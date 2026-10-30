@@ -18,9 +18,9 @@ function renderMcpWrite(mcp: McpDeclarationWrite, indent = ''): string[] {
 export function renderInstallResult(installed: RepoInstall): string[] {
   return [
     `skill ${installed.skill.target}`,
-    `link ${installed.link}`,
+    ...installed.links.map((link) => `link ${link}`),
     `law ${installed.agents.write} ${installed.agents.path}`,
-    `claude ${installed.claude.write} ${installed.claude.path}`,
+    ...installed.instructions.map((instruction) => `law ${instruction.write} ${instruction.path}`),
     ...installed.hooks.flatMap((hook) => renderHooksWrite(hook)),
     ...installed.mcp.flatMap((mcp) => renderMcpWrite(mcp)),
   ];

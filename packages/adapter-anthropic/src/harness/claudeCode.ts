@@ -158,6 +158,14 @@ export const claudeTerminal: TerminalSurface = {
     promptContext: true,
   },
   setup: { file: '.claude.json', done: 'hasCompletedOnboarding' },
+  instructions: {
+    file: 'CLAUDE.md',
+    imports: (text) => /@(?:\.\/)?AGENTS\.md\b/i.test(text),
+    skill: {
+      project: '.claude/skills/tagma',
+      user: { folder: ['.claude'], file: 'skills/tagma', homeEnv: 'CLAUDE_CONFIG_DIR' },
+    },
+  },
   mcpTools: 'catalog',
   mcpCallMeta: 'claudecode/toolUseId',
   mcp: { file: { _tag: 'Project', path: '.mcp.json' }, format: 'json', servers: 'mcpServers', fields: { type: 'stdio' } },

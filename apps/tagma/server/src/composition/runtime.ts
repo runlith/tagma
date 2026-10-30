@@ -137,7 +137,7 @@ import { CommandLedger } from '../executions/contract/service/worlds.js';
 import { WorkspaceInputs } from '../native-harness/contract/service/inputs.js';
 import { OwnSkillDirectories } from '../native-harness/contract/service/ownSkills.js';
 import { nativeHarness } from '../native-harness/native-harness.js';
-import { skillTarget, userSkillTarget } from '../external-harnesses/installs/targets.js';
+import { skillDirectories } from '../external-harnesses/installs/targets.js';
 import { databasePath, seedDirectory } from '../installation/paths.js';
 import { InstalledChannel } from '../installation/contract/service/channel.js';
 import { CHANNEL } from '@tagma/server/composition/channel';
@@ -599,7 +599,9 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
             closing(
               'native harness',
               nativeHarness.lifetimes.installation.pipe(
-                Layer.provide(Layer.succeed(OwnSkillDirectories, (root) => [skillTarget(root), userSkillTarget()])),
+                Layer.provide(
+                  Layer.effect(OwnSkillDirectories, skillDirectories).pipe(Layer.provide(Layer.succeed(HarnessAdapters, adapters))),
+                ),
                 Layer.provide(
                   Layer.succeed(ToolOutputsPlace, options.toolOutputsPath === undefined ? {} : { path: options.toolOutputsPath }),
                 ),

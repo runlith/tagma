@@ -8,7 +8,7 @@ import type { HooksWrite } from './hookInstall.js';
 import { installFailure, type McpDeclarationWrite } from '../../installation/contract/wire/install.js';
 import { installForUser, installInto } from './skillInstall.js';
 import { declareForLaunch } from './mcpDeclaration.js';
-import { skillTarget, userSkillTarget } from './targets.js';
+import { skillLinks, skillTarget, userSkillTarget } from './targets.js';
 import { HarnessAdapters } from '../contract/service/adapters.js';
 import type { HarnessName } from '../../threads/contract/wire/harness/names.js';
 import type { SectionCatalog } from '../../platform/contract/service/sections.js';
@@ -37,7 +37,14 @@ const attemptPlace = <E, R>(place: string, work: Effect.Effect<UpgradeEntry, E, 
 
 export const standing = Effect.fn('harnessInstall.standing')(function* (privately: boolean, root: string) {
   const files = yield* FileSystem.FileSystem;
-  if (!(yield* files.exists(privately ? userSkillTarget() : skillTarget(root)))) return { _tag: 'Absent' } as const;
+  const candidates = privately ? [userSkillTarget(), ...(yield* skillLinks(null))] : [skillTarget(root)];
+  let found = false;
+  for (const path of candidates) {
+    if (!(yield* files.exists(path))) continue;
+    found = true;
+    break;
+  }
+  if (!found) return { _tag: 'Absent' } as const;
   return privately ? ({ _tag: 'User' } as const) : ({ _tag: 'Checkout', root } as const);
 });
 

@@ -4,6 +4,8 @@ import type { HarnessAdapter } from '../contract/service/adapter.js';
 import type { HookCodec } from '@runlith/tagma/adapter/hook';
 import { hookGroups } from './hookInstall.js';
 import { entryLine } from '../../installation/contract/wire/junction.js';
+import { Effect } from 'effect';
+import { HarnessAdapters } from '../contract/service/adapters.js';
 
 const ENTRY_WORD = entryLine('')
   .trimEnd()
@@ -59,10 +61,25 @@ export function skillTarget(repoRoot: string): string {
   return join(repoRoot, '.agents', 'skills', 'tagma');
 }
 
-export function userSkillTarget(directory: string | null = process.env.CLAUDE_CONFIG_DIR ?? null): string {
-  return join(directory === null || directory === '' ? join(homedir(), '.claude') : directory, 'skills', 'tagma');
-}
+export const userSkillTarget = (): string => skillTarget(homedir());
 
-export function skillLinkTarget(repoRoot: string): string {
-  return join(repoRoot, '.claude', 'skills', 'tagma');
-}
+const linksIn = (adapters: readonly HarnessAdapter[], root: string | null): readonly string[] => [
+  ...new Set(
+    adapters.flatMap(({ instructions }) => {
+      if (instructions === undefined) return [];
+      const { skill } = instructions;
+      const home = skill.user.homeEnv === undefined ? undefined : process.env[skill.user.homeEnv];
+      return [
+        root !== null
+          ? join(root, skill.project)
+          : join(home === undefined || home === '' ? join(homedir(), ...skill.user.folder) : home, skill.user.file),
+      ];
+    }),
+  ),
+];
+
+export const skillLinks = (root: string | null) => Effect.map(HarnessAdapters, (adapters) => linksIn(adapters.all(), root));
+
+export const skillDirectories = Effect.map(HarnessAdapters, (adapters) => (root: string) => [
+  ...new Set([skillTarget(root), userSkillTarget(), ...linksIn(adapters.all(), root), ...linksIn(adapters.all(), null)]),
+]);

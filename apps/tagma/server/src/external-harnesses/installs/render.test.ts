@@ -11,9 +11,9 @@ describe('install and upgrade hook results', () => {
     const hooks = [hook({ deferred: [reason] }), hook({ path: '/r/.codex/hooks.json', write: 'current' })];
     const installed = {
       skill: { target: '/r/.agents/skills/tagma', files: [] },
-      link: '/r/.claude/skills/tagma',
+      links: ['/r/.claude/skills/tagma'],
       agents: { path: '/r/AGENTS.md', write: 'created' as const },
-      claude: { path: '/r/CLAUDE.md', write: 'absent' as const },
+      instructions: [{ path: '/r/CLAUDE.md', write: 'absent' as const }],
       hooks,
       mcp: [],
     };
@@ -42,9 +42,9 @@ describe('install and upgrade hook results', () => {
     ];
     const installed = {
       skill: { target: '/r/.agents/skills/tagma', files: [] },
-      link: '/r/.claude/skills/tagma',
+      links: ['/r/.claude/skills/tagma'],
       agents: { path: '/r/AGENTS.md', write: 'created' as const },
-      claude: { path: '/r/CLAUDE.md', write: 'absent' as const },
+      instructions: [{ path: '/r/CLAUDE.md', write: 'absent' as const }],
       hooks: [],
       mcp,
     };

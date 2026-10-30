@@ -303,7 +303,7 @@ layer(fixture, { excludeTestServices: true })('installation', (it) => {
       expect(written.hooks.Stop[0].hooks[0]).toEqual(composed);
       expect(written.hooks.Stop).toHaveLength(2);
       expect(JSON.stringify(written.hooks.Stop[1])).toContain('$t\\" hook stop');
-      expect(rows.find((row) => row.path.endsWith('hooks.json'))?.deferred).toHaveLength(1);
+      expect(rows.find((row) => row.path === join(repo, '.codex', 'hooks.json'))?.deferred).toHaveLength(1);
     }),
   );
 
@@ -563,7 +563,7 @@ layer(fixture, { excludeTestServices: true })('installation', (it) => {
         }
         const installed = yield* installInto(repo, 'LAW', async () => [], contributed);
         expect(yield* skillStatus(installed.skill.target, contributed)).toMatchObject({ state: 'current' });
-        expect(yield* disk.realPath(installed.link)).toBe(yield* disk.realPath(installed.skill.target));
+        expect(yield* disk.realPath(installed.links[0]!)).toBe(yield* disk.realPath(installed.skill.target));
         expect(installed.agents.write).toBe('created');
       }
     }),
@@ -626,7 +626,7 @@ layer(fixture, { excludeTestServices: true })('installation', (it) => {
       });
       expect(ran.exitCode).toBe(0);
       const wrote: UserInstall = JSON.parse(ran.stdout.toString());
-      expect(wrote.skill.target).toBe(join(home, '.claude', 'skills', 'tagma'));
+      expect(wrote.skill.target).toBe(join(home, '.agents', 'skills', 'tagma'));
       expect(wrote.hooks.map((row) => row.path).sort()).toEqual(
         [
           ...seed.map(([file]) => join(home, ...file.split('/'))),
@@ -692,7 +692,7 @@ layer(fixture, { excludeTestServices: true })('installation', (it) => {
       });
       expect(ran.exitCode).toBe(0);
       const wrote: UserInstall = JSON.parse(ran.stdout.toString());
-      expect(wrote.skill.target).toBe(join(home, '.claude', 'skills', 'tagma'));
+      expect(wrote.skill.target).toBe(join(home, '.agents', 'skills', 'tagma'));
       expect(wrote.hooks.map((row) => row.path).sort()).toEqual(
         [
           join(home, '.claude', 'settings.json'),

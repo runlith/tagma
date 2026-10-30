@@ -1,14 +1,15 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { dirname } from 'node:path';
+import { dirname, join } from 'node:path';
 import { Effect } from 'effect';
 import { LAW_END, LAW_START } from '../../graph/contract/wire/law.js';
 import { InstallFailed, installFailure } from '../../installation/contract/wire/install.js';
+import { HarnessAdapters } from '../contract/service/adapters.js';
 
 export type LawWrite = 'created' | 'replaced' | 'appended';
-export type ClaudeLawWrite = LawWrite | 'skipped-import' | 'absent';
+export type InstructionWrite = LawWrite | 'skipped-import' | 'absent';
 
 export type LawPlan = { readonly path: string; readonly write: LawWrite; readonly text: string };
-export type ClaudeLawPlan = LawPlan | { readonly path: string; readonly write: 'skipped-import' | 'absent'; readonly text: null };
+type InstructionPlan = LawPlan | { readonly path: string; readonly write: 'skipped-import' | 'absent'; readonly text: null };
 
 export const planLawSection = Effect.fn('harnessInstall.planLawSection')(function* (filePath: string, section: string) {
   const current = yield* Effect.try({
@@ -40,16 +41,21 @@ export const applyLaw = (plan: LawPlan): Effect.Effect<LawWrite, InstallFailed> 
 export const writeLawSection = (filePath: string, section: string): Effect.Effect<LawWrite, InstallFailed> =>
   Effect.flatMap(planLawSection(filePath, section), applyLaw);
 
-export function claudeImportsAgents(text: string): boolean {
-  return /@(?:\.\/)?AGENTS\.md\b/i.test(text);
-}
-
-export const planClaudeLaw = Effect.fn('harnessInstall.planClaudeLaw')(function* (filePath: string, section: string) {
-  if (!existsSync(filePath)) return { path: filePath, write: 'absent', text: null } as const;
-  const text = yield* Effect.try({ try: () => readFileSync(filePath, 'utf8'), catch: installFailure });
-  if (claudeImportsAgents(text)) return { path: filePath, write: 'skipped-import', text: null } as const;
-  return yield* planLawSection(filePath, section);
+export const planInstructions = Effect.fn('harnessInstall.planInstructions')(function* (root: string, section: string) {
+  const adapters = yield* HarnessAdapters;
+  const declared = new Map(
+    adapters.all().flatMap(({ instructions }) => (instructions === undefined ? [] : [[instructions.file, instructions] as const])),
+  );
+  return yield* Effect.forEach(declared.values(), (surface): Effect.Effect<InstructionPlan, InstallFailed> =>
+    Effect.gen(function* () {
+      const path = join(root, surface.file);
+      if (!existsSync(path)) return { path, write: 'absent', text: null };
+      const text = yield* Effect.try({ try: () => readFileSync(path, 'utf8'), catch: installFailure });
+      if (surface.imports?.(text) === true) return { path, write: 'skipped-import', text: null };
+      return yield* planLawSection(path, section);
+    }),
+  );
 });
 
-export const applyClaudeLaw = (plan: ClaudeLawPlan): Effect.Effect<ClaudeLawWrite, InstallFailed> =>
+export const applyInstructions = (plan: InstructionPlan): Effect.Effect<InstructionWrite, InstallFailed> =>
   plan.text === null ? Effect.succeed(plan.write) : applyLaw(plan);
