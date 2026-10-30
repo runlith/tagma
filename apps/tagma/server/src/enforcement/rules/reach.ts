@@ -135,8 +135,13 @@ export const switchedOffStatutes = Effect.fn('enforcement.switchedOffStatutes')(
 
 export type DescribedAt = ConfigVersion | Descriptions;
 
-export const enforcedRules = Effect.fn('enforcement.enforcedRules')(function* (projectId: number, at: DescribedAt, read?: MapReading) {
-  const statutes = yield* enforcedStatutes(projectId);
+export const enforcedRules = Effect.fn('enforcement.enforcedRules')(function* (
+  projectId: number,
+  at: DescribedAt,
+  read?: MapReading,
+  known?: readonly Statute[],
+) {
+  const statutes = known ?? (yield* enforcedStatutes(projectId));
   if (statutes.every((one) => one.document === null)) return statutes as readonly Enforced[];
   const descriptions = 'tree' in at ? yield* descriptionsAt(at) : at;
   const reading = read ?? (yield* moduleMapOf(projectId));

@@ -27,7 +27,7 @@ import {
   type RuleCounts,
 } from '../contract/wire/engines.js';
 import { refusalRecord } from '../refusals/record.js';
-import { enforcedRules, switchedOffStatutes } from './reach.js';
+import { enforcedRules, enforcedStatutes, switchedOffStatutes } from './reach.js';
 import { formOf } from './forms.js';
 import { digest, documentRevision } from './revision.js';
 
@@ -145,9 +145,16 @@ export const storyAt = Effect.fn('enforcement.storyAt')(function* (ruled: Ruled)
 
 export const ruledIn = Effect.fn('enforcement.ruledIn')(function* (projectId: number) {
   const ruled: Ruled[] = [];
+  const statutes = yield* enforcedStatutes(projectId);
+  if (statutes.length === 0) return ruled;
   const root = yield* measuredRoot(yield* (yield* Projects).byId(projectId));
   const { head, commonDir, shelf } = yield* placeOf(root);
-  const entries = yield* enforcedRules(projectId, { projectId, actor: { _tag: 'Operator' }, root, tree: head, commonDir });
+  const entries = yield* enforcedRules(
+    projectId,
+    { projectId, actor: { _tag: 'Operator' }, root, tree: head, commonDir },
+    undefined,
+    statutes,
+  );
   const reaches = yield* (yield* Orientation).ruleReach(projectId);
   const measured = yield* measurementsOf(
     root,
