@@ -4,8 +4,6 @@ title: Compare the `state` a loopback callback returns with the one you sent bef
 ord: 21
 tags: ["rule"]
 sources:
-  - kind: dir
-    ref: packages/llm/src/oauth
   - kind: symbol
     ref: packages/llm/src/oauth/callback-server.ts
     symbol: callbackServer

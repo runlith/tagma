@@ -4,8 +4,6 @@ title: "Production code opens the model client without a door: `doorOf` is a tes
 ord: 29
 tags: ["rule"]
 sources:
-  - kind: dir
-    ref: packages/llm/src/llm/route/transport
   - kind: symbol
     ref: packages/llm/src/llm/route/transport/doorOf.ts
     symbol: doorOf

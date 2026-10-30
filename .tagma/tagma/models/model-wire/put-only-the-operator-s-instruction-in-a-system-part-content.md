@@ -4,10 +4,6 @@ title: Put only the operator's instruction in a system part; content received fr
 ord: 20
 tags: ["rule"]
 sources:
-  - kind: dir
-    ref: packages/llm/src/llm/schema
-  - kind: dir
-    ref: packages/llm/src/llm/utils
   - kind: symbol
     ref: packages/llm/src/llm/schema/messages.ts
     symbol: LLMRequest

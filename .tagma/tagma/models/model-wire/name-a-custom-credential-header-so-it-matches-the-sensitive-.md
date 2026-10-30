@@ -8,10 +8,6 @@ fields:
     "enabled": true
   }
 sources:
-  - kind: file
-    ref: packages/llm/src/llm/route/auth-options.ts
-  - kind: file
-    ref: packages/llm/src/llm/route/auth.ts
   - kind: symbol
     ref: packages/llm/src/llm/route/auth.ts
     symbol: header

@@ -4,8 +4,6 @@ title: A served MCP tool's `call` answers a tool failure as a result with `isErr
 ord: 13
 tags: ["rule"]
 sources:
-  - kind: dir
-    ref: packages/mcp
   - kind: symbol
     ref: packages/mcp/src/sdkServer.ts
     symbol: McpServerInput

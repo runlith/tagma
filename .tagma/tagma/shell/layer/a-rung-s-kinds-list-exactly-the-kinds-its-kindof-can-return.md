@@ -8,8 +8,6 @@ fields:
     "enabled": true
   }
 sources:
-  - kind: file
-    ref: packages/layer/src/Rung.ts
   - kind: symbol
     ref: packages/layer/src/Rung.ts
     symbol: kindOf

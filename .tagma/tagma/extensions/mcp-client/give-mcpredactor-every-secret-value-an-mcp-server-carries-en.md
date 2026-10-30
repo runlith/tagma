@@ -4,8 +4,6 @@ title: Give `mcpRedactor` every secret value an MCP server carries (environment,
 ord: 17
 tags: ["rule"]
 sources:
-  - kind: dir
-    ref: packages/mcp
   - kind: symbol
     ref: packages/mcp/src/mcpRedactor.ts
     symbol: mcpRedactor

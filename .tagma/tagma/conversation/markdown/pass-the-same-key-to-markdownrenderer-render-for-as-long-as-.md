@@ -4,8 +4,6 @@ title: Pass the same `key` to `MarkdownRenderer.render` for as long as one body 
 ord: 7
 tags: ["rule"]
 sources:
-  - kind: dir
-    ref: packages/markdown
   - kind: symbol
     ref: packages/markdown/src/render.ts
     symbol: MarkdownRenderer

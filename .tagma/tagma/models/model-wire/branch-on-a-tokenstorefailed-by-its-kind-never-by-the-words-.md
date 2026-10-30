@@ -8,17 +8,6 @@ fields:
     "enabled": true
   }
 sources:
-  - kind: file
-    ref: packages/llm/src/oauth/accountKey.ts
-  - kind: file
-    ref: packages/llm/src/oauth/credential.ts
-  - kind: file
-    ref: packages/llm/src/oauth/FileTokenStore.ts
-  - kind: file
-    ref: packages/llm/src/oauth/storeFailure.ts
-  - kind: symbol
-    ref: packages/llm/src/oauth/FileTokenStore.ts
-    symbol: TokenStore
   - kind: symbol
     ref: packages/llm/src/oauth/storeFailure.ts
     symbol: TokenStoreFailed

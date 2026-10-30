@@ -4,8 +4,6 @@ title: Name a `Layer.when` condition's keys in the `when` call; never fetch othe
 ord: 24
 tags: ["rule"]
 sources:
-  - kind: file
-    ref: packages/layer/src/Layer.ts
   - kind: symbol
     ref: packages/layer/src/Layer.ts
     symbol: tiersOf

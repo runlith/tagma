@@ -4,8 +4,6 @@ title: Resolve `${NAME}` placeholders in an MCP server declaration before passin
 ord: 14
 tags: ["rule"]
 sources:
-  - kind: dir
-    ref: packages/mcp
   - kind: symbol
     ref: packages/mcp/src/McpServerDeclaration.ts
     symbol: McpServerDeclaration

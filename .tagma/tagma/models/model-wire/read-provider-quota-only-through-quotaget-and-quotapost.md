@@ -4,10 +4,6 @@ title: Read provider quota only through `quotaGet` and `quotaPost`
 ord: 22
 tags: ["rule"]
 sources:
-  - kind: file
-    ref: packages/llm/src/llm/schema/quota.ts
-  - kind: file
-    ref: packages/llm/src/profiles/quotaRead.ts
   - kind: symbol
     ref: packages/llm/src/profiles/quotaRead.ts
     symbol: withQuotaWire

@@ -4,8 +4,6 @@ title: When merging the tool catalogs of several MCP servers, key each tool by i
 ord: 15
 tags: ["rule"]
 sources:
-  - kind: dir
-    ref: packages/mcp
   - kind: symbol
     ref: packages/mcp/src/mcpToolCatalog.ts
     symbol: mcpToolCatalog

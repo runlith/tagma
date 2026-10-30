@@ -4,10 +4,6 @@ title: List the repo returned by `Repo.tune(key, tuning)` in the manifest in pla
 ord: 10
 tags: ["rule"]
 sources:
-  - kind: file
-    ref: packages/query/src/hydration.ts
-  - kind: file
-    ref: packages/query/src/repo.ts
   - kind: symbol
     ref: packages/query/src/repo.ts
     symbol: tune

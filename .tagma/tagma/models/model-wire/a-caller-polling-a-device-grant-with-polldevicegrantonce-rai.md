@@ -4,8 +4,6 @@ title: A caller polling a device grant with `pollDeviceGrantOnce` raises its own
 ord: 24
 tags: ["rule"]
 sources:
-  - kind: dir
-    ref: packages/llm/src/oauth/flows
   - kind: symbol
     ref: packages/llm/src/oauth/flows/deviceGrant.ts
     symbol: DeviceGrantPoll
