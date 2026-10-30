@@ -78,6 +78,12 @@ layer(doorFixture().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeTest
         expect((yield* world.op('set_graph_remote', { ref: name, remote: bare })).body).toMatchObject({
           remote: { remote: bare, holds: 'this-graph' },
         });
+        const delta = yield* world.stealthProject();
+        const epsilon = yield* world.stealthProject();
+        yield* projectLeaving(world, delta, epsilon);
+        const elsewhere = groupOf(yield* world.op('make_group', { name: world.uniqueName(), projects: [String(delta), String(epsilon)] }));
+        expect((yield* world.op('set_graph_remote', { ref: String(elsewhere.graph.id), remote: bare, restore: true })).status).toBe(200);
+        expect((yield* roots(elsewhere.graph.id)).map((one) => one.name)).toEqual([root]);
 
         expect(ids(groupOf(yield* world.op('leave_group', { project: String(gamma) })))).toEqual([beta, alpha]);
         expect((yield* world.op('read_group', { ref: String(gamma) })).body).toMatchObject({ group: null });

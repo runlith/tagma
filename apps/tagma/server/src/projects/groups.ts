@@ -8,7 +8,7 @@ import { MachineUnits, type Unit, type WriteUnit } from '../platform/contract/se
 import { GateRefusal } from '../platform/contract/wire/refusal.js';
 import type { GroupChange } from './contract/service/changes.js';
 import { ProjectGroups } from './contract/service/registry.js';
-import type { NameRefusal, ProjectGroup, ProjectRow } from './contract/wire/project.js';
+import type { DepartedGroup, NameRefusal, ProjectGroup, ProjectRow } from './contract/wire/project.js';
 import { physical } from './identity.js';
 import { registration } from './resolution.js';
 import { groupMember, project } from './store/table.js';
@@ -158,7 +158,7 @@ export const makeGroups = Effect.fnUntraced(function* (input: {
     if (rest.length >= 2) {
       yield* unit.run(db.delete(groupMember).where(eq(groupMember.projectId, row.id)));
       yield* announced(unit, { groupId: group.graph.id, before: ids(group.members), after: ids(rest) });
-      return { graph: group.graph, members: rest } satisfies ProjectGroup;
+      return { from: group, rest: { graph: group.graph, members: rest } } satisfies DepartedGroup;
     }
     yield* unit.run(db.delete(groupMember).where(eq(groupMember.groupId, group.graph.id)));
     yield* unit.run(
@@ -168,7 +168,7 @@ export const makeGroups = Effect.fnUntraced(function* (input: {
         .where(eq(project.id, group.graph.id)),
     );
     yield* announced(unit, { groupId: group.graph.id, before: ids(group.members), after: [] });
-    return null;
+    return { from: group, rest: null } satisfies DepartedGroup;
   });
 
   const discard = Effect.fn('ProjectGroups.discard')(function* (unit: WriteUnit<'machine'>, graph: ProjectRow) {

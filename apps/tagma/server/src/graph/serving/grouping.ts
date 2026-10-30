@@ -79,24 +79,20 @@ export const makeGroupLifecycle = Effect.fnUntraced(function* (input: {
     }),
 
     leave: Effect.fn('GroupLifecycle.leave')(function* (row) {
-      const before = yield* groups.of(row.id);
       return yield* machine.transaction(writes('group.leave', [groupMember, project]), (unit) =>
         act.unit(
           regrouping,
           Effect.gen(function* () {
-            const after = yield* groups.leave(unit, row);
-            if (before !== undefined) {
-              const left = after === null ? before.members : [row];
-              for (const member of left) yield* moved(member, before.graph.id, null);
-              if (after === null)
-                yield* act.record('project_remove', null, {
-                  projectId: before.graph.id,
-                  name: before.graph.name,
-                  repoKey: before.graph.repoKey,
-                  rootPath: before.graph.rootPath,
-                });
-            }
-            return { project: row, group: after };
+            const { from, rest } = yield* groups.leave(unit, row);
+            for (const member of rest === null ? from.members : [row]) yield* moved(member, from.graph.id, null);
+            if (rest === null)
+              yield* act.record('project_remove', null, {
+                projectId: from.graph.id,
+                name: from.graph.name,
+                repoKey: from.graph.repoKey,
+                rootPath: from.graph.rootPath,
+              });
+            return { project: row, group: rest };
           }),
         ),
       );

@@ -4,6 +4,7 @@ import type { StoreFailure } from '../../../platform/contract/service/store.js';
 import type { WriteUnit } from '../../../platform/contract/service/units.js';
 import type { GateRefusal, GitRefusal } from '../../../platform/contract/wire/refusal.js';
 import type {
+  DepartedGroup,
   FormedGroup,
   FormRefusal,
   JoinRefusal,
@@ -78,6 +79,6 @@ export class ProjectGroups extends Context.Service<
       group: ProjectGroup,
       project: ProjectRow,
     ): Effect.Effect<ProjectGroup, StoreFailure | GateRefusal<JoinRefusal>>;
-    leave(unit: WriteUnit<'machine'>, project: ProjectRow): Effect.Effect<ProjectGroup | null, StoreFailure | GateRefusal<'ungrouped'>>;
+    leave(unit: WriteUnit<'machine'>, project: ProjectRow): Effect.Effect<DepartedGroup, StoreFailure | GateRefusal<'ungrouped'>>;
   }
 >()('tagma/projects/ProjectGroups') {}
