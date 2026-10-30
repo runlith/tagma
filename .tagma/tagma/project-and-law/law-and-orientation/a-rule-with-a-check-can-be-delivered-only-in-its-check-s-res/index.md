@@ -5,7 +5,7 @@ ord: 11
 tags: ["spec"]
 fields:
   {
-    "status": "open"
+    "status": "closed"
   }
 edges:
   - kind: relates
@@ -42,7 +42,7 @@ A third delivery beside `prompt` and `code`: the text is delivered to no agent i
 - `set_rule_delivery` refuses a value the rule's own tag does not declare, naming the values it does (today `setDelivery` in `graph/blocks/law.ts` checks none). The `delivery-undeclared` hint names the known values instead of a hardcoded pair.
 - The default stays: unset is `code` with sources, `prompt` without.
 - Prompt law selects `prompt` alone (`graph/orientation/law.ts`) and touch law `code` alone (`touchLaw`), so neither delivers a `finding` rule.
-- A `finding` rule whose check runs on no act that judges changes — not enforced, or enforced with no landing, merge or edit trigger — reaches nobody automatically. That state is derived, not gated: the answers of `set_rule_delivery` and `enforce_rule` warn when they leave a rule in it, and the rule's delivery label says so wherever it is shown. The warning `set_rule_delivery` gives for `code` with no sources names `finding`.
+- A `finding` rule whose check runs at no trigger — not enforced, at note, or enforced with no triggers — reaches nobody automatically. That state is derived, not gated: the answers of `set_rule_delivery` and `enforce_rule` warn when they leave a rule in it, and the rule's delivery label says so wherever it is shown. The warning `set_rule_delivery` gives for `code` with no sources names `finding`.
 - Every projection of a delivery shows the new value: the reach label (`reachLabel` in `graph/orientation/reach.ts`, printed as `delivered:` by `read_block`), the `set_rule_delivery` meaning text, the block page and the delivery menu.
 - A server older than this change reads `finding` as no delivery and falls back to the default, so a `finding` rule without sources reaches every thread of that server as `prompt`. A team on mixed versions meets this until it updates.
 
@@ -76,9 +76,9 @@ It keeps the plain statement that sources narrow where the check looks, whatever
 
 ## Interface
 
-- Block page, Delivery line (`BlockFacts.svelte`): `finding` reads "With its check's results — no agent gets it in advance"; a `finding` rule that no automatic run judges reads "With its check's results — no check runs on changes, so no agent gets it".
+- Block page, Delivery line (`BlockFacts.svelte`): `finding` reads "With its check's results — no agent gets it in advance"; a `finding` rule that no automatic run judges reads "With its check’s results — its check runs on nothing, so no agent gets it".
 - Delivery menu (`BlockActionsMenu.svelte`): its choices are the values the rule's tag declares, read through `TagCatalog`; Finding stands among them when declared.
-- The Rules screen names a rule's delivery in the same words and shows the body with the norm.
+- The Rules screen names a rule's delivery in the same words. A rule's page there is its block page, which already shows the body above its findings.
 
 ## Not covered
 
