@@ -118,16 +118,12 @@ edges:
 
 ## Acceptance
 
-1. Only the doors themselves call a model directly; every other server file asks through them. An enforced allowlist proves it, and covers any later feature without a change.
-   - `ModelAccess` is imported only by:
-     - `providers`, which is the fresh-ask door;
-     - the native chat turn (`native-harness/kernel.ts`, `native-harness/assembly.ts`);
-     - `threads/asks.ts`, the door for asking over a thread;
-     - `composition`.
-   - `HarnessAsides` is imported only by `threads/asks.ts` and `composition`.
-   - Harness rows are imported only by `external-harnesses` and `threads/harness`.
+1. Only the doors themselves call a model directly; every other server file asks through them ([[93f04f23]]). An enforced check of calls proves it, and covers any later feature without a change:
+   - `ModelAccess.request`, and the requests it returns, are called only in `providers` and in the native chat turn;
+   - an aside's `ask` is called only in `threads/asks.ts`;
+   - a harness row is read only in `external-harnesses` and `threads/harness`.
 
-   Where a module boundary carries the allowlist, the module rule enforces it through the entry's importers. That is why titles, recap and decisions get module cards of their own. A file-level allowlist inspection covers only what no module boundary can. The kernel's summary wiring is proven by test 4.
+   Importing these services to provide, publish, watch or clear them is not asking and stays allowed: the check judges calls, not imports. The kernel's summary wiring is proven by test 4.
 2. `translate_block` translates with a scripted wire provider, and with a test adapter whose program is a local script. With both connected, the lens picker lists both, and lists no harness that declares no path.
 3. On a native thread over a scripted wire provider, with `threads.titleModel` and `threads.decisionModel` set to the test program model:
    - `generate_thread_title` answers through the program;
