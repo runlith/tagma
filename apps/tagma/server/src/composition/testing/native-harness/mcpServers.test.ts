@@ -27,6 +27,7 @@ const descriptor = (name: string) => ({
 const contextOf = (palette: ReturnType<McpServers['Service']['palette']>, bound = mcpBoundTools()): ReturnType<typeof asMcpToolsContext> =>
   ({
     projectId: 1,
+    runId: 'run-1',
     world: { root: '/workspace', facts: { shared: true } },
     thread: { id: 'thread-1' },
     mcp: () => palette,
@@ -84,9 +85,11 @@ it.effect('a server named after a built-in shadows no built-in tool name', () =>
 test('the names this run was bound with are remembered for the thread that is being built', () => {
   const bound = mcpBoundTools();
   mcpServerTools(contextOf([{ declaration: declaration('files'), descriptors: [descriptor('search')] as never }], bound));
-  expect(bound.of('thread-1')).toEqual(['mcp__files__search']);
-  mcpServerTools(contextOf([], bound));
-  expect(bound.of('thread-1')).toEqual([]);
+  expect(bound.of({ threadId: 'thread-1', projectId: 1, runId: 'run-1' })).toEqual(['mcp__files__search']);
+  expect(mcpServerTools(contextOf([], bound))).toEqual({});
+  expect(bound.of({ threadId: 'thread-1', projectId: 1, runId: 'run-1' })).toEqual(['mcp__files__search']);
+  mcpServerTools({ ...contextOf([], bound), runId: 'run-2' });
+  expect(bound.of({ threadId: 'thread-1', projectId: 1, runId: 'run-1' })).toEqual([]);
 });
 
 test('every offered tool is keyed by the name its identity composes, and reads back as its own pair', () => {

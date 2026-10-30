@@ -18,17 +18,25 @@ const connected = (names: readonly string[]): ReturnType<McpServers['Service']['
   names.map((name) => ({ declaration: declaration(name), descriptors: [] }));
 
 const rule = mcpRule<McpRuleContext>();
+const binding = { threadId: 'thread-1', runId: 'run-1', projectId: 1 };
 
 const step = (
   bound: McpBoundTools,
   palette: ReturnType<McpServers['Service']['palette']>,
   hook = 'beforeStep',
 ): AgentRuleContext<McpRuleContext> =>
-  ({ hook, thread: { id: 'thread-1' }, mcp: () => palette, mcpBound: bound }) as unknown as AgentRuleContext<McpRuleContext>;
+  ({
+    hook,
+    thread: { id: 'thread-1' },
+    projectId: 1,
+    runId: 'run-1',
+    mcp: () => palette,
+    mcpBound: bound,
+  }) as unknown as AgentRuleContext<McpRuleContext>;
 
 const boundWith = (...names: readonly string[]): McpBoundTools => {
   const bound = new McpBoundTools();
-  bound.bound('thread-1', names);
+  bound.bound(binding, names);
   return bound;
 };
 
@@ -65,6 +73,8 @@ it.effect('a thread whose run bound no MCP tool answers without reading the pale
       yield* rule({
         hook: 'beforeStep',
         thread: { id: 'thread-1' },
+        projectId: 1,
+        runId: 'run-1',
         mcp: never,
         mcpBound: new McpBoundTools(),
       } as never),
@@ -81,9 +91,9 @@ it.effect('it answers on beforeStep alone', () =>
 it.effect('a thread the harness forgot leaves no ledger entry behind it', () =>
   Effect.gen(function* () {
     const bound = boundWith('mcp__files__read');
-    expect(bound.of('thread-1')).toEqual(['mcp__files__read']);
+    expect(bound.of(binding)).toEqual(['mcp__files__read']);
     bound.forget('thread-1');
-    expect(bound.of('thread-1')).toEqual([]);
+    expect(bound.of(binding)).toEqual([]);
     expect(yield* rule(step(bound, connected([])))).toBeNull();
   }),
 );

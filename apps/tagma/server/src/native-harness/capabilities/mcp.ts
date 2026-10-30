@@ -7,6 +7,10 @@ import { CapabilityUnavailable, type CapabilityBehaviour } from './contract.js';
 const quoted = (value: string): string => JSON.stringify(value.length > 200 ? `${value.slice(0, 200)}…` : value);
 
 export const mcp: CapabilityBehaviour = {
+  catalog: {
+    revision: (ctx) => ctx.mcpServers.catalogRevision(ctx.projectId),
+    notice: () => 'The connected MCP tools changed; this run keeps its original tool membership.',
+  },
   source: {
     id: 'mcp',
     names: [],

@@ -365,13 +365,13 @@ const makeComposition = Effect.fnUntraced(function* (instructionWorld: EffectDem
   const sectionsOf = (declaration: Parameters<typeof composeAgent>[0], facts: WorldFacts): readonly string[] => [
     ...new Set(DEFINITIONS.effective(declaration).declared.flatMap((capability) => capabilitySections()(capability, facts))),
   ];
-  const mcpContext = (mcpServers: unknown) =>
+  const mcpContext = (mcpServers: Partial<McpServers['Service']>) =>
     asThreadContext({
       thread,
       projectId: instructionWorld.projectId,
       target: { graph: { projectId: instructionWorld.projectId, root: instructionWorld.demoRoot } },
       world: sandboxWorld(),
-      mcpServers,
+      mcpServers: { catalogRevision: () => '', ...mcpServers },
       origin: null,
       identity: sessionIdentity,
       grants: testGrantSigner,
@@ -1313,7 +1313,11 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
               comments: () => commentPolicy().fallback,
               vocabulary: () => shippedVocabulary,
               origin: null,
-              mcpServers: { reconcile: () => Effect.void, caller: () => ({ call: () => Effect.die('no call in this case') }) },
+              mcpServers: {
+                catalogRevision: () => '',
+                reconcile: () => Effect.void,
+                caller: () => ({ call: () => Effect.die('no call in this case') }),
+              },
               workingRoot: demo.demoRoot,
               caller: {
                 actor: { kind: 'operator' },
@@ -1344,6 +1348,100 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
             )?.content?.[0]?.text ?? '';
           expect(part).toContain('- mcp__files__search');
           expect(part).toContain('tool_search');
+        }),
+      ),
+    ),
+  );
+  it.effect('a reconnected server restores the run snapshot after a disconnected context rebuild', () =>
+    withDemo((demo) =>
+      Effect.scoped(
+        Effect.gen(function* () {
+          const { composeAgent, scriptedRunner, input, thread, call, answer, namesOnly, mcpContext } = yield* makeComposition(demo);
+          const original: ReturnType<McpServers['Service']['palette']> = [
+            {
+              declaration: {
+                name: 'files',
+                transport: 'stdio',
+                command: 'echo',
+                capabilities: { kinds: [], mutates: false },
+                enabled: true,
+              },
+              descriptors: [{ name: 'search', inputSchema: { type: 'object' } }] as never,
+            },
+          ];
+          const other = yield* demo.graph.projects.global();
+          if (other === undefined) return yield* Effect.die('the graph world must carry its global project');
+          let palette = original;
+          let projectId = demo.projectId;
+          let revision = 0;
+          const bound = mcpBoundTools();
+          const offered: { tools: string[]; active?: string[]; messages: readonly Message[] }[] = [];
+          const runner = yield* scriptedRunner((turn) => {
+            if (turn === 2) {
+              projectId = other.id;
+              revision += 1;
+            }
+            if (turn === 3) {
+              projectId = demo.projectId;
+              palette = [];
+              revision += 1;
+            }
+            if (turn === 4) {
+              palette = [
+                {
+                  ...original[0]!,
+                  descriptors: [...original[0]!.descriptors, { name: 'new-tool', inputSchema: { type: 'object' } }] as never,
+                },
+                { ...original[0]!, declaration: { ...original[0]!.declaration, name: 'new-server' } },
+              ];
+              revision += 1;
+            }
+            return turn < 5
+              ? call(turn, 'tool_search', { query: 'select:mcp__files__search' })
+              : turn === 5
+                ? call(turn, 'mcp__files__search', {})
+                : answer(turn, 'Done.');
+          }, offered);
+          const composed = composeAgent(mcpOnly, runner, orientingThreads.rows, orientingThreads.mandate, namesOnly, (view, use) =>
+            Effect.succeed(
+              asThreadContext({
+                ...mcpContext({
+                  reconcile: () => Effect.void,
+                  catalogRevision: () => String(revision),
+                  caller: () => ({ call: () => Effect.succeed({ content: [{ type: 'text', text: 'restored-result' }] }) }),
+                }),
+                thread: view,
+                projectId,
+                runId: use.runId,
+                mcp: () => palette,
+                mcpBound: bound,
+              }),
+            ),
+          );
+          const started = input(composed, 'reconnected', [Message.user('Search the files.')]);
+          const prepared = yield* composed.prepare(started);
+          const run = yield* prepared.start({
+            ...started,
+            boundary: ({ stepNumber }) =>
+              Effect.succeed(
+                stepNumber === 2 || stepNumber === 3
+                  ? {
+                      context: { generation: stepNumber - 1, sourceKey: `tree-${projectId}`, requestId: `move-${stepNumber}` },
+                      supply: started.supply,
+                      publish: () => Effect.succeed(true),
+                      deny: () => Effect.die('the restored context must be admitted'),
+                    }
+                  : null,
+              ),
+          });
+          yield* run.output.response;
+          expect(offered[3]?.tools).not.toContain('mcp__files__search');
+          expect(offered[4]?.tools).toContain('mcp__files__search');
+          expect(offered[4]?.tools.filter((name) => name.startsWith('mcp__'))).toEqual(['mcp__files__search']);
+          expect(offered[5]?.messages.some((message) => JSON.stringify(message).includes('restored-result'))).toBe(true);
+          const next = yield* composed.toolCatalog({ ...started, run: { ...started.run, id: 'next-run' } });
+          expect(Object.keys(next)).toContain('mcp__files__new-tool');
+          expect(Object.keys(next)).toContain('mcp__new-server__search');
         }),
       ),
     ),

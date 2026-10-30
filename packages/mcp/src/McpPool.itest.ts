@@ -120,6 +120,7 @@ describe('McpPool', () => {
       const pidFile = join(dir, 'pid');
       const scope = yield* Scope.fork(yield* Effect.scope);
       const pool = yield* McpPool.make().pipe(Scope.provide(scope));
+      const emptyRevision = pool.catalogRevisionUnsafe();
 
       yield* pool.reconcile([declare('files', [], { env: { MCP_TEST_PID_FILE: pidFile } })]);
       expect(pool.states().map((state) => state.status)).toEqual(['connecting']);
@@ -127,6 +128,8 @@ describe('McpPool', () => {
       yield* pool.awaitHandshakes();
       expect(names(pool.paletteUnsafe())).toContain('files');
       expect(pool.paletteUnsafe()[0]?.descriptors.map((descriptor) => descriptor.name)).toContain('echo');
+      const connectedRevision = pool.catalogRevisionUnsafe();
+      expect(connectedRevision).not.toBe(emptyRevision);
       expect(pool.states().map((state) => [state.status, state.tools > 0])).toEqual([['connected', true]]);
       expect(existsSync(pidFile)).toBe(true);
       const pid = Number(readFileSync(pidFile, 'utf8'));
@@ -136,12 +139,14 @@ describe('McpPool', () => {
       yield* pool.reconcile([{ ...files }]);
       expect(names(pool.paletteUnsafe())).toEqual(['files']);
       expect(Number(readFileSync(pidFile, 'utf8'))).toBe(pid);
+      expect(pool.catalogRevisionUnsafe()).toBe(connectedRevision);
 
       const tools = () => pool.paletteUnsafe()[0]?.descriptors.map((descriptor) => descriptor.name) ?? [];
       expect(tools()).not.toContain('grown');
       yield* pool.call('files', 'grow', {});
       expect(yield* until(() => tools().includes('grown'))).toBe(true);
       expect(text(yield* pool.call('files', 'grown', {}))).toBe('the grown tool answered');
+      expect(pool.catalogRevisionUnsafe()).not.toBe(connectedRevision);
 
       const changed = { ...files, capabilities: { kinds: ['write'] as const, mutates: true } };
       yield* pool.reconcile([changed]);

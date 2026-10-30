@@ -39,6 +39,11 @@ export const names: Builtin<'names', NamesParams> = {
       F4: {
         allowances: [
           {
+            lines: 717,
+            path: 'apps/tagma/server/src/mcp/serverPool.ts',
+            why: 'One subject: the project MCP pool lifecycle; declaration reconciliation, sign-in readers, secret redaction and app calls share its session ownership and scope.',
+          },
+          {
             lines: 736,
             path: 'apps/tagma/server/src/enforcement/remeasure/driver.ts',
             why: 'One subject: the remeasurement lifecycle of an open checkout — Start waiters, rule-slot scheduling with its per-request answers, pauses, debt and origin-tracing lanes, HEAD observation and cancellation share the same copy and confirmed measurement boundary.',

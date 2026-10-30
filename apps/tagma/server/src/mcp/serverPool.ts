@@ -75,6 +75,7 @@ function reached(declaration: McpServerDeclaration): string {
 
 type Pooled = {
   readonly pool: McpPool;
+  readonly catalogId: number;
   readonly scope: Scope.Closeable;
   readonly secrets: Set<string>;
   readonly keys: Map<string, string>;
@@ -147,6 +148,7 @@ const makeMcpServers = Effect.fnUntraced(function* ({
   const scope = yield* Scope.fork(yield* Effect.scope, 'parallel');
   const opening = yield* flight<number, McpPool, never>({ name: 'mcp-pool-open', owner: 'mcp', key: String, ceiling: '30 seconds' });
   const pools = new Map<number, Pooled>();
+  let catalogIds = 0;
   const moving = yield* FiberSet.makeRuntime<never, void, never>();
   yield* Effect.acquireRelease(
     Effect.sync(() =>
@@ -518,6 +520,10 @@ const makeMcpServers = Effect.fnUntraced(function* ({
   };
 
   const palette: McpServers['Service']['palette'] = (projectId) => pools.get(projectId)?.pool.paletteUnsafe() ?? [];
+  const catalogRevision: McpServers['Service']['catalogRevision'] = (projectId) => {
+    const held = pools.get(projectId);
+    return held === undefined ? 'none' : `${held.catalogId}:${held.pool.catalogRevisionUnsafe()}`;
+  };
 
   const caller: McpServers['Service']['caller'] = (projectId) => {
     const pool = poolOf(projectId);
@@ -627,7 +633,17 @@ const makeMcpServers = Effect.fnUntraced(function* ({
               Stream.runForEach(pool.changes, () => moved(projectId)),
               own,
             );
-            pooled = { pool, scope: own, secrets: new Set(), keys, redaction, narrowed: new Set(), reached: new Set() };
+            catalogIds += 1;
+            pooled = {
+              pool,
+              catalogId: catalogIds,
+              scope: own,
+              secrets: new Set(),
+              keys,
+              redaction,
+              narrowed: new Set(),
+              reached: new Set(),
+            };
             pools.set(projectId, pooled);
             return pool;
           });
@@ -725,6 +741,7 @@ const makeMcpServers = Effect.fnUntraced(function* ({
       reconcileAll,
       raise,
       palette,
+      catalogRevision,
       caller,
       appView,
       appRead,

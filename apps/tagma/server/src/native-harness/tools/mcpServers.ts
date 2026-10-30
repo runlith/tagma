@@ -8,6 +8,7 @@ import type { ThreadWorld } from '../../executions/contract/service/worlds.js';
 
 export type McpToolsContext = {
   readonly projectId: number;
+  readonly runId?: string | null;
   readonly world: ThreadWorld;
   readonly thread: { readonly id: string };
   readonly mcpServers: Context.Service.Shape<typeof McpServers>;
@@ -33,6 +34,7 @@ export function mcpServerTools(ctx: McpToolsContext): ToolCatalog {
       if (naming._tag === 'named') catalog[naming.identity.name] = { ...callable, exposure: 'deferred' };
     }
   }
-  ctx.mcpBound.bound(ctx.thread.id, Object.keys(catalog));
-  return catalog;
+  if (ctx.runId == null) return catalog;
+  const names = new Set(ctx.mcpBound.bound({ threadId: ctx.thread.id, projectId: ctx.projectId, runId: ctx.runId }, Object.keys(catalog)));
+  return Object.fromEntries(Object.entries(catalog).filter(([name]) => names.has(name)));
 }

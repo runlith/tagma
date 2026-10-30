@@ -122,7 +122,25 @@ const makeMcpPool = Effect.fnUntraced(function* (given: McpSessionOptions = {}) 
   const rebuilds = new Map<string, Rebuild>();
   const pulses = yield* Effect.acquireRelease(PubSub.sliding<void>(1), PubSub.shutdown);
   const sessions = yield* Scope.fork(scope, 'parallel');
-  const moved = PubSub.publish(pulses, undefined);
+  let palette: McpPalette = [];
+  let catalogRevision = 0;
+  const moved = Effect.suspend(() => {
+    const next = connectedPalette();
+    const unchanged =
+      next.length === palette.length &&
+      next.every((entry, index) => {
+        const previous = palette[index]!;
+        return (
+          mcpDeclarationsEqual(entry.declaration, previous.declaration) &&
+          (entry.descriptors === previous.descriptors || JSON.stringify(entry.descriptors) === JSON.stringify(previous.descriptors))
+        );
+      });
+    if (!unchanged) {
+      palette = next;
+      catalogRevision += 1;
+    }
+    return PubSub.publish(pulses, undefined);
+  });
   const failed = Effect.fnUntraced(function* (entry: Entry, failure: McpFailure) {
     entry.status = failure._tag === 'McpNeedsSignIn' ? 'needs-sign-in' : 'failed';
     entry.failure = failure;
@@ -181,7 +199,7 @@ const makeMcpPool = Effect.fnUntraced(function* (given: McpSessionOptions = {}) 
     if (attempt._tag === 'Some') yield* Fiber.await(attempt.value);
   });
 
-  const paletteUnsafe = (): McpPalette => {
+  const connectedPalette = (): McpPalette => {
     const palette: McpPaletteEntry[] = [];
     for (const [, entry] of entries) {
       if (entry.status === 'connected' && entry.session !== undefined) {
@@ -549,6 +567,7 @@ const makeMcpPool = Effect.fnUntraced(function* (given: McpSessionOptions = {}) 
     entry.session = undefined;
     entry.sessionScope = undefined;
     entry.connecting = undefined;
+    yield* moved;
     connecting?.interruptUnsafe();
     const attempt = yield* FiberMap.get(connects, name);
     if (attempt._tag === 'Some') attempt.value.interruptUnsafe();
@@ -606,7 +625,8 @@ const makeMcpPool = Effect.fnUntraced(function* (given: McpSessionOptions = {}) 
     reconnect,
     awaitHandshakes,
     awaitHandshake,
-    paletteUnsafe,
+    paletteUnsafe: () => palette,
+    catalogRevisionUnsafe: () => catalogRevision,
     states,
     changes: Stream.fromPubSub(pulses),
     place,

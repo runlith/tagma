@@ -78,6 +78,7 @@ export class McpServers extends Context.Service<
     reconcileAll(): Effect.Effect<void, StoreFailure | GateRefusal<McpReconcileRefusal>>;
     raise(projectId: number, name: string): Effect.Effect<readonly McpServerRow[], StoreFailure | GateRefusal<McpReconcileRefusal>>;
     palette(projectId: number): McpPalette;
+    catalogRevision(projectId: number): string;
     caller(projectId: number): McpToolCaller;
     release(projectId: number): Effect.Effect<void>;
     appView(mount: McpMount, resource: string, tool: string | undefined): Effect.Effect<McpAppView, McpViewFailure>;
