@@ -118,4 +118,4 @@ This contract is maintained in .agents/skills/performance/SKILL.md of the Tagma 
 - Keep the general lesson, not this incident's ids, machine sizes, thresholds, logs or implementation plan. Replace stale guidance instead of appending a chronology. Hypotheses remain hypotheses until measured.
 - Maintain the shipment source, not installed copies. Recheck catalog/load behavior and the affected public contract after a skill change; evaluate wording through investigative decisions, not substring assertions about the prompt.
 
-For a specific contract needing more depth, read only its owner: [[661b9c3f|the performance reports]], [[1b95af1e|elapsed-time breakdown]], or [[a918e690|the loss account]]. These references are optional drill-ins, not a required orientation tour.
+For a specific contract needing more depth, use `read_owners` on the report's implementation under `packages/performance/src` or `apps/tagma/server/src/performance`, then read that owner. These are optional drill-ins, not a required orientation tour.
