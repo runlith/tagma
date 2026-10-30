@@ -1,6 +1,6 @@
 import { basename, join } from 'node:path';
 import { Effect, type FileSystem } from 'effect';
-import type { HarnessCarry } from '../../contract/service/adapter.js';
+import type { HarnessCarry } from '@runlith/tagma/adapter/harness';
 import { codexRolloutName } from './metadata.js';
 
 const DAY_MS = 86_400_000;

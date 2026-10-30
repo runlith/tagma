@@ -1,6 +1,6 @@
 import { Effect } from 'effect';
 import type { JournalRuns } from '@runlith/agent/thread/transport/contract';
-import type { HarnessCut, HarnessCutAsk, HarnessCutMaking, HarnessModelChoice } from '../contract/service/adapter.js';
+import type { HarnessCut, HarnessCutAsk, HarnessCutMaking, HarnessModelChoice } from '@runlith/tagma/adapter/harness';
 import { cutArgv, harnessAdapter, harnessArgv, harnessRoot } from '../contract/service/table.js';
 import type { ExternalSession } from '../../threads/contract/wire/harness/externalSession.js';
 import type { HarnessName } from '../../threads/contract/wire/harness/names.js';

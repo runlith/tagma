@@ -1,4 +1,4 @@
-import { HOOK_CONTEXT_CHARS } from '../../contract/service/adapter.js';
+import type { TerminalHarnessAdapter } from '../../contract/service/adapter.js';
 import { ASKS_IN_REVIEW, ASKS_NEVER } from '../../../platform/contract/wire/conditions.js';
 import { HARNESS_LABELS } from '../../../threads/contract/wire/harness/names.js';
 
@@ -7,13 +7,13 @@ import { claudeCodeIcon } from '@runlith/adapter-anthropic/icon';
 import {
   adoptedPermissionArgv,
   chosenModelArgv,
+  HOOK_CONTEXT_CHARS,
   INTERRUPT_KEY,
-  type TerminalHarnessAdapter,
   type HarnessModelArgv,
   type HarnessPermissionArgv,
   type HarnessPermissionModes,
   type HarnessWidgetKey,
-} from '../../contract/service/adapter.js';
+} from '@runlith/tagma/adapter/harness';
 import { claudeScreenAsk, claudeWidgetKeys } from './screen.js';
 import { claudeComposer, claudePromptScreen } from './composer.js';
 import { CLAUDE_EVENTS, claudeFiles, claudePrinted, claudeOccasion } from '../../adapter/claudeFormat.js';

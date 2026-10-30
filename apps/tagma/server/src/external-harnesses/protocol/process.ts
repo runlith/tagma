@@ -22,7 +22,7 @@ import type { ProtocolLauncher } from './launcher.js';
 import type { ProtocolLaunches } from './launches.js';
 import { reading, stderrTail, type Ending } from './link.js';
 import { facetOf, type Link, type ProtocolLinks } from './links.js';
-import type { AcpProfile } from './profile.js';
+import type { AcpProfile } from '@runlith/tagma/adapter/harness';
 import type { HarnessName } from '../../threads/contract/wire/harness/names.js';
 import type { ProtocolAsides } from './asides.js';
 import type { ProtocolReactor } from './reactor.js';

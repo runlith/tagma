@@ -1,8 +1,7 @@
 import { CALL_ENVELOPE_MS } from '@runlith/agent/callProgress';
 import { CLAUDE_CODE_PROVIDER } from '@runlith/adapter-anthropic/models/anthropic';
 import { WORLD_COMMAND } from '../../../installation/contract/wire/layout.js';
-import { chosenModelArgv, type HarnessModelArgv } from '../../contract/service/adapter.js';
-import type { AcpProfile } from '../../protocol/profile.js';
+import { chosenModelArgv, type AcpProfile, type HarnessModelArgv } from '@runlith/tagma/adapter/harness';
 import { EXTENSIONS, NOTIFICATIONS } from '../../contract/wire/extensions.js';
 
 export const claudeAcp = (model: HarnessModelArgv): AcpProfile => ({

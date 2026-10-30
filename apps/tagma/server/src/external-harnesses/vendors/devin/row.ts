@@ -1,18 +1,18 @@
 import { HARNESS_LABELS } from '../../../threads/contract/wire/harness/names.js';
 import { LEGACY_TOOLS } from '../tools.js';
-import { UNMEASURED_HOOK_CONTEXT } from '../../contract/service/adapter.js';
+import type { TerminalHarnessAdapter } from '../../contract/service/adapter.js';
 
 import { DEVIN_PROVIDER } from '@runlith/adapter-devin/models/devin';
-import type { HarnessQuestionOption } from '../../../threads/contract/wire/harness/session.js';
 import {
   adoptedPermissionArgv,
   chosenModelArgv,
-  type TerminalHarnessAdapter,
+  UNMEASURED_HOOK_CONTEXT,
   type HarnessModelArgv,
   type HarnessPermissionArgv,
+  type HarnessQuestionOption,
   type ScreenAsk,
   type HarnessWidgetKey,
-} from '../../contract/service/adapter.js';
+} from '@runlith/tagma/adapter/harness';
 import { CLAUDE_EVENTS, claudeFiles, claudePrinted, claudeOccasion, claudeSubject } from '../../adapter/claudeFormat.js';
 import { field, rootOfArgv, sessionIdOf, unreported } from '../../adapter/payload.js';
 import { oneValue } from '../../adapter/screenAsk.js';

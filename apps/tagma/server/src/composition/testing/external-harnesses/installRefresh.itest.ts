@@ -7,7 +7,7 @@ import { Context, Effect, FileSystem, Layer, Schema } from 'effect';
 import { doctrine } from '../../doctrine.js';
 import { fixtureMigrations } from '../migrations.js';
 import { harnessAdapter } from '../../../external-harnesses/contract/service/table.js';
-import type { McpSurface } from '../../../external-harnesses/contract/service/adapter.js';
+import type { McpSurface } from '@runlith/tagma/adapter/harness';
 import { declareInto } from '../../../external-harnesses/installs/mcpDeclaration.js';
 import { besideEnv } from '../../../installation/cut/beside.js';
 import { declaredForLaunch, refreshedFor, refreshInstallations } from '../../../external-harnesses/installs/upgrade.js';

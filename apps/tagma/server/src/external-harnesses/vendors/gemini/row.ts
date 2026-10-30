@@ -1,18 +1,18 @@
 import { HARNESS_LABELS } from '../../../threads/contract/wire/harness/names.js';
 import { LEGACY_TOOLS } from '../tools.js';
-import { UNMEASURED_HOOK_CONTEXT } from '../../contract/service/adapter.js';
+import type { TerminalHarnessAdapter } from '../../contract/service/adapter.js';
 
-import type { HarnessQuestionOption } from '../../../threads/contract/wire/harness/session.js';
 import {
   adoptedPermissionArgv,
   chosenModelArgv,
-  type TerminalHarnessAdapter,
+  UNMEASURED_HOOK_CONTEXT,
   type HarnessModelArgv,
   type HarnessPermissionArgv,
+  type HarnessQuestionOption,
   type ScreenAsk,
   type HarnessWidgetKey,
   type HookOccasion,
-} from '../../contract/service/adapter.js';
+} from '@runlith/tagma/adapter/harness';
 import { rootOfArgv, sessionIdOf, tail, unasked, unfiled, unprinted, unreported, unturned } from '../../adapter/payload.js';
 import { oneValue } from '../../adapter/screenAsk.js';
 import { GEMINI_MARK } from './mark.js';

@@ -12,7 +12,7 @@ import type { RunActivities } from './activities.js';
 import type { ProtocolLaunches } from './launches.js';
 import { halt } from './halts.js';
 import { facetOf } from './links.js';
-import type { AcpProfile } from './profile.js';
+import type { AcpProfile } from '@runlith/tagma/adapter/harness';
 import type { HarnessName } from '../../threads/contract/wire/harness/names.js';
 import type { ProtocolReactor } from './reactor.js';
 import { freshRow, type ProtocolRow } from './row.js';

@@ -1,6 +1,4 @@
-import type { HarnessModelReport } from '../../threads/contract/wire/harness/observation.js';
-import type { FileEffect } from '../contract/service/adapter.js';
-import type { HarnessCall } from '../contract/wire/call.js';
+import type { FileEffect, HarnessCall, HarnessModelReport } from '@runlith/tagma/adapter/harness';
 
 export const tail = (prompt: string | undefined): string[] => (prompt === undefined ? [] : [prompt]);
 

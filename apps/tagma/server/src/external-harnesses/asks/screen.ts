@@ -3,7 +3,7 @@ import { Cause, Effect, Fiber, Queue, Scope, Stream } from 'effect';
 import { declare } from '@runlith/held/Held';
 import { Holding } from '@runlith/held/holding';
 import type { ScreenAnswer } from '@runlith/executions/protocol/presentation';
-import type { ScreenAsk } from '../contract/service/adapter.js';
+import type { ScreenAsk } from '@runlith/tagma/adapter/harness';
 import { screenLines } from '@runlith/executions/protocol/presentationText';
 import { readsScreen, sameScreenAsk, widgetStands } from '../adapter/screenAsk.js';
 import { harnessAdapter } from '../contract/service/table.js';

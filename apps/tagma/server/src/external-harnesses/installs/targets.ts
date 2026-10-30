@@ -1,7 +1,7 @@
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { HARNESSES } from '../contract/service/table.js';
-import type { HookFormat } from '../contract/service/adapter.js';
+import type { HookFormat } from '@runlith/tagma/adapter/harness';
 import { entryLine } from '../../installation/contract/wire/junction.js';
 
 const ENTRY_WORD = entryLine('')

@@ -1,4 +1,4 @@
-import type { HarnessTools } from '../contract/service/adapter.js';
+import type { HarnessTools } from '@runlith/tagma/adapter/harness';
 import { ASKS_IN_REVIEW, ASKS_NEVER } from '../../platform/contract/wire/conditions.js';
 
 export const LEGACY_TOOLS: HarnessTools = {

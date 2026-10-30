@@ -8,7 +8,7 @@ import { byteOffset } from '@runlith/executions/protocol/record';
 import { TargetKey } from '../../executions/contract/wire/targets.js';
 import { TerminalRefused } from '../../executions/contract/wire/refusals.js';
 import type { TerminalRecord } from '../../executions/contract/wire/terminals.js';
-import type { ScreenAsk } from '../contract/service/adapter.js';
+import type { ScreenAsk } from '@runlith/tagma/adapter/harness';
 import type { Terminals } from '../../executions/contract/service/terminals.js';
 import type { TerminalScreens } from '../../executions/contract/service/records.js';
 import type { TerminalWriting } from '../../executions/contract/service/writing.js';

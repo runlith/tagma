@@ -1,6 +1,5 @@
 import { Deferred, Effect } from 'effect';
-import type { HarnessCall } from '../contract/wire/call.js';
-import type { ScreenAsk } from '../contract/service/adapter.js';
+import type { HarnessCall, ScreenAsk } from '@runlith/tagma/adapter/harness';
 import { sameScreenAsk } from '../adapter/screenAsk.js';
 
 export type HookReply = 'allow-once' | 'deny' | 'unanswered';

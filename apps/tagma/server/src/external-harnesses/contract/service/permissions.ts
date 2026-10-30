@@ -1,5 +1,6 @@
 import { Context, type Effect } from 'effect';
-import type { HarnessCall, HarnessDecision, HarnessAnswer } from '../wire/call.js';
+import type { HarnessDecision, HarnessAnswer } from '../wire/call.js';
+import type { HarnessCall } from '@runlith/tagma/adapter/harness';
 import type { HarnessFailure } from '../../../threads/contract/service/failure.js';
 import type { HarnessName } from '../../../threads/contract/wire/harness/names.js';
 

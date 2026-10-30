@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import type { HarnessCut, HarnessCutMaking } from '../contract/service/adapter.js';
+import type { HarnessCut, HarnessCutMaking } from '@runlith/tagma/adapter/harness';
 import { ALIGNMENT_WORDS, alignmentOf, type AlignmentFacts } from './alignment.js';
 
 const launch: HarnessCutMaking = { _tag: 'Launch', argv: () => [], rows: 'copied' };

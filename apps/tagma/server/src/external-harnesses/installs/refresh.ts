@@ -1,4 +1,4 @@
-import type { HookFormat } from '../contract/service/adapter.js';
+import type { HookFormat } from '@runlith/tagma/adapter/harness';
 import { hookHole } from '../adapter/hookFormat.js';
 import { ownedEntry, nestedOf, portableEntry } from './targets.js';
 import type { HookEntry } from './hookInstall.js';

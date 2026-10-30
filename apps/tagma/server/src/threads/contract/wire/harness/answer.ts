@@ -1,5 +1,5 @@
 import { Schema } from 'effect';
-import { HARNESS_ID_MAX } from './observation.js';
+import { HARNESS_ID_MAX } from '@runlith/tagma/adapter/harness';
 
 const answerId = Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(HARNESS_ID_MAX));
 

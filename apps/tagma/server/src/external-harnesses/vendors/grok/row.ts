@@ -1,16 +1,16 @@
 import { HARNESS_LABELS } from '../../../threads/contract/wire/harness/names.js';
 import { LEGACY_TOOLS } from '../tools.js';
-import { UNMEASURED_HOOK_CONTEXT } from '../../contract/service/adapter.js';
+import type { TerminalHarnessAdapter } from '../../contract/service/adapter.js';
 
 import {
   adoptedPermissionArgv,
   chosenModelArgv,
   INTERRUPT_KEY,
-  type TerminalHarnessAdapter,
+  UNMEASURED_HOOK_CONTEXT,
   type HarnessModelArgv,
   type HarnessPermissionArgv,
   type HookOccasion,
-} from '../../contract/service/adapter.js';
+} from '@runlith/tagma/adapter/harness';
 import { CLAUDE_EVENTS, claudeFiles, claudePrinted, claudeOccasion } from '../../adapter/claudeFormat.js';
 import { rootOfArgv, sessionIdOf, tail, unasked, unreported, unturned } from '../../adapter/payload.js';
 import { unmeasuredKeys, unmeasuredScreen } from '../../adapter/screenAsk.js';

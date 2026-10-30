@@ -1,4 +1,4 @@
-import type { FileEffect, HarnessPrinted, HookEvents } from '../../contract/service/adapter.js';
+import type { FileEffect, HarnessPrinted, HookEvents } from '@runlith/tagma/adapter/harness';
 import { field, nested, patchFiles } from '../../adapter/payload.js';
 
 export const events: HookEvents = {

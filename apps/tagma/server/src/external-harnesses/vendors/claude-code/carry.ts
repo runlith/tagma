@@ -1,6 +1,6 @@
 import { join } from 'node:path';
 import { Effect } from 'effect';
-import type { HarnessCarry } from '../../contract/service/adapter.js';
+import type { HarnessCarry } from '@runlith/tagma/adapter/harness';
 
 export const claudeCarry: HarnessCarry = {
   folder: '.claude',

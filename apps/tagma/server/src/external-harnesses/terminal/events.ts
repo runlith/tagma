@@ -10,12 +10,12 @@ import type { SessionAlignment } from '../sessions/alignment.js';
 import type { ExternalSession, HarnessTurn } from '../../threads/contract/wire/harness/externalSession.js';
 import type { HarnessFailure } from '../../threads/contract/service/failure.js';
 import {
-  HARNESS_DETAIL_MAX,
   type HarnessEvent,
   type HarnessField,
   type HarnessReceipt,
   type HarnessReportInput,
 } from '../../threads/contract/wire/harness/observation.js';
+import { HARNESS_DETAIL_MAX } from '@runlith/tagma/adapter/harness';
 import type { SessionLookupStore } from '../../threads/store/sessionLookups.js';
 import type { HarnessAdapter } from '../contract/service/adapter.js';
 import type { HarnessPermissions } from '../contract/service/permissions.js';

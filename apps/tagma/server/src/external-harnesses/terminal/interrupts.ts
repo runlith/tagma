@@ -5,7 +5,7 @@ import { harnessSessionActive } from '../../threads/contract/wire/harness/sessio
 import type { HarnessFailure } from '../../threads/contract/service/failure.js';
 import type { HarnessExecutionRef } from '../../threads/contract/wire/harness/observation.js';
 import type { HarnessName } from '../../threads/contract/wire/harness/names.js';
-import type { HarnessExitArm, HarnessWidgetKey } from '../contract/service/adapter.js';
+import type { HarnessExitArm, HarnessWidgetKey } from '@runlith/tagma/adapter/harness';
 import { harnessAdapter } from '../contract/service/table.js';
 import { endsSource } from '../ends/table.js';
 import { promptDigest, typedBack } from '../adapter/input.js';

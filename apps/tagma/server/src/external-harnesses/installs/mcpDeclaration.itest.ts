@@ -15,7 +15,8 @@ import {
 import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { harnessAdapter } from '../contract/service/table.js';
-import type { McpSurface, HarnessAdapter } from '../contract/service/adapter.js';
+import type { HarnessAdapter } from '../contract/service/adapter.js';
+import type { McpSurface } from '@runlith/tagma/adapter/harness';
 import { MCP_KEY_VARIABLE } from '../../platform/contract/wire/session.js';
 import { declareInto as declareWith, installMcpDeclarations, MCP_SERVER_NAME } from './mcpDeclaration.js';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';

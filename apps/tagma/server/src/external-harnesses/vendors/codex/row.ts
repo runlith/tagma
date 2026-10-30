@@ -6,8 +6,8 @@ import {
   adoptedPermissionArgv,
   chosenModelArgv,
   INTERRUPT_KEY,
+  UNMEASURED_HOOK_CONTEXT,
   type FileEffect,
-  type TerminalHarnessAdapter,
   type HarnessModelArgv,
   type HarnessPermissionArgv,
   type HarnessPrepare,
@@ -15,11 +15,12 @@ import {
   type PrepareJudgment,
   type PrepareAnswer,
   type PreparedRoot,
-} from '../../contract/service/adapter.js';
+  type ScreenAsk,
+  type HarnessWidgetKey,
+  type HarnessQuestionOption,
+} from '@runlith/tagma/adapter/harness';
+import type { TerminalHarnessAdapter } from '../../contract/service/adapter.js';
 import { CODEX_PROVIDER } from '@runlith/adapter-openai/models/openai';
-import type { HarnessQuestionOption } from '../../../threads/contract/wire/harness/session.js';
-import type { ScreenAsk, HarnessWidgetKey } from '../../contract/service/adapter.js';
-import { UNMEASURED_HOOK_CONTEXT } from '../../contract/service/adapter.js';
 import { CLAUDE_EVENTS, claudeFiles, claudePrinted, claudeOccasion } from '../../adapter/claudeFormat.js';
 import { oneValue } from '../../adapter/screenAsk.js';
 import { field, modelField, namedCall, nested, patchFiles, rootOfArgv, sessionIdOf, tail } from '../../adapter/payload.js';

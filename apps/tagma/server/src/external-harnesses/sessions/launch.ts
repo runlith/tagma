@@ -4,7 +4,7 @@ import type { HarnessAccounts, HarnessLaunch } from '../../providers/contract/se
 import { HARNESS_HOOK_BYTES } from '../../threads/contract/wire/harness/observation.js';
 import { HostRequestKey } from '@runlith/executions/protocol/execution';
 import type { CommandEnvironmentRequest } from '@runlith/executions/CommandEnvironment';
-import type { HarnessModelChoice } from '../contract/service/adapter.js';
+import type { HarnessModelChoice } from '@runlith/tagma/adapter/harness';
 import { harnessAdapter, harnessArgv, servingProvider, type HarnessTransportOffer } from '../contract/service/table.js';
 import { sessionIdentity } from '../sessionPrefix.js';
 import type { ExternalSession } from '../../threads/contract/wire/harness/externalSession.js';

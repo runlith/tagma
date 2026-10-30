@@ -5,7 +5,7 @@ import type { InputAnswer } from '@runlith/executions/protocol/input';
 import type { ScreenTextFrame } from '@runlith/executions/protocol/presentation';
 import { screenLines } from '@runlith/executions/protocol/presentationText';
 import { GateRefusal } from '../../platform/contract/wire/refusal.js';
-import type { ScreenAsk, HarnessWidgetKey } from '../contract/service/adapter.js';
+import type { ScreenAsk, HarnessWidgetKey } from '@runlith/tagma/adapter/harness';
 import type { HarnessName } from '../../threads/contract/wire/harness/names.js';
 import { sameScreenAsk } from '../adapter/screenAsk.js';
 import type { HarnessExecutionRef } from '../../threads/contract/wire/harness/observation.js';

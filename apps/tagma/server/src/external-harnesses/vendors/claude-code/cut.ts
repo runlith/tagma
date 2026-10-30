@@ -1,6 +1,6 @@
 import { Result, Schema } from 'effect';
 import { WORLD_COMMAND } from '../../../installation/contract/wire/layout.js';
-import type { HarnessAddress, HarnessCut, HarnessCutMaking, PrepareAnswer, PrepareJudgment } from '../../contract/service/adapter.js';
+import type { HarnessAddress, HarnessCut, HarnessCutMaking, PrepareAnswer, PrepareJudgment } from '@runlith/tagma/adapter/harness';
 import { runAddress } from './chain.js';
 
 export const CUT_METHODS = { initialize: 'initialize', fork: 'fork', turns: 'turns' } as const;

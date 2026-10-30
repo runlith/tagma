@@ -27,6 +27,12 @@
       "bun": "./src/adapter/provider.ts",
       "default": "./src/adapter/provider.ts"
     },
+    "./adapter/harness": {
+      "types": "./src/adapter/harness.ts",
+      "browser": "./src/adapter/harness.ts",
+      "bun": "./src/adapter/harness.ts",
+      "default": "./src/adapter/harness.ts"
+    },
     "./adapter/settings": {
       "types": "./src/adapter/settings.ts",
       "browser": "./src/adapter/settings.ts",
@@ -73,6 +79,7 @@
     "@runlith/adapter-opencode-go": "workspace:*",
     "@runlith/adapter-stepfun": "workspace:*",
     "@runlith/adapter-xai": "workspace:*",
+    "@runlith/agent": "workspace:*",
     "@runlith/held": "workspace:*",
     "@runlith/llm": "workspace:*",
     "@runlith/utils": "workspace:*"
@@ -94,6 +101,7 @@
   },
   "tagma": {
     "host": [
+      "./adapter/harness",
       "./adapter/provider",
       "./adapter/settings",
       "effect",

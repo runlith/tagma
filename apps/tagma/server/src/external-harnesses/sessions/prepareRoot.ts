@@ -2,8 +2,8 @@ import { Context, Effect, FileSystem, Layer, Stream } from 'effect';
 import { ByteOffset } from '@runlith/executions/protocol/record';
 import { HostRequestKey } from '@runlith/executions/protocol/execution';
 import { ExchangeFailed, makeExchange, type ExchangeError, type ExchangeVendorError } from '@runlith/ndjson-rpc/exchange';
+import type { HarnessAdapter } from '../contract/service/adapter.js';
 import type {
-  HarnessAdapter,
   HarnessCutAsk,
   HarnessCutMaking,
   HarnessPrepare,
@@ -11,7 +11,7 @@ import type {
   PrepareAnswer,
   PreparedRoot,
   RpcRequest,
-} from '../contract/service/adapter.js';
+} from '@runlith/tagma/adapter/harness';
 import { principalOf } from '../../executions/terminals/principals.js';
 import { STOP_LADDER_MS } from '@runlith/executions/protocol/call';
 import type { Discharge } from '../../executions/contract/service/discharge.js';

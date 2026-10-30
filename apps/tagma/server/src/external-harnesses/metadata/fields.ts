@@ -1,6 +1,6 @@
 import { Schema } from 'effect';
-import type { HarnessClaim, HarnessField, HarnessProvenance } from '../../threads/contract/wire/harness/observation.js';
-import { HARNESS_ID_MAX } from '../../threads/contract/wire/harness/observation.js';
+import type { HarnessField, HarnessProvenance } from '../../threads/contract/wire/harness/observation.js';
+import { HARNESS_ID_MAX, type HarnessClaim } from '@runlith/tagma/adapter/harness';
 import { MetadataInvalid } from './file.js';
 
 export type MetadataValue = { readonly value: string; readonly claim: HarnessClaim; readonly turnId: string | null };

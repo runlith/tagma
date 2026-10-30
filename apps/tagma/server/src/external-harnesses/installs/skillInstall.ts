@@ -6,7 +6,7 @@ import { withFileLock } from '@runlith/file-lock/FileLock';
 import { declareInto } from './mcpDeclaration.js';
 import { type InstallFailed, installFailure } from '../../installation/contract/wire/install.js';
 import type { SectionCatalog } from '../../platform/contract/service/sections.js';
-import type { HookUserFile } from '../contract/service/adapter.js';
+import type { HookUserFile } from '@runlith/tagma/adapter/harness';
 import { applyClaudeLaw, applyLaw, planClaudeLaw, planLawSection, type ClaudeLawWrite, type LawWrite } from './law.js';
 import type { McpDeclarationWrite } from '../../installation/contract/wire/install.js';
 import { entriesOf, hookGroups, type HooksWrite } from './hookInstall.js';

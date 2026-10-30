@@ -1,10 +1,10 @@
 import { installedProgram } from '@runlith/adapter-opencode/host';
 import { HARNESS_LABELS } from '../../../threads/contract/wire/harness/names.js';
-import { UNMEASURED_HOOK_CONTEXT } from '../../contract/service/adapter.js';
+import { adoptedPermissionArgv, UNMEASURED_HOOK_CONTEXT } from '@runlith/tagma/adapter/harness';
 
 import { icon } from '@runlith/adapter-opencode/icon';
 import { ASKS_IN_REVIEW, ASKS_NEVER } from '../../../platform/contract/wire/conditions.js';
-import { adoptedPermissionArgv, type TerminalHarnessAdapter } from '../../contract/service/adapter.js';
+import type { TerminalHarnessAdapter } from '../../contract/service/adapter.js';
 import { claudeOccasion } from '../../adapter/claudeFormat.js';
 import { field, modelField, namedCall, rootOfArgv, sessionIdOf } from '../../adapter/payload.js';
 import { events, filesOf, printedOf } from './format.js';

@@ -1,7 +1,7 @@
 import { Effect } from 'effect';
 import { harnessAdapter, servingProvider } from '../contract/service/table.js';
 import type { HarnessAskedModel } from '../../threads/contract/wire/harness/askedModel.js';
-import type { HarnessModelChoice } from '../contract/service/adapter.js';
+import type { HarnessModelChoice } from '@runlith/tagma/adapter/harness';
 import type { HarnessName, HarnessTransport } from '../../threads/contract/wire/harness/names.js';
 import type { ModelCatalog } from '@runlith/llm/models/catalog';
 import { GateRefusal, type Unblock } from '../../platform/contract/wire/refusal.js';

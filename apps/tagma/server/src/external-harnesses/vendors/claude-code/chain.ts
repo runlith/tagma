@@ -1,5 +1,5 @@
 import { Predicate, Result, Schema } from 'effect';
-import type { HarnessRunSeen } from '../../contract/service/adapter.js';
+import type { HarnessRunSeen } from '@runlith/tagma/adapter/harness';
 
 const CHAINED = new Set(['user', 'assistant', 'progress', 'system', 'attachment']);
 

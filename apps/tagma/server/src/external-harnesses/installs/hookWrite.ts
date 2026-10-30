@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { Effect } from 'effect';
-import type { HookAsset, HookFormat } from '../contract/service/adapter.js';
+import type { HookAsset, HookFormat } from '@runlith/tagma/adapter/harness';
 import { hookEntry, hookEventsAt, hookFileKeys } from '../adapter/hookFormat.js';
 import { InstallFailed, installFailure } from '../../installation/contract/wire/install.js';
 import { hookFiles, type HookEntry, type HooksWrite } from './hookInstall.js';

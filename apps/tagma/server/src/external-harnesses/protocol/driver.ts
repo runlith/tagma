@@ -51,7 +51,7 @@ import type { ProtocolJournal } from './journal.js';
 import { ProtocolLauncher } from './launcher.js';
 import { LinkEnded, profileOf, ProtocolLinks, WaitExpired } from './links.js';
 import { IDLE_MS } from './idle.js';
-import type { AcpProfile } from './profile.js';
+import type { AcpProfile } from '@runlith/tagma/adapter/harness';
 import type { HarnessName } from '../../threads/contract/wire/harness/names.js';
 import { Answers } from './methods/answers.js';
 import type { AsideOutcome, WithdrawOutcome } from './methods/declaration.js';

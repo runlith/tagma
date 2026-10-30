@@ -7,7 +7,7 @@ import type { HarnessName } from '../../threads/contract/wire/harness/names.js';
 import { harnessAdapter } from '../contract/service/table.js';
 import type { ProtocolRows } from '../store/protocol.js';
 import type { HarnessSessionStore } from '../store/sessions.js';
-import type { AcpProfile } from './profile.js';
+import type { AcpProfile } from '@runlith/tagma/adapter/harness';
 import type { ProtocolRow } from './row.js';
 import type { HarnessTurnEnded } from './turns.js';
 import type { ProtocolWriter } from './writing.js';

@@ -2,8 +2,8 @@ import { Clock, Effect } from 'effect';
 import type { HarnessAccepted } from '../contract/service/observations.js';
 import { rootOf, workBound, sameField, sourceOf, sameBinding, field } from './binding.js';
 import type { ExternalSession } from '../../threads/contract/wire/harness/externalSession.js';
+import { HARNESS_DETAIL_MAX } from '@runlith/tagma/adapter/harness';
 import {
-  HARNESS_DETAIL_MAX,
   HARNESS_DIAGNOSTIC_LIMIT,
   HARNESS_HELD_LIMIT,
   type HarnessBinding,

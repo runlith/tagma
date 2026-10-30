@@ -1,7 +1,7 @@
 import { Context, Data, Effect, FileSystem, Layer } from 'effect';
 import { dirname } from 'node:path';
 import type { EnvironmentBinding } from '../../workspace/contract/wire/environments.js';
-import { HARNESS_ID_MAX } from '../../threads/contract/wire/harness/observation.js';
+import { HARNESS_ID_MAX } from '@runlith/tagma/adapter/harness';
 import type { Environments } from '../../workspace/contract/service/environments.js';
 import { MetadataFile } from '../metadata/file.js';
 import { DOCUMENT_LIMITS } from '../metadata/policy.js';

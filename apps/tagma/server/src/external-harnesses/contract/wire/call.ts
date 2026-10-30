@@ -1,13 +1,6 @@
 import { Schema } from 'effect';
 import { harnessNameSchema } from '../../../threads/contract/wire/harness/names.js';
 
-export const harnessCallSchema = Schema.Struct({
-  id: Schema.NullOr(Schema.String.check(Schema.isMinLength(1))),
-  tool: Schema.String.check(Schema.isMinLength(1)),
-  subject: Schema.String.check(Schema.isMinLength(1)),
-});
-export type HarnessCall = typeof harnessCallSchema.Type;
-
 const allowedSchema = Schema.Struct({
   _tag: Schema.Literal('Allowed'),
   ruleId: Schema.String,

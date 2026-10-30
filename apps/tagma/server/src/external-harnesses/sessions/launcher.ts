@@ -18,7 +18,7 @@ import { HarnessSessionStore } from '../store/sessions.js';
 import { refusalLine } from '../../threads/contract/wire/harness/failureLine.js';
 import { threadCallFailed, type HarnessFailure } from '../../threads/contract/service/failure.js';
 import type { SessionPlace } from '../protocol/prompts.js';
-import type { HarnessModelChoice } from '../contract/service/adapter.js';
+import type { HarnessModelChoice } from '@runlith/tagma/adapter/harness';
 import { accountFor, harnessPlace, harnessRunKey, launchHarness, type HarnessPlace, type ProjectDeclaring } from './launch.js';
 import { recordStorageGate, provisionReason } from './lifecycle.js';
 

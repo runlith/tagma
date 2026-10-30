@@ -2,7 +2,8 @@ import type { Effect, Schema } from 'effect';
 import type { Flag } from 'effect/cli';
 import type { OperationRegistry } from '../../../invocation/contract/service/registry.js';
 import type { Invocation } from '../../../platform/cli/verb.js';
-import type { McpToolShape, SessionRef } from '../../../platform/contract/wire/session.js';
+import type { SessionRef } from '../../../platform/contract/wire/session.js';
+import type { McpToolShape } from '@runlith/tagma/adapter/harness';
 import type { Operation } from '../../../platform/contract/wire/operation.js';
 
 export type JsonObjectSchema = Readonly<Record<string, unknown>> & { readonly type: 'object' };

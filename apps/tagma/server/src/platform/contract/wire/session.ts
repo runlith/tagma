@@ -13,9 +13,6 @@ export const MCP_SESSION_HEADER = 'x-tagma-mcp-session';
 
 export const MCP_KEY_VARIABLE = 'TAGMA_MCP_KEY';
 
-export const MCP_TOOL_SHAPES = ['catalog', 'proxy'] as const;
-export type McpToolShape = (typeof MCP_TOOL_SHAPES)[number];
-
 export class SessionIdentity extends Context.Service<
   SessionIdentity,
   {

@@ -15,14 +15,12 @@ import {
 import { inputEnvelopes, operatorWords } from '../adapter/input.js';
 import type { HarnessName } from '../../threads/contract/wire/harness/names.js';
 import { PERMISSION_TIMEOUT_SECONDS } from '../contract/wire/call.js';
-import { HOOK_CONTEXT_CHARS, type FileEffect } from '../contract/service/adapter.js';
+import { HARNESS_DETAIL_MAX, HARNESS_ID_MAX, HOOK_CONTEXT_CHARS, type FileEffect } from '@runlith/tagma/adapter/harness';
 import { adoptedHook, forgetAdoption, publishedHarness } from './adoption.js';
 import { contextAnswer, permissionAnswer, promptAnswer, promptSupported, toolAnswer } from '../adapter/hookFormat.js';
 import { sessionIdOf } from '../adapter/payload.js';
 import {
   HARNESS_HOOK_BYTES,
-  HARNESS_ID_MAX,
-  HARNESS_DETAIL_MAX,
   HARNESS_CALL_OUTPUT_MAX,
   type HarnessCallReport,
   type HarnessReceipt,

@@ -1,4 +1,5 @@
 import { Effect, Schema } from 'effect';
+import { HARNESS_DETAIL_MAX, HARNESS_ID_MAX, harnessClaimSchema, harnessModelReportSchema } from '@runlith/tagma/adapter/harness';
 import { harnessNameSchema, harnessTransportSchema } from './names.js';
 import { harnessSaidSchema } from './said.js';
 
@@ -18,9 +19,6 @@ export type HarnessBinding = typeof harnessBindingSchema.Type;
 
 export const harnessProvenanceSchema = Schema.Literals(['hook', 'vendor-record', 'transcript', 'session-store', 'terminal', 'protocol']);
 export type HarnessProvenance = typeof harnessProvenanceSchema.Type;
-
-export const harnessClaimSchema = Schema.Literals(['configured', 'serving', 'last-recorded']);
-export type HarnessClaim = typeof harnessClaimSchema.Type;
 
 export const harnessScopeSchema = Schema.Struct({
   rootKey: Schema.NullOr(Schema.String),
@@ -112,8 +110,6 @@ export const HARNESS_DIAGNOSTIC_LIMIT = 8;
 
 export const HARNESS_HELD_LIMIT = 8;
 export const HARNESS_SEEN_LIMIT = 8;
-export const HARNESS_ID_MAX = 200;
-export const HARNESS_DETAIL_MAX = 160;
 
 export const harnessReceiptSchema = Schema.Struct({
   outcome: Schema.Literals(['admitted', 'kept', 'refused', 'duplicate', 'unchanged']),
@@ -124,21 +120,6 @@ export const harnessReceiptSchema = Schema.Struct({
   seeded: Schema.optional(Schema.Literal(true)),
 });
 export type HarnessReceipt = typeof harnessReceiptSchema.Type;
-
-export const harnessModelReportSchema = Schema.Union([
-  Schema.Struct({
-    read: Schema.Literal('value'),
-    value: Schema.String.check(Schema.isMaxLength(HARNESS_ID_MAX)),
-    claim: harnessClaimSchema,
-  }),
-  Schema.Struct({ read: Schema.Literal('absent') }),
-  Schema.Struct({ read: Schema.Literal('unsupported') }),
-  Schema.Struct({
-    read: Schema.Literal('unreadable'),
-    reason: Schema.String.check(Schema.isMaxLength(HARNESS_DETAIL_MAX)),
-  }),
-]);
-export type HarnessModelReport = typeof harnessModelReportSchema.Type;
 
 export const HARNESS_HOOK_BYTES = 32 * 1024;
 

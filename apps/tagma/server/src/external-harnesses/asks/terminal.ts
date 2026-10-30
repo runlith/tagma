@@ -6,12 +6,12 @@ import { questionEntryId } from '@runlith/agent/transcript/entryNames';
 import { threadCallFailed } from '../../threads/contract/service/failure.js';
 import { GateRefusal } from '../../platform/contract/wire/refusal.js';
 import type { HarnessFailure } from '../../threads/contract/service/failure.js';
-import { ALLOW_ONCE, DENY, PERMISSION_OPTIONS, type HarnessQuestionOption } from '../../threads/contract/wire/harness/session.js';
+import { ALLOW_ONCE, DENY, PERMISSION_OPTIONS } from '../../threads/contract/wire/harness/session.js';
 import { sameScreenAsk } from '../adapter/screenAsk.js';
-import type { HarnessWidgetKey, ScreenAsk } from '../contract/service/adapter.js';
+import type { HarnessCall, HarnessQuestionOption, HarnessWidgetKey, ScreenAsk } from '@runlith/tagma/adapter/harness';
 import type { HarnessJudging } from '../contract/service/permissions.js';
 import type { HarnessName } from '../../threads/contract/wire/harness/names.js';
-import { PERMISSION_TIMEOUT_SECONDS, type HarnessCall, type HarnessDecision, type HarnessAnswer } from '../contract/wire/call.js';
+import { PERMISSION_TIMEOUT_SECONDS, type HarnessDecision, type HarnessAnswer } from '../contract/wire/call.js';
 import { AskRoutes, widgetAsksAbout, type AskRoute } from './routes.js';
 
 export const TERMINAL_ROUTE = 'terminal';

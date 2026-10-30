@@ -8,7 +8,8 @@ import type { ToolShown } from '@runlith/agent/tool';
 import type { HarnessAdopted, HarnessAdoptInput } from '../contract/wire/adoption.js';
 import { RUN_UNOWNED } from '../contract/wire/call.js';
 import type { HOOK_OPERATIONS } from '../contract/wire/hooks.js';
-import type { HarnessCall, HarnessDecision, harnessCallAnswerSchema } from '../contract/wire/call.js';
+import type { HarnessDecision, harnessCallAnswerSchema } from '../contract/wire/call.js';
+import type { HarnessCall } from '@runlith/tagma/adapter/harness';
 import type { HarnessReceipt, HarnessReportInput } from '../../threads/contract/wire/harness/observation.js';
 
 type Cwd = { readonly cwd: string };

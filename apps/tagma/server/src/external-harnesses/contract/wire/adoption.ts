@@ -1,7 +1,8 @@
 import { Schema } from 'effect';
 import { ProcessWitness } from '@runlith/executions/protocol/evidence';
 import { harnessNameSchema } from '../../../threads/contract/wire/harness/names.js';
-import { HARNESS_HOOK_BYTES, HARNESS_ID_MAX } from '../../../threads/contract/wire/harness/observation.js';
+import { HARNESS_HOOK_BYTES } from '../../../threads/contract/wire/harness/observation.js';
+import { HARNESS_ID_MAX } from '@runlith/tagma/adapter/harness';
 import { HARNESS_STORAGE_VARIABLES } from '../../../threads/contract/wire/harness/session.js';
 import { placeRole } from '../../../platform/contract/wire/place.js';
 

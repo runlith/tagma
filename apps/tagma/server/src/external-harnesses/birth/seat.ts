@@ -7,7 +7,7 @@ import { EXTERNAL_PROVIDER, type HarnessSeat, type KernelSeat, type SeatedHarnes
 import { harnessFacet } from '../../threads/contract/wire/harness/types.js';
 import { harnessAdapter, servingProvider } from '../contract/service/table.js';
 import { transcriptUsage } from '../metadata/words.js';
-import type { AcpProfile } from '../protocol/profile.js';
+import type { AcpProfile } from '@runlith/tagma/adapter/harness';
 import type { HarnessTransportOffer } from '../contract/service/table.js';
 import type { HarnessProfile } from '../settings.js';
 

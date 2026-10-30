@@ -1,7 +1,7 @@
 import { Effect } from 'effect';
 import type { PermissionKind } from '@runlith/agent/permissions';
 import { ASKS_IN_REVIEW } from '../../platform/contract/wire/conditions.js';
-import type { HarnessTool } from '../contract/service/adapter.js';
+import type { HarnessTool } from '@runlith/tagma/adapter/harness';
 import type { HarnessName } from '../../threads/contract/wire/harness/names.js';
 import { judge, resolveMode, type ModeLookup } from '@runlith/agent/modes/ApprovalMode';
 import { OPERATOR_PRINCIPAL } from '../../platform/contract/wire/actor.js';

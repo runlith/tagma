@@ -12,7 +12,7 @@ import type { Terminals } from '../../executions/contract/service/terminals.js';
 import type { TerminalWriting } from '../../executions/contract/service/writing.js';
 import type { ExecutionRecords } from '../../executions/contract/service/records.js';
 import type { Discharge } from '../../executions/contract/service/discharge.js';
-import type { PreparedRoot } from '../contract/service/adapter.js';
+import type { PreparedRoot } from '@runlith/tagma/adapter/harness';
 import { prepareRoot, verifyPreparedRoot } from './prepareRoot.js';
 import type { HarnessPlace } from './launch.js';
 import { readWitness, type WitnessTry } from './readWitness.js';

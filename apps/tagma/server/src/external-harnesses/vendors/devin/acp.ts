@@ -1,5 +1,4 @@
-import { chosenModelArgv, type HarnessModelArgv } from '../../contract/service/adapter.js';
-import type { AcpProfile } from '../../protocol/profile.js';
+import { chosenModelArgv, type AcpProfile, type HarnessModelArgv } from '@runlith/tagma/adapter/harness';
 
 export const devinAcp = (model: HarnessModelArgv): AcpProfile => ({
   argv: (choice) => ['devin', 'acp', ...chosenModelArgv(model, choice)],

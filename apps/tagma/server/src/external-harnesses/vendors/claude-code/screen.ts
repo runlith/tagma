@@ -1,5 +1,4 @@
-import type { HarnessQuestionOption } from '../../../threads/contract/wire/harness/session.js';
-import type { HarnessWidgetKey, ScreenAsk, ScreenAskTyped } from '../../contract/service/adapter.js';
+import type { HarnessQuestionOption, HarnessWidgetKey, ScreenAsk, ScreenAskTyped } from '@runlith/tagma/adapter/harness';
 
 const CLAUDE_SELECTED = /^(\s*)❯ (\d+)\. (.+)$/;
 const CLAUDE_NUMBERED = /^(\s*)(\d+)\. (.+)$/;

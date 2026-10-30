@@ -5,7 +5,7 @@ import { Principal } from '@runlith/executions/protocol/custody';
 import type { TerminalScreens } from '../../executions/contract/service/records.js';
 import type { ThreadRunRef } from '@runlith/agent/thread/run/ThreadRunLedger';
 import type { ThreadInteractionAnswer, ThreadQuestionEntry } from '@runlith/agent/transcript/entries';
-import type { ScreenAsk } from '../contract/service/adapter.js';
+import type { ScreenAsk } from '@runlith/tagma/adapter/harness';
 import type { HarnessSessionStore } from '../store/sessions.js';
 import { HarnessLanes } from '../sessions/lanes.js';
 import { keyboardFrame, keyboardRig, KEYBOARD_EXECUTION, WIDGET_ASK, WIDGET_GONE } from '../testing/keyboard.js';

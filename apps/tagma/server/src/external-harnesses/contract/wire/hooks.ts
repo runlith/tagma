@@ -4,7 +4,8 @@ import { Place } from '../../../platform/contract/wire/place.js';
 import { arms, operation } from '../../../platform/contract/wire/operation.js';
 import { harnessReceiptSchema, harnessReportSchema } from '../../../threads/contract/wire/harness/observation.js';
 import { harnessAdoptedSchema, harnessAdoptSchema } from './adoption.js';
-import { harnessCallAnswerSchema, harnessCallSchema, harnessDecisionSchema } from './call.js';
+import { harnessCallAnswerSchema, harnessDecisionSchema } from './call.js';
+import { harnessCallSchema } from '@runlith/tagma/adapter/harness';
 import { ASKS_IN_REVIEW, ASKS_NEVER } from '../../../platform/contract/wire/conditions.js';
 
 const nobody = () => [];

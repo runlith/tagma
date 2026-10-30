@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test';
 import { ExecutionId, InstallationId } from '@runlith/executions/protocol/execution';
 import { byteOffset } from '@runlith/executions/protocol/record';
 import type { CellStyle, ScreenFrame, ScreenRow } from '@runlith/executions/protocol/presentation';
-import type { HarnessWidgetKey } from '../contract/service/adapter.js';
+import type { HarnessWidgetKey } from '@runlith/tagma/adapter/harness';
 import { claudeCode } from '../vendors/claude-code/row.js';
 import { codex } from '../vendors/codex/row.js';
 import { cursor } from '../vendors/cursor/row.js';

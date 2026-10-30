@@ -1,5 +1,4 @@
-import type { FileEffect, HarnessPrinted, HookEvents, HookOccasion } from '../contract/service/adapter.js';
-import type { HarnessCall } from '../contract/wire/call.js';
+import type { FileEffect, HarnessCall, HarnessPrinted, HookEvents, HookOccasion } from '@runlith/tagma/adapter/harness';
 import { field, nested, questionTool, toolCall } from './payload.js';
 
 export const CLAUDE_EVENTS: HookEvents = {

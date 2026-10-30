@@ -3,7 +3,7 @@ import { it } from '@runlith/effect-test';
 import { Duration, Effect, Fiber } from 'effect';
 import { TestClock } from 'effect/testing';
 import { GateRefusal } from '../../platform/contract/wire/refusal.js';
-import type { ScreenAsk, HarnessWidgetKey } from '../contract/service/adapter.js';
+import type { ScreenAsk, HarnessWidgetKey } from '@runlith/tagma/adapter/harness';
 import { readHarnessFrame, sameWidget, typeHarnessKeys, typeHarnessWords, waitForWidget } from './keyboard.js';
 import {
   cellScreen,

@@ -1,17 +1,16 @@
 import { Effect } from 'effect';
 import { GateRefusal } from '../../../platform/contract/wire/refusal.js';
+import type { HarnessAdapter, HarnessReport } from './adapter.js';
 import type {
+  AcpProfile,
   FileEffect,
-  HarnessAdapter,
+  HarnessCall,
   HarnessCutAsk,
   HarnessCutMaking,
   HarnessLaunch,
   HarnessModelChoice,
   HarnessPrinted,
-  HarnessReport,
-} from './adapter.js';
-import type { AcpProfile } from '../../protocol/profile.js';
-import type { HarnessCall } from '../wire/call.js';
+} from '@runlith/tagma/adapter/harness';
 import { answerField } from '../../adapter/payload.js';
 import { claudeCode } from '../../vendors/claude-code/row.js';
 import { codex } from '../../vendors/codex/row.js';

@@ -1,5 +1,6 @@
 import { Effect, Schema } from 'effect';
 import { ProcessWitness } from '@runlith/executions/protocol/evidence';
+import type { HarnessQuestionOption } from '@runlith/tagma/adapter/harness';
 import { EnvironmentBinding } from '../../../../workspace/contract/wire/environments.js';
 import { HARNESS_HOOK_BYTES } from './observation.js';
 import { TerminalRefused } from '../../../../executions/contract/wire/refusals.js';
@@ -57,16 +58,6 @@ export const harnessSessionSchema = Schema.Struct({
 });
 export type HarnessProcessOutcome = 'completed' | 'failed' | 'aborted';
 export type HarnessSession = typeof harnessSessionSchema.Type;
-
-export const harnessQuestionOptionSchema = Schema.Struct({
-  value: Schema.String,
-  label: Schema.String,
-  description: Schema.optional(Schema.String),
-});
-export type HarnessQuestionOption = typeof harnessQuestionOptionSchema.Type;
-
-export const harnessQuestionKindSchema = Schema.Literals(['choice']);
-export type HarnessQuestionKind = typeof harnessQuestionKindSchema.Type;
 
 export const ALLOW_ONCE = 'allow-once';
 export const DENY = 'deny';

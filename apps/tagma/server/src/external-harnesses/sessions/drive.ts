@@ -38,7 +38,7 @@ import { LEASE_RHYTHM } from '../../threads/contract/wire/rhythm.js';
 import { executionHandshakeMs } from '../../executions/contract/wire/terminalBehavior.js';
 import { readHarnessFrame, typeHarnessKeys, typeHarnessWords, widgetOn, type HarnessKeyed, type HarnessTyped } from './keyboard.js';
 import { screenLines } from '@runlith/executions/protocol/presentationText';
-import type { HarnessWidgetKey } from '../contract/service/adapter.js';
+import type { HarnessWidgetKey } from '@runlith/tagma/adapter/harness';
 import { readsScreen, widgetStands } from '../adapter/screenAsk.js';
 import { terminalArgv, type ProjectDeclaring } from './launch.js';
 import { causeLine, endsAbortedWhenGone, shellEndedLine, forgetKept, BACKGROUND_WORDS } from './lifecycle.js';

@@ -4,7 +4,7 @@ import type { McpServedTool } from '@runlith/mcp/server';
 import { DOOR_FIELDS, doorAsked, offeringDoorFields, withoutDoorFields } from '@runlith/agent/tool';
 import { operationText, operationWrites, type Operation } from '../platform/contract/wire/operation.js';
 import { refusalBody, type RefusalBody } from '../platform/contract/wire/refusal.js';
-import type { McpToolShape } from '../platform/contract/wire/session.js';
+import type { McpToolShape } from '@runlith/tagma/adapter/harness';
 import type { OperationsCli } from './contract/service/operations.js';
 import { inputParsing, inputRefusal } from '../invocation/contract/service/input.js';
 

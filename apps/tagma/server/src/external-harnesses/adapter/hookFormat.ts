@@ -1,4 +1,4 @@
-import type { HookFormat, HookSurface } from '../contract/service/adapter.js';
+import type { HookFormat, HookSurface } from '@runlith/tagma/adapter/harness';
 import type { HarnessAnswer } from '../contract/wire/call.js';
 
 export const hookFileKeys = (format: HookFormat): Record<string, unknown> => (format === 'cursor' ? { version: 1 } : {});

@@ -1,7 +1,8 @@
 import { HARNESSES } from '../contract/service/table.js';
 import { entryLine } from '../../installation/contract/wire/junction.js';
 import { PERMISSION_TIMEOUT_SECONDS } from '../contract/wire/call.js';
-import type { HarnessAdapter, HookAsset, HookEvents, HookFormat, HookSurface } from '../contract/service/adapter.js';
+import type { HarnessAdapter } from '../contract/service/adapter.js';
+import type { HookAsset, HookEvents, HookFormat, HookSurface } from '@runlith/tagma/adapter/harness';
 
 export type HooksWrite = { path: string; write: 'created' | 'updated' | 'current'; deferred?: string[] };
 
