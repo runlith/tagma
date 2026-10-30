@@ -8,16 +8,7 @@ fields:
     "delivery": "code",
     "enforcement": {
       "debt": [],
-      "escaped": [
-        {
-          "commit": "4e6e4e6ea3a88655e77bc10ae7f0077a507a19f9",
-          "fingerprint": "external-harnesses -> @runlith/tagma @ apps/tagma/server/src/external-harnesses/programs/run.ts",
-          "fix": "Where `external-harnesses` truly depends on `@runlith/tagma`, add the relation `external-harnesses → @runlith/tagma` with `set_module`; otherwise move this code to the module that owns its meaning, or reach it through a port `external-harnesses` declares and composition fills.",
-          "line": 4,
-          "path": "apps/tagma/server/src/external-harnesses/programs/run.ts",
-          "said": "imports `@runlith/tagma/adapter/provider` of module `@runlith/tagma`, which `external-harnesses` has no relation to"
-        }
-      ],
+      "escaped": [],
       "inspection": "modules",
       "on": [
         {
