@@ -200,6 +200,22 @@ test('regular source and symlink transitions retire and restore the same dead-co
   expect(fingerprints(added.commit.tree)).toEqual(fingerprints(added.whole.tree));
 });
 
+test('editing a shared shape covers its unchanged former counterpart and retires both old findings', async () => {
+  const shape = 'export type Shared = { readonly a: string; readonly b: string; readonly c: number };\n';
+  const base = treeWith({
+    'src/a.ts': shape,
+    'src/b.ts': shape,
+    '.tagma/a.md': card('a', 'file', 'src/a.ts'),
+    '.tagma/b.md': card('b', 'file', 'src/b.ts'),
+  });
+  await index(base);
+  const tree = treeWith({ 'src/a.ts': shape.replace('readonly c: number', 'readonly c: number; readonly d: boolean') });
+  const { commit } = await judged('repeated-declarations', base, tree, ['src/a.ts']);
+  expect(commit.tree.covered).toContain('src/b.ts');
+  expect(commit.base?.findings.map((one) => one.path).sort()).toEqual(['src/a.ts', 'src/b.ts']);
+  expect(commit.tree.findings).toEqual([]);
+});
+
 test('a commit that copies an exported dependency type reports the redeclaration, as the remeasure does', async () => {
   const wide = 'export type Wide = { readonly a: string; readonly b: string; readonly c: number };\n';
   const base = treeWith({

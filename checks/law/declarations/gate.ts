@@ -153,14 +153,16 @@ export const repeated: Judge<RepeatedParams> = {
       );
     });
     const seeds = new Map<string, Facts>();
+    const keys = new Set<string>();
     for (const held of [
       ...related,
       factsAt(root, sideEntries(changes, 'before', sources)),
       factsAt(root, sideEntries(changes, 'after', sources)),
       ...[base, tree].map((commit) => factsAt(root, importersByName(root, commit, names, sources))),
-    ])
+    ]) {
+      for (const key of sharedKeys(held, params)) keys.add(key);
       for (const [path, file] of held) seeds.set(path, file);
-    const keys = sharedKeys(seeds, params);
+    }
     const paths = new Set<string>(changes.filter((one) => sources(one.path)).map((one) => one.path));
     for (const path of seeds.keys()) paths.add(path);
     if (keys.size > 0)
