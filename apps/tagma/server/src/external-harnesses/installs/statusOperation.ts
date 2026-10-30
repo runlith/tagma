@@ -7,15 +7,26 @@ import { ProjectPolicy } from '../../graph/contract/service/serving.js';
 import { ServedTree } from '../../graph/contract/service/serving.js';
 import { hookLedger } from './hookLedger.js';
 import { hooksStatus, skillStatus } from './status.js';
-import { skillTarget, userSkillTarget } from './targets.js';
+import { skillLinks, skillTarget, userSkillTarget } from './targets.js';
 import { CurrentProject } from '../../projects/contract/service/caller.js';
 import { Doctrine, doctrineOf, type SectionCatalog } from '../../platform/contract/service/sections.js';
 import { INSTALL_STATUS_OPERATIONS } from '../contract/wire/installs.js';
 
 const installations = Effect.fnUntraced(function* (privateProject: boolean, rootPath: string, contributed: SectionCatalog) {
-  const served = privateProject ? userSkillTarget() : skillTarget(rootPath);
-  const other = privateProject ? skillTarget(rootPath) : userSkillTarget();
-  const [own, rest] = yield* Effect.all([skillStatus(served, contributed), skillStatus(other, contributed)], { concurrency: 'unbounded' });
+  const [project, canonical] = yield* Effect.all(
+    [skillStatus(skillTarget(rootPath), contributed), skillStatus(userSkillTarget(), contributed)],
+    { concurrency: 'unbounded' },
+  );
+  let user = canonical;
+  if (user.state === 'missing') {
+    for (const target of yield* skillLinks(null)) {
+      const alias = yield* skillStatus(target, contributed);
+      if (alias.state === 'missing') continue;
+      user = alias;
+      break;
+    }
+  }
+  const [own, rest] = privateProject ? [user, project] : [project, user];
   return [own, ...(rest.state === 'missing' ? [] : [rest])];
 });
 
