@@ -36,3 +36,5 @@ Order:
 - It is enforced at `watch` while part 1 of spec [[6f376186]] is landing.
 - It moves to `gate` once task [[e0faa87f]] has landed.
 - Standing violations, other than those of item 3, are debt owned by a new task under this area, which the same work names.
+
+Implementation is committed through `1a48164240`, including explicit affected-path coverage in `3f750de090`; 64 affected tests passed seeds 1/2/3 and typechecking passed. Enforcement remains incomplete: the final full-judge measurement at `938490bca05e14f664d547cc18c2ab1c15457b36` stopped at 31/35 small-workload samples, and the large workload was not run. The 10% requirement is unproved and all five inspections remain unenforced. The operator ended the work and limited command/test runs to 30 seconds; no further measurement is authorized.
