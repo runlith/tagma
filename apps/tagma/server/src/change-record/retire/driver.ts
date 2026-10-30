@@ -5,7 +5,7 @@ import { runGit } from '../../platform/git/ownGit.js';
 import { CheckoutRows } from '../../workspace/contract/service/checkouts.js';
 import { FileRoots } from '../../workspace/contract/service/roots.js';
 import { RootId } from '../../workspace/contract/wire/ids.js';
-import type { FileRoot } from '../../workspace/contract/wire/roots.js';
+import type { FileRoot, RootResolutionFailure } from '../../workspace/contract/wire/roots.js';
 import { OPERATOR, holderKey } from '../../workspace/contract/wire/checkout.js';
 import { HeldFeed } from '../contract/service/held.js';
 import { Holdings, type IntroducedStep } from '../contract/service/holdings.js';
@@ -59,9 +59,12 @@ export const makeRetirer = Effect.fnUntraced(function* ({
   const claiming = yield* Semaphore.make(1);
   let listening = false;
 
-  const placed = (checkout: RootId): Effect.Effect<Place, RetireFailure> =>
+  const placed = (
+    checkout: RootId,
+    lookup: Effect.Effect<FileRoot, RootResolutionFailure> = roots.read(checkout),
+  ): Effect.Effect<Place, RetireFailure> =>
     Effect.catch(
-      Effect.map(roots.read(checkout), (root): Place => ({ removed: false, root })),
+      Effect.map(lookup, (root): Place => ({ removed: false, root })),
       (failure) =>
         Effect.flatMap(roots.removed(checkout), (removed): Effect.Effect<Place, RetireFailure> =>
           removed ? Effect.succeed({ removed: true }) : Effect.fail(failure),
@@ -436,20 +439,13 @@ export const makeRetirer = Effect.fnUntraced(function* ({
     );
   });
 
-  const follow = (checkout: RootId): Effect.Effect<void> =>
+  const follow = (checkout: RootId): Effect.Effect<void, RetireFailure> =>
     Effect.suspend(() => {
       if (followed.has(checkout)) return Effect.void;
       return Effect.gen(function* () {
-        const place = yield* Effect.result(roots.checked(checkout));
-        if (place._tag === 'Failure') {
-          const removed = yield* Effect.result(roots.removed(checkout));
-          if (removed._tag === 'Success' && removed.success) return yield* logged(passes.hold(checkout, vacate(checkout)), checkout);
-          return yield* Effect.logWarning('the retirement driver cannot place a checkout, so it does not follow its HEAD', {
-            checkout,
-            reason: removed._tag === 'Failure' ? removed.failure.message : place.failure.message,
-          });
-        }
-        const root = place.success.path;
+        const place = yield* placed(checkout, roots.checked(checkout));
+        if (place.removed) return yield* Effect.asVoid(passes.hold(checkout, vacate(checkout)));
+        const root = place.root.path;
         yield* claiming.withPermit(
           Effect.gen(function* () {
             if (followed.has(checkout)) return;

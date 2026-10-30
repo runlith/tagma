@@ -229,9 +229,12 @@ export const changeRecordServingLayer = Layer.effectContext(
       Effect.forEach(
         new Set(change.moved.places.map((place) => place.checkout)),
         (checkout) =>
-          Effect.andThen(
-            retirer.follow(RootId.make(checkout)),
-            Effect.forkIn(retirer.logged(retirer.settle(RootId.make(checkout)), checkout), retiring),
+          retirer.logged(
+            Effect.andThen(
+              retirer.follow(RootId.make(checkout)),
+              Effect.forkIn(retirer.logged(retirer.settle(RootId.make(checkout)), checkout), retiring),
+            ),
+            checkout,
           ),
         { discard: true },
       ),
