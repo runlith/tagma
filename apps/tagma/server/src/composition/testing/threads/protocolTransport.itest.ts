@@ -1,7 +1,6 @@
 import { describe, expect } from 'bun:test';
 import { layer } from '@runlith/effect-test';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
-import { existsSync } from 'node:fs';
 import { isAbsolute, join } from 'node:path';
 import { eq } from 'drizzle-orm';
 import { Clock, Context, Deferred, Effect, FileSystem, Layer, Queue, Schema, Stream } from 'effect';
@@ -14,7 +13,7 @@ import { ThreadFeeds } from '../../../threads/contract/service/feeds.js';
 import { EvidenceFeed } from '../../../threads/contract/service/evidence.js';
 import { ThreadHarness } from '../../../threads/contract/service/engine.js';
 import { sessionOfThread } from '../../../external-harnesses/testing/sessions.js';
-import { EXECUTION_HOST_ROOT, SERVER_SRC } from '../repoRoot.js';
+import { SERVER_SRC } from '../repoRoot.js';
 import { makeDoorWorld, projectLeaving } from '../doorFixture.js';
 import { nativeLeads } from '../claudeLogin.js';
 import { Coverage } from '../../../workspace/contract/service/roots.js';
@@ -23,7 +22,6 @@ import { coreEntry } from '@runlith/agent/transcript/kinds';
 import { SHIPPED_HARNESSES } from '../../../external-harnesses/testing/builtin.js';
 import { WORLD_COMMAND } from '../../../installation/contract/wire/layout.js';
 
-const LIBRARY = join(EXECUTION_HOST_ROOT, 'native', 'target', 'release', 'libexecution_platform.dylib');
 const AGENT = join(SERVER_SRC, 'external-harnesses', 'testing', 'acpAgent.ts');
 const frameSchema = Schema.fromJsonString(
   Schema.Struct({
@@ -158,7 +156,7 @@ const born = Effect.fn('testing.transportChild')(function* (task: string) {
   return { cli, report, lead: lead.thread.id };
 });
 
-describe.skipIf(!existsSync(LIBRARY))('an acp thread behaves like a native one', () => {
+describe('an acp thread behaves like a native one', () => {
   layer(Layer.effect(World, setup).pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeTestServices: true })(
     'ACP transport world',
     (it) => {

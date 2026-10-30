@@ -1,5 +1,4 @@
 import { describe, expect } from 'bun:test';
-import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { layer } from '@runlith/effect-test';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
@@ -18,13 +17,10 @@ import forkRpc from '@runlith/adapter-openai/testing/fixtures/fork-rpc.json';
 import { GRANT_HEADER } from '../../../platform/contract/service/credentials.js';
 import { grantFor } from '../../../platform/testing/grants.js';
 import { harnessSessionActive } from '../../../threads/contract/wire/harness/session.js';
-import { EXECUTION_HOST_ROOT } from '../repoRoot.js';
 import { whoSpeaks, type Who } from './terminalDeliveryRig.js';
 import { settledOn, terminalHistoryWorld, type HistoryClaude } from './terminalHistoryRig.js';
 import { OLD_MS, stamp } from './terminalRig.js';
 import { windowChannel } from './windowChannel.js';
-
-const LIBRARY = join(EXECUTION_HOST_ROOT, 'native', 'target', 'release', 'libexecution_platform.dylib');
 
 const grokStart = {
   hookEventName: 'session_start',
@@ -152,7 +148,7 @@ const op = Effect.fnUntraced(function* (id: string, input: Record<string, unknow
   return answer.body as Record<string, unknown>;
 });
 
-describe.skipIf(!existsSync(LIBRARY))('terminal history', () => {
+describe('terminal history', () => {
   layer(Layer.effect(World, terminalHistoryWorld).pipe(Layer.provideMerge(BunFileSystem.layer)), {
     excludeTestServices: true,
   })('PTY world', (it) => {

@@ -1,7 +1,6 @@
 import { describe, expect } from 'bun:test';
 import { layer } from '@runlith/effect-test';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
-import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { Context, Effect, FileSystem, Layer } from 'effect';
 import type { CheckoutState } from '../../../workspace/contract/wire/checkout.js';
@@ -10,10 +9,6 @@ import type { RootId } from '../../../workspace/contract/wire/ids.js';
 import { Coverage } from '../../../workspace/contract/service/roots.js';
 import { suiteGit, suiteGitText } from '../suiteGit.js';
 import { DoorFixture, doorFixture } from '../doorFixture.js';
-
-const ROOT = join(import.meta.dir, '..', '..', '..', '..', '..', '..', '..');
-const EXECUTION_HOST = join(ROOT, 'packages', 'execution-host');
-const LIBRARY = join(EXECUTION_HOST, 'native', 'target', 'release', 'libexecution_platform.dylib');
 
 const declared = Effect.fnUntraced(function* (run: readonly string[]) {
   const door = yield* DoorFixture;
@@ -54,7 +49,7 @@ const staged = Effect.fnUntraced(function* (projectId: number, rootId: RootId) {
   return (read.body as { checkout: CheckoutState }).checkout.entries.staged.entries.length;
 });
 
-describe.skipIf(!existsSync(LIBRARY))('commit steps over a live execution host', () => {
+describe('commit steps over a live execution host', () => {
   layer(Layer.merge(doorFixture(), BunFileSystem.layer), {
     excludeTestServices: true,
   })('a live host', (it) => {

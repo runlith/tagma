@@ -1,7 +1,7 @@
 import { describe, expect } from 'bun:test';
 import { it } from '@runlith/effect-test';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
-import { existsSync, watch } from 'node:fs';
+import { watch } from 'node:fs';
 import { join } from 'node:path';
 import { Cause, Context, Effect, FileSystem, Queue } from 'effect';
 import { HostRequestKey } from '@runlith/executions/protocol/execution';
@@ -15,12 +15,9 @@ import { principalOf } from '../../../executions/terminals/principals.js';
 import { makeDoorWorld } from '../doorFixture.js';
 import { targetIdentity, targetKeyOf } from '../../../executions/terminals/subjectPolicy.js';
 
-const ROOT = join(import.meta.dir, '..', '..', '..', '..', '..', '..', '..');
-const EXECUTION_HOST = join(ROOT, 'packages', 'execution-host');
-const LIBRARY = join(EXECUTION_HOST, 'native', 'target', 'release', 'libexecution_platform.dylib');
 const CLI = join(import.meta.dir, '..', '..', 'entries', 'cli.ts');
 
-describe.skipIf(!existsSync(LIBRARY))('the adopt door over HTTP', () => {
+describe('the adopt door over HTTP', () => {
   it.live(
     'a hook under an operator shell is born as a thread of the project its directory names, and a settled refusal is asked once',
     () =>

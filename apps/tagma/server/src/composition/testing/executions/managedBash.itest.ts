@@ -2,7 +2,6 @@ import { describe, expect } from 'bun:test';
 import { layer } from '@runlith/effect-test';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import * as BunPath from '@effect/platform-bun/BunPath';
-import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { endpointConnection } from '@runlith/executions/posix/endpoint';
 import { HostRegistration } from '@runlith/executions/HostRegistration';
@@ -37,7 +36,7 @@ import { testGrantSigner } from '../../../platform/testing/grants.js';
 import { asThreadContext, worldTools } from '../../../native-harness/testing/doubles.js';
 import { callerInThread } from '../callers';
 import { fixtureMigrations } from '../migrations.js';
-import { hostFixtureLayer, makeHostCase, HOST_LIBRARY as LIBRARY } from './fixture.js';
+import { hostFixtureLayer, makeHostCase } from './fixture.js';
 
 const INSTALLATION = InstallationId.make('managed-bash');
 const thread = ThreadId.make('01a07000-0000-7000-8000-0000000000d1');
@@ -146,7 +145,7 @@ const answerOf = Effect.fnUntraced(function* (input: { readonly command: string;
 
 const keptPath = (answer: string): string | undefined => /(\/\S+\/output\.log)\b/u.exec(answer)?.[1];
 
-describe.skipIf(!existsSync(LIBRARY))('bash in a managed world over a live execution host', () => {
+describe('bash in a managed world over a live execution host', () => {
   layer(fixture, { excludeTestServices: true })('host', (it) => {
     it.effect(
       'an answer that cannot carry the whole output names a file that holds it, also for a command its life stopped, and a short answer names none',

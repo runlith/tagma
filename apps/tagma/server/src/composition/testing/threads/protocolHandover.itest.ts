@@ -1,6 +1,5 @@
 import { describe, expect } from 'bun:test';
 import { layer } from '@runlith/effect-test';
-import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { eq } from 'drizzle-orm';
 import { Context, Effect, FileSystem, Schema, Stream } from 'effect';
@@ -16,7 +15,7 @@ import { WORLD_COMMAND } from '../../../installation/contract/wire/layout.js';
 import { claudeLogin, nativeLeads } from '../claudeLogin.js';
 import { SERVER_SRC } from '../repoRoot.js';
 import { ProtocolWorld, protocolWorld } from './protocolWorld.js';
-import { LIBRARY, until } from './protocolRig.js';
+import { until } from './protocolRig.js';
 
 const REMEMBER = 'Remember ORANGE-17 and read handover.txt.';
 const ASK = 'Continue on Claude Code.';
@@ -48,7 +47,7 @@ const read: readonly LLMEvent[] = [
 ];
 const trace = Schema.fromJsonString(Schema.Struct({ event: Schema.String, messages: Schema.optional(Schema.Array(Schema.Unknown)) }));
 
-describe.skipIf(!existsSync(LIBRARY))('a native conversation crosses Claude Code and returns through the real doors', () => {
+describe('a native conversation crosses Claude Code and returns through the real doors', () => {
   layer(
     protocolWorld({
       name: 'protocol-handover',

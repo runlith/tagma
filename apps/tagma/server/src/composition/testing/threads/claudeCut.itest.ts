@@ -1,5 +1,4 @@
 import { describe, expect } from 'bun:test';
-import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { layer } from '@runlith/effect-test';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
@@ -7,11 +6,9 @@ import { Context, Effect, FileSystem, Layer } from 'effect';
 import { claudeCodeDescription } from '@runlith/adapter-anthropic/models/anthropic';
 import { HarnessDirectories } from '../../../providers/accounts/harnessRows.js';
 import { WORLD_COMMAND } from '../../../installation/contract/wire/layout.js';
-import { EXECUTION_HOST_ROOT } from '../repoRoot.js';
 import { whoSpeaks } from './terminalDeliveryRig.js';
 import { settledOn, terminalHistoryWorld } from './terminalHistoryRig.js';
 
-const LIBRARY = join(EXECUTION_HOST_ROOT, 'native', 'target', 'release', 'libexecution_platform.dylib');
 const CLI = join(import.meta.dir, '..', '..', 'entries', 'cli.ts');
 
 const realCuts = Effect.gen(function* () {
@@ -47,7 +44,7 @@ const rowsOf = (text: string): readonly Row[] =>
     .filter((line) => line.trim() !== '')
     .map((line) => JSON.parse(line) as Row);
 
-describe.skipIf(!existsSync(LIBRARY))('Claude Code cut', () => {
+describe('Claude Code cut', () => {
   layer(Layer.effect(World, realCuts).pipe(Layer.provideMerge(BunFileSystem.layer)), {
     excludeTestServices: true,
   })('PTY world with the real cut server', (it) => {

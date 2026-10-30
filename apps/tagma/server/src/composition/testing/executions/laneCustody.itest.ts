@@ -1,6 +1,5 @@
 import { describe, expect } from 'bun:test';
 import { layer } from '@runlith/effect-test';
-import { existsSync } from 'node:fs';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import * as BunPath from '@effect/platform-bun/BunPath';
 import { Context, Effect, Fiber, Layer, Ref, Stream } from 'effect';
@@ -20,7 +19,7 @@ import { executionHost, executionPolicy, terminalHostCustody } from '../../../ex
 import { shippedChain } from '../../../platform/store/chain.js';
 import { sessionIdentity } from '../../../external-harnesses/testing/builtin.js';
 import { fixtureMigrations } from '../migrations.js';
-import { hostFixtureLayer, makeHostCase, HOST_LIBRARY as LIBRARY } from './fixture.js';
+import { hostFixtureLayer, makeHostCase } from './fixture.js';
 
 const installation = InstallationId.make('held-stdin');
 const thread = ThreadId.make('held-stdin-thread');
@@ -60,7 +59,7 @@ const fixture = Layer.effect(Fixture, makeFixture).pipe(
   Layer.provide(platform),
 );
 
-describe.skipIf(!existsSync(LIBRARY))('held stdin at the native host boundary', () => {
+describe('held stdin at the native host boundary', () => {
   layer(fixture, { excludeTestServices: true })('host', (it) => {
     it.effect('held stdin rejects other launch modes, writes and ends its own child, and cannot be spent at another execution', () =>
       Effect.gen(function* () {

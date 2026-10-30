@@ -1,7 +1,6 @@
 import { describe, expect } from 'bun:test';
 import { layer, type LayerMethods } from '@runlith/effect-test';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
-import { existsSync } from 'node:fs';
 import { eq } from 'drizzle-orm';
 import { Context, Effect, type FileSystem, Layer, Semaphore, type Scope } from 'effect';
 import { ProviderRegistry } from '../../../providers/contract/service/registry.js';
@@ -13,7 +12,7 @@ import { ThreadHarness } from '../../../threads/contract/service/engine.js';
 import type { HarnessFailure } from '../../../threads/contract/service/failure.js';
 import { answersOf, evidenceOf, threadInbox, threadRun, turnsOf } from '../../../threads/testing/doubles.js';
 import { harnessRefusal } from '../../../threads/refusals.js';
-import { LIBRARY, parityWorld, type ParityWorld, type Seat, type SeatName } from './parityWorld.js';
+import { parityWorld, type ParityWorld, type Seat, type SeatName } from './parityWorld.js';
 import { lingered, WRITTEN } from './parityModel.js';
 import { until } from './terminalDeliveryRig.js';
 
@@ -238,7 +237,7 @@ export const STOPPED = { life: 'idle', ending: 'aborted' } as const;
 export const AWAITING = cp('awaiting', 'started', { life: 'awaiting', openQuestions: 1 });
 
 export const describeParity = (title: string, body: (it: LayerMethods<World | FileSystem.FileSystem>) => void, own?: string): void =>
-  describe.skipIf(!existsSync(LIBRARY))(title, () => {
+  describe(title, () => {
     layer(Layer.effect(World, setup(own)).pipe(Layer.provideMerge(BunFileSystem.layer)), {
       excludeTestServices: true,
     })('transport world', body);

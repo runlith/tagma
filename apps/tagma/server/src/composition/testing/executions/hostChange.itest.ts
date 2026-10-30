@@ -3,7 +3,6 @@ import { layer } from '@runlith/effect-test';
 import { kind, own } from '@runlith/testbed/worlds';
 import { Database } from 'bun:sqlite';
 import { and, eq } from 'drizzle-orm';
-import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import * as BunServices from '@effect/platform-bun/BunServices';
 import { Context, Data, Deferred, Effect, Exit, Fiber, FileSystem, Layer, Schedule, Schema, Scope, Tracer } from 'effect';
@@ -31,7 +30,7 @@ import { HostManagement, HostOffering } from '../../../executions/contract/servi
 import { endHosts, hostsUnder, terminalIntent, terminalRequestKey } from '../../../executions/testing/doubles.js';
 import { rootUse } from '../../../workspace/testing/doubles.js';
 import { programRoadOver } from '../../../executions/ports.js';
-import { EXTRA_MIGRATION, HostBundle, hostFixtureLayer, makeWorkspaceCase, migrated, HOST_LIBRARY as LIBRARY } from './fixture.js';
+import { EXTRA_MIGRATION, HostBundle, hostFixtureLayer, makeWorkspaceCase, migrated } from './fixture.js';
 
 const manifestJson = Schema.fromJsonString(ArtifactManifest);
 const stepThread = ThreadId.make('host-change-step');
@@ -176,7 +175,7 @@ const counted = (text: string): readonly number[] =>
     .filter((line) => line.startsWith('n'))
     .map((line) => Number(line.slice(1)));
 
-describe.skipIf(!existsSync(LIBRARY))('host activation after the server door', () => {
+describe('host activation after the server door', () => {
   layer(fixture, { excludeTestServices: true })('host', (it) => {
     it.effect(
       'defers host migration and consumers until the door opens, lets a start interrupted before it return holding nothing, and releases consumers after a failed take-over',

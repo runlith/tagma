@@ -2,7 +2,6 @@ import { describe, expect } from 'bun:test';
 import { layer } from '@runlith/effect-test';
 import { kind, own } from '@runlith/testbed/worlds';
 import { and, eq } from 'drizzle-orm';
-import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import * as BunServices from '@effect/platform-bun/BunServices';
 import { Context, Effect, Exit, FileSystem, Layer, Schedule, Scope } from 'effect';
@@ -27,7 +26,7 @@ import { HostManagement, HostOffering, LogicYield } from '../../../executions/co
 import { claimHoldersLayer } from '../../hostClaims.js';
 import type { TerminalActor } from '../../../executions/contract/wire/terminals.js';
 import { custodyNotice, endHosts, hostsUnder } from '../../../executions/testing/doubles.js';
-import { HostBundle, hostFixtureLayer, makeWorkspaceCase, migrated, HOST_LIBRARY as LIBRARY } from './fixture.js';
+import { HostBundle, hostFixtureLayer, makeWorkspaceCase, migrated } from './fixture.js';
 
 const holder = ThreadId.make('host-replace-holder');
 
@@ -119,7 +118,7 @@ const started = Effect.fnUntraced(function* (
 const until = <A, E, R>(read: Effect.Effect<A, E, R>, done: (value: A) => boolean) =>
   Effect.repeat(read, { until: done, schedule: Schedule.spaced('50 millis') });
 
-describe.skipIf(!existsSync(LIBRARY))('a new execution host', () => {
+describe('a new execution host', () => {
   layer(fixture, { excludeTestServices: true })('host', (it) => {
     it.effect(
       'names what it would end by its foreground, then ends the standing host that does not take this server, raises its own and owes each holding thread a notice',

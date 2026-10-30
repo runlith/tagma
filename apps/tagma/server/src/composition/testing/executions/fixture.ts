@@ -23,11 +23,9 @@ import { worktreeRecordsLayer } from '../../../worktrees/layer.js';
 import { hostWorkspace } from '../hostWorkspace.js';
 import { fixtureGraph } from '../fixtureGraph.js';
 import { fixtureMigrations } from '../migrations.js';
-import { REPO_ROOT } from '../repoRoot.js';
 import { hostBundleRoot } from '../hostBundle.js';
 import { sharedPool } from '@runlith/sqlite-process/testing/pool';
 
-export const HOST_LIBRARY = join(REPO_ROOT, 'packages/execution-host/native/target/release/libexecution_platform.dylib');
 const machineWorld = makeMachineWorld(() => null);
 
 export class HostBundle extends Context.Service<

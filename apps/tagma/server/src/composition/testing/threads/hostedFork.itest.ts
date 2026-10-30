@@ -1,6 +1,5 @@
 import { describe, expect } from 'bun:test';
 import { layer } from '@runlith/effect-test';
-import { existsSync } from 'node:fs';
 import { eq, sql } from 'drizzle-orm';
 import { Context, Effect, FileSystem, Schema } from 'effect';
 import { GRANT_HEADER } from '../../../platform/contract/service/credentials.js';
@@ -14,7 +13,7 @@ import { COLLABORATION_OPERATIONS } from '../../../threads/contract/wire/operati
 import { ThreadHarness } from '../../../threads/contract/service/engine.js';
 import { birthsOf, threadRun, turnsOf } from '../../../threads/testing/doubles.js';
 import { claudeLogin, hostedDefaults } from '../claudeLogin.js';
-import { heard, LIBRARY, until } from './protocolRig.js';
+import { heard, until } from './protocolRig.js';
 import { ProtocolWorld, protocolWorld } from './protocolWorld.js';
 
 const decodeSpawn = Schema.decodeUnknownEffect(knownAnswer(COLLABORATION_OPERATIONS.spawn_agent.answer));
@@ -42,7 +41,7 @@ const framed = (report: string, method: string, count: number, what: string) =>
     report,
   );
 
-describe.skipIf(!existsSync(LIBRARY))('a fork of a Claude Code thread on ACP', () => {
+describe('a fork of a Claude Code thread on ACP', () => {
   layer(protocolWorld({ name: 'hosted-fork', prepare: (world) => Effect.andThen(claudeLogin(world), hostedDefaults(world)) }), {
     excludeTestServices: true,
   })('protocol world', (it) => {

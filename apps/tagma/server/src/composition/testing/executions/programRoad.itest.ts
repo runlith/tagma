@@ -1,7 +1,6 @@
 import { describe, expect } from 'bun:test';
 import { layer } from '@runlith/effect-test';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
-import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import * as BunPath from '@effect/platform-bun/BunPath';
 import { endpointConnection } from '@runlith/executions/posix/endpoint';
@@ -33,7 +32,7 @@ import {
 import { shippedChain } from '../../../platform/store/chain.js';
 import { sessionIdentity } from '../../../external-harnesses/testing/builtin.js';
 import { fixtureMigrations } from '../migrations.js';
-import { hostFixtureLayer, makeHostCase, HOST_LIBRARY as LIBRARY } from './fixture.js';
+import { hostFixtureLayer, makeHostCase } from './fixture.js';
 
 const INSTALLATION = InstallationId.make('program-road');
 const thread = ThreadId.make('program-thread');
@@ -104,7 +103,7 @@ const alive = (pid: number) =>
     ),
   );
 
-describe.skipIf(!existsSync(LIBRARY))('the program road over a live execution host', () => {
+describe('the program road over a live execution host', () => {
   layer(fixture, { excludeTestServices: true })('host', (it) => {
     it.effect('a program runs as the calling thread, reads its input on stdin, and stands in the command inventory under that thread', () =>
       Effect.gen(function* () {

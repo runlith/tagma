@@ -1,6 +1,5 @@
 import { describe, expect } from 'bun:test';
 import { layer } from '@runlith/effect-test';
-import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { Deferred, Effect, Exit, Fiber, Schema, Scope } from 'effect';
 import { Message } from '@runlith/llm/schema/messages';
@@ -14,7 +13,7 @@ import { runEnd } from './protocolEnds.js';
 import { ASIDE, COMPACT, FORK, REWIND } from '@runlith/hosted-runner/wire/extensions';
 import { HarnessAdapters } from '../../../external-harnesses/contract/service/adapters.js';
 import { shippedAdapters } from '../external-harnesses/shipped.js';
-import { heard, LIBRARY, ProtocolRig, protocolFixture, scenario, until as readUntil, words, type Said } from './protocolRig.js';
+import { heard, ProtocolRig, protocolFixture, scenario, until as readUntil, words, type Said } from './protocolRig.js';
 import { scriptedAgent } from './protocolAgents.js';
 import { protocolStopRig } from './protocolStopRig.js';
 import { protocolWordRig } from './protocolWordRig.js';
@@ -55,7 +54,7 @@ const agent = Effect.fnUntraced(function* (name: string) {
   return report;
 });
 
-describe.skipIf(!existsSync(LIBRARY))('ACP adapter boundaries over one execution host', () => {
+describe('ACP adapter boundaries over one execution host', () => {
   layer(protocolFixture('protocol-road'), { excludeTestServices: true })('protocol rig', (it) => {
     describeTransportStops(
       'acp (scripted agent)',

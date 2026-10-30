@@ -1,6 +1,5 @@
 import { describe, expect } from 'bun:test';
 import { layer } from '@runlith/effect-test';
-import { existsSync } from 'node:fs';
 import { eq } from 'drizzle-orm';
 import { Context, Effect, FileSystem, Schema, Stream } from 'effect';
 import type { ThreadCompactionEntry } from '@runlith/agent/transcript/entries';
@@ -16,7 +15,7 @@ import { compactionChoicesSchema } from '../../../native-harness/contract/wire/c
 import { ThreadEvidence } from '../../../threads/contract/service/evidence.js';
 import { threadRun, turnsOf } from '../../../threads/testing/doubles.js';
 import { claudeLogin, hostedDefaults } from '../claudeLogin.js';
-import { heard, LIBRARY, until } from './protocolRig.js';
+import { heard, until } from './protocolRig.js';
 import { ProtocolWorld, protocolWorld } from './protocolWorld.js';
 
 const DEFERRED = 'apply_batch';
@@ -48,7 +47,7 @@ const summarizing = (standing: ModelAccess['Service']): ModelAccess['Service'] =
         },
 });
 
-describe.skipIf(!existsSync(LIBRARY))('the tools Tagma serves a Claude Code thread over its MCP door', () => {
+describe('the tools Tagma serves a Claude Code thread over its MCP door', () => {
   layer(protocolWorld({ name: 'hosted-reveals', prepare: (world) => Effect.andThen(claudeLogin(world), hostedDefaults(world)) }), {
     excludeTestServices: true,
   })('protocol world', (it) => {

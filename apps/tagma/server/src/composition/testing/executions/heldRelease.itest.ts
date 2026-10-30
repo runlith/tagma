@@ -41,7 +41,7 @@ import { claimHoldersLayer } from '../../hostClaims.js';
 import type { TerminalActor } from '../../../executions/contract/wire/terminals.js';
 import { endHosts } from '../../../executions/testing/doubles.js';
 import { fixtureMigrations } from '../migrations.js';
-import { HostBundle, hostFixtureLayer, makeWorkspaceCase, migrated, HOST_LIBRARY as LIBRARY } from './fixture.js';
+import { HostBundle, hostFixtureLayer, makeWorkspaceCase, migrated } from './fixture.js';
 
 const operator: Caller = { actor: { kind: 'operator' }, files: null };
 const channel = CHANNELS.stable;
@@ -118,7 +118,7 @@ const fixture = Layer.effect(
 const until = <A, E, R>(read: Effect.Effect<A, E, R>, done: (value: A) => boolean) =>
   Effect.repeat(read, { until: done, schedule: Schedule.spaced('50 millis') });
 
-describe.skipIf(!existsSync(LIBRARY))('a published release the standing execution host does not take', () => {
+describe('a published release the standing execution host does not take', () => {
   layer(fixture, { excludeTestServices: true })('install-from', (it) => {
     it.effect(
       'stays beside the release that runs with what a new host ends, until the restart that consents to one makes it current; a release the host takes becomes current',

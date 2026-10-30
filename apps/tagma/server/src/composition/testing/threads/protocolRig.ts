@@ -6,7 +6,7 @@ import { sessionIdentityLayer, sessionIdentity } from '../../../external-harness
 import { SessionIdentity } from '../../../platform/contract/wire/session.js';
 import { watch } from 'node:fs';
 import { join } from 'node:path';
-import { REPO_ROOT, SERVER_SRC } from '../repoRoot.js';
+import { SERVER_SRC } from '../repoRoot.js';
 import { entryCommand } from '../../../installation/contract/wire/junction.js';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import * as BunPath from '@effect/platform-bun/BunPath';
@@ -121,7 +121,6 @@ import { ENTRY_KINDS } from '../../manifest.js';
 import { builtinRegistry } from '../providerCatalog.js';
 import { ProviderRegistry } from '../../../providers/contract/service/registry.js';
 import { HarnessAccounts } from '../../../providers/contract/service/harness.js';
-export const LIBRARY = join(REPO_ROOT, 'packages', 'execution-host', 'native', 'target', 'release', 'libexecution_platform.dylib');
 const ENDING_KINDS: ReadonlySet<string> = new Set(['failure', 'run-end']);
 const machineWorld = makeMachineWorld(() => null);
 const AGENT = join(SERVER_SRC, 'external-harnesses', 'testing', 'acpAgent.ts');

@@ -1,5 +1,4 @@
 import { describe, expect } from 'bun:test';
-import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { layer } from '@runlith/effect-test';
 import { Context, Effect, FileSystem } from 'effect';
@@ -8,10 +7,10 @@ import { Settings } from '../../../settings/contract/service/values.js';
 import { autoTitle } from '../../../threads/contract/wire/settings.js';
 import { turnsOf } from '../../../threads/testing/doubles.js';
 import { claudeLogin, hostedDefaults } from '../claudeLogin.js';
-import { heard, LIBRARY, until } from './protocolRig.js';
+import { heard, until } from './protocolRig.js';
 import { ProtocolWorld, protocolWorld } from './protocolWorld.js';
 
-describe.skipIf(!existsSync(LIBRARY))('the CLI title call follows the one title condition', () => {
+describe('the CLI title call follows the one title condition', () => {
   layer(protocolWorld({ name: 'harness-untitled', prepare: (world) => Effect.andThen(claudeLogin(world), hostedDefaults(world)) }), {
     excludeTestServices: true,
   })('protocol world', (it) => {

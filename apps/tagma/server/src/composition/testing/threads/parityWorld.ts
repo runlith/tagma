@@ -20,13 +20,12 @@ import { TESTING_ADAPTERS } from '../adapters.js';
 import { makeDoorWorld, WORLD_SOURCE, type DoorFixture } from '../doorFixture.js';
 import { makeRuntime } from '../../runtime.js';
 import { testGrantSigner } from '../../../platform/testing/grants.js';
-import { EXECUTION_HOST_ROOT, SERVER_SRC } from '../repoRoot.js';
+import { SERVER_SRC } from '../repoRoot.js';
 import { hostBundleRoot } from '../hostBundle.js';
 import { gitEffect } from '../graphFixture.js';
 import { until, whoSpeaks } from './terminalDeliveryRig.js';
 import { terminalRig, type Cli } from './terminalRig.js';
 
-export const LIBRARY = join(EXECUTION_HOST_ROOT, 'native', 'target', 'release', 'libexecution_platform.dylib');
 const AGENT = join(SERVER_SRC, 'external-harnesses', 'testing', 'acpAgent.ts');
 export type SeatName = 'native' | 'claude' | 'devin' | 'terminal';
 export type Seat = {

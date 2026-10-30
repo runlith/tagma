@@ -1,6 +1,5 @@
 import { describe, expect } from 'bun:test';
 import { layer } from '@runlith/effect-test';
-import { existsSync } from 'node:fs';
 import { eq } from 'drizzle-orm';
 import { Clock, Context, Effect, FileSystem } from 'effect';
 import { claudeCodeDescription } from '@runlith/adapter-anthropic/models/anthropic';
@@ -14,7 +13,7 @@ import { HarnessDirectories } from '../../../providers/accounts/harnessRows.js';
 import { threadEntry, threadRun, turnsOf } from '../../../threads/testing/doubles.js';
 import { ThreadHarness } from '../../../threads/contract/service/engine.js';
 import { claudeLogin, hostedDefaults } from '../claudeLogin.js';
-import { heard, LIBRARY, until } from './protocolRig.js';
+import { heard, until } from './protocolRig.js';
 import { ProtocolWorld, protocolWorld } from './protocolWorld.js';
 import { windowChannel } from './windowChannel.js';
 
@@ -22,7 +21,7 @@ const PROVIDER = claudeCodeDescription.id;
 const FIRST = 'fixture-account';
 const SECOND = 'second-account';
 
-describe.skipIf(!existsSync(LIBRARY))('a moved default account reaches the Claude threads that follow it', () => {
+describe('a moved default account reaches the Claude threads that follow it', () => {
   layer(protocolWorld({ name: 'hosted-default', prepare: (world) => Effect.andThen(claudeLogin(world), hostedDefaults(world)) }), {
     excludeTestServices: true,
   })('protocol world', (it) => {

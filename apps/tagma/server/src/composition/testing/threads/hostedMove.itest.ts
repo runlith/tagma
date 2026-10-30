@@ -1,6 +1,5 @@
 import { describe, expect } from 'bun:test';
 import { layer } from '@runlith/effect-test';
-import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { Context, Effect, Fiber, FileSystem, Schema } from 'effect';
 import { THREAD_TOOL_CONFIRM_VALUE } from '@runlith/agent/transcript/parts';
@@ -14,7 +13,7 @@ import type { CoveredRepositoriesAnswer } from '../../../workspace/contract/wire
 import type { WorktreeIntent } from '../../../worktrees/contract/wire/creation.js';
 import { claudeLogin, hostedDefaults } from '../claudeLogin.js';
 import { suiteGit } from '../suiteGit.js';
-import { heard, LIBRARY, until } from './protocolRig.js';
+import { heard, until } from './protocolRig.js';
 import { ProtocolWorld, protocolWorld } from './protocolWorld.js';
 
 const calledSchema = Schema.Struct({ content: Schema.Array(hostedContentSchema), failed: Schema.Boolean });
@@ -68,7 +67,7 @@ const heldTurn = Effect.fnUntraced(function* (label: string, mode: 'bypass' | 'r
   return { threadId, report, called, release: files.writeFileString(`${report}.release`, 'release') };
 });
 
-describe.skipIf(!existsSync(LIBRARY))('a Tagma agent on ACP moves between worktrees like a native one', () => {
+describe('a Tagma agent on ACP moves between worktrees like a native one', () => {
   layer(protocolWorld({ name: 'hosted-move', prepare: (world) => Effect.andThen(claudeLogin(world), hostedDefaults(world)) }), {
     excludeTestServices: true,
   })('protocol world', (it) => {

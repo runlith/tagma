@@ -1,7 +1,7 @@
 import { describe, expect } from 'bun:test';
 import { layer } from '@runlith/effect-test';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
-import { existsSync, watch } from 'node:fs';
+import { watch } from 'node:fs';
 import { isAbsolute, join } from 'node:path';
 import { sql } from 'drizzle-orm';
 import { Cause, Clock, Context, Effect, FileSystem, Layer, Queue, Schedule, Schema, type Scope, Stream } from 'effect';
@@ -31,7 +31,6 @@ import { ThreadHarness } from '../../../threads/contract/service/engine.js';
 import { SHIPPED_HARNESSES } from '../../../external-harnesses/testing/builtin.js';
 import { HarnessPermissions } from '../../../external-harnesses/contract/service/permissions.js';
 import { WORLD_COMMAND } from '../../../installation/contract/wire/layout.js';
-import { EXECUTION_HOST_ROOT } from '../repoRoot.js';
 import { makeDoorWorld, projectLeaving } from '../doorFixture.js';
 import { claudeLogin, keepAccountDefaults } from '../claudeLogin.js';
 import { AccountKey } from '@runlith/llm/models/authStatus';
@@ -41,7 +40,6 @@ import { deliveryRig, until as readUntil, whoSpeaks, type Who } from './terminal
 import { stamp, terminalRig, type Cli } from './terminalRig.js';
 import { windowChannel } from './windowChannel.js';
 
-const LIBRARY = join(EXECUTION_HOST_ROOT, 'native', 'target', 'release', 'libexecution_platform.dylib');
 const answering = [
   '#!/bin/sh',
   'case "$1" in --version) echo "2.1.306 (Claude Code)"; exit 0;; auth) echo \'{"loggedIn":false}\'; exit 0;; esac',
@@ -734,7 +732,7 @@ const listen = Effect.fnUntraced(function* (state: WordState): Effect.fn.Return<
 
 const terminalWords: WordRig<Env> = { reach: listen };
 
-describe.skipIf(!existsSync(LIBRARY))('the terminal transport keeps the shared Esc contract', () => {
+describe('the terminal transport keeps the shared Esc contract', () => {
   layer(Layer.effect(World, setup).pipe(Layer.provideMerge(BunFileSystem.layer)), {
     excludeTestServices: true,
   })('PTY world', (it) => {
