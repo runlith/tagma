@@ -20,6 +20,9 @@ fields:
       },
       {
         "at": "src/harness/grok.ts"
+      },
+      {
+        "at": "src/harness/session.ts"
       }
     ],
     "id": "@runlith/adapter-xai"
