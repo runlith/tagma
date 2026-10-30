@@ -37,7 +37,7 @@
     {#if value !== null}
       <ProviderMark provider={value.provider} class="size-3.5 shrink-0" titled={false} />
     {/if}
-    <FadeText class={['min-w-0', value === null && 'text-muted-foreground']}
+    <FadeText class={['min-w-0', value === null && 'text-muted-foreground', value !== null && chosen === null && 'text-severity-gap']}
       >{chosen?.label ?? (value === null ? blank : `${value.provider}:${value.model}`)}</FadeText
     >
     {#if rung !== null}
