@@ -13,6 +13,7 @@ layer(graphToolsFixture, { excludeTestServices: true })('native rule operations'
       };
       const name = created.block.name;
       const id = yield* graph.blockNames.idOfName(name);
+      expect((yield* call('set_rule_delivery', { blockId: name, delivery: 'finding' })).warning).toEqual(expect.any(String));
       const document = {
         inspection: 'data',
         strictness: 'gate' as const,
@@ -36,6 +37,7 @@ layer(graphToolsFixture, { excludeTestServices: true })('native rule operations'
       expect(restored.warning).toBeUndefined();
       yield* call('anchor_block', { blockId: name, kind: 'dir', ref: '.' });
       expect((yield* call('set_rule_delivery', { blockId: name, delivery: 'code' })).warning).toBeUndefined();
+      expect((yield* call('set_rule_delivery', { blockId: name, delivery: 'finding' })).warning).toBeUndefined();
     }),
   );
 
@@ -72,6 +74,10 @@ layer(graphToolsFixture, { excludeTestServices: true })('native rule operations'
       expect(yield* call('set_rule_delivery', { blockId, delivery: 'prompt' })).toMatchObject({
         status: 'ok',
         block: { fields: { route: 'prompt' } },
+      });
+      expect(yield* nativeCall('set_rule_delivery', { blockId, delivery: 'finding' })).toMatchObject({
+        status: 'refused',
+        code: 'field-invalid',
       });
     }),
   );

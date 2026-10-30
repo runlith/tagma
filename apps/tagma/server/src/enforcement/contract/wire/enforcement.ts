@@ -85,6 +85,11 @@ export const EnforcedAnswer = Schema.Struct({
   escaped: Schema.Int,
   revision: Schema.NullOr(Schema.String),
   graph: Schema.NullOr(Schema.String),
+  warning: Schema.optional(
+    Schema.String.annotate({
+      description: 'Set when the rule is delivered by finding and its check now runs at no trigger: no agent gets it.',
+    }),
+  ),
 });
 export type EnforcedAnswer = typeof EnforcedAnswer.Type;
 

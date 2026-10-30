@@ -109,10 +109,10 @@ export const OUTLINE_OPERATIONS = {
   set_rule_delivery: operation('set_rule_delivery', {
     ...SURFACE_ACT,
     meaning:
-      "Set where one rule reaches agents: `prompt` in every thread's startup instructions, `code` when the code its sources name is read or written; null leaves it to its sources. Code without sources succeeds with a warning: no agent receives its text, while any enforcement still measures the whole project.",
+      "Set where one rule reaches agents: `prompt` in every thread's startup instructions, `code` when the code its sources name is read or written, `finding` only within the results of the rule's check; null leaves it to its sources. Delivery never changes what the check judges. A value the rule's tag does not declare refuses. A delivery that reaches no agent — `code` without sources, `finding` whose check runs at no trigger — succeeds with a warning.",
     input: graphInput({ blockId: blockRef, delivery: Schema.NullOr(Schema.Literals(DELIVERIES)) }),
     answer: arms({ ok: { block: writtenBlockSchema, start: Schema.optional(startPriceSchema), warning: Schema.optional(Schema.String) } }),
-    refusals: ['not-found', 'deleted', 'not-rule', 'delivery-undeclared'],
+    refusals: ['not-found', 'deleted', 'not-rule', 'delivery-undeclared', 'field-invalid'],
     confirmation: (input) => ({
       summary: `Deliver rule ${input.blockId} ${input.delivery === null ? 'by its sources' : `by ${input.delivery}`}?`,
     }),

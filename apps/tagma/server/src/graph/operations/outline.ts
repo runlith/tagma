@@ -24,6 +24,7 @@ import { farEndOf, farStates } from '../acts/far.js';
 import { farKey } from '../contract/wire/far.js';
 import { blockName } from '../contract/wire/references.js';
 import { LIFECYCLE } from '../contract/wire/tags/lifecycle.js';
+import { deliveryOf, FINDING_UNHEARD, reachesNobody } from '../contract/wire/tags/law.js';
 
 type In<K extends keyof typeof OPS> = (typeof OPS)[K]['input']['Type'];
 
@@ -169,10 +170,14 @@ export const OUTLINE_PAIRS = {
         Effect.fnUntraced(function* (input: In<'set_rule_delivery'>) {
           const { id, projectId } = yield* scoped(input.blockId);
           const written = yield* priced(lawPricing(projectId), (yield* Blocks).setDelivery({ id, delivery: input.delivery }));
-          const warning =
-            input.delivery === 'code' && (yield* (yield* Sources).of(id)).length === 0
-              ? 'Code delivery has no sources: this rule reaches no agent. Any enforcement still measures the whole project. Add sources with anchor_block or set_rule_delivery to prompt.'
-              : undefined;
+          const node = written.value;
+          const projection = (yield* (yield* Tags).of(projectId)).lawProjection(node);
+          const sourced = (yield* (yield* Sources).of(id)).length > 0;
+          const warning = !reachesNobody(projection, node, sourced)
+            ? undefined
+            : deliveryOf(projection, node, sourced) === 'code'
+              ? 'Code delivery has no sources: this rule reaches no agent. Any enforcement still measures the whole project. Add sources with anchor_block, choose finding for an enforced rule, or set_rule_delivery to prompt.'
+              : FINDING_UNHEARD;
           return { status: 'ok' as const, block: wireWritten(written.value), start: written.start, warning };
         }),
       ),

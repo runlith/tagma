@@ -8,7 +8,7 @@ import { Act, type BlockRecord, type BlockRow } from '../contract/service/acts.j
 import { blockName } from '../contract/wire/references.js';
 import { anchorsOf } from '../contract/wire/sources.js';
 import { tagLabel } from '../contract/wire/tags/roles.js';
-import { type Delivery, isEnabled, statedDelivery } from '../contract/wire/tags/law.js';
+import { DELIVERIES, type Delivery, declaredDeliveries, isEnabled, statedDelivery } from '../contract/wire/tags/law.js';
 import type { TagTable } from '../contract/wire/tags/table.js';
 import { validateFields } from '../vocabulary/declarationRules.js';
 import { Tags } from '../contract/service/vocabulary.js';
@@ -78,7 +78,20 @@ export const blockLaw = Effect.gen(function* () {
       return yield* new GateRefusal(
         'delivery-undeclared',
         `${blockName(current.uuid)} is ${tagLabel(table.tagOf(current))}, whose declaration binds no delivery field`,
-        [`declare a delivery field on #${law.type} with {type: "enum", values: ["prompt", "code"]} and bind roles.delivery to it`],
+        [
+          `declare a delivery field on #${law.type} with {type: "enum", values: [...]} among "${DELIVERIES.join('", "')}" and bind roles.delivery to it`,
+        ],
+      );
+    }
+    const declared = declaredDeliveries(table.tagById(law.type), law);
+    if (input.delivery !== null && !declared.includes(input.delivery)) {
+      return yield* new GateRefusal(
+        'field-invalid',
+        `#${law.type} declares the deliveries ${declared.join(', ')}, and ${input.delivery} is not among them`,
+        [
+          `set_rule_delivery with one of ${declared.join(', ')}, or null to deliver by sources`,
+          `add "${input.delivery}" to the values of #${law.type}.fields.${field} with update_block`,
+        ],
       );
     }
     if (statedDelivery(law, current) === input.delivery) return yield* blockRows.recordOf(current);

@@ -157,7 +157,7 @@ layer(graphs, { excludeTestServices: true })('touch guidance', (it) => {
     ),
   );
 
-  it.effect('a file seen in search results brings its rules whole and points at its note, whose body rides once the file is read', () =>
+  it.effect('a file seen in search results brings no rule and points at its note; reading it brings the rule and the note whole', () =>
     withDemo((demo) =>
       Effect.gen(function* () {
         const { graph, root, projectId, areaId, afterTool } = yield* setup(demo);
@@ -181,13 +181,13 @@ layer(graphs, { excludeTestServices: true })('touch guidance', (it) => {
         const thread = { id: 'thread-found', transcript: [] };
         const plain = join(root, 'src', 'plain.ts');
         const found = yield* guideText(rule(afterTool(shown(plain, 'found'), thread)));
-        expect(found).toContain('MUST bind here.');
+        expect(found).not.toContain('MUST bind here.');
         expect(found).toContain('Plain is read without a lock');
         expect(found).not.toContain('A lock here would stall the writer.');
         expect(yield* guideText(rule(afterTool(shown(plain, 'found'), thread)))).toBeNull();
         const read = yield* guideText(rule(afterTool(shown(plain), thread)));
         expect(read).toContain('Plain is read without a lock: A lock here would stall the writer.');
-        expect(read).not.toContain('MUST bind here.');
+        expect(read).toContain('MUST bind here.');
       }),
     ),
   );

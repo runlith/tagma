@@ -265,7 +265,7 @@ export const touchesLayer: Layer.Layer<
             const here = yield* onFiles({ projectId: input.projectId, places });
             const briefs: TouchBrief[] = [];
             for (const [place, as] of seen) {
-              const entries = law.filter((entry) => reaches(entry.places, place));
+              const entries = as === 'found' ? [] : law.filter((entry) => reaches(entry.places, place));
               const notes = explained.get(place) ?? [];
               briefs.push({
                 place,

@@ -4,7 +4,7 @@ import { DELIVERIES } from '../../../graph/contract/wire/tags/law.js';
 import { MODULE, MODULE_SLOTS } from '../../../graph/contract/wire/tags/moduleContract.js';
 import { GateRefusal } from '../../../platform/contract/wire/refusal.js';
 
-const SPELLED = [...DELIVERIES].sort().join(',');
+const KNOWN: ReadonlySet<string> = new Set(DELIVERIES);
 
 export const law: Behaviour = {
   id: LAW,
@@ -25,13 +25,13 @@ export const law: Behaviour = {
     const field = binding.slots.delivery;
     if (field === undefined) return null;
     const type = over.fields[field];
-    const values = typeof type === 'object' && type.type === 'enum' ? [...type.values].sort().join(',') : '';
-    return values === SPELLED
+    const values = typeof type === 'object' && type.type === 'enum' ? type.values : [];
+    return values.length > 0 && values.every((one) => KNOWN.has(one))
       ? null
       : new GateRefusal(
           'tag-incoherent',
-          `#${from} binds ${LAW} delivery to "${field}", which does not hold exactly ${DELIVERIES.join(' and ')}`,
-          [`declare #${from}.fields.${field} as {type: "enum", values: ["${DELIVERIES.join('", "')}"]}`],
+          `#${from} binds ${LAW} delivery to "${field}", which must be an enum of some of ${DELIVERIES.join(', ')} and nothing else`,
+          [`declare #${from}.fields.${field} as {type: "enum", values: [...]} listing deliveries among "${DELIVERIES.join('", "')}"`],
         );
   },
 };

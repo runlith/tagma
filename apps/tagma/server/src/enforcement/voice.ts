@@ -59,14 +59,16 @@ const mapLines = (map: InspectionsReading['map']): string[] => {
 export const enforcedText = (answer: Answered<EnforcedAnswer>): string => {
   if (answer.status !== 'ok') return refusalLines(answer).join('\n');
   const copy = `graph copy: ${answer.graph ?? 'the machine graph'}`;
+  const warned = answer.warning === undefined ? [] : [`warning: ${answer.warning}`];
   if (answer.strictness === 'off') {
-    if (answer.was === null) return `${answer.rule} carried no enforcement; nothing was written\n${copy}`;
+    if (answer.was === null) return [`${answer.rule} carried no enforcement; nothing was written`, copy, ...warned].join('\n');
     return [
       answer.was === 'unreadable'
         ? `removed the enforcement document of ${answer.rule}, which did not decode; the journal keeps it`
         : `removed the enforcement of ${answer.rule}, which stood at ${answer.was.strictness}, ${triggersSaid(answer.was.on)}; the journal keeps the document`,
       copy,
       'revision: none',
+      ...warned,
     ].join('\n');
   }
   return [
@@ -80,6 +82,7 @@ export const enforcedText = (answer: Answered<EnforcedAnswer>): string => {
     ...(answer.retired.length === 0 ? [] : [`retired: ${answer.retired.join(', ')}`]),
     ...(answer.escaped === 0 ? [] : [`escaped: ${answer.escaped}`]),
     ...unjudgedLines(answer.unjudged),
+    ...warned,
   ].join('\n');
 };
 

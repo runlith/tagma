@@ -107,11 +107,16 @@
   const acting = $derived(rename !== undefined || places.length > 0 || !leaf || moves || law || storable);
 
   const BY_SOURCES = 'sources';
-  const DELIVERY_CHOICES = [
-    { value: BY_SOURCES, label: 'By sources', says: 'Code when it has sources, prompt when it has none' },
-    { value: 'prompt', label: 'Prompt', says: 'In every thread’s instructions from the start' },
-    { value: 'code', label: 'Code', says: 'When an agent reads or writes the code its sources name' },
-  ] as const;
+  const BY_SOURCES_CHOICE = { value: BY_SOURCES, label: 'By sources', says: 'Code when it has sources, prompt when it has none' };
+  const DELIVERY_CHOICES: Readonly<Record<Delivery, { readonly label: string; readonly says: string }>> = {
+    prompt: { label: 'Prompt', says: 'In every thread’s instructions from the start' },
+    code: { label: 'Code', says: 'When an agent reads or writes the code its sources name' },
+    finding: { label: 'Finding', says: 'Only in the results of its check, never in advance' },
+  };
+  const choicesOf = (declared: readonly Delivery[]) => [
+    BY_SOURCES_CHOICE,
+    ...declared.map((value) => ({ value, ...DELIVERY_CHOICES[value] })),
+  ];
 </script>
 
 {#snippet acts(list: readonly LinkAct[])}
@@ -188,12 +193,13 @@
         {@const off = tags.switchedOff(block)}
         {@const delivered = tags.deliveredBy(block)}
         {@const delivery = delivered.stated ?? BY_SOURCES}
+        {@const choices = choicesOf(delivered.declared)}
         <DropdownMenu.Item icon={Power} onSelect={() => void store.setLawEnabled(block.name, off)}>
           {off ? 'Switch on' : 'Switch off'}
         </DropdownMenu.Item>
-        {#if delivered.settable}
+        {#if delivered.declared.length > 0}
           <DropdownMenu.Sub>
-            <DropdownMenu.SubTrigger icon={Send} current={DELIVERY_CHOICES.find((choice) => choice.value === delivery)?.label}>
+            <DropdownMenu.SubTrigger icon={Send} current={choices.find((choice) => choice.value === delivery)?.label}>
               Delivery
             </DropdownMenu.SubTrigger>
             <DropdownMenu.SubContent class="min-w-40">
@@ -201,7 +207,7 @@
                 value={delivery}
                 onValueChange={(next) => void store.setLawDelivery(block.name, next === BY_SOURCES ? null : (next as Delivery))}
               >
-                {#each DELIVERY_CHOICES as choice (choice.value)}
+                {#each choices as choice (choice.value)}
                   <DropdownMenu.RadioItem value={choice.value} title={choice.says}>{choice.label}</DropdownMenu.RadioItem>
                 {/each}
               </DropdownMenu.RadioGroup>

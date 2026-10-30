@@ -25,6 +25,9 @@ import { notAdmitted, OwnGitFailed } from '../platform/git/ownGit.js';
 import { GateRefusal } from '../platform/contract/wire/refusal.js';
 import { BlockNames, type BlockRow } from '../graph/contract/service/acts.js';
 import { Blocks } from '../graph/contract/service/blocks.js';
+import { Orientation } from '../graph/contract/service/orientation.js';
+import { documentRunsUnasked, FINDING_UNHEARD } from '../graph/contract/wire/tags/law.js';
+import type { LawEnforcement } from '../graph/contract/wire/enforcement.js';
 import { settleJournalCall } from '../graph/journal/callRange.js';
 import { handoverOf, landingPlace } from '../change-record/prepared/place.js';
 import { selectCheckout } from '../change-record/prepared/selection.js';
@@ -281,6 +284,12 @@ const enforcePreparing = Effect.fn('enforce_rule.prepare')(function* (
   );
 });
 
+const unheard = Effect.fnUntraced(function* (rule: string, document: LawEnforcement | null) {
+  if (documentRunsUnasked(document)) return undefined;
+  const { id, projectId } = yield* scoped(rule);
+  return (yield* (yield* Orientation).ruleReach(projectId)).get(id)?.delivery === 'finding' ? FINDING_UNHEARD : undefined;
+});
+
 const enforceExecuting = Effect.fnUntraced(function* (_input: InputOf<typeof ENFORCEMENT_OPERATIONS.enforce_rule>, prepared: Prepared) {
   yield* GateMemory;
   const driver = yield* Remeasure;
@@ -292,6 +301,7 @@ const enforceExecuting = Effect.fnUntraced(function* (_input: InputOf<typeof ENF
     ...answerOf(applied),
     revision: applied.document === null ? null : documentRevision(applied.document),
     graph: (yield* ServedTree)?.treeRoot ?? null,
+    warning: yield* unheard(applied.rule, applied.document),
   } satisfies EnforcedAnswer;
   return { status: 'ok' as const, block: { name: plan.rule }, ...plan };
 });

@@ -21,6 +21,7 @@ export const STRICTNESS_LABEL: Readonly<Record<Strictness, string>> = {
 export const DELIVERY_WORD: Readonly<Record<EngineRow['delivery'], string>> = {
   prompt: 'in every agent’s instructions',
   code: 'delivered when an agent reads or writes its code',
+  finding: 'delivered only in its check’s results',
 };
 
 const ACT_WORD: Readonly<Record<string, string>> = {

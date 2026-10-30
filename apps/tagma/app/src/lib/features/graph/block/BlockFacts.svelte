@@ -12,6 +12,7 @@
   const facts = $derived(tags.factsOf(read));
   const lawful = $derived(tags.bearsLaw(read));
   const delivery = $derived(read.reach === null ? null : tags.deliveryOf(read, read.sources.length > 0));
+  const unheard = $derived(read.reach !== null && tags.reachesNobody(read, read.sources.length > 0));
   const everywhere = $derived(read.sources.some((one) => one.ref.replace(/\/+$/, '') === '.'));
 </script>
 
@@ -23,6 +24,10 @@
     <span class="text-foreground/90">
       {#if delivery === 'prompt'}
         In every agent’s instructions
+      {:else if delivery === 'finding'}
+        {unheard
+          ? 'With its check’s results — its check runs on nothing, so no agent gets it'
+          : 'With its check’s results — no agent gets it in advance'}
       {:else if read.sources.length === 0}
         With the code its sources name — it has none yet, so no agent gets it
       {:else if everywhere}

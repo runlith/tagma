@@ -19,7 +19,14 @@ import { LIFECYCLE, lifecycleOf } from '@tagma/server/graph/contract/wire/tags/l
 import { OBSERVATION } from '@tagma/server/graph/contract/wire/tags/observation';
 import { WORK } from '@tagma/server/graph/contract/wire/tags/work';
 import { REFLECTION, reflectionOf } from '@tagma/server/graph/contract/wire/tags/reflection';
-import { type Delivery, deliveryOf, isEnabled, statedDelivery } from '@tagma/server/graph/contract/wire/tags/law';
+import {
+  declaredDeliveries,
+  type Delivery,
+  deliveryOf,
+  isEnabled,
+  reachesNobody,
+  statedDelivery,
+} from '@tagma/server/graph/contract/wire/tags/law';
 import { Failure } from '@runlith/layer/Failure';
 import { Scope } from '@runlith/layer/Scope';
 import { Service } from '@runlith/layer/key';
@@ -177,14 +184,18 @@ export class TagCatalog extends Service<TagCatalog>()('TagCatalog', { tier: 'pro
     return law !== null && !isEnabled(law, row);
   }
 
-  deliveredBy(row: Tagged): { readonly stated: Delivery | null; readonly settable: boolean } {
+  deliveredBy(row: Tagged): { readonly stated: Delivery | null; readonly declared: readonly Delivery[] } {
     const law = this.table.lawProjection(row);
-    return { stated: statedDelivery(law, row), settable: law?.delivery != null };
+    return { stated: statedDelivery(law, row), declared: declaredDeliveries(law === null ? null : this.table.tagById(law.type), law) };
   }
 
   deliveryOf(row: Tagged, sourced: boolean): Delivery | null {
     const law = this.table.lawProjection(row);
     return law === null ? null : deliveryOf(law, row, sourced);
+  }
+
+  reachesNobody(row: Tagged, sourced: boolean): boolean {
+    return reachesNobody(this.table.lawProjection(row), row, sourced);
   }
 
   get declared(): readonly string[] {

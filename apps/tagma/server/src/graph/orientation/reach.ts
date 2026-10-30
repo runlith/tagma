@@ -22,14 +22,20 @@ export const reaches = (places: readonly string[], place: string): boolean =>
 
 export const sourced = (reach: RuleReach): boolean => reach.sources.length > 0;
 
-export const codeLabel = (sources: readonly string[]): string => {
-  if (sources.length === 0) return 'code · no sources';
+const sourcesSaid = (sources: readonly string[]): string => {
   const shown = sources.slice(0, SHOWN).join(', ');
-  return `code · ${sources.length > SHOWN ? `${shown}, …` : shown}`;
+  return sources.length > SHOWN ? `${shown}, …` : shown;
 };
 
+export const codeLabel = (sources: readonly string[]): string =>
+  sources.length === 0 ? 'code · no sources' : `code · ${sourcesSaid(sources)}`;
+
 export const reachLabel = (reach: RuleReach, project: string): string =>
-  reach.delivery === 'prompt' ? `prompt · ${project}` : codeLabel(reach.sources);
+  reach.delivery === 'prompt'
+    ? `prompt · ${project}`
+    : reach.delivery === 'finding'
+      ? `finding · ${sourced(reach) ? sourcesSaid(reach.sources) : project}`
+      : codeLabel(reach.sources);
 
 const placeOf = (ref: string): string => {
   const trimmed = ref.replace(/\/+$/, '');
