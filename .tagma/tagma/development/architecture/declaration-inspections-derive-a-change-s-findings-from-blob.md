@@ -6,8 +6,11 @@ tags: ["explanation"]
 sources:
   - kind: dir
     ref: checks/law/declarations
+  - kind: symbol
+    ref: checks/law/store.ts
+    symbol: databaseAt
 ---
-The facts of a source file — its exports, imports, uses by value or type position, and type shapes — are a function of its git blob alone, so `store.ts` keeps them per blob in `<git-common-dir>/runlith-law/declarations.sqlite`, with the places a blob stands at and the import links and shape keys that find importers and copies. The index resets whenever a file that defines it changes. No complete findings are kept for any revision.
+Blob facts and semantic revision indexes belong to the executing reader version. Reader versions coexist in separate stores, so a remeasure or gate using one cannot erase another version's prepared declarations or architecture state. Their git-directory catalogue remains shared because tree objects do not depend on the reader. No complete findings are kept for any revision.
 
 Only a whole reading (`check_rules` over "all", a remeasure) builds the index: it lists the tree, parses every blob it lacks and seeds the packages map. A judgment of a change never scans and never computes a whole result: it derives the revision's index from the nearest of the last indexed ones by `git diff-tree`, and fails with the setup action (`check_rules` over "all") when none lies within 5000 changed files or a packages state is missing. It computes the owners the change can move — the changed files and the exporters whose consumption edges (import, re-export, load) it added or removed; for repeated declarations, every file in a group of a changed shape key on either side — and answers their findings on the base and on the tree from blob facts, with `covered` listing exactly those paths plus the requested ones. A path in `covered` carries all its findings of that version, so the answer agrees with the remeasure on those paths and says nothing about the rest.
 

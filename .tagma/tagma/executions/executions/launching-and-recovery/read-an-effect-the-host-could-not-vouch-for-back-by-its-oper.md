@@ -1,6 +1,6 @@
 ---
 id: 01a0c706-57b3-7134-a26a-dbc872f742cc
-title: An effect the host could not vouch for is read back by its operation key, not restarted
+title: Read an effect the host could not vouch for back by its operation key; never start it again under a new key
 ord: 4
 tags: ["rule"]
 sources:

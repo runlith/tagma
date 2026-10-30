@@ -1,6 +1,6 @@
 ---
 id: 01a0ca9c-1172-7804-affb-6ff184aa1a73
-title: Producer bindings — a pure total function of one target
+title: A WorkspaceBindings producer is a pure function of its target and never throws
 ord: 1
 tags: ["rule"]
 sources:
@@ -13,4 +13,4 @@ sources:
     ref: packages/agent-tools/src/workspace/runtime.ts
     symbol: admitPreparedPath
 ---
-The same read gets the same proof; a producer never throws.
+Admission computes the binding when it judges a call and again before the act, and refuses on a difference; a producer that varies or throws breaks that comparison.
