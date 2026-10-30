@@ -29,10 +29,16 @@ const wide = 'export type Shared = { readonly a: string; readonly b: string; rea
 test('an alias that only renames an imported type reports the alias, while a projection, generic application and local alias are clean', () => {
   const files = {
     'src/owner.ts': wide,
+    'src/qualified.ts':
+      "import type * as Types from './owner';\nexport type NamespaceCopy = Types.Shared;\nexport type InlineCopy = import('./owner').Shared;\nexport type NamespaceMember = Types.Shared['a'];\nexport type ValueShape = typeof import('./owner');\n",
     'src/use.ts':
       "import type { Shared as Imported } from './owner';\nexport type Copy = Imported;\nexport type Member = Imported['a'];\nexport type Instance = Generic<Imported>;\ntype Local = { value: string };\nexport type Own = Local;\n",
   };
-  expect(judge(files).map((one) => [one.path, one.line, one.fingerprint])).toEqual([['src/use.ts', 2, 'repeated alias:Copy src/use.ts']]);
+  expect(judge(files).map((one) => [one.path, one.line, one.fingerprint])).toEqual([
+    ['src/qualified.ts', 2, 'repeated alias:NamespaceCopy src/qualified.ts'],
+    ['src/qualified.ts', 3, 'repeated alias:InlineCopy src/qualified.ts'],
+    ['src/use.ts', 2, 'repeated alias:Copy src/use.ts'],
+  ]);
 });
 
 test('same-name equal types at the structural threshold repeat across modules, but not inside one module or in test code', () => {

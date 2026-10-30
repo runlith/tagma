@@ -395,13 +395,14 @@ const read = (path: string, text: string): Facts => {
       }
       let type = statement.type;
       while (ts.isParenthesizedTypeNode(type)) type = type.type;
-      if (
-        ts.isTypeReferenceNode(type) &&
-        ts.isIdentifier(type.typeName) &&
-        type.typeArguments === undefined &&
-        scopes.get(file)?.(type.typeName.text)?.startsWith('i:')
-      ) {
-        shapes.push({ kind: 'alias', name, line, size: 1, exported, declaration: true, key: hashOf(name), label: type.typeName.text });
+      let head = ts.isTypeReferenceNode(type) ? type.typeName : undefined;
+      while (head !== undefined && ts.isQualifiedName(head)) head = head.left;
+      const imported = head !== undefined && scopes.get(file)?.(head.text)?.startsWith('i:');
+      const alias =
+        (ts.isTypeReferenceNode(type) && type.typeArguments === undefined && imported) ||
+        (ts.isImportTypeNode(type) && !type.isTypeOf && type.qualifier !== undefined && type.typeArguments === undefined);
+      if (alias) {
+        shapes.push({ kind: 'alias', name, line, size: 1, exported, declaration: true, key: hashOf(name), label: type.getText(file) });
       } else if (ts.isTypeLiteralNode(type)) {
         shapes.push({
           kind: 'object',
