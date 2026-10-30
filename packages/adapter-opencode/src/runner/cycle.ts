@@ -40,17 +40,20 @@ export const makeOpenCodeCycle = Effect.fnUntraced(function* (door: HostedDoor, 
             const blocks: ContentBlock[] = [...history];
             if (input.context !== null) blocks.push({ type: 'text', text: input.context });
             blocks.push(...input.prompt);
-            const run = yield* channel.send({
+            return yield* channel.send({
               system: prepared.opened.prompt ?? '',
               blocks,
               selection: { model, effort },
               tools: prepared.listed.tools,
               event: output.event.bind(output),
               call: relay.call.bind(relay),
-              taken: input.taken,
+              taken: Effect.andThen(
+                Effect.sync(() => {
+                  history = [];
+                }),
+                input.taken,
+              ),
             });
-            history = [];
-            return run;
           }),
           close: channel.close,
         },
