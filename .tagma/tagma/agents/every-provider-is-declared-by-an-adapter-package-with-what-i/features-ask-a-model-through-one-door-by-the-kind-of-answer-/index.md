@@ -135,4 +135,6 @@ edges:
 9. `choose` with an empty role and only Codex connected, and the ChatGPT subscription in `codex` mode, resolves to the subscription's light model.
 10. Every ask is one activity naming its path, its model, and its spend when reported.
 
+**Remaining.** Acceptance 1 alone: rule [[93f04f23]] records the import boundary but is not enforced yet; the session building the architecture checks is enforcing it. Everything else is built (server f1fc96ce, app e0faa87f).
+
 **Proof.** Integration tests through `translate_block`, `generate_thread_title`, the decision door, `compact_thread` and the settings write door, with a scripted wire provider and a test adapter package whose program is a local script. The program conformance suite (7), the recorded-output contract test (8), a unit test of `choose` with an empty role (9), and the import rule (1).
