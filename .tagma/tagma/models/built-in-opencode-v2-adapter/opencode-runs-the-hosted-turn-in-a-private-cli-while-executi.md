@@ -1,7 +1,7 @@
 ---
 id: 01a1648e-67fd-74e6-a5f7-2fac75fe8d12
 title: OpenCode runs the hosted turn in a private CLI, while execution and the journal stay with Tagma
-ord: 1
+ord: 2
 tags: ["explanation"]
 sources:
   - kind: dir

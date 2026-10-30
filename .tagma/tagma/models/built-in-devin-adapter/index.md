@@ -14,6 +14,9 @@ fields:
       },
       {
         "at": "src/icon.ts"
+      },
+      {
+        "at": "src/harness/devin.ts"
       }
     ],
     "id": "@runlith/adapter-devin"
@@ -27,4 +30,4 @@ sources:
   - kind: dir
     ref: packages/adapter-devin
 ---
-Devin provider declarations in Tagma's registry: Devin CLI as an external harness (`devin`) with no account catalogs.
+Devin models and chats are declared together by this built-in adapter: the CLI's terminal surface, hook replies, ATIF metadata and vendor-run ACP profile belong to the package, while the server owns transport driving and thread state. The vendor's program and sign-in remain Devin's.

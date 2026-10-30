@@ -28,7 +28,7 @@ sources:
   - kind: file
     ref: apps/tagma/server/src/external-harnesses/vendors/cursor/acp.ts
   - kind: file
-    ref: apps/tagma/server/src/external-harnesses/vendors/devin/acp.ts
+    ref: packages/adapter-devin/src/harness/acp.ts
   - kind: file
     ref: apps/tagma/server/src/threads/harness/registry.ts
   - kind: symbol

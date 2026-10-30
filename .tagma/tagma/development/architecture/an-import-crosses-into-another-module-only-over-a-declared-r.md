@@ -8,7 +8,32 @@ fields:
     "delivery": "code",
     "enforcement": {
       "debt": [],
-      "escaped": [],
+      "escaped": [
+        {
+          "commit": "d6be3c96a1409139de71fedb364ac512e4a34695",
+          "fingerprint": "external-harnesses -> @runlith/adapter-opencode @ apps/tagma/server/src/external-harnesses/runner/opencode/run.ts",
+          "fix": "Import `@runlith/adapter-opencode` only from test code, or open the relation `external-harnesses → @runlith/adapter-opencode` to all code with `set_module`.",
+          "line": 4,
+          "path": "apps/tagma/server/src/external-harnesses/runner/opencode/run.ts",
+          "said": "imports `@runlith/adapter-opencode/host` of module `@runlith/adapter-opencode`, which `external-harnesses` may import from test code only"
+        },
+        {
+          "commit": "d6be3c96a1409139de71fedb364ac512e4a34695",
+          "fingerprint": "external-harnesses -> @runlith/adapter-opencode @ apps/tagma/server/src/external-harnesses/runner/opencode/sdk.ts",
+          "fix": "Import `@runlith/adapter-opencode` only from test code, or open the relation `external-harnesses → @runlith/adapter-opencode` to all code with `set_module`.",
+          "line": 5,
+          "path": "apps/tagma/server/src/external-harnesses/runner/opencode/sdk.ts",
+          "said": "imports `@runlith/adapter-opencode/host` of module `@runlith/adapter-opencode`, which `external-harnesses` may import from test code only"
+        },
+        {
+          "commit": "d6be3c96a1409139de71fedb364ac512e4a34695",
+          "fingerprint": "external-harnesses -> @runlith/adapter-opencode @ apps/tagma/server/src/external-harnesses/vendors/opencode/row.ts",
+          "fix": "Import `@runlith/adapter-opencode` only from test code, or open the relation `external-harnesses → @runlith/adapter-opencode` to all code with `set_module`.",
+          "line": 1,
+          "path": "apps/tagma/server/src/external-harnesses/vendors/opencode/row.ts",
+          "said": "imports `@runlith/adapter-opencode/host` of module `@runlith/adapter-opencode`, which `external-harnesses` may import from test code only"
+        }
+      ],
       "inspection": "modules",
       "on": [
         {

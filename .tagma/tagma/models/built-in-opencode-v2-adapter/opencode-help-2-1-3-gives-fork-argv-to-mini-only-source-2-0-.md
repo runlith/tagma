@@ -1,7 +1,7 @@
 ---
 id: 01a17319-75a7-7026-b6a0-72189d725189
 title: "OpenCode: help 2.1.3 gives fork argv to mini only; source 2.0.29 cuts before the message ID"
-ord: 3
+ord: 4
 tags: ["research"]
 fields:
   {

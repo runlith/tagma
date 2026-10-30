@@ -1,7 +1,7 @@
 ---
 id: 01a16546-5b0c-702d-83ee-a27dee2e3af1
 title: Terminal OpenCode delivers Tagma law and events through the plugin API of a separate standalone CLI
-ord: 2
+ord: 3
 tags: ["explanation"]
 sources:
   - kind: file

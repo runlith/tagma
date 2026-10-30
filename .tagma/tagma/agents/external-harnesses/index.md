@@ -230,13 +230,13 @@ edges:
   - kind: imports
     to: 01a1645c-0111-70ad-b9c5-09ef1cb7b072
   - kind: imports
-    to: 01a16485-4ad9-7d6b-aece-d0d23f720252
-  - kind: imports
     to: 01a18e33-3513-785d-9824-df6d3c2426a1
   - kind: imports-tests
     to: 01a12c56-911f-76ad-b665-0ff9a95d3d64
   - kind: imports-tests
     to: 01a12ce3-7d6d-71b9-8c1e-d661ac293dd5
+  - kind: imports-tests
+    to: 01a16485-4ad9-7d6b-aece-d0d23f720252
   - kind: imports-tests
     to: 01a18e1d-2841-72f0-b3c5-26c3d4a5b244
 sources:
