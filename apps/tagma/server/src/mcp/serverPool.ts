@@ -736,6 +736,11 @@ const makeMcpServers = Effect.fnUntraced(function* ({
       setEnabled,
       signIn,
       signOut,
+      forgetContributed: Effect.fn('McpServers.forgetContributed')(function* (projectId: number, name: string) {
+        const key = keyOf('contributed', projectId, name);
+        yield* signIns.forget(key);
+        yield* owners.drop(KIND, key).pipe(Effect.mapError(storeRefusal));
+      }),
       finishSignIn: signIns.finish,
       reconcile,
       reconcileAll,

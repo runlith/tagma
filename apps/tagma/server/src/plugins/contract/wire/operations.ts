@@ -179,13 +179,13 @@ export const PLUGIN_OPERATIONS = {
     ...acted,
     answer,
     meaning:
-      'Uninstall an agent plugin from this machine: every project stops running it and its secret options are dropped. Its data stays.',
+      'Uninstall an agent plugin from this machine: every project stops running it, its secret options and the sign-ins of the servers it brought are dropped. Its data stays.',
     input: Schema.Struct({ project: projectField, id: PluginId }),
     refusals: CHANGE_REFUSALS,
     confirmation: (input) => ({
       summary: `Uninstall the plugin ${input.id}?`,
       consequence:
-        'Every project stops running it and its secret options are dropped; its data stays, and a clone of its git URL is removed.',
+        'Every project stops running it, its secret options and its servers’ sign-ins are dropped; its data stays, and a clone of its git URL is removed.',
     }),
     confirmLabel: 'Uninstall',
     presentation: { running: 'Uninstalling a plugin', done: 'Uninstalled a plugin' },

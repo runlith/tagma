@@ -39,7 +39,7 @@ export const names: Builtin<'names', NamesParams> = {
       F4: {
         allowances: [
           {
-            lines: 717,
+            lines: 722,
             path: 'apps/tagma/server/src/mcp/serverPool.ts',
             why: 'One subject: the project MCP pool lifecycle; declaration reconciliation, sign-in readers, secret redaction and app calls share its session ownership and scope.',
           },

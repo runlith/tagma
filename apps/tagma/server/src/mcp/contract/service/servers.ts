@@ -73,6 +73,7 @@ export class McpServers extends Context.Service<
     signOut(
       input: McpServerSeenInput & { readonly name: string },
     ): Effect.Effect<readonly McpServerRow[], StoreFailure | GateRefusal<McpSignOutRefusal>>;
+    forgetContributed(projectId: number, name: string): Effect.Effect<void, GateRefusal<'secret-store-failed'>>;
     finishSignIn(answer: McpSignInAnswer): Effect.Effect<McpSignedIn, McpSignInRejected>;
     reconcile(projectId: number): Effect.Effect<void, StoreFailure | GateRefusal<McpReconcileRefusal>>;
     reconcileAll(): Effect.Effect<void, StoreFailure | GateRefusal<McpReconcileRefusal>>;

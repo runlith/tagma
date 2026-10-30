@@ -82,6 +82,13 @@ layer(Layer.mergeAll(doorFixture(), BunFileSystem.layer), { excludeTestServices:
           const said = yield* servers.caller(projectId).call(name, 'whoami', {}, {});
           expect('content' in said ? said.content : said).toEqual([expect.objectContaining({ type: 'text', text: 'Bearer [redacted]' })]);
         }
+
+        const [first] = SERVICES;
+        yield* answered('uninstall_plugin', { id: first });
+        const { preview } = yield* answered('preview_plugin', { marketplace: 'tagma', entry: first });
+        yield* answered('install_plugin', { prepared: preview?.prepared });
+        const again = (yield* answered('read_mcp_servers', {})).mcp?.find((row) => row.name === `${first}-${first}`);
+        expect(again?.status).toBe('needs-sign-in');
       }),
   );
 });
