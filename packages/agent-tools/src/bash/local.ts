@@ -32,7 +32,7 @@ export const local = Effect.fn('BashTool.local')(function* (
   }
   const ready = yield* preflight(resolved, params, baselines);
   const time = yield* commandTime(resolved, params, ctx.caller, ready.workdir);
-  const shell = new ShellRun(resolved, baselines, services, ready.workdir, params.command, ctx.progress);
+  const shell = new ShellRun(resolved, baselines, services, ready.workdir, params.command, ctx.progress, ctx);
   yield* shell.open(ready).pipe(Effect.uninterruptible);
   const timeout = Math.min(time.wait.ms, time.life.ms);
   let settled: Settled = localRunning;
@@ -49,7 +49,7 @@ export const local = Effect.fn('BashTool.local')(function* (
         return ChildProcess.make(windows ? params.command : shellProgram, windows ? [] : ['-c', params.command], {
           shell: windows ? shellProgram : undefined,
           cwd: ready.workdir,
-          env: { ...resolved.env, ...resolved.callEnv(ctx) },
+          env: shell.env,
           extendEnv: true,
           stdin: 'ignore',
           detached: !windows,

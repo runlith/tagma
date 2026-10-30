@@ -141,7 +141,7 @@ it.live('bash keeps home-relative single-file rg matches as data even when minif
     const code = `function es(t){${'x'.repeat(1_000)};return t?t?1:2:3;}`;
     yield* host.writeFile(file, code);
     const rg = yield* machineWorld.environment.executables.ripgrep;
-    const tools = createTools(options({ cwd: root, allowOutsideCwd: true, env: { HOME: outside } }));
+    const tools = createTools(options({ cwd: root, allowOutsideCwd: true, env: { HOME: root }, callEnv: () => ({ HOME: outside }) }));
     const ran = yield* answer(tools.bash, {
       command: `${JSON.stringify(rg)} -a -o 'function es\\(t\\).{0,18000}' ~/claude`,
       description: 'Read a minified function',

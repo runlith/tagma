@@ -21,7 +21,7 @@ import type {
   CommandVerdict,
   CommandWindow,
 } from './WorkspaceChanges';
-import type { ResolvedToolOptions } from './workspace';
+import type { ResolvedToolOptions, ToolEnvCall } from './workspace';
 import type { ToolShown } from '@runlith/agent/tool';
 import { commandClass } from './commandClass';
 import { shellShown } from './shellShown';
@@ -384,6 +384,7 @@ export class ShellRun {
   private inspection: string | null = null;
   private kept: KeptOutput | null = null;
   public elsewhere: string | null = null;
+  readonly env: Record<string, string | undefined>;
 
   constructor(
     private readonly resolved: ResolvedToolOptions,
@@ -392,7 +393,10 @@ export class ShellRun {
     private readonly workdir: string,
     private readonly command: string,
     private readonly progress?: CallProgress,
+    call?: ToolEnvCall,
   ) {
+    const extra = call === undefined ? {} : resolved.callEnv(call);
+    this.env = { ...resolved.env, ...extra };
     this.kind = commandClass(command);
   }
 
@@ -544,7 +548,7 @@ export class ShellRun {
           output: `${stdout}\n${stderr}`,
           cwd: this.workdir,
           root: this.resolved.cwd,
-          home: this.resolved.env.HOME ?? this.resolved.world.environment.home,
+          home: this.env.HOME ?? this.resolved.world.environment.home,
         },
         isFile(fs),
       ),

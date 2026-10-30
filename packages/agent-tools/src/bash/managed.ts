@@ -36,7 +36,7 @@ export const admitted = Effect.fn('BashTool.admitted')(function* (
   const stop = ctx.progress;
   const ready = yield* preflight(resolved, params, baselines);
   const time = yield* commandTime(resolved, params, ctx.caller, ready.workdir);
-  const shell = new ShellRun(resolved, baselines, services, ready.workdir, params.command, ctx.progress);
+  const shell = new ShellRun(resolved, baselines, services, ready.workdir, params.command, ctx.progress, ctx);
   yield* shell.open(ready).pipe(Effect.uninterruptible);
   shell.opened();
   ctx.progress?.stage('Admitting the command to its execution host');
@@ -50,7 +50,7 @@ export const admitted = Effect.fn('BashTool.admitted')(function* (
           args: ['-c', params.command],
           cwd: ready.workdir,
           label: commandLabel(params),
-          env: { ...resolved.env, ...resolved.callEnv(ctx) },
+          env: shell.env,
           lifeMs: params.lifeMs,
           waitMs: time.wait.ms,
           correlation: ctx.toolCallId,
