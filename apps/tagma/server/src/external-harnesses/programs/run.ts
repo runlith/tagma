@@ -6,8 +6,6 @@ import type { CommandExchange, ProgramOutput } from '@runlith/tagma/adapter/prov
 import type { HarnessProgram } from '../../threads/contract/service/harness.js';
 import { programEnvironment } from '../sessions/programs.js';
 
-const OUTPUT_BYTES = 1024 * 1024;
-
 export type ProgramCommand = {
   readonly program: string;
   readonly args: readonly string[];
@@ -21,7 +19,6 @@ export type ProgramCommand = {
 const outputText = async (stream: ReadableStream<Uint8Array>, onLine?: (line: string) => void): Promise<string> => {
   const reader = stream.getReader();
   const decoder = new TextDecoder();
-  let bytes = 0;
   let text = '';
   let scanned = 0;
   let searchFrom = 0;
@@ -29,8 +26,6 @@ const outputText = async (stream: ReadableStream<Uint8Array>, onLine?: (line: st
     for (;;) {
       const read = await reader.read();
       if (read.done) return text + decoder.decode();
-      bytes += read.value.byteLength;
-      if (bytes > OUTPUT_BYTES) throw new ProgramFailed({ message: 'The program output exceeds its one-megabyte envelope.' });
       text += decoder.decode(read.value, { stream: true });
       if (onLine !== undefined) {
         for (let end = text.indexOf('\n', searchFrom); end !== -1; end = text.indexOf('\n', scanned)) {

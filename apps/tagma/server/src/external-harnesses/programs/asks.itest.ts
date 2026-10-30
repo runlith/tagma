@@ -58,12 +58,16 @@ const firstLogged = Effect.fnUntraced(function* (directory: string, path: string
 });
 
 layer(filler, { excludeTestServices: true })('ask programs', (it) => {
-  it.effect('an input over a mebibyte reaches the program on stdin, and a failed exit becomes the refusal its declaration names', () =>
+  it.effect('stdin and answers can exceed a mebibyte, and a failed exit keeps its declared refusal', () =>
     Effect.gen(function* () {
       const large = `ASK-BYTES ${'x'.repeat(MIB + 512)}`;
       const ran = yield* run(large);
       expect(ran.exit).toBe(0);
       expect(askProgramFixture.answer(ran)).toMatchObject({ _tag: 'Text', text: String(Buffer.byteLength(large)) });
+      expect(askProgramFixture.answer(yield* run('ASK-OUTPUT'))).toMatchObject({
+        _tag: 'Text',
+        text: 'x'.repeat(MIB + 512),
+      });
       const limited = yield* run('ASK-QUOTA');
       expect(limited.exit).toBe(2);
       expect(askProgramFixture.answer(limited)).toMatchObject({ _tag: 'Refused', refusal: 'ask-quota' });

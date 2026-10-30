@@ -22,7 +22,7 @@ const objectOf = (schema: { readonly properties?: Record<string, { readonly type
     ]),
   );
 
-const system = flag('--system') ?? '';
+const system = flag('--system') ?? flag('--system-prompt') ?? '';
 const input = await Bun.stdin.text();
 const log = process.env.ASK_PROGRAM_LOG;
 if (log !== undefined && log !== '')
@@ -44,20 +44,30 @@ else if (input.includes('ASK-QUOTA')) {
   process.exit(2);
 } else {
   const marked = system.indexOf(SCHEMA_MARK);
+  const nativeSchema = flag('--json-schema');
+  const schema =
+    nativeSchema === null ? (marked === -1 ? null : JSON.parse(system.slice(marked + SCHEMA_MARK.length))) : JSON.parse(nativeSchema);
   const sections = [...input.matchAll(/^@@ (\d+)\n([\s\S]*?)\n(?=@@ |\s*$)/gmu)];
   const text =
-    marked !== -1
+    schema !== null
       ? input.includes('ASK-MALFORMED')
         ? JSON.stringify({ addressed: 'maybe' })
-        : JSON.stringify(objectOf(JSON.parse(system.slice(marked + SCHEMA_MARK.length))))
+        : JSON.stringify(objectOf(schema))
       : /name conversations/u.test(system)
         ? 'TITLE: Program title'
         : sections.length > 0
           ? sections.map(([, id, part]) => `@@ ${id}\n«ru» ${shouted(part!)}`).join('\n')
           : input.includes('ASK-BYTES')
             ? String(Buffer.byteLength(input))
-            : `## State\n${'The program read the conversation and kept its plan and every file it names. '.repeat(24).trim()}`;
+            : input.includes('ASK-OUTPUT')
+              ? 'x'.repeat(1024 * 1024 + 512)
+              : `## State\n${'The program read the conversation and kept its plan and every file it names. '.repeat(24).trim()}`;
+  const usage = { input_tokens: Math.ceil(input.length / 4), output_tokens: Math.ceil(text.length / 4) };
   process.stdout.write(
-    JSON.stringify({ text, usage: { inputTokens: Math.ceil(input.length / 4), outputTokens: Math.ceil(text.length / 4) } }),
+    JSON.stringify(
+      process.env.ASK_PROGRAM_FORMAT === 'claude'
+        ? { type: 'result', subtype: 'success', result: text, structured_output: schema === null ? undefined : JSON.parse(text), usage }
+        : { text, usage: { inputTokens: usage.input_tokens, outputTokens: usage.output_tokens } },
+    ),
   );
 }
