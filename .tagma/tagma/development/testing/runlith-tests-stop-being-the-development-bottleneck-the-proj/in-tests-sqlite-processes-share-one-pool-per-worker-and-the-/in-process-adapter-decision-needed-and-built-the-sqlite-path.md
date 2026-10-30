@@ -11,7 +11,7 @@ sources:
   - kind: file
     ref: packages/sqlite-process/src/testing/pool.ts
 ---
-**Decision.** A process adapter is needed and built (0e6826c8c1, b244bc371a): `ProcessPool` receives connection hosting from whoever builds it. The product (`composition/server.ts`) passes `childHosting`, test worlds pass `inlineHosting` through `heldPool`/`sharedPool`. Nothing changed above the channel: `Connections`, `Readers`, handover, retire, writer stall, checkpoint, and child accounting run shared code. What works differently in process and which tests therefore stay on child is recorded in [[a6950a0e]]. One channel conformance suite (`packages/sqlite-process/src/hosting.itest.ts`) runs on both hostings.
+**Decision.** A process adapter is needed and built (0e6826c8c1, b244bc371a): `ProcessPool` receives connection hosting from whoever builds it. The product (`composition/server.ts`) passes `childHosting`, test worlds get theirs from `heldPool`/`sharedPool`, which take `inlineHosting` unless the run forces or samples the real one (see below). Nothing changed above the channel: `Connections`, `Readers`, handover, retire, writer stall, checkpoint, and child accounting run shared code. What works differently in process and which tests therefore stay on child is recorded in [[a6950a0e]]. One channel conformance suite (`packages/sqlite-process/src/hosting.itest.ts`) runs on both hostings.
 
 **Why, with the figure.** Measurements 2026-10-24, Apple M2 Max, load average 20–24 from other agents, `--parallel=1`. Each measurement one sample, so this is a pointer, not a norm.
 - `http/collaborationDoor.itest.ts`, 4 tests: 33.9 s file CPU on processes, of it 15 SQLite children — 5.2 s. In process — 20.4 s, 0 children; one test in that run hung on a test race that the x-http fix removed.
@@ -24,6 +24,4 @@ sources:
 
 **The danger from this spec confirmed.** Synchronous lock waiting under `busy_timeout` in one process hung a spike at 60 s. In process `busy_timeout` is 0, and BUSY retries on a timer to the same deadline.
 
-**What remains.**
-- About 140 store opens in tests run without a pool and spawn children by default (`new ProcessPool()` in `platform/store/open.ts`). The default moves to composition with task [[3201be28]]; until then tests pass `sharedPool`.
-- A quiet graph-part and door-file measurement before and after — in the 17:30Z measurement, when all agents stop.
+**What came after.** No store opening or pool picks a hosting by default any more ([[3201be28]]): composition and every test pass the pool. `heldPool` and `sharedPool` choose their hosting in `hostingOfRun`: in-process by default, child when `RUNLITH_SQLITE_HOSTING=child` is set (`check:change` sets it when a non-test file of `packages/sqlite-process` changed), and child for a seed-selected quarter of workers (`RUNLITH_TEST_SEED`, published by the testbed on every run). The quiet-window before/after measurement was dropped by the launcher of [[168725a4]], as the same kind of measurement was dropped on [[05af9265]].

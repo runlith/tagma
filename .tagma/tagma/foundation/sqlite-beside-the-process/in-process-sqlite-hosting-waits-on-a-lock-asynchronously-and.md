@@ -7,7 +7,7 @@ sources:
   - kind: file
     ref: packages/sqlite-process/src/inline.ts
 ---
-`inlineHosting` runs the same channel protocol as the child but in the caller's process; test worlds use it (`testing/pool.ts`), the product stays on `childHosting`.
+`inlineHosting` runs the same channel protocol as the child but in the caller's process; test worlds use it by default (`testing/pool.ts`), the product stays on `childHosting`. A test world takes the child instead when the run says so: `RUNLITH_SQLITE_HOSTING=child` (set by `check:change` whenever a non-test file of `packages/sqlite-process` changed), or `RUNLITH_TEST_SEED` selecting its worker (about one in four). A test green in-process and red on child is a variant mismatch to fix, with its case added to the conformance suite (`hosting.itest.ts`).
 
 `busy_timeout` in-process is 0, and BUSY on `Run` and `Open` is retried with a timer to the connection's same deadline. Synchronous `bun:sqlite` waiting would stop the event loop while another connection of the same process holds `BEGIN IMMEDIATE` through `await`: the holder cannot reach COMMIT, and the waiter gets BUSY only on the deadline. Queue time and whole-wait time land in `queueMs`/`execMs`, as with the child.
 

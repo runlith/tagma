@@ -1,7 +1,7 @@
 ---
 id: 01a18a51-284d-7f34-b786-fc00f111a4d7
 title: A root-registry reopen test using sharedPool leaves two SQLite children
-ord: 1224
+ord: 16
 tags: ["reflection"]
 fields:
   {
