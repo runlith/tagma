@@ -17,7 +17,7 @@ sources:
   - kind: file
     ref: apps/tagma/server/src/external-harnesses/store/protocol.ts
 ---
-Every agent act — a hosted tool call, a streamed CLI frame, a state change — passes through the one server process. Today that process spends far more per act than the act costs. The interface is served from the same event loop, so it freezes with it. This spec makes the server's work per act small and bounded. It keeps the interface's latency independent of how many agents run. It is step 2 ("SQL per act") of the parent spec for the agent path, extended to the writer, thread projections, memory and the fault domain that the 2026-10-30 incident showed. Every user who runs several agents meets the problem; a weaker machine meets it with fewer agents.
+Every agent act — a hosted tool call, a streamed CLI frame, a state change — passes through the one server process. Today that process spends far more per act than the act costs. The interface is served from the same event loop, so it freezes with it. This spec makes the server's work per act small and bounded. Within a stated load envelope it keeps the interface's latency independent of how many agents run; past the envelope agent work slows by backpressure while the interface stays responsive. It is step 2 ("SQL per act") of the parent spec for the agent path, extended to the writer, thread projections, memory and the fault domain that the 2026-10-30 incident showed. Every user who runs several agents meets the problem; a weaker machine meets it with fewer agents.
 
 ## What was measured
 
@@ -59,7 +59,7 @@ Incident: 2026-10-30, 11:21–11:31Z. 22 claude-code threads over ACP, Tagma too
 3. **Context that changes rarely is re-resolved per request:** settings layers, provider accounts, enabled plugins and hooks, file-root registry rows, the caller's grant (`invocation/admission/identity.ts:55-62`, the most frequent stored statement in the incident).
 4. **Every statement and every span costs the main thread.** Drizzle rebuilds SQL text and the row mapper on every call. Rows cross the process boundary by structured clone. Each statement opens a span, and fingerprints are computed only for sampled spans (`packages/sqlite-process/src/connection.ts:294-317`).
 5. **ACP durable steps cost in proportion to the open turn.**
-   - Each durable step decodes and re-encodes the whole protocol row as JSON (`external-harnesses/store/protocol.ts:42-66`).
+   - Each durable step re-encodes and upserts the whole protocol row as JSON from the row it holds in memory (`steps.ts:510`, `external-harnesses/store/protocol.ts:57-66`); the reactor's `stored` path also reads and decodes it first (`steps.ts:289-306`).
    - Every tool-call status change is made durable (`steps.ts:91-94, 426`), although later status changes of hosted calls never reach the journal ([[ae10d61d]]).
    - Each step reads the journal once per standing call (`steps.ts:586-589`).
 6. **Memory has no budget.** The server carries a ~1 GB JS heap and ~3 GB native memory before any load, so collections and paging scale with what is retained, not with the work.
