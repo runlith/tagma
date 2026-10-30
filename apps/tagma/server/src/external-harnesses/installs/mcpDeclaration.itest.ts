@@ -14,9 +14,8 @@ import {
 } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { harnessAdaptersLayer } from '../adapters.js';
 import { HarnessAdapters } from '../contract/service/adapters.js';
-import { builtinHarness } from '../testing/builtin.js';
+import { builtinHarness, shippedHarnessAdaptersLayer } from '../testing/builtin.js';
 import type { HarnessAdapter } from '../contract/service/adapter.js';
 import type { McpSurface } from '@runlith/tagma/adapter/harness';
 import { MCP_KEY_VARIABLE } from '../../platform/contract/wire/session.js';
@@ -337,7 +336,7 @@ it.live('startup installs declaration files without approval; a chosen harness l
     expect(refused).toMatchObject({ write: 'current', approved: 'refused' });
     expect(refused?.detail).toContain('fixture denied');
     expect(text('.cursor/mcp.json')).toBe(before);
-  }).pipe(Effect.provide(Layer.mergeAll(BunFileSystem.layer, harnessAdaptersLayer))),
+  }).pipe(Effect.provide(Layer.mergeAll(BunFileSystem.layer, shippedHarnessAdaptersLayer))),
 );
 
 test('a document this installation cannot read is refused by name, and nothing is written', async () => {

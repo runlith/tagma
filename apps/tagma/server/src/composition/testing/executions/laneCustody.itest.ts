@@ -18,7 +18,7 @@ import type { TerminalStart } from '../../../executions/contract/service/termina
 import { guardedFloor } from '../../../executions/testing/guardedFloor.js';
 import { executionHost, executionPolicy, terminalHostCustody } from '../../../executions/testing/doubles.js';
 import { shippedChain } from '../../../platform/store/chain.js';
-import { sessionIdentity } from '../../../external-harnesses/sessionPrefix.js';
+import { sessionIdentity } from '../../../external-harnesses/testing/builtin.js';
 import { fixtureMigrations } from '../migrations.js';
 import { hostFixtureLayer, makeHostCase, HOST_LIBRARY as LIBRARY } from './fixture.js';
 

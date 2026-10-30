@@ -4,8 +4,7 @@ import { Effect } from 'effect';
 import { builtinModeRegistry } from '@runlith/agent/modes/ApprovalModes';
 import type { SessionThreads } from '../contract/service/sessionThreads.js';
 import { harnessJudging } from './decision.js';
-import { makeHarnessAdapters } from '../adapters.js';
-import { builtinHarness } from '../testing/builtin.js';
+import { builtinHarness, shippedHarnessAdapters } from '../testing/builtin.js';
 import type { HarnessName } from '../../threads/contract/wire/harness/names.js';
 
 it.effect('the vendor owns tool names from its hooks through the approval verdict', () =>
@@ -30,7 +29,7 @@ const PUSH = { id: 'toolu_1', tool: 'bash', subject: 'git push origin main' };
 
 const judgingFor = Effect.fnUntraced(function* (mode: string, modes = builtinModeRegistry(), name: HarnessName = 'claude-code') {
   const threads = { find: () => Effect.succeed({ harness: { name, presentation: { install: null } }, authority: { mode } }) };
-  return harnessJudging(threads as unknown as SessionThreads, modes, yield* makeHarnessAdapters);
+  return harnessJudging(threads as unknown as SessionThreads, modes, yield* shippedHarnessAdapters);
 });
 
 it.effect('every declared vendor tool follows its approval in trust, review and bypass', () =>

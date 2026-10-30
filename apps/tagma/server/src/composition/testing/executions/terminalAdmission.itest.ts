@@ -1,6 +1,6 @@
 import { fixtureMigrations } from '../migrations.js';
 import { sharedPool } from '@runlith/sqlite-process/testing/pool';
-import { sessionIdentityLayer } from '../../../external-harnesses/sessionPrefix.js';
+import { sessionIdentityLayer } from '../../../external-harnesses/testing/builtin.js';
 
 import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';

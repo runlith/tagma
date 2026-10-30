@@ -7,9 +7,9 @@ import { isSessionNotFoundError, isUnauthorizedError, type OpenCodeEvent, type S
 import { modelSelection } from '@runlith/adapter-opencode/selection';
 import { familyRetries, type WireFailureFamily } from '@runlith/llm/schema/errors';
 import type { TransportFailure } from '@runlith/agent/transcript/entries';
-import { MEASURED, RETRYING } from '../../contract/wire/extensions.js';
-import type { Process } from '../hosted/cycle.js';
-import type { Relayed } from '../hosted/relay.js';
+import { MEASURED, RETRYING } from '@runlith/hosted-runner/wire/extensions';
+import type { Process } from '@runlith/hosted-runner/cycle';
+import type { Relayed } from '@runlith/hosted-runner/relay';
 import { OpenCodeSdk, type Outcome, type Run, type Sending } from './channel.js';
 import { preparation } from './plugin.js';
 import source from './plugin.ts' with { type: 'text' };

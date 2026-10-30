@@ -1,6 +1,6 @@
 import { Exit, Schema } from 'effect';
 import { withdrawFailed } from '../../../threads/contract/service/failure.js';
-import { STEER } from '../../contract/wire/extensions.js';
+import { STEER } from '@runlith/hosted-runner/wire/extensions';
 import { failureText } from '../projection.js';
 import { handled, settledBy, type Answering, type Handled } from './declaration.js';
 

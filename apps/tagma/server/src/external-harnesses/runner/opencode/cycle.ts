@@ -4,13 +4,13 @@ import type { ContentBlock } from '@runlith/acp/content';
 import type { PromptResult } from '@runlith/acp/methods';
 import type { SessionConfigOption } from '@runlith/acp/updates';
 import type { ModelSwitches } from '@runlith/llm/models/description';
-import { SAID, RETRYING } from '../../contract/wire/extensions.js';
-import type { Cycle, Process, Prepared, Session } from '../hosted/cycle.js';
-import type { HostedDoor } from '../hosted/door.js';
-import { Handed } from '../hosted/handed.js';
-import { historyBlocks } from '../hosted/history.js';
-import { Output } from '../hosted/output.js';
-import { Relay } from '../hosted/relay.js';
+import { SAID, RETRYING } from '@runlith/hosted-runner/wire/extensions';
+import type { Cycle, Process, Prepared, Session } from '@runlith/hosted-runner/cycle';
+import type { HostedDoor } from '@runlith/hosted-runner/door';
+import { Handed } from '@runlith/hosted-runner/handed';
+import { historyBlocks } from '@runlith/hosted-runner/history';
+import { Output } from '@runlith/hosted-runner/output';
+import { Relay } from '@runlith/hosted-runner/relay';
 import { OpenCodeSdk, type Run } from './channel.js';
 
 export type Launch = {

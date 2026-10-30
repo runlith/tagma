@@ -12,4 +12,5 @@ export const EXTERNAL_HARNESS_BINDINGS: readonly VerbBinding[] = [
     return { ask, here };
   },
   async () => (await import('./harnessCatalog.js')).HARNESS_CATALOG,
+  async () => (await import('../adapters.js')).BUILTIN_HOSTED_RUNNERS,
 ];

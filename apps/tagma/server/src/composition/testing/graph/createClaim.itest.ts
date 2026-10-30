@@ -8,7 +8,7 @@ import { toolDecode } from '@runlith/agent/tool/arguments';
 import { unthreadedCaller } from '../callers.js';
 import { fixtureNativeCatalog } from '../nativeCatalog.js';
 import { type EffectDemo, demoGraphLayer, withDemo } from '../graphFixture.js';
-import { sessionIdentity } from '../../../external-harnesses/sessionPrefix.js';
+import { sessionIdentity } from '../../../external-harnesses/testing/builtin.js';
 import { knownAnswer } from '../../../platform/contract/wire/operation.js';
 import { WRITE_OPERATIONS } from '../../../graph/contract/wire/operations/writes.js';
 import { WORK_OPERATIONS } from '../../../graph/contract/wire/operations/work.js';

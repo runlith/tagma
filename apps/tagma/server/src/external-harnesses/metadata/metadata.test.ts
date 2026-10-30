@@ -5,7 +5,7 @@ import { Context, Effect, FileSystem, Layer } from 'effect';
 import { join } from 'node:path';
 import { MetadataInvalid, emptyValues, fileSource } from '@runlith/tagma/adapter/metadata';
 import { MetadataFile, fileLocationReader } from './file.js';
-import { claude, claudeSources } from '../vendors/claude-code/metadata.js';
+import { claudeCode } from '@runlith/adapter-anthropic/harness';
 import { codex, codexIndex, codexRolloutName, codexSources } from '../vendors/codex/metadata.js';
 import { cursorSources } from '../vendors/cursor/metadata.js';
 import { MetadataIndex } from './sessionIndex.js';
@@ -27,6 +27,10 @@ const home = Layer.effect(
     return yield* files.makeTempDirectoryScoped({ prefix: 'metadata-' });
   }),
 ).pipe(Layer.provideMerge(MemoryFileSystem.layer));
+
+const claudeReader = claudeCode.terminal!.metadata!;
+const claude = claudeReader.artifact!.fold;
+const claudeSources = claudeReader.sources;
 
 const line = (value: unknown) => `${JSON.stringify(value)}\n`;
 const assistant = (sessionId: string, model: string) => line({ type: 'assistant', sessionId, message: { model } });

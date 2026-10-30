@@ -4,7 +4,7 @@ import { WithdrawFailed, type Withdrawal } from '@runlith/agent/thread/transport
 import { GateRefusal } from '../../platform/contract/wire/refusal.js';
 import type { HarnessFailure } from '../../threads/contract/service/failure.js';
 import type { ThreadInbox } from '../../threads/store/inbox.js';
-import { STEER } from '../contract/wire/extensions.js';
+import { STEER } from '@runlith/hosted-runner/wire/extensions';
 import type { ProtocolLaunches } from './launches.js';
 import { LinkEnded, WaitExpired, type ProtocolLinks } from './links.js';
 import type { Answers } from './methods/answers.js';

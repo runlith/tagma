@@ -5,7 +5,7 @@ import { WORLD_COMMAND } from '../../installation/contract/wire/layout.js';
 import type { Terminals, TerminalStart } from '../../executions/contract/service/terminals.js';
 import type { HarnessProgram, InstalledHarnesses } from '../../threads/contract/service/harness.js';
 import { pathWith } from '../birth/installed.js';
-import { HARNESS_PROGRAM } from '../contract/wire/program.js';
+import { HARNESS_PROGRAM } from '@runlith/hosted-runner/wire/program';
 
 const RUNNER_VERB = 'harness-run';
 

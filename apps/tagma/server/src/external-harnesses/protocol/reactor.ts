@@ -1,7 +1,7 @@
 import { Effect, Schema } from 'effect';
 import { AccountKey } from '@runlith/llm/models/authStatus';
 import type { AccountQuota } from '../../providers/contract/service/quota.js';
-import { QUOTA, QuotaReading } from '../contract/wire/extensions.js';
+import { QUOTA, QuotaReading } from '@runlith/hosted-runner/wire/extensions';
 
 import type { ClientEvent } from '@runlith/acp/events';
 import type { ThreadRunRef } from '@runlith/agent/thread/run/ThreadRunLedger';

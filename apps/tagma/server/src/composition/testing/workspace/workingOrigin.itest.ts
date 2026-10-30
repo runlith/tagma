@@ -1,6 +1,6 @@
 import { retiredAt } from '../../../change-record/testing/holdings.js';
 import { fixtureMigrations } from '../migrations.js';
-import { sessionIdentityLayer } from '../../../external-harnesses/sessionPrefix.js';
+import { sessionIdentityLayer } from '../../../external-harnesses/testing/builtin.js';
 import { join } from 'node:path';
 import { expect } from 'bun:test';
 import { layer } from '@runlith/effect-test';

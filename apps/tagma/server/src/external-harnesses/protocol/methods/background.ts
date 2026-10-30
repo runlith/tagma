@@ -1,5 +1,5 @@
 import { Schema } from 'effect';
-import { Background } from '../../contract/wire/extensions.js';
+import { Background } from '@runlith/hosted-runner/wire/extensions';
 import { handled, type Noticing } from './declaration.js';
 
 const decodeBackground = Schema.decodeUnknownResult(Background);

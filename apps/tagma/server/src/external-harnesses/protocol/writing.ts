@@ -6,7 +6,7 @@ import type { HarnessFailure } from '../../threads/contract/service/failure.js';
 
 import type { TerminalWriting } from '../../executions/contract/service/writing.js';
 import type { HarnessLanes } from '../sessions/lanes.js';
-import { COMPACT, STEER, WITHDRAW } from '../contract/wire/extensions.js';
+import { COMPACT, STEER, WITHDRAW } from '@runlith/hosted-runner/wire/extensions';
 import { writeFrame, type Written } from './link.js';
 
 export type Cancel = {

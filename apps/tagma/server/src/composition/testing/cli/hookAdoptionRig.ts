@@ -8,7 +8,7 @@ import { grantFor } from '../../../platform/testing/grants.js';
 import type { HarnessAdoptInput } from '../../../external-harnesses/contract/wire/adoption.js';
 import { unmeasuredObservation, type HarnessReportInput } from '../../../threads/contract/wire/harness/observation.js';
 import { harnessPresentation } from '../../../external-harnesses/contract/service/table.js';
-import { BUILTIN_HARNESSES } from '../../../external-harnesses/vendors/builtin.js';
+import { SHIPPED_HARNESSES } from '../../../external-harnesses/testing/builtin.js';
 import { builtinHarness } from '../../../external-harnesses/testing/builtin.js';
 import type { ExternalSession } from '../../../threads/contract/wire/harness/externalSession.js';
 import { makeTerminalWorld } from '../fixture.js';
@@ -27,7 +27,7 @@ export const adoptionWorld = Effect.fnUntraced(function* () {
 
   const bare = (): Record<string, string | undefined> => {
     const env: Record<string, string | undefined> = { [GRANT_VARIABLE]: undefined, [TERMINAL_VARIABLE]: undefined };
-    for (const { variable } of BUILTIN_HARNESSES) if (variable !== undefined) env[variable] = undefined;
+    for (const { variable } of SHIPPED_HARNESSES) if (variable !== undefined) env[variable] = undefined;
     return env;
   };
 

@@ -1,7 +1,7 @@
 import { CALL_ENVELOPE_MS } from '@runlith/agent/callProgress';
 import { WORLD_COMMAND } from '../../../installation/contract/wire/layout.js';
 import type { AcpProfile } from '@runlith/tagma/adapter/harness';
-import { SAID } from '../../contract/wire/extensions.js';
+import { SAID } from '@runlith/hosted-runner/wire/extensions';
 
 export const opencodeAcp: AcpProfile = {
   argv: (choice) => [

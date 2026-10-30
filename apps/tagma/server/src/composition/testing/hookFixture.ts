@@ -8,9 +8,8 @@ import { GRANT_VARIABLE, SESSION_TOKEN_VARIABLE } from '../../platform/contract/
 import { sessionTokenEnvironment, grantEnvironment } from '../../platform/testing/grants.js';
 import { unmeasuredObservation } from '../../threads/contract/wire/harness/observation.js';
 import { harnessArgv, harnessPresentation } from '../../external-harnesses/contract/service/table.js';
-import { BUILTIN_HARNESSES } from '../../external-harnesses/vendors/builtin.js';
+import { SHIPPED_HARNESSES, sessionIdentity } from '../../external-harnesses/testing/builtin.js';
 import { builtinHarness } from '../../external-harnesses/testing/builtin.js';
-import { sessionIdentity } from '../../external-harnesses/sessionPrefix.js';
 import type { ExternalSession } from '../../threads/contract/wire/harness/externalSession.js';
 import type { KernelSeat } from '../../threads/contract/wire/harness/seat.js';
 import type { makeTerminalWorld } from './fixture.js';
@@ -26,7 +25,7 @@ export const unsigned = (): Record<string, string | undefined> => {
     [GRANT_VARIABLE]: undefined,
     [SESSION_TOKEN_VARIABLE]: undefined,
   };
-  for (const { variable } of BUILTIN_HARNESSES) if (variable !== undefined) env[variable] = undefined;
+  for (const { variable } of SHIPPED_HARNESSES) if (variable !== undefined) env[variable] = undefined;
   return env;
 };
 

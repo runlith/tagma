@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test';
 import { it } from '@runlith/effect-test';
 import { Clock, Duration, Effect, Fiber } from 'effect';
 import { TestClock } from 'effect/testing';
-import { BACKGROUND } from '../contract/wire/extensions.js';
+import { BACKGROUND } from '@runlith/hosted-runner/wire/extensions';
 import { IDLE_MS, idleResource, idling, resting } from './idle.js';
 import type { Link } from './links.js';
 import { background } from './methods/background.js';

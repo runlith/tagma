@@ -1,7 +1,7 @@
 import type { ContentPart, MediaPart, Message, ToolResultValue } from '@runlith/llm/schema/messages';
 import { resultFlags } from '@runlith/agent/thread/run/hostedReplay';
 import { opensTurnMessage } from '@runlith/agent/AgentSignal';
-import type { HostedContent, HostedMessage } from './contract/wire/hosted.js';
+import type { HostedContent, HostedMessage } from '@runlith/hosted-runner/wire/messages';
 
 const DATA_URI = /^data:([^;,]+);base64,(.*)$/s;
 

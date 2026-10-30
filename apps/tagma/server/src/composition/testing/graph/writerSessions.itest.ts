@@ -5,7 +5,7 @@ import { ToolAnswer, toolExecute, toolPrepare } from '@runlith/agent/tool';
 import { unthreadedCaller } from '../callers.js';
 import { fixtureNativeCatalog } from '../nativeCatalog.js';
 import { servingLayer, withServing } from './serving/fixture.js';
-import { sessionIdentity } from '../../../external-harnesses/sessionPrefix.js';
+import { sessionIdentity } from '../../../external-harnesses/testing/builtin.js';
 import { onGraph, signedBy } from '../../../invocation/testing/call.js';
 import { knownAnswer } from '../../../platform/contract/wire/operation.js';
 import { HISTORY_OPERATIONS } from '../../../graph/contract/wire/operations/history.js';

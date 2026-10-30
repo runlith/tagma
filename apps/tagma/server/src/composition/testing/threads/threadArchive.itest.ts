@@ -26,7 +26,7 @@ import { ThreadRollouts } from '../../../threads/contract/service/rollouts.js';
 import { ModelChanges } from '../../../threads/contract/service/modelChanges.js';
 import { harnessPresentation } from '../../../external-harnesses/contract/service/table.js';
 import { builtinHarness } from '../../../external-harnesses/testing/builtin.js';
-import { makeHarnessAdapters } from '../../../external-harnesses/adapters.js';
+import { shippedAdapters } from '../external-harnesses/shipped.js';
 
 const fixture = doorFixture();
 const setup = Effect.gen(function* () {
@@ -43,7 +43,7 @@ const setup = Effect.gen(function* () {
   const selection = catalog.defaultModel;
   if (selection === null) return yield* Effect.die('The archive fixture serves no default model');
   const facets = yield* sessionStoreOver(db, units, parts.spells, records, Context.get(runtime.owners, ModelChanges), () => Effect.void);
-  const adapters = yield* makeHarnessAdapters;
+  const adapters = yield* shippedAdapters;
   const made = new Set<string>();
   return {
     data: world.dataHome,

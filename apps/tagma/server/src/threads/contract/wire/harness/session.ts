@@ -1,29 +1,23 @@
 import { Effect, Schema } from 'effect';
 import { ProcessWitness } from '@runlith/executions/protocol/evidence';
-import type { HarnessQuestionOption } from '@runlith/tagma/adapter/harness';
+import { HARNESS_ID_MAX, type HarnessQuestionOption } from '@runlith/tagma/adapter/harness';
 import { EnvironmentBinding } from '../../../../workspace/contract/wire/environments.js';
 import { HARNESS_HOOK_BYTES } from './observation.js';
 import { TerminalRefused } from '../../../../executions/contract/wire/refusals.js';
 
-export const HARNESS_STORAGE_VARIABLES = [
-  'HOME',
-  'CODEX_HOME',
-  'CLAUDE_CONFIG_DIR',
-  'GROK_HOME',
-  'XDG_DATA_HOME',
-  'XDG_CONFIG_HOME',
-  'PATH',
-] as const;
+export const HARNESS_STORAGE_BASE: readonly string[] = ['HOME', 'XDG_DATA_HOME', 'XDG_CONFIG_HOME', 'PATH'];
+
+export const HARNESS_STORAGE_LIMIT = 16;
+
+export const harnessStorageEntrySchema = Schema.Struct({
+  name: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(HARNESS_ID_MAX)),
+  value: Schema.String.check(Schema.isMaxLength(HARNESS_HOOK_BYTES)),
+});
 
 export const harnessStorageSchema = Schema.Struct({
   binding: EnvironmentBinding,
   unreadable: Schema.optional(Schema.Literal('launch-storage-limit')),
-  entries: Schema.Array(
-    Schema.Struct({
-      name: Schema.Literals(HARNESS_STORAGE_VARIABLES),
-      value: Schema.String.check(Schema.isMaxLength(HARNESS_HOOK_BYTES)),
-    }),
-  ),
+  entries: Schema.Array(harnessStorageEntrySchema).check(Schema.isMaxLength(HARNESS_STORAGE_LIMIT)),
 });
 export type HarnessStorage = typeof harnessStorageSchema.Type;
 

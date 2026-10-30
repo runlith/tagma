@@ -14,12 +14,12 @@ import { HarnessObservations, terminalArgv } from '../../../external-harnesses/t
 import { sessionStoreOver } from '../../../external-harnesses/testing/floor.js';
 import { harnessPresentation } from '../../../external-harnesses/contract/service/table.js';
 import { builtinHarness } from '../../../external-harnesses/testing/builtin.js';
-import { makeHarnessAdapters } from '../../../external-harnesses/adapters.js';
+import { shippedAdapters } from '../external-harnesses/shipped.js';
 import type { HarnessEvent } from '../../../threads/contract/wire/harness/observation.js';
 
 const setup = Effect.fnUntraced(function* () {
   const catalog = yield* (yield* ProviderRegistry).catalog;
-  const adapters = yield* makeHarnessAdapters;
+  const adapters = yield* shippedAdapters;
   const NO_BASIS = {
     warmth: { curves: new Map(), accounts: new Map(), models: catalog.models } satisfies ReturnType<typeof asWarmthBasis>,
     limits: new Map(),

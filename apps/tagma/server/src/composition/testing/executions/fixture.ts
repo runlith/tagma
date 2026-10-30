@@ -14,7 +14,7 @@ import { MachineUnits } from '../../../platform/contract/service/units.js';
 import { unitsLayer } from '../../../platform/store/units.js';
 import { machineFileLayer } from '../../../platform/store/open.js';
 import { spawnedEffect } from '../../../platform/testing/spawn.js';
-import { sessionIdentityLayer } from '../../../external-harnesses/sessionPrefix.js';
+import { sessionIdentityLayer } from '../../../external-harnesses/testing/builtin.js';
 import { bornThread } from '../../../native-harness/testing/born.js';
 import { projectsLayer, project } from '../../../projects/testing/doubles.js';
 import { Coverage } from '../../../workspace/contract/service/roots.js';

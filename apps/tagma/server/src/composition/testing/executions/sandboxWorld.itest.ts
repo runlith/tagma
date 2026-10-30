@@ -60,7 +60,7 @@ import { BEHAVIOUR_REGISTRY } from '../../manifest.js';
 import { theSandboxTree } from '../../../sandbox/doctrine/theSandboxTree.js';
 import { unruledTimes } from '@runlith/agent-tools/CommandWork';
 import { testGrantSigner } from '../../../platform/testing/grants.js';
-import { sessionIdentity } from '../../../external-harnesses/sessionPrefix.js';
+import { sessionIdentity } from '../../../external-harnesses/testing/builtin.js';
 import { ChangeRecord } from '../../../change-record/contract/service/record.js';
 import { SandboxFiles } from '../../../sandbox/contract/service/files.js';
 import { Git } from '@runlith/git/Git';

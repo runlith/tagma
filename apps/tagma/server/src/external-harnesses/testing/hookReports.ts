@@ -26,7 +26,7 @@ import { standingAlignment } from './alignment.js';
 import { harnessArgv, harnessPresentation } from '../contract/service/table.js';
 import { makeHarnessAdapters } from '../adapters.js';
 import { harnessIdentity } from '../sessionPrefix.js';
-import { builtinHarness } from './builtin.js';
+import { builtinHarness, SHIPPED_PROVIDERS } from './builtin.js';
 import { harnessFacet } from '../../threads/contract/wire/harness/types.js';
 import type { HarnessName } from '../../threads/contract/wire/harness/names.js';
 import type { ExternalSession } from '../../threads/contract/wire/harness/externalSession.js';
@@ -79,7 +79,7 @@ export const hookReports = Effect.fnUntraced(function* ({
 }: HookReportOptions = {}) {
   const storage = yield* openMemoryStorage();
   const adapters = yield* makeHarnessAdapters;
-  yield* adapters.declared(harnesses);
+  yield* adapters.declared([...SHIPPED_PROVIDERS, ...harnesses]);
   const rowOf = (harness: HarnessName) => adapters.find(harness) ?? builtinHarness(harness);
   const kernel = terminalKernel(rowOf(name), undefined, false, {});
   const first = yield* storage.createThread({ ownerId: OWNER, scope: SCOPE, transport: kernel.transport });

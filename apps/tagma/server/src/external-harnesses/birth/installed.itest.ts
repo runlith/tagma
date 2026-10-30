@@ -11,13 +11,14 @@ import { makeUserEnvironment, type EnvironmentInput } from '../../installation/p
 import { InstalledHarnesses } from '../../threads/contract/service/harness.js';
 import type { HarnessInstall } from '../../threads/contract/wire/harness/externalSession.js';
 import { installedHarnessesWith } from './installed.js';
+import { claudeCode } from '@runlith/adapter-anthropic/harness';
 import { grok } from '@runlith/adapter-xai/harness';
 import { gemini } from '@runlith/adapter-google/harness';
 import { makeHarnessAdapters } from '../adapters.js';
 import { HarnessAdapters } from '../contract/service/adapters.js';
 import type { Terminals, TerminalStart } from '../../executions/contract/service/terminals.js';
 import { WORLD_COMMAND } from '../../installation/contract/wire/layout.js';
-import { HARNESS_PROGRAM } from '../contract/wire/program.js';
+import { HARNESS_PROGRAM } from '@runlith/hosted-runner/wire/program';
 import { harnessTerminals } from '../sessions/programs.js';
 import { HostRequestKey } from '@runlith/executions/protocol/execution';
 import { NamespaceId } from '@runlith/files/namespace';
@@ -26,7 +27,7 @@ import { EnvironmentId } from '../../workspace/contract/wire/environments.js';
 
 const withGrok = Layer.effect(
   HarnessAdapters,
-  Effect.tap(makeHarnessAdapters, (adapters) => adapters.declared([grok, gemini])),
+  Effect.tap(makeHarnessAdapters, (adapters) => adapters.declared([claudeCode, grok, gemini])),
 );
 
 const root = realpathSync(mkdtempSync(join(tmpdir(), 'installed-harnesses-')));

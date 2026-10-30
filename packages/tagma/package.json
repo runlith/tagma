@@ -30,6 +30,7 @@
     "./adapter/harness": {
       "types": "./src/adapter/harness.ts",
       "browser": "./src/adapter/harness.ts",
+      "node": "./src/adapter/harness.ts",
       "bun": "./src/adapter/harness.ts",
       "default": "./src/adapter/harness.ts"
     },

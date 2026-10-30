@@ -1,7 +1,7 @@
 import { Result, Schema } from 'effect';
 import type { ClientEvent } from '@runlith/acp/events';
 import { Usage } from '@runlith/llm/schema/events';
-import { MEASURED, Measured } from '../contract/wire/extensions.js';
+import { MEASURED, Measured } from '@runlith/hosted-runner/wire/extensions';
 import type { ThreadModelSelection } from '@runlith/agent/thread/record';
 import type { HarnessRequest, HarnessTurnContext } from './turns.js';
 

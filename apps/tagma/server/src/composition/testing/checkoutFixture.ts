@@ -3,7 +3,7 @@ import { heldPool } from '@runlith/sqlite-process/testing/pool';
 import { unthreadedCaller } from './callers';
 import { MachineUnits } from '../../platform/contract/service/units.js';
 import { fixtureMigrations } from './migrations.js';
-import { sessionIdentityLayer } from '../../external-harnesses/sessionPrefix.js';
+import { sessionIdentityLayer } from '../../external-harnesses/testing/builtin.js';
 import { dirname, join } from 'node:path';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { Clock, Context, Effect, FileSystem, Layer, Schema, Scope, Semaphore } from 'effect';

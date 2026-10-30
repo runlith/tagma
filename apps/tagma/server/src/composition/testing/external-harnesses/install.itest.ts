@@ -22,6 +22,8 @@ import {
 
 const fixture = Layer.mergeAll(BunFileSystem.layer, Layer.effect(Doctrine, doctrine), shippedAdaptersLayer);
 const temporary = Effect.flatMap(FileSystem.FileSystem, (disk) => disk.makeTempDirectoryScoped({ prefix: 'tagma-install-' }));
+const claudeOf = <A extends { readonly path: string }>(rows: readonly A[]): A | undefined =>
+  rows.find((row) => row.path.endsWith(join('.claude', 'settings.json')));
 
 layer(fixture, { excludeTestServices: true })('installation', (it) => {
   it.effect('installHooks writes each distinct project file in its own format, and a second run changes nothing', () =>
@@ -201,7 +203,7 @@ layer(fixture, { excludeTestServices: true })('installation', (it) => {
           },
         }),
       );
-      const [claudeWrite] = yield* installHooks(repo);
+      const claudeWrite = claudeOf(yield* installHooks(repo));
       expect(claudeWrite?.write).toBe('updated');
       const written = JSON.parse(readFileSync(join(repo, '.claude', 'settings.json'), 'utf8'));
       expect(written.permissions).toEqual({ allow: ['Bash'] });
@@ -229,7 +231,7 @@ layer(fixture, { excludeTestServices: true })('installation', (it) => {
           },
         }),
       );
-      const [claudeWrite] = yield* installHooks(repo);
+      const claudeWrite = claudeOf(yield* installHooks(repo));
       const written = JSON.parse(readFileSync(join(repo, '.claude', 'settings.json'), 'utf8'));
       expect(written.hooks.PreToolUse).toHaveLength(1);
       expect(written.hooks.PreToolUse[0].matcher).toBe('.*');
@@ -459,7 +461,7 @@ layer(fixture, { excludeTestServices: true })('installation', (it) => {
         expect(before.differing).toEqual([]);
       }
 
-      expect((yield* installHooks(repo))[0]?.write).toBe('updated');
+      expect(claudeOf(yield* installHooks(repo))?.write).toBe('updated');
       const written = JSON.parse(readFileSync(path, 'utf8'));
       expect(written.hooks.PreCompact).toEqual([{ hooks: [theirs] }]);
       expect(written.hooks).not.toHaveProperty('SubagentStop');
@@ -477,7 +479,7 @@ layer(fixture, { excludeTestServices: true })('installation', (it) => {
       doc.hooks.PreCompact = [{ hooks: [{ type: 'command', command: 'tagma hook observe' }] }, theirs];
       writeFileSync(path, JSON.stringify(doc));
 
-      const [claudeWrite] = yield* installHooks(repo);
+      const claudeWrite = claudeOf(yield* installHooks(repo));
       expect(claudeWrite?.deferred?.join(' ')).toContain('PreCompact');
       const written = JSON.parse(readFileSync(path, 'utf8'));
       expect(JSON.stringify(written.hooks.PreCompact[0])).toContain('$t\\" hook observe');
@@ -494,7 +496,7 @@ layer(fixture, { excludeTestServices: true })('installation', (it) => {
       doc.hooks.PreCompact = [null];
       writeFileSync(path, JSON.stringify(doc));
 
-      expect((yield* installHooks(repo))[0]?.write).toBe('current');
+      expect(claudeOf(yield* installHooks(repo))?.write).toBe('current');
       expect(JSON.parse(readFileSync(path, 'utf8')).hooks.PreCompact).toEqual([null]);
       expect((yield* hooksStatus(repo)).find((row) => row.target === path)?.state).toBe('current');
     }),

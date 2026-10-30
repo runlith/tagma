@@ -1,0 +1,79 @@
+{
+  "name": "@runlith/hosted-runner",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The runner side of an agent Tagma hosts: the ACP session, turn opening and tool relay a vendor cycle plugs into, and the driver-runner wire both sides speak.",
+  "type": "module",
+  "exports": {
+    "./agent": {
+      "types": "./src/agent.ts",
+      "default": "./src/agent.ts"
+    },
+    "./cycle": {
+      "types": "./src/cycle.ts",
+      "default": "./src/cycle.ts"
+    },
+    "./door": {
+      "types": "./src/door.ts",
+      "default": "./src/door.ts"
+    },
+    "./handed": {
+      "types": "./src/handed.ts",
+      "default": "./src/handed.ts"
+    },
+    "./history": {
+      "types": "./src/history.ts",
+      "default": "./src/history.ts"
+    },
+    "./output": {
+      "types": "./src/output.ts",
+      "default": "./src/output.ts"
+    },
+    "./relay": {
+      "types": "./src/relay.ts",
+      "default": "./src/relay.ts"
+    },
+    "./run": {
+      "types": "./src/run.ts",
+      "default": "./src/run.ts"
+    },
+    "./wire/extensions": {
+      "types": "./src/wire/extensions.ts",
+      "default": "./src/wire/extensions.ts"
+    },
+    "./wire/historyText": {
+      "types": "./src/wire/historyText.ts",
+      "default": "./src/wire/historyText.ts"
+    },
+    "./wire/messages": {
+      "types": "./src/wire/messages.ts",
+      "browser": "./src/wire/messages.ts",
+      "bun": "./src/wire/messages.ts",
+      "default": "./src/wire/messages.ts"
+    },
+    "./wire/program": {
+      "types": "./src/wire/program.ts",
+      "default": "./src/wire/program.ts"
+    },
+    "./wire/words": {
+      "types": "./src/wire/words.ts",
+      "default": "./src/wire/words.ts"
+    }
+  },
+  "scripts": {
+    "test": "testbed bun test --no-isolate src",
+    "typecheck": "runlith-typecheck"
+  },
+  "dependencies": {
+    "@runlith/acp": "workspace:*",
+    "@runlith/agent": "workspace:*",
+    "@runlith/llm": "workspace:*",
+    "@runlith/ndjson-rpc": "workspace:*",
+    "effect": "catalog:"
+  },
+  "devDependencies": {
+    "@runlith/effect-test": "workspace:*",
+    "@runlith/tsconfig": "workspace:*",
+    "@types/bun": "catalog:"
+  }
+}

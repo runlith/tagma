@@ -34,7 +34,7 @@ import type { Answers } from './methods/answers.js';
 import type { Answered, AsideOutcome, Fate, WithdrawOutcome } from './methods/declaration.js';
 import { doubted, read } from './methods/declared.js';
 import type { AcpProfile } from '@runlith/tagma/adapter/harness';
-import { MEASURED } from '../contract/wire/extensions.js';
+import { MEASURED } from '@runlith/hosted-runner/wire/extensions';
 import { liveOf } from './live.js';
 import { contextsOf, measurementOf, measures, type Measurement } from './measure.js';
 import { boundedClient } from './calls.js';

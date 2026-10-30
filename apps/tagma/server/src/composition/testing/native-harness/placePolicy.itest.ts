@@ -17,7 +17,7 @@ import { commandTimes } from '../../../executions/commands/times.js';
 import { commentPolicy } from '../../../graph/settings.js';
 import { governingProject } from '../../../workspace/governing.js';
 import { asThreadContext, worldTools } from '../../../native-harness/testing/doubles.js';
-import { sessionIdentity } from '../../../external-harnesses/sessionPrefix.js';
+import { sessionIdentity } from '../../../external-harnesses/testing/builtin.js';
 import { checkoutPaths, fixedCoverage } from '../../../workspace/testing/doubles.js';
 
 const fixture = graphFixture({ projects: ['other'] });

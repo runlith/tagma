@@ -2,7 +2,7 @@ import { expect } from 'bun:test';
 import { layer } from '@runlith/effect-test';
 import { Effect } from 'effect';
 import { type SessionRef, sessionName } from '../../../../platform/contract/wire/session.js';
-import { sessionIdentity } from '../../../../external-harnesses/sessionPrefix.js';
+import { sessionIdentity } from '../../../../external-harnesses/testing/builtin.js';
 import { batchDocument } from '../../../../graph/contract/wire/batch.js';
 import { demoGraphLayer, withDemo } from '../../graphFixture.js';
 import { signedBy } from '../../../../invocation/testing/call.js';

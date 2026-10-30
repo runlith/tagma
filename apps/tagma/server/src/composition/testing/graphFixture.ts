@@ -1,4 +1,4 @@
-import { sessionIdentityLayer } from '../../external-harnesses/sessionPrefix.js';
+import { sessionIdentityLayer } from '../../external-harnesses/testing/builtin.js';
 import { tenant } from './tenant.js';
 import { kind, shared } from '@runlith/testbed/worlds';
 import { randomUUID } from 'node:crypto';

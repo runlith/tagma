@@ -1,8 +1,6 @@
-import { Layer } from 'effect';
-import { SessionIdentity } from '../platform/contract/wire/session.js';
+import type { SessionIdentity } from '../platform/contract/wire/session.js';
 import type { HarnessAdapter } from './contract/service/adapter.js';
 import type { HarnessAdapters } from './contract/service/adapters.js';
-import { BUILTIN_HARNESSES } from './vendors/builtin.js';
 
 export const sessionIdentityOf = (rows: readonly HarnessAdapter[]): SessionIdentity['Service'] => ({
   prefix: Object.fromEntries(rows.map((adapter) => [adapter.harness, adapter.prefix])),
@@ -32,7 +30,3 @@ export const harnessIdentity = (adapters: HarnessAdapters['Service']): SessionId
     },
   };
 };
-
-export const sessionIdentity: SessionIdentity['Service'] = sessionIdentityOf(BUILTIN_HARNESSES);
-
-export const sessionIdentityLayer: Layer.Layer<SessionIdentity> = Layer.succeed(SessionIdentity, sessionIdentity);

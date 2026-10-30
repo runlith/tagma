@@ -4,7 +4,7 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { Context, Effect, Fiber, FileSystem, Schema } from 'effect';
 import { THREAD_TOOL_CONFIRM_VALUE } from '@runlith/agent/transcript/parts';
-import { hostedContentSchema } from '../../../external-harnesses/contract/wire/hosted.js';
+import { hostedContentSchema } from '@runlith/hosted-runner/wire/messages';
 import { GRANT_HEADER } from '../../../platform/contract/service/credentials.js';
 import { grantFor } from '../../../platform/testing/grants.js';
 import { ThreadHarness } from '../../../threads/contract/service/engine.js';

@@ -7,13 +7,13 @@ import type { PromptResult } from '@runlith/acp/methods';
 import type { SessionConfigOption } from '@runlith/acp/updates';
 import { cursorSelection } from '@runlith/adapter-cursor/selection';
 import type { ModelSwitches } from '@runlith/llm/models/description';
-import { COMPACTED, RETRYING, SAID } from '../../contract/wire/extensions.js';
-import type { Cycle, Process, Session, Prepared } from '../hosted/cycle.js';
-import type { HostedDoor } from '../hosted/door.js';
-import { Handed } from '../hosted/handed.js';
-import { historyBlocks } from '../hosted/history.js';
-import { Output } from '../hosted/output.js';
-import { Relay } from '../hosted/relay.js';
+import { COMPACTED, RETRYING, SAID } from '@runlith/hosted-runner/wire/extensions';
+import type { Cycle, Process, Session, Prepared } from '@runlith/hosted-runner/cycle';
+import type { HostedDoor } from '@runlith/hosted-runner/door';
+import { Handed } from '@runlith/hosted-runner/handed';
+import { historyBlocks } from '@runlith/hosted-runner/history';
+import { Output } from '@runlith/hosted-runner/output';
+import { Relay } from '@runlith/hosted-runner/relay';
 import { CursorSdk, type Message, type Run } from './channel.js';
 
 export type Launch = {

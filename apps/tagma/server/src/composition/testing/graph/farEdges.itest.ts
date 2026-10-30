@@ -10,7 +10,7 @@ import { demoGraphLayer, withDemo } from '../graphFixture.js';
 import { prepareTeamCopies } from './serving/fixture.js';
 import { fixtureGraphMigrations } from '../migrations.js';
 import { fixtureNativeCatalog } from '../nativeCatalog.js';
-import { sessionIdentity } from '../../../external-harnesses/sessionPrefix.js';
+import { sessionIdentity } from '../../../external-harnesses/testing/builtin.js';
 import { testSessionIdentity } from '../../../platform/testing/identity.js';
 import { GraphStore } from '../../../platform/contract/service/store.js';
 import { storeLayer } from '../../../platform/store/open.js';

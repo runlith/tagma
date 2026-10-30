@@ -5,7 +5,7 @@ import { world } from '@runlith/testbed/worlds';
 import { terminalWorld } from '../fixture.js';
 import { Context, Effect, Layer, Schema } from 'effect';
 import { grantEnvironment } from '../../../platform/testing/grants.js';
-import { sessionIdentity } from '../../../external-harnesses/sessionPrefix.js';
+import { sessionIdentity } from '../../../external-harnesses/testing/builtin.js';
 import { MachineUnits } from '../../../platform/contract/service/units.js';
 import { sqliteThreadJournal } from '../../../threads/testing/doubles.js';
 import { bornThread } from '../../../native-harness/testing/born.js';

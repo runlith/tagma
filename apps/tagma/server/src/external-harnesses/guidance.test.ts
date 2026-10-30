@@ -20,7 +20,7 @@ import { HarnessSessionStore } from './store/sessions.js';
 import { RunActivities } from './protocol/activities.js';
 import { TerminalJournal } from './terminal/journal.js';
 import { makeHookGuidance } from './guidance.js';
-import { sessionIdentity } from './sessionPrefix.js';
+import { sessionIdentity } from './testing/builtin.js';
 
 const TITLE = 'zone-rule-7f3';
 const brief: TouchBrief = {

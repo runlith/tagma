@@ -5,8 +5,8 @@ import { Deferred, Effect, Fiber, FileSystem } from 'effect';
 import type { Outlet } from '@runlith/acp/agent';
 import { act, receive, start } from '@runlith/acp/client';
 import { project } from '../../protocol/projection.js';
-import { hostedAgent } from '../hosted/agent.js';
-import type { HostedDoor } from '../hosted/door.js';
+import { hostedAgent } from '@runlith/hosted-runner/agent';
+import type { HostedDoor } from '@runlith/hosted-runner/door';
 import { makeCursorCycle } from './cycle.js';
 import { CursorSdk, type Sending } from './channel.js';
 

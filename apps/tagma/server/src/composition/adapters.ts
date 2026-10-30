@@ -2,6 +2,7 @@ import { join } from 'node:path';
 import { ADAPTERS } from '../installation/contract/wire/layout.js';
 import type { AdapterEntry } from '@runlith/tagma/adapter/loader';
 import type { HarnessProvider } from '@runlith/tagma/adapter/provider';
+import type { HostedRunner } from '@runlith/hosted-runner/run';
 import type { AdapterPlaces, AdapterSource } from '../providers/contract/service/registry.js';
 import { HOST_MODULES } from './hostModules.generated.js';
 
@@ -28,7 +29,12 @@ export const BUILTIN_ADAPTERS: readonly AdapterSource[] = [
   builtin('openai-compatible', () => import('@runlith/adapter-openai-compatible/adapter')),
 ];
 
+export const BUILTIN_HOSTED_RUNNERS: ReadonlyMap<string, () => Promise<HostedRunner>> = new Map([
+  ['claude-code', async () => (await import('@runlith/adapter-anthropic/runner')).claudeRunner],
+]);
+
 export const BUILTIN_HARNESS_PROVIDERS: ReadonlyMap<string, () => Promise<HarnessProvider>> = new Map([
+  ['claude-code', async () => (await import('@runlith/adapter-anthropic/harness')).claudeCode],
   ['grok', async () => (await import('@runlith/adapter-xai/harness')).grok],
   ['gemini', async () => (await import('@runlith/adapter-google/harness')).gemini],
 ]);

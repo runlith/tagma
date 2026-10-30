@@ -1,4 +1,4 @@
-import { sessionIdentity } from '../../external-harnesses/sessionPrefix.js';
+import { sessionIdentity } from '../../external-harnesses/testing/builtin.js';
 import { ProjectLifecycle } from '../../graph/contract/service/serving.js';
 import { expect } from 'bun:test';
 import { randomUUID } from 'node:crypto';

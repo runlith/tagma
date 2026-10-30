@@ -5,9 +5,9 @@ import { spawnSync } from 'node:child_process';
 import { dirname, join } from 'node:path';
 import { Context, Effect, FileSystem, Layer } from 'effect';
 import { entryPath } from '../../installation/contract/wire/junction.js';
-import { harnessAdaptersLayer, makeHarnessAdapters } from '../adapters.js';
+import { makeHarnessAdapters } from '../adapters.js';
 import { HarnessAdapters } from '../contract/service/adapters.js';
-import { builtinHarness } from '../testing/builtin.js';
+import { builtinHarness, shippedHarnessAdaptersLayer } from '../testing/builtin.js';
 import type { HarnessProvider } from '@runlith/tagma/adapter/provider';
 import { codexCodec } from '../vendors/codex/codec.js';
 import { installHooks } from './hookWrite.js';
@@ -26,7 +26,7 @@ const home = Layer.effect(
     yield* installHooks(repo);
     return { repo, home, bare: join(root, 'bare') };
   }),
-).pipe(Layer.provideMerge(BunFileSystem.layer), Layer.provideMerge(harnessAdaptersLayer));
+).pipe(Layer.provideMerge(BunFileSystem.layer), Layer.provideMerge(shippedHarnessAdaptersLayer));
 
 const read = (repo: string) =>
   Effect.flatMap(FileSystem.FileSystem, (files) => Effect.map(files.readFileString(join(repo, '.codex', 'hooks.json')), JSON.parse));

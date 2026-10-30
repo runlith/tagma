@@ -10,12 +10,13 @@ import { GRANT_HEADER, GRANT_VARIABLE, SESSION_TOKEN_VARIABLE } from '../../../p
 import { grantFor, sessionTokenEnvironment } from '../../../platform/testing/grants.js';
 import { unmeasuredObservation } from '../../../threads/contract/wire/harness/observation.js';
 import { harnessArgv, harnessPresentation } from '../../../external-harnesses/contract/service/table.js';
-import { BUILTIN_HARNESSES } from '../../../external-harnesses/vendors/builtin.js';
+import { SHIPPED_HARNESSES, sessionIdentity } from '../../../external-harnesses/testing/builtin.js';
 import { builtinHarness } from '../../../external-harnesses/testing/builtin.js';
 import { spawnedEffect } from '../../../platform/testing/spawn.js';
-import { sessionIdentity } from '../../../external-harnesses/sessionPrefix.js';
 import type { ExternalSession } from '../../../threads/contract/wire/harness/externalSession.js';
+import { AdapterInstalls } from '../../../providers/contract/service/adapters.js';
 import { makeTerminalWorld } from '../fixture.js';
+import { QUILL, quillPackage } from '../external-harnesses/quill.js';
 
 const figure = (name: string, fallback: number): number => {
   const given = Bun.argv.find((argument) => argument.startsWith(`--${name}=`));
@@ -55,7 +56,7 @@ const reading = (road: string, samples: readonly number[]): Reading => {
 };
 const bare = (): Record<string, string | undefined> => {
   const env: Record<string, string | undefined> = { [GRANT_VARIABLE]: undefined, [SESSION_TOKEN_VARIABLE]: undefined };
-  for (const { variable } of BUILTIN_HARNESSES) if (variable !== undefined) env[variable] = undefined;
+  for (const { variable } of SHIPPED_HARNESSES) if (variable !== undefined) env[variable] = undefined;
   return env;
 };
 const elapsed = (started: bigint) => Effect.map(Clock.monotonicTimeNanos, (ended) => Number(ended - started) / 1_000_000);
@@ -148,15 +149,33 @@ const program = Effect.gen(function* () {
   }
   const launchedSamples: number[] = [];
   const baselineSamples: number[] = [];
+  const packagedSamples: number[] = [];
+  const installedSamples: number[] = [];
   const temporary = yield* world.directory('tmp');
-  const processEnv = { ...process.env, TAGMA_SERVER_URL: world.url, TMPDIR: temporary, TMP: temporary, TEMP: temporary, ...granted };
-  const entries = [{ path: join(import.meta.dir, '../../entries/cli.ts'), samples: launchedSamples }];
-  if (baselineEntry !== undefined) entries.push({ path: baselineEntry, samples: baselineSamples });
+  const dataHome = yield* world.directory('home');
+  const quill = yield* quillPackage(yield* world.directory('quill'));
+  yield* Effect.orDie(Context.get(world.runtime.owners, AdapterInstalls).install(quill.directory));
+  const processEnv = {
+    ...process.env,
+    TAGMA_SERVER_URL: world.url,
+    TAGMA_DATABASE_PATH: join(dataHome, 'tagma.sqlite'),
+    TMPDIR: temporary,
+    TMP: temporary,
+    TEMP: temporary,
+    ...granted,
+  };
+  const cli = join(import.meta.dir, '../../entries/cli.ts');
+  const entries = [
+    { path: cli, harness: 'cursor', samples: launchedSamples },
+    { path: cli, harness: 'claude-code', samples: packagedSamples },
+    { path: cli, harness: QUILL.harness, samples: installedSamples },
+  ];
+  if (baselineEntry !== undefined) entries.push({ path: baselineEntry, harness: 'cursor', samples: baselineSamples });
   for (let index = 0; index < launched; index += 1) {
     const ordered = index % 2 === 0 ? entries : [...entries].reverse();
     for (const [lane, entry] of ordered.entries()) {
       const started = yield* Clock.monotonicTimeNanos;
-      const ran = yield* spawnedEffect([process.execPath, '--no-install', entry.path, 'hook', 'observe', '--harness', 'cursor'], {
+      const ran = yield* spawnedEffect([process.execPath, '--no-install', entry.path, 'hook', 'observe', '--harness', entry.harness], {
         cwd: project.root,
         stdin: new Blob([JSON.stringify({ ...toolEvent, generation_id: `launched-turn-${index}-${lane}` })]),
         env: processEnv,
@@ -220,6 +239,8 @@ const program = Effect.gen(function* () {
     door: reading('door', doorSamples),
     process: reading('observe', observeSamples),
     launched: reading('observe in a launched process', launchedSamples),
+    packaged: reading('observe in a launched process naming a builtin package harness', packagedSamples),
+    installed: reading('observe in a launched process naming a machine-installed package harness', installedSamples),
     baseline:
       baselineEntry === undefined
         ? null

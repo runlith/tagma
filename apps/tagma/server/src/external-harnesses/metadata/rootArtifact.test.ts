@@ -5,8 +5,6 @@ import { Context, Effect, FileSystem, Layer } from 'effect';
 import { join } from 'node:path';
 import { builtinHarness } from '../testing/builtin.js';
 import { readRootArtifact } from './rootArtifact.js';
-import source from '../testing/fixtures/claude-code/source.jsonl' with { type: 'text' };
-import full from '../testing/fixtures/claude-code/sdk-full.jsonl' with { type: 'text' };
 
 class Home extends Context.Service<Home, string>()('test/external-harnesses/metadata/RootArtifactHome') {}
 
@@ -64,11 +62,13 @@ layer(home)('root artifact', (it) => {
     Effect.gen(function* () {
       const claude = builtinHarness('claude-code');
       const copy = '1fc80a2c-3ad0-4331-a75b-15fd97028d6a';
-      expect(yield* reading('copy.jsonl', full, copy, claude)).toEqual({ _tag: 'Bound' });
-      expect((yield* reading('source.jsonl', source, copy, claude))._tag).toBe('Refused');
-      const [first = '', ...rest] = full.split('\n');
-      const pictured = { ...(JSON.parse(first) as object), message: { role: 'user', content: 'x'.repeat(300 * 1024) } };
-      expect(yield* reading('pictured.jsonl', [JSON.stringify(pictured), ...rest].join('\n'), copy, claude)).toEqual({ _tag: 'Bound' });
+      const origin = 'c252b18d-e481-452e-8449-a632720da358';
+      const said = (sessionId: string, content: string) =>
+        `${JSON.stringify({ parentUuid: null, isSidechain: false, type: 'user', sessionId, message: { role: 'user', content } })}\n`;
+      const answered = `${JSON.stringify({ parentUuid: null, isSidechain: false, type: 'assistant', sessionId: copy, message: { model: 'claude-opus-5' } })}\n`;
+      expect(yield* reading('copy.jsonl', said(copy, 'go') + answered, copy, claude)).toEqual({ _tag: 'Bound' });
+      expect((yield* reading('source.jsonl', said(origin, 'go'), copy, claude))._tag).toBe('Refused');
+      expect(yield* reading('pictured.jsonl', said(copy, 'x'.repeat(300 * 1024)) + answered, copy, claude)).toEqual({ _tag: 'Bound' });
     }),
   );
 });

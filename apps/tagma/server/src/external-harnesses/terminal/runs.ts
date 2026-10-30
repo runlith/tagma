@@ -20,7 +20,8 @@ import type { ExternalSession, HarnessTypedShape, HarnessUnread } from '../../th
 import type { HarnessExecutionRef } from '../../threads/contract/wire/harness/observation.js';
 import { harnessSessionActive } from '../../threads/contract/wire/harness/session.js';
 import type { HarnessAdapters } from '../contract/service/adapters.js';
-import { CONTINUE_WORDS, inputWords, plainWords, promptDigest, typedShape } from '../adapter/input.js';
+import { inputWords, plainWords, promptDigest, typedShape } from '../adapter/input.js';
+import { CONTINUE_WORDS } from '@runlith/hosted-runner/wire/words';
 import type { Keyboard, SessionDriver } from '../sessions/drive.js';
 import type { HarnessSessionStore } from '../store/sessions.js';
 import type { TerminalEndings } from './endings.js';

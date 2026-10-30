@@ -3,6 +3,8 @@ import { layer } from '@runlith/effect-test';
 import { join } from 'node:path';
 import { Context, Effect, FileSystem, Layer } from 'effect';
 import * as MemoryFileSystem from '@runlith/testbed/memory';
+import { shippedHarnessAdaptersLayer } from '../testing/builtin.js';
+import { HarnessAdapters } from '../contract/service/adapters.js';
 import { codexCodec } from '../vendors/codex/codec.js';
 import { hookLedger } from './hookLedger.js';
 import { hookFiles } from './hookInstall.js';
@@ -20,7 +22,7 @@ const home = Layer.effect(
     const repo = join(root, 'repo');
     const codex = join(root, 'home');
     yield* files.makeDirectory(codex);
-    const source = hookFiles().find((file) => file.file === '.codex/hooks.json')!;
+    const source = hookFiles((yield* HarnessAdapters).all()).find((file) => file.file === '.codex/hooks.json')!;
     const hooks: Record<string, Readonly<Record<string, unknown>>[]> = {};
     for (const entry of source.entries) {
       (hooks[entry.event] ??= []).push(source.codec.file.entry(entry.command, entry.timeout));
@@ -41,7 +43,7 @@ const home = Layer.effect(
     );
     return { repo, store: join(codex, 'config.toml'), target: join(repo, '.codex', 'hooks.json') };
   }),
-).pipe(Layer.provideMerge(MemoryFileSystem.layer));
+).pipe(Layer.provideMerge(MemoryFileSystem.layer), Layer.provideMerge(shippedHarnessAdaptersLayer));
 
 const keyOf = (target: string, place: OwnPlace): string => {
   const descriptor = codexCodec.file.trust;
@@ -60,7 +62,7 @@ layer(home, { excludeTestServices: true })('hook trust ledger', (it) => {
       const doc = JSON.parse(yield* files.readFileString(target));
       doc.hooks.SessionStart = [...(doc.hooks.SessionStart ?? []), { hooks: [{ type: 'command', command: 'tagma prime' }] }];
       yield* files.writeFileString(target, JSON.stringify(doc));
-      const places = ownPlaces(doc);
+      const places = ownPlaces(doc, codexCodec.file.events);
       const starts = places.filter((place) => place.event === 'SessionStart');
       expect(starts.length).toBeGreaterThan(1);
       const unkeyed = starts[starts.length - 1];

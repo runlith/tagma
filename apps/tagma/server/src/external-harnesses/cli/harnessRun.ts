@@ -1,19 +1,20 @@
 import { Effect, Logger, Option } from 'effect';
 import { Argument, Command, Flag } from 'effect/cli';
+import type { HostedRunner } from '@runlith/hosted-runner/run';
 import { PROGRAM_RELEASE } from '../../platform/contract/wire/program.js';
 import { CurrentInvocation, noting } from '../../platform/cli/verb.js';
-import { runCut } from '../runner/claude-code/cut.js';
-import { runClaude } from '../runner/claude-code/run.js';
-import { EFFORTS } from '../runner/claude-code/settings.js';
 import { runAsk, runCursor } from '../runner/cursor/run.js';
 import { runOpenCode } from '../runner/opencode/run.js';
 import type { ServerCli } from './server.js';
+import { ServerDoor } from './serverDoor.js';
 
-export const harnessRun = (server: ServerCli) =>
+export type HostedRunners = ReadonlyMap<string, () => Promise<HostedRunner>>;
+
+export const harnessRun = (server: ServerCli, runners: HostedRunners) =>
   Command.make(
     'harness-run',
     {
-      harness: Argument.Literals('harness', ['claude-code', 'cursor', 'opencode'] as const),
+      harness: Argument.String('harness'),
       model: Flag.String('model').pipe(Flag.optional, Flag.withMetavar('model'), Flag.withDescription('the model the session opens on')),
       effort: Flag.String('effort').pipe(Flag.optional, Flag.withDescription('the reasoning setting the session opens at')),
       ask: Flag.Boolean('ask').pipe(Flag.withDefault(false), Flag.withDescription('answer one tool-less prompt from stdin')),
@@ -34,35 +35,43 @@ export const harnessRun = (server: ServerCli) =>
           if (Option.isNone(model)) return Effect.die('--ask requires --model');
           return runAsk(at, model.value, Option.getOrNull(effort), system);
         }
-        if (cut) return harness === 'claude-code' ? runCut(at) : Effect.die(`${harness} offers no offline cut`);
         const reasoning = Option.getOrNull(effort);
-        if (harness === 'opencode')
+        if (!cut && harness === 'opencode')
           return runOpenCode(server, at, {
             model: Option.getOrNull(model),
             effort: reasoning,
             parameters: {},
             version: PROGRAM_RELEASE,
           });
-        if (harness === 'cursor')
+        if (!cut && harness === 'cursor')
           return runCursor(server, at, {
             model: Option.getOrNull(model),
             effort: reasoning,
             parameters: {},
             version: PROGRAM_RELEASE,
           });
-        const rung = EFFORTS.find((one) => one === reasoning) ?? null;
-        if (reasoning !== null && rung === null) return Effect.die(`Claude Code does not offer effort ${reasoning}`);
-        return runClaude(server, at, { model: Option.getOrNull(model), effort: rung, version: PROGRAM_RELEASE, titled: !untitled });
+        const load = runners.get(harness);
+        if (load === undefined) return Effect.die(`${harness} ships no hosted runner`);
+        return Effect.flatMap(Effect.promise(load), (runner): Effect.Effect<void, unknown> => {
+          if (!cut)
+            return runner.run(at, new ServerDoor(server, at), {
+              model: Option.getOrNull(model),
+              effort: reasoning,
+              version: PROGRAM_RELEASE,
+              titled: !untitled,
+            });
+          return runner.cut === null ? Effect.die(`${harness} offers no offline cut`) : runner.cut(at);
+        });
       }).pipe(Effect.provideService(Logger.LogToStderr, true)),
   ).pipe(
     Command.withDescription(
       'run a foreign agent as an ACP agent on stdin and stdout, for the Tagma thread whose grant this process carries',
     ),
     noting(`Started by the Tagma server for a thread on the acp transport; never called by hand.
-claude-code  drives Claude Code through its Agent SDK: the prompt and tools of the
-        native agent the thread hosts, served in process, the thread's grant on
-        every call. With --cut it forks a session file offline for a terminal
-        thread and reads the turns of the new root.
+A harness whose builtin package ships a hosted runner drives its vendor's SDK with
+        the prompt and tools of the native agent the thread hosts, the thread's grant
+        on every call. With --cut it forks a session file offline for a terminal
+        thread and reads the turns of the new root, where the runner offers that.
 cursor  drives the local Cursor SDK with the hosted agent's prompt and tools;
         Tagma judges and executes every tool call.
 opencode  drives a private OpenCode V2 host with the hosted agent's prompt and tools;

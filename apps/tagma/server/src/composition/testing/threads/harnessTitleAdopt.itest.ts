@@ -21,7 +21,7 @@ import { threadStack, type ThreadParts } from '../threadParts.js';
 import { HarnessObservations, terminalArgv } from '../../../external-harnesses/testing/doubles.js';
 import { sessionStoreOver } from '../../../external-harnesses/testing/floor.js';
 import { harnessPresentation } from '../../../external-harnesses/contract/service/table.js';
-import { makeHarnessAdapters } from '../../../external-harnesses/adapters.js';
+import { shippedAdapters } from '../external-harnesses/shipped.js';
 import { builtinHarness } from '../../../external-harnesses/testing/builtin.js';
 import { ENTRY_KINDS } from '../../manifest.js';
 
@@ -32,7 +32,7 @@ const titleIdentity = (records: ThreadRecords['Service'], id: string) =>
 
 const setup = Effect.fnUntraced(function* () {
   const catalog = yield* (yield* ProviderRegistry).catalog;
-  const adapters = yield* makeHarnessAdapters;
+  const adapters = yield* shippedAdapters;
   const lifetime = graphFixture();
   const demo = yield* Effect.map(
     Effect.acquireRelease(lifetime.openEffect(), () => Effect.orDie(lifetime.releaseEffect)),

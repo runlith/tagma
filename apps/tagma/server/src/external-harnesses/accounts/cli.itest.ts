@@ -11,6 +11,7 @@ import { UserEnvironment } from '../../installation/contract/service/userEnviron
 import { makeUserEnvironment } from '../../installation/process/userEnvironment.js';
 import { installedHarnessesLayer } from '../birth/installed.js';
 import { makeHarnessAdapters } from '../adapters.js';
+import { claudeCode } from '@runlith/adapter-anthropic/harness';
 import { gemini } from '@runlith/adapter-google/harness';
 import { HarnessAdapters } from '../contract/service/adapters.js';
 import { AccountCli } from '../../providers/contract/service/cli.js';
@@ -23,7 +24,7 @@ import { Projects } from '../../projects/contract/service/registry.js';
 
 const harnessAdaptersLayer = Layer.effect(
   HarnessAdapters,
-  Effect.tap(makeHarnessAdapters, (adapters) => adapters.declared([gemini])),
+  Effect.tap(makeHarnessAdapters, (adapters) => adapters.declared([claudeCode, gemini])),
 );
 
 const unused = () => Effect.die('headless account commands do not use the terminal host');

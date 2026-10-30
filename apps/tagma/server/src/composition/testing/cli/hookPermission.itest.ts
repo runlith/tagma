@@ -8,9 +8,8 @@ import { sessionFor, sessionOfThread } from '../../../external-harnesses/testing
 import { grantEnvironment } from '../../../platform/testing/grants.js';
 import { unmeasuredObservation } from '../../../threads/contract/wire/harness/observation.js';
 import { harnessPresentation } from '../../../external-harnesses/contract/service/table.js';
-import { BUILTIN_HARNESSES } from '../../../external-harnesses/vendors/builtin.js';
+import { SHIPPED_HARNESSES, sessionIdentity } from '../../../external-harnesses/testing/builtin.js';
 import { builtinHarness } from '../../../external-harnesses/testing/builtin.js';
-import { sessionIdentity } from '../../../external-harnesses/sessionPrefix.js';
 import { makeTerminalWorld } from '../fixture.js';
 
 it.live('a call trust does not ask about prints nothing at all', () =>
@@ -45,7 +44,7 @@ it.live('a call trust does not ask about prints nothing at all', () =>
       observation: unmeasuredObservation(),
     });
     const bare: Record<string, string | undefined> = {};
-    for (const { variable } of BUILTIN_HARNESSES) if (variable !== undefined) bare[variable] = undefined;
+    for (const { variable } of SHIPPED_HARNESSES) if (variable !== undefined) bare[variable] = undefined;
     const answered = yield* world.tagma(['hook', 'permission-request'], {
       cwd: project.root,
       stdin: JSON.stringify({

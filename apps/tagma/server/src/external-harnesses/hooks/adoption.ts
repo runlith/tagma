@@ -12,7 +12,7 @@ import {
   type HarnessAdopted,
 } from '../contract/wire/adoption.js';
 import { HARNESS_HOOK_BYTES } from '../../threads/contract/wire/harness/observation.js';
-import { HARNESS_STORAGE_VARIABLES } from '../../threads/contract/wire/harness/session.js';
+import { storageVariables } from '../adapter/storage.js';
 import type { HookDelivery } from './delivery.js';
 import type { Invocation } from '../../platform/cli/verb.js';
 
@@ -150,7 +150,7 @@ export const adoptedHook = Effect.fn('hookAdoption.adoptedHook')(function* (
         ancestry: chain,
         machine: hostname(),
         cwd,
-        storage: HARNESS_STORAGE_VARIABLES.flatMap((name) => {
+        storage: storageVariables(loaded.named ?? loaded.rows.find((row) => row.harness === harness) ?? null).flatMap((name) => {
           const value = at.env[name];
           return value === undefined || value.length > HARNESS_HOOK_BYTES ? [] : [{ name, value }];
         }),

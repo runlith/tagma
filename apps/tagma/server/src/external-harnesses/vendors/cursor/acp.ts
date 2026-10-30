@@ -1,7 +1,7 @@
 import { CALL_ENVELOPE_MS } from '@runlith/agent/callProgress';
 import { WORLD_COMMAND } from '../../../installation/contract/wire/layout.js';
 import type { AcpProfile } from '@runlith/tagma/adapter/harness';
-import { COMPACTED, RETRYING, SAID } from '../../contract/wire/extensions.js';
+import { COMPACTED, RETRYING, SAID } from '@runlith/hosted-runner/wire/extensions';
 
 export const cursorAcp: AcpProfile = {
   argv: (choice) => [

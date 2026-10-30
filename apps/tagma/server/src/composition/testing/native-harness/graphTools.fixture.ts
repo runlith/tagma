@@ -1,5 +1,5 @@
 import { unthreadedCaller } from '../callers';
-import { sessionIdentity } from '../../../external-harnesses/sessionPrefix.js';
+import { sessionIdentity } from '../../../external-harnesses/testing/builtin.js';
 import { basename } from 'node:path';
 import { ToolAnswer, toolExecute, toolPrepare } from '@runlith/agent/tool';
 import { type Message } from '@runlith/llm/schema/messages';

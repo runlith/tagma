@@ -6,7 +6,7 @@ import { GateRefusal } from '../../platform/contract/wire/refusal.js';
 import type { HarnessFailure } from '../../threads/contract/service/failure.js';
 import type { ProtocolRows } from '../store/protocol.js';
 import type { ProtocolAlignment } from './alignment.js';
-import { FORK, STEER, WITHDRAW } from '../contract/wire/extensions.js';
+import { FORK, STEER, WITHDRAW } from '@runlith/hosted-runner/wire/extensions';
 import type { ProtocolHalts } from './halts.js';
 import type { Link } from './links.js';
 import type { ProtocolPrompts } from './prompts.js';

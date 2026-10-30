@@ -5,7 +5,7 @@ import { layer } from '@runlith/effect-test';
 import { Context, Effect, FileSystem, Layer, Schema } from 'effect';
 import { TestClock } from 'effect/testing';
 import { grantEnvironment } from '../../../platform/testing/grants.js';
-import { sessionIdentity } from '../../../external-harnesses/sessionPrefix.js';
+import { sessionIdentity } from '../../../external-harnesses/testing/builtin.js';
 import { born, hookThreads, unsigned } from '../hookFixture.js';
 import { and, eq, getTableColumns } from 'drizzle-orm';
 import { Blocks } from '../../../graph/contract/service/blocks.js';

@@ -54,7 +54,7 @@ import {
 } from '../../../native-harness/testing/doubles.js';
 import { composeAgent as composeWithSections } from '../../../native-harness/testing/doubles.js';
 import { testGrantSigner } from '../../../platform/testing/grants.js';
-import { sessionIdentity } from '../../../external-harnesses/sessionPrefix.js';
+import { sessionIdentity } from '../../../external-harnesses/testing/builtin.js';
 import { OperationId } from '../../../platform/contract/wire/ids.js';
 import { IN_BACKGROUND, unruledTimes } from '@runlith/agent-tools/CommandWork';
 import { commandInspection } from '../../../executions/contract/wire/commands.js';

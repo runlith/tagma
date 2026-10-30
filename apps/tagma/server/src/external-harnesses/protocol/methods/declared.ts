@@ -15,7 +15,7 @@ import {
   WITHDRAW,
   type Extension,
   type Notification,
-} from '../../contract/wire/extensions.js';
+} from '@runlith/hosted-runner/wire/extensions';
 import type { ProtocolRow } from '../row.js';
 import { aside } from './aside.js';
 import { background } from './background.js';

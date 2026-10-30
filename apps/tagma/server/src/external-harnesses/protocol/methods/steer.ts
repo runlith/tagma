@@ -1,6 +1,6 @@
 import { FAULT } from '@runlith/acp/agent';
 import { Schema } from 'effect';
-import { WITHDRAW } from '../../contract/wire/extensions.js';
+import { WITHDRAW } from '@runlith/hosted-runner/wire/extensions';
 import type { ProtocolRow } from '../row.js';
 import { handled, settledBy, type Answering, type Handled, type WordsFate } from './declaration.js';
 

@@ -2,8 +2,8 @@ import { expect } from 'bun:test';
 import { it } from '@runlith/effect-test';
 import { Effect } from 'effect';
 import { FAULT } from '@runlith/acp/agent';
-import { hostedAgent } from '../hosted/agent.js';
-import type { HostedDoor } from '../hosted/door.js';
+import { hostedAgent } from '@runlith/hosted-runner/agent';
+import type { HostedDoor } from '@runlith/hosted-runner/door';
 import { OpenCodeSdk } from './channel.js';
 import { makeOpenCodeCycle } from './cycle.js';
 

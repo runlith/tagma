@@ -2,7 +2,7 @@ import { Schema } from 'effect';
 import type { ClientEvent } from '@runlith/acp/events';
 import type { ThreadRunRef } from '@runlith/agent/thread/run/ThreadRunLedger';
 import type { LiveDelta } from '@runlith/agent/thread/run/lifecycle/RunReports';
-import { INPUT, Input, PHASE, Phased, RETRYING } from '../contract/wire/extensions.js';
+import { INPUT, Input, PHASE, Phased, RETRYING } from '@runlith/hosted-runner/wire/extensions';
 import { textOf } from './content.js';
 import type { OpenedTurn } from './row.js';
 

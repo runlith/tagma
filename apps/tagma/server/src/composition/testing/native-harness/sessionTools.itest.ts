@@ -1,6 +1,6 @@
 import { unthreadedCaller } from '../callers';
 import { fixtureMigrations } from '../migrations.js';
-import { sessionIdentity } from '../../../external-harnesses/sessionPrefix.js';
+import { sessionIdentity } from '../../../external-harnesses/testing/builtin.js';
 import { expect } from 'bun:test';
 import { layer } from '@runlith/effect-test';
 import { Context, Effect, Exit, Layer, Schema, Stream } from 'effect';

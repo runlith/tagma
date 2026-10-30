@@ -6,7 +6,7 @@ import { Context, Effect, Layer } from 'effect';
 import { threadStoreFixture } from '../threadStoreFixture.js';
 import { unmeasuredObservation, asHarnessObservation, modelChanges } from '../../../threads/testing/doubles.js';
 import { harnessPresentation, harnessReport } from '../../../external-harnesses/contract/service/table.js';
-import { makeHarnessAdapters } from '../../../external-harnesses/adapters.js';
+import { shippedAdapters } from '../external-harnesses/shipped.js';
 import { builtinHarness } from '../../../external-harnesses/testing/builtin.js';
 import { asHarnessName } from '../../../threads/testing/doubles.js';
 import { asThreadListProjection } from '../../../threads/testing/doubles.js';
@@ -18,7 +18,7 @@ import type { HarnessEvent } from '../../../threads/contract/wire/harness/observ
 
 const setup = Effect.fnUntraced(function* () {
   const catalog = yield* (yield* ProviderRegistry).catalog;
-  const adapters = yield* makeHarnessAdapters;
+  const adapters = yield* shippedAdapters;
   const NO_BASIS = {
     warmth: { curves: new Map(), accounts: new Map(), models: catalog.models } satisfies ReturnType<typeof asWarmthBasis>,
     limits: new Map(),

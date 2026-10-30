@@ -41,7 +41,7 @@ import { THREAD_OPERATIONS } from '../../../threads/contract/wire/operations/cat
 import { SEARCH_OPERATIONS } from '../../../threads/contract/wire/operations/search.js';
 import { knownAnswer } from '../../../platform/contract/wire/operation.js';
 import { fixtureNativeCatalog } from '../nativeCatalog.js';
-import { sessionIdentity } from '../../../external-harnesses/sessionPrefix.js';
+import { sessionIdentity } from '../../../external-harnesses/testing/builtin.js';
 import { ENTRY_KINDS } from '../../manifest.js';
 
 const born = new Date('2026-10-01T08:00:00.000Z');

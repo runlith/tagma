@@ -31,7 +31,7 @@ import {
   writeRule,
 } from '../../../executions/testing/doubles.js';
 import { shippedChain } from '../../../platform/store/chain.js';
-import { sessionIdentity } from '../../../external-harnesses/sessionPrefix.js';
+import { sessionIdentity } from '../../../external-harnesses/testing/builtin.js';
 import { fixtureMigrations } from '../migrations.js';
 import { hostFixtureLayer, makeHostCase, HOST_LIBRARY as LIBRARY } from './fixture.js';
 

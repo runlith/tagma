@@ -15,7 +15,7 @@ import { claudeLogin, hostedDefaults, nativeLeads } from '../claudeLogin.js';
 import { CLAUDE_CODE_PROVIDER } from '@runlith/adapter-anthropic/models/anthropic';
 import { hostedChild } from './hostedChild.js';
 import { WORLD_COMMAND } from '../../../installation/contract/wire/layout.js';
-import { BUILTIN_HARNESSES } from '../../../external-harnesses/vendors/builtin.js';
+import { SHIPPED_HARNESSES } from '../../../external-harnesses/testing/builtin.js';
 import { TESTING_ADAPTERS } from '../adapters.js';
 import { makeDoorWorld, WORLD_SOURCE, type DoorFixture } from '../doorFixture.js';
 import { makeRuntime } from '../../runtime.js';
@@ -69,7 +69,7 @@ export const parityWorld = Effect.fn('testing.parityWorld')(function* (
   const stage = yield* files.makeTempDirectoryScoped({ prefix: 'parity-' });
   const bin = join(stage, 'bin');
   yield* files.makeDirectory(bin);
-  for (const binary of [WORLD_COMMAND, ...BUILTIN_HARNESSES.map(({ binary }) => binary).filter((binary) => !isAbsolute(binary))])
+  for (const binary of [WORLD_COMMAND, ...SHIPPED_HARNESSES.map(({ binary }) => binary).filter((binary) => !isAbsolute(binary))])
     yield* files.writeFileString(join(bin, binary), '#!/bin/sh\nprintf "fixture\\n"\n', { mode: 0o755 });
   const path = process.env.PATH;
   yield* Effect.acquireRelease(

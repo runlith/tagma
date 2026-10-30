@@ -3,9 +3,9 @@ import type { AgentFault } from '@runlith/acp/agent';
 import type { ContentBlock } from '@runlith/acp/content';
 import type { PromptResult } from '@runlith/acp/methods';
 import type { TransportFailure } from '@runlith/agent/transcript/entries';
-import type { HostedToolWire } from '../../contract/wire/hosted.js';
-import type { OutputEvent } from '../hosted/output.js';
-import type { Relayed } from '../hosted/relay.js';
+import type { HostedToolWire } from '@runlith/hosted-runner/wire/messages';
+import type { OutputEvent } from '@runlith/hosted-runner/output';
+import type { Relayed } from '@runlith/hosted-runner/relay';
 
 export type Selection = { readonly model: string; readonly effort: string | null };
 export type Outcome = {

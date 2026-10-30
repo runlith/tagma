@@ -7,7 +7,7 @@ import { unthreadedCaller } from '../../callers.js';
 import { demoGraphLayer, withDemo } from '../../graphFixture.js';
 import { fixtureGraphMigrations } from '../../migrations.js';
 import { fixtureNativeCatalog } from '../../nativeCatalog.js';
-import { sessionIdentity } from '../../../../external-harnesses/sessionPrefix.js';
+import { sessionIdentity } from '../../../../external-harnesses/testing/builtin.js';
 import { testSessionIdentity } from '../../../../platform/testing/identity.js';
 import { onGraph, signedBy } from '../../../../invocation/testing/call.js';
 import { Blocks } from '../../../../graph/contract/service/blocks.js';

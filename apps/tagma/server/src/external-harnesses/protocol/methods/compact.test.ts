@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { COMPACTED } from '../../contract/wire/extensions.js';
+import { COMPACTED } from '@runlith/hosted-runner/wire/extensions';
 import { freshRow } from '../row.js';
 import { compact } from './compact.js';
 

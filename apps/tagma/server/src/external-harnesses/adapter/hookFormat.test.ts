@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import type { HookVerdict } from '@runlith/tagma/adapter/hook';
-import { BUILTIN_HARNESSES } from '../vendors/builtin.js';
+import { SHIPPED_HARNESSES } from '../testing/builtin.js';
 import { codexCodec } from '../vendors/codex/codec.js';
 import { cursorCodec } from '../vendors/cursor/codec.js';
 import { devinCodec } from '../vendors/devin/codec.js';
@@ -65,7 +65,7 @@ test('a prompt answer rides top-level additional_context to Cursor, the nested e
 });
 
 test('a prompt answer is taken only from CLIs whose own row declares it measured: Claude Code, Codex and Cursor, not OpenCode or Devin', () => {
-  const taken = BUILTIN_HARNESSES.filter((row) => promptSupported(row.hooks)).map((row) => row.harness);
+  const taken = SHIPPED_HARNESSES.filter((row) => promptSupported(row.hooks)).map((row) => row.harness);
   expect(taken.sort()).toEqual(['claude-code', 'codex', 'cursor']);
 });
 

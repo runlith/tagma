@@ -1,5 +1,5 @@
 import { fixtureMigrations } from '../migrations.js';
-import { sessionIdentityLayer } from '../../../external-harnesses/sessionPrefix.js';
+import { sessionIdentityLayer } from '../../../external-harnesses/testing/builtin.js';
 import { type ExecutionFeedItem, type ExecutionsFailure, HostRefused, WireUnavailable } from '@runlith/executions/Executions';
 import { BindingId, Principal } from '@runlith/executions/protocol/custody';
 import { TerminalInput } from '@runlith/executions/TerminalInput';

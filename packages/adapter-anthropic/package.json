@@ -2,13 +2,23 @@
   "name": "@runlith/adapter-anthropic",
   "version": "0.1.0",
   "private": true,
-  "description": "The built-in Anthropic model provider adapter of Tagma.",
+  "description": "The built-in Anthropic adapter of Tagma: the Anthropic model provider and Claude Code as a harness.",
   "type": "module",
   "exports": {
     "./adapter": {
       "types": "./src/adapter.ts",
       "bun": "./src/adapter.ts",
       "default": "./src/adapter.ts"
+    },
+    "./harness": {
+      "types": "./src/harness/claudeCode.ts",
+      "bun": "./src/harness/claudeCode.ts",
+      "default": "./src/harness/claudeCode.ts"
+    },
+    "./harness/session": {
+      "types": "./src/harness/session.ts",
+      "bun": "./src/harness/session.ts",
+      "default": "./src/harness/session.ts"
     },
     "./icon": {
       "types": "./src/icon.ts",
@@ -26,6 +36,16 @@
       "types": "./src/profiles/anthropic.ts",
       "default": "./src/profiles/anthropic.ts"
     },
+    "./runner": {
+      "types": "./src/runner/run.ts",
+      "bun": "./src/runner/run.ts",
+      "default": "./src/runner/run.ts"
+    },
+    "./testing/sdk": {
+      "types": "./src/testing/sdk.ts",
+      "bun": "./src/testing/sdk.ts",
+      "default": "./src/testing/sdk.ts"
+    },
     "./usage": {
       "types": "./src/usage.ts",
       "default": "./src/usage.ts"
@@ -36,12 +56,20 @@
     "typecheck": "runlith-typecheck"
   },
   "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "0.3.292",
+    "@effect/platform-bun": "catalog:",
+    "@runlith/acp": "workspace:*",
+    "@runlith/agent": "workspace:*",
+    "@runlith/hosted-runner": "workspace:*",
     "@runlith/llm": "workspace:*",
+    "@runlith/mcp": "workspace:*",
+    "@runlith/ndjson-rpc": "workspace:*",
     "@runlith/tagma": "workspace:*",
     "effect": "catalog:"
   },
   "devDependencies": {
     "@runlith/effect-test": "workspace:*",
+    "@runlith/testbed": "workspace:*",
     "@runlith/tsconfig": "workspace:*",
     "@types/bun": "catalog:"
   },

@@ -21,7 +21,7 @@ import { currentModel } from '../../threads/contract/wire/harness/observation.js
 import { WAITING_REASONS } from '../../threads/contract/wire/waiting.js';
 import type { ThreadInbox } from '../../threads/store/inbox.js';
 import type { ProtocolAlignment } from './alignment.js';
-import { COMPACT, COMPACTING, STEER, WITHDRAW } from '../contract/wire/extensions.js';
+import { COMPACT, COMPACTING, STEER, WITHDRAW } from '@runlith/hosted-runner/wire/extensions';
 import type { ProtocolJournal } from './journal.js';
 import type { CompactionOrder, ProtocolLaunches } from './launches.js';
 import type { Link } from './links.js';

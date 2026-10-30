@@ -11,6 +11,7 @@ export const HARNESS_DETAIL_MAX = 160;
 
 export const harnessNameSchema = Schema.String.check(Schema.isPattern(/^[a-z][a-z0-9-]*$/u), Schema.isMaxLength(64));
 export const RESERVED_HARNESS_NAMES: readonly string[] = ['tagma', 'lode'];
+export const HOST_COMMAND = 'tagma';
 
 export const harnessClaimSchema = Schema.Literals(['configured', 'serving', 'last-recorded']);
 export type HarnessClaim = typeof harnessClaimSchema.Type;
@@ -312,8 +313,8 @@ export type HarnessTools = {
   readonly byName: Readonly<Record<string, HarnessTool>>;
 };
 
-const ASKS_NEVER: Approval = { asksFrom: 'never' };
-const ASKS_IN_REVIEW: Approval = { asksFrom: 'review', timeout: 'none' };
+export const ASKS_NEVER: Approval = { asksFrom: 'never' };
+export const ASKS_IN_REVIEW: Approval = { asksFrom: 'review', timeout: 'none' };
 
 export const LEGACY_TOOLS: HarnessTools = {
   names: 'kind',

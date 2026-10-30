@@ -3,29 +3,26 @@ import { Effect, Schema } from 'effect';
 import { it } from '@runlith/effect-test';
 import { sessionName } from '../../../platform/contract/wire/session.js';
 import { harnessArgv } from './table.js';
-import { sessionIdentity } from '../../sessionPrefix.js';
 import { harnessHookSchema } from '../../../threads/contract/wire/harness/observation.js';
-import { SESSION_SIGNERS } from '../wire/sessionVariables.js';
-import { terminalCapabilities } from '../../birth/seat.js';
-import { BUILTIN_HARNESSES } from '../../vendors/builtin.js';
-import { builtinHarness } from '../../testing/builtin.js';
+import { terminalCapabilities, terminalHistory } from '../../birth/seat.js';
+import { builtinHarness, sessionIdentity, SHIPPED_HARNESSES } from '../../testing/builtin.js';
 
 const launchOf = (name: string) => builtinHarness(name).launch!;
 
-test('the session signers the CLI reads without loading the rows are every row that publishes its session, in row order', () => {
-  const signers: readonly { readonly harness: string; readonly variable: string }[] = SESSION_SIGNERS;
-  expect(signers).toEqual(BUILTIN_HARNESSES.flatMap(({ harness, variable }) => (variable === undefined ? [] : [{ harness, variable }])));
-});
-
 test('terminal copy fidelity names the vendor only on the sides that have a vendor cut', () => {
-  const copies = Object.fromEntries(BUILTIN_HARNESSES.map((row) => [row.harness, terminalCapabilities(row, false).copies]));
-  expect(copies).toEqual({
+  const copies = Object.fromEntries(SHIPPED_HARNESSES.map((row) => [row.harness, terminalCapabilities(row, false).copies]));
+  expect(copies).toMatchObject({
     'claude-code': { whole: 'vendor', point: 'vendor' },
     codex: { whole: 'vendor', point: 'vendor' },
     devin: { whole: 'record', point: 'record' },
     cursor: { whole: 'record', point: 'record' },
     opencode: { whole: 'record', point: 'record' },
   });
+  expect(terminalHistory(builtinHarness('claude-code'), false)).toEqual({
+    history: 'session',
+    copies: { whole: 'vendor', point: 'vendor' },
+  });
+  expect(terminalHistory(builtinHarness('claude-code'), true).copies).toEqual({ whole: 'vendor', point: 'none' });
 });
 
 test('a foreign session is named by its row prefix', () => {
@@ -43,7 +40,7 @@ test('a row names the call its own event asks about', () => {
 });
 
 test('hook schema admits the row vocabulary and strips the unknown', () => {
-  const keys = [...BUILTIN_HARNESSES.flatMap((row) => row.eventKeys), 'agent_id', 'source', 'transcript_path', 'error'];
+  const keys = [...SHIPPED_HARNESSES.flatMap((row) => row.eventKeys), 'agent_id', 'source', 'transcript_path', 'error'];
   const event = Object.fromEntries(keys.map((key) => [key, 'v']));
   const decoded = Schema.decodeUnknownSync(harnessHookSchema)({ ...event, bogus: 'x' });
   for (const key of Object.keys(event)) expect(decoded).toHaveProperty(key);
@@ -51,7 +48,7 @@ test('hook schema admits the row vocabulary and strips the unknown', () => {
 });
 
 test('declared start, prompt and ending occasions classify to the timer contract', () => {
-  for (const row of BUILTIN_HARNESSES) {
+  for (const row of SHIPPED_HARNESSES) {
     const events = row.hooks?.events;
     if (events === undefined) continue;
     if (events.sessionStart !== null) expect(row.occasionOf({ name: events.sessionStart })).toBe('session-start');

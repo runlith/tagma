@@ -11,13 +11,12 @@ import { bornThread } from '../../../native-harness/testing/born.js';
 import { scopeRecord } from '../../../thread-record/testing/records.js';
 import { GRANT_HEADER, GRANT_VARIABLE } from '../../../platform/contract/service/credentials.js';
 import { grantFor, grantEnvironment } from '../../../platform/testing/grants.js';
-import { BUILTIN_HARNESSES } from '../../../external-harnesses/vendors/builtin.js';
+import { SHIPPED_HARNESSES, sessionIdentity } from '../../../external-harnesses/testing/builtin.js';
 import type { HarnessName } from '../../../threads/contract/wire/harness/names.js';
 import { birthsOf } from '../../../threads/testing/doubles.js';
 import { contentDigest } from '@runlith/files/content';
 import { ChangeRecord } from '../../../change-record/contract/service/record.js';
 import { CheckoutPaths } from '../../../workspace/contract/service/checkoutPaths.js';
-import { sessionIdentity } from '../../../external-harnesses/sessionPrefix.js';
 import { makeTerminalWorld } from '../fixture.js';
 import { suiteGit } from '../suiteGit.js';
 
@@ -33,7 +32,7 @@ class Records extends Context.Service<Records, Effect.Success<typeof setup>>()('
 
 const bare = (): Record<string, string | undefined> => {
   const env: Record<string, string | undefined> = { [GRANT_VARIABLE]: undefined };
-  for (const { variable } of BUILTIN_HARNESSES) if (variable !== undefined) env[variable] = undefined;
+  for (const { variable } of SHIPPED_HARNESSES) if (variable !== undefined) env[variable] = undefined;
   return env;
 };
 

@@ -10,8 +10,7 @@ import type { HarnessSessionStore } from '../store/sessions.js';
 import { HarnessLanes } from '../sessions/lanes.js';
 import { keyboardFrame, keyboardRig, KEYBOARD_EXECUTION, WIDGET_ASK, WIDGET_GONE } from '../testing/keyboard.js';
 import { terminalFaces } from './faces.js';
-import { makeHarnessAdapters } from '../adapters.js';
-import { builtinHarness } from '../testing/builtin.js';
+import { builtinHarness, shippedHarnessAdapters } from '../testing/builtin.js';
 import { TerminalAsks, type AskLedger } from './terminal.js';
 
 const RUN: ThreadRunRef = { id: 'run-1', threadId: 't' };
@@ -36,7 +35,7 @@ const road = Effect.fnUntraced(function* (options: { readonly lostReplyAt?: numb
       }),
     wait: () => Effect.never,
   } as unknown as HarnessSessionStore;
-  const faces = terminalFaces(sessions, face.terminals, screens, face.writing, lanes, yield* makeHarnessAdapters);
+  const faces = terminalFaces(sessions, face.terminals, screens, face.writing, lanes, yield* shippedHarnessAdapters);
   const entries: ThreadQuestionEntry[] = [];
   const update = (questionId: string, change: Partial<ThreadQuestionEntry>) => {
     const at = entries.findIndex((entry) => entry.questionId === questionId);

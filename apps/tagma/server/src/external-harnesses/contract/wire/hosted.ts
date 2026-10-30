@@ -2,6 +2,7 @@ import { Schema } from 'effect';
 import { transportWebSchema } from '@runlith/agent/thread/record';
 import { arms, operation } from '../../../platform/contract/wire/operation.js';
 import { ASKS_NEVER } from '../../../platform/contract/wire/conditions.js';
+import { hostedContentSchema, hostedMessageSchema, hostedToolSchema } from '@runlith/hosted-runner/wire/messages';
 
 const hostedDoor = {
   doors: { http: 'perform' },
@@ -19,35 +20,6 @@ const PROVEN =
   'The thread is the one this call proves from its signed grant; its agent loop runs outside Tagma, and Tagma serves it the prompt, the turn context and the tools of the native agent the thread recorded at birth as its host, as that agent would run the thread; a thread that hosts none refuses `not-hosted`.';
 
 const HOSTED_REFUSALS = ['session-unproven', 'not-found', 'thread-gone', 'not-hosted'] as const;
-
-export const hostedToolSchema = Schema.Struct({
-  name: Schema.String,
-  description: Schema.String,
-  inputSchema: Schema.Record(Schema.String, Schema.Unknown),
-  mutates: Schema.Boolean,
-});
-export type HostedToolWire = typeof hostedToolSchema.Type;
-
-export const hostedContentSchema = Schema.Union([
-  Schema.Struct({ type: Schema.Literal('text'), text: Schema.String }),
-  Schema.Struct({ type: Schema.Literal('image'), data: Schema.String, mimeType: Schema.String }),
-]);
-export type HostedContent = typeof hostedContentSchema.Type;
-
-export const hostedMessageSchema = Schema.Union([
-  Schema.Struct({ role: Schema.Literal('user'), content: Schema.Array(hostedContentSchema) }),
-  Schema.Struct({
-    role: Schema.Literal('assistant'),
-    content: Schema.Array(
-      Schema.Union([
-        Schema.Struct({ type: Schema.Literal('text'), text: Schema.String }),
-        Schema.Struct({ type: Schema.Literal('call'), id: Schema.String, name: Schema.String, input: Schema.Unknown }),
-      ]),
-    ),
-  }),
-  Schema.Struct({ role: Schema.Literal('result'), id: Schema.String, content: Schema.Array(hostedContentSchema), failed: Schema.Boolean }),
-]);
-export type HostedMessage = typeof hostedMessageSchema.Type;
 
 export const HOSTED_OPERATIONS = {
   read_hosted_agent: operation('read_hosted_agent', {

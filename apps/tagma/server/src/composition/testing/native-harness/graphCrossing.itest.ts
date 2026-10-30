@@ -6,7 +6,7 @@ import { Context, Effect, Layer } from 'effect';
 import { ToolAnswer, toolExecute, toolPrepare } from '@runlith/agent/tool';
 import { openToolDoor, ToolJudge } from '@runlith/agent/door/openToolDoor';
 import { builtinMode } from '../modes.js';
-import { sessionIdentity } from '../../../external-harnesses/sessionPrefix.js';
+import { sessionIdentity } from '../../../external-harnesses/testing/builtin.js';
 import { fixtureNativeCatalog } from '../nativeCatalog.js';
 import { type EffectDemo, graphFixture, tempRootEffect } from '../graphFixture.js';
 import { ProjectIdentification, Projects } from '../../../projects/contract/service/registry.js';

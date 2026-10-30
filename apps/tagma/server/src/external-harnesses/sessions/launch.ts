@@ -13,7 +13,8 @@ import type { ExternalSession } from '../../threads/contract/wire/harness/extern
 import type { HarnessName, HarnessTransport } from '../../threads/contract/wire/harness/names.js';
 import type { HarnessAskedModel } from '../../threads/contract/wire/harness/askedModel.js';
 import { launchChoice } from '../birth/modelChoice.js';
-import { HARNESS_STORAGE_VARIABLES, type HarnessSession, type HarnessStorage } from '../../threads/contract/wire/harness/session.js';
+import type { HarnessSession, HarnessStorage } from '../../threads/contract/wire/harness/session.js';
+import { storageVariables } from '../adapter/storage.js';
 import { TerminalUnavailable } from '../../executions/contract/wire/refusals.js';
 import { ThreadId } from '../../platform/contract/wire/thread.js';
 import type { GrantSigner } from '../../platform/contract/service/grantSigner.js';
@@ -143,7 +144,7 @@ export const launchHarness = Effect.fnUntraced(function* <E>(
       const environment = new Map(launch.command.environment.map((entry) => [entry.name, entry.value]));
       const storage: HarnessStorage = {
         binding: place.target.binding,
-        entries: HARNESS_STORAGE_VARIABLES.flatMap((name) => {
+        entries: storageVariables(adapter).flatMap((name) => {
           const value = environment.get(name);
           return value === undefined ? [] : [{ name, value }];
         }),

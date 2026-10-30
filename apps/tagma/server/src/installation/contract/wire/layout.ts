@@ -1,3 +1,4 @@
+import { HOST_COMMAND } from '@runlith/tagma/adapter/harness';
 import type { Channel } from './channel.js';
 
 const directoryOf = (path: string): string => {
@@ -32,7 +33,7 @@ export const RETURN_FILE = 'returned.json';
 export const INSTALL_LOCK = 'install.lock';
 
 export const WORLD = 'world';
-export const WORLD_COMMAND = 'tagma';
+export const WORLD_COMMAND = HOST_COMMAND;
 
 export const BUILD_COMMAND = 'bun run tagma:build';
 export const BUILD_SWAPPED_ENV = 'TAGMA_BUILD_SWAPPED';

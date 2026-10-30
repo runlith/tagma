@@ -6,7 +6,7 @@ import { harnessPresentation } from '../../../external-harnesses/contract/servic
 import { terminalTestKernel } from '../../../external-harnesses/testing/seats.js';
 import { unmeasuredObservation } from '../../../threads/contract/wire/harness/observation.js';
 import { sessionTokenEnvironment } from '../../../platform/testing/grants.js';
-import { sessionIdentity } from '../../../external-harnesses/sessionPrefix.js';
+import { sessionIdentity } from '../../../external-harnesses/testing/builtin.js';
 import { hookThreads, HOOK_SESSION } from '../hookFixture.js';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import * as BunRuntime from '@effect/platform-bun/BunRuntime';

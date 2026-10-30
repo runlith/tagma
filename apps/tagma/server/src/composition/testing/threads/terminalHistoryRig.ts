@@ -1,6 +1,6 @@
 import { isAbsolute, join } from 'node:path';
 import { Context, Effect, FileSystem, Schedule, Stream } from 'effect';
-import { BUILTIN_HARNESSES } from '../../../external-harnesses/vendors/builtin.js';
+import { SHIPPED_HARNESSES } from '../../../external-harnesses/testing/builtin.js';
 import { WORLD_COMMAND } from '../../../installation/contract/wire/layout.js';
 import { Coverage } from '../../../workspace/contract/service/roots.js';
 import { Settings } from '../../../settings/contract/service/values.js';
@@ -164,7 +164,7 @@ export const terminalHistoryWorld = Effect.gen(function* () {
   const stage = yield* files.makeTempDirectoryScoped({ prefix: 'terminal-history-' });
   const bin = join(stage, 'bin');
   yield* files.makeDirectory(bin);
-  for (const binary of BUILTIN_HARNESSES.map(({ binary }) => binary).filter((binary) => !isAbsolute(binary)))
+  for (const binary of SHIPPED_HARNESSES.map(({ binary }) => binary).filter((binary) => !isAbsolute(binary)))
     yield* files.writeFileString(join(bin, binary), '#!/bin/sh\nprintf "fixture\\n"\n', { mode: 0o755 });
   yield* files.writeFileString(join(stage, 'tui.js'), TUI);
   yield* files.writeFileString(join(stage, 'cut.js'), CUT_SERVER);

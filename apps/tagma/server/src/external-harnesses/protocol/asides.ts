@@ -7,7 +7,7 @@ import type { SessionAside, SessionCapture, SessionCopies } from '../contract/se
 import type { HarnessFailure } from '../../threads/contract/service/failure.js';
 import type { ThreadInbox } from '../../threads/store/inbox.js';
 import { harnessServed } from '../sessions/model.js';
-import { ASIDE } from '../contract/wire/extensions.js';
+import { ASIDE } from '@runlith/hosted-runner/wire/extensions';
 import { LinkEnded, type Link, type ProtocolLinks } from './links.js';
 import { asideLost } from './methods/aside.js';
 import type { Answers } from './methods/answers.js';

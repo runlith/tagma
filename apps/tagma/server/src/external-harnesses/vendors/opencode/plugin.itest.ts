@@ -2,7 +2,7 @@ import { expect } from 'bun:test';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { it } from '@runlith/effect-test';
 import { Deferred, Effect, FileSystem, Layer } from 'effect';
-import { harnessAdaptersLayer } from '../../adapters.js';
+import { shippedHarnessAdaptersLayer } from '../../testing/builtin.js';
 import { accountEnvironment } from '@runlith/adapter-opencode/environment';
 import { installedProgram, openHost } from '@runlith/adapter-opencode/host';
 import { entryPath } from '../../../installation/contract/wire/junction.js';
@@ -224,5 +224,5 @@ if (process.argv[2] === 'mcp-serve') {
     yield* Effect.tryPromise(() => host.client.session.interrupt({ sessionID: interrupted.id }));
     expect((yield* Deferred.await(cancelled)).status).toBe('aborted');
     expect((yield* Effect.tryPromise(() => host.client.session.get({ sessionID: interrupted.id }))).outcome).toBe('interrupted');
-  }).pipe(Effect.provide(Layer.mergeAll(BunFileSystem.layer, harnessAdaptersLayer))),
+  }).pipe(Effect.provide(Layer.mergeAll(BunFileSystem.layer, shippedHarnessAdaptersLayer))),
 );

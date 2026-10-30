@@ -2,7 +2,7 @@ import { expect, spyOn } from 'bun:test';
 import { it } from '@runlith/effect-test';
 import { Effect } from 'effect';
 import * as sdk from '@cursor/sdk';
-import type { OutputEvent } from '../hosted/output.js';
+import type { OutputEvent } from '@runlith/hosted-runner/output';
 import { cursorSdk } from './sdk.js';
 
 it.effect('Cursor seals a message after its calls, returns hosted results and reports whole-turn token usage', () =>

@@ -16,7 +16,7 @@ import { textOf } from './content.js';
 import type { OpenedTurn } from './row.js';
 import type { VendorAddress } from '../store/turns.js';
 import type { HarnessTurnEnded } from './turns.js';
-import { EXECUTES, FAILURE, OPENED, type Said } from '../contract/wire/extensions.js';
+import { EXECUTES, FAILURE, OPENED, type Said } from '@runlith/hosted-runner/wire/extensions';
 
 export type Sealed = { readonly _tag: 'Sealed'; readonly said: (typeof Said)['Type'] | null };
 

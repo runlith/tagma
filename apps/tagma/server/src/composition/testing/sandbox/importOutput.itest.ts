@@ -13,7 +13,7 @@ import { ToolAnswer, toolExecute } from '@runlith/agent/tool';
 import { makeLandingHolds } from '@runlith/agent/thread/run/runAdmission';
 import { unthreadedCaller } from '../callers.js';
 import { fixtureMigrations } from '../migrations.js';
-import { sessionIdentityLayer, sessionIdentity } from '../../../external-harnesses/sessionPrefix.js';
+import { sessionIdentityLayer, sessionIdentity } from '../../../external-harnesses/testing/builtin.js';
 import { MachineStore } from '../../../platform/contract/service/store.js';
 import { MachineUnits } from '../../../platform/contract/service/units.js';
 import { unitsLayer } from '../../../platform/store/units.js';

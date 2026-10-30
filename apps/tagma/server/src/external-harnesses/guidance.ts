@@ -19,7 +19,7 @@ import { instructionDelivery } from './instructions.js';
 import { threadCallFailed } from '../threads/contract/service/failure.js';
 import type { RunReports, AdapterReports } from '@runlith/agent/thread/run/lifecycle/RunReports';
 import { hostedHistory, hostedTurns } from './hostedHistory.js';
-import { seededHistory, turnText } from './contract/wire/historyText.js';
+import { seededHistory, turnText } from '@runlith/hosted-runner/wire/historyText';
 
 export const makeHookGuidance = (
   guidance: RunGuiding,

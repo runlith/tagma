@@ -12,7 +12,7 @@ import { ModelChanges } from '../../../threads/contract/service/modelChanges.js'
 import { harnessFacet } from '../../../threads/contract/wire/harness/types.js';
 import { harnessPresentation } from '../../../external-harnesses/contract/service/table.js';
 import { builtinHarness } from '../../../external-harnesses/testing/builtin.js';
-import { makeHarnessAdapters } from '../../../external-harnesses/adapters.js';
+import { shippedAdapters } from '../external-harnesses/shipped.js';
 import { isTransportEntry } from '../../../threads/contract/wire/harness/transportEntry.js';
 import { kernelWrites, nativeTransitions } from '../../../native-harness/testing/doubles.js';
 import { modelChanges, sqliteThreadJournal, threadRebinding, threadRun } from '../../../threads/testing/doubles.js';
@@ -79,7 +79,7 @@ it.effect('SQL transport rebinding persists the hosted model default and both jo
       rebinding,
       registry,
       staticRegistry(providerCatalogOf([provider])),
-      yield* makeHarnessAdapters,
+      yield* shippedAdapters,
     );
     expect(yield* switching.to(id, demo.projectId, { kind: 'operator' }, 'acp')).toMatchObject({ status: 'switched', transport: 'acp' });
     expect(yield* demo.store.find(id)).toMatchObject({

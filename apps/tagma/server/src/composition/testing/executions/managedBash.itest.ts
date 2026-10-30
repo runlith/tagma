@@ -32,7 +32,7 @@ import {
   terminalThreads,
 } from '../../../executions/testing/doubles.js';
 import { shippedChain } from '../../../platform/store/chain.js';
-import { sessionIdentity } from '../../../external-harnesses/sessionPrefix.js';
+import { sessionIdentity } from '../../../external-harnesses/testing/builtin.js';
 import { testGrantSigner } from '../../../platform/testing/grants.js';
 import { asThreadContext, worldTools } from '../../../native-harness/testing/doubles.js';
 import { callerInThread } from '../callers';

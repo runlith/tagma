@@ -8,7 +8,7 @@ import { threadCallFailed } from '../../threads/contract/service/failure.js';
 import type { ProviderRegistry } from '../../providers/contract/service/registry.js';
 import { launchChoice, resolvedAsked } from '../birth/modelChoice.js';
 import type { VendorTurns } from '../store/turns.js';
-import { REWIND } from '../contract/wire/extensions.js';
+import { REWIND } from '@runlith/hosted-runner/wire/extensions';
 import type { ProtocolHalts } from './halts.js';
 import type { ProtocolLaunches } from './launches.js';
 import type { Link } from './links.js';

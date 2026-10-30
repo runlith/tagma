@@ -1,12 +1,13 @@
 import type { HookRows } from '../hooks/rows.js';
 import type { HarnessAdapters } from '../contract/service/adapters.js';
-import { SESSION_SIGNERS } from '../contract/wire/sessionVariables.js';
-import { BUILTIN_HARNESSES } from '../vendors/builtin.js';
+import { SHIPPED_HARNESSES } from './builtin.js';
+
+const SIGNERS = SHIPPED_HARNESSES.map(({ harness, variable }) => ({ harness, variable }));
 
 export const builtinRows = (harness: string | null): HookRows | null => {
-  if (harness === null) return { named: null, rows: BUILTIN_HARNESSES, signers: SESSION_SIGNERS };
-  const builtin = BUILTIN_HARNESSES.find((row) => row.harness === harness);
-  return builtin === undefined ? null : { named: builtin, rows: [builtin], signers: SESSION_SIGNERS };
+  if (harness === null) return { named: null, rows: SHIPPED_HARNESSES, signers: SIGNERS };
+  const builtin = SHIPPED_HARNESSES.find((row) => row.harness === harness);
+  return builtin === undefined ? null : { named: builtin, rows: [builtin], signers: SIGNERS };
 };
 
 export const hookRowsOf = (adapters: HarnessAdapters['Service'], harness: string | null): HookRows | null => {

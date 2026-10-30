@@ -2,7 +2,7 @@ import { Schema } from 'effect';
 import { Usage } from '@runlith/acp/methods';
 import type { ThreadEntry } from '@runlith/agent/transcript/entries';
 import { compactionEntryId } from '@runlith/agent/transcript/entryNames';
-import { COMPACTING, UNSTEPPED } from '../../contract/wire/extensions.js';
+import { COMPACTING, UNSTEPPED } from '@runlith/hosted-runner/wire/extensions';
 import type { ProtocolRow } from '../row.js';
 import { spendOf } from '../projection.js';
 import { handled, settledBy, type Answering, type Handled, type Noticing, type Settled } from './declaration.js';

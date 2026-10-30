@@ -1298,7 +1298,6 @@
     "typecheck": "runlith-typecheck"
   },
   "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "0.3.292",
     "@cursor/sdk": "1.0.40",
     "@effect/platform-bun": "catalog:",
     "@effect/sql-sqlite-bun": "catalog:",
@@ -1341,6 +1340,7 @@
     "@runlith/git": "workspace:*",
     "@runlith/github": "workspace:*",
     "@runlith/held": "workspace:*",
+    "@runlith/hosted-runner": "workspace:*",
     "@runlith/llm": "workspace:*",
     "@runlith/mcp": "workspace:*",
     "@runlith/navigation": "workspace:*",

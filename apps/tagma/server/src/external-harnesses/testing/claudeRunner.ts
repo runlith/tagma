@@ -1,9 +1,10 @@
 import { Effect, Stream } from 'effect';
 import { ExchangeFailed } from '@runlith/ndjson-rpc/exchange';
-import { ServerDoor, type HostedDoor } from '../runner/hosted/door.js';
-import { serveClaude } from '../runner/claude-code/run.js';
-import { fixtureClaude } from './claudeCode.js';
+import type { HostedDoor } from '@runlith/hosted-runner/door';
+import { serveClaude } from '@runlith/adapter-anthropic/runner';
+import { fixtureClaude } from '@runlith/adapter-anthropic/testing/sdk';
 import type { ServerCli } from '../cli/server.js';
+import { ServerDoor } from '../cli/serverDoor.js';
 import { CurrentInvocation, processInvocation } from '../../platform/cli/verb.js';
 
 type Input = { readonly report: string; readonly server?: ServerCli };

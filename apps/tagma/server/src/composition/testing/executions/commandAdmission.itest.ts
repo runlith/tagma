@@ -1,7 +1,7 @@
 import { unthreadedCaller } from '../callers';
 import { fixtureMigrations } from '../migrations.js';
 import { sharedPool } from '@runlith/sqlite-process/testing/pool';
-import { sessionIdentityLayer, sessionIdentity } from '../../../external-harnesses/sessionPrefix.js';
+import { sessionIdentityLayer, sessionIdentity } from '../../../external-harnesses/testing/builtin.js';
 import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterAll, expect } from 'bun:test';

@@ -28,7 +28,7 @@ import { TerminalScreens } from '../../../executions/contract/service/records.js
 import { Terminals } from '../../../executions/contract/service/terminals.js';
 import { Coverage } from '../../../workspace/contract/service/roots.js';
 import { ThreadHarness } from '../../../threads/contract/service/engine.js';
-import { BUILTIN_HARNESSES } from '../../../external-harnesses/vendors/builtin.js';
+import { SHIPPED_HARNESSES } from '../../../external-harnesses/testing/builtin.js';
 import { HarnessPermissions } from '../../../external-harnesses/contract/service/permissions.js';
 import { WORLD_COMMAND } from '../../../installation/contract/wire/layout.js';
 import { EXECUTION_HOST_ROOT } from '../repoRoot.js';
@@ -131,7 +131,7 @@ const setup = Effect.gen(function* () {
   const stage = yield* files.makeTempDirectoryScoped({ prefix: 'conformance-cli-' });
   const bin = join(stage, 'bin');
   yield* files.makeDirectory(bin);
-  for (const binary of [WORLD_COMMAND, ...BUILTIN_HARNESSES.map(({ binary }) => binary).filter((binary) => !isAbsolute(binary))])
+  for (const binary of [WORLD_COMMAND, ...SHIPPED_HARNESSES.map(({ binary }) => binary).filter((binary) => !isAbsolute(binary))])
     yield* files.writeFileString(join(bin, binary), '#!/bin/sh\nprintf "fixture\\n"\n', { mode: 0o755 });
   yield* files.writeFileString(join(stage, 'tui.js'), TUI);
   yield* files.writeFileString(join(stage, 'screens.js'), SCREENS);

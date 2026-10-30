@@ -1,5 +1,5 @@
 import { Schema } from 'effect';
-import { Retrying } from '../../contract/wire/extensions.js';
+import { Retrying } from '@runlith/hosted-runner/wire/extensions';
 import { handled, type Noticing } from './declaration.js';
 
 const isRetrying = Schema.is(Retrying);

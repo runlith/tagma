@@ -16,8 +16,7 @@ import { writes } from '../../platform/contract/service/writes.js';
 import { ThreadInbox } from '../../threads/store/inbox.js';
 import { harnessFacet } from '../../threads/contract/wire/harness/types.js';
 import { harnessPresentation } from '../contract/service/table.js';
-import { makeHarnessAdapters } from '../adapters.js';
-import { builtinHarness } from '../testing/builtin.js';
+import { builtinHarness, shippedHarnessAdapters } from '../testing/builtin.js';
 import type { ExternalSession } from '../../threads/contract/wire/harness/externalSession.js';
 import { transcriptFiles } from '../testing/files.js';
 import { observationRebound } from '../observations/staleness.js';
@@ -54,7 +53,7 @@ const unused = () => Effect.die('This transcript reader needs no command or envi
 const fixture = Effect.fnUntraced(function* () {
   const storage = yield* openMemoryStorage();
   const kernel = terminalKernel(builtinHarness('claude-code'), undefined, false, {});
-  const adapters = yield* makeHarnessAdapters;
+  const adapters = yield* shippedHarnessAdapters;
   const thread = yield* storage.createThread({ ownerId: OWNER, scope: SCOPE, transport: kernel.transport });
   yield* storage.aggregate.update(thread.id, {
     capabilities: kernel.capabilities,

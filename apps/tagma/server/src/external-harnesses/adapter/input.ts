@@ -15,8 +15,6 @@ export const inputWords = (id: string, words: string): string => {
 
 export const plainWords = (words: string): string => typable(words).trim();
 
-export const CONTINUE_WORDS = 'Continue the task from where you stopped.';
-
 export const promptDigest = (prompt: string): string => digest(plainWords(prompt));
 
 const COLLAPSED_PASTE = /^\[Pasted text #\d+ \+(\d+) lines\]$/;
