@@ -15,6 +15,7 @@ import { threadPeeks } from './threadPeek.svelte.js';
 import type { ThreadFolds } from './threadFolds.svelte.js';
 import { columnEntries, filedIn, folderChain, foldTeam, matchShelf, nextWaiting, nodeIndex, rootBand } from './tree.js';
 import type { ThreadSlot } from './ThreadSlot.svelte.js';
+import { TilePlaces } from './worktrees/TilePlaces.svelte.js';
 import { worktreeGroups } from './worktrees/worktreeGroups.js';
 
 const ROW_FOCUS = 'a[data-thread], button[data-fold]';
@@ -33,7 +34,7 @@ export class ColumnState {
   readonly shelving: Shelving;
   readonly win = new ColumnWindow<ColumnLine>(estimateOf);
   private readonly spans = new LineCache();
-  readonly places = $derived.by(() => this.host.places);
+  readonly tile: TilePlaces;
   readonly archivedTree = $derived.by(() => threadTree(this.list.archived ?? []));
   readonly archivedNodes = $derived.by(() => nodeIndex(this.archivedTree));
   readonly folderIds = $derived.by(() => this.list.folders.map((folder) => folder.id));
@@ -53,15 +54,18 @@ export class ColumnState {
   );
   readonly markKey = $derived.by(() => String(this.list.aim.tileId));
   readonly agentsView = $derived.by<AgentsView>(() =>
-    this.places.several && this.marks.agentsView.get(this.markKey) === 'worktrees' ? 'worktrees' : 'teams',
+    this.tile.several && this.marks.agentsView.get(this.markKey) === 'worktrees' ? 'worktrees' : 'teams',
   );
   readonly grouping = $derived.by(() =>
     this.agentsView === 'worktrees'
       ? worktreeGroups(
           this.list.tree,
-          this.places.grouped,
-          (id) => this.places.byRoot(this.list.births.aimOf(id) ?? '') ?? this.places.placeOf(this.list.births.sourceOf(id) ?? id),
-          (thread) => this.places.creatingOf(thread)?.id ?? null,
+          this.tile.members.map(({ projectId, places }) => ({
+            projectId,
+            rows: places.grouped,
+            placeOf: (id) => places.byRoot(this.list.births.aimOf(id) ?? '') ?? places.placeOf(this.list.births.sourceOf(id) ?? id),
+            creatingOf: (thread) => places.creatingOf(thread)?.id ?? null,
+          })),
         )
       : null,
   );
@@ -72,7 +76,7 @@ export class ColumnState {
       : [
           ...this.grouping.groups.flatMap((group) => group.trees),
           ...this.grouping.nowhere,
-          ...this.places.creations.flatMap((creation) => this.grouping?.creating.get(creation.id) ?? []),
+          ...this.tile.creations.flatMap(({ creation }) => this.grouping?.creating.get(creation.id) ?? []),
         ],
   );
   readonly unpinning = $derived.by(() => {
@@ -89,14 +93,7 @@ export class ColumnState {
   readonly lines = $derived.by(() =>
     this.grouping === null
       ? shelfLines(this.entries, this.lineView)
-      : groupLines(
-          this.grouping,
-          this.lineView,
-          this.filter,
-          this.catalog.models,
-          (rootId) => this.groupOpen(rootId),
-          this.places.creations,
-        ),
+      : groupLines(this.grouping, this.lineView, this.filter, this.catalog.models, (rootId) => this.groupOpen(rootId), this.tile.creations),
   );
   readonly archivedLines = $derived.by(() =>
     this.archivedTree.flatMap((node) =>
@@ -124,6 +121,7 @@ export class ColumnState {
 
   constructor(
     private readonly slot: () => ThreadSlot,
+    members: () => readonly number[],
     list: ThreadList,
     folds: ThreadFolds,
     archived: ArchivedThreadsOpen,
@@ -132,6 +130,7 @@ export class ColumnState {
     drops: MentionDrops,
     private readonly catalog: ProviderCatalog,
   ) {
+    this.tile = new TilePlaces(() => this.host.places, members);
     this.list = list;
     this.folds = folds;
     this.archived = archived;
@@ -186,7 +185,7 @@ export class ColumnState {
     if (!closed.delete(rootId)) closed.add(rootId);
     this.marks.worktreeFolds.set(
       this.markKey,
-      [...closed].filter((id) => this.places.rows.some((row) => row.rootId === id)),
+      [...closed].filter((id) => this.tile.members.some(({ places }) => places.byRoot(id) !== null)),
     );
   }
 

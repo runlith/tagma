@@ -3,8 +3,16 @@ import type { WorktreePlace } from '@tagma/server/worktrees/contract/wire/rows';
 import { bandedRoots, composeNode, feedRoots, type ThreadTreeNode } from '../forest.js';
 
 export type WorktreeGroup = {
+  readonly projectId: number;
   readonly row: WorktreePlace;
   readonly trees: readonly ThreadTreeNode[];
+};
+
+export type MemberPlaces = {
+  readonly projectId: number;
+  readonly rows: readonly WorktreePlace[];
+  placeOf(threadId: string): WorktreePlace | null;
+  creatingOf(thread: ThreadListRow): string | null;
 };
 
 export type WorktreeAway = { readonly row: WorktreePlace; readonly threads: readonly string[] };
@@ -24,31 +32,34 @@ const NOWHERE = ':nowhere';
 
 type Member = { readonly node: ThreadTreeNode; readonly group: string };
 
-export function worktreeGroups(
-  trees: readonly ThreadTreeNode[],
-  rows: readonly WorktreePlace[],
-  placeOf: (threadId: string) => WorktreePlace | null,
-  creatingOf: (thread: ThreadListRow) => string | null = () => null,
-): WorktreeGrouping {
-  const fallback = rows.find((row) => row.kind === 'main') ?? rows[0];
-  const drawn = new Set(rows.map((row) => row.rootId));
+export function worktreeGroups(trees: readonly ThreadTreeNode[], members: readonly MemberPlaces[]): WorktreeGrouping {
+  const known = new Map(
+    members.map((member) => [
+      member.projectId,
+      {
+        member,
+        drawn: new Set(member.rows.map((row) => row.rootId)),
+        fallback: member.rows.find((row) => row.kind === 'main') ?? member.rows[0],
+      },
+    ]),
+  );
+  const lead = members[0] === undefined ? undefined : known.get(members[0].projectId);
   const byId = new Map<string, ThreadListRow>();
   const place = new Map<string, WorktreePlace>();
   const homes = new Map<string, string>();
   const walkRows = (node: ThreadTreeNode): void => {
     const row = node.row;
     byId.set(row.id, row);
-    const creation = creatingOf(row);
+    const at = known.get(row.projectId) ?? lead;
+    const creation = at === undefined ? null : at.member.creatingOf(row);
+    const standing = at === undefined || creation !== null ? null : at.member.placeOf(row.id);
     if (creation !== null) homes.set(row.id, `creating:${creation}`);
+    else if (at === undefined || standing === null) homes.set(row.id, NOWHERE);
     else {
-      const standing = placeOf(row.id);
-      if (standing === null) homes.set(row.id, NOWHERE);
-      else {
-        const home = drawn.has(standing.rootId) ? standing : fallback;
-        if (home !== undefined) {
-          place.set(row.id, home);
-          homes.set(row.id, home.rootId);
-        }
+      const home = at.drawn.has(standing.rootId) ? standing : at.fallback;
+      if (home !== undefined) {
+        place.set(row.id, home);
+        homes.set(row.id, home.rootId);
       }
     }
     for (const child of node.children) walkRows(child);
@@ -109,7 +120,9 @@ export function worktreeGroups(
   const groupOf = new Map<string, string>();
   for (const [threadId, row] of place) groupOf.set(threadId, row.rootId);
   return {
-    groups: rows.map((row) => ({ row, trees: bandedRoots(sunk.get(row.rootId) ?? []) })),
+    groups: members.flatMap((member) =>
+      member.rows.map((row) => ({ projectId: member.projectId, row, trees: bandedRoots(sunk.get(row.rootId) ?? []) })),
+    ),
     nowhere: feedRoots(sunk.get(NOWHERE) ?? []),
     creating,
     away,

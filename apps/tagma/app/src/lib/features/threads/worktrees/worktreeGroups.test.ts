@@ -3,7 +3,7 @@ import type { WorktreePlace } from '@tagma/server/worktrees/contract/wire/rows';
 import { expect, test } from 'vitest';
 import { ThreadForest, type ThreadTreeNode, threadTree } from '../forest.js';
 import { foldTeam } from '../tree.js';
-import { worktreeGroups } from './worktreeGroups.js';
+import { type MemberPlaces, worktreeGroups } from './worktreeGroups.js';
 
 const thread = (id: string, parentThreadId: string | null): ThreadListRow =>
   ({
@@ -46,6 +46,13 @@ const worktree = (rootId: string, kind: WorktreePlace['kind']): WorktreePlace =>
 
 const drawn = (trees: readonly ThreadTreeNode[]): string[] => trees.flatMap((node) => [node.row.id, ...drawn(node.children)]);
 
+const member = (
+  rows: readonly WorktreePlace[],
+  placeOf: MemberPlaces['placeOf'],
+  creatingOf: MemberPlaces['creatingOf'] = () => null,
+  projectId = 1,
+): MemberPlaces => ({ projectId, rows, placeOf, creatingOf });
+
 const main = worktree('main', 'main');
 const sidebar = worktree('sidebar', 'tagma');
 const terminal = worktree('terminal', 'tagma');
@@ -66,7 +73,7 @@ const places: Record<string, WorktreePlace> = {
   helper: sidebar,
   stray: gone,
 };
-const grouping = worktreeGroups(threadTree(threads), [main, sidebar, terminal], (id) => places[id] ?? main);
+const grouping = worktreeGroups(threadTree(threads), [member([main, sidebar, terminal], (id) => places[id] ?? main)]);
 const trees = (rootId: string) => grouping.groups.find((group) => group.row.rootId === rootId)?.trees ?? [];
 
 test('every loaded thread is drawn exactly once, and one whose place is not a drawn group stands in main', () => {
@@ -87,22 +94,47 @@ test('a child standing apart from its parent roots its own group with a crumb, a
 });
 
 test('a thread the listing places in no tree stands apart from every group, and not in main', () => {
-  const apart = worktreeGroups(threadTree([thread('placed', null), thread('cleared', null)]), [main, sidebar], (id) =>
-    id === 'cleared' ? null : sidebar,
-  );
+  const apart = worktreeGroups(threadTree([thread('placed', null), thread('cleared', null)]), [
+    member([main, sidebar], (id) => (id === 'cleared' ? null : sidebar)),
+  ]);
   expect(drawn(apart.nowhere)).toEqual(['cleared']);
   expect(apart.groups.flatMap((group) => drawn(group.trees))).toEqual(['placed']);
 });
 
 test('a thread whose new worktree is still being made stands under that creation, not under main', () => {
-  const coming = worktreeGroups(
-    threadTree([thread('born', null), thread('quiet', null)]),
-    [main],
-    () => main,
-    (row) => (row.id === 'born' ? 'creation-1' : null),
-  );
+  const coming = worktreeGroups(threadTree([thread('born', null), thread('quiet', null)]), [
+    member(
+      [main],
+      () => main,
+      (row) => (row.id === 'born' ? 'creation-1' : null),
+    ),
+  ]);
   expect(drawn(coming.creating.get('creation-1') ?? [])).toEqual(['born']);
   expect(coming.groups.flatMap((group) => drawn(group.trees))).toEqual(['quiet']);
+});
+
+test('in a group every thread stands under its own member’s places, and each member’s places follow the group order', () => {
+  const theirs = worktree('their-main', 'main');
+  const feature = worktree('their-feature', 'tagma');
+  const split = worktreeGroups(
+    threadTree([thread('ours', null), { ...thread('theirs', null), projectId: 2 }, { ...thread('their-work', null), projectId: 2 }]),
+    [
+      member([main, sidebar], () => main),
+      member(
+        [theirs, feature],
+        (id) => (id === 'their-work' ? feature : theirs),
+        () => null,
+        2,
+      ),
+    ],
+  );
+
+  expect(split.groups.map((group) => [group.projectId, group.row.rootId, drawn(group.trees)])).toEqual([
+    [1, 'main', ['ours']],
+    [1, 'sidebar', []],
+    [2, 'their-main', ['theirs']],
+    [2, 'their-feature', ['their-work']],
+  ]);
 });
 
 test('a chain that crosses back keeps a crumb at every crossing', () => {
@@ -126,7 +158,7 @@ test('an active descendant in another worktree keeps its idle ancestors outside 
       activeRunStartedAt: life === 'idle' ? null : '2026-01-01T00:00:00.000Z',
       liveSpellStartedAt: life === 'idle' ? null : '2026-01-01T00:00:00.000Z',
     });
-    const split = worktreeGroups(forest.roots, [main, sidebar], (id) => (id === 'leaf' ? sidebar : main));
+    const split = worktreeGroups(forest.roots, [member([main, sidebar], (id) => (id === 'leaf' ? sidebar : main))]);
     const local = split.groups.find((group) => group.row.rootId === 'main')!.trees;
     const root = local.find((node) => node.row.id === 'root')!;
     const fold = foldTeam(root.children);
@@ -142,7 +174,7 @@ test('an active descendant in another worktree keeps its idle ancestors outside 
 
 test('a group reuses the forest nodes wholly inside it, and a parent split across worktrees counts only the children that stayed', () => {
   const source = threadTree(threads);
-  const split = worktreeGroups(source, [main, sidebar, terminal], (id) => places[id] ?? main);
+  const split = worktreeGroups(source, [member([main, sidebar, terminal], (id) => places[id] ?? main)]);
   const inMain = split.groups.find((group) => group.row.rootId === 'main')?.trees ?? [];
   const lead = split.groups.find((group) => group.row.rootId === 'sidebar')?.trees.find((node) => node.row.id === 'lead');
 

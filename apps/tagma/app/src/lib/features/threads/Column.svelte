@@ -44,6 +44,9 @@
   import WorktreeAwayRow from './worktrees/AwayRow.svelte';
   import WorktreeCreating from './worktrees/Creating.svelte';
   import WorktreeGroupHeader from './worktrees/GroupHeader.svelte';
+  import PlacesHold from './worktrees/PlacesHold.svelte';
+  import type { WorktreeCreation } from '$lib/features/worktrees/BoardState.svelte.js';
+  import { Workspace } from '$lib/features/workspace/Selection.svelte.js';
 
   let { host, onCollapse }: { host: ThreadSlot; onCollapse?: () => void } = $props();
 
@@ -53,11 +56,13 @@
   const seams = Seams.use();
   const marks = ReaderMarks.use();
   const list = ThreadList.use();
+  const workspace = Workspace.use();
   const folderActs = FolderActs.use();
   const folds = ThreadFolds.use();
   const squeeze = new Squeeze();
   const col = new ColumnState(
     () => host,
+    () => workspace.groupOf(list.aim.tileId)?.members.map((member) => member.id) ?? [host.projectId],
     list,
     folds,
     ArchivedThreadsOpen.use(),
@@ -96,7 +101,7 @@
       bind:filter={col.filter}
       bind:input={col.filterInput}
       view={col.agentsView}
-      several={places.several}
+      several={col.tile.several}
       filtering={col.filtering}
       anyOpen={col.anyThreadOpen}
       foldable={col.foldable}
@@ -124,14 +129,14 @@
         {/if}
         {#if list.roots === null}
           {#if list.refused === null}<ListReading />{/if}
-        {:else if list.tree.length === 0 && places.creations.length === 0 && list.folders.length === 0}
+        {:else if list.tree.length === 0 && col.tile.creations.length === 0 && list.folders.length === 0}
           <p class="px-2 py-1 text-ui text-muted-foreground">Nothing yet. Ask the agent about this project.</p>
         {:else if col.filtering && col.shown.length === 0}
           <p class="px-2 py-1 text-small text-muted-foreground">Nothing in the loaded rows.</p>
         {/if}
         {#if col.grouping === null}
-          {#each places.creations as creation (creation.id)}
-            <WorktreeCreating {places} {creation} />
+          {#each col.tile.creations as { projectId, creation } (creation.id)}
+            {@render creating(projectId, creation)}
           {/each}
         {/if}
       </div>
@@ -170,12 +175,17 @@
           {list.more} more
         </button>
       {/if}
-      <WorktreeDepartedGroup />
+      {#each col.tile.members as { projectId } (projectId)}
+        <HomeHold {projectId}><WorktreeDepartedGroup /></HomeHold>
+      {/each}
     </div>
   </div>
 
   <ShelfLayer {shelving} part="bar" />
   <ArchivedFoot lines={col.archivedLines} {drag} draw={archivedLine} />
+  {#each col.tile.others as projectId (projectId)}
+    <PlacesHold {projectId} tile={col.tile} />
+  {/each}
 </aside>
 
 <SeamHandle {seam} label="Resize the thread column" />
@@ -229,14 +239,17 @@
   {:else if line.kind === 'away'}
     <WorktreeAwayRow away={line.away} depth={line.depth} onReveal={(id) => void col.revealThread(id)} />
   {:else if line.kind === 'group'}
-    <WorktreeGroupHeader
-      row={line.group.row}
-      open={line.open}
-      current={places.aimed?.rootId === line.group.row.rootId}
-      onToggle={() => col.toggleGroup(line.group.row.rootId)}
-    />
+    <HomeHold projectId={line.group.projectId}>
+      <WorktreeGroupHeader
+        row={line.group.row}
+        mark={workspace.markOf(line.group.projectId, host.projectId)}
+        open={line.open}
+        current={places.aimed?.rootId === line.group.row.rootId}
+        onToggle={() => col.toggleGroup(line.group.row.rootId)}
+      />
+    </HomeHold>
   {:else if line.kind === 'creating'}
-    <WorktreeCreating {places} creation={line.creation} />
+    {@render creating(line.projectId, line.creation)}
   {:else}
     <WorktreeNowhere count={line.count} />
   {/if}
@@ -263,7 +276,7 @@
       query={inArchive ? '' : col.filter}
       {...own ? col.renamer(node.row.id) : {}}
       unborn={own && list.births.unborn(node.row.id)}
-      badge={shelf && places.several ? placeBadge : undefined}
+      badge={shelf && col.tile.several ? placeBadge : undefined}
       aside={own ? (line.decor === 'group' ? crumb : line.decor === 'nowhere' ? placeNowhere : undefined) : undefined}
       selected={own && shelf && shelving.selection.has(node.row.id)}
       lifted={!inArchive && drag.lifts(node.row.id)}
@@ -273,7 +286,13 @@
 {/snippet}
 
 {#snippet placeBadge(row: ThreadListRow, step: number)}
-  <PlaceBadge {places} {row} named={step < Stow.place} />
+  {@const own = col.tile.of(row.projectId)}
+  {#if own !== null}<PlaceBadge places={own} {row} named={step < Stow.place} />{/if}
+{/snippet}
+
+{#snippet creating(projectId: number, creation: WorktreeCreation)}
+  {@const own = col.tile.of(projectId)}
+  {#if own !== null}<WorktreeCreating places={own} {creation} />{/if}
 {/snippet}
 
 {#snippet crumb(node: ThreadTreeNode)}
@@ -297,7 +316,8 @@
 {/snippet}
 
 {#snippet placeNowhere(node: ThreadTreeNode)}
-  <MoveToWorktree {places} thread={node.row.id} />
+  {@const own = col.tile.of(node.row.projectId)}
+  {#if own !== null}<MoveToWorktree places={own} thread={node.row.id} />{/if}
 {/snippet}
 
 {#snippet actions(node: ThreadTreeNode, aim: ContextAim)}

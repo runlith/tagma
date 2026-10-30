@@ -140,7 +140,9 @@ test('a worktree being created heads its members in the same line index the keyb
     groupOf: new Map(),
   };
 
-  const lines = groupLines(grouping, { folds, activeId: null, filtering: false }, '', modelCatalog([]), () => true, [creation]);
+  const lines = groupLines(grouping, { folds, activeId: null, filtering: false }, '', modelCatalog([]), () => true, [
+    { projectId: 1, creation },
+  ]);
 
   expect(lines.map((line) => line.key)).toEqual(['creating:c1', 'member']);
 });

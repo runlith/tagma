@@ -4,6 +4,7 @@ import type { FoldShape, ThreadFolds } from './threadFolds.svelte.js';
 import { type ColumnEntry, type FolderEntry, foldTeam, matchThreads } from './tree.js';
 import type { WorktreeCreation } from '$lib/features/worktrees/BoardState.svelte.js';
 import type { ServedModels } from '$lib/features/providers/served.js';
+import type { MemberCreation } from './worktrees/TilePlaces.svelte.js';
 import type { WorktreeAway, WorktreeGroup, WorktreeGrouping } from './worktrees/worktreeGroups.js';
 
 export type Decor = 'shelf' | 'group' | 'nowhere' | 'plain';
@@ -42,7 +43,7 @@ export type ColumnLine =
     }
   | { readonly kind: 'group'; readonly key: string; readonly group: WorktreeGroup; readonly open: boolean }
   | { readonly kind: 'nowhere'; readonly key: string; readonly count: number }
-  | { readonly kind: 'creating'; readonly key: string; readonly creation: WorktreeCreation };
+  | { readonly kind: 'creating'; readonly key: string; readonly projectId: number; readonly creation: WorktreeCreation };
 
 export type LineKind = ColumnLine['kind'];
 
@@ -206,7 +207,7 @@ export function groupLines(
   filter: string,
   models: ServedModels,
   open: (rootId: string) => boolean,
-  creations: readonly WorktreeCreation[],
+  creations: readonly MemberCreation[],
 ): readonly ColumnLine[] {
   const lines: ColumnLine[] = [];
   for (const group of grouping.groups) {
@@ -221,8 +222,8 @@ export function groupLines(
     lines.push({ kind: 'nowhere', key: 'nowhere', count: nowhere.length });
     for (const node of nowhere) threadLines(node, view, { depth: 0, decor: 'nowhere', drop: null }, lines);
   }
-  for (const creation of creations) {
-    lines.push({ kind: 'creating', key: `creating:${creation.id}`, creation });
+  for (const { projectId, creation } of creations) {
+    lines.push({ kind: 'creating', key: `creating:${creation.id}`, projectId, creation });
     for (const node of grouping.creating.get(creation.id) ?? []) {
       threadLines(node, view, { depth: 0, decor: 'plain', drop: null }, lines);
     }

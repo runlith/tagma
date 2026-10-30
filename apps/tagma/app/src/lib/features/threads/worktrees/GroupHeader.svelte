@@ -11,11 +11,18 @@
   import WorktreeSwatch from '$lib/features/worktrees/WorktreeSwatch.svelte';
   import { toneOf } from '$lib/features/worktrees/tone.js';
   import FadeText from '$lib/shared/FadeText.svelte';
+  import ProjectMark from '$lib/features/workspace/ProjectMark.svelte';
   import * as DropdownMenu from '$lib/shared/ui/dropdown-menu/index.js';
   import { worktreeActs } from './acts.js';
   import WorktreeMenuItems from './MenuItems.svelte';
 
-  let { row, open, current, onToggle }: { row: WorktreePlace; open: boolean; current: boolean; onToggle: () => void } = $props();
+  let {
+    row,
+    mark,
+    open,
+    current,
+    onToggle,
+  }: { row: WorktreePlace; mark: number | null; open: boolean; current: boolean; onToggle: () => void } = $props();
 
   const finishing = Finishing.use();
   const actions = worktreeActs();
@@ -46,13 +53,13 @@
   >
     <ChevronRight class={['size-3.5 text-muted-foreground/60 transition-transform', open && 'rotate-90']} />
     <WorktreeSwatch {row} class={['transition-opacity duration-300', flight !== null && 'opacity-50']} />
-    <FadeText
-      class={[
-        'justify-self-start font-mono font-medium transition-colors duration-300',
-        flight === null ? 'text-foreground/90' : 'text-foreground/60',
-      ]}
-      text={row.branch ?? row.name}
-    />
+    <span class="flex min-w-0 items-center gap-1.5 justify-self-start">
+      <FadeText
+        class={['font-mono font-medium transition-colors duration-300', flight === null ? 'text-foreground/90' : 'text-foreground/60']}
+        text={row.branch ?? row.name}
+      />
+      {#if mark !== null}<span class="flex max-w-24 shrink-0"><ProjectMark projectId={mark} class="min-w-0" /></span>{/if}
+    </span>
     <span class={['flex min-w-0 items-center', YIELDS]}>
       {#if flight !== null}
         <ActLine {flight} class="max-w-[13rem] @max-[339px]:max-w-[7rem]" />
