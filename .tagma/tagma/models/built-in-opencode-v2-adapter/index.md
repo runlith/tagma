@@ -10,12 +10,6 @@ fields:
         "at": "src/adapter.ts"
       },
       {
-        "at": "src/host.ts"
-      },
-      {
-        "at": "src/environment.ts"
-      },
-      {
         "at": "src/harness/opencode.ts"
       },
       {
