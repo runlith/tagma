@@ -30,6 +30,19 @@ test('a recorded result reads as text or as the structured object, with the spen
   });
 });
 
+test('a failed or killed process cannot publish its success-shaped result', () => {
+  const stdout = printed({ result: 'unfinished answer', structured_output: { verdict: true }, usage: SPEND });
+  expect(claudeCodeProgram.answer({ stdout, stderr: 'usage limit reached', exit: 1 })).toMatchObject({
+    _tag: 'Refused',
+    refusal: 'ask-quota',
+    usage: { inputTokens: 45, outputTokens: 4 },
+  });
+  expect(claudeCodeProgram.answer({ stdout, stderr: '', exit: null })).toMatchObject({
+    _tag: 'Refused',
+    refusal: 'ask-provider-failed',
+  });
+});
+
 test('a failed run becomes the refusal its words name', () => {
   const limited = printed({ subtype: 'success', is_error: true, result: 'Claude AI usage limit reached|1793000000' });
   expect(claudeCodeProgram.answer({ stdout: limited, stderr: '', exit: 1 })).toMatchObject({ _tag: 'Refused', refusal: 'ask-quota' });

@@ -63,6 +63,8 @@ export const claudeCodeProgram: CommandProgram = {
         : refused(stderr === '' ? stdout : stderr, undefined);
     const usage = claudeUsage(result.usage);
     const text = typeof result.result === 'string' ? result.result : '';
+    if (exit !== 0)
+      return refused(stderr || (result.is_error === true ? text : '') || `Claude Code ended with exit ${exit ?? 'unknown'}`, usage);
     if (result.is_error === true || result.subtype !== 'success') return refused(text === '' ? stderr : text, usage);
     if (result.structured_output !== undefined) return { _tag: 'Object', object: result.structured_output, usage };
     return { _tag: 'Text', text, usage };
