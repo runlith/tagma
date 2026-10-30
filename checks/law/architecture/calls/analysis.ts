@@ -70,6 +70,8 @@ const bearing = (registry: Registry, path: string): boolean => {
 
 export type Importers = (paths: ReadonlySet<string>) => readonly string[];
 
+export type Carriers = { readonly has: (path: string) => boolean };
+
 type Reach = { readonly judged: readonly string[]; readonly carriers: readonly string[] };
 
 const reach = (
@@ -142,7 +144,7 @@ export const callAnalysis = (
   params: CallParams,
   only?: readonly string[],
   importers?: Importers,
-  relevant?: ReadonlySet<string>,
+  relevant?: Carriers,
 ): Analysis => {
   const registry = new Registry(world, params, relevant);
   const region = new Set(judgedPaths(world.paths, params));
@@ -166,7 +168,7 @@ export const callAnalysis = (
 export const callFindings = (world: World, params: CallParams, only?: readonly string[], importers?: Importers): readonly Finding[] =>
   callAnalysis(world, params, only, importers).findings;
 
-export const carrying = (world: World, params: CallParams, paths: readonly string[], relevant: ReadonlySet<string>): readonly string[] => {
+export const carrying = (world: World, params: CallParams, paths: readonly string[], relevant: Carriers): readonly string[] => {
   const registry = new Registry(world, params, relevant);
   return paths.filter((path) => bearing(registry, path));
 };
@@ -187,20 +189,36 @@ export const callFrontier = (
   changed: readonly string[],
   importersOf: Importers,
   forced: ReadonlySet<string> = new Set(),
-  carriers?: ReadonlySet<string>,
+  carriers?: Carriers,
 ): readonly string[] => {
   const reached = new Set(changed);
-  const afterRelevant = carriers === undefined ? undefined : new Set([...carriers, ...changed]);
+  const added = new Set(changed);
+  const afterRelevant = carriers === undefined ? undefined : { has: (path: string) => added.has(path) || carriers.has(path) };
   const registries = { before: new Registry(before, params, carriers), after: new Registry(after, params, afterRelevant) };
   let wave = [...changed];
   const shadows = (path: string): boolean => carriers !== undefined && alternativesOf(path).some((other) => carriers.has(other));
-  if (carriers !== undefined) {
-    before.prefetch?.([...carriers]);
-    after.prefetch?.([...carriers]);
-  }
+  const reading = (world: World, registry: Registry, paths: readonly string[]): void => {
+    world.prefetch?.(paths);
+    if (carriers === undefined) return;
+    const seen = new Set(paths);
+    let level = paths;
+    while (level.length > 0) {
+      const next: string[] = [];
+      for (const path of level)
+        for (const specifier of specifiersOf(world.read(path) ?? '')) {
+          const target = registry.resolve(specifier, path);
+          if (target !== null && !seen.has(target) && carriers.has(target)) {
+            seen.add(target);
+            next.push(target);
+          }
+        }
+      world.prefetch?.(next);
+      level = next;
+    }
+  };
   while (wave.length > 0) {
-    before.prefetch?.(wave);
-    after.prefetch?.(wave);
+    reading(before, registries.before, wave);
+    reading(after, registries.after, wave);
     const moved = wave.filter(
       (path) =>
         summaryOf(registries.before, path) !== summaryOf(registries.after, path) ||
@@ -211,7 +229,7 @@ export const callFrontier = (
     for (const importer of importersOf(new Set(moved)))
       if (!reached.has(importer)) {
         reached.add(importer);
-        afterRelevant?.add(importer);
+        added.add(importer);
         wave.push(importer);
       }
   }

@@ -6,9 +6,8 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import type { Side } from '@runlith/tagma/rules';
 import { databaseAt } from '../store';
-import { indexes } from './indexes';
-import type { Snapshot } from './snapshot';
-import { vendorIndex } from './vendors';
+import { type Snapshot, snapshots } from './snapshot';
+import { vendorJudge } from './vendors';
 
 test('a competing cache writer does not lose literals needed by an unchanged source after a provider declaration changes', () => {
   const root = mkdtempSync(join(tmpdir(), 'architecture-writers-'));
@@ -30,31 +29,28 @@ test('a competing cache writer does not lose literals needed by an unchanged sou
     main = databaseAt(root);
     other = new Database(main.filename);
     other.exec('PRAGMA busy_timeout = 0');
-    const index = indexes(root, base);
-    const competing = {
-      ...index,
-      snapshot: (side: Side, scope?: readonly string[]): Snapshot => {
-        const snapshot = index.snapshot(side, scope);
-        return {
-          tree: snapshot.tree,
-          paths: snapshot.paths,
-          get modules() {
-            return snapshot.modules;
-          },
-          file: (path) => {
-            if (path === target) {
-              try {
-                other!.exec('BEGIN IMMEDIATE');
-                other!.exec("INSERT OR REPLACE INTO memo (key, value, at) VALUES ('competing-cache', '{}', 0)");
-                other!.exec('COMMIT');
-              } catch (error) {
-                if (!(error instanceof Error) || !('code' in error) || error.code !== 'SQLITE_BUSY') throw error;
-              }
+    const index = snapshots(root);
+    const competing = (side: Side, scope?: readonly string[]): Snapshot => {
+      const snapshot = index(side, scope);
+      return {
+        tree: snapshot.tree,
+        paths: snapshot.paths,
+        get modules() {
+          return snapshot.modules;
+        },
+        file: (path) => {
+          if (path === target) {
+            try {
+              other!.exec('BEGIN IMMEDIATE');
+              other!.exec("INSERT OR REPLACE INTO map_nodes (id, body) VALUES ('competing-cache', '{}')");
+              other!.exec('COMMIT');
+            } catch (error) {
+              if (!(error instanceof Error) || !('code' in error) || error.code !== 'SQLITE_BUSY') throw error;
             }
-            return snapshot.file(path);
-          },
-        };
-      },
+          }
+          return snapshot.file(path);
+        },
+      };
     };
     const side = (commit: string, whole: boolean, paths: readonly string[]): Side => {
       const side: Side = {
@@ -63,22 +59,21 @@ test('a competing cache writer does not lose literals needed by an unchanged sou
         paths,
         facts: null,
         read: async (path) => {
-          const tree = index.snapshot(side).tree;
+          const tree = index(side).tree;
           return tree.has(path) ? tree.read(path) : null;
         },
       };
       return side;
     };
     const params = { source, exclude: [] };
-    vendorIndex(root, base, params, competing)(side(base, true, []));
+    vendorJudge(root, base, params, competing).whole(side(base, true, []));
     put('packages/adapter-orbit/src/adapter.ts', "export const ORBIT_PROVIDER = 'orbit'; export const FUTURE_PROVIDER = 'future-cloud';");
     git('add', '.');
     const tree = git('write-tree');
     const changed = ['packages/adapter-orbit/src/adapter.ts'];
-    const read = vendorIndex(root, tree, params, indexes(root, tree));
-    read(side(base, false, changed));
-    const found = read(side(tree, false, changed));
-    expect(found.findings.map((one) => one.fingerprint)).toEqual([`vendor:future-cloud:${target}`]);
+    const found = vendorJudge(root, tree, params, index).affected(side(base, false, changed), side(tree, false, changed));
+    expect(found.tree.map((one) => one.fingerprint)).toEqual([`vendor:future-cloud:${target}`]);
+    expect(found.base).toEqual([]);
   } finally {
     other?.close();
     main?.close();

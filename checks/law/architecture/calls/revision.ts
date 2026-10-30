@@ -1,22 +1,17 @@
 import { createHash } from 'node:crypto';
-import { Result, Schema } from 'effect';
 import type { TreeDifference } from '@runlith/git/trees';
 import type { Finding, Side } from '@runlith/tagma/rules';
-import { ProgramFinding } from '@tagma/inspection/program';
 import { isManifest, movedPackages } from '../../declarations/corpus';
 import { blobTexts } from '../../git';
 import { blobsAt, changesBetween, FAR, GOOD_ENOUGH, importersByName, importersOf, manifestsAt, prepare } from '../../declarations/index';
-import { revisionAt, saveRevision } from '../../declarations/memo';
+import { derivedMap, recentRoots, rootAt, seededMap, valueAt } from '../../maps';
 import { versionAt } from '../cache';
 import { production, snapshots, within } from '../snapshot';
-import { type Analysis, callAnalysis, callFrontier, carrying, type Importers } from './analysis';
+import { callAnalysis, callFrontier, carrying, type Carriers, type Importers } from './analysis';
 import type { CallParams } from './params';
 import { inRegion, type World, worldOf } from './world';
 
-const record = Schema.Struct({ findings: Schema.Array(ProgramFinding), carriers: Schema.Array(Schema.String) });
-const revisions = Schema.Array(Schema.String);
-
-const KEPT = 6;
+const NEARBY = 6;
 
 const sorted = (findings: readonly Finding[]): readonly Finding[] =>
   [...findings].sort((left, right) => (left.path === right.path ? (left.line ?? 0) - (right.line ?? 0) : left.path < right.path ? -1 : 1));
@@ -29,27 +24,30 @@ const side = (commit: string, whole: boolean, paths: readonly string[] = []): Si
   facts: null,
 });
 
+type Advance = {
+  readonly id: string;
+  readonly affected: ReadonlySet<string>;
+  readonly before: World | undefined;
+  readonly after: World | undefined;
+  readonly relevant: Carriers;
+};
+
+let held: ReturnType<typeof snapshots> | undefined;
+let heldRoot: string | undefined;
+const snapshotsOf = (root: string): ReturnType<typeof snapshots> => {
+  if (held === undefined || heldRoot !== root) {
+    held = snapshots(root);
+    heldRoot = root;
+  }
+  return held;
+};
+
 export const judgements = (root: string, params: CallParams, versionRevision: string) => {
   const signature = createHash('sha1').update(JSON.stringify(params)).digest('hex').slice(0, 16);
-  const prefix = `calls:${versionAt(root, versionRevision)}:${signature}`;
-  const snapshot = snapshots(root);
-  const recentKey = `${prefix}:recent`;
+  const family = `calls:${versionAt(root, versionRevision)}:${signature}`;
+  const snapshot = snapshotsOf(root);
 
-  const recent = (): readonly string[] => {
-    const decoded = Schema.decodeUnknownResult(revisions)(revisionAt(root, recentKey));
-    return Result.isFailure(decoded) ? [] : decoded.success;
-  };
-
-  const held = (commit: string): Analysis | undefined => {
-    const decoded = Schema.decodeUnknownResult(record)(revisionAt(root, `${prefix}:${commit}`));
-    return Result.isFailure(decoded) ? undefined : (decoded.success as Analysis);
-  };
-
-  const save = (commit: string, one: Analysis): Analysis => {
-    saveRevision(root, `${prefix}:${commit}`, one);
-    saveRevision(root, recentKey, [commit, ...recent().filter((entry) => entry !== commit)].slice(0, KEPT));
-    return one;
-  };
+  const carriersAt = (id: string): Carriers => ({ has: (path) => valueAt(root, id, `k:${path}`) !== undefined });
 
   const importersAcross =
     (...revisionsOf: readonly string[]): Importers =>
@@ -76,82 +74,104 @@ export const judgements = (root: string, params: CallParams, versionRevision: st
     };
   };
 
-  const whole = (commit: string): Analysis => {
-    const known = held(commit);
-    if (known !== undefined) return known;
+  const whole = (commit: string): readonly Finding[] => {
     prepare(root, commit, null);
     const packages = manifestsAt(root, commit);
     const view = snapshot(side(commit, true), ['']);
     const analysis = callAnalysis(worldOf(view, { packages, aliases: params.aliases }), params, undefined, importersAcross(commit));
-    return save(commit, { findings: sorted(analysis.findings), carriers: [...analysis.carriers].sort() });
+    seededMap(
+      root,
+      family,
+      commit,
+      analysis.carriers.map((path) => [`k:${path}`, 1] as const),
+    );
+    return sorted(analysis.findings);
   };
 
-  const nearest = (commit: string): { readonly revision: string; readonly one: Analysis; readonly changes: readonly TreeDifference[] } => {
-    let best: { readonly revision: string; readonly one: Analysis; readonly changes: readonly TreeDifference[] } | undefined;
-    for (const revision of recent()) {
-      const one = held(revision);
-      if (one === undefined) continue;
-      const changes = changesBetween(root, revision, commit);
-      if (best === undefined || changes.length < best.changes.length) best = { revision, one, changes };
-      if (changes.length < GOOD_ENOUGH) break;
-    }
-    if (best === undefined || best.changes.length > FAR)
-      throw new Error(
-        `no cached ask-calls findings within ${FAR} changed files of ${commit}; build them with check_rules over "all" for the ask-calls rule, then judge the change again`,
-      );
-    return best;
-  };
-
-  const derive = (commit: string): Analysis => {
-    const { revision, one: standing, changes } = nearest(commit);
-    prepare(root, commit, revision);
+  const advance = (
+    commit: string,
+    source: { readonly revision: string; readonly id: string },
+    changes: readonly TreeDifference[],
+  ): Advance => {
+    prepare(root, commit, source.revision);
+    const standing = carriersAt(source.id);
     const universe = (path: string): boolean => production(path) && (inRegion(path, params) || within(path, 'packages'));
     const touched = changes.filter((change) => universe(change.path));
-    const before = manifestsAt(root, revision);
+    const before = manifestsAt(root, source.revision);
     const after = manifestsAt(root, commit);
     const moved = movedPackages(before, after);
     if (touched.length === 0 && moved.before.length === 0 && moved.after.length === 0 && !changes.some((change) => isManifest(change.path)))
-      return save(commit, standing);
+      return {
+        id: derivedMap(root, family, commit, source.id, new Map()),
+        affected: new Set(),
+        before: undefined,
+        after: undefined,
+        relevant: standing,
+      };
     const names = [...new Set([...moved.before, ...moved.after].map((entry) => entry.name))];
     const seeds = new Set(touched.map((change) => change.path));
     if (names.length > 0)
-      for (const at of new Set([revision, commit])) for (const entry of importersByName(root, at, names, universe)) seeds.add(entry.path);
+      for (const at of new Set([source.revision, commit]))
+        for (const entry of importersByName(root, at, names, universe)) seeds.add(entry.path);
     const forced = new Set(touched.filter((change) => change.before === null || change.after === null).map((change) => change.path));
     const view = (at: string, existing: (change: TreeDifference) => boolean) => {
       const scope = [...new Set([...seeds, ...touched.filter(existing).map((change) => change.path)])];
       return snapshot(side(at, false, scope), scope.length === 0 ? ['package.json'] : scope);
     };
-    const catalogBefore = { packages: before, aliases: params.aliases };
-    const catalogAfter = { packages: after, aliases: params.aliases };
     const beforeWorld = batched(
       worldOf(
-        view(revision, (change) => change.before !== null),
-        catalogBefore,
+        view(source.revision, (change) => change.before !== null),
+        { packages: before, aliases: params.aliases },
       ),
-      revision,
+      source.revision,
     );
     const afterWorld = batched(
       worldOf(
         view(commit, (change) => change.after !== null),
-        catalogAfter,
+        { packages: after, aliases: params.aliases },
       ),
       commit,
     );
-    const known = new Set(standing.carriers);
-    const affected = callFrontier(beforeWorld, afterWorld, params, [...seeds], importersAcross(revision, commit), forced, known);
-    const existing = affected.filter((path) => afterWorld.read(path) !== undefined);
-    const judged = existing.filter((path) => inRegion(path, params));
-    const relevant = new Set([...known, ...affected]);
-    const analysis = callAnalysis({ ...afterWorld, paths: judged }, params, judged, undefined, relevant);
-    const moving = new Set(affected);
-    const carriers = [...standing.carriers.filter((path) => !moving.has(path)), ...carrying(afterWorld, params, existing, relevant)];
-    return save(commit, {
-      findings: sorted([...standing.findings.filter((entry) => !moving.has(entry.path)), ...analysis.findings]),
-      carriers: [...new Set(carriers)].sort(),
-    });
+    const affected = new Set(
+      callFrontier(beforeWorld, afterWorld, params, [...seeds], importersAcross(source.revision, commit), forced, standing),
+    );
+    const relevant: Carriers = { has: (path) => affected.has(path) || standing.has(path) };
+    const existing = [...affected].filter((path) => afterWorld.read(path) !== undefined);
+    const bearing = new Set(carrying(afterWorld, params, existing, relevant));
+    const rows = new Map<string, unknown>();
+    for (const path of affected) rows.set(`k:${path}`, bearing.has(path) ? 1 : undefined);
+    return { id: derivedMap(root, family, commit, source.id, rows), affected, before: beforeWorld, after: afterWorld, relevant };
   };
 
-  const at = (commit: string): Analysis => held(commit) ?? derive(commit);
+  const stateOf = (commit: string): string => {
+    const known = rootAt(root, family, commit);
+    if (known !== undefined) return known;
+    let best: { readonly revision: string; readonly id: string; readonly changes: readonly TreeDifference[] } | undefined;
+    for (const one of recentRoots(root, family, NEARBY)) {
+      const changes = changesBetween(root, one.revision, commit);
+      if (best === undefined || changes.length < best.changes.length) best = { revision: one.revision, id: one.id, changes };
+      if (changes.length < GOOD_ENOUGH) break;
+    }
+    if (best === undefined || best.changes.length > FAR)
+      throw new Error(
+        `no ask-calls state within ${FAR} changed files of ${commit}; build it with check_rules over "all" for the ask-calls rule, then judge the change again`,
+      );
+    return advance(commit, best, best.changes).id;
+  };
 
-  return { whole, at, save };
+  const affected = (
+    base: string,
+    tree: string,
+  ): { readonly paths: ReadonlySet<string>; readonly base: readonly Finding[]; readonly tree: readonly Finding[] } => {
+    const baseId = stateOf(base);
+    const moved = advance(tree, { revision: base, id: baseId }, changesBetween(root, base, tree));
+    const findingsOf = (world: World | undefined): readonly Finding[] => {
+      if (world === undefined) return [];
+      const judged = [...moved.affected].filter((path) => world.read(path) !== undefined && inRegion(path, params));
+      return sorted(callAnalysis({ ...world, paths: judged }, params, judged, undefined, moved.relevant).findings);
+    };
+    return { paths: moved.affected, base: findingsOf(moved.before), tree: findingsOf(moved.after) };
+  };
+
+  return { whole, affected };
 };

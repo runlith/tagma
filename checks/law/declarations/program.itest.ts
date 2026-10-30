@@ -7,8 +7,6 @@ import type { Side } from '@runlith/tagma/rules';
 import { ProgramAnswer, type ProgramInvocation } from '@tagma/inspection/program';
 import { Schema } from 'effect';
 import type { DeadParams, RepeatedParams } from './declaration';
-import { prepare } from './index';
-import { revisionAt, saveRevision } from './memo';
 import { programs } from './program';
 
 const dead: DeadParams = {
@@ -67,11 +65,16 @@ const judged = async (
   paths: readonly string[],
   params: DeadParams | RepeatedParams = key === 'dead-code' ? dead : repeated,
 ) => {
-  const run = programs(root)[key] as unknown as (
-    input: unknown,
-  ) => Promise<{ tree: { findings: { fingerprint: string }[]; covered?: string }; base?: { findings: { fingerprint: string }[] } }>;
+  type Reading = { findings: { fingerprint: string; path: string }[]; covered?: string | string[] };
+  const run = programs(root)[key] as unknown as (input: unknown) => Promise<{ tree: Reading; base?: Reading }>;
   const commit = await run({ params, tree: side(tree, paths), base: side(base, paths) });
-  const whole = await run({ params, tree: side(tree, null), base: side(base, null) });
+  const entire = await run({ params, tree: side(tree, null), base: side(base, null) });
+  const covering = (reading: Reading | undefined, whole: Reading | undefined): Reading | undefined => {
+    if (!Array.isArray(reading?.covered)) throw new Error('a commit judgment answers explicit covered paths');
+    const covered = new Set(reading.covered);
+    return { findings: (whole?.findings ?? []).filter((one) => covered.has(one.path)) };
+  };
+  const whole = { tree: covering(commit.tree, entire.tree)!, base: covering(commit.base, entire.base) };
   return { commit, whole };
 };
 
@@ -101,11 +104,22 @@ test('a commit that removes the last production importer of an export in another
   await index(base);
   const tree = treeWith({ 'src/user.ts': 'export const viaUser = () => 0;\n' });
   const { commit, whole } = await judged('dead-code', base, tree, ['src/user.ts']);
-  expect(commit.tree.covered).toBe('reach');
   expect(fingerprints(commit.tree)).toEqual(['dead src/lib.ts#helper']);
   expect(fingerprints(commit.tree)).toEqual(fingerprints(whole.tree));
   expect(fingerprints(commit.base)).toEqual([]);
   expect(fingerprints(commit.base)).toEqual(fingerprints(whole.base));
+});
+
+test('a commit answers its affected paths only: a standing finding in an unrelated file is neither reported nor covered', async () => {
+  const base = treeWith({ ...initial, 'src/stale.ts': 'export const stale = 1;\n' });
+  await index(base);
+  const tree = treeWith({ 'src/user.ts': 'export const viaUser = () => 0;\n' });
+  const { commit, whole } = await judged('dead-code', base, tree, ['src/user.ts']);
+  expect(commit.tree.covered).toContain('src/lib.ts');
+  expect(commit.tree.covered).not.toContain('src/stale.ts');
+  expect(fingerprints(commit.tree)).toEqual(['dead src/lib.ts#helper']);
+  expect(fingerprints(commit.base)).toEqual([]);
+  expect(fingerprints(whole.tree)).toEqual(['dead src/lib.ts#helper']);
 });
 
 test('an importer rewritten without dropping its import keeps the export live although the index still holds its older text', async () => {
@@ -170,15 +184,6 @@ test('a base nobody judged before is derived from the nearest indexed tree; with
   expect(fingerprints(commit.tree)).toContain('dead src/lib.ts#more');
 });
 
-test('an indexed base with no cached findings and no cached tree nearby is never computed whole at commit time', async () => {
-  const base = treeWith(initial);
-  prepare(root, base, null);
-  const tree = treeWith({ 'src/lib.ts': 'export const used = () => 1;\nexport const helper = () => 2;\nexport const more = () => 3;\n' });
-  await expect(
-    programs(root)['dead-code']({ params: dead, tree: side(tree, ['src/lib.ts']), base: side(base, ['src/lib.ts']) }),
-  ).rejects.toThrow('no cached dead-code findings');
-});
-
 const packaged = (exported: Record<string, string>) => ({
   'src/entry.ts': "import { x } from '@acme/a/x';\nimport { y } from '@acme/a/y';\nexport const run = () => [x, y];\n",
   'pkgs/a/package.json': JSON.stringify({ name: '@acme/a', exports: exported }),
@@ -191,7 +196,7 @@ test('a package manifest that stops exporting a file makes its unchanged exports
   await index(base, wide);
   const tree = treeWith({ 'pkgs/a/package.json': JSON.stringify({ name: '@acme/a', exports: { './x': './src/x.ts' } }) });
   const { commit, whole } = await judged('dead-code', base, tree, ['pkgs/a/package.json'], wide);
-  expect(commit.tree.covered).toBe('reach');
+  expect(commit.tree.covered).toEqual(expect.arrayContaining(['pkgs/a/package.json', 'pkgs/a/src/y.ts']));
   expect(fingerprints(commit.tree)).toEqual(['dead pkgs/a/src/y.ts#y']);
   expect(fingerprints(commit.tree)).toEqual(fingerprints(whole.tree));
   expect(fingerprints(commit.base)).toEqual([]);
@@ -297,10 +302,4 @@ test('the production law programme routes both declaration keys through its root
   expect(of('dead').covered).toEqual({ scope: 'reach' });
   expect(of('dead').findings.map((one) => one.fingerprint)).toEqual(['dead src/a.ts#Wide', 'dead src/b.ts#Copy', 'dead src/lib.ts#orphan']);
   expect(of('repeated').findings.map((one) => one.path)).toEqual(['src/a.ts', 'src/b.ts']);
-});
-
-test('a revision memo keeps JSON values by key across handles', () => {
-  saveRevision(root, 'probe/1', { files: 3, nested: ['a'] });
-  expect(revisionAt(root, 'probe/1')).toEqual({ files: 3, nested: ['a'] });
-  expect(revisionAt(root, 'probe/2')).toBeUndefined();
 });

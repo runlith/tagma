@@ -152,7 +152,7 @@ export class Registry {
   constructor(
     readonly world: World,
     readonly params: CallParams,
-    private readonly relevant?: ReadonlySet<string>,
+    private readonly relevant?: { readonly has: (path: string) => boolean },
   ) {
     this.isRow = matcher(params.rows);
   }

@@ -152,6 +152,12 @@ const populated = (root: string, tree: string): void => {
     if (regular(entry) && indexable(path)) entries.push({ path, blob: entry.object });
   learn(root, entries);
   pruned(root, entries, tree);
+  seededMap(
+    root,
+    MANIFESTS,
+    tree,
+    entries.filter((one) => isManifest(one.path)).map((one) => [one.path, one.blob] as const),
+  );
 };
 
 export const changesBetween = (root: string, base: string, tree: string): readonly TreeDifference[] => {
@@ -168,11 +174,20 @@ export const changesBetween = (root: string, base: string, tree: string): readon
   return changes;
 };
 
+const MANIFESTS = 'manifests';
+
+const KEPT_INDEXED = 256;
+
 const isIndexed = (root: string, tree: string): boolean =>
-  settled.has(`${root}\0${tree}`) || databaseAt(root).query('SELECT 1 FROM indexed WHERE tree = ?').get(tree) !== null;
+  (settled.has(`${root}\0${tree}`) || databaseAt(root).query('SELECT 1 FROM indexed WHERE tree = ?').get(tree) !== null) &&
+  rootAt(root, MANIFESTS, tree) !== undefined;
 
 const mark = (root: string, tree: string): void => {
-  databaseAt(root).query('INSERT OR REPLACE INTO indexed (tree, at) VALUES (?, ?)').run(tree, Date.now());
+  const database = databaseAt(root);
+  database.transaction(() => {
+    database.query('INSERT OR REPLACE INTO indexed (tree, at) VALUES (?, ?)').run(tree, Date.now());
+    database.query('DELETE FROM indexed WHERE tree IN (SELECT tree FROM indexed ORDER BY at DESC LIMIT -1 OFFSET ?)').run(KEPT_INDEXED);
+  })();
   settled.add(`${root}\0${tree}`);
 };
 
@@ -189,7 +204,9 @@ const ensure = (root: string, tree: string, hint: string | null, populate: boole
     .all(NEARBY)
     .map((one) => one.tree);
   let best: { readonly source: string; readonly changes: readonly TreeDifference[] } | undefined;
-  for (const source of [...new Set([...(hint !== null && isIndexed(root, hint) ? [hint] : []), ...recent])]) {
+  for (const source of [...new Set([...(hint !== null && isIndexed(root, hint) ? [hint] : []), ...recent])].filter((one) =>
+    isIndexed(root, one),
+  )) {
     const changes = changesBetween(root, source, tree);
     if (best === undefined || changes.length < best.changes.length) best = { source, changes };
     if (changes.length < GOOD_ENOUGH) break;
@@ -398,33 +415,33 @@ export const sharingShapes = (root: string, commit: string, keys: readonly strin
   );
 };
 
-const manifestKey = (commit: string): string => `declarations/manifests/${commit}`;
+const derivedManifests = (root: string, base: string, tree: string, changes: readonly TreeDifference[]): void => {
+  const from = rootAt(root, MANIFESTS, base);
+  if (from === undefined)
+    throw new Error(
+      `the declaration index holds no manifests of ${base}; build it with check_rules over "all", then judge the change again`,
+    );
+  const rows = new Map<string, string | undefined>();
+  for (const one of changes) if (isManifest(one.path)) rows.set(one.path, one.after ?? undefined);
+  derivedMap(root, MANIFESTS, tree, from, rows);
+};
 
-const manifestEntries = (root: string, commit: string): readonly BlobAt[] => {
-  const held = revisionAt(root, manifestKey(commit)) as readonly BlobAt[] | undefined;
-  if (held !== undefined) return held;
-  const rows = databaseAt(root).query<BlobAt, []>('SELECT path, blob FROM places WHERE blob IN (SELECT blob FROM manifests)').all();
-  const found = standing(
+const packaged = new Map<string, readonly Package[]>();
+
+export const manifestsAt = (root: string, commit: string): readonly Package[] => {
+  const id = rootAt(root, MANIFESTS, commit);
+  if (id === undefined)
+    throw new Error(
+      `the declaration index holds no manifests of ${commit}; build it with check_rules over "all", then judge the change again`,
+    );
+  const key = `${root}\0${id}`;
+  const known = packaged.get(key);
+  if (known !== undefined) return known;
+  const found = packagesAt(
     root,
-    commit,
-    rows.filter((one) => isManifest(one.path)),
+    entriesOf(root, id).map(([path, blob]) => ({ path, blob: blob as string })),
   );
-  saveRevision(root, manifestKey(commit), found);
+  if (packaged.size > 64) packaged.clear();
+  packaged.set(key, found);
   return found;
 };
-
-const derivedManifests = (root: string, base: string, tree: string, changes: readonly TreeDifference[]): void => {
-  const found = new Map(manifestEntries(root, base).map((one) => [one.path, one.blob]));
-  for (const one of changes)
-    if (isManifest(one.path)) {
-      if (one.after === null) found.delete(one.path);
-      else found.set(one.path, one.after);
-    }
-  saveRevision(
-    root,
-    manifestKey(tree),
-    [...found].map(([path, blob]) => ({ path, blob })),
-  );
-};
-
-export const manifestsAt = (root: string, commit: string): Package[] => packagesAt(root, manifestEntries(root, commit));

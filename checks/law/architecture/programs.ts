@@ -1,18 +1,34 @@
-import { defineProgram } from '@runlith/tagma/rules';
+import { defineProgram, type Answer, type Finding, type InspectionInput, type Side } from '@runlith/tagma/rules';
 import type { CouplingParams, VendorParams } from './inspections';
-import { couplingFindings, measuresOf } from './coupling';
-import { moduleOwners } from './snapshot';
-import { vendorIndex } from './vendors';
-import { indexes } from './indexes';
+import { couplingJudge } from './measured';
+import { snapshots } from './snapshot';
+import { vendorJudge } from './vendors';
 
-const held = new Map<string, ReturnType<typeof indexes>>();
-const indexAt = (revision: string): ReturnType<typeof indexes> => {
-  let index = held.get(revision);
-  if (index === undefined) {
-    index = indexes(process.cwd(), revision);
-    held.set(revision, index);
+type Judged = {
+  readonly whole: (tree: Side, base: Side | null) => { readonly tree: readonly Finding[]; readonly base: readonly Finding[] | undefined };
+  readonly affected: (
+    base: Side,
+    tree: Side,
+  ) => { readonly paths: ReadonlySet<string>; readonly base: readonly Finding[]; readonly tree: readonly Finding[] };
+};
+
+const root = (): string => process.cwd();
+
+let held: ReturnType<typeof snapshots> | undefined;
+const snapshot = (): ReturnType<typeof snapshots> => (held ??= snapshots(root()));
+
+const answered = <P extends object>(input: InspectionInput<P>, judged: Judged): Answer => {
+  const { tree, base } = input;
+  if (tree.whole || base === null || base.whole) {
+    const found = judged.whole(tree, base);
+    return {
+      tree: { covered: 'reach', findings: found.tree },
+      base: found.base === undefined ? undefined : { covered: 'reach', findings: found.base },
+    };
   }
-  return index;
+  const found = judged.affected(base, tree);
+  const covered = (side: Side): readonly string[] => [...new Set([...found.paths, ...side.paths])];
+  return { tree: { covered: covered(tree), findings: found.tree }, base: { covered: covered(base), findings: found.base } };
 };
 
 export default defineProgram<{
@@ -20,44 +36,11 @@ export default defineProgram<{
   coupling: CouplingParams;
 }>({
   'vendor-ids': (input) => {
-    const read = vendorIndex(process.cwd(), input.tree.commit, input.params, indexAt(input.tree.commit));
-    const base = input.base === null ? null : read(input.base);
-    const tree = read(input.tree);
-    return {
-      tree: { covered: 'reach', findings: tree.findings },
-      base: base === null ? undefined : { covered: 'reach', findings: base.findings },
-    };
-  },
-  coupling: (input) => {
-    const index = indexAt(input.tree.commit);
-    const prior = input.base === null ? null : index.coupling(input.base, input.params.aliases);
-    const base = prior === null ? null : measuresOf(prior.totals);
-    const tree = index.coupling(input.tree, input.params.aliases);
-    const paths = new Map<string, string>();
-    const owners = [moduleOwners(tree.modules), moduleOwners(prior?.modules ?? [])];
-    const cards = new Map(
-      [...(prior?.modules ?? []), ...tree.modules].filter((one) => one.card !== undefined).map((one) => [one.card!, one.id]),
-    );
-    const metadata = input.tree.paths.find(
-      (path) => path === 'package.json' || path.endsWith('/package.json') || path.startsWith('.tagma/'),
-    );
-    for (const path of input.tree.paths) {
-      for (const owner of owners) {
-        const module = owner(path);
-        if (module !== undefined && !paths.has(module.id)) paths.set(module.id, path);
-      }
-      const id = cards.get(path);
-      if (id !== undefined) paths.set(id, path);
-    }
-    const findings = couplingFindings(measuresOf(tree.totals), input.params, base).map((one) => {
-      if (!/:(?:modules|share)-(?:increase|ceiling)$/.test(one.fingerprint)) return one;
-      const id = one.fingerprint.slice('coupling:'.length, one.fingerprint.lastIndexOf(':'));
-      const path = paths.get(id) ?? metadata;
-      return path === undefined ? one : { ...one, path };
+    const judge = vendorJudge(root(), input.tree.commit, input.params, snapshot());
+    return answered(input, {
+      whole: (tree, base) => ({ tree: judge.whole(tree), base: base === null ? undefined : judge.whole(base) }),
+      affected: judge.affected,
     });
-    return {
-      tree: { covered: 'reach', findings },
-      base: base === null ? undefined : { covered: 'reach', findings: couplingFindings(base, input.params, null) },
-    };
   },
+  coupling: (input) => answered(input, couplingJudge(root(), input.tree.commit, input.params, snapshot())),
 });

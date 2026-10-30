@@ -41,11 +41,10 @@ export const membersOf = (snapshot: Snapshot): readonly Package[] => {
 
 export const contributions = (
   snapshot: Snapshot,
-  modules: readonly Module[],
+  owner: (path: string) => { readonly id: string } | undefined,
   members: readonly Package[],
   aliases: readonly Alias[],
 ): readonly Contribution[] => {
-  const owner = moduleOwners(modules);
   const resolver = resolverOf(
     {
       has: snapshot.tree.has,
@@ -127,7 +126,7 @@ export const indexCoupling = (snapshot: Snapshot, revision: string, aliases: rea
   const modules = snapshot.modules;
   const packages = membersOf(snapshot);
   const totals: Record<string, Totals> = Object.create(null);
-  applyContributions(totals, contributions(snapshot, modules, packages, aliases), 1);
+  applyContributions(totals, contributions(snapshot, moduleOwners(modules), packages, aliases), 1);
   return { revision, modules, packages, totals };
 };
 

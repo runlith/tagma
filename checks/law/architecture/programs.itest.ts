@@ -74,8 +74,13 @@ test('the inspection runner compares each version, keeps partial coverage honest
       const findings = (key: string, side: string) => answer.readings.find((one) => one.key === key && one.side === side)!;
       expect(findings('vendors', 'tree').findings.map((one) => one.path)).toEqual(changed);
       expect(findings('vendors', 'base').findings).toHaveLength(0);
-      expect(findings('vendors', 'tree').covered).toEqual({ scope: 'reach' });
-      expect(findings('coupling', 'tree').covered).toEqual({ scope: 'reach' });
+      if (whole) {
+        expect(findings('vendors', 'tree').covered).toEqual({ scope: 'reach' });
+        expect(findings('coupling', 'tree').covered).toEqual({ scope: 'reach' });
+      } else {
+        expect(findings('vendors', 'tree').covered).toEqual(expect.arrayContaining(changed));
+        expect(findings('coupling', 'tree').covered).toEqual(expect.arrayContaining(changed));
+      }
       const metric = whole ? 'ceiling' : 'increase';
       expect(findings('coupling', 'tree').findings.find((one) => one.fingerprint === `coupling:server:modules-${metric}`)?.value).toBe(1);
       expect(findings('coupling', 'tree').findings.find((one) => one.fingerprint === `coupling:server:share-${metric}`)?.value).toBe(1 / 3);
@@ -119,6 +124,18 @@ test('the inspection runner compares each version, keeps partial coverage honest
     const vendors = declaredAnswer.readings.find((one) => one.side === 'tree')!.findings;
     expect(vendors.some((one) => one.fingerprint === `vendor:future-cloud:${source}/translations/future.ts`)).toBe(true);
     expect(declaredAnswer.readings.find((one) => one.side === 'base')!.findings.some((one) => one.path.endsWith('/future.ts'))).toBe(false);
+    expect(declaredAnswer.readings.find((one) => one.side === 'tree')!.covered).toEqual(
+      expect.arrayContaining([`${source}/translations/future.ts`]),
+    );
+
+    put('packages/adapter-orbit/src/models.ts', "export const ORBIT_PROVIDER = 'orbit-cloud';");
+    git('add', '.');
+    const undeclared = git('write-tree');
+    const retired = run({ ...vendorInput, tree: undeclared, base: declared });
+    const retiredBase = retired.readings.find((one) => one.side === 'base')!;
+    expect(retiredBase.findings.some((one) => one.fingerprint === `vendor:future-cloud:${source}/translations/future.ts`)).toBe(true);
+    expect(retiredBase.covered).toEqual(expect.arrayContaining([`${source}/translations/future.ts`]));
+    expect(retired.readings.find((one) => one.side === 'tree')!.findings.some((one) => one.path.endsWith('/future.ts'))).toBe(false);
 
     const calls = {
       region: [`${source}/`],
@@ -199,16 +216,30 @@ test('the inspection runner compares each version, keeps partial coverage honest
     expect(built.tree.covered).toEqual({ scope: 'reach' });
     expect(prints(built.tree)).toEqual([direct1]);
 
+    const covering = (
+      reading: { readonly findings: readonly { readonly fingerprint: string; readonly path: string }[] } | undefined,
+      covered: unknown,
+    ) => {
+      if (!Array.isArray(covered)) throw new Error('a commit judgment answers explicit covered paths');
+      return reading?.findings
+        .filter((one) => covered.includes(one.path))
+        .map((one) => one.fingerprint)
+        .sort();
+    };
     const moved2 = read(second, first, [`${source}/providers/open.ts`]);
-    expect(moved2.tree.covered).toEqual({ scope: 'reach' });
-    expect(prints(moved2.base)).toEqual([direct1]);
-    expect(prints(moved2.tree)).toEqual([caller2, direct1].sort());
-    expect(prints(moved2.tree)).toEqual(prints(read(second, null, null, independent).tree));
+    expect(moved2.tree.covered).toEqual(expect.arrayContaining([`${source}/providers/open.ts`, `${source}/translations/caller.ts`]));
+    expect(moved2.tree.covered).not.toContain(`${source}/translations/direct.ts`);
+    expect(prints(moved2.base)).toEqual([]);
+    expect(prints(moved2.tree)).toEqual([caller2]);
+    expect(prints(moved2.tree)).toEqual(covering(read(second, null, null, independent).tree, moved2.tree.covered));
+    expect(prints(moved2.base)).toEqual(covering(read(first, null, null, independent).tree, moved2.base!.covered));
 
     const swapped = [`${source}/translations/direct.ts`, `${source}/translations/late.ts`];
     const moved3 = read(third, second, swapped);
-    expect(prints(moved3.tree)).toEqual([caller2, late3].sort());
-    expect(prints(moved3.tree)).toEqual(prints(read(third, null, null, independent).tree));
+    expect(prints(moved3.base)).toEqual([direct1]);
+    expect(prints(moved3.tree)).toEqual([late3]);
+    expect(prints(moved3.tree)).toEqual(covering(read(third, null, null, independent).tree, moved3.tree.covered));
+    expect(prints(moved3.base)).toEqual(covering(read(second, null, null, independent).tree, moved3.base!.covered));
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

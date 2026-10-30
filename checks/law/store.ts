@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { Database } from 'bun:sqlite';
 import { git } from './git';
 
-const INDEX = ['facts', 'places', 'links', 'shapes', 'manifests', 'indexed', 'results'] as const;
+const INDEX = ['facts', 'places', 'links', 'shapes', 'manifests', 'indexed', 'map_roots'] as const;
 
 const SCHEMA = [
   'CREATE TABLE IF NOT EXISTS facts (blob TEXT NOT NULL, class TEXT NOT NULL, data TEXT NOT NULL, PRIMARY KEY (blob, class)) WITHOUT ROWID',
@@ -13,8 +13,10 @@ const SCHEMA = [
   'CREATE TABLE IF NOT EXISTS shapes (key TEXT NOT NULL, blob TEXT NOT NULL, PRIMARY KEY (key, blob)) WITHOUT ROWID',
   'CREATE TABLE IF NOT EXISTS manifests (blob TEXT PRIMARY KEY, data TEXT NOT NULL) WITHOUT ROWID',
   'CREATE TABLE IF NOT EXISTS indexed (tree TEXT PRIMARY KEY, at INTEGER NOT NULL) WITHOUT ROWID',
-  'CREATE TABLE IF NOT EXISTS results (family TEXT NOT NULL, key TEXT PRIMARY KEY, value TEXT NOT NULL, at INTEGER NOT NULL) WITHOUT ROWID',
-  'CREATE TABLE IF NOT EXISTS memo (key TEXT PRIMARY KEY, value TEXT NOT NULL, at INTEGER NOT NULL) WITHOUT ROWID',
+  'DROP TABLE IF EXISTS results',
+  'DROP TABLE IF EXISTS memo',
+  'CREATE TABLE IF NOT EXISTS map_nodes (id TEXT PRIMARY KEY, body TEXT NOT NULL) WITHOUT ROWID',
+  'CREATE TABLE IF NOT EXISTS map_roots (family TEXT NOT NULL, revision TEXT NOT NULL, root TEXT NOT NULL, at INTEGER NOT NULL, PRIMARY KEY (family, revision)) WITHOUT ROWID',
   'CREATE TABLE IF NOT EXISTS meta (name TEXT PRIMARY KEY, version TEXT NOT NULL) WITHOUT ROWID',
   'CREATE TABLE IF NOT EXISTS nodes (tree TEXT PRIMARY KEY, entries TEXT NOT NULL) WITHOUT ROWID',
   'CREATE TABLE IF NOT EXISTS roots (revision TEXT PRIMARY KEY, tree TEXT NOT NULL, at INTEGER NOT NULL) WITHOUT ROWID',
@@ -29,8 +31,8 @@ const version = (): string => {
     'declarations/index.ts',
     'store.ts',
     'directories.ts',
+    'maps.ts',
     'git.ts',
-    'declarations/results.ts',
     'declarations/gate.ts',
     'declarations/dead.ts',
     'declarations/repeated.ts',
