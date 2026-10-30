@@ -23,28 +23,6 @@
       "types": "./src/runner/run.ts",
       "bun": "./src/runner/run.ts",
       "default": "./src/runner/run.ts"
-    },
-    "./host": {
-      "types": "./src/host.ts",
-      "bun": "./src/host.ts",
-      "default": "./src/host.ts"
-    },
-    "./environment": {
-      "types": "./src/environment.ts",
-      "bun": "./src/environment.ts",
-      "default": "./src/environment.ts"
-    },
-    "./selection": {
-      "types": "./src/selection.ts",
-      "browser": "./src/selection.ts",
-      "bun": "./src/selection.ts",
-      "default": "./src/selection.ts"
-    },
-    "./icon": {
-      "types": "./src/icon.ts",
-      "browser": "./src/icon.ts",
-      "bun": "./src/icon.ts",
-      "default": "./src/icon.ts"
     }
   },
   "scripts": {

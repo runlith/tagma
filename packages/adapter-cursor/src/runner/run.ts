@@ -7,7 +7,7 @@ import * as BunStdio from '@effect/platform-bun/BunStdio';
 import { cursorSelection } from '../selection.js';
 import { hostedAgent } from '@runlith/hosted-runner/agent';
 import type { HostedDoor } from '@runlith/hosted-runner/door';
-import { serveHosted, type HostedAsk, type HostedLaunch, type HostedRunner, type Invoked } from '@runlith/hosted-runner/run';
+import { hostedStdio, serveHosted, type HostedAsk, type HostedLaunch, type HostedRunner, type Invoked } from '@runlith/hosted-runner/run';
 import { CursorSdk } from './channel.js';
 import { makeCursorCycle } from './cycle.js';
 import { cursorSdk } from './sdk.js';
@@ -33,19 +33,7 @@ const runCursor = Effect.fnUntraced(function* (at: Invoked, door: HostedDoor, la
   if (!apiKey) return yield* new AgentFault({ code: FAULT.authRequired, message: 'Sign in to Cursor on the Providers screen.' });
   yield* prepareHome(directory);
   const sdk = cursorSdk(yield* Effect.promise(() => import('@cursor/sdk')));
-  const input = Stream.fromReadableStream({
-    evaluate: at.stdin,
-    onError: (cause) => new ExchangeFailed({ detail: `stdin failed: ${String(cause)}` }),
-  });
-  const out = Bun.stdout.writer();
-  const write = (bytes: Uint8Array) =>
-    Effect.try({
-      try: () => {
-        out.write(bytes);
-        out.flush();
-      },
-      catch: (cause) => new ExchangeFailed({ detail: `stdout failed: ${String(cause)}` }),
-    });
+  const { input, write } = hostedStdio(at);
   yield* serveHosted(
     input,
     write,

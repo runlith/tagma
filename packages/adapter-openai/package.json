@@ -33,10 +33,6 @@
       "node": "./src/models/openai.ts",
       "default": "./src/models/openai.ts"
     },
-    "./oauth/cli/codex": {
-      "types": "./src/oauth/cli/codex.ts",
-      "default": "./src/oauth/cli/codex.ts"
-    },
     "./oauth/vendors/openai": {
       "types": "./src/oauth/vendors/openai.ts",
       "default": "./src/oauth/vendors/openai.ts"

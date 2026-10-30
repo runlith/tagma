@@ -1,4 +1,10 @@
-import type { HarnessQuestionOption, HarnessWidgetKey, ScreenAsk, ScreenAskTyped } from '@runlith/tagma/adapter/harness';
+import {
+  navigateChoice,
+  type HarnessQuestionOption,
+  type HarnessWidgetKey,
+  type ScreenAsk,
+  type ScreenAskTyped,
+} from '@runlith/tagma/adapter/harness';
 
 const CLAUDE_SELECTED = /^(\s*)❯ (\d+)\. (.+)$/;
 const CLAUDE_NUMBERED = /^(\s*)(\d+)\. (.+)$/;
@@ -323,9 +329,5 @@ export const claudeWidgetKeys = (ask: ScreenAsk, values: readonly string[]): rea
   if (ask.freeform !== undefined) return answerKeys(ask, ask.freeform, value);
   if (ask.options.every((option) => option.value !== value)) return null;
   if (numbered(ask)) return digits(value);
-  if (ask.selected === null) return null;
-  const from = ask.options.findIndex((option) => option.value === ask.selected);
-  const to = ask.options.findIndex((option) => option.value === value);
-  if (from < 0) return null;
-  return [...walk(from, to), 'enter'];
+  return navigateChoice(ask, value);
 };

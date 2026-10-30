@@ -31,7 +31,29 @@ export type HostedRunner = {
   readonly ask?: (at: Invoked, ask: HostedAsk) => Effect.Effect<void, unknown>;
 };
 
-export type AgentFactory<R> = (process: Process) => Effect.Effect<(outlet: Outlet) => AgentHandlers<never>, AgentFault, R>;
+type AgentFactory<R> = (process: Process) => Effect.Effect<(outlet: Outlet) => AgentHandlers<never>, AgentFault, R>;
+
+type HostedStdio = {
+  readonly input: Stream.Stream<Uint8Array, ExchangeFailed>;
+  readonly write: (bytes: Uint8Array) => Effect.Effect<void, ExchangeFailed>;
+};
+
+export const hostedStdio = (at: Invoked): HostedStdio => {
+  const input = Stream.fromReadableStream({
+    evaluate: at.stdin,
+    onError: (cause) => new ExchangeFailed({ detail: `stdin failed: ${String(cause)}` }),
+  });
+  const out = Bun.stdout.writer();
+  const write = (bytes: Uint8Array) =>
+    Effect.try({
+      try: () => {
+        out.write(bytes);
+        out.flush();
+      },
+      catch: (cause) => new ExchangeFailed({ detail: `stdout failed: ${String(cause)}` }),
+    });
+  return { input, write };
+};
 
 export const serveHosted = Effect.fnUntraced(function* <R>(
   input: Stream.Stream<Uint8Array, ExchangeFailed>,

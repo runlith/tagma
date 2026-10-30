@@ -1,13 +1,13 @@
 import type { FileEffect, HarnessCall, HarnessPrinted, HookEvents, HookOccasion } from './harness';
-import { commandGroup, specificOutput, type HookCodec } from './hook';
+import { approvePermission, commandGroup, eventOutput, toolOutput, type HookCodec } from './hook';
 import { field, nested, questionTool, toolCall } from './payload';
 
 export const claudeCodec: HookCodec = {
   file: { keys: {}, events: ['hooks'], holes: false, trust: null, entry: commandGroup },
-  permission: ({ allowed, words }) => JSON.stringify({ decision: allowed ? 'approve' : 'deny', reason: words }),
+  permission: approvePermission,
   context: (text) => text,
-  tool: (text, moment) => specificOutput(moment === 'before' ? 'PreToolUse' : 'PostToolUse', text),
-  prompt: (text) => specificOutput('UserPromptSubmit', text),
+  tool: toolOutput('PreToolUse', 'PostToolUse'),
+  prompt: eventOutput('UserPromptSubmit'),
 };
 
 export const CLAUDE_EVENTS: HookEvents = {

@@ -10,6 +10,8 @@ import {
   chosenModelArgv,
   INTERRUPT_KEY,
   oneValue,
+  typeChoice,
+  screenChoices,
   UNMEASURED_HOOK_CONTEXT,
   type FileEffect,
   type HarnessModelArgv,
@@ -20,8 +22,6 @@ import {
   type PrepareAnswer,
   type PreparedRoot,
   type ScreenAsk,
-  type HarnessWidgetKey,
-  type HarnessQuestionOption,
 } from '@runlith/tagma/adapter/harness';
 import { CODEX_PROVIDER, codexDescription } from '../models/openai.js';
 import { codexAccounts } from '../accounts.js';
@@ -61,16 +61,16 @@ const codexComposer = (lines: readonly string[]): string | null => {
 const codexScreenAsk = (lines: readonly string[]): ScreenAsk | null => {
   const footer = lines.findLastIndex((line) => line.trim() === CODEX_FOOTER);
   if (footer < 0) return null;
-  const match = (line: string) => CODEX_SELECTED.exec(line) ?? CODEX_UNSELECTED.exec(line);
-  const options: HarnessQuestionOption[] = [];
-  const marked: string[] = [];
-  let above = footer - 1;
-  for (; above >= 0; above -= 1) {
-    const drawn = match(lines[above]!);
-    if (drawn === null) break;
-    options.unshift({ value: drawn[1]!, label: drawn[2]!.trim() });
-    if (CODEX_SELECTED.test(lines[above]!)) marked.push(drawn[1]!);
-  }
+  const choices = screenChoices(
+    lines,
+    (line) => {
+      const drawn = CODEX_SELECTED.exec(line) ?? CODEX_UNSELECTED.exec(line);
+      return drawn === null ? null : { value: drawn[1]!, label: drawn[2]!.trim(), selected: CODEX_SELECTED.test(line) };
+    },
+    footer - 1,
+  );
+  if (choices === null) return null;
+  const { options, selected, above } = choices;
   if (options.length < 2 || options[0]!.value !== '1') return null;
   const asked = lines.slice(0, above + 1).findLast((line) => line.trim() !== '');
   if (asked === undefined) return null;
@@ -82,13 +82,8 @@ const codexScreenAsk = (lines: readonly string[]): ScreenAsk | null => {
     header: null,
     subject: shown.startsWith('$ ') ? prompt : null,
     options,
-    selected: marked.length === 1 ? marked[0]! : null,
+    selected,
   };
-};
-
-const codexWidgetKeys = (ask: ScreenAsk, value: string): readonly HarnessWidgetKey[] | null => {
-  if (ask.options.every((option) => option.value !== value)) return null;
-  return [...value].map((char): HarnessWidgetKey => ({ _tag: 'char', char }));
 };
 
 const permission = { tagma: ['--dangerously-bypass-approvals-and-sandbox'] } as const satisfies HarnessPermissionArgv;
@@ -304,7 +299,7 @@ export const codexTerminal: TerminalSurface = {
   screenAskOf: codexScreenAsk,
   promptScreenOf: codexPromptScreen,
   composer: { of: codexComposer },
-  keysOf: oneValue(codexWidgetKeys),
+  keysOf: oneValue(typeChoice),
   cancelKeysOf: () => ['esc'],
   interrupt: ['esc'],
   steer: 'step',

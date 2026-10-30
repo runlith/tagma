@@ -1,12 +1,11 @@
 import { join } from 'node:path';
-import { Effect, FileSystem, Stream } from 'effect';
+import { Effect, FileSystem } from 'effect';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { AgentFault, FAULT } from '@runlith/acp/agent';
 import { findProgram } from '../host.js';
-import { ExchangeFailed } from '@runlith/ndjson-rpc/exchange';
 import { hostedAgent } from '@runlith/hosted-runner/agent';
 import type { HostedDoor } from '@runlith/hosted-runner/door';
-import { serveHosted, type HostedLaunch, type HostedRunner, type Invoked } from '@runlith/hosted-runner/run';
+import { hostedStdio, serveHosted, type HostedLaunch, type HostedRunner, type Invoked } from '@runlith/hosted-runner/run';
 import { OpenCodeSdk } from './channel.js';
 import { makeOpenCodeCycle } from './cycle.js';
 import { makeOpenCodeSdk } from './sdk.js';
@@ -24,19 +23,7 @@ const runOpenCode = Effect.fnUntraced(
     const program = yield* findProgram(environment).pipe(
       Effect.mapError((cause) => new AgentFault({ code: FAULT.internal, message: cause.message })),
     );
-    const input = Stream.fromReadableStream({
-      evaluate: at.stdin,
-      onError: (cause) => new ExchangeFailed({ detail: `stdin failed: ${String(cause)}` }),
-    });
-    const out = Bun.stdout.writer();
-    const write = (bytes: Uint8Array) =>
-      Effect.try({
-        try: () => {
-          out.write(bytes);
-          out.flush();
-        },
-        catch: (cause) => new ExchangeFailed({ detail: `stdout failed: ${String(cause)}` }),
-      });
+    const { input, write } = hostedStdio(at);
     yield* serveHosted(
       input,
       write,

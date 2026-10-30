@@ -992,6 +992,7 @@
         "@runlith/agent": "workspace:*",
         "@runlith/llm": "workspace:*",
         "@runlith/ndjson-rpc": "workspace:*",
+        "@runlith/tagma": "workspace:*",
         "effect": "catalog:",
       },
       "devDependencies": {

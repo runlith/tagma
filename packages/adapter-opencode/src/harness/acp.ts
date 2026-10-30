@@ -1,48 +1,9 @@
-import { CALL_ENVELOPE_MS } from '@runlith/agent/callProgress';
-import { HOST_COMMAND, type AcpProfile } from '@runlith/tagma/adapter/harness';
-import { SAID } from '@runlith/hosted-runner/wire/extensions';
+import { SAID, RETRYING } from '@runlith/hosted-runner/wire/extensions';
+import { clientProfile } from '@runlith/hosted-runner/profile';
 
-export const opencodeAcp: AcpProfile = {
-  argv: (choice) => [
-    HOST_COMMAND,
-    'harness-run',
-    'opencode',
-    ...(choice === undefined ? [] : ['--model', choice.model, ...(choice.rung === null ? [] : ['--effort', choice.rung])]),
-  ],
-  configure: (choice, switches) => [
-    ...(choice === undefined
-      ? []
-      : [
-          { configId: 'model', value: choice.model },
-          { configId: 'effort', value: choice.rung ?? '' },
-        ]),
-    { configId: 'parameters', value: JSON.stringify(switches) },
-  ],
-  reportedModel: 'model',
-  hosts: 'tagma',
-  serves: 'opencode',
-  web: 'none',
-  mode: 'agent',
-  proves: {
-    law: 'every-call',
-    touch: 'reads-and-writes',
-    authorship: 'recorded',
-    fork: true,
-    rewind: true,
-    compaction: 'foreign',
-    continue: true,
-    usage: 'measured',
-    aside: 'none',
-  },
-  toolCatalog: 'turn',
+export const opencodeAcp = clientProfile({
+  id: 'opencode',
   storage: { environment: 'OPENCODE_DATA_DIR', folder: 'opencode' },
-  graceMs: 5_000,
-  callEnvelopeMs: CALL_ENVELOPE_MS,
-  handshakeMs: 60_000,
-  login: { command: 'sign in with the official OpenCode CLI on the Providers screen', codes: [-32000] },
-  lockedCode: null,
-  otherMutates: false,
-  midTurn: 'after-turn',
-  sharedSessions: false,
-  extensions: [SAID],
-};
+  login: 'sign in with the official OpenCode CLI on the Providers screen',
+  extensions: [SAID, RETRYING],
+});

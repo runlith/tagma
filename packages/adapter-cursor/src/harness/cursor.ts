@@ -7,13 +7,13 @@ import {
   INTERRUPT_KEY,
   LEGACY_TOOLS,
   oneValue,
+  navigateChoice,
+  screenChoices,
   UNMEASURED_HOOK_CONTEXT,
   type HarnessCall,
   type HarnessModelArgv,
   type HarnessPermissionArgv,
-  type HarnessQuestionOption,
   type ScreenAsk,
-  type HarnessWidgetKey,
   type HookOccasion,
 } from '@runlith/tagma/adapter/harness';
 import { claudeFiles, claudePrinted } from '@runlith/tagma/adapter/claude-hooks';
@@ -74,23 +74,12 @@ const cursorScreenAsk = (lines: readonly string[]): ScreenAsk | null => {
     if (rest !== null && rest[1]!.trim() !== '') return { selected: false, label: rest[1]!.trim() };
     return null;
   };
-  let end = -1;
-  for (let i = lines.length - 1; i >= 0; i -= 1) {
-    if (match(lines[i]!) !== null) {
-      end = i;
-      break;
-    }
-  }
-  if (end < 0) return null;
-  const options: HarnessQuestionOption[] = [];
-  const marked: string[] = [];
-  let above = end;
-  for (; above >= 0; above -= 1) {
-    const drawn = match(lines[above]!);
-    if (drawn === null) break;
-    options.unshift({ value: drawn.label, label: drawn.label });
-    if (drawn.selected) marked.push(drawn.label);
-  }
+  const choices = screenChoices(lines, (line) => {
+    const drawn = match(line);
+    return drawn === null ? null : { ...drawn, value: drawn.label };
+  });
+  if (choices === null) return null;
+  const { options, selected, above } = choices;
   if (options.length < 2 || !options.every((option) => CURSOR_HINT.test(option.label))) return null;
   if (!CURSOR_CANCEL.test(options.at(-1)!.label)) return null;
   if (options.some((option) => CURSOR_LOADING.test(option.label))) return null;
@@ -103,17 +92,8 @@ const cursorScreenAsk = (lines: readonly string[]): ScreenAsk | null => {
     header: null,
     subject: null,
     options,
-    selected: marked.length === 1 ? marked[0]! : null,
+    selected,
   };
-};
-
-const cursorWidgetKeys = (ask: ScreenAsk, value: string): readonly HarnessWidgetKey[] | null => {
-  if (ask.selected === null) return null;
-  const from = ask.options.findIndex((option) => option.value === ask.selected);
-  const to = ask.options.findIndex((option) => option.value === value);
-  if (from < 0 || to < 0) return null;
-  const step = to > from ? 'down' : 'up';
-  return [...Array.from<HarnessWidgetKey>({ length: Math.abs(to - from) }).fill(step), 'enter'];
 };
 
 const permission = { tagma: ['--force'] } as const satisfies HarnessPermissionArgv;
@@ -226,7 +206,7 @@ export const cursorTerminal: TerminalSurface = {
   screenAskOf: cursorScreenAsk,
   promptScreenOf: cursorPromptScreen,
   composer: { of: cursorComposer, returns: { clear: [INTERRUPT_KEY], counts: 'lines' }, drafted: [INTERRUPT_KEY] },
-  keysOf: oneValue(cursorWidgetKeys),
+  keysOf: oneValue(navigateChoice),
   cancelKeysOf: () => ['esc'],
   interrupt: ['esc'],
   exitArm: { key: INTERRUPT_KEY, windowMs: 2_000, banner: CURSOR_EXIT_ARMED, version: '2026.10.19-6bbf2c4' },

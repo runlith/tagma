@@ -9,27 +9,10 @@
       "bun": "./src/adapter.ts",
       "default": "./src/adapter.ts"
     },
-    "./harness": {
-      "types": "./src/harness/cursor.ts",
-      "bun": "./src/harness/cursor.ts",
-      "default": "./src/harness/cursor.ts"
-    },
     "./runner": {
       "types": "./src/runner/run.ts",
       "bun": "./src/runner/run.ts",
       "default": "./src/runner/run.ts"
-    },
-    "./icon": {
-      "types": "./src/icon.ts",
-      "browser": "./src/icon.ts",
-      "bun": "./src/icon.ts",
-      "default": "./src/icon.ts"
-    },
-    "./selection": {
-      "types": "./src/selection.ts",
-      "browser": "./src/selection.ts",
-      "bun": "./src/selection.ts",
-      "default": "./src/selection.ts"
     }
   },
   "scripts": {

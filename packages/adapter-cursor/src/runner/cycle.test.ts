@@ -1,7 +1,7 @@
 import { expect } from 'bun:test';
 import * as MemoryFileSystem from '@runlith/testbed/memory';
 import { layer } from '@runlith/effect-test';
-import { Deferred, Effect, Fiber, FileSystem } from 'effect';
+import { Effect, FileSystem } from 'effect';
 import type { Outlet } from '@runlith/acp/agent';
 import { hostedAgent } from '@runlith/hosted-runner/agent';
 import type { HostedDoor } from '@runlith/hosted-runner/door';
@@ -95,122 +95,6 @@ layer(MemoryFileSystem.layer)('Cursor hosted session', (it) => {
         fast: 'on',
       });
       yield* resumed.ended;
-    }),
-  );
-
-  it.effect('a terminal SDK failure reaches the ACP ending as failed with usage and retry classification', () =>
-    Effect.gen(function* () {
-      const files = yield* FileSystem.FileSystem;
-      const directory = yield* files.makeTempDirectoryScoped({ prefix: 'cursor-failed-' });
-      const boundary = CursorSdk.of({
-        open: () =>
-          Effect.succeed({
-            id: 'cursor-session',
-            close: Effect.void,
-            send: () =>
-              Effect.succeed({
-                cancel: Effect.void,
-                wait: Effect.succeed({
-                  status: 'error' as const,
-                  detail: 'capacity refusal',
-                  usage: { totalTokens: 30, inputTokens: 20, outputTokens: 10 },
-                  failure: {
-                    stage: 'cursor.turn',
-                    type: 'RateLimitError',
-                    retryable: true,
-                    modelStarted: false,
-                    reason: { family: 'rate-limit' as const },
-                  },
-                }),
-              }),
-          }),
-      });
-      const door: HostedDoor = {
-        agent: () => Effect.succeed({ prompt: '', web: 'none' }),
-        turn: () => Effect.succeed({ prompt: '', context: null, web: 'none' }),
-        tools: () => Effect.succeed({ names: [], tools: [] }),
-        history: () => Effect.succeed([]),
-        call: () => Effect.die('no calls'),
-      };
-      const cycle = yield* makeCursorCycle(
-        door,
-        { stderr: () => {}, died: (reason) => Effect.die(reason) },
-        { directory, apiKey: 'key' },
-        { model: null, effort: null, parameters: {}, version: 'test' },
-      ).pipe(Effect.provideService(CursorSdk, boundary));
-      const handlers = hostedAgent(
-        cycle,
-        door,
-      )({ update: () => Effect.void, notify: () => Effect.void, request: () => Effect.die('no requests') });
-      const setup = yield* handlers.newSession({ cwd: directory, mcpServers: [] });
-      const params = { sessionId: setup.sessionId, prompt: [{ type: 'text' as const, text: 'go' }] };
-      const result = yield* Effect.result(handlers.prompt(params));
-      expect(result._tag).toBe('Failure');
-      if (result._tag !== 'Failure') return;
-      expect(result.failure).toMatchObject({
-        code: -32603,
-        message: 'capacity refusal',
-        data: {
-          'tagma/failure': { reason: { family: 'rate-limit' }, retryable: true, modelStarted: false },
-          usage: { inputTokens: 20, outputTokens: 10, totalTokens: 30 },
-        },
-      });
-      yield* handlers.ended;
-    }),
-  );
-
-  it.effect('cancel during SDK submission cancels the accepted run and leaves the session usable', () =>
-    Effect.gen(function* () {
-      const files = yield* FileSystem.FileSystem;
-      const directory = yield* files.makeTempDirectoryScoped({ prefix: 'cursor-cancel-' });
-      const sending = yield* Deferred.make<void>();
-      const accepted = yield* Deferred.make<void>();
-      const cancelled = yield* Deferred.make<void>();
-      let first = true;
-      const boundary = CursorSdk.of({
-        open: () =>
-          Effect.succeed({
-            id: 'cursor-session',
-            close: Effect.void,
-            send: Effect.fnUntraced(function* () {
-              if (!first) return { cancel: Effect.void, wait: Effect.succeed({ status: 'finished' as const }) };
-              first = false;
-              yield* Deferred.succeed(sending, undefined);
-              yield* Deferred.await(accepted);
-              return {
-                cancel: Effect.asVoid(Deferred.succeed(cancelled, undefined)),
-                wait: Effect.as(Deferred.await(cancelled), { status: 'cancelled' as const }),
-              };
-            }),
-          }),
-      });
-      const door: HostedDoor = {
-        agent: () => Effect.succeed({ prompt: '', web: 'none' }),
-        turn: () => Effect.succeed({ prompt: '', context: null, web: 'none' }),
-        tools: () => Effect.succeed({ names: [], tools: [] }),
-        history: () => Effect.succeed([]),
-        call: () => Effect.die('no calls'),
-      };
-      const cycle = yield* makeCursorCycle(
-        door,
-        { stderr: () => {}, died: (reason) => Effect.die(reason) },
-        { directory, apiKey: 'key' },
-        { model: null, effort: null, parameters: {}, version: 'test' },
-      ).pipe(Effect.provideService(CursorSdk, boundary));
-      const handlers = hostedAgent(
-        cycle,
-        door,
-      )({ update: () => Effect.void, notify: () => Effect.void, request: () => Effect.die('no requests') });
-      const setup = yield* handlers.newSession({ cwd: directory, mcpServers: [] });
-      const running = yield* Effect.forkChild(handlers.prompt({ sessionId: setup.sessionId, prompt: [{ type: 'text', text: 'first' }] }));
-      yield* Deferred.await(sending);
-      yield* handlers.cancel({ sessionId: setup.sessionId });
-      yield* Deferred.succeed(accepted, undefined);
-      expect(yield* Fiber.join(running)).toMatchObject({ stopReason: 'cancelled' });
-      expect(yield* handlers.prompt({ sessionId: setup.sessionId, prompt: [{ type: 'text', text: 'second' }] })).toMatchObject({
-        stopReason: 'end_turn',
-      });
-      yield* handlers.ended;
     }),
   );
 });

@@ -3,7 +3,8 @@ import { AgentFault, FAULT } from '@runlith/acp/agent';
 import type { TransportFailure } from '@runlith/agent/transcript/entries';
 import { familyRetries, type WireFailureFamily } from '@runlith/llm/schema/errors';
 import type { InteractionUpdate, SDKCustomTool, SDKJsonValue, TokenUsage } from '@cursor/sdk';
-import { CursorSdk, type Outcome, type Sending } from './channel.js';
+import { CursorSdk, type Sending } from './channel.js';
+import type { ClientOutcome } from '@runlith/hosted-runner/client';
 import type { CursorSelection } from '../selection.js';
 import type { Relayed } from '@runlith/hosted-runner/relay';
 
@@ -75,7 +76,7 @@ export const cursorSdk = (module: typeof import('@cursor/sdk')): CursorSdk['Serv
           params: model.params?.map((param) => ({ ...param })),
           maxMode: model.maxMode,
         };
-  const usageOf = (usage: TokenUsage | undefined): Outcome['usage'] =>
+  const usageOf = (usage: TokenUsage | undefined): ClientOutcome['usage'] =>
     usage === undefined
       ? undefined
       : {
@@ -265,7 +266,7 @@ export const cursorSdk = (module: typeof import('@cursor/sdk')): CursorSdk['Serv
           });
           return {
             wait: Effect.tryPromise({ try: () => run.wait(), catch: (cause) => fault(cause, modelStarted) }).pipe(
-              Effect.map((result): Outcome => ({
+              Effect.map((result): ClientOutcome => ({
                 status: result.status,
                 usage: usageOf(result.usage ?? latestUsage),
                 detail: result.error?.message,
@@ -278,7 +279,7 @@ export const cursorSdk = (module: typeof import('@cursor/sdk')): CursorSdk['Serv
                     : undefined,
               })),
               Effect.catchTag('AgentFault', (cause) =>
-                cause.code === -32800 ? Effect.succeed<Outcome>({ status: 'cancelled' }) : Effect.fail(cause),
+                cause.code === -32800 ? Effect.succeed<ClientOutcome>({ status: 'cancelled' }) : Effect.fail(cause),
               ),
             ),
             cancel: Effect.andThen(Deferred.succeed(stopped, undefined), Effect.tryPromise({ try: () => run.cancel(), catch: fault })),

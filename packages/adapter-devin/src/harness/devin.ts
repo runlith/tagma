@@ -7,13 +7,13 @@ import {
   chosenModelArgv,
   LEGACY_TOOLS,
   oneValue,
+  navigateChoice,
+  screenChoices,
   UNMEASURED_HOOK_CONTEXT,
   type HarnessModelArgv,
   type TerminalSurface,
   type HarnessPermissionArgv,
-  type HarnessQuestionOption,
   type ScreenAsk,
-  type HarnessWidgetKey,
 } from '@runlith/tagma/adapter/harness';
 import { CLAUDE_EVENTS, claudeFiles, claudePrinted, claudeOccasion, claudeSubject } from '@runlith/tagma/adapter/claude-hooks';
 import { field, rootOfArgv, sessionIdOf, unreported } from '@runlith/tagma/adapter/payload';
@@ -54,15 +54,16 @@ const devinComposer = (lines: readonly string[]): string | null => {
 const devinScreenAsk = (lines: readonly string[]): ScreenAsk | null => {
   const footer = lines.findLastIndex((line) => line.trim() === FOOTER);
   if (footer < 0) return null;
-  const options: HarnessQuestionOption[] = [];
-  const marked: string[] = [];
-  let above = footer - 1;
-  for (; above >= 0; above -= 1) {
-    const drawn = OPTION.exec(lines[above]!.trim());
-    if (drawn === null) break;
-    options.unshift({ value: drawn[2]!, label: drawn[3]!.trim() });
-    if (drawn[1] === CURSOR) marked.push(drawn[2]!);
-  }
+  const choices = screenChoices(
+    lines,
+    (line) => {
+      const drawn = OPTION.exec(line.trim());
+      return drawn === null ? null : { value: drawn[2]!, label: drawn[3]!.trim(), selected: drawn[1] === CURSOR };
+    },
+    footer - 1,
+  );
+  if (choices === null) return null;
+  const { options, selected, above } = choices;
   if (options.length < 2 || options[0]!.value !== '1') return null;
   let top = above;
   while (top >= 0 && lines[top]!.trim() === '') top -= 1;
@@ -84,7 +85,7 @@ const devinScreenAsk = (lines: readonly string[]): ScreenAsk | null => {
     header: null,
     subject: named === undefined ? null : prompt.slice(named.length),
     options,
-    selected: marked.length === 1 ? marked[0]! : null,
+    selected,
   };
 };
 
@@ -100,15 +101,6 @@ const model: HarnessModelArgv = {
     }
     return ['--model', choice.model];
   },
-};
-
-const devinWidgetKeys = (ask: ScreenAsk, value: string): readonly HarnessWidgetKey[] | null => {
-  if (ask.selected === null) return null;
-  const from = ask.options.findIndex((option) => option.value === ask.selected);
-  const to = ask.options.findIndex((option) => option.value === value);
-  if (from < 0 || to < 0) return null;
-  const step = to > from ? 'down' : 'up';
-  return [...Array.from<HarnessWidgetKey>({ length: Math.abs(to - from) }).fill(step), 'enter'];
 };
 
 export const devinTerminal: TerminalSurface = {
@@ -175,7 +167,7 @@ export const devinTerminal: TerminalSurface = {
   screenAskOf: devinScreenAsk,
   promptScreenOf: devinPromptScreen,
   composer: { of: devinComposer },
-  keysOf: oneValue(devinWidgetKeys),
+  keysOf: oneValue(navigateChoice),
   cancelKeysOf: () => ['esc'],
   interrupt: ['esc', 'esc'],
   steer: 'none',

@@ -1,4 +1,4 @@
-import { commandGroup, specificOutput, type HookCodec } from '@runlith/tagma/adapter/hook';
+import { commandGroup, eventOutput, toolOutput, type HookCodec } from '@runlith/tagma/adapter/hook';
 
 export const codexCodec: HookCodec = {
   file: {
@@ -19,7 +19,7 @@ export const codexCodec: HookCodec = {
     JSON.stringify({
       hookSpecificOutput: { hookEventName: 'PermissionRequest', decision: { behavior: allowed ? 'allow' : 'deny', message: words } },
     }),
-  context: (text) => specificOutput('SessionStart', text),
-  tool: (text, moment) => specificOutput(moment === 'before' ? 'PreToolUse' : 'PostToolUse', text),
-  prompt: (text) => specificOutput('UserPromptSubmit', text),
+  context: eventOutput('SessionStart'),
+  tool: toolOutput('PreToolUse', 'PostToolUse'),
+  prompt: eventOutput('UserPromptSubmit'),
 };

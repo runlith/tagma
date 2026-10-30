@@ -9,6 +9,18 @@
       "types": "./src/agent.ts",
       "default": "./src/agent.ts"
     },
+    "./client": {
+      "types": "./src/client.ts",
+      "default": "./src/client.ts"
+    },
+    "./options": {
+      "types": "./src/options.ts",
+      "default": "./src/options.ts"
+    },
+    "./profile": {
+      "types": "./src/profile.ts",
+      "default": "./src/profile.ts"
+    },
     "./cycle": {
       "types": "./src/cycle.ts",
       "default": "./src/cycle.ts"
@@ -69,6 +81,7 @@
     "@runlith/agent": "workspace:*",
     "@runlith/llm": "workspace:*",
     "@runlith/ndjson-rpc": "workspace:*",
+    "@runlith/tagma": "workspace:*",
     "effect": "catalog:"
   },
   "devDependencies": {

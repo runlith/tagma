@@ -45,10 +45,6 @@
       "types": "./src/testing/sdk.ts",
       "bun": "./src/testing/sdk.ts",
       "default": "./src/testing/sdk.ts"
-    },
-    "./usage": {
-      "types": "./src/usage.ts",
-      "default": "./src/usage.ts"
     }
   },
   "scripts": {

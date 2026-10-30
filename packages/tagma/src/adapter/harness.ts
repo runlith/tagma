@@ -283,6 +283,46 @@ export const oneValue =
   (ask: ScreenAsk, values: readonly string[]): readonly HarnessWidgetKey[] | null =>
     values.length === 1 ? keys(ask, values[0]!) : null;
 
+export const navigateChoice = (ask: ScreenAsk, value: string): readonly HarnessWidgetKey[] | null => {
+  if (ask.selected === null) return null;
+  const from = ask.options.findIndex((option) => option.value === ask.selected);
+  const to = ask.options.findIndex((option) => option.value === value);
+  if (from < 0 || to < 0) return null;
+  const step = to > from ? 'down' : 'up';
+  return [...Array.from<HarnessWidgetKey>({ length: Math.abs(to - from) }).fill(step), 'enter'];
+};
+
+export const typeChoice = (ask: ScreenAsk, value: string): readonly HarnessWidgetKey[] | null =>
+  ask.options.some((option) => option.value === value) ? [...value].map((char) => ({ _tag: 'char', char })) : null;
+
+export type ScreenChoice = { readonly value: string; readonly label: string; readonly selected: boolean };
+
+export type ScreenChoices = {
+  readonly options: readonly HarnessQuestionOption[];
+  readonly selected: string | null;
+  readonly marked: number;
+  readonly above: number;
+};
+
+export const screenChoices = (
+  lines: readonly string[],
+  match: (line: string) => ScreenChoice | null,
+  end: number = lines.findLastIndex((line) => match(line) !== null),
+): ScreenChoices | null => {
+  if (end < 0) return null;
+  const options: HarnessQuestionOption[] = [];
+  const marked: string[] = [];
+  let above = end;
+  for (; above >= 0; above -= 1) {
+    const drawn = match(lines[above]!);
+    if (drawn === null) break;
+    options.push({ value: drawn.value, label: drawn.label });
+    if (drawn.selected) marked.push(drawn.value);
+  }
+  options.reverse();
+  return { options, selected: marked.length === 1 ? marked[0]! : null, marked: marked.length, above };
+};
+
 export type HarnessReturned = { readonly clear: readonly HarnessWidgetKey[]; readonly counts: 'breaks' | 'lines' };
 
 export type HarnessComposer = {

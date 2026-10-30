@@ -10,7 +10,8 @@ import type { TransportFailure } from '@runlith/agent/transcript/entries';
 import { MEASURED, RETRYING } from '@runlith/hosted-runner/wire/extensions';
 import type { Process } from '@runlith/hosted-runner/cycle';
 import type { Relayed } from '@runlith/hosted-runner/relay';
-import { OpenCodeSdk, type Outcome, type Run, type Sending } from './channel.js';
+import { OpenCodeSdk, type Sending } from './channel.js';
+import type { ClientOutcome, ClientRun } from '@runlith/hosted-runner/client';
 import { preparation } from './plugin.js';
 import source from './plugin.ts' with { type: 'text' };
 
@@ -190,7 +191,7 @@ export const makeOpenCodeSdk = Effect.fn('opencode.makeSdk')(function* (home: Ho
       const id =
         opening.id ??
         (yield* Effect.tryPromise({ try: () => client.session.create({ location: { directory: opening.cwd } }), catch: failed })).id;
-      let run: Run | null = null;
+      let run: ClientRun | null = null;
       const close = Effect.fnUntraced(function* () {
         if (run !== null) {
           yield* run.cancel.pipe(Effect.orDie);
@@ -210,8 +211,8 @@ export const makeOpenCodeSdk = Effect.fn('opencode.makeSdk')(function* (home: Ho
               Effect.mapError(failed),
             ),
           );
-          const done = yield* Deferred.make<Outcome, AgentFault>();
-          const terminal = yield* Deferred.make<Outcome>();
+          const done = yield* Deferred.make<ClientOutcome, AgentFault>();
+          const terminal = yield* Deferred.make<ClientOutcome>();
           const connected = yield* Deferred.make<void>();
           const returned = new Map<string, Relayed>();
           const names = new Set(input.tools.map((tool) => tool.name));
@@ -436,7 +437,7 @@ export const makeOpenCodeSdk = Effect.fn('opencode.makeSdk')(function* (home: Ho
             }),
             scope,
           );
-          const sending: Run = {
+          const sending: ClientRun = {
             wait: Deferred.await(done),
             cancel: Effect.gen(function* () {
               cancelled = true;

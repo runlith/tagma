@@ -1,9 +1,9 @@
-import { commandGroup, specificOutput, type HookCodec } from '@runlith/tagma/adapter/hook';
+import { approvePermission, commandGroup, eventOutput, toolOutput, type HookCodec } from '@runlith/tagma/adapter/hook';
 
 export const geminiCodec: HookCodec = {
   file: { keys: {}, events: ['hooks'], holes: false, trust: null, entry: commandGroup },
-  permission: ({ allowed, words }) => JSON.stringify({ decision: allowed ? 'approve' : 'deny', reason: words }),
-  context: (text) => specificOutput('SessionStart', text),
-  tool: (text, moment) => specificOutput(moment === 'before' ? 'BeforeTool' : 'AfterTool', text),
+  permission: approvePermission,
+  context: eventOutput('SessionStart'),
+  tool: toolOutput('BeforeTool', 'AfterTool'),
   prompt: null,
 };

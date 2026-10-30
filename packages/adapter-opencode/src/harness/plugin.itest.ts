@@ -1,14 +1,10 @@
 import { expect } from 'bun:test';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { it } from '@runlith/effect-test';
-import { Deferred, Effect, FileSystem, Layer } from 'effect';
-import { shippedHarnessAdaptersLayer } from './builtin.js';
-import { accountEnvironment } from '@runlith/adapter-opencode/environment';
-import { installedProgram, openHost } from '@runlith/adapter-opencode/host';
-import { entryPath } from '../../installation/contract/wire/junction.js';
-import { installHooks } from '../installs/hookWrite.js';
-import { declareInto, MCP_SERVER_NAME } from '../installs/mcpDeclaration.js';
-import { builtinHarness } from './builtin.js';
+import { Deferred, Effect, FileSystem } from 'effect';
+import { accountEnvironment } from '../environment.js';
+import { installedProgram, openHost } from '../host.js';
+import { opencode } from './opencode.js';
 import { dirname, join } from 'node:path';
 
 it.live('the installed V2 plugin delivers lifecycle and file hooks, injects law and connects the declared MCP process', () =>
@@ -136,16 +132,30 @@ if (process.argv[2] === 'mcp-serve') {
 }
 `,
     );
-    const entry = entryPath({ HOME: home })!;
-    yield* files.makeDirectory(dirname(entry), { recursive: true });
-    yield* files.writeFileString(entry, `#!/bin/sh\nexec '${process.execPath}' '${fixture}' "$@"\n`, { mode: 0o755 });
+    const surface = opencode.terminal!.hooks!;
+    const hookPath = join(root, surface.file);
+    yield* files.makeDirectory(dirname(hookPath), { recursive: true });
+    const hooksByEvent = Object.fromEntries(
+      [
+        ['SessionStart', 'session-start'],
+        ['UserPromptSubmit', 'prompt'],
+        ['PermissionRequest', 'permission-request'],
+        ['PreToolUse', 'pre-tool-use'],
+        ['PostToolUse', 'post-tool-use'],
+        ['PostToolUseFailure', 'post-tool-use'],
+        ['Stop', 'stop'],
+      ].map(([event, verb]) => [event, [surface.codec.file.entry(`'${process.execPath}' '${fixture}' hook ${verb}`, undefined)]]),
+    );
+    yield* files.writeFileString(hookPath, JSON.stringify({ hooks: hooksByEvent }));
+    for (const asset of surface.assets ?? []) {
+      const path = join(dirname(hookPath), asset.file);
+      yield* files.makeDirectory(dirname(path), { recursive: true });
+      yield* files.writeFileString(path, asset.content);
+    }
     yield* files.writeFileString(join(root, 'sample.txt'), 'FILE_MARKER');
-    yield* installHooks(root);
-    expect((yield* installHooks(root)).every((row) => row.write === 'current')).toBe(true);
     const directory = join(root, 'config');
-    const opencode = builtinHarness('opencode');
-    const declared = yield* Effect.tryPromise(() => declareInto(root, opencode, opencode.mcp!, [process.execPath, fixture], directory));
-    expect(declared.write).toBe('created');
+    const mcpName = 'fixture';
+    const mcp = opencode.terminal!.mcp!.declaration!([process.execPath, fixture, 'mcp-serve'], {});
     const environment: Record<string, string | undefined> = { ...process.env, OPENCODE_DISABLE_MODELS_FETCH: 'true' };
     for (const entry of accountEnvironment(home)) environment[entry.name] = entry._tag === 'Set' ? entry.value : undefined;
     yield* files.makeDirectory(directory, { recursive: true });
@@ -159,7 +169,7 @@ if (process.argv[2] === 'mcp-serve') {
         claude: false,
         content: JSON.stringify({
           plugins: [join(root, '.opencode', 'plugins', 'tagma')],
-          mcp: JSON.parse(yield* files.readFileString(join(directory, 'opencode.json'))).mcp,
+          mcp: { servers: { [mcpName]: mcp } },
           model: 'probe/probe',
           snapshots: false,
           formatter: false,
@@ -180,9 +190,9 @@ if (process.argv[2] === 'mcp-serve') {
     });
     yield* Effect.tryPromise(async (signal) => {
       for await (const event of host.client.event.subscribe({ signal })) {
-        if (event.type !== 'server.connected' && !(event.type === 'mcp.status.changed' && event.data.server === MCP_SERVER_NAME)) continue;
+        if (event.type !== 'server.connected' && !(event.type === 'mcp.status.changed' && event.data.server === mcpName)) continue;
         const listed = await host.client.mcp.list({ location: { directory: root } });
-        const standing = listed.data.find((server) => server.name === MCP_SERVER_NAME);
+        const standing = listed.data.find((server) => server.name === mcpName);
         if (standing?.status.status === 'connected') return;
         if (standing?.status.status === 'failed') throw new Error(standing.status.error);
       }
@@ -225,5 +235,5 @@ if (process.argv[2] === 'mcp-serve') {
     yield* Effect.tryPromise(() => host.client.session.interrupt({ sessionID: interrupted.id }));
     expect((yield* Deferred.await(cancelled)).status).toBe('aborted');
     expect((yield* Effect.tryPromise(() => host.client.session.get({ sessionID: interrupted.id }))).outcome).toBe('interrupted');
-  }).pipe(Effect.provide(Layer.mergeAll(BunFileSystem.layer, shippedHarnessAdaptersLayer))),
+  }).pipe(Effect.provide(BunFileSystem.layer)),
 );

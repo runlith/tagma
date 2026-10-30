@@ -5,12 +5,12 @@ import {
   chosenModelArgv,
   LEGACY_TOOLS,
   oneValue,
+  typeChoice,
+  screenChoices,
   UNMEASURED_HOOK_CONTEXT,
   type HarnessModelArgv,
   type HarnessPermissionArgv,
-  type HarnessQuestionOption,
   type ScreenAsk,
-  type HarnessWidgetKey,
   type HookOccasion,
   type TerminalSurface,
 } from '@runlith/tagma/adapter/harness';
@@ -24,25 +24,13 @@ const GEMINI_UNSELECTED = /^  (\d+)\. (.+)$/;
 const GEMINI_CANCEL = /\(esc\)$/;
 
 const geminiScreenAsk = (lines: readonly string[]): ScreenAsk | null => {
-  const match = (line: string) => GEMINI_SELECTED.exec(line) ?? GEMINI_UNSELECTED.exec(line);
-  let end = -1;
-  for (let i = lines.length - 1; i >= 0; i -= 1) {
-    if (match(lines[i]!) !== null) {
-      end = i;
-      break;
-    }
-  }
-  if (end < 0) return null;
-  const options: HarnessQuestionOption[] = [];
-  const marked: string[] = [];
-  let above = end;
-  for (; above >= 0; above -= 1) {
-    const drawn = match(lines[above]!);
-    if (drawn === null) break;
-    options.unshift({ value: drawn[1]!, label: drawn[2]!.trim() });
-    if (GEMINI_SELECTED.test(lines[above]!)) marked.push(drawn[1]!);
-  }
-  if (options.length < 2 || options[0]!.value !== '1' || marked.length === 0) return null;
+  const choices = screenChoices(lines, (line) => {
+    const drawn = GEMINI_SELECTED.exec(line) ?? GEMINI_UNSELECTED.exec(line);
+    return drawn === null ? null : { value: drawn[1]!, label: drawn[2]!.trim(), selected: GEMINI_SELECTED.test(line) };
+  });
+  if (choices === null) return null;
+  const { options, selected, above, marked } = choices;
+  if (options.length < 2 || options[0]!.value !== '1' || marked === 0) return null;
   if (!GEMINI_CANCEL.test(options.at(-1)!.label)) return null;
   const asked = lines.slice(0, above + 1).findLast((line) => line.trim() !== '');
   if (asked === undefined) return null;
@@ -52,13 +40,8 @@ const geminiScreenAsk = (lines: readonly string[]): ScreenAsk | null => {
     header: null,
     subject: null,
     options,
-    selected: marked.length === 1 ? marked[0]! : null,
+    selected,
   };
-};
-
-const geminiWidgetKeys = (ask: ScreenAsk, value: string): readonly HarnessWidgetKey[] | null => {
-  if (ask.options.every((option) => option.value !== value)) return null;
-  return [...value].map((char): HarnessWidgetKey => ({ _tag: 'char', char }));
 };
 
 const permission = { tagma: ['--approval-mode', 'yolo'] } as const satisfies HarnessPermissionArgv;
@@ -133,7 +116,7 @@ export const geminiTerminal: TerminalSurface = {
   printedOf: unprinted,
   eventKeys: ['hook_event_name', 'hookEventName', 'session_id', 'sessionId', 'notification_type'],
   screenAskOf: geminiScreenAsk,
-  keysOf: oneValue(geminiWidgetKeys),
+  keysOf: oneValue(typeChoice),
   cancelKeysOf: () => ['esc'],
   interrupt: ['esc'],
   steer: 'none',

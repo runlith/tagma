@@ -31,6 +31,19 @@ export const commandGroup = (command: string, timeout: number | undefined): Hook
 export const specificOutput = (hookEventName: string, additionalContext: string): string =>
   JSON.stringify({ hookSpecificOutput: { hookEventName, additionalContext } });
 
+export const approvePermission = ({ allowed, words }: HookVerdict): string =>
+  JSON.stringify({ decision: allowed ? 'approve' : 'deny', reason: words });
+
+export const eventOutput =
+  (event: string) =>
+  (text: string): string =>
+    specificOutput(event, text);
+
+export const toolOutput =
+  (before: string, after: string) =>
+  (text: string, moment: HookMoment): string =>
+    specificOutput(moment === 'before' ? before : after, text);
+
 export type HookCodec = {
   readonly file: HookFileShape;
   readonly permission: (verdict: HookVerdict) => string;
