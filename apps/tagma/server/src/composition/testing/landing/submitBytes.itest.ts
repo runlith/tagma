@@ -71,6 +71,35 @@ layer(checkoutFixture, { excludeTestServices: true })('checkout', (it) => {
       }),
     ),
   );
+  it.effect('whole-selected files land with their peer authors when dependency parsing cannot read a sample config', () =>
+    withCheckout((world) =>
+      Effect.gen(function* () {
+        yield* world.based({
+          'sample/tsconfig.json': '{"extends":"uninstalled-config"}\n',
+          'sample/peer.ts': 'export const peer = 1;\n',
+        });
+        const peer = 'export const peer = 2;\n';
+        const importer =
+          'import { peer } from "./peer.js";\nimport { external } from "missing-package";\nexport const value = peer + external;\n';
+        yield* world.written(THEIRS, 'sample/peer.ts', peer);
+        yield* world.written(MINE, 'sample/importer.ts', importer);
+        expect(yield* world.submit(MINE, { paths: ['sample'], whole: ['sample'] })).toMatchObject({
+          status: 'landed',
+          committed: ['sample/importer.ts', 'sample/peer.ts'],
+          carried: [{ path: 'sample/peer.ts', holders: [THEIRS] }],
+        });
+        expect(yield* world.head('sample/importer.ts')).toBe(importer);
+        expect(yield* world.head('sample/peer.ts')).toBe(peer);
+        yield* world.written(THEIRS, 'sample/peer.ts', `${peer}export const required = 3;\n`);
+        yield* world.written(MINE, 'sample/importer.ts', 'import { required } from "./peer.js";\nexport const value = required;\n');
+        expect(yield* Effect.flip(world.submit(MINE, { paths: ['sample/importer.ts'], whole: ['sample/importer.ts'] }))).toMatchObject({
+          code: 'lines-held',
+        });
+        expect(yield* world.head('sample/importer.ts')).toBe(importer);
+        expect(yield* world.head('sample/peer.ts')).toBe(peer);
+      }),
+    ),
+  );
   it.effect('a file that is not UTF-8 text lands byte for byte as it stands', () =>
     withCheckout((checkout) =>
       Effect.fnUntraced(function* () {

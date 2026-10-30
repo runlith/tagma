@@ -1,5 +1,4 @@
 import ts from 'typescript';
-import { posix } from 'node:path';
 import type {
   SymbolDefinition,
   SymbolExport,
@@ -14,10 +13,8 @@ import type {
   SymbolTarget,
   SymbolSpelling,
 } from '../../adapter';
-import type { Tree } from '../../tree';
 import { UnsupportedSource } from '../../imports';
-import { configResolver } from './config';
-import { resolve } from './resolve';
+import { resolver } from './resolution';
 import type { Script, Scripts } from './imports';
 
 const spacesOf = (declaration: ts.Declaration, symbol: ts.Symbol): readonly SymbolSpace[] => {
@@ -135,12 +132,20 @@ const arrayRest = (pattern: ts.Node): boolean => {
   return false;
 };
 
-const memberSpellings = (node: ts.Node, checker: ts.TypeChecker): readonly Spelled[] => {
+const memberSpellings = (
+  node: ts.Node,
+  checker: ts.TypeChecker,
+  include: (name: ts.Identifier) => boolean = () => true,
+): readonly Spelled[] => {
   if (ts.isBindingElement(node) && node.propertyName === undefined && ts.isObjectBindingPattern(node.parent) && ts.isIdentifier(node.name))
-    return [{ name: node.name, symbol: checker.getPropertyOfType(checker.getTypeAtLocation(node.parent), node.name.text) }];
+    return include(node.name)
+      ? [{ name: node.name, symbol: checker.getPropertyOfType(checker.getTypeAtLocation(node.parent), node.name.text) }]
+      : [];
   if (!ts.isObjectLiteralExpression(node) || !assigned(node)) return [];
   return node.properties.flatMap((property) =>
-    (ts.isShorthandPropertyAssignment(property) || ts.isPropertyAssignment(property)) && ts.isIdentifier(property.name)
+    (ts.isShorthandPropertyAssignment(property) || ts.isPropertyAssignment(property)) &&
+    ts.isIdentifier(property.name) &&
+    include(property.name)
       ? [{ name: property.name, symbol: arrayRest(node) ? undefined : checker.getPropertySymbolOfDestructuringAssignment(property.name) }]
       : [],
   );
@@ -399,31 +404,6 @@ const meaningOfName = (node: ts.Node): SymbolMeaning => {
   return 'all';
 };
 
-const local = (path: string): string => path.replace(/^\//, '');
-
-const resolution = (specifier: string, from: string, tree: Tree) => {
-  const relative = resolve(specifier, from, tree);
-  if (relative !== null && 'to' in relative) return relative;
-  const configured = configResolver(tree, () => undefined, new Map())(specifier, from, tree, new Set());
-  if (configured !== null && 'to' in configured) return configured;
-  const found = ts.resolveModuleName(
-    specifier,
-    posix.resolve('/', from),
-    {
-      moduleResolution: ts.ModuleResolutionKind.Bundler,
-      module: ts.ModuleKind.ESNext,
-      allowJs: true,
-      customConditions: ['bun'],
-    },
-    {
-      fileExists: (path) => tree.has(local(path)),
-      readFile: (path) => (tree.has(local(path)) ? tree.read(local(path)) : undefined),
-      realpath: (path) => posix.resolve('/', tree.realpath?.(local(path)) ?? local(path)),
-    },
-  ).resolvedModule;
-  return found === undefined ? (relative ?? configured) : { to: local(found.resolvedFileName) };
-};
-
 const derivations = (node: ts.Node): readonly ts.Node[] => {
   if (ts.isBindingElement(node)) return node.initializer === undefined ? [node.parent.parent] : [node.parent.parent, node.initializer];
   if (ts.isFunctionLike(node)) return node.type !== undefined || !('body' in node) || node.body === undefined ? [] : [node.body];
@@ -482,6 +462,7 @@ const placing =
   (scripts: Scripts) =>
   (input: SymbolPlacing): readonly string[] => {
     const { path, tree } = input;
+    const resolve = resolver(tree);
     const files = new Map<string, ts.SourceFile>();
     const units = new Map<string, Unit>();
     const add = (name: string, owner: string, text: string): Unit => {
@@ -532,7 +513,7 @@ const placing =
     const targetOf = (specifier: string, from: string): string | undefined => {
       const key = `${from}\0${specifier}`;
       if (resolved.has(key)) return resolved.get(key);
-      const found = resolution(specifier, from, tree);
+      const found = resolve(specifier, from);
       const name = found !== null && 'to' in found ? byPath.get(tree.realpath?.(found.to) ?? found.to) : undefined;
       resolved.set(key, name);
       return name;
@@ -627,15 +608,17 @@ const placing =
       placed = new Map<string, boolean>();
       const missing: ts.Identifier[] = [];
       for (const unit of roots) {
+        const include = (name: ts.Identifier): boolean =>
+          wanted.has(name.text) && (lines === undefined || lines.has(located(starts, unit.offset + name.getStart(unit.file)).line));
         const visit = (node: ts.Node): void => {
           const spelled =
             ts.isIdentifier(node) && !isName(node)
-              ? [{ name: node, symbol: identifierSymbol(node, checker) }]
-              : memberSpellings(node, checker);
+              ? include(node)
+                ? [{ name: node, symbol: identifierSymbol(node, checker) }]
+                : []
+              : memberSpellings(node, checker, include);
           for (const one of spelled) {
             const name = one.name.text;
-            if (!wanted.has(name)) continue;
-            if (lines !== undefined && !lines.has(located(starts, unit.offset + one.name.getStart(unit.file)).line)) continue;
             if (placed.get(name) === false) {
               missing.push(one.name);
               continue;
@@ -650,8 +633,8 @@ const placing =
       }
       if (missing.length === 0 || round === 6) break;
       const beyond = new Set<string>();
+      const seen = new Set<ts.Node>();
       for (const name of missing) {
-        const seen = new Set<ts.Node>();
         const pending: ts.Node[] = [...receiversOf(name)];
         while (pending.length > 0) {
           const node = pending.pop()!;
@@ -663,7 +646,7 @@ const placing =
               const from = moduleAt(declaration);
               const owner = units.get(declaration.getSourceFile().fileName)?.path;
               if (from === undefined || owner === undefined) continue;
-              const found = resolution(from, owner, tree);
+              const found = resolve(from, owner);
               if (found !== null && 'to' in found) beyond.add(tree.realpath?.(found.to) ?? found.to);
             }
             pending.push(...(aliased(symbol)?.declarations ?? []));
@@ -706,5 +689,5 @@ export const symbolReader = (scripts: Scripts): SymbolReader => ({
       imports: [...new Set(fragments.flatMap((one) => one.imports))],
     };
   },
-  resolve: resolution,
+  resolve: (specifier, from, tree) => resolver(tree)(specifier, from),
 });

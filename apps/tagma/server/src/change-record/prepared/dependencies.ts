@@ -57,7 +57,11 @@ export const checkDependencies = Effect.fn('prepared.dependencies')(function* <R
     const current = digest === undefined ? (one?.land === 'own' ? one.landed?.working : undefined) : digest;
     return bearsNobody(landing.origin, landing.explicit, landing.team, path, current);
   };
-  const foreign = yield* fns.foreignPaths(landing, carriers, (path) => planned.get(path)?.land !== 'whole' && !borne(path));
+  const foreign = new Set(
+    [...(yield* fns.foreignPaths(landing, carriers, (path) => planned.get(path)?.land !== 'whole' && !borne(path)))].filter(
+      (path) => planned.get(path)?.land !== 'whole',
+    ),
+  );
   if (foreign.size === 0) return;
   const files = yield* FileSystem.FileSystem;
   const snapshots = new Map<string, DependencyInput>();
@@ -81,7 +85,13 @@ export const checkDependencies = Effect.fn('prepared.dependencies')(function* <R
   };
   const inspect = Effect.fnUntraced(function* (input: DependencyInput) {
     const answer = yield* Effect.mapError(fns.walks.dependencies({ ...input, facts: facts.get(input.path) }), (failure) =>
-      walkCut(input.path, failure, `include ${input.path} in paths and whole to carry its complete text`),
+      walkCut(
+        input.path,
+        failure,
+        planned.get(input.path)?.land === 'whole'
+          ? 'wait for the foreign changes to land, or land without this importer'
+          : `include ${input.path} in paths and whole to carry its complete text`,
+      ),
     );
     if (answer.facts !== undefined) {
       facts.set(input.path, answer.facts);
@@ -204,12 +214,16 @@ export const checkDependencies = Effect.fn('prepared.dependencies')(function* <R
   };
   const matched: { readonly candidate: Dependency; readonly users: readonly string[] }[] = [];
   const asked = new Map<string, Set<string>>();
+  const requiredBy = new Map<string, Set<string>>();
   for (const [path, one] of facts)
     for (const candidate of one.candidates) {
       const using = [...(users.get(candidate.name) ?? [])].filter((user) => reached(user).has(path));
       if (using.length === 0) continue;
       matched.push({ candidate, users: using });
-      for (const user of using) asked.set(user, (asked.get(user) ?? new Set()).add(candidate.name));
+      for (const user of using) {
+        asked.set(user, (asked.get(user) ?? new Set()).add(candidate.name));
+        requiredBy.set(user, (requiredBy.get(user) ?? new Set()).add(path));
+      }
     }
   const landed = (path: string): string | null | undefined => {
     const snapshot = snapshots.get(path);
@@ -229,6 +243,7 @@ export const checkDependencies = Effect.fn('prepared.dependencies')(function* <R
     const input = snapshots.get(path);
     if (input === undefined || input.selected === null) continue;
     const files = [...new Set([...(edges.get(path) ?? []), ...reached(path)])];
+    const required = [...(requiredBy.get(path) ?? [])];
     const answer = yield* fns.walks
       .placements({
         root,
@@ -241,7 +256,15 @@ export const checkDependencies = Effect.fn('prepared.dependencies')(function* <R
         closed,
         capture,
       })
-      .pipe(Effect.mapError((failure) => walkCut(path, failure, `include ${path} in paths and whole to carry its complete text`)));
+      .pipe(
+        Effect.mapError((failure) =>
+          walkCut(
+            path,
+            failure,
+            `include ${required.join(', ')} in paths and carry them as they stand (whole: ${JSON.stringify(required)}), or wait for their holders to land`,
+          ),
+        ),
+      );
     placed.set(path, new Set(answer));
   }
   for (const { candidate, users: using } of matched)
