@@ -60,7 +60,12 @@ test('the inspection runner compares each version, keeps partial coverage honest
         tree,
         base,
         keys: [
-          { key: 'vendors', id: 'vendor-ids', params: { source, exclude: [] }, reach: { places: [source], files: ['**/*.ts'] } },
+          {
+            key: 'vendors',
+            id: 'vendor-ids',
+            params: { source, include: ['**'], exclude: [] },
+            reach: { places: [source], files: ['**/*.ts'] },
+          },
           { key: 'coupling', id: 'coupling', params: { baseline: [], aliases: [] }, reach: { places: [''], files: ['**/*.ts'] } },
         ],
         sides: [side('tree'), side('base')],

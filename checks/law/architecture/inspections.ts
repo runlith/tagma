@@ -3,6 +3,7 @@ import type { Alias } from '../declarations/resolve';
 
 export type VendorParams = {
   readonly source: string;
+  readonly include: readonly string[];
   readonly exclude: readonly string[];
 };
 

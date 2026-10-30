@@ -65,7 +65,7 @@ test('a competing cache writer does not lose literals needed by an unchanged sou
       };
       return side;
     };
-    const params = { source, exclude: [] };
+    const params = { source, include: ['**'], exclude: [] };
     vendorJudge(root, base, params, competing).whole(side(base, true, []));
     put('packages/adapter-orbit/src/adapter.ts', "export const ORBIT_PROVIDER = 'orbit'; export const FUTURE_PROVIDER = 'future-cloud';");
     git('add', '.');

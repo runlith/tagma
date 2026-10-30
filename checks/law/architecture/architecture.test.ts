@@ -32,6 +32,8 @@ test('vendor strings follow adapter declarations, decode escapes and ignore non-
     [`${server}/translations/translate.ts`]:
       "const provider = 'orbit-cloud:model'; const command = `orbit-cli`; const escaped = 'orb\\u0069t'; const cursor = placeRole('cursor'); const page = new URL('https://example.test').searchParams.get('cursor'); type Page = Omit<Fields, 'cursor'>; // orbit-cloud",
     [`${server}/external-harnesses/steps/old.ts`]: "const provider = 'orbit-cloud';",
+    [`${server}/plugins/conventions.ts`]: "const provider = 'orbit-cloud';",
+    [`${server}/external-harnesses/launch.ts`]: "const provider = 'orbital-cli';",
     [`${server}/editors/choice.ts`]: "const editor = 'orbit';",
     [`${server}/translations/data.fixture.ts`]: "export const payload = 'orbit-cloud';",
     [`${server}/translations/translate.test.ts`]: "const provider = 'orbit-cloud';",
@@ -47,11 +49,12 @@ test('vendor strings follow adapter declarations, decode escapes and ignore non-
   expect(new Set(words)).toEqual(
     new Set(['orbit', 'orbit-browser', 'orbit-cloud', 'orbit-local', 'orbit-shell', 'orbit-cli', 'orbit-data', 'orbital-cli', 'cursor']),
   );
-  const params = { source: server, exclude: ['external-harnesses/steps/**', 'editors/**'] };
+  const params = { source: server, include: ['translations/**', 'external-harnesses/**'], exclude: ['external-harnesses/steps/**'] };
   const expected = [
     `vendor:orbit-cloud:${server}/translations/translate.ts`,
     `vendor:orbit-cli:${server}/translations/translate.ts`,
     `vendor:orbit:${server}/translations/translate.ts`,
+    `vendor:orbital-cli:${server}/external-harnesses/launch.ts`,
     `vendor:cursor:${server}/translations/selection.ts`,
   ];
   expect(vendorFindings(tree, params, listedWords(words)).map((one) => one.fingerprint)).toEqual(expected);

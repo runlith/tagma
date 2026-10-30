@@ -108,6 +108,7 @@ export default defineConfig({
             'apps/tagma/server/src/providers',
             'apps/tagma/server/src/native-harness/kernel.ts',
             'apps/tagma/server/src/native-harness/assembly.ts',
+            'apps/tagma/server/src/native-harness/turns/runWebs.ts',
           ],
           ask: ['apps/tagma/server/src/threads/asks.ts'],
           row: ['apps/tagma/server/src/external-harnesses', 'apps/tagma/server/src/threads/harness'],
@@ -164,6 +165,7 @@ export default defineConfig({
     'vendor-ids': vendorIds(
       {
         source: 'apps/tagma/server/src',
+        include: ['translations/**', 'threads/{naming,recap,decisions}/**', 'native-harness/compaction/**', 'external-harnesses/**'],
         exclude: ['external-harnesses/steps/**', 'composition/adapters.ts', 'plugin-formats/**', 'editors/**'],
       },
       { files: ['apps/tagma/server/src/**/*.ts', 'packages/adapter-*/**/*.{ts,tsx,js,mjs,cjs}'] },

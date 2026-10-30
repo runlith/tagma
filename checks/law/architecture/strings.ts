@@ -169,8 +169,11 @@ export const stringsOf = (file: ts.SourceFile): readonly StringNode[] => {
   return strings;
 };
 
-export const isVendorSource = (path: string, params: VendorParams): boolean =>
-  within(path, params.source) && !params.exclude.some((glob) => matchesGlob(path.slice(params.source.length + 1), glob));
+export const isVendorSource = (path: string, params: VendorParams): boolean => {
+  if (!within(path, params.source)) return false;
+  const relative = path.slice(params.source.length + 1);
+  return params.include.some((glob) => matchesGlob(relative, glob)) && !params.exclude.some((glob) => matchesGlob(relative, glob));
+};
 
 export type VendorWords = {
   readonly mayName: (text: string) => boolean;
