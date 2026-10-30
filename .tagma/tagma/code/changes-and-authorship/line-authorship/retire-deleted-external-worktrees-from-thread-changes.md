@@ -12,4 +12,4 @@ edges:
   - kind: relates
     to: 01a0fd8b-bef0-716f-98eb-0a3806405a5f
 ---
-Fix the lifecycle that leaves a git-removed temporary worktree as a stale side of thread changes. Reproduce the reported shell-created worktree through the real Changes door, retire its held records only on proven deletion, preserve moved worktrees, and verify that other checkouts and historical outcomes remain readable.
+Retire a git-removed external worktree from thread changes without confusing a failed HEAD read with an absent commit. The shared HEAD observer reports failed attempts through its existing recovery cadence; retirement follows registered paths and asks the root registry to prove deletion. The real Changes socket regression fails before the fix and passes after it, retaining the other checkout and checkout-gone history. The observation and socket files pass on three shuffle seeds; real watcher, root-identity and change-frame suites pass. Server typechecking remains blocked by pre-existing DOM-global errors in column.e2e.ts and undeclaredRefusal in reflections/operations.ts.
