@@ -1,187 +1,155 @@
 import { expect, test } from 'bun:test';
+import type { Boundaries } from '../architecture/boundaries';
 import type { RepeatedParams } from './declaration';
 import { findRepeated } from './repeated';
 import { corpusOf } from './sources';
 
 const params: RepeatedParams = {
-  region: ['src/'],
+  region: ['src/', 'packages/'],
   tests: ['**/*.test.ts', '**/testing/**'],
-  scope: 'exported',
+  scope: 'all',
   minMembers: 3,
   minUnion: 3,
   minLiterals: 3,
   ignoreNames: [],
   aliases: [{ prefix: '$lib/', dir: 'src/lib' }],
 };
-
-const judge = (sources: Record<string, string>, over: Partial<RepeatedParams> = {}) => {
+const boundaries = (relations: readonly (readonly [string, string])[] = [], owners: Readonly<Record<string, string>> = {}): Boundaries => ({
+  owner: (path) => owners[path] ?? path,
+  imports: (from, to) => relations.some(([a, b]) => from === a && to === b),
+});
+const judge = (files: Record<string, string>, map: Boundaries = boundaries(), over: Partial<RepeatedParams> = {}) => {
   const merged = { ...params, ...over };
-  return findRepeated(corpusOf(sources, merged), merged).map((one) => [one.path, one.line, one.fingerprint.split(' ')[1]!.split(':')[0]]);
+  return findRepeated(corpusOf(files, merged), merged, map);
 };
+const paths = (files: Record<string, string>, map?: Boundaries, over?: Partial<RepeatedParams>) =>
+  judge(files, map, over).map((one) => one.path);
+const wide = 'export type Shared = { readonly a: string; readonly b: string; readonly c: number };\n';
 
-test('object types equal in member names, optionality and types repeat across files whatever their order, names and syntax', () => {
-  const found = findRepeated(
-    corpusOf(
-      {
-        'src/a.ts': 'export type Pick = {\n  readonly id: string;\n  readonly title?: string;\n  readonly tags: readonly string[];\n};\n',
-        'src/b.ts':
-          'export interface Draft {\n  readonly tags: readonly string[];\n  readonly title?: string;\n  readonly id: string;\n}\n',
-        'src/c.ts': 'export type Other = { readonly id: string; readonly title: string; readonly tags: readonly string[] };\n',
-      },
-      params,
+test('an alias that only renames an imported type reports the alias, while a projection, generic application and local alias are clean', () => {
+  const files = {
+    'src/owner.ts': wide,
+    'src/use.ts':
+      "import type { Shared as Imported } from './owner';\nexport type Copy = Imported;\nexport type Member = Imported['a'];\nexport type Instance = Generic<Imported>;\ntype Local = { value: string };\nexport type Own = Local;\n",
+  };
+  expect(judge(files).map((one) => [one.path, one.line, one.fingerprint])).toEqual([['src/use.ts', 2, 'repeated alias:Copy src/use.ts']]);
+});
+
+test('same-name equal types repeat across modules, even below the copy threshold, but not inside one module or in test code', () => {
+  const files = {
+    'src/a.ts': 'export type Position = { readonly line: number };\n',
+    'src/b.ts': 'export interface Position { readonly line: number }\n',
+    'src/c.test.ts': 'export type Position = { readonly line: number };\n',
+  };
+  expect(paths(files)).toEqual(['src/a.ts', 'src/b.ts']);
+  expect(paths(files, boundaries([], { 'src/a.ts': 'one', 'src/b.ts': 'one' }))).toEqual([]);
+});
+
+test('a copy of an exported dependency type needs at least three members or alternatives and is reported only at its redeclaration', () => {
+  const files = {
+    'src/owner.ts': wide + "export type Mode = 'one' | 'two' | 'three';\nexport type Pair = { readonly a: string; readonly b: string };\n",
+    'src/copy.ts':
+      "type Local = { readonly c: number; readonly b: string; readonly a: string };\ntype Choice = 'three' | 'one' | 'two';\ntype Small = { readonly a: string; readonly b: string };\n",
+  };
+  const map = boundaries([['src/copy.ts', 'src/owner.ts']]);
+  expect(judge(files, map).map((one) => [one.path, one.line])).toEqual([
+    ['src/copy.ts', 1],
+    ['src/copy.ts', 2],
+  ]);
+  expect(paths(files)).toEqual([]);
+  expect(paths({ 'src/owner.ts': wide.replace('export ', ''), 'src/copy.ts': files['src/copy.ts']! }, map)).toEqual([]);
+});
+
+test('ProgramRan repeats an exported ProgramOutput already reached by the harness module', () => {
+  const output = '{ readonly stdout: string; readonly stderr: string; readonly exit: number | null };\n';
+  const files = {
+    'src/run.ts': `export type ProgramRan = ${output}`,
+    'packages/tagma/src/adapter/provider.ts': `export type ProgramOutput = ${output}`,
+  };
+  expect(
+    paths(
+      files,
+      boundaries([['external-harnesses', '@runlith/tagma']], {
+        'src/run.ts': 'external-harnesses',
+        'packages/tagma/src/adapter/provider.ts': '@runlith/tagma',
+      }),
     ),
-    params,
-  );
-  expect(found.map((one) => [one.path, one.line])).toEqual([
-    ['src/a.ts', 1],
+  ).toEqual(['src/run.ts']);
+});
+
+test('one module declares equal object concepts once, including same-file declarations, while literal settings stay independent', () => {
+  const selection =
+    '{ readonly provider: string; readonly model: string | null; readonly reasoning: string | null; readonly account: string | null };\n';
+  const files = {
+    'src/asks.ts': `export type ThreadSelection = ${selection}`,
+    'src/recap.ts': `export type RecapSelection = ${selection}`,
+  };
+  const map = boundaries([], { 'src/asks.ts': 'threads', 'src/recap.ts': 'threads' });
+  expect(paths(files, map)).toEqual(['src/asks.ts', 'src/recap.ts']);
+  expect(paths({ 'src/asks.ts': `${files['src/asks.ts']}${files['src/recap.ts']}` }, map)).toEqual(['src/asks.ts']);
+  expect(
+    paths({ 'src/asks.ts': "type RenderMode = 'auto'|'on'|'off';", 'src/recap.ts': "type LigatureMode = 'auto'|'on'|'off';" }, map),
+  ).toEqual([]);
+});
+
+test('independent ranges, focus policies and settings with equal shapes stay separate named concepts', () => {
+  expect(
+    paths({
+      'src/speech.ts': 'export type Silenced = { readonly from: number; readonly to: number };\n',
+      'src/editor.ts': 'export type LineRange = { readonly from: number; readonly to: number };\n',
+      'src/layer.ts': 'export type ReturnFocus = false | (() => HTMLElement | null);\n',
+      'src/popover.ts': 'export type InitialFocus = false | (() => HTMLElement | null);\n',
+      'src/render.ts': "export type RenderMode = 'auto' | 'on' | 'off';\n",
+      'src/ligatures.ts': "export type LigatureMode = 'auto' | 'on' | 'off';\n",
+    }),
+  ).toEqual([]);
+});
+
+test('readonly, optionality, generic parameters, heritage and referenced declaration identities distinguish shapes', () => {
+  const files = {
+    'src/a.ts':
+      "import type { Row } from './rows-a';\nexport type Page = { readonly row: Row; readonly next?: string; readonly count: number };\n",
+    'src/b.ts':
+      "import type { Row } from './rows-b';\nexport type Page = { readonly row: Row; readonly next?: string; readonly count: number };\n",
+    'src/c.ts':
+      "import type { Row } from './rows-a';\nexport type Page = { readonly row: Row; readonly next: string; readonly count: number };\n",
+    'src/d.ts': "import type { Row } from './rows-a';\nexport type Page = { row: Row; readonly next?: string; readonly count: number };\n",
+    'src/e.ts': 'export interface Generic<T> { readonly a: T; readonly b: T; readonly c: T }\n',
+    'src/f.ts': 'export interface Generic<K> { readonly a: K; readonly b: K; readonly c: K }\n',
+    'src/g.ts': 'export interface Generic<T> extends Base { readonly a: T; readonly b: T; readonly c: T }\n',
+  };
+  expect(paths(files)).toEqual([]);
+});
+
+test('package exports, relative imports and configured aliases name one referenced declaration', () => {
+  const page = (row: string) => `${row}\nexport type Page = { readonly row: Row; readonly next: string; readonly count: number };\n`;
+  expect(
+    paths({
+      'packages/shared/package.json': JSON.stringify({ name: '@acme/shared', exports: { './row': './src/row.ts' } }),
+      'packages/shared/src/page.ts': page("import type { Row } from './row';"),
+      'packages/app/src/page.ts': page("import type { Row } from '@acme/shared/row';"),
+    }),
+  ).toEqual(['packages/app/src/page.ts', 'packages/shared/src/page.ts']);
+  expect(
+    paths({
+      'src/a.ts': page("import type { Row } from '$lib/row';"),
+      'src/b.ts': page("import type { Row } from './lib/row';"),
+    }),
+  ).toEqual(['src/a.ts', 'src/b.ts']);
+});
+
+test('Svelte declaration positions and fingerprints survive unrelated lines; value sets alone are not type copies', () => {
+  const files = {
+    'src/a.svelte': `<script lang="ts">\n${wide}</script>`,
+    'src/b.ts': wide,
+    'src/constants.ts': "export const MODES = ['one','two','three'];\n",
+    'src/schema.ts': "export const Mode = Schema.Literals(['one','two','three']);\n",
+  };
+  const first = judge(files);
+  expect(first.map((one) => [one.path, one.line])).toEqual([
+    ['src/a.svelte', 2],
     ['src/b.ts', 1],
   ]);
-  expect(found[0]?.message).toBe('object type `Pick` {id, title, tags} is also declared in src/b.ts:1 (`Draft`)');
-});
-
-test('a type below the member minimum, a same-file copy, a test-file copy and an unexported copy are not repeats', () => {
-  const small = 'export type Pair = { readonly a: string; readonly b: string };\n';
-  const wide = 'export type Wide = { readonly a: string; readonly b: string; readonly c: number };\n';
-  expect(
-    judge({
-      'src/one.ts': `${small}${wide}export type Wide2 = { readonly a: string; readonly b: string; readonly c: number };\n`,
-      'src/two.ts': small,
-      'src/three.test.ts': wide,
-      'src/testing/fake.ts': wide,
-      'src/four.ts':
-        'type Hidden = { readonly a: string; readonly b: string; readonly c: number };\nexport const hidden: Hidden | undefined = undefined;\n',
-    }),
-  ).toEqual([]);
-  expect(
-    judge(
-      {
-        'src/one.ts': wide,
-        'src/four.ts':
-          'type Hidden = { readonly a: string; readonly b: string; readonly c: number };\nexport const hidden: Hidden | undefined = undefined;\n',
-      },
-      { scope: 'all' },
-    ),
-  ).toEqual([
-    ['src/four.ts', 1, 'object'],
-    ['src/one.ts', 1, 'object'],
-  ]);
-});
-
-test('readonly, optional, type, generic or heritage differences make object types different', () => {
-  expect(
-    judge({
-      'src/a.ts': 'export type Shape = { readonly id: string; name: string; readonly size: number };\n',
-      'src/b.ts': 'export type Shape = { readonly id: string; readonly name: string; readonly size: number };\n',
-      'src/c.ts': 'export type Shape = { readonly id: string; name?: string; readonly size: number };\n',
-      'src/d.ts': 'export type Shape = { readonly id: string; name: string; readonly size: bigint };\n',
-      'src/e.ts': 'export interface Row<T> { readonly id: T; readonly name: T; readonly size: T }\n',
-      'src/f.ts': 'export interface Row<K> { readonly id: K; readonly name: K; readonly size: K }\n',
-      'src/g.ts':
-        'export interface Base { readonly x: 1 }\nexport interface Row2 extends Base { readonly id: string; readonly name: string; readonly size: number }\n',
-      'src/h.ts': 'export interface Row3 { readonly id: string; readonly name: string; readonly size: number }\n',
-    }),
-  ).toEqual([
-    ['src/b.ts', 1, 'object'],
-    ['src/h.ts', 1, 'object'],
-  ]);
-});
-
-test('unions of references repeat in any order; keyword-only and short unions do not', () => {
-  expect(
-    judge({
-      'src/a.ts': 'export type Outcome = Done | Failed | Cancelled;\nexport type Maybe = string | undefined | null;\n',
-      'src/b.ts': 'export type Result = Cancelled | Done | Failed;\nexport type Either = string | undefined | null;\n',
-      'src/c.ts': 'export type Short = Done | Failed;\n',
-      'src/d.ts': 'export type Short = Failed | Done;\n',
-    }),
-  ).toEqual([
-    ['src/a.ts', 1, 'union'],
-    ['src/b.ts', 1, 'union'],
-  ]);
-});
-
-test('a set of string literals repeats across a union type, a const array, a Set and Schema.Literals; deriving one from the other does not', () => {
-  const found = judge({
-    'src/type.ts': "export type Kind = 'task' | 'rule' | 'spec';\n",
-    'src/array.ts': "export const KINDS = ['spec', 'task', 'rule'] as const;\n",
-    'src/set.ts': "export const SEEN = new Set(['rule', 'spec', 'task']);\n",
-    'src/schema.ts': "export const Kinds = Schema.Literals(['task', 'spec', 'rule']);\n",
-    'src/derived.ts':
-      "import { KINDS } from './array';\nexport type Derived = (typeof KINDS)[number];\nexport const again = Schema.Literals(KINDS);\n",
-    'src/other.ts': "export type Mode = 'a' | 'b' | 'c';\n",
-  });
-  expect(found).toEqual([
-    ['src/array.ts', 1, 'literals'],
-    ['src/schema.ts', 1, 'literals'],
-    ['src/set.ts', 1, 'literals'],
-    ['src/type.ts', 1, 'literals'],
-  ]);
-});
-
-test('Svelte script blocks count with their own line numbers, and ignored names are skipped', () => {
-  const sources = {
-    'src/a.svelte':
-      '<script lang="ts">\n  export type Props = { readonly id: string; readonly label: string; readonly size: number };\n</script>\n<p>a</p>',
-    'src/b.svelte':
-      '<p>b</p>\n<script lang="ts">\n  export type Props = { readonly id: string; readonly label: string; readonly size: number };\n</script>',
-  };
-  expect(judge(sources)).toEqual([
-    ['src/a.svelte', 2, 'object'],
-    ['src/b.svelte', 3, 'object'],
-  ]);
-  expect(judge(sources, { ignoreNames: ['Props'] })).toEqual([]);
-});
-
-test('a referenced type counts by the declaration it names, not by its spelling', () => {
-  const page = (row: string, name = 'Row') =>
-    `${row}\nexport type Page = { readonly items: number; readonly value: ${name}; readonly next: string };\n`;
-  expect(
-    judge({
-      'src/a.ts': page("import type { Row } from './rows-a';"),
-      'src/b.ts': page("import type { Row } from './rows-b';"),
-      'src/c.ts': page('type Row = { readonly own: string };'),
-      'src/d.ts': page('type Row = { readonly own: string };'),
-    }),
-  ).toEqual([]);
-  expect(
-    judge({
-      'src/c.ts': page("import type { Row } from './lib/shared/row.js';"),
-      'src/deep/d.ts': page("import type { Row as Entry } from '../lib/shared/row';", 'Entry'),
-      'src/e.ts': page("import type { Row } from '$lib/shared/row';"),
-      'src/f.ts': page("import type { Row } from './lib/other/row';"),
-    }),
-  ).toEqual([
-    ['src/c.ts', 2, 'object'],
-    ['src/deep/d.ts', 2, 'object'],
-    ['src/e.ts', 2, 'object'],
-  ]);
-});
-
-test('a type reached through a package public path and through a relative path is one declaration, resolved by the package exports', () => {
-  const page = (row: string) => `${row}\nexport type Page = { readonly items: number; readonly value: Row; readonly next: string };\n`;
-  const manifest = (exported: Record<string, unknown>) => JSON.stringify({ name: '@acme/shared', exports: exported });
-  const reach = { region: ['packages/'] };
-  const sources = (exported: Record<string, unknown>) => ({
-    'packages/shared/package.json': manifest(exported),
-    'packages/shared/src/page.ts': page("import type { Row } from './row';"),
-    'packages/app/src/page.ts': page("import type { Row } from '@acme/shared/row';"),
-    'packages/app/src/other.ts': page("import type { Row } from '@acme/missing/row';"),
-  });
-  expect(judge(sources({ './row': './src/row.ts' }), reach)).toEqual([
-    ['packages/app/src/page.ts', 2, 'object'],
-    ['packages/shared/src/page.ts', 2, 'object'],
-  ]);
-  expect(judge(sources({ './row': './src/elsewhere.ts' }), reach)).toEqual([]);
-  expect(judge(sources({ './row': { types: './dist/row.d.ts', default: './src/row.ts' } }), reach)).toEqual([
-    ['packages/app/src/page.ts', 2, 'object'],
-    ['packages/shared/src/page.ts', 2, 'object'],
-  ]);
-});
-
-test('a fingerprint names the shape and the file, not the line, so an edit above a declaration keeps its debt', () => {
-  const declared = 'export type Wide = { readonly a: string; readonly b: string; readonly c: number };\n';
-  const prints = (a: string) =>
-    findRepeated(corpusOf({ 'src/a.ts': a, 'src/b.ts': declared }, params), params).map((one) => one.fingerprint);
-  expect(prints(declared)).toEqual(prints(`// lead\n\nconst padding = 1;\n${declared}`));
-  expect(new Set(prints(declared)).size).toBe(2);
+  expect(judge({ ...files, 'src/b.ts': `\n${wide}` }).map((one) => one.fingerprint)).toEqual(first.map((one) => one.fingerprint));
+  expect(paths(files, undefined, { ignoreNames: ['Shared'] })).toEqual([]);
 });

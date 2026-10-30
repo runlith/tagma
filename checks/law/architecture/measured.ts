@@ -1,18 +1,17 @@
 import { createHash } from 'node:crypto';
+import { boundaryState } from './boundaries';
 import { posix } from 'node:path';
 import type { Finding, Side } from '@runlith/tagma/rules';
 import { changesBetween, FAR, GOOD_ENOUGH, importersOf, manifestsAt, prepare } from '../declarations/index';
 import { listedAt } from '../directories';
-import { blobTexts } from '../git';
 import { derivedMap, recentRoots, rootAt, seededMap, valueAt } from '../maps';
 import { versionAt } from './cache';
 import { applyContributions, type Contribution, contributions, couplingFindings, indexCoupling, measuresOf, type Totals } from './coupling';
 import type { CouplingParams } from './inspections';
-import { type Module, moduleAt, moduleOwners, production, type snapshots, within } from './snapshot';
+import { type Module, moduleOwners, production, type snapshots, within } from './snapshot';
 
 const NEARBY = 6;
 
-type Territory = readonly (readonly [card: string, id: string])[];
 type Owner = (path: string) => { readonly id: string } | undefined;
 
 const source = (path: string): boolean =>
@@ -21,9 +20,6 @@ const manifest = (path: string): boolean => posix.basename(path) === 'package.js
 const cardOf = (path: string): boolean => path.startsWith('.tagma/') && path.endsWith('.md');
 const moduleShape = (module: Module | undefined): string =>
   JSON.stringify(module === undefined ? null : { id: module.id, paths: module.paths });
-const refOf = (ref: string): string => ref.replace(/\/$/, '');
-const territoryKeys = (module: Module): string[] =>
-  module.paths.map((one) => (one.kind === 'file' ? `tf:${refOf(one.ref)}` : `td:${refOf(one.ref)}`));
 
 const byText = (left: string, right: string): number => (left < right ? -1 : left > right ? 1 : 0);
 
@@ -51,32 +47,16 @@ export const couplingJudge = (
   const signature = createHash('sha256').update(JSON.stringify(params.aliases)).digest('hex');
   const family = `coupling:${versionAt(root, revision)}:${signature}`;
 
-  const ownerOver = (rootId: string, overlay: ReadonlyMap<string, unknown>): Owner => {
-    const looked = (key: string): unknown => (overlay.has(key) ? overlay.get(key) : valueAt(root, rootId, key));
-    const pick = (key: string): string | undefined => {
-      const held = looked(key) as Territory | undefined;
-      return held === undefined || held.length === 0 ? undefined : held[held.length - 1]![1];
-    };
-    const memo = new Map<string, { readonly id: string } | undefined>();
+  const ownerOver = (revision: string): Owner => {
+    const view = boundaryState(root, revision);
     return (path) => {
-      if (memo.has(path)) return memo.get(path);
-      let id = pick(`tf:${path}`);
-      for (let at = path; id === undefined && at !== '.'; at = posix.dirname(at)) id = pick(`td:${at}`);
-      id ??= pick('td:.');
-      const found = id === undefined ? undefined : { id };
-      memo.set(path, found);
-      return found;
+      const id = view.owner(path);
+      return id === undefined ? undefined : { id };
     };
   };
 
   const seed = (commit: string, modules: readonly Module[], totals: Readonly<Record<string, Totals>>): void => {
-    const territories = new Map<string, [string, string][]>();
-    for (const module of modules)
-      for (const key of territoryKeys(module)) {
-        const held = territories.get(key);
-        if (held === undefined) territories.set(key, [[module.card ?? '', module.id]]);
-        else held.push([module.card ?? '', module.id]);
-      }
+    boundaryState(root, commit, modules);
     const sharing = new Map<string, string[]>();
     for (const [id, one] of Object.entries(totals)) {
       const held = sharing.get(one.path);
@@ -86,8 +66,6 @@ export const couplingJudge = (
     seededMap(root, family, commit, [
       ...Object.entries(totals).map(([id, one]) => [`m:${id}`, one] as const),
       ...[...sharing].map(([path, ids]) => [`r:${path}`, ids.sort(byText)] as const),
-      ...modules.flatMap((module) => (module.card === undefined ? [] : [[`c:${module.card}`, module] as const])),
-      ...[...territories].map(([key, held]) => [key, held.sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0))] as const),
     ]);
   };
 
@@ -160,7 +138,8 @@ export const couplingJudge = (
     const was = manifestsAt(root, from.revision);
     const now = manifestsAt(root, target.commit);
     const metadata = changes.filter((one) => manifest(one.path) || cardOf(one.path));
-    const texts = blobTexts(root, [...new Set(metadata.flatMap((one) => (cardOf(one.path) && one.after !== null ? [one.after] : [])))]);
+    const boundaryBefore = boundaryState(root, from.revision);
+    const boundaryAfter = boundaryState(root, target.commit);
     const overlay = new Map<string, unknown>();
     const changedTerritories = new Set<string>();
     const changedPackages = new Set<string>();
@@ -172,29 +151,17 @@ export const couplingJudge = (
         if (JSON.stringify(was.at(directory)) !== JSON.stringify(now.at(directory))) changedPackages.add(directory);
         continue;
       }
-      const before = valueAt(root, from.id, `c:${change.path}`) as Module | undefined;
-      const after = change.after === null ? undefined : moduleAt(change.path, texts.get(change.after)!);
+      const before = boundaryBefore.card(change.path);
+      const after = boundaryAfter.card(change.path);
       if (before === undefined && after === undefined) continue;
-      overlay.set(`c:${change.path}`, after);
       const id = after?.id ?? before?.id;
       if (id !== undefined) cards.set(change.path, id);
       for (const module of [before, after]) if (module !== undefined) touched.add(module.id);
-      for (const [module, add] of [
-        [before, false],
-        [after, true],
-      ] as const)
-        if (module !== undefined)
-          for (const key of territoryKeys(module)) {
-            const held = ((overlay.has(key) ? overlay.get(key) : valueAt(root, from.id, key)) as Territory | undefined) ?? [];
-            const next = held.filter((one) => one[0] !== change.path);
-            if (add) next.push([change.path, module.id]);
-            overlay.set(key, next.length === 0 ? undefined : [...next].sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0)));
-          }
       if (moduleShape(before) !== moduleShape(after))
         for (const module of [before, after]) for (const one of module?.paths ?? []) changedTerritories.add(one.ref);
     }
-    const ownerBefore = ownerOver(from.id, new Map());
-    const ownerAfter = ownerOver(from.id, overlay);
+    const ownerBefore = ownerOver(from.revision);
+    const ownerAfter = ownerOver(target.commit);
     const affected = new Set(changes.map((one) => one.path).filter(source));
     const targets = new Set(
       changes.filter((one) => source(one.path) && (one.before === null || one.after === null)).map((one) => one.path),

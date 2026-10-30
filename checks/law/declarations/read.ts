@@ -386,6 +386,7 @@ const read = (path: string, text: string): Facts => {
           name,
           line,
           size: statement.members.length,
+          declaration: true,
           exported,
           ...shapeKeyed(text),
           label: labelOf(statement.members.map((member) => (member.name === undefined ? '()' : nameText(member.name, file)))),
@@ -394,19 +395,28 @@ const read = (path: string, text: string): Facts => {
       }
       let type = statement.type;
       while (ts.isParenthesizedTypeNode(type)) type = type.type;
-      if (ts.isTypeLiteralNode(type)) {
+      if (
+        ts.isTypeReferenceNode(type) &&
+        ts.isIdentifier(type.typeName) &&
+        type.typeArguments === undefined &&
+        scopes.get(file)?.(type.typeName.text)?.startsWith('i:')
+      ) {
+        shapes.push({ kind: 'alias', name, line, size: 1, exported, declaration: true, key: hashOf(name), label: type.typeName.text });
+      } else if (ts.isTypeLiteralNode(type)) {
         shapes.push({
           kind: 'object',
           name,
           line,
           size: type.members.length,
+          declaration: true,
           exported,
           ...shapeKeyed(`${generics(statement.typeParameters, file)} ${objectOf(type.members, file)}`),
           label: labelOf(type.members.map((member) => (member.name === undefined ? '()' : nameText(member.name, file)))),
         });
       } else if (ts.isUnionTypeNode(type)) {
         const strings = type.types.map((one) => (ts.isLiteralTypeNode(one) ? literalText(one.literal) : undefined));
-        if (strings.every((one) => one !== undefined)) shapes.push(literalsShape(strings as string[], name, line, exported));
+        if (strings.every((one) => one !== undefined))
+          shapes.push({ ...literalsShape(strings as string[], name, line, exported), declaration: true });
         else if (!type.types.every(keywordOnly)) {
           const members = [...new Set(type.types.map((one) => canonical(one, file)))].sort();
           shapes.push({
@@ -414,6 +424,7 @@ const read = (path: string, text: string): Facts => {
             name,
             line,
             size: members.length,
+            declaration: true,
             exported,
             ...shapeKeyed(`${generics(statement.typeParameters, file)} ${members.join(' | ')}`),
             label: labelOf(members),

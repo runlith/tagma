@@ -15,7 +15,7 @@ export type Load = { readonly specifier: string; readonly pattern: boolean };
 
 export type Use = readonly [local: string, member: string, kind: 'v' | 't' | 'm'];
 
-export type ShapeKind = 'object' | 'union' | 'literals';
+export type ShapeKind = 'object' | 'union' | 'literals' | 'alias';
 
 export type Shape = {
   readonly kind: ShapeKind;
@@ -23,6 +23,7 @@ export type Shape = {
   readonly line: number;
   readonly size: number;
   readonly exported: boolean;
+  readonly declaration?: boolean;
   readonly key: string;
   readonly label: string;
   readonly text?: string;

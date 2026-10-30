@@ -10,6 +10,8 @@ import { blobTexts, mentioning } from '../git';
 export type Module = {
   readonly id: string;
   readonly card?: string;
+  readonly node?: string;
+  readonly imports?: readonly string[];
   readonly paths: readonly { readonly kind: string; readonly ref: string }[];
 };
 export type Snapshot = {
@@ -52,6 +54,8 @@ export const moduleOwners = (modules: readonly Module[]): ((path: string) => Mod
 };
 
 const header = Schema.Struct({
+  id: Schema.optional(Schema.String),
+  edges: Schema.optional(Schema.Array(Schema.Struct({ kind: Schema.String, to: Schema.String }))),
   tags: Schema.Array(Schema.String),
   fields: Schema.Struct({ id: Schema.optional(Schema.String) }),
   sources: Schema.Array(Schema.Struct({ kind: Schema.String, ref: Schema.String })),
@@ -61,11 +65,20 @@ export const moduleAt = (path: string, text: string): Module | undefined => {
   const end = text.indexOf('\n---', 4);
   if (!text.startsWith('---\n') || end === -1 || !/^tags:.*"module"/m.test(text.slice(4, end))) return undefined;
   const card = Schema.decodeUnknownSync(header)(Bun.YAML.parse(text.slice(4, end)));
-  return card.fields.id === undefined ? undefined : { id: card.fields.id, card: path, paths: card.sources };
+  return card.fields.id === undefined
+    ? undefined
+    : {
+        id: card.fields.id,
+        card: path,
+        node: card.id,
+        imports: card.edges?.filter((one) => one.kind === 'imports').map((one) => one.to) ?? [],
+        paths: card.sources,
+      };
 };
 
-const modulesAt = (root: string, commit: string): readonly Module[] => {
+export const modulesAt = (root: string, commit: string): readonly Module[] => {
   const paths = mentioning(root, commit, '^tags:.*"module"', ['.tagma']);
+  if (paths.length === 0) return [];
   const entries = listedAt(root, commit, paths, false);
   const texts = blobTexts(
     root,

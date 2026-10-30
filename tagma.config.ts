@@ -127,13 +127,13 @@ export default defineConfig({
         region: [''],
         tests: SOURCE_TESTS,
         scope: 'all',
-        minMembers: 1,
-        minUnion: 2,
-        minLiterals: 2,
+        minMembers: 3,
+        minUnion: 3,
+        minLiterals: 3,
         ignoreNames: [],
         aliases: SOURCE_ALIASES,
       },
-      { files: ['**/*.{ts,tsx,js,jsx,mts,cts,mjs,cjs,svelte}', '**/package.json'] },
+      { files: ['**/*.{ts,tsx,js,jsx,mts,cts,mjs,cjs,svelte}', '**/package.json', '.tagma/**/*.md'] },
     ),
     'dead-code': dead(
       {

@@ -1,5 +1,8 @@
 import type { TreeDifference } from '@runlith/git/trees';
 import type { Finding } from '@runlith/tagma/rules';
+import { boundaryState } from '../architecture/boundaries';
+import { modulesAt } from '../architecture/snapshot';
+import { listedAt } from '../directories';
 import { isSource, listedPackages, productionOf, type Reach, type WholeCorpus } from './corpus';
 import { findDead, findDeadAmong } from './dead';
 import type { DeadParams, RepeatedParams } from './declaration';
@@ -108,19 +111,47 @@ const repeatedAt = (
     ),
   );
   for (const [path, held] of own) facts.set(path, held);
-  return ordered(findRepeated({ facts, packages: manifestsAt(root, commit) }, params).filter((one) => paths.has(one.path)));
+  return ordered(
+    findRepeated({ facts, packages: manifestsAt(root, commit) }, params, boundaryState(root, commit)).filter((one) => paths.has(one.path)),
+  );
 };
 
 export const repeated: Judge<RepeatedParams> = {
   kind: 'repeated-declarations',
-  whole: (root, commit, params) => findRepeated(wholeAt(root, commit, params.tests), params),
+  whole: (root, commit, params) => {
+    const corpus = wholeAt(root, commit, params.tests);
+    return findRepeated(corpus, params, boundaryState(root, commit, modulesAt(root, commit)));
+  },
   affected: (root, base, tree, changes, params) => {
     const production = productionOf(params);
     const sources = (path: string): boolean => isSource(path) && production(path);
     const moved = movedPackages(root, base, tree, changes);
     const names = [...new Set([...moved.before, ...moved.after].map((one) => one.name))];
+    const boundaries = [boundaryState(root, base), boundaryState(root, tree)];
+    const ids = new Set<string>();
+    for (const change of changes.filter((one) => one.path.startsWith('.tagma/') && one.path.endsWith('.md'))) {
+      const modules = boundaries.flatMap((view) => view.card(change.path) ?? []);
+      if (JSON.stringify(modules[0]) === JSON.stringify(modules[1])) continue;
+      for (const module of modules) {
+        ids.add(module.id);
+        for (const view of boundaries) for (const id of view.dependents(module.id)) ids.add(id);
+      }
+    }
+    const related = [base, tree].map((commit, at) => {
+      const paths = new Set<string>();
+      for (const id of ids)
+        for (const source of boundaries[at]!.module(id)?.paths ?? []) {
+          const scope = source.kind === 'file' ? source.ref : `${source.ref.replace(/\/$/, '')}/`;
+          for (const path of listedAt(root, commit, [scope], true).keys()) if (sources(path)) paths.add(path);
+        }
+      return factsAt(
+        root,
+        [...blobsAt(root, commit, [...paths])].map(([path, blob]) => ({ path, blob })),
+      );
+    });
     const seeds = new Map<string, Facts>();
     for (const held of [
+      ...related,
       factsAt(root, sideEntries(changes, 'before', sources)),
       factsAt(root, sideEntries(changes, 'after', sources)),
       ...[base, tree].map((commit) => factsAt(root, importersByName(root, commit, names, sources))),

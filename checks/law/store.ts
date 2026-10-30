@@ -39,6 +39,8 @@ const version = (): string => {
     'declarations/resolve.ts',
     'declarations/corpus.ts',
     'declarations/glob.ts',
+    'architecture/boundaries.ts',
+    'architecture/snapshot.ts',
   ])
     hash.update(readFileSync(join(import.meta.dir, name)));
   return hash.digest('hex');

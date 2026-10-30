@@ -78,6 +78,9 @@ const judged = async (
   return { commit, whole };
 };
 
+const card = (id: string, kind: 'dir' | 'file', ref: string, imports: readonly string[] = []) =>
+  `---\nid: ${id}\ntags: ["module"]\nfields: {"id":"${id}"}\nedges: ${JSON.stringify(imports.map((to) => ({ kind: 'imports', to })))}\nsources:\n  - kind: ${kind}\n    ref: ${ref}\n---\n`;
+
 const initial = {
   'src/entry.ts': "import { used } from './lib';\nimport { viaUser } from './user';\nexport const run = () => [used(), viaUser()];\n",
   'src/lib.ts': 'export const used = () => 1;\nexport const helper = () => 2;\n',
@@ -179,15 +182,44 @@ test('regular source and symlink transitions retire and restore the same dead-co
   expect(fingerprints(added.commit.tree)).toEqual(fingerprints(added.whole.tree));
 });
 
-test('a commit that adds a second copy of a declaration reports the older copy in an untouched file too', async () => {
+test('a commit that copies an exported dependency type reports the redeclaration, as the remeasure does', async () => {
   const wide = 'export type Wide = { readonly a: string; readonly b: string; readonly c: number };\n';
-  const base = treeWith({ ...initial, 'src/shapes.ts': wide });
+  const base = treeWith({
+    ...initial,
+    'src/shapes.ts': wide,
+    '.tagma/shape.md': card('shape', 'file', 'src/shapes.ts'),
+    '.tagma/copy.md': card('copy', 'file', 'src/copy.ts', ['shape']),
+  });
   await index(base);
   const tree = treeWith({ 'src/copy.ts': wide.replace('Wide', 'Copy') });
   const { commit, whole } = await judged('repeated-declarations', base, tree, ['src/copy.ts']);
-  expect(commit.tree.findings.map((one) => one.fingerprint.split(' ')[2])).toEqual(['src/copy.ts', 'src/shapes.ts']);
+  expect(commit.tree.findings.map((one) => one.fingerprint.split(' ')[2])).toEqual(['src/copy.ts']);
   expect(fingerprints(commit.tree)).toEqual(fingerprints(whole.tree));
   expect(fingerprints(commit.base)).toEqual([]);
+});
+
+test('a changed production module relation rejudges unchanged type copies and retires them when its exporting owner moves', async () => {
+  const wide = 'export type Shared = { readonly a: string; readonly b: string; readonly c: number };\n';
+  const base = treeWith({
+    'src/owner.ts': wide,
+    'src/copy.ts': wide.replace('Shared', 'Local'),
+    '.tagma/owner.md': card('owner', 'file', 'src/owner.ts'),
+    '.tagma/copy.md': card('copy', 'file', 'src/copy.ts'),
+  });
+  await index(base);
+  const related = treeWith({ '.tagma/copy.md': card('copy', 'file', 'src/copy.ts', ['owner']) });
+  const added = await judged('repeated-declarations', base, related, ['.tagma/copy.md']);
+  expect(added.commit.base?.findings).toEqual([]);
+  expect(added.commit.tree.findings.map((one) => one.path)).toEqual(['src/copy.ts']);
+  expect(fingerprints(added.commit.tree)).toEqual(fingerprints(added.whole.tree));
+  const moved = treeWith({
+    '.tagma/owner.md': card('owner', 'file', 'src/elsewhere.ts'),
+    '.tagma/other.md': card('other', 'file', 'src/owner.ts'),
+  });
+  const retired = await judged('repeated-declarations', related, moved, ['.tagma/owner.md', '.tagma/other.md']);
+  expect(retired.commit.base?.findings.map((one) => one.path)).toEqual(['src/copy.ts']);
+  expect(retired.commit.tree.findings).toEqual([]);
+  expect(fingerprints(retired.commit.tree)).toEqual(fingerprints(retired.whole.tree));
 });
 
 test('a base nobody judged before is derived from the nearest indexed tree; with no indexed tree the judgment asks for the whole setup', async () => {
@@ -290,6 +322,8 @@ test('a manifest that points a package path elsewhere splits two equal types in 
     'pkgs/shared/package.json': JSON.stringify({ name: '@acme/shared', exports: { './row': target } }),
     'pkgs/shared/src/page.ts': page("import type { Row } from './row';"),
     'pkgs/app/src/page.ts': page("import type { Row } from '@acme/shared/row';"),
+    '.tagma/app.md': card('app', 'dir', 'pkgs/app'),
+    '.tagma/shared.md': card('shared', 'dir', 'pkgs/shared'),
   });
   const reach: RepeatedParams = { ...repeated, region: ['pkgs/'] };
   const base = treeWith(files('./src/row.ts'));
@@ -343,7 +377,9 @@ test('the production law programme routes both declaration keys through its root
     ...initial,
     'src/lib.ts': 'export const used = () => 1;\nexport const helper = () => 2;\nexport const orphan = () => 3;\n',
     'src/a.ts': wideA,
-    'src/b.ts': wideA.replace('Wide', 'Copy'),
+    'src/b.ts': wideA,
+    '.tagma/a.md': card('a', 'file', 'src/a.ts'),
+    '.tagma/b.md': card('b', 'file', 'src/b.ts'),
   });
   const reach = { places: ['src'], files: ['**/*.ts'] };
   const invocation: ProgramInvocation = {
@@ -371,6 +407,6 @@ test('the production law programme routes both declaration keys through its root
   expect(answer.failure).toBeUndefined();
   const of = (key: string) => answer.readings.find((one) => one.key === key)!;
   expect(of('dead').covered).toEqual({ scope: 'reach' });
-  expect(of('dead').findings.map((one) => one.fingerprint)).toEqual(['dead src/a.ts#Wide', 'dead src/b.ts#Copy', 'dead src/lib.ts#orphan']);
+  expect(of('dead').findings.map((one) => one.fingerprint)).toEqual(['dead src/a.ts#Wide', 'dead src/b.ts#Wide', 'dead src/lib.ts#orphan']);
   expect(of('repeated').findings.map((one) => one.path)).toEqual(['src/a.ts', 'src/b.ts']);
 });
