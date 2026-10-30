@@ -192,6 +192,7 @@ const released = Effect.fnUntraced(function* (
 const reachLines = (launcher: LauncherWritten): string[] => {
   const bin = dirname(launcher.path);
   switch (launcher.reach._tag) {
+    case 'Beside':
     case 'Reached':
       return [];
     case 'Profiled':

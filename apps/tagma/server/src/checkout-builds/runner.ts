@@ -9,7 +9,7 @@ import { gitLayer } from '@runlith/git/Git';
 import { makeCheckoutReading, type RunningRevision } from './reading.js';
 import { OWN_GIT_VARIABLE } from '../platform/contract/service/credentials.js';
 import { ownGitLayer } from '../platform/git/ownGit.js';
-import { BUILD_COMMAND, BUILD_SWAPPED_ENV, revisionLabel } from '../installation/contract/wire/layout.js';
+import { BUILD_COMMAND, BUILD_HOME_ENV, BUILD_SWAPPED_ENV, revisionLabel } from '../installation/contract/wire/layout.js';
 import { currentVersion, releasesNewestFirst } from '../installation/closure/versions.js';
 import { type InstallRefused, NextInstallation, type StopRefused } from '../installation/contract/service/next.js';
 import type { NextFrame } from '../installation/contract/wire/next.js';
@@ -306,7 +306,8 @@ export const makeCheckoutBuilds = Effect.fnUntraced(function* (options: Checkout
     await mkdir(dirname(options.log), { recursive: true });
     const sink = await open(options.log, 'a');
     const runtime = options.runtime ?? process.execPath;
-    const env = options.env ?? process.env;
+    const inherited = options.env ?? process.env;
+    const env = { ...inherited, HOME: inherited[BUILD_HOME_ENV] ?? inherited.HOME };
     const say = (line: string) => sink.write(`${line}\n`);
     const note = join(dirname(options.log), SWAPPED_NOTE);
     const step = async (title: string, command: readonly string[], cwd: string, more: Record<string, string> = {}): Promise<number> => {

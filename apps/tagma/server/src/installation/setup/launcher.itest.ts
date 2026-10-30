@@ -5,6 +5,7 @@ import { layer } from '@runlith/effect-test';
 import { Effect, FileSystem } from 'effect';
 import { spawnedEffect } from '../../platform/testing/spawn.js';
 import { ensuredPath, runningWorld, writeLauncher } from './launcher.js';
+import { besideEnv } from '../cut/beside.js';
 
 const homeOf = Effect.gen(function* () {
   const files = yield* FileSystem.FileSystem;
@@ -104,6 +105,40 @@ layer(BunFileSystem.layer, { excludeTestServices: true })('the launcher', (it) =
         env: { PATH: ensuredPath('/usr/bin:/bin', world) ?? '' },
       });
       expect(yield* files.realPath(said.stdout.toString().trim())).toBe(yield* files.realPath(path));
+    }),
+  );
+
+  it.effect('rebuilding a beside launcher keeps its own world and leaves the shell profile alone', () =>
+    Effect.gen(function* () {
+      const home = yield* homeOf;
+      const files = yield* FileSystem.FileSystem;
+      const root = join(home, 'trial');
+      const bindings = besideEnv(root, 47821);
+      const install = bindings.TAGMA_INSTALL_ROOT!;
+      const current = join(install, 'current');
+      const path = join(root, 'bin', 'tagma-dev');
+      yield* files.makeDirectory(current, { recursive: true });
+      yield* files.writeFileString(join(current, 'bun'), '#!/bin/sh\nenv\n', { mode: 0o700 });
+      const profile = join(home, '.zshrc');
+      yield* files.writeFileString(profile, 'export PRESERVED=yes\n');
+      const native = process.platform === 'darwin' ? yield* spawnedEffect(['/usr/sbin/sysctl', '-n', 'hw.optional.arm64']) : null;
+      const target = { os: process.platform, arch: native?.stdout.toString().trim() === '1' ? 'arm64' : process.arch };
+      yield* writeLauncher(install, path, target, { ...shell(home, '/usr/bin:/bin'), ...bindings });
+
+      const answer = yield* spawnedEffect([path], { env: { PATH: '/usr/bin:/bin' } });
+      expect(answer.exitCode).toBe(0);
+      const actual = Object.fromEntries(
+        answer.stdout
+          .toString()
+          .trim()
+          .split('\n')
+          .map((line) => {
+            const at = line.indexOf('=');
+            return [line.slice(0, at), line.slice(at + 1)];
+          }),
+      );
+      for (const [key, value] of Object.entries(bindings)) expect(actual[key]).toBe(value);
+      expect(yield* files.readFileString(profile)).toBe('export PRESERVED=yes\n');
     }),
   );
 

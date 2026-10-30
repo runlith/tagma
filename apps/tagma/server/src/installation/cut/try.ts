@@ -7,7 +7,7 @@ import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import * as BunPath from '@effect/platform-bun/BunPath';
 import { gitLayer } from '@runlith/git/Git';
 import { databasePath, installationRoot, launcherPath } from '../paths.js';
-import { ASKED_EVERY_MS, CLI_ENTRY, CURRENT, RUNTIME_PART, SERVE_FLAGS, serveLogPath } from '../contract/wire/layout.js';
+import { ASKED_EVERY_MS, BUILD_HOME_ENV, CLI_ENTRY, CURRENT, RUNTIME_PART, SERVE_FLAGS, serveLogPath } from '../contract/wire/layout.js';
 import { refusalLines } from '@runlith/agent/tool/refusal';
 import { knownAnswer } from '../../platform/contract/wire/operation.js';
 import { REGISTRY_OPERATIONS } from '../../graph/contract/wire/operations/registry.js';
@@ -104,6 +104,7 @@ export const tryout = (
 
   const world = { ...process.env } as Record<string, string>;
   for (const name of [ACT_VARIABLE, GRANT_VARIABLE, SESSION_TOKEN_VARIABLE, TERMINAL_VARIABLE, ...sessionVariables]) delete world[name];
+  if (home) world[BUILD_HOME_ENV] = process.env[BUILD_HOME_ENV] ?? home;
   world.HOME = besideHome(root);
   mkdirSync(world.HOME, { recursive: true });
 

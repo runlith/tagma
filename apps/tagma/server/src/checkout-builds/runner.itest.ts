@@ -97,6 +97,35 @@ it.live('HEAD builds use a disposable worktree, tree builds use the checkout, an
   }),
 );
 
+it.live('a trial HEAD update builds with the launching home while retaining its isolated installation bindings', () =>
+  Effect.gen(function* () {
+    const { dir, builds } = yield* checkoutOf(
+      'test -f "$HOME/.rustup/settings.toml" && test -f "$HOME/Library/Keychains/login.keychain-db" && echo "$HOME|$TAGMA_PORT|$TAGMA_DATABASE_PATH"',
+    );
+    const home = join(dir, 'developer');
+    for (const file of ['.rustup/settings.toml', 'Library/Keychains/login.keychain-db']) {
+      const path = join(home, file);
+      mkdirSync(join(path, '..'), { recursive: true });
+      writeFileSync(path, 'developer resource');
+    }
+    const database = join(dir, 'trial/data/tagma.sqlite');
+    const next = yield* builds({
+      env: {
+        ...process.env,
+        HOME: join(dir, 'trial/home'),
+        TAGMA_BUILD_HOME: home,
+        TAGMA_PORT: '47811',
+        TAGMA_DATABASE_PATH: database,
+        TAGMA_INSTALLATION_MODE: 'beside',
+      },
+    });
+    const started = yield* next.install('head', null, null);
+    const ended = yield* settled(next, started.installing.since);
+    expect(ended?.outcome).toBe('landed');
+    expect(readFileSync(join(dir, 'data/build.log'), 'utf8')).toContain(`${home}|47811|${database}\n`);
+  }),
+);
+
 it.live('stopping a HEAD build ends its descendants and worktree, and a successor recovers a build its server never saw end', () =>
   Effect.gen(function* () {
     const { checkout, dir, builds } = yield* checkoutOf('sleep 30 & echo $! > ../grandchild; wait');

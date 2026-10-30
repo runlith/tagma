@@ -36,6 +36,7 @@ export const WORLD_COMMAND = 'tagma';
 
 export const BUILD_COMMAND = 'bun run tagma:build';
 export const BUILD_SWAPPED_ENV = 'TAGMA_BUILD_SWAPPED';
+export const BUILD_HOME_ENV = 'TAGMA_BUILD_HOME';
 export const DESKTOP_PID_ENV = 'TAGMA_DESKTOP_PID';
 export const SIGNING_IDENTITY_ENV = 'TAGMA_SIGNING_IDENTITY';
 export const BUILD_CONDITIONS_ENV = 'TAGMA_BUILD_CONDITIONS';

@@ -3,10 +3,13 @@ import { accessSync, constants, readFileSync, readlinkSync, statSync } from 'nod
 import { basename, dirname, relative, resolve } from 'node:path';
 import { CLI_ENTRY, RUNTIME_PART, SERVE_FLAGS, WORLD, WORLD_COMMAND } from '../contract/wire/layout.js';
 import type { InstallationPlatform } from '../contract/wire/manifest.js';
+import { INSTALLATION_MODE } from '../contract/wire/junction.js';
+import { PORT_VARIABLES } from '../contract/wire/ports.js';
 
 export class LauncherWriteFailed extends Data.TaggedError('LauncherWriteFailed')<{ readonly path: string; readonly detail: string }> {}
 
 export type LauncherReach =
+  | { readonly _tag: 'Beside' }
   | { readonly _tag: 'Reached' }
   | { readonly _tag: 'Profiled'; readonly profile: string; readonly shadow: string | null }
   | { readonly _tag: 'Unprofiled'; readonly profile: string; readonly detail: string; readonly shadow: string | null };
@@ -159,6 +162,7 @@ export const launcherStands = (path: string, env: NodeJS.ProcessEnv, os: string)
 
 export const reachLine = (written: LauncherWritten): string => {
   const reach = written.reach;
+  if (reach._tag === 'Beside') return `${written.path} is bound to the beside installation; the shell profile is unchanged`;
   if (reach._tag === 'Reached') return `${written.path} is on PATH already`;
   if (reach._tag === 'Profiled')
     return `${dirname(written.path)} goes first on PATH from ${reach.profile}; a new shell finds ${basename(written.path)}${reach.shadow === null ? '' : ` before ${reach.shadow}`}`;
@@ -197,7 +201,16 @@ export const writeLauncher = Effect.fnUntraced(function* (
   env: NodeJS.ProcessEnv,
 ): Effect.fn.Return<LauncherWritten, LauncherWriteFailed, FileSystem.FileSystem> {
   const files = yield* FileSystem.FileSystem;
-  yield* writeLauncherBeside(root, path, platform);
+  const beside = env[INSTALLATION_MODE] === 'beside';
+  const bindings: Record<string, string> = {};
+  if (beside) {
+    for (const name of [INSTALLATION_MODE, 'TAGMA_DATABASE_PATH', 'TAGMA_INSTALL_ROOT', ...Object.values(PORT_VARIABLES)]) {
+      const value = env[name];
+      if (value !== undefined) bindings[name] = value;
+    }
+  }
+  yield* writeLauncherBeside(root, path, platform, bindings);
+  if (beside) return { path, reach: { _tag: 'Beside' } };
   const { onPath, shadow } = reached(path, env);
   if (onPath && shadow === null) return { path, reach: { _tag: 'Reached' } };
   const written = yield* profiled(files, path, env, platform.os);
