@@ -154,7 +154,14 @@ export const serverNames: Builtin<'names', NamesParams> = {
         ],
         exempt: [],
       },
-      literals: [{ region: ['graph/'], words: CATALOG_TAGS, positions: ['compare', 'argument', 'property', 'lookup'], allowIn: [] }],
+      literals: [
+        {
+          region: ['graph/**'],
+          words: CATALOG_TAGS,
+          positions: ['compare', 'argument', 'property', 'lookup'],
+          allowIn: ['graph/steps/**', 'graph/contract/wire/operations/shared.ts'],
+        },
+      ],
     },
     errors: ['Data.TaggedError'],
     files: {
