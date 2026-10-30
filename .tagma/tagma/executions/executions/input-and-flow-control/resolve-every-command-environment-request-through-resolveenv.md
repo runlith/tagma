@@ -1,6 +1,6 @@
 ---
 id: 01a0c72b-21da-7fdb-ad44-d5963b569dd7
-title: A floor answering with a binding resolves the request through `resolveEnvironment`
+title: Resolve every command environment request through `resolveEnvironment`
 ord: 6
 tags: ["rule"]
 sources:
