@@ -112,4 +112,35 @@ describe.skipIf(!existsSync(LIBRARY))('a Tagma agent on ACP moves between worktr
       }),
     );
   });
+
+  layer(protocolWorld({ name: 'hosted-detached', prepare: (world) => Effect.andThen(claudeLogin(world), hostedDefaults(world)) }), {
+    excludeTestServices: true,
+  })('detached checkout', (it) => {
+    it.effect('a hosted tool after moving to a detached team checkout reads inherited law and keeps the graph read-only', () =>
+      Effect.gen(function* () {
+        const { world, projectId, checkout } = yield* ProtocolWorld;
+        expect((yield* world.op('set_project_storage', { ref: String(projectId), mode: 'team' })).status).toBe(200);
+        expect((yield* world.op('sync_graph', {}, `project=${projectId}`)).status).toBe(200);
+        const roots = yield* world.op('list_root_blocks', {}, `project=${projectId}`);
+        const parentId = (roots.body as { blocks: { name: string }[] }).blocks[0]!.name;
+        const history = yield* worktree('history');
+        yield* suiteGit(history.destination, 'checkout', '--detach', 'HEAD');
+        const tip = yield* suiteGit(history.destination, 'rev-parse', 'HEAD');
+        const { threadId, called, release } = yield* heldTurn('historian', 'bypass');
+        yield* called('reveal', 'tool_search', { query: 'select:move_thread,create_block' });
+        const moved = yield* called('move', 'move_thread', { threadId, worktree: history.rootId });
+        expect({ failed: moved.failed, said: textOf(moved) }).toMatchObject({ failed: false });
+        const listed = yield* called('look', 'ls', { path: history.destination, limit: 5 });
+        expect({ failed: listed.failed, said: textOf(listed) }).toMatchObject({ failed: false });
+        expect(textOf(listed)).toContain('.tagma/');
+        const written = yield* called('write', 'create_block', { parentId, title: 'Cannot change a historical graph' });
+        expect(written.failed).toBe(true);
+        expect(textOf(written)).toContain('detached-checkout');
+        expect(yield* suiteGit(history.destination, 'status', '--porcelain')).toBe('');
+        expect(yield* suiteGit(history.destination, 'rev-parse', 'HEAD')).toBe(tip);
+        expect(yield* suiteGit(checkout, 'symbolic-ref', '--short', 'HEAD')).toBe('main');
+        yield* release;
+      }),
+    );
+  });
 });

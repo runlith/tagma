@@ -302,6 +302,7 @@ export type GraphLevelInput = {
   readonly target?: string;
   readonly targetCommit?: string;
   readonly workingTree?: string;
+  readonly resolveProject?: MirrorBuildInput['resolveProject'];
 };
 
 export type PreparedGraph = {

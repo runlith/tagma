@@ -343,6 +343,11 @@ export const makeGraphPool = Effect.gen(function* () {
     detached: boolean,
   ): Effect.fn.Return<HeldGraph, GateRefusal<OpenRefusal>> {
     let dispose: Effect.Effect<void> | undefined;
+    const resolveProject = Effect.fnUntraced(function* (projectId: number) {
+      const served = yield* resolve({ projectId });
+      yield* served.fresh();
+      return served.context;
+    });
     return yield* Effect.uninterruptibleMask((restore) =>
       Effect.gen(function* () {
         const prepared = detached
@@ -359,6 +364,7 @@ export const makeGraphPool = Effect.gen(function* () {
                   commit,
                   graphPath: layout.mode === 'team' ? '.tagma' : '',
                   workingTree: layout.treeRoot,
+                  resolveProject,
                 });
               }),
             )
@@ -380,11 +386,7 @@ export const makeGraphPool = Effect.gen(function* () {
               guard: acting.guard,
               settled: acting.settled,
               siblings: freshnessGate.siblings,
-              resolveProject: Effect.fnUntraced(function* (projectId: number) {
-                const served = yield* resolve({ projectId });
-                yield* served.fresh();
-                return served.context;
-              }),
+              resolveProject,
               committed: () => remotes.wake(row.id),
             }),
           ));

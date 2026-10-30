@@ -604,12 +604,14 @@ export const makeMirrorBuilder = Effect.fnUntraced(function* ({ gates }: { reado
             layout,
             guard: overTree(gates, layout.treeRoot),
             settled: Effect.void,
-            resolveProject: () =>
-              Effect.fail(
-                new GateRefusal('graph-pool', 'a graph being brought to its checkout format reaches no other graph', [
-                  'merge the branch first, then act across graphs',
-                ]),
-              ),
+            resolveProject:
+              input.resolveProject ??
+              (() =>
+                Effect.fail(
+                  new GateRefusal('graph-pool', 'a graph being brought to its checkout format reaches no other graph', [
+                    'merge the branch first, then act across graphs',
+                  ]),
+                )),
             siblings: () => Effect.succeed({ blocked: undefined, copyFailures: [] }),
             committed: () => undefined,
             temporary: true,
