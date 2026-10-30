@@ -5,6 +5,7 @@ import { RegistryFile, RegistryUnreadable } from '../contract/wire/registry.js';
 import { dataPathOf, MachineStore, type StoreFailure } from '../../platform/contract/service/store.js';
 import { setting } from '../../settings/store/table.js';
 import { projectsWithPolicy } from '../../graph/store/policy.js';
+import { groupMember } from '../../projects/store/table.js';
 
 export function registryPathFor(storePath: string): string | null {
   const data = dataPathOf(storePath);
@@ -30,10 +31,12 @@ export const dumpMachineRegistry = Effect.fn('registry.dump')(function* (): Effe
   const path = registryPathFor(storePath);
   if (path === null) return;
   const projects = yield* projectsWithPolicy(db);
+  const members = yield* db.select().from(groupMember);
   const settings = yield* db.select().from(setting);
   const text = `${JSON.stringify(
     {
       projects: projects.map((row) => frozen(row)),
+      members,
       settings: settings.map((row) => frozen(row)),
     },
     null,

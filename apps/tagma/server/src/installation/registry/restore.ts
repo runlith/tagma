@@ -12,9 +12,9 @@ import {
 import { writes } from '../../platform/contract/service/writes.js';
 import { machineFileLayer, poolOf, type PoolSource, storeLayer } from '../../platform/store/open.js';
 import { setting } from '../../settings/store/table.js';
-import { project } from '../../projects/store/table.js';
+import { groupMember, project } from '../../projects/store/table.js';
 import { projectPolicy } from '../../graph/store/policy.js';
-import { restoreProjects } from '../../projects/store/restore.js';
+import { restoreMembers, restoreProjects } from '../../projects/store/restore.js';
 import { restoreSettings } from '../../settings/store/restore.js';
 import { restorePolicies } from '../../graph/serving/policyRestore.js';
 import { MachineRegistry } from '../contract/service/registry.js';
@@ -24,7 +24,7 @@ import { dumpMachineRegistry, readRegistry, registryPathFor } from './file.js';
 const STORE_FILES = ['', '-wal', '-shm'] as const;
 
 function seedRows(store: Context.Service.Shape<typeof MachineStore>, file: RegistryFile): Effect.Effect<void, StoreFailure> {
-  return store.transaction(writes('registry.seed', [project, projectPolicy, setting]), (unit) =>
+  return store.transaction(writes('registry.seed', [project, groupMember, projectPolicy, setting]), (unit) =>
     Effect.gen(function* () {
       yield* restoreProjects(
         unit,
@@ -35,6 +35,7 @@ function seedRows(store: Context.Service.Shape<typeof MachineStore>, file: Regis
           removedAt: row.removedAt == null ? null : new Date(row.removedAt),
         })),
       );
+      yield* restoreMembers(unit, store.db, file.members ?? []);
       yield* restorePolicies(unit, store.db, file.projects);
       yield* restoreSettings(
         unit,

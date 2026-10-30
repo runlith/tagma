@@ -289,11 +289,12 @@ export const projectsLayer = Layer.effectContext(
     const { groups, depart, discard } = yield* makeGroups({
       version,
       named: (unit, name) => nameChecked(store, unit, reserved, name),
-      announce: (change) =>
-        Effect.andThen(
-          publish(regroupings, (subscriber) => subscriber(change)),
-          events.changed.publish(),
-        ),
+      announce: Effect.fnUntraced(function* (change) {
+        const moved = yield* Effect.exit(events.changed.publish());
+        const told = yield* Effect.exit(publish(regroupings, (subscriber) => subscriber(change)));
+        const failures = Cause.combine(Exit.isFailure(moved) ? moved.cause : Cause.empty, Exit.isFailure(told) ? told.cause : Cause.empty);
+        if (failures.reasons.length > 0) return yield* Effect.failCause(failures);
+      }, Effect.uninterruptible),
     });
     let removed: { readonly version: number; readonly ids: readonly number[] } | null = null;
     const projects = Projects.of({

@@ -18,6 +18,7 @@ export const RegistryFile = Schema.Struct({
       removedAt: Schema.optional(Schema.NullOr(Schema.String)),
     }),
   ),
+  members: Schema.optional(Schema.Array(Schema.Struct({ projectId: Schema.Number, groupId: Schema.Number, ord: Schema.Number }))),
   settings: Schema.Array(
     Schema.Struct({
       id: Schema.Number,

@@ -3,7 +3,15 @@ import type { StoreDb, StoreFailure } from '../../platform/contract/service/stor
 import type { WriteUnit } from '../../platform/contract/service/units.js';
 import { insertRows } from '../../platform/store/rows.js';
 import type { ProjectKind } from '../contract/wire/project.js';
-import { project } from './table.js';
+import { groupMember, project } from './table.js';
+
+export type RestoredMember = { readonly projectId: number; readonly groupId: number; readonly ord: number };
+
+export const restoreMembers = (
+  unit: WriteUnit<'machine'>,
+  db: StoreDb<'machine'>,
+  rows: readonly RestoredMember[],
+): Effect.Effect<void, StoreFailure> => insertRows(unit, db, groupMember, rows);
 
 export type RestoredProject = {
   readonly id: number;
