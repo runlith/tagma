@@ -1,11 +1,11 @@
 import type { TreeDifference } from '@runlith/git/trees';
 import type { BlobAt } from '@runlith/git/working';
 import { listedAt } from '../directories';
-import { isSource, movedPackages, type Package, productionOf } from './corpus';
+import { isSource, type Packages, productionOf } from './corpus';
 import { consumptions } from './dead';
 import type { DeadParams } from './declaration';
 import type { Facts } from './facts';
-import { blobsAt, factsAt, importersByName, manifestsAt } from './index';
+import { blobsAt, factsAt, importersByName, manifestsAt, movedPackages } from './index';
 import { patternDir, type Resolver, resolverOf } from './resolve';
 
 export const sideEntries = (
@@ -52,7 +52,7 @@ const edgesOf = (
   root: string,
   commit: string,
   files: ReadonlyMap<string, Facts>,
-  packages: readonly Package[],
+  packages: Packages,
   params: DeadParams,
   production: (path: string) => boolean,
 ): ReadonlyMap<string, ReadonlySet<string>> => {
@@ -83,7 +83,7 @@ export const ownersOf = (
   const sources = (path: string): boolean => isSource(path) && production(path);
   const packagesBefore = manifestsAt(root, base);
   const packagesAfter = manifestsAt(root, tree);
-  const moved = movedPackages(packagesBefore, packagesAfter);
+  const moved = movedPackages(root, base, tree, changes);
   const sides = [
     { commit: base, packages: packagesBefore, moved: moved.before, held: factsAt(root, sideEntries(changes, 'before', sources)) },
     { commit: tree, packages: packagesAfter, moved: moved.after, held: factsAt(root, sideEntries(changes, 'after', sources)) },

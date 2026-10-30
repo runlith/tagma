@@ -5,11 +5,10 @@ import { versionAt } from './cache';
 import type { VendorParams } from './inspections';
 import { indexLiterals, literalCandidates } from './literals';
 import { production, selectSources, type Snapshot, type snapshots, within } from './snapshot';
-import { isVendorSource, vendorFindings, vendorWords } from './strings';
+import { indexedWords, isVendorSource, listedWords, vendorFindings, vendorWords, type VendorWords } from './strings';
 
 const NEARBY = 6;
 const WHOLE_SCOPE = ['packages', 'apps/tagma/server/src/external-harnesses/vendors'];
-const WORDS = 'W';
 
 const declares = (path: string): boolean =>
   production(path) && (/^packages\/adapter-[^/]+\//.test(path) || within(path, 'apps/tagma/server/src/external-harnesses/vendors'));
@@ -34,17 +33,17 @@ export const vendorJudge = (root: string, revision: string, params: VendorParams
   const family = `vendor-words:${version}`;
   const eligible = (path: string): boolean => production(path) && isVendorSource(path, params);
 
-  const scanning = (snapshot: Snapshot, words: readonly string[]): readonly Finding[] =>
+  const scanning = (snapshot: Snapshot, words: VendorWords): readonly Finding[] =>
     snapshot.paths.flatMap((path) => {
       const file = selectSources(snapshot, [path]);
       indexLiterals(root, version, file, params);
       return vendorFindings(file, params, words);
     });
 
-  const scan = (side: Side, paths: readonly string[], words: readonly string[]): readonly Finding[] =>
+  const scan = (side: Side, paths: readonly string[], words: VendorWords): readonly Finding[] =>
     paths.length === 0 ? [] : scanning(snapshot({ ...side, paths, whole: false }), words);
 
-  const wordsOf = (id: string): readonly string[] => (valueAt(root, id, WORDS) as readonly string[] | undefined) ?? [];
+  const declaredAt = (id: string): VendorWords => indexedWords((word) => valueAt(root, id, `w:${word}`) !== undefined);
 
   const derived = (commit: string, sourceRoot: string, changes: readonly { readonly path: string }[]): string => {
     const declaring = changes.map((one) => one.path).filter(declares);
@@ -52,7 +51,6 @@ export const vendorJudge = (root: string, revision: string, params: VendorParams
     const rows = new Map<string, unknown>();
     const held = (key: string): readonly string[] =>
       ((rows.has(key) ? rows.get(key) : valueAt(root, sourceRoot, key)) as readonly string[] | undefined) ?? [];
-    const words = new Set(wordsOf(sourceRoot));
     if (declaring.length + sources.length > 0) {
       const changed = snapshot(sideOf(commit, [...new Set([...declaring, ...sources])]));
       for (const path of changed.paths) indexLiterals(root, version, selectSources(changed, [path]), params);
@@ -66,16 +64,10 @@ export const vendorJudge = (root: string, revision: string, params: VendorParams
           if (!now.includes(word)) {
             const left = held(`w:${word}`).filter((one) => one !== path);
             rows.set(`w:${word}`, left.length === 0 ? undefined : left);
-            if (left.length === 0) words.delete(word);
           }
-        for (const word of now)
-          if (!was.includes(word)) {
-            rows.set(`w:${word}`, [...held(`w:${word}`), path].sort());
-            words.add(word);
-          }
+        for (const word of now) if (!was.includes(word)) rows.set(`w:${word}`, [...held(`w:${word}`), path].sort());
       }
     }
-    rows.set(WORDS, longestFirst(words));
     return derivedMap(root, family, commit, sourceRoot, rows);
   };
 
@@ -113,9 +105,8 @@ export const vendorJudge = (root: string, revision: string, params: VendorParams
     seededMap(root, family, side.commit, [
       ...[...origins].map(([path, found]) => [`p:${path}`, found] as const),
       ...[...declaring].map(([word, paths]) => [`w:${word}`, paths.sort()] as const),
-      [WORDS, words] as const,
     ]);
-    return ordered(scanning(snapshot(side, [params.source]), words));
+    return ordered(scanning(snapshot(side, [params.source]), listedWords(words)));
   };
 
   const affected: VendorJudge['affected'] = (base, tree) => {
@@ -123,23 +114,27 @@ export const vendorJudge = (root: string, revision: string, params: VendorParams
     const baseRoot = declared(base.commit, null);
     const changes = changesBetween(root, base.commit, tree.commit);
     const treeRoot = rootAt(root, family, tree.commit) ?? derived(tree.commit, baseRoot, changes);
-    const before = wordsOf(baseRoot);
-    const now = wordsOf(treeRoot);
-    const nowSet = new Set(now);
-    const beforeSet = new Set(before);
+    const before = declaredAt(baseRoot);
+    const now = declaredAt(treeRoot);
+    const named = new Set<string>();
+    for (const path of changes.map((one) => one.path).filter(declares))
+      for (const id of [baseRoot, treeRoot])
+        for (const word of (valueAt(root, id, `p:${path}`) as readonly string[] | undefined) ?? []) named.add(word);
+    const held = (id: string, word: string): boolean => valueAt(root, id, `w:${word}`) !== undefined;
+    const words = [...named];
     const paths = new Set(changes.map((one) => one.path).filter(eligible));
     for (const path of literalCandidates(
       root,
       version,
       tree.commit,
-      now.filter((word) => !beforeSet.has(word)),
+      words.filter((word) => held(treeRoot, word) && !held(baseRoot, word)),
     ))
       if (eligible(path)) paths.add(path);
     for (const path of literalCandidates(
       root,
       version,
       base.commit,
-      before.filter((word) => !nowSet.has(word)),
+      words.filter((word) => held(baseRoot, word) && !held(treeRoot, word)),
     ))
       if (eligible(path)) paths.add(path);
     return { paths, base: ordered(scan(base, [...paths], before)), tree: ordered(scan(tree, [...paths], now)) };

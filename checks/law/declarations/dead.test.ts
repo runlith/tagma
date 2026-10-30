@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { findDead } from './dead';
+import { findDead, findDeadAmong } from './dead';
 import type { DeadParams } from './declaration';
 import { corpusOf } from './sources';
 
@@ -258,5 +258,5 @@ test('a judged set reports only its own files', () => {
     'src/consumer.ts': "import { wanted } from './changed';\nexport const use = () => wanted;\n",
   };
   const corpus = corpusOf(sources, params);
-  expect(findDead(corpus, params, new Set(['src/changed.ts'])).map((one) => one.fingerprint)).toEqual(['dead src/changed.ts#added']);
+  expect(findDeadAmong(corpus, params, new Set(['src/changed.ts'])).map((one) => one.fingerprint)).toEqual(['dead src/changed.ts#added']);
 });

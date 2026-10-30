@@ -1,7 +1,7 @@
 import { posix } from 'node:path';
 import { adapterOf } from '@runlith/code-facts/adapter';
 import { ADAPTERS } from '@runlith/code-facts/adapters';
-import type { Package } from '../../declarations/corpus';
+import type { Packages } from '../../declarations/corpus';
 import { type Alias, resolverOf } from '../../declarations/resolve';
 import { production, type Snapshot, within } from '../snapshot';
 import type { CallParams } from './params';
@@ -14,7 +14,7 @@ export type World = {
   readonly prefetch?: (paths: readonly string[]) => void;
 };
 
-export type Catalog = { readonly packages: readonly Package[]; readonly aliases: readonly Alias[] };
+export type Catalog = { readonly packages: Packages; readonly aliases: readonly Alias[] };
 
 const SOURCE = /\.[cm]?[jt]sx?$/;
 

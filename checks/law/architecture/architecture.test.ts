@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import ts from 'typescript';
 import { couplingFindings, measureCoupling } from './coupling';
-import { vendorFindings, vendorWords } from './strings';
+import { indexedWords, listedWords, vendorFindings, vendorWords } from './strings';
 import { production, type Module, type Snapshot } from './snapshot';
 import type { CouplingMeasure } from './inspections';
 
@@ -47,17 +47,21 @@ test('vendor strings follow adapter declarations, decode escapes and ignore non-
   expect(new Set(words)).toEqual(
     new Set(['orbit', 'orbit-browser', 'orbit-cloud', 'orbit-local', 'orbit-shell', 'orbit-cli', 'orbit-data', 'orbital-cli', 'cursor']),
   );
-  const findings = vendorFindings(
-    tree,
-    { source: server, exclude: ['external-harnesses/steps/**', 'editors/**', 'external-harnesses/vendors/**'] },
-    words,
-  );
-  expect(findings.map((one) => one.fingerprint)).toEqual([
+  const params = { source: server, exclude: ['external-harnesses/steps/**', 'editors/**', 'external-harnesses/vendors/**'] };
+  const expected = [
     `vendor:orbit-cloud:${server}/translations/translate.ts`,
     `vendor:orbit-cli:${server}/translations/translate.ts`,
     `vendor:orbit:${server}/translations/translate.ts`,
     `vendor:cursor:${server}/translations/selection.ts`,
-  ]);
+  ];
+  expect(vendorFindings(tree, params, listedWords(words)).map((one) => one.fingerprint)).toEqual(expected);
+  const known = new Set(words);
+  const indexed = vendorFindings(
+    tree,
+    params,
+    indexedWords((word) => known.has(word)),
+  );
+  expect(indexed.map((one) => one.fingerprint)).toEqual(expected);
 });
 
 test('coupling counts literal imports against the narrowest module and keeps reductions below the baseline as the next commit’s ceiling', () => {

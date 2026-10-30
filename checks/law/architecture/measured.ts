@@ -1,7 +1,6 @@
 import { createHash } from 'node:crypto';
 import { posix } from 'node:path';
 import type { Finding, Side } from '@runlith/tagma/rules';
-import { packageOf } from '../declarations/corpus';
 import { changesBetween, FAR, GOOD_ENOUGH, importersOf, manifestsAt, prepare } from '../declarations/index';
 import { listedAt } from '../directories';
 import { blobTexts } from '../git';
@@ -25,6 +24,8 @@ const moduleShape = (module: Module | undefined): string =>
 const refOf = (ref: string): string => ref.replace(/\/$/, '');
 const territoryKeys = (module: Module): string[] =>
   module.paths.map((one) => (one.kind === 'file' ? `tf:${refOf(one.ref)}` : `td:${refOf(one.ref)}`));
+
+const byText = (left: string, right: string): number => (left < right ? -1 : left > right ? 1 : 0);
 
 const sideOf = (commit: string, paths: readonly string[]): Side => ({ commit, whole: false, paths, read: async () => null, facts: null });
 
@@ -76,8 +77,15 @@ export const couplingJudge = (
         if (held === undefined) territories.set(key, [[module.card ?? '', module.id]]);
         else held.push([module.card ?? '', module.id]);
       }
+    const sharing = new Map<string, string[]>();
+    for (const [id, one] of Object.entries(totals)) {
+      const held = sharing.get(one.path);
+      if (held === undefined) sharing.set(one.path, [id]);
+      else held.push(id);
+    }
     seededMap(root, family, commit, [
       ...Object.entries(totals).map(([id, one]) => [`m:${id}`, one] as const),
+      ...[...sharing].map(([path, ids]) => [`r:${path}`, ids.sort(byText)] as const),
       ...modules.flatMap((module) => (module.card === undefined ? [] : [[`c:${module.card}`, module] as const])),
       ...[...territories].map(([key, held]) => [key, held.sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0))] as const),
     ]);
@@ -158,12 +166,10 @@ export const couplingJudge = (
     const changedPackages = new Set<string>();
     const touched = new Set<string>();
     const cards = new Map<string, string>();
-    const packagesBefore = new Map(was.map((one) => [one.dir, one]));
-    const packagesAfter = new Map(now.map((one) => [one.dir, one]));
     for (const change of metadata) {
       if (manifest(change.path)) {
         const directory = posix.dirname(change.path) === '.' ? '' : posix.dirname(change.path);
-        if (JSON.stringify(packagesBefore.get(directory)) !== JSON.stringify(packagesAfter.get(directory))) changedPackages.add(directory);
+        if (JSON.stringify(was.at(directory)) !== JSON.stringify(now.at(directory))) changedPackages.add(directory);
         continue;
       }
       const before = valueAt(root, from.id, `c:${change.path}`) as Module | undefined;
@@ -223,9 +229,23 @@ export const couplingJudge = (
       for (const entry of [...leaving, ...arriving]) loaded(entry.module);
       applyContributions(local, leaving, -1);
       applyContributions(local, arriving, 1);
-      for (const id of original.keys()) {
+      const moves = new Map<string, { readonly out: Set<string>; readonly in: Set<string> }>();
+      const slot = (path: string) => {
+        const held = moves.get(path) ?? { out: new Set<string>(), in: new Set<string>() };
+        moves.set(path, held);
+        return held;
+      };
+      for (const [id, held] of original) {
         overlay.set(`m:${id}`, local[id]);
         touched.add(id);
+        if (held !== undefined) slot(held.path).out.add(id);
+        if (local[id] !== undefined) slot(local[id]!.path).in.add(id);
+      }
+      for (const [path, move] of moves) {
+        const standing = (valueAt(root, from.id, `r:${path}`) as readonly string[] | undefined) ?? [];
+        const ids = new Set(standing.filter((one) => !move.out.has(one)));
+        for (const one of move.in) ids.add(one);
+        overlay.set(`r:${path}`, ids.size === 0 ? undefined : [...ids].sort(byText));
       }
     }
     for (const path of affected)
@@ -281,23 +301,31 @@ export const couplingJudge = (
         const module = owner(path);
         if (module !== undefined) touched.add(module.id);
       }
-    const totalsOf = (pick: (id: string) => Totals | undefined): Record<string, Totals> =>
-      Object.fromEntries(
-        [...touched].flatMap((id) => {
-          const held = pick(id);
-          return held === undefined ? [] : [[id, held] as const];
-        }),
+    const judge = (judged: ReadonlySet<string>) => {
+      const totalsOf = (pick: (id: string) => Totals | undefined): Record<string, Totals> =>
+        Object.fromEntries(
+          [...judged].flatMap((id) => {
+            const held = pick(id);
+            return held === undefined ? [] : [[id, held] as const];
+          }),
+        );
+      const was = measuresOf(totalsOf(out.before));
+      const found = place(
+        couplingFindings(measuresOf(totalsOf(out.after)), params, was),
+        tree,
+        [out.ownerAfter, out.ownerBefore],
+        out.cards,
+        touched,
       );
-    const was = measuresOf(totalsOf(out.before));
-    const found = place(
-      couplingFindings(measuresOf(totalsOf(out.after)), params, was),
-      tree,
-      [out.ownerAfter, out.ownerBefore],
-      out.cards,
-      touched,
-    );
-    const prior = couplingFindings(was, params, null);
-    return { paths: new Set([...found, ...prior].map((one) => one.path)), base: prior, tree: found };
+      return { base: couplingFindings(was, params, null), tree: found };
+    };
+    const first = judge(touched);
+    const covered = new Set([...first.tree, ...first.base].map((one) => one.path));
+    const sharing = new Set<string>();
+    for (const path of new Set([...covered, ...tree.paths, ...base.paths]))
+      for (const id of (valueAt(root, baseId, `r:${path}`) as readonly string[] | undefined) ?? []) if (!touched.has(id)) sharing.add(id);
+    const found = sharing.size === 0 ? first : judge(new Set([...touched, ...sharing]));
+    return { paths: new Set([...found.tree, ...found.base].map((one) => one.path)), base: found.base, tree: found.tree };
   };
 
   return { whole, affected };

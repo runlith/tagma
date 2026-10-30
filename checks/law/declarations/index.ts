@@ -5,9 +5,10 @@ import type { TreeDifference } from '@runlith/git/trees';
 import type { BlobAt } from '@runlith/git/working';
 import { directoriesAt, listedAt, prepareDirectories } from '../directories';
 import { blobTexts, type Entry, git } from '../git';
+import { derivedMap, rootAt, seededMap, valueAt } from '../maps';
 import { databaseAt } from '../store';
 import { type Packed, pack, unpack } from './compact';
-import { isManifest, isSource, type Package, packageOf } from './corpus';
+import { ancestorsOf, isManifest, isSource, type Package, type Packages, packageOf, shapeOf } from './corpus';
 import type { Facts } from './facts';
 import { revisionAt, saveRevision } from './memo';
 import { type Alias, keyStems, resolverOf } from './resolve';
@@ -154,9 +155,14 @@ const populated = (root: string, tree: string): void => {
   pruned(root, entries, tree);
   seededMap(
     root,
-    MANIFESTS,
+    PACKAGES,
     tree,
-    entries.filter((one) => isManifest(one.path)).map((one) => [one.path, one.blob] as const),
+    packageRows(
+      packagesAt(
+        root,
+        entries.filter((one) => isManifest(one.path)),
+      ),
+    ),
   );
 };
 
@@ -174,13 +180,28 @@ export const changesBetween = (root: string, base: string, tree: string): readon
   return changes;
 };
 
-const MANIFESTS = 'manifests';
+const PACKAGES = 'packages';
+
+const byText = (left: string, right: string): number => (left < right ? -1 : left > right ? 1 : 0);
+
+const packageRows = (packages: readonly Package[]): (readonly [string, unknown])[] => {
+  const names = new Map<string, string[]>();
+  for (const one of packages) {
+    const held = names.get(one.name);
+    if (held === undefined) names.set(one.name, [one.dir]);
+    else held.push(one.dir);
+  }
+  return [
+    ...packages.map((one) => [`m:${one.dir}`, one] as const),
+    ...[...names].map(([name, dirs]) => [`n:${name}`, dirs.sort(byText)] as const),
+  ];
+};
 
 const KEPT_INDEXED = 256;
 
 const isIndexed = (root: string, tree: string): boolean =>
   (settled.has(`${root}\0${tree}`) || databaseAt(root).query('SELECT 1 FROM indexed WHERE tree = ?').get(tree) !== null) &&
-  rootAt(root, MANIFESTS, tree) !== undefined;
+  rootAt(root, PACKAGES, tree) !== undefined;
 
 const mark = (root: string, tree: string): void => {
   const database = databaseAt(root);
@@ -224,7 +245,7 @@ const ensure = (root: string, tree: string, hint: string | null, populate: boole
     root,
     best.changes.flatMap((one) => (one.after !== null && indexable(one.path) ? [{ path: one.path, blob: one.after }] : [])),
   );
-  derivedManifests(root, best.source, tree, best.changes);
+  derivedPackages(root, best.source, tree, best.changes);
   mark(root, tree);
 };
 
@@ -360,7 +381,7 @@ export const importersOf = (
   root: string,
   commit: string,
   targets: ReadonlySet<string>,
-  packages: readonly Package[],
+  packages: Packages,
   aliases: readonly Alias[],
   accepts: (path: string) => boolean,
 ): BlobAt[] => {
@@ -415,33 +436,84 @@ export const sharingShapes = (root: string, commit: string, keys: readonly strin
   );
 };
 
-const derivedManifests = (root: string, base: string, tree: string, changes: readonly TreeDifference[]): void => {
-  const from = rootAt(root, MANIFESTS, base);
-  if (from === undefined)
-    throw new Error(
-      `the declaration index holds no manifests of ${base}; build it with check_rules over "all", then judge the change again`,
-    );
-  const rows = new Map<string, string | undefined>();
-  for (const one of changes) if (isManifest(one.path)) rows.set(one.path, one.after ?? undefined);
-  derivedMap(root, MANIFESTS, tree, from, rows);
+const dirOf = (path: string): string => (posix.dirname(path) === '.' ? '' : posix.dirname(path));
+
+const noPackages = (commit: string): Error =>
+  new Error(`the declaration index holds no packages of ${commit}; build it with check_rules over "all", then judge the change again`);
+
+const derivedPackages = (root: string, base: string, tree: string, changes: readonly TreeDifference[]): void => {
+  const from = rootAt(root, PACKAGES, base);
+  if (from === undefined) throw noPackages(base);
+  const manifests = changes.filter((one) => isManifest(one.path));
+  const now = new Map(
+    packagesAt(
+      root,
+      manifests.flatMap((one) => (one.after === null ? [] : [{ path: one.path, blob: one.after }])),
+    ).map((one) => [one.dir, one]),
+  );
+  const rows = new Map<string, unknown>();
+  const changed = new Set(manifests.map((one) => dirOf(one.path)));
+  const names = new Set<string>();
+  for (const dir of changed) {
+    const was = valueAt(root, from, `m:${dir}`) as Package | undefined;
+    const is = now.get(dir);
+    rows.set(`m:${dir}`, is);
+    for (const one of [was, is]) if (one !== undefined) names.add(one.name);
+  }
+  for (const name of names) {
+    const standing = (valueAt(root, from, `n:${name}`) as readonly string[] | undefined) ?? [];
+    const dirs = new Set(standing.filter((dir) => !changed.has(dir)));
+    for (const dir of changed) if (now.get(dir)?.name === name) dirs.add(dir);
+    rows.set(`n:${name}`, dirs.size === 0 ? undefined : [...dirs].sort(byText));
+  }
+  derivedMap(root, PACKAGES, tree, from, rows);
 };
 
-const packaged = new Map<string, readonly Package[]>();
+const catalogs = new Map<string, Packages>();
 
-export const manifestsAt = (root: string, commit: string): readonly Package[] => {
-  const id = rootAt(root, MANIFESTS, commit);
-  if (id === undefined)
-    throw new Error(
-      `the declaration index holds no manifests of ${commit}; build it with check_rules over "all", then judge the change again`,
-    );
+export const manifestsAt = (root: string, commit: string): Packages => {
+  const id = rootAt(root, PACKAGES, commit);
+  if (id === undefined) throw noPackages(commit);
   const key = `${root}\0${id}`;
-  const known = packaged.get(key);
+  const known = catalogs.get(key);
   if (known !== undefined) return known;
-  const found = packagesAt(
-    root,
-    entriesOf(root, id).map(([path, blob]) => ({ path, blob: blob as string })),
-  );
-  if (packaged.size > 64) packaged.clear();
-  packaged.set(key, found);
-  return found;
+  const dirs = new Map<string, Package | undefined>();
+  const at = (dir: string): Package | undefined => {
+    if (!dirs.has(dir)) dirs.set(dir, valueAt(root, id, `m:${dir}`) as Package | undefined);
+    return dirs.get(dir);
+  };
+  const names = new Map<string, Package | undefined>();
+  const made: Packages = {
+    at,
+    named: (name) => {
+      if (!names.has(name)) {
+        const held = valueAt(root, id, `n:${name}`) as readonly string[] | undefined;
+        names.set(name, held === undefined ? undefined : at(held[held.length - 1]!));
+      }
+      return names.get(name);
+    },
+    around: (path) => ancestorsOf(path).flatMap((dir) => at(dir) ?? []),
+  };
+  if (catalogs.size > 64) catalogs.clear();
+  catalogs.set(key, made);
+  return made;
+};
+
+export const movedPackages = (
+  root: string,
+  base: string,
+  tree: string,
+  changes: readonly TreeDifference[],
+): { readonly before: readonly Package[]; readonly after: readonly Package[] } => {
+  const was = manifestsAt(root, base);
+  const is = manifestsAt(root, tree);
+  const before: Package[] = [];
+  const after: Package[] = [];
+  for (const dir of new Set(changes.filter((one) => isManifest(one.path)).map((one) => dirOf(one.path)))) {
+    const left = was.at(dir);
+    const right = is.at(dir);
+    if (left !== undefined && (right === undefined || shapeOf(left) !== shapeOf(right))) before.push(left);
+    if (right !== undefined && (left === undefined || shapeOf(left) !== shapeOf(right))) after.push(right);
+  }
+  return { before, after };
 };

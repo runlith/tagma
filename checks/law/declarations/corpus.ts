@@ -9,10 +9,20 @@ export type Package = {
   readonly entries: readonly string[];
 };
 
+export type Packages = {
+  readonly named: (name: string) => Package | undefined;
+  readonly at: (dir: string) => Package | undefined;
+  readonly around: (path: string) => readonly Package[];
+};
+
+export type ListedPackages = Packages & { readonly all: () => readonly Package[] };
+
 export type Corpus = {
   readonly facts: ReadonlyMap<string, Facts>;
-  readonly packages: readonly Package[];
+  readonly packages: Packages;
 };
+
+export type WholeCorpus = Corpus & { readonly packages: ListedPackages };
 
 export type Reach = { readonly tests: readonly string[] };
 
@@ -41,23 +51,24 @@ export const leavesOf = (value: unknown): readonly string[] => {
   return into;
 };
 
-const signature = (pkg: Package): string => JSON.stringify([pkg.name, pkg.exports, pkg.entries]);
+export const shapeOf = (pkg: Package): string => JSON.stringify([pkg.name, pkg.exports, pkg.entries]);
 
-export const movedPackages = (
-  before: readonly Package[],
-  after: readonly Package[],
-): { readonly before: readonly Package[]; readonly after: readonly Package[] } => {
-  const was = new Map(before.map((one) => [one.dir, one]));
-  const is = new Map(after.map((one) => [one.dir, one]));
+const byDir = (left: Package, right: Package): number => (left.dir < right.dir ? -1 : left.dir > right.dir ? 1 : 0);
+
+export const ancestorsOf = (path: string): readonly string[] => {
+  const parts = path.split('/').slice(0, -1);
+  return ['', ...parts.map((_, at) => parts.slice(0, at + 1).join('/'))];
+};
+
+export const listedPackages = (packages: readonly Package[]): ListedPackages => {
+  const ordered = [...packages].sort(byDir);
+  const dirs = new Map(ordered.map((one) => [one.dir, one]));
+  const names = new Map(ordered.map((one) => [one.name, one]));
   return {
-    before: before.filter((one) => {
-      const other = is.get(one.dir);
-      return other === undefined || signature(other) !== signature(one);
-    }),
-    after: after.filter((one) => {
-      const other = was.get(one.dir);
-      return other === undefined || signature(other) !== signature(one);
-    }),
+    named: (name) => names.get(name),
+    at: (dir) => dirs.get(dir),
+    around: (path) => ancestorsOf(path).flatMap((dir) => dirs.get(dir) ?? []),
+    all: () => ordered,
   };
 };
 

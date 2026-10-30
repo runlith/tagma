@@ -1,9 +1,19 @@
 import { createHash } from 'node:crypto';
 import type { TreeDifference } from '@runlith/git/trees';
 import type { Finding, Side } from '@runlith/tagma/rules';
-import { isManifest, movedPackages } from '../../declarations/corpus';
+import { isManifest } from '../../declarations/corpus';
 import { blobTexts } from '../../git';
-import { blobsAt, changesBetween, FAR, GOOD_ENOUGH, importersByName, importersOf, manifestsAt, prepare } from '../../declarations/index';
+import {
+  blobsAt,
+  changesBetween,
+  FAR,
+  GOOD_ENOUGH,
+  importersByName,
+  importersOf,
+  manifestsAt,
+  movedPackages,
+  prepare,
+} from '../../declarations/index';
 import { derivedMap, recentRoots, rootAt, seededMap, valueAt } from '../../maps';
 import { versionAt } from '../cache';
 import { production, snapshots, within } from '../snapshot';
@@ -99,7 +109,7 @@ export const judgements = (root: string, params: CallParams, versionRevision: st
     const touched = changes.filter((change) => universe(change.path));
     const before = manifestsAt(root, source.revision);
     const after = manifestsAt(root, commit);
-    const moved = movedPackages(before, after);
+    const moved = movedPackages(root, source.revision, commit, changes);
     if (touched.length === 0 && moved.before.length === 0 && moved.after.length === 0 && !changes.some((change) => isManifest(change.path)))
       return {
         id: derivedMap(root, family, commit, source.id, new Map()),

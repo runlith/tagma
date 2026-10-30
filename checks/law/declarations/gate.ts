@@ -1,11 +1,22 @@
 import type { TreeDifference } from '@runlith/git/trees';
 import type { Finding } from '@runlith/tagma/rules';
-import { type Corpus, isSource, movedPackages, productionOf, type Reach } from './corpus';
-import { findDead } from './dead';
+import { isSource, listedPackages, productionOf, type Reach, type WholeCorpus } from './corpus';
+import { findDead, findDeadAmong } from './dead';
 import type { DeadParams, RepeatedParams } from './declaration';
 import { ownersOf, sideEntries } from './frontier';
 import type { Facts } from './facts';
-import { blobsAt, factsAt, importersByName, importersOf, listing, manifestsAt, packagesAt, prepare, sharingShapes } from './index';
+import {
+  blobsAt,
+  factsAt,
+  importersByName,
+  importersOf,
+  listing,
+  manifestsAt,
+  movedPackages,
+  packagesAt,
+  prepare,
+  sharingShapes,
+} from './index';
 import { findRepeated, inRegion, judges, keyOf } from './repeated';
 
 export type Affected = {
@@ -23,7 +34,7 @@ export type Judge<P extends Reach & { readonly region: readonly string[] }> = {
 const ordered = (findings: readonly Finding[]): readonly Finding[] =>
   [...findings].sort((left, right) => (left.path === right.path ? (left.line ?? 0) - (right.line ?? 0) : left.path < right.path ? -1 : 1));
 
-const wholeAt = (root: string, commit: string, tests: readonly string[]): Corpus => {
+const wholeAt = (root: string, commit: string, tests: readonly string[]): WholeCorpus => {
   prepare(root, commit, null);
   const production = productionOf({ tests });
   const all = listing(root, commit);
@@ -32,9 +43,11 @@ const wholeAt = (root: string, commit: string, tests: readonly string[]): Corpus
       root,
       all.filter((one) => production(one.path)),
     ),
-    packages: packagesAt(
-      root,
-      all.filter((one) => !isSource(one.path)),
+    packages: listedPackages(
+      packagesAt(
+        root,
+        all.filter((one) => !isSource(one.path)),
+      ),
     ),
   };
 };
@@ -55,7 +68,7 @@ const deadAt = (root: string, commit: string, owners: ReadonlySet<string>, param
   const importers = importersOf(root, commit, new Set(own.keys()), packages, params.aliases, production);
   const facts = new Map<string, Facts>(factsAt(root, importers));
   for (const [path, held] of own) facts.set(path, held);
-  return findDead({ facts, packages }, params, new Set(own.keys()));
+  return findDeadAmong({ facts, packages }, params, new Set(own.keys()));
 };
 
 export const dead: Judge<DeadParams> = {
@@ -104,7 +117,7 @@ export const repeated: Judge<RepeatedParams> = {
   affected: (root, base, tree, changes, params) => {
     const production = productionOf(params);
     const sources = (path: string): boolean => isSource(path) && production(path);
-    const moved = movedPackages(manifestsAt(root, base), manifestsAt(root, tree));
+    const moved = movedPackages(root, base, tree, changes);
     const names = [...new Set([...moved.before, ...moved.after].map((one) => one.name))];
     const seeds = new Map<string, Facts>();
     for (const held of [

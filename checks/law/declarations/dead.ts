@@ -1,5 +1,5 @@
 import type { Finding } from '@runlith/tagma/rules';
-import type { Corpus } from './corpus';
+import type { Corpus, Package, WholeCorpus } from './corpus';
 import type { DeadParams } from './declaration';
 import type { ExportKind, Facts } from './facts';
 import { matcher } from './glob';
@@ -44,7 +44,12 @@ export const consumptions = function* (path: string, file: Facts, resolver: Reso
       if (target !== path) yield [target, ALL, true];
 };
 
-export const findDead = (corpus: Corpus, params: DeadParams, judged?: ReadonlySet<string>): readonly Finding[] => {
+export const findDead = (corpus: WholeCorpus, params: DeadParams): readonly Finding[] => deadAmong(corpus, params, corpus.packages.all());
+
+export const findDeadAmong = (corpus: Corpus, params: DeadParams, judged: ReadonlySet<string>): readonly Finding[] =>
+  deadAmong(corpus, params, [...new Set([...judged].flatMap((path) => corpus.packages.around(path)))], judged);
+
+const deadAmong = (corpus: Corpus, params: DeadParams, holders: readonly Package[], judged?: ReadonlySet<string>): readonly Finding[] => {
   const { facts, packages } = corpus;
   const resolver = resolverOf(new Set(facts.keys()), packages, params.aliases);
   const imported = new Set<string>();
@@ -61,7 +66,7 @@ export const findDead = (corpus: Corpus, params: DeadParams, judged?: ReadonlySe
 
   const entry = matcher(params.entries);
   for (const path of facts.keys()) if (entry(path)) consumeAll(path);
-  for (const pkg of packages) {
+  for (const pkg of holders) {
     const published = params.published.some((dir) => pkg.dir === dir || (dir !== '' && pkg.dir.startsWith(`${dir}/`)));
     for (const target of published ? resolver.exported(pkg) : pkg.entries.flatMap((one) => resolver.inside(pkg, one))) consumeAll(target);
   }

@@ -6,7 +6,7 @@ import { exported } from '@runlith/code-facts/js/workspace';
 import type { Finding } from '@runlith/tagma/rules';
 import type { CouplingMeasure, CouplingParams } from './inspections';
 import { moduleOwners, within, type Module, type Snapshot } from './snapshot';
-import { packageOf, type Package } from '../declarations/corpus';
+import { listedPackages, packageOf, type Package, type Packages } from '../declarations/corpus';
 import { resolverOf, type Alias } from '../declarations/resolve';
 export type Contribution = {
   readonly module: string;
@@ -18,7 +18,7 @@ export type Totals = { path: string; files: number; total: number; targets: Reco
 export type CouplingIndex = {
   readonly revision: string;
   readonly modules: readonly Module[];
-  readonly packages: readonly Package[];
+  readonly packages: Packages;
   readonly totals: Readonly<Record<string, Totals>>;
 };
 
@@ -29,20 +29,20 @@ const packageName = (specifier: string): string =>
     .join('/');
 const conditions = new Set(['bun', 'node', 'import']);
 
-export const membersOf = (snapshot: Snapshot): readonly Package[] => {
+export const membersOf = (snapshot: Snapshot): Packages => {
   const packages: Package[] = [];
   for (const path of snapshot.tree.paths!()) {
     if (posix.basename(path) !== 'package.json') continue;
     const member = packageOf(path, snapshot.tree.read(path));
     if (member !== undefined) packages.push(member);
   }
-  return packages;
+  return listedPackages(packages);
 };
 
 export const contributions = (
   snapshot: Snapshot,
   owner: (path: string) => { readonly id: string } | undefined,
-  members: readonly Package[],
+  members: Packages,
   aliases: readonly Alias[],
 ): readonly Contribution[] => {
   const resolver = resolverOf(
@@ -55,7 +55,6 @@ export const contributions = (
     members,
     aliases,
   );
-  const packages = new Map(members.map((one) => [one.name, one]));
   const entries: Contribution[] = [];
   for (const path of snapshot.paths) {
     if (!within(path, 'apps/tagma/server/src') && !within(path, 'apps/tagma/app/src') && !within(path, 'packages')) continue;
@@ -69,7 +68,7 @@ export const contributions = (
       const aliased = aliases.some((one) => site.specifier.startsWith(one.prefix)) ? resolver.resolve(site.specifier, path)[0] : undefined;
       const resolved = aliased === undefined ? adapterOf(ADAPTERS, path).resolve(site.specifier, path, snapshot.tree) : null;
       const name = packageName(site.specifier);
-      const member = packages.get(name);
+      const member = members.named(name);
       const subpath = site.specifier === name ? '.' : `.${site.specifier.slice(name.length)}`;
       const entry = member === undefined ? undefined : exported(member.exports, subpath, conditions);
       const target =

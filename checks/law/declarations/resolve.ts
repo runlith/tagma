@@ -1,6 +1,6 @@
 import { posix } from 'node:path';
 import { LANGUAGES } from '@runlith/code-facts/languages';
-import { leavesOf, type Package } from './corpus';
+import { leavesOf, type Package, type Packages } from './corpus';
 import { globRegex } from './glob';
 
 export type Alias = { readonly prefix: string; readonly dir: string };
@@ -42,8 +42,7 @@ const staticDir = (absolute: string): string | undefined => {
 export const patternDir = (value: string, from: string): string | undefined =>
   value.startsWith('!') ? undefined : staticDir(absoluteOf(value, from));
 
-export const resolverOf = (paths: Paths, packages: readonly Package[], aliases: readonly Alias[]): Resolver => {
-  const named = new Map(packages.map((one) => [one.name, one]));
+export const resolverOf = (paths: Paths, packages: Packages, aliases: readonly Alias[]): Resolver => {
   const probe = (base: string): string | undefined => {
     if (paths.has(base)) return base;
     if (COMPILED.test(base)) {
@@ -91,7 +90,7 @@ export const resolverOf = (paths: Paths, packages: readonly Package[], aliases: 
   const bare = (specifier: string): readonly string[] => {
     const parts = specifier.split('/');
     const name = specifier.startsWith('@') ? parts.slice(0, 2).join('/') : parts[0]!;
-    const pkg = named.get(name);
+    const pkg = packages.named(name);
     if (pkg === undefined) return [];
     const rest = specifier.slice(name.length);
     return targets(pkg, rest === '' ? '.' : `.${rest}`);
@@ -173,10 +172,9 @@ const keyedOf = (pkg: Package): Keyed => {
   return made;
 };
 
-export const keyStems = (packages: readonly Package[], path: string): readonly string[] => {
+export const keyStems = (packages: Packages, path: string): readonly string[] => {
   const stems = new Set<string>();
-  for (const pkg of packages) {
-    if (pkg.dir !== '' && !path.startsWith(`${pkg.dir}/`)) continue;
+  for (const pkg of packages.around(path)) {
     const held = keyedOf(pkg);
     if (held.whole !== undefined) stems.add(held.whole);
     for (const stem of held.exact.get(path) ?? []) stems.add(stem);

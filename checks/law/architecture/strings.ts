@@ -177,24 +177,79 @@ export const stringsOf = (file: ts.SourceFile): readonly StringNode[] => {
 export const isVendorSource = (path: string, params: VendorParams): boolean =>
   within(path, params.source) && !params.exclude.some((glob) => matchesGlob(path.slice(params.source.length + 1), glob));
 
-export const vendorFindings = (snapshot: Snapshot, params: VendorParams, words: readonly string[]): readonly Finding[] => {
+export type VendorWords = {
+  readonly mayName: (text: string) => boolean;
+  readonly within: (text: string) => readonly string[];
+};
+
+const longestFirst = (left: string, right: string): number => right.length - left.length || left.localeCompare(right);
+
+export const listedWords = (words: readonly string[]): VendorWords => ({
+  mayName: (text) => {
+    const lower = text.toLowerCase();
+    return words.some((word) => lower.includes(word));
+  },
+  within: () => words,
+});
+
+const alphanumeric = (code: number): boolean => (code >= 97 && code <= 122) || (code >= 48 && code <= 57);
+
+const spelled = (text: string): Set<string> => {
+  const found = new Set<string>();
+  for (let start = 0; start < text.length; start += 1) {
+    const first = text.charCodeAt(start);
+    if (first < 97 || first > 122 || (start > 0 && alphanumeric(text.charCodeAt(start - 1)))) continue;
+    for (let end = start + 1; end <= text.length; end += 1) {
+      const next = end === text.length ? -1 : text.charCodeAt(end);
+      if (end - start >= 2 && !alphanumeric(next)) found.add(text.slice(start, end));
+      if (next !== 45 && !alphanumeric(next)) break;
+    }
+  }
+  return found;
+};
+
+export const indexedWords = (has: (word: string) => boolean): VendorWords => {
+  const known = new Map<string, boolean>();
+  const held = (word: string): boolean => {
+    let one = known.get(word);
+    if (one === undefined) {
+      one = has(word);
+      known.set(word, one);
+    }
+    return one;
+  };
+  return {
+    mayName: (text) => [...spelled(text.toLowerCase())].some(held),
+    within: (text) => [...spelled(text.toLowerCase())].filter(held).sort(longestFirst),
+  };
+};
+
+const patterns = new Map<string, RegExp>();
+
+const patternOf = (word: string): RegExp => {
+  let one = patterns.get(word);
+  if (one === undefined) {
+    one = new RegExp(`(?<![a-z0-9])${word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![a-z0-9])`, 'gi');
+    if (patterns.size > 4096) patterns.clear();
+    patterns.set(word, one);
+  }
+  return one;
+};
+
+export const vendorFindings = (snapshot: Snapshot, params: VendorParams, words: VendorWords): readonly Finding[] => {
   const findings: Finding[] = [];
-  const matchers = words.map((word) => ({
-    word,
-    pattern: new RegExp(`(?<![a-z0-9])${word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![a-z0-9])`, 'gi'),
-  }));
   for (const path of snapshot.paths) {
     if (!isVendorSource(path, params)) continue;
     const text = snapshot.tree.read(path);
-    const lower = text.toLowerCase();
-    if (!text.includes('\\') && !words.some((word) => lower.includes(word))) continue;
+    if (!text.includes('\\') && !words.mayName(text)) continue;
     const file = snapshot.file(path);
     for (const node of stringsOf(file)) {
       if (literal(node) && propertyCursor(node)) continue;
       if (node.text.startsWith('@') && node.text.includes('/')) continue;
       if ((ts.isImportDeclaration(node.parent) || ts.isExportDeclaration(node.parent)) && node.parent.moduleSpecifier === node) continue;
       const occupied = new Set<number>();
-      for (const { word, pattern } of matchers) {
+      for (const word of words.within(node.text)) {
+        const pattern = patternOf(word);
         if (word === 'cursor' && !cursorVendor(node, path)) continue;
         let found = false;
         for (const match of node.text.matchAll(pattern)) {

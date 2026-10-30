@@ -213,6 +213,30 @@ test('a manifest edit that keeps name, exports and entries moves nothing', async
   expect(fingerprints(commit.tree)).toEqual(fingerprints(whole.tree));
 });
 
+test('two packages sharing a name resolve to the later directory until its manifest goes, then to the earlier one, until that one is renamed', async () => {
+  const entry = "import { fromC } from '@acme/dup';\nexport const run = () => fromC;\n";
+  const manifest = (name: string) => JSON.stringify({ name, exports: './src/index.ts' });
+  const base = treeWith({
+    'src/entry.ts': entry,
+    'pkgs/a/package.json': manifest('@acme/dup'),
+    'pkgs/a/src/index.ts': 'export const fromA = 1;\nexport const fromC = 2;\n',
+    'pkgs/c/package.json': manifest('@acme/dup'),
+    'pkgs/c/src/index.ts': 'export const fromC = 3;\n',
+  });
+  await index(base, wide);
+  const removed = treeWith({ 'pkgs/c/package.json': null });
+  const first = await judged('dead-code', base, removed, ['pkgs/c/package.json'], wide);
+  expect(fingerprints(first.commit.base)).toEqual(['dead pkgs/a/src/index.ts#fromA', 'dead pkgs/a/src/index.ts#fromC']);
+  expect(fingerprints(first.commit.tree)).toEqual(['dead pkgs/a/src/index.ts#fromA', 'dead pkgs/c/src/index.ts#fromC']);
+  expect(fingerprints(first.commit.tree)).toEqual(fingerprints(first.whole.tree));
+  expect(fingerprints(first.commit.base)).toEqual(fingerprints(first.whole.base));
+  const renamed = treeWith({ 'pkgs/a/package.json': manifest('@acme/other') });
+  const second = await judged('dead-code', removed, renamed, ['pkgs/a/package.json'], wide);
+  expect(fingerprints(second.commit.tree)).toEqual(fingerprints(second.whole.tree));
+  expect(fingerprints(second.commit.base)).toEqual(fingerprints(second.whole.base));
+  expect(fingerprints(second.commit.tree)).toEqual(['dead pkgs/a/src/index.ts#fromA', 'dead pkgs/a/src/index.ts#fromC']);
+});
+
 test('a manifest that points a package path elsewhere splits two equal types in unchanged files, as the remeasure finds', async () => {
   const page = (row: string) => `${row}\nexport type Page = { readonly items: number; readonly value: Row; readonly next: string };\n`;
   const files = (target: string) => ({
