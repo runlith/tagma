@@ -119,9 +119,7 @@
   const places = $derived(host.places);
   const placed = $derived(places.placeOf(row.id));
   const targets = $derived(
-    places.several && row.projectId === host.projectId
-      ? places.rows.filter((one) => one.rootId !== placed?.rootId && !one.missing && (one.kind === 'main' || one.branch !== null))
-      : [],
+    places.several && row.projectId === host.projectId ? places.targets.filter((one) => one.rootId !== placed?.rootId) : [],
   );
   const destinations = $derived(
     !archived && home === host.projectId

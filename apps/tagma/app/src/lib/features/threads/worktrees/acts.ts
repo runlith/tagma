@@ -6,10 +6,18 @@ import { ProjectRung } from '$lib/features/workspace/ProjectRung.js';
 import { Workspace } from '$lib/features/workspace/Selection.svelte.js';
 import { ProjectFocus } from '$lib/features/workspace/Focus.svelte.js';
 import { CHAT } from '$lib/features/workspace/surface.js';
-import { ThreadOnScreen } from '../OnScreen.svelte.js';
+import { type DraftPlace, MAIN_CHECKOUT } from '../Draft.svelte.js';
+import { ThreadList } from '../List.svelte.js';
+import { DraftShelf } from '../native/DraftShelf.svelte.js';
+import { unbornKey } from '../SlotSelection.svelte.js';
+
+export function draftPlaceOf(row: WorktreePlace): DraftPlace {
+  return row.kind === 'main' ? MAIN_CHECKOUT : { kind: 'worktree', rootId: row.rootId };
+}
 
 export type WorktreeActs = {
   newAgent(row: WorktreePlace): void;
+  newAgentIn(place: DraftPlace, branch: string | null): void;
   openInGit(row: WorktreePlace): void;
   openTerminal(row: WorktreePlace): void;
   copyPath(row: WorktreePlace): void;
@@ -19,7 +27,8 @@ export function worktreeActs(): WorktreeActs {
   const router = Router.use();
   const addresses = Addresses.use();
   const terminals = Terminals.use();
-  const onScreen = ThreadOnScreen.use();
+  const drafts = DraftShelf.use();
+  const list = ThreadList.use();
   const workspace = Workspace.use();
   const projectId = ProjectRung.Current.use().projectId;
   const focus = ProjectFocus.use();
@@ -28,11 +37,13 @@ export function worktreeActs(): WorktreeActs {
     const project = workspace.find(projectId);
     if (project !== null) await router.goto(href(project.name));
   };
+  const newAgentIn = (place: DraftPlace, branch: string | null): void => {
+    drafts.place(unbornKey(projectId), place, () => list.titles());
+    void go((project) => addresses.place(project, CHAT, null, branch));
+  };
   return {
-    newAgent(row) {
-      onScreen.host?.birth.pickNewWorktree(null);
-      void go((project) => addresses.place(project, CHAT, null, branchOf(row)));
-    },
+    newAgent: (row) => newAgentIn(draftPlaceOf(row), branchOf(row)),
+    newAgentIn,
     openInGit(row) {
       void go((project) => addresses.git('tree', branchOf(row), project));
     },

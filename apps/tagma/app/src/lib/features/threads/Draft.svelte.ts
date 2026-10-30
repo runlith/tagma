@@ -6,8 +6,7 @@ import type { Piece } from '@tagma/server/speech/contract/wire/listening';
 import { pieceKey } from '$lib/features/speech/calls/piece.js';
 import type { CallPieces } from './native/CallPieces.js';
 import type { ThreadUploads } from './native/ThreadUploads.js';
-import { type DraftShelf, type DraftSlot } from './native/DraftShelf.svelte.js';
-import type { DraftNewWorktree } from './native/DraftStore.js';
+import type { DraftShelf, DraftSlot } from './native/DraftShelf.svelte.js';
 import { Effect } from 'effect';
 import { CHAT_QUEUE_PREVIEW_MAX } from '@runlith/chat-ui/session/FeedVerdicts';
 import type { ChatComposedTurn, ChatDraft, ChatTakenWords, ChatTurnOpening } from '@runlith/chat-ui/ChatDraft';
@@ -34,6 +33,13 @@ export type DraftMention = {
 };
 
 export type DraftDocument = { readonly id: string; readonly title: string; readonly text: string };
+
+export type DraftPlace =
+  | { readonly kind: 'main' }
+  | { readonly kind: 'worktree'; readonly rootId: string }
+  | { readonly kind: 'new'; readonly base: string | null };
+
+export const MAIN_CHECKOUT: DraftPlace = { kind: 'main' };
 
 export function mentionReference(name: string, title: string): string {
   const label = title.replaceAll(']', '').replaceAll('\n', ' ').trim();
@@ -129,13 +135,12 @@ export class ThreadDraft implements ChatDraft<Draft> {
     return this.slot.approvalMode;
   }
 
-  get newWorktree(): DraftNewWorktree | null {
-    return this.slot.newWorktree;
+  get place(): DraftPlace {
+    return this.slot.place;
   }
 
-  setNewWorktree(value: DraftNewWorktree | null): void {
-    this.slot.newWorktree = value;
-    this.keep();
+  setPlace(value: DraftPlace): void {
+    this.shelf.place(this.key, value, this.taken);
   }
 
   setType(value: string | null): void {

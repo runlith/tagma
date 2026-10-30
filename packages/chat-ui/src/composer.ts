@@ -58,7 +58,7 @@ export type ComposerSlashCommand = {
   run(args: ComposerCommandArgs): ComposerHandler;
 };
 
-export type ComposerRegion = 'leading' | 'status' | 'right' | 'media' | 'dock' | 'edge';
+export type ComposerRegion = 'leading' | 'status' | 'right' | 'media' | 'dock' | 'edge' | 'strip';
 
 export type ComposerCycle = {
   readonly available: boolean;

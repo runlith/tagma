@@ -29,11 +29,11 @@ test('what was typed and staged at an address stands after the page ends', () =>
   slot.type = 'code';
   slot.account = 'me@example.com';
   slot.switches = { speed: 'fast' };
-  slot.newWorktree = { base: 'tagma/sidebar', name: null, aimedAt: 'root-main' };
+  slot.place = { kind: 'new', base: 'tagma/sidebar' };
   first.keep('new:47');
 
   const reloaded = new DraftShelf(storage, kept).at('new:47');
-  expect(reloaded.newWorktree).toEqual({ base: 'tagma/sidebar', name: null, aimedAt: 'root-main' });
+  expect(reloaded.place).toEqual({ kind: 'new', base: 'tagma/sidebar' });
   expect(reloaded.text).toBe('the prompt nobody sent yet');
   expect(reloaded.mentions).toEqual([{ name: 'a1b2c3d4', title: 'The Composer', tag: 'claim' }]);
   expect(reloaded.type).toBe('code');

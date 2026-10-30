@@ -174,6 +174,7 @@ export function slotWorld(over: Partial<SlotParts>, scope: Scope) {
   const list = Object.create(fields, {
     harnessRow: { value: ThreadList.prototype.harnessRow },
     identityOf: { value: ThreadList.prototype.identityOf },
+    titles: { value: ThreadList.prototype.titles },
   }) as SlotParts['list'];
   const types = over.types ?? new AgentTypes(threads, projectId, new Notices(scope), scope);
   const catalog = over.catalog ?? testProviderCatalog();

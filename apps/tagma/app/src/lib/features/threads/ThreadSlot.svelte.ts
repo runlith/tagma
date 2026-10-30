@@ -1,6 +1,7 @@
 import { Effect, type Exit } from 'effect';
 import type { WireThread } from '@tagma/server/threads/contract/wire/snapshot';
 import type { ThreadListRow } from '@tagma/server/threads/contract/wire/list';
+import type { WorktreePlace } from '@tagma/server/worktrees/contract/wire/rows';
 import type { CompactionChoice } from '@tagma/server/native-harness/contract/wire/compactionChoices';
 import type { ChatContextSource } from '@runlith/chat-ui/contextUsage';
 import type { ChatNotice } from '@runlith/chat-ui/notice';
@@ -23,7 +24,7 @@ import { Worktrees } from '$lib/features/worktrees/BoardState.svelte.js';
 import { ChatHold } from './ChatHold.svelte.js';
 import { AgentTypes } from './AgentTypes.svelte.js';
 import { ThreadBirth } from './birth/ThreadBirth.svelte.js';
-import { type Draft, ThreadDraft } from './Draft.svelte.js';
+import { type Draft, type DraftPlace, MAIN_CHECKOUT, ThreadDraft } from './Draft.svelte.js';
 import { ModelDefaults } from './ModelDefaults.svelte.js';
 import { Favorites } from './Favorites.svelte.js';
 import { AgentLibraryRepo } from './library/AgentLibraryRepo.js';
@@ -159,11 +160,8 @@ export class ThreadSlot extends Process<ThreadSlot, SlotArgs>()('ThreadSlot') im
     this.selection = new SlotSelection(projectId, options.draft);
     this.writer = writer;
     this.opens = new ThreadOpenWatch(runner, (threadId) => this.showing(threadId));
-    this.draft = new ThreadDraft(
-      shelf,
-      new ThreadUploads(threads, door, projectId),
-      new CallPieces(threads, projectId),
-      () => new Set(list.threads.map((row) => row.title)),
+    this.draft = new ThreadDraft(shelf, new ThreadUploads(threads, door, projectId), new CallPieces(threads, projectId), () =>
+      list.titles(),
     );
     this.draft.useKey(this.selection.draftKey(null));
     this.history = new PromptHistory(new PromptStore(storage, projectId));
@@ -226,13 +224,19 @@ export class ThreadSlot extends Process<ThreadSlot, SlotArgs>()('ThreadSlot') im
 
   row = $derived.by<ThreadListRow | null>(() => this.list.harnessRow(this.selection.activeId));
 
+  place = $derived.by<WorktreePlace | null>(() => {
+    const id = this.selection.activeId;
+    if (id === null) return this.birth.place.row;
+    return this.places.known ? this.places.placeOf(id) : null;
+  });
+
   identity = $derived.by<ThreadIdentity | null>(() =>
     this.list.identityOf(this.selection.activeId, this.thread?.get(ThreadFeed).session.thread ?? null),
   );
 
   forget(id: string): void {
     this.shelf.forget(this.selection.draftKey(id));
-    if (this.selection.activeId === id) this.startDraft();
+    if (this.selection.activeId === id) this.showDraft();
   }
 
   activateRoute(sessionId: string | null, projectId: number | null): void {
@@ -256,9 +260,9 @@ export class ThreadSlot extends Process<ThreadSlot, SlotArgs>()('ThreadSlot') im
     this.writer.open(id);
   }
 
-  startDraft(): void {
-    if (this.selection.activeId === null) this.resetDraft();
-    this.writer.navigate(null);
+  startDraft(place: DraftPlace = MAIN_CHECKOUT): void {
+    this.shelf.place(this.selection.draftKey(null), place, () => this.list.titles());
+    this.showDraft();
   }
 
   startDraftAs(type: string): void {
@@ -266,8 +270,13 @@ export class ThreadSlot extends Process<ThreadSlot, SlotArgs>()('ThreadSlot') im
     this.startDraft();
   }
 
+  showDraft(): void {
+    if (this.selection.activeId === null) this.resetDraft();
+    this.writer.navigate(null);
+  }
+
   private restart(): void {
-    this.startDraft();
+    this.showDraft();
     void this.writes.send();
   }
 

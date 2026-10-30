@@ -269,6 +269,10 @@ export class ThreadList extends Service<ThreadList>()('ThreadList', { tier: 'pro
     return this.snapshot.rows;
   }
 
+  titles(): ReadonlySet<string> {
+    return new Set(this.threads.map((row) => row.title));
+  }
+
   get size(): number {
     void this.version;
     return this.forest.size;
@@ -462,7 +466,7 @@ export class ThreadList extends Service<ThreadList>()('ThreadList', { tier: 'pro
     this.pending.leave(id, ids);
     for (let at = ids.length - 1; at >= 0; at--) this.draw(ids[at] as string);
     this.publish();
-    for (const host of open) host.startDraft();
+    for (const host of open) host.showDraft();
   }
 
   private restore(id: string): void {

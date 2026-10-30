@@ -138,6 +138,8 @@ export function testPlaces(): Worktrees {
     aim: { projectId: 1 },
     rows: [],
     grouped: [],
+    targets: [],
+    bases: [],
     known: false,
     unread: null,
     several: false,

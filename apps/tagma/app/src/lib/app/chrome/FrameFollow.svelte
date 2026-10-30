@@ -19,8 +19,7 @@
   $effect(() => {
     const host = seats.host;
     if (host === null || host.projectId !== projectId || projectAim()?.projectId !== projectId) return;
-    const id = host.activeId;
-    const place = id === null || !host.places.known ? null : host.places.placeOf(id);
+    const place = host.place;
     if (place === null || place.branch === null || place.missing) return;
     const aimed = router.url.searchParams.get('branch');
     if (aimed === place.branch || (aimed === null && place.kind === 'main')) return;

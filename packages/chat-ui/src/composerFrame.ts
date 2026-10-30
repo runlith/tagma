@@ -15,3 +15,5 @@ export const COMPOSER_ACTION_RIGHT_CLASS = 'flex shrink-0 items-center gap-1 jus
 export const COMPOSER_ACTION_GROUP_CLASS = 'flex items-center gap-1';
 
 export const COMPOSER_STATUS_GROUP_CLASS = 'hidden items-center gap-1 @min-[22rem]:flex';
+
+export const COMPOSER_STRIP_CLASS = 'flex h-7 min-w-0 items-center gap-2 px-1.5 pt-1';

@@ -150,18 +150,18 @@ test('a child born under the root while its archive is pending is back with the 
 });
 
 test('archiving the thread a pane shows sends that pane to a draft before the door answers', () => {
-  const startDraft = vi.fn();
+  const showDraft = vi.fn();
   const elsewhere = vi.fn();
   const list = open([
-    { activeId: 'child', startDraft },
-    { activeId: 'other', startDraft: elsewhere },
+    { activeId: 'child', showDraft },
+    { activeId: 'other', showDraft: elsewhere },
   ]);
   seed(list);
   archiving.mockReturnValue(new Promise(() => undefined));
 
   void list.setArchived('root', true);
 
-  expect(startDraft).toHaveBeenCalledTimes(1);
+  expect(showDraft).toHaveBeenCalledTimes(1);
   expect(elsewhere).not.toHaveBeenCalled();
 });
 

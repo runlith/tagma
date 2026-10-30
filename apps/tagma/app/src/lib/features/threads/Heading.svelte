@@ -25,7 +25,6 @@
   import ThreadMenu from './Menu.svelte';
   import ThisThread from './ThisThread.svelte';
   import WorksOn from './WorksOn.svelte';
-  import WorktreeChip from './worktrees/Chip.svelte';
 
   let { host }: { host: ThreadSlot } = $props();
 
@@ -231,11 +230,6 @@
           <FadeText text={bornLabel} />
         </button>
       </Tooltip>
-    {/if}
-    {#if host.activeId}
-      <span class="no-drag-region flex min-w-0 shrink items-center gap-1.5">
-        <WorktreeChip {host} threadId={host.activeId} />
-      </span>
     {/if}
     {#if accountMove !== null && host.activeId}
       {@const id = host.activeId}

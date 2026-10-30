@@ -16,7 +16,7 @@
     from = null,
     suggested = '',
     onCreated,
-  }: { open?: boolean; from?: string | null; suggested?: string; onCreated?: (branch: string) => void } = $props();
+  }: { open?: boolean; from?: string | null; suggested?: string; onCreated?: (branch: string, rootId: string) => void } = $props();
 
   const worktrees = Worktrees.use();
   const settings = SettingsRepo.use();
@@ -28,7 +28,7 @@
     return typeof entry?.value === 'string' ? entry.value : worktreeBranchPrefix.fallback;
   });
 
-  const bases = $derived(worktrees.rows.filter((row) => row.branch !== null && !row.missing));
+  const bases = $derived(worktrees.bases);
 
   let name = $state('');
   let automatic = $state('');
@@ -52,7 +52,7 @@
     const wanted = branch;
     open = false;
     void worktrees.create(wanted, start).then((rootId) => {
-      if (rootId !== null) onCreated?.(wanted);
+      if (rootId !== null) onCreated?.(wanted, rootId);
     });
   }
 </script>

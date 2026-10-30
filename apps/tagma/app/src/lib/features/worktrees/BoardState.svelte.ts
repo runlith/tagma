@@ -65,6 +65,8 @@ export class Worktrees extends Service<Worktrees>()('Worktrees', { tier: 'projec
   readonly main = $derived(this.rows.find((row) => row.kind === 'main') ?? null);
   readonly grouped = $derived(this.rows.filter((row) => row.kind !== 'external' || row.agents.standing > 0));
   readonly several = $derived(this.grouped.length > 1 || this.creations.length > 0);
+  readonly targets = $derived(this.rows.filter((row) => !row.missing && (row.kind === 'main' || row.branch !== null)));
+  readonly bases = $derived(this.rows.filter((row) => !row.missing && row.branch !== null));
   readonly aimed = $derived.by<WorktreePlace | null>(() => {
     if (!this.focus.current) return null;
     const branch = this.router.url.searchParams.get('branch');

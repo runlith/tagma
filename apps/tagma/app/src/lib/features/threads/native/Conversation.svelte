@@ -154,6 +154,7 @@
     feeds: host.feeds,
     skills: host.skills,
     birth: host.birth,
+    places: host.places,
     panel: host.panel,
     views: host.views,
     writes: host.writes,

@@ -11,7 +11,7 @@
   import { ComposerMenu, type ComposerPick } from './ComposerMenu.svelte';
   import { composerIntent, rewindEscape } from './composerKeys';
   import ComposerFrame from './ComposerFrame.svelte';
-  import { COMPOSER_ACTION_GROUP_CLASS, COMPOSER_STATUS_GROUP_CLASS } from './composerFrame';
+  import { COMPOSER_ACTION_GROUP_CLASS, COMPOSER_STATUS_GROUP_CLASS, COMPOSER_STRIP_CLASS } from './composerFrame';
   import ComposerMenuPopup from './ComposerMenuPopup.svelte';
   import { pastedFiles } from './fileIntake.svelte';
   import type { PromptRecall } from './PromptHistory';
@@ -201,6 +201,7 @@
   const trailing = $derived(contributions.chips('right'));
   const media = $derived(contributions.chips('media'));
   const edge = $derived(contributions.chips('edge'));
+  const strip = $derived(contributions.chips('strip'));
 
   $effect(() => {
     const opened = menu.kind === 'mention' ? menu.provider?.id : undefined;
@@ -576,6 +577,13 @@
     leftActions={leftZone}
     rightActions={rightZone}
   />
+  {#if strip.length > 0}
+    <div class={COMPOSER_STRIP_CLASS} data-composer-strip>
+      {#each strip as chip (chip.id)}
+        {@render chip.body()}
+      {/each}
+    </div>
+  {/if}
   {#if contributions.attachments.length > 0}
     <input bind:this={fileInput} type="file" accept={contributions.attachAccept} multiple class="hidden" onchange={attach} />
   {/if}

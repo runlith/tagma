@@ -1,5 +1,6 @@
 import { App } from '@runlith/layer/svelte/App.svelte';
 import { untrack } from 'svelte';
+import { unbornKey } from '$lib/features/threads/SlotSelection.svelte.js';
 import { ThreadSlot } from '$lib/features/threads/ThreadSlot.svelte.js';
 import { Addresses } from '$lib/features/workspace/Addresses.js';
 import { ProjectRung } from '$lib/features/workspace/ProjectRung.js';
@@ -18,7 +19,7 @@ export function threadSlot(seats: ThreadSeats, pane: () => SidePane): ThreadPane
   if (home !== null) App.hold(ProjectRung, { projectId: home });
   const host = ThreadSlot.start(App.section(`beside-${key}`, 'project'), {
     app: App.current(),
-    draft: `new:${projectId}:${key}`,
+    draft: unbornKey(projectId, key),
     writer: seats.writerOf(key),
     context: { scopeName: () => (home === null ? addresses.scope : null) },
   });

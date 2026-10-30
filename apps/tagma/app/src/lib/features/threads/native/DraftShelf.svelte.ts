@@ -11,14 +11,14 @@ import type { ModelSwitches } from '@runlith/llm/models/description';
 import type { TeamLayer } from '@runlith/agent/collaboration/team';
 import { randomThreadName } from '@tagma/server/thread-record/contract/wire/name';
 import { DraftFiles, type KeptFile } from './DraftFiles.js';
-import { type DraftNewWorktree, DraftStore, type StoredDraft } from './DraftStore.js';
-import type { Draft, DraftDocument, DraftMention } from '../Draft.svelte.js';
+import { DraftStore, type StoredDraft } from './DraftStore.js';
+import { type Draft, type DraftDocument, type DraftMention, type DraftPlace, MAIN_CHECKOUT } from '../Draft.svelte.js';
 import type { Piece } from '@tagma/server/speech/contract/wire/listening';
 
 const NO_NAMES = (): ReadonlySet<string> => new Set();
 
 export class DraftSlot {
-  newWorktree: DraftNewWorktree | null;
+  place: DraftPlace;
   text: string;
   images = $state<readonly ChatDraftImage[]>([]);
   files = $state<readonly ChatDraftFile[]>([]);
@@ -41,7 +41,7 @@ export class DraftSlot {
     readonly name: string,
     stored: StoredDraft | null = null,
   ) {
-    this.newWorktree = $state(stored?.newWorktree ?? null);
+    this.place = $state.raw(stored?.place ?? MAIN_CHECKOUT);
     this.text = $state(stored?.text ?? '');
     this.mentions = $state(stored?.mentions ?? []);
     this.pieces = $state(stored?.pieces ?? []);
@@ -95,6 +95,11 @@ export class DraftShelf extends Service<DraftShelf>()('DraftShelf', { tier: 'app
     if (draft === null) this.store.drop(key);
     else this.store.write(key, draft);
     this.keepStaged(key, slot, draft === null ? [] : [...draft.images, ...draft.files]);
+  }
+
+  place(key: string, place: DraftPlace, taken: () => ReadonlySet<string> = NO_NAMES): void {
+    this.at(key, taken).place = place;
+    this.keep(key);
   }
 
   rename(from: string, to: string): void {
@@ -306,7 +311,7 @@ function storedDraft(slot: DraftSlot): StoredDraft | null {
     slot.approvalMode !== null ||
     slot.delegation !== null ||
     slot.team !== null ||
-    slot.newWorktree !== null ||
+    slot.place.kind !== 'main' ||
     Object.keys(slot.switches).length > 0;
   if (!carries) return null;
   return {
@@ -322,7 +327,7 @@ function storedDraft(slot: DraftSlot): StoredDraft | null {
     approvalMode: slot.approvalMode,
     delegation: slot.delegation,
     team: slot.team,
-    newWorktree: slot.newWorktree,
+    place: slot.place,
     images,
     files,
   };

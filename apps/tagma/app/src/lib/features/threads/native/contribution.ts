@@ -14,6 +14,7 @@ import {
 import type { FeedRegions } from '@runlith/chat-ui/FeedRegions.svelte';
 import type { PromptHandle } from '@runlith/chat-ui/PromptHandle.svelte';
 import { clashOf } from '@runlith/chat-ui/RegistryClash';
+import type { Worktrees } from '$lib/features/worktrees/BoardState.svelte.js';
 import type { ThreadBirth } from '../birth/ThreadBirth.svelte.js';
 import type { ChatHold } from '../ChatHold.svelte.js';
 import type { ThreadDraft } from '../Draft.svelte.js';
@@ -47,6 +48,7 @@ export type SlotOwners = {
   readonly feeds: ComposerFeeds;
   readonly skills: SkillCatalog;
   readonly birth: ThreadBirth;
+  readonly places: Worktrees;
   readonly panel: ModelPanelState;
   readonly views: ThreadViews;
   readonly writes: ThreadWrites;

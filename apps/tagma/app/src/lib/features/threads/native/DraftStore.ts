@@ -1,15 +1,9 @@
 import type { PlatformStorage } from '@runlith/layer/Platform';
 import type { ModelSwitches } from '@runlith/llm/models/description';
-import type { DraftDocument, DraftMention } from '../Draft.svelte.js';
+import { type DraftDocument, type DraftMention, type DraftPlace, MAIN_CHECKOUT } from '../Draft.svelte.js';
 import { Piece } from '@tagma/server/speech/contract/wire/listening';
 import { TeamLayer } from '@runlith/agent/collaboration/team';
 import { Option, Schema } from 'effect';
-
-export type DraftNewWorktree = {
-  readonly base: string | null;
-  readonly name: string | null;
-  readonly aimedAt: string | null;
-};
 
 export type StoredDraft = {
   at: number;
@@ -24,7 +18,7 @@ export type StoredDraft = {
   approvalMode: string | null;
   delegation: boolean | null;
   team: TeamLayer | null;
-  newWorktree: DraftNewWorktree | null;
+  place: DraftPlace;
   images: readonly string[];
   files: readonly string[];
 };
@@ -130,7 +124,7 @@ function draftOf(value: unknown): StoredDraft | null {
     approvalMode: typeof row.approvalMode === 'string' ? row.approvalMode : null,
     delegation: typeof row.delegation === 'boolean' ? row.delegation : null,
     team: Option.getOrNull(Option.map(teamOf(row.team), (team) => (row.spendSteps === SPEND_STEPS ? team : spendOnTen(team)))),
-    newWorktree: newWorktreeOf(row.newWorktree),
+    place: placeOf(row.place),
     images: idsOf(row.images),
     files: idsOf(row.files),
   };
@@ -140,14 +134,15 @@ function idsOf(value: unknown): readonly string[] {
   return Array.isArray(value) ? value.filter((id): id is string => typeof id === 'string') : [];
 }
 
-function newWorktreeOf(value: unknown): DraftNewWorktree | null {
-  if (typeof value !== 'object' || value === null) return null;
-  const row = value as Record<string, unknown>;
-  return {
-    base: typeof row.base === 'string' ? row.base : null,
-    name: typeof row.name === 'string' && row.name.trim() !== '' ? row.name : null,
-    aimedAt: typeof row.aimedAt === 'string' ? row.aimedAt : null,
-  };
+const storedPlace = Schema.decodeUnknownOption(
+  Schema.Union([
+    Schema.Struct({ kind: Schema.Literal('worktree'), rootId: Schema.String }),
+    Schema.Struct({ kind: Schema.Literal('new'), base: Schema.NullOr(Schema.String) }),
+  ]),
+);
+
+function placeOf(value: unknown): DraftPlace {
+  return Option.getOrElse(storedPlace(value), () => MAIN_CHECKOUT);
 }
 
 const teamOf = Schema.decodeUnknownOption(TeamLayer);

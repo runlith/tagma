@@ -3,22 +3,21 @@
   import ChevronRight from '@lucide/svelte/icons/chevron-right';
   import ChevronsUpDown from '@lucide/svelte/icons/chevrons-up-down';
   import GitBranch from '@lucide/svelte/icons/git-branch';
-  import GitBranchPlus from '@lucide/svelte/icons/git-branch-plus';
   import LayoutList from '@lucide/svelte/icons/layout-list';
   import Waiting from '@runlith/chat-ui/Waiting.svelte';
   import Plus from '@lucide/svelte/icons/plus';
   import type { ProjectBranch } from '@tagma/server/graph/contract/wire/rows';
-  import { PROVISIONAL_NAME } from '@tagma/server/worktrees/contract/wire/creation';
   import type { WorktreePlace } from '@tagma/server/worktrees/contract/wire/rows';
   import { Host } from '@runlith/layer/Host';
   import { Router } from '@runlith/layer/Router';
   import { spellKey } from '$lib/shared/chordSpelling.js';
   import Kbd from '$lib/shared/ui/kbd/Kbd.svelte';
   import MatchText from '$lib/shared/MatchText.svelte';
+  import { type DraftPlace, MAIN_CHECKOUT } from '$lib/features/threads/Draft.svelte.js';
   import { ThreadOnScreen } from '$lib/features/threads/OnScreen.svelte.js';
-  import { branchHref, currentProject } from '$lib/features/workspace/address.js';
+  import { worktreeActs } from '$lib/features/threads/worktrees/acts.js';
+  import { branchHref } from '$lib/features/workspace/address.js';
   import { Addresses } from '$lib/features/workspace/Addresses.js';
-  import { SurfaceRegistry } from '$lib/features/workspace/surface.js';
   import { GraphRung } from '$lib/features/workspace/GraphRung.js';
   import { ProjectsRepo } from '$lib/features/workspace/ProjectsRepo.js';
   import { Notices } from '$lib/features/notices/Service.svelte.js';
@@ -27,7 +26,6 @@
   import { Finishing } from '$lib/features/worktrees/Finishing.svelte.js';
   import NewWorktreeDialog from '$lib/features/worktrees/NewWorktreeDialog.svelte';
   import WorktreeFacts from '$lib/features/worktrees/WorktreeFacts.svelte';
-  import WorktreeNameField from '$lib/features/worktrees/WorktreeNameField.svelte';
   import WorktreeSwatch from '$lib/features/worktrees/WorktreeSwatch.svelte';
   import { Worktrees } from '$lib/features/worktrees/BoardState.svelte.js';
   import FadeText from '$lib/shared/FadeText.svelte';
@@ -47,9 +45,9 @@
   const notices = Notices.use();
   const router = Router.use();
   const addresses = Addresses.use();
-  const surfaces = SurfaceRegistry.use();
   const graphAim = GraphRung.Source.use();
   const onScreen = ThreadOnScreen.use();
+  const acts = worktreeActs();
 
   const aimed = $derived(graphAim()?.branch ?? null);
   const projectId = worktrees.aim.projectId;
@@ -81,7 +79,8 @@
 
   const page = $derived(onScreen.host?.projectId === projectId ? onScreen.host : null);
   const thread = $derived(page?.activeId ?? null);
-  const picked = $derived(page?.birth.newWorktree ?? null);
+  const chosen = $derived(page !== null && thread === null ? page.birth.place.chosen : null);
+  const picked = $derived(chosen?.kind === 'new' ? chosen : null);
 
   let open = $state(false);
   let query = $state('');
@@ -109,10 +108,14 @@
   const shownBranches = $derived(needle !== '' ? named(free, (row) => row.branch) : several ? [] : free);
   const nothing = $derived(needle !== '' && shownRows.length === 0 && shownCreations.length === 0 && shownBranches.length === 0);
 
-  function aimAt(branch: string | null, rootId: string | null): void {
-    const leaving = thread !== null && rootId !== here?.rootId;
-    if (!leaving) page?.birth.pickNewWorktree(null);
-    void router.goto(leaving ? addresses.place(currentProject(router), surfaces.home, null, branch) : branchHref(router, branch));
+  function aimAt(branch: string | null, rootId: string): void {
+    const place: DraftPlace = branch === null ? MAIN_CHECKOUT : { kind: 'worktree', rootId };
+    if (thread !== null && rootId !== here?.rootId) {
+      acts.newAgentIn(place, branch);
+      return;
+    }
+    page?.birth.place.pick(place);
+    void router.goto(branchHref(router, branch));
   }
 
   function go(row: WorktreePlace): void {
@@ -132,14 +135,6 @@
     worktrees.creating = true;
   }
 
-  function ownForDraft(): void {
-    page?.birth.pickNewWorktree({ base: here === null || here.kind === 'main' ? null : here.branch, name: null });
-  }
-
-  function nameNew(value: string): void {
-    if (picked !== null) page?.birth.pickNewWorktree({ base: picked.base, name: value === '' ? null : value });
-  }
-
   function factsOf(row: WorktreePlace): string {
     return [
       row.folder,
@@ -155,7 +150,6 @@
   const enter = spellKey('Enter', Host.use().apple);
   const LABEL = 'px-3 pt-2 pb-1 text-small font-semibold text-muted-foreground';
   const NO_REPOSITORY = 'The project folder is not a Git repository, so there is nothing to cut a worktree from';
-  const keep = (event: KeyboardEvent): void => event.stopPropagation();
 </script>
 
 {#snippet worktreeItem(row: WorktreePlace)}
@@ -217,11 +211,8 @@
           {@attach here === null || picked !== null ? undefined : reading.observe(here.rootId)}
         >
           {#if picked !== null}
-            <Plus class="size-3.5 shrink-0" />
-            <FadeText
-              class="font-mono"
-              text={`${picked.name ?? 'new worktree'} · from ${picked.base ?? worktrees.main?.branch ?? 'main'}`}
-            />
+            <WorktreeSwatch row={null} size="md" />
+            <FadeText class="font-mono" text={`new worktree from ${picked.base ?? worktrees.main?.branch ?? 'main'}`} />
           {:else if several && here !== null}
             <WorktreeSwatch row={here} size="md" />
             <FadeText class="font-mono" text={here.branch ?? here.name} />
@@ -248,34 +239,11 @@
     >
       <Command.Root class="min-h-0 flex-1 rounded-none! bg-transparent p-0">
         <Command.Input bind:value={query} placeholder={several ? 'Go to worktree or branch…' : 'Go to branch…'} class="text-ui" />
-        {#if needle === ''}
-          {#if picked !== null}
-            <div class="mt-1 grid gap-1.5 border-y bg-hover px-3 pt-2 pb-2" data-worktree-pick>
-              <div class="flex min-w-0 items-center gap-2">
-                <WorktreeSwatch row={null} size="md" />
-                <FadeText class="flex-1 font-mono text-ui" text={`new worktree from ${picked.base ?? worktrees.main?.branch ?? 'main'}`} />
-                <Button variant="ghost" size="xs" onkeydown={keep} onclick={() => page?.birth.pickNewWorktree(null)}>Cancel</Button>
-              </div>
-              <div class="pl-5">
-                <WorktreeNameField
-                  bind:value={() => picked?.name ?? '', nameNew}
-                  size="sm"
-                  placeholder={`${PROVISIONAL_NAME}-······`}
-                  label="New worktree name"
-                  onkeydown={(event) => {
-                    event.stopPropagation();
-                    if (event.key === 'Escape' || event.key === 'Enter') (event.currentTarget as HTMLInputElement).blur();
-                  }}
-                />
-              </div>
-              <div class="pl-5 text-small text-muted-foreground">Made with this draft’s first message.</div>
-            </div>
-          {:else if several && here !== null}
-            <div class="mt-1 border-t">
-              <div class={LABEL}>You are in</div>
-              <WorktreeCard row={here} onDone={() => (open = false)} />
-            </div>
-          {/if}
+        {#if needle === '' && several && here !== null}
+          <div class="mt-1 border-t">
+            <div class={LABEL}>You are in</div>
+            <WorktreeCard row={here} onDone={() => (open = false)} />
+          </div>
         {/if}
         <Command.List class="max-h-none min-h-0 flex-1 overscroll-contain p-1">
           {#if shownRows.length > 0 || shownCreations.length > 0 || (needle === '' && idle.length > 0)}
@@ -344,14 +312,6 @@
             <FadeText text={needle === '' ? 'New worktree…' : `New worktree “${query.trim()}”…`} />
           </Button>
         </Tooltip>
-        {#if page !== null && thread === null && picked === null}
-          <Tooltip text={unversioned ? NO_REPOSITORY : 'Start this draft in a new worktree, made with its first message'} class="flex">
-            <Button variant="ghost" size="sm" class="text-ui" disabled={unversioned} onclick={ownForDraft} data-worktree-new-agent>
-              <GitBranchPlus class="size-3.5 text-muted-foreground" />
-              Draft in a new worktree
-            </Button>
-          </Tooltip>
-        {/if}
         <span class="flex-1"></span>
         {#if several}
           <Button
@@ -375,7 +335,7 @@
     bind:open={worktrees.creating}
     from={here?.branch ?? null}
     suggested={suggestion}
-    onCreated={(branch) => aimAt(branch, null)}
+    onCreated={(branch, rootId) => aimAt(branch, rootId)}
   />
 {/if}
 
