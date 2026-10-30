@@ -1,4 +1,4 @@
-import { Context, Effect } from 'effect';
+import { Context, Effect, Schema } from 'effect';
 import { and, eq } from 'drizzle-orm';
 import { MachineStore, type StoreFailure } from '../../platform/contract/service/store.js';
 import type { Actor } from '../../platform/contract/wire/actor.js';
@@ -24,9 +24,11 @@ import {
 } from '../../platform/contract/service/credentials.js';
 import type { GrantSigner } from '../../platform/contract/service/grantSigner.js';
 import { GateRefusal } from '../../platform/contract/wire/refusal.js';
-import { HARNESS_NAMES } from '../../threads/contract/wire/harness/names.js';
+import { harnessNameSchema } from '../../threads/contract/wire/harness/names.js';
 import type { MachineContext } from '../../graph/serving/machine.js';
 import type { CallWorld } from '../contract/service/admission.js';
+
+const isHarnessName = Schema.is(harnessNameSchema);
 
 type ThreadBornOf = NonNullable<Extract<Actor, { readonly kind: 'thread' }>['act']>;
 
@@ -156,11 +158,14 @@ export const identityOf = Effect.fnUntraced(function* (
   const declared = headers[MCP_SESSION_HEADER]?.trim();
   if (declared) {
     const bridge = parseSessionToken(declared);
-    if (bridge === null || !HARNESS_NAMES.some((name) => name === bridge.harness)) {
+    if (bridge === null || bridge.harness === NATIVE_HARNESS || !isHarnessName(bridge.harness)) {
       return yield* new GateRefusal(
         'mcp-session-shape',
-        `${MCP_SESSION_HEADER} is "<harness>:<key>" naming a harness this server carries, got "${declared}"`,
-        [`send one of: ${HARNESS_NAMES.join(', ')}`, 'a session of this server is proven by its shell’s grant, not declared here'],
+        `${MCP_SESSION_HEADER} is "<harness>:<key>" naming a harness id, got "${declared}"`,
+        [
+          'send the id of the harness that runs this session: lowercase letters, digits and dashes',
+          'a session of this server is proven by its shell’s grant, not declared here',
+        ],
       );
     }
     return yield* signedBy(machine, resolution, headers, bridge);

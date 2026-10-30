@@ -1,9 +1,11 @@
-import { HARNESS_AGENT_ID, HARNESS_NAMES, type HarnessName } from './names.js';
+import { Schema } from 'effect';
+import { HARNESS_AGENT_ID, harnessNameSchema, type HarnessName } from './names.js';
 import { unmeasuredObservation } from './observation.js';
 import type { ExternalSession, HarnessInstall, HarnessPresentation } from './externalSession.js';
 
 const SEPARATOR = ':';
 const PREFIX = `${HARNESS_AGENT_ID}${SEPARATOR}`;
+const isHarnessName = Schema.is(harnessNameSchema);
 
 export function harnessTypeId(harness: string): string {
   return `${PREFIX}${harness}`;
@@ -12,7 +14,7 @@ export function harnessTypeId(harness: string): string {
 export function harnessOfTypeId(typeId: string): HarnessName | null {
   if (!typeId.startsWith(PREFIX)) return null;
   const named = typeId.slice(PREFIX.length);
-  return HARNESS_NAMES.find((harness) => harness === named) ?? null;
+  return isHarnessName(named) ? named : null;
 }
 
 export function harnessSpawnTypes(installs: readonly HarnessInstall[]) {
