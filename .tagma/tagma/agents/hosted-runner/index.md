@@ -32,6 +32,15 @@ fields:
       },
       {
         "at": "src/wire/"
+      },
+      {
+        "at": "src/client.ts"
+      },
+      {
+        "at": "src/options.ts"
+      },
+      {
+        "at": "src/profile.ts"
       }
     ],
     "id": "@runlith/hosted-runner",
@@ -46,6 +55,8 @@ edges:
     to: 01a0c944-8aa1-7e16-b225-ddc5d1caad35
   - kind: imports
     to: 01a108bd-5060-7141-819c-dd4dad88de8a
+  - kind: imports
+    to: 01a12c51-8120-7250-9703-61feea5c74f4
   - kind: imports-tests
     to: 01a13b4d-7a3d-7729-955f-a344b43ff1ba
 sources:
