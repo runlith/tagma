@@ -8,7 +8,7 @@ import { MachineUnits, type Unit } from '../../platform/contract/service/units.j
 import { recordFacts } from '../../thread-record/facts.js';
 import { thread } from '../store/kernel.js';
 import { ThreadInputRefused } from '../contract/service/failure.js';
-import { selected, type ThreadSelection } from './select.js';
+import { type ListHomes, selected, type ThreadSelection } from './select.js';
 
 const HELD = 256;
 const PAGE = 50;
@@ -59,8 +59,9 @@ export const makeThreadSelections = Effect.gen(function* () {
       }),
     );
 
-  const pin = Effect.fn('ThreadWindows.pin')(function* (owner: string, project: number, selection: ThreadSelection) {
+  const pin = Effect.fn('ThreadWindows.pin')(function* (owner: string, homes: ListHomes, selection: ThreadSelection) {
     const reading = randomUUID();
+    const project = homes.id;
     const clock = selection.view === 'archived' ? recordFacts.archivedAt : recordFacts.readerOrderAt;
     const insert = (ids?: readonly string[]) =>
       units.write('ThreadWindows.select', (unit) =>
@@ -70,7 +71,7 @@ export const makeThreadSelections = Effect.gen(function* () {
             db.run(sql`insert into temp.thread_selection_member (reading, thread, order_at)
           select ${reading}, ${recordFacts.id}, ${clock} from ${recordFacts}
           left join ${thread} on ${thread.id} = ${recordFacts.id}
-          where ${and(selected(owner, project, selection), ids === undefined ? undefined : inArray(recordFacts.id, [...ids]))}`),
+          where ${and(selected(owner, homes.projects, selection), ids === undefined ? undefined : inArray(recordFacts.id, [...ids]))}`),
           );
         }),
       );
@@ -85,24 +86,26 @@ export const makeThreadSelections = Effect.gen(function* () {
       );
       if (selection.active === undefined) yield* insert();
       else {
-        let after: string | undefined;
-        let held: string | undefined;
-        do {
-          const page = yield* activity
-            .threads({
-              project,
-              limit: PAGE,
-              ids: selection.ids,
-              since: selection.active.since?.getTime(),
-              before: selection.active.before?.getTime(),
-              after,
-              reading: held,
-            })
-            .pipe(Effect.mapError((cause) => new ThreadStorageFailed({ call: 'activity.threads', cause })));
-          if (page.threads.length > 0) yield* insert(page.threads);
-          after = page.after ?? undefined;
-          held = page.reading;
-        } while (after !== undefined);
+        for (const home of homes.projects) {
+          let after: string | undefined;
+          let held: string | undefined;
+          do {
+            const page = yield* activity
+              .threads({
+                project: home,
+                limit: PAGE,
+                ids: selection.ids,
+                since: selection.active.since?.getTime(),
+                before: selection.active.before?.getTime(),
+                after,
+                reading: held,
+              })
+              .pipe(Effect.mapError((cause) => new ThreadStorageFailed({ call: 'activity.threads', cause })));
+            if (page.threads.length > 0) yield* insert(page.threads);
+            after = page.after ?? undefined;
+            held = page.reading;
+          } while (after !== undefined);
+        }
       }
       yield* units.write('ThreadWindows.seal', (unit) =>
         Effect.gen(function* () {
@@ -125,10 +128,10 @@ export const makeThreadSelections = Effect.gen(function* () {
     }).pipe(Effect.onError(() => release(reading).pipe(Effect.orDie)));
   });
 
-  const page = Effect.fn('ThreadWindows.page')(function* (owner: string, project: number, reading: string, after: number, limit: number) {
+  const page = Effect.fn('ThreadWindows.page')(function* (owner: string, listId: number, reading: string, after: number, limit: number) {
     return yield* units.write('ThreadWindows.page', (unit) =>
       Effect.gen(function* () {
-        const held = yield* holding(unit, owner, project, reading);
+        const held = yield* holding(unit, owner, listId, reading);
         if (held.total === null) return yield* stale();
         const found = yield* unit.run(
           db.all<{ readonly thread: string }>(sql`

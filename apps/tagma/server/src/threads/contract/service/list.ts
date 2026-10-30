@@ -55,11 +55,11 @@ export class ThreadList extends Context.Service<
     pulse(): Effect.Effect<readonly ThreadSummary[], HarnessFailure>;
     subscribeAttention(listener: (event: AttentionEvent) => void): () => void;
     observe(threadId: string, notify: () => void): () => void;
-    list(projectId: number, selection: ThreadSelection): Effect.Effect<ThreadProjectionPage, HarnessFailure<SessionCode<'list_threads'>>>;
-    listWindow(projectId: number, before?: Date): Effect.Effect<ThreadProjectionWindow, HarnessFailure>;
-    openWindow(projectId: number): Effect.Effect<ThreadProjectionWindow, HarnessFailure>;
+    list(listId: number, selection: ThreadSelection): Effect.Effect<ThreadProjectionPage, HarnessFailure<SessionCode<'list_threads'>>>;
+    listWindow(listId: number, before?: Date): Effect.Effect<ThreadProjectionWindow, HarnessFailure>;
+    openWindow(listId: number): Effect.Effect<ThreadProjectionWindow, HarnessFailure>;
     row(threadId: string): Effect.Effect<ThreadListProjection | undefined, HarnessFailure>;
-    subscribe(projectId: number, listener: (event: ThreadsEvent) => void): () => void;
+    subscribe(listId: number, listener: (event: ThreadsEvent) => void): () => void;
     announce(row: ThreadSummary): ThreadListProjection;
     announceThread(threadId: string): Effect.Effect<void>;
     announceFolders(projectId: number, folders: readonly ThreadFolder[]): void;
@@ -68,7 +68,7 @@ export class ThreadList extends Context.Service<
     relation(threadId: string, callerId: string): Effect.Effect<ThreadRelation, HarnessFailure>;
     working(threadId: string): Effect.Effect<readonly string[], HarnessFailure>;
     sweepRelation(
-      projectId: number,
+      listId: number,
       selection: Omit<ThreadSelection, 'view'>,
       archived: boolean,
       callerId: string,
@@ -82,7 +82,7 @@ export class ThreadList extends Context.Service<
       spared?: string | null,
     ): Effect.Effect<ThreadListProjection, HarnessFailure>;
     setArchivedMatching(
-      projectId: number,
+      listId: number,
       selection: Omit<ThreadSelection, 'view'>,
       archived: boolean,
       by: Actor,

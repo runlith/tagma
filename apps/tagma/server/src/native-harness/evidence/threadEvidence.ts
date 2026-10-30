@@ -161,7 +161,9 @@ export const threadEvidence = Effect.fnUntraced(function* ({ rows, runs }: Threa
     const answered = new Map<string, PresenceSource>(missing);
     if (present.length > 0) {
       const read = yield* coherently(() =>
-        Effect.flatMap(windows.list(OPERATOR_PRINCIPAL, projectId, { view: 'all', ids: present }), (page) => sourcesOf(page.rows)),
+        Effect.flatMap(windows.list(OPERATOR_PRINCIPAL, { id: projectId, projects: [projectId] }, { view: 'all', ids: present }), (page) =>
+          sourcesOf(page.rows),
+        ),
       );
       for (const source of read) answered.set(source.threadId, source);
     }

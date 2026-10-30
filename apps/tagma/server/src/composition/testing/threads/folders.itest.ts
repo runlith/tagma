@@ -40,7 +40,7 @@ it.live(
     if (made.status !== 'created') return yield* Effect.die(new Error(`the folder was not made: ${made.status}`));
     expect(made.moved as readonly string[]).toEqual([oldest]);
     const window = Effect.fnUntraced(function* () {
-      return (yield* threads.list.rootWindow('operator', demo.projectId, { limit: 1 })).rows.map((row) => row.id);
+      return (yield* threads.list.rootWindow('operator', [demo.projectId], { limit: 1 })).rows.map((row) => row.id);
     });
     const filed = yield* threads.list.summary(oldest);
     expect(filed?.folderId).toBe(made.folder.id);

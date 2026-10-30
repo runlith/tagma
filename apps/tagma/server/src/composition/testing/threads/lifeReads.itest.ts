@@ -65,10 +65,14 @@ layer(builtinRegistry, { excludeTestServices: true })('thread lifecycle readings
       expect(stalledSince(native)?.getTime()).toBe(quiet.getTime());
       expect(stalledSince(acp)?.getTime()).toBe(quiet.getTime());
       expect(stalledSince(healthy)).toBeNull();
-      const selected = yield* threads.list.list('operator', projectId, {
-        view: 'live',
-        state: { kind: 'stalled', now: new Date(yield* Clock.currentTimeMillis) },
-      });
+      const selected = yield* threads.list.list(
+        'operator',
+        { id: projectId, projects: [projectId] },
+        {
+          view: 'live',
+          state: { kind: 'stalled', now: new Date(yield* Clock.currentTimeMillis) },
+        },
+      );
       expect(selected.rows.map((row) => row.id).sort()).toEqual([native, acp].sort());
       expect(selected.rows.map((row) => row.life)).toEqual(['stalled', 'stalled']);
     }),

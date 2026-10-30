@@ -55,8 +55,10 @@ it.live(
   Effect.fnUntraced(function* () {
     const { db, parts, a, b, parent, child, newest, outsider } = yield* setup();
     const list = parts.list;
-    expect((yield* list.rootWindow('operator', a, { limit: 2 })).rows.map((row) => row.id).sort()).toEqual([parent, child, newest].sort());
-    expect((yield* list.list('operator', b, { view: 'live', limit: 2 })).rows.map((row) => row.id).sort()).toEqual(
+    expect((yield* list.rootWindow('operator', [a], { limit: 2 })).rows.map((row) => row.id).sort()).toEqual(
+      [parent, child, newest].sort(),
+    );
+    expect((yield* list.list('operator', { id: b, projects: [b] }, { view: 'live', limit: 2 })).rows.map((row) => row.id).sort()).toEqual(
       [child, outsider].sort(),
     );
     yield* db.insert(threadRun()).values({
@@ -66,7 +68,7 @@ it.live(
       status: 'running',
       progress: { stage: 'running', message: null },
     });
-    const window = yield* list.rootWindow('operator', a, { limit: 1 });
+    const window = yield* list.rootWindow('operator', [a], { limit: 1 });
     expect(window.roots).toBe(2);
     expect(window.rows.map((row) => row.id).sort()).toEqual([parent, child, newest].sort());
     expect(window.rows.find((row) => row.id === child)).toMatchObject({ projectId: b, life: 'working', parentThreadId: parent });

@@ -8,6 +8,9 @@ import { writes } from '../../platform/contract/service/writes.js';
 import type { HarnessId } from '../../platform/contract/wire/session.js';
 import { ThreadId } from '../../platform/contract/wire/thread.js';
 import { ThreadRecords } from '../../thread-record/contract/service/records.js';
+import { ThreadFolders } from '../../thread-record/contract/service/folders.js';
+import { ProjectGroups } from '../../projects/contract/service/registry.js';
+import type { ProjectGroup } from '../../projects/contract/wire/project.js';
 import type { NativeThreadState } from '../contract/service/state.js';
 import { ThreadLookup, ThreadWindows, ThreadRunning, ThreadShelving, ThreadReading } from '../contract/service/reads.js';
 import { ThreadLive, ThreadLaunchGate } from '../contract/service/engine.js';
@@ -30,7 +33,7 @@ const unused = (): never => {
   throw new Error('the list reached an unrelated synchronous service member');
 };
 
-const opened = Effect.fnUntraced(function* (source?: 'resource' | 'commands') {
+const opened = Effect.fnUntraced(function* (source?: 'resource' | 'commands', groups: readonly ProjectGroup[] = []) {
   let stamped = 0;
   let held = 0;
   const reading = yield* Deferred.make<void>();
@@ -83,6 +86,8 @@ const opened = Effect.fnUntraced(function* (source?: 'resource' | 'commands') {
         Layer.succeed(ThreadLive, live),
         Layer.succeed(ThreadLaunchGate, gate),
         Layer.mock(ThreadRollouts, { pathOf: unused, appendRecord: unused, queueMeta: unused, shelve: unused, formRested: unused }),
+        Layer.mock(ProjectGroups, { list: () => Effect.succeed(groups) }),
+        Layer.mock(ThreadFolders, { regrouped: () => () => {} }),
         Layer.succeed(HeldPathCounts, {
           counts: () => Effect.sync(() => new Map([['thread', { paths: held, unproven: 0 }]])),
           moved: () => Effect.sync(() => new Map([['thread', { paths: held, unproven: 0 }]])),
@@ -140,6 +145,22 @@ it.effect('resync publishes its window before row frames announced while it read
     list.announce(summary);
     yield* Deferred.succeed(release, undefined);
     expect([yield* Queue.take(events), yield* Queue.take(events)]).toEqual(['list', 'row']);
+  }),
+);
+
+it.effect('a member’s row reaches the list of its group’s own id and its home, never another member’s own list', () =>
+  Effect.gen(function* () {
+    const group = { graph: { id: 10 }, members: [{ id: 1 }, { id: 2 }] } as unknown as ProjectGroup;
+    const { list } = yield* opened(undefined, [group]);
+    const heard: number[] = [];
+    const stops = [10, 1, 2].map((listId) =>
+      list.subscribe(listId, (event) => {
+        if (event.kind === 'row') heard.push(listId);
+      }),
+    );
+    yield* Effect.addFinalizer(() => Effect.sync(() => stops.forEach((stop) => stop())));
+    list.announce(summary);
+    expect(heard.sort()).toEqual([1, 10]);
   }),
 );
 

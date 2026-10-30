@@ -73,8 +73,8 @@ export type ThreadGate = {
   readonly evictedAt: Date | null;
 };
 
-const matchedWhere = (ownerId: string, projectId: number, selection: ThreadSelection, spared: string | null) =>
-  and(selected(ownerId, projectId, selection), spared === null ? undefined : sql`${recordFacts.id} not in ${lineageOf(spared)}`);
+const matchedWhere = (ownerId: string, homes: readonly number[], selection: ThreadSelection, spared: string | null) =>
+  and(selected(ownerId, homes, selection), spared === null ? undefined : sql`${recordFacts.id} not in ${lineageOf(spared)}`);
 
 export type ThreadListReads = ThreadLookup['Service'] &
   ThreadWindows['Service'] &
@@ -192,13 +192,13 @@ export const makeThreadListReads = Effect.gen(function* () {
             ),
           ),
 
-    list: (ownerId, projectId, selection) => {
+    list: (ownerId, homes, selection) => {
       if (selection.active !== undefined)
         return Effect.gen(function* () {
-          const reading = yield* selections.pin(ownerId, projectId, selection);
-          const page = yield* selections.page(ownerId, projectId, reading, 0, selection.limit ?? -1);
+          const reading = yield* selections.pin(ownerId, homes, selection);
+          const page = yield* selections.page(ownerId, homes.id, reading, 0, selection.limit ?? -1);
           const { active: _active, ...metadata } = selection;
-          const listed = yield* reads.list(ownerId, projectId, { ...metadata, ids: page.ids });
+          const listed = yield* reads.list(ownerId, homes, { ...metadata, ids: page.ids });
           return { ...listed, total: page.total };
         });
       if (selection.view === 'live' && selection.archivedAt !== undefined) {
@@ -211,7 +211,7 @@ export const makeThreadListReads = Effect.gen(function* () {
         );
       }
       const clock = selection.view === 'archived' ? recordFacts.archivedAt : recordFacts.readerOrderAt;
-      const counting = selected(ownerId, projectId, selection);
+      const counting = selected(ownerId, homes.projects, selection);
       const where = and(counting, pastCursor(clock, selection.before));
       const page = units.read((unit) =>
         Effect.gen(function* () {
@@ -271,11 +271,11 @@ export const makeThreadListReads = Effect.gen(function* () {
 
     rootWindow: Effect.fn('ThreadListReads.rootWindow')(function* (
       ownerId: string,
-      projectId: number,
+      homes: readonly number[],
       page: { readonly limit: number; readonly before?: Date },
     ) {
-      yield* Effect.annotateCurrentSpan({ projectId, limit: page.limit });
-      const roots = and(selected(ownerId, projectId, { view: 'live' }), liveRoot(ownerId, projectId));
+      yield* Effect.annotateCurrentSpan({ projects: homes.join(','), limit: page.limit });
+      const roots = and(selected(ownerId, homes, { view: 'live' }), liveRoot(ownerId, homes));
       const cut = page.before === undefined ? roots : and(roots, sql`${recordFacts.readerOrderAt} < ${page.before.getTime()}`);
       const owing = yield* owingOf();
       const window = yield* units.read((unit) =>
@@ -288,8 +288,8 @@ export const makeThreadListReads = Effect.gen(function* () {
                 and(
                   roots,
                   or(
-                    sql`${recordFacts.id} in ${runningRoots(ownerId, projectId)}`,
-                    owing.size === 0 ? undefined : sql`${recordFacts.id} in ${rootsOf(ownerId, projectId, [...owing])}`,
+                    sql`${recordFacts.id} in ${runningRoots(ownerId, homes)}`,
+                    owing.size === 0 ? undefined : sql`${recordFacts.id} in ${rootsOf(ownerId, homes, [...owing])}`,
                   ),
                 ),
               ),
@@ -305,7 +305,7 @@ export const makeThreadListReads = Effect.gen(function* () {
                   or(
                     isNotNull(recordFacts.pinnedAt),
                     isNotNull(recordFacts.folderId),
-                    sql`${recordFacts.id} in ${pinnedRoots(ownerId, projectId)}`,
+                    sql`${recordFacts.id} in ${pinnedRoots(ownerId, homes)}`,
                   ),
                 ),
               ),
@@ -341,28 +341,33 @@ export const makeThreadListReads = Effect.gen(function* () {
       return { ...window, rows: marked(owing, window.rows) };
     }),
 
-    families: (ownerId, member, projects) =>
-      projects.length === 0
+    families: (ownerId, member, lists) =>
+      lists.length === 0
         ? Effect.succeed([])
         : Effect.flatMap(owingOf(), (owing) =>
             Effect.map(
               units.read((unit) =>
                 Effect.gen(function* () {
-                  const roots = yield* unit.run(
-                    db
-                      .select({ id: recordFacts.id, projectId: sql<number>`${recordFacts.projectId}` })
-                      .from(recordFacts)
-                      .where(
-                        and(
-                          eq(recordFacts.principalId, ownerId),
-                          isNull(recordFacts.archivedAt),
-                          inArray(recordFacts.projectId, [...projects]),
-                          sql`${recordFacts.id} in ${lineageOf(member.id)}`,
-                          liveRoot(ownerId, recordFacts.projectId),
-                        ),
+                  const roots = yield* Effect.forEach(lists, (list) =>
+                    Effect.map(
+                      unit.run(
+                        db
+                          .select({ id: recordFacts.id })
+                          .from(recordFacts)
+                          .where(
+                            and(
+                              eq(recordFacts.principalId, ownerId),
+                              isNull(recordFacts.archivedAt),
+                              inArray(recordFacts.projectId, [...list.projects]),
+                              sql`${recordFacts.id} in ${lineageOf(member.id)}`,
+                              liveRoot(ownerId, list.projects),
+                            ),
+                          ),
                       ),
+                      (found) => found.map((root) => ({ id: root.id, listId: list.id })),
+                    ),
                   );
-                  return yield* Effect.forEach(roots, (root) =>
+                  return yield* Effect.forEach(roots.flat(), (root) =>
                     Effect.gen(function* () {
                       const rows = yield* unit.run(
                         summariesOf(
@@ -370,7 +375,7 @@ export const makeThreadListReads = Effect.gen(function* () {
                           and(sql`${recordFacts.id} in ${liveFamilyOf(ownerId, [root.id])}`, sql`${recordFacts.id} != ${member.id}`),
                         ),
                       );
-                      return { projectId: root.projectId, rows: [member, ...(yield* summarized('families', rows))] };
+                      return { listId: root.listId, rows: [member, ...(yield* summarized('families', rows))] };
                     }),
                   );
                 }),
@@ -384,7 +389,7 @@ export const makeThreadListReads = Effect.gen(function* () {
     setPinned: (threadId, at) =>
       units.write(writes('ThreadListReads.setPinned', [threadRecord]), (unit) => records.setPinned(unit, threadId, at)),
 
-    heldUpMatching: (ownerId, projectId, selection, spared) =>
+    heldUpMatching: (ownerId, homes, selection, spared) =>
       units.read((unit) =>
         unit.run(
           db
@@ -398,11 +403,11 @@ export const makeThreadListReads = Effect.gen(function* () {
             .from(recordFacts)
             .leftJoin(thread, eq(thread.id, recordFacts.id))
             .innerJoin(sql`${heldUp} held`, sql`held.id = ${recordFacts.id}`)
-            .where(matchedWhere(ownerId, projectId, selection, spared)),
+            .where(matchedWhere(ownerId, homes, selection, spared)),
         ),
       ),
 
-    selectsBeyond: (ownerId, projectId, selection, callerId) =>
+    selectsBeyond: (ownerId, homes, selection, callerId) =>
       units.read((unit) =>
         Effect.map(
           unit.run(
@@ -412,7 +417,7 @@ export const makeThreadListReads = Effect.gen(function* () {
               .leftJoin(thread, eq(thread.id, recordFacts.id))
               .where(
                 and(
-                  selected(ownerId, projectId, selection),
+                  selected(ownerId, homes, selection),
                   sql`${recordFacts.id} not in ${lineageOf(callerId)}`,
                   sql`${recordFacts.id} not in ${subtreeOf(callerId)}`,
                 ),
@@ -426,13 +431,13 @@ export const makeThreadListReads = Effect.gen(function* () {
 
     setArchivedWhere: Effect.fnUntraced(function* (
       ownerId: string,
-      projectId: number,
+      homes: readonly number[],
       selection: ThreadSelection,
       at: Date | null,
       spared: string | null,
       before?: ArchiveWork,
     ) {
-      const matched = matchedWhere(ownerId, projectId, selection, spared);
+      const matched = matchedWhere(ownerId, homes, selection, spared);
       const chosen = (rootsWithin?: readonly string[]) =>
         units.read((unit) =>
           Effect.gen(function* () {

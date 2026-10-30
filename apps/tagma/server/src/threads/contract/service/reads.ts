@@ -4,7 +4,7 @@ import { Context, type Effect } from 'effect';
 import type { StoreFailure } from '../../../platform/contract/service/store.js';
 import type { Unit } from '../../../platform/contract/service/units.js';
 import type { HarnessId } from '../../../platform/contract/wire/session.js';
-import type { ThreadSelection, ThreadPage, ThreadWindow, ThreadFamily, ThreadSelectionPage } from '../../list/select.js';
+import type { ListHomes, ThreadSelection, ThreadPage, ThreadWindow, ThreadFamily, ThreadSelectionPage } from '../../list/select.js';
 import type { PlacedEntry, SubtreeMember, ThreadGate, ThreadMetadata } from '../../list/store.js';
 import type { ThreadListMove, ThreadSummary } from '../../list/summary.js';
 import type { ArchiveWork } from './list.js';
@@ -31,11 +31,11 @@ export class ThreadLookup extends Context.Service<
 export class ThreadWindows extends Context.Service<
   ThreadWindows,
   {
-    list(ownerId: string, projectId: number, selection: ThreadSelection): Effect.Effect<ThreadPage, HarnessFailure>;
-    pin(ownerId: string, projectId: number, selection: ThreadSelection): Effect.Effect<string, HarnessFailure>;
+    list(ownerId: string, homes: ListHomes, selection: ThreadSelection): Effect.Effect<ThreadPage, HarnessFailure>;
+    pin(ownerId: string, homes: ListHomes, selection: ThreadSelection): Effect.Effect<string, HarnessFailure>;
     page(
       ownerId: string,
-      projectId: number,
+      listId: number,
       reading: string,
       after: number,
       limit: number,
@@ -45,23 +45,28 @@ export class ThreadWindows extends Context.Service<
     families(
       ownerId: string,
       member: ThreadSummary,
-      projects: readonly number[],
+      lists: readonly ListHomes[],
     ): Effect.Effect<readonly ThreadFamily[], StoreFailure | ThreadStorageFailed>;
     rootWindow(
       ownerId: string,
-      projectId: number,
+      homes: readonly number[],
       page: { readonly limit: number; readonly before?: Date },
     ): Effect.Effect<ThreadWindow, StoreFailure | ThreadStorageFailed>;
     heldUpMatching(
       ownerId: string,
-      projectId: number,
+      homes: readonly number[],
       selection: ThreadSelection,
       spared: string | null,
     ): Effect.Effect<
       ReadonlyArray<{ threadId: string; runId: string; kind: 'run' | 'harness'; sessionThreadId: string; harness: HarnessId }>,
       StoreFailure
     >;
-    selectsBeyond(ownerId: string, projectId: number, selection: ThreadSelection, callerId: string): Effect.Effect<boolean, StoreFailure>;
+    selectsBeyond(
+      ownerId: string,
+      homes: readonly number[],
+      selection: ThreadSelection,
+      callerId: string,
+    ): Effect.Effect<boolean, StoreFailure>;
   }
 >()('tagma/threads/ThreadWindows') {}
 
@@ -92,7 +97,7 @@ export class ThreadShelving extends Context.Service<
     setPinned(threadId: string, at: Date | null): Effect.Effect<string | undefined, StoreFailure>;
     setArchivedWhere(
       ownerId: string,
-      projectId: number,
+      homes: readonly number[],
       selection: ThreadSelection,
       at: Date | null,
       spared: string | null,

@@ -157,7 +157,7 @@ const carryOut = Effect.fnUntraced(function* (db: StoreDb<'machine'>, unit: Writ
   }
 });
 
-type Subscriber = (event: FoldersRegrouped) => Effect.Effect<void>;
+type Subscriber = (event: FoldersRegrouped) => Effect.Effect<void, StoreFailure>;
 
 export const makeThreadFolders = Effect.gen(function* () {
   const { db } = yield* MachineStore;

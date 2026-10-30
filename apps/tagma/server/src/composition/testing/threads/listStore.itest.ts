@@ -68,7 +68,9 @@ it.live(
         }),
       )
       .pipe(Effect.orDie);
-    const { rows } = yield* threads.list.list('operator', demo.projectId, { view: 'live' }).pipe(Effect.orDie);
+    const { rows } = yield* threads.list
+      .list('operator', { id: demo.projectId, projects: [demo.projectId] }, { view: 'live' })
+      .pipe(Effect.orDie);
     expect(rows).toHaveLength(1);
     expect(rows[0]?.outcome).toMatchObject({ runId: '0002', status: 'cut' });
   }),
@@ -96,7 +98,9 @@ it.live(
       )
       .pipe(Effect.orDie);
     const selected = Effect.fnUntraced(function* (title: string) {
-      const page = yield* threads.list.list('operator', demo.projectId, { view: 'live', title }).pipe(Effect.orDie);
+      const page = yield* threads.list
+        .list('operator', { id: demo.projectId, projects: [demo.projectId] }, { view: 'live', title })
+        .pipe(Effect.orDie);
       return { ids: page.rows.map((row) => row.id).sort(), total: page.total };
     });
     expect(yield* selected('build-code')).toEqual({ ids: [named], total: 1 });
@@ -122,7 +126,9 @@ it.live(
         }),
       )
       .pipe(Effect.orDie);
-    const { rows } = yield* threads.list.list('operator', demo.projectId, { view: 'live' }).pipe(Effect.orDie);
+    const { rows } = yield* threads.list
+      .list('operator', { id: demo.projectId, projects: [demo.projectId] }, { view: 'live' })
+      .pipe(Effect.orDie);
     const one = yield* threads.list.summary(id).pipe(Effect.orDie);
     const stored = yield* store.systemPromptOf(id).pipe(Effect.orDie);
     expect(stored).toMatchObject({ systemPrompt: 'frozen', pendingSystemPrompt: 'pending' });
@@ -212,7 +218,7 @@ it.live(
     const { threads, ids } = yield* project(demo, 3);
     const [oldest, middle, newest] = ids as [string, string, string];
     yield* threads.list.setPinned(oldest, new Date('2026-02-01T00:00:00.000Z')).pipe(Effect.orDie);
-    const window = yield* threads.list.rootWindow('operator', demo.projectId, { limit: 1 }).pipe(Effect.orDie);
+    const window = yield* threads.list.rootWindow('operator', [demo.projectId], { limit: 1 }).pipe(Effect.orDie);
     const admitted = window.rows.map((row) => row.id);
     expect(admitted).toContain(oldest);
     expect(admitted).toContain(newest);
@@ -236,7 +242,7 @@ it.live(
         }),
       )
       .pipe(Effect.orDie);
-    const admitted = Effect.map(threads.list.rootWindow('operator', demo.projectId, { limit: 1 }).pipe(Effect.orDie), (window) =>
+    const admitted = Effect.map(threads.list.rootWindow('operator', [demo.projectId], { limit: 1 }).pipe(Effect.orDie), (window) =>
       window.rows.map((row) => row.id),
     );
     yield* threads.list.setPinned(child, new Date('2026-02-01T00:00:00.000Z')).pipe(Effect.orDie);
@@ -604,7 +610,9 @@ it.live(
     yield* park(demo, earlier, asked('run-earlier', [confirm('Run `git push`')], ['bash']), { id: 'run-later', waiting: true });
     yield* park(demo, long, asked('run-long', [confirm(`Run \`${'x'.repeat(5000)}\``)], ['bash']));
     yield* park(demo, idle, asked('run-idle', [confirm('Run `git push`')], ['bash']), null);
-    const { rows } = yield* threads.list.list('operator', demo.projectId, { view: 'live' }).pipe(Effect.orDie);
+    const { rows } = yield* threads.list
+      .list('operator', { id: demo.projectId, projects: [demo.projectId] }, { view: 'live' })
+      .pipe(Effect.orDie);
     const ask = (id: string) => rows.find((row) => row.id === id)?.ask;
     expect(rows).toHaveLength(24);
     expect(same).toHaveLength(12);
@@ -718,7 +726,9 @@ it.live(
                  (${malformed}, 2, 'torn', 'run-malformed', 'message', '{"type":"message","role":"assistant","text":"torn'),
                  (${malformed}, 3, 'after', 'run-malformed', 'message', '{"type":"message","id":"after","role":"assistant","text":"After it."}')`)
       .pipe(Effect.andThen(saidOfRuns(demo.db, malformed, ['run-malformed'])), Effect.orDie);
-    const { rows } = yield* threads.list.list('operator', demo.projectId, { view: 'live' }).pipe(Effect.orDie);
+    const { rows } = yield* threads.list
+      .list('operator', { id: demo.projectId, projects: [demo.projectId] }, { view: 'live' })
+      .pipe(Effect.orDie);
     const said = (id: string) => rows.find((row) => row.id === id)?.saidLine;
     expect(said(answered)).toBe('Found 3 issues');
     expect(said(toolLast)).toBe('Later words.');
@@ -735,7 +745,7 @@ it.live(
     expect(said(closing)).toBe('B');
     expect(said(malformed)).toBeNull();
     expect(rows.find((row) => row.id === malformed)?.outcome?.status).toBe('completed');
-    const window = yield* threads.list.rootWindow('operator', demo.projectId, { limit: 50 }).pipe(Effect.orDie);
+    const window = yield* threads.list.rootWindow('operator', [demo.projectId], { limit: 50 }).pipe(Effect.orDie);
     expect(window.rows.find((row) => row.id === answered)?.saidLine).toBe('Found 3 issues');
     expect((yield* threads.list.summary(going).pipe(Effect.orDie))?.saidLine).toBe('Now the wire.');
   }),
@@ -967,7 +977,7 @@ it.live(
       )
       .pipe(Effect.orDie);
     const world = yield* owingReads(demo, store);
-    const window = () => world.reads.rootWindow('operator', demo.projectId, { limit: 1 }).pipe(Effect.orDie);
+    const window = () => world.reads.rootWindow('operator', [demo.projectId], { limit: 1 }).pipe(Effect.orDie);
     expect((yield* window()).rows.map((row) => row.id)).toEqual([newer]);
 
     yield* world.ended(tester, 'run-grandchild');

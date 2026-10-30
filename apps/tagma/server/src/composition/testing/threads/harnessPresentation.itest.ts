@@ -38,7 +38,9 @@ it.live(
       .pipe(Effect.orDie);
     yield* demo.db.run(sql`update external_session set facet = json_remove(facet, '$.presentation') where id = ${id}`).pipe(Effect.orDie);
     for (const statement of migration!.sql) yield* demo.db.run(sql.raw(statement)).pipe(Effect.orDie);
-    const { rows } = yield* threads.list.list('operator', demo.projectId, { view: 'live' }).pipe(Effect.orDie);
+    const { rows } = yield* threads.list
+      .list('operator', { id: demo.projectId, projects: [demo.projectId] }, { view: 'live' })
+      .pipe(Effect.orDie);
     const presentation = rows.find((row) => row.id === id)?.harness?.presentation;
     expect(presentation).toMatchObject({ label: 'Cursor', iconProvider: null, hosted: true, sharedSessions: false });
     expect(presentation?.mark).toStartWith('<svg');

@@ -291,7 +291,7 @@ layer(Layer.effect(World, setup).pipe(Layer.provide(fixture), Layer.provideMerge
         const now = new Date(yield* Clock.currentTimeMillis);
         const answer = yield* parts.list.setArchivedWhere(
           OPERATOR_PRINCIPAL,
-          projectId,
+          [projectId],
           { view: 'live', ids: [id] },
           now,
           null,

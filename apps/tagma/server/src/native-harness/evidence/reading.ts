@@ -166,7 +166,9 @@ export const evidenceReading = Effect.fnUntraced(function* ({ runs, gate }: Evid
         return carry(resumed.pin.threads.map((target) => target.threadId));
       }
       if (request.selection === undefined) return carry(request.threads);
-      const matched = (yield* threads.list(OPERATOR_PRINCIPAL, projectId, request.selection)).rows.map((row) => row.id);
+      const matched = (yield* threads.list(OPERATOR_PRINCIPAL, { id: projectId, projects: [projectId] }, request.selection)).rows.map(
+        (row) => row.id,
+      );
       return carry([...request.threads, ...matched.filter((id) => !request.threads.includes(id))]);
     }),
 
@@ -180,7 +182,9 @@ export const evidenceReading = Effect.fnUntraced(function* ({ runs, gate }: Evid
               threads: [],
             });
       const at = resumed?.from.kind === 'source' ? resumed.from.at : 0;
-      const reading = resumed?.pin.listing?.reading ?? (yield* threads.pin(OPERATOR_PRINCIPAL, projectId, request.selection));
+      const reading =
+        resumed?.pin.listing?.reading ??
+        (yield* threads.pin(OPERATOR_PRINCIPAL, { id: projectId, projects: [projectId] }, request.selection));
       const selected = yield* threads.page(OPERATOR_PRINCIPAL, projectId, reading, at, limit);
       const pin =
         resumed?.pin ??
@@ -287,7 +291,11 @@ export const evidenceReading = Effect.fnUntraced(function* ({ runs, gate }: Evid
                 })
                 .pipe(Effect.mapError((cause) => new ThreadCallBroke({ cause })));
               if (active.threads.length > 0) {
-                const page = yield* threads.list(OPERATOR_PRINCIPAL, projectId, { ...metadata, ids: active.threads, limit: 50 });
+                const page = yield* threads.list(
+                  OPERATOR_PRINCIPAL,
+                  { id: projectId, projects: [projectId] },
+                  { ...metadata, ids: active.threads, limit: 50 },
+                );
                 yield* activity
                   .members(
                     pin.id,
@@ -301,11 +309,15 @@ export const evidenceReading = Effect.fnUntraced(function* ({ runs, gate }: Evid
           } else {
             let before = metadata.before;
             do {
-              const page = yield* threads.list(OPERATOR_PRINCIPAL, projectId, {
-                ...metadata,
-                limit: 50,
-                before,
-              });
+              const page = yield* threads.list(
+                OPERATOR_PRINCIPAL,
+                { id: projectId, projects: [projectId] },
+                {
+                  ...metadata,
+                  limit: 50,
+                  before,
+                },
+              );
               yield* activity
                 .members(
                   pin.id,

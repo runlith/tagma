@@ -77,11 +77,15 @@ layer(demoGraphLayer(), { excludeTestServices: true })('run stalls', (it) => {
           yield* runs.writeHeartbeats([parked.id], new Date(now)).pipe(Effect.orDie);
           const selected = Effect.fnUntraced(function* (state: string) {
             const selection = yield* threadSelectionOf({ state });
-            const page = yield* threads.list.list('operator', demo.projectId, selection).pipe(Effect.orDie);
+            const page = yield* threads.list
+              .list('operator', { id: demo.projectId, projects: [demo.projectId] }, selection)
+              .pipe(Effect.orDie);
             return page.rows.map((row) => row.id).sort();
           });
           const selection = yield* threadSelectionOf({ state: 'running' });
-          const page = yield* threads.list.list('operator', demo.projectId, selection).pipe(Effect.orDie);
+          const page = yield* threads.list
+            .list('operator', { id: demo.projectId, projects: [demo.projectId] }, selection)
+            .pipe(Effect.orDie);
           const read = new Map(page.rows.map((row) => [row.id, row.life]));
           expect([read.get(born.parked), read.get(born.asking), read.get(born.healthy)]).toEqual(['stalled', 'awaiting', 'working']);
           expect(yield* selected('stalled')).toEqual([born.parked]);
@@ -145,7 +149,9 @@ layer(demoGraphLayer(), { excludeTestServices: true })('run stalls', (it) => {
         }
         const stalled = Effect.gen(function* () {
           const selection = yield* threadSelectionOf({ state: 'stalled' });
-          const page = yield* threads.list.list('operator', demo.projectId, selection).pipe(Effect.orDie);
+          const page = yield* threads.list
+            .list('operator', { id: demo.projectId, projects: [demo.projectId] }, selection)
+            .pipe(Effect.orDie);
           return page.rows.map((row) => row.id);
         });
         expect(yield* stalled).toEqual([made.watched!]);

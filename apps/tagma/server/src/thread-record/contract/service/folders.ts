@@ -37,7 +37,7 @@ export class ThreadFolders extends Context.Service<
   ThreadFolders,
   {
     list(projectId: number): Effect.Effect<readonly ThreadFolder[], StoreFailure>;
-    regrouped(subscriber: (event: FoldersRegrouped) => Effect.Effect<void>): () => void;
+    regrouped(subscriber: (event: FoldersRegrouped) => Effect.Effect<void, StoreFailure>): () => void;
     create(
       projectId: number,
       name: string,

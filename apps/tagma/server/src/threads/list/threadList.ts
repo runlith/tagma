@@ -29,11 +29,28 @@ import { ThreadLookup, ThreadReading, ThreadRunning, ThreadShelving, ThreadWindo
 import type { ThreadCursor, ThreadSelection } from './select.js';
 import type { ThreadListProjection, ThreadSummary } from './summary.js';
 import { ThreadRecords } from '../../thread-record/contract/service/records.js';
+import { type FoldersRegrouped, ThreadFolders } from '../../thread-record/contract/service/folders.js';
+import type { ThreadFolder } from '../../thread-record/contract/wire/folder.js';
+import { ProjectGroups } from '../../projects/contract/service/registry.js';
+import type { ProjectGroup } from '../../projects/contract/wire/project.js';
 import { HeldPathCounts } from '../contract/service/parts.js';
 import type { ThreadHeld } from '../../change-record/contract/wire/holdings.js';
 
 const NONE_HELD: ThreadHeld = { paths: 0, unproven: 0 };
 type HeldCount = { readonly projectId: number; readonly held: ThreadHeld };
+
+type Membership = { readonly members: ReadonlyMap<number, readonly number[]>; readonly groupOf: ReadonlyMap<number, number> };
+
+const membershipOf = (groups: readonly ProjectGroup[]): Membership => {
+  const members = new Map<number, readonly number[]>();
+  const groupOf = new Map<number, number>();
+  for (const group of groups) {
+    const homes = group.members.map((member) => member.id);
+    members.set(group.graph.id, homes);
+    for (const home of homes) groupOf.set(home, group.graph.id);
+  }
+  return { members, groupOf };
+};
 
 function recordedPhase(row: ThreadSummary): ThreadPhase | null {
   const recorded = row.activeRun?.phase;
@@ -54,6 +71,15 @@ export const makeThreadList = Effect.gen(function* () {
   const rollouts = yield* ThreadRollouts;
   const heldPathsOf = yield* HeldPathCounts;
   const releasing = yield* ThreadReleasing;
+  const groups = yield* ProjectGroups;
+  const folders = yield* ThreadFolders;
+  let membership = membershipOf(yield* groups.list());
+  const homesOf = (listId: number): readonly number[] => membership.members.get(listId) ?? [listId];
+  const listsOf = (home: number): readonly number[] => {
+    const group = membership.groupOf.get(home);
+    return group === undefined ? [home] : [home, group];
+  };
+  const listened = (home: number): boolean => listsOf(home).some((listId) => listeners.has(listId));
   let archiving: ArchiveWork | null = null;
   let openCalls: OpenCalls | null = null;
   const closeWork: ArchiveWork = (ids, work) =>
@@ -74,12 +100,12 @@ export const makeThreadList = Effect.gen(function* () {
   const signals = new Map<string, string>();
   const unwatched = (): boolean => listeners.size === 0 && everyone.size === 0;
 
-  const deliver = (projectId: number, event: ThreadsEvent, attention = true): void => {
-    for (const listener of listeners.get(projectId) ?? []) {
+  const deliver = (listId: number, event: ThreadsEvent, attention = true): void => {
+    for (const listener of listeners.get(listId) ?? []) {
       try {
         listener(event);
       } catch (error) {
-        console.error('[tagma] a thread list listener threw', { projectId, kind: event.kind }, error);
+        console.error('[tagma] a thread list listener threw', { listId, kind: event.kind }, error);
       }
     }
     if (!attention || (event.kind !== 'row' && event.kind !== 'removed')) return;
@@ -87,36 +113,36 @@ export const makeThreadList = Effect.gen(function* () {
       try {
         listener(event);
       } catch (error) {
-        console.error('[tagma] an attention listener threw', { projectId, kind: event.kind }, error);
+        console.error('[tagma] an attention listener threw', { listId, kind: event.kind }, error);
       }
     }
   };
 
-  const fan = (projectId: number, event: ThreadsEvent, observed = true, attention = true): void => {
+  const reach = (listId: number, event: ThreadsEvent, attention: boolean): void => {
+    if (event.kind === 'row') audience.include(listId, [event.row.id]);
+    else if (event.kind === 'removed') audience.remove(listId, event.threadId);
+    const reading = resyncing.get(listId);
+    if (reading === undefined) deliver(listId, event, attention);
+    else reading.behind.push({ event, attention });
+  };
+
+  const fan = (home: number, event: ThreadsEvent, observed = true, attention = true): void => {
     const subject = event.kind === 'row' ? event.row.id : event.kind === 'removed' ? event.threadId : null;
     if (observed && subject !== null) {
       for (const notify of observers.get(subject) ?? []) {
         try {
           notify();
         } catch (error) {
-          console.error('[tagma] a thread observer threw', { projectId, kind: event.kind }, error);
+          console.error('[tagma] a thread observer threw', { home, kind: event.kind }, error);
         }
       }
     }
-    if (event.kind === 'removed') {
-      if (attention) {
-        heldPaths.delete(event.threadId);
-        signals.delete(event.threadId);
-      }
+    if (event.kind === 'removed' && attention) {
+      heldPaths.delete(event.threadId);
+      signals.delete(event.threadId);
     }
-    if (event.kind === 'row') audience.include(projectId, [event.row.id]);
-    else if (event.kind === 'removed') {
-      audience.remove(projectId, event.threadId);
-      releaseCounts([event.threadId]);
-    }
-    const reading = resyncing.get(projectId);
-    if (reading === undefined) deliver(projectId, event, attention);
-    else reading.behind.push({ event, attention });
+    for (const [at, listId] of listsOf(home).entries()) reach(listId, event, attention && at === 0);
+    if (event.kind === 'removed') releaseCounts([event.threadId]);
   };
 
   const phases = new ThreadPhaseFeed({
@@ -159,10 +185,10 @@ export const makeThreadList = Effect.gen(function* () {
   const releaseCounts = (ids: readonly string[]): void => {
     for (const id of ids) {
       const reading = heldPaths.get(id);
-      if (reading !== undefined && !listeners.has(reading.projectId) && !audience.has(id)) heldPaths.delete(id);
+      if (reading !== undefined && !listened(reading.projectId) && !audience.has(id)) heldPaths.delete(id);
     }
   };
-  const followed = (row: ThreadSummary): boolean => listeners.has(row.projectId) || audience.has(row.id);
+  const followed = (row: ThreadSummary): boolean => listened(row.projectId) || audience.has(row.id);
 
   const counted = (
     rows: readonly ThreadSummary[],
@@ -191,16 +217,17 @@ export const makeThreadList = Effect.gen(function* () {
     const member = yield* threads.summary(threadId);
     if (member === undefined) return undefined;
     if (followed(member) || (member.parentThreadId !== null && audience.has(member.parentThreadId))) return member;
-    const families = yield* threads.families(OPERATOR_PRINCIPAL, member, [...listeners.keys()]);
+    const lists = [...listeners.keys()].map((id) => ({ id, projects: homesOf(id) }));
+    const families = yield* threads.families(OPERATOR_PRINCIPAL, member, lists);
     let found: ThreadSummary | undefined;
     for (const family of families) {
       audience.include(
-        family.projectId,
+        family.listId,
         family.rows.map((row) => row.id),
       );
       for (const row of family.rows) {
         if (row.id === threadId) found = row;
-        else fan(family.projectId, { kind: 'row', row: listRow(row) }, false, false);
+        else reach(family.listId, { kind: 'row', row: listRow(row) }, false);
       }
     }
     return found ?? (attention ? member : undefined);
@@ -219,12 +246,13 @@ export const makeThreadList = Effect.gen(function* () {
   const announce = (row: ThreadSummary, observed = true): ThreadListProjection => {
     const projected = listRow(row);
     const event: ThreadsEvent = row.archivedAt === null ? { kind: 'row', row: projected } : { kind: 'removed', threadId: row.id };
+    const own = listsOf(row.projectId);
     fan(row.projectId, event, observed);
-    const reached = row.parentThreadId === null ? new Set<number>() : audience.projects(row.parentThreadId);
     const prior = [...audience.projects(row.id)];
-    for (const projectId of reached) if (projectId !== row.projectId) fan(projectId, event, false, false);
-    for (const projectId of prior) {
-      if (projectId !== row.projectId && !reached.has(projectId)) fan(projectId, { kind: 'removed', threadId: row.id }, false, false);
+    const reached = row.parentThreadId === null ? new Set<number>() : audience.projects(row.parentThreadId);
+    for (const listId of reached) if (!own.includes(listId)) reach(listId, event, false);
+    for (const listId of prior) {
+      if (!own.includes(listId) && !reached.has(listId)) reach(listId, { kind: 'removed', threadId: row.id }, false);
     }
     return projected;
   };
@@ -267,10 +295,10 @@ export const makeThreadList = Effect.gen(function* () {
       }),
     );
 
-  const openWindow = (projectId: number): Effect.Effect<ThreadProjectionWindow, HarnessFailure> =>
+  const openWindow = (listId: number): Effect.Effect<ThreadProjectionWindow, HarnessFailure> =>
     Effect.suspend(() => {
-      const opening = audience.opening(projectId, true);
-      return Effect.map(threads.rootWindow(OPERATOR_PRINCIPAL, projectId, { limit: LIST_WINDOW_ROWS }), (window) => {
+      const opening = audience.opening(listId, true);
+      return Effect.map(threads.rootWindow(OPERATOR_PRINCIPAL, homesOf(listId), { limit: LIST_WINDOW_ROWS }), (window) => {
         const opened = { rows: window.rows.map((row) => listRow(row)), roots: window.roots, windowBefore: window.windowBefore };
         releaseCounts(opening.install(window.rows.map((row) => row.id)));
         runFork(projectedHeld(recounted(window.rows)));
@@ -278,9 +306,9 @@ export const makeThreadList = Effect.gen(function* () {
       }).pipe(Effect.ensuring(Effect.sync(opening.close)));
     });
 
-  const listWindow = Effect.fnUntraced(function* (projectId: number, before?: Date) {
-    const opening = audience.opening(projectId, before === undefined);
-    const window = yield* threads.rootWindow(OPERATOR_PRINCIPAL, projectId, { limit: LIST_WINDOW_ROWS, before }).pipe(
+  const listWindow = Effect.fnUntraced(function* (listId: number, before?: Date) {
+    const opening = audience.opening(listId, before === undefined);
+    const window = yield* threads.rootWindow(OPERATOR_PRINCIPAL, homesOf(listId), { limit: LIST_WINDOW_ROWS, before }).pipe(
       Effect.tap((window) => Effect.sync(() => releaseCounts(opening.install(window.rows.map((row) => row.id))))),
       Effect.ensuring(Effect.sync(opening.close)),
     );
@@ -313,35 +341,52 @@ export const makeThreadList = Effect.gen(function* () {
     );
   };
 
-  const resyncProject = (projectId: number): void => {
-    const standing = resyncing.get(projectId);
+  const resyncList = (listId: number): void => {
+    const standing = resyncing.get(listId);
     if (standing !== undefined) {
       standing.again = true;
       return;
     }
     const reading = { behind: [] as { readonly event: ThreadsEvent; readonly attention: boolean }[], again: false };
-    resyncing.set(projectId, reading);
+    resyncing.set(listId, reading);
     runFork(
-      Effect.exit(openWindow(projectId)).pipe(
+      Effect.exit(openWindow(listId)).pipe(
         Effect.map((read) => {
-          resyncing.delete(projectId);
+          resyncing.delete(listId);
           if (Exit.isSuccess(read)) {
             const window = read.value;
-            deliver(projectId, { kind: 'list', rows: window.rows, roots: window.roots, windowBefore: window.windowBefore });
+            deliver(listId, { kind: 'list', rows: window.rows, roots: window.roots, windowBefore: window.windowBefore });
           } else {
-            console.error('[tagma] thread list resync failed', { projectId }, Cause.squash(read.cause));
+            console.error('[tagma] thread list resync failed', { listId }, Cause.squash(read.cause));
           }
-          for (const { event, attention } of reading.behind) deliver(projectId, event, attention);
-          if (reading.again) resyncProject(projectId);
+          for (const { event, attention } of reading.behind) deliver(listId, event, attention);
+          if (reading.again) resyncList(listId);
         }),
       ),
     );
   };
 
   const resync = (only?: number): void => {
-    for (const projectId of only === undefined ? listeners.keys() : listeners.has(only) ? [only] : []) resyncProject(projectId);
+    for (const listId of only === undefined ? [...listeners.keys()] : listsOf(only).filter((one) => listeners.has(one))) resyncList(listId);
     for (const listener of everyone) listener({ kind: 'resync' });
   };
+
+  const announceFolders = (projectId: number, held: readonly ThreadFolder[]): void => {
+    const owner = membership.groupOf.get(projectId) ?? projectId;
+    for (const listId of [owner, ...(membership.members.get(owner) ?? [])]) {
+      if (listeners.has(listId)) reach(listId, { kind: 'folders', folders: held }, false);
+    }
+  };
+
+  const regrouped = Effect.fnUntraced(function* (event: FoldersRegrouped) {
+    membership = membershipOf(yield* groups.list());
+    const lists = new Set([event.groupId, ...event.projects]);
+    for (const listId of lists) {
+      if (!listeners.has(listId)) continue;
+      announceFolders(listId, yield* folders.list(listId));
+      resyncList(listId);
+    }
+  });
 
   const attentionMoved = (state: NativeThreadState): boolean => {
     if (everyone.size === 0 || state.thread.ownerId !== OPERATOR_PRINCIPAL) return false;
@@ -368,10 +413,11 @@ export const makeThreadList = Effect.gen(function* () {
     });
 
   const detachBirths = records.birthRecorded(({ threadId, projectId }) => announceThread(threadId, projectId));
-  const removeRow = (threadId: string, projectId: number): void => {
+  const removeRow = (threadId: string, home: number): void => {
     const reached = [...audience.projects(threadId)];
-    fan(projectId, { kind: 'removed', threadId });
-    for (const target of reached) if (target !== projectId) fan(target, { kind: 'removed', threadId }, false, false);
+    const own = listsOf(home);
+    fan(home, { kind: 'removed', threadId });
+    for (const listId of reached) if (!own.includes(listId)) reach(listId, { kind: 'removed', threadId }, false);
   };
   const removedRows = Effect.fnUntraced(function* (ids: readonly string[]) {
     const homes = yield* records.projectsOf(ids);
@@ -399,10 +445,12 @@ export const makeThreadList = Effect.gen(function* () {
       ),
     );
   });
+  const detachRegroups = folders.regrouped(regrouped);
   yield* Effect.addFinalizer(() =>
     Effect.sync(() => {
       detachBirths();
       detachRemovals();
+      detachRegroups();
       detach();
       phases.dispose();
     }),
@@ -430,10 +478,10 @@ export const makeThreadList = Effect.gen(function* () {
       };
     },
 
-    list: (projectId, selection) =>
+    list: (listId, selection) =>
       admitThreadFailures(
         Effect.gen(function* () {
-          const page = yield* threads.list(OPERATOR_PRINCIPAL, projectId, selection);
+          const page = yield* threads.list(OPERATOR_PRINCIPAL, { id: listId, projects: homesOf(listId) }, selection);
           return { rows: yield* withHeld(page.rows), total: page.total, before: page.before };
         }),
         THREAD_OPERATIONS.list_threads.refusals,
@@ -447,16 +495,16 @@ export const makeThreadList = Effect.gen(function* () {
       return (yield* withHeld([row]))[0];
     }),
 
-    subscribe: (projectId, listener) => {
-      const held = listeners.get(projectId) ?? new Set();
+    subscribe: (listId, listener) => {
+      const held = listeners.get(listId) ?? new Set();
       held.add(listener);
-      listeners.set(projectId, held);
-      audience.watch(projectId);
+      listeners.set(listId, held);
+      audience.watch(listId);
       return () => {
         held.delete(listener);
-        if (held.size === 0 && listeners.get(projectId) === held) {
-          listeners.delete(projectId);
-          releaseCounts(audience.close(projectId));
+        if (held.size === 0 && listeners.get(listId) === held) {
+          listeners.delete(listId);
+          releaseCounts(audience.close(listId));
         }
       };
     },
@@ -465,7 +513,7 @@ export const makeThreadList = Effect.gen(function* () {
 
     announceThread,
 
-    announceFolders: (projectId, folders) => fan(projectId, { kind: 'folders', folders }),
+    announceFolders,
 
     resync,
 
@@ -480,9 +528,9 @@ export const makeThreadList = Effect.gen(function* () {
 
     working: (threadId) => Effect.map(threads.heldSessionsInSubtree(threadId), (rows) => [...new Set(rows.map((row) => row.threadId))]),
 
-    sweepRelation: (projectId, selection, archived, callerId) =>
+    sweepRelation: (listId, selection, archived, callerId) =>
       Effect.map(
-        threads.selectsBeyond(OPERATOR_PRINCIPAL, projectId, { ...selection, view: archived ? 'live' : 'archived' }, callerId),
+        threads.selectsBeyond(OPERATOR_PRINCIPAL, homesOf(listId), { ...selection, view: archived ? 'live' : 'archived' }, callerId),
         (beyond) => (beyond ? ('beyond' as const) : ('subtree' as const)),
       ),
 
@@ -539,16 +587,17 @@ export const makeThreadList = Effect.gen(function* () {
         THREAD_OPERATIONS.archive_thread.refusals,
       ),
 
-    setArchivedMatching: (projectId, selection, archived, by) =>
+    setArchivedMatching: (listId, selection, archived, by) =>
       admitThreadFailures(
         Effect.gen(function* () {
+          const homes = homesOf(listId);
           const spared = archived ? lineageOf(by) : null;
           const before: ArchiveWork = (ids, work) =>
             closeWork(ids, (close) =>
               work(
                 Effect.fnUntraced(function* (selected) {
                   yield* close(selected);
-                  const held = yield* threads.heldUpMatching(OPERATOR_PRINCIPAL, projectId, { ...selection, view: 'live' }, spared);
+                  const held = yield* threads.heldUpMatching(OPERATOR_PRINCIPAL, homes, { ...selection, view: 'live' }, spared);
                   const targets = new Set(selected);
                   for (const id of new Set(held.map((row) => row.sessionThreadId))) {
                     if (targets.has(id)) yield* releasing.release(id);
@@ -558,7 +607,7 @@ export const makeThreadList = Effect.gen(function* () {
             );
           const swept = yield* threads.setArchivedWhere(
             OPERATOR_PRINCIPAL,
-            projectId,
+            homes,
             { ...selection, view: archived ? 'live' : 'archived' },
             archived ? new Date(yield* Clock.currentTimeMillis) : null,
             spared,

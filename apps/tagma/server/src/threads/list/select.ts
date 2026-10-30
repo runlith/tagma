@@ -58,7 +58,9 @@ export type ThreadPage = {
   readonly before: ThreadCursor | null;
 };
 
-export type ThreadFamily = { readonly projectId: number; readonly rows: readonly ThreadSummary[] };
+export type ListHomes = { readonly id: number; readonly projects: readonly number[] };
+
+export type ThreadFamily = { readonly listId: number; readonly rows: readonly ThreadSummary[] };
 
 export type ThreadWindow = {
   readonly rows: readonly ThreadSummary[];
@@ -66,10 +68,16 @@ export type ThreadWindow = {
   readonly windowBefore: Date | null;
 };
 
-export const selected = (ownerId: string, projectId: number, selection: ThreadSelection): SQL | undefined =>
+const homesSql = (homes: readonly number[]): SQL =>
+  sql`(${sql.join(
+    homes.map((home) => sql`${home}`),
+    sql`, `,
+  )})`;
+
+export const selected = (ownerId: string, homes: readonly number[], selection: ThreadSelection): SQL | undefined =>
   and(
     eq(recordFacts.principalId, ownerId),
-    eq(recordFacts.projectId, projectId),
+    inArray(recordFacts.projectId, [...homes]),
     archivedView(selection.view),
     stateOf(selection.state),
     selection.ids === undefined ? undefined : inArray(recordFacts.id, [...selection.ids]),
@@ -179,13 +187,13 @@ export const heldUp: SQL = sql`(
   select id, run_id, kind, session_thread, harness from held
 )`;
 
-export const liveRoot = (ownerId: string, projectId: number | SQLiteColumn): SQL => sql`(
+export const liveRoot = (ownerId: string, homes: readonly number[]): SQL => sql`(
   ${recordFacts.parentId} is null
   or not exists (
     select 1 from ${recordsAs('parent')}
      where parent.id = ${recordFacts.parentId}
        and parent.principal_id = ${ownerId}
-       and parent.project_id = ${projectId}
+       and parent.project_id in ${homesSql(homes)}
        and parent.archived_at is null
   )
 )`;
@@ -202,13 +210,13 @@ export const liveFamilyOf = (ownerId: string, seeds: readonly string[]): SQL => 
   select id from family
 )`;
 
-const rootsAbove = (ownerId: string, projectId: number, seeds: SQL, seeded: SQL): SQL => sql`(
+const rootsAbove = (ownerId: string, homes: readonly number[], seeds: SQL, seeded: SQL): SQL => sql`(
   with recursive climb(id, parent) as (
     select seed.id, seed.parent_id from ${seeds}
       where ${seeded} and seed.principal_id = ${ownerId} and seed.archived_at is null
         and exists (
           select 1 from ${recordsAs('local')}
-          where local.spawn_root_id = seed.spawn_root_id and local.project_id = ${projectId}
+          where local.spawn_root_id = seed.spawn_root_id and local.project_id in ${homesSql(homes)}
             and local.principal_id = ${ownerId} and local.archived_at is null
         )
     union
@@ -219,14 +227,14 @@ const rootsAbove = (ownerId: string, projectId: number, seeds: SQL, seeded: SQL)
   select id from climb
 )`;
 
-export const runningRoots = (ownerId: string, projectId: number): SQL =>
-  rootsAbove(ownerId, projectId, sql`${threadRun} r cross join ${recordsAs('seed')} on seed.id = r.thread_id`, sql`r.status = 'running'`);
+export const runningRoots = (ownerId: string, homes: readonly number[]): SQL =>
+  rootsAbove(ownerId, homes, sql`${threadRun} r cross join ${recordsAs('seed')} on seed.id = r.thread_id`, sql`r.status = 'running'`);
 
-export const rootsOf = (ownerId: string, projectId: number, ids: readonly string[]): SQL =>
-  rootsAbove(ownerId, projectId, sql`${recordsAs('seed')}`, sql`seed.id in (select value from json_each(${JSON.stringify(ids)}))`);
+export const rootsOf = (ownerId: string, homes: readonly number[], ids: readonly string[]): SQL =>
+  rootsAbove(ownerId, homes, sql`${recordsAs('seed')}`, sql`seed.id in (select value from json_each(${JSON.stringify(ids)}))`);
 
-export const pinnedRoots = (ownerId: string, projectId: number): SQL =>
-  rootsAbove(ownerId, projectId, sql`${recordsAs('seed')}`, sql`seed.pinned_at is not null and seed.parent_id is not null`);
+export const pinnedRoots = (ownerId: string, homes: readonly number[]): SQL =>
+  rootsAbove(ownerId, homes, sql`${recordsAs('seed')}`, sql`seed.pinned_at is not null and seed.parent_id is not null`);
 
 export function summariesOf(db: StoreDb<'machine'>, where: SQL | undefined) {
   const terminalRun = alias(threadRun, 'terminal_run');

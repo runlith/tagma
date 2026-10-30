@@ -79,7 +79,7 @@ const main = withDemo((demo) =>
         return count;
       }),
     );
-    const window = threads.list.rootWindow('operator', demo.projectId, { limit: 50 });
+    const window = threads.list.rootWindow('operator', [demo.projectId], { limit: 50 });
     const samples = { said: [] as number[], silent: [] as number[] };
     let rows = 0;
     let saying = 0;
