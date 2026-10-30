@@ -32,8 +32,8 @@ sources:
 **How.** By itself, after a tool call: native `read`, `edit`, `write`, `grep`, and `bash` name the shown files themselves, a foreign CLI in a thread reports them with a hook; the `touch_path` operation.
 
 **Behaviour.**
-- A read or written file brings the code rules whose reach covers it, explanations of its place, tag prompts of those nodes not yet received, and a row about another session reading or writing the file under its task in work.
-- A file noticed only in search output brings the rules whole, and an explanation as a "read the file" pointer; it does not count as a task touch.
+- A read or written file brings the rules delivered by `code` whose reach covers it, explanations of its place, tag prompts of those nodes not yet received, and a row about another session reading or writing the file under its task in work. A rule delivered by `finding` never rides a touch: its text stands only in its check's results.
+- A file noticed only in search output brings no rule, and an explanation as a "read the file" pointer; it does not count as a task touch.
 - Every text arrives in a thread once; a native thread gets it again after compaction.
 - A touch records on the tasks the session holds — that is how colleagues learn about it.
 - Another project's file brings that project's law; an unreadable place graph is named in the answer.
