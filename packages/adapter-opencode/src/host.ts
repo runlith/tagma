@@ -4,6 +4,7 @@ import { randomBytes } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { OpenCode, type OpenCodeClient } from '@opencode/client';
 import { Data, Deferred, Effect, Result, Schema } from 'effect';
+import { HARNESS_PROGRAM } from '@runlith/hosted-runner/wire/program';
 
 const VERSION = '2.1.3';
 
@@ -100,7 +101,7 @@ export const installedProgram = (): string =>
 
 export const findProgram = Effect.fn('opencode.findProgram')(function* (environment: Record<string, string | undefined> = process.env) {
   return yield* Effect.try({
-    try: () => environment.HARNESS_PROGRAM ?? installedProgram(),
+    try: () => environment[HARNESS_PROGRAM] ?? installedProgram(),
     catch: (cause) => new HostRefused({ code: 'program-missing', message: `OpenCode V2 could not be resolved: ${String(cause)}` }),
   });
 });
