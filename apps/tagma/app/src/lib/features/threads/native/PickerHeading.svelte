@@ -44,10 +44,18 @@
   const pushed = $derived(shownRow === undefined || tightestFigure(usageFigures(shownRow.quota)) === null);
   const choosable = $derived(rows.length > 1 || (here && pinned) || (missing && rows.length > 0));
   const active = $derived(rows.find((row) => row.default) ?? null);
+  const explicit = $derived(here ? pinned : shown !== null);
+  const mode = $derived(account === null ? null : explicit ? 'Pinned' : 'Follows default');
 
   const ITEM =
     'flex h-7 w-full min-w-0 items-center gap-2 rounded-md px-2 text-left text-small transition-colors hover:bg-hover disabled:opacity-60';
 </script>
+
+{#snippet modeWord()}
+  {#if mode !== null}
+    <span class="shrink-0 text-muted-foreground/70" data-picker-mode={explicit ? 'pinned' : 'default'}>{mode}</span>
+  {/if}
+{/snippet}
 
 <div class="eyebrow flex min-w-0 items-center gap-1.5 px-2 pt-2 pb-1 text-muted-foreground" data-picker-heading={provider}>
   <QuotaHeading {provider} {label} {now} {account} />
@@ -66,10 +74,14 @@
       onclick={ontoggle}
     >
       <FadeText text={named ?? 'Choose an account'} />
+      {@render modeWord()}
       <ChevronDown class="size-3 shrink-0" />
     </button>
   {:else if named !== null}
-    <FadeText class={['max-w-56 shrink px-1.5 font-normal text-muted-foreground', pushed && 'ml-auto']} text={named} />
+    <span class={['flex min-w-0 max-w-56 shrink items-center gap-1 px-1.5 font-normal text-muted-foreground', pushed && 'ml-auto']}>
+      <FadeText text={named} />
+      {@render modeWord()}
+    </span>
   {/if}
 </div>
 

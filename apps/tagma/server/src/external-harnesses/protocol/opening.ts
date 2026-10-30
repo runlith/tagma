@@ -121,6 +121,7 @@ export class ProtocolOpening {
     if (cwd === null) return IDLE;
     const key = link.facet.sessionKey;
     if (link.row.fork !== null) {
+      if (link.row.fork.account !== (link.facet.session?.account?.key ?? null)) return yield* alignment.fresh(link, cwd);
       if (!link.row.client.extensions.includes(FORK) && link.profile.hosts !== null && link.profile.proves.fork) {
         return yield* alignment.fresh(link, cwd);
       }

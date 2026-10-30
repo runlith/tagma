@@ -103,7 +103,7 @@ const defaults = (provider: string, accountKey: string | null, switches: Record<
 
 const opening = (shown: WireThread) => feedSnapshot(shown);
 
-async function open(row: WireThread | null): Promise<ThreadSlot> {
+async function open(row: WireThread | null, loaded = true): Promise<ThreadSlot> {
   life = Scope.make();
   if (door.favorites.getMockImplementation() === undefined) door.favorites.mockResolvedValue({ models: [] });
   const port = new TestConnection<WireThread>();
@@ -135,6 +135,7 @@ async function open(row: WireThread | null): Promise<ThreadSlot> {
   if (row) {
     host.open(row.id);
     commitRoute(host);
+    if (!loaded) return host;
     port.emit(opening(row), row.id);
     await waitUntil(() => host?.activeThread != null);
   }
@@ -171,18 +172,32 @@ test('a thread pinned to an account that is gone keeps naming it', async () => {
   expect(opened.views.model.accountLabel).toBe('removed-key');
 });
 
+test('a thread whose feed has not loaded shows no account choice instead of the global default', async () => {
+  door.defaults.mockResolvedValue(defaults('subscription', 'k1'));
+
+  const opened = await open(thread('k2'), false);
+  await waitUntil(() => door.defaults.mock.results.length > 0);
+  await Promise.all([door.defaults.mock.results[0]?.value, Promise.resolve()]);
+  await Promise.resolve();
+
+  expect(opened.activeThread).toBeNull();
+  expect(opened.views.model.settings).toBeNull();
+});
+
 test('a draft shows the provider’s default, and a row of another provider shows that provider’s', async () => {
   door.defaults.mockResolvedValue(defaults('subscription', 'k1'));
   door.saveDefaults.mockResolvedValue(defaults('openai-oauth', 'o1'));
 
   const opened = await open(null);
   expect(opened.views.model.settings?.account).toBe('k1');
+  expect(opened.views.model.settings?.accountPinned).toBe(false);
   expect(opened.views.model.settings?.accountMissing).toBe(false);
 
   await opened.writes.applyModel('openai-oauth', defaultTextModelId('openai-oauth'));
 
   expect(opened.views.model.settings?.provider).toBe('openai-oauth');
   expect(opened.views.model.settings?.account).toBe('o1');
+  expect(opened.views.model.settings?.accountPinned).toBe(false);
   expect(opened.views.model.settings?.accountOptions.map((option) => option.id)).toEqual(['o1']);
 });
 

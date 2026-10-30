@@ -207,11 +207,13 @@ export const makeEngineBirths = Effect.fnUntraced(function* ({
             failure instanceof ThreadCallBroke ? new ThreadCallBroke({ cause: refused(failure.cause) }) : failure,
           ),
         );
-      if (served !== null) return { ...served.seat, kernel: { ...served.seat.kernel, account: launched } };
+      if (served !== null) return served.seat;
       const session: HarnessSeat = yield* face
         .seat(parentId, tx)
         .pipe(Effect.mapError((cause) => new ThreadCallBroke({ cause: refused(cause) })));
-      return session.kernel === null ? session : { ...session, kernel: { ...session.kernel, switches: child.switches, account: launched } };
+      return session.kernel === null
+        ? session
+        : { ...session, kernel: { ...session.kernel, switches: child.switches, account: child.account } };
     });
   };
   return { record, ready };

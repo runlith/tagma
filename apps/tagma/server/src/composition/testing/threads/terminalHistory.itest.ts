@@ -555,37 +555,38 @@ describe.skipIf(!existsSync(LIBRARY))('terminal history', () => {
         }),
     );
 
-    it.effect(
-      'a fork child launches under the account its source session was launched under while Tagma can still name it, and otherwise under the source row’s choice with a fresh session told the kept turns',
-      () =>
-        Effect.gen(function* () {
-          const { cuts, rig } = yield* World;
-          const said = yield* spoken('forked-account', ['first words']);
-          const { fake, who } = said;
-          const launchedOn = (yield* fake.cli.facet())!.session!.account!;
-          const own = Effect.map(cuts(), (asked) => asked.filter((one) => one.method === 'fork' && one.params.root === who.root));
-          const standing = (child: string) =>
-            settledOn(Effect.map(rig.store.read(child), (facet) => (facet?.session?.state === 'running' ? facet : null)));
-          const kept = String((yield* op('branch_thread', { threadId: fake.cli.threadId })).threadId);
-          const boots = yield* booted(fake, 2);
-          const fork = (yield* own)[0]!;
-          expect(after(boots[1]!, '--resume')).toBe(String(fork.result.sessionId));
-          expect((yield* standing(kept)).session?.account).toEqual(launchedOn);
-          yield* fake.cli.store.change(fake.cli.threadId, (facet) =>
-            Effect.succeed({
-              facet: { ...facet, session: { ...facet.session!, account: { ...launchedOn, key: 'an-account-signed-out-since' } } },
-              value: undefined,
-            }),
-          );
-          const moved = String((yield* op('branch_thread', { threadId: fake.cli.threadId })).threadId);
-          const reborn = yield* booted(fake, 3);
-          expect(reborn[2]).not.toContain('--resume');
-          const seated = yield* standing(moved);
-          expect(seated.session?.account).toEqual(launchedOn);
-          expect(seated.session?.seed).toBe(true);
-          expect(seated.observation.diagnostics.map((note) => note.cause)).toContain('history-seeded');
-          expect(yield* own).toHaveLength(1);
-        }),
+    it.effect('a fork inherits the source account choice and keeps the source session account only as conversation provenance', () =>
+      Effect.gen(function* () {
+        const { cuts, rig, flow } = yield* World;
+        const said = yield* spoken('forked-account', ['first words']);
+        const { fake, who } = said;
+        const launchedOn = (yield* fake.cli.facet())!.session!.account!;
+        const own = Effect.map(cuts(), (asked) => asked.filter((one) => one.method === 'fork' && one.params.root === who.root));
+        const standing = (child: string) =>
+          settledOn(Effect.map(rig.store.read(child), (facet) => (facet?.session?.state === 'running' ? facet : null)));
+        const kept = String((yield* op('branch_thread', { threadId: fake.cli.threadId })).threadId);
+        const boots = yield* booted(fake, 2);
+        const fork = (yield* own)[0]!;
+        expect(after(boots[1]!, '--resume')).toBe(String(fork.result.sessionId));
+        expect((yield* standing(kept)).session?.account).toEqual(launchedOn);
+        expect((yield* flow.harness().reads.snapshot(kept)).thread.account).toBe(
+          (yield* flow.harness().reads.snapshot(fake.cli.threadId)).thread.account,
+        );
+        yield* fake.cli.store.change(fake.cli.threadId, (facet) =>
+          Effect.succeed({
+            facet: { ...facet, session: { ...facet.session!, account: { ...launchedOn, key: 'an-account-signed-out-since' } } },
+            value: undefined,
+          }),
+        );
+        const moved = String((yield* op('branch_thread', { threadId: fake.cli.threadId })).threadId);
+        const reborn = yield* booted(fake, 3);
+        expect(reborn[2]).not.toContain('--resume');
+        const seated = yield* standing(moved);
+        expect(seated.session?.account).toEqual(launchedOn);
+        expect(seated.session?.seed).toBe(true);
+        expect(seated.observation.diagnostics.map((note) => note.cause)).toContain('history-seeded');
+        expect(yield* own).toHaveLength(1);
+      }),
     );
 
     it.effect(

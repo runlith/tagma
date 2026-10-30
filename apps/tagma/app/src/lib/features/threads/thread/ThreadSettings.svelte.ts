@@ -100,8 +100,7 @@ export class ThreadSettings extends Service<ThreadSettings>()('ThreadSettings', 
 
   private basis = $derived.by<ModelPreference | null>(() => {
     const thread = this.thread;
-    const standing = thread === null ? this.defaults.value : this.fromThread(thread);
-    return this.intended ?? standing;
+    return this.intended ?? (thread === null ? null : this.fromThread(thread));
   });
 
   settings = $derived.by<ModelSettings | null>(() => {

@@ -136,40 +136,53 @@ describe.skipIf(!existsSync(LIBRARY))('a fork of a Claude Code thread on ACP', (
         }),
     );
 
-    it.effect(
-      'a branch forks the vendor session under the account its source was launched under, and opens its own session from the journal once Tagma can no longer name that account',
-      () =>
-        Effect.gen(function* () {
-          const { world, projectId, agent, birth } = yield* ProtocolWorld;
-          const report = yield* agent('branch-account');
-          const source = yield* birth();
-          const turns = turnsOf(world.runtime.owners);
-          const kernel = Context.get(world.runtime.owners, ThreadHarness);
-          const db = Context.get(world.runtime.graph, MachineStore).db;
-          yield* completed(report, (yield* turns.send(source, projectId, 'Read the module.')).runId);
-          const launchedOn = yield* db.get<{ readonly account: string | null }>(
-            sql`select json_extract(facet, '$.session.account.key') as account from external_session where id = ${source}`,
-          );
-          expect(launchedOn?.account).toBe('fixture-account');
-          const branched = Effect.fnUntraced(function* (words: string) {
-            const answer = yield* world.op('branch_thread', { threadId: source }, `project=${projectId}`);
-            expect(answer.status).toBe(200);
-            const child = String((answer.body as { readonly threadId: string }).threadId);
-            yield* Effect.addFinalizer(() => {
-              const born = kernel.threads.handle(child, 'operator');
-              return Effect.andThen(born.stop(), born.release()).pipe(Effect.orDie);
-            });
-            yield* completed(report, (yield* turns.send(child, projectId, words)).runId);
-            const frames = yield* heard(report);
-            const asked = frames.findIndex((line) => line.method === 'session/prompt' && JSON.stringify(line.params).includes(words));
-            return frames.slice(0, asked).findLast((line) => OPENINGS.has(line.method ?? ''));
+    it.effect('a branch inherits the source account choice and uses the vendor fork only while its source session remains reachable', () =>
+      Effect.gen(function* () {
+        const { world, projectId, agent, birth } = yield* ProtocolWorld;
+        const report = yield* agent('branch-account');
+        const source = yield* birth();
+        const turns = turnsOf(world.runtime.owners);
+        const kernel = Context.get(world.runtime.owners, ThreadHarness);
+        const db = Context.get(world.runtime.graph, MachineStore).db;
+        yield* completed(report, (yield* turns.send(source, projectId, 'Read the module.')).runId);
+        const launchedOn = yield* db.get<{ readonly account: string | null }>(
+          sql`select json_extract(facet, '$.session.account.key') as account from external_session where id = ${source}`,
+        );
+        expect(launchedOn?.account).toBe('fixture-account');
+        const branched = Effect.fnUntraced(function* (words: string) {
+          const answer = yield* world.op('branch_thread', { threadId: source }, `project=${projectId}`);
+          expect(answer.status).toBe(200);
+          const child = String((answer.body as { readonly threadId: string }).threadId);
+          expect((yield* kernel.reads.snapshot(child)).thread.account).toBe((yield* kernel.reads.snapshot(source)).thread.account);
+          yield* Effect.addFinalizer(() => {
+            const born = kernel.threads.handle(child, 'operator');
+            return Effect.andThen(born.stop(), born.release()).pipe(Effect.orDie);
           });
-          expect((yield* branched('Say what it does.'))?.method).toBe('_tagma/fork');
-          yield* db.run(
-            sql`update external_session set facet = json_set(facet, '$.session.account.key', 'an-account-signed-out-since') where id = ${source}`,
-          );
-          expect((yield* branched('Say it again.'))?.method).toBe('session/new');
-        }),
+          yield* completed(report, (yield* turns.send(child, projectId, words)).runId);
+          const frames = yield* heard(report);
+          const asked = frames.findIndex((line) => line.method === 'session/prompt' && JSON.stringify(line.params).includes(words));
+          return frames.slice(0, asked).findLast((line) => OPENINGS.has(line.method ?? ''));
+        });
+        expect((yield* branched('Say what it does.'))?.method).toBe('_tagma/fork');
+        expect(
+          (yield* world.op(
+            'set_thread_model',
+            {
+              threadId: source,
+              provider: 'claude-code',
+              model: 'claude-opus-5-5',
+              reasoning: null,
+              switches: {},
+              account: 'fixture-account',
+            },
+            `project=${projectId}`,
+          )).status,
+        ).toBe(200);
+        yield* db.run(
+          sql`update external_session set facet = json_set(facet, '$.session.account.key', 'an-account-signed-out-since') where id = ${source}`,
+        );
+        expect((yield* branched('Say it again.'))?.method).toBe('session/new');
+      }),
     );
   });
 });

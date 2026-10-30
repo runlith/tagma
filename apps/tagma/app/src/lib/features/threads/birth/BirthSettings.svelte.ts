@@ -50,7 +50,7 @@ export class BirthSettings implements ModelView {
       models: this.catalog.models,
       selection,
       switches: { ...(selection.switches ?? {}), ...this.draft.switches },
-      pinned: this.draft.account ?? selection.account ?? null,
+      pinned: this.draft.account,
       pickable: this.pickable,
       accounts: this.accounts,
       favorites: this.favorites.list,
@@ -64,9 +64,7 @@ export class BirthSettings implements ModelView {
 
   accountMissing = $derived.by<boolean>(() => {
     const selection = this.defaults.value;
-    return selection === null
-      ? false
-      : accountMissingOf(this.catalog.models, selection.provider, this.draft.account ?? selection.account ?? null, this.accounts);
+    return selection === null ? false : accountMissingOf(this.catalog.models, selection.provider, this.draft.account, this.accounts);
   });
 
   readonly accountLabel: string | null = null;

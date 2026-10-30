@@ -86,7 +86,7 @@ export class ProtocolHistory {
           : { address: before?.address ?? null, ordinal: before?.ordinal ?? null };
     yield* rows.write(unit, child, {
       ...freshRow(child, null, null),
-      fork: at === null || facet.sessionKey === null ? null : { session: facet.sessionKey, prompt: at.address },
+      fork: at === null || facet.sessionKey === null ? null : { session: facet.sessionKey, prompt: at.address, account },
     });
     if (at === null) return;
     yield* turns.copy(unit, source, child, at.ordinal);
