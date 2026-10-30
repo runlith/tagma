@@ -485,6 +485,7 @@
         "@runlith/held": "workspace:*",
         "@runlith/llm": "workspace:*",
         "@runlith/paging": "workspace:*",
+        "@runlith/performance": "workspace:*",
         "@runlith/utils": "workspace:*",
         "effect": "catalog:",
         "uuidv7": "1.2.1",
@@ -1372,6 +1373,7 @@
       "dependencies": {
         "@effect/sql-sqlite-bun": "catalog:",
         "@runlith/held": "workspace:*",
+        "@runlith/performance": "workspace:*",
         "@runlith/testbed": "workspace:*",
         "effect": "catalog:",
       },
