@@ -22,7 +22,7 @@ edges:
   - the `translation.model`, `threads.titleModel` and `threads.decisionModel` settings;
   - the members of `agent.compactionSummarizers`.
 
-  The settings get a new control kind for this; today model and rung are two keys. Each place filters the picker by the kind its role needs:
+  Each role setting holds provider, model and rung as one value under the `ask` control, which names the role's kind once; `providers` registers the write check for every key whose control or rows field names a kind. Each place filters the picker by the kind its role needs:
   - text — translation, titles, summaries;
   - decision — decisions. Decision-capable models such as OpenRouter's decision-only models are listed first, followed by models that answer objects.
 

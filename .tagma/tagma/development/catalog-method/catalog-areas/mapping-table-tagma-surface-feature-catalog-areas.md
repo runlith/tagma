@@ -72,7 +72,7 @@ Every Tagma surface unit stands in exactly one catalog area; the areas and their
 
 ## Settings (135)
 
-- **A1 (25):** agent.approvalMode, agent.approves, agent.compactionOverrides, agent.compactionStrategy, agent.compactionSummarizerRule, agent.compactionSummarizers, agent.compactionTrigger, agent.default, agent.delegation, agent.keepWarm, agent.keepWarmPings, agent.modelGuidance, agent.offered, agent.operatorNotice, agent.subAgentDepth, agent.takeover, agent.worktrees, threads.autoTitle, threads.harnessProfile, threads.harnessTitle, threads.harnessTransport, threads.terminalChat, threads.titleCharacters, threads.titleModel, threads.titleReasoning
+- **A1 (24):** agent.approvalMode, agent.approves, agent.compactionOverrides, agent.compactionStrategy, agent.compactionSummarizerRule, agent.compactionSummarizers, agent.compactionTrigger, agent.default, agent.delegation, agent.keepWarm, agent.keepWarmPings, agent.modelGuidance, agent.offered, agent.operatorNotice, agent.subAgentDepth, agent.takeover, agent.worktrees, threads.autoTitle, threads.harnessProfile, threads.harnessTitle, threads.harnessTransport, threads.terminalChat, threads.titleCharacters, threads.titleModel
 - **A2 (7):** activity.bodiesMaxBytes, activity.keepHours, agent.startShare, agent.toolOutputShare, remote.enabled, threads.idleProjectionDays, threads.recap
 - **A3 (1):** graph.catalogs
 - **A4 (6):** enforcement.programs, graph.commit, orientation.mapBudget, rules.global.disabled, rules.global.enabled, writing.comments
