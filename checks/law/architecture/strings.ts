@@ -107,7 +107,9 @@ const vendorRole = (name: string): boolean =>
     .toLowerCase()
     .split(/[^a-z0-9]+/)
     .some((word) =>
-      ['provider', 'providers', 'harness', 'harnesses', 'model', 'models', 'adapter', 'adapters', 'runner', 'cli'].includes(word),
+      ['provider', 'providers', 'harness', 'harnesses', 'model', 'models', 'adapter', 'adapters', 'runner', 'cli', 'id', 'ids'].includes(
+        word,
+      ),
     );
 const referenceName = (node: ts.Expression): string =>
   ts.isIdentifier(node) ? node.text : ts.isPropertyAccessExpression(node) ? `${referenceName(node.expression)}.${node.name.text}` : '';

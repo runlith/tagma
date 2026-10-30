@@ -38,6 +38,7 @@ test('vendor strings follow adapter declarations, decode escapes and ignore non-
     [`${server}/translations/testing.ts`]: "export const fixture = 'orbit-cloud';",
     [`${server}/translations/runtime.generated.ts`]: "export const modules = { '@runlith/adapter-orbit': 1 };",
     [`${server}/translations/selection.ts`]: "const pickedProvider = 'cursor'; const theme = { label: 'Cursor', key: 'cursor' };",
+    [`${server}/translations/compare.ts`]: "export const hosted = (id: string) => id === 'cursor';",
     [`${server}/providers/pagination.ts`]:
       "const readAdapters = operation({ id: 'read_adapters', refusals: ['bad-cursor', 'cursor-stale'], cursor: Flag.String('cursor') }).pipe(registerProviders); const renderClient = Effect.gen(function* () { return `before is not a page cursor: ${raw}`; }); const html = `<style>button { cursor:pointer; }</style>`; const theme = { id: 'terminal.cursor', label: 'Cursor' };",
     [`${server}/browser/mark.ts`]:
@@ -54,6 +55,7 @@ test('vendor strings follow adapter declarations, decode escapes and ignore non-
     `vendor:orbit:${server}/translations/translate.ts`,
     `vendor:orbital-cli:${server}/external-harnesses/launch.ts`,
     `vendor:cursor:${server}/translations/selection.ts`,
+    `vendor:cursor:${server}/translations/compare.ts`,
   ];
   expect(vendorFindings(tree, params, listedWords(words)).map((one) => one.fingerprint)).toEqual(expected);
   const known = new Set(words);
