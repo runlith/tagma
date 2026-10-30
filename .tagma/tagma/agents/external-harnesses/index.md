@@ -136,14 +136,6 @@ fields:
         "."
       ],
       [
-        "runner/hosted/"
-      ],
-      [
-        "runner/claude-code/",
-        "runner/cursor/",
-        "runner/opencode/"
-      ],
-      [
         "cli/harnessRun.ts",
         "testing/"
       ],
