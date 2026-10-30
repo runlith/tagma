@@ -1,4 +1,4 @@
-import { isAbsolute } from 'node:path';
+import { isAbsolute, resolve } from 'node:path';
 import { Effect } from 'effect';
 import type { SubjectPlace } from '../platform/contract/service/place.js';
 import { CallPlace } from '../platform/contract/service/place.js';
@@ -7,10 +7,23 @@ import { CheckoutPaths, type PlaceUnread } from './contract/service/checkoutPath
 
 const unread = (failure: PlaceUnread) => new GateRefusal('files', failure.reason, ['read the checkout again']);
 
+const placedPath = Effect.fnUntraced(function* (path: string) {
+  const here = yield* CallPlace;
+  const absolute = isAbsolute(path) ? path : here?.checkout == null ? null : resolve(here.checkout, path);
+  if (absolute === null) return null;
+  return yield* (yield* CheckoutPaths).placeAcross(absolute).pipe(Effect.mapError(unread));
+});
+
 const pathPlace = Effect.fn('workspace.pathPlace')(function* (path: string) {
-  if (!isAbsolute(path)) return null;
-  const placed = yield* (yield* CheckoutPaths).placeAcross(path).pipe(Effect.mapError(unread));
+  const placed = yield* placedPath(path);
   return placed === null ? null : { projectId: placed.projectId, checkout: placed.root, branch: null };
+});
+
+const pathSpelling = Effect.fn('workspace.pathSpelling')(function* (path: string) {
+  if (isAbsolute(path)) return null;
+  const placed = yield* placedPath(path);
+  const here = yield* CallPlace;
+  return placed === null || placed.projectId === here?.projectId ? null : placed.path;
 });
 
 const checkoutPlace = Effect.fn('workspace.checkoutPlace')(function* (named: string) {
@@ -22,6 +35,6 @@ const checkoutPlace = Effect.fn('workspace.checkoutPlace')(function* (named: str
 });
 
 export const WORKSPACE_SUBJECTS: readonly SubjectPlace[] = [
-  { kind: 'path', place: pathPlace },
+  { kind: 'path', place: pathPlace, canonical: pathSpelling },
   { kind: 'checkout', place: checkoutPlace },
 ];
