@@ -1,29 +1,26 @@
-import { activity } from '@runlith/activity/Activity';
-import { activityKind } from '@runlith/activity/fact';
 import { ActivityLog } from '@runlith/activity/log';
-import type { ModelCallUsage } from '@runlith/activity/modelCall';
 import type { ModelRequest } from '@runlith/agent/modelPort';
 import { estimateThreadTokens } from '@runlith/agent/thread/compaction/measurement';
 import { decodeJsonAnswer } from '@runlith/llm/call';
 import { DecisionRefused, type DecisionAnswer, type DecisionRequest } from '@runlith/llm/decision';
 import { lowestReasoning, type ModelOption } from '@runlith/llm/models/catalog';
-import { isContextOverflowFailure } from '@runlith/llm/provider-error';
-import type { LLMError } from '@runlith/llm/schema/errors';
 import { LLMResponse, type Usage } from '@runlith/llm/schema/events';
 import { ModelID, ProviderID, type JsonSchema } from '@runlith/llm/schema/ids';
 import { ModelIdentity } from '@runlith/llm/schema/options';
 import { decisionVerdicts, textDecisionAsk } from '@runlith/llm/textDecision';
 import type { AskKind, ModelCapacity } from '@runlith/llm/models/description';
 import type { ProgramAnswer } from '@runlith/tagma/adapter/provider';
-import { Cause, Effect, Layer, Option, Schema, Semaphore } from 'effect';
+import { Effect, Layer, Schema, Semaphore } from 'effect';
 import { OPERATOR_PRINCIPAL } from '../platform/contract/wire/actor.js';
 import { GateRefusal } from '../platform/contract/wire/refusal.js';
 import { thisMachine } from '../platform/contract/service/capacity.js';
+import { askActivity } from './askActivity.js';
 import { ProviderAccounts } from './contract/service/accounts.js';
 import { ModelAccess } from './contract/service/access.js';
 import {
   AskPrograms,
   AskRefused,
+  askFailure,
   DefaultSelection,
   ModelAsks,
   type Answered,
@@ -37,11 +34,6 @@ import { AdapterInstalls } from './contract/service/adapters.js';
 import type { AskPath, AskRefusal } from './contract/wire/asks.js';
 import { ProviderRegistry, type AskRoute, type ProviderCatalog } from './contract/service/registry.js';
 
-export const ASK = activityKind<
-  { readonly kind: AskKind; readonly path: AskPath; readonly provider: string; readonly model: string; readonly rung: string | null },
-  { readonly account?: string; readonly usage?: ModelCallUsage }
->('ask');
-
 const PROGRAM_OUTPUT_TOKENS = 8_192;
 const PROGRAM_SETTLE_MS = 30_000;
 const PROGRAM_MS_PER_OUTPUT_TOKEN = 25;
@@ -52,22 +44,6 @@ type Spoken<A> = { readonly value: A; readonly usage: Usage | undefined; readonl
 
 const refused = (refusal: AskRefusal, message: string, failure?: unknown, usage?: Usage) =>
   new AskRefused({ refusal, message, failure, usage });
-
-const refusalOf = (failure: LLMError): AskRefused => {
-  if (isContextOverflowFailure(failure)) return refused('ask-input-too-large', failure.message, failure);
-  switch (failure.reason._tag) {
-    case 'Authentication':
-    case 'NotInstalled':
-    case 'AdapterFailed':
-      return refused('ask-not-connected', failure.message, failure);
-    case 'QuotaExceeded':
-      return refused('ask-quota', failure.message, failure);
-    case 'InvalidProviderOutput':
-      return refused('ask-unreadable-answer', failure.message, failure);
-    default:
-      return refused('ask-provider-failed', failure.message, failure);
-  }
-};
 
 const optionOf = (catalog: ProviderCatalog, provider: string, model: string): ModelOption | undefined =>
   catalog.models.registered(provider) ? catalog.models.modelsOf(provider).find((option) => option.id === model) : undefined;
@@ -138,29 +114,9 @@ export const makeModelAsks = Effect.gen(function* () {
     work: Effect.Effect<Spoken<A>, AskRefused>,
   ): Effect.Effect<Answered<A>, AskRefused> =>
     Effect.provideService(
-      activity(
-        ASK,
+      askActivity(
         { kind, path, provider: selection.provider, model: selection.model, rung: selection.reasoning },
         Effect.map(work, (spoken) => ({ value: spoken.value, path, selection, usage: spoken.usage, account: spoken.account })),
-        {
-          ended: (exit) => {
-            if (exit._tag === 'Success')
-              return { result: { account: exit.value.account, usage: exit.value.usage === undefined ? undefined : exit.value.usage } };
-            const failure = Option.getOrUndefined(Cause.findErrorOption(exit.cause));
-            if (!(failure instanceof AskRefused)) return {};
-            const before =
-              failure.refusal === 'ask-not-connected' ||
-              failure.refusal === 'ask-unanswerable' ||
-              failure.refusal === 'ask-input-too-large' ||
-              failure.refusal === 'ask-quota';
-            return {
-              outcome: before ? 'refused' : 'failed',
-              reason: failure.refusal,
-              message: failure.message,
-              result: failure.usage === undefined ? undefined : { usage: failure.usage },
-            };
-          },
-        },
       ),
       ActivityLog,
       log,
@@ -179,7 +135,7 @@ export const makeModelAsks = Effect.gen(function* () {
       reasoningOutput: false,
       stallMs: ask?.stallMs,
     });
-    return request.refusal === undefined ? Effect.succeed(request) : Effect.fail(refusalOf(request.refusal));
+    return request.refusal === undefined ? Effect.succeed(request) : Effect.fail(askFailure(request.refusal));
   };
 
   const environmentOf = Effect.fnUntraced(function* (catalog: ProviderCatalog, route: ProgramRoute, account: string | null) {
@@ -247,7 +203,7 @@ export const makeModelAsks = Effect.gen(function* () {
       return { value, usage, account } satisfies Spoken<string>;
     }
     const request = yield* requestOf(route, selection, ask.system, ask);
-    const response = yield* request.text({ prompt: ask.input, stallMs: ask.stallMs }).pipe(Effect.mapError(refusalOf));
+    const response = yield* request.text({ prompt: ask.input, stallMs: ask.stallMs }).pipe(Effect.mapError(askFailure));
     return { value: response.text, usage: LLMResponse.usage(response), account: request.signedAccount?.() } satisfies Spoken<string>;
   });
 
@@ -276,7 +232,7 @@ export const makeModelAsks = Effect.gen(function* () {
     const request = yield* requestOf(route, selection, ask.system, ask);
     const answered = yield* request
       .object({ prompt: ask.input, schema: Schema.Unknown, jsonSchema: schema, stallMs: ask.stallMs })
-      .pipe(Effect.mapError(refusalOf));
+      .pipe(Effect.mapError(askFailure));
     return {
       value: answered.object,
       usage: LLMResponse.usage(answered.response),
@@ -302,7 +258,7 @@ export const makeModelAsks = Effect.gen(function* () {
       .pipe(
         Effect.mapError((failure) =>
           failure.failure !== undefined
-            ? refusalOf(failure.failure)
+            ? askFailure(failure.failure)
             : failure.reason === 'malformed'
               ? refused('ask-unreadable-answer', failure.message, failure)
               : failure.reason === 'input-too-large'
@@ -375,6 +331,15 @@ export const makeModelAsks = Effect.gen(function* () {
   });
 
   return ModelAsks.of({
+    resolve: (selection) => {
+      const request = models.request({
+        ownerId: OPERATOR_PRINCIPAL,
+        provider: selection.provider,
+        model: selection.model,
+        reasoning: selection.reasoning,
+      });
+      return { origin: request.origin, reasoning: request.rung ?? null };
+    },
     choose: Effect.fn('ModelAsks.choose')(function* (kind, role, asker) {
       if (role === null) return yield* defaultFor(kind, asker);
       const named = `${role.provider}:${role.model}`;

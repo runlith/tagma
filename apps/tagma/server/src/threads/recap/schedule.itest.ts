@@ -1,6 +1,7 @@
 import { expect } from 'bun:test';
 import { layer } from '@runlith/effect-test';
 import { ActivityLog } from '@runlith/activity/log';
+import { activityRecording } from '@runlith/activity/testing';
 import { Clock, Context, Deferred, Effect, Exit, Fiber, Layer, Stream } from 'effect';
 import { TestClock } from 'effect/testing';
 import { uuidv7 } from 'uuidv7';
@@ -9,8 +10,10 @@ import { withAgentReaderInput } from '@runlith/agent/AgentSignal';
 import type { ModelRequest, ModelStreamInput } from '@runlith/agent/modelPort';
 import { makeThreadAsides } from '@runlith/agent/thread/ThreadAsides';
 import { Usage, type LLMEvent } from '@runlith/llm/schema/events';
+import { LLMError, QuotaExceededReason } from '@runlith/llm/schema/errors';
 import { subscriptionDescription } from '@runlith/builtin-catalog/subscription/description';
 import { modelCatalog } from '@runlith/llm/models/catalog';
+import { AccountKey } from '@runlith/llm/models/authStatus';
 import { ModelID, ProviderID } from '@runlith/llm/schema/ids';
 import { Message } from '@runlith/llm/schema/messages';
 import { ModelIdentity } from '@runlith/llm/schema/options';
@@ -35,7 +38,8 @@ import { conversationAppended } from '../journal/conversationIndex.js';
 import { ThreadRecaps } from '../contract/service/recaps.js';
 import { makeThreadRecaps } from './readings.js';
 import { makeRecapSchedule } from './schedule.js';
-import { AccountCredentials, ModelAccess } from '../../providers/contract/service/access.js';
+import { AccountCredentials } from '../../providers/contract/service/access.js';
+import { ModelAsks } from '../../providers/contract/service/asks.js';
 import { Settings } from '../../settings/contract/service/values.js';
 import { ThreadJournal } from '../contract/service/engine.js';
 import { HarnessAsides } from '../contract/service/asides.js';
@@ -134,10 +138,13 @@ const answering = (text: string): readonly LLMEvent[] => [
   { type: 'text-start', id: 't' },
   { type: 'text-delta', id: 't', text },
   { type: 'text-end', id: 't' },
-  { type: 'finish', reason: 'stop' },
+  { type: 'finish', reason: 'stop', usage: new Usage({ inputTokens: 100, outputTokens: 20 }) },
 ];
 
-const world = Effect.fnUntraced(function* (answer: (input: ModelStreamInput) => Stream.Stream<LLMEvent>, cacheTtl: number | null = 3600) {
+const world = Effect.fnUntraced(function* (
+  answer: (input: ModelStreamInput) => Stream.Stream<LLMEvent, LLMError>,
+  cacheTtl: number | null = 3600,
+) {
   const { db } = yield* MachineStore;
   const units = yield* MachineUnits;
   const records = yield* ThreadRecords;
@@ -149,9 +156,11 @@ const world = Effect.fnUntraced(function* (answer: (input: ModelStreamInput) => 
   const answered = yield* Deferred.make<string>();
   const recapped = new Map<string, string | null>();
   const completed = new Map<string, Deferred.Deferred<string>>();
+  const recording = activityRecording();
   const log: ActivityLog = {
     settled: Effect.void,
     record: (fact) => {
+      recording.log.record(fact);
       if (fact._tag === 'Opened' && fact.kind === 'recap') recapped.set(fact.id, fact.thread);
       if (fact._tag !== 'Ended' || !recapped.has(fact.activity)) return;
       const effect = (fact.result as { readonly effect?: string }).effect;
@@ -180,14 +189,27 @@ const world = Effect.fnUntraced(function* (answer: (input: ModelStreamInput) => 
   const threadAsks = yield* makeThreadAsks.pipe(
     Effect.provideContext(
       Context.make(HarnessAsides, asides).pipe(
-        Context.add(ModelAccess, { request: () => ({ origin: ORIGIN, rung: 'high' }) } as never),
-        Context.add(AccountCredentials, {
-          account: () =>
-            Effect.andThen(
-              account.beforeRead,
-              Effect.sync(() => account.value),
-            ),
-        } as never),
+        Context.add(ActivityLog, log),
+        Context.add(
+          ModelAsks,
+          ModelAsks.of({
+            resolve: () => ({ origin: ORIGIN, reasoning: 'high' }),
+            choose: () => Effect.die('a recap only asks its warm copy'),
+            capacity: () => Effect.die('a recap only asks its warm copy'),
+            text: () => Effect.die('a recap only asks its warm copy'),
+            decide: () => Effect.die('a recap answers text'),
+          }),
+        ),
+        Context.add(
+          AccountCredentials,
+          AccountCredentials.of({
+            account: () =>
+              Effect.andThen(
+                account.beforeRead,
+                Effect.sync(() => AccountKey.make(account.value)),
+              ),
+          }),
+        ),
       ),
     ),
   );
@@ -233,7 +255,7 @@ const world = Effect.fnUntraced(function* (answer: (input: ModelStreamInput) => 
     ),
   );
   asides.watch(schedule);
-  const request = (runAnswer: (input: ModelStreamInput) => Stream.Stream<LLMEvent>): ModelRequest => ({
+  const request = (runAnswer: (input: ModelStreamInput) => Stream.Stream<LLMEvent, LLMError>): ModelRequest => ({
     plannedOutputTokens: 0,
     origin: ORIGIN,
     rung: 'high',
@@ -280,7 +302,7 @@ const world = Effect.fnUntraced(function* (answer: (input: ModelStreamInput) => 
       const ready = completed.get(threadId);
       return ready === undefined ? Effect.die('The recap test has not settled this thread') : Deferred.await(ready);
     });
-  return { asked, stopped, answered, settings, account, running, recaps, journal, asides, settle, schedule, whenCompleted };
+  return { asked, stopped, answered, settings, account, running, recaps, journal, asides, settle, schedule, whenCompleted, recording };
 });
 
 const readingOf = Effect.fnUntraced(function* (recaps: ThreadRecaps['Service'], threadId: string) {
@@ -342,11 +364,42 @@ layer(fixture)('recap schedule', (it) => {
       const reading = yield* readingOf(w.recaps, threadId);
       expect(written).toEqual({ status: 'written', threadId, recap: reading! });
       expect(w.recaps.attempt(threadId)).toBeNull();
+      expect(w.recording.activities().filter((row) => row.opened.kind === 'ask')).toMatchObject([
+        {
+          opened: {
+            thread: threadId,
+            attrs: { kind: 'text', path: 'thread', provider: 'subscription', model: 'claude-sonnet-5-5', rung: 'high' },
+          },
+          ended: { outcome: 'ok', result: { usage: { inputTokens: 100, outputTokens: 20 } } },
+        },
+      ]);
       expect(reading).toMatchObject({
         summary: 'The report was drafted, reviewed and published.',
         status: 'current',
         basis: { position: 4, entryId: `${threadId}:entry-4`, runId: `${threadId}:run-1` },
       });
+    }),
+  );
+
+  it.effect('a manual recap preserves the shared quota refusal from its warm model', () =>
+    Effect.gen(function* () {
+      const projectId = yield* RecapProject;
+      const threadId = yield* born(['run-1'], conversation('run-1').slice(2));
+      const w = yield* world(() =>
+        Stream.fail(new LLMError({ module: 'fixture', method: 'aside', reason: new QuotaExceededReason({ message: 'quota exhausted' }) })),
+      );
+      w.settings.enabled = false;
+      yield* w.settle(threadId, 'run-1');
+      const refusal = yield* Effect.flip(
+        RECAP_PAIRS.generate_thread_recap.body
+          .execute({ threadId }, undefined, { actor: { kind: 'operator' }, files: null })
+          .pipe(
+            forProject(Effect.succeed({ project: { id: projectId, name: 'recaps' } })),
+            Effect.provideService(ThreadRecapWriting, { generate: (id, project) => w.schedule.generateNow(id, project) }),
+          ),
+      );
+      expect(refusal).toMatchObject({ code: 'ask-quota' });
+      expect(w.recaps.attempt(threadId)).toMatchObject({ state: 'refused', code: 'ask-quota' });
     }),
   );
 

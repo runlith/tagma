@@ -4,8 +4,10 @@ import { arms, operation } from '../../../../platform/contract/wire/operation.js
 import { ThreadId } from '../../../../platform/contract/wire/thread.js';
 import { recapReadingSchema } from '../recap.js';
 import { ASKS_IN_REVIEW } from '../../../../platform/contract/wire/conditions.js';
+import { ASK_REFUSALS } from '../../../../providers/contract/wire/asks.js';
 
 export const RECAP_REFUSALS = [
+  ...ASK_REFUSALS,
   'not-found',
   'foreign-project',
   'not-warm',

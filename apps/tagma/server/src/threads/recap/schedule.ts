@@ -23,7 +23,7 @@ import { thread, threadRun } from '../store/kernel.js';
 import { recap as recapKey } from '../contract/wire/settings.js';
 import { readRecap, recapInstruction } from './prompt.js';
 import { document, makeRecapQuestions } from './questions.js';
-import type { ThreadSelection } from '../contract/service/asks.js';
+import { askGate, AskRefused, type ModelSelection } from '../../providers/contract/service/asks.js';
 import { automaticRecaps } from './readings.js';
 import { GateRefusal } from '../../platform/contract/wire/refusal.js';
 import { ThreadStorageFailed } from '@runlith/agent/thread/persisted';
@@ -216,7 +216,7 @@ export const makeRecapSchedule = Effect.fnUntraced(function* ({
     return manual || (yield* promised(threadId)) ? null : ('cold' satisfies RecapSkip);
   });
 
-  const publish = Effect.fnUntraced(function* (threadId: string, slot: Pending, selected: ThreadSelection, written: ThreadRecap) {
+  const publish = Effect.fnUntraced(function* (threadId: string, slot: Pending, selected: ModelSelection, written: ThreadRecap) {
     const held = slot.capture;
     const enabled = slot.manual ? () => true : yield* settings.held(recapKey, held.basis.projectId);
     return yield* units.write(writes('ThreadRecap.publish', [threadRecord]), (unit) =>
@@ -261,6 +261,11 @@ export const makeRecapSchedule = Effect.fnUntraced(function* ({
     if (answer._tag === 'Failure') {
       if (Cause.hasInterruptsOnly(answer.cause)) return yield* Effect.interrupt;
       const failure = Option.getOrUndefined(Cause.findErrorOption(answer.cause));
+      if (failure instanceof AskRefused) {
+        yield* recorded(threadId, failure.refusal, undefined, failure.message);
+        return yield* askGate(failure, ['check the provider connection and try /recap again']);
+      }
+      if (failure instanceof GateRefusal) return yield* failure;
       const reason =
         failure instanceof AgentAsideCalledTool ? 'tool-call' : Predicate.isTagged(failure, 'TimeoutError') ? 'timeout' : 'model-failed';
       yield* recorded(threadId, reason, failure instanceof AgentAsideCalledTool ? failure : undefined, String(Cause.squash(answer.cause)));

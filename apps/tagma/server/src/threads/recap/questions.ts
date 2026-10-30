@@ -3,14 +3,15 @@ import { body } from '@runlith/activity/Activity';
 import type { ActivityBody } from '@runlith/activity/fact';
 import { Effect } from 'effect';
 import { OPERATOR_PRINCIPAL } from '../../platform/contract/wire/actor.js';
-import { ThreadAsks, type ThreadSelection } from '../contract/service/asks.js';
+import type { ModelSelection } from '../../providers/contract/service/asks.js';
+import { ThreadAsks } from '../contract/service/asks.js';
 import { ThreadLookup } from '../contract/service/reads.js';
 
 export type Unselected = 'gone' | 'running' | 'selection';
 
 export type RecapQuestion = {
   readonly ask: Effect.Effect<AgentAsideAnswer, unknown>;
-  readonly selected: Effect.Effect<ThreadSelection | Unselected, unknown>;
+  readonly selected: Effect.Effect<ModelSelection | Unselected, unknown>;
 };
 
 export type Covered = {
@@ -36,7 +37,7 @@ export const makeRecapQuestions = Effect.gen(function* () {
     });
     if (standing._tag === 'Moved') return 'selection' satisfies Unselected;
     const { provider, model, reasoning, account } = standing.basis;
-    return { provider, model, reasoning, account } satisfies ThreadSelection;
+    return { provider, model, reasoning, account } satisfies ModelSelection;
   });
 
   const posed = Effect.fnUntraced(function* (threadId: string, copy: AgentAside, instruction: string, covered: Covered) {

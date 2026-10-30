@@ -1,16 +1,10 @@
 import type { AgentAside, AgentAsideAnswer, AgentAsideCalledTool } from '@runlith/agent/AgentAside';
 import type { LLMError } from '@runlith/llm/schema/errors';
+import type { AskRefused, ModelSelection } from '../../../providers/contract/service/asks.js';
 import { Context, type Effect } from 'effect';
 import { GateRefusal, type Unblock } from '../../../platform/contract/wire/refusal.js';
 
-export type ThreadSelection = {
-  readonly provider: string;
-  readonly model: string | null;
-  readonly reasoning: string | null;
-  readonly account: string | null;
-};
-
-export type ThreadAskBasis = ThreadSelection & {
+export type ThreadAskBasis = ModelSelection & {
   readonly source: AgentAside['source'];
   readonly runId: string;
   readonly stepNumber: number;
@@ -34,11 +28,11 @@ export class ThreadAsks extends Context.Service<
   ThreadAsks,
   {
     held(threadId: string): AgentAside | undefined;
-    standing(copy: AgentAside, current: ThreadSelection): Effect.Effect<CopyStanding, LLMError>;
+    standing(copy: AgentAside, current: ModelSelection): Effect.Effect<CopyStanding, LLMError>;
     over(
       threadId: string,
       instruction: string,
       copy?: AgentAside,
-    ): Effect.Effect<AgentAsideAnswer, NotWarm | LLMError | AgentAsideCalledTool>;
+    ): Effect.Effect<AgentAsideAnswer, NotWarm | AskRefused | AgentAsideCalledTool>;
   }
 >()('tagma/threads/ThreadAsks') {}
