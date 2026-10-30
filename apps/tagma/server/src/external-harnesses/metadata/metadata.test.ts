@@ -3,16 +3,15 @@ import { layer } from '@runlith/effect-test';
 import * as MemoryFileSystem from '@runlith/testbed/memory';
 import { Context, Effect, FileSystem, Layer } from 'effect';
 import { join } from 'node:path';
-import { MetadataFile, MetadataInvalid } from './file.js';
+import { MetadataInvalid, emptyValues, fileSource } from '@runlith/tagma/adapter/metadata';
+import { MetadataFile, fileLocationReader } from './file.js';
 import { claude, claudeSources } from '../vendors/claude-code/metadata.js';
 import { codex, codexIndex, codexRolloutName, codexSources } from '../vendors/codex/metadata.js';
 import { cursorSources } from '../vendors/cursor/metadata.js';
-import { keyboardFrame } from '../testing/keyboard.js';
 import { MetadataIndex } from './sessionIndex.js';
-import { emptyValues, metadataField } from './fields.js';
-import { fileSource } from './sources.js';
+import { metadataField } from './fields.js';
 import { METADATA_LIMITS } from './policy.js';
-import type { MetadataInput } from './sources.js';
+import type { MetadataInput } from './input.js';
 import { devin, devinTitle } from '../vendors/devin/metadata.js';
 import { grok, grokSources } from '../vendors/grok/metadata.js';
 import { NamespaceId } from '@runlith/files/namespace';
@@ -365,7 +364,7 @@ layer(home)('vendor metadata', (it) => {
         ['model'],
       );
       if (source.kind !== 'file') return yield* Effect.die(new Error('the export path resolved to no file source'));
-      const cursor = source.open(METADATA_LIMITS);
+      const cursor = fileLocationReader(source);
       let page = yield* cursor(files);
       while (page._tag === 'Read' && !page.complete) page = yield* cursor(files);
       expect(page).toMatchObject({ _tag: 'Read', complete: true, value: { model: { value: 'SWE-2 Max', claim: 'last-recorded' } } });
@@ -487,7 +486,7 @@ layer(home)('vendor metadata', (it) => {
       const input = testInput({ rootKey: 'grok-one', storage });
       const [summary] = grokSources(input);
       if (summary === undefined || summary.kind !== 'file') return yield* Effect.die(new Error('expected a file source'));
-      const read = summary.open(METADATA_LIMITS);
+      const read = fileLocationReader(summary);
       expect(yield* read(files)).toEqual({ _tag: 'Unreadable', reason: 'session-path-unresolved' });
       const dir = join(home, 'sessions', encodeURIComponent('/work/proj'), 'grok-one');
       yield* files.makeDirectory(dir, { recursive: true });
@@ -501,11 +500,11 @@ layer(home)('vendor metadata', (it) => {
     const [title] = cursorSources(input);
     if (title === undefined || title.kind !== 'terminal') throw new Error('expected a terminal source');
     expect(title.cells).toBe(false);
-    expect(title.parse({ ...keyboardFrame(['prompt']), title: 'Devin · my task' })).toEqual({
+    expect(title.parse({ title: 'Devin · my task' })).toEqual({
       value: 'Devin · my task',
       claim: 'last-recorded',
       turnId: null,
     });
-    expect(title.parse(keyboardFrame(['prompt']))).toBeNull();
+    expect(title.parse({ title: '' })).toBeNull();
   });
 });

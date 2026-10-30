@@ -15,9 +15,8 @@ import { harnessAdapter } from '../contract/service/table.js';
 import { readBefore, readTail } from '../ends/read.js';
 import { writes, type WriteSet } from '../../platform/contract/service/writes.js';
 import type { SessionAlignment } from '../sessions/alignment.js';
-import type { TailEnd, TailSource } from '../ends/tail.js';
-import type { MetadataInput } from '../metadata/sources.js';
-import { endsSource } from '../ends/table.js';
+import type { TailEnd, TailSource } from '@runlith/tagma/adapter/metadata';
+import type { MetadataInput } from '../metadata/input.js';
 import { inputOf } from '../metadata/harnessMetadata.js';
 import { readHarnessTranscript, sessionFiles, type HarnessReading } from '../metadata/words.js';
 import type { TerminalClosing } from './closing.js';
@@ -102,7 +101,7 @@ export class TerminalWatch {
   }
 
   private proofOf(adapter: HarnessAdapter): Silence['proof'] | null {
-    if (endsSource(adapter) === null) return null;
+    if (adapter.metadata?.ends === undefined) return null;
     if (adapter.ends.tail === 'final') return 'tail';
     return adapter.ends.idle === null && adapter.promptScreenOf !== undefined ? 'screen' : null;
   }

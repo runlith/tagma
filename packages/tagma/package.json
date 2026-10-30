@@ -33,6 +33,17 @@
       "bun": "./src/adapter/harness.ts",
       "default": "./src/adapter/harness.ts"
     },
+    "./adapter/metadata": {
+      "types": "./src/adapter/metadata.ts",
+      "bun": "./src/adapter/metadata.ts",
+      "default": "./src/adapter/metadata.ts"
+    },
+    "./adapter/hook": {
+      "types": "./src/adapter/hook.ts",
+      "browser": "./src/adapter/hook.ts",
+      "bun": "./src/adapter/hook.ts",
+      "default": "./src/adapter/hook.ts"
+    },
     "./adapter/settings": {
       "types": "./src/adapter/settings.ts",
       "browser": "./src/adapter/settings.ts",
@@ -102,6 +113,8 @@
   "tagma": {
     "host": [
       "./adapter/harness",
+      "./adapter/hook",
+      "./adapter/metadata",
       "./adapter/provider",
       "./adapter/settings",
       "effect",

@@ -29,7 +29,7 @@ const reading = Effect.fnUntraced(function* (name: string, text?: string, root: 
   const dir = yield* Home;
   const path = join(dir, name);
   if (text !== undefined) yield* files.writeFileString(path, text);
-  return yield* readRootArtifact(files, adapter, root, path);
+  return yield* readRootArtifact(files, adapter.metadata, root, path);
 });
 
 layer(home)('root artifact', (it) => {

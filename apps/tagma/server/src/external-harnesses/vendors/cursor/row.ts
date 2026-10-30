@@ -1,6 +1,7 @@
 import { HARNESS_LABELS } from '../../../threads/contract/wire/harness/names.js';
 import { LEGACY_TOOLS } from '../tools.js';
 import type { TerminalHarnessAdapter } from '../../contract/service/adapter.js';
+import { cursorReader } from './reader.js';
 
 import {
   adoptedPermissionArgv,
@@ -153,7 +154,7 @@ export const cursor: TerminalHarnessAdapter = {
   prefix: 'cu',
   binary: 'cursor-agent',
   install: 'curl https://cursor.com/install -fsS | bash',
-  metadata: 'cursor-terminal',
+  metadata: cursorReader,
   acp: cursorAcp,
   launch: {
     permission,

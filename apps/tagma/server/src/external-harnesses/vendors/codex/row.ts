@@ -1,6 +1,7 @@
 import { Predicate, Schema } from 'effect';
 import { HARNESS_LABELS } from '../../../threads/contract/wire/harness/names.js';
 import { ASKS_IN_REVIEW, ASKS_NEVER } from '../../../platform/contract/wire/conditions.js';
+import { codexReader } from './reader.js';
 
 import {
   adoptedPermissionArgv,
@@ -241,7 +242,7 @@ export const codex: TerminalHarnessAdapter = {
   variable: SESSION_VARIABLES.codex,
   binary: 'codex',
   install: 'npm install -g @openai/codex',
-  metadata: 'codex-rollout',
+  metadata: codexReader,
   launch: {
     permission,
     model,

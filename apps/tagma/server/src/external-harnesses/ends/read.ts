@@ -1,8 +1,9 @@
 import { Effect, Option, type FileSystem } from 'effect';
 import { isAbsolute, relative, sep } from 'node:path';
+import type { TailEnd, TailSource, TailWindow } from '@runlith/tagma/adapter/metadata';
 import { DOCUMENT_LIMITS } from '../metadata/policy.js';
-import type { MetadataInput } from '../metadata/sources.js';
-import { TailScan, type TailEnd, type TailSource, type TailWindow } from './tail.js';
+import type { MetadataInput } from '../metadata/input.js';
+import { TailScan } from './tail.js';
 
 export const TAIL_CHUNK_BYTES = 64 * 1024;
 export const TAIL_LIMIT_BYTES = 8 * 1024 * 1024;

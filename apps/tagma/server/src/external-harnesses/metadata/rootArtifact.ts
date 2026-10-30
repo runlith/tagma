@@ -1,8 +1,6 @@
 import { Effect, type FileSystem } from 'effect';
 import { dirname } from 'node:path';
-import type { HarnessAdapter } from '../contract/service/adapter.js';
-import { claude } from '../vendors/claude-code/metadata.js';
-import { codex } from '../vendors/codex/metadata.js';
+import type { MetadataReader } from '@runlith/tagma/adapter/metadata';
 import { MetadataFile } from './file.js';
 import { METADATA_LIMITS } from './policy.js';
 
@@ -15,15 +13,18 @@ const ARTIFACT_PAGES = Math.ceil(METADATA_LIMITS.recordBytes / METADATA_LIMITS.b
 
 export function readRootArtifact(
   files: FileSystem.FileSystem,
-  adapter: HarnessAdapter,
+  reader: MetadataReader | undefined,
   rootKey: string,
   artifact: string,
 ): Effect.Effect<RootArtifactRead> {
-  if (adapter.metadata === 'codex-rollout')
-    return binding(new MetadataFile(codex(rootKey), METADATA_LIMITS), files, artifact, ARTIFACT_PAGES);
-  if (adapter.metadata === 'claude-jsonl')
-    return binding(new MetadataFile(claude(rootKey), METADATA_LIMITS), files, artifact, Number.POSITIVE_INFINITY);
-  return Effect.succeed({ _tag: 'Unreadable', reason: 'artifact-fold-unavailable' } as const);
+  const bound = reader?.artifact;
+  if (bound === undefined) return Effect.succeed({ _tag: 'Unreadable', reason: 'artifact-fold-unavailable' } as const);
+  return binding(
+    new MetadataFile(bound.fold(rootKey), METADATA_LIMITS),
+    files,
+    artifact,
+    bound.scan === 'whole-file' ? Number.POSITIVE_INFINITY : ARTIFACT_PAGES,
+  );
 }
 
 const binding = Effect.fn('HarnessPrepare.artifact')(

@@ -8,18 +8,34 @@ import type { Discharge } from '../../executions/contract/service/discharge.js';
 import type { ExecutionRecords, TerminalScreens } from '../../executions/contract/service/records.js';
 import type { Terminals } from '../../executions/contract/service/terminals.js';
 import type { Environments } from '../../workspace/contract/service/environments.js';
+import type { ScreenAnswer } from '@runlith/executions/protocol/presentation';
+import {
+  MetadataInvalid,
+  emptyValues,
+  type MetadataField,
+  type MetadataLocation,
+  type MetadataScreen,
+  type MetadataValues,
+} from '@runlith/tagma/adapter/metadata';
 import type { HarnessFields, HarnessField } from '../../threads/contract/wire/harness/observation.js';
-import { emptyValues, metadataField } from './fields.js';
+import { metadataField } from './fields.js';
 import { MetadataIndex } from './sessionIndex.js';
 import { MetadataCommands } from './commands.js';
-import { MetadataInvalid, type MetadataPage } from './file.js';
-import type { MetadataValues } from './fields.js';
-import type { MetadataInput, MetadataLocation } from './sources.js';
+import { fileLocationReader, type MetadataPage } from './file.js';
+import type { MetadataInput } from './input.js';
 import { METADATA_LIMITS } from './policy.js';
+
+const screenOf = (screen: ScreenAnswer, input: MetadataInput): MetadataScreen => {
+  if (screen._tag === 'ScreenUnavailable') throw new MetadataInvalid({ reason: 'terminal-unavailable' });
+  const ref = screen.provenance.ref;
+  if (ref.execution !== input.execution.execution || ref.incarnation !== input.execution.incarnation)
+    throw new MetadataInvalid({ reason: 'identity' });
+  return { title: screen._tag === 'ScreenTextFrame' ? screen.title : screen.appearance.title };
+};
 
 export type MetadataRead = () => Effect.Effect<{ readonly fields: Partial<HarnessFields>; readonly more: boolean }>;
 
-const missedOf = (page: MetadataPage<MetadataValues>, name: keyof HarnessFields): number =>
+const missedOf = (page: MetadataPage<MetadataValues>, name: MetadataField): number =>
   page._tag !== 'Read' ? 0 : page.missed === undefined ? page.skipped : (page.missed[name] ?? 0);
 
 export class MetadataBackend {
@@ -87,7 +103,7 @@ export class MetadataBackend {
         let read: () => Effect.Effect<MetadataPage<MetadataValues>>;
         switch (source.kind) {
           case 'file': {
-            const cursor = source.open(METADATA_LIMITS);
+            const cursor = fileLocationReader(source);
             read = () => cursor(files);
             break;
           }
@@ -120,7 +136,7 @@ export class MetadataBackend {
                       bytes: 0,
                       records: 1,
                       skipped: 0,
-                      value: { ...emptyValues(), title: source.parse(screen) },
+                      value: { ...emptyValues(), title: source.parse(screenOf(screen, input)) },
                     }),
                     catch: (cause) => (cause instanceof MetadataInvalid ? cause : new MetadataInvalid({ reason: 'malformed' })),
                   }),

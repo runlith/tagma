@@ -1,5 +1,5 @@
 import { dirname } from 'node:path';
-import { answered, blocksOf, fieldsOf, textBlocks, textOf, type TailEnd, type TailSource } from '../../ends/tail.js';
+import { answered, blocksOf, fieldsOf, textBlocks, textOf, type TailEnd, type TailSource } from '@runlith/tagma/adapter/metadata';
 
 const lastAnswer = (after: readonly unknown[]): string => {
   for (const record of after) {

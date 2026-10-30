@@ -1,32 +1,34 @@
 import { Schema } from 'effect';
 import { basename, dirname, join } from 'node:path';
-import { fileSource, storageHome, type MetadataAdapter, type MetadataInput } from '../../metadata/sources.js';
-import type { TailLocation } from '../../ends/tail.js';
+import { claudeUsage } from '@runlith/adapter-anthropic/usage';
+import {
+  MetadataInvalid,
+  emptyValues,
+  fileSource,
+  jsonValue,
+  metadataDecode,
+  metadataText,
+  recordedValue,
+  stampMillis,
+  storageHome,
+  transcriptSaid,
+  unsaid,
+  type MetadataField,
+  type MetadataFold,
+  type MetadataSession,
+  type MetadataValues,
+  type TailLocation,
+  type TranscriptWords,
+  type WordsSource,
+} from '@runlith/tagma/adapter/metadata';
 
-export const claudeTranscript = (input: MetadataInput): TailLocation | null => {
+export const claudeTranscript = (input: MetadataSession): TailLocation | null => {
   if (input.transcriptPath !== undefined) return { root: dirname(input.transcriptPath), path: input.transcriptPath };
   const home = storageHome(input, 'CLAUDE_CONFIG_DIR', '.claude');
   if (home === null) return null;
   const root = join(home, 'projects');
   return { root, path: join(root, input.cwd.replace(/[^a-zA-Z0-9]/g, '-'), `${input.rootKey}.jsonl`) };
 };
-
-export const claudeSources: MetadataAdapter = (input) => {
-  const where = claudeTranscript(input);
-  const transcript =
-    where !== null && basename(where.path) !== `${input.rootKey}.jsonl`
-      ? {
-          kind: 'unreadable' as const,
-          reason: 'session-identity-mismatch',
-          source: 'transcript' as const,
-          fields: ['model', 'effort', 'title'] as const,
-        }
-      : fileSource(where?.root ?? null, where?.path, claude(input.rootKey), ['model', 'effort', 'title']);
-  return [transcript];
-};
-import { MetadataInvalid, type MetadataFold } from '../../metadata/file.js';
-import { emptyValues, jsonValue, metadataDecode, metadataText, recordedValue, type MetadataValues } from '../../metadata/fields.js';
-import type { HarnessFields } from '../../../threads/contract/wire/harness/observation.js';
 
 const record = metadataDecode(
   Schema.Struct({
@@ -87,9 +89,9 @@ const claudeIgnored = new Set([
   'frame-link',
 ]);
 
-const claudeMissed = (head: string): readonly (keyof HarnessFields)[] => {
+const claudeMissed = (head: string): readonly MetadataField[] => {
   if (sidechainHead.test(head)) return [];
-  const tag = (name: string | undefined): readonly (keyof HarnessFields)[] =>
+  const tag = (name: string | undefined): readonly MetadataField[] =>
     name === 'assistant'
       ? ['model', 'effort']
       : name === 'ai-title' || name === 'custom-title'
@@ -106,4 +108,76 @@ const claudeMissed = (head: string): readonly (keyof HarnessFields)[] => {
   }
   const leading = leadingType.exec(head)?.[1];
   return leading === undefined ? ['model', 'effort', 'title'] : tag(leading);
+};
+
+export const claudeSources = (input: MetadataSession) => {
+  const where = claudeTranscript(input);
+  const transcript =
+    where !== null && basename(where.path) !== `${input.rootKey}.jsonl`
+      ? {
+          kind: 'unreadable' as const,
+          reason: 'session-identity-mismatch',
+          source: 'transcript' as const,
+          fields: ['model', 'effort', 'title'] as const,
+        }
+      : fileSource(where?.root ?? null, where?.path, claude(input.rootKey), ['model', 'effort', 'title']);
+  return [transcript];
+};
+
+const wordsEntry = metadataDecode(
+  Schema.Struct({
+    type: Schema.String,
+    subtype: Schema.optional(Schema.String),
+    sessionId: Schema.optional(Schema.String),
+    isSidechain: Schema.optional(Schema.Boolean),
+    timestamp: Schema.optional(Schema.String),
+    message: Schema.optional(Schema.Unknown),
+    compactMetadata: Schema.optional(Schema.Unknown),
+  }),
+);
+const wordsMessage = metadataDecode(Schema.Struct({ content: Schema.Unknown }));
+const compactedTokens = Schema.decodeUnknownResult(Schema.Struct({ postTokens: Schema.Number }));
+const wordsCall = metadataDecode(
+  Schema.Struct({ id: Schema.optional(Schema.String), model: Schema.optional(Schema.String), usage: Schema.optional(Schema.Unknown) }),
+);
+
+const SYNTHETIC = '<synthetic>';
+
+const claudeWords = (rootKey: string): MetadataFold<TranscriptWords> => ({
+  empty: unsaid,
+  line: (standing, text) => {
+    const row = wordsEntry(jsonValue(text));
+    if (row.isSidechain !== true && row.sessionId !== undefined && row.sessionId !== rootKey)
+      throw new MetadataInvalid({ reason: 'identity' });
+    if (row.type === 'assistant') {
+      if (row.message === undefined) return standing;
+      const call = wordsCall(row.message);
+      const usage = claudeUsage(call.usage);
+      const id = call.id ?? text;
+      if (usage !== undefined && call.model !== SYNTHETIC)
+        standing.requests.set(id, {
+          id,
+          usage,
+          model: call.model ?? null,
+          at: standing.requests.get(id)?.at ?? stampMillis(row.timestamp),
+          main: row.isSidechain !== true,
+        });
+      return standing;
+    }
+    if (row.type === 'system' && row.subtype === 'compact_boundary' && row.isSidechain !== true) {
+      const read = compactedTokens(row.compactMetadata);
+      return {
+        ...standing,
+        compacted: { tokens: read._tag === 'Success' ? read.success.postTokens : null, at: stampMillis(row.timestamp) },
+      };
+    }
+    if (row.isSidechain === true || row.type !== 'user') return standing;
+    const said = transcriptSaid(wordsMessage(row.message).content, row.timestamp);
+    return said === null ? standing : { ...standing, said: [...standing.said, said] };
+  },
+});
+
+export const claudeWordSources = (input: MetadataSession): readonly WordsSource[] => {
+  const where = claudeTranscript(input);
+  return [{ root: where?.root ?? null, path: where?.path, fold: claudeWords(input.rootKey) }];
 };

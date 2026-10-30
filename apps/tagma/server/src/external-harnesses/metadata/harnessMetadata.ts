@@ -15,10 +15,9 @@ import type { Terminals } from '../../executions/contract/service/terminals.js';
 import type { Environments } from '../../workspace/contract/service/environments.js';
 import { MetadataBackend, type MetadataRead } from './runtime.js';
 import { MetadataIndex } from './sessionIndex.js';
-import { metadataAdapter, metadataFieldSources } from './table.js';
 import { readHarnessTranscript } from './words.js';
 import { METADATA_CADENCE, METADATA_CONCURRENCY, METADATA_LIMITS, METADATA_PAGES } from './policy.js';
-import type { MetadataInput } from './sources.js';
+import type { MetadataInput } from './input.js';
 
 type Job = { readonly key: string; boundary: string; readonly wake: Queue.Queue<void>; fiber: Fiber.Fiber<void> | null };
 
@@ -105,7 +104,7 @@ export const makeSessionMetadata = Effect.fnUntraced(function* (
                   jobs.delete(threadId);
                   yield* Effect.withFiberSucceed((fiber) => prior.fiber?.interruptUnsafe(fiber.id));
                 }
-                if (key === null || metadataAdapter(harnessAdapter(facet.name)) === null) return prior?.fiber ?? null;
+                if (key === null || harnessAdapter(facet.name).metadata === undefined) return prior?.fiber ?? null;
                 const job: Job = { key, boundary, wake: yield* Queue.sliding<void>(1), fiber: null };
                 jobs.set(threadId, job);
                 job.fiber = yield* Effect.forkIn(
@@ -168,6 +167,7 @@ export const makeSessionMetadata = Effect.fnUntraced(function* (
           title: { _tag: 'NotRead' },
         };
         let failure: string | null = null;
+        const reader = harnessAdapter(facet.name).metadata;
         const input: MetadataInput | null = inputOf(facet);
         if (input === null) failure = 'launch-storage-unavailable';
         else if (input.storage.unreadable !== undefined) failure = input.storage.unreadable;
@@ -179,7 +179,7 @@ export const makeSessionMetadata = Effect.fnUntraced(function* (
                 const scope = yield* Scope.make();
                 const opened = yield* restore(
                   slotsHeld
-                    .hold('slot', runtime.open(input, metadataAdapter(harnessAdapter(facet.name))!(input)).pipe(Scope.provide(scope)))
+                    .hold('slot', runtime.open(input, reader!.sources(input)).pipe(Scope.provide(scope)))
                     .pipe(Effect.withSpan('HarnessMetadata.queue'), Effect.timeout(METADATA_CADENCE)),
                 ).pipe(
                   Effect.onInterrupt(() => Scope.close(scope, Exit.void)),
@@ -227,7 +227,7 @@ export const makeSessionMetadata = Effect.fnUntraced(function* (
           }
         }
         if (failure !== null) {
-          const declared = metadataFieldSources[harnessAdapter(facet.name).metadata!];
+          const declared = reader!.provenance;
           const at = new Date(yield* Clock.currentTimeMillis).toISOString();
           for (const name of ['model', 'effort', 'title'] as const) {
             const field = declared[name];

@@ -1,6 +1,7 @@
 import { HARNESS_LABELS } from '../../../threads/contract/wire/harness/names.js';
 import { LEGACY_TOOLS } from '../tools.js';
 import type { TerminalHarnessAdapter } from '../../contract/service/adapter.js';
+import { grokReader } from './reader.js';
 
 import {
   adoptedPermissionArgv,
@@ -63,7 +64,7 @@ export const grok: TerminalHarnessAdapter = {
   prefix: 'gb',
   variable: SESSION_VARIABLES.grok,
   binary: 'grok',
-  metadata: 'grok-summary',
+  metadata: grokReader,
   launch: {
     permission,
     model,

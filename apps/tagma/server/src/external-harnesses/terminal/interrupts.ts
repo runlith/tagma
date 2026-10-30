@@ -7,7 +7,6 @@ import type { HarnessExecutionRef } from '../../threads/contract/wire/harness/ob
 import type { HarnessName } from '../../threads/contract/wire/harness/names.js';
 import type { HarnessExitArm, HarnessWidgetKey } from '@runlith/tagma/adapter/harness';
 import { harnessAdapter } from '../contract/service/table.js';
-import { endsSource } from '../ends/table.js';
 import { promptDigest, typedBack } from '../adapter/input.js';
 import type { Keyboard, SessionDriver } from '../sessions/drive.js';
 import type { HarnessSessionStore } from '../store/sessions.js';
@@ -283,7 +282,7 @@ export class TerminalInterrupts {
     const execution = facet.execution;
     if (execution === null || composer === undefined || returns === undefined) {
       if (ended) return 'confirmed';
-      if (execution === null || prompt === undefined) return endsSource(adapter) === null ? 'confirmed' : 'unconfirmed';
+      if (execution === null || prompt === undefined) return adapter.metadata?.ends === undefined ? 'confirmed' : 'unconfirmed';
       return prompt(yield* this.driver.lines(execution)) ? 'confirmed' : 'unconfirmed';
     }
     const typed = mark.turn.typed ?? [];

@@ -1,5 +1,11 @@
 import { Effect, Schema } from 'effect';
-import { HARNESS_DETAIL_MAX, HARNESS_ID_MAX, harnessClaimSchema, harnessModelReportSchema } from '@runlith/tagma/adapter/harness';
+import {
+  HARNESS_DETAIL_MAX,
+  HARNESS_ID_MAX,
+  harnessClaimSchema,
+  harnessModelReportSchema,
+  harnessProvenanceSchema,
+} from '@runlith/tagma/adapter/harness';
 import { harnessNameSchema, harnessTransportSchema } from './names.js';
 import { harnessSaidSchema } from './said.js';
 
@@ -16,9 +22,6 @@ export const harnessBindingSchema = Schema.Struct({
   workKey: Schema.optional(Schema.String),
 });
 export type HarnessBinding = typeof harnessBindingSchema.Type;
-
-export const harnessProvenanceSchema = Schema.Literals(['hook', 'vendor-record', 'transcript', 'session-store', 'terminal', 'protocol']);
-export type HarnessProvenance = typeof harnessProvenanceSchema.Type;
 
 export const harnessScopeSchema = Schema.Struct({
   rootKey: Schema.NullOr(Schema.String),

@@ -4,9 +4,8 @@ import * as MemoryFileSystem from '@runlith/testbed/memory';
 import { Context, Effect, FileSystem, Layer } from 'effect';
 import { join } from 'node:path';
 import { harnessAdapter } from '../contract/service/table.js';
-import type { MetadataInput } from '../metadata/sources.js';
+import type { MetadataInput } from '../metadata/input.js';
 import { readTail } from './read.js';
-import { endsSource } from './table.js';
 
 class Home extends Context.Service<Home, string>()('test/external-harnesses/ends/Home') {}
 
@@ -35,8 +34,8 @@ const readFrom = Effect.fnUntraced(function* (
   window: { since: number; offset: number | null },
   chunk: number,
 ) {
-  const source = endsSource(harnessAdapter(name));
-  if (source === null) return yield* Effect.die(`${name} has no transcript reader`);
+  const source = harnessAdapter(name).metadata?.ends;
+  if (source === undefined) return yield* Effect.die(`${name} has no transcript reader`);
   const files = yield* FileSystem.FileSystem;
   yield* files.writeFileString(path, text);
   return yield* readTail(files, source, input(path), { ...window, turn: null }, chunk);
@@ -95,8 +94,8 @@ layer(home)('transcript tails', (it) => {
           { timestamp: at(2), source: 'system', message: '[Response interrupted by user]' },
         ],
       });
-      const source = endsSource(harnessAdapter('devin'));
-      if (source === null) return yield* Effect.die('devin has no transcript reader');
+      const source = harnessAdapter('devin').metadata?.ends;
+      if (source === undefined) return yield* Effect.die('devin has no transcript reader');
       const located = { ...source, locate: () => ({ root, path }) };
       const files = yield* FileSystem.FileSystem;
       yield* files.writeFileString(path, document);

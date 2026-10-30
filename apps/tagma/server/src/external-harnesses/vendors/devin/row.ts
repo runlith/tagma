@@ -1,6 +1,7 @@
 import { HARNESS_LABELS } from '../../../threads/contract/wire/harness/names.js';
 import { LEGACY_TOOLS } from '../tools.js';
 import type { TerminalHarnessAdapter } from '../../contract/service/adapter.js';
+import { devinReader } from './reader.js';
 
 import { DEVIN_PROVIDER } from '@runlith/adapter-devin/models/devin';
 import {
@@ -115,7 +116,7 @@ export const devin: TerminalHarnessAdapter = {
   label: HARNESS_LABELS.devin,
   prefix: 'dv',
   binary: 'devin',
-  metadata: 'devin-atif',
+  metadata: devinReader,
   launch: {
     permission,
     model,

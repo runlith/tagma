@@ -1,17 +1,7 @@
-import { Data, Effect, FileSystem, Option } from 'effect';
+import { Effect, FileSystem, Option } from 'effect';
 import { isAbsolute, relative, sep } from 'node:path';
-import type { HarnessFields } from '../../threads/contract/wire/harness/observation.js';
-
-export class MetadataInvalid extends Data.TaggedError('MetadataInvalid')<{
-  readonly reason: 'malformed' | 'identity' | 'limit' | 'path' | 'changed' | 'terminal-unavailable';
-}> {}
-
-export type MetadataFold<A> = {
-  readonly json?: true;
-  readonly empty: () => A;
-  readonly line: (value: A, text: string) => A;
-  readonly missed?: (head: string) => readonly (keyof HarnessFields)[];
-};
+import { MetadataInvalid, type MetadataField, type MetadataFold, type MetadataLocation } from '@runlith/tagma/adapter/metadata';
+import { DOCUMENT_LIMITS, METADATA_LIMITS } from './policy.js';
 
 export type MetadataLimits = {
   readonly bytes: number;
@@ -19,7 +9,7 @@ export type MetadataLimits = {
   readonly recordBytes: number;
 };
 
-export type MetadataMissed = { readonly [K in keyof HarnessFields]?: number };
+export type MetadataMissed = { readonly [K in MetadataField]?: number };
 
 export type MetadataPage<A> =
   | {
@@ -46,7 +36,7 @@ type Cursor<A> = {
   readonly partialBytes: number;
   readonly skipping: boolean;
   readonly skipped: number;
-  readonly missed: { [K in keyof HarnessFields]?: number } | null;
+  readonly missed: { [K in MetadataField]?: number } | null;
   readonly value: A;
 };
 
@@ -229,6 +219,18 @@ export class MetadataFile<A> {
     ),
   );
 }
+
+export const fileLocationReader = (source: Extract<MetadataLocation, { readonly kind: 'file' }>) => {
+  const cursor = new MetadataFile(source.fold, source.fold.json === true ? DOCUMENT_LIMITS : METADATA_LIMITS);
+  return (files: FileSystem.FileSystem) =>
+    cursor
+      .read(files, source.root, source.path)
+      .pipe(
+        Effect.map((page) =>
+          page._tag === 'Absent' && source.computed === true ? ({ _tag: 'Unreadable', reason: 'session-path-unresolved' } as const) : page,
+        ),
+      );
+};
 
 const inside = (root: string, path: string): boolean => {
   const part = relative(root, path);

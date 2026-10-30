@@ -1,4 +1,5 @@
 import type { TerminalHarnessAdapter } from '../../contract/service/adapter.js';
+import { claudeReader } from './reader.js';
 import { ASKS_IN_REVIEW, ASKS_NEVER } from '../../../platform/contract/wire/conditions.js';
 import { HARNESS_LABELS } from '../../../threads/contract/wire/harness/names.js';
 
@@ -117,7 +118,7 @@ export const claudeCode: TerminalHarnessAdapter = {
   binary: 'claude',
   installedIn: (home) => [`${home}/.claude/local`],
   install: 'curl -fsSL https://claude.ai/install.sh | bash',
-  metadata: 'claude-jsonl',
+  metadata: claudeReader,
   launch: {
     permission,
     permissionModes,

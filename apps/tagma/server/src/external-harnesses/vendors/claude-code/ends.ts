@@ -1,4 +1,4 @@
-import { answered, fieldsOf, isoStamp, textBlocks, type TailEnd, type TailSource } from '../../ends/tail.js';
+import { answered, fieldsOf, isoStamp, textBlocks, type TailEnd, type TailSource } from '@runlith/tagma/adapter/metadata';
 import { claudeTranscript } from './metadata.js';
 
 const INTERRUPTED = '[Request interrupted by user';

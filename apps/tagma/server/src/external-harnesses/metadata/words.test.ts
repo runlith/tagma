@@ -4,11 +4,12 @@ import * as MemoryFileSystem from '@runlith/testbed/memory';
 import { Context, Effect, FileSystem, Layer } from 'effect';
 import { join } from 'node:path';
 import { harnessAdapter } from '../contract/service/table.js';
+import type { WordsSource } from '@runlith/tagma/adapter/metadata';
 import { MetadataFile } from './file.js';
 import { DOCUMENT_LIMITS, TRANSCRIPT_LIMITS } from './policy.js';
-import { wordsAdapter, type WordsSource } from './words.js';
+import { heardWords } from './words.js';
 import { inputWords } from '../adapter/input.js';
-import type { MetadataInput } from './sources.js';
+import type { MetadataInput } from './input.js';
 
 class Home extends Context.Service<Home, string>()('test/external-harnesses/metadata/WordsHome') {}
 
@@ -31,8 +32,8 @@ const input = (rootKey: string, over: Partial<MetadataInput>): MetadataInput => 
 const readWords = Effect.fnUntraced(function* (name: 'devin' | 'claude-code' | 'codex', rootKey: string, fileName: string, text: string) {
   const dir = yield* Home;
   const file = join(dir, fileName);
-  const declared = wordsAdapter(harnessAdapter(name));
-  if (declared === null) return yield* Effect.die(new Error(`${name} declares no reader-word source`));
+  const declared = harnessAdapter(name).metadata?.words?.sources;
+  if (declared === undefined) return yield* Effect.die(new Error(`${name} declares no reader-word source`));
   const over: Partial<MetadataInput> = name === 'devin' ? { rootKey, exportPath: file } : { rootKey, transcriptPath: file };
   const source = declared(input(rootKey, over)).find(
     (entry): entry is WordsSource & { root: string; path: string } => entry.root !== null && entry.path === file,
@@ -43,7 +44,7 @@ const readWords = Effect.fnUntraced(function* (name: 'devin' | 'claude-code' | '
   const cursor = new MetadataFile(source.fold, source.fold.json === true ? DOCUMENT_LIMITS : TRANSCRIPT_LIMITS);
   let page = yield* cursor.read(files, source.root, source.path);
   while (page._tag === 'Read' && !page.complete) page = yield* cursor.read(files, source.root, source.path);
-  return page;
+  return page._tag === 'Read' ? { ...page, value: heardWords(page.value) } : page;
 });
 
 const atif = (sessionId: string, steps: readonly { source: string; message: unknown }[]) =>
@@ -197,7 +198,7 @@ layer(home)('reader words', (it) => {
   it.effect('vendors carrying no readable reader-word source declare none', () =>
     Effect.sync(() => {
       for (const name of ['grok', 'cursor', 'gemini'] as const) {
-        expect(wordsAdapter(harnessAdapter(name))).toBeNull();
+        expect(harnessAdapter(name).metadata?.words).toBeUndefined();
       }
     }),
   );

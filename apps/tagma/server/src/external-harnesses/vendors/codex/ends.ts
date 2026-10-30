@@ -1,5 +1,5 @@
 import { dirname } from 'node:path';
-import { answered, fieldsOf, isoStamp, textOf, type TailEnd, type TailSource } from '../../ends/tail.js';
+import { answered, fieldsOf, isoStamp, textOf, type TailEnd, type TailSource } from '@runlith/tagma/adapter/metadata';
 import { codexFailureOf } from './failure.js';
 
 const completed = (event: Readonly<Record<string, unknown>>): TailEnd => {

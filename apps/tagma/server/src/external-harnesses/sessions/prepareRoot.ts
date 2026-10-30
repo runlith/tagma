@@ -296,7 +296,7 @@ export const verifyPreparedRoot = (
       );
       if (acquired.world.files === undefined) return { _tag: 'Unreadable', reason: 'files-unsupported' } as const;
       const files = Context.get(yield* Layer.build(acquired.world.files), FileSystem.FileSystem);
-      return yield* readRootArtifact(files, adapter, root.id, root.artifact);
+      return yield* readRootArtifact(files, adapter.metadata, root.id, root.artifact);
     }),
   ).pipe(Effect.catch((failure) => Effect.succeed({ _tag: 'Unreadable', reason: failure._tag } as const)));
 };

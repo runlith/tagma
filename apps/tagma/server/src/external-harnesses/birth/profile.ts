@@ -4,7 +4,6 @@ import { GateRefusal } from '../../platform/contract/wire/refusal.js';
 import type { Settings } from '../../settings/contract/service/values.js';
 import type { HarnessName } from '../../threads/contract/wire/harness/names.js';
 import { harnessAdapter } from '../contract/service/table.js';
-import { endsSource } from '../ends/table.js';
 import { harnessProfile, type HarnessProfile } from '../settings.js';
 import type { HarnessTransportOffer } from '../contract/service/table.js';
 
@@ -37,7 +36,7 @@ export const profileOf = (
       [`set threads.harnessProfile.${name}.home to a folder Tagma installs nothing into`],
     );
   }
-  if (asked.plain === true && endsSource(adapter)?.located !== 'launch') {
+  if (asked.plain === true && adapter.metadata?.ends?.located !== 'launch') {
     return new GateRefusal(
       'profile-unsupported',
       `${adapter.label} names its transcript only once it reports its session, so a plain thread of it could not see its turns end.`,

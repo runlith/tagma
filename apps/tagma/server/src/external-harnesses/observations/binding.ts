@@ -8,9 +8,9 @@ import {
   type HarnessField,
   type HarnessLastKnown,
   type HarnessObservation,
-  type HarnessProvenance,
   type HarnessStale,
 } from '../../threads/contract/wire/harness/observation.js';
+import type { HarnessProvenance } from '@runlith/tagma/adapter/harness';
 import { lastKnownOf, staleField } from './staleness.js';
 
 export type Landed = {

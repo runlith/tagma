@@ -3,12 +3,16 @@ import type { Approval, PermissionKind } from '@runlith/agent/permissions';
 import type { TransportFailure } from '@runlith/agent/transcript/entries';
 import type { TransportCapabilities, TransportWeb } from '@runlith/agent/thread/record';
 import type { ModelSwitches } from '@runlith/llm/models/description';
+import type { MetadataReader } from './metadata';
 
 export const HARNESS_ID_MAX = 200;
 export const HARNESS_DETAIL_MAX = 160;
 
 export const harnessClaimSchema = Schema.Literals(['configured', 'serving', 'last-recorded']);
 export type HarnessClaim = typeof harnessClaimSchema.Type;
+
+export const harnessProvenanceSchema = Schema.Literals(['hook', 'vendor-record', 'transcript', 'session-store', 'terminal', 'protocol']);
+export type HarnessProvenance = typeof harnessProvenanceSchema.Type;
 
 export const harnessModelReportSchema = Schema.Union([
   Schema.Struct({
@@ -298,9 +302,6 @@ export type HarnessTools = {
   readonly byName: Readonly<Record<string, HarnessTool>>;
 };
 
-export const TRANSCRIPT_FORMATS = ['claude-jsonl', 'codex-rollout', 'grok-summary', 'devin-atif', 'cursor-terminal'] as const;
-export type TranscriptFormat = (typeof TRANSCRIPT_FORMATS)[number];
-
 export type TerminalSurface = {
   readonly prefix: string;
   readonly variable?: string;
@@ -308,7 +309,7 @@ export type TerminalSurface = {
   readonly binary: string;
   readonly installedIn?: (home: string) => readonly string[];
   readonly install?: string;
-  readonly metadata?: TranscriptFormat;
+  readonly metadata?: MetadataReader;
   readonly tools: HarnessTools;
   readonly env?: Record<string, string>;
   readonly hooks: HookSurface | null;

@@ -1,21 +1,6 @@
-import { Schema } from 'effect';
-import type { HarnessField, HarnessProvenance } from '../../threads/contract/wire/harness/observation.js';
-import { HARNESS_ID_MAX, type HarnessClaim } from '@runlith/tagma/adapter/harness';
-import { MetadataInvalid } from './file.js';
-
-export type MetadataValue = { readonly value: string; readonly claim: HarnessClaim; readonly turnId: string | null };
-export type MetadataValues = {
-  readonly model: MetadataValue | null;
-  readonly effort: MetadataValue | null;
-  readonly title: MetadataValue | null;
-};
-
-export const emptyValues = (): MetadataValues => ({ model: null, effort: null, title: null });
-
-export const metadataText = Schema.String.check(Schema.isMaxLength(HARNESS_ID_MAX));
-
-export const recordedValue = (value: string | null | undefined, turnId: string | null = null): MetadataValue | null =>
-  value === undefined || value === null || value.trim() === '' ? null : { value, claim: 'last-recorded', turnId };
+import type { HarnessProvenance } from '@runlith/tagma/adapter/harness';
+import type { MetadataValue } from '@runlith/tagma/adapter/metadata';
+import type { HarnessField } from '../../threads/contract/wire/harness/observation.js';
 
 export const metadataField = (
   value: MetadataValue | null,
@@ -36,20 +21,3 @@ export const metadataField = (
           lastKnown: null,
         }
       : { _tag: 'Absent', source, scope: { rootKey, turnId: null }, observedAt };
-
-export const jsonValue = (text: string): unknown => {
-  try {
-    return JSON.parse(text);
-  } catch {
-    throw new MetadataInvalid({ reason: 'malformed' });
-  }
-};
-
-export const metadataDecode = <S extends Schema.ConstraintDecoder<unknown>>(schema: S) => {
-  const decode = Schema.decodeUnknownResult(schema);
-  return (input: unknown): S['Type'] => {
-    const result = decode(input);
-    if (result._tag === 'Failure') throw new MetadataInvalid({ reason: 'malformed' });
-    return result.success;
-  };
-};

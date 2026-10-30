@@ -1,5 +1,5 @@
 import { dirname } from 'node:path';
-import { answered, fieldsOf, textBlocks, type Fields, type TailEnd, type TailSource } from '../../ends/tail.js';
+import { answered, fieldsOf, textBlocks, type Fields, type TailEnd, type TailSource } from '@runlith/tagma/adapter/metadata';
 
 const updateOf = (record: unknown): Fields | null => fieldsOf(fieldsOf(fieldsOf(record)?.params)?.update);
 

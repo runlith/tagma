@@ -23,7 +23,7 @@ import { SessionDriver as SessionDriverImpl } from '../sessions/drive.js';
 import { screenTexts as screenTextsImpl } from '../sessions/speech.js';
 import { METADATA_CADENCE as METADATA_CADENCEImpl, METADATA_LIMITS as METADATA_LIMITSImpl } from '../metadata/policy.js';
 import { MetadataIndex as MetadataIndexImpl } from '../metadata/sessionIndex.js';
-import { MetadataInvalid as MetadataInvalidImpl } from '../metadata/file.js';
+import { MetadataInvalid as MetadataInvalidImpl } from '@runlith/tagma/adapter/metadata';
 import { MetadataBackend as MetadataBackendImpl } from '../metadata/runtime.js';
 import { readWitness as readWitnessImpl } from '../sessions/readWitness.js';
 import { LOST_LINE as LOST_LINEImpl } from '../sessions/lifecycle.js';

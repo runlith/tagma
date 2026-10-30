@@ -8,7 +8,8 @@ import type { Environments } from '../../workspace/contract/service/environments
 import type { ExternalSession } from '../../threads/contract/wire/harness/externalSession.js';
 import { harnessAdapter } from '../contract/service/table.js';
 import { inputOf } from '../metadata/harnessMetadata.js';
-import { readHarnessTranscript, transcriptUsage, type HarnessReading, type HarnessRequest } from '../metadata/words.js';
+import type { TranscriptRequest } from '@runlith/tagma/adapter/metadata';
+import { readHarnessTranscript, transcriptUsage, type HarnessReading } from '../metadata/words.js';
 
 export type TurnSpend = {
   readonly run: string;
@@ -66,7 +67,7 @@ export class TerminalClosing {
     const models = yield* this.models;
     const provider = harnessAdapter(facet.name).launch?.model?.provider ?? null;
     const now = yield* Clock.currentTimeMillis;
-    const readingOf = (request: HarnessRequest): ThreadContextReading => {
+    const readingOf = (request: TranscriptRequest): ThreadContextReading => {
       const option = catalogued(models, provider, request.model);
       return {
         usage: request.usage,

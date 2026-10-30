@@ -1,31 +1,24 @@
 import { Schema } from 'effect';
-import { basename, join } from 'node:path';
-import { fileSource, storageHome, type MetadataAdapter } from '../../metadata/sources.js';
-
-export const codexSources: MetadataAdapter = (input) => {
-  const home = storageHome(input, 'CODEX_HOME', '.codex');
-  const archive = home === null ? null : join(home, 'archived_sessions');
-  const root =
-    home === null ? null : archive !== null && input.transcriptPath?.startsWith(`${archive}/`) ? archive : join(home, 'sessions');
-  return [
-    home === null
-      ? { kind: 'unreadable', source: 'session-store', fields: ['title'], reason: 'source-location-unavailable' }
-      : {
-          kind: 'index',
-          source: 'session-store',
-          fields: ['title'],
-          root: home,
-          path: join(home, 'session_index.jsonl'),
-          parse: codexIndex,
-        },
-    input.transcriptPath !== undefined && !codexRolloutName(basename(input.transcriptPath), input.rootKey)
-      ? { kind: 'unreadable', reason: 'session-identity-mismatch', source: 'transcript', fields: ['model', 'effort'] }
-      : fileSource(root, input.transcriptPath, codex(input.rootKey), ['model', 'effort']),
-  ];
-};
-import { MetadataInvalid, type MetadataFold } from '../../metadata/file.js';
-import { emptyValues, jsonValue, metadataDecode, metadataText, recordedValue, type MetadataValues } from '../../metadata/fields.js';
-import type { HarnessFields } from '../../../threads/contract/wire/harness/observation.js';
+import { basename, dirname, join } from 'node:path';
+import {
+  MetadataInvalid,
+  emptyValues,
+  fileSource,
+  jsonValue,
+  metadataDecode,
+  metadataText,
+  recordedValue,
+  storageHome,
+  transcriptSaid,
+  unsaid,
+  type MetadataField,
+  type MetadataFold,
+  type MetadataLocation,
+  type MetadataSession,
+  type MetadataValues,
+  type TranscriptWords,
+  type WordsSource,
+} from '@runlith/tagma/adapter/metadata';
 
 const envelope = metadataDecode(Schema.Struct({ type: Schema.String, payload: Schema.Unknown }));
 const session = metadataDecode(Schema.Struct({ id: Schema.String, session_id: Schema.optional(Schema.String) }));
@@ -77,7 +70,7 @@ export const codex = (rootKey: string): MetadataFold<CodexReading> => ({
 const envelopeType = /^\{"timestamp":"[^"]{0,60}","ordinal":[0-9]+,"type":"([A-Za-z_]+)"/;
 const codexIgnored = new Set(['response_item', 'event_msg', 'compacted', 'world_state']);
 
-const codexMissed = (head: string): readonly (keyof HarnessFields)[] => {
+const codexMissed = (head: string): readonly MetadataField[] => {
   const tag = envelopeType.exec(head)?.[1];
   return tag === 'turn_context' || tag === 'session_meta'
     ? ['model', 'effort']
@@ -85,3 +78,61 @@ const codexMissed = (head: string): readonly (keyof HarnessFields)[] => {
       ? []
       : ['model', 'effort'];
 };
+
+export const codexSources = (input: MetadataSession): readonly MetadataLocation[] => {
+  const home = storageHome(input, 'CODEX_HOME', '.codex');
+  const archive = home === null ? null : join(home, 'archived_sessions');
+  const root =
+    home === null ? null : archive !== null && input.transcriptPath?.startsWith(`${archive}/`) ? archive : join(home, 'sessions');
+  return [
+    home === null
+      ? { kind: 'unreadable', source: 'session-store', fields: ['title'], reason: 'source-location-unavailable' }
+      : {
+          kind: 'index',
+          source: 'session-store',
+          fields: ['title'],
+          root: home,
+          path: join(home, 'session_index.jsonl'),
+          parse: codexIndex,
+        },
+    input.transcriptPath !== undefined && !codexRolloutName(basename(input.transcriptPath), input.rootKey)
+      ? { kind: 'unreadable', reason: 'session-identity-mismatch', source: 'transcript', fields: ['model', 'effort'] }
+      : fileSource(root, input.transcriptPath, codex(input.rootKey), ['model', 'effort']),
+  ];
+};
+
+const wordsEnvelope = metadataDecode(
+  Schema.Struct({ type: Schema.String, timestamp: Schema.optional(Schema.String), payload: Schema.Unknown }),
+);
+const wordsItem = metadataDecode(
+  Schema.Struct({
+    type: Schema.String,
+    role: Schema.optional(Schema.String),
+    content: Schema.Unknown,
+  }),
+);
+const wordsMeta = metadataDecode(Schema.Struct({ id: Schema.String }));
+
+const codexWords = (rootKey: string): MetadataFold<TranscriptWords> => ({
+  empty: unsaid,
+  line: (standing, text) => {
+    const row = wordsEnvelope(jsonValue(text));
+    if (row.type === 'session_meta') {
+      if (wordsMeta(row.payload).id !== rootKey) throw new MetadataInvalid({ reason: 'identity' });
+      return standing;
+    }
+    if (row.type !== 'response_item') return standing;
+    const item = wordsItem(row.payload);
+    if (item.type !== 'message' || item.role !== 'user') return standing;
+    const said = transcriptSaid(item.content, row.timestamp);
+    return said === null ? standing : { ...standing, said: [...standing.said, said] };
+  },
+});
+
+export const codexWordSources = (input: MetadataSession): readonly WordsSource[] => [
+  {
+    root: input.transcriptPath === undefined ? null : dirname(input.transcriptPath),
+    path: input.transcriptPath,
+    fold: codexWords(input.rootKey),
+  },
+];

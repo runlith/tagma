@@ -1,6 +1,5 @@
 import { dirname, join } from 'node:path';
-import { storageHome } from '../../metadata/sources.js';
-import { answered, fieldsOf, isoStamp, textBlocks, type TailEnd, type TailSource } from '../../ends/tail.js';
+import { answered, fieldsOf, isoStamp, storageHome, textBlocks, type TailEnd, type TailSource } from '@runlith/tagma/adapter/metadata';
 
 const INTERRUPTED = '[Response interrupted by user]';
 
