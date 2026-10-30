@@ -1,6 +1,6 @@
 import { MachineUnits } from '../../platform/contract/service/units.js';
 import { fixtureMigrations } from '../../composition/testing/migrations.js';
-import { ProjectLifecycle, ProjectPolicy } from '../../graph/contract/service/serving.js';
+import { GroupLifecycle, ProjectLifecycle, ProjectPolicy } from '../../graph/contract/service/serving.js';
 import { testSessionIdentityLayer } from '../../platform/testing/identity.js';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -16,7 +16,7 @@ import { setting } from '../../settings/store/table.js';
 import { projectsWithPolicy } from '../../graph/store/policy.js';
 import { projectsLayer } from '../../projects/registration.js';
 import { fixtureGraph } from '../../composition/testing/fixtureGraph.js';
-import { Projects } from '../../projects/contract/service/registry.js';
+import { ProjectGroups, Projects } from '../../projects/contract/service/registry.js';
 import { dumpMachineRegistry, readRegistry } from './file.js';
 import { machineStoreLayer } from './restore.js';
 import { sharedPool } from '@runlith/sqlite-process/testing/pool';
@@ -51,22 +51,34 @@ const early = (rootPath: string, createdAt: string) => ({
   createdAt,
 });
 
-it.live('a project registered, the database deleted, the registry reseeds it with its id', () =>
+it.live('a project registered, the database deleted, the registry reseeds it with its id and its group', () =>
   Effect.gen(function* () {
     const base = yield* based('registry-');
     const dbPath = join(base, 'tagma.sqlite');
-    const born = yield* Effect.flatMap(ProjectLifecycle, (births) =>
-      births.create({ name: 'registry-demo', rootPath: base, storage: 'stealth' }),
-    ).pipe(Effect.provide(opened(dbPath, base)));
+    const second = join(base, 'second');
+    mkdirSync(second);
+    const { born, group } = yield* Effect.gen(function* () {
+      const births = yield* ProjectLifecycle;
+      const born = yield* births.create({ name: 'registry-demo', rootPath: base, storage: 'stealth' });
+      const other = yield* births.create({ name: 'registry-other', rootPath: second, storage: 'stealth' });
+      const made = yield* (yield* GroupLifecycle).make({ name: 'registry-group', members: [other, born] });
+      return { born, group: made.group };
+    }).pipe(Effect.provide(opened(dbPath, base)));
     expect(existsSync(join(base, 'registry.json'))).toBe(true);
 
     for (const suffix of ['', '-wal', '-shm']) rmSync(`${dbPath}${suffix}`, { force: true });
     const revived = yield* Effect.gen(function* () {
       const rows = yield* Effect.flatMap(Projects, (projects) => projects.list());
       const policies = yield* Effect.flatMap(ProjectPolicy, (policy) => policy.read([born.id]));
-      return { id: rows.find((row) => row.name === 'registry-demo')?.id, storage: policies.get(born.id)?.storage };
+      const regrouped = yield* Effect.flatMap(ProjectGroups, (groups) => groups.of(born.id));
+      return {
+        id: rows.find((row) => row.name === 'registry-demo')?.id,
+        storage: policies.get(born.id)?.storage,
+        group: regrouped?.graph.id,
+        members: regrouped?.members.map((member) => member.id),
+      };
     }).pipe(Effect.provide(opened(dbPath, base)));
-    expect(revived).toEqual({ id: born.id, storage: 'stealth' });
+    expect(revived).toEqual({ id: born.id, storage: 'stealth', group: group.graph.id, members: group.members.map((member) => member.id) });
   }),
 );
 

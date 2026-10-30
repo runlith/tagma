@@ -132,7 +132,10 @@ export const grouping = <Row, Removed, const Policy extends ReadonlyArray<Comman
     { json, name: Argument.String('name'), projects: Argument.String('name|id').pipe(Argument.atLeast(2)) },
     ({ json, name, projects }) =>
       Effect.gen(function* () {
-        yield* shown(yield* groups.make({ name, projects }, here(yield* CurrentInvocation)), json);
+        const made = yield* groups.make({ name, projects }, here(yield* CurrentInvocation));
+        if (json) return yield* print(made, true);
+        yield* Console.log(renderGroups([made.group]));
+        if (made.returned) yield* Console.log('a group dissolved under this name came back with its graph');
       }),
   ).pipe(
     Command.withDescription(

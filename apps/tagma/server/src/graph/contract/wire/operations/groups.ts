@@ -68,7 +68,7 @@ export const GROUP_OPERATIONS = {
         .annotate({ description: 'At least two distinct projects, in the group’s order.' }),
     }),
     answer: arms({ ok: { group: groupSchema, returned: Schema.Boolean } }),
-    refusals: [...PROJECT_REFUSALS, ...NAME_REFUSALS, 'grouped', 'ungroupable', 'group-size'],
+    refusals: [...PROJECT_REFUSALS, ...NAME_REFUSALS, 'grouped', 'ungroupable', 'group-size', 'unwritable-root'],
   }),
 
   rename_group: operation('rename_group', {

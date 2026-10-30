@@ -24,13 +24,23 @@ layer(doorFixture().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeTest
         const alpha = yield* world.stealthProject();
         const beta = yield* world.stealthProject();
         const gamma = yield* world.stealthProject();
-        yield* projectLeaving(world, alpha, beta, gamma);
+        yield* projectLeaving(world, alpha, beta);
         const name = world.uniqueName();
+        const roots = (projectId: number) =>
+          Effect.map(
+            world.op('list_root_blocks', {}, `project=${projectId}`),
+            (answer) => (answer.body as { blocks: { name: string }[] }).blocks,
+          );
 
-        const made = yield* world.op('make_group', { name, projects: [String(beta), String(alpha)] });
+        const listed = () =>
+          Effect.map(world.op('list_groups', {}), (answer) => (answer.body as { groups: Group[] }).groups.map((one) => one.graph.id));
+
+        const made = yield* world.op('make_group', { name, projects: [String(beta), String(alpha)] }, `project=${beta}`);
         expect(made).toMatchObject({ status: 200, body: { group: { graph: { name, kind: 'group' } }, returned: false } });
         const group = groupOf(made);
         expect(ids(group)).toEqual([beta, alpha]);
+        expect((yield* roots(group.graph.id)).length).toBe(1);
+        expect((yield* roots(beta)).length).toBe(1);
         expect(codeOf(yield* world.op('make_group', { name: world.uniqueName(), projects: [String(alpha), String(gamma)] }))).toBe(
           'grouped',
         );
@@ -42,7 +52,11 @@ layer(doorFixture().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeTest
         );
         expect(codeOf(yield* world.op('remove_project', { ref: name }))).toBe('group-graph');
 
-        expect(ids(groupOf(yield* world.op('join_group', { group: name, project: String(gamma) })))).toEqual([beta, alpha, gamma]);
+        expect(ids(groupOf(yield* world.op('join_group', { group: name, project: String(gamma) }, `project=${alpha}`)))).toEqual([
+          beta,
+          alpha,
+          gamma,
+        ]);
         expect(groupOf(yield* world.op('read_group', { ref: String(gamma) })).graph.id).toBe(group.graph.id);
 
         const lens = `project=${group.graph.id}`;
@@ -68,7 +82,7 @@ layer(doorFixture().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeTest
         expect(ids(groupOf(yield* world.op('leave_group', { project: String(gamma) })))).toEqual([beta, alpha]);
         expect((yield* world.op('read_group', { ref: String(gamma) })).body).toMatchObject({ group: null });
         expect((yield* world.op('leave_group', { project: String(alpha) })).body).toMatchObject({ group: null });
-        expect((yield* world.op('list_groups', {})).body).toMatchObject({ groups: [] });
+        expect(yield* listed()).not.toContain(group.graph.id);
         expect((yield* world.op('read_group', { ref: String(beta) })).body).toMatchObject({ group: null });
         expect(codeOf(yield* world.op('leave_group', { project: String(beta) }))).toBe('ungrouped');
 
@@ -78,16 +92,27 @@ layer(doorFixture().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeTest
         expect((yield* world.op('read_block', { blockIds: [kept] }, lens)).body).toMatchObject({
           reads: [{ title: 'Contract alpha serves and beta calls' }],
         });
+
+        expect((yield* world.op('remove_project', { ref: String(gamma) })).status).toBe(200);
+        expect((yield* world.op('read_group', { ref: String(beta) })).body).toMatchObject({ group: null });
+        expect(yield* listed()).not.toContain(group.graph.id);
       }),
   );
 
   it.effect(
-    'a member starts with the group root, its own section marked where it stands, every other member and the law of global, group and each member under its name; a project in no group starts as before',
+    'a member starts with the group root, its own map, every other member’s regions, and the law of the group and of each member labelled with its project; a project in no group starts as before',
     () =>
       Effect.gen(function* () {
         const world = yield* DoorFixture;
-        const alpha = yield* world.stealthProject();
-        const beta = yield* world.stealthProject();
+        const roots = yield* Effect.forEach(['alpha', 'beta'], (label) =>
+          Effect.gen(function* () {
+            const root = yield* world.directory(label);
+            yield* Effect.promise(() => Bun.write(`${root}/core/.keep`, ''));
+            return root;
+          }),
+        );
+        const alpha = yield* world.stealthProject(roots[0]);
+        const beta = yield* world.stealthProject(roots[1]);
         const gamma = yield* world.stealthProject();
         yield* projectLeaving(world, alpha, beta, gamma);
         const start = (projectId: number) => Effect.map(world.op('session_start', {}, `project=${projectId}`), textOf);
@@ -96,34 +121,39 @@ layer(doorFixture().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeTest
             world.op('list_root_blocks', {}, `project=${projectId}`),
             (answer) => (answer.body as { blocks: { name: string }[] }).blocks[0]!.name,
           );
-        const rule = (projectId: number, title: string) =>
-          Effect.flatMap(rootOf(projectId), (parentId) =>
-            world.op('create_block', { tags: ['rule'], title, parentId }, `project=${projectId}`),
+        const rule = Effect.fnUntraced(function* (projectId: number, title: string) {
+          return nameOf(
+            yield* world.op('create_block', { tags: ['rule'], title, parentId: yield* rootOf(projectId) }, `project=${projectId}`),
           );
+        });
+        const region = Effect.fnUntraced(function* (projectId: number, root: string, title: string) {
+          yield* suiteGit(root, 'commit', '-q', '--allow-empty', '-m', 'born');
+          const parent = yield* rootOf(projectId);
+          expect(
+            (yield* world.op('set_module', { modules: [{ id: 'core', title, parent, root: 'core' }] }, `project=${projectId}`)).status,
+          ).toBe(200);
+        });
         const before = yield* start(gamma);
-        yield* rule(alpha, 'Alpha members keep this');
-        yield* rule(beta, 'Beta members keep this');
-        const name = world.uniqueName();
-        const group = groupOf(yield* world.op('make_group', { name, projects: [String(beta), String(alpha)] }));
-        yield* rule(group.graph.id, 'Every member keeps this');
-        const [alphaRow, betaRow] = [group.members[1]!, group.members[0]!];
+        yield* region(alpha, roots[0]!, 'Alpha core region');
+        yield* region(beta, roots[1]!, 'Beta core region');
+        const alphaRule = yield* rule(alpha, 'Alpha members keep this');
+        const betaRule = yield* rule(beta, 'Beta members keep this');
+        const group = groupOf(yield* world.op('make_group', { name: world.uniqueName(), projects: [String(beta), String(alpha)] }));
+        const groupRule = yield* rule(group.graph.id, 'Every member keeps this');
+        const groupRoot = yield* rootOf(group.graph.id);
+        const labelled = new Map([
+          [groupRule, group.graph.name],
+          [betaRule, group.members[0]!.name],
+          [alphaRule, group.members[1]!.name],
+        ]);
 
         const text = yield* start(alpha);
-        const at = (fragment: string) => {
-          const found = text.indexOf(fragment);
-          expect(found).toBeGreaterThan(-1);
-          return found;
-        };
-        const order = [
-          at(`## ${name} (id ${group.graph.id}) — group root`),
-          at(`## ${alphaRow.name} (id ${alpha},`),
-          at('— you stand here'),
-          at(`## ${betaRow.name} (id ${beta},`),
-          at(`Every member keeps this [prompt · ${name}]`),
-          at(`Beta members keep this [prompt · ${betaRow.name}]`),
-          at(`Alpha members keep this [prompt · ${alphaRow.name}]`),
-        ];
+        const lines = text.split('\n');
+        const at = (fragment: string) => lines.findIndex((line) => line.includes(fragment));
+        const order = [groupRoot, 'Alpha core region', 'Beta core region', groupRule, betaRule, alphaRule].map(at);
+        expect(order.every((index) => index >= 0)).toBe(true);
         expect(order).toEqual([...order].sort((a, b) => a - b));
+        for (const [ruleName, project] of labelled) expect(lines[at(ruleName)]).toContain(project);
         expect(yield* start(gamma)).toBe(before);
       }),
   );

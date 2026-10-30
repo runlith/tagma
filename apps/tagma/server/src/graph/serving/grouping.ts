@@ -1,5 +1,5 @@
-import { Effect, FileSystem } from 'effect';
-import { GraphStore, MachineStore, type StoreFailure } from '../../platform/contract/service/store.js';
+import { Effect } from 'effect';
+import { MachineStore, type StoreFailure } from '../../platform/contract/service/store.js';
 import { writes } from '../../platform/contract/service/writes.js';
 import type { GateRefusal, OpenRefusal } from '../../platform/contract/wire/refusal.js';
 import { ActState } from '../contract/service/transaction.js';
@@ -21,8 +21,6 @@ export const makeGroupLifecycle = Effect.fnUntraced(function* (input: {
   readonly takeBack: (row: ProjectRow) => Effect.Effect<void, StoreFailure | GateRefusal>;
 }) {
   const machine = yield* MachineStore;
-  const { path: storePath } = yield* GraphStore;
-  const files = yield* FileSystem.FileSystem;
   const act = yield* Act;
   const projects = yield* Projects;
   const groups = yield* ProjectGroups;
@@ -38,7 +36,7 @@ export const makeGroupLifecycle = Effect.fnUntraced(function* (input: {
           Effect.gen(function* () {
             const formed = yield* groups.form(unit, { name, members });
             const { graph } = formed.group;
-            for (const member of members) yield* moved(member, null, graph.id);
+            for (const member of formed.group.members) yield* moved(member, null, graph.id);
             if (formed.returned) {
               yield* act.record('project_return', null, { projectId: graph.id, repoKey: graph.repoKey, rootPath: graph.rootPath });
               return { formed, born: null };
@@ -47,7 +45,6 @@ export const makeGroupLifecycle = Effect.fnUntraced(function* (input: {
           }),
         ),
       );
-      if (storePath !== ':memory:') yield* Effect.orDie(files.makeDirectory(formed.group.graph.rootPath, { recursive: true }));
       if (born === null || birth === undefined) return formed;
       yield* birth(born).pipe(Effect.onError(() => Effect.orDie(input.takeBack(born))));
       return formed;

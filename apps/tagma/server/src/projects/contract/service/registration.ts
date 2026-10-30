@@ -18,7 +18,7 @@ export type GroupRegistry<Group, Left> = {
   readonly make: (
     input: { readonly name: string; readonly projects: readonly string[] },
     lens: ProjectLens,
-  ) => Effect.Effect<Group, unknown>;
+  ) => Effect.Effect<{ readonly group: Group; readonly returned: boolean }, unknown>;
   readonly rename: (group: string, name: string, lens: ProjectLens) => Effect.Effect<Group, unknown>;
   readonly join: (group: string, project: string, lens: ProjectLens) => Effect.Effect<Group, unknown>;
   readonly leave: (project: string, lens: ProjectLens) => Effect.Effect<Left, unknown>;

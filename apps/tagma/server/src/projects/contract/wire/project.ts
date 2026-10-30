@@ -48,8 +48,8 @@ export type ProjectGroup = {
 
 export type FormedGroup = { readonly group: ProjectGroup; readonly returned: boolean };
 
-export type FormRefusal = 'grouped' | 'ungroupable' | 'group-size';
+export type FormRefusal = 'grouped' | 'ungroupable' | 'group-size' | 'not-found' | 'unwritable-root';
 
-export type JoinRefusal = 'grouped' | 'ungroupable' | 'not-a-group';
+export type JoinRefusal = 'grouped' | 'ungroupable' | 'not-a-group' | 'not-found';
 
 export type NameRefusal = 'reserved-project' | 'project-name' | 'duplicate-name';

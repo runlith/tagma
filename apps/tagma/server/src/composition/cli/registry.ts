@@ -11,7 +11,8 @@ type Removed = { readonly project: Project; readonly pointing: Pointing; readonl
 type Left = { readonly project: Project; readonly group: Group | null };
 
 export const groupRegistry: GroupRegistry<Group, Left> = {
-  make: (input, lens) => Effect.map(perform(GROUPS.make_group, input, lens), (answer) => answer.group),
+  make: (input, lens) =>
+    Effect.map(perform(GROUPS.make_group, input, lens), (answer) => ({ group: answer.group, returned: answer.returned })),
   rename: (group, name, lens) => Effect.map(perform(GROUPS.rename_group, { group, name }, lens), (answer) => answer.group),
   join: (group, project, lens) => Effect.map(perform(GROUPS.join_group, { group, project }, lens), (answer) => answer.group),
   leave: (project, lens) =>
