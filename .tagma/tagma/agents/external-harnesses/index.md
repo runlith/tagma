@@ -93,6 +93,18 @@ fields:
         "for": [
           "13182a9f"
         ]
+      },
+      {
+        "at": "hooks/rows.ts",
+        "for": [
+          "13182a9f"
+        ]
+      },
+      {
+        "at": "adapters.ts",
+        "for": [
+          "13182a9f"
+        ]
       }
     ],
     "id": "external-harnesses",
