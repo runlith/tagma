@@ -7,16 +7,6 @@ edges:
   - kind: relates
     to: 01a18cbf-9775-75eb-a4a1-6542bcec10b7
 sources:
-  - kind: dir
-    ref: apps/tagma/server/src/translations
-  - kind: dir
-    ref: apps/tagma/server/src/threads/naming
-  - kind: dir
-    ref: apps/tagma/server/src/threads/recap
-  - kind: file
-    ref: apps/tagma/server/src/threads/decisions.ts
-  - kind: dir
-    ref: apps/tagma/server/src/native-harness/compaction
   - kind: file
     ref: apps/tagma/server/src/providers/contract/service/access.ts
   - kind: file
