@@ -5,7 +5,8 @@ ord: 2
 tags: ["task"]
 fields:
   {
-    "status": "open"
+    "holder": "tagma:01a18eda-93b4-7ebe-84d5-f17b366ffbb5",
+    "status": "in_work"
   }
 ---
 55 rules from the 2026-09-22 contract pass over `packages/layer`, `query`, `chat-ui`, `llm`, `mcp`, `markdown`, `primitives`, `seam`, `error-boundary`, `agent`, `adapter-devin` and app and server files: each becomes a readable obligation, an `#explanation` of a property the code keeps, or is deleted; sources follow moved code.
