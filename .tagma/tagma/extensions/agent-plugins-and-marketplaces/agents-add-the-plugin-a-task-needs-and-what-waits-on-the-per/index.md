@@ -24,9 +24,9 @@ A person who never opens the Plugins place still gets a service connected: asked
 ## Design
 
 - The doctrine of `mcp` and `plugins` tells the agent the path above instead of asking the person to install.
-- The install's tool display carries a reference to the plugin, which the app opens as the plugin's page.
-- A waiting server becomes an operator notification of the `mcp` sender, opened when it starts waiting and closed when it stops, so Attention and the phone take it with no new list.
-- The composer's `$` source names the plugin a skill came from; the find row is the app's, opening the place with the query.
+- The feed reads the install's answer and draws the installed plugin as a row carrying a `plugin` link, which the Plugins place declares as a link kind and opens as the plugin's page.
+- A waiting server in an open pool becomes an operator notification of the `mcp` sender, sent when it starts waiting and withdrawn when it stops, so Attention and the phone take it with no new list. A notification carries an optional link (`mcp-server`), which Attention opens: a contributed server opens its plugin's page, any other its server page. The rail icon counts the waiting servers of the open project from the live server rows.
+- The skill catalog names the plugin a skill came from; the find row is the app's, opening the catalog with the query through a `plugins-find` link.
 
 ## Acceptance
 
