@@ -19,11 +19,13 @@ The architecture review of the asks work (task f1fc96ce) found 20 defects. Eight
 Make five of those defects measurable, as inspections in `tagma.config.ts`, each enforced through `enforce_rule` on its rule:
 
 1. **Repeated declarations.** Structurally equal object or union types, and equal literal sets, declared in more than one file. These enforce [[144dfedc]].
-2. **Dead code.** An export no production file imports, and an exported function no production code calls. A test-only reach counts as dead. This needs a new rule.
+2. **Dead code.** An export no production file imports, and an exported function no production code calls. A test-only reach counts as dead. This enforces [[aabef712]].
 3. **Vendor ids outside vendor code.** A provider or CLI id string in server code. This is the string inspection of spec [[6f376186]], acceptance 1, with that spec's exemptions. Its standing violations are debt owned by spec [[57787448]].
-4. **Coupling ratchet.** For each server, app and package module: the number of modules it imports from, and the share of its imports that leave the module. Neither value may grow above its recorded value. Today's values are the debt, and a new module starts at the project median. This needs a new rule.
+4. **Coupling ratchet.** For each server, app and package module: the number of modules it imports from, and the share of its imports that leave the module. Neither value may grow above its recorded value. Today's values are the debt, and a new module starts at the project median. This enforces [[acafebe1]].
 
 5. **Direct model calls** (acceptance 1 of [[bcec10b7]], rule [[93f04f23]]): `ModelAccess.request` and the requests it returns are called only in `providers` and the native chat turn (`native-harness/kernel.ts`, `native-harness/assembly.ts`); an aside's `ask` is called only in `threads/asks.ts`; a vendor harness row is read only in `external-harnesses` and `threads/harness`. The inspection judges calls and row reads across server code, including later features. Provision, publication, watch, clear and metadata imports stay allowed. `HarnessAsides` has its own contract file.
+
+Before any enforcement, fixtures prove findings, clean code and named edge cases. Measure existing commit judging without and with each check and with all five together on small and large source commits; the combined increase must be at most 10% on both. Commit work follows changed sources and affected frontiers from a revision-keyed index; whole-repository work runs only on explicit remeasure. A missing starting index requests remeasure.
 
 Order:
 - Each inspection is first tried with `check_rules` and its findings read for false positives.
