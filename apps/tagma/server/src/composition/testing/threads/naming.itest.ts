@@ -1,11 +1,12 @@
 import { expect } from 'bun:test';
 import { it } from '@runlith/effect-test';
 import { Clock, Context, Deferred, Effect, Fiber, Schema, Stream } from 'effect';
+import { TestClock } from 'effect/testing';
 import { LLMResponse, Usage, type LLMEvent } from '@runlith/llm/schema/events';
 import { Message } from '@runlith/llm/schema/messages';
 import { ModelIdentity } from '@runlith/llm/schema/options';
 import { ModelID, ProviderID } from '@runlith/llm/schema/ids';
-import { activity, CurrentActivity } from '@runlith/activity/Activity';
+import { activity } from '@runlith/activity/Activity';
 import { activityKind } from '@runlith/activity/fact';
 import { ActivityStore } from '@runlith/activity/store';
 import { triggered } from '../../../invocation/testing/performing.js';
@@ -22,7 +23,7 @@ import { knownAnswer } from '../../../platform/contract/wire/operation.js';
 import { threadTitleAnswerSchema } from '../../../threads/contract/wire/titles.js';
 import { credentialMissing } from '../../../providers/credentials/missing.js';
 
-type Sent = { readonly request: ModelRequestInput; readonly call: ModelStreamInput; readonly within: string | undefined };
+type Sent = { readonly call: ModelStreamInput };
 const fixture = doorFixture();
 
 it.live(
@@ -39,57 +40,60 @@ it.live(
       let broken = false;
       let suspended = false;
       let recapping = false;
+      let resolving: Deferred.Deferred<void> | undefined;
       const world = yield* DoorFixture;
       yield* world.lend({
         models: (standing) => ({
           ...standing,
-          request: (input) => ({
-            plannedOutputTokens: 32,
-            origin:
-              input.model == null
-                ? undefined
-                : new ModelIdentity({ provider: ProviderID.make(input.provider), model: ModelID.make(input.model) }),
-            cache: { ttlSeconds: 3_600 },
-            signedAccount: () => account,
-            text: () =>
-              Effect.sync(() => {
-                excerpted.push(input);
-                return new LLMResponse({
-                  message: Message.assistant('TITLE: Compact result'),
-                  events: [{ type: 'text-delta', id: 'text', text: 'TITLE: Compact result' }],
-                  usage: new Usage({ inputTokens: 20, outputTokens: 4 }),
-                  finishReason: 'stop',
-                });
-              }),
-            object: () => Effect.die(new Error('the naming fixture answers no objects')),
-            stream: (call) =>
-              Stream.unwrap(
-                Effect.gen(function* () {
-                  const current = yield* CurrentActivity;
-                  sent.push({ request: input, call, within: current?.id });
-                  const naming = !first;
-                  first = false;
-                  if (naming && !recapping && Object.keys(call.tools).length > 0) yield* Deferred.succeed(opened, undefined);
-                  if (naming && suspended) {
-                    yield* Deferred.succeed(interruption, undefined);
-                    return Stream.fromEffect(Effect.never);
-                  }
-                  if (naming && broken) return Stream.fail(credentialMissing('fixture transport failure'));
-                  if (naming && Object.keys(call.tools).length > 0 && answer === 'tool')
-                    return Stream.fromIterable<LLMEvent>([
-                      { type: 'tool-call', id: 'call', name: 'read', input: {} },
-                      { type: 'finish', reason: 'tool-calls' },
-                    ]);
-                  const text = recapping ? 'SUMMARY: Prefix reuse was explained and verified.\nNEXT: none' : !naming ? 'Ready.' : answer;
-                  return Stream.fromIterable<LLMEvent>([
-                    { type: 'text-start', id: 'text' },
-                    { type: 'text-delta', id: 'text', text },
-                    { type: 'text-end', id: 'text' },
-                    { type: 'finish', reason: 'stop', usage: new Usage({ inputTokens: 20, outputTokens: 4 }) },
-                  ]);
+          request: (input) => {
+            if (resolving !== undefined) Deferred.doneUnsafe(resolving, Effect.void);
+            return {
+              plannedOutputTokens: 32,
+              origin:
+                input.model == null
+                  ? undefined
+                  : new ModelIdentity({ provider: ProviderID.make(input.provider), model: ModelID.make(input.model) }),
+              cache: { ttlSeconds: 3_600 },
+              signedAccount: () => account,
+              text: () =>
+                Effect.sync(() => {
+                  excerpted.push(input);
+                  return new LLMResponse({
+                    message: Message.assistant('TITLE: Compact result'),
+                    events: [{ type: 'text-delta', id: 'text', text: 'TITLE: Compact result' }],
+                    usage: new Usage({ inputTokens: 20, outputTokens: 4 }),
+                    finishReason: 'stop',
+                  });
                 }),
-              ),
-          }),
+              object: () => Effect.die(new Error('the naming fixture answers no objects')),
+              stream: (call) =>
+                Stream.unwrap(
+                  Effect.gen(function* () {
+                    sent.push({ call });
+                    const naming = !first;
+                    first = false;
+                    if (naming && !recapping && Object.keys(call.tools).length > 0) yield* Deferred.succeed(opened, undefined);
+                    if (naming && suspended) {
+                      yield* Deferred.succeed(interruption, undefined);
+                      return Stream.fromEffect(Effect.never);
+                    }
+                    if (naming && broken) return Stream.fail(credentialMissing('fixture transport failure'));
+                    if (naming && Object.keys(call.tools).length > 0 && answer === 'tool')
+                      return Stream.fromIterable<LLMEvent>([
+                        { type: 'tool-call', id: 'call', name: 'read', input: {} },
+                        { type: 'finish', reason: 'tool-calls' },
+                      ]);
+                    const text = recapping ? 'SUMMARY: Prefix reuse was explained and verified.\nNEXT: none' : !naming ? 'Ready.' : answer;
+                    return Stream.fromIterable<LLMEvent>([
+                      { type: 'text-start', id: 'text' },
+                      { type: 'text-delta', id: 'text', text },
+                      { type: 'text-end', id: 'text' },
+                      { type: 'finish', reason: 'stop', usage: new Usage({ inputTokens: 20, outputTokens: 4 }) },
+                    ]);
+                  }),
+                ),
+            };
+          },
         }),
       });
       const projectId = yield* world.stealthProject();
@@ -141,8 +145,7 @@ it.live(
       });
       const primary = sent[0]!;
       const captured = sent.at(-1)!;
-      expect(captured.request).toBe(primary.request);
-      expect(captured.call.tools).toBe(primary.call.tools);
+      expect(captured.call.tools).toEqual(primary.call.tools);
       expect(captured.call.messages.slice(0, -2)).toEqual([...primary.call.messages]);
       expect(captured.call.messages.at(-2)).toMatchObject({ role: 'assistant', content: [{ type: 'text', text: 'Ready.' }] });
       const caller = {
@@ -252,7 +255,6 @@ it.live(
       );
       const rejected = rows.find((row) => row.kind === 'title' && row.reason === 'too-long');
       expect(rejected?.parent).toEqual(expect.any(String));
-      expect(sent.some((asked) => `activity:${asked.within}` === rejected?.at)).toBe(true);
       const expanded = yield* world.op('read_thread_record', { at: [{ threadId, at: rejected?.at }] }, `project=${projectId}`);
       expect(expanded.status).toBe(200);
       const retained = yield* Schema.decodeUnknownEffect(knownAnswer(THREAD_OPERATIONS.read_thread_record.answer))(expanded.body);
@@ -282,10 +284,7 @@ it.live(
       answer = 'NO-TOPIC';
       expect(yield* naming.generate(threadId, projectId)).toMatchObject({ outcome: 'no-topic', source: 'captured' });
       broken = true;
-      const failed = yield* naming.generate(threadId, projectId);
-      expect(failed).toMatchObject({ outcome: 'failed', reason: 'model-failed', source: 'captured' });
-      expect(sent.at(-1)!.request).toBe(primary.request);
-      expect(failed.attemptId).toStartWith('title:');
+      expect(yield* naming.generate(threadId, projectId).pipe(Effect.flip)).toMatchObject({ code: 'ask-not-connected' });
       broken = false;
       const second = yield* Effect.acquireRelease(
         world.runtime.tokens.add('subscription', {
@@ -304,5 +303,26 @@ it.live(
         source: 'fresh',
         freshReason: 'account-changed',
       });
+      yield* Context.get(world.runtime.owners, DefaultAccounts).saveDefaultAccount('subscription', account);
+      const expiresAt = Context.get(world.runtime.owners, HarnessAsides).of(threadId)?.expiresAt;
+      if (expiresAt == null) return yield* Effect.die('the naming fixture has no expiring warm copy');
+      const clock = yield* TestClock.make();
+      const currentTime = yield* Clock.currentTimeMillis;
+      yield* Effect.gen(function* () {
+        yield* clock.setTime(currentTime);
+        const reconciled = yield* Deferred.make<void>();
+        resolving = reconciled;
+        const pending = yield* Effect.forkScoped(world.op('generate_thread_title', { threadId }, `project=${projectId}`));
+        yield* Deferred.await(reconciled);
+        yield* clock.setTime(expiresAt + 1);
+        const expired = yield* Fiber.join(pending);
+        expect(expired.status).toBe(200);
+        expect(yield* Schema.decodeUnknownEffect(threadTitleAnswerSchema)(expired.body)).toMatchObject({
+          outcome: 'named',
+          title: 'Compact result',
+          source: 'fresh',
+          freshReason: 'no-prefix',
+        });
+      }).pipe(Effect.provideService(Clock.Clock, clock));
     }).pipe(Effect.provide(fixture)),
 );

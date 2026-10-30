@@ -193,6 +193,7 @@ export const makeThreadNaming = Effect.fnUntraced(function* ({
     if (asked._tag === 'Failure') {
       if (Cause.hasInterruptsOnly(asked.cause)) return yield* Effect.interrupt;
       const failure = Option.getOrUndefined(Cause.findErrorOption(asked.cause)) as { readonly _tag?: string } | undefined;
+      if (failure instanceof GateRefusal && failure.code === 'not-warm') return yield* failure;
       if (failure instanceof AskRefused) {
         yield* recorded(threadId, { ...unnamed('failed', 'model-failed'), ...metadata }, undefined, { failure: failure.message });
         return yield* askRefusal(failure);
@@ -239,7 +240,7 @@ export const makeThreadNaming = Effect.fnUntraced(function* ({
     request: NamingRequest,
     write: (title: string) => Effect.Effect<TitleNaming, HarnessFailure>,
     placement: ActivityPlacement = {},
-  ): Effect.Effect<NamingAnswer, HarnessFailure> => {
+  ): Effect.Effect<NamingAnswer | null, HarnessFailure> => {
     const work = Effect.gen(function* () {
       if (request.source === 'captured') {
         yield* note({
@@ -264,9 +265,16 @@ export const makeThreadNaming = Effect.fnUntraced(function* ({
       }
       return yield* judged(threadId, request, threadAsks.over(threadId, INSTRUCTION, prompt), write);
     });
-    return request.source === 'captured'
-      ? attempt(threadId, request, work, { run: prompt.runId, parent: { run: prompt.runId }, ...placement })
-      : work;
+    return (
+      request.source === 'captured'
+        ? attempt(threadId, request, work, { run: prompt.runId, parent: { run: prompt.runId }, ...placement })
+        : work
+    ).pipe(
+      Effect.catchIf(
+        (failure) => failure instanceof GateRefusal && failure.code === 'not-warm',
+        () => Effect.succeed(null),
+      ),
+    );
   };
 
   const fresh = (
@@ -332,17 +340,23 @@ export const makeThreadNaming = Effect.fnUntraced(function* ({
           records.claimTitleInput(unit, threadId, readerInput),
         );
         if (claimed === undefined) return;
-        const outcome = yield* asking(
+        const placement: ActivityPlacement = {
+          actor: { kind: 'server', name: 'title-hook' },
+          trigger: { kind: 'title-hook', refs: [aside.runId, readerInput] },
+        };
+        let outcome = yield* asking(
           threadId,
           aside,
           { source: 'captured' },
           (title) =>
             units.write(writes('ThreadNaming.name', [threadRecord]), (unit) => records.nameTitle(unit, threadId, title, claimed.revision)),
-          {
-            actor: { kind: 'server', name: 'title-hook' },
-            trigger: { kind: 'title-hook', refs: [aside.runId, readerInput] },
-          },
+          placement,
         );
+        if (outcome === null) {
+          const thread = yield* threads.find(threadId, OPERATOR_PRINCIPAL);
+          if (thread === undefined) return;
+          outcome = yield* fresh(thread, thread.projectId, claimed.revision, 'no-prefix', yield* material(thread), placement);
+        }
         if (outcome.effect?.outcome === 'written') yield* published(threadId);
       },
       (work) =>
@@ -432,11 +446,13 @@ export const makeThreadNaming = Effect.fnUntraced(function* ({
             units.write(writes('ThreadNaming.name', [threadRecord]), (unit) => records.nameTitle(unit, threadId, title, identity.revision)),
           placement,
         );
-        const rejected =
-          captured.reason !== undefined &&
-          ['tool-call', 'empty-answer', 'extra-lines', 'missing-frame', 'empty-title', 'too-long'].includes(captured.reason);
-        if (captured.outcome === 'failed' && rejected) freshReason = 'captured-rejected';
-        else result = captured;
+        if (captured !== null) {
+          const rejected =
+            captured.reason !== undefined &&
+            ['tool-call', 'empty-answer', 'extra-lines', 'missing-frame', 'empty-title', 'too-long'].includes(captured.reason);
+          if (captured.outcome === 'failed' && rejected) freshReason = 'captured-rejected';
+          else result = captured;
+        }
       }
       if (result === null) result = yield* fresh(thread, projectId, identity.revision, freshReason, yield* material(thread), placement);
       if (result.effect?.outcome === 'written') yield* published(threadId);
