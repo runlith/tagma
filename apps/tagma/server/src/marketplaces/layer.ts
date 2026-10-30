@@ -13,12 +13,12 @@ import { type MarketplaceAdded, marketplacesAdded, marketplacesPresets } from '.
 import { entryRowOf, entryRows, escapes, installedOf } from './entries.js';
 import {
   clearStaging,
-  type Detail,
   detailed,
   dropFetched,
   dropRevision,
   type Fetched,
   fetchRevision,
+  type ListAbsent,
   type ListUnreachable,
   type ListUnreadable,
   removed,
@@ -43,7 +43,7 @@ const byTrust = (a: MarketplaceAdded, b: MarketplaceAdded): number => TRUST_LABE
 const byKey = (a: EntryRow, b: EntryRow): number =>
   a.marketplace !== b.marketplace ? (a.marketplace < b.marketplace ? -1 : 1) : a.name < b.name ? -1 : a.name > b.name ? 1 : 0;
 
-const refusedOf = (failure: ListUnreachable | ListUnreadable, source: MarketplaceSource) => {
+const refusedOf = (failure: ListUnreachable | ListUnreadable | ListAbsent, source: MarketplaceSource) => {
   const from = source.kind === 'git' ? source.url : source.path;
   return failure._tag === 'ListUnreachable'
     ? new GateRefusal('marketplace-unreachable', `${from} could not be fetched: ${failure.reason}`, [
@@ -141,7 +141,6 @@ export const makeMarketplaces = Effect.gen(function* () {
   });
 
   const described = Effect.fnUntraced(function* (root: string, list: MarketplaceList) {
-    const details: Record<string, Detail> = {};
     const bare = list.entries.flatMap((entry) =>
       entry.source.kind === 'path' &&
       !escapes(root, entry.source.path) &&
@@ -149,15 +148,15 @@ export const makeMarketplaces = Effect.gen(function* () {
         ? [{ name: entry.name, path: entry.source.path, manifest: entry.manifest ?? undefined }]
         : [],
     );
-    yield* Effect.forEach(
+    const read = yield* Effect.forEach(
       bare,
       ({ name, path, manifest }) =>
-        Effect.map(plugins.describe({ root: resolve(root, path), declared: { name, manifest } }), (detail) => {
-          if (detail !== null) details[name] = detail;
-        }),
-      { concurrency: DESCRIBING, discard: true },
+        Effect.map(plugins.describe({ root: resolve(root, path), declared: { name, manifest } }), (detail) =>
+          detail === null ? [] : [[name, detail] as const],
+        ),
+      { concurrency: DESCRIBING },
     );
-    return details;
+    return Object.fromEntries(read.flat());
   });
 
   const fetched = Effect.fnUntraced(function* (source: MarketplaceSource) {
@@ -166,7 +165,7 @@ export const makeMarketplaces = Effect.gen(function* () {
     return { ...got, details, list: detailed(got.list, details) } satisfies Fetched;
   });
 
-  const failed = Effect.fnUntraced(function* (registration: MarketplaceAdded, failure: ListUnreachable | ListUnreadable) {
+  const failed = Effect.fnUntraced(function* (registration: MarketplaceAdded, failure: ListUnreachable | ListUnreadable | ListAbsent) {
     stored.set(registration.id, {
       revision: stored.get(registration.id)?.revision ?? null,
       failure: { reason: failure.reason, at: yield* Clock.currentTimeMillis },
@@ -321,13 +320,15 @@ export const makeMarketplaces = Effect.gen(function* () {
     }),
     refresh,
     look: Effect.fn('Marketplaces.look')(function* (source) {
-      const got = yield* provided(fetchRevision({ home, source, formats, now: yield* Clock.currentTimeMillis })).pipe(
-        Effect.catchTag('ListUnreadable', () => Effect.succeed(null)),
+      const now = yield* Clock.currentTimeMillis;
+      return yield* Effect.acquireUseRelease(
+        provided(fetchRevision({ home, source, formats, now })),
+        (got) => Effect.succeed<MarketplaceList | null>(got.list),
+        (got) => Effect.orDie(provided(dropFetched(got))),
+      ).pipe(
+        Effect.catchTag('ListAbsent', () => Effect.succeed(null)),
         Effect.mapError((failure) => refusedOf(failure, source)),
       );
-      if (got === null) return null;
-      yield* provided(dropFetched(got)).pipe(Effect.mapError(unstored(source.kind === 'git' ? source.url : source.path)));
-      return got.list;
     }),
     entry: (marketplace, name, use) =>
       reading(Effect.flatMap(pick(marketplace, name), use)).pipe(Effect.withSpan('Marketplaces.entry', { attributes: { marketplace } })),

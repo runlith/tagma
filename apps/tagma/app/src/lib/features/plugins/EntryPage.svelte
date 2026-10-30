@@ -16,6 +16,7 @@
   import type { Told } from '$lib/wire/told.js';
   import { type Listing, titleOf } from '$lib/features/plugins/catalog.js';
   import Gives from '$lib/features/plugins/Gives.svelte';
+  import { broughtBy, pluginState } from '$lib/features/plugins/here.js';
   import { idOf } from '$lib/features/plugins/place.js';
   import { PluginsRepo } from '$lib/features/plugins/Repo.js';
   import ServerSteps from '$lib/features/plugins/ServerSteps.svelte';
@@ -53,8 +54,11 @@
 
   const installed = $derived(plugins.find((row) => row.origin?.marketplace === entry.marketplace && row.origin.entry === entry.name));
   const pluginId = $derived(added ?? installed?.id ?? null);
-  const own = $derived(pluginId === null ? [] : servers.filter((row) => row.scope === 'contributed' && row.contributor === pluginId));
-  const ready = $derived(added !== null && own.every((row) => row.status === 'connected'));
+  const row = $derived(pluginId === null ? undefined : plugins.find((one) => one.id === pluginId));
+  const own = $derived(row === undefined ? [] : broughtBy(servers, row.id));
+  const standing = $derived(row === undefined ? null : pluginState(row, own, null));
+  const ready = $derived(added !== null && standing === 'ok');
+  const asks = $derived(row !== undefined && row.options.some((option) => option.required && !option.set));
 
   async function prepare(at: string): Promise<void> {
     preview = undefined;
@@ -155,7 +159,7 @@
     {/if}
     {#if failed !== undefined}<Callout tone="error" title={failed.text} note={failed.note} />{/if}
 
-    {#if pluginId !== null && (added !== null || own.some((row) => row.status !== 'connected'))}
+    {#if pluginId !== null && (added !== null || (standing !== null && standing !== 'ok'))}
       <section class="grid rounded-lg border bg-raised px-4 py-2" aria-label="Adding">
         {#if added !== null}
           <div class="grid grid-cols-[auto_1fr] items-start gap-3 py-2">
@@ -164,6 +168,13 @@
           </div>
         {/if}
         <ServerSteps projectId={project.id} servers={own} />
+        {#if asks}
+          <div class="grid grid-cols-[auto_1fr_auto] items-center gap-3 py-2">
+            <span class="grid h-5 place-items-center"><span class="size-2 bg-status-open"></span></span>
+            <span class="text-ui font-medium">It needs values only you can give</span>
+            <Button size="sm" href={hrefOf(idOf({ kind: 'plugin', id: pluginId }))}>Set them</Button>
+          </div>
+        {/if}
         {#if ready}
           <div class="grid grid-cols-[auto_1fr_auto] items-center gap-3 py-2">
             <span class="grid h-5 place-items-center"><span class="size-2 bg-status-done"></span></span>

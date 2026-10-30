@@ -2,6 +2,8 @@
   import { untrack } from 'svelte';
   import { App } from '@runlith/layer/svelte/App.svelte';
   import { Router } from '@runlith/layer/Router';
+  import Callout from '@runlith/chat-ui/Callout.svelte';
+  import { refusalOf } from '$lib/wire/refusal.js';
   import { Addresses } from '$lib/features/workspace/Addresses.js';
   import { Workspace } from '$lib/features/workspace/Selection.svelte.js';
   import { McpFeed } from '$lib/features/mcp/Feed.js';
@@ -58,6 +60,9 @@
   const served = $derived(projectId === undefined ? undefined : mcp.servers.key(projectId));
   const rows = $derived(listed?.data ?? []);
   const servers = $derived(served?.data ?? []);
+  const pluginsFailure = $derived(listed?.error == null ? null : refusalOf(listed.error).reason);
+  const serversFailure = $derived(served?.error == null ? null : refusalOf(served.error).reason);
+  const failure = $derived([pluginsFailure, serversFailure].filter((reason): reason is string => reason !== null).join(' ') || null);
 
   const listings = $derived(listingsOf(feed.marketplaces, feed.entries));
   const categories = $derived(categoriesOf(listings));
@@ -89,45 +94,54 @@
       listed={listings.length}
       {place}
       {hrefOf}
+      {failure}
       onadd={() => (adding = true)}
     />
     <main class="min-h-0 min-w-0 flex-1 overflow-y-auto" aria-label="Plugins">
-      {#if place.kind === 'entry'}
-        {@const listing = listings.find(
-          ({ entry, also }) =>
-            (entry.marketplace === place.marketplace && entry.name === place.name) ||
-            also.some((one) => one.marketplace === place.marketplace && one.name === place.name),
-        )}
-        {#if listing !== undefined}
-          {@const exact =
-            listing.entry.marketplace === place.marketplace
-              ? listing
-              : { ...listing, entry: listing.also.find((one) => one.marketplace === place.marketplace) ?? listing.entry }}
-          <EntryPage listing={exact} {project} plugins={rows} {servers} {hrefOf} onadded={refreshed} />
+      {#key opened}
+        {#if place.kind === 'entry'}
+          {@const listing = listings.find(
+            ({ entry, also }) =>
+              (entry.marketplace === place.marketplace && entry.name === place.name) ||
+              also.some((one) => one.marketplace === place.marketplace && one.name === place.name),
+          )}
+          {#if listing !== undefined}
+            {@const exact =
+              listing.entry.marketplace === place.marketplace
+                ? listing
+                : { ...listing, entry: listing.also.find((one) => one.marketplace === place.marketplace) ?? listing.entry }}
+            <EntryPage listing={exact} {project} plugins={rows} {servers} {hrefOf} onadded={refreshed} />
+          {:else}
+            <p class="px-8 py-6 text-ui text-muted-foreground">
+              {feed.known ? 'No source lists this plugin now.' : 'Reading the sources…'}
+            </p>
+          {/if}
+        {:else if place.kind === 'plugin'}
+          {@const item = here.find((one) => one.kind === 'plugin' && one.row.id === place.id)}
+          {#if item !== undefined && item.kind === 'plugin'}
+            <PluginPage {item} {project} {catalog} onchanged={refreshed} onremoved={() => go(null)} />
+          {:else if pluginsFailure !== null}
+            <div class="px-8 py-6"><Callout tone="error" title="The plugins could not be read" note={pluginsFailure} /></div>
+          {:else}
+            <p class="px-8 py-6 text-ui text-muted-foreground">
+              {listed?.isPending ? 'Reading the plugins…' : 'This plugin is not installed.'}
+            </p>
+          {/if}
+        {:else if place.kind === 'server'}
+          {@const row = servers.find((one) => one.scope === place.scope && one.name === place.name)}
+          {#if row !== undefined}
+            <ServerPage {row} {project} onremoved={() => go(null)} />
+          {:else if serversFailure !== null}
+            <div class="px-8 py-6"><Callout tone="error" title="The servers could not be read" note={serversFailure} /></div>
+          {:else}
+            <p class="px-8 py-6 text-ui text-muted-foreground">
+              {served?.isPending ? 'Reading the servers…' : 'No server of that name is declared.'}
+            </p>
+          {/if}
         {:else}
-          <p class="px-8 py-6 text-ui text-muted-foreground">{feed.known ? 'No source lists this plugin now.' : 'Reading the sources…'}</p>
+          <CatalogView {listings} marketplaces={feed.marketplaces} known={feed.known} {place} {hrefOf} onremoved={() => go(null)} />
         {/if}
-      {:else if place.kind === 'plugin'}
-        {@const item = here.find((one) => one.kind === 'plugin' && one.row.id === place.id)}
-        {#if item !== undefined && item.kind === 'plugin'}
-          <PluginPage {item} {project} {catalog} onchanged={refreshed} onremoved={() => go(null)} />
-        {:else}
-          <p class="px-8 py-6 text-ui text-muted-foreground">
-            {listed?.isPending ? 'Reading the plugins…' : 'This plugin is not installed.'}
-          </p>
-        {/if}
-      {:else if place.kind === 'server'}
-        {@const row = servers.find((one) => one.scope === place.scope && one.name === place.name)}
-        {#if row !== undefined}
-          <ServerPage {row} {project} onremoved={() => go(null)} />
-        {:else}
-          <p class="px-8 py-6 text-ui text-muted-foreground">
-            {served?.isPending ? 'Reading the servers…' : 'No server of that name is declared.'}
-          </p>
-        {/if}
-      {:else}
-        <CatalogView {listings} marketplaces={feed.marketplaces} known={feed.known} {place} {hrefOf} onremoved={() => go(null)} />
-      {/if}
+      {/key}
     </main>
   </div>
   <AddDialog

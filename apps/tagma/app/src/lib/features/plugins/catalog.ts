@@ -8,8 +8,6 @@ export type Listing = {
 
 const identity = (entry: EntryRow): string => (entry.plugin ?? entry.name).toLowerCase();
 
-const held = (entry: EntryRow): boolean => entry.state === 'installed';
-
 export const titleOf = (entry: EntryRow): string => entry.title ?? entry.name;
 
 export function listingsOf(marketplaces: readonly MarketplaceRow[], entries: readonly EntryRow[]): readonly Listing[] {
@@ -18,10 +16,7 @@ export function listingsOf(marketplaces: readonly MarketplaceRow[], entries: rea
   const last = marketplaces.length;
   const ordered = entries
     .filter((entry) => entry.state !== 'refused')
-    .toSorted(
-      (left, right) =>
-        Number(held(right)) - Number(held(left)) || (rank.get(left.marketplace) ?? last) - (rank.get(right.marketplace) ?? last),
-    );
+    .toSorted((left, right) => (rank.get(left.marketplace) ?? last) - (rank.get(right.marketplace) ?? last));
   const groups = new Map<string, EntryRow[]>();
   for (const entry of ordered) {
     const key = identity(entry);

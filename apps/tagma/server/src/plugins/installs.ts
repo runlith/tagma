@@ -459,10 +459,8 @@ export const makeInstalls = Effect.fnUntraced(function* (input: {
       const prepared = yield* Effect.flatMap(readOf(taken.root, taken.declared), (read) => preparedOf(taken, read, projectId)).pipe(
         Effect.tapError(() => dropped(taken)),
       );
-      if (taken.stage !== null) {
-        holding.set(taken.token, taken);
-        yield* Effect.forkIn(Effect.delay(expire(taken.token), KEPT), scope);
-      }
+      holding.set(taken.token, taken);
+      yield* Effect.forkIn(Effect.delay(expire(taken.token), KEPT), scope);
       return prepared;
     }),
     held: Effect.fn('Plugins.held')(function* ({ projectId, token }) {

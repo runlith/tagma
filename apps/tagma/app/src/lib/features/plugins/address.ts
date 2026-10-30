@@ -19,7 +19,6 @@ const nameOf = (text: string): string =>
 export function addressOf(typed: string): Address {
   const text = typed.trim();
   if (text === '') return { kind: 'empty' };
-  if (LOCAL.test(text) || text.startsWith('git@')) return { kind: 'source', source: text };
   if (SHORT.test(text)) return { kind: 'source', source: `https://github.com/${text}.git` };
   if (URL.canParse(text) && /^https?:$/u.test(new URL(text).protocol)) {
     const url = new URL(text);
@@ -27,6 +26,7 @@ export function addressOf(typed: string): Address {
     const label = url.host.split('.').filter((part) => !['www', 'mcp', 'api'].includes(part))[0] ?? url.host;
     return { kind: 'service', start: { transport: 'http', name: nameOf(label), url: text } };
   }
+  if (LOCAL.test(text) || !/\s/u.test(text)) return { kind: 'source', source: text };
   const [command = '', ...rest] = text.split(/\s+/u);
   const named = rest.find((word) => !word.startsWith('-')) ?? command;
   return {

@@ -26,11 +26,11 @@ export function serverState(row: McpServerRow): HereState {
     case 'failed':
       return 'fails';
     case 'connecting':
-    case 'pending':
       return 'connecting';
     case 'disabled':
     case 'declined':
       return 'off';
+    case 'pending':
     case 'connected':
       return 'ok';
   }
@@ -45,7 +45,10 @@ export function newerOf(row: PluginRow, entries: readonly EntryRow[]): string | 
   return entry?.version != null && row.version !== null && entry.version !== row.version ? entry.version : null;
 }
 
-function pluginState(row: PluginRow, servers: readonly McpServerRow[], newer: string | null): HereState {
+export const broughtBy = (servers: readonly McpServerRow[], id: string): readonly McpServerRow[] =>
+  servers.filter((row) => row.scope === 'contributed' && row.contributor === id);
+
+export function pluginState(row: PluginRow, servers: readonly McpServerRow[], newer: string | null): HereState {
   if (row.refused !== undefined) return 'fails';
   if (!row.enabled) return 'off';
   const states = servers.map(serverState);
@@ -56,10 +59,9 @@ function pluginState(row: PluginRow, servers: readonly McpServerRow[], newer: st
 }
 
 export function hereOf(plugins: readonly PluginRow[], servers: readonly McpServerRow[], entries: readonly EntryRow[]): readonly Here[] {
-  const brought = (id: string) => servers.filter((row) => row.scope === 'contributed' && row.contributor === id);
   const items: Here[] = [
     ...plugins.map((row): Here => {
-      const own = brought(row.id);
+      const own = broughtBy(servers, row.id);
       const newer = newerOf(row, entries);
       return {
         kind: 'plugin',

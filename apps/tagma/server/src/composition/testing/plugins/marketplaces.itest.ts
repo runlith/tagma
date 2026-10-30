@@ -289,7 +289,7 @@ layer(Layer.effect(Market, setup).pipe(Layer.provideMerge(BunFileSystem.layer)),
   it.effect('an address is read as the marketplace or the plugin it holds, and the plugin installs as read', () =>
     Effect.gen(function* () {
       const { world, call, kept } = yield* Market;
-      yield* kept([], ['loose']);
+      yield* kept([], ['loose', 'flat']);
       const market = yield* world.directory('inspected-market');
       yield* repository(market, claudeList('fixture-inspected', [{ name: 'one', source: './plugins/one' }]));
       const loose = yield* world.directory('loose-plugin');
@@ -309,6 +309,16 @@ layer(Layer.effect(Market, setup).pipe(Layer.provideMerge(BunFileSystem.layer)),
       expect(found?.kind === 'plugin' ? names(found.preview.components) : []).toEqual(['loose-act']);
       const prepared = found?.kind === 'plugin' ? found.preview.prepared : '';
       expect((yield* call('install_plugin', { prepared })).plugin?.id).toBe('loose');
+
+      const flat = yield* world.directory('flat-plugin');
+      yield* repository(flat, { '.claude-plugin/plugin.json': JSON.stringify({ name: 'flat' }), 'skills/act/SKILL.md': skill('Acts.') });
+      const folder = (yield* call('inspect_source', { source: flat })).found;
+      const held = folder?.kind === 'plugin' ? folder.preview.prepared : '';
+      expect((yield* call('install_plugin', { prepared: held })).plugin?.id).toBe('flat');
+
+      const broken = yield* world.directory('broken-market');
+      yield* repository(broken, { '.claude-plugin/marketplace.json': '{ not json' });
+      expect((yield* call('inspect_source', { source: `file://${broken}` })).code).toBe('marketplace-unreadable');
     }),
   );
 

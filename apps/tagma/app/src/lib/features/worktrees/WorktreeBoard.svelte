@@ -5,6 +5,7 @@
   import { WallClock } from '$lib/features/workspace/WallClock.svelte.js';
   import PageHeader from '$lib/shared/PageHeader.svelte';
   import ReadingFailed from '$lib/shared/ReadingFailed.svelte';
+  import { HeldOrder } from '$lib/shared/HeldOrder.svelte.js';
   import { Button } from '$lib/shared/ui/button/index.js';
   import { GROUPS, groupOf, type Group } from './board.js';
   import BoardRow from './BoardRow.svelte';
@@ -46,24 +47,9 @@
     });
   });
 
-  let held = $state.raw<Layout | null>(null);
-  let pointed = false;
-  let menus = 0;
-  const layout = $derived(held ?? live);
-
-  function hold(): void {
-    held ??= live;
-  }
-
-  function release(): void {
-    if (!pointed && menus === 0) held = null;
-  }
-
-  function menu(open: boolean): void {
-    menus += open ? 1 : -1;
-    if (open) hold();
-    else release();
-  }
+  const order = new HeldOrder<Layout>(() => live);
+  const layout = $derived(order.shown);
+  const menu = (open: boolean): void => order.menu(open);
 
   const total = $derived(live.reduce((sum, one) => sum + one.ids.length, 0));
   const needs = $derived(live.find((one) => one.group === 'needs')?.ids.length ?? 0);
@@ -106,18 +92,7 @@
       <div class="mx-3 mt-2 border-b"></div>
     {/if}
 
-    <div
-      role="presentation"
-      data-board-list
-      onpointerenter={() => {
-        pointed = true;
-        hold();
-      }}
-      onpointerleave={() => {
-        pointed = false;
-        release();
-      }}
-    >
+    <div role="presentation" data-board-list onpointerenter={() => order.enter()} onpointerleave={() => order.leave()}>
       {#each layout as section (section.group)}
         <section class="pt-4" data-board-group={section.group}>
           <h2 class="flex h-7 items-center gap-2 px-3 text-small font-medium text-muted-foreground">

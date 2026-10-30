@@ -22,6 +22,12 @@ export class ListUnreadable extends Data.TaggedError('ListUnreadable')<{ readonl
   }
 }
 
+export class ListAbsent extends Data.TaggedError('ListAbsent')<{ readonly reason: string }> {
+  override get message(): string {
+    return this.reason;
+  }
+}
+
 const Detail = Schema.Struct({
   title: Schema.NullOr(Schema.String),
   description: Schema.NullOr(Schema.String),
@@ -54,7 +60,7 @@ const Stamp = Schema.Struct({
 export const detailed = (list: MarketplaceList, details: Details): MarketplaceList => ({
   ...list,
   entries: list.entries.map((entry) => {
-    const detail = details[entry.name];
+    const detail = Object.hasOwn(details, entry.name) ? details[entry.name] : undefined;
     return detail === undefined
       ? entry
       : {
@@ -89,7 +95,7 @@ const listAt = Effect.fnUntraced(function* (formats: readonly ListFormat[], root
     const text = yield* files.readFileString(path).pipe(Effect.mapError(unreachable));
     return { format: format.id, text, list: yield* parsed(format, text) };
   }
-  return yield* new ListUnreadable({
+  return yield* new ListAbsent({
     reason: `it holds no marketplace list: neither ${formats.map((format) => format.file).join(' nor ')}`,
   });
 });
@@ -99,7 +105,11 @@ export const fetchRevision = Effect.fn('marketplaces.fetch')(function* (input: {
   readonly source: MarketplaceSource;
   readonly formats: readonly ListFormat[];
   readonly now: number;
-}): Effect.fn.Return<Fetched, ListUnreachable | ListUnreadable, FileSystem.FileSystem | ChildProcessSpawner.ChildProcessSpawner> {
+}): Effect.fn.Return<
+  Fetched,
+  ListUnreachable | ListUnreadable | ListAbsent,
+  FileSystem.FileSystem | ChildProcessSpawner.ChildProcessSpawner
+> {
   const files = yield* FileSystem.FileSystem;
   const { home, source, formats, now } = input;
   if (source.kind === 'folder') {
@@ -118,7 +128,7 @@ export const fetchRevision = Effect.fn('marketplaces.fetch')(function* (input: {
     const { commit } = yield* shallowClone({ url: source.url, into: root }).pipe(Effect.mapError(unreachable));
     return { ...(yield* listAt(formats, root)), root, commit, fetched: now, details: {}, stage };
   });
-  return yield* listed.pipe(Effect.tapError(() => Effect.orDie(files.remove(stage, { recursive: true, force: true }))));
+  return yield* listed.pipe(Effect.onError(() => Effect.orDie(files.remove(stage, { recursive: true, force: true }))));
 });
 
 export const storedRevision = Effect.fn('marketplaces.store')(function* (home: string, id: string, fetched: Fetched) {

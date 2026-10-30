@@ -44,8 +44,8 @@
             'size-2',
             state === 'waits' && 'bg-status-open',
             state === 'fails' && 'bg-destructive',
-            state === 'ok' && 'bg-status-done',
-            state === 'off' && 'border border-dashed border-muted-foreground',
+            row.status === 'connected' && 'bg-status-done',
+            (state === 'off' || row.status === 'pending') && 'border border-dashed border-muted-foreground',
           ]}
         ></span>
       {/if}
@@ -67,6 +67,8 @@
         <span class="stamp text-muted-foreground">{row.failure ?? ''}</span>
       {:else if state === 'off'}
         <span class="text-ui text-muted-foreground">{row.name} is off here</span>
+      {:else if row.status === 'pending'}
+        <span class="text-ui text-muted-foreground">{hostOf(row)} starts when an agent first uses it</span>
       {:else}
         <span class="text-ui text-muted-foreground">Connecting to {hostOf(row)}</span>
       {/if}
