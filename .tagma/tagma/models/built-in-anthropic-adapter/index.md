@@ -17,6 +17,12 @@ fields:
       },
       {
         "at": "src/icon.ts"
+      },
+      {
+        "at": "src/usage.ts",
+        "for": [
+          "287a4906"
+        ]
       }
     ],
     "id": "@runlith/adapter-anthropic"
