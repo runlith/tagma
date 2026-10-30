@@ -7,6 +7,7 @@ import type { HostedDoor } from './door.js';
 const INPUT_LINE_BYTES = 64 * 1024 * 1024;
 
 export type Invoked = {
+  readonly cwd: string;
   readonly env: Readonly<Record<string, string | undefined>>;
   readonly stdin: () => ReadableStream<Uint8Array>;
 };
@@ -18,9 +19,16 @@ export type HostedLaunch = {
   readonly titled: boolean;
 };
 
+export type HostedAsk = {
+  readonly model: string;
+  readonly effort: string | null;
+  readonly system: string;
+};
+
 export type HostedRunner = {
   readonly run: (at: Invoked, door: HostedDoor, launch: HostedLaunch) => Effect.Effect<void, unknown>;
   readonly cut: ((at: Invoked) => Effect.Effect<void, unknown>) | null;
+  readonly ask?: (at: Invoked, ask: HostedAsk) => Effect.Effect<void, unknown>;
 };
 
 export type AgentFactory<R> = (process: Process) => Effect.Effect<(outlet: Outlet) => AgentHandlers<never>, AgentFault, R>;
