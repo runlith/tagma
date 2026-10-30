@@ -157,10 +157,6 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "repeated-declarations repeated object:ec7b72070cf293c1:ad12cb9e1309 apps/tagma/server/src/native-harness/transcript/restedWork.ts",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "repeated-declarations repeated object:54b4e6d2b9514b74: apps/tagma/server/src/native-harness/voice/calls.ts",
           "owner": "5a3bed29"
         },
