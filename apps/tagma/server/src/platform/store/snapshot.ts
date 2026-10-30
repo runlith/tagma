@@ -4,6 +4,7 @@ import { basename, dirname, join, resolve } from 'node:path';
 import { sql } from 'drizzle-orm';
 import { makeWithDefaults } from 'drizzle-orm/effect-sqlite-bun';
 import { sqliteProcessLayer } from '@runlith/sqlite-process/SqliteProcess';
+import type { ProcessPool } from '@runlith/sqlite-process/ProcessPool';
 import { Effect, Schema, Semaphore } from 'effect';
 import { makeDirectory, requireSpace } from '../durable/files.js';
 import { dataSpaceWords } from '../durable/space.js';
@@ -133,7 +134,12 @@ const sweepFiles = Effect.fnUntraced(function* (path: string) {
   }
 });
 
-export const restoreParticipantInto = Effect.fnUntraced(function* (owner: string, participant: SnapshotParticipant, snapshot: string) {
+export const restoreParticipantInto = Effect.fnUntraced(function* (
+  owner: string,
+  participant: SnapshotParticipant,
+  snapshot: string,
+  processes: ProcessPool,
+) {
   const standing = yield* Effect.tryPromise({
     try: () => stat(snapshot),
     catch: (cause) => new SnapshotFailed({ path: snapshot, reason: `the snapshot copy cannot be read: ${String(cause)}` }),
@@ -160,17 +166,23 @@ export const restoreParticipantInto = Effect.fnUntraced(function* (owner: string
     });
   }).pipe(
     Effect.provide(
-      sqliteProcessLayer({
-        filename: snapshot,
-        readers: 0,
-        onLost: (reason) => console.error(`[tagma] snapshot copy connection lost: ${reason}`),
-      }),
+      sqliteProcessLayer(
+        {
+          filename: snapshot,
+          readers: 0,
+          onLost: (reason) => console.error(`[tagma] snapshot copy connection lost: ${reason}`),
+        },
+        processes,
+      ),
     ),
   );
   return losses;
 });
 
-export function storeSnapshots(participants: Readonly<Record<string, SnapshotParticipant>>): StoreSnapshots['Service'] {
+export function storeSnapshots(
+  participants: Readonly<Record<string, SnapshotParticipant>>,
+  processes: ProcessPool,
+): StoreSnapshots['Service'] {
   const registered = Object.entries(participants);
   const retire = new Map<string, string>();
   const locks = new Map<string, Semaphore.Semaphore>();
@@ -328,11 +340,14 @@ export function storeSnapshots(participants: Readonly<Record<string, SnapshotPar
               yield* checkpoint({ path: copied, db });
             }).pipe(
               Effect.provide(
-                sqliteProcessLayer({
-                  filename: copied,
-                  readers: 0,
-                  onLost: (reason) => console.error(`[tagma] snapshot scrub connection lost: ${reason}`),
-                }),
+                sqliteProcessLayer(
+                  {
+                    filename: copied,
+                    readers: 0,
+                    onLost: (reason) => console.error(`[tagma] snapshot scrub connection lost: ${reason}`),
+                  },
+                  processes,
+                ),
               ),
             );
           yield* flushFile(copied);
@@ -426,11 +441,14 @@ export function storeSnapshots(participants: Readonly<Record<string, SnapshotPar
           yield* checkpoint({ path: paths.staging, db });
         }).pipe(
           Effect.provide(
-            sqliteProcessLayer({
-              filename: paths.staging,
-              readers: 0,
-              onLost: (reason) => console.error(`[tagma] snapshot staging connection lost: ${reason}`),
-            }),
+            sqliteProcessLayer(
+              {
+                filename: paths.staging,
+                readers: 0,
+                onLost: (reason) => console.error(`[tagma] snapshot staging connection lost: ${reason}`),
+              },
+              processes,
+            ),
           ),
         );
         yield* flushFile(paths.staging);
@@ -503,13 +521,16 @@ export function storeSnapshots(participants: Readonly<Record<string, SnapshotPar
           yield* checkpoint({ path, db });
         }).pipe(
           Effect.provide(
-            sqliteProcessLayer({
-              filename: path,
-              readers: 0,
-              synchronous: 'full',
-              fullfsync: process.platform === 'darwin',
-              onLost: (reason) => console.error(`[tagma] snapshot restore connection lost: ${reason}`),
-            }),
+            sqliteProcessLayer(
+              {
+                filename: path,
+                readers: 0,
+                synchronous: 'full',
+                fullfsync: process.platform === 'darwin',
+                onLost: (reason) => console.error(`[tagma] snapshot restore connection lost: ${reason}`),
+              },
+              processes,
+            ),
           ),
         );
         yield* flushFile(path);

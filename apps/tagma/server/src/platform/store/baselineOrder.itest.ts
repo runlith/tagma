@@ -5,6 +5,7 @@ import { Database } from 'bun:sqlite';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { Effect } from 'effect';
+import { sharedPool } from '@runlith/sqlite-process/testing/pool';
 import { sql } from 'drizzle-orm';
 import { readMigrationFiles } from 'drizzle-orm/migrator';
 import { fixtureMigrations } from '../../composition/testing/migrations.js';
@@ -69,7 +70,7 @@ layer(BunFileSystem.layer, { excludeTestServices: true })('baseline translation 
     Effect.gen(function* () {
       const path = yield* storePlace('baseline-changed-');
       sourceStore(path, fixtureMigrations);
-      const snapshots = storeSnapshots({});
+      const snapshots = storeSnapshots({}, yield* sharedPool);
       yield* inDatabase(path, (db) =>
         snapshots.take({ path, db }, [{ name: receipt.chain.at(-1)!.name, hash: 'future', sql: ["update meta set value = '1'"] }]),
       );
@@ -83,23 +84,26 @@ layer(BunFileSystem.layer, { excludeTestServices: true })('baseline translation 
         }),
       ).pipe(
         Effect.provide(
-          sqliteProcessLayer({
-            filename: path,
-            readers: 0,
-            onLost: (reason) => {
-              throw new Error(reason);
+          sqliteProcessLayer(
+            {
+              filename: path,
+              readers: 0,
+              onLost: (reason) => {
+                throw new Error(reason);
+              },
+              checkStatement: (statement) =>
+                Effect.sync(() => {
+                  if (statement.toUpperCase() !== 'BEGIN IMMEDIATE') return;
+                  const writer = new Database(path);
+                  try {
+                    writer.query('update __drizzle_migrations set hash = ? where name = ?').run('changed', receipt.chain.at(-1)!.name);
+                  } finally {
+                    writer.close();
+                  }
+                }),
             },
-            checkStatement: (statement) =>
-              Effect.sync(() => {
-                if (statement.toUpperCase() !== 'BEGIN IMMEDIATE') return;
-                const writer = new Database(path);
-                try {
-                  writer.query('update __drizzle_migrations set hash = ? where name = ?').run('changed', receipt.chain.at(-1)!.name);
-                } finally {
-                  writer.close();
-                }
-              }),
-          }),
+            yield* sharedPool,
+          ),
         ),
       );
       expect(changed).toBeInstanceOf(MigrationChainInvalid);

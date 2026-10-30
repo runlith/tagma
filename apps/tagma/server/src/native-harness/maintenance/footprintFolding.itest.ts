@@ -3,6 +3,7 @@ import { expect } from 'bun:test';
 import { it } from '@runlith/effect-test';
 import { asc, eq } from 'drizzle-orm';
 import { Effect, Layer } from 'effect';
+import { sharedPool } from '@runlith/sqlite-process/testing/pool';
 import { decodeThreadEventPayload } from '@runlith/agent/thread/events';
 import { ThreadEntryKinds, makeThreadEntryReader, type ThreadEntryReader } from '@runlith/agent/transcript/kinds';
 import type { ThreadRow } from '@runlith/agent/thread/rows';
@@ -19,7 +20,7 @@ import { makeThreadRecords } from '../../thread-record/layer.js';
 import { CORE_KINDS, threadStore } from '../testing/doubles.js';
 
 const machine = Layer.orDie(
-  unitsLayer(MachineUnits, MachineStore).pipe(Layer.provideMerge(seededStoreLayer(MachineStore, fixtureMigrations))),
+  unitsLayer(MachineUnits, MachineStore).pipe(Layer.provideMerge(seededStoreLayer(MachineStore, fixtureMigrations, {}, sharedPool))),
 );
 
 const stand = Effect.fnUntraced(function* (kinds: ThreadEntryReader = CORE_KINDS) {

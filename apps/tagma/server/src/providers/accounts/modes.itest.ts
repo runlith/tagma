@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { it } from '@runlith/effect-test';
 import { Context, Effect, Layer, Schema, Stream } from 'effect';
+import { sharedPool } from '@runlith/sqlite-process/testing/pool';
 import type { HarnessProvider, WireProvider } from '@runlith/tagma/adapter/provider';
 import { makeFileTokenStore } from '@runlith/llm/oauth/FileTokenStore';
 import { AccountKey } from '@runlith/llm/models/authStatus';
@@ -124,7 +125,7 @@ it.effect('the selected mode controls credentials and defaults, preserves both g
     yield* own.add(wire.id, OWN);
     const tokens = makeBorrowingTokens({ own, catalog: catalog.current, directories, cli: cli(always) });
     const stores = unitsLayer(MachineUnits, MachineStore).pipe(
-      Layer.provideMerge(Layer.orDie(seededStoreLayer(MachineStore, fixtureMigrations))),
+      Layer.provideMerge(Layer.orDie(seededStoreLayer(MachineStore, fixtureMigrations, {}, sharedPool))),
     );
     const defaultsContext = yield* Layer.build(
       defaultAccountsLayer(

@@ -1,6 +1,8 @@
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { Effect, FileSystem, Option } from 'effect';
 import { Command, Flag } from 'effect/cli';
+import { ProcessPool } from '@runlith/sqlite-process/ProcessPool';
+import { childHosting } from '@runlith/sqlite-process/children';
 import { snapshotAssembly } from '../snapshots.js';
 import { lockDataDirectory, type DataDirectoryLock } from '../../platform/lock/dataDirectory.js';
 import { SnapshotFailed, type StoreSnapshots } from '../../platform/contract/service/snapshots.js';
@@ -14,7 +16,13 @@ import { CHANNEL } from '@tagma/server/composition/channel';
 const inStore = Effect.fnUntraced(function* <A, E>(
   selected: Option.Option<string>,
   scope: 'machine' | 'installation',
-  run: (path: string, snapshots: StoreSnapshots['Service'], seeds: string, lock: DataDirectoryLock) => Effect.Effect<A, E>,
+  run: (
+    path: string,
+    snapshots: StoreSnapshots['Service'],
+    seeds: string,
+    lock: DataDirectoryLock,
+    processes: ProcessPool,
+  ) => Effect.Effect<A, E>,
 ) {
   const invocation = yield* CurrentInvocation;
   const data = dataDirectory(CHANNEL, invocation.env);
@@ -36,12 +44,13 @@ const inStore = Effect.fnUntraced(function* <A, E>(
   if (inside === '..' || inside.startsWith(`..${sep}`) || isAbsolute(inside)) {
     return yield* new SnapshotFailed({ path, reason: 'the store must belong to this installation data directory' });
   }
-  const snapshots = yield* snapshotAssembly(machine, root);
+  const processes = new ProcessPool(undefined, 'stop', undefined, childHosting);
+  const snapshots = yield* snapshotAssembly(machine, root, processes);
   return yield* Effect.acquireUseRelease(
     lockDataDirectory(root).pipe(Effect.mapError((cause) => new SnapshotFailed({ path, reason: cause.message }))),
-    (lock) => run(path, snapshots, invocation.env.TAGMA_SEED_DIRECTORY?.trim() || invocation.temporary, lock),
+    (lock) => run(path, snapshots, invocation.env.TAGMA_SEED_DIRECTORY?.trim() || invocation.temporary, lock, processes),
     (lock) => lock.release,
-  );
+  ).pipe(Effect.ensuring(Effect.promise(() => processes.close())));
 });
 
 const restoreSnapshot = Command.make(
@@ -73,7 +82,7 @@ const migrate = Command.make(
           'repeat with --without-snapshot --confirm to record and accept this loss of protection',
         ]);
       const files = yield* FileSystem.FileSystem;
-      const schema = yield* inStore(store, 'machine', (path, snapshots, seeds) =>
+      const schema = yield* inStore(store, 'machine', (path, snapshots, seeds, _lock, processes) =>
         Effect.gen(function* () {
           const existing = yield* files
             .stat(path)
@@ -82,7 +91,7 @@ const migrate = Command.make(
             );
           if (existing.type !== 'File') return yield* new SnapshotFailed({ path, reason: 'migration requires an existing store file' });
           return yield* Effect.map(MachineStore, (store) => store.schema).pipe(
-            Effect.provide(storeLayer(MachineStore, path, { folder: migrationsFolder, seeds, snapshots }, { withoutSnapshot })),
+            Effect.provide(storeLayer(MachineStore, path, { folder: migrationsFolder, seeds, snapshots }, { withoutSnapshot }, processes)),
           );
         }),
       );

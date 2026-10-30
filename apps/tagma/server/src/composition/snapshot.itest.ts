@@ -4,6 +4,7 @@ import { expect } from 'bun:test';
 import { Database } from 'bun:sqlite';
 import { join } from 'node:path';
 import { sql } from 'drizzle-orm';
+import { sharedPool } from '@runlith/sqlite-process/testing/pool';
 import { Effect, FileSystem } from 'effect';
 import { inDatabase } from '../platform/testing/connection.js';
 import { storeSnapshots } from '../platform/store/snapshot.js';
@@ -29,7 +30,7 @@ layer(BunFileSystem.layer, { excludeTestServices: true })('scoped snapshots', (i
     Effect.gen(function* () {
       const root = yield* FileSystem.FileSystem.use((files) => files.makeTempDirectoryScoped({ prefix: 'snapshot-scoped-' }));
       const path = join(root, 'store.sqlite');
-      const snapshots = storeSnapshots({});
+      const snapshots = storeSnapshots({}, yield* sharedPool);
       const pending = [{ name: 'migrate-one', hash: 'one', sql: ["update fact set value = 'after'"] }];
       yield* inDatabase(path, (db) =>
         Effect.gen(function* () {
@@ -62,7 +63,7 @@ layer(BunFileSystem.layer, { excludeTestServices: true })('scoped snapshots', (i
     Effect.gen(function* () {
       const root = yield* FileSystem.FileSystem.use((files) => files.makeTempDirectoryScoped({ prefix: 'snapshot-schema-only-' }));
       const path = join(root, 'store.sqlite');
-      const snapshots = storeSnapshots({});
+      const snapshots = storeSnapshots({}, yield* sharedPool);
       const pending = [
         {
           name: 'migrate-schema',
@@ -117,7 +118,7 @@ layer(BunFileSystem.layer, { excludeTestServices: true })('scoped snapshots', (i
     Effect.gen(function* () {
       const root = yield* FileSystem.FileSystem.use((files) => files.makeTempDirectoryScoped({ prefix: 'snapshot-rowid-' }));
       const path = join(root, 'store.sqlite');
-      const snapshots = storeSnapshots({});
+      const snapshots = storeSnapshots({}, yield* sharedPool);
       const pending = [
         {
           name: 'migrate-rowid',

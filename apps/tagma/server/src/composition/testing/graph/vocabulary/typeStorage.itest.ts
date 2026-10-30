@@ -3,6 +3,7 @@ import { layer } from '@runlith/effect-test';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { join } from 'node:path';
 import { Context, Effect, FileSystem, Layer } from 'effect';
+import { sharedPool } from '@runlith/sqlite-process/testing/pool';
 import { eq, sql } from 'drizzle-orm';
 import { GraphStore } from '../../../../platform/contract/service/store.js';
 import { storeLayer } from '../../../../platform/store/open.js';
@@ -73,10 +74,10 @@ layer(BunFileSystem.layer, { excludeTestServices: true })('type storage', (it) =
         ]);
         yield* db.insert(event).values({ ts: now, op: 'create', blockId: 2, projectId: 1, payload: '{"verdict":"kept"}' });
         return { blocks: yield* db.select().from(block), history: yield* db.select().from(event) };
-      }).pipe(Effect.provide(storeLayer(GraphStore, path, fixtureGraphMigrations, { readers: 1 })));
+      }).pipe(Effect.provide(storeLayer(GraphStore, path, fixtureGraphMigrations, { readers: 1 }, sharedPool)));
       const context = yield* Layer.build(
         Layer.mergeAll(tagsLayer, unitsLayer(GraphUnits, GraphStore)).pipe(
-          Layer.provideMerge(storeLayer(GraphStore, path, fixtureGraphMigrations, { readers: 1 })),
+          Layer.provideMerge(storeLayer(GraphStore, path, fixtureGraphMigrations, { readers: 1 }, sharedPool)),
           Layer.provide(Layer.succeed(Behaviours, BEHAVIOUR_REGISTRY)),
           Layer.provide(Layer.succeed(Catalogs, NO_CATALOGS)),
         ),

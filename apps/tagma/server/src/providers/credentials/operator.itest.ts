@@ -8,6 +8,7 @@ import { it } from '@runlith/effect-test';
 import type { SubscriptionCredential } from '@runlith/builtin-catalog/subscription/provider';
 import { AccountKey } from '@runlith/llm/models/authStatus';
 import { Effect, Layer } from 'effect';
+import { sharedPool } from '@runlith/sqlite-process/testing/pool';
 import { MachineStore } from '../../platform/contract/service/store.js';
 import { MachineUnits } from '../../platform/contract/service/units.js';
 import { unitsLayer } from '../../platform/store/units.js';
@@ -94,7 +95,7 @@ it.live('one request keeps the row it resolved even when the owner default moves
 );
 
 const layers = unitsLayer(MachineUnits, MachineStore).pipe(
-  Layer.provideMerge(Layer.orDie(seededStoreLayer(MachineStore, fixtureMigrations))),
+  Layer.provideMerge(Layer.orDie(seededStoreLayer(MachineStore, fixtureMigrations, {}, sharedPool))),
 );
 
 const consoleWorld = Effect.fnUntraced(function* (prefix: string) {

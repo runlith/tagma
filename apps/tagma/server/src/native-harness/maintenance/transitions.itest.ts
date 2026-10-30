@@ -1,6 +1,7 @@
 import { expect } from 'bun:test';
 import { it } from '@runlith/effect-test';
 import { Deferred, Effect, Fiber, Layer } from 'effect';
+import { sharedPool } from '@runlith/sqlite-process/testing/pool';
 import { sql } from 'drizzle-orm';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -9,7 +10,7 @@ import { MachineStore, type MigrationChain } from '../../platform/contract/servi
 import { MachineUnits } from '../../platform/contract/service/units.js';
 import { StoreSnapshots } from '../../platform/contract/service/snapshots.js';
 import { unitsLayer } from '../../platform/store/units.js';
-import { storeLayer } from '../../platform/store/open.js';
+import { type PoolSource, storeLayer } from '../../platform/store/open.js';
 import { storeSnapshots } from '../../platform/store/snapshot.js';
 import { chain } from '../../platform/store/chain.js';
 import { fixtureMigrations } from '../../composition/testing/migrations.js';
@@ -17,8 +18,8 @@ import { withDatabase } from '../../platform/testing/connection.js';
 import { makeTransitionRetirement } from './transitions.js';
 
 const migration = chain(fixtureMigrations).find(({ name }) => name === '20261010183425_run_transition_receipt')!;
-const opening = (path: string, migrations: MigrationChain<'machine'>) =>
-  unitsLayer(MachineUnits, MachineStore).pipe(Layer.provideMerge(storeLayer(MachineStore, path, migrations, { readers: 0 })));
+const opening = (path: string, migrations: MigrationChain<'machine'>, pool: PoolSource) =>
+  unitsLayer(MachineUnits, MachineStore).pipe(Layer.provideMerge(storeLayer(MachineStore, path, migrations, { readers: 0 }, pool)));
 
 it.live('retirement preserves a covered rename for exact restore and drains only after its snapshot is released', () =>
   Effect.gen(function* () {
@@ -30,7 +31,8 @@ it.live('retirement preserves a covered rename for exact restore and drains only
     const folder = join(root, 'migrations');
     yield* Effect.promise(() => mkdir(join(folder, migration.name), { recursive: true }));
     yield* Effect.promise(() => writeFile(join(folder, migration.name, 'migration.sql'), migration.sql.join('--> statement-breakpoint\n')));
-    const snapshots = storeSnapshots({});
+    const pool = yield* sharedPool;
+    const snapshots = storeSnapshots({}, pool);
     const migrations: MigrationChain<'machine'> = { folder, seeds: join(root, 'seeds'), snapshots };
     const retirement = makeTransitionRetirement.pipe(Effect.provideService(StoreSnapshots, snapshots));
     let discarded = '';
@@ -88,7 +90,7 @@ it.live('retirement preserves a covered rename for exact restore and drains only
           yield* store.db.all(sql`select name from sqlite_master where name in ('thread_run_receipt', 'thread_run_receipt_end')`),
         ).toEqual([]);
       }),
-      opening(path, migrations),
+      opening(path, migrations, pool),
     );
 
     yield* Effect.provide(
@@ -100,7 +102,7 @@ it.live('retirement preserves a covered rename for exact restore and drains only
         expect(yield* store.db.all(sql`pragma secure_delete`)).toEqual(secure);
         expect(yield* store.db.all(sql`select name from sqlite_master where tbl_name = 'retired_run_transition'`)).toEqual([]);
       }),
-      opening(path, migrations),
+      opening(path, migrations, pool),
     );
 
     yield* Effect.provide(
@@ -111,7 +113,7 @@ it.live('retirement preserves a covered rename for exact restore and drains only
         expect(yield* store.db.all(sql`select count(*) as n from thread_run_receipt`)).toEqual([{ n: 0 }]);
         expect(yield* store.db.all(sql`select applied_seq from thread_run where id = 'live'`)).toEqual([{ applied_seq: 2 }]);
       }),
-      opening(path, migrations),
+      opening(path, migrations, pool),
     );
   }),
 );

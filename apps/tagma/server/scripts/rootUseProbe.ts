@@ -3,6 +3,8 @@ import { dirname, join } from 'node:path';
 import { Effect, Layer, ManagedRuntime } from 'effect';
 import { makeWithDefaults } from 'drizzle-orm/effect-sqlite-bun';
 import { sqliteProcessLayer } from '@runlith/sqlite-process/SqliteProcess';
+import { ProcessPool } from '@runlith/sqlite-process/ProcessPool';
+import { childHosting } from '@runlith/sqlite-process/children';
 import { MachineStore } from '../src/platform/contract/service/store.js';
 import { storeLayer } from '../src/platform/store/open.js';
 import { storeSnapshots } from '../src/platform/store/snapshot.js';
@@ -12,7 +14,8 @@ import { migrationsFolder } from '../src/installation/closure/read.js';
 const [path, mode, useId] = process.argv.slice(2);
 if (path === undefined || !['open', 'estimate', 'delete'].includes(mode ?? ''))
   throw new Error('Pass an isolated APFS clone and open, estimate or delete; never the live store.');
-const snapshots = storeSnapshots({});
+const processes = new ProcessPool(undefined, 'stop', undefined, childHosting);
+const snapshots = storeSnapshots({}, processes);
 if (mode === 'delete') {
   if (useId === undefined) throw new Error('Pass the same released use for both deletion samples.');
   const db = new Database(path);
@@ -33,13 +36,16 @@ if (mode === 'delete') {
   const estimate = await Effect.runPromise(
     Effect.flatMap(makeWithDefaults(), (db) => snapshots.estimate({ db, path }, [migration], migrationsFolder)).pipe(
       Effect.provide(
-        sqliteProcessLayer({
-          filename: path,
-          readers: 0,
-          onLost: (reason) => {
-            throw new Error(reason);
+        sqliteProcessLayer(
+          {
+            filename: path,
+            readers: 0,
+            onLost: (reason) => {
+              throw new Error(reason);
+            },
           },
-        }),
+          processes,
+        ),
       ),
     ),
   );
@@ -57,6 +63,7 @@ if (mode === 'delete') {
           snapshots,
         },
         { readers: 0 },
+        processes,
       ),
     ),
   );

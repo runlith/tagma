@@ -3,6 +3,7 @@ import { expect } from 'bun:test';
 import { layer } from '@runlith/effect-test';
 import { CACHE_CURVE_SAMPLE, type ThreadCacheObservationValues } from '@runlith/agent/thread/storage/cacheObservations';
 import { Effect, Layer } from 'effect';
+import { sharedPool } from '@runlith/sqlite-process/testing/pool';
 import { MachineStore } from '../../platform/contract/service/store.js';
 import { MachineUnits } from '../../platform/contract/service/units.js';
 import { unitsLayer } from '../../platform/store/units.js';
@@ -13,7 +14,7 @@ import { threadFolder } from '../testing/fold.js';
 import { CORE_KINDS, threadStore } from '../testing/doubles.js';
 
 const machine = unitsLayer(MachineUnits, MachineStore).pipe(
-  Layer.provideMerge(Layer.orDie(seededStoreLayer(MachineStore, fixtureMigrations))),
+  Layer.provideMerge(Layer.orDie(seededStoreLayer(MachineStore, fixtureMigrations, {}, sharedPool))),
 );
 
 const stand = Effect.gen(function* () {

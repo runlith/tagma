@@ -9,6 +9,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { sql } from 'drizzle-orm';
 import { Clock, Context, Effect, Fiber, Layer, Queue, Schema, Stream } from 'effect';
+import { sharedPool } from '@runlith/sqlite-process/testing/pool';
 import { ExecutionId, InstallationId, type ExecutionRef } from '@runlith/executions/protocol/execution';
 import { Agent } from '@runlith/agent/Agent';
 import { makeAgentRunner } from '@runlith/agent/AgentRunner';
@@ -149,7 +150,7 @@ const calls = (threadId: string) => heard.get(threadId) ?? [];
 const said = (messages: readonly Message[]) => JSON.stringify(messages);
 const plan = (threadId: string, ...turns: Turn[]) => void script.set(threadId, [...(script.get(threadId) ?? []), ...turns]);
 const machine = unitsLayer(MachineUnits, MachineStore).pipe(
-  Layer.provideMerge(Layer.orDie(seededStoreLayer(MachineStore, fixtureMigrations, { readers: 1 }))),
+  Layer.provideMerge(Layer.orDie(seededStoreLayer(MachineStore, fixtureMigrations, { readers: 1 }, sharedPool))),
 );
 const opened = Effect.gen(function* () {
   const { db } = yield* MachineStore;

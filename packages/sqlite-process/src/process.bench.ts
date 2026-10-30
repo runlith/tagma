@@ -5,6 +5,7 @@ import { Context, Effect, Layer, Tracer } from 'effect';
 import { SqlClient } from 'effect/sql/SqlClient';
 import { sqliteProcessLayer } from './SqliteProcess.js';
 import { ProcessPool } from './ProcessPool.js';
+import { childHosting } from './children.js';
 
 const samples: Record<string, number[]> = {};
 const fingerprints = new Set<string>();
@@ -26,7 +27,7 @@ const tracer = Tracer.make({
 });
 const directory = await mkdtemp(join(tmpdir(), 'sqlite-process-bench-'));
 const pids = new Set<number>();
-const processes = new ProcessPool(2);
+const processes = new ProcessPool(2, 'stop', undefined, childHosting);
 const layer = (filename: string) =>
   sqliteProcessLayer(
     {

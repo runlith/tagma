@@ -4,6 +4,7 @@ import { layer } from '@runlith/effect-test';
 import { join } from 'node:path';
 import { eq } from 'drizzle-orm';
 import { Effect, FileSystem, Layer } from 'effect';
+import { sharedPool } from '@runlith/sqlite-process/testing/pool';
 import { ThreadEntryKinds } from '@runlith/agent/transcript/kinds';
 import { MachineStore } from '../../../platform/contract/service/store.js';
 import { MachineUnits } from '../../../platform/contract/service/units.js';
@@ -46,7 +47,7 @@ const CAPABILITIES = [
 const FORMED = CAPABILITIES.map((capability) => (capability === 'plugins' ? 'apps' : capability));
 
 const machine = unitsLayer(MachineUnits, MachineStore).pipe(
-  Layer.provideMerge(Layer.orDie(seededStoreLayer(MachineStore, fixtureMigrations))),
+  Layer.provideMerge(Layer.orDie(seededStoreLayer(MachineStore, fixtureMigrations, {}, sharedPool))),
   Layer.provideMerge(BunFileSystem.layer),
   Layer.provideMerge(Layer.succeed(ThreadEntryKinds, ENTRY_KINDS)),
 );

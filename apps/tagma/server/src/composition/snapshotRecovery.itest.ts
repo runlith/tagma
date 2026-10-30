@@ -4,6 +4,7 @@ import { expect } from 'bun:test';
 import { Database } from 'bun:sqlite';
 import { join } from 'node:path';
 import { sql } from 'drizzle-orm';
+import { sharedPool } from '@runlith/sqlite-process/testing/pool';
 import { Effect, FileSystem } from 'effect';
 import { rolloutParticipant } from '../threads/testing/doubles.js';
 import { SnapshotFailed } from '../platform/contract/service/snapshots.js';
@@ -31,18 +32,21 @@ layer(BunFileSystem.layer, { excludeTestServices: true })('snapshot recovery', (
         },
       ];
       let fail = true;
-      const snapshots = storeSnapshots({
-        threads: rolloutParticipant(path, home),
-        fault: {
-          tables: ['fact'],
-          restore: (store) =>
-            Effect.sync(() =>
-              store.registerPublication(
-                fail ? Effect.fail(new SnapshotFailed({ path, reason: 'injected publication failure' })) : Effect.void,
+      const snapshots = storeSnapshots(
+        {
+          threads: rolloutParticipant(path, home),
+          fault: {
+            tables: ['fact'],
+            restore: (store) =>
+              Effect.sync(() =>
+                store.registerPublication(
+                  fail ? Effect.fail(new SnapshotFailed({ path, reason: 'injected publication failure' })) : Effect.void,
+                ),
               ),
-            ),
+          },
         },
-      });
+        yield* sharedPool,
+      );
       yield* FileSystem.FileSystem.use((files) => files.makeDirectory(join(home, '1'), { recursive: true }));
       yield* FileSystem.FileSystem.use((files) => files.writeFileString(rollout, before));
       yield* inDatabase(path, (db) =>
@@ -91,7 +95,7 @@ layer(BunFileSystem.layer, { excludeTestServices: true })('snapshot recovery', (
     Effect.gen(function* () {
       const root = yield* FileSystem.FileSystem.use((files) => files.makeTempDirectoryScoped({ prefix: 'snapshot-reuse-' }));
       const path = join(root, 'store.sqlite');
-      const snapshots = storeSnapshots({});
+      const snapshots = storeSnapshots({}, yield* sharedPool);
       const pending = [{ name: 'one', hash: 'one', sql: ["update fact set value = 'migrated'"] }];
       const identity = Effect.fnUntraced(function* () {
         return (JSON.parse(yield* FileSystem.FileSystem.use((files) => files.readFileString(`${path}.snapshot.json`))) as { id: string })

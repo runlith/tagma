@@ -1,6 +1,8 @@
 import { it } from '@runlith/effect-test';
 import { expect } from 'bun:test';
 import { Effect, Schema } from 'effect';
+import { ProcessPool } from '@runlith/sqlite-process/ProcessPool';
+import { childHosting } from '@runlith/sqlite-process/children';
 import { settingKey } from '../platform/contract/wire/setting.js';
 import { testGrantSigner } from '../platform/testing/grants.js';
 import { testSessionIdentity } from '../platform/testing/identity.js';
@@ -20,7 +22,15 @@ const servers = settingKey({
 });
 
 const started = (operations: readonly string[]) =>
-  start('drizzle', 'seeds', testSessionIdentity, testGrantSigner, [servers], operations, storeSnapshots({}));
+  start(
+    'drizzle',
+    'seeds',
+    testSessionIdentity,
+    testGrantSigner,
+    [servers],
+    operations,
+    storeSnapshots({}, new ProcessPool(0, 'stop', undefined, childHosting)),
+  );
 
 it.effect('start refuses a managed setting whose operation is not registered', () =>
   Effect.gen(function* () {

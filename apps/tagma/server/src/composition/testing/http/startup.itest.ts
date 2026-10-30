@@ -2,6 +2,7 @@ import { expect } from 'bun:test';
 import { it } from '@runlith/effect-test';
 import { join } from 'node:path';
 import { Clock, Context, Deferred, Effect, Exit, Fiber, FileSystem, Layer, Scope } from 'effect';
+import { sharedPool } from '@runlith/sqlite-process/testing/pool';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import * as BunHttpServer from '@effect/platform-bun/BunHttpServer';
 import { FetchHttpClient, HttpBody, HttpClient, HttpClientResponse, HttpRouter, HttpServer, HttpServerResponse } from 'effect/http';
@@ -47,7 +48,7 @@ it.live('a pending migration is visible while health and operations refuse, then
     const migrations: MigrationChain<'machine'> = { folder, seeds: join(home, 'seeds') };
     const opening = yield* Effect.forkScoped(
       Layer.build(
-        storeLayer(MachineStore, path, migrations, { readers: 0 }).pipe(
+        storeLayer(MachineStore, path, migrations, { readers: 0 }, yield* sharedPool).pipe(
           Layer.provide(
             Layer.succeed(StoreOpening, (step) =>
               Effect.gen(function* () {

@@ -107,16 +107,16 @@ export const storeLayer = <I, Brand extends StoreBrand>(
   tag: Context.Key<I, Store<Brand>>,
   path: string,
   migrations: MigrationChain<Brand>,
-  options: StoreOptions = {},
-  processes: PoolSource = new ProcessPool(),
+  options: StoreOptions,
+  processes: PoolSource,
 ): Layer.Layer<I, StoreOpenFailure> =>
   pooled(processes, (pool) => fileLayer(tag, path, migrations, options, pool, (opened) => Context.make(tag, storeOf<Brand>(opened))));
 
 export const machineFileLayer = (
   path: string,
   migrations: MigrationChain<'machine'>,
-  options: StoreOptions = {},
-  processes: PoolSource = new ProcessPool(),
+  options: StoreOptions,
+  processes: PoolSource,
 ): Layer.Layer<MachineStore | GraphStore, StoreOpenFailure> =>
   pooled(processes, (pool) =>
     fileLayer(MachineStore, path, migrations, options, pool, (opened) =>
@@ -144,15 +144,15 @@ const seededLayer = <I, Brand extends StoreBrand, A>(
 export const seededStoreLayer = <I, Brand extends StoreBrand>(
   tag: Context.Key<I, Store<Brand>>,
   migrations: MigrationChain<Brand>,
-  options: StoreOptions = {},
-  processes: PoolSource = new ProcessPool(),
+  options: StoreOptions,
+  processes: PoolSource,
 ): Layer.Layer<I, StoreOpenFailure> =>
   seededLayer(tag, migrations, (path, pool) => storeLayer(tag, path, migrations, options, pool), processes);
 
 export const seededMachineLayer = (
   migrations: MigrationChain<'machine'>,
-  options: StoreOptions = {},
-  processes: PoolSource = new ProcessPool(),
+  options: StoreOptions,
+  processes: PoolSource,
 ): Layer.Layer<MachineStore | GraphStore, StoreOpenFailure> =>
   seededLayer(MachineStore, migrations, (path, pool) => machineFileLayer(path, migrations, options, pool), processes);
 
@@ -181,7 +181,7 @@ function connection<Brand extends StoreBrand, A>(
       const identity = { path, generation: ++generations };
       const classed = durable && mode === 'refuse';
       return Layer.effectContext(
-        Effect.map(open<Brand>(identity, migrations, freeBytes, timings, withoutSnapshot, classed), (opened) =>
+        Effect.map(open<Brand>(identity, migrations, processes, freeBytes, timings, withoutSnapshot, classed), (opened) =>
           mint({ ...opened, processes, durable }),
         ),
       ).pipe(
@@ -290,13 +290,14 @@ const storeOf = <Brand extends StoreBrand>({
 const open = <Brand extends StoreBrand>(
   identity: StoreIdentity,
   migrations: MigrationChain<Brand>,
+  processes: ProcessPool,
   freeBytes: FreeSpace,
   timings: WriterTimings,
   withoutSnapshot = false,
   classed = false,
 ) =>
   Effect.flatMap(
-    Effect.tap(migrated(identity.path, migrations, withoutSnapshot), ({ db }) => readConsequences(identity, db)),
+    Effect.tap(migrated(identity.path, migrations, processes, withoutSnapshot), ({ db }) => readConsequences(identity, db)),
     ({ db, schema }) => {
       const moves = new TableMoves();
       return Effect.zipWith(
@@ -322,12 +323,13 @@ const open = <Brand extends StoreBrand>(
 const migrated = Effect.fn('Store.open')(function* (
   path: string,
   migrations: { readonly folder: string; readonly snapshots?: StoreSnapshots['Service'] },
+  processes: ProcessPool,
   withoutSnapshot = false,
 ) {
   const db = yield* makeWithDefaults();
 
   const local = chain(migrations);
-  const snapshots = migrations.snapshots ?? storeSnapshots({});
+  const snapshots = migrations.snapshots ?? storeSnapshots({}, processes);
   const pending = yield* pendingMigrations(db, local, migrations.folder);
   const observe = yield* StoreOpening;
   yield* observe({ phase: 'opening', path, at: yield* Clock.currentTimeMillis, pending: pending.length });

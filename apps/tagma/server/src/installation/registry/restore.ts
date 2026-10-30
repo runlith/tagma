@@ -82,7 +82,7 @@ export const openMachineRegistry = Effect.fn('registry.open')(function* (
 export const machineStoreLayer = (
   path: string,
   migrations: MigrationChain<'machine'>,
-  processes: PoolSource = new ProcessPool(),
+  processes: PoolSource,
 ): Layer.Layer<MachineStore | GraphStore, never> =>
   Layer.unwrap(
     Effect.gen(function* () {

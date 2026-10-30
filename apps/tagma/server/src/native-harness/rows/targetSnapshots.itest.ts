@@ -2,6 +2,7 @@ import { fixtureMigrations } from '../../composition/testing/migrations.js';
 import { expect } from 'bun:test';
 import { it } from '@runlith/effect-test';
 import { Effect, Layer } from 'effect';
+import { sharedPool } from '@runlith/sqlite-process/testing/pool';
 import { project } from '../../projects/store/table.js';
 import { threadEntry, threadRun } from '../../threads/store/kernel.js';
 import { bornThread } from '../testing/born.js';
@@ -14,7 +15,9 @@ import type { ProvedRoot } from '../../workspace/contract/wire/place.js';
 import type { TargetSnapshot } from '../../threads/contract/wire/target.js';
 import { makeTargetSnapshots } from './targetSnapshots.js';
 
-const storage = unitsLayer(MachineUnits, MachineStore).pipe(Layer.provideMerge(seededStoreLayer(MachineStore, fixtureMigrations)));
+const storage = unitsLayer(MachineUnits, MachineStore).pipe(
+  Layer.provideMerge(seededStoreLayer(MachineStore, fixtureMigrations, {}, sharedPool)),
+);
 
 const PLACE: ProvedRoot = {
   environment: {

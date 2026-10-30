@@ -4,6 +4,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Effect, Layer, Schema, Stream } from 'effect';
+import { sharedPool } from '@runlith/sqlite-process/testing/pool';
 import { AccountKey } from '@runlith/llm/models/authStatus';
 import { InvalidRequestReason, LLMError } from '@runlith/llm/schema/errors';
 import type { WireProvider } from '@runlith/tagma/adapter/provider';
@@ -76,7 +77,7 @@ const providers = providersLayer.pipe(
     ),
   ),
   Layer.provideMerge(unitsLayer(MachineUnits, MachineStore)),
-  Layer.provideMerge(seededStoreLayer(MachineStore, fixtureMigrations)),
+  Layer.provideMerge(seededStoreLayer(MachineStore, fixtureMigrations, {}, sharedPool)),
 );
 afterAll(() => rmSync(home, { recursive: true, force: true }));
 

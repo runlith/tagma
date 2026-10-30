@@ -3,6 +3,7 @@ import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { layer } from '@runlith/effect-test';
 import { join } from 'node:path';
 import { Effect, FileSystem } from 'effect';
+import { sharedPool } from '@runlith/sqlite-process/testing/pool';
 import { sql } from 'drizzle-orm';
 import { inDatabase } from '../testing/connection.js';
 import { storeSnapshots } from './snapshot.js';
@@ -17,7 +18,10 @@ layer(BunFileSystem.layer)('migration load', (it) => {
       yield* fileSystem.makeDirectory(join(root, name));
       yield* fileSystem.writeFileString(join(root, name, 'heavy.json'), JSON.stringify({ reason: 'Rebuild event representation' }));
       const path = join(root, 'store.sqlite');
-      const snapshots = storeSnapshots({ files: { tables: ['events'], estimate: () => Effect.succeed({ bytes: 4096, hashPasses: 2 }) } });
+      const snapshots = storeSnapshots(
+        { files: { tables: ['events'], estimate: () => Effect.succeed({ bytes: 4096, hashPasses: 2 }) } },
+        yield* sharedPool,
+      );
       const pending = [{ name, hash: 'hash', sql: ['update events set body = upper(body)', 'update keyed set body = upper(body)'] }];
       const measured = yield* inDatabase(path, (db) =>
         Effect.gen(function* () {

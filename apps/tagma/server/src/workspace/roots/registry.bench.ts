@@ -1,5 +1,6 @@
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { Effect, FileSystem, Layer, Path } from 'effect';
+import { sharedPool } from '@runlith/sqlite-process/testing/pool';
 import { sql } from 'drizzle-orm';
 import { NamespaceId } from '@runlith/files/namespace';
 import { fixtureMigrations } from '../../composition/testing/migrations.js';
@@ -11,7 +12,9 @@ import { makeFileRootStore } from '../store/rootRegistry.js';
 import { makeRootRegistry } from './registry.js';
 import { RootReservations } from '../contract/service/roots.js';
 
-const storage = unitsLayer(MachineUnits, MachineStore).pipe(Layer.provideMerge(seededStoreLayer(MachineStore, fixtureMigrations)));
+const storage = unitsLayer(MachineUnits, MachineStore).pipe(
+  Layer.provideMerge(seededStoreLayer(MachineStore, fixtureMigrations, {}, sharedPool)),
+);
 const layers = Layer.mergeAll(storage, BunFileSystem.layer, Path.layer);
 
 await Effect.runPromise(

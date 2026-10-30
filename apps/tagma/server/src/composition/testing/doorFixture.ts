@@ -165,7 +165,7 @@ const accountCli = AccountCli.of({
 });
 
 const built = Effect.fnUntraced(
-  function* (options: DoorParams, root: string, processes?: ProcessPool) {
+  function* (options: DoorParams, root: string, processes: ProcessPool) {
     const { seams, lend } = lending();
     const fixture = yield* FixtureScope.acquire(root);
     yield* Effect.addFinalizer(() =>

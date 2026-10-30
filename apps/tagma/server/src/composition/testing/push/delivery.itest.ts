@@ -3,6 +3,7 @@ import { expect } from 'bun:test';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { layer } from '@runlith/effect-test';
 import { Clock, Context, Data, Effect, FileSystem, Layer, PubSub, Queue, Schedule, Stream } from 'effect';
+import { sharedPool } from '@runlith/sqlite-process/testing/pool';
 import { MachineStore } from '../../../platform/contract/service/store.js';
 import { MachineUnits } from '../../../platform/contract/service/units.js';
 import { machineFileLayer } from '../../../platform/store/open.js';
@@ -123,7 +124,7 @@ const store = Layer.effect(
     const home = yield* files.makeTempDirectoryScoped({ prefix: 'tagma-push-' });
     return yield* Layer.build(
       unitsLayer(MachineUnits, MachineStore).pipe(
-        Layer.provideMerge(Layer.orDie(machineFileLayer(join(home, 'db.sqlite'), fixtureMigrations))),
+        Layer.provideMerge(Layer.orDie(machineFileLayer(join(home, 'db.sqlite'), fixtureMigrations, {}, sharedPool))),
       ),
     );
   }),

@@ -42,7 +42,7 @@ const makeWorld = Effect.fnUntraced(
     released: (report: ReleaseReport) => Effect.Effect<void>,
     options: TerminalWorldOptions,
     root: string,
-    processes?: ProcessPool,
+    processes: ProcessPool,
   ) {
     const files = yield* FileSystem.FileSystem;
     const fixture = yield* FixtureScope.acquire(root);
@@ -163,7 +163,9 @@ export const makeTerminalWorld = (options: TerminalWorldOptions & { readonly own
   const params = { hostSourcePath: options.hostSourcePath };
   if (options.own === undefined) return shared(terminalWorld, params);
   return own(
-    kind(TerminalFixture, (given: TerminalWorldOptions, home: string) => makeWorld(released, given, home)),
+    kind(TerminalFixture, (given: TerminalWorldOptions, home: string) =>
+      Effect.flatMap(heldPool, (pool) => makeWorld(released, given, home, pool)),
+    ),
     params,
     options.own,
   );

@@ -1,7 +1,9 @@
 import { join } from 'node:path';
 import * as BunRuntime from '@effect/platform-bun/BunRuntime';
 import * as BunServices from '@effect/platform-bun/BunServices';
-import { Clock, Context, Data, Effect, Exit, FiberSet, FileSystem, Metric, Scope, Stream } from 'effect';
+import { Clock, Context, Data, Effect, Exit, FiberSet, FileSystem, Layer, Metric, Scope, Stream } from 'effect';
+import { ProcessPool } from '@runlith/sqlite-process/ProcessPool';
+import { childHosting } from '@runlith/sqlite-process/children';
 import type { PlatformError } from 'effect/PlatformError';
 import { PerformanceReports } from '@runlith/performance/PerformanceReports';
 import { PerformanceStore } from '@runlith/performance/PerformanceStore';
@@ -73,15 +75,19 @@ const main = Effect.gen(function* () {
     if (!ran.success) return yield* new BenchmarkRefused({ message: ran.stderr.toString() });
   }
   const boot = Effect.fnUntraced(function* () {
-    return yield* makeRuntime({
-      grants: testGrantSigner,
-      databasePath: join(home, 'db/tagma.sqlite'),
-      tokensPath: join(home, 'tokens.json'),
-      attachmentsPath: join(home, 'attachments'),
-      sourcePath: checkout,
-      quotaProviders: [],
-      spanFloorMicros: () => 0,
-    });
+    return yield* makeRuntime(
+      {
+        grants: testGrantSigner,
+        databasePath: join(home, 'db/tagma.sqlite'),
+        tokensPath: join(home, 'tokens.json'),
+        attachmentsPath: join(home, 'attachments'),
+        sourcePath: checkout,
+        quotaProviders: [],
+        spanFloorMicros: () => 0,
+      },
+      Layer.empty,
+      new ProcessPool(undefined, 'stop', undefined, childHosting),
+    );
   });
   const firstScope = yield* Scope.fork(yield* Effect.scope);
   const first = yield* Scope.provide(boot(), firstScope);

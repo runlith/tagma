@@ -2,6 +2,7 @@ import { expect } from 'bun:test';
 import { join } from 'node:path';
 import { layer } from '@runlith/effect-test';
 import { Context, Effect, FileSystem, Layer, Path, Scope, Stream } from 'effect';
+import { sharedPool } from '@runlith/sqlite-process/testing/pool';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import * as BunPath from '@effect/platform-bun/BunPath';
 import * as BunChildProcessSpawner from '@effect/platform-bun/BunChildProcessSpawner';
@@ -20,7 +21,9 @@ import type { NextFrame } from '../../installation/contract/wire/next.js';
 import { sourceChanges } from '../developer/sourceChanges.js';
 
 const host = BunChildProcessSpawner.layer.pipe(Layer.provide(Layer.mergeAll(BunFileSystem.layer, BunPath.layer)));
-const storage = unitsLayer(MachineUnits, MachineStore).pipe(Layer.provideMerge(seededStoreLayer(MachineStore, fixtureMigrations)));
+const storage = unitsLayer(MachineUnits, MachineStore).pipe(
+  Layer.provideMerge(seededStoreLayer(MachineStore, fixtureMigrations, {}, sharedPool)),
+);
 const layers = Layer.mergeAll(storage, BunFileSystem.layer, Path.layer, gitLayer.pipe(Layer.provide(host)));
 
 layer(layers, { excludeTestServices: true })('installation source', (it) => {

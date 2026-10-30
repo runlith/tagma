@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Checkpoints } from './Checkpoints.js';
 import { ProcessPool } from './ProcessPool.js';
+import { childHosting } from './children.js';
 import { thrownShapeOf, type SqliteSaid } from './channel.js';
 import { checkEngine, selectEngine } from './engine.js';
 
@@ -68,7 +69,7 @@ it.live('an implicit read cursor blocks the writer probe without losing the stor
         );
       }
     }
-    const checkpoints = new Checkpoints(new ObservedPool(0));
+    const checkpoints = new Checkpoints(new ObservedPool(0, 'stop', undefined, childHosting));
     const losses: string[] = [];
     checkpoints.add(
       1,

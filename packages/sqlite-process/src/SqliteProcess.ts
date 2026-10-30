@@ -79,7 +79,7 @@ export const synchronously =
 
 export const sqliteProcessLayer = (
   config: SqliteProcessConfig,
-  processes = new ProcessPool(),
+  processes: ProcessPool,
 ): Layer.Layer<SqliteClient | Client.SqlClient | Readers | Connections> =>
   Layer.effectContext(
     Effect.orDie(

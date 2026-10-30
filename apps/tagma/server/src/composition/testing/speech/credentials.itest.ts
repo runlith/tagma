@@ -6,6 +6,7 @@ import { layer } from '@runlith/effect-test';
 import { AccountKey } from '@runlith/llm/models/authStatus';
 import { SpeechCredentials } from '@runlith/speech/engine/SpeechCredentials';
 import { Effect, Layer, Stream } from 'effect';
+import { sharedPool } from '@runlith/sqlite-process/testing/pool';
 import { fixtureMigrations } from '../migrations.js';
 import { MachineStore } from '../../../platform/contract/service/store.js';
 import { MachineUnits } from '../../../platform/contract/service/units.js';
@@ -41,7 +42,7 @@ const world = credentialsLayer.pipe(
     ),
   ),
   Layer.provideMerge(unitsLayer(MachineUnits, MachineStore)),
-  Layer.provideMerge(seededStoreLayer(MachineStore, fixtureMigrations)),
+  Layer.provideMerge(seededStoreLayer(MachineStore, fixtureMigrations, {}, sharedPool)),
 );
 
 const refusalOf = (provider: string) =>

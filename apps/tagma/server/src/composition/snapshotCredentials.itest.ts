@@ -5,6 +5,7 @@ import { Database } from 'bun:sqlite';
 import { join } from 'node:path';
 import { sql } from 'drizzle-orm';
 import { Effect, FileSystem } from 'effect';
+import { sharedPool } from '@runlith/sqlite-process/testing/pool';
 import { inDatabase } from '../platform/testing/connection.js';
 import { storeSnapshots } from '../platform/store/snapshot.js';
 import { consoleAccountOf } from '../providers/credentials/consoleKeys.js';
@@ -35,7 +36,7 @@ layer(BunFileSystem.layer, { excludeTestServices: true })('snapshot credentials'
       const path = join(root, 'store.sqlite');
       const creds = join(root, 'creds');
       yield* FileSystem.FileSystem.use((files) => files.makeDirectory(creds, { recursive: true }));
-      const snapshots = storeSnapshots({ providers: credentialParticipant(creds) });
+      const snapshots = storeSnapshots({ providers: credentialParticipant(creds) }, yield* sharedPool);
       const pending = [{ name: 'rotate', hash: 'rotate', sql: ["update console_key set key_value = 'rotated' where account = 'alice'"] }];
       yield* inDatabase(path, (db) =>
         Effect.gen(function* () {
@@ -72,7 +73,7 @@ layer(BunFileSystem.layer, { excludeTestServices: true })('snapshot credentials'
       const path = join(root, 'store.sqlite');
       const creds = join(root, 'creds');
       yield* FileSystem.FileSystem.use((files) => files.makeDirectory(creds, { recursive: true }));
-      const snapshots = storeSnapshots({ providers: credentialParticipant(creds) });
+      const snapshots = storeSnapshots({ providers: credentialParticipant(creds) }, yield* sharedPool);
       const pending = [
         {
           name: 'rotate',
@@ -131,7 +132,7 @@ layer(BunFileSystem.layer, { excludeTestServices: true })('snapshot credentials'
       const path = join(root, 'store.sqlite');
       const creds = join(root, 'creds');
       yield* FileSystem.FileSystem.use((files) => files.makeDirectory(creds, { recursive: true }));
-      const snapshots = storeSnapshots({ providers: credentialParticipant(creds) });
+      const snapshots = storeSnapshots({ providers: credentialParticipant(creds) }, yield* sharedPool);
       const pending = [
         { name: 'rotate', hash: 'rotate', sql: ["update console_key set key_value = 'rotated'", "update fact set value = 'after'"] },
       ];

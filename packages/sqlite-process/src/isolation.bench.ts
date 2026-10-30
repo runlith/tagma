@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { Context, Effect, Fiber, Layer, Tracer } from 'effect';
 import { SqlClient } from 'effect/sql/SqlClient';
 import { ProcessPool } from './ProcessPool.js';
+import { childHosting } from './children.js';
 import { bulk, sqliteProcessLayer } from './SqliteProcess.js';
 
 const directory = await mkdtemp(join(tmpdir(), 'sqlite-isolation-bench-'));
@@ -21,7 +22,7 @@ try {
   await Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* () {
-        const processes = new ProcessPool(2);
+        const processes = new ProcessPool(2, 'stop', undefined, childHosting);
         const clients: SqlClient[] = [];
         const pids = new Set<number>();
         for (const name of ['a', 'b']) {

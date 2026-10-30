@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { it } from '@runlith/effect-test';
 import { Effect } from 'effect';
+import { sharedPool } from '@runlith/sqlite-process/testing/pool';
 import { sql } from 'drizzle-orm';
 import { inDatabase, storePlace } from '../../platform/testing/connection.js';
 import { applyMigration } from '../../platform/store/chain.js';
@@ -36,7 +37,7 @@ it.live(
   () =>
     Effect.gen(function* () {
       const path = yield* storePlace('change-text-');
-      const snapshots = storeSnapshots({});
+      const snapshots = storeSnapshots({}, yield* sharedPool);
       const migration = {
         name,
         hash: 'change-text',

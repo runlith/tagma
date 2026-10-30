@@ -6,9 +6,10 @@ import { Effect, Tracer } from 'effect';
 import { openConnection } from './connection.js';
 import { makeReaderPool } from './ReaderPool.js';
 import { ProcessPool } from './ProcessPool.js';
+import { childHosting } from './children.js';
 
 const directory = await mkdtemp(join(tmpdir(), 'sqlite-readers-bench-'));
-const processes = new ProcessPool(2);
+const processes = new ProcessPool(2, 'stop', undefined, childHosting);
 const pids = new Set<number>();
 const spans: Tracer.NativeSpan[] = [];
 const cold: number[] = [];

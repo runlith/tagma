@@ -348,7 +348,7 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
     drivers?: readonly DriverId[];
   },
   observations: Layer.Layer<never> = Layer.empty,
-  processes?: ProcessPool,
+  processes: ProcessPool,
   prepared: Context.Context<never> = Context.empty(),
 ): Effect.fn.Return<ServerRuntime, RuntimeFailure, Scope.Scope> {
   const baseScope = yield* Scope.fork(yield* Effect.scope);
@@ -394,7 +394,7 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
       options.grants,
       SETTING_DECLARATIONS.keys,
       OPERATION_IDS,
-      yield* snapshotAssembly(storePath, dirname(options.tokensPath)),
+      yield* snapshotAssembly(storePath, dirname(options.tokensPath), processes),
     ),
     (started) => Scope.close(started.scope, Exit.void),
   );
@@ -819,7 +819,7 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
     stackScope,
   );
   const resolution = sessionResolution(store, Context.get(built, Terminals), Context.get(built, ThreadRecords));
-  const steps = Context.make(ConsoleKeyRollback, consoleKeyRollback(dirname(options.tokensPath))).pipe(
+  const steps = Context.make(ConsoleKeyRollback, consoleKeyRollback(dirname(options.tokensPath), processes)).pipe(
     Context.add(DowngradeSteps, Context.get(owners, CommitQueue)),
   );
   const door: Context.Context<RuntimeDoor> = Context.mergeAll(

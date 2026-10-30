@@ -11,13 +11,14 @@ test.skipIf(process.platform === 'win32')(
     const script = `
     import { Effect, Layer } from 'effect';
     import { ProcessPool } from './ProcessPool.ts';
+    import { childHosting } from './children.ts';
     import { sqliteProcessLayer } from './SqliteProcess.ts';
     await Effect.runPromise(Effect.scoped(Effect.gen(function* () {
       yield* Layer.build(sqliteProcessLayer({
         filename: ${JSON.stringify(join(directory, 'store.db'))},
         onLost: (reason) => { throw new Error(reason); },
         onSpawned: ({ pid }) => { process.send?.({ sqlite: pid }); return () => {}; },
-      }, new ProcessPool(2)));
+      }, new ProcessPool(2, 'stop', undefined, childHosting)));
       yield* Effect.promise(() => new Promise(() => process.send?.('ready')));
     })));
   `;
@@ -71,13 +72,14 @@ test.skipIf(process.platform === 'win32')('a Unix terminal hangup leaves SQLite 
     import { Context, Effect, Layer } from 'effect';
     import { SqlClient } from 'effect/sql/SqlClient';
     import { ProcessPool } from './ProcessPool.ts';
+    import { childHosting } from './children.ts';
     import { sqliteProcessLayer } from './SqliteProcess.ts';
     await Effect.runPromise(Effect.scoped(Effect.gen(function* () {
       const context = yield* Layer.build(sqliteProcessLayer({
         filename: ${JSON.stringify(filename)},
         onLost: (reason) => { throw new Error(reason); },
         onSpawned: ({ pid }) => { process.send?.({ sqlite: pid }); return () => {}; },
-      }, new ProcessPool(2)));
+      }, new ProcessPool(2, 'stop', undefined, childHosting)));
       const sql = Context.get(context, SqlClient);
       yield* sql\`CREATE TABLE item (value INTEGER)\`;
       yield* Effect.promise(() => new Promise((resolve) => {

@@ -19,6 +19,7 @@ import {
   QuotaWindow,
 } from '@runlith/llm/schema/quota';
 import { Clock, Context, Deferred, Effect, Exit, Fiber, Latch, Layer, Option, Queue, Scope, Stream } from 'effect';
+import { sharedPool } from '@runlith/sqlite-process/testing/pool';
 import { TestClock } from 'effect/testing';
 import { accountQuotaReading } from '../store/tables.js';
 import { MachineStore } from '../../platform/contract/service/store.js';
@@ -34,7 +35,9 @@ import { subscriptionAccounts } from '../accounts/stored.js';
 import { makeQuotaReadings } from './readings.js';
 import { makeOperatorCredentials } from '../credentials/operator.js';
 
-const storage = unitsLayer(MachineUnits, MachineStore).pipe(Layer.provideMerge(seededStoreLayer(MachineStore, fixtureMigrations)));
+const storage = unitsLayer(MachineUnits, MachineStore).pipe(
+  Layer.provideMerge(seededStoreLayer(MachineStore, fixtureMigrations, {}, sharedPool)),
+);
 
 const readings = Effect.map(Effect.all([MachineStore, MachineUnits]), ([store, units]) => makeQuotaReadings({ db: store.db, units }));
 

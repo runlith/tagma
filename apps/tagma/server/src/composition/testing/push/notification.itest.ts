@@ -3,6 +3,7 @@ import { expect } from 'bun:test';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { it } from '@runlith/effect-test';
 import { Context, Effect, FileSystem, Layer, Queue, Stream } from 'effect';
+import { sharedPool } from '@runlith/sqlite-process/testing/pool';
 import { Notifications } from '../../../notify/contract/service/notifications.js';
 import { Outcomes, type Settled } from '../../../notify/contract/service/outcomes.js';
 import { notify } from '../../../notify/notify.js';
@@ -46,7 +47,7 @@ it.live('an app asks, the question reaches the phone as a link and the stored ou
       ),
     );
     const store = unitsLayer(MachineUnits, MachineStore).pipe(
-      Layer.provideMerge(Layer.orDie(machineFileLayer(join(home, 'db.sqlite'), fixtureMigrations))),
+      Layer.provideMerge(Layer.orDie(machineFileLayer(join(home, 'db.sqlite'), fixtureMigrations, {}, sharedPool))),
     );
     const notified = notify.lifetimes.serving.pipe(
       Layer.provide(

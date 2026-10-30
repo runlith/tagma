@@ -3,6 +3,7 @@ import { layer } from '@runlith/effect-test';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { sql } from 'drizzle-orm';
 import { Context, Effect, Layer, Schedule } from 'effect';
+import { sharedPool } from '@runlith/sqlite-process/testing/pool';
 import { fixtureMigrations } from '../../composition/testing/migrations.js';
 import { MachineStore } from '../contract/service/store.js';
 import { storePlace } from '../testing/connection.js';
@@ -12,8 +13,8 @@ const PROBE_ROWS = 400;
 
 const PAGE_ROW_BYTES = 3_000;
 
-const opened = (path: string, options?: Parameters<typeof storeLayer>[3]) =>
-  Effect.map(Layer.build(Layer.orDie(storeLayer(MachineStore, path, fixtureMigrations, options))), Context.get(MachineStore));
+const opened = (path: string, options: Parameters<typeof storeLayer>[3] = {}) =>
+  Effect.map(Layer.build(Layer.orDie(storeLayer(MachineStore, path, fixtureMigrations, options, sharedPool))), Context.get(MachineStore));
 
 const fill = Effect.fnUntraced(function* (store: MachineStore['Service'], table: string, rows: number, bytes = 2_048) {
   yield* store.db.run(sql.raw(`create table if not exists ${table} (value blob not null)`));

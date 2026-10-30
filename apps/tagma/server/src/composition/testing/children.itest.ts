@@ -2,6 +2,8 @@ import { expect } from 'bun:test';
 import { resolve } from 'node:path';
 import { it } from '@runlith/effect-test';
 import { Effect, Layer, Logger } from 'effect';
+import { ProcessPool } from '@runlith/sqlite-process/ProcessPool';
+import { childHosting } from '@runlith/sqlite-process/children';
 import { ChildProcess } from 'effect/process';
 import * as BunServices from '@effect/platform-bun/BunServices';
 import { makeWithDefaults } from 'drizzle-orm/effect-sqlite-bun';
@@ -63,17 +65,20 @@ it.live('server composition witnesses git and SQLite children, and releases thei
         expect(ledger.of(databasePid)).toMatchObject({ role: 'database', identity: { _tag: 'Read', pid: databasePid } });
       }).pipe(
         Effect.provide(
-          sqliteProcessLayer({
-            filename: ':memory:',
-            readers: 0,
-            onLost: (reason) => {
-              throw new Error(reason);
+          sqliteProcessLayer(
+            {
+              filename: ':memory:',
+              readers: 0,
+              onLost: (reason) => {
+                throw new Error(reason);
+              },
+              onSpawned: ({ pid }) => {
+                databasePid = pid;
+                return ledger.record({ pid, role: 'database' });
+              },
             },
-            onSpawned: ({ pid }) => {
-              databasePid = pid;
-              return ledger.record({ pid, role: 'database' });
-            },
-          }),
+            new ProcessPool(undefined, 'stop', undefined, childHosting),
+          ),
         ),
       ),
     );

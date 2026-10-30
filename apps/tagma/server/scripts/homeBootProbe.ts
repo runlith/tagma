@@ -1,5 +1,7 @@
 import { Effect, Layer, ManagedRuntime } from 'effect';
 import { sql } from 'drizzle-orm';
+import { ProcessPool } from '@runlith/sqlite-process/ProcessPool';
+import { childHosting } from '@runlith/sqlite-process/children';
 import { dirname, join } from 'node:path';
 import { MachineStore } from '../src/platform/contract/service/store.js';
 import { MachineUnits } from '../src/platform/contract/service/units.js';
@@ -11,6 +13,7 @@ import { formChangeHomes } from '../src/change-record/store/homes.js';
 
 const path = process.argv[2];
 if (path === undefined) throw new Error('Pass an isolated APFS clone, never the live store.');
+const processes = new ProcessPool(undefined, 'stop', undefined, childHosting);
 const started = performance.now();
 const runtime = ManagedRuntime.make(
   unitsLayer(MachineUnits, MachineStore).pipe(
@@ -19,8 +22,9 @@ const runtime = ManagedRuntime.make(
         storeLayer(
           MachineStore,
           path,
-          { folder: migrationsFolder, seeds: join(dirname(path), 'home-seeds'), snapshots: storeSnapshots({}) },
+          { folder: migrationsFolder, seeds: join(dirname(path), 'home-seeds'), snapshots: storeSnapshots({}, processes) },
           { readers: 0 },
+          processes,
         ),
       ),
     ),

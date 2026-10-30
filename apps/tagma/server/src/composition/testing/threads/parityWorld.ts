@@ -1,6 +1,7 @@
 import { isAbsolute, join } from 'node:path';
 import { sql } from 'drizzle-orm';
-import { Cause, Clock, Context, Effect, Exit, FileSystem, Schema, Scope } from 'effect';
+import { Cause, Clock, Context, Effect, Exit, FileSystem, Layer, Schema, Scope } from 'effect';
+import { heldPool } from '@runlith/sqlite-process/testing/pool';
 import { MachineStore } from '../../../platform/contract/service/store.js';
 import { Settings } from '../../../settings/contract/service/values.js';
 import { HostManagement, type HostPlacement } from '../../../executions/contract/service/host.js';
@@ -311,21 +312,25 @@ export const parityWorld = Effect.fn('testing.parityWorld')(function* (
       if (currentScope !== undefined) yield* Scope.close(currentScope, Exit.void);
       const scope = yield* Scope.fork(generations);
       currentScope = scope;
-      const next = yield* makeRuntime({
-        adapters: TESTING_ADAPTERS,
-        grants: testGrantSigner,
-        profileWindowMs: () => 0,
-        quotaProviders: [],
-        databasePath: join(world.root, 'home/tagma.sqlite'),
-        tokensPath: join(world.root, 'home/tokens.json'),
-        attachmentsPath: join(world.root, 'home/attachments'),
-        sourcePath: join(world.sourceCheckout, 'server'),
-        hostBundlePath: yield* Effect.orDie(hostBundleRoot),
-        placedHost,
-        source: WORLD_SOURCE,
-        models: heldOrAsking,
-        drivers: [],
-      }).pipe(Scope.provide(scope));
+      const next = yield* makeRuntime(
+        {
+          adapters: TESTING_ADAPTERS,
+          grants: testGrantSigner,
+          profileWindowMs: () => 0,
+          quotaProviders: [],
+          databasePath: join(world.root, 'home/tagma.sqlite'),
+          tokensPath: join(world.root, 'home/tokens.json'),
+          attachmentsPath: join(world.root, 'home/attachments'),
+          sourcePath: join(world.sourceCheckout, 'server'),
+          hostBundlePath: yield* Effect.orDie(hostBundleRoot),
+          placedHost,
+          source: WORLD_SOURCE,
+          models: heldOrAsking,
+          drivers: [],
+        },
+        Layer.empty,
+        yield* heldPool.pipe(Scope.provide(scope)),
+      ).pipe(Scope.provide(scope));
       world.runtime = next;
       rig = yield* terminalRig(world, projectId, folder).pipe(Effect.provideService(FileSystem.FileSystem, files), Scope.provide(scope));
       for (const transport of Context.get(next.owners, ThreadHarness).runs.transports().all())

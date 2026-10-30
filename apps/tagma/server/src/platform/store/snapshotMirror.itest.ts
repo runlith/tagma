@@ -4,6 +4,7 @@ import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { readFileSync } from 'node:fs';
 import { sql } from 'drizzle-orm';
 import { Effect } from 'effect';
+import { sharedPool } from '@runlith/sqlite-process/testing/pool';
 import { inDatabase, storePlace } from '../testing/connection.js';
 import { storeSnapshots } from './snapshot.js';
 
@@ -30,7 +31,7 @@ layer(BunFileSystem.layer, { excludeTestServices: true })('snapshot search mirro
     () =>
       Effect.gen(function* () {
         const path = yield* storePlace('snapshot-mirror-');
-        const snapshots = storeSnapshots({});
+        const snapshots = storeSnapshots({}, yield* sharedPool);
         yield* inDatabase(path, (db) =>
           Effect.gen(function* () {
             for (const statement of SCHEMA) yield* db.run(sql.raw(statement));
@@ -64,7 +65,7 @@ layer(BunFileSystem.layer, { excludeTestServices: true })('snapshot search mirro
   it.effect('a search index a migration creates is a schema-only target its restore drops together with its shadow tables', () =>
     Effect.gen(function* () {
       const path = yield* storePlace('snapshot-index-');
-      const snapshots = storeSnapshots({});
+      const snapshots = storeSnapshots({}, yield* sharedPool);
       yield* inDatabase(path, (db) =>
         Effect.gen(function* () {
           for (const statement of SCHEMA) yield* db.run(sql.raw(statement));

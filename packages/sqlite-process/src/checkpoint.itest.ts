@@ -9,6 +9,7 @@ import { Context, Effect, Layer } from 'effect';
 import { SqlClient } from 'effect/sql/SqlClient';
 import { Connections, sqliteProcessLayer } from './SqliteProcess.js';
 import { ProcessPool } from './ProcessPool.js';
+import { childHosting } from './children.js';
 import { selectEngine, SOURCE_ID } from './engine.js';
 
 selectEngine();
@@ -20,7 +21,7 @@ const temporaryRoot = (prefix: string) =>
   );
 
 const preparedPool = Effect.acquireRelease(
-  Effect.sync(() => new ProcessPool(0)),
+  Effect.sync(() => new ProcessPool(0, 'stop', undefined, childHosting)),
   (processes) => Effect.promise(() => processes.closePrepared()),
 );
 

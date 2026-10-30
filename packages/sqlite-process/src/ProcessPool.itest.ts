@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { Clock, Context, Deferred, Effect, Exit, Fiber, Layer, Scope, Tracer } from 'effect';
 import { SqlClient } from 'effect/sql/SqlClient';
 import { ProcessPool } from './ProcessPool.js';
+import { childHosting } from './children.js';
 import { bulk, readOnly, sqliteProcessLayer } from './SqliteProcess.js';
 
 const burn =
@@ -24,7 +25,7 @@ const withStores = Effect.fnUntraced(function* <A, E>(
     (path) => Effect.promise(() => rm(path, { recursive: true, force: true })),
   );
   const held = yield* Effect.scope;
-  const processes = new ProcessPool(2);
+  const processes = new ProcessPool(2, 'stop', undefined, childHosting);
   const pids = new Set<number>();
   const lost: string[] = [];
   const readersLost = yield* Deferred.make<void>();
@@ -175,7 +176,7 @@ it.live('a keeping pool reuses its writer, reader and checkpoint children across
       Effect.promise(() => mkdtemp(join(tmpdir(), 'sqlite-keep-'))),
       (path) => Effect.promise(() => rm(path, { recursive: true, force: true })),
     );
-    const processes = new ProcessPool(1, 'keep');
+    const processes = new ProcessPool(1, 'keep', undefined, childHosting);
     const spawned: number[] = [];
     const registrant = () => {
       const held = new Set<number>();
@@ -212,7 +213,7 @@ it.live('a keeping pool reuses its writer, reader and checkpoint children across
 
 it.live('independent in-memory stores do not share a transaction fence', () =>
   Effect.gen(function* () {
-    const processes = new ProcessPool(2);
+    const processes = new ProcessPool(2, 'stop', undefined, childHosting);
     const open = () =>
       Effect.map(Layer.build(sqliteProcessLayer({ filename: ':memory:', onLost: () => {} }, processes)), (context) =>
         Context.get(context, SqlClient),

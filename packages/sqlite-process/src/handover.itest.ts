@@ -8,6 +8,7 @@ import { Context, Deferred, Effect, Exit, Fiber, Layer, Scope } from 'effect';
 import { SqlClient } from 'effect/sql/SqlClient';
 import { openConnection } from './connection.js';
 import { ProcessPool } from './ProcessPool.js';
+import { childHosting } from './children.js';
 import { Connections, Handover, readOnly, sqliteProcessLayer } from './SqliteProcess.js';
 
 const temporaryRoot = (prefix: string) =>
@@ -27,7 +28,7 @@ it.live('a handed-over writer releases its WAL to the successor without ending a
     foreignDb.close();
     let writer = 0;
     const losses: string[] = [];
-    const processes = new ProcessPool(1);
+    const processes = new ProcessPool(1, 'stop', undefined, childHosting);
     const foreign = yield* openConnection(processes, { filename: foreignPath, readonly: true, onLost: (reason) => losses.push(reason) }, 0);
     const priorScope = yield* Effect.acquireRelease(Scope.make(), (scope) => Scope.close(scope, Exit.void));
     const before = yield* Layer.buildWithScope(
@@ -70,7 +71,7 @@ it.live('a handed-over writer releases its WAL to the successor without ending a
     const after = yield* Layer.build(
       sqliteProcessLayer(
         { filename, readers: 0, synchronous: 'full', fullfsync: true, onLost: (reason) => losses.push(reason) },
-        new ProcessPool(0),
+        new ProcessPool(0, 'stop', undefined, childHosting),
       ),
     );
     expect(yield* Context.get(after, SqlClient)`select value from item`).toEqual([{ value: 'accepted' }]);
@@ -96,7 +97,7 @@ it.live('handover closes admission while an accepted transaction reaches its dur
             throw new Error(reason);
           },
         },
-        new ProcessPool(0),
+        new ProcessPool(0, 'stop', undefined, childHosting),
       ),
     );
     const sql = Context.get(before, SqlClient);
@@ -131,7 +132,7 @@ it.live('handover closes admission while an accepted transaction reaches its dur
             throw new Error(reason);
           },
         },
-        new ProcessPool(0),
+        new ProcessPool(0, 'stop', undefined, childHosting),
       ),
     );
     expect(yield* Context.get(after, SqlClient)`select value from item order by rowid`).toEqual([

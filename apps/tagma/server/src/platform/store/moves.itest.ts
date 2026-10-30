@@ -4,6 +4,7 @@ import { it } from '@runlith/effect-test';
 import { sql, type SQL } from 'drizzle-orm';
 import { sqliteTable, text } from 'drizzle-orm/sqlite-core';
 import { Effect, Layer } from 'effect';
+import { sharedPool } from '@runlith/sqlite-process/testing/pool';
 import { MachineStore } from '../contract/service/store.js';
 import { MachineUnits } from '../contract/service/units.js';
 import { writes } from '../contract/service/writes.js';
@@ -16,7 +17,7 @@ const other = sqliteTable('moves_other', { id: text('id').primaryKey() });
 const apart = sqliteTable('moves_apart', { id: text('id').primaryKey() });
 
 const storage = unitsLayer(MachineUnits, MachineStore).pipe(
-  Layer.provideMerge(Layer.orDie(seededStoreLayer(MachineStore, fixtureMigrations))),
+  Layer.provideMerge(Layer.orDie(seededStoreLayer(MachineStore, fixtureMigrations, {}, sharedPool))),
 );
 
 const world = Effect.gen(function* () {

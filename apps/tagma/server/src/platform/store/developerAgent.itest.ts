@@ -4,6 +4,7 @@ import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { join } from 'node:path';
 import { sql } from 'drizzle-orm';
 import { Context, Effect, FileSystem, Layer } from 'effect';
+import { sharedPool } from '@runlith/sqlite-process/testing/pool';
 import { MachineStore } from '../contract/service/store.js';
 import { storeLayer } from './open.js';
 
@@ -55,7 +56,7 @@ layer(BunFileSystem.layer, { excludeTestServices: true })('stored code threads',
       );
       yield* files.copyFile(new URL(`../../../drizzle/${MIGRATION}/migration.sql`, import.meta.url).pathname, join(move, 'migration.sql'));
       const context = yield* Layer.build(
-        storeLayer(MachineStore, join(root, 'machine.sqlite'), { folder, seeds: join(root, 'seeds') }, { readers: 0 }),
+        storeLayer(MachineStore, join(root, 'machine.sqlite'), { folder, seeds: join(root, 'seeds') }, { readers: 0 }, sharedPool),
       );
       const { db } = Context.get(context, MachineStore);
       const rows = yield* db.all<{ id: string; agent: string; profile: string | null; transport: string }>(

@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { it } from '@runlith/effect-test';
 import { Effect, Layer } from 'effect';
+import { sharedPool } from '@runlith/sqlite-process/testing/pool';
 import { sql } from 'drizzle-orm';
 import { MachineStore } from '../../platform/contract/service/store.js';
 import { MachineUnits } from '../../platform/contract/service/units.js';
@@ -31,7 +32,9 @@ const storage = Layer.unwrap(
         ].join('\n--> statement-breakpoint\n'),
       );
       return unitsLayer(MachineUnits, MachineStore).pipe(
-        Layer.provideMerge(Layer.orDie(storeLayer(MachineStore, ':memory:', { folder: root, seeds: join(root, 'seeds') }, { readers: 0 }))),
+        Layer.provideMerge(
+          Layer.orDie(storeLayer(MachineStore, ':memory:', { folder: root, seeds: join(root, 'seeds') }, { readers: 0 }, sharedPool)),
+        ),
       );
     },
   ),

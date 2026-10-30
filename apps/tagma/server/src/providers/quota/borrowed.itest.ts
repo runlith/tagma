@@ -4,6 +4,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { hostname, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Clock, Context, Deferred, Effect, Fiber, Layer, Schema, Stream } from 'effect';
+import { sharedPool } from '@runlith/sqlite-process/testing/pool';
 import { TestClock } from 'effect/testing';
 import { AccountKey } from '@runlith/llm/models/authStatus';
 import type { StoredCredential } from '@runlith/llm/oauth/credential';
@@ -128,7 +129,7 @@ const layer = providersLayer.pipe(
     ),
   ),
   Layer.provideMerge(unitsLayer(MachineUnits, MachineStore)),
-  Layer.provideMerge(seededStoreLayer(MachineStore, fixtureMigrations)),
+  Layer.provideMerge(seededStoreLayer(MachineStore, fixtureMigrations, {}, sharedPool)),
 );
 
 it.effect('an addressed native model discovers its existing CLI login without a preliminary catalog, launch or sign-in', () =>

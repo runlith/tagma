@@ -2,6 +2,7 @@ import { fixtureMigrations } from '../migrations.js';
 import { expect } from 'bun:test';
 import { layer } from '@runlith/effect-test';
 import { DateTime, Effect, Layer, Tracer } from 'effect';
+import { sharedPool } from '@runlith/sqlite-process/testing/pool';
 import { eq, sql } from 'drizzle-orm';
 import { Message } from '@runlith/llm/schema/messages';
 import { MachineStore } from '../../../platform/contract/service/store.js';
@@ -19,7 +20,9 @@ import { journalSteps, rolloutForms, sqliteThreadJournal } from '../../../thread
 import { makeThreadEntryReader } from '@runlith/agent/transcript/kinds';
 import { ENTRY_KINDS } from '../../manifest.js';
 
-const storage = unitsLayer(MachineUnits, MachineStore).pipe(Layer.provideMerge(seededStoreLayer(MachineStore, fixtureMigrations)));
+const storage = unitsLayer(MachineUnits, MachineStore).pipe(
+  Layer.provideMerge(seededStoreLayer(MachineStore, fixtureMigrations, {}, sharedPool)),
+);
 
 layer(storage, { excludeTestServices: true })('thread storage', (it) => {
   it.effect('thread storage exposes append, checkpoint and suffix phases, per fold', () =>

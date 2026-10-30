@@ -2,6 +2,7 @@ import { expect } from 'bun:test';
 import { it } from '@runlith/effect-test';
 import { sql } from 'drizzle-orm';
 import { Deferred, Effect, Fiber } from 'effect';
+import { sharedPool } from '@runlith/sqlite-process/testing/pool';
 import { TestClock } from 'effect/testing';
 import { fixtureMigrations } from '../../composition/testing/migrations.js';
 import { MachineStore } from '../contract/service/store.js';
@@ -32,5 +33,5 @@ it.effect('advancing domain time leaves a live transaction and its queued statem
     expect(yield* store.db.all<{ value: number }>(sql`select value from clock_probe order by value`)).toEqual([{ value: 1 }, { value: 2 }]);
     yield* store.transaction('after-clock-shift', () => store.db.run(sql`insert into clock_probe (value) values (3)`));
     expect(yield* store.db.all<{ n: number }>(sql`select count(*) as n from clock_probe`)).toEqual([{ n: 3 }]);
-  }).pipe(Effect.provide(seededStoreLayer(MachineStore, fixtureMigrations, { readers: 0 }))),
+  }).pipe(Effect.provide(seededStoreLayer(MachineStore, fixtureMigrations, { readers: 0 }, sharedPool))),
 );

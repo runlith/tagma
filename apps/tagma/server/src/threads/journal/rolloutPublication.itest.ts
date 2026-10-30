@@ -5,6 +5,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Effect, Layer, Result } from 'effect';
+import { sharedPool } from '@runlith/sqlite-process/testing/pool';
 import { sql } from 'drizzle-orm';
 import { ThreadEntryKinds, makeThreadEntryReader, type ThreadEntryReader, type ThreadFormStep } from '@runlith/agent/transcript/kinds';
 import { fixtureMigrations } from '../../composition/testing/migrations.js';
@@ -18,7 +19,7 @@ const root = mkdtempSync(join(tmpdir(), 'rollout-publication-'));
 afterAll(() => rmSync(root, { recursive: true, force: true }));
 const machine = Layer.orDie(
   unitsLayer(MachineUnits, MachineStore).pipe(
-    Layer.provideMerge(storeLayer(MachineStore, join(root, 'tagma.sqlite'), fixtureMigrations, { readers: 0 })),
+    Layer.provideMerge(storeLayer(MachineStore, join(root, 'tagma.sqlite'), fixtureMigrations, { readers: 0 }, sharedPool)),
   ),
 );
 const step: ThreadFormStep = {

@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { it } from '@runlith/effect-test';
 import { Context, Effect, Layer, Result, Stream } from 'effect';
+import { sharedPool } from '@runlith/sqlite-process/testing/pool';
 import { CLAUDE_CODE_PROVIDER } from '@runlith/adapter-anthropic/models/anthropic';
 import { CODEX_PROVIDER, OPENAI_OAUTH_PROVIDER } from '@runlith/adapter-openai/models/openai';
 import { AccountKey } from '@runlith/llm/models/authStatus';
@@ -126,7 +127,9 @@ const birthOn = Effect.fnUntraced(function* (
     () => [],
   );
   const stores = yield* Layer.build(
-    unitsLayer(MachineUnits, MachineStore).pipe(Layer.provideMerge(Layer.orDie(seededStoreLayer(MachineStore, fixtureMigrations)))),
+    unitsLayer(MachineUnits, MachineStore).pipe(
+      Layer.provideMerge(Layer.orDie(seededStoreLayer(MachineStore, fixtureMigrations, {}, sharedPool))),
+    ),
   );
   const rows = yield* Effect.provide(makeModelPreferenceRows, stores);
   if (saved !== undefined) yield* rows.saveModelSelection(OPERATOR_PRINCIPAL, saved);

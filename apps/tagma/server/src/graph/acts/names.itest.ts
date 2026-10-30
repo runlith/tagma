@@ -3,6 +3,7 @@ import { layer } from '@runlith/effect-test';
 import { randomUUID } from 'node:crypto';
 import { eq } from 'drizzle-orm';
 import { Clock, Deferred, Effect, Fiber, Layer } from 'effect';
+import { sharedPool } from '@runlith/sqlite-process/testing/pool';
 import { fixtureGraphMigrations } from '../../composition/testing/migrations.js';
 import { GraphStore } from '../../platform/contract/service/store.js';
 import { GraphUnits } from '../../platform/contract/service/units.js';
@@ -15,7 +16,7 @@ import { blockName } from '../contract/wire/references.js';
 import { blockNames } from './names.js';
 
 const stores = unitsLayer(GraphUnits, GraphStore).pipe(
-  Layer.provideMerge(Layer.orDie(seededStoreLayer(GraphStore, fixtureGraphMigrations, { readers: 1 }))),
+  Layer.provideMerge(Layer.orDie(seededStoreLayer(GraphStore, fixtureGraphMigrations, { readers: 1 }, sharedPool))),
 );
 
 layer(stores, { excludeTestServices: true })('block names', (it) => {

@@ -2,6 +2,7 @@ import { fixtureMigrations } from '../migrations.js';
 import { expect } from 'bun:test';
 import { layer } from '@runlith/effect-test';
 import { Effect, Layer } from 'effect';
+import { sharedPool } from '@runlith/sqlite-process/testing/pool';
 import { asc, eq } from 'drizzle-orm';
 import { Message } from '@runlith/llm/schema/messages';
 import { TranscriptFold } from '@runlith/agent/transcript/TranscriptFold';
@@ -17,7 +18,9 @@ import { makeThreadRecords } from '../../../thread-record/layer.js';
 import { threadFolder } from '../../../native-harness/testing/fold.js';
 import { ENTRY_KINDS } from '../../manifest.js';
 
-const storage = unitsLayer(MachineUnits, MachineStore).pipe(Layer.provideMerge(seededStoreLayer(MachineStore, fixtureMigrations)));
+const storage = unitsLayer(MachineUnits, MachineStore).pipe(
+  Layer.provideMerge(seededStoreLayer(MachineStore, fixtureMigrations, {}, sharedPool)),
+);
 
 const stand = Effect.gen(function* () {
   const { db } = yield* MachineStore;

@@ -3,17 +3,18 @@ import { expect } from 'bun:test';
 import { it } from '@runlith/effect-test';
 import { sql } from 'drizzle-orm';
 import { Cause, Context, Deferred, Effect, Exit, Fiber, Layer } from 'effect';
+import { sharedPool } from '@runlith/sqlite-process/testing/pool';
 import { GraphStore, MachineStore, StoreIdentityConflict } from '../contract/service/store.js';
 import { type Unit, GraphUnits, MachineUnits } from '../contract/service/units.js';
 import { seededStoreLayer } from './open.js';
 import { unitsLayer } from './units.js';
 
 const machine = unitsLayer(MachineUnits, MachineStore).pipe(
-  Layer.provideMerge(Layer.orDie(seededStoreLayer(MachineStore, fixtureMigrations))),
+  Layer.provideMerge(Layer.orDie(seededStoreLayer(MachineStore, fixtureMigrations, {}, sharedPool))),
 );
 
 const graph = unitsLayer(GraphUnits, GraphStore).pipe(
-  Layer.provideMerge(Layer.orDie(seededStoreLayer(GraphStore, fixtureGraphMigrations, { readers: 0 }))),
+  Layer.provideMerge(Layer.orDie(seededStoreLayer(GraphStore, fixtureGraphMigrations, { readers: 0 }, sharedPool))),
 );
 
 const held = sql`select id from unit_isolation_probe where id = 'held'`;

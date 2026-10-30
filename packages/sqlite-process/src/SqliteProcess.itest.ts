@@ -9,14 +9,17 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { ProcessPool } from './ProcessPool.js';
+import { childHosting } from './children.js';
 import type { PoolState } from './ReaderPool.js';
 import { HeldFor } from '@runlith/held/holding';
 import { bulk, Connections, readOnly, Readers, sqliteProcessLayer } from './SqliteProcess.js';
 import type { StatementTiming } from './connection.js';
 
+const fresh = (ceiling?: number) => new ProcessPool(ceiling, 'stop', undefined, childHosting);
+
 const withClient = Effect.fnUntraced(function* <A, E>(work: (sql: SqlClient, lost: Array<string>) => Effect.Effect<A, E>) {
   const lost: Array<string> = [];
-  const context = yield* Layer.build(sqliteProcessLayer({ filename: ':memory:', onLost: (reason) => void lost.push(reason) }));
+  const context = yield* Layer.build(sqliteProcessLayer({ filename: ':memory:', onLost: (reason) => void lost.push(reason) }, fresh()));
   return yield* work(Context.get(context, SqlClient), lost);
 });
 
@@ -48,7 +51,7 @@ it.live('a statement answers and a transaction rolls back whole', () =>
 
 it.live('the writer standing names the work holding it, counts only the time nothing ran in the engine, and empties when it ends', () =>
   Effect.gen(function* () {
-    const context = yield* Layer.build(sqliteProcessLayer({ filename: ':memory:', onLost: () => undefined }));
+    const context = yield* Layer.build(sqliteProcessLayer({ filename: ':memory:', onLost: () => undefined }, fresh()));
     const sql = Context.get(context, SqlClient);
     const { writer } = Context.get(context, Connections);
     const seen = yield* sql
@@ -75,7 +78,7 @@ it.live('the writer standing names the work holding it, counts only the time not
 it.live('a statement waiting in SQLite leaves the asking loop able to release its blocker', () =>
   Effect.gen(function* () {
     const filename = yield* onDisk;
-    const context = yield* Layer.build(sqliteProcessLayer({ filename, busyTimeout: Duration.seconds(86_400), onLost: () => {} }));
+    const context = yield* Layer.build(sqliteProcessLayer({ filename, busyTimeout: Duration.seconds(86_400), onLost: () => {} }, fresh()));
     const sql = Context.get(context, SqlClient);
     const { writer } = Context.get(context, Connections);
     yield* sql`CREATE TABLE t (id INTEGER PRIMARY KEY)`;
@@ -108,7 +111,7 @@ it.live('every statement says where its time went: the round trip, the queue, th
   Effect.gen(function* () {
     const timings: Array<StatementTiming> = [];
     const context = yield* Layer.build(
-      sqliteProcessLayer({ filename: ':memory:', onLost: () => {}, onStatement: (timing) => void timings.push(timing) }),
+      sqliteProcessLayer({ filename: ':memory:', onLost: () => {}, onStatement: (timing) => void timings.push(timing) }, fresh()),
     );
     const sql = Context.get(context, SqlClient);
     yield* sql`CREATE TABLE t (id INTEGER PRIMARY KEY)`;
@@ -161,7 +164,7 @@ it.live('a statement asked after the connection is let go fails instead of waiti
   Effect.gen(function* () {
     const scope = yield* Scope.make();
     yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void));
-    const context = yield* Scope.provide(Layer.build(sqliteProcessLayer({ filename: ':memory:', onLost: () => {} })), scope);
+    const context = yield* Scope.provide(Layer.build(sqliteProcessLayer({ filename: ':memory:', onLost: () => {} }, fresh())), scope);
     const sql = Context.get(context, SqlClient);
     yield* sql`CREATE TABLE t (id INTEGER PRIMARY KEY)`;
     yield* Scope.close(scope, Exit.void);
@@ -173,11 +176,14 @@ it.live('a statement asked after the connection is let go fails instead of waiti
 it.live('every door of the connection answers, and the name transforms are applied', () =>
   Effect.gen(function* () {
     const context = yield* Layer.build(
-      sqliteProcessLayer({
-        filename: ':memory:',
-        onLost: () => {},
-        transformResultNames: (name) => name.replace(/_(.)/g, (_, letter: string) => letter.toUpperCase()),
-      }),
+      sqliteProcessLayer(
+        {
+          filename: ':memory:',
+          onLost: () => {},
+          transformResultNames: (name) => name.replace(/_(.)/g, (_, letter: string) => letter.toUpperCase()),
+        },
+        fresh(),
+      ),
     );
     const sql = Context.get(context, SqlClient);
     yield* sql`CREATE TABLE person (id INTEGER PRIMARY KEY, given_name TEXT NOT NULL)`;
@@ -254,13 +260,16 @@ it.live('a handler that throws leaves no waiter on the wire and does not un-anno
         }),
     );
     const context = yield* Layer.build(
-      sqliteProcessLayer({
-        filename: ':memory:',
-        onLost: () => {
-          calls.push('told');
-          throw new Error('the handler is broken');
+      sqliteProcessLayer(
+        {
+          filename: ':memory:',
+          onLost: () => {
+            calls.push('told');
+            throw new Error('the handler is broken');
+          },
         },
-      }),
+        fresh(),
+      ),
     );
     const sql = Context.get(context, SqlClient);
     const running = yield* Effect.forkChild(answeredOrFailure(sql`${sql.literal(burn(200_000_000))}`));
@@ -319,11 +328,14 @@ it.live('a statement the connection is still busy with is questioned and left to
     const { names, lost, askedWhileHeld } = yield* Effect.gen(function* () {
       const lost: Array<string> = [];
       const context = yield* Layer.build(
-        sqliteProcessLayer({
-          filename: file,
-          busyTimeout: Duration.seconds(30),
-          onLost: (reason) => void lost.push(reason),
-        }),
+        sqliteProcessLayer(
+          {
+            filename: file,
+            busyTimeout: Duration.seconds(30),
+            onLost: (reason) => void lost.push(reason),
+          },
+          fresh(),
+        ),
       );
       const sql = Context.get(context, SqlClient);
       yield* sql`CREATE TABLE t (id INTEGER PRIMARY KEY, name TEXT NOT NULL)`;
@@ -357,7 +369,7 @@ const withReadClient = Effect.fnUntraced(function* <A, E>(
   onStatement?: (timing: StatementTiming) => void,
 ) {
   const filename = yield* onDisk;
-  const context = yield* Layer.build(sqliteProcessLayer({ filename, readers, onLost: () => {}, onStatement }));
+  const context = yield* Layer.build(sqliteProcessLayer({ filename, readers, onLost: () => {}, onStatement }, fresh()));
   return yield* work(Context.get(context, SqlClient), Context.get(context, Readers).state);
 });
 
@@ -484,7 +496,7 @@ it.live('a reader that died sends its own statement nowhere, and the next read o
 
 it.live('a read its caller leaves mid-statement frees its lane at once, and every store sharing that lane reads on', () =>
   Effect.gen(function* () {
-    const processes = new ProcessPool(1);
+    const processes = fresh(1);
     const open = (filename: string) =>
       Effect.map(Layer.build(sqliteProcessLayer({ filename, onLost: () => {} }, processes)), (context) => ({
         sql: Context.get(context, SqlClient),
@@ -623,7 +635,7 @@ it.live('a ceiling of two opens two readers for three simultaneous reads and par
 
 it.live('an in-memory client keeps every statement on its one connection', () =>
   Effect.gen(function* () {
-    const context = yield* Layer.build(sqliteProcessLayer({ filename: ':memory:', readers: 4, onLost: () => {} }));
+    const context = yield* Layer.build(sqliteProcessLayer({ filename: ':memory:', readers: 4, onLost: () => {} }, fresh()));
     const sql = Context.get(context, SqlClient);
     yield* sql`CREATE TABLE t (id INTEGER PRIMARY KEY)`;
     yield* sql`INSERT INTO t (id) VALUES (1)`;
@@ -635,11 +647,14 @@ it.live('an in-memory client keeps every statement on its one connection', () =>
 const mmapOf = Effect.fnUntraced(
   function* (mmapBytes: number | undefined) {
     const context = yield* Layer.build(
-      sqliteProcessLayer({
-        filename: yield* onDisk,
-        onLost: () => {},
-        mmapBytes,
-      }),
+      sqliteProcessLayer(
+        {
+          filename: yield* onDisk,
+          onLost: () => {},
+          mmapBytes,
+        },
+        fresh(),
+      ),
     );
     const sql = Context.get(context, SqlClient);
     const read = sql<{ mmap_size: number }>`PRAGMA mmap_size`;

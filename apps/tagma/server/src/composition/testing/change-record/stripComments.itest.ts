@@ -3,6 +3,7 @@ import { layer } from '@runlith/effect-test';
 import { dirname, join } from 'node:path';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { Clock, Context, Effect, FileSystem, Layer, Schema } from 'effect';
+import { sharedPool } from '@runlith/sqlite-process/testing/pool';
 import { Git } from '@runlith/git/Git';
 import { gitMode } from '@runlith/agent-tools/changes/measure';
 import { workspaceChangeHunk } from '@runlith/files/hunk';
@@ -94,7 +95,7 @@ const checkout = Effect.gen(function* () {
   yield* files.copy(fixture.template, root);
   const graph = yield* Layer.build(
     Layer.mergeAll(fixtureGraph({ sourcePath: root }).pipe(Layer.provideMerge(projectsLayer)), unitsLayer(MachineUnits, MachineStore)).pipe(
-      Layer.provideMerge(Layer.orDie(machineFileLayer(join(home, 'db.sqlite'), fixtureMigrations))),
+      Layer.provideMerge(Layer.orDie(machineFileLayer(join(home, 'db.sqlite'), fixtureMigrations, {}, sharedPool))),
       Layer.provideMerge(testSessionIdentityLayer),
     ),
   );

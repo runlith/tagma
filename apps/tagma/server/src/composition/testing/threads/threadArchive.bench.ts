@@ -2,7 +2,9 @@ import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import * as BunRuntime from '@effect/platform-bun/BunRuntime';
 import { join } from 'node:path';
 import { sql } from 'drizzle-orm';
-import { Clock, Context, Effect, FileSystem } from 'effect';
+import { Clock, Context, Effect, FileSystem, Layer } from 'effect';
+import { ProcessPool } from '@runlith/sqlite-process/ProcessPool';
+import { childHosting } from '@runlith/sqlite-process/children';
 import { PerformanceReports } from '@runlith/performance/PerformanceReports';
 import { PerformanceStore } from '@runlith/performance/PerformanceStore';
 import type { TraceCursor } from '@runlith/performance/protocol/queries';
@@ -39,15 +41,19 @@ const main = Effect.gen(function* () {
   const fixture = yield* Effect.acquireRelease(roots.openEffect, () => roots.releaseEffect.pipe(Effect.orDie));
   const rootPath = yield* tempRepoEffect(fixture, 'archive-bench-');
   yield* files.makeDirectory(join(home, 'home'));
-  const runtime = yield* makeRuntime({
-    grants: testGrantSigner,
-    databasePath: join(home, 'home', 'tagma.sqlite'),
-    tokensPath: join(home, 'home', 'tokens.json'),
-    attachmentsPath: join(home, 'home', 'attachments'),
-    sourcePath: join(home, 'home', 'tagma'),
-    quotaProviders: [],
-    spanFloorMicros: () => 0,
-  });
+  const runtime = yield* makeRuntime(
+    {
+      grants: testGrantSigner,
+      databasePath: join(home, 'home', 'tagma.sqlite'),
+      tokensPath: join(home, 'home', 'tokens.json'),
+      attachmentsPath: join(home, 'home', 'attachments'),
+      sourcePath: join(home, 'home', 'tagma'),
+      quotaProviders: [],
+      spanFloorMicros: () => 0,
+    },
+    Layer.empty,
+    new ProcessPool(undefined, 'stop', undefined, childHosting),
+  );
   yield* Effect.gen(function* () {
     const clock = yield* Clock.Clock;
     const settings = yield* Settings;

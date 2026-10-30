@@ -4,6 +4,7 @@ import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { join } from 'node:path';
 import { sql } from 'drizzle-orm';
 import { Context, Effect, FileSystem, Layer } from 'effect';
+import { sharedPool } from '@runlith/sqlite-process/testing/pool';
 import { MachineStore } from '../../platform/contract/service/store.js';
 import { storeLayer } from '../../platform/store/open.js';
 
@@ -41,7 +42,7 @@ layer(BunFileSystem.layer, { excludeTestServices: true })('placements on a forme
         join(repair, 'migration.sql'),
       );
       const context = yield* Layer.build(
-        storeLayer(MachineStore, join(root, 'machine.sqlite'), { folder, seeds: join(root, 'seeds') }, { readers: 0 }),
+        storeLayer(MachineStore, join(root, 'machine.sqlite'), { folder, seeds: join(root, 'seeds') }, { readers: 0 }, sharedPool),
       );
       const { db } = Context.get(context, MachineStore);
       expect(yield* db.all(sql`select thread_id, root_id, revision from assignment_selection order by thread_id`)).toEqual([

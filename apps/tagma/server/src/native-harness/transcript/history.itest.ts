@@ -1,6 +1,7 @@
 import { expect } from 'bun:test';
 import { it } from '@runlith/effect-test';
 import { Effect, Layer } from 'effect';
+import { sharedPool } from '@runlith/sqlite-process/testing/pool';
 import { eq } from 'drizzle-orm';
 import { Message } from '@runlith/llm/schema/messages';
 import { THREAD_AUTHORITY_DEFAULT } from '@runlith/agent/thread/rows';
@@ -21,7 +22,7 @@ import { instructionForm } from '../steps/projectInstructions.js';
 import { journalSteps } from '../../threads/journal/formSteps.js';
 
 const layer = unitsLayer(MachineUnits, MachineStore).pipe(
-  Layer.provideMerge(Layer.orDie(seededStoreLayer(MachineStore, fixtureMigrations, { readers: 0 }))),
+  Layer.provideMerge(Layer.orDie(seededStoreLayer(MachineStore, fixtureMigrations, { readers: 0 }, sharedPool))),
 );
 const changed = writes('history.test', [threadEvent, threadLog, threadHistoryItem]);
 const historyOf = (kinds: ThreadEntryReader) => makeHistoryStore({ reads: undefined }).pipe(Effect.provideService(ThreadEntryKinds, kinds));

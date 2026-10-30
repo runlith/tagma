@@ -2,6 +2,7 @@ import { expect } from 'bun:test';
 import { layer } from '@runlith/effect-test';
 import { THREAD_AUTHORITY_DEFAULT } from '@runlith/agent/thread/rows';
 import { Effect, Layer } from 'effect';
+import { sharedPool } from '@runlith/sqlite-process/testing/pool';
 import { bornThread } from '../native-harness/testing/born.js';
 import { fixtureMigrations } from '../composition/testing/migrations.js';
 import { MachineStore } from '../platform/contract/service/store.js';
@@ -13,7 +14,7 @@ import { ThreadRecords } from './contract/service/records.js';
 import { threadRecordsLayer } from './layer.js';
 
 const base = unitsLayer(MachineUnits, MachineStore).pipe(
-  Layer.provideMerge(Layer.orDie(seededStoreLayer(MachineStore, fixtureMigrations))),
+  Layer.provideMerge(Layer.orDie(seededStoreLayer(MachineStore, fixtureMigrations, {}, sharedPool))),
 );
 
 layer(threadRecordsLayer.pipe(Layer.provideMerge(base)))('detachment', (it) => {

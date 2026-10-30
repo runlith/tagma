@@ -3,6 +3,8 @@ import childProcess from 'node:child_process';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { ProcessPool } from '@runlith/sqlite-process/ProcessPool';
+import { childHosting } from '@runlith/sqlite-process/children';
 
 const cpu = (): number => {
   const used = process.cpuUsage();
@@ -160,6 +162,7 @@ const runtime =
               ...chosen,
             },
             Layer.succeed(FiberRuntimeMetrics, recorder),
+            new ProcessPool(undefined, 'stop', undefined, childHosting),
           ),
           scope,
         ).pipe(Effect.provideService(FiberRuntimeMetrics, recorder)),

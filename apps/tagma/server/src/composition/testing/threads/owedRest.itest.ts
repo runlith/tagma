@@ -4,6 +4,7 @@ import { THREAD_AUTHORITY_DEFAULT } from '@runlith/agent/thread/rows';
 import { ExecutionId, InstallationId, type ExecutionRef } from '@runlith/executions/protocol/execution';
 import { eq } from 'drizzle-orm';
 import { Effect, Layer } from 'effect';
+import { sharedPool } from '@runlith/sqlite-process/testing/pool';
 import { fixtureMigrations } from '../migrations.js';
 import { MachineStore } from '../../../platform/contract/service/store.js';
 import { MachineUnits } from '../../../platform/contract/service/units.js';
@@ -21,7 +22,7 @@ import { eventReads, ownWork, threadInbox } from '../../../threads/testing/doubl
 const INSTALLATION = InstallationId.make('owed-rest');
 
 const base = unitsLayer(MachineUnits, MachineStore).pipe(
-  Layer.provideMerge(Layer.orDie(seededStoreLayer(MachineStore, fixtureMigrations))),
+  Layer.provideMerge(Layer.orDie(seededStoreLayer(MachineStore, fixtureMigrations, {}, sharedPool))),
 );
 
 layer(base)('owed rest', (it) => {

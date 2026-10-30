@@ -43,7 +43,7 @@ export type ActivityStoreConfig = {
   readonly keeping: () => Keeping;
   readonly upkeepAfter?: Effect.Effect<void>;
   readonly projectsOf: (threads: readonly string[]) => Effect.Effect<ReadonlyMap<string, number | null>, unknown>;
-  readonly processes?: ProcessPool;
+  readonly processes: ProcessPool;
   readonly readingsMax?: number;
   readonly pendingMax?: number;
 };
@@ -85,7 +85,7 @@ function attempt(config: ActivityStoreConfig): Layer.Layer<ActivityStore | Activ
         filename: config.database,
         onLost: (reason: string) => console.error(`[activity] the store at ${config.database} is gone: ${reason}`),
       };
-      const database = config.processes === undefined ? sqliteProcessLayer(connection) : sqliteProcessLayer(connection, config.processes);
+      const database = sqliteProcessLayer(connection, config.processes);
       return Layer.effectContext(opened(config)).pipe(
         Layer.provide(BunWorker.layer(() => new Worker(new URL('./body.worker.ts', import.meta.url), { type: 'module' }))),
         Layer.provide(Layer.mergeAll(database, BunFileSystem.layer)),

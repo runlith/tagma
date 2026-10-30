@@ -4,6 +4,7 @@ import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { readFileSync } from 'node:fs';
 import { sql } from 'drizzle-orm';
 import { Effect } from 'effect';
+import { sharedPool } from '@runlith/sqlite-process/testing/pool';
 import { inDatabase, storePlace } from '../testing/connection.js';
 import { storeSnapshots } from './snapshot.js';
 
@@ -38,7 +39,7 @@ layer(BunFileSystem.layer, { excludeTestServices: true })('snapshot of renamed t
   it.effect('a table the migrations only rename is captured as schema and renamed back, keeping every row it holds at restore', () =>
     Effect.gen(function* () {
       const path = yield* storePlace('snapshot-rename-');
-      const snapshots = storeSnapshots({});
+      const snapshots = storeSnapshots({}, yield* sharedPool);
       yield* inDatabase(path, (db) =>
         Effect.gen(function* () {
           for (const statement of SCHEMA) yield* db.run(sql.raw(statement));
@@ -94,7 +95,7 @@ layer(BunFileSystem.layer, { excludeTestServices: true })('snapshot of renamed t
   it.effect('a rename under the current alter, which rewrites what refers to the table, is captured with its rows', () =>
     Effect.gen(function* () {
       const path = yield* storePlace('snapshot-rename-current-');
-      const snapshots = storeSnapshots({});
+      const snapshots = storeSnapshots({}, yield* sharedPool);
       yield* inDatabase(path, (db) =>
         Effect.gen(function* () {
           for (const statement of SCHEMA) yield* db.run(sql.raw(statement));
@@ -110,7 +111,7 @@ layer(BunFileSystem.layer, { excludeTestServices: true })('snapshot of renamed t
   it.effect('a renamed table the migrations also write is captured with its rows, as before', () =>
     Effect.gen(function* () {
       const path = yield* storePlace('snapshot-rename-written-');
-      const snapshots = storeSnapshots({});
+      const snapshots = storeSnapshots({}, yield* sharedPool);
       yield* inDatabase(path, (db) =>
         Effect.gen(function* () {
           for (const statement of SCHEMA) yield* db.run(sql.raw(statement));

@@ -3,6 +3,10 @@ import { it } from '@runlith/effect-test';
 import { Effect, Tracer } from 'effect';
 import { SqlClient } from 'effect/sql/SqlClient';
 import { sqliteProcessLayer } from './SqliteProcess.js';
+import { ProcessPool } from './ProcessPool.js';
+import { childHosting } from './children.js';
+
+const fresh = () => new ProcessPool(undefined, 'stop', undefined, childHosting);
 
 const recording = () => {
   const spans: Tracer.NativeSpan[] = [];
@@ -27,7 +31,7 @@ it.live('SQL spans identify statement shapes and retain engine timing for succes
       yield* sql.unsafe('SELECT 10 AS "1 -- label"');
       yield* sql.unsafe('SELECT 11 AS "2 -- label"');
       return { first, second, failed: failed._tag };
-    }).pipe(Effect.provide(sqliteProcessLayer({ filename: ':memory:', onLost: () => {} })), Effect.withTracer(tracer));
+    }).pipe(Effect.provide(sqliteProcessLayer({ filename: ':memory:', onLost: () => {} }, fresh())), Effect.withTracer(tracer));
     expect(result).toEqual({ first: [{ value: 'secret-one' }], second: [{ value: 'secret-two' }], failed: 'Failure' });
     const queries = spans.filter((span) => span.name === 'sql.execute');
     expect(queries).toHaveLength(5);
@@ -51,7 +55,7 @@ it.live('transaction control statements are measured on statement spans of their
       yield* sql.withTransaction(sql`SELECT 1 AS value`);
     }).pipe(
       Effect.withSpan('caller'),
-      Effect.provide(sqliteProcessLayer({ filename: ':memory:', onLost: () => {} })),
+      Effect.provide(sqliteProcessLayer({ filename: ':memory:', onLost: () => {} }, fresh())),
       Effect.withTracer(tracer),
     );
     const caller = spans.find((span) => span.name === 'caller');

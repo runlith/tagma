@@ -2,6 +2,7 @@ import { expect } from 'bun:test';
 import { layer } from '@runlith/effect-test';
 import { THREAD_AUTHORITY_DEFAULT } from '@runlith/agent/thread/rows';
 import { Clock, Effect, Layer } from 'effect';
+import { sharedPool } from '@runlith/sqlite-process/testing/pool';
 import { bornThread } from '../native-harness/testing/born.js';
 import { recordOf, scopeRecord } from './testing/records.js';
 import { sessionFor } from '../external-harnesses/testing/sessions.js';
@@ -16,7 +17,7 @@ import { ThreadId } from '../platform/contract/wire/thread.js';
 import { threadRecordsLayer } from './layer.js';
 
 const base = unitsLayer(MachineUnits, MachineStore).pipe(
-  Layer.provideMerge(Layer.orDie(seededStoreLayer(MachineStore, fixtureMigrations))),
+  Layer.provideMerge(Layer.orDie(seededStoreLayer(MachineStore, fixtureMigrations, {}, sharedPool))),
 );
 let store: MachineStore['Service'];
 let units: MachineUnits['Service'];

@@ -9,6 +9,7 @@ import type { SubscriptionAccounts } from '@runlith/llm/oauth/vendor';
 import { vendorWire } from '@runlith/llm/oauth/vendorCall';
 import { adapter } from '@runlith/adapter-openai-compatible/adapter';
 import { Effect, Layer, Schema, Stream } from 'effect';
+import { sharedPool } from '@runlith/sqlite-process/testing/pool';
 import { fixtureMigrations } from '../../composition/testing/migrations.js';
 import { seededStoreLayer } from '../../platform/store/open.js';
 import { unitsLayer } from '../../platform/store/units.js';
@@ -104,54 +105,53 @@ const setup = Effect.fnUntraced(function* () {
   };
 });
 
-layer(unitsLayer(MachineUnits, MachineStore).pipe(Layer.provideMerge(Layer.orDie(seededStoreLayer(MachineStore, fixtureMigrations)))))(
-  'sign-ins',
-  (it) => {
-    it.effect(
-      'a key method advertised by an API-key provider stores a usable console-key account through the same sign-in operations',
-      () =>
-        Effect.gen(function* () {
-          const { keys, signing } = yield* setup();
-          expect(yield* signing.begin('keyed', undefined, undefined, 'key')).toEqual({ flow: 'key' });
-          const completed = yield* signing.complete('keyed', undefined, 'console-secret');
-          if ('pending' in completed) return yield* Effect.die('key completion must finish');
-          expect(yield* keys.key('keyed', completed.account)).toBe('console-secret');
-          expect(completed).toMatchObject({ provider: 'keyed', expiresAt: null, origin: { kind: 'own' } });
-          expect(yield* Effect.flip(signing.complete('keyed', undefined, 'console-secret'))).toMatchObject({ code: 'no-sign-in' });
-        }),
-    );
+layer(
+  unitsLayer(MachineUnits, MachineStore).pipe(
+    Layer.provideMerge(Layer.orDie(seededStoreLayer(MachineStore, fixtureMigrations, {}, sharedPool))),
+  ),
+)('sign-ins', (it) => {
+  it.effect('a key method advertised by an API-key provider stores a usable console-key account through the same sign-in operations', () =>
+    Effect.gen(function* () {
+      const { keys, signing } = yield* setup();
+      expect(yield* signing.begin('keyed', undefined, undefined, 'key')).toEqual({ flow: 'key' });
+      const completed = yield* signing.complete('keyed', undefined, 'console-secret');
+      if ('pending' in completed) return yield* Effect.die('key completion must finish');
+      expect(yield* keys.key('keyed', completed.account)).toBe('console-secret');
+      expect(completed).toMatchObject({ provider: 'keyed', expiresAt: null, origin: { kind: 'own' } });
+      expect(yield* Effect.flip(signing.complete('keyed', undefined, 'console-secret'))).toMatchObject({ code: 'no-sign-in' });
+    }),
+  );
 
-    it.effect('a key harness signs in and exposes its stored account through the common account flow', () =>
-      Effect.gen(function* () {
-        const { tokens, signing } = yield* setup();
-        expect(yield* signing.begin('harness-keyed', undefined, undefined, 'key')).toEqual({ flow: 'key' });
-        const signed = yield* signing.complete('harness-keyed', undefined, 'harness-secret');
-        if ('pending' in signed) return yield* Effect.die('key completion must finish');
-        expect((yield* tokens.get('harness-keyed', signed.account))?.credential.accessToken).toBe('harness-secret');
-        expect((yield* signing.status())['harness-keyed']).toMatchObject([
-          { account: signed.account, label: 'Account', origin: { kind: 'own' } },
-        ]);
-      }),
-    );
+  it.effect('a key harness signs in and exposes its stored account through the common account flow', () =>
+    Effect.gen(function* () {
+      const { tokens, signing } = yield* setup();
+      expect(yield* signing.begin('harness-keyed', undefined, undefined, 'key')).toEqual({ flow: 'key' });
+      const signed = yield* signing.complete('harness-keyed', undefined, 'harness-secret');
+      if ('pending' in signed) return yield* Effect.die('key completion must finish');
+      expect((yield* tokens.get('harness-keyed', signed.account))?.credential.accessToken).toBe('harness-secret');
+      expect((yield* signing.status())['harness-keyed']).toMatchObject([
+        { account: signed.account, label: 'Account', origin: { kind: 'own' } },
+      ]);
+    }),
+  );
 
-    it.effect('paste authorization stores the returned account, refuses bad codes, and a consumed challenge cannot complete twice', () =>
-      Effect.gen(function* () {
-        const { tokens, signing } = yield* setup();
-        expect(yield* signing.begin('fixture', undefined, undefined, 'paste')).toEqual({
-          flow: 'paste',
-          authorizeUrl: 'https://vendor.test/authorize',
-        });
-        expect(yield* Effect.flip(signing.complete('fixture', undefined, 'wrong'))).toMatchObject({ code: 'sign-in-failed' });
-        expect(yield* tokens.accounts('fixture')).toEqual([]);
-        expect(yield* signing.complete('fixture', undefined, 'approved')).toMatchObject({ account: 'account', provider: 'fixture' });
-        expect(yield* tokens.getAccessToken('fixture', AccountKey.make('account'))).toBe('paste-token');
-        expect(yield* Effect.flip(signing.complete('fixture', undefined, 'approved'))).toMatchObject({ code: 'no-sign-in' });
-        expect(yield* Effect.flip(signing.begin('fixture', undefined, undefined, 'device'))).toMatchObject({ code: 'sign-in-failed' });
-        yield* signing.begin('fixture', undefined, undefined, 'paste');
-        yield* signing.begin('fixture', undefined, undefined, 'key');
-        yield* signing.complete('fixture', undefined, 'replacement-key');
-        expect(yield* tokens.getAccessToken('fixture', AccountKey.make('account'))).toBe('replacement-key');
-      }),
-    );
-  },
-);
+  it.effect('paste authorization stores the returned account, refuses bad codes, and a consumed challenge cannot complete twice', () =>
+    Effect.gen(function* () {
+      const { tokens, signing } = yield* setup();
+      expect(yield* signing.begin('fixture', undefined, undefined, 'paste')).toEqual({
+        flow: 'paste',
+        authorizeUrl: 'https://vendor.test/authorize',
+      });
+      expect(yield* Effect.flip(signing.complete('fixture', undefined, 'wrong'))).toMatchObject({ code: 'sign-in-failed' });
+      expect(yield* tokens.accounts('fixture')).toEqual([]);
+      expect(yield* signing.complete('fixture', undefined, 'approved')).toMatchObject({ account: 'account', provider: 'fixture' });
+      expect(yield* tokens.getAccessToken('fixture', AccountKey.make('account'))).toBe('paste-token');
+      expect(yield* Effect.flip(signing.complete('fixture', undefined, 'approved'))).toMatchObject({ code: 'no-sign-in' });
+      expect(yield* Effect.flip(signing.begin('fixture', undefined, undefined, 'device'))).toMatchObject({ code: 'sign-in-failed' });
+      yield* signing.begin('fixture', undefined, undefined, 'paste');
+      yield* signing.begin('fixture', undefined, undefined, 'key');
+      yield* signing.complete('fixture', undefined, 'replacement-key');
+      expect(yield* tokens.getAccessToken('fixture', AccountKey.make('account'))).toBe('replacement-key');
+    }),
+  );
+});

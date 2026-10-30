@@ -4,6 +4,7 @@ import { expect } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { sql } from 'drizzle-orm';
+import { sharedPool } from '@runlith/sqlite-process/testing/pool';
 import { Effect, FileSystem, Layer } from 'effect';
 import { MachineStore } from '../platform/contract/service/store.js';
 import { storeLayer } from '../platform/store/open.js';
@@ -18,9 +19,10 @@ layer(BunFileSystem.layer, { excludeTestServices: true })('snapshot lifecycle', 
     Effect.gen(function* () {
       const root = yield* FileSystem.FileSystem.use((files) => files.makeTempDirectoryScoped({ prefix: 'snapshot-baseline-' }));
       const path = join(root, 'store.sqlite');
-      const snapshots = storeSnapshots({ threads: rolloutParticipant(path, join(root, 'rollouts')) });
+      const pool = yield* sharedPool;
+      const snapshots = storeSnapshots({ threads: rolloutParticipant(path, join(root, 'rollouts')) }, pool);
       const migration = 'alter table thread add column baseline_note text';
-      yield* Effect.scoped(Effect.provide(Effect.void, Layer.orDie(storeLayer(MachineStore, path, fixtureMigrations))));
+      yield* Effect.scoped(Effect.provide(Effect.void, Layer.orDie(storeLayer(MachineStore, path, fixtureMigrations, {}, pool))));
       yield* inDatabase(path, (db) => snapshots.take({ path, db }, [{ name: 'next', hash: 'next', sql: [migration] }]));
       const manifest = JSON.parse(yield* FileSystem.FileSystem.use((files) => files.readFileString(`${path}.snapshot.json`))) as {
         tables: Array<{ name: string; data: boolean }>;
@@ -41,12 +43,15 @@ layer(BunFileSystem.layer, { excludeTestServices: true })('snapshot lifecycle', 
       const root = yield* FileSystem.FileSystem.use((files) => files.makeTempDirectoryScoped({ prefix: 'snapshot-cleanup-' }));
       const path = join(root, 'store.sqlite');
       let shouldFail = false;
-      const snapshots = storeSnapshots({
-        fault: {
-          tables: ['fact'],
-          scrub: () => (shouldFail ? Effect.fail(new SnapshotFailed({ path, reason: 'injected scrub failure' })) : Effect.void),
+      const snapshots = storeSnapshots(
+        {
+          fault: {
+            tables: ['fact'],
+            scrub: () => (shouldFail ? Effect.fail(new SnapshotFailed({ path, reason: 'injected scrub failure' })) : Effect.void),
+          },
         },
-      });
+        yield* sharedPool,
+      );
       const pending = [{ name: 'next', hash: 'next', sql: ['update fact set value = 2'] }];
       yield* inDatabase(path, (db) =>
         Effect.gen(function* () {
@@ -76,15 +81,18 @@ layer(BunFileSystem.layer, { excludeTestServices: true })('snapshot lifecycle', 
       const root = yield* FileSystem.FileSystem.use((files) => files.makeTempDirectoryScoped({ prefix: 'snapshot-participant-' }));
       const path = join(root, 'store.sqlite');
       const seen: Array<readonly string[]> = [];
-      const snapshots = storeSnapshots({
-        scoped: {
-          tables: ['fact', 'other'],
-          prepare: (store) =>
-            Effect.sync((): void => {
-              seen.push([...store.tables]);
-            }),
+      const snapshots = storeSnapshots(
+        {
+          scoped: {
+            tables: ['fact', 'other'],
+            prepare: (store) =>
+              Effect.sync((): void => {
+                seen.push([...store.tables]);
+              }),
+          },
         },
-      });
+        yield* sharedPool,
+      );
       const pending = [
         {
           name: 'migrate-participant',
@@ -109,7 +117,7 @@ layer(BunFileSystem.layer, { excludeTestServices: true })('snapshot lifecycle', 
     Effect.gen(function* () {
       const root = yield* FileSystem.FileSystem.use((files) => files.makeTempDirectoryScoped({ prefix: 'snapshot-foreign-key-' }));
       const path = join(root, 'store.sqlite');
-      const snapshots = storeSnapshots({});
+      const snapshots = storeSnapshots({}, yield* sharedPool);
       const pending = [{ name: 'migrate-parent', hash: 'parent', sql: ["update parent set value = 'migrated' where id = 'kept'"] }];
       yield* inDatabase(path, (db) =>
         Effect.gen(function* () {
@@ -144,7 +152,7 @@ layer(BunFileSystem.layer, { excludeTestServices: true })('snapshot lifecycle', 
     Effect.gen(function* () {
       const root = yield* FileSystem.FileSystem.use((files) => files.makeTempDirectoryScoped({ prefix: 'snapshot-retention-' }));
       const path = join(root, 'store.sqlite');
-      const snapshots = storeSnapshots({});
+      const snapshots = storeSnapshots({}, yield* sharedPool);
       const pending = [{ name: 'm1', hash: 'h1', sql: ["update fact set value = 'migrated'"] }];
       yield* inDatabase(path, (db) =>
         Effect.gen(function* () {
@@ -167,7 +175,8 @@ layer(BunFileSystem.layer, { excludeTestServices: true })('snapshot lifecycle', 
         `import { storeSnapshots } from ${JSON.stringify(storeModule)};`,
         `import { inDatabase } from ${JSON.stringify(connectionModule)};`,
         'const path = process.env.RETAIN_PATH as string;',
-        'const snapshots = storeSnapshots({});',
+        "import { sharedPool } from '@runlith/sqlite-process/testing/pool';",
+        'const snapshots = storeSnapshots({}, await Effect.runPromise(sharedPool));',
         'await Effect.runPromise(inDatabase(path, (db) => Effect.gen(function* () {',
         '  yield* snapshots.opened({ path, db });',
         '  yield* snapshots.ready;',
@@ -189,7 +198,7 @@ layer(BunFileSystem.layer, { excludeTestServices: true })('snapshot lifecycle', 
     Effect.gen(function* () {
       const root = yield* FileSystem.FileSystem.use((files) => files.makeTempDirectoryScoped({ prefix: 'snapshot-concurrent-retire-' }));
       const path = join(root, 'store.sqlite');
-      const snapshots = storeSnapshots({});
+      const snapshots = storeSnapshots({}, yield* sharedPool);
       const pending = [{ name: 'm1', hash: 'h1', sql: ["update fact set value = 'migrated'"] }];
       yield* inDatabase(path, (db) =>
         Effect.gen(function* () {

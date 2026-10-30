@@ -4,6 +4,7 @@ import { expect } from 'bun:test';
 import { Database } from 'bun:sqlite';
 import { join } from 'node:path';
 import { sql } from 'drizzle-orm';
+import { sharedPool } from '@runlith/sqlite-process/testing/pool';
 import { Effect, FileSystem } from 'effect';
 import { capturedEffect } from './testing/captured.js';
 import { lockDataDirectory } from '../platform/lock/dataDirectory.js';
@@ -18,7 +19,7 @@ layer(BunFileSystem.layer, { excludeTestServices: true })('offline snapshots', (
       const graph = join(root, 'graphs', 'one.sqlite');
       const env = { TAGMA_DATABASE_PATH: machine };
       yield* FileSystem.FileSystem.use((files) => files.makeDirectory(join(root, 'graphs')));
-      const snapshots = yield* snapshotAssembly(machine, root);
+      const snapshots = yield* snapshotAssembly(machine, root, yield* sharedPool);
       yield* inDatabase(graph, (db) =>
         Effect.gen(function* () {
           yield* db.run(sql`create table fact(value text)`);

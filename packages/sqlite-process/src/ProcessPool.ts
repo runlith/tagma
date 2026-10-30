@@ -4,7 +4,6 @@ import type { SqliteAsk, SqliteReply, SqliteRequest, SqliteSaid } from './channe
 import { ReaderLanes } from './ReaderLanes.js';
 import { Checkpoints } from './Checkpoints.js';
 import { prepareEngine } from './engine.js';
-import { childHosting } from './children.js';
 import type { Host, Hosting } from './hosting.js';
 
 const WORKER_BYTES = 64 * 1024 * 1024;
@@ -50,8 +49,8 @@ export class ProcessPool {
   constructor(
     ceiling = machineReaders(),
     private idle: IdleChildren = 'stop',
-    private readonly adopt?: (pid: number) => () => void,
-    private readonly hosting: Hosting = childHosting,
+    private readonly adopt: ((pid: number) => () => void) | undefined,
+    private readonly hosting: Hosting,
   ) {
     this.readers = new ReaderLanes(ceiling);
   }

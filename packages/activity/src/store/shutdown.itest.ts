@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { it } from '@runlith/effect-test';
 import { Deferred, Duration, Effect, Exit, Fiber, Layer, Scope } from 'effect';
 import { TestClock } from 'effect/testing';
-import { ProcessPool } from '@runlith/sqlite-process/ProcessPool';
+import { childPool } from '@runlith/sqlite-process/testing/pool';
 import { ActivityStore, activityStoreLayer } from './ActivityStore';
 
 it.live('disposal retires a really blocked writer before joining its store fibers and reports unwritten work', () =>
@@ -26,7 +26,7 @@ it.live('disposal retires a really blocked writer before joining its store fiber
         bodies: join(root, 'bodies'),
         migrations: fileURLToPath(new URL('../../drizzle', import.meta.url)),
         keeping: () => ({ hours: 24, bodiesMaxBytes: 1024 * 1024 }),
-        processes: new ProcessPool(0),
+        processes: childPool(0),
         upkeepAfter: Effect.never,
         projectsOf: (threads) => Deferred.succeed(taken, undefined).pipe(Effect.as(new Map(threads.map((id) => [id, 7])))),
       }).pipe(Layer.provideMerge(TestClock.layer())),

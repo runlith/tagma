@@ -220,7 +220,7 @@ layer(Layer.effect(BaselineFixture, baselineFixture).pipe(Layer.provideMerge(Bun
         const path = yield* place;
         const { migrations, local, receipt } = yield* BaselineFixture;
         sourceStore(path, migrations);
-        const snapshots = storeSnapshots({});
+        const snapshots = storeSnapshots({}, yield* sharedPool);
         yield* inDatabase(path, (db) =>
           snapshots.take({ path, db }, [{ name: receipt.chain.at(-1)!.name, hash: 'pending', sql: ["update meta set value = '1'"] }]),
         );

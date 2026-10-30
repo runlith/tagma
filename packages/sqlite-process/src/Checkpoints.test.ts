@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import type { SqliteAsk, SqliteSaid } from './channel.js';
 import { Checkpoints } from './Checkpoints.js';
 import { type ProcessChannel, ProcessPool } from './ProcessPool.js';
+import { inlineHosting } from './inline.js';
 
 type Driver = { readonly sent: SqliteAsk[]; readonly say: (said: SqliteSaid) => void; readonly lose: (reason: string) => void };
 
@@ -45,7 +46,7 @@ const owned = (losses: string[], name: string) => (reason: string) => ({
 const passes = (driver: Driver) => driver.sent.filter((ask) => ask._tag === 'Checkpoint');
 
 test('a kept checkpoint driver answers each pass to the file that asked for it, not to the next owner', async () => {
-  const pool = new RecordedPool(0);
+  const pool = new RecordedPool(0, 'stop', undefined, inlineHosting);
   const checkpoints = new Checkpoints(pool, () => true);
   const losses: string[] = [];
   checkpoints.add(1, 'a.db', false, owned(losses, 'a'), undefined);
@@ -70,7 +71,7 @@ test('a kept checkpoint driver answers each pass to the file that asked for it, 
 });
 
 test('a checkpoint driver lost during a pass leaves its replacement free to run the next pass', async () => {
-  const pool = new RecordedPool(0);
+  const pool = new RecordedPool(0, 'stop', undefined, inlineHosting);
   const checkpoints = new Checkpoints(pool, () => true);
   const losses: string[] = [];
   checkpoints.add(1, 'a.db', true, owned(losses, 'a'), undefined);

@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { layer } from '@runlith/effect-test';
 import { sql } from 'drizzle-orm';
 import { Effect, Layer } from 'effect';
+import { sharedPool } from '@runlith/sqlite-process/testing/pool';
 import { MachineStore } from '../../platform/contract/service/store.js';
 import { MachineUnits } from '../../platform/contract/service/units.js';
 import { unitsLayer } from '../../platform/store/units.js';
@@ -13,7 +14,9 @@ import { seededStoreLayer } from '../../platform/store/open.js';
 import { consoleAccountOf, makeConsoleKeyStore } from './consoleKeys.js';
 import { CONSOLE_KEYS_FILE, consoleKeyFile } from './consoleKeyFile.js';
 
-const layers = unitsLayer(MachineUnits, MachineStore).pipe(Layer.provideMerge(seededStoreLayer(MachineStore, fixtureMigrations)));
+const layers = unitsLayer(MachineUnits, MachineStore).pipe(
+  Layer.provideMerge(seededStoreLayer(MachineStore, fixtureMigrations, {}, sharedPool)),
+);
 
 const home = mkdtempSync(join(tmpdir(), 'console-keys-'));
 afterAll(() => rmSync(home, { recursive: true, force: true }));

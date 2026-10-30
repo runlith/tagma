@@ -3,7 +3,9 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { sql } from 'drizzle-orm';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
-import { Context, Effect, Exit, Scope, Tracer } from 'effect';
+import { Context, Effect, Exit, Layer, Scope, Tracer } from 'effect';
+import { ProcessPool } from '@runlith/sqlite-process/ProcessPool';
+import { childHosting } from '@runlith/sqlite-process/children';
 import { Message } from '@runlith/llm/schema/messages';
 import { threadEntryEvent, threadStepMessagesEvent } from '@runlith/agent/thread/events';
 import type { ThreadEventInput } from '@runlith/agent/thread/events';
@@ -132,14 +134,18 @@ try {
   await Effect.runPromise(Scope.addFinalizer(scope, Effect.orDie(roots.releaseEffect)));
   const runtime = await Effect.runPromise(
     Scope.provide(
-      makeRuntime({
-        grants: testGrantSigner,
-        databasePath: join(home, 'home', 'tagma.sqlite'),
-        tokensPath: join(home, 'home', 'tokens.json'),
-        attachmentsPath: join(home, 'home', 'attachments'),
-        sourcePath: join(home, 'home', 'tagma'),
-        quotaProviders: [],
-      }),
+      makeRuntime(
+        {
+          grants: testGrantSigner,
+          databasePath: join(home, 'home', 'tagma.sqlite'),
+          tokensPath: join(home, 'home', 'tokens.json'),
+          attachmentsPath: join(home, 'home', 'attachments'),
+          sourcePath: join(home, 'home', 'tagma'),
+          quotaProviders: [],
+        },
+        Layer.empty,
+        new ProcessPool(undefined, 'stop', undefined, childHosting),
+      ),
       scope,
     ),
   );

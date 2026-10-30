@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { describe, expect } from 'bun:test';
 import { it } from '@runlith/effect-test';
 import { Context, Effect, FileSystem, Layer } from 'effect';
+import { sharedPool } from '@runlith/sqlite-process/testing/pool';
 import { asc, eq } from 'drizzle-orm';
 import { MachineStore } from '../../../platform/contract/service/store.js';
 import { MachineUnits } from '../../../platform/contract/service/units.js';
@@ -39,7 +40,7 @@ import type { ThreadEventPayload } from '@runlith/agent/thread/events';
 import { Message } from '@runlith/llm/schema/messages';
 
 const storage = unitsLayer(MachineUnits, MachineStore).pipe(
-  Layer.provideMerge(Layer.orDie(seededStoreLayer(MachineStore, fixtureMigrations))),
+  Layer.provideMerge(Layer.orDie(seededStoreLayer(MachineStore, fixtureMigrations, {}, sharedPool))),
   Layer.merge(Layer.succeed(ThreadEntryKinds, ENTRY_KINDS)),
   Layer.merge(BunFileSystem.layer),
 );

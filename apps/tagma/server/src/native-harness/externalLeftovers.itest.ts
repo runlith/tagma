@@ -3,6 +3,7 @@ import { layer } from '@runlith/effect-test';
 import { eq, sql } from 'drizzle-orm';
 import { thread as nativeThread } from '../threads/store/kernel.js';
 import { Effect, Layer } from 'effect';
+import { sharedPool } from '@runlith/sqlite-process/testing/pool';
 import { fixtureMigrations } from '../composition/testing/migrations.js';
 import { MachineStore } from '../platform/contract/service/store.js';
 import { MachineUnits } from '../platform/contract/service/units.js';
@@ -37,7 +38,7 @@ const seeded = Effect.gen(function* () {
 });
 
 const fixture = unitsLayer(MachineUnits, MachineStore).pipe(
-  Layer.provideMerge(Layer.orDie(seededStoreLayer(MachineStore, fixtureMigrations))),
+  Layer.provideMerge(Layer.orDie(seededStoreLayer(MachineStore, fixtureMigrations, {}, sharedPool))),
 );
 
 layer(fixture)('external leftovers', (it) => {

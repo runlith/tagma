@@ -10,6 +10,7 @@ import { storeLayer } from '../src/platform/store/open.js';
 import { migrationsFolder } from '../src/installation/closure/read.js';
 import { storeSnapshots } from '../src/platform/store/snapshot.js';
 import { ProcessPool } from '@runlith/sqlite-process/ProcessPool';
+import { childHosting } from '@runlith/sqlite-process/children';
 
 const profiles: Promise<number | null>[] = [];
 const channels: { event: string; at: number; pid: number; ask?: unknown; said?: unknown }[] = [];
@@ -126,7 +127,8 @@ const tracer = Tracer.make({
     return span;
   },
 });
-const snapshots = storeSnapshots({});
+const processes = new TracedProcesses(0, 'stop', undefined, childHosting);
+const snapshots = storeSnapshots({}, processes);
 const tracedSnapshots = {
   ...snapshots,
   take: (store: Parameters<typeof snapshots.take>[0], pending: Parameters<typeof snapshots.take>[1]) =>
@@ -142,7 +144,7 @@ const result = await Effect.runPromise(
           path,
           { folder: migrationsFolder, seeds: join(root, 'seeds'), snapshots: tracedSnapshots },
           { readers: 0 },
-          new TracedProcesses(0),
+          processes,
         ),
       );
       const store = Context.get(context, MachineStore);
