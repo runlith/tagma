@@ -157,7 +157,7 @@
   $effect(() => {
     void column.focusing;
     untrack(() => {
-      if (column.view === 'files') (rowOf(focused ?? '') ?? host)?.focus();
+      if (column.view === 'files') (rowOf(focused ?? '') ?? host)?.focus({ preventScroll: true });
     });
   });
 
@@ -269,7 +269,7 @@
   function focusRow(path: string): void {
     focused = path;
     reveal(path);
-    void tick().then(() => rowOf(path)?.focus());
+    void tick().then(() => rowOf(path)?.focus({ preventScroll: true }));
   }
 
   function parentOf(path: string): string | null {
@@ -437,7 +437,7 @@
                 onCommit={(name) => ops.commitDraft(name)}
                 onCancel={() => {
                   ops.endDraft();
-                  rowOf(row.path)?.focus();
+                  rowOf(row.path)?.focus({ preventScroll: true });
                 }}
               />
             </div>
@@ -509,7 +509,7 @@
               onCommit={(name) => ops.commitDraft(name)}
               onCancel={() => {
                 ops.endDraft();
-                host?.focus();
+                host?.focus({ preventScroll: true });
               }}
             />
           </div>
