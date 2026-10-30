@@ -1,0 +1,41 @@
+{
+  "name": "@runlith/adapter-google",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The built-in Google Gemini CLI adapter of Tagma.",
+  "type": "module",
+  "exports": {
+    "./adapter": {
+      "types": "./src/adapter.ts",
+      "bun": "./src/adapter.ts",
+      "default": "./src/adapter.ts"
+    },
+    "./harness": {
+      "types": "./src/harness/gemini.ts",
+      "bun": "./src/harness/gemini.ts",
+      "default": "./src/harness/gemini.ts"
+    },
+    "./icon": {
+      "types": "./src/icon.ts",
+      "browser": "./src/icon.ts",
+      "node": "./src/icon.ts",
+      "default": "./src/icon.ts"
+    }
+  },
+  "scripts": {
+    "test": "testbed bun test --no-isolate --pass-with-no-tests src",
+    "typecheck": "runlith-typecheck"
+  },
+  "dependencies": {
+    "@runlith/tagma": "workspace:*"
+  },
+  "devDependencies": {
+    "@runlith/tsconfig": "workspace:*",
+    "@types/bun": "catalog:"
+  },
+  "tagma": {
+    "host": [
+      "./icon"
+    ]
+  }
+}

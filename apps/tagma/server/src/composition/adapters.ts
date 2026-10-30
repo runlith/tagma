@@ -17,6 +17,7 @@ export const BUILTIN_ADAPTERS: readonly AdapterSource[] = [
   builtin('openai', () => import('@runlith/adapter-openai/adapter')),
   builtin('cursor', () => import('@runlith/adapter-cursor/adapter')),
   builtin('xai', () => import('@runlith/adapter-xai/adapter')),
+  builtin('google', () => import('@runlith/adapter-google/adapter')),
   builtin('muse', () => import('@runlith/adapter-muse/adapter')),
   builtin('devin', () => import('@runlith/adapter-devin/adapter')),
   builtin('opencode-go', () => import('@runlith/adapter-opencode-go/adapter')),
@@ -29,4 +30,5 @@ export const BUILTIN_ADAPTERS: readonly AdapterSource[] = [
 
 export const BUILTIN_HARNESS_PROVIDERS: ReadonlyMap<string, () => Promise<HarnessProvider>> = new Map([
   ['grok', async () => (await import('@runlith/adapter-xai/harness')).grok],
+  ['gemini', async () => (await import('@runlith/adapter-google/harness')).gemini],
 ]);

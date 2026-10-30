@@ -7,7 +7,6 @@ import { claudeCode } from '../vendors/claude-code/row.js';
 import { codex } from '../vendors/codex/row.js';
 import { cursor } from '../vendors/cursor/row.js';
 import { devin } from '../vendors/devin/row.js';
-import { gemini } from '../vendors/gemini/row.js';
 import { screenLines } from '@runlith/executions/protocol/presentationText';
 import { sameScreenAsk } from './screenAsk.js';
 
@@ -448,27 +447,6 @@ test('Cursor transcript arrows without a parenthetical shortcut raise nothing', 
   expect(cursor.screenAskOf(['→ ordinary transcript', '  more text'])).toBeNull();
 });
 
-const GEMINI_WIDGET = ['Allow this tool?', '● 1. Allow once', '  2. Allow for this session', '  3. No, suggest changes (esc)'] as const;
-
-test('Gemini’s numbered confirmation is read as a choice carrying every option in the CLI’s own words', () => {
-  expect(gemini.screenAskOf(GEMINI_WIDGET)).toEqual({
-    kind: 'choice',
-    prompt: 'Allow this tool?',
-    header: null,
-    subject: null,
-    options: [
-      { value: '1', label: 'Allow once' },
-      { value: '2', label: 'Allow for this session' },
-      { value: '3', label: 'No, suggest changes (esc)' },
-    ],
-    selected: '1',
-  });
-});
-
-test('a numbered list without Gemini’s indicator raises nothing', () => {
-  expect(gemini.screenAskOf(['  1. Allow once', '  2. Allow for this session'])).toBeNull();
-});
-
 test('a Cursor decision still loading its Run Everything row raises nothing', () => {
   const loading = [
     'Run this command?',
@@ -484,10 +462,8 @@ test('a Cursor decision still loading its Run Everything row raises nothing', ()
 
 test('a widget still painting its tail raises nothing on the rows with no footer', () => {
   expect(claudeCode.screenAskOf(CLAUDE_WIDGET.slice(0, -1))).toBeNull();
-  expect(gemini.screenAskOf(GEMINI_WIDGET.slice(0, -1))).toBeNull();
   expect(cursor.screenAskOf(CURSOR_WIDGET.slice(0, -1))).toBeNull();
   expect(claudeCode.screenAskOf(CLAUDE_WIDGET)?.options).toHaveLength(3);
-  expect(gemini.screenAskOf(GEMINI_WIDGET)?.options).toHaveLength(3);
   expect(cursor.screenAskOf(CURSOR_WIDGET)?.options).toHaveLength(3);
 });
 
@@ -497,7 +473,6 @@ test('the numbered rows answer by typing the value’s own digits, cursor or non
   const rows = [
     { row: claudeCode, ask: claudeCode.screenAskOf(CLAUDE_WIDGET)!, value: '3' },
     { row: codex, ask: codex.screenAskOf(CODEX_WIDGET)!, value: '2' },
-    { row: gemini, ask: gemini.screenAskOf(GEMINI_WIDGET)!, value: '3' },
   ] as const;
   for (const { row, ask, value } of rows) {
     expect(row.keysOf(ask, [value])).toEqual(chars(value));

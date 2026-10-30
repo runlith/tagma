@@ -1,4 +1,4 @@
-import type { TerminalHarnessAdapter } from '../../contract/service/adapter.js';
+import type { HarnessProvider } from '@runlith/tagma/adapter/provider';
 
 import {
   adoptedPermissionArgv,
@@ -12,10 +12,11 @@ import {
   type ScreenAsk,
   type HarnessWidgetKey,
   type HookOccasion,
+  type TerminalSurface,
 } from '@runlith/tagma/adapter/harness';
 import { rootOfArgv, sessionIdOf, tail, unasked, unprinted, unreported, unturned } from '@runlith/tagma/adapter/payload';
 import { claudeFiles } from '@runlith/tagma/adapter/claude-hooks';
-import { GEMINI_MARK } from './mark.js';
+import { icon } from '../icon';
 import { geminiCodec } from './codec.js';
 
 const GEMINI_SELECTED = /^● (\d+)\. (.+)$/;
@@ -83,11 +84,8 @@ const geminiOccasion: HookOccasion = (event) => {
   }
 };
 
-export const gemini: TerminalHarnessAdapter = {
-  harness: 'gemini',
+export const geminiTerminal: TerminalSurface = {
   tools: LEGACY_TOOLS,
-  label: 'Gemini CLI',
-  mark: GEMINI_MARK,
   prefix: 'gm',
   binary: 'gemini',
   install: 'npm install -g @google/gemini-cli',
@@ -142,4 +140,17 @@ export const gemini: TerminalHarnessAdapter = {
   quit: null,
   callEnvelopeMs: null,
   ends: { interrupt: 'screen', idle: null, tail: 'prompt' },
+};
+
+export const gemini: HarnessProvider = {
+  id: 'gemini',
+  label: 'Gemini CLI',
+  kind: 'harness',
+  auth: 'cli',
+  icon,
+  environment: () => [],
+  models: {},
+  defaultTextModel: '',
+  cacheLifetime: { promisedSeconds: null, prior: null },
+  terminal: geminiTerminal,
 };

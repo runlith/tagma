@@ -1311,6 +1311,7 @@
     "@runlith/adapter-cursor": "workspace:*",
     "@runlith/adapter-deepseek": "workspace:*",
     "@runlith/adapter-devin": "workspace:*",
+    "@runlith/adapter-google": "workspace:*",
     "@runlith/adapter-muse": "workspace:*",
     "@runlith/adapter-openai": "workspace:*",
     "@runlith/adapter-openai-compatible": "workspace:*",

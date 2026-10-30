@@ -24,7 +24,6 @@ test('terminal copy fidelity names the vendor only on the sides that have a vend
     codex: { whole: 'vendor', point: 'vendor' },
     devin: { whole: 'record', point: 'record' },
     cursor: { whole: 'record', point: 'record' },
-    gemini: { whole: 'record', point: 'record' },
     opencode: { whole: 'record', point: 'record' },
   });
 });
@@ -79,7 +78,6 @@ test('every launch shape carries the row permission stance', () => {
     codex: ['--dangerously-bypass-approvals-and-sandbox'],
     devin: ['--permission-mode', 'dangerous', '--respect-workspace-trust', 'false'],
     cursor: ['--force'],
-    gemini: ['--approval-mode', 'yolo'],
   } as const;
   for (const name of Object.keys(measured) as (keyof typeof measured)[]) {
     const row = builtinHarness(name);
@@ -235,9 +233,8 @@ it.effect('a chosen permission mode replaces the bypass in every launch shape, a
 test('a row that cannot spell the pair refuses, and an undeclared row launches exactly as it did', () => {
   expect(() => launchOf('devin').interactive('go', { model: 'gpt-5-6-sol', rung: 'high' })).toThrow(/rung/);
 
-  const frozen: Record<'cursor' | 'gemini', readonly string[]> = {
+  const frozen = {
     cursor: ['cursor-agent', '--force', '--resume', 'root-4', 'go'],
-    gemini: ['gemini', '--approval-mode', 'yolo', '--resume', 'root-4', 'go'],
   };
   for (const [name, argv] of Object.entries(frozen) as [keyof typeof frozen, readonly string[]][]) {
     const launch = launchOf(name);

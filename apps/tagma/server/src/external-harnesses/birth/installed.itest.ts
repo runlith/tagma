@@ -12,6 +12,7 @@ import { InstalledHarnesses } from '../../threads/contract/service/harness.js';
 import type { HarnessInstall } from '../../threads/contract/wire/harness/externalSession.js';
 import { installedHarnessesWith } from './installed.js';
 import { grok } from '@runlith/adapter-xai/harness';
+import { gemini } from '@runlith/adapter-google/harness';
 import { makeHarnessAdapters } from '../adapters.js';
 import { HarnessAdapters } from '../contract/service/adapters.js';
 import type { Terminals, TerminalStart } from '../../executions/contract/service/terminals.js';
@@ -25,7 +26,7 @@ import { EnvironmentId } from '../../workspace/contract/wire/environments.js';
 
 const withGrok = Layer.effect(
   HarnessAdapters,
-  Effect.tap(makeHarnessAdapters, (adapters) => adapters.declared([grok])),
+  Effect.tap(makeHarnessAdapters, (adapters) => adapters.declared([grok, gemini])),
 );
 
 const root = realpathSync(mkdtempSync(join(tmpdir(), 'installed-harnesses-')));

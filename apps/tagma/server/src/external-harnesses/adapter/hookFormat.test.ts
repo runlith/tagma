@@ -4,7 +4,6 @@ import { BUILTIN_HARNESSES } from '../vendors/builtin.js';
 import { codexCodec } from '../vendors/codex/codec.js';
 import { cursorCodec } from '../vendors/cursor/codec.js';
 import { devinCodec } from '../vendors/devin/codec.js';
-import { geminiCodec } from '../vendors/gemini/codec.js';
 import type { HarnessAnswer } from '../contract/wire/call.js';
 import { claudeCodec } from '@runlith/tagma/adapter/claude-hooks';
 import { promptSupported, verdictOf } from './hookFormat.js';
@@ -62,7 +61,6 @@ test('a prompt answer rides top-level additional_context to Cursor, the nested e
       hookSpecificOutput: { hookEventName: 'UserPromptSubmit', additionalContext: 'the law' },
     });
   }
-  expect(geminiCodec.prompt).toBeNull();
   expect(devinCodec.prompt).toBeNull();
 });
 
@@ -80,9 +78,6 @@ test('post-tool words ride top-level additional_context to Cursor and the nested
       hookSpecificOutput: { hookEventName: 'PostToolUse', additionalContext: 'over the lines you read' },
     });
   }
-  expect(JSON.parse(geminiCodec.tool('over the lines you read', 'after'))).toEqual({
-    hookSpecificOutput: { hookEventName: 'AfterTool', additionalContext: 'over the lines you read' },
-  });
 });
 
 test('a Codex trust entry is addressed by its file, its snake-cased event and its position', () => {

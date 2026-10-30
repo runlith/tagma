@@ -10,7 +10,9 @@ import { existsSync, writeFileSync } from 'node:fs';
 import { UserEnvironment } from '../../installation/contract/service/userEnvironment.js';
 import { makeUserEnvironment } from '../../installation/process/userEnvironment.js';
 import { installedHarnessesLayer } from '../birth/installed.js';
-import { harnessAdaptersLayer } from '../adapters.js';
+import { makeHarnessAdapters } from '../adapters.js';
+import { gemini } from '@runlith/adapter-google/harness';
+import { HarnessAdapters } from '../contract/service/adapters.js';
 import { AccountCli } from '../../providers/contract/service/cli.js';
 import { Terminals, TerminalRequests } from '../../executions/contract/service/terminals.js';
 import { HostManagement } from '../../executions/contract/service/host.js';
@@ -18,6 +20,11 @@ import { TerminalEndings } from '../../executions/contract/service/endings.js';
 import { accountCliLayer } from './cli.js';
 import { InstalledHarnesses } from '../../threads/contract/service/harness.js';
 import { Projects } from '../../projects/contract/service/registry.js';
+
+const harnessAdaptersLayer = Layer.effect(
+  HarnessAdapters,
+  Effect.tap(makeHarnessAdapters, (adapters) => adapters.declared([gemini])),
+);
 
 const unused = () => Effect.die('headless account commands do not use the terminal host');
 const terminals = Layer.succeed(
