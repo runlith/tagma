@@ -204,7 +204,11 @@ export const agentLibrary = Effect.fn('AgentLibrary.make')(function* ({ types, d
     }
     const sources = resolved ?? (yield* sourceCache.walk(projectId, project.rootPath));
     const skills = skillPool(artifacts, sources);
-    const brought = new Map(sources.inventory.flatMap((entry) => (entry.plugin === null ? [] : [[entry.name, entry.plugin] as const])));
+    const brought = new Map(
+      sources.inventory.flatMap((entry) =>
+        entry.plugin === null || entry.replacedBy !== null ? [] : [[entry.name, entry.plugin] as const],
+      ),
+    );
     return {
       skills: skills.map((skill) => ({ id: skill.id, description: skill.description, plugin: brought.get(skill.id) ?? null })),
       basis,

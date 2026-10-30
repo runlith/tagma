@@ -86,6 +86,7 @@ export const makeInbox = Effect.fnUntraced(function* ({ handback }: { readonly h
       return yield* settle(id, 'answered', answer);
     }),
     dismiss: (id) => settle(id, 'dismissed', null),
+    keys: (sender) => Effect.map(ledger.keys(sender), (rows) => rows.flatMap((row) => (row.key === null ? [] : [row.key]))),
     withdraw: Effect.fn('Notifications.withdraw')(function* (sender, key) {
       yield* Effect.uninterruptible(
         Effect.tap(ledger.withdraw(sender, key), (rows) =>

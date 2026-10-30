@@ -83,6 +83,7 @@ const server = Effect.fnUntraced(function* () {
         answer: unused,
         dismiss: unused,
         withdraw: unused,
+        keys: unused,
         changes: Stream.fromQueue(notices),
       }),
       Context.add(Devices, {

@@ -10,8 +10,9 @@ import { idOf, PLUGINS, type Place } from './place.js';
 
 const WORDS = 'Open in Plugins';
 
-async function opened(app: Resolver, projectId: number, place: Place): Promise<void> {
-  const project = app.resolve(Workspace).find(projectId);
+async function opened(app: Resolver, projectId: number | null, place: Place): Promise<void> {
+  const workspace = app.resolve(Workspace);
+  const project = projectId === null ? workspace.contextProject : workspace.find(projectId);
   if (project !== null) await app.resolve(Router).goto(app.resolve(Addresses).place(project.name, PLUGINS, idOf(place), null));
 }
 

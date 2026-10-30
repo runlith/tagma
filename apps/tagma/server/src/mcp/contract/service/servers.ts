@@ -5,7 +5,7 @@ import type { McpAppCallResult, McpAppTarget, McpAppView } from '@runlith/mcp/ap
 import type { McpCaller } from '@runlith/mcp/caller';
 import type { McpResourceResult } from '@runlith/mcp/resources';
 import type { McpResourceEvent } from '../wire/feeds.js';
-import { Context, Data, type Effect, type Stream } from 'effect';
+import { Context, Data, type Effect, type Scope, type Stream } from 'effect';
 import type { StoreFailure } from '../../../platform/contract/service/store.js';
 import type { SettableScope } from '../../../platform/contract/wire/setting.js';
 import type { GateRefusal, OpenRefusal } from '../../../platform/contract/wire/refusal.js';
@@ -58,7 +58,7 @@ export class McpServers extends Context.Service<
   {
     list(projectId: number): Effect.Effect<readonly McpServerRow[], StoreFailure | GateRefusal<McpListRefusal>>;
     rows(projectId: number): Stream.Stream<readonly McpServerRow[], StoreFailure | GateRefusal<McpListRefusal>>;
-    readonly moves: Stream.Stream<number | null>;
+    readonly moves: Effect.Effect<Stream.Stream<number | null>, never, Scope.Scope>;
     opened(): readonly number[];
     add(
       input: McpServerScopeInput & { readonly declaration: McpServerDeclaration },
@@ -75,7 +75,7 @@ export class McpServers extends Context.Service<
     signOut(
       input: McpServerSeenInput & { readonly name: string },
     ): Effect.Effect<readonly McpServerRow[], StoreFailure | GateRefusal<McpSignOutRefusal>>;
-    forgetContributed(projectId: number, name: string): Effect.Effect<void, GateRefusal<'secret-store-failed'>>;
+    forgetContributed(brought: (name: string) => boolean): Effect.Effect<void, GateRefusal<'secret-store-failed'>>;
     finishSignIn(answer: McpSignInAnswer): Effect.Effect<McpSignedIn, McpSignInRejected>;
     reconcile(projectId: number): Effect.Effect<void, StoreFailure | GateRefusal<McpReconcileRefusal>>;
     reconcileAll(): Effect.Effect<void, StoreFailure | GateRefusal<McpReconcileRefusal>>;

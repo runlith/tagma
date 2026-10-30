@@ -70,6 +70,7 @@ export class SecretOwners extends Context.Service<
       key: string,
       request: SignInRefresh<Grant, E, R>,
     ): Effect.Effect<void, E | SecretStoreFailed, R>;
+    keys(kind: string): Effect.Effect<readonly string[], SecretStoreFailed>;
     drop(kind: string, key: string): Effect.Effect<void, SecretStoreFailed>;
     adopt(kind: string, values: Readonly<Record<string, Readonly<Record<string, string>>>>): Effect.Effect<void, SecretStoreFailed>;
     move(kind: string, into: string): Effect.Effect<void, SecretStoreFailed>;

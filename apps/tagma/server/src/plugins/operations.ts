@@ -6,7 +6,6 @@ import { cursorRefusal, GateRefusal } from '../platform/contract/wire/refusal.js
 import type { SettableScope } from '../platform/contract/wire/setting.js';
 import { McpServers } from '../mcp/contract/service/servers.js';
 import { CurrentProject } from '../projects/contract/service/caller.js';
-import { Projects } from '../projects/contract/service/registry.js';
 import { Plugins } from './contract/service/plugins.js';
 import { PLUGIN_OPERATIONS as OPS, PLUGIN_ROWS } from './contract/wire/operations.js';
 import type { PluginRow } from './contract/wire/rows.js';
@@ -103,18 +102,12 @@ export const PLUGIN_PAIRS = {
         const project = yield* projectId;
         const plugins = yield* Plugins;
         const servers = yield* McpServers;
-        const brought = (yield* plugins.rows(project, [input.id])).flatMap((row) =>
-          row.components.filter((component) => component.kind === 'mcp-server').map((component) => component.name),
-        );
+        const serving = (rows: readonly PluginRow[]) =>
+          new Set(rows.flatMap((row) => row.components.flatMap((component) => (component.kind === 'mcp-server' ? [component.name] : []))));
+        const brought = serving(yield* plugins.rows(project, [input.id]));
         const plugin = yield* plugins.uninstall({ projectId: project, id: input.id });
-        const projects = yield* (yield* Projects).list();
-        yield* Effect.forEach(
-          projects,
-          ({ id }) => Effect.forEach(brought, (name) => servers.forgetContributed(id, name), { discard: true }),
-          {
-            discard: true,
-          },
-        );
+        const kept = serving(yield* plugins.rows(project, yield* plugins.ids()));
+        yield* servers.forgetContributed((name) => (brought.has(name) || name.startsWith(`${input.id}-`)) && !kept.has(name));
         return answer(plugin);
       }),
     }),

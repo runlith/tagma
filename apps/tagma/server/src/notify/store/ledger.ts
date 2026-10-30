@@ -78,6 +78,16 @@ export const makeLedger = Effect.gen(function* () {
             .get(),
         ),
       ),
+    keys: (sender: string) =>
+      units.read((unit) =>
+        unit.run(
+          db
+            .select({ key: notification.key })
+            .from(notification)
+            .where(and(eq(notification.sender, sender), isNotNull(notification.key)))
+            .all(),
+        ),
+      ),
     withdraw: (sender: string, key: string | null) =>
       units.write(writes('Ledger.withdraw', [notification]), (unit) =>
         unit.run(

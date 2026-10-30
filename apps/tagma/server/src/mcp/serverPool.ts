@@ -645,6 +645,7 @@ const makeMcpServers = Effect.fnUntraced(function* ({
               reached: new Set(),
             };
             pools.set(projectId, pooled);
+            yield* moved(projectId);
             return pool;
           });
         }),
@@ -731,17 +732,20 @@ const makeMcpServers = Effect.fnUntraced(function* ({
     servers: McpServers.of({
       list,
       rows,
-      moves: Stream.fromPubSub(pulses),
+      moves: Effect.map(PubSub.subscribe(pulses), Stream.fromSubscription),
       opened: () => [...pools.keys()],
       add,
       remove,
       setEnabled,
       signIn,
       signOut,
-      forgetContributed: Effect.fn('McpServers.forgetContributed')(function* (projectId: number, name: string) {
-        const key = keyOf('contributed', projectId, name);
-        yield* signIns.forget(key);
-        yield* owners.drop(KIND, key).pipe(Effect.mapError(storeRefusal));
+      forgetContributed: Effect.fn('McpServers.forgetContributed')(function* (brought: (name: string) => boolean) {
+        for (const key of yield* owners.keys(KIND).pipe(Effect.mapError(storeRefusal))) {
+          const name = /^\d+\/contributed\/(.+)$/u.exec(key)?.[1];
+          if (name === undefined || !brought(name)) continue;
+          yield* signIns.forget(key);
+          yield* owners.drop(KIND, key).pipe(Effect.mapError(storeRefusal));
+        }
       }),
       finishSignIn: signIns.finish,
       reconcile,

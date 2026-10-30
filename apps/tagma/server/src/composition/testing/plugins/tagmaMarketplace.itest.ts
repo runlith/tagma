@@ -5,6 +5,7 @@ import { layer } from '@runlith/effect-test';
 import { oauthServer } from '@runlith/mcp/testing/oauth';
 import { Context, Effect, FileSystem, Layer, Stream } from 'effect';
 import { McpServers } from '../../../mcp/contract/service/servers.js';
+import { MCP_SERVER_LINK } from '../../../mcp/contract/wire/link.js';
 import { Notifications } from '../../../notify/contract/service/notifications.js';
 import type { Notification } from '../../../notify/contract/wire/notification.js';
 import { DoorFixture, doorFixture, projectLeaving } from '../doorFixture.js';
@@ -22,6 +23,7 @@ type Answer = {
   readonly skills?: readonly { readonly id: string }[];
   readonly mcp?: readonly { readonly name: string; readonly status: string; readonly signIn?: { readonly signedIn: boolean } }[];
   readonly url?: string;
+  readonly plugins?: readonly { readonly id: string; readonly root: string }[];
 };
 
 layer(Layer.mergeAll(doorFixture(), BunFileSystem.layer), { excludeTestServices: true })('tagma marketplace', (it) => {
@@ -74,7 +76,9 @@ layer(Layer.mergeAll(doorFixture(), BunFileSystem.layer), { excludeTestServices:
 
         const servers = Context.get(world.runtime.owners, McpServers);
         const notices = Context.get(world.runtime.owners, Notifications);
-        const asking = (holds: (titles: readonly string[]) => boolean) =>
+        const waiting = (rows: readonly Notification[]): readonly unknown[] =>
+          rows.flatMap((row) => (row.sender === 'mcp' && row.link?.kind === MCP_SERVER_LINK ? [row.link.target] : []));
+        const asking = (holds: (targets: readonly unknown[]) => boolean) =>
           notices.changes.pipe(
             Stream.mapAccum(
               (): readonly Notification[] => [],
@@ -88,24 +92,27 @@ layer(Layer.mergeAll(doorFixture(), BunFileSystem.layer), { excludeTestServices:
                 return [next, [next]] as const;
               },
             ),
-            Stream.filter((rows) => holds(rows.filter((row) => row.sender === 'mcp').map((row) => row.title))),
+            Stream.filter((rows) => holds(waiting(rows))),
             Stream.runHead,
           );
         for (const service of SERVICES) {
           const name = `${service}-${service}`;
           const rowOf = Effect.map(answered('read_mcp_servers', {}), (read) => read.mcp?.find((row) => row.name === name));
+          const target = { projectId, scope: 'contributed', name, contributor: service };
           expect((yield* rowOf)?.status).toBe('needs-sign-in');
-          yield* asking((titles) => titles.includes(`Sign in to ${name}`));
+          yield* asking((targets) => targets.some((one) => Bun.deepEquals(one, target)));
           const { url } = yield* answered('sign_in_mcp_server', { name, scope: 'contributed' });
           const returned = yield* oauth.follow(url ?? '');
           expect((yield* world.call(`${returned.pathname}${returned.search}`)).status).toBe(200);
           expect(yield* rowOf).toMatchObject({ status: 'connected', signIn: { signedIn: true } });
-          yield* asking((titles) => !titles.includes(`Sign in to ${name}`));
+          yield* asking((targets) => !targets.some((one) => Bun.deepEquals(one, target)));
           const said = yield* servers.caller(projectId).call(name, 'whoami', {}, {});
           expect('content' in said ? said.content : said).toEqual([expect.objectContaining({ type: 'text', text: 'Bearer [redacted]' })]);
         }
 
         const [first] = SERVICES;
+        const installed = (yield* answered('read_plugins', {})).plugins?.find((plugin) => plugin.id === first);
+        yield* files.remove(join(installed?.root ?? '', '.mcp.json'));
         yield* answered('uninstall_plugin', { id: first });
         const { preview } = yield* answered('preview_plugin', { marketplace: 'tagma', entry: first });
         yield* answered('install_plugin', { prepared: preview?.prepared });

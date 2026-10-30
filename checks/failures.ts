@@ -10,10 +10,17 @@ export const ALLOWED: SwallowedFailuresParams['allow'] = [
   },
   {
     path: 'apps/tagma/server/src/mcp/waits.ts',
-    symbol: 'waitsLayer.now',
+    symbol: 'waitsLayer.rowsOf',
     form: 'orElseSucceed',
-    site: 'fee9f824',
+    site: 'ecee12ab',
     why: 'A project whose servers cannot be read keeps the waits it showed, logged; the next pulse of its pool reads them again, and withdrawing on a read failure would tell the operator a wait ended that did not.',
+  },
+  {
+    path: 'apps/tagma/server/src/mcp/waits.ts',
+    symbol: 'waitsLayer.nameOf',
+    form: 'orElseSucceed',
+    site: 'ce76be2e',
+    why: "The project's name only words a wait's notification; an unreadable registry words it by the project id instead of keeping the wait from the operator.",
   },
   {
     path: 'packages/agent/src/thread/run/ParkedMoves.ts',

@@ -27,6 +27,7 @@ export class Notifications extends Context.Service<
     answer(id: string, answer: string): Effect.Effect<Resolved, GateRefusal<'not-found' | 'no-question' | 'bad-answer'> | StoreFailure>;
     dismiss(id: string): Effect.Effect<Resolved, GateRefusal<'not-found'> | StoreFailure>;
     withdraw(sender: string, key: string | null): Effect.Effect<void, StoreFailure>;
+    keys(sender: string): Effect.Effect<readonly string[], StoreFailure>;
     readonly changes: Stream.Stream<NotificationChange, StoreFailure>;
   }
 >()('tagma/notify/Notifications') {}

@@ -198,6 +198,9 @@ export const makeKeeper = (input: { readonly file: CredentialFile<Held> | null }
     }),
     keepSignIn,
     refreshSignIn,
+    keys: Effect.fn('SecretOwners.keys')(function* (kind) {
+      return Object.keys((yield* held()).owners[kind] ?? {});
+    }),
     drop: Effect.fn('SecretOwners.drop')(function* (kind, key) {
       yield* change((current) => dropped(current, kind, key));
     }),
