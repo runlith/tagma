@@ -11,5 +11,7 @@ sources:
   - kind: symbol
     ref: packages/performance/src/TraceSampler.ts
     symbol: coverStall
+  - kind: file
+    ref: packages/performance/src/LoopStalls.ts
 ---
 A stall given in another clock's instants cannot be matched to the spans the sampler holds.
