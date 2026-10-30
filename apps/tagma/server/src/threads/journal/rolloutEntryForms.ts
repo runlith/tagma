@@ -1,10 +1,5 @@
-import { createHash, type Hash } from 'node:crypto';
-import { createWriteStream } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { rename, rm, stat } from 'node:fs/promises';
-import { once } from 'node:events';
-import { Transform, type Readable, type Writable } from 'node:stream';
-import { pipeline } from 'node:stream/promises';
-import { createZstdCompress, createZstdDecompress } from 'node:zlib';
 import { and, eq, isNotNull, sql } from 'drizzle-orm';
 import { Clock, Data, Effect, Result } from 'effect';
 import type { StoreDb, StoreFailure } from '../../platform/contract/service/store.js';
@@ -12,182 +7,27 @@ import type { WriteUnit } from '../../platform/contract/service/units.js';
 import { writes, type WriteSet } from '../../platform/contract/service/writes.js';
 import { threadRecord } from '../../thread-record/store/table.js';
 import { threadRolloutCursor, threadRolloutForm, threadRolloutRefusal, type RolloutPublishing } from '../store/journal.js';
-import { ThreadFormRefused, type ThreadEntryReader, type ThreadFormBase, type ThreadFormStep } from '@runlith/agent/transcript/kinds';
+import {
+  ThreadEntryKinds,
+  ThreadFormRefused,
+  type ThreadEntryReader,
+  type ThreadFormBase,
+  type ThreadFormStep,
+} from '@runlith/agent/transcript/kinds';
 import { thread, threadRun } from '../store/kernel.js';
 import { RolloutUnreadable, rolloutStream } from './rolloutFile.js';
-import { isMetaRecord } from './rolloutMeta.js';
+import type { NativeFolds } from './rolloutMeta.js';
+import { eventless } from './rolloutStaging.js';
 import { RolloutReads, type ReadRollout } from '../contract/service/rolloutReads.js';
-import { compressedRollout, rolloutStateOf, transcriptOf } from './rolloutForms.js';
+import { compressedRollout, rolloutFiles, rolloutStateOf, transcriptOf } from './rolloutForms.js';
 import type { RolloutFiles, TranscriptKey } from '../contract/service/rested.js';
 
-type Formed = {
-  readonly changed: boolean;
-  readonly moved: ReadonlyMap<number, number>;
-  readonly sha256: string;
-};
-
-class LineUnformable extends Data.TaggedError('LineUnformable')<{ readonly message: string }> {
-  constructor(message: string) {
-    super({ message });
-  }
-}
-
-type Line = { readonly current: string | null };
-
-const KEPT: Line = { current: null };
-
-type RecordForm = {
-  readonly events: boolean;
-  readonly form: (kind: 'event' | 'meta', held: unknown) => { readonly value: unknown; readonly changed: boolean };
-};
-
-export const eventless = (steps: readonly ThreadFormStep[]): boolean =>
-  steps.every((step) => step.payload === undefined && step.entry === undefined && step.message === undefined);
-
-const recordForm = (kinds: ThreadEntryReader, steps: readonly ThreadFormStep[]): RecordForm => ({
-  events: !eventless(steps),
-  form: (kind, held) => {
-    const value = kind === 'meta' ? kinds.formed('meta', held, steps) : kinds.formedEvent(held, steps);
-    return { value, changed: value !== held };
-  },
-});
-
-const EVENT_LINE = Buffer.from('{"kind":"event",', 'utf8');
-
-const keptEvent = (line: Buffer, form: RecordForm): boolean =>
-  !form.events && line.length > EVENT_LINE.length && line.subarray(0, EVENT_LINE.length).equals(EVENT_LINE);
-
-function currentLine(line: string, at: number, { form }: RecordForm): Line {
-  let record: { kind?: unknown; meta?: unknown; row?: { kind?: unknown; payload?: unknown } };
-  try {
-    record = JSON.parse(line) as typeof record;
-  } catch {
-    throw new LineUnformable(`the line ending at byte ${at} is not JSON`);
-  }
-  const header = record.kind === undefined && isMetaRecord(record);
-  const kind = header || record.kind === 'meta' ? 'meta' : record.kind === 'event' ? 'event' : null;
-  const held = header ? record : kind === 'meta' ? record.meta : record.row?.payload;
-  if (kind === null || held === undefined) return KEPT;
-  let formed: ReturnType<RecordForm['form']>;
-  try {
-    formed = form(kind, held);
-  } catch (failure) {
-    if (failure instanceof ThreadFormRefused) throw new LineUnformable(`the line ending at byte ${at}: ${failure.message}`);
-    throw failure;
-  }
-  if (!formed.changed) return KEPT;
-  return {
-    current: JSON.stringify(
-      header
-        ? formed.value
-        : kind === 'meta'
-          ? { ...record, meta: formed.value }
-          : { ...record, row: { ...record.row, payload: formed.value } },
-    ),
-  };
-}
-
-async function written(sink: Writable, bytes: Buffer): Promise<void> {
-  if (!sink.write(bytes)) await once(sink, 'drain');
-}
-
-async function formLines(source: AsyncIterable<Buffer>, sink: Writable, wanted: ReadonlySet<number>, form: RecordForm): Promise<Formed> {
-  let broken: Error | null = null;
-  sink.on('error', (error) => {
-    broken = error;
-  });
-  try {
-    return await formInto(source, sink, wanted, form, () => broken);
-  } finally {
-    sink.destroy();
-  }
-}
-
-async function formInto(
-  source: AsyncIterable<Buffer>,
-  sink: Writable,
-  wanted: ReadonlySet<number>,
-  form: RecordForm,
-  broken: () => Error | null,
-): Promise<Formed> {
-  const moved = new Map<number, number>();
-  const hash = createHash('sha256');
-  let changed = false;
-  let parts: Buffer[] = [];
-  let read = 0;
-  let wrote = 0;
-  const emit = async (line: Buffer, newline: boolean): Promise<void> => {
-    const failure = broken();
-    if (failure !== null) throw failure;
-    read += line.length + (newline ? 1 : 0);
-    const formed = newline && !keptEvent(line, form) ? currentLine(line.toString('utf8'), read, form) : KEPT;
-    const current = formed.current;
-    const out = current === null ? line : Buffer.from(current, 'utf8');
-    if (current !== null) changed = true;
-    const bytes = newline ? Buffer.concat([out, Buffer.from('\n')]) : out;
-    hash.update(bytes);
-    await written(sink, bytes);
-    wrote += bytes.length;
-    if (newline && wanted.has(read)) moved.set(read, wrote);
-  };
-  for await (const chunk of source) {
-    let from = 0;
-    for (let newline = chunk.indexOf(0x0a); newline !== -1; newline = chunk.indexOf(0x0a, from)) {
-      parts.push(chunk.subarray(from, newline));
-      await emit(parts.length === 1 ? parts[0]! : Buffer.concat(parts), true);
-      parts = [];
-      from = newline + 1;
-    }
-    if (from < chunk.length) parts.push(chunk.subarray(from));
-  }
-  if (parts.length > 0) await emit(Buffer.concat(parts), false);
-  const failure = broken();
-  if (failure !== null) throw failure;
-  sink.end();
-  await once(sink, 'finish');
-  return { changed, moved, sha256: hash.digest('hex') };
-}
-
-function packedSource(packed: string, read: ReadRollout): Readable {
-  const source = rolloutStream(packed, read);
-  const opened = createZstdDecompress();
-  source.on('error', (error) => opened.destroy(error));
-  return source.pipe(opened);
-}
-
-const hashing = (hash: Hash) =>
-  new Transform({
-    transform(chunk: Buffer, _encoding, done) {
-      hash.update(chunk);
-      done(null, chunk);
-    },
-  });
+export type StageRollout = NativeFolds['stage'];
 
 async function sha256Of(path: string, read: ReadRollout): Promise<string> {
   const hash = createHash('sha256');
   for await (const chunk of rolloutStream(path, read)) hash.update(chunk as Buffer);
   return hash.digest('hex');
-}
-
-type Staged = { readonly formed: Formed; readonly staged: string; readonly published: string };
-
-async function staged(
-  path: string,
-  form: 'plain' | 'compressed',
-  wanted: ReadonlySet<number>,
-  lines: RecordForm,
-  read: ReadRollout,
-  suffix: string,
-): Promise<Staged> {
-  const forming = `${path}${suffix}`;
-  const source = form === 'plain' ? rolloutStream(path, read) : packedSource(compressedRollout(path), read);
-  const formed = await formLines(source, createWriteStream(forming), wanted, lines);
-  if (form === 'plain' || !formed.changed) return { formed, staged: forming, published: path };
-  const packed = compressedRollout(path);
-  const hash = createHash('sha256');
-  await pipeline(rolloutStream(forming, read), createZstdCompress(), hashing(hash), createWriteStream(`${packed}${suffix}`));
-  await rm(forming, { force: true });
-  return { formed: { ...formed, sha256: hash.digest('hex') }, staged: `${packed}${suffix}`, published: packed };
 }
 
 async function cleared(path: string, suffix: string): Promise<void> {
@@ -412,10 +252,10 @@ export const stagedRollout = Effect.fnUntraced(function* (
   threadId: string,
   path: string,
   kinds: ThreadEntryReader,
+  stage: StageRollout,
   aside: boolean,
 ): Effect.fn.Return<RolloutForm | RolloutStaged, RolloutUnreadable | StoreFailure> {
   const suffix = aside ? '.staging' : '.forming';
-  const read = yield* RolloutReads;
   const done = yield* rolloutFormOf(db, threadId);
   if (done === undefined && kinds.last === null) return FORMED;
   const state = yield* rolloutStateOf(path);
@@ -449,7 +289,6 @@ export const stagedRollout = Effect.fnUntraced(function* (
   const stepping = rested || !hasRow || mark !== null;
   const pending = stepping ? kinds.after(mark) : [];
   const step = stepping ? kinds.last : null;
-  const form = recordForm(kinds, pending);
 
   const basis = yield* basisOf(db, threadId, path);
   const wanted = new Set([basis.cursor, basis.refused].filter((bytes): bytes is number => bytes !== undefined && bytes > 0));
@@ -475,11 +314,13 @@ export const stagedRollout = Effect.fnUntraced(function* (
     );
 
   const attempt = yield* Effect.result(
-    Effect.tryPromise({
-      try: () => staged(path, state.form, wanted, form, read, suffix),
-      catch: (error) =>
-        error instanceof LineUnformable ? new RolloutUnformable({ threadId, path, reason: error.message }) : io(path)(error),
-    }),
+    stage(rolloutFiles(path), { form: state.form, wanted: [...wanted], steps: pending.map((one) => one.name), suffix }).pipe(
+      Effect.provideService(ThreadEntryKinds, kinds),
+      Effect.mapError((failure) => (failure._tag === 'WorkerUnavailable' ? io(path)(failure) : failure)),
+      Effect.flatMap((file) =>
+        file.kind === 'staged' ? Effect.succeed(file) : Effect.fail(new RolloutUnformable({ threadId, path, reason: file.reason })),
+      ),
+    ),
   );
   if (Result.isFailure(attempt)) {
     yield* clear;
@@ -487,8 +328,10 @@ export const stagedRollout = Effect.fnUntraced(function* (
     if (failure._tag === 'RolloutUnreadable') return yield* failure;
     return { kind: 'staged', commit: () => unmoved(refuse(failure)), discard: Effect.void, transcript: null } satisfies RolloutStaged;
   }
-  const { formed, staged: from, published } = attempt.success;
-  const moved = (bytes: number | undefined) => (bytes === undefined ? null : (formed.moved.get(bytes) ?? bytes));
+  const formed = attempt.success;
+  const { staged: from, published } = formed;
+  const shifted = new Map(formed.moved);
+  const moved = (bytes: number | undefined) => (bytes === undefined ? null : (shifted.get(bytes) ?? bytes));
   const publishing: RolloutPublishing | null = formed.changed
     ? { sha256: formed.sha256, cursorBytes: moved(basis.cursor), refusalBytes: moved(basis.refused) }
     : null;
@@ -549,9 +392,10 @@ export const formRollout = Effect.fnUntraced(function* (
   threadId: string,
   path: string,
   kinds: ThreadEntryReader,
+  stage: StageRollout,
 ): Effect.fn.Return<RolloutForm, RolloutUnreadable | StoreFailure> {
   for (;;) {
-    const staging = yield* stagedRollout(db, write, threadId, path, kinds, false);
+    const staging = yield* stagedRollout(db, write, threadId, path, kinds, stage, false);
     if (staging.kind !== 'staged') return staging;
     const outcome = yield* staging.commit(false);
     if (outcome.kind !== 'moved') return outcome;

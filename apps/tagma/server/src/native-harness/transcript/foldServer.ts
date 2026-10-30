@@ -11,6 +11,7 @@ import { HistoryFold } from '@runlith/agent/thread/HistoryFold';
 import { TranscriptFold } from '@runlith/agent/transcript/TranscriptFold';
 import { entryOf, type ThreadEntryReader } from '@runlith/agent/transcript/kinds';
 import { RolloutLineUnreadable, factOf } from '../../threads/journal/restedReads.js';
+import { stageRolloutFile } from '../../threads/journal/rolloutStaging.js';
 import type { RolloutFiles, TranscriptKey } from '../../threads/contract/service/rested.js';
 import { wireWeight } from './rows.js';
 import {
@@ -219,6 +220,7 @@ async function answered(ask: RestedAsk, kinds: ThreadEntryReader): Promise<Reste
     if (ask.kind === 'compaction') return { id: ask.id, kind: 'compaction', summary: await compaction(ask.rollout, read) };
     if (ask.kind === 'transcribe')
       return { id: ask.id, kind: 'transcribed', entries: await transcribed(ask.rollout, ask.key, kinds, read) };
+    if (ask.kind === 'stage') return { id: ask.id, kind: 'staged', file: await stageRolloutFile(ask.rollout, ask.stage, kinds, read) };
     return { id: ask.id, kind: 'history', ...(await history(ask.rollout, kinds, read)) };
   } finally {
     const reads = totals.drain();

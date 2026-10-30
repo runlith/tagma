@@ -14,6 +14,7 @@ import { MachineUnits } from '../../platform/contract/service/units.js';
 import { unitsLayer } from '../../platform/store/units.js';
 import { storeLayer } from '../../platform/store/open.js';
 import { makeRolloutForms } from './rolloutForming.js';
+import { stagedHere } from '../testing/doubles.js';
 
 const root = mkdtempSync(join(tmpdir(), 'rollout-publication-'));
 afterAll(() => rmSync(root, { recursive: true, force: true }));
@@ -52,7 +53,7 @@ const plant = Effect.fnUntraced(function* (id: string, bytes: number, publishing
     );
 });
 const formed = (kinds: ThreadEntryReader, id: string, path: string) =>
-  makeRolloutForms({ journal: (_id, work) => work }).pipe(
+  makeRolloutForms({ journal: (_id, work) => work, stage: stagedHere }).pipe(
     Effect.provideService(ThreadEntryKinds, kinds),
     Effect.flatMap((forms) => forms.formedHere(id, path)),
   );
@@ -108,7 +109,7 @@ layer(machine)('rollout publication', (it) => {
       });
       yield* plant(id, Buffer.byteLength(before), publishing);
       const folded = makeThreadEntryReader({ products: [], base: { step: step.name, release: '0.2.0' } });
-      const read = yield* makeRolloutForms({ journal: (_id, work) => work }).pipe(
+      const read = yield* makeRolloutForms({ journal: (_id, work) => work, stage: stagedHere }).pipe(
         Effect.provideService(ThreadEntryKinds, folded),
         Effect.flatMap((forms) => Effect.result(forms.readable(id, path))),
       );

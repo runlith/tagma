@@ -10,7 +10,7 @@ import { runIdOf, threadCompactionCheckpoint, threadHistoryItem, threadLog, thre
 import { thread, threadEntry } from '../threads/store/kernel.js';
 import { threadEvent } from '../threads/store/journal.js';
 import { frozen, type FoldRow, type NativeFolds } from '../threads/journal/rolloutMeta.js';
-import { transcribeRollout } from './transcript/restedWork.js';
+import { stageRollout, transcribeRollout } from './transcript/restedWork.js';
 
 const INSERT_ROWS = 8_000;
 const BODY_IDS = 500;
@@ -163,5 +163,6 @@ export const nativeFolds: NativeFolds = {
     yield* db.insert(threadLog).values({ threadId, historyThrough: through, entriesThrough: through });
   }),
   transcribe: (files, key) => Effect.flatMap(ThreadEntryKinds, (kinds) => Effect.asVoid(transcribeRollout(kinds, files, key))),
+  stage: (files, stage) => Effect.flatMap(ThreadEntryKinds, (kinds) => stageRollout(kinds, files, stage)),
   writes: writes('rollout.native.folds', [threadEntry, threadHistoryItem, threadLog, threadPrunedToolCall, threadCompactionCheckpoint]),
 };

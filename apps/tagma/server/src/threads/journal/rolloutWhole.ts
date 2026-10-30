@@ -29,7 +29,9 @@ export const rolloutWhole = (
   const going = new Set<string>();
   const deferred = new Set<string>();
   const recalled = new Set<string>();
+  const queued = new Set<string>();
   const passes = new Map<string, Deferred.Deferred<void>>();
+  let draining = false;
 
   const placed = Effect.fnUntraced(function* (threadId: string) {
     if (ctx.home === undefined || !(yield* forms.lags(threadId))) return null;
@@ -68,14 +70,40 @@ export const rolloutWhole = (
     if (pass !== undefined) Deferred.doneUnsafe(pass, Exit.void);
   };
 
+  const next = Effect.sync(() => {
+    const [threadId] = queued;
+    if (threadId === undefined) {
+      draining = false;
+      return null;
+    }
+    queued.delete(threadId);
+    return threadId;
+  });
+
+  const drain: Effect.Effect<void> = Effect.flatMap(next, (threadId) =>
+    threadId === null ? Effect.void : Effect.andThen(restedNow(threadId), drain),
+  );
+
+  const queue = (threadId: string): void => {
+    queued.add(threadId);
+    if (draining) return;
+    draining = true;
+    runAppend(
+      Effect.onInterrupt(drain, () =>
+        Effect.sync(() => {
+          draining = false;
+        }),
+      ),
+    );
+  };
+
   const requested = (threadId: string): void => {
     if (!passes.has(threadId)) passes.set(threadId, Deferred.makeUnsafe<void>());
-    runAppend(restedNow(threadId));
+    if (!going.has(threadId)) queue(threadId);
   };
 
   const restedNow = (threadId: string): Effect.Effect<void> =>
     Effect.suspend(() => {
-      if (going.has(threadId)) return Effect.void;
       if (ctx.kinds.last === null) return Effect.sync(() => settled(threadId));
       going.add(threadId);
       deferred.delete(threadId);
@@ -110,7 +138,7 @@ export const rolloutWhole = (
         Effect.ensuring(
           Effect.sync(() => {
             going.delete(threadId);
-            if (recalled.delete(threadId) && deferred.has(threadId)) runAppend(restedNow(threadId));
+            if (recalled.delete(threadId) && deferred.has(threadId)) queue(threadId);
             else settled(threadId);
           }),
         ),

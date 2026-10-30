@@ -16,6 +16,7 @@ import { carriedRecap } from '../../thread-record/contract/wire/recap.js';
 import type { RecordBirth, ThreadRecords } from '../../thread-record/contract/service/records.js';
 import type { RolloutFiles, TranscriptKey } from '../contract/service/rested.js';
 import type { RolloutUnreadable } from './rolloutFile.js';
+import type { RolloutStage, StagedFile } from './rolloutStaging.js';
 
 import type { WriteUnit } from '../../platform/contract/service/units.js';
 
@@ -86,6 +87,10 @@ export type NativeFolds = {
     files: RolloutFiles,
     key: TranscriptKey,
   ) => Effect.Effect<void, RolloutUnreadable | WorkerUnavailable, ThreadEntryKinds>;
+  readonly stage: (
+    files: RolloutFiles,
+    stage: RolloutStage,
+  ) => Effect.Effect<StagedFile, RolloutUnreadable | WorkerUnavailable, ThreadEntryKinds>;
   readonly writes: WriteSet;
 };
 

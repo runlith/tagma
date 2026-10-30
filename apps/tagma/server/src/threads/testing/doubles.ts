@@ -23,6 +23,9 @@ import { makeThreadRolloutRepair } from '../journal/repair.js';
 import { makeThreadRolloutReport } from '../journal/report.js';
 import { makeRestedReads } from '../journal/restedReads.js';
 import { makeRolloutForms } from '../journal/rolloutForming.js';
+import type { StageRollout } from '../journal/rolloutEntryForms.js';
+import { stageRolloutFile } from '../journal/rolloutStaging.js';
+import { RolloutReads } from '../contract/service/rolloutReads.js';
 import type { JournalEntry } from '../journal/rolloutContext.js';
 import { formedThread as formedThreadOver, journalSteps as journalStepsOver } from '../journal/formSteps.js';
 import { exportThreadRollout as exportThreadRolloutOver, appendThreadRollout as appendThreadRolloutOver } from '../journal/export.js';
@@ -31,6 +34,7 @@ import { threadRolloutMeta as threadRolloutMetaOver, rolloutBirth as rolloutBirt
 import { type RolloutBirth, type RolloutWriter, RolloutWriting, rolloutWriter as rolloutWriterOver } from '../journal/rolloutWriter.js';
 import { rolloutParticipant as rolloutParticipantOver } from '../journal/rolloutSnapshot.js';
 import {
+  RolloutUnreadable,
   createRollout as createRolloutOver,
   appendRolloutItem as appendRolloutItemOver,
   replayRollout as replayRolloutOver,
@@ -387,13 +391,29 @@ export const rolloutWriter = (
 export const rolloutBirth = (...input: Parameters<typeof rolloutBirthOver>): ReturnType<typeof rolloutBirthOver> =>
   rolloutBirthOver(...input);
 
-export const restedReads = (kinds: ThreadEntryReader, home: string | undefined, lagging: (threadId: string) => void = () => {}) =>
-  Effect.flatMap(makeRolloutForms({ journal: (_threadId, work) => work }), (forms) => makeRestedReads({ forms, home, lagging })).pipe(
-    Effect.provideService(ThreadEntryKinds, kinds),
+export const stagedHere: StageRollout = (files, stage) =>
+  Effect.flatMap(ThreadEntryKinds, (kinds) =>
+    Effect.flatMap(RolloutReads, (read) =>
+      Effect.tryPromise({
+        try: () => stageRolloutFile(files, stage, kinds, read),
+        catch: (error) =>
+          new RolloutUnreadable({ reason: 'io', path: files.path, message: error instanceof Error ? error.message : String(error) }),
+      }),
+    ),
   );
 
-export const rolloutForms = (journal: JournalEntry, kinds: ThreadEntryReader) =>
-  Effect.provideService(makeRolloutForms({ journal }), ThreadEntryKinds, kinds);
+export const restedReads = (
+  kinds: ThreadEntryReader,
+  home: string | undefined,
+  lagging: (threadId: string) => void = () => {},
+  stage: StageRollout = stagedHere,
+) =>
+  Effect.flatMap(makeRolloutForms({ journal: (_threadId, work) => work, stage }), (forms) =>
+    makeRestedReads({ forms, home, lagging }),
+  ).pipe(Effect.provideService(ThreadEntryKinds, kinds));
+
+export const rolloutForms = (journal: JournalEntry, kinds: ThreadEntryReader, stage: StageRollout = stagedHere) =>
+  Effect.provideService(makeRolloutForms({ journal, stage }), ThreadEntryKinds, kinds);
 
 export const journalSteps = (...input: Parameters<typeof journalStepsOver>): ReturnType<typeof journalStepsOver> =>
   journalStepsOver(...input);

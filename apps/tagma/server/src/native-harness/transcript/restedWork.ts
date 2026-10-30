@@ -6,6 +6,7 @@ import type { ThreadEntryReader, ThreadReaderWorker } from '@runlith/agent/trans
 import { RolloutUnreadable } from '../../threads/journal/rolloutFile.js';
 import type { RolloutFiles, TranscriptKey } from '../../threads/contract/service/rested.js';
 import { RolloutReads, type RolloutRead, type ReadRollout } from '../../threads/contract/service/rolloutReads.js';
+import type { RolloutStage, StagedFile } from '../../threads/journal/rolloutStaging.js';
 
 export const TRANSCRIPT_FOOTER_BYTES = 48;
 export const TRANSCRIPT_SLOT_BYTES = 16;
@@ -24,12 +25,14 @@ export type RestedAsk = { readonly id: number; readonly rollout: RolloutFiles } 
   | { readonly kind: 'transcribe'; readonly key: TranscriptKey }
   | { readonly kind: 'history' }
   | { readonly kind: 'compaction' }
+  | { readonly kind: 'stage'; readonly stage: RolloutStage }
 );
 
 export type RestedAnswer = { readonly id: number } & (
   | { readonly kind: 'transcribed'; readonly entries: number }
   | { readonly kind: 'history'; readonly history: ThreadHistory; readonly bytes: number }
   | { readonly kind: 'compaction'; readonly summary: RestedCompaction }
+  | { readonly kind: 'staged'; readonly file: StagedFile }
   | { readonly kind: 'failed'; readonly reason: string }
 );
 
@@ -80,6 +83,7 @@ const ask = (
   kinds: ThreadEntryReader,
   rollout: RolloutFiles,
   asking: (id: number) => RestedAsk,
+  span = 'ThreadTranscript.rested.fold',
 ): Effect.Effect<RestedAnswer, WorkerUnavailable> =>
   Effect.flatMap(RolloutReads, (read) =>
     Effect.callback<RestedAnswer, WorkerUnavailable>((resume) => {
@@ -112,7 +116,7 @@ const ask = (
         if (waiting.size === 0) thread.unref();
       });
     }),
-  ).pipe(Effect.withSpan('ThreadTranscript.rested.fold', { attributes: { rollout: rollout.path } }));
+  ).pipe(Effect.withSpan(span, { attributes: { rollout: rollout.path } }));
 
 const unreadable = (rollout: RolloutFiles, answer: RestedAnswer): RolloutUnreadable =>
   new RolloutUnreadable({
@@ -129,6 +133,16 @@ export const transcribeRollout = (
   Effect.flatMap(
     ask(kinds, rollout, (id) => ({ id, rollout, kind: 'transcribe', key })),
     (answer) => (answer.kind === 'transcribed' ? Effect.succeed(answer.entries) : Effect.fail(unreadable(rollout, answer))),
+  );
+
+export const stageRollout = (
+  kinds: ThreadEntryReader,
+  rollout: RolloutFiles,
+  stage: RolloutStage,
+): Effect.Effect<StagedFile, RolloutUnreadable | WorkerUnavailable> =>
+  Effect.flatMap(
+    ask(kinds, rollout, (id) => ({ id, rollout, kind: 'stage', stage }), 'ThreadRollout.stage'),
+    (answer) => (answer.kind === 'staged' ? Effect.succeed(answer.file) : Effect.fail(unreadable(rollout, answer))),
   );
 
 export const readRolloutCompaction = (

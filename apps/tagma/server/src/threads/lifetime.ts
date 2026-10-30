@@ -84,7 +84,7 @@ export const makeThreadsLifetime = Effect.fnUntraced(function* ({ rolloutHome }:
   const registry = harnessRegistry();
   const own = yield* makeOwnWork;
   const reads = yield* makeThreadListReads.pipe(Effect.provideService(OwnWork, own));
-  const forms = yield* makeRolloutForms({ journal: journalEntry(order) });
+  const forms = yield* makeRolloutForms({ journal: journalEntry(order), stage: parts.native.folds.stage });
   const rested = yield* makeRestedReads({ forms, home: rolloutHome, lagging: (threadId) => rollouts.formRested(threadId) });
   const mandate = yield* makeMandateRows;
   const ledger = yield* makeThreadResourceStore;
