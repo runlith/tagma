@@ -57,7 +57,7 @@ A group is a named, ordered set of registered projects Tagma treats as one syste
 - **Opening another member's thread** keeps the group tile, the list, its folders and scroll; only the crumb, and with it Files, Git and terminals, moves to that member.
 - **Folders belong to the group.** Joining puts both projects' folders into one list unchanged. Folders with the same name stay two folders: a folder is its id, and names are not unique even within one project today. Leaving hands each project its own threads; a folder holding threads of both stays with both, each keeping its own threads.
 - **Making and leaving.** "Group with" in a project tile's menu and in the project menu lists existing groups, then projects; choosing a project makes a group of the two and asks its name in one field. A member's project menu carries "Leave group"; a group of two dissolves when one member leaves. A dissolved group's registration stays as a removed row with its graph on disk; a group made again under the same name takes that graph back, and the act says so, so a mistaken leave loses no knowledge.
-- **New threads.** The context strip under the composer (the related spec) carries a project picker before the place; the default is the first member's main checkout.
+- **New threads.** The context strip under the composer (the related spec) carries a project picker before the place. "+" never moves the window: a draft starts in the main checkout of the member the crumb stands in, and picking another member moves the draft and the crumb there, keeping its text and model.
 
 ## Decided, and why
 
