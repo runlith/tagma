@@ -10,5 +10,9 @@ fields:
 sources:
   - kind: dir
     ref: apps/tagma/server/src
+  - kind: dir
+    ref: packages/agent/src
+  - kind: dir
+    ref: packages/agent-tools/src
 ---
-No model names (Fable, Opus, and others), no reasoning levels (`max`, `xhigh`), no model selection, switching, or downgrade policy in text Tagma gives an agent. Which model fits which work is decided by the operator in their own words and rules.
+No model names (Fable, Opus, and others), no reasoning levels (`max`, `xhigh`), and no model selection, switching or downgrade policy of Tagma's own in text Tagma gives an agent. The operator decides which model fits which work: his own model rows (`agent.models`), with the ratings he gave them, reach agents as he configured them, and the choice among them follows those ratings.
