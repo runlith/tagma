@@ -85,7 +85,7 @@ export const vendorJudge = (root: string, revision: string, params: VendorParams
     }
     if (best === undefined || best.changes.length > FAR)
       throw new Error(
-        'vendor-ids has no revision index; run check_rules over all with inspection vendor-ids to remeasure before judging a change',
+        'vendor-ids has no revision index for this reader; run check_rules with inspection vendor-ids over "change", using the same paths, whole and taking selection, to prepare the candidate before judging it again',
       );
     return derived(commit, best.id, best.changes);
   };

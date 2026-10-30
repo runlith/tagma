@@ -164,7 +164,7 @@ export const judgements = (root: string, params: CallParams, versionRevision: st
     }
     if (best === undefined || best.changes.length > FAR)
       throw new Error(
-        `no ask-calls state within ${FAR} changed files of ${commit}; build it with check_rules over "all" for the ask-calls rule, then judge the change again`,
+        `no ask-calls state within ${FAR} changed files of ${commit}; run check_rules with inspection ask-calls over "change", using the same paths, whole and taking selection, to prepare the candidate before judging it again`,
       );
     return advance(commit, best, best.changes).id;
   };

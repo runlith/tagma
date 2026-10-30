@@ -8,7 +8,9 @@ export const versionAt = (root: string, revision: string): string => {
   const key = `${root}\0${revision}`;
   const held = versions.get(key);
   if (held !== undefined) return held;
-  const hash = createHash('sha256');
+  const hash = createHash('sha256')
+    .update(readFileSync(Bun.resolveSync('typescript/package.json', import.meta.dir)))
+    .update(readFileSync(Bun.resolveSync('oxc-parser/package.json', Bun.resolveSync('@runlith/code-facts/adapters', import.meta.dir))));
   const entries = listedAt(
     root,
     revision,
@@ -21,7 +23,6 @@ export const versionAt = (root: string, revision: string): string => {
       'checks/law/store.ts',
       'checks/law/trees.ts',
       'packages/code-facts/src',
-      'bun.lock',
     ],
     false,
   );

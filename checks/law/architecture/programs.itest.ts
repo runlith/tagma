@@ -28,6 +28,7 @@ test('the inspection runner compares each version and keeps partial coverage hon
   };
   try {
     git('init', '-q');
+    put('bun.lock', '{"lockfileVersion":1,"workspaces":{},"packages":{}}');
     put('.tagma/server.md', card('server', source));
     put('.tagma/orbit.md', card('orbit', 'packages/adapter-orbit'));
     put('packages/adapter-orbit/package.json', '{"name":"@example/orbit","exports":"./src/models.ts"}');
@@ -84,6 +85,7 @@ test('the inspection runner compares each version and keeps partial coverage hon
     };
     invoke(false);
     const latest = invoke(true);
+    put('bun.lock', '{"lockfileVersion":1,"workspaces":{"packages/new-client":{"name":"@example/new-client"}},"packages":{}}');
     put(
       'packages/adapter-orbit/src/models.ts',
       "export const ORBIT_PROVIDER = 'orbit-cloud'; export const FUTURE_PROVIDER = 'future-cloud';",
@@ -117,6 +119,15 @@ test('the inspection runner compares each version and keeps partial coverage hon
     expect(retiredBase.covered).toEqual(expect.arrayContaining([`${source}/translations/future.ts`]));
     expect(retired.readings.find((one) => one.side === 'tree')!.findings.some((one) => one.path.endsWith('/future.ts'))).toBe(false);
 
+    put('bun.lock', '{"lockfileVersion":1,"workspaces":{},"packages":{"client":["client@1.0.0","",{},"sha512-client"]}}');
+    git('add', '.');
+    const relocked = git('write-tree');
+    const lockOnly = run({ ...vendorInput, tree: relocked, base: undeclared });
+    expect(lockOnly.readings.map(({ covered, findings }) => ({ covered, findings }))).toEqual([
+      { covered: [], findings: [] },
+      { covered: [], findings: [] },
+    ]);
+
     const calls = {
       region: [`${source}/`],
       sources: [{ path: `${source}/providers/access.ts`, name: 'ModelAccess', capability: 'access', form: 'service' }],
@@ -141,6 +152,7 @@ test('the inspection runner compares each version and keeps partial coverage hon
       `${source}/providers/open.ts`,
       "import type { ModelAccess } from './access.js'; export const open = (models: ModelAccess['Service']) => models.request({});",
     );
+    put('bun.lock', '{"lockfileVersion":1,"workspaces":{},"packages":{"client":["client@2.0.0","",{},"sha512-client"]}}');
     git('add', '.');
     const second = git('write-tree');
     git('rm', '-qf', `${source}/translations/direct.ts`);
@@ -190,7 +202,6 @@ test('the inspection runner compares each version and keeps partial coverage hon
 
     const unbuilt = attempt(second, first, [`${source}/providers/open.ts`]);
     expect(unbuilt.status).not.toBe(0);
-    expect(unbuilt.stderr.toString()).toContain('check_rules over "all"');
 
     const built = read(first, null, null);
     expect(built.tree.covered).toEqual({ scope: 'reach' });
