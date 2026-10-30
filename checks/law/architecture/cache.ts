@@ -28,8 +28,6 @@ export const versionAt = (root: string, revision: string): string => {
   if (entries.size === 0)
     for (const path of [
       'cache.ts',
-      'coupling.ts',
-      'measured.ts',
       'snapshot.ts',
       'strings.ts',
       'literals.ts',

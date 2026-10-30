@@ -154,6 +154,24 @@ test('a commit that adds an unused export, an unused function and a type-only fu
   expect(fingerprints(commit.base)).toEqual(fingerprints(whole.base));
 });
 
+test('a card-declared testing entry is neither a judged export nor a production consumer, and a role change rejudges its exporters', async () => {
+  const ordinary = card('app', 'dir', 'src');
+  const base = treeWith({
+    'src/lib.ts': 'export const used = 1; export const rigOnly = 2;\n',
+    'src/entry.ts': "import { used } from './lib'; export const result = used;\n",
+    'src/rig.ts': "import { rigOnly } from './lib'; export const support = rigOnly;\n",
+    '.tagma/app.md': ordinary,
+  });
+  await index(base);
+  const declared = ordinary.replace('fields: {"id":"app"}', 'fields: {"id":"app","entries":[{"at":"rig.ts","role":"testing"}]}');
+  const tree = treeWith({ '.tagma/app.md': declared });
+  const { commit, whole } = await judged('dead-code', base, tree, ['.tagma/app.md']);
+  expect(commit.tree.covered).toEqual(expect.arrayContaining(['src/lib.ts', 'src/rig.ts']));
+  expect(fingerprints(commit.base)).toEqual(['dead src/rig.ts#support']);
+  expect(fingerprints(commit.tree)).toEqual(['dead src/lib.ts#rigOnly']);
+  expect(fingerprints(commit.tree)).toEqual(fingerprints(whole.tree));
+});
+
 test('a surviving test importer does not keep an export alive after its last production importer goes', async () => {
   const base = treeWith(initial);
   await index(base);

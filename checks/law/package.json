@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "typecheck": "runlith-typecheck",
-    "test": "testbed bun test ./programs.itest.ts ./migrations.itest.ts ./input.itest.ts ./directories.itest.ts ./maps.itest.ts ./ui-tokens.test.ts ./environment.test.ts ./effect-style.test.ts ./declarations/dead.test.ts ./declarations/repeated.test.ts ./declarations/program.itest.ts ./architecture/architecture.test.ts ./architecture/programs.itest.ts ./architecture/coupling.itest.ts ./architecture/calls/calls.test.ts ./architecture/concurrent.itest.ts"
+    "test": "testbed bun test ./programs.itest.ts ./migrations.itest.ts ./input.itest.ts ./directories.itest.ts ./maps.itest.ts ./ui-tokens.test.ts ./environment.test.ts ./effect-style.test.ts ./declarations/dead.test.ts ./declarations/repeated.test.ts ./declarations/program.itest.ts ./architecture/architecture.test.ts ./architecture/programs.itest.ts ./architecture/calls/calls.test.ts ./architecture/concurrent.itest.ts"
   },
   "dependencies": {
     "@runlith/code-facts": "workspace:*",

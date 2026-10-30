@@ -3,10 +3,10 @@ import type { Finding } from '@runlith/tagma/rules';
 import { boundaryState } from '../architecture/boundaries';
 import { modulesAt } from '../architecture/snapshot';
 import { listedAt } from '../directories';
-import { isSource, listedPackages, productionOf, type Reach, type WholeCorpus } from './corpus';
+import { isSource, listedPackages, type Reach, type WholeCorpus } from './corpus';
 import { findDead, findDeadAmong } from './dead';
 import type { DeadParams, RepeatedParams } from './declaration';
-import { ownersOf, sideEntries } from './frontier';
+import { ownersOf, productionAt, sideEntries } from './frontier';
 import type { Facts } from './facts';
 import {
   blobsAt,
@@ -39,7 +39,8 @@ const ordered = (findings: readonly Finding[]): readonly Finding[] =>
 
 const wholeAt = (root: string, commit: string, tests: readonly string[]): WholeCorpus => {
   prepare(root, commit, null);
-  const production = productionOf({ tests });
+  boundaryState(root, commit, modulesAt(root, commit));
+  const production = productionAt(root, commit, { tests });
   const all = listing(root, commit);
   return {
     facts: factsAt(
@@ -56,7 +57,7 @@ const wholeAt = (root: string, commit: string, tests: readonly string[]): WholeC
 };
 
 const deadAt = (root: string, commit: string, owners: ReadonlySet<string>, params: DeadParams): readonly Finding[] => {
-  const production = productionOf(params);
+  const production = productionAt(root, commit, params);
   const present = blobsAt(
     root,
     commit,
@@ -97,7 +98,7 @@ const repeatedAt = (
   params: RepeatedParams,
   production: (path: string) => boolean,
 ): readonly Finding[] => {
-  const present = blobsAt(root, commit, [...paths]);
+  const present = blobsAt(root, commit, [...paths].filter(production));
   const own = factsAt(
     root,
     [...present].map(([path, blob]) => ({ path, blob })),
@@ -123,7 +124,9 @@ export const repeated: Judge<RepeatedParams> = {
     return findRepeated(corpus, params, boundaryState(root, commit, modulesAt(root, commit)));
   },
   affected: (root, base, tree, changes, params) => {
-    const production = productionOf(params);
+    const beforeProduction = productionAt(root, base, params);
+    const afterProduction = productionAt(root, tree, params);
+    const production = (path: string): boolean => beforeProduction(path) || afterProduction(path);
     const sources = (path: string): boolean => isSource(path) && production(path);
     const moved = movedPackages(root, base, tree, changes);
     const names = [...new Set([...moved.before, ...moved.after].map((one) => one.name))];
@@ -163,6 +166,10 @@ export const repeated: Judge<RepeatedParams> = {
     if (keys.size > 0)
       for (const commit of [base, tree])
         for (const one of sharingShapes(root, commit, [...keys])) if (production(one.path)) paths.add(one.path);
-    return { paths, base: repeatedAt(root, base, paths, params, production), tree: repeatedAt(root, tree, paths, params, production) };
+    return {
+      paths,
+      base: repeatedAt(root, base, paths, params, beforeProduction),
+      tree: repeatedAt(root, tree, paths, params, afterProduction),
+    };
   },
 };

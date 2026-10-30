@@ -2,8 +2,7 @@ import { posix } from 'node:path';
 import { changesBetween, FAR, GOOD_ENOUGH } from '../declarations/index';
 import { blobTexts } from '../git';
 import { derivedMap, recentRoots, rootAt, seededMap, valueAt } from '../maps';
-import { versionAt } from './cache';
-import { moduleAt, type Module } from './snapshot';
+import { moduleAt, testingEntry, type Module } from './snapshot';
 
 export type Boundaries = {
   readonly owner: (path: string) => string | undefined;
@@ -12,6 +11,7 @@ export type Boundaries = {
 
 type Territory = readonly (readonly [card: string, id: string])[];
 type State = Boundaries & {
+  readonly testing: (path: string) => boolean;
   readonly card: (path: string) => Module | undefined;
   readonly module: (id: string) => Module | undefined;
   readonly dependents: (id: string) => readonly string[];
@@ -21,7 +21,7 @@ const keysOf = (module: Module): readonly string[] =>
 const ordered = (rows: Territory): Territory => [...rows].sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
 
 export const boundaryState = (root: string, revision: string, modules?: readonly Module[]): State => {
-  const family = `boundaries:${versionAt(root, revision)}`;
+  const family = 'boundaries';
   const view = (id: string): State => {
     const owners = new Map<string, string | undefined>();
     const owner = (path: string): string | undefined => {
@@ -38,6 +38,11 @@ export const boundaryState = (root: string, revision: string, modules?: readonly
     };
     return {
       owner,
+      testing: (path) => {
+        const name = owner(path);
+        const module = name === undefined ? undefined : (valueAt(root, id, `m:${name}`) as Module | undefined);
+        return module !== undefined && testingEntry(module, path);
+      },
       card: (path) => valueAt(root, id, `c:${path}`) as Module | undefined,
       module: (name) => valueAt(root, id, `m:${name}`) as Module | undefined,
       dependents: (name) => {

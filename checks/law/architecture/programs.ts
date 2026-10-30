@@ -1,6 +1,5 @@
 import { defineProgram, type Answer, type Finding, type InspectionInput, type Side } from '@runlith/tagma/rules';
-import type { CouplingParams, VendorParams } from './inspections';
-import { couplingJudge } from './measured';
+import type { VendorParams } from './inspections';
 import { snapshots } from './snapshot';
 import { vendorJudge } from './vendors';
 
@@ -33,7 +32,6 @@ const answered = <P extends object>(input: InspectionInput<P>, judged: Judged): 
 
 export default defineProgram<{
   'vendor-ids': VendorParams;
-  coupling: CouplingParams;
 }>({
   'vendor-ids': (input) => {
     const judge = vendorJudge(root(), input.tree.commit, input.params, snapshot());
@@ -42,5 +40,4 @@ export default defineProgram<{
       affected: judge.affected,
     });
   },
-  coupling: (input) => answered(input, couplingJudge(root(), input.tree.commit, input.params, snapshot())),
 });

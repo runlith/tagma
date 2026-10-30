@@ -4,10 +4,9 @@ import { names, platforms, serverNames } from './checks/builtins';
 import { ALLOWED } from './checks/failures';
 import { effectStyle, environment, migrations, stepPlaces, uiTokens } from './checks/law/inspections';
 import type { EffectStyleParams } from './checks/law/effect-style/declaration';
-import { coupling, vendorIds } from './checks/law/architecture/inspections';
+import { vendorIds } from './checks/law/architecture/inspections';
 import { dead, repeated } from './checks/law/declarations/declaration';
 import { askCalls } from './checks/law/architecture/calls/params';
-import couplingBaseline from './checks/law/architecture/coupling.json';
 
 const EFFECT_EXTENSIONS = ['.ts', '.tsx', '.mts', '.cts', '.js', '.jsx', '.mjs', '.cjs', '.svelte'];
 const SOURCE_TESTS = [
@@ -150,17 +149,6 @@ export default defineConfig({
         aliases: SOURCE_ALIASES,
       },
       { files: ['**/*.{ts,tsx,js,jsx,mts,cts,mjs,cjs,svelte}', '**/package.json'] },
-    ),
-    coupling: coupling(
-      { baseline: couplingBaseline, aliases: SOURCE_ALIASES },
-      {
-        files: [
-          'apps/tagma/{server,app}/src/**/*.{ts,tsx,js,jsx,mts,cts,mjs,cjs,svelte}',
-          'packages/**/*.{ts,tsx,js,jsx,mts,cts,mjs,cjs,svelte}',
-          '**/package.json',
-          '.tagma/**/*.md',
-        ],
-      },
     ),
     'vendor-ids': vendorIds(
       {

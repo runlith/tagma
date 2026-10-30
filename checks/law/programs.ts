@@ -10,7 +10,7 @@ import type { EffectStyleParams } from './effect-style/declaration';
 import type { EnvironmentParams } from './environment/declaration';
 import type { UiTokensParams } from './ui-tokens/declaration';
 import type { DeadParams, RepeatedParams } from './declarations/declaration';
-import type { CouplingParams, VendorParams } from './architecture/inspections';
+import type { VendorParams } from './architecture/inspections';
 import type { CallParams } from './architecture/calls/params';
 
 const root = process.cwd();
@@ -114,7 +114,6 @@ export default defineProgram<{
   'repeated-declarations': RepeatedParams;
   'dead-code': DeadParams;
   'vendor-ids': VendorParams;
-  coupling: CouplingParams;
   'ask-calls': CallParams;
 }>({
   'effect-style': checked('effect-style'),
@@ -125,6 +124,5 @@ export default defineProgram<{
   'repeated-declarations': lazily<RepeatedParams>(() => import('./declarations/program'), 'repeated-declarations'),
   'dead-code': lazily<DeadParams>(() => import('./declarations/program'), 'dead-code'),
   'vendor-ids': lazily<VendorParams>(() => import('./architecture/programs'), 'vendor-ids'),
-  coupling: lazily<CouplingParams>(() => import('./architecture/programs'), 'coupling'),
   'ask-calls': lazily<CallParams>(() => import('./architecture/calls/program'), 'ask-calls'),
 });

@@ -1,7 +1,8 @@
 import type { TreeDifference } from '@runlith/git/trees';
 import type { BlobAt } from '@runlith/git/working';
 import { listedAt } from '../directories';
-import { isSource, type Packages, productionOf, targetKeys } from './corpus';
+import { boundaryState } from '../architecture/boundaries';
+import { isSource, type Packages, productionOf, targetKeys, type Reach } from './corpus';
 import { consumptions } from './dead';
 import type { DeadParams } from './declaration';
 import type { Facts } from './facts';
@@ -72,6 +73,12 @@ const edgesOf = (
   return visit(resolverOf(present, packages, params.aliases));
 };
 
+export const productionAt = (root: string, commit: string, params: Reach): ((path: string) => boolean) => {
+  const production = productionOf(params);
+  const boundaries = boundaryState(root, commit);
+  return (path) => production(path) && !boundaries.testing(path);
+};
+
 export const ownersOf = (
   root: string,
   base: string,
@@ -79,16 +86,33 @@ export const ownersOf = (
   changes: readonly TreeDifference[],
   params: DeadParams,
 ): ReadonlySet<string> => {
-  const production = productionOf(params);
-  const sources = (path: string): boolean => isSource(path) && production(path);
+  const boundaries = [boundaryState(root, base), boundaryState(root, tree)];
+  const production = [productionAt(root, base, params), productionAt(root, tree, params)];
+  const sources = (path: string): boolean => production.some((accept) => accept(path));
+  const roles = new Set<string>();
+  for (const change of changes.filter((one) => one.path.startsWith('.tagma/') && one.path.endsWith('.md'))) {
+    const modules = boundaries.map((view) => view.card(change.path));
+    if (JSON.stringify(modules[0]?.testing) === JSON.stringify(modules[1]?.testing)) continue;
+    for (const [at, commit] of [base, tree].entries())
+      for (const source of modules[at]?.paths ?? [])
+        for (const path of listedAt(root, commit, [source.kind === 'file' ? source.ref : `${source.ref.replace(/\/$/, '')}/`], true).keys())
+          if (isSource(path)) roles.add(path);
+  }
   const packagesBefore = manifestsAt(root, base);
   const packagesAfter = manifestsAt(root, tree);
   const moved = movedPackages(root, base, tree, changes);
   const sides = [
-    { commit: base, packages: packagesBefore, moved: moved.before, held: factsAt(root, sideEntries(changes, 'before', sources)) },
-    { commit: tree, packages: packagesAfter, moved: moved.after, held: factsAt(root, sideEntries(changes, 'after', sources)) },
-  ];
-  const owners = new Set<string>();
+    { commit: base, packages: packagesBefore, moved: moved.before, which: 'before' as const },
+    { commit: tree, packages: packagesAfter, moved: moved.after, which: 'after' as const },
+  ].map((side, at) => ({
+    ...side,
+    production: production[at]!,
+    held: factsAt(root, [
+      ...sideEntries(changes, side.which, production[at]!),
+      ...[...blobsAt(root, side.commit, [...roles].filter(production[at]!))].map(([path, blob]) => ({ path, blob })),
+    ]),
+  }));
+  const owners = new Set<string>(roles);
   for (const one of changes) {
     if (!sources(one.path)) continue;
     owners.add(one.path);
@@ -104,8 +128,8 @@ export const ownersOf = (
         if (key.startsWith('d:')) dirs.add(bounded(key.slice(2), `the exports of package \`${one.name}\``));
         else for (const probe of probesOf(key.slice(2))) files.add(probe);
       }
-    const reached = [...blobsAt(root, side.commit, [...files]).keys()].filter(sources);
-    const resolver = resolverOf(new Set([...listed(root, side.commit, dirs, sources), ...reached]), side.packages, params.aliases);
+    const reached = [...blobsAt(root, side.commit, [...files]).keys()].filter(side.production);
+    const resolver = resolverOf(new Set([...listed(root, side.commit, dirs, side.production), ...reached]), side.packages, params.aliases);
     for (const pkg of side.moved) {
       const published = params.published.some((dir) => pkg.dir === dir || (dir !== '' && pkg.dir.startsWith(`${dir}/`)));
       for (const target of published ? resolver.exported(pkg) : pkg.entries.flatMap((entry) => resolver.inside(pkg, entry)))
@@ -114,9 +138,9 @@ export const ownersOf = (
   }
   if (names.length > 0)
     for (const side of sides)
-      for (const [path, file] of factsAt(root, importersByName(root, side.commit, names, sources)))
+      for (const [path, file] of factsAt(root, importersByName(root, side.commit, names, side.production)))
         if (!side.held.has(path)) side.held.set(path, file);
-  const [before, after] = sides.map((side) => edgesOf(root, side.commit, side.held, side.packages, params, sources));
+  const [before, after] = sides.map((side) => edgesOf(root, side.commit, side.held, side.packages, params, side.production));
   for (const path of new Set([...before!.keys(), ...after!.keys()])) {
     const was = before!.get(path) ?? new Set<string>();
     const is = after!.get(path) ?? new Set<string>();

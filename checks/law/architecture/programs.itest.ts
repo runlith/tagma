@@ -10,7 +10,7 @@ const RUNNER = join(import.meta.dir, '../../../apps/tagma/server/src/enforcement
 const PROGRAM = join(import.meta.dir, '../programs.ts');
 const source = 'apps/tagma/server/src';
 
-test('the inspection runner compares each version, keeps partial coverage honest and reads the module cards instead of directory guesses', () => {
+test('the inspection runner compares each version and keeps partial coverage honest', () => {
   const root = mkdtempSync(join(tmpdir(), 'architecture-programs-'));
   const git = (...args: string[]) => execFileSync('git', args, { cwd: root, encoding: 'utf8' }).trim();
   const put = (path: string, text: string) => {
@@ -66,7 +66,6 @@ test('the inspection runner compares each version, keeps partial coverage honest
             params: { source, include: ['**'], exclude: [] },
             reach: { places: [source], files: ['**/*.ts'] },
           },
-          { key: 'coupling', id: 'coupling', params: { baseline: [], aliases: [] }, reach: { places: [''], files: ['**/*.ts'] } },
         ],
         sides: [side('tree'), side('base')],
       };
@@ -79,40 +78,12 @@ test('the inspection runner compares each version, keeps partial coverage honest
       const findings = (key: string, side: string) => answer.readings.find((one) => one.key === key && one.side === side)!;
       expect(findings('vendors', 'tree').findings.map((one) => one.path)).toEqual(changed);
       expect(findings('vendors', 'base').findings).toHaveLength(0);
-      if (whole) {
-        expect(findings('vendors', 'tree').covered).toEqual({ scope: 'reach' });
-        expect(findings('coupling', 'tree').covered).toEqual({ scope: 'reach' });
-      } else {
-        expect(findings('vendors', 'tree').covered).toEqual(expect.arrayContaining(changed));
-        expect(findings('coupling', 'tree').covered).toEqual(expect.arrayContaining(changed));
-      }
-      const metric = whole ? 'ceiling' : 'increase';
-      expect(findings('coupling', 'tree').findings.find((one) => one.fingerprint === `coupling:server:modules-${metric}`)?.value).toBe(1);
-      expect(findings('coupling', 'tree').findings.find((one) => one.fingerprint === `coupling:server:share-${metric}`)?.value).toBe(1 / 3);
+      if (whole) expect(findings('vendors', 'tree').covered).toEqual({ scope: 'reach' });
+      else expect(findings('vendors', 'tree').covered).toEqual(expect.arrayContaining(changed));
       return input;
     };
     invoke(false);
     const latest = invoke(true);
-    put(
-      '.tagma/other.md',
-      `---\ntags: ["module"]\nfields: {"id": "other"}\nsources:\n  - kind: file\n    ref: ${source}/providers/access.ts\n---\n`,
-    );
-    git('add', '.');
-    const moved = git('write-tree');
-    const input: ProgramInvocation = {
-      ...latest,
-      tree: moved,
-      base: tree,
-      keys: [latest.keys.find((one) => one.id === 'coupling')!],
-      sides: [
-        { side: 'tree', paths: [], files: [] },
-        { side: 'base', paths: [], files: [] },
-      ],
-    };
-    const movedAnswer = run(input);
-    const metrics = movedAnswer.readings.find((one) => one.side === 'tree')!.findings;
-    expect(metrics.find((one) => one.fingerprint === 'coupling:server:modules-increase')?.value).toBe(2);
-    expect(metrics.find((one) => one.fingerprint === 'coupling:server:share-increase')?.value).toBe(1);
     put(
       'packages/adapter-orbit/src/models.ts',
       "export const ORBIT_PROVIDER = 'orbit-cloud'; export const FUTURE_PROVIDER = 'future-cloud';",
@@ -120,10 +91,14 @@ test('the inspection runner compares each version, keeps partial coverage honest
     git('add', '.');
     const declared = git('write-tree');
     const vendorInput: ProgramInvocation = {
-      ...input,
+      ...latest,
       tree: declared,
-      base: moved,
+      base: tree,
       keys: [latest.keys.find((one) => one.id === 'vendor-ids')!],
+      sides: [
+        { side: 'tree', paths: [], files: [] },
+        { side: 'base', paths: [], files: [] },
+      ],
     };
     const declaredAnswer = run(vendorInput);
     const vendors = declaredAnswer.readings.find((one) => one.side === 'tree')!.findings;

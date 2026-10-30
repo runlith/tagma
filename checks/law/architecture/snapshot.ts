@@ -1,4 +1,4 @@
-import { posix } from 'node:path';
+import { matchesGlob, posix } from 'node:path';
 import { Schema } from 'effect';
 import ts from 'typescript';
 import type { Side } from '@runlith/tagma/rules';
@@ -12,6 +12,7 @@ export type Module = {
   readonly card?: string;
   readonly node?: string;
   readonly imports?: readonly string[];
+  readonly testing?: readonly string[];
   readonly paths: readonly { readonly kind: string; readonly ref: string }[];
 };
 export type Snapshot = {
@@ -36,6 +37,9 @@ export const production = (path: string): boolean =>
     path,
   );
 
+export const testingEntry = (module: Module, path: string): boolean =>
+  (module.testing ?? []).some((entry) => matchesGlob(path, entry) || matchesGlob(path, `${entry}/**`));
+
 export const within = (path: string, prefix: string): boolean => path === prefix || path.startsWith(`${prefix.replace(/\/$/, '')}/`);
 export const moduleOwners = (modules: readonly Module[]): ((path: string) => Module | undefined) => {
   const files = new Map<string, Module>();
@@ -57,7 +61,10 @@ const header = Schema.Struct({
   id: Schema.optional(Schema.String),
   edges: Schema.optional(Schema.Array(Schema.Struct({ kind: Schema.String, to: Schema.String }))),
   tags: Schema.Array(Schema.String),
-  fields: Schema.Struct({ id: Schema.optional(Schema.String) }),
+  fields: Schema.Struct({
+    id: Schema.optional(Schema.String),
+    entries: Schema.optional(Schema.Array(Schema.Struct({ at: Schema.String, role: Schema.optional(Schema.String) }))),
+  }),
   sources: Schema.Array(Schema.Struct({ kind: Schema.String, ref: Schema.String })),
 });
 
@@ -73,6 +80,9 @@ export const moduleAt = (path: string, text: string): Module | undefined => {
         node: card.id,
         imports: card.edges?.filter((one) => one.kind === 'imports').map((one) => one.to) ?? [],
         paths: card.sources,
+        testing: (card.fields.entries ?? [])
+          .filter((entry) => entry.role === 'testing')
+          .flatMap((entry) => card.sources.filter((source) => source.kind === 'dir').map((source) => posix.join(source.ref, entry.at))),
       };
 };
 

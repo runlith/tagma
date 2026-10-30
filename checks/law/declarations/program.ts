@@ -30,11 +30,7 @@ const judged =
       return { tree: reading(found), base: reading(wholeOf(base.commit)) };
     }
     const production = productionOf(params);
-    if (
-      ![...tree.paths, ...base.paths].some(
-        (path) => production(path) || isManifest(path) || (judge.kind === 'repeated-declarations' && path.startsWith('.tagma/')),
-      )
-    )
+    if (![...tree.paths, ...base.paths].some((path) => production(path) || isManifest(path) || path.startsWith('.tagma/')))
       return { tree: { findings: [], covered: 'paths' } };
     prepare(root, tree.commit, base.commit);
     const answer = judge.affected(root, base.commit, tree.commit, changesBetween(root, base.commit, tree.commit), params);
