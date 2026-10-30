@@ -150,7 +150,7 @@ The heap walks 1.5 → 4.4 GB within a minute and back after collection, externa
      Each run of a recorded call mix (read, grep, edit, bash, submit_work) reports: own-cost CPU-s per call by process (server, git, SQLite, host, window), start, idle and wakeups per second, RSS p50 and peak, allocation volume, p99 loop, writer wait — with and without telemetry.
    - Budgets: statements per tool call, git runs per operation, statuses per HEAD move — itest checks, like the [[afa44677]] inventory.
 1. **Checkout status by mark reason** — Git kit (adeeb4ba), work places (06405a5f), Holdings (00ddf0e5).
-2. **SQL per act** — producers by step-0 rank: owner projections, batched probes, prepared statements. With it — frame basis once per frame.
+2. **SQL per act** — producers by step-0 rank: owner projections, batched probes, prepared statements. With it — frame basis once per frame. For the agent path (hosted tool calls, ACP steps, thread projections, the writer, memory and the interface's fault domain) this step is specified by [[2afe6fec]].
 3. **SQLite in-process** — if step 2 leaves the SQL path a visible share. First an audit of point-read boundedness; the decision is recorded with a number.
 4. **Memory turnover** — [[19d1811a]].
 5. **Window, start and idle.**
