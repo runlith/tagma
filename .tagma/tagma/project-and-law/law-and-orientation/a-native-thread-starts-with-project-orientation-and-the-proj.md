@@ -28,6 +28,7 @@ sources:
 - Orientation: the root body, the global graph link, the area map by names, work in progress with holders.
 - A thread born over a subtree gets its body, its branch's catalogs on the map, and only its own work in progress.
 - A map over budget cuts depth, and every area tells how many of its children it did not show; when no area fits, their count remains.
+- A member of a group starts with the group root, then its own project marked as where it stands, then every other member's root and top regions — within the same map budget.
 - A foreign CLI gets the same orientation, with the project law added.
 
 **Limits.** An agent without the graph capability gets no orientation.

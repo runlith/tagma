@@ -38,7 +38,7 @@ sources:
 **How.** By itself: a native thread gets the set before every model step, a foreign CLI through hooks. Where a rule arrives is decided by its `delivery` field (`set_rule_delivery`): `prompt` into the start, `code` on touching code named by its sources; with no value a rule with sources goes as `code`, one without as `prompt`.
 
 **Behaviour.**
-- The set is the global graph's prompt rules, then the project's prompt rules as whole bodies, catalog guides, and tag prompts; an agent without the graph capability gets only rules.
+- The set is the global graph's prompt rules, then the project's prompt rules as whole bodies, catalog guides, and tag prompts; an agent without the graph capability gets only rules. In a member of a group the project's rules give way to the group's rules and then every member's prompt rules, each under its project's name.
 - Changes arrive as a diff: replaced records, new and withdrawn ones; with an unchanged set nothing arrives.
 - Between checkouts of one project the delivered text compares: the same set never arrives twice, a differing one arrives as a diff. After context compaction the set arrives whole again.
 - Nesting rules never overrides: a rule under a rule only shows indented.

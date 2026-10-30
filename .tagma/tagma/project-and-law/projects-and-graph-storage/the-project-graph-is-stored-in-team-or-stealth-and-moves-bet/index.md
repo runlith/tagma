@@ -37,5 +37,6 @@ sources:
 - Moving carries the whole tree and keeps the mirror with its journal. A new open waits for the move to finish. In stealth, files commit into Tagma's git; in team they stay in the checkout until committed under the `graph.commit` policy.
 - Moving refuses if the target already holds a tree, the source tree is mid-merge, or another copy of the project still holds its graph. A stealth move requires a named branch if the folder has git.
 - The global project is born stealth and changes storage mode on common grounds; its working folder stays in place.
+- A group's graph is born stealth and stays stealth: no repository could carry it.
 
 **Limits.** The window doesn't move the graph itself — it copies the command. Moving to team removes private. An off-machine copy of a stealth graph is kept by [[34ea6c7a|its own git remote]]; a team graph has none, it travels with the code repository.
