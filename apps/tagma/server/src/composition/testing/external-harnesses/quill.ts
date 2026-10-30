@@ -13,7 +13,14 @@ export const QUILL = {
   close: 'quill.close',
 } as const;
 
-const adapterText = (close: string) => `
+const ASKS = `(lines) => {
+  const line = lines.find((text) => text.startsWith('quill asks: '));
+  return line === undefined
+    ? null
+    : { kind: 'choice', prompt: line.slice('quill asks: '.length).trim(), header: null, subject: null, options: [{ value: 'yes', label: 'Yes' }], selected: null };
+}`;
+
+const adapterText = (close: string, screen: boolean) => `
 import { defineAdapter } from '@runlith/tagma/adapter/provider';
 import { emptyValues, fileSource } from '@runlith/tagma/adapter/metadata';
 
@@ -126,7 +133,7 @@ export const adapter = defineAdapter(() => [
       },
       printedOf: () => null,
       eventKeys: ['hook_event_name', 'quill_session', 'quill_turn', 'quill_tool'],
-      screenAskOf: () => null,
+      screenAskOf: ${screen ? ASKS : '() => null'},
       keysOf: () => null,
       cancelKeysOf: () => null,
       interrupt: [{ _tag: 'char', char: '\\u0003' }],
@@ -161,12 +168,17 @@ while IFS= read -r line; do echo "quill heard: $line"; done
 
 export type QuillPackage = { readonly directory: string; readonly bin: string };
 
-export const quillRelease = Effect.fn('quill.release')(function* (directory: string, version: string, close: string = QUILL.close) {
+export const quillRelease = Effect.fn('quill.release')(function* (
+  directory: string,
+  version: string,
+  close: string = QUILL.close,
+  screen = true,
+) {
   const files = yield* FileSystem.FileSystem;
   const manifest = { name: QUILL.name, version, type: 'module', exports: { '.': './adapter.ts' } };
   yield* files.writeFileString(join(directory, 'package.json'), JSON.stringify(manifest));
   yield* files.writeFileString(join(directory, 'answer.txt'), `quill ${version}\n`);
-  yield* files.writeFileString(join(directory, 'adapter.ts'), adapterText(close));
+  yield* files.writeFileString(join(directory, 'adapter.ts'), adapterText(close, screen));
 });
 
 export const quillPackage = Effect.fn('quill.package')(function* (root: string) {

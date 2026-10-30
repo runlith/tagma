@@ -24,6 +24,7 @@ import { testGrantSigner } from '../../platform/testing/grants.js';
 import { SpawnRefused } from '../../platform/testing/spawn.js';
 import { endHosts } from '../../executions/testing/doubles.js';
 import { hostBundleRoot } from './hostBundle.js';
+import type { HostPlacement } from '../../executions/contract/service/host.js';
 
 export type Call = {
   readonly cwd?: string;
@@ -36,6 +37,40 @@ export type Call = {
 export type TerminalCheckout = { readonly id: number; readonly name: string; readonly root: string };
 
 export type TerminalWorldOptions = { readonly hostSourcePath?: string };
+
+type RuntimeHost = { readonly hostSourcePath?: string; readonly hostBundlePath?: string; readonly placedHost?: HostPlacement };
+
+export type TerminalRuntime = Effect.Success<ReturnType<typeof makeRuntime>>;
+
+export const terminalRuntime = (dataHome: string, host: RuntimeHost, processes: ProcessPool) =>
+  makeRuntime(
+    {
+      adapters: TESTING_ADAPTERS,
+      grants: testGrantSigner,
+      databasePath: join(dataHome, 'tagma.sqlite'),
+      tokensPath: join(dataHome, 'tokens.json'),
+      attachmentsPath: join(dataHome, 'attachments'),
+      sourcePath: join(dataHome, 'tagma'),
+      ...host,
+      drivers: [],
+    },
+    Layer.empty,
+    processes,
+  );
+
+export const servedRuntime = Effect.fnUntraced(function* (runtime: TerminalRuntime, dataHome: string) {
+  const served = HttpRouter.serve(
+    Layer.mergeAll(doorServing(doorLayer({ status: runtime.status }), runtime, dataHome), liveDoorLayer(runtime, dataHome)),
+    { disableListenLog: true, disableLogger: true },
+  ).pipe(
+    Layer.provide(frozenBuildsLayer({ dataPath: dataHome })),
+    Layer.provideMerge(BunHttpServer.layer({ port: 0, gracefulShutdownTimeout: '20 millis' })),
+    Layer.provide(Layer.succeedContext(routedContext(runtime.graph, runtime.pool))),
+    Layer.provide(Layer.succeedContext(runtime.bindings)),
+  );
+  const built = yield* Layer.build(served);
+  return `http://127.0.0.1:${(Context.get(built, HttpServer.HttpServer).address as { port: number }).port}`;
+});
 
 const makeWorld = Effect.fnUntraced(
   function* (
@@ -58,34 +93,10 @@ const makeWorld = Effect.fnUntraced(
     const dataHome = yield* directory('home');
     const scratch = yield* directory('tmp');
     const hostBundlePath = options.hostSourcePath === undefined ? yield* Effect.orDie(hostBundleRoot) : undefined;
-    const runtime = yield* makeRuntime(
-      {
-        adapters: TESTING_ADAPTERS,
-        grants: testGrantSigner,
-        databasePath: join(dataHome, 'tagma.sqlite'),
-        tokensPath: join(dataHome, 'tokens.json'),
-        attachmentsPath: join(dataHome, 'attachments'),
-        sourcePath: join(dataHome, 'tagma'),
-        hostSourcePath: options.hostSourcePath,
-        hostBundlePath,
-        drivers: [],
-      },
-      Layer.empty,
-      processes,
-    );
+    const runtime = yield* terminalRuntime(dataHome, { hostSourcePath: options.hostSourcePath, hostBundlePath }, processes);
     yield* Effect.orDie(chosenModel(runtime));
     yield* Effect.orDie(Context.get(runtime.graph, Settings).write({ scope: 'user', key: keepAwake.id, value: 'off' }));
-    const served = HttpRouter.serve(
-      Layer.mergeAll(doorServing(doorLayer({ status: runtime.status }), runtime, dataHome), liveDoorLayer(runtime, dataHome)),
-      { disableListenLog: true, disableLogger: true },
-    ).pipe(
-      Layer.provide(frozenBuildsLayer({ dataPath: dataHome })),
-      Layer.provideMerge(BunHttpServer.layer({ port: 0, gracefulShutdownTimeout: '20 millis' })),
-      Layer.provide(Layer.succeedContext(routedContext(runtime.graph, runtime.pool))),
-      Layer.provide(Layer.succeedContext(runtime.bindings)),
-    );
-    const built = yield* Layer.build(served);
-    const url = `http://127.0.0.1:${(Context.get(built, HttpServer.HttpServer).address as { port: number }).port}`;
+    const url = yield* servedRuntime(runtime, dataHome);
     let sequence = 0;
     const environment = (call: Call): Environment => {
       const env: Environment = {
