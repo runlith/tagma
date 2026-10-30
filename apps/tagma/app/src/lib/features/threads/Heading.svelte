@@ -210,6 +210,7 @@
         {row}
         {list}
         {host}
+        places={row.projectId === host.projectId ? host.places : null}
         archived={row.archivedAt !== null}
         onRename={isRoot ? startRename : undefined}
         acts={others.length > 0 ? bornActs : undefined}

@@ -6,6 +6,7 @@
   import { heldWords } from '$lib/features/checkout/holdingWords.js';
   import type { ThreadListRow } from '@tagma/server/threads/contract/wire/list';
   import type { ThreadSlot } from './ThreadSlot.svelte.js';
+  import type { Worktrees } from '$lib/features/worktrees/BoardState.svelte.js';
   import { flushSync, untrack, type Snippet } from 'svelte';
   import { Addresses } from '$lib/features/workspace/Addresses.js';
   import { doubleClick } from '$lib/shared/doubleClick.js';
@@ -44,6 +45,7 @@
     query = '',
     parent = null,
     host = null,
+    places = null,
     squeeze = null,
     badge,
     aside,
@@ -58,6 +60,7 @@
   }: {
     query?: string;
     host?: ThreadSlot | null;
+    places?: Worktrees | null;
     squeeze?: Squeeze | null;
     parent?: ThreadListRow | null;
     node: ThreadTreeNode;
@@ -336,7 +339,7 @@
   {/if}
   {@render aside?.(node)}
   {#if peeking && link !== null}
-    <ThreadPeek {node} {peekKey} {host} anchor={link} {label} {time} {processes} />
+    <ThreadPeek {node} {peekKey} {host} {places} member={mark} anchor={link} {label} {time} {processes} />
   {/if}
   {#if hasChildren && filtering}
     <span

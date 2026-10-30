@@ -51,6 +51,7 @@
   import { ProviderCatalog } from '$lib/features/providers/Catalog.svelte.js';
   import { NOT_INSTALLED } from '$lib/features/providers/served.js';
   import { CommandActivity, silenceOf, type CommandView } from '$lib/features/executions/commands/Activity.svelte.js';
+  import type { Worktrees } from '$lib/features/worktrees/BoardState.svelte.js';
   import WorktreeSwatch from '$lib/features/worktrees/WorktreeSwatch.svelte';
   import ProjectMark from '$lib/features/workspace/ProjectMark.svelte';
   import { WallClock } from '$lib/features/workspace/WallClock.svelte.js';
@@ -90,10 +91,14 @@
     time,
     processes,
     host = null,
+    places = null,
+    member = null,
   }: {
     node: ThreadTreeNode;
     peekKey: string;
     host?: ThreadSlot | null;
+    places?: Worktrees | null;
+    member?: number | null;
     anchor: HTMLElement;
     label: string;
     time: string;
@@ -145,7 +150,7 @@
   }
 
   const mark = $derived(threadMark(row));
-  const place = $derived(host === null ? null : host.places.placeOf(row.id));
+  const place = $derived(places?.placeOf(row.id) ?? null);
   const harness = $derived(row.harness === null ? null : harnessWords(catalog.models, row.harness));
   const words = $derived(modelWords(catalog.models, row));
   const model = $derived(
@@ -506,15 +511,16 @@
           </span>
           {#if warning !== null}<span class="text-status-in-work">Activity may be incomplete. {warning}</span>{/if}
         </dd>
-        {#if !homed}
+        {#if member !== null}
           <dt class="text-muted-foreground">Project</dt>
-          <dd class="flex min-w-0 items-center"><ProjectMark projectId={row.projectId} class="min-w-0" /></dd>
-        {:else if host !== null && host.places.known}
+          <dd class="flex min-w-0 items-center"><ProjectMark projectId={member} class="min-w-0" /></dd>
+        {/if}
+        {#if places !== null && places.known}
           <dt class="text-muted-foreground">Worktree</dt>
           <dd class="flex min-w-0 items-center gap-1.5" data-thread-peek-worktree={place?.name ?? ''}>
             {#if place === null}
               <span class="text-muted-foreground">
-                {host.places.creatingOf({ id: row.id, name: row.name }) === null ? 'not in a worktree' : 'new worktree · being made'}
+                {places.creatingOf({ id: row.id, name: row.name }) === null ? 'not in a worktree' : 'new worktree · being made'}
               </span>
             {:else}
               <WorktreeSwatch row={place} />

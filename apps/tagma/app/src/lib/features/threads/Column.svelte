@@ -269,6 +269,7 @@
       depth={line.depth}
       parent={line.parent}
       {host}
+      places={col.tile.of(node.row.projectId)}
       {squeeze}
       {folds}
       activeId={host.activeId}
@@ -325,6 +326,7 @@
     row={node.row}
     {list}
     {host}
+    places={col.tile.of(node.row.projectId)}
     {aim}
     onRename={() => col.startRename(node.row)}
     onMove={col.grouping === null && node.row.parentThreadId === null
@@ -335,5 +337,14 @@
 {/snippet}
 
 {#snippet archivedActions(node: ThreadTreeNode, aim: ContextAim)}
-  <ThreadMenu row={node.row} {list} {host} {aim} archived onRename={() => col.startRename(node.row)} class={ROW_MENU} />
+  <ThreadMenu
+    row={node.row}
+    {list}
+    {host}
+    places={col.tile.of(node.row.projectId)}
+    {aim}
+    archived
+    onRename={() => col.startRename(node.row)}
+    class={ROW_MENU}
+  />
 {/snippet}

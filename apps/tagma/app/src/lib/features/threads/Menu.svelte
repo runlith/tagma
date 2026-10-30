@@ -28,6 +28,7 @@
   import { Button } from '$lib/shared/ui/button/index.js';
   import * as Dialog from '$lib/shared/ui/dialog/index.js';
   import * as DropdownMenu from '$lib/shared/ui/dropdown-menu/index.js';
+  import type { Worktrees } from '$lib/features/worktrees/BoardState.svelte.js';
   import WorktreeSwatch from '$lib/features/worktrees/WorktreeSwatch.svelte';
   import ProjectGlyph from '$lib/features/workspace/ProjectGlyph.svelte';
   import { labelOf } from '$lib/features/workspace/mark.js';
@@ -54,6 +55,7 @@
     row,
     list,
     host,
+    places,
     aim,
     archived = false,
     onRename,
@@ -67,6 +69,7 @@
     row: ThreadListRow;
     list: ThreadList;
     host: ThreadSlot;
+    places: Worktrees | null;
     aim?: ContextAim;
     archived?: boolean;
     onRename?: () => void;
@@ -116,13 +119,10 @@
   const stoppable = $derived(stoppableOf(row));
   const stopping = $derived(stoppable === null ? null : chats.of(row.projectId).stops.phase(row.id, stoppable));
 
-  const places = $derived(host.places);
-  const placed = $derived(places.placeOf(row.id));
-  const targets = $derived(
-    places.several && row.projectId === host.projectId ? places.targets.filter((one) => one.rootId !== placed?.rootId) : [],
-  );
+  const placed = $derived(places?.placeOf(row.id) ?? null);
+  const targets = $derived(places?.several ? places.targets.filter((one) => one.rootId !== placed?.rootId) : []);
   const destinations = $derived(
-    !archived && home === host.projectId
+    !archived && places !== null
       ? [
           ...workspace.projects.filter((one) => one.id !== home && one.kind === 'folder'),
           ...workspace.projects.filter((one) => one.id !== home && one.kind === 'global'),
@@ -232,11 +232,12 @@
       {/if}
       {#if targets.length > 0}
         <DropdownMenu.Sub>
-          <DropdownMenu.SubTrigger icon={ArrowRightLeft} disabled={places.moving.includes(row.id)}>Move to worktree</DropdownMenu.SubTrigger
+          <DropdownMenu.SubTrigger icon={ArrowRightLeft} disabled={places?.moving.includes(row.id)}
+            >Move to worktree</DropdownMenu.SubTrigger
           >
           <DropdownMenu.SubContent class="max-h-80 min-w-56 overflow-y-auto">
             {#each targets as target (target.rootId)}
-              <DropdownMenu.Item onSelect={() => void places.move(row.id, target.rootId)}>
+              <DropdownMenu.Item onSelect={() => void places?.move(row.id, target.rootId)}>
                 {#snippet lead()}<WorktreeSwatch row={target} />{/snippet}
                 <span class="font-mono text-small">{target.branch ?? target.name}</span>
               </DropdownMenu.Item>
@@ -246,10 +247,10 @@
       {/if}
       {#if destinations.length > 0}
         <DropdownMenu.Sub>
-          <DropdownMenu.SubTrigger icon={Forward} disabled={places.moving.includes(row.id)}>Move to project</DropdownMenu.SubTrigger>
+          <DropdownMenu.SubTrigger icon={Forward} disabled={places?.moving.includes(row.id)}>Move to project</DropdownMenu.SubTrigger>
           <DropdownMenu.SubContent class="max-h-80 min-w-56 overflow-y-auto">
             {#each destinations as destination (destination.id)}
-              <DropdownMenu.Item onSelect={() => void places.move(row.id, 'main', destination.id)}>
+              <DropdownMenu.Item onSelect={() => void places?.move(row.id, 'main', destination.id)}>
                 {#snippet lead()}<ProjectGlyph project={destination} />{/snippet}
                 <FadeText class="min-w-0">{labelOf(destination)}</FadeText>
               </DropdownMenu.Item>

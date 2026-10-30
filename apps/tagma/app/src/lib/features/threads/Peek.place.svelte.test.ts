@@ -81,6 +81,7 @@ function peek(
   placeOf: (threadId: string) => WorktreePlace | null,
   recap: ReturnType<typeof recapOf> | null = null,
   saidLine: string | null = null,
+  member: number | null = null,
 ): HTMLElement {
   app = mountShell(
     Layer.mergeAll(WallClock, Notices, ThreadNames, CommandActivity, CallActivity, ExecutionActs),
@@ -106,7 +107,9 @@ function peek(
   app.draw(ThreadPeek as never, {
     node: threadTree([recap === null ? { ...row, saidLine } : { ...row, saidLine, recap }])[0],
     peekKey: 'peek-1',
-    host: testThreadSlot({ places: { ...testPlaces(), known: true, placeOf } as never }),
+    host: testThreadSlot(),
+    places: { ...testPlaces(), known: true, placeOf },
+    member,
     anchor,
     label: row.title,
     time: '1m',
@@ -120,6 +123,12 @@ test('the peek names the worktree the listing places the thread in, the one its 
   const page = peek((threadId) => (threadId === 'thread-1' ? tree : null));
   const cell = page.querySelector('[data-thread-peek-worktree]');
   expect(cell?.getAttribute('data-thread-peek-worktree')).toBe('tagma-wt');
+});
+
+test('a thread of another member names that member and still the worktree it stands in there', () => {
+  const page = peek((threadId) => (threadId === 'thread-1' ? tree : null), null, null, 2);
+  expect(page.querySelector('[data-project-mark]')?.getAttribute('data-project-mark')).toBe('2');
+  expect(page.querySelector('[data-thread-peek-worktree]')?.getAttribute('data-thread-peek-worktree')).toBe('tagma-wt');
 });
 
 test('a thread the listing places in no tree reads as none, never as main', () => {
