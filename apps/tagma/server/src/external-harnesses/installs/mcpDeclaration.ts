@@ -7,6 +7,8 @@ import type { McpConfigFile, McpSurface } from '@runlith/tagma/adapter/harness';
 import { MCP_KEY_VARIABLE } from '../../platform/contract/wire/session.js';
 import type { McpDeclarationWrite } from '../../installation/contract/wire/install.js';
 import { installedHere } from '../birth/installed.js';
+import { Effect } from 'effect';
+import { HarnessAdapters } from '../contract/service/adapters.js';
 
 export const MCP_SERVER_NAME = 'tagma';
 
@@ -425,15 +427,12 @@ export const declareForLaunch = async (
     : { ...written, ...(await approve(programmed(adapter, surface.approve(MCP_SERVER_NAME)), repoRoot)) };
 };
 
-export async function installMcpDeclarations(
-  adapters: readonly HarnessAdapter[],
-  repoRoot: string,
-  cli: readonly string[],
-): Promise<McpDeclarationWrite[]> {
-  const written: McpDeclarationWrite[] = [];
-  for (const adapter of adapters) {
-    if (adapter.mcp === null || installedHere(adapter) === null) continue;
-    written.push(await declareInto(repoRoot, adapter, adapter.mcp, cli));
-  }
-  return written;
-}
+export const mcpDeclarations = (cli: readonly string[]) =>
+  Effect.map(HarnessAdapters, (adapters) => async (repoRoot: string): Promise<McpDeclarationWrite[]> => {
+    const written: McpDeclarationWrite[] = [];
+    for (const adapter of adapters.all()) {
+      if (adapter.mcp === null || installedHere(adapter) === null) continue;
+      written.push(await declareInto(repoRoot, adapter, adapter.mcp, cli));
+    }
+    return written;
+  });

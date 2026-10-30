@@ -6,9 +6,9 @@ import { channelActive, entryCommand, integratesProjects, junctionDirectory } fr
 import { placeEntry } from '../installation/setup/entry.js';
 import { installHomes } from '../external-harnesses/installs/skillInstall.js';
 import { refreshedFor, refreshInstallations } from '../external-harnesses/installs/upgrade.js';
-import { installMcpDeclarations } from '../external-harnesses/installs/mcpDeclaration.js';
+import { mcpDeclarations } from '../external-harnesses/installs/mcpDeclaration.js';
 import { renderUpgradeResult } from '../external-harnesses/installs/render.js';
-import { HarnessAdapters } from '../external-harnesses/contract/service/adapters.js';
+
 import { Doctrine, doctrineOf } from '../platform/contract/service/sections.js';
 import { Projects } from '../projects/contract/service/registry.js';
 import { ProjectPolicy, type ServedGraphs } from '../graph/contract/service/serving.js';
@@ -41,7 +41,7 @@ export const installationsRefreshed = (build: string | null, pool: ServedGraphs[
     ? Effect.void
     : Effect.gen(function* () {
         const contributed = doctrineOf(yield* Doctrine).contributed;
-        const adapters = yield* HarnessAdapters;
+        const declare = yield* mcpDeclarations(entryCommand(env));
         const projects = yield* Projects;
         const policy = yield* ProjectPolicy;
         const registered = Effect.flatMap(projects.list(), (rows) =>
@@ -53,16 +53,9 @@ export const installationsRefreshed = (build: string | null, pool: ServedGraphs[
               .fresh()
               .pipe(Effect.andThen(Context.get(served.context, Orientation).law({ projectId })), Effect.provide(served.context)),
           );
-        const done = yield* refreshedFor(
-          build,
-          refreshInstallations(
-            registered,
-            law,
-            (root) => installMcpDeclarations(adapters.all(), root, entryCommand(env)),
-            contributed,
-            env,
-          ),
-        ).pipe(Effect.provide(BunFileSystem.layer));
+        const done = yield* refreshedFor(build, refreshInstallations(registered, law, declare, contributed, env)).pipe(
+          Effect.provide(BunFileSystem.layer),
+        );
         for (const entry of done ?? []) {
           if (entry.skipped !== undefined) continue;
           const lines = renderUpgradeResult([entry]);

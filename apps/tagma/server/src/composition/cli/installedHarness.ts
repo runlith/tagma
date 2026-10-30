@@ -47,11 +47,11 @@ const installedHarnesses = async (machine: string): Promise<readonly HarnessProv
 
 export const harnessDeclarations: HarnessDeclarations = async (machine, harness, pinned) => {
   if (harness === null) {
-    const builtins = await Promise.all([...BUILTIN_HARNESS_PROVIDERS.values()].map((load) => load()));
+    const builtins = await Promise.all([...BUILTIN_HARNESS_PROVIDERS.values()].map(({ load }) => load()));
     return machine === null ? builtins : [...builtins, ...(await installedHarnesses(machine))];
   }
   const builtin = BUILTIN_HARNESS_PROVIDERS.get(harness);
-  if (builtin !== undefined) return [await builtin()];
+  if (builtin !== undefined) return [await builtin.load()];
   const provider = machine === null ? null : await installedHarness(machine, harness, pinned);
   return provider === null ? [] : [provider];
 };

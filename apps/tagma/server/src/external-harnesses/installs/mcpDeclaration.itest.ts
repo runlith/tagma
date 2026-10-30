@@ -14,12 +14,11 @@ import {
 } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { HarnessAdapters } from '../contract/service/adapters.js';
 import { builtinHarness, shippedHarnessAdaptersLayer } from '../testing/builtin.js';
 import type { HarnessAdapter } from '../contract/service/adapter.js';
 import type { McpSurface } from '@runlith/tagma/adapter/harness';
 import { MCP_KEY_VARIABLE } from '../../platform/contract/wire/session.js';
-import { declareInto as declareWith, installMcpDeclarations, MCP_SERVER_NAME } from './mcpDeclaration.js';
+import { declareInto as declareWith, mcpDeclarations, MCP_SERVER_NAME } from './mcpDeclaration.js';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { it } from '@runlith/effect-test';
 import { Effect, Layer } from 'effect';
@@ -324,8 +323,8 @@ it.live('startup installs declaration files without approval; a chosen harness l
           else process.env.OPENCODE_CONFIG_DIR = held.OPENCODE_CONFIG_DIR;
         }),
     );
-    const adapters = yield* HarnessAdapters;
-    const installed = yield* Effect.promise(() => installMcpDeclarations(adapters.all(), repo, CLI));
+    const declare = yield* mcpDeclarations(CLI);
+    const installed = yield* Effect.promise(() => declare(repo));
     expect(installed.find((row) => row.harness === 'cursor')).toMatchObject({ write: 'created' });
     expect(existsSync(log)).toBe(false);
     const before = text('.cursor/mcp.json');

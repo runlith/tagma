@@ -1,7 +1,6 @@
-import { CLAUDE_SESSION } from '@runlith/adapter-anthropic/harness/session';
-import { CODEX_SESSION } from '@runlith/adapter-openai/harness/session';
-import { GROK_SESSION } from '@runlith/adapter-xai/harness/session';
-import { OPENCODE_SESSION } from '@runlith/adapter-opencode/harness/session';
 import type { Signer } from '../../cli/contract/service/server.js';
+import { BUILTIN_HARNESS_PROVIDERS } from '../adapters.js';
 
-export const SIGNERS: readonly Signer[] = [CLAUDE_SESSION, CODEX_SESSION, OPENCODE_SESSION, GROK_SESSION];
+export const SIGNERS: readonly Signer[] = await Promise.all(
+  [...BUILTIN_HARNESS_PROVIDERS.values()].map(({ id, signer }) => (signer === undefined ? { harness: id } : signer())),
+);

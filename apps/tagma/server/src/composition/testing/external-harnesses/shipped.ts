@@ -5,7 +5,7 @@ import { BUILTIN_HARNESS_PROVIDERS } from '../../adapters.js';
 
 export const shippedAdapters = Effect.gen(function* () {
   const adapters = yield* makeHarnessAdapters;
-  const providers = yield* Effect.promise(() => Promise.all([...BUILTIN_HARNESS_PROVIDERS.values()].map((load) => load())));
+  const providers = yield* Effect.promise(() => Promise.all([...BUILTIN_HARNESS_PROVIDERS.values()].map(({ load }) => load())));
   yield* adapters.declared(providers);
   return adapters;
 });
