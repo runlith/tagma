@@ -1,10 +1,11 @@
-import type { JournalBatch } from '@tagma/server/graph/contract/wire/journal';
+import type { JournalBatch, MovedBlock } from '@tagma/server/graph/contract/wire/journal';
 
 export type JournalRun = {
   kind: 'run';
   key: string;
   batches: readonly JournalBatch[];
   blockName: string;
+  moved?: MovedBlock;
   sessionId: number | null;
   ops: readonly string[];
   entries: number;
@@ -46,7 +47,8 @@ export function dayLabel(iso: string, now = Date.now()): string {
   return at.getFullYear() === today.getFullYear() ? date : `${date}, ${at.getFullYear()}`;
 }
 
-const sameRun = (run: JournalRun, batch: JournalBatch): boolean => run.blockName === batch.blockName && run.sessionId === batch.sessionId;
+const sameRun = (run: JournalRun, batch: JournalBatch): boolean =>
+  run.moved === undefined && batch.moved === undefined && run.blockName === batch.blockName && run.sessionId === batch.sessionId;
 
 function joinRun(run: JournalRun, batch: JournalBatch): JournalRun {
   return {
@@ -77,6 +79,7 @@ export function journalRows(batches: readonly JournalBatch[], now = Date.now()):
       key: batchKey(batch),
       batches: [batch],
       blockName: batch.blockName,
+      moved: batch.moved,
       sessionId: batch.sessionId,
       ops: batch.ops,
       entries: batch.entries,

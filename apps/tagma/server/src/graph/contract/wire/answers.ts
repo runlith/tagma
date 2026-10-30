@@ -7,6 +7,7 @@ import { refusalSchema } from '../../../platform/contract/wire/refusal.js';
 import { startPriceSchema } from '../../../platform/contract/wire/start.js';
 import { nodeActionsSchema } from './tags/actions.js';
 import { PAGE_ROLES, SCREEN_ROWS } from './tags/pageRole.js';
+import { graphAddressSchema } from './far.js';
 
 export const graphCopySchema = Schema.Struct({
   projectId: Schema.Int,
@@ -134,6 +135,7 @@ export const eventRowSchema = Schema.Struct({
   at: Schema.String,
   op: Schema.String,
   blockName: Schema.NullOr(BlockName),
+  destination: Schema.optional(graphAddressSchema),
   writer: Schema.NullOr(Schema.String),
 });
 export type EventRow = typeof eventRowSchema.Type;

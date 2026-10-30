@@ -22,6 +22,7 @@ const OP_WORDS: Readonly<Record<GraphEventOp, string>> = {
   unsupersede: 'supersession withdrawn',
   settle: 'settled',
   delete: 'deleted',
+  depart: 'moved',
   restore: 'restored',
   enable: 'enabled',
   disable: 'disabled',

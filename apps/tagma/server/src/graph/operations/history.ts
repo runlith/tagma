@@ -25,6 +25,7 @@ import { CurrentProject } from '../../projects/contract/service/caller.js';
 import { HISTORY_OPERATIONS as OPS, WRITERS } from '../contract/wire/operations/history.js';
 import { WRITERS_WALK } from '../contract/wire/walks.js';
 import { blockName } from '../contract/wire/references.js';
+import { departedBlock, journalUnreadable } from '../contract/wire/journalPayloads.js';
 import { journalBatches } from '../journal/eventLog.js';
 import { journalSessions, writerSession } from '../journal/writers.js';
 import { SessionNames } from '../contract/service/orientation.js';
@@ -117,17 +118,27 @@ export const HISTORY_PAIRS = {
         const oldest = entries.at(-1);
         const rows = yield* (yield* Selection).records([...new Set(batches.map((item) => item.blockId))]);
         const named = new Map(rows.map((row) => [row.id, blockName(row.uuid)] as const));
+        const firstEntries = new Map(entries.map((entry) => [entry.id, entry]));
+        const namedBatches = yield* Effect.forEach(batches, (item) =>
+          Effect.gen(function* () {
+            const entry = firstEntries.get(item.firstEventId)!;
+            const moved = yield* Effect.mapError(Effect.fromResult(departedBlock(entry)), journalUnreadable);
+            const { blockId, ...batch } = item;
+            return {
+              ...batch,
+              blockName: named.get(blockId) ?? '',
+              moved,
+              firstTs: item.firstTs.toISOString(),
+              lastTs: item.lastTs.toISOString(),
+            };
+          }),
+        );
         const writers = yield* (yield* WriterRegister).named(
           batches.map((item) => item.sessionId).filter((id): id is number => id !== null),
         );
         return {
           status: 'ok' as const,
-          batches: batches.map(({ blockId, ...item }) => ({
-            ...item,
-            blockName: named.get(blockId) ?? '',
-            firstTs: item.firstTs.toISOString(),
-            lastTs: item.lastTs.toISOString(),
-          })),
+          batches: namedBatches,
           blocks: rows.map(wireBlock),
           sessions: yield* journalSessions(yield* SessionNames, call.project.id, writers),
           nextBefore: input.limit !== undefined && entries.length === input.limit && oldest ? oldest.id : null,

@@ -21,6 +21,8 @@ import type { InstalledCatalog, Tag } from '../contract/wire/tags/declaration.js
 import type { UnreadableTag } from '../contract/wire/tags/table.js';
 import { cross, scoped, targeted } from './crossing.js';
 import { CurrentGraph, GraphCall } from '../contract/service/serving.js';
+import { departedBlock, journalUnreadable } from '../contract/wire/journalPayloads.js';
+import type { GraphAddress } from '../contract/wire/far.js';
 
 const READS = READ_OPERATIONS;
 
@@ -133,12 +135,14 @@ const ORIENTATION_ROUTED = {
         const events = yield* Effect.forEach(cut.rows, (row) =>
           Effect.gen(function* () {
             const writer = yield* sessions.writerOf(row.sessionId);
+            const moved = yield* Effect.mapError(Effect.fromResult(departedBlock(row)), journalUnreadable);
             return {
               id: row.id,
               ts: row.ts.toISOString(),
               sessionId: row.sessionId,
               op: row.op,
-              blockName: row.blockId === null ? null : (named.get(row.blockId) ?? null),
+              blockName: moved?.name ?? (row.blockId === null ? null : (named.get(row.blockId) ?? null)),
+              destination: moved?.destination,
               payload: row.payload,
               writer: writer === null ? null : `${writer.harness}:${writer.key}`,
             };
@@ -160,6 +164,7 @@ const ORIENTATION_ROUTED = {
         readonly sessionId: number | null;
         readonly op: string;
         readonly blockName: string | null;
+        readonly destination?: GraphAddress;
         readonly payload: string;
         readonly writer: string | null;
       }[];
@@ -169,11 +174,12 @@ const ORIENTATION_ROUTED = {
       readonly complete: boolean;
     }) => ({
       status: 'ok' as const,
-      events: reading.events.map(({ id, ts, op, blockName, writer }) => ({
+      events: reading.events.map(({ id, ts, op, blockName, destination, writer }) => ({
         id,
         at: ts,
         op,
         blockName,
+        destination,
         writer,
       })),
       shown: reading.shown,

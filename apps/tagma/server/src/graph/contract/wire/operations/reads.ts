@@ -244,7 +244,7 @@ export const READ_OPERATIONS = {
         complete: Schema.Boolean,
       },
     }),
-    refusals: ['not-found', 'deleted', 'unknown-project', 'bad-cursor', 'cursor-stale'],
+    refusals: ['not-found', 'deleted', 'unknown-project', 'bad-cursor', 'cursor-stale', 'journal-unreadable'],
     confirmation: (input) => ({
       summary: input.blockId === undefined ? 'Read this project’s journal, newest first?' : `Read what happened to ${input.blockId}?`,
     }),

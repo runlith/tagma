@@ -428,10 +428,15 @@ export const targeted = <Input, A, E, R, F = null, EF = never, RF = never>(
 
 export const scoped = (name: string) => cross(name, (id) => Effect.flatMap(Blocks, (blocks) => blocks.blockById(id)));
 
+export const localId = Effect.fn('crossing.localId')(function* (name: string) {
+  const target = yield* locate(name);
+  return yield* (yield* BlockNames).idOfName(target.row.uuid);
+});
+
 export const linkTarget = Effect.fn('crossing.linkTarget')(function* (name: string, owner: { readonly projectId: number }, kind: EdgeKind) {
   const target = yield* locate(name);
   if (target.projectId === owner.projectId) {
-    const near: LinkTarget = { near: (yield* scoped(name)).id };
+    const near: LinkTarget = { near: yield* localId(name) };
     return near;
   }
   const far: LinkTarget = {
@@ -486,7 +491,7 @@ export const unlink = Effect.fnUntraced(function* (input: BlockLink) {
   }
   const target = yield* locate(input.toId);
   if (target.projectId === from.projectId)
-    return yield* edges.unlink({ fromId: from.id, kind: input.kind, toId: (yield* scoped(input.toId)).id });
+    return yield* edges.unlink({ fromId: from.id, kind: input.kind, toId: yield* localId(input.toId) });
   const exact = ends.filter((row) => row.uuid === target.row.uuid);
   if (exact.length > 0) return yield* edges.unlinkFar({ fromId: from.id, kind: input.kind, to: exact });
   yield* edges.unlinkFar({ fromId: from.id, kind: input.kind, to: [yield* farAddressOf(target)] });
@@ -507,7 +512,7 @@ export const documentScope = Effect.fnUntraced(function* (projectId: number) {
         ],
       );
     }
-    return yield* names.idOfName(name);
+    return yield* names.idOfName(target.row.uuid);
   });
   return {
     references: {
@@ -519,16 +524,15 @@ export const documentScope = Effect.fnUntraced(function* (projectId: number) {
   } satisfies DocumentScope;
 });
 
-export const peer = <const Code extends string>(name: string, owner: BlockRow, code: Code) =>
-  Effect.flatMap(scoped(name), (row) =>
-    row.projectId === owner.projectId
-      ? Effect.succeed(row)
-      : Effect.fail(
-          new GateRefusal(code, 'this act cannot join blocks stored in different project graphs', [
-            `name a block in project ${owner.projectId}, beside the block being changed`,
-          ]),
-        ),
-  );
+export const peer = Effect.fnUntraced(function* <const Code extends string>(name: string, owner: BlockRow, code: Code) {
+  const row = yield* scoped(name);
+  if (row.projectId !== owner.projectId) {
+    return yield* new GateRefusal(code, 'this act cannot join blocks stored in different project graphs', [
+      `name a block in project ${owner.projectId}, beside the block being changed`,
+    ]);
+  }
+  return yield* (yield* Blocks).blockById(yield* localId(name));
+});
 
 export const cross = <A, E, R>(
   name: string,

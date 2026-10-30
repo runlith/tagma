@@ -2,7 +2,9 @@ import { expect } from 'bun:test';
 import { layer } from '@runlith/effect-test';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { join } from 'node:path';
-import { Effect, FileSystem, Layer } from 'effect';
+import { Context, Effect, FileSystem, Layer, Queue } from 'effect';
+import { GraphFeed, type GraphFrame } from '../../../graph/contract/service/journal.js';
+import type { JournalPageBody } from '../../../graph/contract/wire/journal.js';
 import { graphHome, stealthTreeName } from '../../../graph/storage/layout.js';
 import { doorFixture, DoorFixture, projectLeaving } from '../doorFixture.js';
 import { suiteGit } from '../suiteGit.js';
@@ -94,6 +96,59 @@ layer(doorFixture().pipe(Layer.provideMerge(BunFileSystem.layer)), {
       const counted = yield* lastCommit(root);
       expect(counted.subject).toBe('Add 2 notes');
       expect(counted.lines.slice(0, 2)).toEqual([`add ${split} Billing questions`, `add ${faq} Refund FAQ`]);
+    }),
+  );
+
+  it.effect('a cross-project move names the departing block and its destination in the source journal and commit', () =>
+    Effect.gen(function* () {
+      const source = yield* teamProject('departure-source', ['feat(core): seed the source']);
+      const target = yield* teamProject('departure-target', ['feat(core): seed the target']);
+      const name = yield* source.created({ title: 'Knowledge to move' });
+      expect((yield* source.world.op('sync_graph', { project: source.project })).status).toBe(200);
+      const served = yield* source.world.runtime.pool.resolve({ projectId: source.project });
+      const changes = yield* Queue.unbounded<GraphFrame>();
+      const stop = yield* Context.get(served.context, GraphFeed).subscribe(source.project, (frame) => Queue.offerUnsafe(changes, frame));
+      yield* Effect.addFinalizer(() => Effect.sync(stop));
+      const moved = yield* source.world.op('update_block', { project: source.project, blockId: name, parentId: target.parentId });
+      expect(moved).toMatchObject({ status: 200 });
+      const events = yield* source.world.op('read_events', { project: source.project, limit: 1 });
+      const targetProject = (
+        (yield* source.world.op('read_project', {}, `project=${target.project}`)).body as { project: { name: string } }
+      ).project;
+      expect(events.body).toMatchObject({
+        events: [{ op: 'depart', blockName: name, destination: { label: targetProject.name } }],
+      });
+      for (;;) {
+        const frame = yield* Queue.take(changes);
+        if (frame.type !== 'change' || !frame.events.some((entry) => entry.op === 'depart')) continue;
+        expect(frame.events).toEqual(expect.arrayContaining([expect.objectContaining({ op: 'depart', blockName: name })]));
+        break;
+      }
+      const journal = (yield* source.world.op('read_journal', { project: source.project, limit: 1 })).body as JournalPageBody;
+      const departure = journal.batches[0]!;
+      expect(departure).toMatchObject({ moved: { name, title: 'Knowledge to move', destination: { label: targetProject.name } } });
+      expect(journal.blocks.find((row) => row.name === departure.blockName)?.title).toBe('Knowledge to move');
+      const history = yield* source.world.op('read_block_diff', {
+        project: source.project,
+        blockId: departure.blockName,
+        from: departure.firstEventId - 1,
+        to: departure.lastEventId,
+      });
+      expect(history).toMatchObject({ status: 200, body: { diff: { changes: [expect.objectContaining({ kind: 'move' })] } } });
+      expect((yield* source.world.op('sync_graph', { project: source.project })).status).toBe(200);
+      const commit = yield* lastCommit(source.root);
+      expect(commit.lines[0]).toBe(`move ${name} Knowledge to move to ${target.parentId}`);
+      expect((yield* source.world.op('restore_block', { project: source.project, blockId: departure.blockName })).status).toBe(200);
+      expect(
+        (yield* source.world.op('update_block', { project: source.project, blockId: departure.blockName, title: 'Restored copy' })).status,
+      ).toBe(200);
+      const after = (yield* source.world.op('read_journal', { project: source.project, limit: 10 })).body as JournalPageBody;
+      expect(after.batches.find((batch) => batch.ops.includes('restore'))?.blockName).toBe(departure.blockName);
+      expect(after.batches.flatMap((batch) => (batch.moved === undefined ? [] : [batch.moved.name]))).toEqual([name]);
+      expect(after.batches.find((batch) => batch.ops.includes('depart'))).toMatchObject({
+        blockName: departure.blockName,
+        moved: { name, title: 'Knowledge to move' },
+      });
     }),
   );
 

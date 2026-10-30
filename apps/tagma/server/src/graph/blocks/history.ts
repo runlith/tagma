@@ -258,6 +258,12 @@ function changeOf(entry: ActEntry): Changes {
       return labelled(readJournal.supersede(entry), (p) => ({ kind: 'unsupersede', label: 'Replacement withdrawn', peerId: p.withId }));
     case 'delete':
       return plain('delete', 'Moved to the trash');
+    case 'depart':
+      return labelled(readJournal.depart(entry), (p) => ({
+        kind: 'move',
+        label: `Moved to ${p.to.label} (${blockName(p.to.graph)})`,
+        peerId: null,
+      }));
     case 'restore':
       return plain('restore', 'Restored from the trash');
     case 'enable':
@@ -311,6 +317,7 @@ function changeOf(entry: ActEntry): Changes {
 }
 
 function markOf(seen: { ops: ReadonlySet<GraphEventOp>; moved: boolean }, row: BlockRecord): MarkKind {
+  if (seen.ops.has('depart')) return 'moved';
   if (row.deletedAt !== null && seen.ops.has('delete')) return 'deleted';
   if (seen.ops.has('create')) return 'added';
   if (seen.ops.has('restore')) return 'restored';

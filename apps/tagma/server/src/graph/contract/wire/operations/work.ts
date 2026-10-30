@@ -33,7 +33,7 @@ Exact fields per op (?, optional):
   delete    {op, id}
   restore   {op, id}
 One writing project per document; individual ops cannot set project. References to blocks being changed, parents, source donors and replacements must stay there; another project refuses place-mismatch. To move a block to a foreign parent, use update_block with parentId alone outside the document. Edge targets may be in any registered project, as in link_blocks/unlink_blocks.
-\`$id\` on create declares a handle. Every reference accepts \`$handle\`; bodies use \`[[$handle]]\`. A body and a field naming blocks (a ref field such as a catalog's tags, a view query's scope and edge) reach a create's handle anywhere in the document; an op's own reference (id, parentId, fromId, …) names a handle declared above it. An undeclared handle refuses. Any failed gate rolls back all ops and names the failing op.
+\`$id\` on create declares a handle. Every reference accepts \`$handle\`; bodies use \`[[$handle]]\`. A body and a field naming blocks (a ref field such as a catalog's tags, a view query's scope and edge) reach a create's handle anywhere in the document; an op's own reference (id, parentId, fromId, …) names a handle declared above it. An undeclared handle refuses unless that literal handle was already stored in the edited block. Any failed gate rolls back all ops and names the failing op.
 Submit a document file, read at call time. An op’s \`body\` may be \`{"file":"name.md"}\`, relative to the document; edit old/new stay inline. On refusal, edit the returned \`inputFile\` and resubmit its path: it names the body file when the body itself was refused, otherwise the document (or a saved copy of inline input).`;
 
 const batchOpSchema = Schema.StructWithRest(

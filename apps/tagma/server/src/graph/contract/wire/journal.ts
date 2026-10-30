@@ -2,6 +2,10 @@ import { Schema } from 'effect';
 import { JournalPosition } from './answers.js';
 import { BlockName } from './references.js';
 import { blockSchema } from './rows.js';
+import { graphAddressSchema } from './far.js';
+
+export const movedBlockSchema = Schema.Struct({ name: BlockName, title: Schema.String, destination: graphAddressSchema });
+export type MovedBlock = typeof movedBlockSchema.Type;
 
 export const GRAPH_EVENT_OPS = [
   'project_add',
@@ -25,6 +29,7 @@ export const GRAPH_EVENT_OPS = [
   'unsupersede',
   'settle',
   'delete',
+  'depart',
   'restore',
   'enable',
   'disable',
@@ -53,6 +58,7 @@ export const journalPageSchema = Schema.Struct({
   batches: Schema.Array(
     Schema.Struct({
       blockName: BlockName,
+      moved: Schema.optional(movedBlockSchema),
       sessionId: Schema.NullOr(Schema.Number),
       ops: Schema.Array(Schema.String),
       entries: Schema.Number,
@@ -85,6 +91,7 @@ export const eventSchema = Schema.Struct({
   sessionId: Schema.NullOr(Schema.Number),
   op: Schema.String,
   blockName: Schema.NullOr(Schema.String),
+  destination: Schema.optional(graphAddressSchema),
   payload: Schema.String,
 });
 

@@ -10,6 +10,8 @@ import { makeThreadDoors, type Outcome } from '../threadDoors.js';
 import { suiteGit, suiteGitText } from '../suiteGit.js';
 import { makeDoorWorld, projectLeaving, WORLD_SOURCE } from '../doorFixture.js';
 import { Settings } from '../../../settings/contract/service/values.js';
+import { BlockNames } from '../../../graph/contract/service/acts.js';
+import { Blocks } from '../../../graph/contract/service/blocks.js';
 
 const REEXPORTS = { builtin: 'reexports', params: { base: '', allows: [], files: { extensions: ['.ts'], exclude: [] } } };
 
@@ -148,6 +150,34 @@ layer(Layer.effect(Place, setup).pipe(Layer.provideMerge(BunFileSystem.layer)), 
       });
       expect((yield* read(rule)).title).toBe('Main selected by branch');
       expect((yield* read(rule, destination)).title).toBe('The worktree law');
+      const mainParent = yield* op('create_block', { parentId: parent, title: 'Only main holds this parent' });
+      const mainParentName = (mainParent.body as { block: { name: string } }).block.name;
+      const freshMain = yield* world.runtime.pool.resolve({ projectId: project });
+      const foreignParentId = yield* Context.get(freshMain.context, BlockNames).idOfName(mainParentName);
+      const branchBlocks = Context.get(placed.served.context, Blocks);
+      while ((yield* branchBlocks.liveBlock(foreignParentId)) === undefined) {
+        const decoy = yield* asThread('create_block', { parentId: parent, title: 'The branch number names another parent' });
+        expect(decoy.status).toBe(200);
+        const decoyId = yield* Context.get(placed.served.context, BlockNames).idOfName(
+          (decoy.body as { block: { name: string } }).block.name,
+        );
+        expect(decoyId).toBeLessThanOrEqual(foreignParentId);
+      }
+      const child = yield* asThread('create_block', { parentId: parent, title: 'A branch child' });
+      const childName = (child.body as { block: { name: string } }).block.name;
+      expect(yield* asThread('update_block', { blockId: childName, parentId: mainParentName })).toMatchObject({
+        status: 409,
+        body: { code: 'not-found' },
+      });
+      expect(yield* read(childName, destination)).toMatchObject({ parentName: parent });
+      expect(
+        yield* asThread('create_block', {
+          parentId: parent,
+          title: 'A branch task with a main-only origin',
+          tags: ['task'],
+          edges: [{ kind: 'discovered-from', to: mainParentName }],
+        }),
+      ).toMatchObject({ status: 409, body: { code: 'not-found' } });
       const filing = { title: 'friction on this branch', command: 'tagma op x', expected: 'a branch record', actual: 'a branch defect' };
       const filed = yield* answered(yield* doors.atNative('file_reflection', filing, placed));
       expect(filed.block).toMatchObject({ parentName: area });

@@ -10,6 +10,7 @@ import type { TagReading } from '../contract/wire/tags/reading.js';
 import type { GraphReport, IdleSpecAnswer, Moved } from '../contract/wire/answers.js';
 import type { FarHold } from '../contract/wire/far.js';
 import type { WriterSession } from '../contract/wire/operations/history.js';
+import { blockName } from '../contract/wire/references.js';
 
 const writerLine = (row: WriterSession): string =>
   `${row.id} ${row.thread === null ? `${row.harness}:${row.key}` : `thread ${row.thread}`} · born ${row.createdAt}`;
@@ -71,7 +72,7 @@ function graphContent(table: TagReading, result: GraphToolAnswer, identity: Sess
   if ('events' in result) {
     const rows = result.events.map(
       (row) =>
-        `${row.id} ${row.at} ${row.op}${row.blockName === null ? '' : ` ${row.blockName}`}${row.writer === null ? '' : ` ${row.writer}`}`,
+        `${row.id} ${row.at} ${row.op}${row.blockName === null ? '' : ` ${row.blockName}`}${row.destination === undefined ? '' : ` to ${row.destination.label} (${blockName(row.destination.graph)})`}${row.writer === null ? '' : ` ${row.writer}`}`,
     );
     return toolPageText({
       rows: rows.map((label) => ({ label })),
@@ -98,7 +99,9 @@ function graphContent(table: TagReading, result: GraphToolAnswer, identity: Sess
       const subject =
         batch.blockName === ''
           ? 'block unrecorded'
-          : `${batch.blockName}${block === undefined ? '' : ` ${block.title}${underParent(block.parentName)}`}`;
+          : batch.moved === undefined
+            ? `${batch.blockName}${block === undefined ? '' : ` ${block.title}${underParent(block.parentName)}`}`
+            : `${batch.moved.name} ${batch.moved.title} to ${batch.moved.destination.label} (${blockName(batch.moved.destination.graph)})`;
       return `${events} · ${time} · ${subject} · ${writer}\n  ${batch.ops.join(', ')} · ${batch.entries} ${batch.entries === 1 ? 'act' : 'acts'}`;
     });
     const batched = new Set(result.batches.map((batch) => batch.blockName));

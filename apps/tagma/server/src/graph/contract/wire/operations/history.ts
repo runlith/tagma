@@ -76,7 +76,7 @@ export const HISTORY_OPERATIONS = {
       limit: Schema.optional(Schema.Number),
     }),
     answer: arms({ ok: journalPageSchema.fields }),
-    refusals: [],
+    refusals: ['journal-unreadable'],
   }),
 
   read_journal_vocabulary: operation('read_journal_vocabulary', {

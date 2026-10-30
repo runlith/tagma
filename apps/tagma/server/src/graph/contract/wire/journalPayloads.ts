@@ -1,6 +1,9 @@
 import { Data, Result, Schema } from 'effect';
 import { GateRefusal } from '../../../platform/contract/wire/refusal.js';
 import { STORAGE_MODES } from '../../../projects/contract/wire/project.js';
+import { graphAddressSchema } from './far.js';
+import { blockName } from './references.js';
+import type { MovedBlock } from './journal.js';
 
 export const bodySpanSchema = Schema.Struct({ at: Schema.Number, del: Schema.String, ins: Schema.String });
 export type BodySpan = typeof bodySpanSchema.Type;
@@ -49,6 +52,13 @@ const SHAPES = {
     tag: Schema.optional(Schema.String),
   }),
   trash: Schema.Struct({ ids: Schema.Array(Schema.Number) }),
+  depart: Schema.Struct({
+    ids: Schema.Array(Schema.Number),
+    uuid: Schema.String,
+    title: Schema.String,
+    tags: Schema.Array(Schema.String),
+    to: graphAddressSchema,
+  }),
   enforce: Schema.Struct({ strictness: Schema.optional(Schema.String), imported: Schema.optional(Schema.Boolean) }),
   remeasure: Schema.Struct({ retired: list, escaped: list, fixed: list }),
   answer: Schema.Struct({
@@ -92,10 +102,16 @@ export const readJournal = {
   supersede: reader(SHAPES.supersede),
   settle: reader(SHAPES.settle),
   trash: reader(SHAPES.trash),
+  depart: reader(SHAPES.depart),
   enforce: reader(SHAPES.enforce),
   remeasure: reader(SHAPES.remeasure),
   answer: reader(SHAPES.answer),
 };
+
+export const departedBlock = (entry: StoredEntry): Result.Result<MovedBlock | undefined, JournalPayloadUnreadable> =>
+  entry.op === 'depart'
+    ? Result.map(readJournal.depart(entry), (payload) => ({ name: blockName(payload.uuid), title: payload.title, destination: payload.to }))
+    : Result.succeed(undefined);
 
 export const journalUnreadable = (error: JournalPayloadUnreadable): GateRefusal<'journal-unreadable'> =>
   new GateRefusal('journal-unreadable', error.message, [

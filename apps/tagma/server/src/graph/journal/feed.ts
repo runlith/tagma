@@ -85,7 +85,7 @@ export const graphFeedLayer: Layer.Layer<
       return {
         type: 'change' as const,
         projectId,
-        events: group.events.map((entry) => wireEvent(entry, uuidById.get(entry.blockId ?? -1) ?? null)),
+        events: yield* Effect.forEach(group.events, (entry) => wireEvent(entry, uuidById.get(entry.blockId ?? -1) ?? null)),
         unreadable: group.unreadable.length === 0 ? undefined : group.unreadable,
         blocks: blocks.map(wireTreeBlock),
         edges: edgeRows.flatMap((row) => wireNamed(row, named)),

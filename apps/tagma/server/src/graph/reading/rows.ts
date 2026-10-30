@@ -1,4 +1,6 @@
+import { Effect } from 'effect';
 import type { SourceRow, BlockRecord, BlockWrite } from '../contract/service/acts.js';
+import { departedBlock, type JournalPayloadUnreadable } from '../contract/wire/journalPayloads.js';
 import type { ProjectPolicyRow } from '../contract/wire/serving.js';
 import { blockName } from '../contract/wire/references.js';
 
@@ -75,16 +77,21 @@ export function wireSource(row: SourceRow): Source {
   };
 }
 
-export function wireEvent(row: ActEntry, blockUuid?: string | null): JournalEvent & { op: ActEntry['op'] } {
+export const wireEvent = Effect.fnUntraced(function* (
+  row: ActEntry,
+  blockUuid?: string | null,
+): Effect.fn.Return<JournalEvent & { op: ActEntry['op'] }, JournalPayloadUnreadable> {
+  const moved = yield* Effect.fromResult(departedBlock(row));
   return {
     id: row.id,
     ts: at(row.ts),
     sessionId: row.sessionId,
     op: row.op,
-    blockName: row.blockId === null ? null : blockName(blockUuid ?? ''),
+    blockName: moved?.name ?? (row.blockId === null ? null : blockName(blockUuid ?? '')),
+    destination: moved?.destination,
     payload: row.payload,
   };
-}
+});
 
 export function wireRead(row: BlockDetail): BlockRead {
   return {

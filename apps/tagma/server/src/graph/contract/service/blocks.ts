@@ -13,7 +13,7 @@ import type { NodeActions } from '../wire/tags/actions.js';
 import type { TagTable } from '../wire/tags/table.js';
 import type { CreationDefaultRefusal } from '../wire/tags/profile.js';
 import type { ModuleCard, ModuleWrite } from '../wire/modules.js';
-import type { FarAddress, FarTarget } from '../wire/far.js';
+import type { FarAddress, FarTarget, GraphAddress } from '../wire/far.js';
 import type { ContractId } from '../wire/tags/behaviour.js';
 import type { farEdge } from '../../store/tables.js';
 import type { SessionRef } from '../../../platform/contract/wire/session.js';
@@ -235,8 +235,6 @@ export type Arrival = {
   readonly from: string;
   readonly blocks: readonly CarriedBlock[];
 };
-
-export type GraphAddress = { readonly graph: string; readonly label: string };
 
 export type LinkTarget = { readonly near: number } | { readonly far: FarBlock };
 

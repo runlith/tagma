@@ -190,6 +190,49 @@ layer(graphToolsFixture, { excludeTestServices: true })('native graph files', (i
     }),
   );
 
+  it.effect('batch edits preserve stored literal handles while new unresolved handles refuse atomically', () =>
+    Effect.gen(function* () {
+      const { ctx, nativeCall, rootName } = yield* GraphTools;
+      const files = yield* FileSystem.FileSystem;
+      const born = yield* nativeCall('create_block', {
+        parentId: yield* rootName(),
+        title: 'A stored literal handle',
+        body: 'Keep [[$prune]] while changing old text.',
+      });
+      const name = (born.block as { name: string }).name;
+      const document = join(ctx.scratch.path, 'edit-literal.json');
+      yield* files.writeFileString(document, JSON.stringify({ ops: [{ op: 'edit', id: name, old: 'old', new: 'new' }] }));
+      expect(yield* nativeCall('apply_batch', { file: document })).toMatchObject({ status: 'ok' });
+      expect(yield* nativeCall('read_block', { blockIds: [name], depth: 0 })).toMatchObject({
+        reads: [{ body: 'Keep [[$prune]] while changing new text.' }],
+      });
+      yield* files.writeFileString(
+        document,
+        JSON.stringify({ ops: [{ op: 'update', id: name, body: 'Keep [[$prune]] and introduce [[$missing]].' }] }),
+      );
+      expect(yield* nativeCall('apply_batch', { file: document })).toMatchObject({ status: 'refused', code: 'batch-ref' });
+      expect(yield* nativeCall('read_block', { blockIds: [name], depth: 0 })).toMatchObject({
+        reads: [{ body: 'Keep [[$prune]] while changing new text.' }],
+      });
+    }),
+  );
+
+  it.effect('ending a parent sees a child move that has already answered', () =>
+    Effect.gen(function* () {
+      const { nativeCall, rootName } = yield* GraphTools;
+      const root = yield* rootName();
+      const parent = yield* nativeCall('create_block', { parentId: root, tags: ['task'], title: 'The previous parent' });
+      const parentName = (parent.block as { name: string }).name;
+      const child = yield* nativeCall('create_block', { parentId: parentName, tags: ['task'], title: 'Moved work' });
+      const childName = (child.block as { name: string }).name;
+      expect(yield* nativeCall('update_block', { blockId: childName, parentId: root })).toMatchObject({ status: 'ok' });
+      expect(yield* nativeCall('finish_block', { blockId: parentName })).toMatchObject({
+        status: 'ok',
+        block: { fields: { status: 'done' } },
+      });
+    }),
+  );
+
   it.effect('a document named by a bare path is re-read from this thread’s scratch after refusal', () =>
     Effect.gen(function* () {
       const { graph, ctx, nativeCall, rootName } = yield* GraphTools;

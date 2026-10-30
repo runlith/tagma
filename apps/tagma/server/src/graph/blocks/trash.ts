@@ -1,5 +1,6 @@
 import { Clock, Effect, Layer } from 'effect';
-import { Trash, type Departure, type DeleteRefusal, type GraphAddress, type RestoreRefusal } from '../contract/service/blocks.js';
+import { Trash, type Departure, type DeleteRefusal, type RestoreRefusal } from '../contract/service/blocks.js';
+import type { GraphAddress } from '../contract/wire/far.js';
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import { GraphStore, type StoreFailure } from '../../platform/contract/service/store.js';
 import { block, edge, event } from '../store/tables.js';
@@ -111,7 +112,7 @@ export const trashLayer: Layer.Layer<Trash, never, GraphStore | Act | BlockProje
             for (const row of falling) yield* db.update(block).set({ deletedAt: now, uuid: mintBlockId() }).where(eq(block.id, row.id));
             yield* blockProjection.forgetVocabulary(ids);
             if (declaring) yield* closeVocabulary(taken.projectId, table, yield* vocabulary.of(taken.projectId), null);
-            yield* act.record('delete', taken.id, { ids }, now);
+            yield* act.record('depart', taken.id, { ids, uuid: taken.uuid, title: taken.title, tags: taken.tags, to: input.to }, now);
             return { taken, resting: yield* blockRows.recordOf(yield* blockRows.rawBlockById(taken.id)) };
           }),
         );
@@ -138,7 +139,7 @@ export const trashLayer: Layer.Layer<Trash, never, GraphStore | Act | BlockProje
         const deletion = yield* db
           .select()
           .from(event)
-          .where(and(eq(event.op, 'delete'), eq(event.blockId, row.id)))
+          .where(and(inArray(event.op, ['delete', 'depart']), eq(event.blockId, row.id)))
           .orderBy(sql`${event.id} desc`)
           .get();
         if (!deletion) {

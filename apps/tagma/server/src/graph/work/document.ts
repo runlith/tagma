@@ -168,7 +168,7 @@ export const documentsLayer: Layer.Layer<
         const body = row.body.replaceAll(/\[\[\$([A-Za-z0-9_-]+)(\|[^\]\n]+)?\]\]/g, (whole, handle: string, label: string | undefined) => {
           const target = handleId(handles, handle);
           if (target === undefined) {
-            unknown.push(handle);
+            if (!handles.literals.get(item.id)?.has(handle)) unknown.push(handle);
             return whole;
           }
           return `[[${named.get(target) ?? ''}${label ?? ''}]]`;
@@ -180,6 +180,7 @@ export const documentsLayer: Layer.Layer<
             'a block that already exists is written as [[name]], not as a handle',
           ]);
         }
+        if (body === row.body) continue;
         const table = yield* vocabulary.of(row.projectId);
         const capped = yield* Effect.result(assertBodyCap(table.tagsOf(row), body, row.body));
         if (capped._tag === 'Failure') {
@@ -217,6 +218,7 @@ export const documentsLayer: Layer.Layer<
       }
       const handles: Handles = {
         declared: new Map(),
+        literals: new Map(),
         minted: mintedHandles(ops),
         awaiting: new Set(),
         references: references ?? {
@@ -386,6 +388,13 @@ export const documentsLayer: Layer.Layer<
       handles: Handles,
       projectId: number,
     ): Effect.fn.Return<OpOutcome, StoreFailure | GateRefusal<DocumentOpRefusal>, ActState> {
+      if ((op.op === 'edit' || op.op === 'update') && !op.id.startsWith('$')) {
+        const id = yield* refOf(handles, op.id);
+        if (!handles.literals.has(id)) {
+          const row = yield* blockRows.blockById(id);
+          handles.literals.set(id, new Set([...row.body.matchAll(/\[\[\$([A-Za-z0-9_-]+)(?:\|[^\]\n]+)?\]\]/g)].map((match) => match[1]!)));
+        }
+      }
       switch (op.op) {
         case 'create': {
           const table = yield* vocabulary.of(projectId);
@@ -417,6 +426,7 @@ export const documentsLayer: Layer.Layer<
             farEdges: linked.flatMap((link) => ('far' in link.target ? [{ kind: link.kind, end: link.target.far }] : [])),
           });
           if (written.unborn) handles.awaiting.add(row.id);
+          handles.literals.set(row.id, new Set());
           yield* register(handles, op.$id, row.id);
           return row;
         }

@@ -254,6 +254,7 @@ export type BatchAnswer = {
 
 export type Handles = {
   readonly declared: Map<string, number>;
+  readonly literals: Map<number, ReadonlySet<string>>;
   readonly minted: ReadonlyMap<string, string>;
   readonly awaiting: Set<number>;
   readonly references: DocumentReferences;

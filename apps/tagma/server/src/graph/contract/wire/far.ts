@@ -5,6 +5,9 @@ const UUID = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
 
 const FAR_TO = new RegExp(`^(${UUID})/(${UUID})(?:#([\\s\\S]*))?$`, 'u');
 
+export const graphAddressSchema = Schema.Struct({ graph: Schema.String, label: Schema.String });
+export type GraphAddress = typeof graphAddressSchema.Type;
+
 export type FarAddress = { readonly graph: string; readonly uuid: string };
 
 export type FarTarget = FarAddress & { readonly label: string };

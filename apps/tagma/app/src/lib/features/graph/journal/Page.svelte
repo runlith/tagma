@@ -16,6 +16,7 @@
   import { cn } from '$lib/shared/utils.js';
   import Tooltip from '$lib/shared/ui/tooltip/Tooltip.svelte';
   import PageHeader from '$lib/shared/PageHeader.svelte';
+  import FadeText from '$lib/shared/FadeText.svelte';
 
   let { journal, scope }: { journal: JournalScreen; scope: string | null } = $props();
 
@@ -63,7 +64,7 @@
           {@const block = journal.blocks.get(row.blockName)}
           {@const unread = row.lastEventId > journal.sessionMark}
           {@const open = journal.openRuns.has(row.key)}
-          {@const words = opWords(row.ops)}
+          {@const words = `${opWords(row.ops)}${row.moved === undefined ? '' : ` to ${row.moved.destination.label}`}`}
           <div class={cn('rounded-md transition-colors', open ? 'bg-selected' : 'hover:bg-hover')}>
             <div class="flex min-h-7 min-w-0 items-center gap-3 px-2">
               <Tooltip text={open ? 'Hide what changed' : 'Show what changed'}>
@@ -86,7 +87,7 @@
               </Tooltip>
               <Author session={journal.sessionOf(row.sessionId)} class="w-40 shrink-0" />
               <Tooltip text={words} class="flex w-56 shrink-0 items-baseline gap-1.5">
-                <span class="min-w-0 truncate text-ui text-muted-foreground">{words}</span>
+                <FadeText class="text-ui text-muted-foreground" text={words} />
                 {#if row.entries > 1}
                   <span class="stamp tabular shrink-0 text-muted-foreground">×{row.entries}</span>
                 {/if}
@@ -101,16 +102,18 @@
                   <span class="size-1.5 shrink-0 rounded-full" style:background={tags.statusVar(block)}></span>
                   <TagIcon tag={tags.tagOf(block)} class="size-3.5 shrink-0 text-muted-foreground" />
                 {/if}
-                <Tooltip text={block?.deletedAt != null ? 'In the trash' : undefined} class="block min-w-0 flex-1">
-                  <span
+                <Tooltip
+                  text={row.moved === undefined && block?.deletedAt != null ? 'In the trash' : undefined}
+                  class="block min-w-0 flex-1"
+                >
+                  <FadeText
                     class={cn(
-                      'block min-w-0 truncate text-ui',
+                      'text-ui',
                       unread ? 'text-foreground' : 'text-muted-foreground',
-                      block?.deletedAt != null && 'line-through decoration-muted-foreground/40',
+                      row.moved === undefined && block?.deletedAt != null && 'line-through decoration-muted-foreground/40',
                     )}
-                  >
-                    {block?.title.trim() || `L-${row.blockName}`}
-                  </span>
+                    text={(row.moved?.title ?? block?.title)?.trim() || `L-${row.blockName}`}
+                  />
                 </Tooltip>
               </a>
             </div>

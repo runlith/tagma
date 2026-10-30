@@ -36,6 +36,8 @@ export function blocksOf(row: ActEntry): Concerned {
     case 'delete':
     case 'restore':
       return withPeers([], readJournal.trash(row), (payload) => payload.ids);
+    case 'depart':
+      return withPeers([], readJournal.depart(row), (payload) => payload.ids);
     case 'settle':
       return withPeers(own, readJournal.settle(row), (payload) => payload.settled);
     case 'answer':
@@ -77,6 +79,7 @@ const PEER_PATHS = {
   unanswer: { path: '$.by', many: false },
   settle: { path: '$.settled', many: true },
   delete: { path: '$.ids', many: true },
+  depart: { path: '$.ids', many: true },
   restore: { path: '$.ids', many: true },
 } as const satisfies Partial<Record<GraphEventOp, { readonly path: string; readonly many: boolean }>>;
 
@@ -124,7 +127,7 @@ export function journalBatches(entries: readonly ActEntry[]): JournalBatch[] {
     const entry = entries[index];
     if (!entry || entry.blockId === null) continue;
     const current = open.get(entry.blockId);
-    if (current !== undefined && current.sessionId === entry.sessionId) {
+    if (current !== undefined && current.sessionId === entry.sessionId && entry.op !== 'depart' && !current.ops.includes('depart')) {
       if (!current.ops.includes(entry.op)) current.ops.push(entry.op);
       current.entries += 1;
       current.lastEventId = entry.id;

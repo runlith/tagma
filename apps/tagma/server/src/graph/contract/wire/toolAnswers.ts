@@ -3,7 +3,7 @@ import type { BlockListRow } from './reads.js';
 import type { BlockQuery } from './query.js';
 import type { BlockRead } from './rows.js';
 import type { VoiceAck, VoiceRefused } from '../../../platform/contract/wire/voiceAnswer.js';
-import type { BlockResultAnswer, Crowded, IdleSpecAnswer } from './answers.js';
+import type { BlockResultAnswer, Crowded, EventRow, IdleSpecAnswer } from './answers.js';
 import type { ReadyTaskAnswer } from './operations/reads.js';
 import type { CallRecorded } from './callRange.js';
 import type { JournalPageBody } from './journal.js';
@@ -88,17 +88,9 @@ export type ToolSync = {
   };
 };
 
-export type ToolEvent = {
-  readonly id: number;
-  readonly at: string;
-  readonly op: string;
-  readonly blockName: string | null;
-  readonly writer: string | null;
-};
-
 export type ToolEvents = {
   readonly status: 'ok';
-  readonly events: readonly ToolEvent[];
+  readonly events: readonly EventRow[];
   readonly shown: number;
   readonly total: number | null;
   readonly next: string | null;

@@ -26,7 +26,7 @@ import type { BlockWrite } from '../contract/service/acts.js';
 import type { Crowded, Moved } from '../contract/wire/answers.js';
 import { crowdedPages } from '../blocks/crowding.js';
 import { Tags } from '../contract/service/vocabulary.js';
-import { cross, link, linkTarget, scoped, targeted, unlink } from './crossing.js';
+import { cross, link, linkTarget, localId, scoped, targeted, unlink } from './crossing.js';
 import { relocate } from './relocation.js';
 import { GraphCall } from '../contract/service/serving.js';
 import { type Published, publishedOf } from './published.js';
@@ -157,7 +157,7 @@ const BLOCK_WRITE_ROUTED = {
           );
         });
 
-        return yield* createIn(projectId ?? call.project.id, parentId === undefined ? undefined : (yield* scoped(parentId)).id);
+        return yield* createIn(projectId ?? call.project.id, parentId === undefined ? undefined : yield* localId(parentId));
       }),
     ),
     answer: (raw: Priced<BlockWrite> & { readonly crowded: Crowded | undefined }) => ({ ...pricedResult(raw), crowded: raw.crowded }),
@@ -185,7 +185,7 @@ const BLOCK_WRITE_ROUTED = {
           const { write, moved } = yield* relocate(input.blockId, across);
           return { value: { ...write, moved }, start: undefined, crowded: undefined };
         }
-        const parentId = input.parentId === undefined ? undefined : across === null ? null : (yield* scoped(across)).id;
+        const parentId = input.parentId === undefined ? undefined : across === null ? null : yield* localId(across);
         const pricing = yield* nodePricing(row.projectId, { tags: [...row.tags, ...(input.tags ?? [])] });
         const written = yield* withBodyFile({ body: input.body, bodyFile: callerPath(caller, input.bodyFile) }, (body) =>
           priced(

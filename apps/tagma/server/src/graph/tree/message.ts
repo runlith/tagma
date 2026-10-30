@@ -11,6 +11,7 @@ import { CHECKOUT_DIRECTORY } from '../contract/wire/storage.js';
 import type { ActEntry, BlockRow } from '../contract/service/acts.js';
 import type { Tags } from '../contract/service/vocabulary.js';
 import type { GraphEventOp } from '../contract/wire/journal.js';
+import { readJournal } from '../contract/wire/journalPayloads.js';
 import { blockName } from '../contract/wire/references.js';
 import type { TagReading } from '../contract/wire/tags/reading.js';
 import { LIFECYCLE } from '../contract/wire/tags/lifecycle.js';
@@ -51,6 +52,7 @@ type ActLine = {
   readonly title: string;
   readonly kind: string;
   readonly weight: number;
+  readonly to?: string;
 };
 
 type NamedBlock = Pick<BlockRow, 'uuid' | 'title' | 'tags' | 'stealth'>;
@@ -76,6 +78,7 @@ const VERBS: Record<Exclude<GraphEventOp, 'create'>, string> = {
   unsupersede: 'unsupersede',
   settle: 'settle',
   delete: 'delete',
+  depart: 'move',
   restore: 'restore',
   enable: 'enable',
   disable: 'disable',
@@ -96,26 +99,29 @@ const weightOf = (op: GraphEventOp, node: NamedBlock, table: TagReading): number
 
 const named = (scope: TreeScope, node: NamedBlock): boolean => scope === 'whole' || (scope === 'stealth' ? node.stealth : !node.stealth);
 
-const actLine = (
-  entry: Pick<ActEntry, 'op' | 'blockId'>,
+const actLine = Effect.fnUntraced(function* (
+  entry: Pick<ActEntry, 'id' | 'op' | 'blockId' | 'payload'>,
   blocks: ReadonlyMap<number, NamedBlock>,
   table: TagReading,
   scope: TreeScope,
-): ActLine | null => {
+): Effect.fn.Return<ActLine | null> {
   if (entry.blockId === null) {
     if (entry.op === 'create' || scope === 'stealth') return null;
     return { verb: VERBS[entry.op], name: null, title: '', kind: PROJECT, weight: 3 };
   }
-  const node = blocks.get(entry.blockId);
-  if (node === undefined || !named(scope, node)) return null;
+  const stored = blocks.get(entry.blockId);
+  if (stored === undefined || !named(scope, stored)) return null;
+  const departure = entry.op === 'depart' ? yield* Effect.fromResult(readJournal.depart(entry)).pipe(Effect.orDie) : null;
+  const node = departure === null ? stored : { ...stored, uuid: departure.uuid, title: departure.title, tags: departure.tags };
   return {
     verb: entry.op === 'create' ? (table.supports(node, LIFECYCLE) ? 'open' : 'add') : VERBS[entry.op],
     name: blockName(node.uuid),
     title: node.title.replace(/\s+/gu, ' ').trim(),
     kind: node.tags[0] ?? UNTAGGED,
     weight: weightOf(entry.op, node, table),
+    to: departure === null ? undefined : blockName(departure.to.graph),
   };
-};
+});
 
 const plural = (word: string): string =>
   /(s|x|z|ch|sh)$/u.test(word) ? `${word}es` : /[^aeiou]y$/u.test(word) ? `${word.slice(0, -1)}ies` : `${word}s`;
@@ -170,7 +176,10 @@ const phraseOf = (lines: readonly ActLine[], room: number): string => {
   return counted(lines, room);
 };
 
-const bodyLine = (line: ActLine): string => [line.verb, line.name ?? line.kind, line.title].filter((part) => part !== '').join(' ');
+const bodyLine = (line: ActLine): string =>
+  [line.verb, line.name ?? line.kind, line.title, ...(line.to === undefined ? [] : ['to', line.to])]
+    .filter((part) => part !== '')
+    .join(' ');
 
 const worded = (lines: readonly ActLine[], shape: CommitShape, position: number): string => {
   const prefix = shape === 'conventional' ? PREFIX : '';
@@ -245,7 +254,7 @@ export const commitJournal = ({ store, tags, identity, projectId, scope }: Commi
         from >= reach
           ? []
           : yield* db
-              .select({ op: event.op, blockId: event.blockId, sessionId: event.sessionId })
+              .select({ id: event.id, op: event.op, blockId: event.blockId, sessionId: event.sessionId, payload: event.payload })
               .from(event)
               .where(and(gt(event.id, from), lte(event.id, reach)))
               .orderBy(event.id);
@@ -261,7 +270,7 @@ export const commitJournal = ({ store, tags, identity, projectId, scope }: Commi
       const lines = new Map<string, ActLine>();
       const signers = new Set<number>();
       for (const entry of entries) {
-        const line = actLine(entry, blocks, table, scope);
+        const line = yield* actLine(entry, blocks, table, scope);
         if (line === null) continue;
         const lineKey = `${line.verb}\0${line.name ?? line.kind}`;
         if (!lines.has(lineKey)) lines.set(lineKey, line);
