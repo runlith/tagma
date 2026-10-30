@@ -182,7 +182,14 @@ export const makeShelf = Effect.fnUntraced(function* (input: { readonly home: st
     return { loaded, options, skipped } satisfies Bound;
   });
 
-  return { read, bind, forget: (root: string) => cache.delete(root) };
+  const look = Effect.fn('PluginShelf.look')(function* (root: string, declared: PluginDeclared | null) {
+    return yield* readPlugin(formats, root, declared).pipe(
+      Effect.provideService(FileSystem.FileSystem, files),
+      Effect.provideService(PluginReads, new Set<string>()),
+    );
+  });
+
+  return { read, look, bind, forget: (root: string) => cache.delete(root) };
 });
 
 export type Shelf = Effect.Success<ReturnType<typeof makeShelf>>;

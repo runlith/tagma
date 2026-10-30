@@ -2,6 +2,7 @@ import { resolve } from 'node:path';
 import { within } from '../plugins/contract/service/reading.js';
 import { PLUGIN_ID_PATTERN, pluginIdOf } from '../plugins/contract/wire/names.js';
 import { installedFrom, type PluginInstall } from '../plugins/contract/wire/settings.js';
+import { categoryOf } from './categories.js';
 import type { EntrySource, ListedEntry } from './contract/service/lists.js';
 import type { EntryRow } from './contract/wire/rows.js';
 import type { Revision } from './revisions.js';
@@ -47,7 +48,7 @@ export const entryRowOf = (marketplace: string, root: string, entry: ListedEntry
     author: entry.author,
     homepage: entry.homepage,
     repository: entry.repository,
-    category: entry.category,
+    category: categoryOf(entry.category),
     brings: entry.brings,
     source: sourceLine(entry.source),
     policy: entry.policy,

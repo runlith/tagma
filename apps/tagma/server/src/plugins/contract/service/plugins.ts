@@ -5,7 +5,15 @@ import type { GateRefusal } from '../../../platform/contract/wire/refusal.js';
 import type { SettableScope } from '../../../platform/contract/wire/setting.js';
 import type { SettingLandRefusal } from '../../../settings/contract/service/values.js';
 import type { PluginConsented } from '../wire/consent.js';
-import type { PluginDeclared, PluginHookPoint, PluginOrigin, PluginPreview, PluginRow, PluginSource } from '../wire/rows.js';
+import type {
+  PluginComponentKind,
+  PluginDeclared,
+  PluginHookPoint,
+  PluginOrigin,
+  PluginPreview,
+  PluginRow,
+  PluginSource,
+} from '../wire/rows.js';
 import type { PluginInstall } from '../wire/settings.js';
 import type { PluginHookAnswer, PluginHookCall, PluginHookSession, PluginPackage, PluginPlace, PluginUnreadable } from './format.js';
 
@@ -27,6 +35,12 @@ export type PluginPrepared = PluginConsented & {
   readonly stage: string | null;
   readonly package: PluginPackage;
   readonly preview: PluginPreview;
+};
+
+export type PluginDescribed = {
+  readonly title: string | null;
+  readonly description: string | null;
+  readonly brings: readonly PluginComponentKind[];
 };
 
 export type PluginListRefusal = 'unknown-project' | 'secret-store-failed';
@@ -55,6 +69,7 @@ export class Plugins extends Context.Service<
     ids(): Effect.Effect<readonly string[], StoreFailure>;
     installs(): Effect.Effect<readonly PluginInstall[], StoreFailure>;
     rows(projectId: number, ids: readonly string[]): Effect.Effect<readonly PluginRow[], PluginFailure<PluginListRefusal>>;
+    describe(input: { readonly root: string; readonly declared: PluginDeclared | null }): Effect.Effect<PluginDescribed | null>;
     prepare(input: {
       readonly projectId: number;
       readonly source: string | PluginResolved;

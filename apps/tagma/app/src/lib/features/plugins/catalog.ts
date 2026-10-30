@@ -1,4 +1,4 @@
-import type { EntryRow, MarketplaceRow } from '@tagma/server/marketplaces/contract/wire/rows';
+import type { CatalogCategory, EntryRow, MarketplaceRow } from '@tagma/server/marketplaces/contract/wire/rows';
 
 export type Listing = {
   readonly entry: EntryRow;
@@ -49,6 +49,8 @@ export function matching(listings: readonly Listing[], query: string): readonly 
 
 export type Category = { readonly name: string; readonly count: number };
 
+const OTHER: CatalogCategory = 'Other';
+
 export function categoriesOf(listings: readonly Listing[]): readonly Category[] {
   const counts = new Map<string, number>();
   for (const { entry } of listings) {
@@ -57,5 +59,8 @@ export function categoriesOf(listings: readonly Listing[]): readonly Category[] 
   }
   return [...counts]
     .map(([name, count]) => ({ name, count }))
-    .toSorted((left, right) => right.count - left.count || left.name.localeCompare(right.name));
+    .toSorted(
+      (left, right) =>
+        Number(left.name === OTHER) - Number(right.name === OTHER) || right.count - left.count || left.name.localeCompare(right.name),
+    );
 }

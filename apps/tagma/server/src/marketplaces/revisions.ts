@@ -2,6 +2,7 @@ import { join } from 'node:path';
 import { shallowClone } from '@runlith/git/clone';
 import { Data, Effect, FileSystem, Schema } from 'effect';
 import type { ChildProcessSpawner } from 'effect/process';
+import { PLUGIN_COMPONENT_KINDS } from '../plugins/contract/wire/rows.js';
 import type { ListFormat, MarketplaceList } from './contract/service/lists.js';
 import type { MarketplaceSource } from './contract/wire/rows.js';
 
@@ -21,18 +22,49 @@ export class ListUnreadable extends Data.TaggedError('ListUnreadable')<{ readonl
   }
 }
 
+const Detail = Schema.Struct({
+  title: Schema.NullOr(Schema.String),
+  description: Schema.NullOr(Schema.String),
+  brings: Schema.Array(Schema.Literals(PLUGIN_COMPONENT_KINDS)),
+});
+export type Detail = typeof Detail.Type;
+
+export type Details = Readonly<Record<string, Detail>>;
+
 export type Revision = {
   readonly root: string;
   readonly commit: string | null;
   readonly fetched: number;
   readonly format: string;
   readonly text: string;
+  readonly details: Details;
   readonly list: MarketplaceList;
 };
 
 export type Fetched = Revision & { readonly stage: string | null };
 
-const Stamp = Schema.Struct({ commit: Schema.NullOr(Schema.String), fetched: Schema.Finite, format: Schema.String, text: Schema.String });
+const Stamp = Schema.Struct({
+  commit: Schema.NullOr(Schema.String),
+  fetched: Schema.Finite,
+  format: Schema.String,
+  text: Schema.String,
+  details: Schema.optional(Schema.Record(Schema.String, Detail)),
+});
+
+export const detailed = (list: MarketplaceList, details: Details): MarketplaceList => ({
+  ...list,
+  entries: list.entries.map((entry) => {
+    const detail = details[entry.name];
+    return detail === undefined
+      ? entry
+      : {
+          ...entry,
+          title: entry.title ?? detail.title,
+          description: entry.description ?? detail.description,
+          brings: entry.brings.length > 0 ? entry.brings : detail.brings,
+        };
+  }),
+});
 
 const decodeStamp = Schema.decodeUnknownEffect(Schema.fromJsonString(Stamp));
 
@@ -75,7 +107,7 @@ export const fetchRevision = Effect.fn('marketplaces.fetch')(function* (input: {
       return yield* new ListUnreachable({ reason: `${source.path} does not exist` });
     }
     const root = yield* files.realPath(source.path).pipe(Effect.mapError(unreachable));
-    return { ...(yield* listAt(formats, root)), root, commit: null, fetched: now, stage: null };
+    return { ...(yield* listAt(formats, root)), root, commit: null, fetched: now, details: {}, stage: null };
   }
   yield* files.makeDirectory(join(home, FOLDER, STAGING), { recursive: true }).pipe(Effect.mapError(unreachable));
   const stage = yield* files
@@ -84,7 +116,7 @@ export const fetchRevision = Effect.fn('marketplaces.fetch')(function* (input: {
   const root = join(stage, 'repository');
   const listed = Effect.gen(function* () {
     const { commit } = yield* shallowClone({ url: source.url, into: root }).pipe(Effect.mapError(unreachable));
-    return { ...(yield* listAt(formats, root)), root, commit, fetched: now, stage };
+    return { ...(yield* listAt(formats, root)), root, commit, fetched: now, details: {}, stage };
   });
   return yield* listed.pipe(Effect.tapError(() => Effect.orDie(files.remove(stage, { recursive: true, force: true }))));
 });
@@ -93,10 +125,10 @@ export const storedRevision = Effect.fn('marketplaces.store')(function* (home: s
   const files = yield* FileSystem.FileSystem;
   const stamp = stampOf(home, id);
   const next = `${stamp}.next`;
-  const { commit, format, text } = fetched;
+  const { commit, format, text, details } = fetched;
   yield* files.makeDirectory(join(home, FOLDER), { recursive: true });
-  yield* files.writeFileString(next, JSON.stringify({ commit, fetched: fetched.fetched, format, text }));
-  const revision = { root: fetched.root, commit, fetched: fetched.fetched, format, text, list: fetched.list } satisfies Revision;
+  yield* files.writeFileString(next, JSON.stringify({ commit, fetched: fetched.fetched, format, text, details }));
+  const revision = { root: fetched.root, commit, fetched: fetched.fetched, format, text, details, list: fetched.list } satisfies Revision;
   if (fetched.stage === null) {
     yield* files.rename(next, stamp);
     return { revision, leftovers: [] as readonly string[] };
@@ -126,7 +158,8 @@ export const storedRevisionOf = Effect.fnUntraced(function* (input: {
   if (format === undefined)
     return yield* new ListUnreadable({ reason: `its stored list is in ${stamp.format}, a format Tagma does not read` });
   const root = input.source.kind === 'git' ? placeOf(input.home, input.id) : input.source.path;
-  return { root, ...stamp, list: yield* parsed(format, stamp.text) } satisfies Revision;
+  const details = stamp.details ?? {};
+  return { root, ...stamp, details, list: detailed(yield* parsed(format, stamp.text), details) } satisfies Revision;
 });
 
 export const removed = Effect.fn('marketplaces.removed')(function* (paths: readonly string[]) {

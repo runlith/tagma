@@ -6,13 +6,15 @@ import { within } from '../plugins/contract/service/reading.js';
 import { EnabledPlugins, Plugins } from '../plugins/contract/service/plugins.js';
 import type { PluginSource } from '../plugins/contract/wire/rows.js';
 import { Settings } from '../settings/contract/service/values.js';
-import { ListFormats } from './contract/service/lists.js';
+import { ListFormats, type MarketplaceList } from './contract/service/lists.js';
 import { MarketplacePlaces, MarketplacePresets, Marketplaces, type Picked } from './contract/service/marketplaces.js';
 import { type EntryRow, MARKETPLACE_ID_PATTERN, type MarketplaceRow, type MarketplaceSource, TRUST_LABELS } from './contract/wire/rows.js';
 import { type MarketplaceAdded, marketplacesAdded, marketplacesPresets } from './contract/wire/settings.js';
 import { entryRowOf, entryRows, escapes, installedOf } from './entries.js';
 import {
   clearStaging,
+  type Detail,
+  detailed,
   dropFetched,
   dropRevision,
   type Fetched,
@@ -28,6 +30,8 @@ import {
 type Stored = { readonly revision: Revision | null; readonly failure: { readonly reason: string; readonly at: number } | null };
 
 const WRITERS = 1_000;
+
+const DESCRIBING = 8;
 
 const READ = 'read_marketplaces names every marketplace added and its entries';
 
@@ -136,8 +140,30 @@ export const makeMarketplaces = Effect.gen(function* () {
     yield* provided(removed(leftovers)).pipe(Effect.mapError(unstored(id)));
   });
 
+  const described = Effect.fnUntraced(function* (root: string, list: MarketplaceList) {
+    const details: Record<string, Detail> = {};
+    const bare = list.entries.flatMap((entry) =>
+      entry.source.kind === 'path' &&
+      !escapes(root, entry.source.path) &&
+      (entry.title === null || entry.description === null || entry.brings.length === 0)
+        ? [{ name: entry.name, path: entry.source.path, manifest: entry.manifest ?? undefined }]
+        : [],
+    );
+    yield* Effect.forEach(
+      bare,
+      ({ name, path, manifest }) =>
+        Effect.map(plugins.describe({ root: resolve(root, path), declared: { name, manifest } }), (detail) => {
+          if (detail !== null) details[name] = detail;
+        }),
+      { concurrency: DESCRIBING, discard: true },
+    );
+    return details;
+  });
+
   const fetched = Effect.fnUntraced(function* (source: MarketplaceSource) {
-    return yield* provided(fetchRevision({ home, source, formats, now: yield* Clock.currentTimeMillis }));
+    const got = yield* provided(fetchRevision({ home, source, formats, now: yield* Clock.currentTimeMillis }));
+    const details = yield* described(got.root, got.list);
+    return { ...got, details, list: detailed(got.list, details) } satisfies Fetched;
   });
 
   const failed = Effect.fnUntraced(function* (registration: MarketplaceAdded, failure: ListUnreachable | ListUnreadable) {

@@ -44,6 +44,20 @@ export const marketplaceRowSchema = Schema.Struct({
 });
 export type MarketplaceRow = typeof marketplaceRowSchema.Type;
 
+export const CATALOG_CATEGORIES = [
+  'Development',
+  'Productivity',
+  'Data',
+  'Monitoring',
+  'Security',
+  'Design',
+  'Communication',
+  'Learning',
+  'Finance',
+  'Other',
+] as const;
+export type CatalogCategory = (typeof CATALOG_CATEGORIES)[number];
+
 export const ENTRY_STATES = ['available', 'installed', 'taken', 'refused'] as const;
 export type EntryState = (typeof ENTRY_STATES)[number];
 
@@ -66,9 +80,11 @@ export const entryRowSchema = Schema.Struct({
   author: Said,
   homepage: Said,
   repository: Said,
-  category: Said,
+  category: Schema.NullOr(Schema.Literals(CATALOG_CATEGORIES)).annotate({
+    description: 'The catalog category Tagma files the entry under, from the word its list gives; null when the list gives none.',
+  }),
   brings: Schema.Array(Schema.Literals(PLUGIN_COMPONENT_KINDS)).annotate({
-    description: 'The components the entry itself says the plugin brings.',
+    description: 'The components the plugin brings: as its entry says, or as its own manifest says when the entry is silent.',
   }),
   source: Schema.String.annotate({ description: 'Where its files are, as the list says.' }),
   policy: Schema.NullOr(entryPolicySchema).annotate({

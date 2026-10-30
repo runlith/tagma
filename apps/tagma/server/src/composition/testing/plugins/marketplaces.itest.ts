@@ -12,6 +12,9 @@ type Component = { readonly kind: string; readonly name: string; readonly detail
 type Entry = {
   readonly marketplace: string;
   readonly name: string;
+  readonly description?: string | null;
+  readonly brings?: readonly string[];
+  readonly category?: string | null;
   readonly state: string;
   readonly taken?: string;
   readonly policy?: unknown;
@@ -272,5 +275,23 @@ layer(Layer.effect(Market, setup).pipe(Layer.provideMerge(BunFileSystem.layer)),
           'rooted-later',
         ]);
       }),
+  );
+
+  it.effect('an entry its list leaves bare is described by its own manifest and filed under a Tagma category', () =>
+    Effect.gen(function* () {
+      const { world, call, kept } = yield* Market;
+      yield* kept(['fixture-bare'], []);
+      const market = yield* world.directory('bare-market');
+      yield* repository(market, {
+        ...claudeList('fixture-bare', [{ name: 'bare', source: './plugins/bare', category: 'Developer Tools' }]),
+        'plugins/bare/.claude-plugin/plugin.json': JSON.stringify({ name: 'bare', description: 'Does bare things.' }),
+        'plugins/bare/skills/act/SKILL.md': skill('Acts.'),
+      });
+      yield* call('add_marketplace', { source: `file://${market}` });
+
+      expect((yield* call('read_marketplaces', { marketplace: 'fixture-bare' })).entries).toEqual([
+        expect.objectContaining({ name: 'bare', description: 'Does bare things.', brings: ['skill'], category: 'Development' }),
+      ]);
+    }),
   );
 });

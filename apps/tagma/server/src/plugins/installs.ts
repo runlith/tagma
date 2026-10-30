@@ -8,7 +8,7 @@ import { Projects } from '../projects/contract/service/registry.js';
 import { SecretOwners } from '../secrets/contract/service/secrets.js';
 import { Settings } from '../settings/contract/service/values.js';
 import type { PluginPackage, PluginRefused, PluginUnreadable } from './contract/service/format.js';
-import { type PluginPrepared, Plugins } from './contract/service/plugins.js';
+import { type PluginDescribed, type PluginPrepared, Plugins } from './contract/service/plugins.js';
 import { componentName } from './contract/wire/names.js';
 import type { PluginDeclared, PluginOrigin, PluginRow, PluginSource } from './contract/wire/rows.js';
 import {
@@ -428,6 +428,26 @@ export const makeInstalls = Effect.fnUntraced(function* (input: {
           return install === undefined ? [] : [install];
         }),
         (install) => rowOf(install, projectId, enabled),
+      );
+    }),
+    describe: Effect.fn('Plugins.describe')(function* ({ root, declared }) {
+      return yield* shelf.look(root, declared).pipe(
+        Effect.map(({ package: pkg }): PluginDescribed => ({
+          title: pkg.title,
+          description: pkg.description,
+          brings: [
+            ...(pkg.skills.length > 0 ? (['skill'] as const) : []),
+            ...(pkg.commands.length > 0 ? (['command'] as const) : []),
+            ...(pkg.servers.length > 0 ? (['mcp-server'] as const) : []),
+            ...(pkg.agents.length > 0 ? (['agent'] as const) : []),
+            ...(pkg.hooks.length > 0 ? (['hook'] as const) : []),
+          ],
+        })),
+        Effect.catchTags({
+          PluginRefused: () => Effect.succeed(null),
+          PluginUnreadable: () => Effect.succeed(null),
+          NamesCollide: () => Effect.succeed(null),
+        }),
       );
     }),
     prepare: Effect.fn('Plugins.prepare')(function* ({ projectId, source: given }) {
