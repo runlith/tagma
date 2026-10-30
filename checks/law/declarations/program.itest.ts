@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, test } from 'bun:test';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import type { Side } from '@runlith/tagma/rules';
@@ -158,6 +158,25 @@ test('a surviving test importer does not keep an export alive after its last pro
   const { commit, whole } = await judged('dead-code', base, tree, ['src/user.ts', 'src/entry.ts']);
   expect(fingerprints(commit.tree)).toEqual(['dead src/lib.ts#helper']);
   expect(fingerprints(commit.tree)).toEqual(fingerprints(whole.tree));
+});
+
+test('regular source and symlink transitions retire and restore the same dead-code findings', async () => {
+  const base = treeWith({ ...initial, 'src/unused.ts': 'export const orphan = 1;\n' });
+  await index(base);
+  rmSync(join(root, 'src/unused.ts'));
+  symlinkSync('lib.ts', join(root, 'src/unused.ts'));
+  git('add', 'src/unused.ts');
+  const linked = git('write-tree');
+  const removed = await judged('dead-code', base, linked, ['src/unused.ts']);
+  expect(fingerprints(removed.commit.base)).toEqual(['dead src/unused.ts#orphan']);
+  expect(fingerprints(removed.commit.tree)).toEqual([]);
+  expect(fingerprints(removed.commit.tree)).toEqual(fingerprints(removed.whole.tree));
+  rmSync(join(root, 'src/unused.ts'));
+  const restored = treeWith({ 'src/unused.ts': 'export const restored = 2;\n' });
+  const added = await judged('dead-code', linked, restored, ['src/unused.ts']);
+  expect(fingerprints(added.commit.base)).toEqual([]);
+  expect(fingerprints(added.commit.tree)).toEqual(['dead src/unused.ts#restored']);
+  expect(fingerprints(added.commit.tree)).toEqual(fingerprints(added.whole.tree));
 });
 
 test('a commit that adds a second copy of a declaration reports the older copy in an untouched file too', async () => {

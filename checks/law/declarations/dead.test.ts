@@ -139,6 +139,15 @@ test('reading only the metadata of an exported function is not calling it, but p
   ]);
 });
 
+test('import-type expressions consume only their named export, never a runtime caller or unrelated export', () => {
+  expect(
+    judge({
+      'src/types.ts': 'export type Shape = { id: string };\nexport function factory() {}\nexport const unrelated = 1;\n',
+      'src/entry.ts': "export type Row = import('./types').Shape;\nexport type Factory = typeof import('./types').factory;\n",
+    }),
+  ).toEqual(['dead src/types.ts#factory', 'dead src/types.ts#unrelated']);
+});
+
 test('a class heritage expression is a runtime use and an implements or interface heritage is a type position', () => {
   expect(
     judge({

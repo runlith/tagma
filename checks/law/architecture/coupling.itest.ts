@@ -20,7 +20,12 @@ test('a module card move leaves every standing coupling finding reported on its 
   const card = (id: string, ...sources: readonly (readonly [kind: 'dir' | 'file', ref: string])[]) =>
     `---\ntags: ["module"]\nfields: {"id": "${id}"}\nsources:\n${sources.map(([kind, ref]) => `  - kind: ${kind}\n    ref: ${ref}\n`).join('')}---\n`;
   const baseline = ['a', 'b', 'c', 'd'].map((id) => ({ id, path: `packages/${id}/src/${id}1.ts`, modules: 0, outside: 0, total: 0 }));
-  const key = { key: 'coupling', id: 'coupling', params: { baseline, aliases: [] }, reach: { places: [''], files: ['**/*.ts'] } };
+  const key = {
+    key: 'coupling',
+    id: 'coupling',
+    params: { baseline, aliases: [{ prefix: '$lib/', dir: 'packages/a/src/' }] },
+    reach: { places: [''], files: ['**/*.ts'] },
+  };
   const listing = (revision: string) => git('ls-tree', '-r', '--name-only', revision).split('\n');
   const textOf = (revision: string, path: string) => {
     const shown = spawnSync('git', ['show', `${revision}:${path}`], { cwd: root });
@@ -93,7 +98,7 @@ test('a module card move leaves every standing coupling finding reported on its 
     put('packages/a/src/zmove.ts', "import { b } from '../../b/src/b1'; export const moved = b;");
     put('packages/b/src/b1.ts', "import { c } from '../../c/src/c1'; export const b = c;");
     put('packages/c/src/c1.ts', 'export const c = 1;');
-    put('packages/d/src/d1.ts', "import { c } from '../../c/src/c1'; export const d = c;");
+    put('packages/d/src/d1.ts', "import { b } from '../../b/src/b1'; import { moved } from '$lib/zmove'; export const d = [b, moved];");
     git('add', '.');
     const first = git('write-tree');
     ask(first, null, { tree: null, base: null });
@@ -103,6 +108,8 @@ test('a module card move leaves every standing coupling finding reported on its 
     const moved = git('write-tree');
     const step = compare(moved, first, ['.tagma/b.md']);
     expect(step.tree.findings.some((one) => one.fingerprint.startsWith('coupling:a:'))).toBe(true);
+    expect(step.base.findings.find((one) => one.fingerprint === 'coupling:d:modules')?.value).toBe(2);
+    expect(step.tree.findings.find((one) => one.fingerprint === 'coupling:d:modules')?.value).toBe(1);
 
     put('packages/a/src/zmove.ts', "import { b } from '../../b/src/b1'; import { d } from '../../d/src/d1'; export const moved = [b, d];");
     git('add', '.');

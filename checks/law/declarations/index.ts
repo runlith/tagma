@@ -172,9 +172,11 @@ export const changesBetween = (root: string, base: string, tree: string): readon
     const match = /^:(\d+) (\d+) ([0-9a-f]+) ([0-9a-f]+) (\S+)$/.exec(output[at]!);
     if (match === null) continue;
     const zero = (id: string): string | null => (/^0+$/.test(id) ? null : id);
-    const regularMode = (mode: string): boolean => mode === '100644' || mode === '100755' || mode === '000000';
-    if (!regularMode(match[1]!) || !regularMode(match[2]!)) continue;
-    changes.push({ path: output[at + 1]!, before: zero(match[3]!), after: zero(match[4]!), mode: match[2]!, status: match[5]! });
+    const regularMode = (mode: string): boolean => mode === '100644' || mode === '100755';
+    const before = regularMode(match[1]!) ? zero(match[3]!) : null;
+    const after = regularMode(match[2]!) ? zero(match[4]!) : null;
+    if (before === null && after === null) continue;
+    changes.push({ path: output[at + 1]!, before, after, mode: match[2]!, status: match[5]! });
   }
   return changes;
 };

@@ -109,6 +109,14 @@ test('every natural way of reaching ModelAccess.request is a finding', () => {
   );
 });
 
+test('both conditional branches are analyzed even when the true branch has a known value', () => {
+  expect(
+    found({
+      'server/src/f/conditional.ts': `${HEAD}export const run = Effect.gen(function* () { const models = yield* ModelAccess; return enabled ? {} : models.request({}); });\n`,
+    }),
+  ).toEqual([['server/src/f/conditional.ts', 'request:ModelAccess.request']]);
+});
+
 test('typed parameters, properties and classes establish the requester a feature calls', () => {
   const files = {
     'server/src/f/param.ts':

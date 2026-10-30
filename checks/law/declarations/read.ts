@@ -444,7 +444,14 @@ const read = (path: string, text: string): Facts => {
       if (ts.isImportTypeNode(node)) {
         const argument = node.argument;
         const specifier = ts.isLiteralTypeNode(argument) ? literalText(argument.literal) : undefined;
-        if (specifier !== undefined) loads.push({ specifier, pattern: false });
+        if (specifier !== undefined) {
+          const local = `@import-type:${imports.length}`;
+          let name = node.qualifier;
+          while (name !== undefined && ts.isQualifiedName(name)) name = name.left;
+          const imported = name?.text ?? '*';
+          imports.push({ specifier, bindings: [{ local, imported }] });
+          uses.add(`${local}\0*\0t`);
+        }
       } else if (ts.isCallExpression(node)) {
         const callee = node.expression;
         const first = node.arguments[0];

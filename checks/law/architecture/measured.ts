@@ -212,7 +212,7 @@ export const couplingJudge = (
         [from.revision, was],
         [target.commit, now],
       ] as const)
-        for (const importer of importersOf(root, commit, targets, members, [], source)) affected.add(importer.path);
+        for (const importer of importersOf(root, commit, targets, members, params.aliases, source)) affected.add(importer.path);
     const local: Record<string, Totals> = Object.create(null);
     const original = new Map<string, Totals | undefined>();
     const loaded = (id: string): void => {

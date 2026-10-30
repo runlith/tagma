@@ -774,7 +774,8 @@ export class FileModel {
     if (ts.isConditionalExpression(node)) {
       this.eval(node.condition, scope);
       const yes = this.eval(node.whenTrue, scope, context);
-      return yes ?? this.eval(node.whenFalse, scope, context);
+      const no = this.eval(node.whenFalse, scope, context);
+      return yes ?? no;
     }
     if (ts.isBinaryExpression(node)) return this.binary(node, scope);
     ts.forEachChild(node, (child) => (ts.isTypeNode(child) ? this.typeValue(child, scope) : this.eval(child, scope)));
