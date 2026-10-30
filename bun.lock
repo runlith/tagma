@@ -134,7 +134,6 @@
         "tagma": "./src/composition/entries/cli.ts",
       },
       "dependencies": {
-        "@anthropic-ai/claude-agent-sdk": "0.3.292",
         "@cursor/sdk": "1.0.40",
         "@effect/platform-bun": "catalog:",
         "@effect/sql-sqlite-bun": "catalog:",
@@ -177,6 +176,7 @@
         "@runlith/git": "workspace:*",
         "@runlith/github": "workspace:*",
         "@runlith/held": "workspace:*",
+        "@runlith/hosted-runner": "workspace:*",
         "@runlith/llm": "workspace:*",
         "@runlith/mcp": "workspace:*",
         "@runlith/navigation": "workspace:*",
@@ -234,6 +234,7 @@
       "name": "@runlith/law",
       "dependencies": {
         "@runlith/code-facts": "workspace:*",
+        "@runlith/git": "workspace:*",
         "@runlith/sqlite-process": "workspace:*",
         "@runlith/tagma": "workspace:*",
         "@tagma/inspection": "workspace:*",
@@ -281,12 +282,20 @@
       "name": "@runlith/adapter-anthropic",
       "version": "0.1.0",
       "dependencies": {
+        "@anthropic-ai/claude-agent-sdk": "0.3.292",
+        "@effect/platform-bun": "catalog:",
+        "@runlith/acp": "workspace:*",
+        "@runlith/agent": "workspace:*",
+        "@runlith/hosted-runner": "workspace:*",
         "@runlith/llm": "workspace:*",
+        "@runlith/mcp": "workspace:*",
+        "@runlith/ndjson-rpc": "workspace:*",
         "@runlith/tagma": "workspace:*",
         "effect": "catalog:",
       },
       "devDependencies": {
         "@runlith/effect-test": "workspace:*",
+        "@runlith/testbed": "workspace:*",
         "@runlith/tsconfig": "workspace:*",
         "@types/bun": "catalog:",
       },
@@ -962,6 +971,22 @@
         "@runlith/files": "workspace:*",
         "@runlith/utils": "workspace:*",
         "shiki": "catalog:",
+      },
+    },
+    "packages/hosted-runner": {
+      "name": "@runlith/hosted-runner",
+      "version": "0.1.0",
+      "dependencies": {
+        "@runlith/acp": "workspace:*",
+        "@runlith/agent": "workspace:*",
+        "@runlith/llm": "workspace:*",
+        "@runlith/ndjson-rpc": "workspace:*",
+        "effect": "catalog:",
+      },
+      "devDependencies": {
+        "@runlith/effect-test": "workspace:*",
+        "@runlith/tsconfig": "workspace:*",
+        "@types/bun": "catalog:",
       },
     },
     "packages/i18n": {
@@ -2334,6 +2359,8 @@
     "@runlith/held": ["@runlith/held@workspace:packages/held"],
 
     "@runlith/highlight": ["@runlith/highlight@workspace:packages/highlight"],
+
+    "@runlith/hosted-runner": ["@runlith/hosted-runner@workspace:packages/hosted-runner"],
 
     "@runlith/i18n": ["@runlith/i18n@workspace:packages/i18n"],
 

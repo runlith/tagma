@@ -1,20 +1,11 @@
 import { createHash } from 'node:crypto';
 import { Result, Schema } from 'effect';
+import type { TreeDifference } from '@runlith/git/trees';
 import type { Finding, Side } from '@runlith/tagma/rules';
 import { ProgramFinding } from '@tagma/inspection/program';
 import { isManifest, movedPackages } from '../../declarations/corpus';
 import { blobTexts } from '../../git';
-import {
-  blobsAt,
-  changesBetween,
-  type Change,
-  FAR,
-  GOOD_ENOUGH,
-  importersByName,
-  importersOf,
-  manifestsAt,
-  prepare,
-} from '../../declarations/index';
+import { blobsAt, changesBetween, FAR, GOOD_ENOUGH, importersByName, importersOf, manifestsAt, prepare } from '../../declarations/index';
 import { revisionAt, saveRevision } from '../../declarations/memo';
 import { versionAt } from '../cache';
 import { production, snapshots, within } from '../snapshot';
@@ -95,8 +86,8 @@ export const judgements = (root: string, params: CallParams, versionRevision: st
     return save(commit, { findings: sorted(analysis.findings), carriers: [...analysis.carriers].sort() });
   };
 
-  const nearest = (commit: string): { readonly revision: string; readonly one: Analysis; readonly changes: readonly Change[] } => {
-    let best: { readonly revision: string; readonly one: Analysis; readonly changes: readonly Change[] } | undefined;
+  const nearest = (commit: string): { readonly revision: string; readonly one: Analysis; readonly changes: readonly TreeDifference[] } => {
+    let best: { readonly revision: string; readonly one: Analysis; readonly changes: readonly TreeDifference[] } | undefined;
     for (const revision of recent()) {
       const one = held(revision);
       if (one === undefined) continue;
@@ -126,7 +117,7 @@ export const judgements = (root: string, params: CallParams, versionRevision: st
     if (names.length > 0)
       for (const at of new Set([revision, commit])) for (const entry of importersByName(root, at, names, universe)) seeds.add(entry.path);
     const forced = new Set(touched.filter((change) => change.before === null || change.after === null).map((change) => change.path));
-    const view = (at: string, existing: (change: Change) => boolean) => {
+    const view = (at: string, existing: (change: TreeDifference) => boolean) => {
       const scope = [...new Set([...seeds, ...touched.filter(existing).map((change) => change.path)])];
       return snapshot(side(at, false, scope), scope.length === 0 ? ['package.json'] : scope);
     };

@@ -1,10 +1,13 @@
 import { createRequire } from 'node:module';
 import { posix } from 'node:path';
 import type { Database } from 'bun:sqlite';
-import { blobTexts, type Entry, entriesAt, git } from '../git';
+import type { TreeDifference } from '@runlith/git/trees';
+import type { BlobAt } from '@runlith/git/working';
+import { directoriesAt, listedAt, prepareDirectories } from '../directories';
+import { blobTexts, type Entry, git } from '../git';
+import { databaseAt } from '../store';
 import { type Packed, pack, unpack } from './compact';
 import { isManifest, isSource, type Package, packageOf } from './corpus';
-import { databaseAt } from './database';
 import type { Facts } from './facts';
 import { revisionAt, saveRevision } from './memo';
 import { type Alias, keyStems, resolverOf } from './resolve';
@@ -14,8 +17,6 @@ const load = createRequire(import.meta.url);
 let reader: typeof import('./read') | undefined;
 
 const factsOf = (path: string, text: string): Facts => (reader ??= load('./read.ts') as typeof import('./read')).factsOf(path, text);
-
-export type Change = { readonly path: string; readonly before: string | null; readonly after: string | null };
 
 const GLOB = '\0glob';
 
@@ -129,7 +130,7 @@ const learn = (root: string, entries: readonly { readonly path: string; readonly
 
 const LIMIT = 80_000;
 
-const pruned = (root: string, entries: readonly Blobbed[], tree: string): void => {
+const pruned = (root: string, entries: readonly BlobAt[], tree: string): void => {
   const database = databaseAt(root);
   const total = database.query<{ count: number }, []>('SELECT count(*) AS count FROM facts').get()!.count;
   if (total <= LIMIT) return;
@@ -147,22 +148,22 @@ const pruned = (root: string, entries: readonly Blobbed[], tree: string): void =
 
 const populated = (root: string, tree: string): void => {
   const entries: { path: string; blob: string }[] = [];
-  for (const [path, entry] of entriesAt(root, tree, [], true))
+  for (const [path, entry] of listedAt(root, tree, [], true))
     if (regular(entry) && indexable(path)) entries.push({ path, blob: entry.object });
   learn(root, entries);
   pruned(root, entries, tree);
 };
 
-export const changesBetween = (root: string, base: string, tree: string): readonly Change[] => {
+export const changesBetween = (root: string, base: string, tree: string): readonly TreeDifference[] => {
   const output = git(root, ['diff-tree', '-r', '-z', '--raw', '--no-renames', '--no-abbrev', base, tree]).toString().split('\0');
-  const changes: Change[] = [];
+  const changes: TreeDifference[] = [];
   for (let at = 0; at + 1 < output.length; at += 2) {
-    const match = /^:(\d+) (\d+) ([0-9a-f]+) ([0-9a-f]+) /.exec(output[at]!);
+    const match = /^:(\d+) (\d+) ([0-9a-f]+) ([0-9a-f]+) (\S+)$/.exec(output[at]!);
     if (match === null) continue;
     const zero = (id: string): string | null => (/^0+$/.test(id) ? null : id);
     const regularMode = (mode: string): boolean => mode === '100644' || mode === '100755' || mode === '000000';
     if (!regularMode(match[1]!) || !regularMode(match[2]!)) continue;
-    changes.push({ path: output[at + 1]!, before: zero(match[3]!), after: zero(match[4]!) });
+    changes.push({ path: output[at + 1]!, before: zero(match[3]!), after: zero(match[4]!), mode: match[2]!, status: match[5]! });
   }
   return changes;
 };
@@ -187,7 +188,7 @@ const ensure = (root: string, tree: string, hint: string | null, populate: boole
     .query<{ tree: string }, [number]>('SELECT tree FROM indexed ORDER BY at DESC LIMIT ?')
     .all(NEARBY)
     .map((one) => one.tree);
-  let best: { readonly source: string; readonly changes: readonly Change[] } | undefined;
+  let best: { readonly source: string; readonly changes: readonly TreeDifference[] } | undefined;
   for (const source of [...new Set([...(hint !== null && isIndexed(root, hint) ? [hint] : []), ...recent])]) {
     const changes = changesBetween(root, source, tree);
     if (best === undefined || changes.length < best.changes.length) best = { source, changes };
@@ -212,19 +213,19 @@ const ensure = (root: string, tree: string, hint: string | null, populate: boole
 
 export const prepare = (root: string, tree: string, base: string | null): void => {
   if (base === null) {
+    prepareDirectories(root, tree, null);
     ensure(root, tree, null, true);
     return;
   }
   ensure(root, base, null, false);
+  prepareDirectories(root, tree, base);
   ensure(root, tree, base, false);
 };
 
-export type Blobbed = { readonly path: string; readonly blob: string };
-
-export const factsAt = (root: string, entries: readonly Blobbed[]): Map<string, Facts> => {
+export const factsAt = (root: string, entries: readonly BlobAt[]): Map<string, Facts> => {
   const database = databaseAt(root);
   const facts = new Map<string, Facts>();
-  const byBlob = new Map<string, Blobbed[]>();
+  const byBlob = new Map<string, BlobAt[]>();
   for (const one of entries) {
     const held = byBlob.get(one.blob);
     if (held === undefined) byBlob.set(one.blob, [one]);
@@ -242,7 +243,7 @@ export const factsAt = (root: string, entries: readonly Blobbed[]): Map<string, 
   return facts;
 };
 
-export const packagesAt = (root: string, entries: readonly Blobbed[]): Package[] => {
+export const packagesAt = (root: string, entries: readonly BlobAt[]): Package[] => {
   const database = databaseAt(root);
   const found: Package[] = [];
   const blobs = [...new Set(entries.map((one) => one.blob))];
@@ -260,16 +261,16 @@ export const packagesAt = (root: string, entries: readonly Blobbed[]): Package[]
   return found;
 };
 
-export const listing = (root: string, tree: string): readonly Blobbed[] => {
-  const entries: Blobbed[] = [];
-  for (const [path, entry] of entriesAt(root, tree, [], true))
+export const listing = (root: string, tree: string): readonly BlobAt[] => {
+  const entries: BlobAt[] = [];
+  for (const [path, entry] of listedAt(root, tree, [], true))
     if (regular(entry) && indexable(path)) entries.push({ path, blob: entry.object });
   return entries;
 };
 
 const DIRECTORY_LISTING = 24;
 
-const byLookup = (root: string, commit: string, rows: readonly Blobbed[]): Blobbed[] => {
+const byLookup = (root: string, commit: string, rows: readonly BlobAt[]): BlobAt[] => {
   if (rows.length === 0) return [];
   const checked = git(root, ['cat-file', '--batch-check=%(objectname)'], `${rows.map((one) => `${commit}:${one.path}`).join('\n')}\n`)
     .toString()
@@ -279,6 +280,14 @@ const byLookup = (root: string, commit: string, rows: readonly Blobbed[]): Blobb
 
 export const blobsAt = (root: string, commit: string, paths: readonly string[]): Map<string, string> => {
   const found = new Map<string, string>();
+  const prepared = directoriesAt(root, commit);
+  if (prepared !== undefined) {
+    for (const path of paths) {
+      const entry = prepared.entry(path);
+      if (entry !== undefined && regular(entry)) found.set(path, entry.object);
+    }
+    return found;
+  }
   const looked = (wanted: readonly string[]): void => {
     if (wanted.length === 0) return;
     const checked = git(
@@ -298,7 +307,7 @@ export const blobsAt = (root: string, commit: string, paths: readonly string[]):
     return found;
   }
   const nested = paths.filter((one) => posix.dirname(one) !== '.');
-  const listed = entriesAt(root, commit, [...new Set(nested.map((one) => `${posix.dirname(one)}/`))], false);
+  const listed = listedAt(root, commit, [...new Set(nested.map((one) => `${posix.dirname(one)}/`))], false);
   for (const path of nested) {
     const entry = listed.get(path);
     if (entry !== undefined && regular(entry)) found.set(path, entry.object);
@@ -307,10 +316,12 @@ export const blobsAt = (root: string, commit: string, paths: readonly string[]):
   return found;
 };
 
-const standing = (root: string, commit: string, rows: readonly Blobbed[]): Blobbed[] => {
+const standing = (root: string, commit: string, rows: readonly BlobAt[]): BlobAt[] => {
+  const prepared = directoriesAt(root, commit);
+  if (prepared !== undefined) return rows.filter((one) => prepared.entry(one.path)?.object === one.blob);
   if (rows.length <= DIRECTORY_LISTING) return byLookup(root, commit, rows);
   const nested = rows.filter((one) => posix.dirname(one.path) !== '.');
-  const listed = entriesAt(root, commit, [...new Set(nested.map((one) => `${posix.dirname(one.path)}/`))], false);
+  const listed = listedAt(root, commit, [...new Set(nested.map((one) => `${posix.dirname(one.path)}/`))], false);
   return [
     ...nested.filter((one) => listed.get(one.path)?.object === one.blob),
     ...byLookup(
@@ -321,10 +332,10 @@ const standing = (root: string, commit: string, rows: readonly Blobbed[]): Blobb
   ];
 };
 
-const placed = (database: Database, blobs: readonly string[]): Blobbed[] => {
-  const rows: Blobbed[] = [];
+const placed = (database: Database, blobs: readonly string[]): BlobAt[] => {
+  const rows: BlobAt[] = [];
   for (const part of chunks(blobs))
-    rows.push(...database.query<Blobbed, string[]>(`SELECT path, blob FROM places WHERE blob IN (${marks(part.length)})`).all(...part));
+    rows.push(...database.query<BlobAt, string[]>(`SELECT path, blob FROM places WHERE blob IN (${marks(part.length)})`).all(...part));
   return rows;
 };
 
@@ -335,7 +346,7 @@ export const importersOf = (
   packages: readonly Package[],
   aliases: readonly Alias[],
   accepts: (path: string) => boolean,
-): Blobbed[] => {
+): BlobAt[] => {
   const database = databaseAt(root);
   const stems = new Set<string>([GLOB, '.']);
   for (const path of targets) {
@@ -343,7 +354,7 @@ export const importersOf = (
     for (const stem of keyStems(packages, path)) stems.add(stem);
   }
   const resolver = resolverOf(targets, packages, aliases);
-  const rows = new Map<string, Blobbed>();
+  const rows = new Map<string, BlobAt>();
   for (const part of chunks([...stems]))
     for (const row of database
       .query<{ spec: string; path: string; blob: string }, string[]>(
@@ -359,12 +370,12 @@ export const importersOf = (
   return standing(root, commit, [...rows.values()]);
 };
 
-export const importersByName = (root: string, commit: string, names: readonly string[], accepts: (path: string) => boolean): Blobbed[] => {
+export const importersByName = (root: string, commit: string, names: readonly string[], accepts: (path: string) => boolean): BlobAt[] => {
   const database = databaseAt(root);
-  const rows = new Map<string, Blobbed>();
+  const rows = new Map<string, BlobAt>();
   for (const name of names)
     for (const row of database
-      .query<Blobbed, [string, number, string]>(
+      .query<BlobAt, [string, number, string]>(
         'SELECT DISTINCT p.path AS path, p.blob AS blob FROM links l JOIN places p ON p.blob = l.blob WHERE l.spec = ?1 OR substr(l.spec, 1, ?2) = ?3',
       )
       .all(name, name.length + 1, `${name}/`))
@@ -372,7 +383,7 @@ export const importersByName = (root: string, commit: string, names: readonly st
   return standing(root, commit, [...rows.values()]);
 };
 
-export const sharingShapes = (root: string, commit: string, keys: readonly string[]): Blobbed[] => {
+export const sharingShapes = (root: string, commit: string, keys: readonly string[]): BlobAt[] => {
   const database = databaseAt(root);
   const blobs = new Set<string>();
   for (const part of chunks([...new Set(keys)]))
@@ -389,10 +400,10 @@ export const sharingShapes = (root: string, commit: string, keys: readonly strin
 
 const manifestKey = (commit: string): string => `declarations/manifests/${commit}`;
 
-const manifestEntries = (root: string, commit: string): readonly Blobbed[] => {
-  const held = revisionAt(root, manifestKey(commit)) as readonly Blobbed[] | undefined;
+const manifestEntries = (root: string, commit: string): readonly BlobAt[] => {
+  const held = revisionAt(root, manifestKey(commit)) as readonly BlobAt[] | undefined;
   if (held !== undefined) return held;
-  const rows = databaseAt(root).query<Blobbed, []>('SELECT path, blob FROM places WHERE blob IN (SELECT blob FROM manifests)').all();
+  const rows = databaseAt(root).query<BlobAt, []>('SELECT path, blob FROM places WHERE blob IN (SELECT blob FROM manifests)').all();
   const found = standing(
     root,
     commit,
@@ -402,7 +413,7 @@ const manifestEntries = (root: string, commit: string): readonly Blobbed[] => {
   return found;
 };
 
-const derivedManifests = (root: string, base: string, tree: string, changes: readonly Change[]): void => {
+const derivedManifests = (root: string, base: string, tree: string, changes: readonly TreeDifference[]): void => {
   const found = new Map(manifestEntries(root, base).map((one) => [one.path, one.blob]));
   for (const one of changes)
     if (isManifest(one.path)) {

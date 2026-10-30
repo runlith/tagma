@@ -1,4 +1,4 @@
-import { databaseAt } from './database';
+import { databaseAt } from '../store';
 
 const KEPT = 1024;
 

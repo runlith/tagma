@@ -1,4 +1,4 @@
-import { databaseAt } from '../declarations/database';
+import { databaseAt } from '../store';
 import { blobsAt } from '../declarations/index';
 import type { VendorParams } from './inspections';
 import type { Snapshot } from './snapshot';

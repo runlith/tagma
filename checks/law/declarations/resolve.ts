@@ -1,4 +1,5 @@
 import { posix } from 'node:path';
+import { LANGUAGES } from '@runlith/code-facts/languages';
 import { leavesOf, type Package } from './corpus';
 import { globRegex } from './glob';
 
@@ -11,7 +12,9 @@ export type Resolver = {
   readonly exported: (pkg: Package) => readonly string[];
 };
 
-const EXTENSIONS = ['.ts', '.tsx', '.mts', '.cts', '.js', '.jsx', '.mjs', '.cjs', '.svelte'];
+const FIRST = ['.ts', '.tsx'];
+
+const EXTENSIONS = [...FIRST, ...LANGUAGES[0].extensions.filter((one) => !FIRST.includes(one))];
 
 const COMPILED = /\.[cm]?js$/;
 

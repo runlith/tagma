@@ -1,12 +1,18 @@
-import { entriesAt } from '../git';
+import type { TreeDifference } from '@runlith/git/trees';
+import type { BlobAt } from '@runlith/git/working';
+import { listedAt } from '../directories';
 import { isSource, movedPackages, type Package, productionOf } from './corpus';
 import { consumptions } from './dead';
 import type { DeadParams } from './declaration';
 import type { Facts } from './facts';
-import { type Blobbed, blobsAt, type Change, factsAt, importersByName, manifestsAt } from './index';
+import { blobsAt, factsAt, importersByName, manifestsAt } from './index';
 import { patternDir, type Resolver, resolverOf } from './resolve';
 
-export const sideEntries = (changes: readonly Change[], which: 'before' | 'after', production: (path: string) => boolean): Blobbed[] =>
+export const sideEntries = (
+  changes: readonly TreeDifference[],
+  which: 'before' | 'after',
+  production: (path: string) => boolean,
+): BlobAt[] =>
   changes.flatMap((one) => {
     const blob = one[which];
     return blob !== null && production(one.path) ? [{ path: one.path, blob }] : [];
@@ -30,7 +36,7 @@ const bounded = (dir: string, what: string): string => {
 };
 
 const listed = (root: string, commit: string, dirs: ReadonlySet<string>, production: (path: string) => boolean): string[] =>
-  dirs.size === 0 ? [] : [...entriesAt(root, commit, [...dirs], true).keys()].filter(production);
+  dirs.size === 0 ? [] : [...listedAt(root, commit, [...dirs], true).keys()].filter(production);
 
 const patternDirs = (files: ReadonlyMap<string, Facts>): Set<string> => {
   const dirs = new Set<string>();
@@ -66,7 +72,13 @@ const edgesOf = (
   return visit(resolverOf(present, packages, params.aliases));
 };
 
-export const ownersOf = (root: string, base: string, tree: string, changes: readonly Change[], params: DeadParams): ReadonlySet<string> => {
+export const ownersOf = (
+  root: string,
+  base: string,
+  tree: string,
+  changes: readonly TreeDifference[],
+  params: DeadParams,
+): ReadonlySet<string> => {
   const production = productionOf(params);
   const sources = (path: string): boolean => isSource(path) && production(path);
   const packagesBefore = manifestsAt(root, base);

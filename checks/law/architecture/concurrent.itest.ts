@@ -5,7 +5,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import type { Side } from '@runlith/tagma/rules';
-import { databaseAt } from '../declarations/database';
+import { databaseAt } from '../store';
 import { indexes } from './indexes';
 import type { Snapshot } from './snapshot';
 import { vendorIndex } from './vendors';

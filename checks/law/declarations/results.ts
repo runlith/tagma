@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { Finding } from '@runlith/tagma/rules';
-import { databaseAt } from './database';
+import { databaseAt } from '../store';
 
 const KEPT = 6;
 

@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Database } from 'bun:sqlite';
-import { git } from '../git';
+import { git } from './git';
 
 const INDEX = ['facts', 'places', 'links', 'shapes', 'manifests', 'indexed', 'results'] as const;
 
@@ -16,23 +16,27 @@ const SCHEMA = [
   'CREATE TABLE IF NOT EXISTS results (family TEXT NOT NULL, key TEXT PRIMARY KEY, value TEXT NOT NULL, at INTEGER NOT NULL) WITHOUT ROWID',
   'CREATE TABLE IF NOT EXISTS memo (key TEXT PRIMARY KEY, value TEXT NOT NULL, at INTEGER NOT NULL) WITHOUT ROWID',
   'CREATE TABLE IF NOT EXISTS meta (name TEXT PRIMARY KEY, version TEXT NOT NULL) WITHOUT ROWID',
+  'CREATE TABLE IF NOT EXISTS nodes (tree TEXT PRIMARY KEY, entries TEXT NOT NULL) WITHOUT ROWID',
+  'CREATE TABLE IF NOT EXISTS roots (revision TEXT PRIMARY KEY, tree TEXT NOT NULL, at INTEGER NOT NULL) WITHOUT ROWID',
 ] as const;
 
 const version = (): string => {
   const hash = createHash('sha256').update(readFileSync(Bun.resolveSync('typescript/package.json', import.meta.dir)));
   for (const name of [
-    'facts.ts',
-    'read.ts',
-    'compact.ts',
-    'index.ts',
-    'database.ts',
-    'results.ts',
-    'gate.ts',
-    'dead.ts',
-    'repeated.ts',
-    'resolve.ts',
-    'corpus.ts',
-    'glob.ts',
+    'declarations/facts.ts',
+    'declarations/read.ts',
+    'declarations/compact.ts',
+    'declarations/index.ts',
+    'store.ts',
+    'directories.ts',
+    'git.ts',
+    'declarations/results.ts',
+    'declarations/gate.ts',
+    'declarations/dead.ts',
+    'declarations/repeated.ts',
+    'declarations/resolve.ts',
+    'declarations/corpus.ts',
+    'declarations/glob.ts',
   ])
     hash.update(readFileSync(join(import.meta.dir, name)));
   return hash.digest('hex');

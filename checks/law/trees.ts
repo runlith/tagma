@@ -6,6 +6,7 @@ import type { Facet } from '@runlith/code-facts/adapter';
 import { blobTree, type ParseMemo } from '@runlith/code-facts/blobs';
 import { UnsupportedSource } from '@runlith/code-facts/imports';
 import type { Tree } from '@runlith/code-facts/tree';
+import { directoriesAt, listedAt } from './directories';
 import { blobTexts, type Entry, entriesAt, git } from './git';
 
 export type HeldBlobs = { readonly listings: Map<string, Map<string, Entry>>; readonly texts: Map<string, string> };
@@ -40,7 +41,7 @@ export const sideTree = (
       ? []
       : prefixes.filter((one) => !prefixes.some((other) => other !== one && one.startsWith(`${other}/`)));
     const listing = `${snapshot}\0${within.join('\0')}`;
-    listed = held.listings.get(listing) ?? entriesAt(root, snapshot, within, true);
+    listed = held.listings.get(listing) ?? listedAt(root, snapshot, within, true);
     held.listings.set(listing, listed);
     complete = within.length === 0 ? [''] : within;
     for (const [path, entry] of listed) {
@@ -61,6 +62,11 @@ export const sideTree = (
   const entryAt = (path: string): Entry | undefined => {
     if (supplied.has(path)) return undefined;
     if (complete.some((prefix) => prefix === '' || path === prefix || path.startsWith(`${prefix}/`))) return listed.get(path);
+    const prepared = directoriesAt(root, snapshot);
+    if (prepared !== undefined) {
+      const found = prepared.entry(path);
+      return found?.kind === 'tree' ? undefined : found;
+    }
     const directory = posix.dirname(path);
     let entries = context.get(directory);
     if (entries === undefined) {

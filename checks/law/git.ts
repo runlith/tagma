@@ -43,9 +43,22 @@ export const present = (root: string, objects: readonly string[]): Set<string> =
 
 export type Entry = { readonly object: string; readonly mode: string; readonly kind: string };
 
-export const entriesAt = (root: string, snapshot: string, paths: readonly string[], recursive: boolean): Map<string, Entry> => {
+export const entriesAt = (
+  root: string,
+  snapshot: string,
+  paths: readonly string[],
+  recursive: boolean,
+  trees = false,
+): Map<string, Entry> => {
   const entries = new Map<string, Entry>();
-  const listing = git(root, ['ls-tree', ...(recursive ? ['-r'] : []), '-z', snapshot, '--', ...paths.map((one) => `:(literal)${one}`)]);
+  const listing = git(root, [
+    'ls-tree',
+    ...(recursive ? (trees ? ['-r', '-t'] : ['-r']) : []),
+    '-z',
+    snapshot,
+    '--',
+    ...paths.map((one) => `:(literal)${one}`),
+  ]);
   for (const row of listing.toString().split('\0')) {
     if (row === '') continue;
     const match = /^(\d+) (\S+) ([0-9a-f]+)\t(.*)$/s.exec(row);
@@ -53,6 +66,41 @@ export const entriesAt = (root: string, snapshot: string, paths: readonly string
     entries.set(match[4]!, { mode: match[1]!, kind: match[2]!, object: match[3]! });
   }
   return entries;
+};
+
+export type TreeRow = readonly [name: string, mode: string, object: string];
+
+export const treesRead = (root: string, ids: readonly string[]): Map<string, TreeRow[]> => {
+  const trees = new Map<string, TreeRow[]>();
+  const unique = [...new Set(ids)];
+  if (unique.length === 0) return trees;
+  const bytes = git(root, ['cat-file', '--batch'], `${unique.join('\n')}\n`);
+  let at = 0;
+  for (const id of unique) {
+    const end = bytes.indexOf(10, at);
+    const header = bytes.subarray(at, end).toString();
+    const match = /^([0-9a-f]+) tree (\d+)$/.exec(header);
+    if (match === null || match[1] !== id) throw new Error(`unread tree: ${header}`);
+    const size = Number(match[2]);
+    at = end + 1;
+    const body = bytes.subarray(at, at + size);
+    at += size + 1;
+    const width = id.length / 2;
+    const rows: TreeRow[] = [];
+    for (let cursor = 0; cursor < body.length;) {
+      const space = body.indexOf(32, cursor);
+      const stop = body.indexOf(0, space);
+      rows.push([
+        body.subarray(space + 1, stop).toString(),
+        body.subarray(cursor, space).toString().padStart(6, '0'),
+        body.subarray(stop + 1, stop + 1 + width).toString('hex'),
+      ]);
+      cursor = stop + 1 + width;
+    }
+    trees.set(id, rows);
+  }
+  if (at !== bytes.length) throw new Error('unexpected bytes after trees');
+  return trees;
 };
 
 export const blobTexts = (root: string, ids: readonly string[]): Map<string, string> => {

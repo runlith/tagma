@@ -4,7 +4,8 @@ import ts from 'typescript';
 import type { Side } from '@runlith/tagma/rules';
 import type { Tree } from '@runlith/code-facts/tree';
 import { sideTree, type HeldBlobs } from '../trees';
-import { blobTexts, entriesAt, mentioning } from '../git';
+import { listedAt } from '../directories';
+import { blobTexts, mentioning } from '../git';
 
 export type Module = {
   readonly id: string;
@@ -65,7 +66,7 @@ export const moduleAt = (path: string, text: string): Module | undefined => {
 
 const modulesAt = (root: string, commit: string): readonly Module[] => {
   const paths = mentioning(root, commit, '^tags:.*"module"', ['.tagma']);
-  const entries = entriesAt(root, commit, paths, false);
+  const entries = listedAt(root, commit, paths, false);
   const texts = blobTexts(
     root,
     [...entries.values()].map((entry) => entry.object),

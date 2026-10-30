@@ -1,21 +1,11 @@
+import type { TreeDifference } from '@runlith/git/trees';
 import type { Finding } from '@runlith/tagma/rules';
 import { type Corpus, isSource, movedPackages, productionOf, type Reach } from './corpus';
 import { findDead } from './dead';
 import type { DeadParams, RepeatedParams } from './declaration';
 import { ownersOf, sideEntries } from './frontier';
 import type { Facts } from './facts';
-import {
-  blobsAt,
-  type Change,
-  factsAt,
-  importersByName,
-  importersOf,
-  listing,
-  manifestsAt,
-  packagesAt,
-  prepare,
-  sharingShapes,
-} from './index';
+import { blobsAt, factsAt, importersByName, importersOf, listing, manifestsAt, packagesAt, prepare, sharingShapes } from './index';
 import { findRepeated, inRegion, judges, keyOf } from './repeated';
 
 export type Judge<P extends Reach & { readonly region: readonly string[] }> = {
@@ -25,7 +15,7 @@ export type Judge<P extends Reach & { readonly region: readonly string[] }> = {
     root: string,
     base: string,
     tree: string,
-    changes: readonly Change[],
+    changes: readonly TreeDifference[],
     standing: readonly Finding[],
     params: P,
   ) => readonly Finding[];

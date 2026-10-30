@@ -2,7 +2,8 @@ import { posix } from 'node:path';
 import { createHash } from 'node:crypto';
 import type { Alias } from '../declarations/resolve';
 import type { Side } from '@runlith/tagma/rules';
-import { blobTexts, entriesAt, present } from '../git';
+import { listedAt } from '../directories';
+import { blobTexts, present } from '../git';
 import { changesBetween, GOOD_ENOUGH, importersOf, prepare } from '../declarations/index';
 import { packageOf } from '../declarations/corpus';
 import { applyContributions, contributions, indexCoupling, type CouplingIndex } from './coupling';
@@ -23,7 +24,7 @@ export const indexes = (root: string, revision: string) => {
   const recent = new Map<string, CouplingIndex>();
   const scope = (side: Side, revision: string, paths: readonly string[]) => snapshot({ ...side, commit: revision, paths, whole: false });
   const pathsIn = (revision: string, roots: readonly string[]): string[] =>
-    roots.length === 0 ? [] : [...entriesAt(root, revision, roots, true).keys()].filter(source);
+    roots.length === 0 ? [] : [...listedAt(root, revision, roots, true).keys()].filter(source);
 
   const coupling = (side: Side, aliases: readonly Alias[]): CouplingIndex => {
     const signature = createHash('sha256').update(JSON.stringify(aliases)).digest('hex');
