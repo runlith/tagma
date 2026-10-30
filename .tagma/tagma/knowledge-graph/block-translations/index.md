@@ -47,8 +47,6 @@ edges:
     to: 01a0fd8b-beed-7934-884b-a443f92da92b
   - kind: imports
     to: 01a0fd8b-bef1-758e-b119-40b1d962023e
-  - kind: imports
-    to: 01a0fd8b-bf06-7d52-a6ca-9e8e1a45453a
 sources:
   - kind: dir
     ref: apps/tagma/server/src/translations
