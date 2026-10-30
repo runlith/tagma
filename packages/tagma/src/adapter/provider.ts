@@ -5,7 +5,55 @@ import type { ProviderDescription } from '@runlith/llm/models/description';
 import type { StoredCredential } from '@runlith/llm/oauth/credential';
 import type { SubscriptionAccounts } from '@runlith/llm/oauth/vendor';
 import type { ModelCredentials, ProductIdentity, ProviderQuota, ProviderRegistration } from '@runlith/llm/profiles/contract';
-import type { ModelSpecs } from '@runlith/llm/models/description';
+import type { ModelCapability, ModelSpecs } from '@runlith/llm/models/description';
+import type { Usage } from '@runlith/llm/schema/events';
+import type { JsonSchema } from '@runlith/llm/schema/ids';
+
+export const ASK_KINDS = ['text', 'object', 'decision'] as const;
+export type AskKind = (typeof ASK_KINDS)[number];
+
+export type AskPath = 'request' | 'program';
+
+export const PROGRAM_REFUSALS = [
+  'ask-not-connected',
+  'ask-quota',
+  'ask-input-too-large',
+  'ask-unreadable-answer',
+  'ask-provider-failed',
+] as const;
+export type ProgramRefusal = (typeof PROGRAM_REFUSALS)[number];
+
+export type ProgramAsk = {
+  readonly model: string;
+  readonly rung: string | null;
+  readonly system: string;
+  readonly schema?: JsonSchema;
+};
+
+export type ProgramOutput = { readonly stdout: string; readonly stderr: string; readonly exit: number | null };
+
+export type ProgramAnswer = (
+  | { readonly _tag: 'Text'; readonly text: string }
+  | { readonly _tag: 'Object'; readonly object: unknown }
+  | { readonly _tag: 'Refused'; readonly refusal: ProgramRefusal; readonly message: string }
+) & { readonly usage?: Usage };
+
+export type AskCommand = string | { readonly runner: string };
+
+export type AskProgram = {
+  readonly command: AskCommand;
+  readonly schemas: boolean;
+  argv(ask: ProgramAsk): readonly string[];
+  answer(output: ProgramOutput): ProgramAnswer;
+};
+
+export type ProviderAsks = { readonly program?: AskProgram };
+
+export const askKindsOf = (path: AskPath | null, capabilities: readonly ModelCapability[]): readonly AskKind[] => {
+  if (path === null) return [];
+  if (capabilities.includes('text')) return ASK_KINDS;
+  return path === 'request' && capabilities.includes('decision') ? ['decision'] : [];
+};
 
 export type CatalogModels = {
   readonly models: ModelSpecs;
@@ -86,6 +134,7 @@ type HarnessDescription = ProviderDescription & {
   readonly icon?: string;
   readonly quota?: ProviderQuota;
   readonly keyHint?: string;
+  readonly asks?: ProviderAsks;
 };
 
 export type CliHarnessProvider = HarnessDescription & {

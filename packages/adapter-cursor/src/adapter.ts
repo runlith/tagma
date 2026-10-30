@@ -3,6 +3,7 @@ import { accounts } from './accounts';
 import { catalog } from './catalog';
 import { quota } from './quota';
 import { icon } from './icon';
+import { cursorProgram } from './program';
 
 export const adapter = defineAdapter(() => [
   {
@@ -14,6 +15,7 @@ export const adapter = defineAdapter(() => [
     accounts,
     catalog,
     quota,
+    asks: { program: cursorProgram },
     dynamicCatalog: true,
     models: {},
     defaultTextModel: '',

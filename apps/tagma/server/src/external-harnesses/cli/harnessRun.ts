@@ -5,7 +5,7 @@ import { CurrentInvocation, noting } from '../../platform/cli/verb.js';
 import { runCut } from '../runner/claude-code/cut.js';
 import { runClaude } from '../runner/claude-code/run.js';
 import { EFFORTS } from '../runner/claude-code/settings.js';
-import { runCursor } from '../runner/cursor/run.js';
+import { runAsk, runCursor } from '../runner/cursor/run.js';
 import { runOpenCode } from '../runner/opencode/run.js';
 import type { ServerCli } from './server.js';
 
@@ -16,6 +16,8 @@ export const harnessRun = (server: ServerCli) =>
       harness: Argument.Literals('harness', ['claude-code', 'cursor', 'opencode'] as const),
       model: Flag.String('model').pipe(Flag.optional, Flag.withMetavar('model'), Flag.withDescription('the model the session opens on')),
       effort: Flag.String('effort').pipe(Flag.optional, Flag.withDescription('the reasoning setting the session opens at')),
+      ask: Flag.Boolean('ask').pipe(Flag.withDefault(false), Flag.withDescription('answer one tool-less prompt from stdin')),
+      system: Flag.String('system').pipe(Flag.withDefault(''), Flag.withDescription('instructions for a fresh ask')),
       untitled: Flag.Boolean('untitled').pipe(
         Flag.withDescription('keep the CLI from naming its session; Tagma names the thread'),
         Flag.withDefault(false),
@@ -25,8 +27,13 @@ export const harnessRun = (server: ServerCli) =>
         Flag.withDefault(false),
       ),
     },
-    ({ harness, model, effort, untitled, cut }) =>
+    ({ harness, model, effort, untitled, cut, ask, system }) =>
       Effect.flatMap(CurrentInvocation, (at) => {
+        if (ask) {
+          if (harness !== 'cursor' || cut) return Effect.die('--ask requires cursor and cannot be combined with --cut');
+          if (Option.isNone(model)) return Effect.die('--ask requires --model');
+          return runAsk(at, model.value, Option.getOrNull(effort), system);
+        }
         if (cut) return harness === 'claude-code' ? runCut(at) : Effect.die(`${harness} offers no offline cut`);
         const reasoning = Option.getOrNull(effort);
         if (harness === 'opencode')
