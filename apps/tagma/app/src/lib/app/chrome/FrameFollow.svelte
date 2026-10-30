@@ -20,9 +20,11 @@
     const host = seats.host;
     if (host === null || host.projectId !== projectId || projectAim()?.projectId !== projectId) return;
     const place = host.place;
-    if (place === null || place.branch === null || place.missing) return;
+    if (place === null || place.missing) return;
+    const main = place.kind === 'main';
+    if (!main && place.branch === null) return;
     const aimed = router.url.searchParams.get('branch');
-    if (aimed === place.branch || (aimed === null && place.kind === 'main')) return;
-    untrack(() => void router.replace(branchHref(router, place.kind === 'main' ? null : place.branch)));
+    if ((aimed !== null && aimed === place.branch) || (aimed === null && main)) return;
+    untrack(() => void router.replace(branchHref(router, main ? null : place.branch)));
   });
 </script>

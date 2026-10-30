@@ -28,7 +28,7 @@
   import Tabs from './Tabs.svelte';
   import ThreadRow from './ThreadRow.svelte';
 
-  let { project, draft }: { project: string; draft: string } = $props();
+  let { project, onNew }: { project: string; onNew: () => void } = $props();
 
   type Filter = Extract<ThreadState, 'working' | 'waiting' | 'failed' | 'unread'>;
 
@@ -119,9 +119,14 @@
       <span class="min-w-0 truncate text-title">{project}</span>
       <ChevronsUpDown class="size-4 shrink-0 text-muted-foreground" />
     </button>
-    <a class="grid size-11 shrink-0 place-items-center rounded-full text-foreground active:bg-hover" href={draft} aria-label="New thread">
+    <button
+      type="button"
+      class="grid size-11 shrink-0 place-items-center rounded-full text-foreground active:bg-hover"
+      aria-label="New thread"
+      onclick={onNew}
+    >
       <Plus class="size-4" />
-    </a>
+    </button>
   </div>
   <label class="flex h-10 items-center gap-2 rounded-lg bg-hover px-3 text-muted-foreground">
     <Search class="size-4 shrink-0" />

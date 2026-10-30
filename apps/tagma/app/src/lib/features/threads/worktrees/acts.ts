@@ -7,9 +7,7 @@ import { Workspace } from '$lib/features/workspace/Selection.svelte.js';
 import { ProjectFocus } from '$lib/features/workspace/Focus.svelte.js';
 import { CHAT } from '$lib/features/workspace/surface.js';
 import { type DraftPlace, MAIN_CHECKOUT } from '../Draft.svelte.js';
-import { ThreadList } from '../List.svelte.js';
-import { DraftShelf } from '../native/DraftShelf.svelte.js';
-import { unbornKey } from '../SlotSelection.svelte.js';
+import { PageDraft } from '../PageDraft.js';
 
 export function draftPlaceOf(row: WorktreePlace): DraftPlace {
   return row.kind === 'main' ? MAIN_CHECKOUT : { kind: 'worktree', rootId: row.rootId };
@@ -27,8 +25,7 @@ export function worktreeActs(): WorktreeActs {
   const router = Router.use();
   const addresses = Addresses.use();
   const terminals = Terminals.use();
-  const drafts = DraftShelf.use();
-  const list = ThreadList.use();
+  const drafts = PageDraft.use();
   const workspace = Workspace.use();
   const projectId = ProjectRung.Current.use().projectId;
   const focus = ProjectFocus.use();
@@ -38,8 +35,8 @@ export function worktreeActs(): WorktreeActs {
     if (project !== null) await router.goto(href(project.name));
   };
   const newAgentIn = (place: DraftPlace, branch: string | null): void => {
-    drafts.place(unbornKey(projectId), place, () => list.titles());
-    void go((project) => addresses.place(project, CHAT, null, branch));
+    const project = workspace.find(projectId);
+    if (project !== null) drafts.start(project, place, branch);
   };
   return {
     newAgent: (row) => newAgentIn(draftPlaceOf(row), branchOf(row)),

@@ -70,6 +70,19 @@ test('a new draft is born in the main checkout while the frame stands in a workt
   expect((await send(host, 'fix the typo on main')).worktree).toBeUndefined();
 });
 
+test('a CLI launched while a thread is open is born in the main checkout, not where that thread was placed', async () => {
+  const { host } = open();
+  host.startDraft({ kind: 'worktree', rootId: sidebar.rootId });
+  commitRoute(host);
+  await send(host, 'work in the sidebar');
+  commitRoute(host);
+
+  create.mockResolvedValueOnce({ snapshot: { thread: { id: 'cli' } } });
+  await host.birth.launch('harness:devin');
+
+  expect(create.mock.calls.at(-1)?.[0].payload.worktree).toBeUndefined();
+});
+
 test('a place the draft was given stands while another thread is opened and the draft is returned to, until its send', async () => {
   const { host, port } = open();
   host.startDraft();

@@ -5,8 +5,8 @@ import { SidePanes } from '$lib/app/panes/SidePanes.svelte.js';
 import type { ActionsModule } from '$lib/features/workspace/action.js';
 import { AgentTypes } from '$lib/features/threads/AgentTypes.svelte.js';
 import { AgentLibraryOverlay } from '$lib/features/threads/overlay.js';
-import { Addresses } from '$lib/features/workspace/Addresses.js';
 import LibraryIcon from './LibraryIcon.svelte';
+import { PageDraft } from './PageDraft.js';
 import { THREAD_PANE } from './seats/pane.js';
 
 export const actions: ActionsModule['actions'] = [
@@ -18,7 +18,7 @@ export const actions: ActionsModule['actions'] = [
     icon: Plus,
     available: (env) => env.project !== null,
     run: (env) => {
-      if (env.project !== null) env.goto(env.resolve(Addresses).thread(null, env.project.name));
+      if (env.project !== null) env.resolve(PageDraft).start(env.project);
     },
   },
   {

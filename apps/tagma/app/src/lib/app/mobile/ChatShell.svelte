@@ -49,6 +49,6 @@
 {#if sessionId !== null || drafting}
   <Thread {host} {project} />
 {:else}
-  <Threads {project} draft={draftHref} />
+  <Threads {project} onNew={() => host.startDraft()} />
 {/if}
 {@render children()}

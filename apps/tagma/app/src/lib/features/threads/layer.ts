@@ -6,6 +6,7 @@ import { ArchivedThreadsOpen } from './ArchivedThreadsOpen.svelte.js';
 import { CallActivity } from './CallActivity.svelte.js';
 import { ContextPanelState } from './native/PanelState.svelte.js';
 import { DraftShelf } from './native/DraftShelf.svelte.js';
+import { PageDraft } from './PageDraft.js';
 import { ThreadChats } from './ThreadChats.js';
 import { Asking } from './Asking.js';
 import { ThreadPreferences } from './native/preferences.js';
@@ -65,6 +66,7 @@ export const HarnessLayer = Layer.mergeAll(
   ThreadContext,
   CallActivity,
   DraftShelf,
+  PageDraft,
   ThreadList,
   FolderActs,
   ThreadPresence,

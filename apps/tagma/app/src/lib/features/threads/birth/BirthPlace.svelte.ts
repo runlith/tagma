@@ -1,6 +1,6 @@
 import type { WorktreePlace } from '@tagma/server/worktrees/contract/wire/rows';
 import type { ThreadStanding, Worktrees } from '$lib/features/worktrees/BoardState.svelte.js';
-import type { DraftPlace, ThreadDraft } from '../Draft.svelte.js';
+import { type DraftPlace, MAIN_CHECKOUT, type ThreadDraft } from '../Draft.svelte.js';
 import type { SlotSelection } from '../SlotSelection.svelte.js';
 
 export type PlaceStanding = ThreadStanding | { readonly kind: 'new'; readonly base: string | null };
@@ -21,17 +21,17 @@ export class BirthPlace {
   ) {}
 
   get chosen(): DraftPlace {
-    return this.draft.place;
+    return this.selection.activeId === null ? this.draft.place : MAIN_CHECKOUT;
   }
 
   readonly row = $derived.by<WorktreePlace | null>(() => {
-    const chosen = this.draft.place;
+    const chosen = this.chosen;
     if (chosen.kind === 'main') return this.places.main;
     return chosen.kind === 'worktree' ? this.places.byRoot(chosen.rootId) : null;
   });
 
   readonly standing = $derived.by<PlaceStanding | null>(() => {
-    const chosen = this.draft.place;
+    const chosen = this.chosen;
     if (chosen.kind === 'new') return chosen;
     if (!this.places.known) return null;
     const row = this.row;
