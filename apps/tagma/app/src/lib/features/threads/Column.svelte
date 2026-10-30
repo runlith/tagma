@@ -88,97 +88,99 @@
   onCollapse={() => onCollapse?.()}
   class="@container min-h-0 overflow-hidden"
 >
-  <div class="flex min-h-0 flex-1 flex-col gap-1 py-1.5" {@attach squeeze.column}>
-    <ColumnHead
-      {host}
-      bind:filter={col.filter}
-      bind:input={col.filterInput}
-      view={col.agentsView}
-      several={col.tile.several}
-      filtering={col.filtering}
-      anyOpen={col.anyThreadOpen}
-      foldable={col.foldable}
-      onFilterKeys={(event) => col.filterKeys(event, find)}
-      onView={(next) => marks.agentsView.set(col.markKey, next)}
-      onCollapse={() => folds.closeAll(col.foldTrees, col.folderIds)}
-      onExpand={() => folds.openBack()}
-      onNewFolder={() => void shelving.shelve([], 'New folder')}
-    />
+  <div class="flex min-h-0 flex-1 flex-col" {@attach squeeze.column}>
+    <div class="flex min-h-0 flex-1 flex-col gap-1 py-1.5">
+      <ColumnHead
+        {host}
+        bind:filter={col.filter}
+        bind:input={col.filterInput}
+        view={col.agentsView}
+        several={col.tile.several}
+        filtering={col.filtering}
+        anyOpen={col.anyThreadOpen}
+        foldable={col.foldable}
+        onFilterKeys={(event) => col.filterKeys(event, find)}
+        onView={(next) => marks.agentsView.set(col.markKey, next)}
+        onCollapse={() => folds.closeAll(col.foldTrees, col.folderIds)}
+        onExpand={() => folds.openBack()}
+        onNewFolder={() => void shelving.shelve([], 'New folder')}
+      />
 
-    <!-- svelte-ignore a11y_no_static_element_interactions -->
-    <div
-      bind:this={col.listEl}
-      class="relative min-h-0 flex-1 overflow-y-auto px-1.5"
-      data-drop="loose"
-      onkeydown={(event) => col.listKeys(event)}
-      onfocusin={(event) => (col.focusKey = (event.target as HTMLElement).closest<HTMLElement>('[data-line]')?.dataset.line ?? null)}
-      onfocusout={() => (col.focusKey = null)}
-      onclickcapture={(event) => shelving.select(event)}
-      {@attach win.column}
-    >
-      <div class="flow-root">
-        {#if list.refused !== null}
-          <ListRefused reason={list.refused} onRetry={() => list.retry()} />
-        {/if}
-        {#if list.roots === null}
-          {#if list.refused === null}<ListReading />{/if}
-        {:else if list.tree.length === 0 && col.tile.creations.length === 0 && list.folders.length === 0}
-          <p class="px-2 py-1 text-ui text-muted-foreground">Nothing yet. Ask the agent about this project.</p>
-        {:else if col.filtering && col.shown.length === 0}
-          <p class="px-2 py-1 text-small text-muted-foreground">Nothing in the loaded rows.</p>
-        {/if}
-        {#if col.grouping === null}
-          {#each col.tile.creations as { projectId, creation } (creation.id)}
-            {@render creating(projectId, creation)}
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
+      <div
+        bind:this={col.listEl}
+        class="relative min-h-0 flex-1 overflow-y-auto px-1.5"
+        data-drop="loose"
+        onkeydown={(event) => col.listKeys(event)}
+        onfocusin={(event) => (col.focusKey = (event.target as HTMLElement).closest<HTMLElement>('[data-line]')?.dataset.line ?? null)}
+        onfocusout={() => (col.focusKey = null)}
+        onclickcapture={(event) => shelving.select(event)}
+        {@attach win.column}
+      >
+        <div class="flow-root">
+          {#if list.refused !== null}
+            <ListRefused reason={list.refused} onRetry={() => list.retry()} />
+          {/if}
+          {#if list.roots === null}
+            {#if list.refused === null}<ListReading />{/if}
+          {:else if list.tree.length === 0 && col.tile.creations.length === 0 && list.folders.length === 0}
+            <p class="px-2 py-1 text-ui text-muted-foreground">Nothing yet. Ask the agent about this project.</p>
+          {:else if col.filtering && col.shown.length === 0}
+            <p class="px-2 py-1 text-small text-muted-foreground">Nothing in the loaded rows.</p>
+          {/if}
+          {#if col.grouping === null}
+            {#each col.tile.creations as { projectId, creation } (creation.id)}
+              {@render creating(projectId, creation)}
+            {/each}
+          {/if}
+        </div>
+        <div class="relative" {@attach win.span}>
+          {#each col.placed as { line } (line.key)}
+            <div
+              class={[
+                'absolute inset-x-0 flow-root rounded-md',
+                col.lineTint(line) && 'bg-status-open/5',
+                col.lineLifted(line) && 'opacity-40',
+              ]}
+              data-line={line.key}
+              data-drop={col.lineDrop(line)}
+              data-team={col.lineTeam(line)}
+              {@attach win.measure(line.key)}
+            >
+              {@render drawLine(line, false)}
+            </div>
           {/each}
+        </div>
+        <Conversations query={col.filter} projectId={host.projectId} />
+        {#if drag.line !== null}
+          <span
+            class="pointer-events-none absolute right-3.5 h-0.5 rounded-full bg-status-open"
+            style:top="{drag.line.top - 1}px"
+            style:left="{drag.line.left}px"
+            aria-hidden="true"
+          ></span>
         {/if}
-      </div>
-      <div class="relative" {@attach win.span}>
-        {#each col.placed as { line } (line.key)}
-          <div
-            class={[
-              'absolute inset-x-0 flow-root rounded-md',
-              col.lineTint(line) && 'bg-status-open/5',
-              col.lineLifted(line) && 'opacity-40',
-            ]}
-            data-line={line.key}
-            data-drop={col.lineDrop(line)}
-            data-team={col.lineTeam(line)}
-            {@attach win.measure(line.key)}
+        {#if list.more > 0}
+          <button
+            type="button"
+            class="mt-1 w-full rounded-md px-2 py-1 text-left text-small text-muted-foreground hover:bg-hover hover:text-foreground"
+            onclick={() => void list.readMore()}
           >
-            {@render drawLine(line, false)}
-          </div>
+            {list.more} more
+          </button>
+        {/if}
+        {#each col.tile.members as { projectId } (projectId)}
+          <HomeHold {projectId}><WorktreeDepartedGroup /></HomeHold>
         {/each}
       </div>
-      <Conversations query={col.filter} projectId={host.projectId} />
-      {#if drag.line !== null}
-        <span
-          class="pointer-events-none absolute right-3.5 h-0.5 rounded-full bg-status-open"
-          style:top="{drag.line.top - 1}px"
-          style:left="{drag.line.left}px"
-          aria-hidden="true"
-        ></span>
-      {/if}
-      {#if list.more > 0}
-        <button
-          type="button"
-          class="mt-1 w-full rounded-md px-2 py-1 text-left text-small text-muted-foreground hover:bg-hover hover:text-foreground"
-          onclick={() => void list.readMore()}
-        >
-          {list.more} more
-        </button>
-      {/if}
-      {#each col.tile.members as { projectId } (projectId)}
-        <HomeHold {projectId}><WorktreeDepartedGroup /></HomeHold>
-      {/each}
     </div>
-  </div>
 
-  <ShelfLayer {shelving} part="bar" />
-  <ArchivedFoot lines={col.archivedLines} {drag} draw={archivedLine} />
-  {#each col.tile.others as projectId (projectId)}
-    <PlacesHold {projectId} tile={col.tile} />
-  {/each}
+    <ShelfLayer {shelving} part="bar" />
+    <ArchivedFoot lines={col.archivedLines} {drag} draw={archivedLine} />
+    {#each col.tile.others as projectId (projectId)}
+      <PlacesHold {projectId} tile={col.tile} />
+    {/each}
+  </div>
 </SectionColumn>
 
 <ShelfLayer {shelving} part="floating" />
