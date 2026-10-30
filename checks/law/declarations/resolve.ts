@@ -19,6 +19,26 @@ const joined = (dir: string, relative: string): string => posix.normalize(dir ==
 
 export type Paths = { readonly has: (path: string) => boolean } & Iterable<string>;
 
+export const ANY: Paths = { has: () => true, [Symbol.iterator]: () => [][Symbol.iterator]() };
+
+const GLOBBED = /[*{?]/;
+
+const absoluteOf = (value: string, from: string): string =>
+  value.startsWith('.') ? joined(posix.dirname(from) === '.' ? '' : posix.dirname(from), value) : value.replace(/^\//, '');
+
+const staticDir = (absolute: string): string | undefined => {
+  if (!GLOBBED.test(absolute)) return undefined;
+  const kept: string[] = [];
+  for (const part of absolute.split('/')) {
+    if (GLOBBED.test(part)) break;
+    kept.push(part);
+  }
+  return kept.join('/');
+};
+
+export const patternDir = (value: string, from: string): string | undefined =>
+  value.startsWith('!') ? undefined : staticDir(absoluteOf(value, from));
+
 export const resolverOf = (paths: Paths, packages: readonly Package[], aliases: readonly Alias[]): Resolver => {
   const named = new Map(packages.map((one) => [one.name, one]));
   const probe = (base: string): string | undefined => {
@@ -87,10 +107,8 @@ export const resolverOf = (paths: Paths, packages: readonly Package[], aliases: 
   };
   const pattern = (value: string, from: string): readonly string[] => {
     if (value.startsWith('!')) return [];
-    const absolute = value.startsWith('.')
-      ? joined(posix.dirname(from) === '.' ? '' : posix.dirname(from), value)
-      : value.replace(/^\//, '');
-    if (!absolute.includes('*') && !absolute.includes('{') && !absolute.includes('?')) return resolve(value, from);
+    const absolute = absoluteOf(value, from);
+    if (!GLOBBED.test(absolute)) return resolve(value, from);
     const regex = globRegex(absolute);
     return [...paths].filter((path) => regex.test(path));
   };

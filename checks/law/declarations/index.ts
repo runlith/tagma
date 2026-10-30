@@ -177,9 +177,9 @@ const mark = (root: string, tree: string): void => {
 
 const NEARBY = 6;
 
-const GOOD_ENOUGH = 50;
+export const GOOD_ENOUGH = 50;
 
-const FAR = 5000;
+export const FAR = 5000;
 
 const ensure = (root: string, tree: string, hint: string | null, populate: boolean): void => {
   if (isIndexed(root, tree)) return;
@@ -356,6 +356,19 @@ export const importersOf = (
         (row.spec === '' || resolver.resolve(row.spec, row.path).length > 0)
       )
         rows.set(`${row.path}\0${row.blob}`, { path: row.path, blob: row.blob });
+  return standing(root, commit, [...rows.values()]);
+};
+
+export const importersByName = (root: string, commit: string, names: readonly string[], accepts: (path: string) => boolean): Blobbed[] => {
+  const database = databaseAt(root);
+  const rows = new Map<string, Blobbed>();
+  for (const name of names)
+    for (const row of database
+      .query<Blobbed, [string, number, string]>(
+        'SELECT DISTINCT p.path AS path, p.blob AS blob FROM links l JOIN places p ON p.blob = l.blob WHERE l.spec = ?1 OR substr(l.spec, 1, ?2) = ?3',
+      )
+      .all(name, name.length + 1, `${name}/`))
+      if (accepts(row.path)) rows.set(`${row.path}\0${row.blob}`, row);
   return standing(root, commit, [...rows.values()]);
 };
 

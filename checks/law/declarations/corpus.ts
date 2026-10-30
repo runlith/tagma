@@ -41,6 +41,26 @@ export const leavesOf = (value: unknown): readonly string[] => {
   return into;
 };
 
+const signature = (pkg: Package): string => JSON.stringify([pkg.name, pkg.exports, pkg.entries]);
+
+export const movedPackages = (
+  before: readonly Package[],
+  after: readonly Package[],
+): { readonly before: readonly Package[]; readonly after: readonly Package[] } => {
+  const was = new Map(before.map((one) => [one.dir, one]));
+  const is = new Map(after.map((one) => [one.dir, one]));
+  return {
+    before: before.filter((one) => {
+      const other = is.get(one.dir);
+      return other === undefined || signature(other) !== signature(one);
+    }),
+    after: after.filter((one) => {
+      const other = was.get(one.dir);
+      return other === undefined || signature(other) !== signature(one);
+    }),
+  };
+};
+
 export const packageOf = (path: string, text: string): Package | undefined => {
   const parsed: unknown = JSON.parse(text);
   if (parsed === null || typeof parsed !== 'object') return undefined;

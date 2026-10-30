@@ -157,6 +157,27 @@ test('a referenced type counts by the declaration it names, not by its spelling'
   ]);
 });
 
+test('a type reached through a package public path and through a relative path is one declaration, resolved by the package exports', () => {
+  const page = (row: string) => `${row}\nexport type Page = { readonly items: number; readonly value: Row; readonly next: string };\n`;
+  const manifest = (exported: Record<string, unknown>) => JSON.stringify({ name: '@acme/shared', exports: exported });
+  const reach = { region: ['packages/'] };
+  const sources = (exported: Record<string, unknown>) => ({
+    'packages/shared/package.json': manifest(exported),
+    'packages/shared/src/page.ts': page("import type { Row } from './row';"),
+    'packages/app/src/page.ts': page("import type { Row } from '@acme/shared/row';"),
+    'packages/app/src/other.ts': page("import type { Row } from '@acme/missing/row';"),
+  });
+  expect(judge(sources({ './row': './src/row.ts' }), reach)).toEqual([
+    ['packages/app/src/page.ts', 2, 'object'],
+    ['packages/shared/src/page.ts', 2, 'object'],
+  ]);
+  expect(judge(sources({ './row': './src/elsewhere.ts' }), reach)).toEqual([]);
+  expect(judge(sources({ './row': { types: './dist/row.d.ts', default: './src/row.ts' } }), reach)).toEqual([
+    ['packages/app/src/page.ts', 2, 'object'],
+    ['packages/shared/src/page.ts', 2, 'object'],
+  ]);
+});
+
 test('a fingerprint names the shape and the file, not the line, so an edit above a declaration keeps its debt', () => {
   const declared = 'export type Wide = { readonly a: string; readonly b: string; readonly c: number };\n';
   const prints = (a: string) =>

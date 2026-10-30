@@ -1,10 +1,9 @@
 import { createHash } from 'node:crypto';
-import { posix } from 'node:path';
 import type { Finding } from '@runlith/tagma/rules';
 import type { Corpus } from './corpus';
 import type { RepeatedParams } from './declaration';
 import type { Shape, ShapeKind } from './facts';
-import type { Alias } from './resolve';
+import { ANY, type Resolver, resolverOf } from './resolve';
 
 type Site = { readonly path: string; readonly shape: Shape; readonly group: string };
 
@@ -12,22 +11,24 @@ const REFERENCE = /\u0001([^\u0002]*)\u0002/g;
 
 const normal = (path: string): string => path.replace(/\.[cm]?[jt]sx?$|\.svelte$/, '').replace(/\/index$/, '');
 
-const specifierAt = (specifier: string, path: string, aliases: readonly Alias[]): string => {
-  if (specifier.startsWith('.')) return normal(posix.normalize(posix.join(posix.dirname(path), specifier)));
-  const alias = aliases.find((one) => specifier.startsWith(one.prefix));
-  return alias === undefined ? specifier : normal(posix.normalize(posix.join(alias.dir, specifier.slice(alias.prefix.length))));
+const DECLARATION = /\.d\.[cm]?ts$/;
+
+const specifierAt = (specifier: string, path: string, resolver: Resolver): string => {
+  const targets = resolver.resolve(specifier, path);
+  const target = targets.find((one) => !DECLARATION.test(one)) ?? targets[0];
+  return target === undefined ? specifier : normal(target);
 };
 
-const identityOf = (token: string, path: string, aliases: readonly Alias[]): string => {
+const identityOf = (token: string, path: string, resolver: Resolver): string => {
   if (token.startsWith('l:')) return `${path}#${token.slice(2)}`;
   const [specifier, tail] = token.slice(2).split('\u0003');
-  return `${specifierAt(specifier!, path, aliases)}#${tail}`;
+  return `${specifierAt(specifier!, path, resolver)}#${tail}`;
 };
 
-const groupOf = (shape: Shape, path: string, aliases: readonly Alias[]): string => {
+const groupOf = (shape: Shape, path: string, resolver: Resolver): string => {
   const coarse = `${shape.kind}:${shape.key}`;
   if (shape.text === undefined) return `${coarse}:`;
-  const fine = shape.text.replace(REFERENCE, (_, token: string) => `<${identityOf(token, path, aliases)}>`);
+  const fine = shape.text.replace(REFERENCE, (_, token: string) => `<${identityOf(token, path, resolver)}>`);
   return `${coarse}:${createHash('sha1').update(fine).digest('hex').slice(0, 12)}`;
 };
 
@@ -61,11 +62,12 @@ export const inRegion = (path: string, params: RepeatedParams): boolean =>
 
 export const findRepeated = (corpus: Corpus, params: RepeatedParams): readonly Finding[] => {
   const groups = new Map<string, Site[]>();
+  const resolver = resolverOf(ANY, corpus.packages, params.aliases);
   for (const [path, file] of corpus.facts) {
     if (!inRegion(path, params)) continue;
     for (const shape of file.shapes) {
       if (!judges(shape, params)) continue;
-      const group = groupOf(shape, path, params.aliases);
+      const group = groupOf(shape, path, resolver);
       const held = groups.get(group);
       if (held === undefined) groups.set(group, [{ path, shape, group }]);
       else held.push({ path, shape, group });

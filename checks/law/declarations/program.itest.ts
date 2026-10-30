@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import type { Side } from '@runlith/tagma/rules';
 import type { DeadParams, RepeatedParams } from './declaration';
+import { prepare } from './index';
 import { revisionAt, saveRevision } from './memo';
 import { programs } from './program';
 
@@ -55,11 +56,18 @@ const side = (commit: string, paths: readonly string[] | null): Side => ({
 const fingerprints = (answer: { readonly findings: readonly { readonly fingerprint: string }[] } | undefined) =>
   answer?.findings.map((one) => one.fingerprint).sort();
 
-const judged = async (key: 'dead-code' | 'repeated-declarations', base: string, tree: string, paths: readonly string[]) => {
+const wide: DeadParams = { ...dead, region: ['src/', 'pkgs/'] };
+
+const judged = async (
+  key: 'dead-code' | 'repeated-declarations',
+  base: string,
+  tree: string,
+  paths: readonly string[],
+  params: DeadParams | RepeatedParams = key === 'dead-code' ? dead : repeated,
+) => {
   const run = programs(root)[key] as unknown as (
     input: unknown,
   ) => Promise<{ tree: { findings: { fingerprint: string }[]; covered?: string }; base?: { findings: { fingerprint: string }[] } }>;
-  const params = key === 'dead-code' ? dead : repeated;
   const commit = await run({ params, tree: side(tree, paths), base: side(base, paths) });
   const whole = await run({ params, tree: side(tree, null), base: side(base, null) });
   return { commit, whole };
@@ -72,8 +80,8 @@ const initial = {
   'src/lib.test.ts': "import { helper } from './lib';\nhelper();\n",
 };
 
-const index = async (tree: string) => {
-  await programs(root)['dead-code']({ params: dead, tree: side(tree, null), base: null });
+const index = async (tree: string, deadParams: DeadParams = dead) => {
+  await programs(root)['dead-code']({ params: deadParams, tree: side(tree, null), base: null });
   await programs(root)['repeated-declarations']({ params: repeated, tree: side(tree, null), base: null });
 };
 
@@ -158,6 +166,86 @@ test('a base nobody judged before is derived from the nearest indexed tree; with
   const { commit, whole } = await judged('dead-code', skipped, tree, ['src/lib.ts']);
   expect(fingerprints(commit.tree)).toEqual(fingerprints(whole.tree));
   expect(fingerprints(commit.tree)).toContain('dead src/lib.ts#more');
+});
+
+test('an indexed base with no cached findings and no cached tree nearby is never computed whole at commit time', async () => {
+  const base = treeWith(initial);
+  prepare(root, base, null);
+  const tree = treeWith({ 'src/lib.ts': 'export const used = () => 1;\nexport const helper = () => 2;\nexport const more = () => 3;\n' });
+  await expect(
+    programs(root)['dead-code']({ params: dead, tree: side(tree, ['src/lib.ts']), base: side(base, ['src/lib.ts']) }),
+  ).rejects.toThrow('no cached dead-code findings');
+});
+
+const packaged = (exported: Record<string, string>) => ({
+  'src/entry.ts': "import { x } from '@acme/a/x';\nimport { y } from '@acme/a/y';\nexport const run = () => [x, y];\n",
+  'pkgs/a/package.json': JSON.stringify({ name: '@acme/a', exports: exported }),
+  'pkgs/a/src/x.ts': 'export const x = 1;\n',
+  'pkgs/a/src/y.ts': 'export const y = 2;\n',
+});
+
+test('a package manifest that stops exporting a file makes its unchanged exports dead, as the remeasure finds', async () => {
+  const base = treeWith(packaged({ './x': './src/x.ts', './y': './src/y.ts' }));
+  await index(base, wide);
+  const tree = treeWith({ 'pkgs/a/package.json': JSON.stringify({ name: '@acme/a', exports: { './x': './src/x.ts' } }) });
+  const { commit, whole } = await judged('dead-code', base, tree, ['pkgs/a/package.json'], wide);
+  expect(commit.tree.covered).toBe('reach');
+  expect(fingerprints(commit.tree)).toEqual(['dead pkgs/a/src/y.ts#y']);
+  expect(fingerprints(commit.tree)).toEqual(fingerprints(whole.tree));
+  expect(fingerprints(commit.base)).toEqual([]);
+});
+
+test('a manifest edit that keeps name, exports and entries moves nothing', async () => {
+  const base = treeWith(packaged({ './x': './src/x.ts', './y': './src/y.ts' }));
+  await index(base, wide);
+  const tree = treeWith({
+    'pkgs/a/package.json': JSON.stringify({ name: '@acme/a', exports: { './x': './src/x.ts', './y': './src/y.ts' }, version: '2.0.0' }),
+  });
+  const { commit, whole } = await judged('dead-code', base, tree, ['pkgs/a/package.json'], wide);
+  expect(fingerprints(commit.tree)).toEqual([]);
+  expect(fingerprints(commit.tree)).toEqual(fingerprints(whole.tree));
+});
+
+test('a manifest that points a package path elsewhere splits two equal types in unchanged files, as the remeasure finds', async () => {
+  const page = (row: string) => `${row}\nexport type Page = { readonly items: number; readonly value: Row; readonly next: string };\n`;
+  const files = (target: string) => ({
+    'pkgs/shared/package.json': JSON.stringify({ name: '@acme/shared', exports: { './row': target } }),
+    'pkgs/shared/src/page.ts': page("import type { Row } from './row';"),
+    'pkgs/app/src/page.ts': page("import type { Row } from '@acme/shared/row';"),
+  });
+  const reach: RepeatedParams = { ...repeated, region: ['pkgs/'] };
+  const base = treeWith(files('./src/row.ts'));
+  await programs(root)['repeated-declarations']({ params: reach, tree: side(base, null), base: null });
+  const tree = treeWith(files('./src/elsewhere.ts'));
+  const { commit, whole } = await judged('repeated-declarations', base, tree, ['pkgs/shared/package.json'], reach);
+  expect(fingerprints(commit.base)?.length).toBe(2);
+  expect(fingerprints(commit.tree)).toEqual([]);
+  expect(fingerprints(commit.tree)).toEqual(fingerprints(whole.tree));
+});
+
+test('a glob load that starts matching an unchanged file keeps its exports live, as the remeasure finds', async () => {
+  const files = (pattern: string) => ({
+    'src/entry.ts': "import { modules } from './loader';\nexport const run = () => modules;\n",
+    'src/loader.ts': `export const modules = import.meta.glob('${pattern}');\n`,
+    'src/plugins/a.ts': 'export const a = 1;\n',
+    'src/plugins/b.ts': 'export const b = 2;\n',
+  });
+  const base = treeWith(files('./plugins/a*.ts'));
+  await index(base);
+  const tree = treeWith(files('./plugins/*.ts'));
+  const { commit, whole } = await judged('dead-code', base, tree, ['src/loader.ts']);
+  expect(fingerprints(commit.base)).toEqual(['dead src/plugins/b.ts#b']);
+  expect(fingerprints(commit.tree)).toEqual([]);
+  expect(fingerprints(commit.tree)).toEqual(fingerprints(whole.tree));
+});
+
+test('a glob load that spans the repository root cannot be judged on a commit and names the remeasure', async () => {
+  const base = treeWith({ ...initial, 'src/loader.ts': "export const modules = import.meta.glob('./plugins/*.ts');\n" });
+  await index(base);
+  const tree = treeWith({ 'src/loader.ts': "export const modules = import.meta.glob('/**/*.ts');\n" });
+  await expect(
+    programs(root)['dead-code']({ params: dead, tree: side(tree, ['src/loader.ts']), base: side(base, ['src/loader.ts']) }),
+  ).rejects.toThrow('check_rules over "all"');
 });
 
 test('a change outside every production file costs nothing and finds nothing', async () => {

@@ -12,6 +12,12 @@ export const resultAt = (root: string, family: string, tree: string): readonly F
   return row === null ? undefined : (JSON.parse(row.value) as readonly Finding[]);
 };
 
+export const resultTrees = (root: string, family: string): readonly string[] =>
+  databaseAt(root)
+    .query<{ key: string }, [string]>('SELECT key FROM results WHERE family = ? ORDER BY at DESC')
+    .all(family)
+    .map((row) => row.key.slice(family.length + 1));
+
 export const carryResult = (root: string, family: string, from: string, to: string): void => {
   const database = databaseAt(root);
   database
