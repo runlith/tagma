@@ -127,14 +127,13 @@ describe('ACP adapter boundaries over one execution host', () => {
         const { openThread, floor } = yield* ProtocolRig;
         const report = yield* agent('session-aside');
         const threadId = 'thread-protocol-session-aside';
-        const until = waiting(threadId);
         yield* openThread(threadId, CLAUDE);
         yield* scenario(
           Effect.gen(function* () {
             const raised = yield* floor([]);
             const driver = yield* raised.driver('owner-session-aside');
             yield* driver.send(threadId, 'WARM HOLD the turn');
-            const copy = yield* until(
+            const copy = yield* readUntil(
               Effect.sync(() => raised.held.of(threadId) ?? null),
               'held the measured session copy',
               report,
@@ -143,7 +142,7 @@ describe('ACP adapter boundaries over one execution host', () => {
             expect((yield* raised.held.ask(threadId, copy, { instruction: 'the held prefix' })).text).toBe('aside: the held prefix');
             expect(yield* driver.current(threadId)).toBe(copy.runId);
             yield* driver.stop(threadId);
-            yield* until(
+            yield* readUntil(
               Effect.sync(() => (raised.held.of(threadId) === undefined ? true : null)),
               'released the exited session copy',
               report,

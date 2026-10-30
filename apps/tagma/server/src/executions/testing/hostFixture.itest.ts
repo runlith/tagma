@@ -7,7 +7,28 @@ import { startHostFixture } from './hostFixture.js';
 
 class PreparationRefused extends Data.TaggedError('PreparationRefused') {}
 
+const stdinHost = (state: string, released: string) => [
+  process.execPath,
+  '-e',
+  `process.stdout.write(${JSON.stringify(join(state, 'host.sock'))});for await(const _ of Bun.stdin.stream()){};await Bun.write(${JSON.stringify(released)},'EOF');`,
+];
+
 layer(BunFileSystem.layer, { excludeTestServices: true })('scoped host fixture', (it) => {
+  it.effect('the host outlives the SIGTERM a timed-out test sends every tracked child, and vacates when its scope closes', () =>
+    Effect.gen(function* () {
+      const files = yield* FileSystem.FileSystem;
+      const state = yield* files.makeTempDirectoryScoped({ prefix: 'host-outlives-' });
+      const released = join(state, 'released');
+      const host = yield* Effect.scoped(
+        Effect.tap(startHostFixture({ state, command: stdinHost(state, released) }), (child) =>
+          Effect.sync(() => process.kill(child.pid, 'SIGTERM')),
+        ),
+      );
+      expect(yield* files.readFileString(released)).toBe('EOF');
+      expect(host.exitCode).toBe(0);
+    }),
+  );
+
   it.effect('an exit before registration carries its stderr after both output streams close', () =>
     Effect.gen(function* () {
       const files = yield* FileSystem.FileSystem;
@@ -41,11 +62,7 @@ layer(BunFileSystem.layer, { excludeTestServices: true })('scoped host fixture',
           Effect.gen(function* () {
             child = yield* startHostFixture({
               state,
-              command: [
-                process.execPath,
-                '-e',
-                `process.stdout.write(${JSON.stringify(join(state, 'host.sock'))});for await(const _ of Bun.stdin.stream()){};await Bun.write(${JSON.stringify(released)},'EOF');`,
-              ],
+              command: stdinHost(state, released),
             });
             return yield* new PreparationRefused();
           }),

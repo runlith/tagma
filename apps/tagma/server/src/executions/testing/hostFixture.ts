@@ -13,6 +13,7 @@ export const BUNDLE_ENGINE = 'bun';
 export const BUNDLE_ENTRY = 'host/host.js';
 export const BUNDLE_LIBRARY = 'native/libexecution_platform.dylib';
 export const BUNDLE_HOLDER = 'native/execution-holder';
+const TERM_IGNORED = 'trap "" TERM; exec 3<&0; (trap - TERM; exec "$@") <&3 3<&- & exec 3<&-; wait $!';
 
 export const hostCommand = (bundle: string, state: string): Array<string> => [
   join(bundle, BUNDLE_HOLDER),
@@ -52,7 +53,14 @@ export const startHostFixture = Effect.fn('HostFixture.start')(function* ({
 }) {
   const child = yield* Effect.acquireRelease(
     Effect.try({
-      try: () => Bun.spawn([...command], { cwd: state, stdin: 'pipe', stdout: 'pipe', stderr: 'pipe' }),
+      try: () =>
+        Bun.spawn(['/bin/sh', '-c', TERM_IGNORED, 'sh', ...command], {
+          cwd: state,
+          stdin: 'pipe',
+          stdout: 'pipe',
+          stderr: 'pipe',
+          detached: true,
+        }),
       catch: (cause) => new SpawnRefused({ command, cause }),
     }),
     (child) =>
