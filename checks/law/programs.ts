@@ -41,6 +41,7 @@ const supplied = async (name: Named, side: Side): Promise<ProgramSide> => {
 const checked =
   (id: string) =>
   async (input: InspectionInput<object>): Promise<Answer> => {
+    await (engine ??= prepared());
     const check = await checkOf(id, input.params);
     const reading = async (name: Named, side: Side): Promise<Reading> => {
       const reach = new Set(side.paths);
@@ -84,7 +85,7 @@ const prepared = async (): Promise<void> => {
 const stored =
   (id: 'migrations' | 'step-places') =>
   async (input: InspectionInput<object>): Promise<Answer> => {
-    if (id === 'migrations') await (engine ??= prepared());
+    await (engine ??= prepared());
     const judge = storedJudge(root, input.tree.commit, input.base?.commit ?? null);
     const readings = await judge.judge({ key: id, id, params: input.params });
     judge.save();
@@ -98,6 +99,7 @@ const stored =
 const lazily =
   <Params extends object>(load: () => Promise<{ readonly default: { readonly [key: string]: Program<never> } }>, key: string) =>
   async (input: InspectionInput<Params>): Promise<Answer> => {
+    await (engine ??= prepared());
     const handler = (await load()).default[key] as Program<Params> | undefined;
     if (handler === undefined) throw new Error(`the law programs hold no handler for ${key}`);
     return handler(input);
