@@ -164,16 +164,16 @@ const grouped = (listing: ReadonlyMap<string, Entry>): Map<string, Row[]> => {
 
 const record = (root: string, revision: string, tree: string, fresh: ReadonlyMap<string, readonly Row[]>): void => {
   const database = databaseAt(root);
-  const children = new Set<string>();
-  for (const rows of fresh.values()) for (const [, mode, object] of rows) if (mode === TREE) children.add(object);
-  const absent = [...children].filter((id) => !fresh.has(id));
-  const present = presentNodes(database, absent);
-  const lacking = absent.find((id) => !present.has(id));
-  if (lacking !== undefined) throw missing(`no directory ${lacking} below ${tree} of ${revision}`);
   const insertNode = database.query('INSERT OR IGNORE INTO nodes (tree, entries) VALUES (?, ?)');
   const insertRoot = database.query('INSERT OR REPLACE INTO roots (revision, tree, at) VALUES (?, ?, ?)');
   database
     .transaction(() => {
+      const needed = new Set([tree]);
+      for (const rows of fresh.values()) for (const [, mode, object] of rows) if (mode === TREE) needed.add(object);
+      const absent = [...needed].filter((id) => !fresh.has(id));
+      const found = presentNodes(database, absent);
+      const lacking = absent.find((id) => !found.has(id));
+      if (lacking !== undefined) throw missing(`no directory ${lacking} below ${tree} of ${revision}`);
       for (const [id, rows] of fresh) insertNode.run(id, JSON.stringify(rows));
       insertRoot.run(revision, tree, Date.now());
       database.query('DELETE FROM roots WHERE revision IN (SELECT revision FROM roots ORDER BY at DESC LIMIT -1 OFFSET ?)').run(KEPT_ROOTS);
@@ -183,38 +183,44 @@ const record = (root: string, revision: string, tree: string, fresh: ReadonlyMap
 
 const swept = (root: string): void => {
   const database = databaseAt(root);
-  const total = database.query<{ count: number }, []>('SELECT count(*) AS count FROM nodes').get()!.count;
-  if (total <= SWEPT_ABOVE) return;
-  const reachable = new Set<string>();
-  const visit = (id: string): void => {
-    if (reachable.has(id)) return;
-    reachable.add(id);
-    const row = database.query<{ entries: string }, [string]>('SELECT entries FROM nodes WHERE tree = ?').get(id);
-    if (row === null) return;
-    for (const [, mode, object] of JSON.parse(row.entries) as Row[]) if (mode === TREE) visit(object);
-  };
-  for (const row of database.query<{ tree: string }, [number]>('SELECT tree FROM roots ORDER BY at DESC LIMIT ?').all(SWEPT_KEEPING))
-    visit(row.tree);
-  database
-    .transaction(() => {
+  const done = database
+    .transaction((): boolean => {
+      const total = database.query<{ count: number }, []>('SELECT count(*) AS count FROM nodes').get()!.count;
+      if (total <= SWEPT_ABOVE) return false;
+      const reachable = new Set<string>();
+      const visit = (id: string): void => {
+        if (reachable.has(id)) return;
+        reachable.add(id);
+        const row = database.query<{ entries: string }, [string]>('SELECT entries FROM nodes WHERE tree = ?').get(id);
+        if (row === null) return;
+        for (const [, mode, object] of JSON.parse(row.entries) as Row[]) if (mode === TREE) visit(object);
+      };
+      for (const row of database.query<{ tree: string }, [number]>('SELECT tree FROM roots ORDER BY at DESC LIMIT ?').all(SWEPT_KEEPING))
+        visit(row.tree);
       database.exec('CREATE TEMP TABLE IF NOT EXISTS keeping (tree TEXT PRIMARY KEY) WITHOUT ROWID');
       database.exec('DELETE FROM keeping');
       const keep = database.query('INSERT OR IGNORE INTO keeping (tree) VALUES (?)');
       for (const id of reachable) keep.run(id);
       database.exec('DELETE FROM nodes WHERE tree NOT IN (SELECT tree FROM keeping)');
       database.query('DELETE FROM roots WHERE tree NOT IN (SELECT tree FROM keeping)').run();
+      return true;
     })
     .immediate();
+  if (!done) return;
   held(root).clear();
   settled.clear();
 };
 
 const catalogued = (root: string, revision: string, tree: string): boolean => {
-  if (directoriesAt(root, revision) !== undefined) return true;
-  const row = databaseAt(root).query<{ revision: string }, [string]>('SELECT revision FROM roots WHERE tree = ? LIMIT 1').get(tree);
-  if (row === null) return false;
-  databaseAt(root).query('INSERT OR REPLACE INTO roots (revision, tree, at) VALUES (?, ?, ?)').run(revision, tree, Date.now());
-  return directoriesAt(root, revision) !== undefined;
+  const database = databaseAt(root);
+  return database
+    .transaction((): boolean => {
+      if (database.query('SELECT 1 FROM roots WHERE revision = ?').get(revision) !== null) return true;
+      if (database.query('SELECT 1 FROM roots WHERE tree = ? LIMIT 1').get(tree) === null) return false;
+      database.query('INSERT OR REPLACE INTO roots (revision, tree, at) VALUES (?, ?, ?)').run(revision, tree, Date.now());
+      return true;
+    })
+    .immediate();
 };
 
 const populate = (root: string, revision: string): void => {
