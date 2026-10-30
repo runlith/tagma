@@ -9,6 +9,10 @@ fields:
     "status": "in_work"
   }
 edges:
+  - kind: implements
+    to: 01a18cbf-8498-75d8-913f-c74f6f376186
+  - kind: implements
+    to: 01a18cbf-97fc-7f17-bc60-685157787448
   - kind: relates
     to: 01a0ea9b-790b-786c-9051-1143144dfedc
   - kind: relates
