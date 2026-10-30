@@ -22,3 +22,5 @@ edges:
     to: 01a18d5f-862b-73c3-8598-6617dc84f88b
 ---
 Acceptance 8 of [[57787448]] and 5 of [[6f376186]], proved once after the last vendor landing: one builtin vendor package removed from the server's dependencies and host modules; the build and boot succeed and the bundle carries none of its code. Then close both specs if nothing else is open.
+
+Known blocker: release packaging names a vendor by hand. `installation/cut/packages.ts` declares `OPENCODE = '@opencode/cli'`, and `installation/cut/release.ts` lists it in `CARRIED_PACKAGES`. A release without the OpenCode package would still try to carry its CLI. The release cut has to take the runtime packages to carry from the builtin adapter packages' own declarations.
