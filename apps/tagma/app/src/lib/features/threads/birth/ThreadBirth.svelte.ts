@@ -204,7 +204,7 @@ export class ThreadBirth implements ChatBirth {
       reasoning: chosen?.reasoning || null,
       root: place.kind === 'worktree' ? place.rootId : null,
     };
-    const id = await this.list.births.bear(aim, async () => {
+    const id = await this.list.births.bear(aim, this.projectId, async () => {
       const payload = await this.place.bear(place, create, this.restart, name);
       return payload === null ? null : payload.snapshot.thread.id;
     });

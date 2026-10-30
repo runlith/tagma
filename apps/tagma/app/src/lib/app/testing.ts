@@ -15,6 +15,7 @@ import type { Vocabulary } from '@tagma/server/graph/contract/wire/tags/table';
 import { Dialogs } from '@runlith/primitives/DialogRegistry.svelte';
 import { GraphRung, type GraphAim } from '$lib/features/workspace/GraphRung.js';
 import { ProjectRung } from '$lib/features/workspace/ProjectRung.js';
+import { TileRung } from '$lib/features/workspace/TileRung.js';
 import { ThreadRung, type ThreadAim } from '$lib/features/workspace/ThreadRung.js';
 import { ThreadOnScreen, type ScreenThreads } from '$lib/features/threads/OnScreen.svelte.js';
 import { CheckoutScreen } from '$lib/features/checkout/CheckoutScreen.js';
@@ -32,6 +33,7 @@ import { ExternalLinks } from '$lib/shared/ExternalLinks.js';
 import { FileSaver } from '$lib/shared/FileSaver.js';
 import { Addresses } from '$lib/features/workspace/Addresses.js';
 import { SurfaceRegistry } from '$lib/features/workspace/surface.js';
+import type { Workspace } from '$lib/features/workspace/Selection.svelte.js';
 import TestHost from './TestHost.svelte';
 import { DECLARED_SURFACES } from './declaredSurfaces.js';
 
@@ -42,6 +44,17 @@ export const testSurfaces = (): SurfaceRegistry => new SurfaceRegistry(DECLARED_
 export const testAddresses = (router: Router = makeRouter()): Addresses => new Addresses(router, testSurfaces());
 
 export const testAddressing = Layer.mergeAll(Layer.provide(SurfaceRegistry, testSurfaces), Addresses);
+
+export const soloWorkspace = (over: Record<string, unknown> = {}): Workspace =>
+  ({
+    projects: [],
+    groups: [],
+    find: () => null,
+    groupOf: () => null,
+    tileIdOf: (id: number) => id,
+    markOf: (home: number, standing: number) => (home === standing ? null : home),
+    ...over,
+  }) as unknown as Workspace;
 
 export type TestApp = {
   readonly app: MountedApp;
@@ -73,8 +86,8 @@ export function mountShell(
     boot as never,
   );
   const graph = mountApp(Layer.mergeAll(manifest as never, Overlays, Topics, testAddressing) as never, world as never, {
-    ladder: [ProjectRung, ThreadRung, GraphRung],
-    at: { project: at && { projectId: at.projectId }, graph: at, thread: options.thread },
+    ladder: [TileRung, ProjectRung, ThreadRung, GraphRung],
+    at: { tile: at && { tileId: at.projectId }, project: at && { projectId: at.projectId }, graph: at, thread: options.thread },
   });
   const drawn: { target: HTMLElement; component: Record<string, unknown> }[] = [];
 
@@ -94,6 +107,7 @@ export function mountShell(
       return target;
     },
     place: (aim) => {
+      graph.place('tile', aim && { tileId: aim.projectId });
       graph.place('project', aim && { projectId: aim.projectId });
       graph.place('graph', aim);
     },

@@ -29,7 +29,10 @@ test('a project registered by another door appears in the open workspace when th
     throw error;
   });
   const workspace = new Workspace(
-    { list: stubSingle({ loadOrThrow: async () => [...registry], refresh: async () => [...registry] }) } as never,
+    {
+      list: stubSingle({ loadOrThrow: async () => [...registry], refresh: async () => [...registry] }),
+      groups: stubSingle({ loadOrThrow: async () => [], refresh: async () => [] }),
+    } as never,
     makeRouter({ params: {} }),
     makePlatform({ local: makeStorage() }),
     failure,

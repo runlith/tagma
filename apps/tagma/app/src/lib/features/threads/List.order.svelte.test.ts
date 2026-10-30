@@ -7,7 +7,8 @@ import { Layer } from '@runlith/layer/Layer';
 import { afterEach, expect, test, vi } from 'vitest';
 import { waitFor } from '@runlith/testing/flush';
 
-import { keyedBy, liveFeed, mountShell, threadsRepo, type TestApp } from '$lib/app/testing.js';
+import { keyedBy, liveFeed, mountShell, soloWorkspace, threadsRepo, type TestApp } from '$lib/app/testing.js';
+import { Workspace } from '$lib/features/workspace/Selection.svelte.js';
 import { ExecutionsRepo } from '$lib/features/executions/Repo.js';
 import { ThreadsRepo } from './Repo.js';
 import { Live } from '$lib/wire/Live.js';
@@ -27,6 +28,7 @@ function open(): ThreadList {
       Layer.of(ThreadsRepo, threadsRepo({ roots: keyedBy(roots) })),
       Layer.of(ExecutionsRepo, {} as never),
       Layer.of(Live, feed.live),
+      Layer.of(Workspace, soloWorkspace()),
       Layer.of(ThreadOnScreen, { page: null, host: null, shown: [] } as never),
     ),
   );

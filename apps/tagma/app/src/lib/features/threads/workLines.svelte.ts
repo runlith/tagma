@@ -4,7 +4,7 @@ import { SvelteMap } from 'svelte/reactivity';
 import { WallClock } from '$lib/features/workspace/WallClock.svelte.js';
 import { NO_WORK, observe, type WorkInput, type WorkMemory, type WorkShown } from './workLine.js';
 
-export class WorkLines extends Service<WorkLines>()('WorkLines', { tier: 'project' }) {
+export class WorkLines extends Service<WorkLines>()('WorkLines', { tier: 'tile' }) {
   static *make() {
     return new WorkLines(yield* WallClock);
   }

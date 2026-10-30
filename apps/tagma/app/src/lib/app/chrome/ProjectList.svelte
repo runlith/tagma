@@ -3,6 +3,10 @@
   import { rank } from '@runlith/search-text/match';
   import Check from '@lucide/svelte/icons/check';
   import FolderMinus from '@lucide/svelte/icons/folder-minus';
+  import GroupIcon from '@lucide/svelte/icons/group';
+  import UngroupIcon from '@lucide/svelte/icons/ungroup';
+  import GroupWith from '$lib/features/projects/GroupWith.svelte';
+  import { ProjectGrouping } from '$lib/features/projects/Grouping.svelte.js';
   import PencilLine from '@lucide/svelte/icons/pencil-line';
   import Plus from '@lucide/svelte/icons/plus';
   import Search from '@lucide/svelte/icons/search';
@@ -40,7 +44,9 @@
   const ACT = 'grid size-5 place-items-center rounded-sm text-muted-foreground';
 
   const workspace = Workspace.use();
-  const shell = shellActs(ShellOps.use(), Notices.use());
+  const notices = Notices.use();
+  const shell = shellActs(ShellOps.use(), notices);
+  const grouping = ProjectGrouping.use();
   const prefetch = ProjectPrefetch.use();
   const creation = ProjectCreation.use();
   const visits = Visits.use();
@@ -70,8 +76,13 @@
     return rank(candidates, needle, (project) => ({ name: labelOf(project), names: [project.name] }));
   });
   const current = $derived(context !== null && context.kind === 'folder' ? context : null);
-  const recent = $derived(strip.recent.filter((project) => project.kind === 'folder' && project.id !== current?.id).slice(0, RECENT));
-  const rest = $derived(projects.filter((project) => project.id !== current?.id && !recent.includes(project)));
+  const group = $derived(current === null ? null : workspace.groupOf(current.id));
+  const grouped = $derived(new Set(group?.members.map((member) => member.id) ?? []));
+  const outside = $derived(projects.filter((project) => !grouped.has(project.id)));
+  const recent = $derived(
+    strip.recent.filter((project) => project.kind === 'folder' && project.id !== current?.id && !grouped.has(project.id)).slice(0, RECENT),
+  );
+  const rest = $derived(outside.filter((project) => project.id !== current?.id && !recent.includes(project)));
 
   function open(project: Project, event: Event): void {
     const target = event.target instanceof Element ? event.target : null;
@@ -221,16 +232,26 @@
       {:else}
         <DropdownMenu.Note>No project matches</DropdownMenu.Note>
       {/each}
-    {:else if searching}
-      {#if current !== null}{@render row(current, null)}{/if}
-      {#if recent.length > 0}
-        <DropdownMenu.Label>Recent</DropdownMenu.Label>
-        {#each recent as project (project.id)}{@render row(project, null)}{/each}
-        {#if rest.length > 0}<DropdownMenu.Label>All</DropdownMenu.Label>{/if}
-      {/if}
-      {#each rest as project (project.id)}{@render row(project, null)}{/each}
     {:else}
-      {#each projects as project (project.id)}{@render row(project, null)}{/each}
+      {#if group !== null}
+        <DropdownMenu.Label>
+          {#snippet lead()}<GroupIcon class="size-3.5" />{/snippet}
+          {labelOf(group.graph)}
+        </DropdownMenu.Label>
+        {#each group.members as member (member.id)}{@render row(member, null)}{/each}
+      {/if}
+      {#if searching}
+        {#if current !== null && group === null}{@render row(current, null)}{/if}
+        {#if recent.length > 0}
+          <DropdownMenu.Label>Recent</DropdownMenu.Label>
+          {#each recent as project (project.id)}{@render row(project, null)}{/each}
+          {#if rest.length > 0}<DropdownMenu.Label>All</DropdownMenu.Label>{/if}
+        {/if}
+        {#each rest as project (project.id)}{@render row(project, null)}{/each}
+      {:else}
+        {#if group !== null && outside.length > 0}<DropdownMenu.Label>All</DropdownMenu.Label>{/if}
+        {#each outside as project (project.id)}{@render row(project, null)}{/each}
+      {/if}
     {/if}
   </div>
   <DropdownMenu.Separator />
@@ -240,6 +261,13 @@
 {#if current !== null}
   <DropdownMenu.Separator />
   <DropdownMenu.Item icon={PencilLine} onSelect={() => renaming.ask(current)}>Rename “{labelOf(current)}”…</DropdownMenu.Item>
+  {#if group !== null}
+    <DropdownMenu.Item icon={UngroupIcon} onSelect={() => void grouping.leave(current).catch((error: unknown) => notices.refusal(error))}>
+      Leave group “{labelOf(group.graph)}”
+    </DropdownMenu.Item>
+  {:else}
+    <GroupWith project={current} />
+  {/if}
   <DropdownMenu.Item variant="destructive" icon={FolderMinus} onSelect={() => removal.ask(current)}>
     Remove “{labelOf(current)}” from Tagma…
   </DropdownMenu.Item>

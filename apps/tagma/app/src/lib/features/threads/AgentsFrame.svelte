@@ -9,7 +9,5 @@
 </script>
 
 {#if host !== null}
-  {#key host}
-    <ThreadColumn {host} onCollapse={() => agents.toggle()} />
-  {/key}
+  <ThreadColumn {host} onCollapse={() => agents.toggle()} />
 {/if}

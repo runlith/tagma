@@ -38,8 +38,8 @@
   const key = (project: Project): string => String(project.id);
 
   function open(id: string): void {
-    const projectId = Number(id);
-    if (projectId !== workspace.activeId) void shell.openProject(projectId, 'strip');
+    const tile = strip.projects.find((one) => String(one.id) === id);
+    if (tile !== undefined && tile.id !== workspace.activeTileId) void shell.openProject(strip.entry(tile).id, 'strip');
   }
 </script>
 
@@ -53,7 +53,7 @@
       aria-current={current ? 'page' : undefined}
       data-strip-project={project.id}
       role="presentation"
-      onpointerenter={() => prefetch.hover(project)}
+      onpointerenter={() => prefetch.hover(strip.entry(project))}
       onpointerleave={() => prefetch.leave()}
     >
       <Swatch projectId={project.id} />
@@ -82,7 +82,7 @@
     here
     items={strip.projects}
     {key}
-    active={workspace.activeId === null ? null : String(workspace.activeId)}
+    active={workspace.activeTileId === null ? null : String(workspace.activeTileId)}
     label="Projects"
     name={labelOf}
     closeLabel={(standing) => `Remove ${labelOf(standing)} from the strip`}

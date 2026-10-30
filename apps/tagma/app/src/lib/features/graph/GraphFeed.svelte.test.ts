@@ -14,6 +14,7 @@ import { waitUntil } from '@runlith/testing/flush';
 import { testTagCatalog } from '$lib/app/testing.js';
 import { GraphRung } from '$lib/features/workspace/GraphRung.js';
 import { ProjectRung } from '$lib/features/workspace/ProjectRung.js';
+import { TileRung } from '$lib/features/workspace/TileRung.js';
 import { ReaderMarks } from '$lib/shared/reading/ReaderMarks.svelte.js';
 import { SessionRegistry } from './SessionRegistry.svelte.js';
 import { GraphDoor } from '$lib/features/workspace/GraphDoor.js';
@@ -71,7 +72,10 @@ function open(answer: (url: URL) => Promise<Response>, readTags?: () => Promise<
         },
       } as never),
     ),
-    { ladder: [ProjectRung, GraphRung], at: { project: { projectId: 1 }, graph: { projectId: 1, branch: 'feature/one' } } },
+    {
+      ladder: [TileRung, ProjectRung, GraphRung],
+      at: { tile: { tileId: 1 }, project: { projectId: 1 }, graph: { projectId: 1, branch: 'feature/one' } },
+    },
   );
   close.push(() => app.unmount());
   return {

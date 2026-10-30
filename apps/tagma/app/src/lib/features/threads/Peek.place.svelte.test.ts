@@ -8,7 +8,7 @@ import { flushSync } from 'svelte';
 import { afterEach, expect, test } from 'vitest';
 import { ThreadChats } from './ThreadChats.js';
 import { Favorites } from './Favorites.svelte.js';
-import { liveFeed, mountShell, type TestApp, testShellOps, testPlaces } from '$lib/app/testing.js';
+import { liveFeed, mountShell, soloWorkspace, type TestApp, testShellOps, testPlaces } from '$lib/app/testing.js';
 import { testThreadSlot } from '$lib/app/slotWorld.js';
 import { UsageAccounts } from '$lib/features/providers/usage/Accounts.svelte.js';
 import { testProviders } from '$lib/features/providers/testing.js';
@@ -86,7 +86,7 @@ function peek(
     Layer.mergeAll(WallClock, Notices, ThreadNames, CommandActivity, CallActivity, ExecutionActs),
     Layer.mergeAll(
       Layer.of(ExecutionsRepo, { inventory: stubFamily(), commands: stubFamily() } as never),
-      Layer.of(Workspace, { contextProject: { rootPath: '/repo' }, find: () => ({ rootPath: '/repo' }) } as never),
+      Layer.of(Workspace, soloWorkspace({ contextProject: { rootPath: '/repo' }, find: () => ({ rootPath: '/repo' }) })),
       testShellOps,
       Layer.of(Live, liveFeed().live),
       Layer.of(Door, { ask: () => Promise.reject(new Error('this suite makes no call')) } as never),

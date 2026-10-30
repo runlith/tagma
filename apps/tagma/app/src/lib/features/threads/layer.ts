@@ -32,6 +32,7 @@ import { FolderActs } from './FolderActs.js';
 import { MentionDrops } from './MentionDrops.svelte.js';
 import { ThreadPresence } from '$lib/features/presence/Presence.svelte.js';
 import { ThreadRungSource } from '$lib/features/workspace/ThreadRung.js';
+import { ProjectRung } from '$lib/features/workspace/ProjectRung.js';
 import { ThreadWords } from './Words.svelte.js';
 import { WorkLines } from './workLines.svelte.js';
 import { ThreadsRepo } from './Repo.js';
@@ -73,7 +74,7 @@ export const HarnessLayer = Layer.mergeAll(
   WorkLines,
   Layer.provide(ThreadNames, function* () {
     const threads = yield* ThreadList;
-    const words = new ThreadWords(threads, yield* ThreadsRepo, yield* Workspace, threads.aim.projectId);
+    const words = new ThreadWords(threads, yield* ThreadsRepo, yield* Workspace, (yield* ProjectRung.Current).projectId);
     return new ThreadNames((thread, project) => words.of(thread, project));
   }),
   ThreadFolds,

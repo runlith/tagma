@@ -44,7 +44,7 @@ const row = (id: string, parentThreadId: string | null): ThreadListRow => ({
   updatedAt: '2026-01-01T00:00:00.000Z',
 });
 
-const folds = (storage = makeStorage(), projectId = 1) => new ThreadFolds({ projectId }, new ReaderMarks(storage));
+const folds = (storage = makeStorage(), tileId = 1) => new ThreadFolds({ tileId }, new ReaderMarks(storage));
 
 test('collapse closes every spawn parent and puts back only the parents it closed', () => {
   const trees = threadTree([

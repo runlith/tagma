@@ -3,7 +3,7 @@
   import { cn } from '$lib/shared/utils.js';
   import { hueOf, initialsOf, labelOf } from '$lib/features/workspace/mark.js';
 
-  let { project, lit = false }: { project: Project; lit?: boolean } = $props();
+  let { project, marks = [project.id], lit = false }: { project: Project; marks?: readonly number[]; lit?: boolean } = $props();
 </script>
 
 <span
@@ -13,5 +13,7 @@
   )}
   data-tone
   aria-hidden="true"
-  ><span class="absolute top-1 left-1 size-1" style:background-color={hueOf(project.id)}></span>{initialsOf(labelOf(project))}</span
+  ><span class="absolute top-1 left-1 flex gap-0.5"
+    >{#each marks as id (id)}<span class="size-1" style:background-color={hueOf(id)}></span>{/each}</span
+  >{initialsOf(labelOf(project))}</span
 >

@@ -2,6 +2,8 @@ import type { MountedApp } from '@runlith/layer/App';
 import { Handoff } from '@runlith/layer/Handoff';
 import { untrack } from 'svelte';
 import { ProjectRung } from '../workspace/ProjectRung.js';
+import { Workspace } from '../workspace/Selection.svelte.js';
+import { TileRung } from '../workspace/TileRung.js';
 import { ThreadList } from '../threads/List.svelte.js';
 import { onThreadOpen, type ThreadOpenTiming } from '../threads/threadOpenRecord.js';
 
@@ -90,7 +92,7 @@ export class ProjectSwitchWatch {
     for (const mark of marks) entries.delete(mark);
     this.attempt = {
       ...destination,
-      warm: this.app.hasScope(ProjectRung, destination),
+      warm: this.app.hasScope(TileRung, { tileId: this.app.resolve(Workspace).tileIdOf(destination.projectId) }),
       startedAt,
       from: { navigation, entry: marks.at(-1)?.entry ?? null },
       navigationAt: null,

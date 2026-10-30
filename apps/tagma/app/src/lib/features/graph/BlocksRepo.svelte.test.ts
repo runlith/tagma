@@ -5,6 +5,7 @@ import { mountRepo } from '@runlith/query/testing';
 import { afterEach, expect, test } from 'vitest';
 import { GraphRung } from '$lib/features/workspace/GraphRung.js';
 import { ProjectRung } from '$lib/features/workspace/ProjectRung.js';
+import { TileRung } from '$lib/features/workspace/TileRung.js';
 import { GraphDoor } from '$lib/features/workspace/GraphDoor.js';
 import { testDoor } from '$lib/wire/testing.js';
 import { BlocksRepo } from './BlocksRepo.js';
@@ -58,8 +59,8 @@ test('creation on a branch leaves the canonical tree unchanged', async () => {
     const mounted = mountRepo(BlocksRepo, {
       door: new GraphDoor(door, aim),
       queryClient,
-      ladder: [ProjectRung, GraphRung],
-      at: { project: { projectId: aim.projectId }, graph: aim },
+      ladder: [TileRung, ProjectRung, GraphRung],
+      at: { tile: { tileId: aim.projectId }, project: { projectId: aim.projectId }, graph: aim },
     });
     close.push(mounted.unmount);
     return mounted.repo;
@@ -91,8 +92,8 @@ test.each(['single', 'keyed', 'mutation'] as const)('closing a graph aborts its 
     const mounted = mountRepo(BlocksRepo, {
       door: new GraphDoor(door, aim),
       queryClient,
-      ladder: [ProjectRung, GraphRung],
-      at: { project: { projectId: aim.projectId }, graph: aim },
+      ladder: [TileRung, ProjectRung, GraphRung],
+      at: { tile: { tileId: aim.projectId }, project: { projectId: aim.projectId }, graph: aim },
     });
     close.push(mounted.unmount);
     return mounted;

@@ -109,6 +109,12 @@ export class DraftShelf extends Service<DraftShelf>()('DraftShelf', { tier: 'app
     void this.staged.move(from, to).catch(warn);
   }
 
+  carry(from: string, to: string): void {
+    if (from === to || storedDraft(this.slots.at(to)) !== null) return;
+    this.forget(to);
+    this.rename(from, to);
+  }
+
   forget(key: string): void {
     this.slots.forget(key);
     this.store.drop(key);

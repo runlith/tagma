@@ -14,8 +14,19 @@
   import type { ShownThread } from '../ShownThread.js';
   import { ThreadPlace } from '../thread/ThreadPlace.svelte.js';
   import { draftPlaceOf } from '../worktrees/acts.js';
+  import { PageDraft } from '../PageDraft.js';
+  import { ProjectRung } from '$lib/features/workspace/ProjectRung.js';
+  import { Workspace } from '$lib/features/workspace/Selection.svelte.js';
+  import Swatch from '$lib/features/workspace/Swatch.svelte';
+  import { labelOf } from '$lib/features/workspace/mark.js';
 
   let { shown, place, places }: { shown: ShownThread; place: BirthPlace; places: Worktrees } = $props();
+
+  const workspace = Workspace.use();
+  const drafts = PageDraft.use();
+  const projectId = ProjectRung.Current.use().projectId;
+  const project = $derived(workspace.find(projectId));
+  const members = $derived(workspace.groupOf(projectId)?.members ?? null);
 
   const reading = untrack(() => places.window());
   const main = $derived(places.main);
@@ -71,6 +82,23 @@
       <FadeText text={main.folder.split('/').findLast((part) => part !== '') ?? main.folder} />
     </span>
   {:else if standing !== null}
+    {#if drafting && members !== null && project !== null}
+      <DropdownMenu.Root>
+        <DropdownMenu.Trigger class={PICKER} aria-label="The project this thread runs in">
+          <Swatch projectId={project.id} />
+          <FadeText text={labelOf(project)} />
+          <ChevronsUpDown class="size-3 shrink-0 opacity-60" />
+        </DropdownMenu.Trigger>
+        <DropdownMenu.Content align="start" class="max-h-80 min-w-48 overflow-y-auto">
+          {#each members as member (member.id)}
+            <DropdownMenu.Item here={member.id === project.id} onSelect={() => member.id !== project.id && drafts.move(project, member)}>
+              {#snippet lead()}<Swatch projectId={member.id} />{/snippet}
+              {labelOf(member)}
+            </DropdownMenu.Item>
+          {/each}
+        </DropdownMenu.Content>
+      </DropdownMenu.Root>
+    {/if}
     {#if drafting}
       <DropdownMenu.Root>
         <DropdownMenu.Trigger class={PICKER} aria-label="Where this thread runs">

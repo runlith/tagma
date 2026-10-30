@@ -64,9 +64,11 @@
   const above = $derived(edge('above'));
   const below = $derived(edge('below'));
 
-  function open(project: Project): void {
-    if (project.id !== workspace.activeId) void shell.openProject(project.id, 'strip');
+  function open(tile: Project): void {
+    if (tile.id !== workspace.activeTileId) void shell.openProject(strip.entry(tile).id, 'strip');
   }
+
+  const marksOf = (tile: Project): readonly number[] => workspace.groupOf(tile.id)?.members.map((member) => member.id) ?? [tile.id];
 
   function tileOf(id: number | undefined): HTMLElement | null {
     return id === undefined ? null : (scroller?.querySelector<HTMLElement>(`[data-strip-project="${id}"]`) ?? null);
@@ -99,7 +101,7 @@
     return () => watch.disconnect();
   });
 
-  $effect(() => reveal(workspace.activeId ?? undefined, 'instant'));
+  $effect(() => reveal(workspace.activeTileId ?? undefined, 'instant'));
 </script>
 
 {#snippet marker(side: Side, at: ReturnType<typeof edge>)}
@@ -130,7 +132,7 @@
     {@attach reorder.attach}
   >
     {#each reorder.arranged(strip.projects, (project) => project.id) as project, place (project.id)}
-      {@const current = project.id === workspace.activeId}
+      {@const current = project.id === workspace.activeTileId}
       {@const counts = pulse.of(project.id)}
       {@const chord = chords ? chordOf(place, strip.projects.length) : null}
       {@const label = labelOf(project)}
@@ -156,12 +158,14 @@
               aimed = project;
               aim.aim(event);
             }}
-            onpointerenter={() => prefetch.hover(project)}
+            onpointerenter={() => prefetch.hover(strip.entry(project))}
             onpointerleave={() => prefetch.leave()}
           >
             <RailMark {current} />
             <span class="relative grid">
-              <Badge count={counts.working} tone="work" class="-right-1.5 -bottom-1.5"><Tile {project} lit={current} /></Badge>
+              <Badge count={counts.working} tone="work" class="-right-1.5 -bottom-1.5"
+                ><Tile {project} marks={marksOf(project)} lit={current} /></Badge
+              >
               {#if counts.working > 0}<Crest />{/if}
               {#if counts.awaiting > 0}
                 <span class="absolute -bottom-1 -left-1 size-2 bg-status-open ring-2 ring-chrome" aria-hidden="true">

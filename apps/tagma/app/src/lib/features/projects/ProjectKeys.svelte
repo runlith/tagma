@@ -24,8 +24,8 @@
   let cycle: Cycle | null = null;
   let timer: ReturnType<typeof setTimeout> | null = null;
 
-  function go(project: Project | undefined): void {
-    if (project !== undefined && project.id !== workspace.activeId) void shell.openProject(project.id, 'keys');
+  function go(tile: Project | undefined): void {
+    if (tile !== undefined && tile.id !== workspace.activeTileId) void shell.openProject(strip.entry(tile).id, 'keys');
   }
 
   function end(): Cycle | null {
@@ -72,7 +72,7 @@
       }, SWITCHER_AFTER_MS);
     }
     cycle.step(command.direction);
-    prefetch.ahead(cycle.chosen);
+    prefetch.ahead(strip.entry(cycle.chosen));
   }
 
   $effect(() => {

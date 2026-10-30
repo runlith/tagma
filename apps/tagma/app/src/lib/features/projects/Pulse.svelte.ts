@@ -4,17 +4,23 @@ import { Scope } from '@runlith/layer/Scope';
 import { Service } from '@runlith/layer/key';
 import { SvelteMap } from 'svelte/reactivity';
 import { Live, type LiveConnection } from '$lib/wire/Live.js';
+import { Workspace } from '../workspace/Selection.svelte.js';
 
 const NONE: PulseCounts = { working: 0, awaiting: 0 };
 
 export class ProjectPulse extends Service<ProjectPulse>()('ProjectPulse', { tier: 'app' }) {
   static *make() {
-    return new ProjectPulse(yield* Live, yield* Scope, yield* Failure);
+    return new ProjectPulse(yield* Live, yield* Workspace, yield* Scope, yield* Failure);
   }
 
   private readonly projects = new SvelteMap<number, PulseCounts>();
 
-  constructor(live: LiveConnection, scope: Scope, failure: Failure) {
+  constructor(
+    live: LiveConnection,
+    private readonly workspace: Workspace,
+    scope: Scope,
+    failure: Failure,
+  ) {
     super();
     const held = live.hold(
       (client) => client['threads.pulse']({}),
@@ -33,6 +39,15 @@ export class ProjectPulse extends Service<ProjectPulse>()('ProjectPulse', { tier
   }
 
   of(projectId: number): PulseCounts {
-    return this.projects.get(projectId) ?? NONE;
+    const group = this.workspace.groupOf(projectId);
+    if (group === null || group.graph.id !== projectId) return this.projects.get(projectId) ?? NONE;
+    let working = 0;
+    let awaiting = 0;
+    for (const member of group.members) {
+      const counts = this.projects.get(member.id);
+      working += counts?.working ?? 0;
+      awaiting += counts?.awaiting ?? 0;
+    }
+    return working === 0 && awaiting === 0 ? NONE : { working, awaiting };
   }
 }

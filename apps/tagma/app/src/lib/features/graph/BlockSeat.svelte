@@ -2,14 +2,14 @@
   import { App } from '@runlith/layer/svelte/App.svelte';
   import { untrack } from 'svelte';
   import { GraphRung } from '$lib/features/workspace/GraphRung.js';
-  import { ProjectRung } from '$lib/features/workspace/ProjectRung.js';
+  import { holdProject } from '$lib/features/workspace/holds.js';
   import BlockPage from './block/BlockPage.svelte';
   import type { PlacedBlock } from './blockPane.js';
 
   let { placed }: { placed: PlacedBlock } = $props();
 
   const held = untrack(() => placed);
-  App.hold(ProjectRung, { projectId: held.projectId });
+  holdProject(held.projectId);
   App.hold(GraphRung, { projectId: held.projectId, branch: held.branch });
 </script>
 

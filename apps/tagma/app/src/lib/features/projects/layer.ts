@@ -4,5 +4,6 @@ import { ProjectPulse } from './Pulse.svelte.js';
 import { ProjectRemoval } from './Removal.svelte.js';
 import { ProjectRenaming } from './Renaming.svelte.js';
 import { ProjectStrip } from './Strip.svelte.js';
+import { ProjectGrouping } from './Grouping.svelte.js';
 
-export const ProjectsLayer = Layer.mergeAll(ProjectStrip, ProjectPulse, ProjectPrefetch, ProjectRemoval, ProjectRenaming);
+export const ProjectsLayer = Layer.mergeAll(ProjectStrip, ProjectPulse, ProjectPrefetch, ProjectRemoval, ProjectRenaming, ProjectGrouping);

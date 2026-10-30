@@ -6,6 +6,7 @@ import { ProjectDoor } from './ProjectDoor.js';
 import { ProjectsFeed } from './ProjectsFeed.js';
 import { ProjectRungSource } from './ProjectRung.js';
 import { ProjectsRepo } from './ProjectsRepo.js';
+import { TileRungSource } from './TileRung.js';
 import { WallClock } from './WallClock.svelte.js';
 import { Workspace } from './Selection.svelte.js';
 
@@ -14,6 +15,7 @@ export const WorkspaceLayer = Layer.mergeAll(
   ProjectsRepo,
   ProjectsFeed,
   WallClock,
+  TileRungSource,
   ProjectRungSource,
   ProjectDoor,
   GraphRungSource,

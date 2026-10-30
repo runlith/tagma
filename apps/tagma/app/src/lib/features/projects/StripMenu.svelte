@@ -9,10 +9,12 @@
   import * as DropdownMenu from '$lib/shared/ui/dropdown-menu/index.js';
   import type { ContextAim } from '$lib/shared/contextAim.svelte.js';
   import { Visits } from '$lib/features/workspace/Visits.svelte.js';
+  import { Workspace } from '$lib/features/workspace/Selection.svelte.js';
   import { ProjectWindows } from '$lib/shared/desktop/ProjectWindows.js';
   import { ProjectRemoval } from './Removal.svelte.js';
   import { ProjectRenaming } from './Renaming.svelte.js';
   import { ProjectStrip } from './Strip.svelte.js';
+  import GroupWith from './GroupWith.svelte';
   import { labelOf } from '$lib/features/workspace/mark.js';
   import Swatch from '$lib/features/workspace/Swatch.svelte';
 
@@ -22,6 +24,7 @@
   const removal = ProjectRemoval.use();
   const renaming = ProjectRenaming.use();
   const visits = Visits.use();
+  const workspace = Workspace.use();
   const windows = ProjectWindows.find();
   const open = $derived(aim.anchor !== null && project !== null);
 
@@ -41,10 +44,13 @@
       {#if project.kind !== 'global'}
         <DropdownMenu.Item icon={PencilLine} onSelect={() => renaming.ask(project)}>Rename…</DropdownMenu.Item>
       {/if}
+      {#if project.kind === 'folder' && workspace.groupOf(project.id) === null}
+        <GroupWith {project} />
+      {/if}
       <DropdownMenu.Item icon={X} onSelect={() => strip.remove(project.id)}>Remove from strip</DropdownMenu.Item>
       <DropdownMenu.Separator />
       {#if windows !== undefined}
-        <DropdownMenu.Item icon={AppWindow} onSelect={() => windows.openProject(visits.resume(project))}>
+        <DropdownMenu.Item icon={AppWindow} onSelect={() => windows.openProject(visits.resume(strip.entry(project)))}>
           Open in New Window
         </DropdownMenu.Item>
         <DropdownMenu.Separator />

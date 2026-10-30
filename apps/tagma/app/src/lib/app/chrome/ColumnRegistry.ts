@@ -8,6 +8,7 @@ export type SectionColumn = {
   readonly label: string;
   readonly open: boolean;
   readonly frame: ColumnFrame | undefined;
+  readonly stands: 'tile' | 'page';
   readonly search: boolean;
   toggle(): void;
 };
@@ -69,6 +70,7 @@ export class ColumnRegistry extends Service<ColumnRegistry>()('ColumnRegistry', 
       id: declaration.id,
       label: declaration.label,
       frame: declaration.frame,
+      stands: declaration.stands ?? 'page',
       search: declaration.search ?? false,
       get open() {
         return state.open;

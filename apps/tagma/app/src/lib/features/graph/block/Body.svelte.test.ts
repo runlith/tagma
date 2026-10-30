@@ -19,6 +19,7 @@ import { Opening } from '$lib/features/opening/Opening.svelte.js';
 import { Notices } from '$lib/features/notices/Service.svelte.js';
 import { ThreadNames, type OwnerWords } from '$lib/shared/threads/Names.svelte.js';
 import { ProjectRung } from '$lib/features/workspace/ProjectRung.js';
+import { TileRung } from '$lib/features/workspace/TileRung.js';
 import { GraphRung } from '$lib/features/workspace/GraphRung.js';
 import { createHeadlessMarkdownEditor } from '@runlith/markdown-editor/codec';
 import { createMarkdownEditorExtensions } from '@runlith/markdown-editor/extensions';
@@ -52,7 +53,10 @@ test('the block body renders thread references, follows live names and opens the
         tip: () => ({ text: null }),
       } as never),
     ),
-    { ladder: [ProjectRung, GraphRung], at: { project: { projectId: 5 }, graph: { projectId: 5, branch: null } } },
+    {
+      ladder: [TileRung, ProjectRung, GraphRung],
+      at: { tile: { tileId: 5 }, project: { projectId: 5 }, graph: { projectId: 5, branch: null } },
+    },
   );
   const target = document.createElement('div');
   const host = mount(TestHost, {
@@ -112,7 +116,10 @@ test('the link menu opened by a right click on a reference in the body stays ope
       Layer.of(BlockTitles, { answered: 0, peer: () => ({ title: 'Notes', project: 'runlith' }) } as never),
       Layer.of(Opening, opening),
     ),
-    { ladder: [ProjectRung, GraphRung], at: { project: { projectId: 5 }, graph: { projectId: 5, branch: null } } },
+    {
+      ladder: [TileRung, ProjectRung, GraphRung],
+      at: { tile: { tileId: 5 }, project: { projectId: 5 }, graph: { projectId: 5, branch: null } },
+    },
   );
   const target = document.body.appendChild(document.createElement('div'));
   const store = { rootName: '24e6b6b0', blocks: new Map(), block: () => undefined, setBody: async () => undefined };

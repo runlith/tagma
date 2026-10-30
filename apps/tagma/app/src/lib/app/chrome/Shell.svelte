@@ -9,6 +9,7 @@
   import { settingsHref } from '$lib/features/workspace/address.js';
   import { GraphRung } from '$lib/features/workspace/GraphRung.js';
   import { ProjectRung } from '$lib/features/workspace/ProjectRung.js';
+  import { TileRung } from '$lib/features/workspace/TileRung.js';
   import { Topics } from '$lib/shared/threads/Topics.svelte.js';
   import DesktopTabKeys from '$lib/features/checkout/files/DesktopTabKeys.svelte';
   import DictationKeys from '$lib/features/speech/dictation/Keys.svelte';
@@ -105,7 +106,12 @@
     const aim = graphAim();
     return aim === undefined ? null : GraphRung.keyOf(aim);
   });
-  const frameKey = $derived(standingKey(surfaces.get(surface).stands, projectAim(), graphAim()));
+  const tileAim = TileRung.Source.use();
+  const frameKey = $derived.by(() => {
+    if (framed?.stands !== 'tile') return standingKey(surfaces.get(surface).stands, projectAim(), graphAim());
+    const tile = tileAim();
+    return tile === undefined || projectAim() === undefined ? null : `tile:${TileRung.keyOf(tile)}`;
+  });
   const frame = $derived(framed?.frame === undefined || !framed.open ? null : framed.frame());
 
   const togglePalette = (group?: 'files'): true => {

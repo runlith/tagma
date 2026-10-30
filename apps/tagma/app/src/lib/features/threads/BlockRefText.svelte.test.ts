@@ -12,6 +12,7 @@ import { testAddressing } from '$lib/app/testing.js';
 import { BlockTitles } from '$lib/features/graph/BlockTitles.svelte.js';
 import { CommitLinks } from '$lib/features/checkout/CommitLinks.svelte.js';
 import { ProjectRung } from '$lib/features/workspace/ProjectRung.js';
+import { TileRung } from '$lib/features/workspace/TileRung.js';
 import { GraphRung } from '$lib/features/workspace/GraphRung.js';
 import type { Link } from '$lib/features/opening/Link.js';
 import { Opening } from '$lib/features/opening/Opening.svelte.js';
@@ -49,7 +50,10 @@ test('a plain message opens confirmed file paths at their location and retires p
       Layer.of(CommitLinks, { peer: () => undefined } as never),
       Layer.of(Opening, opening as never),
     ),
-    { ladder: [ProjectRung, GraphRung], at: { project: { projectId: 1 }, graph: { projectId: 1, branch: null } } },
+    {
+      ladder: [TileRung, ProjectRung, GraphRung],
+      at: { tile: { tileId: 1 }, project: { projectId: 1 }, graph: { projectId: 1, branch: null } },
+    },
   );
   const target = document.createElement('div');
   const view = mount(TestHost, {

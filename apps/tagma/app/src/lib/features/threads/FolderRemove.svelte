@@ -10,7 +10,7 @@
 
   const list = ThreadList.use();
   const workspace = Workspace.use();
-  const project = $derived(workspace.find(list.aim.projectId)?.name ?? String(list.aim.projectId));
+  const project = $derived(workspace.find(list.aim.tileId)?.name ?? String(list.aim.tileId));
   const folder = $derived(shelving.removing);
   const inside = $derived(folder === null ? new Set<string>() : folderSubtrees(list.folders, [folder.id]));
   const subfolders = $derived(Math.max(0, inside.size - 1));

@@ -96,6 +96,7 @@
   const row = $derived(node.row);
   const home = $derived(host === null || row.projectId === host.projectId ? null : row.projectId);
   const homeName = $derived(home === null ? undefined : workspace.find(home)?.name);
+  const mark = $derived(host === null ? null : workspace.markOf(row.projectId, host.projectId));
   const isRoot = $derived(row.parentThreadId === null);
   const label = $derived(isRoot ? row.title.trim() || 'Untitled' : (row.name ?? row.agentId));
   const reading = new RowReading(() => node, wallClock, WorkLines.use(), catalog);
@@ -263,7 +264,7 @@
           () => isRoot && onRename !== undefined,
         )}><MatchText text={label} {query} prose /></FadeText
       >
-      {#if home !== null}<span class="flex max-w-24 shrink-0" data-squeeze-keep><ProjectMark projectId={home} class="min-w-0" /></span>{/if}
+      {#if mark !== null}<span class="flex max-w-24 shrink-0" data-squeeze-keep><ProjectMark projectId={mark} class="min-w-0" /></span>{/if}
     </span>
     <span class="relative flex h-[18px] shrink-0 items-center gap-1.5 text-small leading-none" data-squeeze-cluster>
       {#if row.held.paths > 0 || row.held.unproven > 0}

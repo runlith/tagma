@@ -10,7 +10,8 @@ import { stubMutation } from '@runlith/query/testing';
 import { afterEach, expect, test, vi } from 'vitest';
 import { waitFor } from '@runlith/testing/flush';
 
-import { keyedBy, liveFeed, mountShell, threadsRepo, type TestApp } from '$lib/app/testing.js';
+import { keyedBy, liveFeed, mountShell, soloWorkspace, threadsRepo, type TestApp } from '$lib/app/testing.js';
+import { Workspace } from '$lib/features/workspace/Selection.svelte.js';
 import { ExecutionsRepo } from '$lib/features/executions/Repo.js';
 import { ThreadsRepo } from './Repo.js';
 import { Live } from '$lib/wire/Live.js';
@@ -32,6 +33,7 @@ function open(acts: Record<string, unknown> = {}): ThreadList {
       Layer.of(ThreadsRepo, threadsRepo({ roots: keyedBy(roots), ...acts })),
       Layer.of(ExecutionsRepo, {} as never),
       Layer.of(Live, feed.live),
+      Layer.of(Workspace, soloWorkspace()),
       Layer.of(ThreadOnScreen, { page: null, host: null, shown: [] } as never),
       Layer.of(Failure, new Failure((reason) => void reported.push(reason))),
     ),
@@ -270,7 +272,7 @@ test('a birth stands as an idle root from the press, takes its thread id, and dr
   feed.frame?.({ type: 'list', rows: [held], roots: 1, windowBefore: null });
 
   let answer: (id: string | null) => void = () => undefined;
-  const bearing = list.births.bear(aim, () => new Promise((resolve) => (answer = resolve)));
+  const bearing = list.births.bear(aim, 1, () => new Promise((resolve) => (answer = resolve)));
   const unborn = list.tree[0]?.row.id ?? '';
   expect(list.tree.map((node) => [node.row.title, node.row.life])).toEqual([
     ['quiet-otter', 'idle'],
@@ -300,10 +302,10 @@ test('a birth that never got a thread leaves no row, and one whose turn was refu
   const list = open();
   feed.frame?.({ type: 'list', rows: [], roots: 0, windowBefore: null });
 
-  await list.births.bear(aim, async () => null);
+  await list.births.bear(aim, 1, async () => null);
   expect(list.tree).toEqual([]);
 
-  await list.births.bear(aim, async () => 'born');
+  await list.births.bear(aim, 1, async () => 'born');
   feed.frame?.({ type: 'row', row: row('born', 1) });
   list.births.settle('born', null);
   expect(list.tree.map((node) => [node.row.id, node.row.life])).toEqual([['born', 'idle']]);
@@ -462,6 +464,7 @@ test('a finished thread the list already holds is marked seen once it comes on s
       ),
       Layer.of(ExecutionsRepo, {} as never),
       Layer.of(Live, feed.live),
+      Layer.of(Workspace, soloWorkspace()),
       Layer.of(ThreadOnScreen, screen as never),
       Layer.of(Failure, new Failure((reason) => void reported.push(reason))),
     ),

@@ -9,7 +9,7 @@ import { Cache } from '@runlith/query/repo';
 import { waitUntil } from '@runlith/testing/flush';
 import { flushSync } from 'svelte';
 import { afterEach, expect, test } from 'vitest';
-import { mountShell, type TestApp, testTagCatalog } from '$lib/app/testing.js';
+import { mountShell, soloWorkspace, type TestApp, testTagCatalog } from '$lib/app/testing.js';
 import { CommitLinks } from '$lib/features/checkout/CommitLinks.svelte.js';
 import { PathRoads } from '$lib/features/checkout/PathRoads.js';
 import { Checkout } from '$lib/features/checkout/Selection.svelte.js';
@@ -230,7 +230,7 @@ test('a part page in the main pane and another block in the right-hand tab both 
         background: (error: unknown) => void failures.push(error),
         refusal: (error: unknown) => void failures.push(error),
       } as never),
-      Layer.of(Workspace, { active: project, contextProject: project, find: () => null, nameOf: async () => 'tagma' } as never),
+      Layer.of(Workspace, soloWorkspace({ active: project, contextProject: project, nameOf: async () => 'tagma' })),
       Failure.of((error) => void failures.push(error)),
     ),
     {
@@ -349,13 +349,7 @@ test('a project root opened in a tab from another project lists its parts beside
         background: (error: unknown) => void failures.push(error),
         refusal: (error: unknown) => void failures.push(error),
       } as never),
-      Layer.of(Workspace, {
-        active: project,
-        contextProject: project,
-        contextId: project.id,
-        find: () => null,
-        nameOf: async () => 'tagma',
-      } as never),
+      Layer.of(Workspace, soloWorkspace({ active: project, contextProject: project, contextId: project.id, nameOf: async () => 'tagma' })),
       Failure.of((error) => void failures.push(error)),
     ),
     {

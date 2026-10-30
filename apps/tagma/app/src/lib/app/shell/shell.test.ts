@@ -67,6 +67,7 @@ function world(standing: readonly string[] = ['t1', 't9'], goto: (href: string) 
       }),
     activeId: 1,
     contextProject: { id: 1, name: 'runlith' },
+    tileIdOf: (id: number) => id,
   } as unknown as Workspace;
   const visits = new Visits(makeStorage(), surfaces);
   const prepared: string[] = [];
@@ -74,7 +75,7 @@ function world(standing: readonly string[] = ['t1', 't9'], goto: (href: string) 
     prepared.push(`${rung.name} ${JSON.stringify(input)}`);
     went.push(`prepared ${rung.name}`);
   }) as unknown as PrepareRung;
-  const prefetch = new ProjectPrefetch(prepare, visits, new Failure(() => undefined));
+  const prefetch = new ProjectPrefetch(prepare, visits, workspace, new Failure(() => undefined));
   const threads = {
     list: {
       key: (aim: { selection: { ids: string } }) => ({
@@ -232,7 +233,16 @@ it.live('a project opens at its last place in every shell, the main window’s o
     const unknown = yield* Effect.result(desktop.openProject(7, 'menu'));
 
     const place = '/orbit/notes/alpha?branch=feature';
-    expect(went).toEqual(['prepared project', 'prepared graph', place, 'prepared project', 'prepared graph', place]);
+    expect(went).toEqual([
+      'prepared tile',
+      'prepared project',
+      'prepared graph',
+      place,
+      'prepared tile',
+      'prepared project',
+      'prepared graph',
+      place,
+    ]);
     expect(prepared).toContain('graph {"projectId":2,"branch":"feature"}');
     expect(revealed).toEqual([place]);
     expect(failure(unknown)).toBeInstanceOf(ProjectUnknown);

@@ -33,6 +33,7 @@
   import NewProjectDialog from './NewProjectDialog.svelte';
   import RemoveProjectDialog from '$lib/features/projects/RemoveDialog.svelte';
   import RenameProjectDialog from '$lib/features/projects/RenameDialog.svelte';
+  import GroupDialog from '$lib/features/projects/GroupDialog.svelte';
   import { ProjectCreation } from './ProjectCreation.svelte.js';
   import ProjectList from './ProjectList.svelte';
   import { STORAGE } from './projectStorage.js';
@@ -211,3 +212,4 @@
 <NewProjectDialog bind:open={creation.open} />
 <RemoveProjectDialog />
 <RenameProjectDialog />
+<GroupDialog />

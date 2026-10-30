@@ -52,7 +52,13 @@ async function stand(stored: Record<string, string> = {}) {
     get activeId() {
       return at.active;
     },
+    get activeTileId() {
+      return at.active;
+    },
     find: (id: number) => REGISTRY.find((one) => one.id === id) ?? null,
+    groupOf: () => null,
+    tileIdOf: (id: number) => id,
+    tileOf: (one: unknown) => one,
   } as unknown as Workspace;
   const feeds: Feed[] = [];
   const live = {

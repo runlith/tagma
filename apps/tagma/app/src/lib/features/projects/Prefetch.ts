@@ -6,6 +6,8 @@ import { type InstanceOf, Service } from '@runlith/layer/key';
 import { GraphRung } from '../workspace/GraphRung.js';
 import { ProjectRung } from '../workspace/ProjectRung.js';
 import { Visits } from '../workspace/Visits.svelte.js';
+import { Workspace } from '../workspace/Selection.svelte.js';
+import { TileRung } from '../workspace/TileRung.js';
 
 const HOVER_MS = 150;
 
@@ -13,7 +15,7 @@ export type PrepareRung = InstanceOf<typeof Prepare>;
 
 export class ProjectPrefetch extends Service<ProjectPrefetch>()('ProjectPrefetch', { tier: 'app' }) {
   static *make() {
-    return new ProjectPrefetch(yield* Prepare, yield* Visits, yield* Failure);
+    return new ProjectPrefetch(yield* Prepare, yield* Visits, yield* Workspace, yield* Failure);
   }
 
   private timer: ReturnType<typeof setTimeout> | null = null;
@@ -21,6 +23,7 @@ export class ProjectPrefetch extends Service<ProjectPrefetch>()('ProjectPrefetch
   constructor(
     private readonly prepare: PrepareRung,
     private readonly visits: Visits,
+    private readonly workspace: Workspace,
     private readonly failure: Failure,
   ) {
     super();
@@ -28,12 +31,13 @@ export class ProjectPrefetch extends Service<ProjectPrefetch>()('ProjectPrefetch
 
   of(project: Project): Promise<void> {
     const projectId = project.id;
+    const tile = this.prepare(TileRung, { tileId: this.workspace.tileIdOf(projectId) });
     const own = this.prepare(ProjectRung, { projectId });
     const graph = this.prepare(GraphRung, { projectId, branch: this.visits.branchOf(project) }).catch((error: unknown) => {
       if (error instanceof RungClosedError) return;
       throw error;
     });
-    return Promise.all([own, graph]).then(() => undefined);
+    return Promise.all([tile, own, graph]).then(() => undefined);
   }
 
   ahead(project: Project): void {

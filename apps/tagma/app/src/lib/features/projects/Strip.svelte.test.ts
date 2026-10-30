@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import type { Project } from '@tagma/server/graph/contract/wire/rows';
+import type { Group, Project } from '@tagma/server/graph/contract/wire/rows';
 import type { PlatformStorage } from '@runlith/layer/Platform';
 import { makeSharedStorage, makeStorage } from '@runlith/layer/testing';
 import { flushSync } from 'svelte';
@@ -33,7 +33,13 @@ afterEach(() => {
 });
 
 function window(storage: PlatformStorage, active: number | null, visits = new Visits(makeStorage(), surfaces)) {
-  const at = $state({ active, projects: REGISTRY });
+  const at = $state<{ active: number | null; projects: readonly Project[]; groups: readonly Group[] }>({
+    active,
+    projects: REGISTRY,
+    groups: [],
+  });
+  const groupOf = (id: number) => at.groups.find((group) => group.graph.id === id || group.members.some((one) => one.id === id)) ?? null;
+  const tileIdOf = (id: number) => at.groups.find((group) => group.members.some((one) => one.id === id))?.graph.id ?? id;
   const workspace = {
     get projects() {
       return at.projects;
@@ -41,7 +47,13 @@ function window(storage: PlatformStorage, active: number | null, visits = new Vi
     get activeId() {
       return at.projects.find((one) => one.id === at.active)?.id ?? null;
     },
+    get activeTileId() {
+      return at.active === null ? null : tileIdOf(at.active);
+    },
     find: (id: number) => at.projects.find((one) => one.id === id) ?? null,
+    groupOf,
+    tileIdOf,
+    tileOf: (one: Project) => at.projects.find((candidate) => candidate.id === tileIdOf(one.id)) ?? one,
   } as unknown as Workspace;
   let strip!: ProjectStrip;
   stops.push(
@@ -127,6 +139,33 @@ test('what another window changes in the strip shows in this one at once, and th
   expect(names(first.strip.projects)).toEqual(['gamma', 'alpha']);
   expect(first.strip.view).toBe('tabs');
   expect(names(first.strip.recent)).toEqual(['beta', 'alpha']);
+});
+
+test('a group stands as one tile where its first member stood, opens into the member last entered, moves and leaves whole, and its members come back as tiles once it dissolves', () => {
+  const { strip, at, go } = window(makeStorage(), 1);
+  go(2);
+  go(3);
+  const shop = { ...project(9, 'shop'), kind: 'group' as const };
+  at.projects = [...REGISTRY, shop];
+  at.groups = [{ graph: shop, members: [REGISTRY[0]!, REGISTRY[2]!] }];
+  flushSync();
+  expect(names(strip.projects)).toEqual(['shop', 'beta']);
+  expect(strip.entry(shop).name).toBe('gamma');
+  go(1);
+  expect(strip.entry(shop).name).toBe('alpha');
+  expect(names(strip.cycle)).toEqual(['shop', 'beta']);
+
+  strip.move(9, null);
+  expect(names(strip.projects)).toEqual(['beta', 'shop']);
+
+  at.groups = [];
+  flushSync();
+  expect(names(strip.projects)).toEqual(['beta', 'alpha', 'gamma']);
+
+  at.groups = [{ graph: shop, members: [REGISTRY[0]!, REGISTRY[2]!] }];
+  flushSync();
+  strip.remove(9);
+  expect(names(strip.projects)).toEqual(['beta']);
 });
 
 test('the first strip holds the projects that have a remembered place, in registry order, and the current one', () => {

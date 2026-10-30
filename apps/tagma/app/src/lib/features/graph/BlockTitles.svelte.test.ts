@@ -68,7 +68,10 @@ function open(
     },
   };
   const workspace = new Workspace(
-    { list: single({ name: 'projects', scope, queryClient: cache, loader: ({ signal }) => readProjects(signal) }) } as never,
+    {
+      list: single({ name: 'projects', scope, queryClient: cache, loader: ({ signal }) => readProjects(signal) }),
+      groups: single({ name: 'groups', scope, queryClient: cache, loader: async () => [] }),
+    } as never,
     makeRouter(),
     makePlatform(),
     new Failure((cause) => {

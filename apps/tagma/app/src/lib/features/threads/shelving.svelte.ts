@@ -26,7 +26,7 @@ export class Shelving {
   constructor(
     private readonly list: ThreadList,
     private readonly folds: ThreadFolds,
-    private readonly host: ThreadSlot,
+    private readonly slot: () => ThreadSlot,
     readonly filing: Filing,
     private readonly drops: MentionDrops,
     private readonly drawn: DrawnColumn,
@@ -130,7 +130,7 @@ export class Shelving {
   newAgentIn(folderId: string): void {
     this.list.aimBirth(folderId);
     this.folds.setOpen(folderId, true);
-    this.host.startDraft();
+    this.slot().startDraft();
   }
 
   select(event: MouseEvent): void {
@@ -142,7 +142,7 @@ export class Shelving {
     event.stopPropagation();
     const id = root.row.id;
     const next = new Set(this.selection);
-    const active = this.host.activeId;
+    const active = this.slot().activeId;
     const from = this.selectedFrom ?? (active === null ? null : (this.drawn.rootOf(active)?.row.id ?? null));
     if (event.shiftKey && from !== null) {
       const order = this.drawn.roots();

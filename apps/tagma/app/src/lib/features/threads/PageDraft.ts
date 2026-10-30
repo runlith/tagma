@@ -22,6 +22,11 @@ export class PageDraft extends Service<PageDraft>()('PageDraft', { tier: 'app' }
     super();
   }
 
+  move(from: Project, to: Project): void {
+    this.shelf.carry(unbornKey(from.id), unbornKey(to.id));
+    this.start(to);
+  }
+
   start(project: Project, place: DraftPlace = MAIN_CHECKOUT, branch: string | null = null): void {
     this.shelf.place(unbornKey(project.id), place);
     this.panes.focusOn(null);

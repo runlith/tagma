@@ -4,8 +4,10 @@ import { Layer } from '@runlith/layer/Layer';
 import { Handoff } from '@runlith/layer/Handoff';
 import { flushSync, tick } from 'svelte';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
-import { liveFeed, mountShell, screen, threadsRepo, type TestApp } from '$lib/app/testing.js';
+import { liveFeed, mountShell, screen, soloWorkspace, threadsRepo, type TestApp } from '$lib/app/testing.js';
+import { Workspace } from '$lib/features/workspace/Selection.svelte.js';
 import { ProjectRung } from '$lib/features/workspace/ProjectRung.js';
+import { TileRung } from '$lib/features/workspace/TileRung.js';
 import { ThreadList } from '$lib/features/threads/List.svelte.js';
 import { FolderActs } from '$lib/features/threads/FolderActs.js';
 import { Notices } from '$lib/features/notices/Service.svelte.js';
@@ -46,7 +48,7 @@ beforeEach(async () => {
   feed = liveFeed();
   app = mountShell(
     Layer.mergeAll(ThreadList, FolderActs, Notices),
-    Layer.mergeAll(Layer.of(ThreadsRepo, threadsRepo()), Layer.of(Live, feed.live), screen()),
+    Layer.mergeAll(Layer.of(ThreadsRepo, threadsRepo()), Layer.of(Live, feed.live), Layer.of(Workspace, soloWorkspace()), screen()),
   );
   watch = new ProjectSwitchWatch(app.app);
   release = $effect.root(() => {
@@ -139,7 +141,8 @@ test('a cold switch waits for scope, the first list and the selected thread, the
 });
 
 test('a held scope and its existing list make a return warm without another list frame', async () => {
-  const held = app.app.hold(ProjectRung, { projectId: 2 });
+  const tile = app.app.hold(TileRung, { tileId: 2 });
+  const held = app.app.hold(ProjectRung, { projectId: 2 }, tile.scope);
   await list();
   watch.begin({ projectId: 2, project: 'B', threadId: 'b' }, 'popstate');
   time = 110;
@@ -161,6 +164,7 @@ test('a held scope and its existing list make a return warm without another list
     totalMs: 40,
   });
   held.release();
+  tile.release();
 });
 
 test('a third navigation declines the previous switch, including an already scheduled frame', async () => {

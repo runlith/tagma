@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { App } from '@runlith/layer/svelte/App.svelte';
   import { untrack } from 'svelte';
   import ArrowLeft from '@lucide/svelte/icons/arrow-left';
   import ArrowRight from '@lucide/svelte/icons/arrow-right';
@@ -16,6 +15,7 @@
   import { SidePanes } from '$lib/app/panes/SidePanes.svelte.js';
   import { SettingsRepo, writtenCatalog } from '$lib/features/settings/SettingsRepo.js';
   import { ProjectRung } from '$lib/features/workspace/ProjectRung.js';
+  import { holdProject } from '$lib/features/workspace/holds.js';
   import FadeText from '$lib/shared/FadeText.svelte';
   import type { SidePane } from '$lib/shared/panes/pane.js';
   import { ThreadNames } from '$lib/shared/threads/Names.svelte.js';
@@ -44,7 +44,7 @@
 
   let { pane, close, project }: { pane: SidePane; close: () => void; project: number } = $props();
 
-  if (untrack(() => project) !== ProjectRung.Current.use().projectId) App.hold(ProjectRung, { projectId: untrack(() => project) });
+  if (untrack(() => project) !== ProjectRung.Current.use().projectId) holdProject(untrack(() => project));
 
   const open = OpenPages.use();
   const panes = SidePanes.use();

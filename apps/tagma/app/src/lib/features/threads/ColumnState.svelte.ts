@@ -20,7 +20,6 @@ import { worktreeGroups } from './worktrees/worktreeGroups.js';
 const ROW_FOCUS = 'a[data-thread], button[data-fold]';
 
 export class ColumnState {
-  readonly host: ThreadSlot;
   private readonly list: ThreadList;
   private readonly folds: ThreadFolds;
   private readonly archived: ArchivedThreadsOpen;
@@ -52,7 +51,7 @@ export class ColumnState {
       filtering: this.filtering,
     }),
   );
-  readonly markKey = $derived.by(() => String(this.host.projectId));
+  readonly markKey = $derived.by(() => String(this.list.aim.tileId));
   readonly agentsView = $derived.by<AgentsView>(() =>
     this.places.several && this.marks.agentsView.get(this.markKey) === 'worktrees' ? 'worktrees' : 'teams',
   );
@@ -119,8 +118,12 @@ export class ColumnState {
   readonly quietPins = $derived.by(() => this.shown.filter((node) => rootBand(node) === 'pinned' && isQuiet(node)));
   private lastWaiting: string | null = null;
 
+  get host(): ThreadSlot {
+    return this.slot();
+  }
+
   constructor(
-    host: ThreadSlot,
+    private readonly slot: () => ThreadSlot,
     list: ThreadList,
     folds: ThreadFolds,
     archived: ArchivedThreadsOpen,
@@ -129,12 +132,11 @@ export class ColumnState {
     drops: MentionDrops,
     private readonly catalog: ProviderCatalog,
   ) {
-    this.host = host;
     this.list = list;
     this.folds = folds;
     this.archived = archived;
     this.marks = marks;
-    this.shelving = new Shelving(list, folds, host, filing, drops, {
+    this.shelving = new Shelving(list, folds, slot, filing, drops, {
       shelved: () => this.grouping === null,
       nodeOf: (id) => this.list.node(id),
       rootOf: (id) => this.rootOf(id),

@@ -40,7 +40,7 @@ export class Births {
   private readonly unbornRows = new WeakMap<Birth, ThreadListRow>();
 
   constructor(
-    private readonly projectId: number,
+    private readonly covers: (projectId: number) => boolean,
     private readonly base: (threadId: string) => ThreadListRow | undefined,
     private readonly born: (threadId: string) => void,
     private readonly repaint: (threadIds: readonly string[]) => void,
@@ -76,8 +76,8 @@ export class Births {
     return birth;
   }
 
-  async bear(aim: BirthAim, create: () => Promise<string | null>): Promise<string | null> {
-    const birth = this.conceive(aim, this.projectId, null);
+  async bear(aim: BirthAim, projectId: number, create: () => Promise<string | null>): Promise<string | null> {
+    const birth = this.conceive(aim, projectId, null);
     let threadId: string | null = null;
     try {
       threadId = await create();
@@ -107,7 +107,7 @@ export class Births {
       threadId = answer?.threadId ?? null;
       return answer;
     } finally {
-      const listed = source.projectId === this.projectId && this.listed(source.id) !== undefined ? threadId : null;
+      const listed = this.covers(source.projectId) && this.listed(source.id) !== undefined ? threadId : null;
       this.replace(birth.key, (standing) => ({ ...standing, threadId: listed, settled: true }));
     }
   }

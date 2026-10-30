@@ -10,6 +10,10 @@ export const ProjectsRepo = Repo.define(
       loader: async ({ signal }, door) => (await door.perform('list_projects', {}, {}, { signal })).projects,
     }),
 
+    groups: single({
+      loader: async ({ signal }, door) => (await door.perform('list_groups', {}, {}, { signal })).groups,
+    }),
+
     add: mutation({
       mutator: async (
         input: { name: string; rootPath: string; storage?: StorageMode; catalogs?: readonly string[]; graphRemote?: string },
@@ -29,6 +33,26 @@ export const ProjectsRepo = Repo.define(
     rename: mutation({
       mutator: async (input: { projectId: number; name: string }, { signal }, door) =>
         (await door.perform('update_project', { ref: String(input.projectId), name: input.name }, {}, { signal })).project,
+    }),
+
+    makeGroup: mutation({
+      mutator: async (input: { name: string; projects: readonly number[] }, { signal }, door) =>
+        await door.perform('make_group', { name: input.name, projects: input.projects.map(String) }, {}, { signal }),
+    }),
+
+    joinGroup: mutation({
+      mutator: async (input: { groupId: number; projectId: number }, { signal }, door) =>
+        (await door.perform('join_group', { group: String(input.groupId), project: String(input.projectId) }, {}, { signal })).group,
+    }),
+
+    leaveGroup: mutation({
+      mutator: async (projectId: number, { signal }, door) =>
+        (await door.perform('leave_group', { project: String(projectId) }, {}, { signal })).group,
+    }),
+
+    renameGroup: mutation({
+      mutator: async (input: { groupId: number; name: string }, { signal }, door) =>
+        (await door.perform('rename_group', { group: String(input.groupId), name: input.name }, {}, { signal })).group,
     }),
 
     roots: keyed({

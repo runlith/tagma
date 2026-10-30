@@ -1,6 +1,6 @@
 import { Service } from '@runlith/layer/key';
 import { ReaderMarks } from '$lib/shared/reading/ReaderMarks.svelte.js';
-import { ProjectRung, type ProjectAim } from '$lib/features/workspace/ProjectRung.js';
+import { TileRung, type TileAim } from '$lib/features/workspace/TileRung.js';
 import type { ThreadTreeNode } from './forest.js';
 
 export type FoldShape = {
@@ -22,9 +22,9 @@ class SetMemo {
   }
 }
 
-export class ThreadFolds extends Service<ThreadFolds>()('ThreadFolds', { tier: 'project' }) {
+export class ThreadFolds extends Service<ThreadFolds>()('ThreadFolds', { tier: 'tile' }) {
   static *make() {
-    return new ThreadFolds(yield* ProjectRung.Current, yield* ReaderMarks);
+    return new ThreadFolds(yield* TileRung.Current, yield* ReaderMarks);
   }
 
   private closedFrom = $state<readonly string[] | null>(null);
@@ -33,7 +33,7 @@ export class ThreadFolds extends Service<ThreadFolds>()('ThreadFolds', { tier: '
   private readonly stubSets = new SetMemo();
 
   constructor(
-    private readonly aim: ProjectAim,
+    private readonly aim: TileAim,
     private readonly marks: ReaderMarks,
   ) {
     super();
@@ -134,6 +134,6 @@ export class ThreadFolds extends Service<ThreadFolds>()('ThreadFolds', { tier: '
   }
 
   private get project(): string {
-    return String(this.aim.projectId);
+    return String(this.aim.tileId);
   }
 }

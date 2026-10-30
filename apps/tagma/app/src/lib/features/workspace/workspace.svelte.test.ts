@@ -7,6 +7,8 @@ import { expect, test } from 'vitest';
 import { waitUntil } from '@runlith/testing/flush';
 import { Workspace } from './Selection.svelte.js';
 
+const groups = () => stubSingle({ loadOrThrow: async () => [], refresh: async () => [] });
+
 const projects = ['first', 'second'].map((name, i): Project => ({
   id: i + 1,
   name,
@@ -21,6 +23,30 @@ const projects = ['first', 'second'].map((name, i): Project => ({
   createdAt: '2026-09-05T00:00:00Z',
 }));
 
+test('a member of a group stands under the group’s tile, and a thread row carries a mark for every home but the first member, wherever the window stands; a project in no group marks only foreign homes', async () => {
+  const shop: Project = { ...projects[0]!, id: 9, name: 'shop', repoKey: 'group:shop', kind: 'group' };
+  const third: Project = { ...projects[0]!, id: 3, name: 'third', repoKey: 'third', rootPath: '/projects/third' };
+  const workspace = new Workspace(
+    {
+      list: stubSingle({ loadOrThrow: async () => [...projects, third, shop] }),
+      groups: stubSingle({ loadOrThrow: async () => [{ graph: shop, members: [projects[1]!, projects[0]!] }] }),
+    } as never,
+    makeRouter({ params: { project: 'first' } }),
+    makePlatform({ local: makeStorage() }),
+    new Failure((error) => {
+      throw error;
+    }),
+  );
+  await waitUntil(() => workspace.loaded);
+  expect(workspace.contextTile?.name).toBe('shop');
+  expect([workspace.tileIdOf(1), workspace.tileIdOf(2), workspace.tileIdOf(3)]).toEqual([9, 9, 3]);
+  expect([1, 2].map((standing) => [workspace.markOf(1, standing), workspace.markOf(2, standing)])).toEqual([
+    [1, null],
+    [1, null],
+  ]);
+  expect([workspace.markOf(3, 3), workspace.markOf(1, 3)]).toEqual([null, 1]);
+});
+
 test.each(['refused', 'older'] as const)('the remembered project survives %s storage in this document', async (mode) => {
   const local =
     mode === 'refused'
@@ -34,7 +60,7 @@ test.each(['refused', 'older'] as const)('the remembered project survives %s sto
     throw error;
   });
   const workspace = new Workspace(
-    { list: stubSingle({ loadOrThrow: async () => projects }) } as never,
+    { list: stubSingle({ loadOrThrow: async () => projects }), groups: groups() } as never,
     makeRouter(route),
     makePlatform({ local }),
     failure,
@@ -53,7 +79,7 @@ test('the project the composition names is resumed even when only global project
   const global: Project = { ...projects[0]!, name: 'global', kind: 'global' };
   const opened = (entry?: { readonly project: string }) =>
     new Workspace(
-      { list: stubSingle({ loadOrThrow: async () => [global] }) } as never,
+      { list: stubSingle({ loadOrThrow: async () => [global] }), groups: groups() } as never,
       makeRouter({ params: {} }),
       makePlatform({ local: makeStorage() }),
       new Failure((error) => {
@@ -80,7 +106,7 @@ test.each([
   const { router, visited } = makeRouterWithLog({ url: new URL(at, 'http://localhost'), routeId, params: { ...params } });
   const renamed = projects.map((project) => (project.id === 1 ? { ...project, name: 'renamed' } : project));
   const workspace = new Workspace(
-    { list: stubSingle({ loadOrThrow: async () => projects, refresh: async () => renamed }) } as never,
+    { list: stubSingle({ loadOrThrow: async () => projects, refresh: async () => renamed }), groups: groups() } as never,
     router,
     makePlatform({ local: makeStorage() }),
     new Failure((error) => {
@@ -113,6 +139,7 @@ test.each([
         loadOrThrow: async () => projects,
         refresh: async () => projects.map((project) => (project.id === 1 ? { ...project, name: 'renamed' } : project)),
       }),
+      groups: groups(),
     } as never,
     router,
     makePlatform({ local: makeStorage() }),
@@ -143,7 +170,7 @@ test('a rename told while an older registry read is still in flight is followed 
     Promise.resolve(projects.map((project) => (project.id === 1 ? { ...project, name: 'renamed' } : project))),
   ];
   const workspace = new Workspace(
-    { list: stubSingle({ loadOrThrow: async () => projects, refresh: () => answers.shift()! }) } as never,
+    { list: stubSingle({ loadOrThrow: async () => projects, refresh: () => answers.shift()! }), groups: groups() } as never,
     router,
     makePlatform({ local: makeStorage() }),
     new Failure((error) => {
@@ -170,6 +197,7 @@ test('a project registered after the registry was read is found by one re-read, 
           return [...projects, later];
         },
       }),
+      groups: groups(),
     } as never,
     makeRouter({ params: {} }),
     makePlatform({ local: makeStorage() }),

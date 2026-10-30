@@ -30,12 +30,12 @@ export class ProjectStrip extends Service<ProjectStrip>()('ProjectStrip', { tier
   private shown = $state<StripView>('dock');
   private entered: number | null = null;
   private here = $state.raw<readonly number[]>([]);
-  private readonly listed = $derived(this.known(this.members ?? this.seed()));
+  private readonly listed = $derived(this.tiles(this.members ?? this.seed()));
   private readonly ordered = $derived(this.known(this.order));
   private readonly lately = $derived.by(() => {
-    const held = new Set(this.listed.map((project) => project.id));
+    const held = new Set(this.listed.map((tile) => tile.id));
     const current = this.workspace.activeId;
-    return this.known(this.here.filter((id) => id === current || held.has(id)));
+    return this.known(this.here.filter((id) => id === current || held.has(this.workspace.tileIdOf(id))));
   });
 
   constructor(
@@ -70,7 +70,23 @@ export class ProjectStrip extends Service<ProjectStrip>()('ProjectStrip', { tier
   }
 
   get visible(): boolean {
-    return this.workspace.projects.filter((project) => project.kind === 'folder').length >= 2;
+    const folders = this.workspace.projects.filter((project) => project.kind === 'folder');
+    return new Set(folders.map((project) => this.workspace.tileIdOf(project.id))).size >= 2;
+  }
+
+  entry(tile: Project): Project {
+    const members = this.workspace.groupOf(tile.id)?.members;
+    if (members === undefined || tile.kind !== 'group') return tile;
+    const held = new Set(members.map((member) => member.id));
+    const last = this.order.find((id) => held.has(id));
+    return members.find((member) => member.id === last) ?? members[0] ?? tile;
+  }
+
+  include(projectIds: readonly number[]): void {
+    const stored = this.read();
+    const held = stored?.members ?? this.seed();
+    const missing = projectIds.filter((id) => !held.includes(id));
+    if (missing.length > 0) this.write({ ...this.base(stored), members: [...held, ...missing] });
   }
 
   get projects(): readonly Project[] {
@@ -86,27 +102,36 @@ export class ProjectStrip extends Service<ProjectStrip>()('ProjectStrip', { tier
   }
 
   get cycle(): readonly Project[] {
-    const members = this.projects;
-    const held = new Set(members.map((project) => project.id));
-    const current = this.workspace.activeId;
-    const first = this.recent.filter((project) => held.has(project.id) || project.id === current);
-    const met = new Set(first.map((project) => project.id));
-    return [...first, ...members.filter((project) => !met.has(project.id))];
+    const tiles = this.projects;
+    const held = new Set(tiles.map((tile) => tile.id));
+    const current = this.workspace.activeTileId;
+    const first = this.tiles(this.order).filter((tile) => held.has(tile.id) || tile.id === current);
+    const met = new Set(first.map((tile) => tile.id));
+    return [...first, ...tiles.filter((tile) => !met.has(tile.id))];
   }
 
-  remove(projectId: number): void {
+  remove(tileId: number): void {
     const stored = this.read();
-    this.write({ ...this.base(stored), members: (stored?.members ?? this.seed()).filter((id) => id !== projectId) });
+    const members = (stored?.members ?? this.seed()).filter((id) => this.workspace.tileIdOf(id) !== tileId && id !== tileId);
+    this.write({ ...this.base(stored), members });
   }
 
-  move(projectId: number, before: number | null): void {
+  move(tileId: number, before: number | null): void {
     const stored = this.read();
     const held = stored?.members ?? this.seed();
-    if (!held.includes(projectId) || projectId === before) return;
-    const members = held.filter((id) => id !== projectId);
-    const at = before === null ? -1 : members.indexOf(before);
-    members.splice(at === -1 ? members.length : at, 0, projectId);
-    this.write({ ...this.base(stored), members });
+    const blocks = new Map<number, number[]>();
+    for (const id of held) {
+      const tile = this.workspace.tileIdOf(id);
+      const block = blocks.get(tile);
+      if (block === undefined) blocks.set(tile, [id]);
+      else block.push(id);
+    }
+    const moving = blocks.get(tileId);
+    if (moving === undefined || tileId === before) return;
+    const order = [...blocks.keys()].filter((tile) => tile !== tileId);
+    const at = before === null ? -1 : order.indexOf(before);
+    order.splice(at === -1 ? order.length : at, 0, tileId);
+    this.write({ ...this.base(stored), members: order.flatMap((tile) => blocks.get(tile) ?? []) });
   }
 
   show(view: StripView): void {
@@ -139,6 +164,16 @@ export class ProjectStrip extends Service<ProjectStrip>()('ProjectStrip', { tier
 
   private known(order: readonly number[]): readonly Project[] {
     return order.flatMap((id) => this.workspace.find(id) ?? []);
+  }
+
+  private tiles(order: readonly number[]): readonly Project[] {
+    const seen = new Set<number>();
+    return this.known(order).flatMap((project) => {
+      const tile = this.workspace.tileOf(project);
+      if (seen.has(tile.id)) return [];
+      seen.add(tile.id);
+      return [tile];
+    });
   }
 
   private read(): Stored | null {

@@ -55,6 +55,7 @@ import { LocalFiles } from '$lib/features/executions/terminal/LocalFiles.js';
 import { ServerOrigin } from '$lib/wire/ServerOrigin.svelte.js';
 import { GraphRung } from '$lib/features/workspace/GraphRung.js';
 import { ProjectRung } from '$lib/features/workspace/ProjectRung.js';
+import { TileRung } from '$lib/features/workspace/TileRung.js';
 import { WorkspaceLayer } from '$lib/features/workspace/layer.js';
 import { WorktreesLayer } from '$lib/features/worktrees/layer.js';
 import { RETRIES, retriable } from '$lib/wire/refusal.js';
@@ -97,7 +98,7 @@ import { MobileShell } from './shell/MobileShell.js';
 import { Screen } from './mobile/Screen.svelte.js';
 import { Overlays } from './overlays.js';
 
-export const LADDER = [ProjectRung, ThreadRung, GraphRung] as const;
+export const LADDER = [TileRung, ProjectRung, ThreadRung, GraphRung] as const;
 
 export function appLayers(desktop: DesktopApi | undefined) {
   const bridged =

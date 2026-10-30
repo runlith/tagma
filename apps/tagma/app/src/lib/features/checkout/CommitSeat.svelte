@@ -2,13 +2,13 @@
   import { App } from '@runlith/layer/svelte/App.svelte';
   import { untrack } from 'svelte';
   import { GraphRung } from '$lib/features/workspace/GraphRung.js';
-  import { ProjectRung } from '$lib/features/workspace/ProjectRung.js';
+  import { holdProject } from '$lib/features/workspace/holds.js';
   import CommitView from './CommitView.svelte';
 
   let { projectId, sha }: { projectId: number; sha: string } = $props();
 
   const held = untrack(() => projectId);
-  App.hold(ProjectRung, { projectId: held });
+  holdProject(held);
   App.hold(GraphRung, { projectId: held, branch: null });
 </script>
 

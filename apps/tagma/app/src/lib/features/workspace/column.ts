@@ -13,6 +13,7 @@ export type ColumnDeclaration = {
   readonly label: string;
   readonly state: KeyClass<string, ColumnState>;
   readonly frame?: ColumnFrame;
+  readonly stands?: 'tile';
   readonly search?: boolean;
   readonly routes?: readonly string[];
   readonly room?: (app: Resolver) => boolean;

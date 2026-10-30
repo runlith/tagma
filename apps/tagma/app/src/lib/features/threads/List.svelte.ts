@@ -8,7 +8,8 @@ import { Failure } from '@runlith/layer/Failure';
 import { Notices } from '$lib/features/notices/Service.svelte.js';
 import { Scope } from '@runlith/layer/Scope';
 import { Service } from '@runlith/layer/key';
-import { ProjectRung, type ProjectAim } from '$lib/features/workspace/ProjectRung.js';
+import { TileRung, type TileAim } from '$lib/features/workspace/TileRung.js';
+import { Workspace } from '$lib/features/workspace/Selection.svelte.js';
 import { ThreadsRepo } from './Repo.js';
 import { Live, type LiveConnection } from '$lib/wire/Live.js';
 import { untrack } from 'svelte';
@@ -37,10 +38,11 @@ export type ThreadIdentity = {
   readonly bornAs: string;
 };
 
-export class ThreadList extends Service<ThreadList>()('ThreadList', { tier: 'project', eager: true }) {
+export class ThreadList extends Service<ThreadList>()('ThreadList', { tier: 'tile', eager: true }) {
   static *make() {
     return new ThreadList(
-      yield* ProjectRung.Current,
+      yield* TileRung.Current,
+      yield* Workspace,
       yield* ThreadsRepo,
       yield* FolderActs,
       yield* Live,
@@ -80,7 +82,8 @@ export class ThreadList extends Service<ThreadList>()('ThreadList', { tier: 'pro
   private readonly seeing = new Set<string>();
 
   constructor(
-    readonly aim: ProjectAim,
+    readonly aim: TileAim,
+    private readonly workspace: Workspace,
     private readonly repo: Threads,
     private readonly folderActs: FolderActs,
     private readonly live: LiveConnection,
@@ -91,7 +94,7 @@ export class ThreadList extends Service<ThreadList>()('ThreadList', { tier: 'pro
   ) {
     super();
     this.births = new Births(
-      aim.projectId,
+      (projectId) => this.covers(projectId),
       (threadId) => this.byId.get(threadId),
       (threadId) => {
         const folderId = this.aimedFolder;
@@ -121,7 +124,7 @@ export class ThreadList extends Service<ThreadList>()('ThreadList', { tier: 'pro
 
   private subscribe(): void {
     this.feed = this.live.hold(
-      (client) => client['threads.subscribe']({ projectId: this.aim.projectId }),
+      (client) => client['threads.subscribe']({ projectId: this.aim.tileId }),
       (frame) => this.take(frame),
       (reason) => {
         if (reason.kind !== 'subscription') return;
@@ -243,7 +246,7 @@ export class ThreadList extends Service<ThreadList>()('ThreadList', { tier: 'pro
 
   private draw(id: string): void {
     const base = this.byId.get(id);
-    if (base !== undefined && base.projectId !== this.aim.projectId) this.homes.set(id, base.projectId);
+    if (base !== undefined && base.projectId !== this.aim.tileId) this.homes.set(id, base.projectId);
     const row = this.pending.hides(id, base) ? undefined : this.births.draw(id, base);
     if (row === undefined) {
       this.forest.remove(id);
@@ -317,9 +320,11 @@ export class ThreadList extends Service<ThreadList>()('ThreadList', { tier: 'pro
   }
 
   homeOf(id: string): number {
-    return (
-      this.byId.get(id)?.projectId ?? this.homes.get(id) ?? this.shelved?.find((row) => row.id === id)?.projectId ?? this.aim.projectId
-    );
+    return this.byId.get(id)?.projectId ?? this.homes.get(id) ?? this.shelved?.find((row) => row.id === id)?.projectId ?? this.aim.tileId;
+  }
+
+  covers(projectId: number): boolean {
+    return this.workspace.tileIdOf(projectId) === this.aim.tileId;
   }
 
   private refreshWindow(): void {
@@ -331,7 +336,7 @@ export class ThreadList extends Service<ThreadList>()('ThreadList', { tier: 'pro
     const landing = { frames: [] as Exclude<ThreadsFeedEvent, { type: 'folders' }>[], asked: false };
     this.landing = landing;
     void this.repo.roots
-      .key({ projectId: this.aim.projectId })
+      .key({ projectId: this.aim.tileId })
       .refresh({ throwOnError: true })
       .then(
         (window) => {
@@ -363,7 +368,7 @@ export class ThreadList extends Service<ThreadList>()('ThreadList', { tier: 'pro
     if (before === null || this.more === 0) return;
     const era = this.era;
     try {
-      const page = await this.repo.roots.key({ projectId: this.aim.projectId, readerBefore: before }).refresh({ throwOnError: true });
+      const page = await this.repo.roots.key({ projectId: this.aim.tileId, readerBefore: before }).refresh({ throwOnError: true });
       if (era !== this.era || page === undefined) return;
       const fresh = page.rows.filter((row) => !this.byId.has(row.id) && !this.pending.hides(row.id, row));
       for (const row of fresh) {
@@ -382,7 +387,7 @@ export class ThreadList extends Service<ThreadList>()('ThreadList', { tier: 'pro
     const era = this.era;
     const asked = ++this.shelfReads;
     try {
-      const answer = await this.repo.archived.key(this.aim.projectId).refresh({ throwOnError: true });
+      const answer = await this.repo.archived.key(this.aim.tileId).refresh({ throwOnError: true });
       if (era !== this.era || asked !== this.shelfReads || answer === undefined) return;
       if (answer.status !== 'rows') throw new Error('archived threads answered without rows');
       this.shelved = answer.rows;

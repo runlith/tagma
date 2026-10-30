@@ -18,6 +18,7 @@
   import { MentionDrops } from './MentionDrops.svelte.js';
   import ThreadMenu from './Menu.svelte';
   import ThreadRow from './Row.svelte';
+  import HomeHold from './HomeHold.svelte';
   import { Squeeze, Stow } from './squeeze.svelte.js';
   import { ThreadFolds } from './threadFolds.svelte.js';
   import type { ThreadTreeNode } from './forest.js';
@@ -56,7 +57,7 @@
   const folds = ThreadFolds.use();
   const squeeze = new Squeeze();
   const col = new ColumnState(
-    untrack(() => host),
+    () => host,
     list,
     folds,
     ArchivedThreadsOpen.use(),
@@ -249,24 +250,26 @@
   {@const node = line.node}
   {@const shelf = line.decor === 'shelf'}
   {@const own = line.top && !inArchive}
-  <ThreadRow
-    {node}
-    depth={line.depth}
-    parent={line.parent}
-    {host}
-    {squeeze}
-    {folds}
-    activeId={host.activeId}
-    actions={inArchive ? archivedActions : actions}
-    query={inArchive ? '' : col.filter}
-    {...own ? col.renamer(node.row.id) : {}}
-    unborn={own && list.births.unborn(node.row.id)}
-    badge={shelf && places.several ? placeBadge : undefined}
-    aside={own ? (line.decor === 'group' ? crumb : line.decor === 'nowhere' ? placeNowhere : undefined) : undefined}
-    selected={own && shelf && shelving.selection.has(node.row.id)}
-    lifted={!inArchive && drag.lifts(node.row.id)}
-    onUnpin={inArchive ? undefined : (row) => void list.setPinned(row.id, false)}
-  />
+  <HomeHold projectId={node.row.projectId}>
+    <ThreadRow
+      {node}
+      depth={line.depth}
+      parent={line.parent}
+      {host}
+      {squeeze}
+      {folds}
+      activeId={host.activeId}
+      actions={inArchive ? archivedActions : actions}
+      query={inArchive ? '' : col.filter}
+      {...own ? col.renamer(node.row.id) : {}}
+      unborn={own && list.births.unborn(node.row.id)}
+      badge={shelf && places.several ? placeBadge : undefined}
+      aside={own ? (line.decor === 'group' ? crumb : line.decor === 'nowhere' ? placeNowhere : undefined) : undefined}
+      selected={own && shelf && shelving.selection.has(node.row.id)}
+      lifted={!inArchive && drag.lifts(node.row.id)}
+      onUnpin={inArchive ? undefined : (row) => void list.setPinned(row.id, false)}
+    />
+  </HomeHold>
 {/snippet}
 
 {#snippet placeBadge(row: ThreadListRow, step: number)}

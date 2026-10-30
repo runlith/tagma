@@ -8,6 +8,7 @@ import { afterEach, expect, test } from 'vitest';
 import { GraphDoor } from '$lib/features/workspace/GraphDoor.js';
 import { GraphRung } from '$lib/features/workspace/GraphRung.js';
 import { ProjectRung } from '$lib/features/workspace/ProjectRung.js';
+import { TileRung } from '$lib/features/workspace/TileRung.js';
 import { loadOperations } from '$lib/wire/operation.js';
 import { testDoor } from '$lib/wire/testing.js';
 import { TranslationLens } from './Lens.svelte.js';
@@ -67,8 +68,8 @@ test('a refused first act holds the lens on its refusal, and a retry with a mode
   const mounted = mountRepo(TranslationsRepo, {
     door: new GraphDoor(testDoor(fetch), aim),
     queryClient: new QueryClient({ defaultOptions: { queries: { retry: false } } }),
-    ladder: [ProjectRung, GraphRung],
-    at: { project: { projectId: 1 }, graph: aim },
+    ladder: [TileRung, ProjectRung, GraphRung],
+    at: { tile: { tileId: 1 }, project: { projectId: 1 }, graph: aim },
   });
   close.push(mounted.unmount);
   const translations = new Translations(

@@ -49,7 +49,7 @@ const done = (id: string): ThreadListRow =>
 test('finished children wait behind one stub and working ones past five behind another, each opened by its fold', () => {
   const busy = ['w0', 'w1', 'w2', 'w3', 'w4', 'w5', 'w6'];
   const [lead] = threadTree([row('lead', null), done('d0'), ...busy.map(working), done('d1')]);
-  const folds = new ThreadFolds({ projectId: 1 }, new ReaderMarks(makeStorage()));
+  const folds = new ThreadFolds({ tileId: 1 }, new ReaderMarks(makeStorage()));
   const draw = () =>
     threadLines(
       lead as NonNullable<typeof lead>,
@@ -70,7 +70,7 @@ test('pinned finished children stand after every working fold and before the fin
   const busy = ['w0', 'w1', 'w2', 'w3', 'w4', 'w5'];
   const [lead] = threadTree([row('lead', null), ...busy.map(working), { ...done('kept'), pinnedAt: NOW }, done('d0')]);
   const [alone] = threadTree([row('lead', null), { ...done('kept'), pinnedAt: NOW }]);
-  const folds = new ThreadFolds({ projectId: 1 }, new ReaderMarks(makeStorage()));
+  const folds = new ThreadFolds({ tileId: 1 }, new ReaderMarks(makeStorage()));
   const draw = (node: typeof lead, unpinning: string | null = null) =>
     threadLines(
       node as NonNullable<typeof node>,
@@ -86,7 +86,7 @@ test('pinned finished children stand after every working fold and before the fin
 test('an idle ancestor stays visible until its whole subtree is idle and returns when a descendant wakes', () => {
   const forest = new ThreadForest();
   for (const held of [row('lead', null), done('middle'), row('leaf', 'middle')]) forest.put(held);
-  const folds = new ThreadFolds({ projectId: 1 }, new ReaderMarks(makeStorage()));
+  const folds = new ThreadFolds({ tileId: 1 }, new ReaderMarks(makeStorage()));
   const cache = new LineCache();
   const draw = () =>
     threadLines(forest.node('lead')!, { folds, activeId: null, filtering: false, cache }, { depth: 0, decor: 'shelf', drop: 'loose' }).map(
@@ -109,7 +109,7 @@ test('an idle ancestor stays visible until its whole subtree is idle and returns
 
 test('a closed parent draws no child lines, and a filter draws every child whatever the folds say', () => {
   const [lead] = threadTree([row('lead', null), working('w0'), done('d0')]);
-  const folds = new ThreadFolds({ projectId: 1 }, new ReaderMarks(makeStorage()));
+  const folds = new ThreadFolds({ tileId: 1 }, new ReaderMarks(makeStorage()));
   folds.toggle('lead');
   const place = { depth: 0, decor: 'shelf', drop: 'loose' } as const;
   const node = lead as NonNullable<typeof lead>;
@@ -120,7 +120,7 @@ test('a closed parent draws no child lines, and a filter draws every child whate
 
 test('a worktree being created heads its members in the same line index the keyboard and the reveal walk', () => {
   const [member] = threadTree([row('member', null)]);
-  const folds = new ThreadFolds({ projectId: 1 }, new ReaderMarks(makeStorage()));
+  const folds = new ThreadFolds({ tileId: 1 }, new ReaderMarks(makeStorage()));
   const creation = {
     id: 'c1',
     label: 'feature',
@@ -148,7 +148,7 @@ test('a worktree being created heads its members in the same line index the keyb
 test('a change under one parent rebuilds the lines of its path and hands back the very lines of every other subtree', () => {
   const forest = new ThreadForest();
   for (const held of [row('lead', null), working('a'), working('b'), { ...working('a1'), parentThreadId: 'a' }]) forest.put(held);
-  const folds = new ThreadFolds({ projectId: 1 }, new ReaderMarks(makeStorage()));
+  const folds = new ThreadFolds({ tileId: 1 }, new ReaderMarks(makeStorage()));
   const cache = new LineCache();
   const draw = () =>
     threadLines(

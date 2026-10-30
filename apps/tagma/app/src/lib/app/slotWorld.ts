@@ -165,7 +165,7 @@ export function slotWorld(over: Partial<SlotParts>, scope: Scope) {
     threads: [],
     row: () => undefined,
     births: new Births(
-      1,
+      (projectId) => projectId === 1,
       () => undefined,
       () => undefined,
       () => undefined,

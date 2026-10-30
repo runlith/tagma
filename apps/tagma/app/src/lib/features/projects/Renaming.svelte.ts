@@ -31,7 +31,8 @@ export class ProjectRenaming extends Service<ProjectRenaming>()('ProjectRenaming
   async rename(project: Project, name: string): Promise<void> {
     this.renaming = true;
     try {
-      await this.projects.rename.run({ projectId: project.id, name }, { throwOnError: true });
+      if (project.kind === 'group') await this.projects.renameGroup.run({ groupId: project.id, name }, { throwOnError: true });
+      else await this.projects.rename.run({ projectId: project.id, name }, { throwOnError: true });
       await this.workspace.refreshProjects();
       if (this.asked?.id === project.id) this.asked = null;
     } finally {

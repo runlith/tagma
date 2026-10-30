@@ -10,7 +10,7 @@ import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { AgentTypes } from './AgentTypes.svelte.js';
 import { ThreadChats } from './ThreadChats.js';
 import { ModelDefaults } from './ModelDefaults.svelte.js';
-import { keyedBy, liveFeed, mountShell, screen, threadsRepo, type TestApp } from '$lib/app/testing.js';
+import { keyedBy, liveFeed, mountShell, screen, soloWorkspace, threadsRepo, type TestApp } from '$lib/app/testing.js';
 import { testThreadSlot } from '$lib/app/slotWorld.js';
 import { AreaFrame } from '$lib/app/panes/AreaFrame.svelte.js';
 import { PaneRegistry } from '$lib/app/panes/PaneRegistry.js';
@@ -166,7 +166,7 @@ function shell(): { shown: TestApp; host: ThreadSlot } {
       } as never),
       Layer.of(ModelDefaults, { value: null } as never),
       Layer.of(ProviderCatalog, testProviderCatalog()),
-      Layer.of(Workspace, { contextProject: { rootPath: '/repo' }, find: () => ({ rootPath: '/repo' }) } as never),
+      Layer.of(Workspace, soloWorkspace({ contextProject: { rootPath: '/repo' }, find: () => ({ rootPath: '/repo' }) })),
       Layer.of(Door, { ask: () => Promise.reject(new Error('this suite makes no call')) } as never),
       Layer.of(Failure, new Failure(() => undefined)),
       Layer.of(Finishing, { departed: [] } as never),

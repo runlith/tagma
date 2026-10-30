@@ -5,6 +5,7 @@ import { afterEach, expect, test } from 'vitest';
 import { testDoor } from '$lib/wire/testing.js';
 import { GraphRung } from '$lib/features/workspace/GraphRung.js';
 import { ProjectRung } from '$lib/features/workspace/ProjectRung.js';
+import { TileRung } from '$lib/features/workspace/TileRung.js';
 import { GraphDoor } from '$lib/features/workspace/GraphDoor.js';
 import { JournalRepo } from './JournalRepo.js';
 
@@ -30,8 +31,8 @@ const open = () => {
   const mounted = mountRepo(JournalRepo, {
     door: new GraphDoor(testDoor(fetch), aim),
     queryClient: new QueryClient({ defaultOptions: { queries: { retry: false } } }),
-    ladder: [ProjectRung, GraphRung],
-    at: { project: { projectId: aim.projectId }, graph: aim },
+    ladder: [TileRung, ProjectRung, GraphRung],
+    at: { tile: { tileId: aim.projectId }, project: { projectId: aim.projectId }, graph: aim },
   });
   close.push(mounted.unmount);
   return mounted.repo;

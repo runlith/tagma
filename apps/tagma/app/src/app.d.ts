@@ -1,6 +1,7 @@
 declare module '@runlith/layer/key' {
   interface Ladder {
-    project: object;
+    tile: object;
+    project: { under: 'tile' };
     graph: { under: 'project' };
     thread: { under: 'project' };
   }

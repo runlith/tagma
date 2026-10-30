@@ -1,4 +1,4 @@
-import type { Project } from '@tagma/server/graph/contract/wire/rows';
+import type { Group, Project } from '@tagma/server/graph/contract/wire/rows';
 import { Failure } from '@runlith/layer/Failure';
 import { Platform } from '@runlith/layer/Platform';
 import { asRoutePathname, Router } from '@runlith/layer/Router';
@@ -18,6 +18,7 @@ export class Workspace extends Service<Workspace>()('Workspace', { tier: 'app' }
   }
 
   projects = $state<readonly Project[]>([]);
+  groups = $state.raw<readonly Group[]>([]);
   loaded = $state(false);
   readonly ready: Promise<void>;
   private remembered = $state<string | null>(null);
@@ -25,7 +26,10 @@ export class Workspace extends Service<Workspace>()('Workspace', { tier: 'app' }
   private refreshing: Promise<void> | null = null;
   private asked = 0;
   private readonly byId = $derived(new Map(this.projects.map((project) => [project.id, project])));
+  private readonly byMember = $derived(new Map(this.groups.flatMap((group) => group.members.map((member) => [member.id, group] as const))));
+  private readonly byGraph = $derived(new Map(this.groups.map((group) => [group.graph.id, group] as const)));
   readonly contextId = $derived(this.contextProject?.id ?? null);
+  readonly contextTile = $derived(this.contextProject === null ? null : this.tileOf(this.contextProject));
   private readonly sought = new Set<number>();
 
   constructor(
@@ -55,6 +59,11 @@ export class Workspace extends Service<Workspace>()('Workspace', { tier: 'app' }
 
   get activeId(): number | null {
     return this.active?.id ?? null;
+  }
+
+  get activeTileId(): number | null {
+    const active = this.activeId;
+    return active === null ? null : this.tileIdOf(active);
   }
 
   get contextProject(): Project | null {
@@ -98,6 +107,23 @@ export class Workspace extends Service<Workspace>()('Workspace', { tier: 'app' }
       queueMicrotask(() => void this.refreshProjects().catch((error: unknown) => this.failure.report(error)));
     }
     return project;
+  }
+
+  groupOf(projectId: number): Group | null {
+    return this.byMember.get(projectId) ?? this.byGraph.get(projectId) ?? null;
+  }
+
+  tileOf(project: Project): Project {
+    return this.byMember.get(project.id)?.graph ?? project;
+  }
+
+  tileIdOf(projectId: number): number {
+    return this.byMember.get(projectId)?.graph.id ?? projectId;
+  }
+
+  markOf(home: number, standing: number): number | null {
+    const first = this.byMember.get(standing)?.members[0]?.id ?? standing;
+    return home === first ? null : home;
   }
 
   rootOf(id: number): string {
@@ -144,24 +170,28 @@ export class Workspace extends Service<Workspace>()('Workspace', { tier: 'app' }
   private async reread(): Promise<void> {
     for (;;) {
       const asked = this.asked;
-      const projects = await this.repo.list.refresh({ throwOnError: true });
-      if (projects !== undefined) this.adopt(projects);
+      const [projects, groups] = await Promise.all([
+        this.repo.list.refresh({ throwOnError: true }),
+        this.repo.groups.refresh({ throwOnError: true }),
+      ]);
+      if (projects !== undefined) this.adopt(projects, groups ?? this.groups);
       if (this.asked === asked) return;
     }
   }
 
   private async read(): Promise<void> {
     try {
-      const projects = await this.repo.list.loadOrThrow();
-      if (projects !== undefined) this.adopt(projects);
+      const [projects, groups] = await Promise.all([this.repo.list.loadOrThrow(), this.repo.groups.loadOrThrow()]);
+      if (projects !== undefined) this.adopt(projects, groups ?? []);
     } finally {
       this.loaded = true;
     }
   }
 
-  private adopt(projects: readonly Project[]): void {
+  private adopt(projects: readonly Project[], groups: readonly Group[]): void {
     const before = this.byId;
     this.projects = projects;
+    this.groups = groups;
     const renamed = new Map<string, Project>();
     for (const project of projects) {
       const was = before.get(project.id)?.name;

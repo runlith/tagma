@@ -6,7 +6,7 @@ import { stubFamily } from '@runlith/query/testing';
 import { Cache } from '@runlith/query/repo';
 import { flushSync } from 'svelte';
 import { afterEach, expect, test } from 'vitest';
-import { mountShell, liveFeed, screen, type TestApp } from '$lib/app/testing.js';
+import { mountShell, liveFeed, screen, soloWorkspace, type TestApp } from '$lib/app/testing.js';
 import { testProviders } from '$lib/features/providers/testing.js';
 import { NOT_INSTALLED } from '$lib/features/providers/served.js';
 import { makeStorage } from '@runlith/layer/testing';
@@ -110,14 +110,14 @@ function draw(
     Layer.mergeAll(
       ...(readings === null ? [] : [Layer.of(Readings, readings)]),
       Layer.of(ExecutionsRepo, { inventory: stubFamily(), commands: stubFamily() } as never),
-      Layer.of(Workspace, { contextProject: { rootPath: '/repo' }, find: () => ({ rootPath: '/repo' }) } as never),
+      Layer.of(Workspace, soloWorkspace({ contextProject: { rootPath: '/repo' }, find: () => ({ rootPath: '/repo' }) })),
       Layer.of(Live, feed.live),
       Layer.of(Door, { ask: () => Promise.reject(new Error('this suite makes no call')) } as never),
     ),
   );
   const host = app.draw(ThreadRow as never, {
     node,
-    folds: new ThreadFolds({ projectId: 1 }, new ReaderMarks(makeStorage())),
+    folds: new ThreadFolds({ tileId: 1 }, new ReaderMarks(makeStorage())),
     activeId: null,
     parent,
   });
