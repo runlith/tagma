@@ -117,7 +117,7 @@ export const REGISTRY_PAIRS = {
         const leaving = yield* resolved(input.ref);
         const into = yield* pointingInto(leaving.id, yield* dependencies);
         const row = yield* admitted(OPS.remove_project)((yield* ProjectLifecycle).remove({ ref: input.ref }));
-        const others = (yield* (yield* Projects).list()).flatMap((one) => (one.global ? [] : [one.rootPath]));
+        const others = (yield* (yield* Projects).list()).flatMap((one) => (one.kind === 'folder' ? [one.rootPath] : []));
         yield* (yield* RegisteredRoots).left(row.rootPath, others);
         const pool = yield* RoutedGraphs;
         let unlinked = 0;

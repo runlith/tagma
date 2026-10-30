@@ -11,7 +11,7 @@
   const settings = SettingsRepo.use();
   const workspace = Workspace.use();
 
-  const aim = $derived((workspace.projects.find((project) => project.global) ?? workspace.contextProject)?.id);
+  const aim = $derived((workspace.projects.find((project) => project.kind === 'global') ?? workspace.contextProject)?.id);
   const entry = $derived(aim === undefined ? undefined : settings.catalog.key(aim));
 
   const declared = $derived(entry?.data?.entries.find((row) => row.id === graphCatalogs.id));

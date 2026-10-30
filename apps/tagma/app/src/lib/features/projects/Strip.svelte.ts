@@ -70,7 +70,7 @@ export class ProjectStrip extends Service<ProjectStrip>()('ProjectStrip', { tier
   }
 
   get visible(): boolean {
-    return this.workspace.projects.filter((project) => !project.global).length >= 2;
+    return this.workspace.projects.filter((project) => project.kind === 'folder').length >= 2;
   }
 
   get projects(): readonly Project[] {

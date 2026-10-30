@@ -161,7 +161,9 @@ export class ProjectLifecycle extends Context.Service<
     ): Effect.Effect<
       ProjectPolicyRow,
       | StoreFailure
-      | GateRefusal<ProjectRootFailure | FloorRefusal | GitRefusal | 'not-found' | 'no-root' | 'global-permanent' | 'duplicate-root'>,
+      | GateRefusal<
+          ProjectRootFailure | FloorRefusal | GitRefusal | 'not-found' | 'no-root' | 'global-permanent' | 'group-graph' | 'duplicate-root'
+        >,
       ProjectIdentification
     >;
     update(

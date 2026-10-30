@@ -83,7 +83,7 @@ it.live('a registry whose lowest id is not the cross-project row still revives w
       Effect.provide(opened(join(base, 'tagma.sqlite'), base)),
     );
     expect(rows.find((row) => row.name === 'early')?.id).toBe(1);
-    const cross = rows.find((row) => row.global);
+    const cross = rows.find((row) => row.kind === 'global');
     expect(cross).toBeDefined();
     expect(cross?.id).not.toBe(1);
   }),

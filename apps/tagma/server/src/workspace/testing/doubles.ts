@@ -246,7 +246,14 @@ export const fixedCheckoutPaths = (projectId: number, checkouts: readonly FixedC
   checkoutPaths(fixedCoverage(projectId, checkouts), {
     list: () =>
       Effect.succeed([
-        { id: projectId, name: 'fixed', repoKey: 'fixed', rootPath: checkouts[0]?.root ?? '/', createdAt: new Date(0), global: false },
+        {
+          id: projectId,
+          name: 'fixed',
+          repoKey: 'fixed',
+          rootPath: checkouts[0]?.root ?? '/',
+          createdAt: new Date(0),
+          kind: 'folder' as const,
+        },
       ]),
     byId: () => Effect.die('a fixed registry does not read projects'),
     named: () => Effect.die('a fixed registry does not resolve names'),

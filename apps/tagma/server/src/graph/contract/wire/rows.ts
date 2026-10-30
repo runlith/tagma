@@ -3,7 +3,7 @@ import { SOURCE_KINDS } from './sources.js';
 import { edgeNameSchema } from './edges.js';
 import { fieldsField, tagsField } from './fields.js';
 import { SERVES_FROM } from './storage.js';
-import { STORAGE_MODES } from '../../../projects/contract/wire/project.js';
+import { PROJECT_KINDS, STORAGE_MODES } from '../../../projects/contract/wire/project.js';
 import { subtreeShapeSchema } from './standing.js';
 import { blockListRowSchema, viewResultsSchema } from './reads.js';
 import { graphReportFields, type GraphReport } from './answers.js';
@@ -18,13 +18,22 @@ export const projectSchema = Schema.Struct({
   rootPath: Schema.String,
   strictProvenance: Schema.Boolean,
   private: Schema.Boolean,
-  global: Schema.Boolean,
+  kind: Schema.Literals(PROJECT_KINDS).annotate({
+    description:
+      'folder: a project registered by its folder; global: the shared graph; group: the graph of a group of projects, which carries no code.',
+  }),
   storage: Schema.Literals(STORAGE_MODES),
   graphRemote: Schema.NullOr(Schema.String),
   servesFrom: Schema.Literals(SERVES_FROM),
   createdAt: Schema.String,
 });
 export type Project = typeof projectSchema.Type;
+
+export const groupSchema = Schema.Struct({
+  graph: projectSchema.annotate({ description: 'The group’s own registration: its name, id and the graph it keeps.' }),
+  members: Schema.Array(projectSchema).annotate({ description: 'The projects of the group in its order; the first is its first member.' }),
+});
+export type Group = typeof groupSchema.Type;
 
 export const projectBranchSchema = Schema.Struct({
   branch: Schema.String,

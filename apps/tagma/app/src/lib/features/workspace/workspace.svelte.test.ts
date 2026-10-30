@@ -14,7 +14,7 @@ const projects = ['first', 'second'].map((name, i): Project => ({
   rootPath: `/projects/${name}`,
   strictProvenance: false,
   private: false,
-  global: false,
+  kind: 'folder',
   storage: 'stealth',
   graphRemote: null,
   servesFrom: 'rows',
@@ -50,7 +50,7 @@ test.each(['refused', 'older'] as const)('the remembered project survives %s sto
 });
 
 test('the project the composition names is resumed even when only global projects stand; without one such a window resumes nothing', async () => {
-  const global: Project = { ...projects[0]!, name: 'global', global: true };
+  const global: Project = { ...projects[0]!, name: 'global', kind: 'global' };
   const opened = (entry?: { readonly project: string }) =>
     new Workspace(
       { list: stubSingle({ loadOrThrow: async () => [global] }) } as never,

@@ -13,7 +13,7 @@ import { unitsLayer } from '../platform/store/units.js';
 import { Projects } from './contract/service/registry.js';
 import { keyHolds, markIn, marked, physical } from './identity.js';
 import { ReservedNames } from './contract/service/names.js';
-import { ProjectChanges, type ProjectRemoved } from './contract/service/changes.js';
+import { ProjectChanges, type GroupChange, type ProjectRemoved } from './contract/service/changes.js';
 import { GLOBAL_PROJECT, type ProjectIdentity, type ProjectRootFailure, type ProjectRow } from './contract/wire/project.js';
 import { PROJECT_WORDS } from './contract/wire/words.js';
 import {
@@ -67,7 +67,7 @@ const markedRoots = Effect.fn('Projects.markRoots')(function* (
       store.db
         .select({ id: project.id, repoKey: project.repoKey, rootPath: project.rootPath })
         .from(project)
-        .where(and(isNull(project.removedAt), eq(project.global, false))),
+        .where(and(isNull(project.removedAt), eq(project.kind, 'folder'))),
     ),
   );
   const unmarked: { readonly id: number; readonly gitDir: string; readonly repoKey: string; readonly rekeyed: boolean }[] = [];
@@ -183,9 +183,16 @@ const nameChecked = Effect.fn('Projects.nameChecked')(function* (
 });
 
 const refuseUnmaking = (row: ProjectRow, what: string) =>
-  row.global
+  row.kind === 'global'
     ? new GateRefusal('global-permanent', `"${row.name}" is the cross-project graph: it cannot be ${what}`, [
         'delete or disable its rules — that is what stops law from travelling',
+      ])
+    : Effect.void;
+
+const refuseGroupGraph = (row: ProjectRow, what: string) =>
+  row.kind === 'group'
+    ? new GateRefusal('group-graph', `"${row.name}" is the graph of a group of projects: it cannot be ${what}`, [
+        `leave_group each member of "${row.name}" — a group left with one member dissolves`,
       ])
     : Effect.void;
 
@@ -197,6 +204,7 @@ export const projectsLayer = Layer.effectContext(
     const { db } = store;
     const version = yield* Ref.make(0);
     const removals = new Set<(event: ProjectRemoved) => Effect.Effect<void>>();
+    const regroupings = new Set<(change: GroupChange) => Effect.Effect<void>>();
     const changes = new Set<Effect.Effect<void>>();
     const subscribe = <A>(set: Set<A>, item: A) => {
       set.add(item);
@@ -216,6 +224,9 @@ export const projectsLayer = Layer.effectContext(
       removed: {
         publish: (event) => publish(removals, (subscriber) => subscriber(event)),
         subscribe: (subscriber) => subscribe(removals, subscriber),
+      },
+      grouped: {
+        subscribe: (subscriber) => subscribe(regroupings, subscriber),
       },
       changed: {
         publish: () =>
@@ -246,7 +257,7 @@ export const projectsLayer = Layer.effectContext(
             db.insert(project).values({
               name: GLOBAL_PROJECT.name,
               repoKey: GLOBAL_PROJECT.repoKey,
-              global: true,
+              kind: 'global',
               rootPath: globalRoot,
               createdAt: new Date(yield* Clock.currentTimeMillis),
             }),
@@ -299,7 +310,7 @@ export const projectsLayer = Layer.effectContext(
       register: Effect.fn('Projects.register')(function* (unit, input) {
         const { identity } = input;
         const { holder, own, moved } = yield* placeOf(store, unit, identity, canonical);
-        if (holder !== undefined && !holder.global && (holder.removedAt !== null || moved)) {
+        if (holder !== undefined && holder.kind === 'folder' && (holder.removedAt !== null || moved)) {
           const kept = holder.removedAt === null || (yield* holderOfName(store, unit, holder.name)) === undefined;
           if (!kept) yield* nameChecked(store, unit, reserved, input.name, holder.id);
           const repoKey = keyOf(identity, own, holder);
@@ -321,11 +332,16 @@ export const projectsLayer = Layer.effectContext(
           yield* unit.afterCommit(events.changed.publish());
           return { project: row, returned: true };
         }
-        if (holder?.global === true) {
+        if (holder?.kind === 'global') {
           return yield* new GateRefusal('reserved-project', `"${GLOBAL_PROJECT.name}" is the cross-project graph, which always exists`, [
             'name this project something else',
             `name project ${GLOBAL_PROJECT.name} in a read to reach the graph that already holds that name`,
           ]).saying(PROJECT_WORDS.nameRefused(input.name));
+        }
+        if (holder?.kind === 'group') {
+          return yield* new GateRefusal('duplicate-root', `this folder keeps the graph of the group "${holder.name}", not code`, [
+            'register the folder of a repository or of your own files',
+          ]).saying(PROJECT_WORDS.folderTaken(holder.name));
         }
         yield* nameChecked(store, unit, reserved, input.name);
         yield* identityFree(holder);
@@ -344,6 +360,7 @@ export const projectsLayer = Layer.effectContext(
       }),
       setRoot: Effect.fn('Projects.setRoot')(function* (unit, current, identity) {
         yield* refuseUnmaking(current, 're-pointed');
+        yield* refuseGroupGraph(current, 're-pointed');
         const { holder, own } = yield* placeOf(store, unit, identity, canonical);
         yield* identityFree(holder, current.id);
         const repoKey = keyOf(identity, own, current);
@@ -366,6 +383,7 @@ export const projectsLayer = Layer.effectContext(
       }),
       remove: Effect.fn('Projects.remove')(function* (unit, current) {
         yield* refuseUnmaking(current, 'removed');
+        yield* refuseGroupGraph(current, 'removed');
         yield* unit.run(
           db
             .update(project)

@@ -92,7 +92,7 @@ export const REGISTRY_OPERATIONS = {
     meaning: 'Point a registered project at another checkout; the commit gate is installed there.',
     input: Schema.Struct({ ref, rootPath: root }),
     answer: arms({ ok: { project: projectSchema } }),
-    refusals: [...ROOT_REFUSALS, 'not-found', 'global-permanent', 'git-refused', 'git-incomplete'],
+    refusals: [...ROOT_REFUSALS, 'not-found', 'global-permanent', 'group-graph', 'git-refused', 'git-incomplete'],
   }),
 
   remove_project: operation('remove_project', {
@@ -113,7 +113,7 @@ export const REGISTRY_OPERATIONS = {
       }),
     }),
     answer: arms({ ok: { project: projectSchema, pointing: pointingSchema, unlinked: Schema.Number } }),
-    refusals: ['not-found', 'global-permanent', 'no-edge', 'operation-only', 'graph-pool'],
+    refusals: ['not-found', 'global-permanent', 'group-graph', 'no-edge', 'operation-only', 'graph-pool'],
   }),
 
   update_project: operation('update_project', {

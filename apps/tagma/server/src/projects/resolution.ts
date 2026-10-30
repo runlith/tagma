@@ -12,7 +12,7 @@ export const registration = {
   repoKey: project.repoKey,
   rootPath: project.rootPath,
   createdAt: project.createdAt,
-  global: project.global,
+  kind: project.kind,
 };
 
 const holding = { ...registration, removedAt: project.removedAt };
@@ -52,7 +52,13 @@ export function sameOrInside(path: string, root: string): boolean {
 }
 
 export const list = (store: MachineStore['Service'], unit: Unit<'machine'>) =>
-  unit.run(store.db.select(registration).from(project).where(standing).orderBy(desc(project.global), asc(project.name)));
+  unit.run(
+    store.db
+      .select(registration)
+      .from(project)
+      .where(standing)
+      .orderBy(desc(eq(project.kind, 'global')), asc(project.name)),
+  );
 
 export const removedIds = (store: MachineStore['Service'], unit: Unit<'machine'>) =>
   Effect.map(unit.run(store.db.select({ id: project.id }).from(project).where(isNotNull(project.removedAt))), (rows) =>
@@ -60,7 +66,7 @@ export const removedIds = (store: MachineStore['Service'], unit: Unit<'machine'>
   );
 
 export const globalProject = (store: MachineStore['Service'], unit: Unit<'machine'>) =>
-  unit.run(store.db.select(registration).from(project).where(eq(project.global, true)).get());
+  unit.run(store.db.select(registration).from(project).where(eq(project.kind, 'global')).get());
 
 export const byId = Effect.fn('Projects.byId')(function* (store: MachineStore['Service'], unit: Unit<'machine'>, id: number) {
   const row = yield* unit.run(

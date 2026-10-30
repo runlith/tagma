@@ -192,7 +192,7 @@ export const enforcementServingLayer = Layer.effectContext(
         'commit-hooks',
         maintenance.opened.pipe(
           Effect.andThen(projects.list()),
-          Effect.flatMap((rows) => hooks.sweep(rows.flatMap((row) => (row.global ? [] : [row.rootPath])))),
+          Effect.flatMap((rows) => hooks.sweep(rows.flatMap((row) => (row.kind === 'folder' ? [row.rootPath] : [])))),
           Effect.tapCause((cause) =>
             Effect.logWarning('the commit gate could not be carried into the registered checkouts', { cause: Cause.pretty(cause) }),
           ),

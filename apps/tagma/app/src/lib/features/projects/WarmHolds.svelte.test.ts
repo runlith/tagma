@@ -25,7 +25,7 @@ const project = (id: number): Project => ({
   rootPath: `/projects/p${id}`,
   strictProvenance: false,
   private: false,
-  global: false,
+  kind: 'folder',
   storage: 'stealth',
   graphRemote: null,
   servesFrom: 'rows',

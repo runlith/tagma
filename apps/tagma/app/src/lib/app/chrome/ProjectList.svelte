@@ -60,8 +60,8 @@
   let query = $state('');
 
   const context = $derived(workspace.contextProject);
-  const shared = $derived(workspace.projects.find((project) => project.global) ?? null);
-  const projects = $derived(workspace.projects.filter((project) => !project.global));
+  const shared = $derived(workspace.projects.find((project) => project.kind === 'global') ?? null);
+  const projects = $derived(workspace.projects.filter((project) => project.kind === 'folder'));
   const searching = $derived(projects.length >= SEARCH_FROM);
   const needle = $derived(searching ? query.trim().toLocaleLowerCase() : '');
   const found = $derived.by(() => {
@@ -69,8 +69,8 @@
     const candidates = shared === null ? projects : [...projects, shared];
     return rank(candidates, needle, (project) => ({ name: labelOf(project), names: [project.name] }));
   });
-  const current = $derived(context !== null && !context.global ? context : null);
-  const recent = $derived(strip.recent.filter((project) => !project.global && project.id !== current?.id).slice(0, RECENT));
+  const current = $derived(context !== null && context.kind === 'folder' ? context : null);
+  const recent = $derived(strip.recent.filter((project) => project.kind === 'folder' && project.id !== current?.id).slice(0, RECENT));
   const rest = $derived(projects.filter((project) => project.id !== current?.id && !recent.includes(project)));
 
   function open(project: Project, event: Event): void {
@@ -129,7 +129,7 @@
       <ProjectGlyph {project} />
     {/snippet}
     {#snippet tail()}
-      {@const acts = windows !== undefined || !project.global}
+      {@const acts = windows !== undefined || project.kind !== 'global'}
       <span class="flex h-5 min-w-5 items-center justify-end">
         <span class={cn('flex items-center', acts && 'group-hover/menu-row:hidden group-data-highlighted/menu-row:hidden')}>
           {#if project.id === context?.id}
@@ -142,7 +142,7 @@
         </span>
         {#if acts}
           <span class="hidden items-center gap-0.5 group-hover/menu-row:flex group-data-highlighted/menu-row:flex">
-            {#if !project.global}
+            {#if project.kind !== 'global'}
               <Tooltip text="Rename…" keys={renameKeys}>
                 <button
                   type="button"
@@ -168,7 +168,7 @@
                 </button>
               </Tooltip>
             {/if}
-            {#if !project.global}
+            {#if project.kind !== 'global'}
               <Tooltip text="Remove from Tagma…" keys={removeKeys}>
                 <button
                   type="button"

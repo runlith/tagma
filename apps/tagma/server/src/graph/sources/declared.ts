@@ -20,7 +20,7 @@ export const assertDeclared = Effect.fn('Sources.assertDeclared')(function* (
   symbol: string,
 ): Effect.fn.Return<void, StoreFailure | GateRefusal<'symbol-missing' | 'not-found'>> {
   const project = yield* projects.byId(projectId);
-  if (project.global) return;
+  if (project.kind === 'global') return;
   const served = yield* CurrentGraph;
   const root = served !== null && served.projectId === projectId ? served.checkout : project.rootPath;
   const head = symbol.split('.')[0] as string;

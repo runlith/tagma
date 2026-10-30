@@ -55,7 +55,7 @@ for (const code of ['graph-unmerged', 'graph-pool'] as const) {
         repoKey: 'shop-repository',
         rootPath: '/project',
         createdAt: new Date(0),
-        global: false,
+        kind: 'folder',
       };
       const refused = new GateRefusal(code, 'the graph cannot open', ['resolve the graph conflict']);
       const identification = ProjectIdentification.of({ identify: () => Effect.succeed({} as never) });

@@ -62,14 +62,14 @@ export class Workspace extends Service<Workspace>()('Workspace', { tier: 'app' }
   }
 
   get empty(): boolean {
-    return this.loaded && this.projects.every((project) => project.global);
+    return this.loaded && this.projects.every((project) => project.kind !== 'folder');
   }
 
   entryProject(): Project | null {
     return (
       this.entered() ??
       this.projects.find((project) => String(project.id) === this.remembered) ??
-      this.projects.find((project) => !project.global) ??
+      this.projects.find((project) => project.kind === 'folder') ??
       this.projects[0] ??
       null
     );

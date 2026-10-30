@@ -21,7 +21,7 @@ export class ProjectRenaming extends Service<ProjectRenaming>()('ProjectRenaming
   }
 
   ask(project: Project): void {
-    if (!project.global) this.asked = project;
+    if (project.kind !== 'global') this.asked = project;
   }
 
   dismiss(): void {

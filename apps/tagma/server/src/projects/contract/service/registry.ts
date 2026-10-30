@@ -3,7 +3,16 @@ import type { GitAnswerInvalid, GitRefused, GitUnreadable } from '@runlith/git/r
 import type { StoreFailure } from '../../../platform/contract/service/store.js';
 import type { WriteUnit } from '../../../platform/contract/service/units.js';
 import type { GateRefusal, GitRefusal } from '../../../platform/contract/wire/refusal.js';
-import type { ProjectIdentity, ProjectPlace, ProjectRefusal, ProjectRow, Registered } from '../wire/project.js';
+import type {
+  GroupRefusal,
+  NameRefusal,
+  ProjectGroup,
+  ProjectIdentity,
+  ProjectPlace,
+  ProjectRefusal,
+  ProjectRow,
+  Registered,
+} from '../wire/project.js';
 
 export class ProjectIdentification extends Context.Service<
   ProjectIdentification,
@@ -35,14 +44,38 @@ export class Projects extends Context.Service<
       unit: WriteUnit<'machine'>,
       row: ProjectRow,
       identity: ProjectIdentity,
-    ): Effect.Effect<ProjectRow, StoreFailure | GateRefusal<GitRefusal | 'unwritable-root' | 'global-permanent' | 'duplicate-root'>>;
+    ): Effect.Effect<
+      ProjectRow,
+      StoreFailure | GateRefusal<GitRefusal | 'unwritable-root' | 'global-permanent' | 'group-graph' | 'duplicate-root'>
+    >;
     rename(
       unit: WriteUnit<'machine'>,
       row: ProjectRow,
       name: string,
-    ): Effect.Effect<ProjectRow, StoreFailure | GateRefusal<'global-permanent' | 'reserved-project' | 'project-name' | 'duplicate-name'>>;
-    remove(unit: WriteUnit<'machine'>, project: ProjectRow): Effect.Effect<void, StoreFailure | GateRefusal<'global-permanent'>>;
+    ): Effect.Effect<ProjectRow, StoreFailure | GateRefusal<'global-permanent' | NameRefusal>>;
+    remove(
+      unit: WriteUnit<'machine'>,
+      project: ProjectRow,
+    ): Effect.Effect<void, StoreFailure | GateRefusal<'global-permanent' | 'group-graph'>>;
     forget(unit: WriteUnit<'machine'>, project: ProjectRow): Effect.Effect<void, StoreFailure>;
     readonly registryVersion: Effect.Effect<number>;
   }
 >()('tagma/projects/Projects') {}
+
+export class ProjectGroups extends Context.Service<
+  ProjectGroups,
+  {
+    list(): Effect.Effect<readonly ProjectGroup[], StoreFailure>;
+    of(projectId: number): Effect.Effect<ProjectGroup | undefined, StoreFailure>;
+    form(
+      unit: WriteUnit<'machine'>,
+      input: { readonly name: string; readonly members: readonly ProjectRow[] },
+    ): Effect.Effect<ProjectGroup, StoreFailure | GateRefusal<GroupRefusal | NameRefusal>>;
+    join(
+      unit: WriteUnit<'machine'>,
+      group: ProjectGroup,
+      project: ProjectRow,
+    ): Effect.Effect<ProjectGroup, StoreFailure | GateRefusal<GroupRefusal>>;
+    leave(unit: WriteUnit<'machine'>, project: ProjectRow): Effect.Effect<ProjectGroup | null, StoreFailure | GateRefusal<GroupRefusal>>;
+  }
+>()('tagma/projects/ProjectGroups') {}

@@ -87,6 +87,7 @@ function rig(rows: readonly ThreadSummary[], window: number) {
   };
   const registry: ProjectChanges['Service'] = {
     removed: { publish: unused, subscribe: () => () => {} },
+    grouped: { subscribe: () => () => {} },
     changed: {
       publish: unused,
       subscribe: (subscriber) => {

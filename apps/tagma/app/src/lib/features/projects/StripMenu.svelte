@@ -38,7 +38,7 @@
         {labelOf(project)}
       </DropdownMenu.Label>
       <DropdownMenu.Separator />
-      {#if !project.global}
+      {#if project.kind !== 'global'}
         <DropdownMenu.Item icon={PencilLine} onSelect={() => renaming.ask(project)}>Rename…</DropdownMenu.Item>
       {/if}
       <DropdownMenu.Item icon={X} onSelect={() => strip.remove(project.id)}>Remove from strip</DropdownMenu.Item>
@@ -54,7 +54,7 @@
       {:else}
         <DropdownMenu.Item icon={PanelLeft} onSelect={() => strip.show('dock')}>Show as dock</DropdownMenu.Item>
       {/if}
-      {#if !project.global}
+      {#if project.kind === 'folder'}
         <DropdownMenu.Separator />
         <DropdownMenu.Item variant="destructive" icon={FolderMinus} onSelect={() => removal.ask(project)}>
           Remove from Tagma…

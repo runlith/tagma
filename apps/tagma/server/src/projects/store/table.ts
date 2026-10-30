@@ -1,4 +1,5 @@
-import { integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
+import { index, integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
+import { PROJECT_KINDS } from '../contract/wire/project.js';
 
 export const project = sqliteTable(
   'project',
@@ -7,9 +8,23 @@ export const project = sqliteTable(
     name: text('name').notNull(),
     repoKey: text('repo_key').notNull(),
     rootPath: text('root_path').notNull(),
-    global: integer('global', { mode: 'boolean' }).notNull().default(false),
+    kind: text('kind', { enum: PROJECT_KINDS }).notNull().default('folder'),
     createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
     removedAt: integer('removed_at', { mode: 'timestamp_ms' }),
   },
   (table) => [uniqueIndex('project_identity_idx').on(table.repoKey)],
+);
+
+export const groupMember = sqliteTable(
+  'group_member',
+  {
+    projectId: integer('project_id')
+      .primaryKey()
+      .references(() => project.id, { onDelete: 'cascade' }),
+    groupId: integer('group_id')
+      .notNull()
+      .references(() => project.id, { onDelete: 'cascade' }),
+    ord: integer('ord').notNull(),
+  },
+  (table) => [index('group_member_group_idx').on(table.groupId, table.ord)],
 );

@@ -1,5 +1,5 @@
 import { Data, Schema } from 'effect';
-import { STORAGE_MODES } from '../../../projects/contract/wire/project.js';
+import { PROJECT_KINDS, STORAGE_MODES } from '../../../projects/contract/wire/project.js';
 import { SETTABLE_SCOPES } from '../../../platform/contract/wire/setting.js';
 
 export const RegistryFile = Schema.Struct({
@@ -13,6 +13,7 @@ export const RegistryFile = Schema.Struct({
       createdAt: Schema.String,
       strictProvenance: Schema.optional(Schema.Boolean),
       private: Schema.optional(Schema.Boolean),
+      kind: Schema.optional(Schema.Literals(PROJECT_KINDS)),
       global: Schema.optional(Schema.Boolean),
       removedAt: Schema.optional(Schema.NullOr(Schema.String)),
     }),

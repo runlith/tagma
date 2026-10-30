@@ -57,7 +57,7 @@ function world(writes: unknown[]) {
     const path = new URL(request.url).pathname;
     const project = { id: 7, name: 'demo' };
     if (path === '/api/op/list_projects') {
-      const row = { ...project, repoKey: 'demo', rootPath: '/projects/demo', strictProvenance: false, private: false, global: false };
+      const row = { ...project, repoKey: 'demo', rootPath: '/projects/demo', strictProvenance: false, private: false, kind: 'folder' };
       return json({
         status: 'ok',
         projects: [{ ...row, storage: 'stealth', graphRemote: null, servesFrom: 'rows', createdAt: '2026-10-18T00:00:00Z' }],

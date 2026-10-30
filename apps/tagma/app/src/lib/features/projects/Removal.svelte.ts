@@ -25,7 +25,7 @@ export class ProjectRemoval extends Service<ProjectRemoval>()('ProjectRemoval', 
   }
 
   ask(project: Project): void {
-    if (!project.global) this.asked = project;
+    if (project.kind === 'folder') this.asked = project;
   }
 
   dismiss(): void {

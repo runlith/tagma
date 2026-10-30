@@ -14,7 +14,7 @@ const project: Project = {
   rootPath: '/projects/demo',
   strictProvenance: false,
   private: false,
-  global: false,
+  kind: 'folder',
   storage: 'stealth',
   graphRemote: null,
   servesFrom: 'rows',

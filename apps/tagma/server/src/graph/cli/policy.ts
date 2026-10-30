@@ -18,7 +18,7 @@ export const renderProjects = (rows: readonly Project[]): string =>
   rows
     .map(
       (row) =>
-        `${row.name} (${row.id}) ${row.rootPath} ${row.global ? '[cross-project]' : `[${row.repoKey}]`} [${row.storage}] [${row.servesFrom}]${row.strictProvenance ? ' [strict-provenance]' : ''}${row.private ? ' [private]' : ''}${row.graphRemote === null ? '' : ` [remote ${row.graphRemote}]`}`,
+        `${row.name} (${row.id}) ${row.rootPath} ${row.kind === 'global' ? '[cross-project]' : row.kind === 'group' ? '[group]' : `[${row.repoKey}]`} [${row.storage}] [${row.servesFrom}]${row.strictProvenance ? ' [strict-provenance]' : ''}${row.private ? ' [private]' : ''}${row.graphRemote === null ? '' : ` [remote ${row.graphRemote}]`}`,
     )
     .join('\n');
 

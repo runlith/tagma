@@ -36,7 +36,7 @@ const registered: readonly Project[] = ['home', 'other'].map((name, index) => ({
   rootPath: `/${name}`,
   strictProvenance: true,
   private: false,
-  global: false,
+  kind: 'folder',
   storage: 'team',
   graphRemote: null,
   servesFrom: 'files',

@@ -13,7 +13,7 @@ const HUES = [
 
 export const hueOf = (projectId: number): string => HUES[Math.abs(projectId) % HUES.length] as string;
 
-export const labelOf = (project: Project): string => (project.global ? 'Shared graph' : project.name);
+export const labelOf = (project: Project): string => (project.kind === 'global' ? 'Shared graph' : project.name);
 
 export function initialsOf(name: string): string {
   const [first, second] = name.split(/[^\p{L}\p{N}]+/u).filter((word) => word !== '');

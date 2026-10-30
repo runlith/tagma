@@ -21,7 +21,7 @@ export function wireProject(row: ProjectPolicyRow, servesFrom: ServesFrom): Proj
     rootPath: row.rootPath,
     strictProvenance: row.strictProvenance,
     private: row.private,
-    global: row.global,
+    kind: row.kind,
     storage: row.storage,
     graphRemote: row.graphRemote,
     servesFrom,

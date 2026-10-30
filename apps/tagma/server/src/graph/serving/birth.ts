@@ -286,7 +286,7 @@ export const projectsLayer = (
         }),
         move: Effect.fn('ProjectLifecycle.move')(function* (projectId: number, root: string) {
           const current = yield* projects.byId(projectId);
-          if (current.global)
+          if (current.kind === 'global')
             return yield* new GateRefusal('global-permanent', `"${current.name}" is the cross-project graph: it cannot be re-pointed`, [
               'delete or disable its rules — that is what stops law from travelling',
             ]);

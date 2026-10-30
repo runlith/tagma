@@ -138,7 +138,7 @@ const setup = Effect.gen(function* () {
           copies: { subscribe: () => () => {} },
         }),
         Layer.mock(Projects, {
-          byId: (id) => Effect.succeed({ id, name: 'home', repoKey: 'home', rootPath: '/main', createdAt: new Date(0), global: false }),
+          byId: (id) => Effect.succeed({ id, name: 'home', repoKey: 'home', rootPath: '/main', createdAt: new Date(0), kind: 'folder' }),
           removed: () => Effect.succeed([]),
         }),
       ),

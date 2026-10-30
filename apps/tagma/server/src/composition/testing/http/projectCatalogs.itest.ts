@@ -65,7 +65,7 @@ layer(doorFixture(), { excludeTestServices: true })('project catalogs', (it) => 
         settings.write({ scope: 'user', key: graphCatalogs.id, value: previous?.value, declined: previous?.declined }).pipe(Effect.orDie),
       );
       const listed = yield* world.op('list_projects', {});
-      const home = (listed.body as { projects: { id: number; global: boolean }[] }).projects.find((row) => row.global);
+      const home = (listed.body as { projects: { id: number; kind: string }[] }).projects.find((row) => row.kind === 'global');
       if (home === undefined) return yield* Effect.die(new Error('the fixture registered no global project'));
       const chosen = yield* bornWith('matched', ['software-development']);
       expect(yield* projectLayerOf(chosen)).toEqual([CORE_LIBRARY, 'software-development']);

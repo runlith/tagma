@@ -21,7 +21,7 @@ const registered: ProjectPolicyRow = {
   name: 'project',
   rootPath: '/recovery-feed/project',
   repoKey: 'repository',
-  global: false,
+  kind: 'folder',
   createdAt: new Date(0),
   strictProvenance: false,
   private: false,

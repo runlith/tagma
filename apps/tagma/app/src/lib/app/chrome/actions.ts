@@ -75,7 +75,7 @@ export const actions: ActionsModule['actions'] = [
     title: 'Remove project from Tagma',
     keywords: ['remove', 'close', 'unregister', 'forget', 'project'],
     icon: FolderMinus,
-    available: (env) => env.project !== null && !env.project.global,
+    available: (env) => env.project !== null && env.project.kind === 'folder',
     note: (env) => (env.project === null ? null : labelOf(env.project)),
     run: (env) => {
       if (env.project !== null) env.resolve(ProjectRemoval).ask(env.project);
