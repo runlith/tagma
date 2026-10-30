@@ -56,6 +56,13 @@ export type McpServerRow = {
   readonly measuredAt: number;
 };
 
+export function mcpServerShown(row: McpServerRow): string {
+  if (row.contributor === undefined) return row.name;
+  if (row.reach.transport === 'http' && URL.canParse(row.reach.url)) return new URL(row.reach.url).host;
+  const own = row.name.slice(row.contributor.length + 1);
+  return row.name.startsWith(`${row.contributor}-`) && own !== '' ? own : row.name;
+}
+
 const STATUS_WORDS: Record<McpServerStatus | 'pending' | 'needs-value' | 'declined', null> = {
   declined: null,
   pending: null,

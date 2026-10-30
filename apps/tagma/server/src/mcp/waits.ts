@@ -6,7 +6,7 @@ import { ProjectChanges } from '../projects/contract/service/changes.js';
 import { Projects } from '../projects/contract/service/registry.js';
 import { McpServers } from './contract/service/servers.js';
 import { MCP_SERVER_LINK, type McpServerLinkTarget } from './contract/wire/link.js';
-import type { McpServerRow } from './contract/wire/servers.js';
+import { type McpServerRow, mcpServerShown } from './contract/wire/servers.js';
 
 export const MCP_SENDER = 'mcp';
 
@@ -30,17 +30,18 @@ const waitOf = (projectId: number, project: string, row: McpServerRow): Wait | n
   };
   const link: NotificationLink = { kind: MCP_SERVER_LINK, target };
   const whose = user ? 'Your MCP server' : `An MCP server of ${project}`;
+  const shown = mcpServerShown(row);
   if (row.status === 'needs-sign-in') {
     return {
       key: `${SIGN_IN}/${placeOf(projectId, row)}`,
-      title: `Sign in to ${row.name}`,
+      title: `Sign in to ${shown}`,
       body: `${whose} waits for your sign-in; agents cannot use its tools until then.`,
       link,
     };
   }
   return {
     key: `${VALUE}/${placeOf(projectId, row)}`,
-    title: `${row.name} needs ${(row.needs ?? []).join(', ')}`,
+    title: `${shown} needs ${(row.needs ?? []).join(', ')}`,
     body: `${whose} waits for values only you can give; agents cannot use its tools until they are set.`,
     link,
   };

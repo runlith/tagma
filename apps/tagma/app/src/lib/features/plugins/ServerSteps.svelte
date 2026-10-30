@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { McpServerRow } from '@tagma/server/mcp/contract/wire/servers';
+  import { type McpServerRow, mcpServerShown } from '@tagma/server/mcp/contract/wire/servers';
   import Callout from '@runlith/chat-ui/Callout.svelte';
   import Waiting from '@runlith/chat-ui/Waiting.svelte';
   import { Button } from '$lib/shared/ui/button/index.js';
@@ -63,13 +63,15 @@
           {row.signIn?.pending ? 'Waiting for the browser.' : 'Opens its sign-in page in your browser. Agents never sign in for you.'}
         </span>
       {:else if row.status === 'needs-value'}
-        <span class="text-ui font-medium">{row.name} needs a value</span>
+        <span class="text-ui font-medium">{mcpServerShown(row)} needs a value</span>
         <FadeText text={(row.needs ?? []).join(', ')} class="stamp text-muted-foreground" />
       {:else if row.status === 'failed'}
-        <span class="text-ui font-medium">{row.name} does not start</span>
+        <span class="text-ui font-medium">
+          {row.reach.transport === 'http' ? `Cannot connect to ${hostOf(row)}` : `${mcpServerShown(row)} does not start`}
+        </span>
         <span class="stamp text-muted-foreground">{row.failure ?? ''}</span>
       {:else if state === 'off'}
-        <span class="text-ui text-muted-foreground">{row.name} is off here</span>
+        <span class="text-ui text-muted-foreground">{mcpServerShown(row)} is off here</span>
       {:else if row.status === 'pending'}
         <span class="text-ui text-muted-foreground">{hostOf(row)} starts when an agent first uses it</span>
       {:else}
