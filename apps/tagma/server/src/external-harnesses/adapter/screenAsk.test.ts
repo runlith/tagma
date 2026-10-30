@@ -2,48 +2,7 @@ import { expect, test } from 'bun:test';
 import { ExecutionId, InstallationId } from '@runlith/executions/protocol/execution';
 import { byteOffset } from '@runlith/executions/protocol/record';
 import type { CellStyle, ScreenFrame, ScreenRow } from '@runlith/executions/protocol/presentation';
-import type { HarnessWidgetKey } from '@runlith/tagma/adapter/harness';
-import { claudeTerminal as claudeCode } from '@runlith/adapter-anthropic/harness';
 import { screenLines } from '@runlith/executions/protocol/presentationText';
-
-const CLAUDE_WIDGET = [
-  'Claude wants to run git push origin main',
-  '❯ 1. Yes',
-  "  2. Yes, and don't ask again for git push",
-  '  3. No, and tell Claude what to do differently (esc)',
-] as const;
-
-test('Claude’s numbered select is read as a choice carrying every option in the CLI’s own words', () => {
-  expect(claudeCode.screenAskOf(CLAUDE_WIDGET)).toEqual({
-    kind: 'choice',
-    prompt: 'Claude wants to run git push origin main',
-    header: null,
-    subject: 'git push origin main',
-    options: [
-      { value: '1', label: 'Yes' },
-      { value: '2', label: "Yes, and don't ask again for git push" },
-      { value: '3', label: 'No, and tell Claude what to do differently (esc)' },
-    ],
-    selected: '1',
-  });
-});
-
-test('a widget still painting its tail raises nothing on the rows with no footer', () => {
-  expect(claudeCode.screenAskOf(CLAUDE_WIDGET.slice(0, -1))).toBeNull();
-  expect(claudeCode.screenAskOf(CLAUDE_WIDGET)?.options).toHaveLength(3);
-});
-
-const chars = (text: string): readonly HarnessWidgetKey[] => [...text].map((char) => ({ _tag: 'char', char }));
-
-test('the numbered rows answer by typing the value’s own digits, cursor or none', () => {
-  const rows = [{ row: claudeCode, ask: claudeCode.screenAskOf(CLAUDE_WIDGET)!, value: '3' }] as const;
-  for (const { row, ask, value } of rows) {
-    expect(row.keysOf(ask, [value])).toEqual(chars(value));
-    expect(row.keysOf({ ...ask, selected: null }, [value])).toEqual(chars(value));
-    expect(row.keysOf(ask, ['9'])).toBeNull();
-    expect(row.cancelKeysOf(ask)).toEqual(['esc']);
-  }
-});
 
 test('screenLines offers the visible display and never the scrollback above it', () => {
   const frame = frameOf(['· 1 gone with the scrollback', 'still drawn   '], 1);

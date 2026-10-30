@@ -263,3 +263,31 @@ test('a numbered markdown list without Claude’s pointer raises nothing', () =>
   expect(claudeCode.screenAskOf(['  1. Yes', '  2. No'])).toBeNull();
   expect(claudeCode.screenAskOf(['❯ some prompt'])).toBeNull();
 });
+
+const numbered = [
+  'Claude wants to run git push origin main',
+  '❯ 1. Yes',
+  "  2. Yes, and don't ask again for git push",
+  '  3. No, and tell Claude what to do differently (esc)',
+] as const;
+
+test('the numbered permission widget waits for its tail and answers by the option number', () => {
+  const ask = claudeCode.screenAskOf(numbered)!;
+  expect(ask).toEqual({
+    kind: 'choice',
+    prompt: 'Claude wants to run git push origin main',
+    header: null,
+    subject: 'git push origin main',
+    options: [
+      { value: '1', label: 'Yes' },
+      { value: '2', label: "Yes, and don't ask again for git push" },
+      { value: '3', label: 'No, and tell Claude what to do differently (esc)' },
+    ],
+    selected: '1',
+  });
+  expect(claudeCode.screenAskOf(numbered.slice(0, -1))).toBeNull();
+  expect(claudeCode.keysOf(ask, ['3'])).toEqual(chars('3'));
+  expect(claudeCode.keysOf({ ...ask, selected: null }, ['3'])).toEqual(chars('3'));
+  expect(claudeCode.keysOf(ask, ['9'])).toBeNull();
+  expect(claudeCode.cancelKeysOf(ask)).toEqual(['esc']);
+});
