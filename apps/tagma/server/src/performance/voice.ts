@@ -1,4 +1,4 @@
-import type { CostCounts, CostRow } from '@runlith/performance/CostLedger';
+import type { CostCounts, CostCursor, CostRow } from '@runlith/performance/CostLedger';
 import type { HandedArtifact, PerformanceAnswer, PerformanceValue } from './contract/wire/performance.js';
 
 export const measured = (answer: unknown): PerformanceAnswer | null =>
@@ -71,13 +71,15 @@ const ledgerRow = (row: CostRow): string[] => [
   ...row.producers.map((producer) => ledgerCounts(producer.name, producer.counts)),
 ];
 
+const ledgerCursor = (cursor: CostCursor): string => JSON.stringify(cursor);
+
 function ledgerText(value: Extract<PerformanceValue, { readonly type: 'ledger' }>): string {
   return [
     'cost ledger: process-lifetime retained suffix; late work can update ended roots',
     'totals are own + disjoint producers; request/response bytes measure logical SQLite payload, not IPC framing',
     'bucket\tstatements\tunits\tprograms\twriterHoldMs\twriterWaitMs\trequestBytes\tresponseBytes\tspans',
     ...value.rows.flatMap(ledgerRow),
-    `total ${value.total}; evicted ${value.evicted}; next ${value.next ?? 'none'}`,
+    `ledger ${value.ledgerId}; reset ${value.reset}; total ${value.total}; evicted ${value.evicted}; next ${value.next === null ? 'none' : ledgerCursor(value.next)}`,
   ].join('\n');
 }
 

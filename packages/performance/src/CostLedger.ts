@@ -14,9 +14,15 @@ const costCountsSchema = Schema.Struct({
 });
 export type CostCounts = typeof costCountsSchema.Type;
 
+const costCursorSchema = Schema.Struct({
+  ledgerId: Schema.String.check(Schema.isMinLength(1)),
+  sequence: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+});
+export type CostCursor = typeof costCursorSchema.Type;
+
 export const costReadSchema = Schema.Struct({
   rootId: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
-  after: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
+  after: Schema.optional(costCursorSchema),
   limit: Schema.Int.check(Schema.isGreaterThan(0)),
 });
 type CostRead = typeof costReadSchema.Type;
@@ -34,9 +40,11 @@ const costRowSchema = Schema.Struct({
 export type CostRow = typeof costRowSchema.Type;
 
 export const costPageSchema = Schema.Struct({
+  ledgerId: Schema.String,
+  reset: Schema.Boolean,
   rows: Schema.Array(costRowSchema),
   total: Schema.Int,
-  next: Schema.NullOr(Schema.Int),
+  next: Schema.NullOr(costCursorSchema),
   evicted: Schema.Int,
 });
 export type CostPage = typeof costPageSchema.Type;
@@ -122,6 +130,7 @@ const readRoot = (owner: Root): CostRow => {
 
 const makeCostLedger = Effect.fnUntraced(function* (input: { readonly capacity: number }) {
   const clock = yield* Clock.Clock;
+  const ledgerId = globalThis.crypto.randomUUID();
   const roots = new Map<number, Root>();
   let sequence = 0;
   let evicted = 0;
@@ -149,20 +158,22 @@ const makeCostLedger = Effect.fnUntraced(function* (input: { readonly capacity: 
       return { counts: own, [root]: owner };
     },
     read: (query) => {
+      const reset = query.after !== undefined && query.after.ledgerId !== ledgerId;
+      const after = reset ? 0 : (query.after?.sequence ?? 0);
       const rows: CostRow[] = [];
       let total = query.rootId === undefined ? roots.size : 0;
       let more = false;
       for (const owner of roots.values()) {
         if (query.rootId !== undefined && owner.id !== query.rootId) continue;
         if (query.rootId !== undefined) total++;
-        if (owner.sequence <= (query.after ?? 0)) continue;
+        if (owner.sequence <= after) continue;
         if (rows.length < query.limit) rows.push(readRoot(owner));
         else {
           more = true;
           if (query.rootId === undefined) break;
         }
       }
-      return { rows, total, next: more ? rows.at(-1)!.sequence : null, evicted };
+      return { ledgerId, reset, rows, total, next: more ? { ledgerId, sequence: rows.at(-1)!.sequence } : null, evicted };
     },
   });
 });

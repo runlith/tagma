@@ -145,12 +145,47 @@ it.effect('pages keep an ordered retained suffix, report eviction and do not rei
     ledger.open('third', 'third');
     const first = ledger.read({ limit: 1 });
     expect(first.rows.map((row) => [row.id, row.sequence])).toEqual([['second', 2]]);
-    expect({ total: first.total, next: first.next, evicted: first.evicted }).toEqual({ total: 2, next: 2, evicted: 1 });
+    expect({ total: first.total, next: first.next, evicted: first.evicted }).toEqual({
+      total: 2,
+      next: { ledgerId: first.ledgerId, sequence: 2 },
+      evicted: 1,
+    });
     const second = ledger.read({ limit: 1, after: first.next! });
     expect(second.rows.map((row) => row.id)).toEqual(['third']);
     expect({ total: second.total, next: second.next }).toEqual({ total: 2, next: null });
     evicted.counts.statements++;
-    expect(ledger.read({ limit: 1, rootId: 'old' })).toEqual({ rows: [], total: 0, next: null, evicted: 1 });
+    expect(ledger.read({ limit: 1, rootId: 'old' })).toEqual({
+      ledgerId: first.ledgerId,
+      reset: false,
+      rows: [],
+      total: 0,
+      next: null,
+      evicted: 1,
+    });
     expect(ledger.read({ limit: 1, rootId: 'third' }).rows[0]!.id).toBe('third');
+  }),
+);
+
+it.effect('a cursor from an earlier ledger explicitly restarts at the new retained suffix', () =>
+  Effect.gen(function* () {
+    const previous = yield* CostLedger.pipe(Effect.provide(costLedgerLayer({ capacity: 2 })));
+    previous.open('old-first', 'old-first');
+    previous.open('old-second', 'old-second');
+    const before = previous.read({ limit: 1 });
+    const ledger = yield* CostLedger.pipe(Effect.provide(costLedgerLayer({ capacity: 2 })));
+    const empty = ledger.read({ limit: 1, after: before.next! });
+    expect(empty.rows).toEqual([]);
+    ledger.open('new-first', 'new-first');
+    ledger.open('new-second', 'new-second');
+    const restarted = ledger.read({ limit: 1, after: before.next! });
+    expect(restarted.rows.map((row) => row.id)).toEqual(['new-first']);
+    expect(empty.reset).toBe(true);
+    expect(empty.ledgerId).not.toBe(before.ledgerId);
+    expect(restarted.reset).toBe(true);
+    expect(restarted.ledgerId).toBe(empty.ledgerId);
+    const continued = ledger.read({ limit: 1, after: restarted.next! });
+    expect(continued.rows.map((row) => row.id)).toEqual(['new-second']);
+    expect(continued.reset).toBe(false);
+    expect(continued.next).toBeNull();
   }),
 );
