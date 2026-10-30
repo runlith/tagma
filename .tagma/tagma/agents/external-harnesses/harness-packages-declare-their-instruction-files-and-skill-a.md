@@ -14,4 +14,4 @@ sources:
     ref: packages/tagma/src/adapter/harness.ts
     symbol: InstructionSurface
 ---
-The canonical skill belongs to the installation, while a CLI's file names and import syntax belong to its package. Installing only aliases for declared harnesses keeps a removed vendor out of new integrations. Upgrade recognizes a declared user alias left by an earlier install before moving it onto the canonical skill; both canonical directories and declared aliases are excluded from native skill discovery, so Tagma's own instructions are not offered twice.
+The canonical skill belongs to the installation, while a CLI's instruction files, import syntax and skill aliases belong to its package. User and default-home installs refresh one canonical copy; isolated accounts keep theirs within the account directory. Every path links its declared alias instead of rewriting that alias as a separate copy, so a release cannot leave the canonical skill stale. Upgrade recognizes earlier declared user aliases, and native discovery excludes the canonical skill and its aliases so Tagma's own instructions are not offered twice.
