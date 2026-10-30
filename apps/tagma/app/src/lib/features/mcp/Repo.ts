@@ -9,6 +9,14 @@ export type McpDeclarationInput =
   | (Omit<McpStdioServerDeclaration, 'enabled'> & { readonly enabled?: boolean })
   | (Omit<McpHttpServerDeclaration, 'enabled'> & { readonly enabled?: boolean });
 
+export type McpDeclarationStart = {
+  readonly name: string;
+  readonly transport: 'stdio' | 'http';
+  readonly url?: string;
+  readonly command?: string;
+  readonly args?: string;
+};
+
 export type McpSignIn = {
   readonly projectId?: number;
   readonly scope: McpServerScope;

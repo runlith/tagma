@@ -51,6 +51,11 @@ export const PluginsRepo = Repo.define(
         ).plugin,
     }),
 
+    update: mutation({
+      mutator: async (input: PluginTarget, { signal }, door) =>
+        (await door.perform('update_plugin', { project: String(input.projectId), id: input.id }, lens(input.projectId), { signal })).plugin,
+    }),
+
     uninstall: mutation({
       mutator: async (input: PluginTarget, { signal }, door) =>
         (await door.perform('uninstall_plugin', { id: input.id }, lens(input.projectId), { signal })).plugin,

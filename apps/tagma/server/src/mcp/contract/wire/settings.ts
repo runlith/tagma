@@ -45,6 +45,6 @@ export const MCP_SETTING_SECTIONS = [
     id: 'mcp',
     order: 60,
     title: 'MCP servers',
-    description: 'The MCP servers whose tools the agent is offered, each with the authority its calls are judged by.',
+    description: 'How agents reach MCP servers: whether a project takes your own servers, and the client Tagma signs in as.',
   },
 ] as const;

@@ -10,11 +10,12 @@ import type { PluginPreview, PluginRow } from '@tagma/server/plugins/contract/wi
 import { mountShell } from '$lib/app/testing.js';
 import { McpRepo } from '$lib/features/mcp/Repo.js';
 import { Notices } from '$lib/features/notices/Service.svelte.js';
+import { ThreadSeats } from '$lib/features/threads/seats/ThreadSeats.svelte.js';
 import { Door } from '$lib/wire/Door.js';
 import { loadOperations } from '$lib/wire/operation.js';
 import { testDoor } from '$lib/wire/testing.js';
 import { PluginsRepo } from './Repo.js';
-import Catalog from './Catalog.svelte';
+import EntryPage from './EntryPage.svelte';
 
 await loadOperations();
 
@@ -78,13 +79,13 @@ const plugin: PluginRow = {
   origin: { marketplace: 'fixture', entry: 'greeter' },
   root: '/data/agent-plugins/greeter',
   enabled: true,
-  everywhere: true,
+  everywhere: false,
   components: [{ kind: 'skill', name: 'greeter-hello' }],
   ignored: [],
   options: [],
 };
 
-test('opening an entry previews it, and installing sends the prepared revision for the layer the page is set for', async () => {
+test('a plugin page previews its entry, and adding sends the prepared revision for this project', async () => {
   const asked: { readonly path: string; readonly body: unknown }[] = [];
   const installed = Promise.withResolvers<void>();
   const json = (value: unknown) => new Response(JSON.stringify(value), { headers: { 'content-type': 'application/json' } });
@@ -92,6 +93,7 @@ test('opening an entry previews it, and installing sends the prepared revision f
     Layer.mergeAll(Notices, PluginsRepo, McpRepo),
     Layer.mergeAll(
       Layer.of(Cache, new QueryClient({ defaultOptions: { queries: { retry: false } } })),
+      Layer.of(ThreadSeats, { ask: () => undefined } as never),
       Layer.of(
         Door,
         testDoor(async (input, init) => {
@@ -104,8 +106,6 @@ test('opening an entry previews it, and installing sends the prepared revision f
             case '/api/op/install_plugin':
               installed.resolve();
               return json({ status: 'ok', plugin });
-            case '/api/op/read_mcp_servers':
-              return json({ status: 'ok', mcp: [] });
             default:
               throw new Error(`Unexpected request ${request.url}`);
           }
@@ -114,23 +114,21 @@ test('opening an entry previews it, and installing sends the prepared revision f
     ),
   );
   try {
-    const target = app.draw(Catalog as never, {
-      marketplaces: [marketplace],
-      entries: [entry],
+    const target = app.draw(EntryPage as never, {
+      listing: { entry, marketplace, also: [] },
       project: { id: 1, name: 'demo' } as Project,
-      scope: 'user',
-      oninstalled: async () => undefined,
+      plugins: [],
+      servers: [],
+      hrefOf: () => '',
+      onadded: async () => undefined,
     });
     flushSync();
-    const card = target.querySelector('[data-entry="fixture/greeter"]')!;
-    expect(card.textContent).toContain('acme/fixture');
-    card.querySelector('button')!.click();
-    await expect.poll(() => card.textContent).toContain('greeter-hello');
-    [...card.querySelectorAll('button')].find((button) => button.textContent?.trim() === 'Install')!.click();
+    await expect.poll(() => target.textContent).toContain('The skill $greeter-hello');
+    [...target.querySelectorAll('button')].find((button) => button.textContent?.trim() === 'Add to demo')!.click();
     await installed.promise;
-    expect(asked.filter((call) => call.path !== '/api/op/read_mcp_servers')).toEqual([
+    expect(asked).toEqual([
       { path: '/api/op/preview_plugin', body: { marketplace: 'fixture', entry: 'greeter' } },
-      { path: '/api/op/install_plugin', body: { prepared: 'held-1', scope: 'user' } },
+      { path: '/api/op/install_plugin', body: { prepared: 'held-1', scope: 'project' } },
     ]);
   } finally {
     await app.unmount();

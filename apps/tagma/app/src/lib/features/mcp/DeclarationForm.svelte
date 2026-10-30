@@ -2,26 +2,31 @@
   import { PERMISSION_KINDS, type PermissionKind } from '@runlith/agent/permissions';
   import { Button } from '$lib/shared/ui/button/index.js';
   import { Input } from '$lib/shared/ui/input/index.js';
-  import type { McpDeclarationInput } from '$lib/features/mcp/Repo.js';
+  import { untrack } from 'svelte';
+  import type { McpDeclarationInput, McpDeclarationStart } from '$lib/features/mcp/Repo.js';
 
   let {
     busy = false,
     refusal,
+    start,
     onsubmit,
     oncancel,
   }: {
     busy?: boolean;
     refusal?: { readonly code: string; readonly reason: string; readonly unblock: readonly string[] };
+    start?: McpDeclarationStart;
     onsubmit: (declaration: McpDeclarationInput) => void;
     oncancel: () => void;
   } = $props();
 
-  let name = $state('');
-  let transport = $state<'stdio' | 'http'>('stdio');
-  let command = $state('');
-  let args = $state('');
+  const initial = untrack(() => start);
+
+  let name = $state(initial?.name ?? '');
+  let transport = $state<'stdio' | 'http'>(initial?.transport ?? 'stdio');
+  let command = $state(initial?.command ?? '');
+  let args = $state(initial?.args ?? '');
   let cwd = $state('');
-  let url = $state('');
+  let url = $state(initial?.url ?? '');
   let pairs = $state('');
   let kinds = $state<PermissionKind[]>([]);
   let mutates = $state(false);
