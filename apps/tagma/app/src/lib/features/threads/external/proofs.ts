@@ -69,9 +69,7 @@ export function proofWords(harness: HarnessRowDetail): ProofWords | null {
       : capabilities.usage === 'none'
         ? [['spend unmeasured', 'its spend is not measured, so neither is its budget']]
         : []),
-    ...(capabilities.aside === 'none'
-      ? [['no warm copy', 'no warm copy of its conversation: no automatic recap, and a manual recap retells the feed']]
-      : []),
+    ...(capabilities.aside === 'none' ? [['no warm copy', 'this transport keeps no warm copy for a recap']] : []),
   ];
   const [first] = gaps;
   if (first === undefined) return null;
