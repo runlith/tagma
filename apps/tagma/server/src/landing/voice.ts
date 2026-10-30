@@ -30,7 +30,7 @@ export function submitLines(report: SubmitReceipt): string[] {
     ...(report.unnamedTasks === undefined
       ? []
       : [`held tasks not attributed to this commit — tasks was omitted: ${report.unnamedTasks.join(', ')}`]),
-    ...(report.left ?? []).map((path) => `  ${path} — lines of this session still stand uncommitted`),
+    ...(report.left ?? []).map((path) => `  ${path} — lines remain uncommitted`),
     ...unattributedLines(report),
     ...(report.unsynced === undefined
       ? []
