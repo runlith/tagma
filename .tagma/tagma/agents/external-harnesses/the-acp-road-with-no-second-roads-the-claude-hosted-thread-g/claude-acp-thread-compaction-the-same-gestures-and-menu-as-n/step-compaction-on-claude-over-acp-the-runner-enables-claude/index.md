@@ -16,9 +16,9 @@ sources:
   - kind: file
     ref: apps/tagma/server/src/external-harnesses/protocol/prompts.ts
   - kind: file
-    ref: apps/tagma/server/src/external-harnesses/runner/claude-code/compaction.ts
+    ref: packages/adapter-anthropic/src/runner/compaction.ts
   - kind: file
-    ref: apps/tagma/server/src/external-harnesses/runner/claude-code/lifecycle.ts
+    ref: packages/adapter-anthropic/src/runner/lifecycle.ts
 ---
 ## What the operator gets
 

@@ -9,7 +9,7 @@ fields:
   }
 sources:
   - kind: dir
-    ref: apps/tagma/server/src/external-harnesses/runner/claude-code
+    ref: packages/adapter-anthropic/src/runner
 ---
 After a cancellation the runner lets no Claude Code turn continue. This is the cause of the 2026-10-21 incident.
 

@@ -10,9 +10,9 @@ fields:
   }
 sources:
   - kind: file
-    ref: apps/tagma/server/src/external-harnesses/runner/claude-code/feed.ts
+    ref: packages/adapter-anthropic/src/runner/feed.ts
   - kind: file
-    ref: apps/tagma/server/src/external-harnesses/runner/claude-code/translate.ts
+    ref: packages/adapter-anthropic/src/runner/translate.ts
 ---
 Thread [[01a16b08-ee15-7003-95b6-d5dd064444b4|01a16b08]] stood forever on 2026-10-23 at a `bash` call (`toolu_01Ng9yfkgF7EojAKdLbdSEjx`): a `queued`/`gated` record, "Running" with no buttons in the feed, the command never launched.
 

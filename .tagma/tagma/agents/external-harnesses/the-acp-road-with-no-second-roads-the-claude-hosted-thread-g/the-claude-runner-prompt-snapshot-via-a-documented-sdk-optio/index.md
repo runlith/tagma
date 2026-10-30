@@ -12,7 +12,7 @@ edges:
     to: 01a108ea-e217-7ba4-b3f5-b5266c4c410f
 sources:
   - kind: dir
-    ref: apps/tagma/server/src/external-harnesses/runner/claude-code
+    ref: packages/adapter-anthropic/src/runner
 ---
 ## What the operator gets
 

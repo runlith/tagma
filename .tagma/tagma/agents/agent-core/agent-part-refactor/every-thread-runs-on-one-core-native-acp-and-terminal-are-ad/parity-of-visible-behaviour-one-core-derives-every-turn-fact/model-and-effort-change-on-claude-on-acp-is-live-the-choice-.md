@@ -18,7 +18,7 @@ sources:
   - kind: file
     ref: apps/tagma/server/src/external-harnesses/protocol/opening.ts
   - kind: file
-    ref: apps/tagma/server/src/external-harnesses/runner/claude-code/settings.ts
+    ref: packages/adapter-anthropic/src/runner/settings.ts
   - kind: file
     ref: apps/tagma/server/src/external-harnesses/sessions/model.ts
 ---

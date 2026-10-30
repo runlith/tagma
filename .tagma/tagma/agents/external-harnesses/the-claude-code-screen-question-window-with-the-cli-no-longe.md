@@ -10,7 +10,7 @@ fields:
   }
 sources:
   - kind: file
-    ref: apps/tagma/server/src/external-harnesses/vendors/claude-code/screen.ts
+    ref: packages/adapter-anthropic/src/harness/screen.ts
   - kind: file
     ref: packages/agent/src/thread/run/RoutedAnswers.ts
 ---

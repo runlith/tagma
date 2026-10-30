@@ -13,7 +13,7 @@ edges:
     to: 01a113ff-0d62-74ec-ae7c-e91101dc1899
 sources:
   - kind: dir
-    ref: apps/tagma/server/src/external-harnesses/runner/claude-code
+    ref: packages/adapter-anthropic/src/runner
 ---
 The Claude thread on `acp` searches and reads the web through Tagma's `websearch`/`webfetch`: these are the free MCP Parallel and Exa. The runner opens `query()` with `tools: []`, and Claude Code's built-in `WebSearch`/`WebFetch` are off. By [[01dc1899]], ACP carries the vendor's own tools, and the web is exactly such a tool: Anthropic search on subscription beats free endpoints, and it does not touch the tree.
 

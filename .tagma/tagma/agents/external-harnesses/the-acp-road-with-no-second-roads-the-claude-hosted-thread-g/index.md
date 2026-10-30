@@ -14,7 +14,7 @@ sources:
   - kind: dir
     ref: apps/tagma/server/src/external-harnesses/protocol
   - kind: dir
-    ref: apps/tagma/server/src/external-harnesses/runner/claude-code
+    ref: packages/adapter-anthropic/src/runner
   - kind: file
     ref: packages/agent/src/thread/run/ThreadHosting.ts
 ---

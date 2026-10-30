@@ -9,9 +9,9 @@ fields:
   }
 sources:
   - kind: file
-    ref: apps/tagma/server/src/external-harnesses/runner/claude-code/bridge.ts
+    ref: packages/adapter-anthropic/src/runner/bridge.ts
   - kind: file
-    ref: apps/tagma/server/src/external-harnesses/runner/claude-code/translate.ts
+    ref: packages/adapter-anthropic/src/runner/translate.ts
   - kind: file
     ref: apps/tagma/server/src/threads/list/phase.ts
   - kind: file

@@ -17,7 +17,7 @@ sources:
   - kind: file
     ref: apps/tagma/server/src/external-harnesses/protocol/alignment.ts
   - kind: file
-    ref: apps/tagma/server/src/external-harnesses/runner/claude-code/lifecycle.ts
+    ref: packages/adapter-anthropic/src/runner/lifecycle.ts
   - kind: file
     ref: packages/adapter-anthropic/src/models/anthropic.ts
 ---

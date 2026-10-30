@@ -12,11 +12,11 @@ edges:
     to: 01a1732c-8663-7eed-af66-fea9880f739d
 sources:
   - kind: file
-    ref: apps/tagma/server/src/external-harnesses/runner/claude-code/cut.ts
+    ref: packages/adapter-anthropic/src/runner/cut.ts
   - kind: file
-    ref: apps/tagma/server/src/external-harnesses/vendors/claude-code/chain.ts
+    ref: packages/adapter-anthropic/src/harness/chain.ts
   - kind: file
-    ref: apps/tagma/server/src/external-harnesses/vendors/claude-code/cut.ts
+    ref: packages/adapter-anthropic/src/harness/cut.ts
 ---
 Both cuts of terminal Claude Code — whole and up to a turn — are prepared by `tagma harness-run claude-code --cut` on the execution target: the SDK loads only in the runner process, the session file lies where the CLI runs, and `forkSession` writes the new root Y file before the TUI launch, so a child closed before the first word does not lose its root ([[880f739d]]).
 

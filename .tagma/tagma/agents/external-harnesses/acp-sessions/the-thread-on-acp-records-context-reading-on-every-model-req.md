@@ -7,7 +7,7 @@ sources:
   - kind: file
     ref: apps/tagma/server/src/external-harnesses/protocol/measure.ts
   - kind: file
-    ref: apps/tagma/server/src/external-harnesses/runner/claude-code/meter.ts
+    ref: packages/adapter-anthropic/src/runner/meter.ts
   - kind: symbol
     ref: apps/tagma/server/src/threads/harness/turns.ts
     symbol: readingOf

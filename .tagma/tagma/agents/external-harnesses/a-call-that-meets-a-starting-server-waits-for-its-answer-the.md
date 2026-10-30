@@ -14,9 +14,9 @@ sources:
   - kind: file
     ref: apps/tagma/server/src/cli/door.ts
   - kind: file
-    ref: apps/tagma/server/src/external-harnesses/runner/claude-code/bridge.ts
+    ref: packages/adapter-anthropic/src/runner/bridge.ts
   - kind: file
-    ref: apps/tagma/server/src/external-harnesses/runner/claude-code/door.ts
+    ref: packages/adapter-anthropic/src/runner/door.ts
 ---
 A Claude thread on `acp` survived a server restart at 03:44 on 16.10 ([[01a1413f-28ad-75a4-b37a-dbf1e18a13cc|thread]]). Claude Code called `write` at 03:44:02, `call_hosted_tool` reached the starting server and got 503 `server-starting` with `retry-after: 1`. The client door `cli/door.ts` (`undeclaredAnswer`) turns this refusal's body into a bare `Error`, the runner (`runner/claude/door.ts`) marks it failed, and `bridge.ts` retries a call only on server silence and `run-not-held`. The model received a false error and retried the record with a new call. The first call left a `Handed` mark with `failed`, and its record stood `queued` for 2 min 48 s until the turn ended. The sidebar showed "1 queued" all those minutes instead of the phase: `workLine.ts` hides the phase when a call is queued with no turn running.
 

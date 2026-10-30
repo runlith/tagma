@@ -44,7 +44,7 @@ sources:
     ref: apps/tagma/server/src/external-harnesses/settings.ts
     symbol: harnessTransport
   - kind: symbol
-    ref: apps/tagma/server/src/external-harnesses/vendors/claude-code/acp.ts
+    ref: packages/adapter-anthropic/src/harness/acp.ts
     symbol: claudeAcp
   - kind: symbol
     ref: apps/tagma/server/src/external-harnesses/vendors/opencode/acp.ts

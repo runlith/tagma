@@ -5,7 +5,7 @@ ord: 4
 tags: ["explanation"]
 sources:
   - kind: file
-    ref: apps/tagma/server/src/external-harnesses/vendors/claude-code/screen.ts
+    ref: packages/adapter-anthropic/src/harness/screen.ts
 ---
 Claude Code's own question (the AskUserQuestion tool) Tagma sees only on the screen: a plain thread has no hooks, and in the vendor transcript, while the question stood, the tool call had not yet appeared (measured on one live question). So the question travels the same road as permission screens: screen reader → thread question with `parent: true` → notification to the parent → `answer_approval` → keys into the TUI. One reader serves both plain and regular Claude terminal threads.
 

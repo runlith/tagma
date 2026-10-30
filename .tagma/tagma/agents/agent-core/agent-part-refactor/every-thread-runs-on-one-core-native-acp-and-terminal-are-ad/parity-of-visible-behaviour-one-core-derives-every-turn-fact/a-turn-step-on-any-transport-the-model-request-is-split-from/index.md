@@ -12,9 +12,9 @@ edges:
     to: 01a11c9a-6edb-7ed8-b517-60ad2121a95f
 sources:
   - kind: file
-    ref: apps/tagma/server/src/external-harnesses/runner/claude-code/meter.ts
+    ref: packages/adapter-anthropic/src/runner/meter.ts
   - kind: file
-    ref: apps/tagma/server/src/external-harnesses/runner/claude-code/spend.ts
+    ref: packages/adapter-anthropic/src/runner/spend.ts
   - kind: file
     ref: apps/tagma/server/src/native-harness/agents/startCard.ts
   - kind: file

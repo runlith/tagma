@@ -10,9 +10,9 @@ fields:
   }
 sources:
   - kind: file
-    ref: apps/tagma/server/src/external-harnesses/runner/claude-code/turn.ts
+    ref: packages/adapter-anthropic/src/runner/turn.ts
   - kind: file
-    ref: apps/tagma/server/src/external-harnesses/runner/hosted/relay.ts
+    ref: packages/hosted-runner/src/relay.ts
   - kind: file
     ref: packages/agent/src/thread/run/hostedWords.ts
 ---

@@ -12,7 +12,7 @@ edges:
     to: 01a14274-9f8b-7125-818c-5dddc226e611
 sources:
   - kind: file
-    ref: apps/tagma/server/src/external-harnesses/runner/claude-code/door.ts
+    ref: packages/adapter-anthropic/src/runner/door.ts
   - kind: file
     ref: packages/agent/src/thread/run/ThreadHosting.ts
 ---

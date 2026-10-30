@@ -12,7 +12,7 @@ edges:
     to: 01a0ca97-13e3-7639-9dcc-eea8f2781507
 sources:
   - kind: file
-    ref: apps/tagma/server/src/external-harnesses/vendors/claude-code/row.ts
+    ref: packages/adapter-anthropic/src/harness/claudeCode.ts
   - kind: file
     ref: packages/adapter-google/src/harness/gemini.ts
   - kind: symbol

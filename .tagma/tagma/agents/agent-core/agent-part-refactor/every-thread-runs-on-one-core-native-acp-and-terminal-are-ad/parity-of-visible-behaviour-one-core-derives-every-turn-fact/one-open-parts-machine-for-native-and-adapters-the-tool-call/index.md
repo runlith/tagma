@@ -12,9 +12,9 @@ edges:
     to: 01a10ba7-815e-7dbe-86e5-13e23b671eda
 sources:
   - kind: file
-    ref: apps/tagma/server/src/external-harnesses/runner/claude-code/session.ts
+    ref: packages/adapter-anthropic/src/runner/session.ts
   - kind: file
-    ref: apps/tagma/server/src/external-harnesses/runner/claude-code/translate.ts
+    ref: packages/adapter-anthropic/src/runner/translate.ts
   - kind: file
     ref: packages/agent/src/thread/run/lifecycle/liveTails.ts
   - kind: file

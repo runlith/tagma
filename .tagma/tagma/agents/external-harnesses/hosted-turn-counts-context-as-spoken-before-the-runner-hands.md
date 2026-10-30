@@ -13,7 +13,7 @@ edges:
     to: 01a17f5d-9e25-780b-9302-7f0783cb4628
 sources:
   - kind: file
-    ref: apps/tagma/server/src/external-harnesses/runner/hosted/turn.ts
+    ref: packages/hosted-runner/src/turn.ts
   - kind: file
     ref: packages/agent/src/thread/run/ThreadHosting.ts
 ---

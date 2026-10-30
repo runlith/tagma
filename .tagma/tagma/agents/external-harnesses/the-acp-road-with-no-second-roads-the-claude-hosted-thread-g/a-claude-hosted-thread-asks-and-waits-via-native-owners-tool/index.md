@@ -15,7 +15,7 @@ sources:
   - kind: file
     ref: apps/tagma/server/src/external-harnesses/protocol/questions.ts
   - kind: file
-    ref: apps/tagma/server/src/external-harnesses/runner/claude-code/permit.ts
+    ref: packages/adapter-anthropic/src/runner/permit.ts
   - kind: file
     ref: packages/agent/src/thread/run/ThreadHosting.ts
 ---

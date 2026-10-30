@@ -13,7 +13,7 @@ edges:
     to: 01a14cba-e095-7bcb-bb6f-608245d13bf3
 sources:
   - kind: file
-    ref: apps/tagma/server/src/external-harnesses/runner/claude-code/failure.ts
+    ref: packages/adapter-anthropic/src/runner/failure.ts
   - kind: file
     ref: apps/tagma/server/src/threads/naming/excerpt.ts
   - kind: file

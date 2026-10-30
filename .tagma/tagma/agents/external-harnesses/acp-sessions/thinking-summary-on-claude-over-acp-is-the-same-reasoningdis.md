@@ -8,9 +8,9 @@ edges:
     to: 01a14f72-2ff8-7fe8-9dcf-44bcf1407326
 sources:
   - kind: file
-    ref: apps/tagma/server/src/external-harnesses/runner/claude-code/settings.ts
+    ref: packages/adapter-anthropic/src/runner/settings.ts
   - kind: file
-    ref: apps/tagma/server/src/external-harnesses/vendors/claude-code/acp.ts
+    ref: packages/adapter-anthropic/src/harness/acp.ts
 ---
 `claude-code` models with adaptive thinking declare the same `REASONING_DISPLAY_SWITCH` as subscription models, so the pick, the default (`summarized`), and value validation on an ACP thread match native. Launch resolves the core row's switches against the model declaration and hands `reasoningDisplay` to the Claude profile as the session `thinking` option; like the model and effort, `Configure` sets it from the diff against the protocol row's `configured`, with no new process.
 

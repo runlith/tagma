@@ -12,9 +12,9 @@ sources:
   - kind: file
     ref: apps/tagma/server/src/external-harnesses/hostedOperations.ts
   - kind: file
-    ref: apps/tagma/server/src/external-harnesses/runner/hosted/turn.ts
+    ref: packages/hosted-runner/src/turn.ts
   - kind: symbol
-    ref: apps/tagma/server/src/external-harnesses/runner/hosted/cycle.ts
+    ref: packages/hosted-runner/src/cycle.ts
     symbol: Input
   - kind: symbol
     ref: apps/tagma/server/src/external-harnesses/store/turns.ts

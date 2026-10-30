@@ -12,7 +12,7 @@ edges:
     to: 01a10973-ef85-739e-8a04-c139d0810682
 sources:
   - kind: dir
-    ref: apps/tagma/server/src/external-harnesses/runner/claude-code
+    ref: packages/adapter-anthropic/src/runner
 ---
 One hosted-runner mechanism — a process that runs the Tagma agent inside someone else's agent loop — for all vendors: today it lives whole in `runner/claude-code/`, mixed with Claude Agent SDK shapes. Before the second runner (Cursor), the shared part moves to `external-harnesses/runner/hosted/`, and Claude moves onto it in the same change ([[dd380bf6]]): no second copy of the door, call accounting, and word fates appears.
 
