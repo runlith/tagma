@@ -103,7 +103,15 @@
   const shown =
     (on: boolean): Attachment<HTMLElement> =>
     (node) => {
-      if (on) node.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
+      const strip = node.parentElement;
+      if (!on || strip === null) return;
+      const margin = getComputedStyle(node);
+      const tab = node.getBoundingClientRect();
+      const bounds = strip.getBoundingClientRect();
+      const before = tab.left - parseFloat(margin.scrollMarginLeft) - bounds.left;
+      const after = tab.right + parseFloat(margin.scrollMarginRight) - bounds.right;
+      if (before < 0) strip.scrollLeft += before;
+      else if (after > 0) strip.scrollLeft += after;
     };
 
   const rail: Attachment<HTMLElement> = (node) => {
