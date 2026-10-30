@@ -183,7 +183,8 @@ export const makeThreadFolders = Effect.gen(function* () {
   const regroup = Effect.fn('ThreadFolders.regroup')(function* (groupId: number) {
     return yield* units.write(folding('regroup'), (unit) =>
       Effect.gen(function* () {
-        const members = ((yield* groups.list()).find((group) => group.graph.id === groupId)?.members ?? []).map((member) => member.id);
+        const held = yield* groups.list();
+        const members = (held.find((group) => group.graph.id === groupId)?.members ?? []).map((member) => member.id);
         const entering: { readonly memberId: number; readonly folders: readonly HeldFolder[] }[] = [];
         for (const memberId of members) {
           const folders = yield* heldOf(db, unit, memberId);
@@ -206,17 +207,23 @@ export const makeThreadFolders = Effect.gen(function* () {
               ),
             ),
         );
-        const receivers = [
-          ...new Set([
-            ...filed.flatMap((root) => (root.home === null || members.includes(root.home) ? [] : [root.home])),
-            ...folders.flatMap((folder) => (folder.memberId === null || members.includes(folder.memberId) ? [] : [folder.memberId])),
-          ]),
-        ];
+        const departed = new Set([
+          ...filed.flatMap((root) => (root.home === null || members.includes(root.home) ? [] : [root.home])),
+          ...folders.flatMap((folder) => (folder.memberId === null || members.includes(folder.memberId) ? [] : [folder.memberId])),
+        ]);
+        const owners = new Map(
+          [...departed].map(
+            (home) => [home, held.find((group) => group.members.some((one) => one.id === home))?.graph.id ?? home] as const,
+          ),
+        );
         const standing = new Map<number, number>();
-        for (const receiver of receivers) standing.set(receiver, yield* nextTop(db, unit, receiver));
-        const plan = partFolders({ groupId, members, folders, filed, standing, newId: uuidv7 });
+        for (const owner of new Set(owners.values())) standing.set(owner, yield* nextTop(db, unit, owner));
+        const plan = partFolders({ groupId, members, owners, folders, filed, standing, newId: uuidv7 });
         yield* carryOut(db, unit, plan);
-        return { receivers, refiled: plan.refiled.map((root) => root.threadId as ThreadId) };
+        return {
+          receivers: [...new Set([...departed, ...standing.keys()])],
+          refiled: plan.refiled.map((root) => root.threadId as ThreadId),
+        };
       }),
     );
   });

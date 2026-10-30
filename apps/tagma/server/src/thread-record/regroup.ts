@@ -92,13 +92,16 @@ export const absorbFolders = (input: {
 export const partFolders = (input: {
   readonly groupId: number;
   readonly members: readonly number[];
+  readonly owners: ReadonlyMap<number, number>;
   readonly folders: readonly HeldFolder[];
   readonly filed: readonly FiledRoot[];
   readonly standing: ReadonlyMap<number, number>;
   readonly newId: () => string;
 }): FolderPlan => {
   const { groupId, members } = input;
-  const ownerOf = (home: number): number => (members.includes(home) ? groupId : home);
+  const ownerOf = (home: number): number => (members.includes(home) ? groupId : (input.owners.get(home) ?? home));
+  const membersOf = (ownerId: number): readonly number[] =>
+    ownerId === groupId ? members : [...input.owners].flatMap(([home, owner]) => (owner === ownerId && owner !== home ? [home] : []));
   const children = childrenOf(input.folders);
   const walked = ordered(input.folders, children);
   const byId = new Map(walked.map((folder) => [folder.id, folder] as const));
@@ -131,18 +134,16 @@ export const partFolders = (input: {
   for (const folder of walked) {
     const need = needers.get(folder.id) as Set<number>;
     const parent = folder.parentId === null ? undefined : byId.get(folder.parentId);
-    const keeper = need.has(groupId)
-      ? groupId
-      : folder.memberId !== null && need.has(folder.memberId)
-        ? folder.memberId
-        : Math.min(...need);
+    const own = folder.memberId === null ? groupId : ownerOf(folder.memberId);
+    const keeper = need.has(groupId) ? groupId : need.has(own) ? own : Math.min(...need);
     const places = new Map<number, string>();
     at.set(folder.id, places);
     for (const ownerId of [keeper, ...[...need].filter((one) => one !== keeper).sort((a, b) => a - b)]) {
       const parentId = parent === undefined ? null : (at.get(parent.id)?.get(ownerId) ?? null);
       const top = parentId === null;
       const position = top && ownerId !== groupId ? tops.next(ownerId) : folder.position;
-      const memberId = ownerId === groupId ? memberOf(folder, members, homes.get(folder.id) as Set<number>) : null;
+      const into = membersOf(ownerId);
+      const memberId = ownerId === groupId || into.length > 0 ? memberOf(folder, into, homes.get(folder.id) as Set<number>) : null;
       if (ownerId === keeper) {
         places.set(ownerId, folder.id);
         if (ownerId === groupId && parentId === folder.parentId && memberId === folder.memberId) continue;

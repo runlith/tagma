@@ -1,6 +1,10 @@
+import { randomUUID } from 'node:crypto';
 import { expect } from 'bun:test';
 import { it } from '@runlith/effect-test';
-import { Effect } from 'effect';
+import { eq } from 'drizzle-orm';
+import { Clock, Context, Deferred, Effect } from 'effect';
+import { ProjectGroups } from '../../../projects/contract/service/registry.js';
+import { project as projectTable } from '../../../projects/testing/doubles.js';
 import { shelveRecord } from '../../../thread-record/testing/records.js';
 import { makeThreadFolders } from '../../../thread-record/folders.js';
 import { type ThreadStoreFixture, threadStoreFixture } from '../threadStoreFixture.js';
@@ -132,5 +136,64 @@ it.live(
       ['Top', 0],
       ['B', 0],
     ]);
+  }),
+);
+
+const registered = Effect.fnUntraced(function* (demo: ThreadStoreFixture) {
+  const name = `member-${randomUUID()}`;
+  const createdAt = new Date(yield* Clock.currentTimeMillis);
+  const row = yield* demo.units.write('testing.groupMember', (unit) =>
+    unit.run(
+      demo.db
+        .insert(projectTable())
+        .values({ name, repoKey: `/${name}`, rootPath: `/${name}`, createdAt })
+        .returning()
+        .get(),
+    ),
+  );
+  if (row === undefined) return yield* Effect.die(new Error('the member project was not registered'));
+  yield* Effect.addFinalizer(() =>
+    demo.units
+      .write('testing.groupMemberRelease', (unit) => unit.run(demo.db.delete(projectTable()).where(eq(projectTable().id, row.id))))
+      .pipe(Effect.orDie),
+  );
+  return row;
+});
+
+it.live(
+  'folders a dissolved group still holds for a member that has joined another group since reach that group on the next start',
+  Effect.fnUntraced(function* () {
+    const demo = yield* threadStoreFixture;
+    const groups = Context.get(demo.context, ProjectGroups);
+    const alpha = yield* registered(demo);
+    const beta = yield* registered(demo);
+    const gamma = yield* registered(demo);
+    const thread = yield* demo.units.write('ThreadStore.member', (unit) =>
+      Effect.gen(function* () {
+        const created = yield* demo.store.insert({ ownerId: 'operator', agentId: 'tagma' }, unit);
+        yield* demo.threads.rows.attachFacet({ threadId: created.id, projectId: beta.id }, unit);
+        return created.id;
+      }),
+    );
+    const formed = (members: readonly (typeof beta)[]) =>
+      demo.units.write('testing.formGroup', (unit) => groups.form(unit, { name: `group-${randomUUID()}`, members }));
+    const first = yield* formed([alpha, beta]);
+    const site = yield* Effect.scoped(
+      Effect.flatMap(Effect.provide(makeThreadFolders, demo.context), (folders) => folders.create(beta.id, 'Site', null, [thread])),
+    );
+    if (site.status !== 'created') return yield* Effect.die(new Error(`the folder was not made: ${site.status}`));
+
+    yield* demo.units.write('testing.leaveGroup', (unit) => groups.leave(unit, beta));
+    yield* formed([beta, gamma]);
+    yield* Effect.addFinalizer(() => Effect.orDie(demo.units.write('testing.leaveGroup', (unit) => groups.leave(unit, beta))));
+
+    const settled = yield* Deferred.make<void>();
+    const folders = yield* Effect.provide(makeThreadFolders, demo.context);
+    folders.regrouped((event) =>
+      event.groupId === first.group.graph.id ? Effect.asVoid(Deferred.succeed(settled, undefined)) : Effect.void,
+    );
+    yield* Deferred.await(settled);
+    expect((yield* folders.list(beta.id)).map((folder) => [folder.id, folder.name])).toEqual([[site.folder.id, 'Site']]);
+    expect((yield* demo.threads.list.summary(thread))?.folderId).toBe(site.folder.id);
   }),
 );
