@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { dirname } from 'node:path';
 import { copyFile, open, rename, rm, stat } from 'node:fs/promises';
 import { Data, Duration, Effect } from 'effect';
 import type { Git } from '@runlith/git/Git';
@@ -192,6 +193,78 @@ const takeLock = Effect.fn('platform.index.lock')(function* (index: string) {
   }
 });
 
+export type IndexEdit<A, E, R> = {
+  readonly value: A;
+  readonly write: ((temporary: string) => Effect.Effect<void, E, R>) | null;
+};
+
+export const editHeldIndex = Effect.fn('platform.index.edit')(function* <A, E, R, W, S>(
+  index: string,
+  edit: Effect.Effect<IndexEdit<A, W, S>, E, R>,
+): Effect.fn.Return<A, E | W | IndexBusy | IndexWriteFailed | HoldStalled | HoldCut, R | S> {
+  const measured = yield* Effect.tryPromise({ try: () => indexMeasure(index), catch: failed(index) });
+  return yield* indexSection.hold(
+    { path: dirname(index), bytesPerMs: measured.bytesPerMs },
+    measured.bytes,
+    Effect.suspend(() => {
+      const temporary = `${index}.tagma-${randomUUID()}`;
+      let renamed = false;
+      return Effect.acquireUseRelease(
+        takeLock(index),
+        (lock) =>
+          Effect.gen(function* () {
+            const edited = yield* edit;
+            if (edited.write !== null) {
+              yield* Effect.uninterruptible(
+                Effect.tryPromise({
+                  try: () =>
+                    copyFile(index, temporary).catch((cause: NodeJS.ErrnoException) =>
+                      cause.code === 'ENOENT' ? null : Promise.reject(cause),
+                    ),
+                  catch: failed(index),
+                }),
+              );
+              yield* edited.write(temporary);
+              yield* Effect.uninterruptible(
+                Effect.tryPromise({
+                  try: async () => {
+                    const written = await open(temporary, 'r+');
+                    try {
+                      await written.sync();
+                    } finally {
+                      await written.close();
+                    }
+                    await lock.close();
+                    await rename(temporary, `${index}.lock`);
+                    await rename(`${index}.lock`, index);
+                  },
+                  catch: failed(index),
+                }).pipe(
+                  Effect.tap(() =>
+                    Effect.sync(() => {
+                      renamed = true;
+                    }),
+                  ),
+                ),
+              );
+            }
+            return edited.value;
+          }),
+        (lock) =>
+          Effect.tryPromise({
+            try: async () => {
+              await lock.close();
+              if (!renamed) await rm(`${index}.lock`, { force: true });
+              await rm(temporary, { force: true });
+              await rm(`${temporary}.lock`, { force: true });
+            },
+            catch: failed(index),
+          }),
+      );
+    }),
+  );
+});
+
 export const settleIndex = Effect.fn('platform.index.settle')(function* (
   git: Git['Service'],
   checkout: string,
@@ -200,105 +273,63 @@ export const settleIndex = Effect.fn('platform.index.settle')(function* (
   entries: readonly SettleEntry[],
 ): Effect.fn.Return<Settlement, IndexBusy | IndexWriteFailed | OwnGitFailed | HoldStalled | HoldCut> {
   if (entries.length === 0) return { paths: new Map(), moved: false };
-  const { index, gitDir } = places;
+  const { index } = places;
   const guard = yield* shaOf(git, checkout, ref);
   const paths = entries.map((entry) => entry.path);
   const atRef = yield* treeBlobs(git, checkout, guard, paths);
   const superseded = (entry: SettleEntry) => (atRef.get(entry.path)?.blob ?? null) !== entry.landed;
-  const measured = yield* Effect.tryPromise({ try: () => indexMeasure(index), catch: failed(index) });
-  return yield* indexWrites.hold(
+  const settled = yield* indexWrites.hold(
     index,
-    indexSection.hold(
-      { path: gitDir, bytesPerMs: measured.bytesPerMs },
-      measured.bytes,
-      Effect.suspend(() => {
-        const temp = `${index}.tagma-${randomUUID()}`;
-        let renamed = false;
-        return Effect.acquireUseRelease(
-          takeLock(index),
-          (lock) =>
-            Effect.gen(function* () {
-              const onRef = (yield* refOfHead(git, checkout)) === ref;
-              if ((yield* shaOf(git, checkout, ref)) !== guard) {
-                return {
-                  paths: new Map<string, Settled>(
-                    entries.map((entry) => [entry.path, superseded(entry) ? 'superseded' : 'unsynced'] as const),
+    editHeldIndex(
+      index,
+      Effect.gen(function* () {
+        const onRef = (yield* refOfHead(git, checkout)) === ref;
+        if ((yield* shaOf(git, checkout, ref)) !== guard) {
+          return {
+            value: {
+              paths: new Map<string, Settled>(entries.map((entry) => [entry.path, superseded(entry) ? 'superseded' : 'unsynced'] as const)),
+              moved: true,
+            },
+            write: null,
+          };
+        }
+        const staged = yield* indexBlobs(git, checkout, paths);
+        const decided = new Map<string, Settled>();
+        const lines: string[] = [];
+        for (const entry of entries) {
+          const now = atRef.get(entry.path);
+          if (superseded(entry)) {
+            decided.set(entry.path, 'superseded');
+            continue;
+          }
+          const inIndex = staged.get(entry.path) ?? null;
+          if (!onRef || (inIndex !== entry.base && inIndex !== entry.landed)) {
+            decided.set(entry.path, 'unsynced');
+            continue;
+          }
+          decided.set(entry.path, 'synced');
+          if (inIndex === entry.landed) continue;
+          lines.push(now === undefined ? `0 ${'0'.repeat(guard.length)}\t${entry.path}` : `${now.mode} ${now.blob}\t${entry.path}`);
+        }
+        return {
+          value: { paths: decided, moved: false },
+          write:
+            lines.length === 0
+              ? null
+              : (temporary: string) =>
+                  Effect.asVoid(
+                    runGitBytes(git, 'settle-write', ['-C', checkout, 'update-index', '-z', '--index-info'], {
+                      env: { GIT_INDEX_FILE: temporary },
+                      stdin: lines.map((line) => `${line}\0`).join(''),
+                    }),
                   ),
-                  moved: true,
-                };
-              }
-              const staged = yield* indexBlobs(git, checkout, paths);
-              const decided = new Map<string, Settled>();
-              const lines: string[] = [];
-              for (const entry of entries) {
-                const now = atRef.get(entry.path);
-                if (superseded(entry)) {
-                  decided.set(entry.path, 'superseded');
-                  continue;
-                }
-                const inIndex = staged.get(entry.path) ?? null;
-                if (!onRef || (inIndex !== entry.base && inIndex !== entry.landed)) {
-                  decided.set(entry.path, 'unsynced');
-                  continue;
-                }
-                decided.set(entry.path, 'synced');
-                if (inIndex === entry.landed) continue;
-                lines.push(now === undefined ? `0 ${'0'.repeat(guard.length)}\t${entry.path}` : `${now.mode} ${now.blob}\t${entry.path}`);
-              }
-              if (lines.length > 0) {
-                yield* Effect.uninterruptible(
-                  Effect.tryPromise({
-                    try: () =>
-                      copyFile(index, temp).catch((cause: NodeJS.ErrnoException) =>
-                        cause.code === 'ENOENT' ? null : Promise.reject(cause),
-                      ),
-                    catch: failed(index),
-                  }),
-                );
-                yield* runGitBytes(git, 'settle-write', ['-C', checkout, 'update-index', '-z', '--index-info'], {
-                  env: { GIT_INDEX_FILE: temp },
-                  stdin: lines.map((line) => `${line}\0`).join(''),
-                });
-                yield* Effect.uninterruptible(
-                  Effect.tryPromise({
-                    try: async () => {
-                      const written = await open(temp, 'r+');
-                      try {
-                        await written.sync();
-                      } finally {
-                        await written.close();
-                      }
-                      await lock.close();
-                      await rename(temp, `${index}.lock`);
-                      await rename(`${index}.lock`, index);
-                    },
-                    catch: failed(index),
-                  }).pipe(
-                    Effect.tap(() =>
-                      Effect.sync(() => {
-                        renamed = true;
-                      }),
-                    ),
-                  ),
-                );
-              }
-              const after = yield* quietGit(git, 'settle-ref', ['-C', checkout, 'rev-parse', '--verify', '-q', `${ref}^{commit}`]);
-              const moved = after !== guard;
-              if (moved) for (const [path, outcome] of decided) if (outcome === 'synced') decided.set(path, 'unsynced');
-              return { paths: decided, moved };
-            }),
-          (lock) =>
-            Effect.tryPromise({
-              try: async () => {
-                await lock.close();
-                if (!renamed) await rm(`${index}.lock`, { force: true });
-                await rm(temp, { force: true });
-                await rm(`${temp}.lock`, { force: true });
-              },
-              catch: failed(index),
-            }),
-        );
+        };
       }),
     ),
   );
+  const after = yield* quietGit(git, 'settle-ref', ['-C', checkout, 'rev-parse', '--verify', '-q', `${ref}^{commit}`]);
+  const moved = settled.moved || after !== guard;
+  const decided = new Map(settled.paths);
+  if (moved) for (const [path, outcome] of decided) if (outcome === 'synced') decided.set(path, 'unsynced');
+  return { paths: decided, moved };
 });

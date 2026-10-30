@@ -5,9 +5,8 @@ import { stagedEntriesAt, treeEntriesAt, type TreeEntries, type TreeEntry } from
 import type { PreparedEntries, PreparedHashes } from '../../change-record/contract/service/prepared.js';
 import { actingGit, runGit } from '../../platform/git/ownGit.js';
 import { indexWrites } from '../../platform/git/index.js';
+import { editHeldIndex } from '../../platform/git/settle.js';
 import { nul, stagedTexts } from '../../change-record/prepared/tree.js';
-
-const SYNC_TRIES = 8;
 
 const sameEntry = (one: TreeEntry | undefined, other: TreeEntry | undefined): boolean =>
   one?.mode === other?.mode && one?.object === other?.object;
@@ -118,21 +117,33 @@ export const syncHeldIndex = Effect.fn('submitWork.syncIndex')(function* (
   changed: readonly string[],
   hashes: ReadonlyMap<string, PreparedHashes>,
   index: string,
+  shared: string,
   known: KnownEntries = new Map(),
 ): Effect.fn.Return<readonly string[]> {
-  for (let tried = 1; ; tried += 1) {
-    const { due, unread } = yield* dueOf(git, root, bases, commit, changed, hashes, index, known);
-    if (due.length === 0) return unread;
-    const reset = yield* Effect.result(
-      runGit(git, 'submit-sync', ['-C', root, 'reset', '-q', '--pathspec-from-file=-', '--pathspec-file-nul', commit], {
-        stdin: nul(due),
-        env: { GIT_LITERAL_PATHSPECS: '1' },
+  const edited = yield* Effect.result(
+    editHeldIndex(
+      shared,
+      Effect.gen(function* () {
+        const { due, unread } = yield* dueOf(git, root, bases, commit, changed, hashes, index, known);
+        return {
+          value: unread,
+          write:
+            due.length === 0
+              ? null
+              : (temporary: string) =>
+                  Effect.asVoid(
+                    runGit(git, 'submit-sync', ['-C', root, 'reset', '-q', '--pathspec-from-file=-', '--pathspec-file-nul', commit], {
+                      stdin: nul(due),
+                      env: { GIT_LITERAL_PATHSPECS: '1', GIT_INDEX_FILE: temporary },
+                    }),
+                  ),
+        };
       }),
-    );
-    if (reset._tag === 'Success') return unread;
-    if (tried >= SYNC_TRIES || reset.failure.reason !== 'locked') return [...due, ...unread];
-    yield* Effect.sleep(100 * tried);
-  }
+    ),
+  );
+  if (edited._tag === 'Success') return edited.success;
+  yield* Effect.logWarning('the commit landed, but its index pickup failed and the index was left as it stood', edited.failure);
+  return changed;
 });
 
 export const syncIndex = Effect.fn('submitWork.index')(function* (
@@ -147,7 +158,7 @@ export const syncIndex = Effect.fn('submitWork.index')(function* (
   known: KnownEntries,
 ): Effect.fn.Return<readonly string[]> {
   if (changed.length === 0) return [];
-  return yield* indexWrites.hold(index, syncHeldIndex(git, root, bases, commit, changed, hashes, prepared, known)).pipe(
+  return yield* indexWrites.hold(index, syncHeldIndex(git, root, bases, commit, changed, hashes, prepared, index, known)).pipe(
     Effect.catchTags({
       HoldStalled: () => Effect.succeed(changed),
       HoldCut: () => Effect.succeed(changed),

@@ -179,7 +179,7 @@ const publish = (
     const unsynced =
       merge === undefined
         ? yield* syncIndex(git, root, places.index, bases, sent.commit, changed, built.hashes, index, known)
-        : yield* syncHeldIndex(git, root, [...bases, merge.tree], sent.commit, changed, built.hashes, index, known);
+        : yield* syncHeldIndex(git, root, [...bases, merge.tree], sent.commit, changed, built.hashes, index, places.index, known);
     const conclusion = merge === undefined ? null : yield* concluded(hosted, root, 'merge');
     return { _tag: 'published', commit: sent.commit, unsynced, conclusion } as const;
   });

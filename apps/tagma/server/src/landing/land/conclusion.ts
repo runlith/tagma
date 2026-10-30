@@ -17,7 +17,7 @@ export const recoverConclusion = (
   const merge = intent.merge;
   if (merge == null) return Effect.succeed(null);
   const root = intent.checkout;
-  const finish = Effect.gen(function* () {
+  const finish = Effect.fnUntraced(function* (index: string) {
     if ((yield* headRef(git, root)) !== intent.ref)
       return 'the checkout moved off the recorded branch, so its merge tail was left untouched';
     const parents = (yield* runGit(git, 'merge-tail-parents', ['-C', root, 'show', '-s', '--format=%P', commit])).split(' ');
@@ -41,11 +41,11 @@ export const recoverConclusion = (
     ]))
       .split('\0')
       .filter((path) => path !== '');
-    const unsynced = yield* syncHeldIndex(git, root, [merge.tree], tip, paths, new Map(), '');
+    const unsynced = yield* syncHeldIndex(git, root, [merge.tree], tip, paths, new Map(), '', index);
     const conclusion = operation === 'merge' ? yield* concluded(hosted, root, 'merge') : null;
     return conclusion ?? (unsynced.length === 0 ? null : `the merge index could not settle: ${unsynced.join(', ')}`);
   });
-  return Effect.map(Effect.result(Effect.flatMap(indexPath(git, root), (index) => indexWrites.hold(index, finish))), (answer) => {
+  return Effect.map(Effect.result(Effect.flatMap(indexPath(git, root), (index) => indexWrites.hold(index, finish(index)))), (answer) => {
     if (answer._tag === 'Success') return answer.success;
     const failure = answer.failure;
     return failure._tag === 'OwnGitFailed' ? failure.message : `the merge tail's index lane did not finish: ${failure._tag}`;
