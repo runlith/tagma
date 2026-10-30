@@ -5,8 +5,7 @@ ord: 22
 tags: ["task"]
 fields:
   {
-    "holder": "tagma:01a18d3e-3a12-7d50-9f31-4b9bf87d1650",
-    "status": "in_work"
+    "status": "open"
   }
 edges:
   - kind: implements
@@ -37,4 +36,4 @@ Order:
 - It moves to `gate` once task [[e0faa87f]] has landed.
 - Standing violations, other than those of item 3, are debt owned by a new task under this area, which the same work names.
 
-Implementation is committed through `1a48164240`, including explicit affected-path coverage in `3f750de090`; 64 affected tests passed seeds 1/2/3 and typechecking passed. Enforcement remains incomplete: the final full-judge measurement at `938490bca05e14f664d547cc18c2ab1c15457b36` stopped at 31/35 small-workload samples, and the large workload was not run. The 10% requirement is unproved and all five inspections remain unenforced. The operator ended the work and limited command/test runs to 30 seconds; no further measurement is authorized.
+Implementation is committed through `1a48164240`, including explicit affected-path coverage in `3f750de090`; 64 affected tests passed seeds 1/2/3 and typechecking passed. Enforcement remains incomplete: the final full-judge measurement at `938490bca05e14f664d547cc18c2ab1c15457b36` stopped at 31/35 small-workload samples, and the large workload was not run. The 10% requirement is unproved and all five inspections remain unenforced. The operator ended the work and limited command/test runs to 30 seconds; no further measurement is authorized. The final, read-only review was cut short by that deadline and found four confirmed defects still open: the calls analyzer skips a conditional's false branch when its true branch has a value; coupling importer discovery omits configured aliases; import-type expressions consume exports as runtime wildcard loads; and source changes across symlink/regular mode transitions are dropped. The implementations are committed, but enforcement and correctness acceptance are not complete.
