@@ -112,46 +112,6 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead apps/tagma/app/src/lib/app/slotWorld.ts#TestSlotOptions",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/app/src/lib/app/slotWorld.ts#testLive",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/app/src/lib/app/slotWorld.ts#testThreadSlot",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/app/src/lib/app/slotWorld.ts#testThreadSlots",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/app/src/lib/app/slotWorld.ts#slotWorld",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/app/src/lib/app/slotWorld.ts#TestRoute",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/app/src/lib/app/slotWorld.ts#routeOf",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/app/src/lib/app/slotWorld.ts#commitRoute",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/app/src/lib/app/slotWorld.ts#testThreadChat",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/app/src/lib/app/slotWorld.ts#feedSnapshot",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "dead-code dead apps/tagma/app/src/lib/features/browser/Links.svelte.ts#BesidePage",
           "owner": "5a3bed29"
         },
@@ -4515,10 +4475,6 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead apps/tagma/server/src/executions/host/boot.ts#hostPresence",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "dead-code dead apps/tagma/server/src/executions/host/boot.ts#RaiseInput",
           "owner": "5a3bed29"
         },
@@ -4612,18 +4568,6 @@ fields:
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/executions/host/offer.ts#Candidate",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/executions/host/processes.ts#ProcessesUnmeasured",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/executions/host/processes.ts#hostsUnder",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/executions/host/processes.ts#endHosts",
           "owner": "5a3bed29"
         },
         {
@@ -13095,14 +13039,6 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead packages/agent/src/thread/compaction/lookupModels.ts#ModelLookups",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead packages/agent/src/thread/compaction/lookupModels.ts#lookupModels",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "dead-code dead packages/agent/src/thread/compaction/policy.ts#CompactionTriggerSource",
           "owner": "5a3bed29"
         },
@@ -14100,14 +14036,6 @@ fields:
         },
         {
           "fingerprint": "dead-code dead packages/agent/src/thread/storage/memory/state.ts#ThreadMemory",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead packages/agent/src/thread/storage/memory/units.ts#MemoryUnitEndedError",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead packages/agent/src/thread/storage/memory/units.ts#MemoryTxInput",
           "owner": "5a3bed29"
         },
         {
@@ -15361,50 +15289,6 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead packages/e2e/src/artifacts.ts#FailureArtifact",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead packages/e2e/src/artifacts.ts#artifactDirectory",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead packages/e2e/src/artifacts.ts#record",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead packages/e2e/src/artifacts.ts#captureFailure",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead packages/e2e/src/browser.ts#BrowserTest",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead packages/e2e/src/browser.ts#Options",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead packages/e2e/src/browser.ts#e2e",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead packages/e2e/src/engines.ts#ElectronTarget",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead packages/e2e/src/engines.ts#BrowserSession",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead packages/e2e/src/engines.ts#ElectronSession",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead packages/e2e/src/engines.ts#BrowserUnavailable",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "dead-code dead packages/e2e/src/lanes/inspector.ts#InspectorFailed",
           "owner": "5a3bed29"
         },
@@ -15413,104 +15297,7 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead packages/e2e/src/lanes/ios.ts#IOSUnavailable",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead packages/e2e/src/lanes/ios.ts#UntransferableValue",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead packages/e2e/src/lanes/ios.ts#IOSRun",
-          "owner": "5a3bed29"
-        },
-        {
-          "count": 2,
-          "fingerprint": "dead-code dead packages/e2e/src/lanes/ios.ts#ScrollFrame",
-          "owner": "5a3bed29"
-        },
-        {
-          "count": 2,
-          "fingerprint": "dead-code dead packages/e2e/src/lanes/ios.ts#TouchSample",
-          "owner": "5a3bed29"
-        },
-        {
-          "count": 2,
-          "fingerprint": "dead-code dead packages/e2e/src/lanes/ios.ts#ScrollSample",
-          "owner": "5a3bed29"
-        },
-        {
-          "count": 2,
-          "fingerprint": "dead-code dead packages/e2e/src/lanes/ios.ts#Release",
-          "owner": "5a3bed29"
-        },
-        {
-          "count": 2,
-          "fingerprint": "dead-code dead packages/e2e/src/lanes/ios.ts#ScrollRecording",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead packages/e2e/src/lanes/ios.ts#ScrollCapture",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead packages/e2e/src/lanes/ios.ts#IOSSession",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead packages/e2e/src/lanes/ios.ts#IOSTest",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead packages/e2e/src/lanes/ios.ts#iosSession",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead packages/e2e/src/lanes/ios.ts#ios",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "dead-code dead packages/e2e/src/lanes/iosTools.ts#ToolsUnavailable",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead packages/e2e/src/lanes/simulator.ts#Simulator",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead packages/e2e/src/stand.ts#serveStand",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead packages/e2e/src/stand.ts#Stand",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead packages/e2e/src/stand.ts#stand",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead packages/e2e/src/touch.ts#TouchInput",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead packages/effect-test/src/vitest.ts#LayerGroup",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead packages/effect-test/src/vitest.ts#LayerMethods",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead packages/effect-test/src/vitest.ts#Methods",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead packages/effect-test/src/vitest.ts#layer",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead packages/effect-test/src/vitest.ts#it",
           "owner": "5a3bed29"
         },
         {
@@ -17688,22 +17475,6 @@ fields:
         },
         {
           "fingerprint": "dead-code dead packages/layer/src/svelte/screen.svelte.ts#ScreenClass",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead packages/layer/src/svelte/test.svelte.ts#At",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead packages/layer/src/svelte/test.svelte.ts#TestOptions",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead packages/layer/src/svelte/test.svelte.ts#TestApp",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead packages/layer/src/svelte/test.svelte.ts#test",
           "owner": "5a3bed29"
         },
         {
@@ -19920,30 +19691,6 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead packages/testbed/src/fixture.ts#measure",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead packages/testbed/src/fixture.ts#hold",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead packages/testbed/src/fixture.ts#release",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead packages/testbed/src/fixture.ts#locate",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead packages/testbed/src/memory.ts#make",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead packages/testbed/src/memory.ts#layer",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "dead-code dead packages/testbed/src/report.ts#ITEMS",
           "owner": "5a3bed29"
         },
@@ -19989,26 +19736,6 @@ fields:
         },
         {
           "fingerprint": "dead-code dead packages/testbed/src/vitest/global.ts#default",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead packages/testbed/src/worlds.ts#Params",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead packages/testbed/src/worlds.ts#Kind",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead packages/testbed/src/worlds.ts#RunKind",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead packages/testbed/src/worlds.ts#Made",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead packages/testbed/src/worlds.ts#world",
           "owner": "5a3bed29"
         },
         {
