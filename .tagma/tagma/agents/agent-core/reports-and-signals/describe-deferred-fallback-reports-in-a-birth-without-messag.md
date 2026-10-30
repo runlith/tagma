@@ -6,7 +6,7 @@ tags: ["task"]
 fields:
   {
     "holder": "tagma:01a18a3d-4587-782b-8f41-83c488f67465",
-    "status": "in_work"
+    "status": "done"
   }
 edges:
   - kind: discovered-from
