@@ -8,7 +8,7 @@ import { GraphUnits } from '../../platform/contract/service/units.js';
 import { readsOf } from '../acts/reads.js';
 import { deriveLaw } from './derived.js';
 import { measuredRoot } from '../contract/service/serving.js';
-import { Projects } from '../../projects/contract/service/registry.js';
+import { ProjectGroups, Projects } from '../../projects/contract/service/registry.js';
 import { type LawEntry, type LawReads, ruleLine } from './law.js';
 import { reachLabel } from './reach.js';
 
@@ -83,11 +83,12 @@ export function instructionText(set: InstructionSet, previous?: InstructionSet):
 export const instructionsReads = Effect.fnUntraced(function* (law: LawReads) {
   const reads = readsOf(yield* GraphUnits);
   const projects = yield* Projects;
-  const { globalLaw, prompted, ownGraph } = law;
-  const globals = new WeakMap<LawEntry, Map<string, Instruction>>();
-  const globalInstruction = (entry: LawEntry, scope: string) => {
-    const variants = globals.get(entry) ?? new Map<string, Instruction>();
-    globals.set(entry, variants);
+  const groups = yield* ProjectGroups;
+  const { globalLaw, prompted, promptOf, ownGraph } = law;
+  const scoped = new WeakMap<LawEntry, Map<string, Instruction>>();
+  const scopedInstruction = (entry: LawEntry, scope: string) => {
+    const variants = scoped.get(entry) ?? new Map<string, Instruction>();
+    scoped.set(entry, variants);
     let instruction = variants.get(scope);
     if (instruction === undefined) {
       instruction = instructionOf('law', blockName(entry.rule.uuid), scope, ruleLine(entry, ` [${scope}]`));
@@ -113,8 +114,16 @@ export const instructionsReads = Effect.fnUntraced(function* (law: LawReads) {
       const proj = yield* projects.byId(input.projectId);
       const root = yield* measuredRoot(proj);
       const cross = yield* globalLaw(input.projectId);
-      const law = cross.rules.map((entry) => globalInstruction(entry, cross.scope));
-      if (!cross.own) for (const entry of yield* prompted(input.projectId)) law.push(localInstruction(entry, proj.name));
+      const law = cross.rules.map((entry) => scopedInstruction(entry, cross.scope));
+      const group = yield* groups.of(input.projectId);
+      if (group !== undefined && group.graph.id !== input.projectId) {
+        const scope = `prompt · ${group.graph.name}`;
+        for (const entry of yield* promptOf(group.graph.id)) law.push(scopedInstruction(entry, scope));
+        for (const member of group.members) {
+          const entries = member.id === input.projectId ? yield* prompted(member.id) : yield* promptOf(member.id);
+          for (const entry of entries) law.push(localInstruction(entry, member.name));
+        }
+      } else if (!cross.own) for (const entry of yield* prompted(input.projectId)) law.push(localInstruction(entry, proj.name));
       const vocabulary = input.audience === 'graph' ? yield* Effect.provide(vocabularyInstructions(input.projectId), ownGraph) : [];
       return {
         projectId: input.projectId,

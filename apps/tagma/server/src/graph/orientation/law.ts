@@ -246,6 +246,12 @@ export const lawReads = Effect.fnUntraced(function* (doctrine: DoctrineText | nu
     }),
   );
 
+  const promptOf = reads(
+    Effect.fn('Orientation.promptOf')(function* (projectId: number) {
+      return (yield* Effect.provide(lawFamilies(projectId), yield* graphOf(projectId))).prompt;
+    }),
+  );
+
   const doctrineText = Effect.fn('Orientation.doctrine')(function* (
     projectId?: number,
   ): Effect.fn.Return<string, StoreFailure | GateRefusal> {
@@ -270,7 +276,7 @@ export const lawReads = Effect.fnUntraced(function* (doctrine: DoctrineText | nu
     return [LAW_START, yield* doctrineText(input.projectId), LAW_END].join('\n');
   });
 
-  return { policyOf, graphOf, forest, prompted, off, globalLaw, doctrineText, lawText, ownGraph, ruleReachOf };
+  return { policyOf, graphOf, forest, prompted, promptOf, off, globalLaw, doctrineText, lawText, ownGraph, ruleReachOf };
 });
 
 export type LawReads = Effect.Success<ReturnType<typeof lawReads>>;

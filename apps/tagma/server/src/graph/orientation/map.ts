@@ -143,7 +143,10 @@ function outline(node: MapNode, children: ReadonlyMap<number | null, readonly Ma
   return [node, ...(children.get(node.id) ?? []).flatMap((kid) => outline(kid, children, seen))];
 }
 
-export function mapLines(nodes: readonly MapNode[], budget: number, focus?: number): MapCut {
+export const regionsHeading = (left: number): string =>
+  left === 0 ? 'Top regions:' : `Top regions; ${left} more stand inside the \`(+N)\` cuts:`;
+
+export function mapLines(nodes: readonly MapNode[], budget: number, focus?: number, depth?: number): MapCut {
   const children = new Map<number | null, MapNode[]>();
   for (const node of nodes) {
     const siblings = children.get(node.parentId);
@@ -195,6 +198,7 @@ export function mapLines(nodes: readonly MapNode[], budget: number, focus?: numb
   let spent = 0;
   for (const node of order) {
     if (node.parentId !== null && !shown.has(node.parentId)) continue;
+    if (depth !== undefined && depthOf(node) > depth) continue;
     const back = node.parentId === null ? 0 : (held.get(node.parentId) as number);
     const price =
       bodyOf(node).length +
