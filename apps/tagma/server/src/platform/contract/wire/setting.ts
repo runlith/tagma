@@ -1,3 +1,4 @@
+import type { AskKind } from '@runlith/llm/models/description';
 import { Schema } from 'effect';
 import type { SessionRef } from './session.js';
 import type { StartMoves } from './start.js';
@@ -39,13 +40,23 @@ export type SettingColorSlot = { readonly key: string; readonly label: string; r
 
 export type SettingColorGroup = { readonly label: string; readonly slots: readonly SettingColorSlot[] };
 
-export const SETTING_CHOICE_SETS = ['terminal-theme', 'model', 'decision-model', 'reasoning', 'image-model'] as const;
+export const SETTING_CHOICE_SETS = ['terminal-theme', 'image-model'] as const;
 export type SettingChoiceSet = (typeof SETTING_CHOICE_SETS)[number];
+
+export const AskChoice = Schema.Struct({
+  provider: Schema.String.check(Schema.isMinLength(1)),
+  model: Schema.String.check(Schema.isMinLength(1)),
+  reasoning: Schema.optional(Schema.NullOr(Schema.String)),
+});
+export type AskChoice = typeof AskChoice.Type;
+
+export type AskControl = { readonly kind: 'ask'; readonly of: AskKind };
 
 export type SettingFieldCondition = { readonly path: readonly string[]; readonly equals: string };
 
 export type SettingField =
   | { readonly kind: 'model'; readonly path: readonly [string, string]; readonly label: string }
+  | (AskControl & { readonly label: string })
   | {
       readonly kind: 'share';
       readonly path: readonly [string];
@@ -80,6 +91,7 @@ export type SettingControl =
       readonly unit: SettingUnit;
     }
   | { readonly kind: 'catalog'; readonly of: SettingChoiceSet }
+  | AskControl
   | { readonly kind: 'colors'; readonly groups: readonly SettingColorGroup[] }
   | { readonly kind: 'machine' }
   | { readonly kind: 'rows'; readonly fields: readonly SettingField[]; readonly merging?: true }

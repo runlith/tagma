@@ -46,6 +46,8 @@ import { SettingsColumn } from '$lib/features/settings/SettingsColumn.svelte.js'
 import { SettingsRepo } from '$lib/features/settings/SettingsRepo.js';
 import { SectionRegistry } from '$lib/features/settings/SectionRegistry.js';
 import { ModelChoices } from '$lib/features/settings/controls/catalogs.js';
+import { ModelFields } from '$lib/features/settings/controls/modelField.js';
+import ModelField from '$lib/features/threads/native/ModelField.svelte';
 import { ProviderCatalog } from '$lib/features/providers/Catalog.svelte.js';
 import { modelChoices } from '$lib/features/providers/choices.js';
 import { TerminalsLayer } from '$lib/features/executions/layer.js';
@@ -258,6 +260,7 @@ export function appLayers(desktop: DesktopApi | undefined) {
     CheckoutLayer,
     FilesLayer,
     Layer.of(MarkdownPreview, { Markdown: MarkdownBody }),
+    Layer.of(ModelFields, { field: ModelField }),
     ThreadPages,
     Layer.provide(PageTeams, function* () {
       const list = yield* ThreadList;

@@ -21,7 +21,7 @@ import type { HarnessName } from '../contract/wire/harness/names.js';
 import { HarnessRegistry, type Harness } from '../contract/service/harness.js';
 import { threadRecord } from '../../thread-record/store/table.js';
 import { Settings } from '../../settings/contract/service/values.js';
-import { autoTitle, titleCharacters, TITLE_CHARACTERS_MAX, titleModel, titleReasoning } from '../contract/wire/settings.js';
+import { autoTitle, titleCharacters, TITLE_CHARACTERS_MAX, titleModel } from '../contract/wire/settings.js';
 import {
   TITLE_FAILURES,
   type TitleStatus,
@@ -288,11 +288,11 @@ export const makeThreadNaming = Effect.fnUntraced(function* ({
         const write = (title: string) =>
           units.write(writes('ThreadNaming.name', [threadRecord]), (unit) => records.nameTitle(unit, thread.id, title, revision));
         const selection = yield* asks
-          .choose(
-            'text',
-            { model: yield* settings.value(titleModel, projectId), reasoning: yield* settings.value(titleReasoning, projectId) },
-            { provider: thread.provider, model: thread.model, account: thread.account },
-          )
+          .choose('text', yield* settings.value(titleModel, projectId), {
+            provider: thread.provider,
+            model: thread.model,
+            account: thread.account,
+          })
           .pipe(Effect.mapError(askRefusal));
         yield* note({ type: 'model-chosen', road: 'fresh', freshReason, ...selection, rung: selection.reasoning });
         const budget = yield* settings.value(titleCharacters, projectId);

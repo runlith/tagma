@@ -12,7 +12,11 @@ import { TranslationsRepo } from './Repo.js';
 
 type Repo = ReturnType<typeof TranslationsRepo.use>;
 
-export type TranslateAsk = { readonly model?: string | undefined; readonly again?: boolean | undefined };
+export type TranslateAsk = {
+  readonly model?: string | undefined;
+  readonly reasoning?: string | undefined;
+  readonly again?: boolean | undefined;
+};
 
 export type Entry = { readonly language: string; readonly standing: boolean };
 
@@ -91,7 +95,10 @@ export class Translations extends Service<Translations>()('Translations', { tier
     let refusal: Refusal | undefined;
     try {
       if (ask.model !== undefined || ask.again === true) await this.repo.stop.run({ block, language }, { throwOnError: true });
-      await this.repo.translate.run({ block, language, model: ask.model, again: ask.again }, { throwOnError: true });
+      await this.repo.translate.run(
+        { block, language, model: ask.model, reasoning: ask.reasoning, again: ask.again },
+        { throwOnError: true },
+      );
     } catch (error: unknown) {
       refusal = refusalOf(error);
     }

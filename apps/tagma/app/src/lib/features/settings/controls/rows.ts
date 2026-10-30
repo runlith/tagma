@@ -26,6 +26,7 @@ export function fieldApplies(field: SettingField, row: Row): boolean {
 }
 
 export function fieldPaths(field: SettingField): readonly (readonly string[])[] {
+  if (field.kind === 'ask') return [['provider'], ['model'], ['reasoning']];
   return field.kind === 'model' ? [[field.path[0]], [field.path[1]]] : [field.path];
 }
 

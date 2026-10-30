@@ -107,7 +107,7 @@ it.live('a block translates by parts into a stored projection that marks and upd
     expect((yield* translate({ language: 'en-12' })).status).not.toBe(200);
     yield* Context.get(world.runtime.graph, Settings).write({
       key: 'translation.model',
-      value: MODEL,
+      value: { provider: 'openai-oauth', model: 'gpt-5.5' },
       scope: 'project',
       projectId: project,
     });

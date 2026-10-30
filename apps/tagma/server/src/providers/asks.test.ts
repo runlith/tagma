@@ -134,7 +134,7 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const { asks, connected, saved } = yield* setup;
-      const empty = { model: '', reasoning: '' };
+      const empty = null;
       const asker = { provider: 'text', model: 'large', account: null };
       expect(yield* asks.choose('text', empty, asker).pipe(Effect.flip)).toMatchObject({ _tag: 'AskRefused', refusal: 'ask-unanswerable' });
       connected.add('native');
@@ -156,7 +156,7 @@ it.effect('with only a borrowed CLI login connected, the default is the borrowin
   Effect.gen(function* () {
     const { asks, connected, said } = yield* setup;
     connected.add('codex');
-    const chosen = yield* asks.choose('text', { model: '', reasoning: '' });
+    const chosen = yield* asks.choose('text', null);
     expect(chosen).toEqual({ provider: 'codex', model: 'luna', reasoning: 'low', account: null });
     expect(yield* asks.text(chosen, { system: 'Name it.', input: 'words' })).toMatchObject({ value: 'answer', path: 'request' });
     expect(said.requested).toEqual(['chat:luna']);
@@ -177,7 +177,7 @@ it.effect('a decision answers by its profile on a decision model and by a checke
     expect(
       yield* asks.decide({ provider: 'text', model: 'large', reasoning: 'medium', account: null }, TRIAGE).pipe(Effect.flip),
     ).toMatchObject({ refusal: 'ask-unreadable-answer' });
-    expect(yield* asks.choose('decision', { model: 'text:missing', reasoning: '' }).pipe(Effect.flip)).toMatchObject({
+    expect(yield* asks.choose('decision', { provider: 'text', model: 'missing' }).pipe(Effect.flip)).toMatchObject({
       refusal: 'ask-unanswerable',
     });
     expect(

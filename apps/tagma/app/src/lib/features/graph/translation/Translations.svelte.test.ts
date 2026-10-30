@@ -58,7 +58,7 @@ test('a refused first act holds the lens on its refusal, and a retry with a mode
     if (operation === 'stop_block_translation') return json({ status: 'idle', block: 'abcd1234', language: 'ru' });
     const { model } = JSON.parse(await request.text()) as { model?: string };
     if (model === undefined)
-      return json({ code: 'translation-model-missing', reason: 'no model translates', unblock: ['set translation.model'] }, 409);
+      return json({ code: 'ask-unanswerable', reason: 'no model translates', unblock: ['set translation.model'] }, 409);
     await answered.promise;
     started = true;
     return json({ status: 'translating', block: 'abcd1234', language: 'ru', joined: false, model, rung: null, sending: 1 });
@@ -91,7 +91,7 @@ test('a refused first act holds the lens on its refusal, and a retry with a mode
 
   await translations.translate('abcd1234', 'ru');
   await waitUntil(() => lens.read !== undefined);
-  expect(lens.refusal?.code).toBe('translation-model-missing');
+  expect(lens.refusal?.code).toBe('ask-unanswerable');
   expect(lens.absent).toBe(false);
 
   const retry = lens.update({ model: 'anthropic:claude-haiku' });

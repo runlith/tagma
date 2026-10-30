@@ -1,6 +1,6 @@
 import { Schema } from 'effect';
 import { DEFAULT_COMPACTION_TRIGGER } from '@runlith/llm/models/description';
-import { SETTABLE_SCOPES } from '../../../platform/contract/wire/setting.js';
+import { AskChoice, SETTABLE_SCOPES } from '../../../platform/contract/wire/setting.js';
 import { nativeKey, nativeListKey } from './settings.js';
 
 const COMPACTION_TRIGGER = {
@@ -131,22 +131,15 @@ export const compactionSummarizerRule = nativeKey({
   merge: 'replace',
 });
 
-export const CompactionSummarizer = Schema.Struct({
-  provider: Schema.String.check(Schema.isMinLength(1)),
-  model: Schema.String.check(Schema.isMinLength(1)),
-  reasoning: Schema.optional(Schema.NullOr(Schema.String)),
-});
-export type CompactionSummarizer = typeof CompactionSummarizer.Type;
-
 export const compactionSummarizers = nativeListKey({
   id: 'agent.compactionSummarizers',
   order: 640,
   title: 'Models that summarize instead',
   description:
     'Tried in order when the rule above hands a compaction over: the first whose provider is connected and whose account has quota writes the summary, and a provider failure hands it to the next. With none of them spendable the compaction refuses rather than spend the thread’s own model. The thread keeps its own selection; the summarizer serves one compaction.',
-  member: CompactionSummarizer,
-  control: { kind: 'rows', fields: [{ kind: 'model', path: ['provider', 'model'], label: 'Model' }] },
-  fallback: [] as readonly CompactionSummarizer[],
+  member: AskChoice,
+  control: { kind: 'rows', fields: [{ kind: 'ask', of: 'text', label: 'Model' }] },
+  fallback: [] as readonly AskChoice[],
   scopes: SETTABLE_SCOPES,
   merge: 'replace',
 });

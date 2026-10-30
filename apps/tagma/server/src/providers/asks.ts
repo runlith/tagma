@@ -26,7 +26,6 @@ import {
   AskRefused,
   DefaultSelection,
   ModelAsks,
-  namedModel,
   type Answered,
   type AskCapacity,
   type Asker,
@@ -361,19 +360,17 @@ export const makeModelAsks = Effect.gen(function* () {
   });
 
   return ModelAsks.of({
-    answers: (model, kind) => registry.current().asks.answers(model.provider, model.model, kind),
-
     choose: Effect.fn('ModelAsks.choose')(function* (kind, role, asker) {
-      const named = namedModel(role.model);
-      if (named === null) return yield* defaultFor(kind, asker);
+      if (role === null) return yield* defaultFor(kind, asker);
+      const named = `${role.provider}:${role.model}`;
       const catalog = registry.current();
-      const option = optionOf(catalog, named.provider, named.model);
-      if (option === undefined || !catalog.asks.answers(named.provider, named.model, kind))
-        return yield* refused('ask-unanswerable', `${role.model} cannot answer a ${kind} ask here`);
-      const reasoning = role.reasoning !== '' ? role.reasoning : option.defaultReasoning;
+      const option = optionOf(catalog, role.provider, role.model);
+      if (option === undefined || !catalog.asks.answers(role.provider, role.model, kind))
+        return yield* refused('ask-unanswerable', `${named} cannot answer a ${kind} ask here`);
+      const reasoning = role.reasoning ?? option.defaultReasoning;
       if (reasoning !== null && !option.reasoningOptions.some((rung) => rung.id === reasoning))
-        return yield* refused('ask-unanswerable', `${role.model} offers no reasoning rung ${reasoning}`);
-      return { ...named, reasoning, account: null };
+        return yield* refused('ask-unanswerable', `${named} offers no reasoning rung ${reasoning}`);
+      return { provider: role.provider, model: role.model, reasoning, account: null };
     }),
 
     capacity: Effect.fn('ModelAsks.capacity')(function* (selection, system) {

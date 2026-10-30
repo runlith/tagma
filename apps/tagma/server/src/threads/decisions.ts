@@ -11,7 +11,7 @@ import { AskRefused, ModelAsks } from '../providers/contract/service/asks.js';
 import { Settings } from '../settings/contract/service/values.js';
 import { ThreadDecisions, type ThreadDecision } from './contract/service/decisions.js';
 import { ThreadLookup } from './contract/service/reads.js';
-import { decisionModel, decisionReasoning } from './contract/wire/settings.js';
+import { decisionModel } from './contract/wire/settings.js';
 
 export const DECISION = activityKind<
   { readonly questions: readonly string[] },
@@ -40,14 +40,11 @@ export const makeThreadDecisions = Effect.gen(function* () {
     const thread = yield* threads.find(threadId, OPERATOR_PRINCIPAL);
     if (thread === undefined) return yield* new ThreadNotFoundError(threadId);
     const work = Effect.gen(function* () {
-      const selection = yield* asks.choose(
-        'decision',
-        {
-          model: yield* settings.value(decisionModel, thread.projectId),
-          reasoning: yield* settings.value(decisionReasoning, thread.projectId),
-        },
-        { provider: thread.provider, model: thread.model, account: thread.account },
-      );
+      const selection = yield* asks.choose('decision', yield* settings.value(decisionModel, thread.projectId), {
+        provider: thread.provider,
+        model: thread.model,
+        account: thread.account,
+      });
       yield* note({ type: 'model-chosen', road: 'decision', ...selection, rung: selection.reasoning });
       yield* body(document('input', request));
       const answered = yield* asks.decide(selection, request);

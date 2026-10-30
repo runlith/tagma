@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { AskChoice } from '@tagma/server/platform/contract/wire/setting';
   import { Input } from '$lib/shared/ui/input/index.js';
   import CatalogPicker from '$lib/features/settings/controls/CatalogPicker.svelte';
   import ChoiceControl from '$lib/features/settings/controls/ChoiceControl.svelte';
@@ -6,6 +7,7 @@
   import ColorSlots from '$lib/features/settings/controls/ColorSlots.svelte';
   import { colorsOf } from '$lib/features/settings/controls/colors.js';
   import ListEditor from '$lib/features/settings/controls/ListEditor.svelte';
+  import ModelPick from '$lib/features/settings/controls/ModelPick.svelte';
   import QuantityControl from '$lib/features/settings/controls/QuantityControl.svelte';
   import RowsControl from '$lib/features/settings/controls/RowsControl.svelte';
   import type { Row, RowNote } from '$lib/features/settings/controls/rows.js';
@@ -65,6 +67,16 @@
       {/if}
       <code class="stamp text-meta text-muted-foreground">{managed.by}</code>
     </div>
+  {:else if entry.control?.kind === 'ask'}
+    <ModelPick
+      label={entry.title}
+      ask={entry.control.of}
+      value={(shown ?? null) as AskChoice | null}
+      blank="Automatic"
+      {disabled}
+      onpick={onwrite}
+      onautomatic={() => onwrite(null)}
+    />
   {:else if typeof shown === 'boolean'}
     <SwitchControl label={entry.title} value={shown} {disabled} {onwrite} />
   {:else if entry.control?.kind === 'choice' && entry.control.multiple}

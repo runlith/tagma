@@ -6,6 +6,7 @@ import type { AskKind } from '@runlith/llm/models/description';
 import type { AskProgram, ProgramAsk, ProgramOutput } from '@runlith/tagma/adapter/provider';
 import { Context, Data, type Effect } from 'effect';
 import { GateRefusal, type Unblock } from '../../../platform/contract/wire/refusal.js';
+import type { AskChoice } from '../../../platform/contract/wire/setting.js';
 import type { AskPath, AskRefusal } from '../wire/asks.js';
 
 export class AskRefused extends Data.TaggedError('AskRefused')<{
@@ -33,8 +34,6 @@ export type AskSelection = NamedModel & {
 
 export type Asker = { readonly provider: string; readonly model: string | null; readonly account: string | null };
 
-export type RoleChoice = { readonly model: string; readonly reasoning: string };
-
 export type FreshAsk = { readonly system: string; readonly input: string; readonly stallMs?: number; readonly runId?: string };
 
 export type AskCapacity = { readonly input: number; readonly output: number };
@@ -50,8 +49,7 @@ export type Answered<A> = {
 export class ModelAsks extends Context.Service<
   ModelAsks,
   {
-    answers(model: NamedModel, kind: AskKind): boolean;
-    choose(kind: AskKind, role: RoleChoice, asker?: Asker): Effect.Effect<AskSelection, AskRefused>;
+    choose(kind: AskKind, role: AskChoice | null, asker?: Asker): Effect.Effect<AskSelection, AskRefused>;
     capacity(selection: AskSelection, system: string): Effect.Effect<AskCapacity, AskRefused>;
     text(selection: AskSelection, ask: FreshAsk): Effect.Effect<Answered<string>, AskRefused>;
     decide(selection: AskSelection, request: DecisionRequest): Effect.Effect<Answered<DecisionAnswer>, AskRefused>;

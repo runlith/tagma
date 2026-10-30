@@ -6,7 +6,8 @@ import { Clock, Effect } from 'effect';
 import { QuotaObservation, QuotaWindow } from '@runlith/llm/schema/quota';
 import type { QuotaTable } from '../../providers/contract/wire/accounts.js';
 import { AccountKey } from '@runlith/llm/models/authStatus';
-import type { CompactionSummarizer, SummarizerRule } from '../contract/wire/compactionSettings.js';
+import type { SummarizerRule } from '../contract/wire/compactionSettings.js';
+import type { AskChoice } from '../../platform/contract/wire/setting.js';
 import { NATIVE_CAPABILITIES, type TransportCapabilities } from '@runlith/agent/thread/record';
 import type { ThreadCompaction } from '@runlith/agent/thread/compaction/ThreadCompaction';
 import { OPERATOR_PRINCIPAL } from '../../platform/contract/wire/actor.js';
@@ -42,7 +43,7 @@ const ACCOUNTS: QuotaTable = [
 
 const readerOf = (
   compaction: TransportCapabilities['compaction'],
-  configured: readonly CompactionSummarizer[] = [],
+  configured: readonly AskChoice[] = [],
   provider = 'claude-code',
   rule: SummarizerRule = 'when-cold',
   table: QuotaTable = ACCOUNTS,
@@ -84,7 +85,7 @@ const readerOf = (
 
 const menuOf = (
   compaction: TransportCapabilities['compaction'],
-  configured: readonly CompactionSummarizer[] = [],
+  configured: readonly AskChoice[] = [],
   provider = 'claude-code',
   rule: SummarizerRule = 'when-cold',
   table: QuotaTable = ACCOUNTS,

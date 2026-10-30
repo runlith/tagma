@@ -7,7 +7,7 @@ import { Cause, Clock, Deferred, Effect, FiberMap, Option, PubSub, Semaphore, St
 import type { StoreFailure } from '../platform/contract/service/store.js';
 import { GateRefusal } from '../platform/contract/wire/refusal.js';
 import { ProjectChanges } from '../projects/contract/service/changes.js';
-import { askGate, ModelAsks, type Answered, type AskRefused } from '../providers/contract/service/asks.js';
+import { askGate, ModelAsks, namedModel, type Answered, type AskRefused } from '../providers/contract/service/asks.js';
 import { Settings } from '../settings/contract/service/values.js';
 import {
   Translations,
@@ -17,7 +17,7 @@ import {
   type TranslationAsk,
 } from './contract/service/translations.js';
 import type { ActState, LanguageStanding, PartState, ProjectedPart, TranslationFrame } from './contract/wire/projection.js';
-import { translationInstructions, translationLanguage, translationModel, translationReasoning } from './contract/wire/settings.js';
+import { translationInstructions, translationLanguage, translationModel } from './contract/wire/settings.js';
 import { Projections, type ProjectionKey } from './store/projections.js';
 import { answerOf, batchesOf, promptOf, systemOf, type Batch, type Brief } from './translator/batches.js';
 import { titleHash, type Part, type Segmented } from './translator/parts.js';
@@ -143,13 +143,8 @@ export const makeTranslations = Effect.gen(function* () {
     let path: string | undefined;
     const refuse = (refusal: StartRefusal) => Effect.andThen(Deferred.fail(started, refusal), Effect.fail(refusal));
     const work = Effect.gen(function* () {
-      const role =
-        ask.model === undefined
-          ? {
-              model: yield* settings.value(translationModel, key.projectId),
-              reasoning: yield* settings.value(translationReasoning, key.projectId),
-            }
-          : { model: ask.model, reasoning: ask.reasoning ?? '' };
+      const named = ask.model === undefined ? null : namedModel(ask.model);
+      const role = named === null ? yield* settings.value(translationModel, key.projectId) : { ...named, reasoning: ask.reasoning ?? null };
       const brief: Brief = {
         language: key.language,
         title: block.title,

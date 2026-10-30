@@ -7,6 +7,7 @@ import { lazyLayer } from '../platform/contract/service/manifest.js';
 import { LineWrites } from '../change-record/contract/service/lineWrites.js';
 import { lineWrites } from './lineWrites.js';
 import { modelAsksLayer } from '../providers/asks.js';
+import { askSettingsLayer } from '../providers/askSettings.js';
 import { compactionAsksLayer } from '../providers/compactionAsks.js';
 import { defaultSelectionLayer } from '../native-harness/models/defaultSelection.js';
 import { Holdings } from '../change-record/contract/service/holdings.js';
@@ -201,7 +202,9 @@ const graphBindings = Layer.effectContext(
 
 const machineServed = graphBindings.pipe(Layer.provideMerge(judged));
 
-const asking = compactionAsksLayer.pipe(Layer.provideMerge(modelAsksLayer.pipe(Layer.provide(defaultSelectionLayer))));
+const asking = Layer.merge(compactionAsksLayer, askSettingsLayer).pipe(
+  Layer.provideMerge(modelAsksLayer.pipe(Layer.provide(defaultSelectionLayer))),
+);
 
 const stores = threads.lifetimes.installation.pipe(
   Layer.provideMerge(

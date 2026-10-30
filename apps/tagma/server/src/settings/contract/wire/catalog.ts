@@ -1,3 +1,4 @@
+import { ASK_KINDS } from '@runlith/llm/models/description';
 import { Schema } from 'effect';
 import type { SessionRef } from '../../../platform/contract/wire/session.js';
 import {
@@ -60,6 +61,7 @@ const fieldSchema = Schema.Union([
     path: Schema.Tuple([Schema.String, Schema.String]),
     label: Schema.String,
   }),
+  Schema.Struct({ kind: Schema.Literal('ask'), of: Schema.Literals(ASK_KINDS), label: Schema.String }),
   Schema.Struct({
     kind: Schema.Literal('share'),
     path: Schema.Tuple([Schema.String]),
@@ -109,6 +111,7 @@ const controlSchema = Schema.Union([
     unit: Schema.Literals(SETTING_UNITS),
   }),
   Schema.Struct({ kind: Schema.Literal('catalog'), of: Schema.Literals(SETTING_CHOICE_SETS) }),
+  Schema.Struct({ kind: Schema.Literal('ask'), of: Schema.Literals(ASK_KINDS) }),
   Schema.Struct({ kind: Schema.Literal('colors'), groups: Schema.Array(colorGroupSchema) }),
   Schema.Struct({
     kind: Schema.Literal('rows'),

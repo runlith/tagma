@@ -27,7 +27,9 @@
   const scope = $derived(entry === undefined ? 'user' : writeScope(entry));
   const answer = $derived(entry === undefined ? undefined : settingAnswer(entry, scope));
   const editable = $derived(
-    entry !== undefined && !UNEDITABLE.has(entry.control?.kind ?? '') && (typeof entry.value !== 'object' || entry.value === null),
+    entry !== undefined &&
+      (entry.control?.kind === 'ask' ||
+        (!UNEDITABLE.has(entry.control?.kind ?? '') && (typeof entry.value !== 'object' || entry.value === null))),
   );
   const origin = $derived.by(() => {
     if (entry === undefined) return '';

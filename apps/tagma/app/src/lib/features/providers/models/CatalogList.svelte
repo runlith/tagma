@@ -34,6 +34,7 @@
     query: opening = '',
     title = null,
     queueAction = null,
+    empty = null,
     busy = false,
     autofocus = true,
     heading,
@@ -51,6 +52,7 @@
     query?: string;
     title?: string | null;
     queueAction?: string | null;
+    empty?: string | null;
     busy?: boolean;
     autofocus?: boolean;
     heading?: Snippet<[string, string]>;
@@ -566,7 +568,9 @@
         {/if}
       {/each}
       {#if live.length === 0 && rows.length === 0}
-        <div class="px-2 py-3 text-small text-muted-foreground" role="status">No model matches.</div>
+        <div class="px-2 py-3 text-small text-muted-foreground" role="status">
+          {choices.length === 0 && empty !== null ? empty : 'No model matches.'}
+        </div>
       {/if}
     </div>
 

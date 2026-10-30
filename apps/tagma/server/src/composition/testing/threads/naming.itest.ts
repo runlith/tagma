@@ -110,8 +110,7 @@ it.live(
       for (const [key, value] of Object.entries({
         'threads.autoTitle': true,
         'threads.titleCharacters': 128,
-        'threads.titleModel': 'openai-oauth:gpt-5.5',
-        'threads.titleReasoning': 'low',
+        'threads.titleModel': { provider: 'openai-oauth', model: 'gpt-5.5', reasoning: 'low' },
       }))
         yield* settings.write({ key, value, scope: 'project', projectId });
       yield* modelDefaults(world, { provider: 'subscription', model: 'claude-sonnet-5-5', reasoning: 'low', account: null });

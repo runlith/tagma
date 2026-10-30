@@ -5,7 +5,7 @@ import { COLD_WAKE_RULE } from '@runlith/agent/collaboration/wakeCost';
 import { DEFAULT_MODE } from '@runlith/agent/modes/builtin';
 import { APPROVES_ALL } from '@runlith/agent/thread/Approvers';
 import { Schema } from 'effect';
-import { SETTABLE_SCOPES, settingKey, settingListKey } from '../../../platform/contract/wire/setting.js';
+import { AskChoice, SETTABLE_SCOPES, settingKey, settingListKey } from '../../../platform/contract/wire/setting.js';
 
 export const subAgentDepth = settingKey({
   id: 'agent.subAgentDepth',
@@ -219,22 +219,10 @@ export const titleModel = settingKey({
   order: 110,
   title: 'Fresh naming model',
   description:
-    "Provider and model for compact naming when a captured request is unavailable or its completed answer was rejected; it must answer text asks. Empty: the light model of the thread's provider, then the thread's own model at its lowest rung, then your default model's, then the first connected provider's light model.",
-  schema: Schema.String,
-  control: { kind: 'catalog', of: 'model' },
-  fallback: '',
-  scopes: SETTABLE_SCOPES,
-  merge: 'replace',
-});
-
-export const titleReasoning = settingKey({
-  id: 'threads.titleReasoning',
-  order: 120,
-  title: 'Fresh naming reasoning',
-  description: 'Reasoning rung for the named fresh naming model, which must offer it.',
-  schema: Schema.String,
-  control: { kind: 'catalog', of: 'reasoning' },
-  fallback: '',
+    "`{provider, model, reasoning}` for compact naming when a captured request is unavailable or its completed answer was rejected; it must answer text asks and offer the rung, a null rung taking the model's default. Null: the light model of the thread's provider, then the thread's own model at its lowest rung, then your default model's, then the first connected provider's light model.",
+  schema: Schema.NullOr(AskChoice),
+  control: { kind: 'ask', of: 'text' },
+  fallback: null as AskChoice | null,
   scopes: SETTABLE_SCOPES,
   merge: 'replace',
 });
@@ -258,22 +246,10 @@ export const decisionModel = settingKey({
   order: 135,
   title: 'Decision model',
   description:
-    "Provider and model that answers the server's typed questions about a thread; it must answer decisions. Empty: the first connected model built for decisions, else the light model of the thread's provider, else the thread's own model on its lowest rung, else your default model's, else the first connected provider's light model. A named model always answers; one that cannot answer refuses.",
-  schema: Schema.String,
-  control: { kind: 'catalog', of: 'decision-model' },
-  fallback: '',
-  scopes: SETTABLE_SCOPES,
-  merge: 'replace',
-});
-
-export const decisionReasoning = settingKey({
-  id: 'threads.decisionReasoning',
-  order: 136,
-  title: 'Decision reasoning',
-  description: 'Reasoning rung for the named decision model, which must offer it.',
-  schema: Schema.String,
-  control: { kind: 'catalog', of: 'reasoning' },
-  fallback: '',
+    "`{provider, model, reasoning}` that answers the server's typed questions about a thread; it must answer decisions and offer the rung, a null rung taking the model's default. Null: the first connected model built for decisions, else the light model of the thread's provider, else the thread's own model on its lowest rung, else your default model's, else the first connected provider's light model. A named model always answers; one that cannot answer refuses.",
+  schema: Schema.NullOr(AskChoice),
+  control: { kind: 'ask', of: 'decision' },
+  fallback: null as AskChoice | null,
   scopes: SETTABLE_SCOPES,
   merge: 'replace',
 });
@@ -326,10 +302,8 @@ export const THREADS_SETTING_KEYS = [
   agentWeb,
   autoTitle,
   titleModel,
-  titleReasoning,
   titleCharacters,
   decisionModel,
-  decisionReasoning,
   recap,
   coldWakeRefusal,
   coldWakeTokens,

@@ -26,7 +26,7 @@ export const TRANSLATION_OPERATIONS = {
     meaning:
       'Translate a block’s title and body into a language as a projection kept beside it, never changing the block: start the act for that block and language, or join the one running, and answer at once.',
     grammar:
-      'Only parts with no translation of their current text are sent; `again` sends every part. `model` names a catalog model for this act, `reasoning` its rung; without them `translation.model` and `translation.reasoning` choose, then the light model of the first connected provider. A projection that matches the block whole answers `current` with no model call.',
+      'Only parts with no translation of their current text are sent; `again` sends every part. `model` names a catalog model for this act, `reasoning` its rung; without them `translation.model` chooses, then the default text model. A projection that matches the block whole answers `current` with no model call.',
     input: Schema.Struct({
       block,
       language: LANGUAGE_TAG,

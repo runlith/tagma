@@ -17,7 +17,7 @@ import { birthsOf, turnsOf } from '../../../threads/testing/doubles.js';
 import { DoorFixture, doorFixture, projectLeaving } from '../doorFixture.js';
 import { modelDefaults } from '../claudeLogin.js';
 import { settledThread } from '../native-harness/settled.fixture.js';
-import { ASK_PROGRAM_KEY, ASK_PROGRAM_MODEL, ASK_PROGRAM_PROVIDER } from '../askProgram.js';
+import { ASK_PROGRAM_MODEL, ASK_PROGRAM_PROVIDER } from '../askProgram.js';
 import { ProviderRegistry } from '../../../providers/contract/service/registry.js';
 import { titleModel } from '../../../threads/contract/wire/settings.js';
 
@@ -113,17 +113,19 @@ layer(Layer.effect(ProgramFixture, makeFixture).pipe(Layer.provide(doorFixture()
       Effect.gen(function* () {
         const { world, projectId, set, settings, talked } = yield* ProgramFixture;
         const registry = Context.get(world.runtime.owners as Context.Context<ProviderRegistry>, ProviderRegistry);
-        const silent = `devin:${registry.current().models.defaultTextModelId('devin')}`;
+        const silent = { provider: 'devin', model: registry.current().models.defaultTextModelId('devin') };
         const refusedWrite = yield* world.op('write_setting', { key: 'threads.titleModel', value: silent }, `project=${projectId}`);
         expect(refusedWrite.body).toMatchObject({ code: 'setting-value' });
         expect(yield* Effect.flip(set('threads.decisionModel', silent))).toMatchObject({ code: 'setting-value' });
-        expect(yield* Effect.flip(set('agent.compactionSummarizers', [{ provider: 'devin', model: silent.slice(6) }]))).toMatchObject({
-          code: 'setting-value',
-        });
-        expect(yield* settings.value(titleModel, projectId)).toBe('');
-        yield* set('threads.titleModel', ASK_PROGRAM_KEY);
-        yield* set('threads.titleReasoning', 'high');
-        yield* set('threads.decisionModel', ASK_PROGRAM_KEY);
+        expect(yield* Effect.flip(set('agent.compactionSummarizers', [silent]))).toMatchObject({ code: 'setting-value' });
+        expect(
+          yield* Effect.flip(
+            set('threads.titleModel', { provider: ASK_PROGRAM_PROVIDER, model: ASK_PROGRAM_MODEL, reasoning: 'unoffered' }),
+          ),
+        ).toMatchObject({ code: 'setting-value' });
+        expect(yield* settings.value(titleModel, projectId)).toBeNull();
+        yield* set('threads.titleModel', { provider: ASK_PROGRAM_PROVIDER, model: ASK_PROGRAM_MODEL, reasoning: 'high' });
+        yield* set('threads.decisionModel', { provider: ASK_PROGRAM_PROVIDER, model: ASK_PROGRAM_MODEL });
         const threadId = yield* talked('Fix the flaky retry in the uploader.');
         const named = yield* world.op('generate_thread_title', { threadId }, `project=${projectId}`);
         expect(yield* Schema.decodeUnknownEffect(threadTitleAnswerSchema)(named.body)).toMatchObject({

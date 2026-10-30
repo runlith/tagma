@@ -17,7 +17,7 @@ import type { CompactionChoice, CompactionChoicesRead, CompactionWarmth, Summari
 import { AccountQuota } from '../../providers/contract/service/quota.js';
 import { OPERATOR_PRINCIPAL } from '../../platform/contract/wire/actor.js';
 import { ceilingOf } from '../../platform/contract/wire/pageFamily.js';
-import type { SettableScope } from '../../platform/contract/wire/setting.js';
+import type { AskChoice, SettableScope } from '../../platform/contract/wire/setting.js';
 import { signingAccount, spendability, textModelOf } from '../models/spendability.js';
 import { admitSummarizer, foldOf, summarizerSpend, type SummarizedThread, type SummarizerSpend } from './spend.js';
 import { Settings } from '../../settings/contract/service/values.js';
@@ -25,12 +25,7 @@ import type { QuotaTable } from '../../providers/contract/wire/accounts.js';
 import { type ProviderCatalog, ProviderRegistry } from '../../providers/contract/service/registry.js';
 import { COMPACTION_CHOICES } from '../contract/wire/pages.js';
 import { GateRefusal, cursorRefusal } from '../../platform/contract/wire/refusal.js';
-import {
-  type CompactionSummarizer,
-  type SummarizerRule,
-  compactionSummarizerRule,
-  compactionSummarizers,
-} from '../contract/wire/compactionSettings.js';
+import { type SummarizerRule, compactionSummarizerRule, compactionSummarizers } from '../contract/wire/compactionSettings.js';
 import { gateProject } from '../../threads/projectGate.js';
 import { ThreadLookup } from '../../threads/contract/service/reads.js';
 import type { ThreadSummary } from '../../threads/list/summary.js';
@@ -50,7 +45,7 @@ export type SummarizerMember = {
 
 export function summarizerChain(
   catalog: ProviderCatalog,
-  configured: readonly CompactionSummarizer[],
+  configured: readonly AskChoice[],
   table: QuotaTable,
   now: number,
   thread?: SummarizedThread,
@@ -138,7 +133,7 @@ function isWarm(warmth: CompactionWarmth): boolean {
 type Settled = {
   readonly thread: ThreadSummary;
   readonly rule: SummarizerRule;
-  readonly configured: readonly CompactionSummarizer[];
+  readonly configured: readonly AskChoice[];
 };
 
 type Standing = {

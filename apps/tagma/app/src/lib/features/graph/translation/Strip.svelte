@@ -6,10 +6,11 @@
   import Callout from '@runlith/chat-ui/Callout.svelte';
   import Waiting from '@runlith/chat-ui/Waiting.svelte';
   import { Router } from '@runlith/layer/Router';
+  import type { AskChoice } from '@tagma/server/platform/contract/wire/setting';
   import type { LanguageStanding } from '@tagma/server/translations/contract/wire/projection';
   import LensStrip from '$lib/features/graph/block/LensStrip.svelte';
   import { Notices } from '$lib/features/notices/Service.svelte.js';
-  import CatalogPicker from '$lib/features/settings/controls/CatalogPicker.svelte';
+  import ModelPick from '$lib/features/settings/controls/ModelPick.svelte';
   import { settingsHref } from '$lib/features/workspace/address.js';
   import ReadingFailed from '$lib/shared/ReadingFailed.svelte';
   import { agoSaid } from '$lib/shared/time.js';
@@ -43,6 +44,15 @@
     outdated: 'outdated',
     failed: 'failed',
   };
+
+  const RETRIED: ReadonlySet<string> = new Set(['ask-quota', 'ask-provider-failed', 'ask-unreadable-answer']);
+  const CHOSEN: ReadonlySet<string> = new Set(['ask-unanswerable', 'ask-not-connected', 'ask-input-too-large', 'invalid-selection']);
+
+  const chosen = $derived.by<AskChoice | null>(() => {
+    const key = projection?.model ?? '';
+    const split = key.indexOf(':');
+    return split < 1 ? null : { provider: key.slice(0, split), model: key.slice(split + 1), reasoning: projection?.rung ?? null };
+  });
 
   const parts = (count: number): string => `${count} ${count === 1 ? 'part' : 'parts'}`;
 
@@ -119,13 +129,14 @@
     </DropdownMenu.Content>
   </DropdownMenu.Root>
 
-  <CatalogPicker
+  <ModelPick
     label="Translation model"
-    of="model"
+    ask="text"
     chip
     blank="Choose a model"
-    value={projection?.model ?? ''}
-    onwrite={(model) => run(lens.update({ model, again: true }))}
+    value={chosen}
+    onpick={(choice) =>
+      run(lens.update({ model: `${choice.provider}:${choice.model}`, reasoning: choice.reasoning ?? undefined, again: true }))}
   />
 
   {#if projection !== null}
@@ -170,7 +181,7 @@
     title={toldOf(refusal).text}
     note={refusal.reason}
     class="mt-3"
-    actions={refusal.code === 'translation-model-missing' || refusal.code === 'invalid-selection' ? settings : undefined}
+    actions={RETRIED.has(refusal.code) ? again : CHOSEN.has(refusal.code) ? settings : undefined}
   />
 {:else if projection !== null && phase === 'failed'}
   <Callout

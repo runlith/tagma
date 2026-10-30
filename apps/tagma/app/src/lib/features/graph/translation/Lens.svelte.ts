@@ -1,7 +1,7 @@
 import type { LanguageStanding, ProjectedPart, Projection } from '@tagma/server/translations/contract/wire/projection';
 import type { Refusal } from '$lib/wire/refusal.js';
 import type { TranslationsRepo } from './Repo.js';
-import type { Translations } from './Translations.svelte.js';
+import type { TranslateAsk, Translations } from './Translations.svelte.js';
 
 type Repo = ReturnType<typeof TranslationsRepo.use>;
 
@@ -104,7 +104,7 @@ export class TranslationLens {
     return this.projection?.titles.find((one) => one.name === name)?.title;
   }
 
-  update(ask: { readonly model?: string; readonly again?: boolean } = {}): Promise<void> {
+  update(ask: TranslateAsk = {}): Promise<void> {
     const block = this.block();
     const language = this.language();
     return block === null || language === null ? Promise.resolve() : this.translations.translate(block, language, ask);

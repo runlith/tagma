@@ -1,8 +1,6 @@
 <script lang="ts">
   import type { SettableScope } from '@tagma/server/platform/contract/wire/setting';
-  import { setContext, untrack } from 'svelte';
-  import ModelField from '$lib/features/providers/ModelField.svelte';
-  import { MODEL_FIELD } from '$lib/features/settings/controls/modelField.js';
+  import { untrack } from 'svelte';
   import { Router } from '@runlith/layer/Router';
   import { App } from '@runlith/layer/svelte/App.svelte';
   import SettingsPage from '$lib/features/settings/SettingsPage.svelte';
@@ -11,8 +9,6 @@
   import { Workspace } from '$lib/features/workspace/Selection.svelte.js';
   import ProjectHold from '$lib/features/workspace/ProjectHold.svelte';
   import { SettingsColumn } from '$lib/features/settings/SettingsColumn.svelte.js';
-
-  setContext(MODEL_FIELD, ModelField);
 
   const workspace = Workspace.use();
   const column = SettingsColumn.use();

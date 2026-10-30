@@ -51,8 +51,6 @@ import { makeExcerptAsks } from './naming/excerpt.js';
 import { makeThreadDecisions } from './decisions.js';
 import { makeThreadAsks } from './asks.js';
 import { ThreadAsks } from './contract/service/asks.js';
-import { askSetting, modelsNamed } from '../providers/askSettings.js';
-import { decisionModel, titleModel } from './contract/wire/settings.js';
 import { ThreadTitles } from './contract/service/titles.js';
 import { ThreadDecisions } from './contract/service/decisions.js';
 import { ThreadMoves, makeThreadMover } from './targets/moves.js';
@@ -230,8 +228,6 @@ export const threadsLayer = Layer.effectContext(
     const registry = yield* HarnessRegistry;
     const placement = yield* Placing;
     const custody = yield* Custody;
-    yield* askSetting(titleModel, 'text', modelsNamed);
-    yield* askSetting(decisionModel, 'decision', modelsNamed);
     const threadAsks = yield* makeThreadAsks;
     const excerpts = yield* makeExcerptAsks({ idleMs: AGENT_IDLE_MS });
     const naming = yield* makeThreadNaming({ idleMs: AGENT_IDLE_MS, excerpts }).pipe(Effect.provideService(ThreadAsks, threadAsks));

@@ -1,5 +1,5 @@
 import { Schema } from 'effect';
-import { SETTABLE_SCOPES, settingKey } from '../../../platform/contract/wire/setting.js';
+import { AskChoice, SETTABLE_SCOPES, settingKey } from '../../../platform/contract/wire/setting.js';
 import { LANGUAGE_TAG } from './language.js';
 
 export const translationModel = settingKey({
@@ -7,22 +7,10 @@ export const translationModel = settingKey({
   order: 10,
   title: 'Translation model',
   description:
-    'Provider and model that translates a block; it must answer text asks. Empty: the light model of your default model’s provider, then your default model at its lowest rung, then the light model of the first connected provider. A model chosen in the translation lens wins for that act; a named model that cannot answer refuses.',
-  schema: Schema.String,
-  control: { kind: 'catalog', of: 'model' },
-  fallback: '',
-  scopes: SETTABLE_SCOPES,
-  merge: 'replace',
-});
-
-export const translationReasoning = settingKey({
-  id: 'translation.reasoning',
-  order: 20,
-  title: 'Translation reasoning',
-  description: 'Reasoning rung for the named translation model, which must offer it.',
-  schema: Schema.String,
-  control: { kind: 'catalog', of: 'reasoning' },
-  fallback: '',
+    '`{provider, model, reasoning}` that translates a block; it must answer text asks and offer the rung, a null rung taking the model’s default. Null: the light model of your default model’s provider, then your default model at its lowest rung, then the light model of the first connected provider. A model chosen in the translation lens wins for that act; a named model that cannot answer refuses.',
+  schema: Schema.NullOr(AskChoice),
+  control: { kind: 'ask', of: 'text' },
+  fallback: null as AskChoice | null,
   scopes: SETTABLE_SCOPES,
   merge: 'replace',
 });
@@ -50,7 +38,7 @@ export const translationInstructions = settingKey({
   merge: 'replace',
 });
 
-export const TRANSLATION_SETTING_KEYS = [translationModel, translationReasoning, translationLanguage, translationInstructions] as const;
+export const TRANSLATION_SETTING_KEYS = [translationModel, translationLanguage, translationInstructions] as const;
 
 export const TRANSLATION_SETTING_SECTIONS = [
   {

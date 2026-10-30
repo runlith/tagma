@@ -3,11 +3,12 @@
   import GripVertical from '@lucide/svelte/icons/grip-vertical';
   import Plus from '@lucide/svelte/icons/plus';
   import X from '@lucide/svelte/icons/x';
-  import { getContext, tick } from 'svelte';
-  import { MODEL_FIELD, type ModelFieldComponent } from '$lib/features/settings/controls/modelField.js';
+  import { tick } from 'svelte';
+  import ModelPick from '$lib/features/settings/controls/ModelPick.svelte';
   import {
     blankRow,
     fieldApplies,
+    fieldPaths,
     readPath,
     rowsToEdit,
     settleRow,
@@ -39,8 +40,6 @@
     onwrite: (value: readonly unknown[]) => void;
     ondecline: (declined: boolean) => void;
   } = $props();
-
-  const ModelField = getContext<ModelFieldComponent | undefined>(MODEL_FIELD);
 
   let frame = $state<HTMLDivElement | null>(null);
 
@@ -96,8 +95,11 @@
     dirty = false;
   }
 
-  function scalarFields(row: Row): readonly SettingField[] {
-    return control.fields.filter((field) => field.kind !== 'model' && fieldApplies(field, row));
+  function scalarFields(row: Row): readonly Exclude<SettingField, { kind: 'model' | 'ask' }>[] {
+    return control.fields.filter(
+      (field): field is Exclude<SettingField, { kind: 'model' | 'ask' }> =>
+        field.kind !== 'model' && field.kind !== 'ask' && fieldApplies(field, row),
+    );
   }
 </script>
 
@@ -127,16 +129,23 @@
         </button>
       {/if}
       <div class="min-w-0 flex-1">
-        {#each control.fields.filter((field) => field.kind === 'model') as field (field.label)}
-          {#if ModelField !== undefined}
-            <ModelField
+        {#each control.fields.filter((field) => field.kind === 'model' || field.kind === 'ask') as field (field.label)}
+          {#if field.kind === 'model' || field.kind === 'ask'}
+            {@const [provider, model, reasoning] = fieldPaths(field).map((path) => readPath(row, path))}
+            <ModelPick
               label={field.label}
-              provider={String(readPath(row, [field.path[0]]) ?? '')}
-              model={String(readPath(row, [field.path[1]]) ?? '')}
+              ask={field.kind === 'ask' ? field.of : undefined}
+              value={typeof provider === 'string' && typeof model === 'string'
+                ? { provider, model, reasoning: typeof reasoning === 'string' ? reasoning : null }
+                : null}
+              blank="Pick a model"
               disabled={disabled || !held}
-              onpick={(provider, model) => {
+              onpick={(choice) => {
                 if (index === null) return;
-                edit(index, writePath(writePath(row, [field.path[0]], provider), [field.path[1]], model));
+                const [providerAt, modelAt, reasoningAt] = fieldPaths(field);
+                let next = writePath(writePath(row, providerAt!, choice.provider), modelAt!, choice.model);
+                if (reasoningAt !== undefined) next = writePath(next, reasoningAt, choice.reasoning ?? undefined);
+                edit(index, next);
               }}
             />
           {/if}
