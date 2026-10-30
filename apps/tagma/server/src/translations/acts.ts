@@ -157,7 +157,7 @@ export const makeTranslations = Effect.gen(function* () {
       );
       yield* note({ type: 'model-chosen', road: ask.model === undefined ? 'setting' : 'named', ...selection, rung: selection.reasoning });
       model = `${selection.provider}:${selection.model}`;
-      const { batches, oversized } = batchesOf(sending, capacity.output);
+      const { batches, oversized } = batchesOf(sending, capacity, brief);
       const live: Running = {
         projectId: key.projectId,
         name: block.name,
@@ -192,7 +192,7 @@ export const makeTranslations = Effect.gen(function* () {
               {
                 landed: 0,
                 failed: oversized.length,
-                reason: `${oversized.length} ${oversized.length === 1 ? 'part is' : 'parts are'} longer than ${model} answers in one reply; choose a model with a larger output`,
+                reason: `${oversized.length} ${oversized.length === 1 ? 'part does' : 'parts do'} not fit ${model}'s input or answer budget; choose a model with a larger input or output`,
               },
             ];
       const failed = outcomes.reduce((sum, one) => sum + one.failed, 0);

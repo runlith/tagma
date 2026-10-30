@@ -1,3 +1,5 @@
+import { estimateThreadTokens } from '@runlith/agent/thread/compaction/measurement';
+import type { AskCapacity } from '../../providers/contract/service/asks.js';
 import { placeholderFault, unmask, type Masked } from './masks.js';
 import type { Part } from './parts.js';
 
@@ -21,25 +23,29 @@ const FRAME_TOKENS = 8;
 
 const outputTokens = (masked: Masked): number => Math.ceil(masked.text.length / 2) + FRAME_TOKENS;
 
-export const batchesOf = (parts: readonly Part[], budget: number): Packed => {
+export const batchesOf = (parts: readonly Part[], capacity: AskCapacity, brief: Brief): Packed => {
   const batches: Batch[] = [];
   const oversized: Part[] = [];
-  let open: { parts: Part[]; masked: Masked[]; tokens: number } | null = null;
+  const overhead = estimateThreadTokens(promptOf({ parts: [], masked: [] }, brief));
+  const inputBudget = capacity.input - overhead;
+  let open: { parts: Part[]; masked: Masked[]; input: number; output: number } | null = null;
   for (const part of parts) {
     const masked = part.masked;
     if (masked === null) continue;
-    const tokens = outputTokens(masked);
-    if (tokens > budget) {
+    const output = outputTokens(masked);
+    const input = estimateThreadTokens(masked.text) + FRAME_TOKENS;
+    if (output > capacity.output || input > inputBudget) {
       oversized.push(part);
       continue;
     }
-    if (open === null || open.tokens + tokens > budget) {
+    if (open === null || open.input + input > inputBudget || open.output + output > capacity.output) {
       if (open !== null) batches.push(open);
-      open = { parts: [], masked: [], tokens: 0 };
+      open = { parts: [], masked: [], input: 0, output: 0 };
     }
     open.parts.push(part);
     open.masked.push(masked);
-    open.tokens += tokens;
+    open.input += input;
+    open.output += output;
   }
   if (open !== null) batches.push(open);
   return { batches, oversized };

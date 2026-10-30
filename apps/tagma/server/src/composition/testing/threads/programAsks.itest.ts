@@ -12,7 +12,11 @@ import { ThreadDecisions } from '../../../threads/contract/service/decisions.js'
 import { THREAD_OPERATIONS } from '../../../threads/contract/wire/operations/catalog.js';
 import { knownAnswer } from '../../../platform/contract/wire/operation.js';
 import { threadTitleAnswerSchema } from '../../../threads/contract/wire/titles.js';
-import { Compaction } from '../../../native-harness/contract/service/context.js';
+import { threadCompactResultSchema } from '@runlith/agent/protocol/realtime';
+import { THREAD_COMPACT } from '../../../native-harness/contract/wire/threadFeeds.js';
+import { SocketOperations } from '../../../invocation/contract/service/socketOperations.js';
+import { OperationId } from '../../../platform/contract/wire/ids.js';
+import { socketDoorLayer } from '../socketDoor.js';
 import { birthsOf, turnsOf } from '../../../threads/testing/doubles.js';
 import { DoorFixture, doorFixture, projectLeaving } from '../doorFixture.js';
 import { modelDefaults } from '../claudeLogin.js';
@@ -101,7 +105,8 @@ const makeFixture = Effect.gen(function* () {
     yield* settledThread({ threadId, projectId, runId: opened.runId }).pipe(Effect.provide(world.runtime.owners));
     return threadId;
   });
-  return { world, projectId, set, settings, talked, summarized };
+  const socket = Context.get(yield* Layer.build(socketDoorLayer(world.runtime, yield* world.directory('socket'))), SocketOperations);
+  return { world, projectId, set, settings, talked, summarized, socket };
 });
 
 class ProgramFixture extends Context.Service<ProgramFixture, Effect.Success<typeof makeFixture>>()('testing/ProgramFixture') {}
@@ -116,8 +121,10 @@ layer(Layer.effect(ProgramFixture, makeFixture).pipe(Layer.provide(doorFixture()
         const silent = { provider: 'devin', model: registry.current().models.defaultTextModelId('devin') };
         const refusedWrite = yield* world.op('write_setting', { key: 'threads.titleModel', value: silent }, `project=${projectId}`);
         expect(refusedWrite.body).toMatchObject({ code: 'setting-value' });
-        expect(yield* Effect.flip(set('threads.decisionModel', silent))).toMatchObject({ code: 'setting-value' });
-        expect(yield* Effect.flip(set('agent.compactionSummarizers', [silent]))).toMatchObject({ code: 'setting-value' });
+        for (const key of ['translation.model', 'threads.decisionModel', 'agent.compactionSummarizers']) {
+          const value = key === 'agent.compactionSummarizers' ? [silent] : silent;
+          expect((yield* world.op('write_setting', { key, value }, `project=${projectId}`)).body).toMatchObject({ code: 'setting-value' });
+        }
         expect(
           yield* Effect.flip(
             set('threads.titleModel', { provider: ASK_PROGRAM_PROVIDER, model: ASK_PROGRAM_MODEL, reasoning: 'unoffered' }),
@@ -170,14 +177,16 @@ layer(Layer.effect(ProgramFixture, makeFixture).pipe(Layer.provide(doorFixture()
 
     it.effect('compaction summarizes through a program member, and a quota refusal of the program falls through to the wire member', () =>
       Effect.gen(function* () {
-        const { world, projectId, set, talked, summarized } = yield* ProgramFixture;
+        const { world, projectId, set, talked, summarized, socket } = yield* ProgramFixture;
         yield* set('agent.compactionSummarizerRule', 'always');
         yield* set('agent.compactionSummarizers', [
           { provider: ASK_PROGRAM_PROVIDER, model: ASK_PROGRAM_MODEL },
           { provider: 'opencode-go', model: 'deepseek-v4.1-flash' },
         ]);
         const compacted = Effect.fnUntraced(function* (threadId: string) {
-          const compacting = yield* Context.get(world.runtime.owners, Compaction).compact(threadId, projectId, {});
+          const compacting = yield* socket
+            .perform(OperationId.make('compact_thread'), projectId, { threadId }, THREAD_COMPACT)
+            .pipe(Effect.flatMap(Schema.decodeUnknownEffect(threadCompactResultSchema)));
           if (compacting.status !== 'started') return yield* Effect.die(`the compaction answered ${compacting.status}`);
           const after = yield* settledThread({ threadId, projectId, runId: compacting.runId }).pipe(Effect.provide(world.runtime.owners));
           return after.transcript.find(

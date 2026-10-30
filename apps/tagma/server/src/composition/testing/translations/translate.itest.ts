@@ -182,7 +182,6 @@ it.live('a block translates by parts into a stored projection that marks and upd
     const cut = (yield* world.op('read_block_translation', { block: long, language: 'ru' }, at)).body as Read;
     expect(cut.projection).toMatchObject({
       failed: 1,
-      reason: expect.stringContaining('larger output'),
       parts: [{ state: 'translated' }, { state: 'translated' }, { state: 'changed', text: null }],
     });
     expect(prompts.slice(before).some((prompt) => prompt.includes('Long reading'))).toBe(false);

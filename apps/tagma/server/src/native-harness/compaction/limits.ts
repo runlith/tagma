@@ -30,7 +30,7 @@ export type LimitInput = {
 
 export function contextLimitOf(catalog: ProviderCatalog, policy: ThreadCompactionPolicy, input: LimitInput): ThreadContextLimit | null {
   const session = input.compaction === 'session';
-  const provider = session ? familyOf(catalog, input.provider) : input.provider;
+  const provider = session ? contextProvider(catalog, input.provider) : input.provider;
   const model = input.model ?? (session || !catalog.models.registered(provider) ? null : catalog.models.defaultTextModelId(provider));
   const option = model === null ? undefined : textModelOf(catalog.models, provider, model);
   const declared = option?.capacity?.context ?? null;
@@ -60,7 +60,7 @@ function thresholdAt(
   );
 }
 
-const familyOf = (catalog: ProviderCatalog, provider: string): string => catalog.borrower(provider) ?? provider;
+const contextProvider = (catalog: ProviderCatalog, provider: string): string => catalog.borrower(provider) ?? provider;
 
 export const makeContextLimits = Effect.fnUntraced(function* (input: { readonly agents: AgentRegistry<WriteUnit<'machine'>> }) {
   const settings = yield* Settings;
@@ -103,7 +103,7 @@ export const makeCompactionPlanning = Effect.gen(function* () {
     threshold: Effect.fnUntraced(function* (threadId, harness, model, window) {
       const policy = yield* compactionPolicy(records, settings, threadId);
       const catalog = yield* registry.catalog;
-      const provider = familyOf(catalog, harness);
+      const provider = contextProvider(catalog, harness);
       const option = model === null ? undefined : textModelOf(catalog.models, provider, model);
       return thresholdAt(catalog, policy, provider, model, option, window).at;
     }, Effect.mapError(threadCallFailed)),
