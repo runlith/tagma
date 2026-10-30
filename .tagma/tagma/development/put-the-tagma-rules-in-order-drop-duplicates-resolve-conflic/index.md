@@ -6,7 +6,7 @@ tags: ["task"]
 fields:
   {
     "holder": "tagma:01a18d7e-c054-7f63-9b0a-a9ec15aa8591",
-    "status": "in_work"
+    "status": "done"
   }
 ---
 A reading of all 207 rules on 2026-10-30 found work in five groups.
