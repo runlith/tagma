@@ -70,21 +70,29 @@ Kind: a design decision — state re-derived on pull, the writer coupled to loop
 
 ### A. Thread state is a versioned projection the thread's owner keeps exact
 
-- **One version per thread.** The thread's journal position is its version. Every write that changes a thread's readable state carries a typed change: the thread, the position it commits at, and the written facts themselves (entry revisions, run, inbox and question rows). A change never says only "thread T moved". Each stored entry revision records the position that wrote it.
-- **Completeness is enforced.** Declared write sets extend from tables to keys, building on `TableMoves`. A write to a projected table without a declared change is refused, not printed. Tests and the bench run a shadow mode that recomputes each projection from storage after each flush and diffs it.
+- **Three clocks per thread, their relation explicit.**
+  - *Change revision*: committed, monotonic per thread, advanced by every program that changes the thread's readable storage. That includes writes that append no journal event: run phase, progress and heartbeat-visible run fields (`native-harness/runs/ledger.ts:63-83`), the title (`threads/turns/adjustments.ts:50-66`). It orders changes, detects gaps and rejects duplicates.
+  - *Journal position*: the exact cut for transcript facts, as today ([[7686017c]]). Many changes may share one position.
+  - *Live sequence*: per incarnation, for open entries and progress, as `FeedPosition.seq` today (`packages/agent/src/transcript/live.ts:11-14`).
+
+  No transcript fact is manufactured to version a heartbeat or a status.
+- **Typed changes.** Every program that changes readable state carries a typed change: the thread, its change revision, its journal position, and the written facts themselves (entry revisions, run, inbox and question rows). A change never says only "thread T moved". Each stored entry revision records the position that wrote it.
+- **Completeness is enforced.** Declared write sets extend from tables to keys, building on `TableMoves`. A write to a projected table without a declared change is refused, not printed. A shadow mode, run apart from performance measurement, recomputes each projection from storage after each flush and diffs it.
 - **One owner per projection.** Today's `ThreadSnapshots` and `ThreadFeed` in `packages/agent` keep, per followed thread:
-  - the state;
-  - the newest transcript page and the live tail, both bounded by the wire page limits;
+  - the state at a change revision;
+  - the newest transcript page;
+  - the open entries in a bounded resident form. An open entry larger than the resident bound keeps its identity, length and newest chunk in memory. Its whole text stays durable in the run's stream tail (`thread_run.stream_tail`), and text leaves memory only once the tail holding it is durable. Nothing is lost and no text length ceiling appears ([[a99bba00]]);
   - a bounded window of deltas.
 
-  The owner applies changes in position order. Application is idempotent: an entry revision applies only over an older recorded position.
-- **Snapshot and `attachFrom` are served from the projection at its applied position P.** They are exact by construction:
-  - a snapshot is state, page and live tail at P;
-  - `attachFrom(since)` answers deltas from the window, or a snapshot when `since` fell out of it.
+  The owner applies changes in change-revision order. Application is idempotent: an entry revision applies only over an older recorded position.
+- **Snapshot and `attachFrom` are served from the projection at its applied cut** — change revision, journal position and live sequence. They are exact by construction:
+  - a snapshot is state, page and open entries at that cut;
+  - `attachFrom(since)` answers deltas from the window, or a snapshot when `since` fell out of it;
+  - an oversized open entry travels in chunks. Its frame names the entry, its total length and the offset of what it carries, and the client reads the prefix it lacks by offset. This extends `ThreadOpenChange` on the wire.
 
   Older pages are read from storage as today.
-- **Hydration.** The first follower installs the change subscription before reading storage, buffers changes, reads at the head, then applies buffered changes newer than what it read. A detected gap (a missing position) re-hydrates. Lock order stays Residence → `atCut` → write unit ([[a92c2538]]).
-- **Inputs that are not storage feed the same projection as typed changes:** launch gate, words in flight, resting, transports. Status deadlines are timers the projection owns (today's `arm` / `reconsider`).
+- **Hydration is one storage snapshot.** The first follower installs the change subscription first. It then reads metadata, runs, inbox, pending input and the newest page in one read transaction, which also answers the thread's change revision R. Buffered changes above R apply; those at or below R are dropped. Open entries come from the live feed's owner at the live sequence it holds when hydration completes. A gap in change revisions re-hydrates. Lock order stays Residence → `atCut` → write unit ([[a92c2538]]); hydration takes no writer.
+- **Inputs that are not storage** reach the projection as typed transient changes on the same per-thread lane as committed ones: launch gate, words in flight, resting and transports (`packages/agent/src/thread/run/LaunchGate.ts:15-24`, `WordsInFlight.ts:19-39`). Status deadlines are timers the projection owns (today's `arm` / `reconsider`). A transient change advances the frame sequence, never the change revision.
 - **Narrow events for other consumers.** The thread list, keep-warm, graph-copy holding and attention subscribe to typed events derived by the projection owner: list-row fields changed, run started or ended, status class changed, owed work changed. They no longer subscribe to whole states. Their own projections — the list row, the own-work flags — are maintained from these events. A thread nobody follows costs its changes' event derivation and nothing else.
 - **Coalescing** applies to replaceable state frames, at most one per key per commit batch. It never applies to journal facts or live deltas, which each apply once.
 - **Publications follow commits.** The imperative `publish(threadId)` calls go away as their producers emit changes.
@@ -92,20 +100,20 @@ Kind: a design decision — state re-derived on pull, the writer coupled to loop
 ### B. A write unit is a program the writer runs alone
 
 - **Programs.** A program is the unit's statements with its guards: an expected row count, a revision condition or a uniqueness constraint. The store sends it to the writer child as one message, and the child executes it between BEGIN and COMMIT. Writer hold becomes engine time. No unit's hold depends on the loop.
-- **Decisions stay atomic.** Check-then-act decisions are made against the aggregate owner's memory, with the aggregate's revision as a guard in the program. Examples:
+- **Decisions stay atomic.** Check-then-act decisions are made against owners' memory. The program carries a guard for every persisted fact the decision depended on: the aggregate's revision, and the revision of each other owner's fact it read. Examples:
   - the facet read and write in `HarnessSessionStore.settle` (`external-harnesses/store/sessions.ts:99-127`);
-  - the command recheck in terminal reserve (`executions/terminals/start.ts:197`);
+  - terminal reserve (`executions/terminals/start.ts:197`), whose `CommandAccess.recheck` re-resolves policy, authority and the owner fence (`executions/commands/access.ts:324-344`); each becomes a guard;
   - the run-still-ours check of hosted entries.
 
-  A guard failure aborts that program alone and returns a typed conflict; the owner reloads and decides again. An owner applies the program's effect to its memory only after the commit is acknowledged.
-- **Group commit.** Programs queued while one runs commit together in the writer child:
-  - one SAVEPOINT per program, so a failing program rolls back alone;
+  An owner whose answer can gate another owner's decision hands out a revision token with that answer, and a guard statement that checks the token inside the writer transaction. A guard failure aborts that program alone and returns a typed conflict; the owner reloads and decides again. An owner applies the program's effect to its memory only after the commit is acknowledged.
+- **Group commit.** Programs queued while one runs commit together in the writer child, within a bound on programs and bytes per batch:
+  - one SAVEPOINT per program, so a guard or statement failure rolls back that program alone;
+  - a COMMIT or I/O failure fails the whole batch, and every member is answered with it;
   - the batch's synchronous mode is the strictest of its members;
   - per-program results;
   - nested units join their outer program, as the nested join of `transaction.ts:198-204` does today;
   - after-commit effects run in commit order.
-
-  A crash loses the whole unacknowledged batch and nothing acknowledged.
+- **An unacknowledged program may have committed.** The child commits before it replies (`packages/sqlite-process/src/host.ts:59-66`), and committed WAL survives its death ([[15a15cc2]]). So every program carries an owner-stable operation identity. Its owner keeps durable evidence that recognizes a committed outcome on recovery without repeating it — its own receipt row, request key or entry position, reused where one exists. Effects published after a commit (feed frames, notifications, ACP frames) are recovered by their owner from committed state, never assumed lost or done.
 - **Boundaries stay where an external effect or an acknowledgement stands:**
   - the terminal start's `reserve` / `dispatched` commit precedes `host.start`, and the receipt side (`accepted`, `record`, or `uncertain`) commits after it (`start.ts:193-305`);
   - stop and discharge likewise;
@@ -125,7 +133,7 @@ Kind: a design decision — state re-derived on pull, the writer coupled to loop
 ### D. A statement and a span cost the loop almost nothing
 
 - **Prepared queries.** Hot queries are drizzle prepared queries (`.prepare()` with placeholders), so SQL text and the row mapper are built once.
-- **Batched reads.** One logical read needing several statements sends them in one round trip. It names whether they must share one read snapshot.
+- **Batched reads.** One logical read needing several statements sends them in one round trip. It names whether they share one read snapshot; a projection's hydration always does.
 - **Statement accounting** happens at the execution boundary for every statement, sampled or not: counts and time by fingerprint and by root act. It never depends on a retained span.
 - **Unsampled spans are near-free:** no attribute projection, no byte sizing. Statements become spans only inside a trace being kept, through a bounded tail buffer. Telemetry produces only what it can keep.
 
@@ -138,16 +146,16 @@ Kind: a design decision — state re-derived on pull, the writer coupled to loop
 ### F. Memory has budgets
 
 - **Census.** The census names what holds the idle and the loaded server: JS heap after a full collection, by retainer through heap snapshots, plus native and allocator memory.
-- **Every in-memory owner declares its bound** and evicts past it. That includes the projections of A and the caches of C, which add to the heap whose pauses froze the loop.
+- **Every in-memory owner declares its bound** and evicts past it. That includes the projections of A and the caches of C, which add to the heap whose pauses froze the loop. Uncommitted programs, live facts owed to a follower and pending notifications cannot be evicted; they are bounded by B's batch bounds and G's backpressure.
 - **Budgets recorded here** before the work they gate: idle server memory after full collection, and server-resident memory per active agent. Target: ≤ 10 MB per active agent.
 - **Lingering sessions.** Stopped ACP threads kept their runner and CLI: 31 runners and 39 CLIs held 5.8 GB at 11:50Z. Their lifetime gets a stated rule from their owner.
 
-### G. Interface latency does not depend on agent load
+### G. The interface keeps its latency within a stated envelope
 
-- **Requirement.** Interface latency is a requirement now (see Proof). One JS heap shared with agent work cannot bound it: its pauses grow with what agent work retains.
-- **The boundary is built by A and B:** a serializable, versioned change stream, and writes as messages to the writer child.
-- **The split is decided by a measured gate.** If after A–F the bench misses an interface or pause gate on the reference profile, the agent runtime moves into worker isolates sharded by thread across cores. The agent runtime here is thread aggregates, harness drivers and hosted tool execution. The serving isolate keeps the doors, graph, files, settings and the thread projections, fed by the change stream. The census of F decides where each cache lives.
-- **Why not split now.** That was considered. The isolate boundary depends on what the census attributes and on the residual after A–F. Both are measured here, so the gate is a number, not a deferral.
+- **Envelope.** Supported: up to 50 agents at the incident's per-agent rates, on the reference profile, with the payload sizes of the Proof. Past it, agent work slows; the interface does not.
+- **Bounded ingress.** Agent acts enter through bounded queues per owner: hosted calls, ACP steps, program batches, projection application. A full queue pushes back on its producer — the runner's call or the CLI's stdout read waits — instead of growing memory. A projection consumer that falls behind its delta window is re-hydrated, not fed an unbounded backlog.
+- **A reserved path.** Interface and control work — graph, files, settings, thread open, stop and interrupt — is served ahead of agent work and never waits behind an agent queue.
+- **The isolation decision is measured.** A JS heap shared with agent work bounds interface latency only as far as that heap's pauses are bounded. If after A–F the bench misses an interface or pause gate on the reference profile, the census and the causal ledger name the owner whose work or retained memory causes the miss. That owner leaves the serving isolate, behind the change stream and writer messages that A and B build. Which owners move and how many workers run follows from those numbers. Moving loop-owned code alone may not remove a pause: some stalls show process CPU far above loop CPU (`44a84cec…`). Machine memory and the writer stay shared whatever moves.
 
 ## Considered and rejected
 
@@ -179,7 +187,9 @@ Kind: a design decision — state re-derived on pull, the writer coupled to loop
 - subscribers as at the incident's longest stall: `thread.changes` ×8, `artifacts.thread` ×8, `worktrees` ×6, and `commands`, `threads`, `calls`, `views`, `graph`, `holdings`, `checkout`, `tree` ×4 each;
 - also zero subscribers, and subscribe, unsubscribe, reconnect, rewind, compaction and external file changes during commits;
 - N = 0, 10 and 50 at the incident rates, and a 5× rate stress run;
-- 30 minutes for the steady-state runs;
+- sizes at a few distinct points: tool results of 2 KB, 64 KB and 1 MB; assistant messages of 1 KB and 200 KB; 1 and 8 calls per assistant boundary; histories of 100 and 10,000 entries; the parent's repository, project and subscriber axes;
+- 30-minute steady-state runs. Each is one uninterrupted program in the measuring lane of the tests skill. It needs a command life above this project's 15-minute rule, set by the operator's word for these runs, and is never split or resumed;
+- performance runs without the shadow mode; shadow equality is its own correctness run;
 - the parent's constrained 4-core / 8 GB profile as the reference profile.
 
 **Gates on counts** (machine-independent, ledger attribution, the subscriber mix above), for a steady-state hosted `read`:
@@ -190,9 +200,12 @@ Kind: a design decision — state re-derived on pull, the writer coupled to loop
 
 **Relative gates** (same machine, same bench): server CPU per act and allocation per act ≥ 10× below the step-0 baseline.
 
-**Interface gates** — server-side RPC p99 at N = 50 for graph block open, thread open and thread-list update:
-- ≤ 100 ms on the reference profile ([[c57e2aa9]]);
-- ≤ 1.5× the N = 0 figure on the same machine.
+**Interface gates** at N = 50, each measured on a finite boundary:
+- graph block open: request arrival to answer;
+- thread open: request arrival, admission and queue included, to the first usable snapshot or resume frame delivered;
+- thread-list update: the causing commit to the delivered list frame.
+
+Each holds p99 ≤ 100 ms on the reference profile ([[c57e2aa9]]) and ≤ 1.5× its N = 0 figure on the same machine. In the 5× stress run the same boundaries hold p99 ≤ 250 ms while agent acts are pushed back.
 
 The e2e lane's `tagma.thread-open` p99 is reported beside them: renderer cost is outside this spec.
 
@@ -205,8 +218,13 @@ The e2e lane's `tagma.thread-open` p99 is reported beside them: renderer cost is
 - the F budgets hold.
 
 **Correctness:**
-- kill -9 between a group commit and its reply;
+- kill -9 between a group commit and its reply: the committed program is recognized on recovery and not repeated, a duplicate submission is recognized, and its publications are recovered from committed state;
+- a COMMIT failure answers every member of its batch;
 - a guard conflict aborts only its program and is decided again;
+- a decision's dependency changes while its target aggregate does not: the guard refuses;
+- several storage and transient changes at one journal head, across reconnect and a timer transition;
+- an open entry larger than the page budget, with a reconnect while it grows;
+- hydration interleaved with a rewind or restore and a late entry;
 - durability merge and after-commit order;
 - terminal start and stop recovery across their boundaries;
 - ACP step-before-frames and result-after-message contracts;
