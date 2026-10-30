@@ -42,6 +42,12 @@ fields:
       },
       {
         "at": "src/adapter/hook.ts"
+      },
+      {
+        "at": "src/adapter/payload.ts"
+      },
+      {
+        "at": "src/adapter/claudeHooks.ts"
       }
     ],
     "id": "@runlith/tagma"

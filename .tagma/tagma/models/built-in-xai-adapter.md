@@ -17,6 +17,9 @@ fields:
       },
       {
         "at": "src/icon.ts"
+      },
+      {
+        "at": "src/harness/grok.ts"
       }
     ],
     "id": "@runlith/adapter-xai"
@@ -30,4 +33,4 @@ sources:
   - kind: dir
     ref: packages/adapter-xai
 ---
-xAI provider declarations in the Tagma registry: the `xai` API key over `@runlith/llm` registrations.
+xAI declarations in the Tagma registry: the `xai` API key over `@runlith/llm` registrations, and the Grok Build CLI as the `grok` harness — its terminal surface, its Claude-format hook vocabulary in snake case, and the reader of its session summaries and transcripts.
