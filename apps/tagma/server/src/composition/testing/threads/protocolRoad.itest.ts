@@ -11,6 +11,9 @@ import { describeTransportStops } from '@runlith/agent/thread/conformance/transp
 import { describeTransportRestarts } from '@runlith/agent/thread/conformance/transportRestarts';
 import { describeTransportEndings, describeTransportWords } from '@runlith/agent/thread/conformance/transportWords';
 import { runEnd } from './protocolEnds.js';
+import { ASIDE, COMPACT, FORK, REWIND } from '@runlith/hosted-runner/wire/extensions';
+import { HarnessAdapters } from '../../../external-harnesses/contract/service/adapters.js';
+import { shippedAdapters } from '../external-harnesses/shipped.js';
 import { heard, LIBRARY, ProtocolRig, protocolFixture, scenario, until as readUntil, words, type Said } from './protocolRig.js';
 import { scriptedAgent } from './protocolAgents.js';
 import { protocolStopRig } from './protocolStopRig.js';
@@ -76,6 +79,47 @@ describe.skipIf(!existsSync(LIBRARY))('ACP adapter boundaries over one execution
       'acp (scripted agent)',
       () => Effect.map(ProtocolRig, (rig) => protocolWordRig(rig, scriptedAgent(rig), 'endings')),
       it.effect,
+    );
+
+    it.effect('a vendor-run profile claiming an unnegotiated capability refuses launch before opening a session', () =>
+      Effect.gen(function* () {
+        const rig = yield* ProtocolRig;
+        const { openThread, floor, stage, agentBinary } = rig;
+        const report = join(stage, 'unnegotiated.report');
+        yield* agentBinary(report);
+        const threadId = 'thread-protocol-unnegotiated';
+        yield* openThread(threadId);
+        yield* scenario(
+          Effect.gen(function* () {
+            const shipped = yield* shippedAdapters;
+            const original = yield* shipped.row('devin');
+            if (original.acp === undefined) return yield* Effect.die('the vendor-run fixture needs an ACP profile');
+            const profile = {
+              ...original,
+              acp: {
+                ...original.acp,
+                proves: { ...original.acp.proves, fork: true, rewind: true, compaction: true, aside: 'session' as const },
+                extensions: [FORK, REWIND, COMPACT, ASIDE],
+              },
+            };
+            const adapters = HarnessAdapters.of({
+              ...shipped,
+              find: (id) => (id === 'devin' ? profile : shipped.find(id)),
+              last: (id) => (id === 'devin' ? profile : shipped.last(id)),
+              all: () => shipped.all().map((row) => (row.harness === 'devin' ? profile : row)),
+              row: (id, install) => (id === 'devin' ? Effect.succeed(profile) : shipped.row(id, install)),
+            });
+            const raised = yield* floor([], { fails: 0, refuses: false, adapters });
+            const driver = yield* raised.driver('owner-unnegotiated');
+            yield* driver.send(threadId, 'do not open the unsupported session');
+            const ended = yield* waiting(threadId)(runEnd(rig.world.context, threadId), 'settled the unsupported launch', report);
+            expect(ended.status).toBe('failed');
+            expect(ended.failure).toContain('harness-contract');
+            for (const capability of ['fork', 'rewind', 'compaction', 'aside']) expect(ended.failure).toContain(capability);
+            expect(yield* asked(report, 'session/new')).toEqual([]);
+          }),
+        );
+      }),
     );
 
     it.effect('a live session copy answers through the ACP extension and is released when its process exits', () =>

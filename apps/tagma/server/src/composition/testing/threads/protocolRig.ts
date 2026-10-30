@@ -638,7 +638,7 @@ export const protocolRig = Effect.fn('testing.protocolRig')(function* (fixture: 
     const touched = new Set<string>();
     let stopper: ((threadId: string) => Effect.Effect<unknown, unknown>) | null = null;
     const scenarioScope = yield* Effect.scope;
-    const adapters = yield* shippedAdapters;
+    const adapters = options.adapters ?? (yield* shippedAdapters);
     const driver = Effect.fn('testing.protocolDriver')(function* (
       owner: string,
       timing: {

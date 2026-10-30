@@ -6,7 +6,7 @@ import { GateRefusal } from '../../platform/contract/wire/refusal.js';
 import type { HarnessFailure } from '../../threads/contract/service/failure.js';
 import type { ProtocolRows } from '../store/protocol.js';
 import type { ProtocolAlignment } from './alignment.js';
-import { FORK, STEER, WITHDRAW } from '@runlith/hosted-runner/wire/extensions';
+import { ASIDE, COMPACT, FORK, REWIND, STEER, WITHDRAW } from '@runlith/hosted-runner/wire/extensions';
 import type { ProtocolHalts } from './halts.js';
 import type { Link } from './links.js';
 import type { ProtocolPrompts } from './prompts.js';
@@ -28,6 +28,24 @@ export class ProtocolOpening {
     const meta = capabilities?._meta;
     const declared = typeof meta === 'object' && meta !== null && 'tagma/extensions' in meta ? meta['tagma/extensions'] : null;
     const extensions = Array.isArray(declared) ? link.profile.extensions.filter((method) => declared.includes(method)) : [];
+    if (link.profile.hosts === null) {
+      const { proves } = link.profile;
+      const missing = [
+        proves.fork && !extensions.includes(FORK) ? 'fork' : null,
+        proves.rewind && !extensions.includes(REWIND) ? 'rewind' : null,
+        proves.compaction === true && !extensions.includes(COMPACT) ? 'compaction' : null,
+        proves.aside === 'session' && !extensions.includes(ASIDE) ? 'aside' : null,
+      ].filter((capability) => capability !== null);
+      if (missing.length > 0) {
+        yield* this.halts.failed(
+          link,
+          new GateRefusal('harness-contract', `The agent did not negotiate claimed capabilities: ${missing.join(', ')}.`, [
+            'use an agent that supports the declared capabilities or correct the adapter profile',
+          ]),
+        );
+        return IDLE;
+      }
+    }
     yield* steps.intend(link, { _tag: 'Extensions', methods: extensions });
     const sessions = capabilities?.sessionCapabilities;
     const methods = result.authMethods ?? [];

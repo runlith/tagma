@@ -4,6 +4,7 @@ import { Deferred, Effect } from 'effect';
 import type { RunLaunch, TransportRuns } from '@runlith/agent/thread/transport/contract';
 import type { ThreadRunSettledSubscriber } from '@runlith/agent/thread/run/ThreadRunSettlements';
 import { TerminalWriting } from '../../../executions/contract/service/writing.js';
+import type { HarnessAdapters } from '../../../external-harnesses/contract/service/adapters.js';
 
 export type LaunchPause = { readonly entered: Deferred.Deferred<RunLaunch>; readonly released: Deferred.Deferred<void> };
 
@@ -16,6 +17,7 @@ export const delayedLaunches = (runs: TransportRuns, pause: LaunchPause): Transp
 export type Floor = {
   readonly fails: number;
   readonly refuses: boolean;
+  readonly adapters?: HarnessAdapters['Service'];
   readonly resting?: ReadonlySet<string>;
   readonly loses?: boolean;
   readonly losesSteers?: boolean;
