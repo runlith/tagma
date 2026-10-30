@@ -4,6 +4,7 @@ import { ActivityLog } from '@runlith/activity/log';
 import type { ModelCallUsage } from '@runlith/activity/modelCall';
 import type { ModelOneShotInput, ModelRequest, ModelRequestInput } from '@runlith/agent/modelPort';
 import { estimateThreadTokens } from '@runlith/agent/thread/compaction/measurement';
+import { decodeJsonAnswer } from '@runlith/llm/call';
 import { DecisionRefused, type DecisionAnswer, type DecisionRequest } from '@runlith/llm/decision';
 import type { ModelOption } from '@runlith/llm/models/catalog';
 import { isContextOverflowFailure } from '@runlith/llm/provider-error';
@@ -211,8 +212,8 @@ export const makeModelAsks = Effect.gen(function* () {
     return request.refusal === undefined ? Effect.succeed(request) : Effect.fail(refusalOf(request.refusal));
   };
 
-  const launched = Effect.fnUntraced(function* (route: ProgramRoute, account: string | null) {
-    const registration = registry.current().harnesses.find((provider) => provider.id === route.provider);
+  const launched = Effect.fnUntraced(function* (catalog: ProviderCatalog, route: ProgramRoute, account: string | null) {
+    const registration = catalog.harnesses.find((provider) => provider.id === route.provider);
     if (registration === undefined) return yield* refused('ask-not-connected', `${route.provider} is not installed`);
     const launch = yield* harnessAccounts
       .launch(route.provider, account ?? undefined)
@@ -228,20 +229,20 @@ export const makeModelAsks = Effect.gen(function* () {
   });
 
   const programAnswer = Effect.fnUntraced(function* (
+    catalog: ProviderCatalog,
     route: ProgramRoute,
     selection: AskSelection,
     system: string,
     input: string,
     schema?: JsonSchema,
   ) {
-    const catalog = registry.current();
     const option = optionOf(catalog, route.provider, selection.model);
     const output = plannedOutput(option);
     const context = option?.capacity?.context;
     const asked = schema === undefined || route.program.schemas ? system : objectInstruction(system, schema);
     if (context !== undefined && estimateThreadTokens(asked) + estimateThreadTokens(input) > context - output)
       return yield* refused('ask-input-too-large', `The input takes more than ${selection.model} reads beside its answer`);
-    const environment = yield* launched(route, selection.account);
+    const environment = yield* launched(catalog, route, selection.account);
     const argv = route.program.argv({
       model: selection.model,
       rung: selection.reasoning,
@@ -266,7 +267,7 @@ export const makeModelAsks = Effect.gen(function* () {
 
   const spokenText = Effect.fnUntraced(function* (route: AskRoute, selection: AskSelection, ask: FreshAsk) {
     if (route.path === 'program') {
-      const { answer, usage, account } = yield* programAnswer(route, selection, ask.system, ask.input);
+      const { answer, usage, account } = yield* programAnswer(registry.current(), route, selection, ask.system, ask.input);
       const value = answer._tag === 'Text' ? answer.text : JSON.stringify(answer.object);
       return { value, usage, account } satisfies Spoken<string>;
     }
@@ -277,13 +278,18 @@ export const makeModelAsks = Effect.gen(function* () {
 
   const spokenObject = Effect.fnUntraced(function* (route: AskRoute, selection: AskSelection, ask: FreshAsk, schema: JsonSchema) {
     if (route.path === 'program') {
-      const { answer, usage, account } = yield* programAnswer(route, selection, ask.system, ask.input, schema);
-      const value =
+      const { answer, usage, account } = yield* programAnswer(registry.current(), route, selection, ask.system, ask.input, schema);
+      const given =
         answer._tag === 'Object'
           ? answer.object
           : yield* parsedObject(answer._tag === 'Text' ? answer.text : '').pipe(
               Effect.mapError((failure) => refused(failure.refusal, failure.message, failure.failure, usage)),
             );
+      const value = yield* decodeJsonAnswer(schema)(given).pipe(
+        Effect.mapError((issue) =>
+          refused('ask-unreadable-answer', `The answer does not match the requested shape: ${issue.message}`, issue, usage),
+        ),
+      );
       return { value, usage, account } satisfies Spoken<unknown>;
     }
     const request = yield* requestOf(route, selection, ask.system, ask.stallMs);
@@ -424,8 +430,7 @@ export const makeModelAsks = Effect.gen(function* () {
     return { input, output: request.plannedOutputTokens };
   });
 
-  const programRequest = (input: ModelRequestInput, route: ProgramRoute): ModelRequest => {
-    const catalog = input.runId === undefined ? registry.current() : registry.forRun(input.runId);
+  const programRequest = (catalog: ProviderCatalog, input: ModelRequestInput, route: ProgramRoute): ModelRequest => {
     const model = input.model ?? catalog.models.defaultTextModelId(input.provider);
     const selection: AskSelection = { provider: input.provider, model, reasoning: input.reasoning ?? null, account: input.account ?? null };
     let account: string | undefined;
@@ -436,7 +441,7 @@ export const makeModelAsks = Effect.gen(function* () {
         'program',
         selection,
         Effect.map(
-          programAnswer(route, selection, input.instructions ?? '', call.prompt ?? textOf(call.messages ?? [])),
+          programAnswer(catalog, route, selection, input.instructions ?? '', call.prompt ?? textOf(call.messages ?? [])),
           ({ answer, usage, account: signed }) => {
             account = signed;
             return { value: answer._tag === 'Text' ? answer.text : JSON.stringify(answer.object), usage, account: signed };
@@ -488,7 +493,7 @@ export const makeModelAsks = Effect.gen(function* () {
         const model = input.model ?? (catalog.models.registered(input.provider) ? catalog.models.defaultTextModelId(input.provider) : null);
         const route = model === null ? null : catalog.asks.route(input.provider, model);
         if (route === null || (route.provider === input.provider && route.path === 'request')) return models.request(input);
-        return route.path === 'program' ? programRequest(input, route) : models.request({ ...input, provider: route.provider });
+        return route.path === 'program' ? programRequest(catalog, input, route) : models.request({ ...input, provider: route.provider });
       },
       served: (provider, model, runId) => models.served(provider, model, runId),
       defaultModel: (provider, runId) => models.defaultModel(provider, runId),

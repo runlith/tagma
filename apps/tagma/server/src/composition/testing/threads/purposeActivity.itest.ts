@@ -41,7 +41,7 @@ const setup = Effect.gen(function* () {
 class World extends Context.Service<World, Effect.Success<typeof setup>>()('testing/PurposeActivityWorld') {}
 
 layer(Layer.effect(World, setup), { excludeTestServices: true })('purpose activities', (it) => {
-  it.effect('a cancelled scheduled recap and a malformed manual recap remain readable activities', () =>
+  it.effect('a cancelled scheduled recap and a manual recap refused on a moved conversation remain readable activities', () =>
     Effect.gen(function* () {
       const { world, projectId, account } = yield* World;
       const setting = (key: string, value: unknown) =>
@@ -79,7 +79,7 @@ layer(Layer.effect(World, setup), { excludeTestServices: true })('purpose activi
       yield* asides.settled(threadId, capture.runId);
       yield* asides.opened(threadId, 'replacement-run', false);
       expect((yield* world.op('generate_thread_recap', { threadId }, `project=${projectId}`)).body).toMatchObject({
-        code: 'recap-malformed',
+        code: 'not-warm',
       });
       const activities = yield* Effect.provide(ActivityStore, yield* world.runtime.runtime.contextEffect);
       yield* activities.settled;
@@ -107,8 +107,8 @@ layer(Layer.effect(World, setup), { excludeTestServices: true })('purpose activi
       expect(rows.find((row) => row.outcome === 'refused')).toMatchObject({
         actor: { kind: 'operator' },
         trigger: { kind: 'operation', refs: ['generate_thread_recap'] },
-        reason: 'recap-malformed',
-        result: { effect: 'skipped', reason: 'recap-malformed' },
+        reason: 'not-warm',
+        result: { effect: 'skipped', reason: 'not-warm' },
       });
     }),
   );

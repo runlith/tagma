@@ -1,6 +1,6 @@
 import type { AgentAside } from '@runlith/agent/AgentAside';
 import { ModelIdentity } from '@runlith/llm/schema/options';
-import { Effect } from 'effect';
+import { Clock, Effect } from 'effect';
 import { OPERATOR_PRINCIPAL } from '../platform/contract/wire/actor.js';
 import { GateRefusal } from '../platform/contract/wire/refusal.js';
 import { AccountCredentials, ModelAccess } from '../providers/contract/service/access.js';
@@ -53,6 +53,8 @@ export const makeThreadAsks = Effect.gen(function* () {
     over: Effect.fnUntraced(function* (threadId, instruction, copy) {
       const held = copy ?? asides.of(threadId);
       if (held === undefined) return yield* notWarm('This thread holds no warm copy of its conversation to ask over.');
+      if (held.expiresAt !== null && held.expiresAt <= (yield* Clock.currentTimeMillis))
+        return yield* notWarm("This copy of the thread's conversation is past its cache deadline.");
       const answer = yield* asides.ask(threadId, held, { instruction });
       return { answer, basis: basisOf(held, servedBy(held)) };
     }),

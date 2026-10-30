@@ -1,4 +1,4 @@
-import { Effect, type JsonSchema, Schema } from 'effect';
+import { Effect, JsonSchema, Schema, SchemaRepresentation } from 'effect';
 import { LlmClient, fold } from './route/client';
 import {
   type ContentPart,
@@ -110,13 +110,33 @@ type AnswerTool = {
   readonly decode: (input: unknown) => Effect.Effect<unknown, Schema.SchemaError>;
 };
 
+const jsonAnswerSchemas = new WeakMap<JsonSchema.JsonSchema, AnswerSchema<unknown>>();
+
+const jsonAnswerSchema = (jsonSchema: JsonSchema.JsonSchema): AnswerSchema<unknown> => {
+  const held = jsonAnswerSchemas.get(jsonSchema);
+  if (held !== undefined) return held;
+  const imported = SchemaRepresentation.fromJsonSchemaDocument(JsonSchema.fromSchemaDraft2020_12(jsonSchema), {
+    patterns: 'apply',
+  }) as AnswerSchema<unknown>;
+  jsonAnswerSchemas.set(jsonSchema, imported);
+  return imported;
+};
+
+export const decodeJsonAnswer =
+  (jsonSchema: JsonSchema.JsonSchema) =>
+  (input: unknown): Effect.Effect<unknown, Schema.SchemaError> =>
+    Effect.flatMap(
+      Effect.sync(() => jsonAnswerSchema(jsonSchema)),
+      (schema) => Schema.decodeUnknownEffect(schema)(input),
+    );
+
 const answerTool = (shape: { readonly schema: AnswerSchema<unknown> } | { readonly jsonSchema: JsonSchema.JsonSchema }): AnswerTool => ({
   definition: new ToolDefinition({
     name: GENERATE_OBJECT_TOOL_NAME,
     description: GENERATE_OBJECT_TOOL_DESCRIPTION,
     inputSchema: 'schema' in shape ? toolInputSchema(shape.schema) : shape.jsonSchema,
   }),
-  decode: 'schema' in shape ? Schema.decodeUnknownEffect(shape.schema) : Effect.succeed,
+  decode: 'schema' in shape ? Schema.decodeUnknownEffect(shape.schema) : decodeJsonAnswer(shape.jsonSchema),
 });
 
 const answerChoice = (allowed: readonly AllowedToolChoice[] | undefined): ToolChoice =>
