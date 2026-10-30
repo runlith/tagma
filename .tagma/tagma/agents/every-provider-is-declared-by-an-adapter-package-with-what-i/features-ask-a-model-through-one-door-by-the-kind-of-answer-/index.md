@@ -5,7 +5,7 @@ ord: 1
 tags: ["spec"]
 fields:
   {
-    "status": "open"
+    "status": "closed"
   }
 edges:
   - kind: relates
@@ -140,6 +140,6 @@ edges:
 9. `choose` with an empty role and only Codex connected, and the ChatGPT subscription in `codex` mode, resolves to the subscription's light model.
 10. Every ask is one activity naming its path, its model, and its spend when reported.
 
-**Remaining.** Acceptance 1 alone. Rule [[93f04f23]] records it as an allowlist of who may call a model directly, but does not enforce it yet. The session building the architecture checks is enforcing it. Everything else is built (server f1fc96ce, app e0faa87f).
+**Built.** Server f1fc96ce, app e0faa87f; the single-login paths are proved through the feature doors in `43145877f3`. Acceptance 1 is the call check enforced at gate on rule [[93f04f23]] over the whole server, with no standing violation.
 
 **Proof.** Integration tests through `translate_block`, `generate_thread_title`, the decision door, `compact_thread` and the settings write door, with a scripted wire provider and a test adapter package whose program is a local script. The program conformance suite (7), the recorded-output contract test (8), a unit test of `choose` with an empty role (9), and the call inspection (1).
