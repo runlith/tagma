@@ -1,8 +1,8 @@
 ---
 id: 01a0c71b-6d2a-7c54-b6b0-5f34c852f964
-title: A checksum segment counts exactly over the payload bytes its sealed bounds name, never over the file header
+title: A record segment's checksum covers exactly the payload bytes its sealed bounds name, never the file header
 ord: 9
-tags: ["rule"]
+tags: ["explanation"]
 sources:
   - kind: file
     ref: packages/executions/src/recordFormat.ts
@@ -19,3 +19,4 @@ sources:
     ref: packages/executions/src/recordFormat.ts
     symbol: SealedSegment
 ---
+Sealing and verification must count the same span; a checksum that includes the header would fail verification of a segment whose payload is intact.

@@ -1,8 +1,8 @@
 ---
 id: 01a0c712-6de3-731c-91c0-17f661e25fce
-title: Reading what the host holds or has already finished starts nothing, finishes nothing, and emits nothing
+title: Reading what the host holds or has already finished starts, finishes and emits nothing
 ord: 4
-tags: ["rule"]
+tags: ["explanation"]
 sources:
   - kind: file
     ref: packages/executions/src/Executions.ts
@@ -25,4 +25,4 @@ sources:
     ref: packages/executions/src/Executions.ts
     symbol: ending
 ---
-A world probe while reading is allowed; an act on the observed execution is not.
+Inventory, command, process and listener reads observe only. A probe of the world while reading is allowed; an act on the observed execution is not.

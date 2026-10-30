@@ -1,8 +1,8 @@
 ---
 id: 01a0c705-58f7-7033-9632-e7dbd4aeec96
-title: The caller must not read admission as the child having consumed bytes
+title: Input admission means the host took the bytes, not that the child consumed them
 ord: 1
-tags: ["rule"]
+tags: ["explanation"]
 sources:
   - kind: file
     ref: packages/executions/src/protocol/input.ts
@@ -15,4 +15,4 @@ sources:
     ref: packages/executions/src/protocol/input.ts
     symbol: InputReceipt
 ---
-The frontier counts bytes taken but not yet written into the child; what the child did with them reads from the execution's own output.
+The frontier counts bytes taken but not yet written into the child. What the child did with them is read from the execution's own output.
