@@ -206,6 +206,16 @@ describe('McpSession', () => {
   );
 
   it.live(
+    'takes a whole tool list the size of a first-party service catalog without a declared bound',
+    Effect.fnUntraced(function* () {
+      const listed = yield* Effect.scoped(
+        Effect.map(openMcpSession(declare('wide', ['--wide-tools'], { timeoutMs: 4_000 })), (session) => session.descriptors.length),
+      );
+      expect(listed).toBe(23);
+    }),
+  );
+
+  it.live(
     'ends a tool list that never ends, naming the bound it hit, and registers no half-read catalog',
     Effect.fnUntraced(function* () {
       const repeated = yield* failed(Effect.scoped(openMcpSession(declare('loop', ['--cursor-loop'], { timeoutMs: 4_000 }))));

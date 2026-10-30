@@ -28,7 +28,7 @@ import {
   openMcpTransport,
 } from './sdk';
 
-export const MCP_DEFAULT_CATALOG_BYTES = TOOL_OUTPUT_MAX_BYTES;
+export const MCP_DEFAULT_CATALOG_BYTES = 4 * 1024 * 1024;
 
 export type McpToolAnnotations = {
   readonly title?: string;
@@ -119,10 +119,7 @@ const listAll = Effect.fn('McpSession.listAll')(
         descriptors.push(described);
       }
       if (bytes > maxCatalogBytes) {
-        return yield* refusedListing(
-          connection,
-          `the tool list passed ${maxCatalogBytes} bytes, which is more of one server's words than a model is handed at once`,
-        );
+        return yield* refusedListing(connection, `the tool list passed ${maxCatalogBytes} bytes, more than Tagma holds for one server`);
       }
       const next = page.nextCursor;
       if (next === undefined) return descriptors as readonly McpToolDescriptor[];

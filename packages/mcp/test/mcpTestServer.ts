@@ -10,6 +10,19 @@ if (flags.includes('--hang')) {
   process.stdin.resume();
   setInterval(() => undefined, 60_000);
   if (!flags.includes('--no-exit')) process.stdin.on('end', () => process.exit(0));
+} else if (flags.includes('--wide-tools')) {
+  const { Server: WideServer } = await import('@modelcontextprotocol/sdk/server/index.js');
+  const { StdioServerTransport: WideTransport } = await import('@modelcontextprotocol/sdk/server/stdio.js');
+  const { ListToolsRequestSchema: WideList } = await import('@modelcontextprotocol/sdk/types.js');
+  const wide = new WideServer({ name: 'wide', version: '0.0.0' }, { capabilities: { tools: {} } });
+  wide.setRequestHandler(WideList, async () => ({
+    tools: Array.from({ length: 23 }, (_, at) => ({
+      name: `tool_${at}`,
+      description: 'x'.repeat(3400),
+      inputSchema: { type: 'object' as const },
+    })),
+  }));
+  await wide.connect(new WideTransport());
 } else if (flags.includes('--cursor-loop') || flags.includes('--empty-pages') || flags.includes('--flood-tools')) {
   const { Server: LoopServer } = await import('@modelcontextprotocol/sdk/server/index.js');
   const { StdioServerTransport: LoopTransport } = await import('@modelcontextprotocol/sdk/server/stdio.js');
