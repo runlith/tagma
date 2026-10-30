@@ -6,7 +6,7 @@ tags: ["task"]
 fields:
   {
     "holder": "tagma:01a18e91-0057-7f4b-85b6-a35adafffddb",
-    "status": "in_work"
+    "status": "done"
   }
 ---
 Equal structure alone conflates independent concepts. Enforce direct imported aliases, same-name equal types across modules, and copies of exported production dependencies with at least three members or alternatives; retain the named independent-concept negatives and incremental module-card coverage.
