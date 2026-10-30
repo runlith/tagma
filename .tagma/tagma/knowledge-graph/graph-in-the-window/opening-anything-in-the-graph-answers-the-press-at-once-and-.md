@@ -7,5 +7,10 @@ fields:
   {
     "delivery": "prompt"
   }
+sources:
+  - kind: dir
+    ref: apps/tagma/app/src/lib/features/graph
+  - kind: dir
+    ref: apps/tagma/server/src/graph
 ---
 Covers clicking a block, link or card and going to a block, including in another project's graph or in global. The interface reacts to the press immediately, even while data still loads. Longer than 1 second is allowed only for an objective reason that can't be removed (for example, a huge graph after a machine reboot); the reason is named in the spec or task.

@@ -7,5 +7,10 @@ fields:
   {
     "delivery": "prompt"
   }
+sources:
+  - kind: dir
+    ref: apps/tagma/app/src
+  - kind: dir
+    ref: packages/chat-ui/src
 ---
 Before the mockup, read the token file (`apps/tagma/app/src/app.css`) and the components of the screen being changed. The mockup shows the whole screen, in the surroundings where the change will live, not a detached fragment.

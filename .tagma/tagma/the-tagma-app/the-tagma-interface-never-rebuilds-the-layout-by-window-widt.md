@@ -7,5 +7,8 @@ fields:
   {
     "delivery": "prompt"
   }
+sources:
+  - kind: dir
+    ref: apps/tagma/app/src
 ---
 Tagma is a desktop app, not an adaptive dashboard. When the window narrows, panels stay in place and only resize within their bounds. Only the human changes the layout.
