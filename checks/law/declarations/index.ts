@@ -10,7 +10,6 @@ import { databaseAt } from '../store';
 import { type Packed, pack, unpack } from './compact';
 import { ancestorsOf, isManifest, isSource, type Package, type Packages, packageOf, shapeOf } from './corpus';
 import type { Facts } from './facts';
-import { revisionAt, saveRevision } from './memo';
 import { type Alias, keyStems, resolverOf } from './resolve';
 
 const load = createRequire(import.meta.url);
