@@ -47,7 +47,7 @@ sources:
     ref: packages/adapter-anthropic/src/harness/acp.ts
     symbol: claudeAcp
   - kind: symbol
-    ref: apps/tagma/server/src/external-harnesses/vendors/opencode/acp.ts
+    ref: packages/adapter-opencode/src/harness/acp.ts
     symbol: opencodeAcp
 ---
 **Value.** A hosted run looks and is managed like a regular Tagma agent, while the vendor runs its model and tool loop. Claude Code, Cursor, and OpenCode get Tagma's prompt and tools with law on every call; Devin runs its own agent.
