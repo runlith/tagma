@@ -66,4 +66,4 @@ sources:
   - kind: dir
     ref: apps/tagma/server/src/performance
 ---
-To take slow calls, hangs, and memory growth apart, the server records its own work — spans, event-loop delays, CPU profiles, and memory snapshots — and answers questions over what it saved. The module owns these on-request reads and captures; the recording mechanism is the @runlith/performance package.
+To take slow calls, hangs, and memory growth apart, the server records its own work — spans, event-loop delays, CPU profiles, and memory snapshots — and answers questions over what it saved. The module owns these on-request reads and captures, including live causal costs from the process-lifetime retained suffix; the recording mechanism is the @runlith/performance package.

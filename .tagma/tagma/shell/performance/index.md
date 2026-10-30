@@ -177,4 +177,4 @@ sources:
   - kind: dir
     ref: packages/performance
 ---
-The package observes process work and summarizes V8 heap snapshots so the operator can ask what was slow, froze or keeps growing. It owns collectors, bounded worker persistence, windowed reports and the heap file reader. Mounting products choose intervals, thresholds and storage, coordinate heavy analyses and present results.
+The package observes process work and summarizes V8 heap snapshots so the operator can ask what was slow, froze or keeps growing. It owns collectors, a process-lifetime causal cost ledger, bounded worker persistence, windowed reports and the heap file reader. Mounting products choose intervals, thresholds and storage, coordinate heavy analyses and present results.
