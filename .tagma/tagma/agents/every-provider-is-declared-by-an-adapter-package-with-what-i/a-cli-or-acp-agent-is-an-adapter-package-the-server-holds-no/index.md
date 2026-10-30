@@ -40,7 +40,7 @@ A harness provider gains two optional surfaces. Their types move out of the serv
   - cut, carry, prepare, address;
   - the title switch;
   - a **hook codec** and a **metadata reader**, implementations of public contracts:
-    - the hook codec reads the CLI's events and writes its answers: permission, context, trust and file shape;
+    - the hook codec (`@runlith/tagma/adapter/hook`) writes the CLI's answers — permission, context, tool and prompt — and declares its hook file: top-level keys, where events sit, the trust table, the entry for one command; the surface's event readers (`occasionOf`, `subjectOf`, `filesOf`, …) read its events;
     - the metadata reader reads the CLI's transcripts.
 
     Today's codecs (`adapter/hookFormat.ts`, `adapter/claudeFormat.ts`) and metadata readers (`metadata/*`) move into the vendor packages. Helpers that are genuinely format-neutral become shared host modules.
@@ -50,11 +50,14 @@ A provider must declare at least one of the two surfaces to be offered as a chat
 
 ## Owners
 
-- **Hook process.** `tagma hook` runs on every CLI tool call. It parses events in its own process, through the static table (`hooks/dispatch.ts`), and validates `--harness` against literals (`cli/hook.ts:21`). The first step of this work measures two designs with `composition/testing/cli/hookIngress.bench.ts`, and lands the one that keeps the benchmark within its current budget:
-  - **(a) Thin relay.** The hook forwards the event bytes and the harness id. The server parses them with the package's codec and returns the answer bytes, which the hook writes. The bound on forwarded size (note [[8ed5962b]]) moves to the server ingress.
-  - **(b) Named package only.** The hook loads just the named package's codec.
+- **Hook process.** `tagma hook` runs on every CLI tool call and parses the event in its own process. It loads only the named harness — its builtin row, or the one machine-installed adapter package that declares the id, through the loader and the server's host modules — and answers through that harness's hook codec. `--harness` (and `tagma mcp serve --harness`) takes any id; an id nothing declares refuses `harness-not-installed`. Builtin ids keep their spelling, so hook files already written into users' repositories and CLI homes keep working. A command written without `--harness` reads with every builtin row and answers in the codec of the CLI whose published session variable carries the event's session, else of the thread the server's receipt names, else not at all.
 
-  In both designs, `--harness` is any installed id. Hook files already written into users' repositories and CLI homes keep working, because builtin ids do not change.
+  Both designs were measured with `composition/testing/cli/hookIngress.bench.ts`: three alternating runs per design on one shared, loaded machine; 60 door posts, 20 in-process `observe` and `post-tool-use` hooks, 12 `observe` hooks in a launched source-run CLI process. Per-run p50 (p95) in ms:
+  - HEAD baseline: launched 179 (579), 172 (256), 198 (343); observe 8.3, 6.2, 7.4; write 39, 36, 109.
+  - (b) named package only: launched 193 (275), 179 (292), 263 (472); observe 9.7, 6.7, 11.0; write 45, 44, 92.
+  - (a) thin relay — the hook posted the event bytes to a server ingress that ran the dispatch: launched 113 (157), 385 (529), 213 (370); observe 6.9, 7.8, 15.8; write 43, 200, 125.
+
+  Neither design leaves HEAD's run-to-run spread, so both keep the budget. (b) landed: the hook keeps capturing write bases and queuing pending writes on the CLI's own disk while the server is unreachable. A relay that does not parse cannot know which files to capture before the write, so every edit made during a server restart would land ownerless (note [[8ed5962b]]). The relay prototype was deleted.
 - **`external-harnesses` becomes vendor-neutral.** It keeps the drivers: ACP, terminal, hooks ingress, installs, births and seats, and the `AskPrograms` filler. Every vendor fact it reads comes from the registry's harness providers.
 - **Registry lifetime.**
   - `HarnessRegistry` gains withdraw and replace. Today it has neither, and it dies on a second registration (`threads/harness/registry.ts:11-16`).
