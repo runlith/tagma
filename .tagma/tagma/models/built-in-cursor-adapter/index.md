@@ -30,4 +30,4 @@ sources:
   - kind: dir
     ref: packages/adapter-cursor
 ---
-The Cursor provider for subscription models through a hosted harness: the adapter owns key login, the official catalog projection, and CLI-account-matched quota reading. Account storage, catalog refresh, and process launch stay with providers and harness; the SDK loads here only for browser login.
+The Cursor provider for subscription models through a hosted harness: the adapter owns key login, the official catalog projection, CLI-account-matched quota reading, and the fresh-ask program declaration. Account storage, catalog refresh, and process launch stay with providers and harness; the SDK loads here only for browser login.
