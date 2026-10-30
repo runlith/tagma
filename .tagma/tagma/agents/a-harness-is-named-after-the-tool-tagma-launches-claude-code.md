@@ -5,7 +5,16 @@ ord: 85
 tags: ["rule"]
 fields:
   {
-    "delivery": "prompt"
+    "delivery": "code"
   }
+sources:
+  - kind: dir
+    ref: apps/tagma/server/src/external-harnesses
+  - kind: dir
+    ref: apps/tagma/server/src/threads/harness
+  - kind: dir
+    ref: apps/tagma/server/src/threads/contract/wire/harness
+  - kind: dir
+    ref: packages/adapter-anthropic
 ---
 Covers the harness id, the `harness:<name>` type, setting keys, and names in code. "Claude" is the model and provider a Tagma agent runs on; "Claude Code" is the CLI and its TUI.

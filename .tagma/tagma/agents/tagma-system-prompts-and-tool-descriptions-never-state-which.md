@@ -5,7 +5,10 @@ ord: 82
 tags: ["rule"]
 fields:
   {
-    "delivery": "prompt"
+    "delivery": "code"
   }
+sources:
+  - kind: dir
+    ref: apps/tagma/server/src
 ---
 No model names (Fable, Opus, and others), no reasoning levels (`max`, `xhigh`), no model selection, switching, or downgrade policy in text Tagma gives an agent. Which model fits which work is decided by the operator in their own words and rules.

@@ -5,7 +5,16 @@ ord: 55
 tags: ["rule"]
 fields:
   {
-    "delivery": "prompt"
+    "delivery": "code"
   }
+sources:
+  - kind: dir
+    ref: packages/mcp
+  - kind: dir
+    ref: apps/tagma/server/src/mcp
+  - kind: dir
+    ref: apps/tagma/server/src/plugins
+  - kind: dir
+    ref: packages/agent/src/agent/door
 ---
 Order, parallelism, defaults, and workarounds for third-party problems are built only for Tagma tools and operations. A third-party tool runs as its author declared it.

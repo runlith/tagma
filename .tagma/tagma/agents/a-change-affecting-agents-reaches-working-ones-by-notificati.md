@@ -5,7 +5,12 @@ ord: 101
 tags: ["rule"]
 fields:
   {
-    "delivery": "prompt"
+    "delivery": "code"
   }
+sources:
+  - kind: dir
+    ref: apps/tagma/server/src/native-harness/turns
+  - kind: dir
+    ref: apps/tagma/server/src/threads/turns
 ---
 Covers any setting or state an agent's work depends on: child models, review policy, delegation, connected accounts. An idle agent picks up the current state on its next run.

@@ -5,7 +5,12 @@ ord: 15
 tags: ["rule"]
 fields:
   {
-    "delivery": "prompt"
+    "delivery": "code"
   }
+sources:
+  - kind: dir
+    ref: apps
+  - kind: dir
+    ref: packages
 ---
 Covers fields, methods, and accessors, including fields with `$state`/`$derived`.

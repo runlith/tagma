@@ -5,7 +5,7 @@ ord: 56
 tags: ["rule"]
 fields:
   {
-    "delivery": "prompt"
+    "delivery": "code"
   }
 sources:
   - kind: dir
