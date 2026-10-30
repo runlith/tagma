@@ -43,8 +43,8 @@ sources:
 - A path inside a member checkout nested in another member's answers the nested member's owners and code rules.
 - The dock shows a group as one tile with a mark per member, its badge and crest summing the members' activity; it opens into the member last entered. The agent list covers every member's threads, a row of any member but the first carries that member's mark, and moving between members keeps the list, its folders and scroll, while Files, Git and terminals follow the member.
 - Thread folders belong to the group: a joining member's folders come in as they are, and a leaving member takes the folders its threads are filed in, a folder shared with the rest copied.
-- In the worktree view each member's places are their own groups, in group order, and each thread stands in its own member's place.
+- In the worktree view each member's places are their own groups, in group order, and each thread stands in its own member's place. Wherever the window stands, a member's thread shows its worktree in the peek, and its menu moves it between that member's worktrees or to another project.
 - A new thread's draft starts in the main checkout of the member the window stands in; the strip under the composer picks another member, and the draft goes there with its text and model.
 - A project in no group sees no change.
 
-**Limits.** A thread's home stays one project: moving one to another member is a move to another project. While the window stands in one member, the peek and menu of another member's thread show no worktree and offer no move between that member's worktrees.
+**Limits.** A thread's home stays one project: moving one to another member is a move to another project.
