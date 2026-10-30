@@ -142,4 +142,4 @@ edges:
 
 **Remaining.** Acceptance 1 alone. Rule [[93f04f23]] records it as an allowlist of who may call a model directly, but does not enforce it yet. The session building the architecture checks is enforcing it. Everything else is built (server f1fc96ce, app e0faa87f).
 
-**Proof.** Integration tests through `translate_block`, `generate_thread_title`, the decision door, `compact_thread` and the settings write door, with a scripted wire provider and a test adapter package whose program is a local script. The program conformance suite (7), the recorded-output contract test (8), a unit test of `choose` with an empty role (9), and the import rule (1).
+**Proof.** Integration tests through `translate_block`, `generate_thread_title`, the decision door, `compact_thread` and the settings write door, with a scripted wire provider and a test adapter package whose program is a local script. The program conformance suite (7), the recorded-output contract test (8), a unit test of `choose` with an empty role (9), and the call inspection (1).
