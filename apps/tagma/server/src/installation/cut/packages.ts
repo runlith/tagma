@@ -40,7 +40,7 @@ export const nativeCarried = Effect.fnUntraced(function* (server: string, llm: s
       carrying('typescript', facts, held);
       carrying('@embedpdf/pdfium', at('@runlith/agent-tools', server), held);
       carrying(OPENCODE, at('@runlith/adapter-opencode', server), held);
-      return { held, sharp: at('sharp', llm), cursor: at('@cursor/sdk', server) };
+      return { held, sharp: at('sharp', llm), cursor: at('@cursor/sdk', at('@runlith/adapter-cursor', server)) };
     },
     catch: (error) => `a compiled module could not be resolved: ${String(error)}`,
   });

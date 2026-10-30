@@ -29,12 +29,12 @@ const input = (rootKey: string, over: Partial<MetadataInput>): MetadataInput => 
   ...over,
 });
 
-const readWords = Effect.fnUntraced(function* (name: 'devin' | 'claude-code' | 'codex', rootKey: string, fileName: string, text: string) {
+const readWords = Effect.fnUntraced(function* (name: 'claude-code' | 'codex', rootKey: string, fileName: string, text: string) {
   const dir = yield* Home;
   const file = join(dir, fileName);
   const declared = builtinHarness(name).metadata?.words?.sources;
   if (declared === undefined) return yield* Effect.die(new Error(`${name} declares no reader-word source`));
-  const over: Partial<MetadataInput> = name === 'devin' ? { rootKey, exportPath: file } : { rootKey, transcriptPath: file };
+  const over: Partial<MetadataInput> = { rootKey, transcriptPath: file };
   const source = declared(input(rootKey, over)).find(
     (entry): entry is WordsSource & { root: string; path: string } => entry.root !== null && entry.path === file,
   );
@@ -47,46 +47,9 @@ const readWords = Effect.fnUntraced(function* (name: 'devin' | 'claude-code' | '
   return page._tag === 'Read' ? { ...page, value: heardWords(page.value) } : page;
 });
 
-const atif = (sessionId: string, steps: readonly { source: string; message: unknown }[]) =>
-  JSON.stringify({ schema_version: 'ATIF-v1.7', session_id: sessionId, agent: { model_name: 'SWE-2 Max' }, steps });
-
 const line = (value: unknown) => `${JSON.stringify(value)}\n`;
 
 layer(home)('reader words', (it) => {
-  it.effect('a Devin export reads the reader steps and nothing the CLI wrapped them in', () =>
-    Effect.gen(function* () {
-      const page = yield* readWords(
-        'devin',
-        'devin-1',
-        'devin-export.json',
-        atif('devin-1', [
-          { source: 'user', message: 'fix the black gap under the terminal' },
-          { source: 'user', message: [{ type: 'text', text: 'and pin the footer' }] },
-          { source: 'agent', message: 'working on it' },
-          { source: 'user', message: '<command-name>init</command-name>' },
-          { source: 'system', message: 'you are Devin' },
-        ]),
-      );
-      expect(page).toMatchObject({
-        _tag: 'Read',
-        complete: true,
-        value: { words: ['fix the black gap under the terminal', 'and pin the footer'] },
-      });
-    }),
-  );
-
-  it.effect('a Devin export naming another session is refused by identity', () =>
-    Effect.gen(function* () {
-      const page = yield* readWords(
-        'devin',
-        'devin-1',
-        'devin-foreign.json',
-        atif('devin-other', [{ source: 'user', message: 'words of a different session' }]),
-      );
-      expect(page).toEqual({ _tag: 'Unreadable', reason: 'identity' });
-    }),
-  );
-
   it.effect('a Claude transcript reads user entries, skips sidechains, injected context and the records that carry no message', () =>
     Effect.gen(function* () {
       const page = yield* readWords(
@@ -158,39 +121,6 @@ layer(home)('reader words', (it) => {
         'claude-foreign.jsonl',
         line({ type: 'user', sessionId: 'claude-2', message: { role: 'user', content: 'not this session' } }),
       );
-      expect(page).toEqual({ _tag: 'Unreadable', reason: 'identity' });
-    }),
-  );
-
-  it.effect('a Codex rollout reads user input_text under the session its meta names', () =>
-    Effect.gen(function* () {
-      const page = yield* readWords(
-        'codex',
-        'codex-1',
-        'codex-rollout.jsonl',
-        [
-          line({ type: 'session_meta', payload: { id: 'codex-1' } }),
-          line({
-            type: 'response_item',
-            payload: { type: 'message', role: 'developer', content: [{ type: 'input_text', text: '<permissions instructions>' }] },
-          }),
-          line({
-            type: 'response_item',
-            payload: { type: 'message', role: 'user', content: [{ type: 'input_text', text: 'name this thread' }] },
-          }),
-          line({
-            type: 'response_item',
-            payload: { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'done' }] },
-          }),
-        ].join(''),
-      );
-      expect(page).toMatchObject({ _tag: 'Read', complete: true, value: { words: ['name this thread'] } });
-    }),
-  );
-
-  it.effect('a Codex rollout whose meta names another session is refused by identity', () =>
-    Effect.gen(function* () {
-      const page = yield* readWords('codex', 'codex-1', 'codex-foreign.jsonl', line({ type: 'session_meta', payload: { id: 'codex-2' } }));
       expect(page).toEqual({ _tag: 'Unreadable', reason: 'identity' });
     }),
   );

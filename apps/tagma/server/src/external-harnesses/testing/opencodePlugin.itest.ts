@@ -2,13 +2,13 @@ import { expect } from 'bun:test';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { it } from '@runlith/effect-test';
 import { Deferred, Effect, FileSystem, Layer } from 'effect';
-import { shippedHarnessAdaptersLayer } from '../../testing/builtin.js';
+import { shippedHarnessAdaptersLayer } from './builtin.js';
 import { accountEnvironment } from '@runlith/adapter-opencode/environment';
 import { installedProgram, openHost } from '@runlith/adapter-opencode/host';
-import { entryPath } from '../../../installation/contract/wire/junction.js';
-import { installHooks } from '../../installs/hookWrite.js';
-import { declareInto, MCP_SERVER_NAME } from '../../installs/mcpDeclaration.js';
-import { opencode } from './row.js';
+import { entryPath } from '../../installation/contract/wire/junction.js';
+import { installHooks } from '../installs/hookWrite.js';
+import { declareInto, MCP_SERVER_NAME } from '../installs/mcpDeclaration.js';
+import { builtinHarness } from './builtin.js';
 import { dirname, join } from 'node:path';
 
 it.live('the installed V2 plugin delivers lifecycle and file hooks, injects law and connects the declared MCP process', () =>
@@ -143,6 +143,7 @@ if (process.argv[2] === 'mcp-serve') {
     yield* installHooks(root);
     expect((yield* installHooks(root)).every((row) => row.write === 'current')).toBe(true);
     const directory = join(root, 'config');
+    const opencode = builtinHarness('opencode');
     const declared = yield* Effect.tryPromise(() => declareInto(root, opencode, opencode.mcp!, [process.execPath, fixture], directory));
     expect(declared.write).toBe('created');
     const environment: Record<string, string | undefined> = { ...process.env, OPENCODE_DISABLE_MODELS_FETCH: 'true' };

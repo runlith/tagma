@@ -9,6 +9,21 @@
       "bun": "./src/adapter.ts",
       "default": "./src/adapter.ts"
     },
+    "./harness": {
+      "types": "./src/harness/opencode.ts",
+      "bun": "./src/harness/opencode.ts",
+      "default": "./src/harness/opencode.ts"
+    },
+    "./harness/session": {
+      "types": "./src/harness/session.ts",
+      "bun": "./src/harness/session.ts",
+      "default": "./src/harness/session.ts"
+    },
+    "./runner": {
+      "types": "./src/runner/run.ts",
+      "bun": "./src/runner/run.ts",
+      "default": "./src/runner/run.ts"
+    },
     "./host": {
       "types": "./src/host.ts",
       "bun": "./src/host.ts",
@@ -41,12 +56,18 @@
     "@effect/platform-bun": "catalog:",
     "@opencode/cli": "2.1.3",
     "@opencode/client": "2.1.3",
+    "@opencode/plugin": "2.1.3",
+    "@runlith/acp": "workspace:*",
+    "@runlith/agent": "workspace:*",
+    "@runlith/hosted-runner": "workspace:*",
     "@runlith/llm": "workspace:*",
+    "@runlith/ndjson-rpc": "workspace:*",
     "@runlith/tagma": "workspace:*",
     "effect": "catalog:"
   },
   "devDependencies": {
     "@runlith/effect-test": "workspace:*",
+    "@runlith/testbed": "workspace:*",
     "@runlith/tsconfig": "workspace:*",
     "@types/bun": "catalog:"
   }

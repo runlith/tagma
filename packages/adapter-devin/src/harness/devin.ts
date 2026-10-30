@@ -1,7 +1,7 @@
-import type { TerminalHarnessAdapter } from '../../contract/service/adapter.js';
+import type { HarnessProvider } from '@runlith/tagma/adapter/provider';
 import { devinReader } from './reader.js';
-
-import { DEVIN_PROVIDER } from '@runlith/adapter-devin/models/devin';
+import { devinDescription, DEVIN_PROVIDER } from '../models/devin.js';
+import { icon } from '../icon.js';
 import {
   adoptedPermissionArgv,
   chosenModelArgv,
@@ -9,6 +9,7 @@ import {
   oneValue,
   UNMEASURED_HOOK_CONTEXT,
   type HarnessModelArgv,
+  type TerminalSurface,
   type HarnessPermissionArgv,
   type HarnessQuestionOption,
   type ScreenAsk,
@@ -110,10 +111,8 @@ const devinWidgetKeys = (ask: ScreenAsk, value: string): readonly HarnessWidgetK
   return [...Array.from<HarnessWidgetKey>({ length: Math.abs(to - from) }).fill(step), 'enter'];
 };
 
-export const devin: TerminalHarnessAdapter = {
-  harness: 'devin',
+export const devinTerminal: TerminalSurface = {
   tools: LEGACY_TOOLS,
-  label: 'Devin',
   prefix: 'dv',
   binary: 'devin',
   metadata: devinReader,
@@ -183,5 +182,15 @@ export const devin: TerminalHarnessAdapter = {
   quit: null,
   callEnvelopeMs: null,
   ends: { interrupt: 'screen', idle: null, tail: 'prompt' },
+};
+
+export const devin: HarnessProvider = {
+  ...devinDescription,
+  kind: 'harness',
+  auth: 'cli',
+  icon,
+  environment: () => [],
+  harnessLabel: 'Devin',
+  terminal: devinTerminal,
   acp: devinAcp(model),
 };

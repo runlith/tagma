@@ -4,7 +4,7 @@ import type { TransportFailure } from '@runlith/agent/transcript/entries';
 import { familyRetries, type WireFailureFamily } from '@runlith/llm/schema/errors';
 import type { InteractionUpdate, SDKCustomTool, SDKJsonValue, TokenUsage } from '@cursor/sdk';
 import { CursorSdk, type Outcome, type Sending } from './channel.js';
-import type { CursorSelection } from '@runlith/adapter-cursor/selection';
+import type { CursorSelection } from '../selection.js';
 import type { Relayed } from '@runlith/hosted-runner/relay';
 
 const mutableJson = (value: Schema.Json): SDKJsonValue => {

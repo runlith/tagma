@@ -62,42 +62,6 @@ test('Claude: the final assistant message ends the run, an interrupt mark aborts
   expect(endOf('claude-code', [asked, { ...claudeAssistant(4, 'end_turn', text('side')), isSidechain: true }])).toEqual({ _tag: 'Open' });
 });
 
-const codex = (seconds: number, payload: unknown) => ({ timestamp: at(seconds), type: 'event_msg', payload });
-
-test('Codex: task_complete carries the answer, turn_aborted aborts, and a started task is open', () => {
-  const started = codex(1, { type: 'task_started', turn_id: 't' });
-  expect(
-    endOf('codex', [started, codex(5, { type: 'token_count' }), codex(6, { type: 'task_complete', last_agent_message: 'BANANA DONE' })]),
-  ).toEqual({
-    _tag: 'Completed',
-    message: 'BANANA DONE',
-  });
-  expect(endOf('codex', [started, codex(6, { type: 'turn_aborted', reason: 'interrupted' }), codex(6, { type: 'token_count' })])).toEqual({
-    _tag: 'Aborted',
-  });
-  expect(endOf('codex', [codex(-20, { type: 'task_complete', last_agent_message: 'older' }), started])).toEqual({ _tag: 'Open' });
-});
-
-const atif = (seconds: number, source: string, message: string, calls = 0) => ({
-  timestamp: at(seconds),
-  source,
-  message,
-  tool_calls: Array.from({ length: calls }, () => ({})),
-});
-
-test('Devin: an agent step with no tool call ends the run, the system interrupt step aborts it, and an interrupt in a tool wait leaves it open', () => {
-  expect(endOf('devin', [atif(1, 'user', 'go'), atif(2, 'agent', 'looking', 1), atif(3, 'agent', 'BANANA')])).toEqual({
-    _tag: 'Completed',
-    message: 'BANANA',
-  });
-  expect(endOf('devin', [atif(1, 'user', 'go'), atif(2, 'agent', 'partial'), atif(3, 'system', '[Response interrupted by user]')])).toEqual(
-    {
-      _tag: 'Aborted',
-    },
-  );
-  expect(endOf('devin', [atif(1, 'user', 'go'), atif(2, 'agent', 'waiting', 1)])).toEqual({ _tag: 'Open' });
-});
-
 const grok = (seconds: number, update: Record<string, unknown>) => ({
   timestamp: Math.floor(START / 1000) + seconds,
   method: 'session/update',
@@ -128,26 +92,4 @@ test('Grok: turn_completed ends the run with the message streamed after the last
 test('Grok: a turn completed in the same second the run began is still read, because seconds cannot order inside one', () => {
   const same = { ...grok(0, { sessionUpdate: 'turn_completed', stop_reason: 'cancelled' }), timestamp: Math.floor(START / 1000) };
   expect(endOf('grok', [same])).toEqual({ _tag: 'Aborted' });
-});
-
-const cursorUser = { role: 'user', message: { content: text('<user_query>go</user_query>') } };
-const cursorAnswer = (value: string) => ({ role: 'assistant', message: { content: text(value) } });
-
-test('Cursor: turn_ended says how the turn ended, an answer record ends it without the mark, and a tool call leaves it open', () => {
-  expect(endOf('cursor', [cursorUser, cursorAnswer('APPLE'), { type: 'turn_ended', status: 'success' }])).toEqual({
-    _tag: 'Completed',
-    message: 'APPLE',
-  });
-  expect(endOf('cursor', [cursorUser, { type: 'turn_ended', status: 'aborted', error: 'User aborted/interrupted manually.' }])).toEqual({
-    _tag: 'Aborted',
-  });
-  expect(endOf('cursor', [cursorUser, { type: 'turn_ended', status: 'error', error: 'Named models unavailable' }])).toEqual({
-    _tag: 'Failed',
-    reason: 'Named models unavailable',
-  });
-  expect(endOf('cursor', [cursorUser, cursorAnswer('DONE')])).toEqual({ _tag: 'Completed', message: 'DONE' });
-  expect(endOf('cursor', [cursorUser, { role: 'assistant', message: { content: [{ type: 'tool_use', name: 'Shell' }] } }])).toEqual({
-    _tag: 'Open',
-  });
-  expect(endOf('cursor', [cursorUser])).toEqual({ _tag: 'Open' });
 });

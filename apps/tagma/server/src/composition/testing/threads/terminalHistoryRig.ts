@@ -1,4 +1,5 @@
 import { isAbsolute, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { Context, Effect, FileSystem, Schedule, Stream } from 'effect';
 import { SHIPPED_HARNESSES } from '../../../external-harnesses/testing/builtin.js';
 import { WORLD_COMMAND } from '../../../installation/contract/wire/layout.js';
@@ -213,7 +214,7 @@ export const terminalHistoryWorld = Effect.gen(function* () {
             `case "$1" in --version) echo "${harness === 'codex' ? 'codex-cli 0.162.0' : 'grok 1.0.62'}"; exit 0;; esac`,
             ...(harness === 'codex'
               ? [
-                  `if [ "$1" = app-server ]; then exec ${process.execPath} ${join(stage, 'cut.js')} ${cuts} ${forks} ${join(import.meta.dir, '../../../external-harnesses/testing/fixtures/codex/fork-rpc.json')}; fi`,
+                  `if [ "$1" = app-server ]; then exec ${process.execPath} ${join(stage, 'cut.js')} ${cuts} ${forks} ${fileURLToPath(import.meta.resolve('@runlith/adapter-openai/testing/fixtures/fork-rpc.json'))}; fi`,
                 ]
               : []),
           ];

@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
-import { codex } from './row.js';
-import forkRpc from '../../testing/fixtures/codex/fork-rpc.json';
+import { codexTerminal as codex } from './codex.js';
+import forkRpc from '../testing/fixtures/fork-rpc.json';
 
 const prepare = codex.launch.prepare!;
 const whole = codex.launch.cut!.whole!;

@@ -9,9 +9,11 @@ import { makeHarnessAdapters } from '../adapters.js';
 import { HarnessAdapters } from '../contract/service/adapters.js';
 import { builtinHarness, shippedHarnessAdaptersLayer } from '../testing/builtin.js';
 import type { HarnessProvider } from '@runlith/tagma/adapter/provider';
-import { codexCodec } from '../vendors/codex/codec.js';
+import { codexTerminal } from '@runlith/adapter-openai/harness';
 import { installHooks } from './hookWrite.js';
 import { ownPlaces } from './targets.js';
+
+const codexCodec = codexTerminal.hooks!.codec;
 
 class Home extends Context.Service<Home, { readonly repo: string; readonly home: string; readonly bare: string }>()('test/hooks/Home') {}
 

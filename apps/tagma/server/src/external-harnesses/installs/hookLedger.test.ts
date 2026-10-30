@@ -5,10 +5,12 @@ import { Context, Effect, FileSystem, Layer } from 'effect';
 import * as MemoryFileSystem from '@runlith/testbed/memory';
 import { shippedHarnessAdaptersLayer } from '../testing/builtin.js';
 import { HarnessAdapters } from '../contract/service/adapters.js';
-import { codexCodec } from '../vendors/codex/codec.js';
+import { codexTerminal } from '@runlith/adapter-openai/harness';
 import { hookLedger } from './hookLedger.js';
 import { hookFiles } from './hookInstall.js';
 import { ownPlaces, type OwnPlace } from './targets.js';
+
+const codexCodec = codexTerminal.hooks!.codec;
 
 class Home extends Context.Service<Home, { readonly repo: string; readonly store: string; readonly target: string }>()(
   'test/ledger/Home',

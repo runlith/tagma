@@ -1,13 +1,12 @@
 import { CALL_ENVELOPE_MS } from '@runlith/agent/callProgress';
-import { WORLD_COMMAND } from '../../../installation/contract/wire/layout.js';
 import type { AcpProfile } from '@runlith/tagma/adapter/harness';
-import { SAID } from '@runlith/hosted-runner/wire/extensions';
+import { COMPACTED, RETRYING, SAID } from '@runlith/hosted-runner/wire/extensions';
 
-export const opencodeAcp: AcpProfile = {
+export const cursorAcp: AcpProfile = {
   argv: (choice) => [
-    WORLD_COMMAND,
+    'tagma',
     'harness-run',
-    'opencode',
+    'cursor',
     ...(choice === undefined ? [] : ['--model', choice.model, ...(choice.rung === null ? [] : ['--effort', choice.rung])]),
   ],
   configure: (choice, switches) => [
@@ -21,7 +20,7 @@ export const opencodeAcp: AcpProfile = {
   ],
   reportedModel: 'model',
   hosts: 'tagma',
-  serves: 'opencode',
+  serves: 'cursor',
   web: 'none',
   mode: 'agent',
   proves: {
@@ -36,14 +35,14 @@ export const opencodeAcp: AcpProfile = {
     aside: 'none',
   },
   toolCatalog: 'turn',
-  storage: { environment: 'OPENCODE_DATA_DIR', folder: 'opencode' },
+  storage: { environment: 'CURSOR_DATA_DIR', folder: 'cursor-sdk' },
   graceMs: 5_000,
   callEnvelopeMs: CALL_ENVELOPE_MS,
   handshakeMs: 60_000,
-  login: { command: 'sign in with the official OpenCode CLI on the Providers screen', codes: [-32000] },
+  login: { command: 'sign in to Cursor on the Providers screen', codes: [-32000] },
   lockedCode: null,
   otherMutates: false,
   midTurn: 'after-turn',
   sharedSessions: false,
-  extensions: [SAID],
+  extensions: [SAID, COMPACTED, RETRYING],
 };

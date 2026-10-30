@@ -1298,11 +1298,8 @@
     "typecheck": "runlith-typecheck"
   },
   "dependencies": {
-    "@cursor/sdk": "1.0.40",
     "@effect/platform-bun": "catalog:",
     "@effect/sql-sqlite-bun": "catalog:",
-    "@opencode/client": "2.1.3",
-    "@opencode/plugin": "2.1.3",
     "@paulirish/trace_engine": "0.0.67",
     "@runlith/acp": "workspace:*",
     "@runlith/activity": "workspace:*",

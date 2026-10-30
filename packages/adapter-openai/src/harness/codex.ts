@@ -1,9 +1,12 @@
 import { Predicate, Schema } from 'effect';
-import { ASKS_IN_REVIEW, ASKS_NEVER } from '../../../platform/contract/wire/conditions.js';
+import type { HarnessProvider } from '@runlith/tagma/adapter/provider';
 import { codexReader } from './reader.js';
 
 import {
+  ASKS_IN_REVIEW,
+  ASKS_NEVER,
   adoptedPermissionArgv,
+  type TerminalSurface,
   chosenModelArgv,
   INTERRUPT_KEY,
   oneValue,
@@ -20,11 +23,12 @@ import {
   type HarnessWidgetKey,
   type HarnessQuestionOption,
 } from '@runlith/tagma/adapter/harness';
-import type { TerminalHarnessAdapter } from '../../contract/service/adapter.js';
-import { CODEX_PROVIDER } from '@runlith/adapter-openai/models/openai';
+import { CODEX_PROVIDER, codexDescription } from '../models/openai.js';
+import { codexAccounts } from '../accounts.js';
+import { icon } from '../icon.js';
 import { CLAUDE_EVENTS, claudeFiles, claudePrinted, claudeOccasion } from '@runlith/tagma/adapter/claude-hooks';
 import { field, modelField, namedCall, nested, patchFiles, rootOfArgv, sessionIdOf, tail } from '@runlith/tagma/adapter/payload';
-import { SESSION_VARIABLES } from '../../contract/wire/sessionVariables.js';
+import { CODEX_SESSION } from './session.js';
 import { codexCarry } from './carry.js';
 import { codexCodec } from './codec.js';
 
@@ -190,8 +194,7 @@ const cut: HarnessCutMaking = {
   },
 };
 
-export const codex: TerminalHarnessAdapter = {
-  harness: 'codex',
+export const codexTerminal: TerminalSurface = {
   tools: {
     names: 'vendor',
     byName: {
@@ -237,9 +240,8 @@ export const codex: TerminalHarnessAdapter = {
       image_genimagegen: { kind: 'write', approval: ASKS_IN_REVIEW },
     },
   },
-  label: 'Codex',
   prefix: 'cx',
-  variable: SESSION_VARIABLES.codex,
+  variable: CODEX_SESSION.variable,
   binary: 'codex',
   install: 'npm install -g @openai/codex',
   metadata: codexReader,
@@ -309,4 +311,29 @@ export const codex: TerminalHarnessAdapter = {
   quit: [['esc'], [INTERRUPT_KEY], [INTERRUPT_KEY]],
   callEnvelopeMs: null,
   ends: { interrupt: 'screen', idle: null, tail: 'prompt' },
+};
+
+export const codex: HarnessProvider = {
+  ...codexDescription,
+  kind: 'harness',
+  auth: 'cli',
+  icon,
+  harnessLabel: 'Codex',
+  accounts: codexAccounts,
+  accountMode: {
+    section: 'codex',
+    title: 'Codex',
+    default: 'codex',
+    id: 'codex',
+    label: 'Codex',
+    hint: 'Uses the logins of the codex CLI on this machine. Codex keeps and renews the token.',
+    missing: "codex isn't installed",
+    defaultPlace: '~/.codex',
+  },
+  environment: (directory) => [
+    directory === null ? { _tag: 'Unset', name: 'CODEX_HOME' } : { _tag: 'Set', name: 'CODEX_HOME', value: directory },
+    { _tag: 'Unset', name: 'CODEX_API_KEY' },
+    { _tag: 'Unset', name: 'CODEX_ACCESS_TOKEN' },
+  ],
+  terminal: codexTerminal,
 };

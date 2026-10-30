@@ -3,8 +3,6 @@ import * as MemoryFileSystem from '@runlith/testbed/memory';
 import { layer } from '@runlith/effect-test';
 import { Deferred, Effect, Fiber, FileSystem } from 'effect';
 import type { Outlet } from '@runlith/acp/agent';
-import { act, receive, start } from '@runlith/acp/client';
-import { project } from '../../protocol/projection.js';
 import { hostedAgent } from '@runlith/hosted-runner/agent';
 import type { HostedDoor } from '@runlith/hosted-runner/door';
 import { makeCursorCycle } from './cycle.js';
@@ -146,23 +144,17 @@ layer(MemoryFileSystem.layer)('Cursor hosted session', (it) => {
       )({ update: () => Effect.void, notify: () => Effect.void, request: () => Effect.die('no requests') });
       const setup = yield* handlers.newSession({ cwd: directory, mcpServers: [] });
       const params = { sessionId: setup.sessionId, prompt: [{ type: 'text' as const, text: 'go' }] };
-      const prompt = act(start('process'), { _tag: 'Prompt', turn: 'run', envelopes: [], params });
       const result = yield* Effect.result(handlers.prompt(params));
       expect(result._tag).toBe('Failure');
       if (result._tag !== 'Failure') return;
-      const step = receive(prompt.state, {
-        _tag: 'Frame',
-        inbound: { start: 0n, end: 1n, message: { _tag: 'Error', id: prompt.request, error: result.failure } },
-      });
-      const projected = project(step.events, [], '2026-10-22T00:00:00.000Z', true);
-      expect(projected.ended).toMatchObject([
-        {
-          status: 'failed',
-          failure: expect.stringContaining('capacity refusal'),
-          cause: { reason: { family: 'rate-limit' }, retryable: true, modelStarted: false },
-          rest: { inputTokens: 20, outputTokens: 10, totalTokens: 30 },
+      expect(result.failure).toMatchObject({
+        code: -32603,
+        message: 'capacity refusal',
+        data: {
+          'tagma/failure': { reason: { family: 'rate-limit' }, retryable: true, modelStarted: false },
+          usage: { inputTokens: 20, outputTokens: 10, totalTokens: 30 },
         },
-      ]);
+      });
       yield* handlers.ended;
     }),
   );

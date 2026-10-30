@@ -1,4 +1,4 @@
-import type { TerminalHarnessAdapter } from '../../contract/service/adapter.js';
+import type { TerminalSurface } from '@runlith/tagma/adapter/harness';
 import { cursorReader } from './reader.js';
 
 import {
@@ -18,9 +18,6 @@ import {
 } from '@runlith/tagma/adapter/harness';
 import { claudeFiles, claudePrinted } from '@runlith/tagma/adapter/claude-hooks';
 import { field, modelField, nested, questionTool, rootOfArgv, sessionIdOf, tail } from '@runlith/tagma/adapter/payload';
-import { icon as CURSOR_MARK } from '@runlith/adapter-cursor/icon';
-
-import { cursorAcp } from './acp.js';
 import { cursorCodec } from './codec.js';
 
 const CURSOR_SELECTED = /^→ (.+)$/;
@@ -146,16 +143,12 @@ const cursorOccasion: HookOccasion = (event) => {
   }
 };
 
-export const cursor: TerminalHarnessAdapter = {
-  harness: 'cursor',
+export const cursorTerminal: TerminalSurface = {
   tools: LEGACY_TOOLS,
-  label: 'Cursor',
-  mark: CURSOR_MARK,
   prefix: 'cu',
   binary: 'cursor-agent',
   install: 'curl https://cursor.com/install -fsS | bash',
   metadata: cursorReader,
-  acp: cursorAcp,
   launch: {
     permission,
     model,

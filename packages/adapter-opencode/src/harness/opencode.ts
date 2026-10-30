@@ -1,25 +1,31 @@
-import { installedProgram } from '@runlith/adapter-opencode/host';
-import { adoptedPermissionArgv, UNMEASURED_HOOK_CONTEXT } from '@runlith/tagma/adapter/harness';
-
-import { icon } from '@runlith/adapter-opencode/icon';
-import { ASKS_IN_REVIEW, ASKS_NEVER } from '../../../platform/contract/wire/conditions.js';
-import type { TerminalHarnessAdapter } from '../../contract/service/adapter.js';
+import { Effect } from 'effect';
+import { QuotaUnavailable } from '@runlith/llm/schema/quota';
+import type { HarnessProvider } from '@runlith/tagma/adapter/provider';
+import {
+  adoptedPermissionArgv,
+  ASKS_IN_REVIEW,
+  ASKS_NEVER,
+  UNMEASURED_HOOK_CONTEXT,
+  type TerminalSurface,
+} from '@runlith/tagma/adapter/harness';
+import { accounts } from '../accounts.js';
+import { catalog } from '../catalog.js';
+import { accountEnvironment } from '../environment.js';
+import { installedProgram } from '../host.js';
+import { icon } from '../icon.js';
 import { claudeCodec, claudeOccasion } from '@runlith/tagma/adapter/claude-hooks';
 import { field, modelField, namedCall, rootOfArgv, sessionIdOf } from '@runlith/tagma/adapter/payload';
 import { events, filesOf, printedOf } from './format.js';
 import plugin from './plugin.ts' with { type: 'text' };
 import { opencodeAcp } from './acp.js';
-import { SESSION_VARIABLES } from '../../contract/wire/sessionVariables.js';
+import { OPENCODE_SESSION } from './session.js';
 
 const permission = { tagma: ['--auto'] } as const;
 const prompted = (prompt: string | undefined): string[] => (prompt === undefined ? [] : ['--prompt', prompt]);
 
-export const opencode: TerminalHarnessAdapter = {
-  harness: 'opencode',
-  label: 'OpenCode',
-  mark: icon,
+const terminal: TerminalSurface = {
   prefix: 'oc',
-  variable: SESSION_VARIABLES.opencode,
+  variable: OPENCODE_SESSION.variable,
   binary: installedProgram(),
   launch: {
     permission,
@@ -103,5 +109,35 @@ export const opencode: TerminalHarnessAdapter = {
   quit: null,
   callEnvelopeMs: null,
   ends: { interrupt: 'record', idle: null, tail: 'final' },
+};
+
+export const opencode: HarnessProvider = {
+  id: 'opencode',
+  label: 'OpenCode',
+  kind: 'harness',
+  auth: 'cli',
+  icon,
+  harnessLabel: 'OpenCode',
+  mark: icon,
+  accounts: accounts(installedProgram()),
+  catalog,
+  quota: {
+    fromHeaders: () => null,
+    read: () => Effect.fail(new QuotaUnavailable({ reason: 'OpenCode does not expose upstream account quota.' })),
+  },
+  environment: accountEnvironment,
+  dynamicCatalog: true,
+  models: {},
+  defaultTextModel: '',
+  cacheLifetime: { promisedSeconds: null, prior: null },
+  accountMode: {
+    section: 'opencode',
+    title: 'OpenCode',
+    default: 'opencode',
+    id: 'opencode',
+    label: 'OpenCode',
+    hint: 'Uses the upstream logins kept by OpenCode in this profile. OpenCode keeps and renews its credentials.',
+  },
+  terminal,
   acp: opencodeAcp,
 };

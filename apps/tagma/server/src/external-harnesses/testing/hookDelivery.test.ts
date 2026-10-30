@@ -11,7 +11,6 @@ import { makeHookDelivery, type HookDoor } from '../hooks/delivery.js';
 import { hookEventOf } from '../hooks/dispatch.js';
 import { builtinRows } from './hookRows.js';
 import { declaredHarness } from '../adapter/declared.js';
-import { SESSION_SIGNERS } from '../contract/wire/sessionVariables.js';
 import { grok } from '@runlith/adapter-xai/harness';
 import { GRANT_VARIABLE } from '../../platform/contract/service/credentials.js';
 import type { HarnessReceipt, HarnessReportInput } from '../../threads/contract/wire/harness/observation.js';
@@ -200,7 +199,7 @@ layer(Layer.merge(MemoryFileSystem.layer, Layer.succeed(CurrentInvocation, at)))
           'hook',
         );
         const row = named === 'grok' ? declaredHarness(grok)! : builtinRows(named)!.named!;
-        const signers = [...SESSION_SIGNERS, { harness: grok.id, variable: grok.terminal?.variable }];
+        const signers = [{ harness: grok.id, variable: grok.terminal?.variable }];
         return hookEventOf('stop', invocation, () => Effect.succeed(door), { named: row, rows: [row], signers }).pipe(
           Effect.provideService(CurrentInvocation, invocation),
         );

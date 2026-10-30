@@ -14,7 +14,7 @@ import { OPERATOR_PRINCIPAL } from '../../../platform/contract/wire/actor.js';
 import { HarnessReports } from '../../../external-harnesses/contract/service/reports.js';
 import { VendorTurns } from '../../../external-harnesses/testing/doubles.js';
 import { MachineUnits } from '../../../platform/contract/service/units.js';
-import forkRpc from '../../../external-harnesses/testing/fixtures/codex/fork-rpc.json';
+import forkRpc from '@runlith/adapter-openai/testing/fixtures/fork-rpc.json';
 import { GRANT_HEADER } from '../../../platform/contract/service/credentials.js';
 import { grantFor } from '../../../platform/testing/grants.js';
 import { harnessSessionActive } from '../../../threads/contract/wire/harness/session.js';

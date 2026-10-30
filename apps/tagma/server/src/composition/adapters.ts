@@ -31,10 +31,16 @@ export const BUILTIN_ADAPTERS: readonly AdapterSource[] = [
 
 export const BUILTIN_HOSTED_RUNNERS: ReadonlyMap<string, () => Promise<HostedRunner>> = new Map([
   ['claude-code', async () => (await import('@runlith/adapter-anthropic/runner')).claudeRunner],
+  ['cursor', async () => (await import('@runlith/adapter-cursor/runner')).cursorRunner],
+  ['opencode', async () => (await import('@runlith/adapter-opencode/runner')).opencodeRunner],
 ]);
 
 export const BUILTIN_HARNESS_PROVIDERS: ReadonlyMap<string, () => Promise<HarnessProvider>> = new Map([
   ['claude-code', async () => (await import('@runlith/adapter-anthropic/harness')).claudeCode],
+  ['cursor', async () => (await import('@runlith/adapter-cursor/adapter')).cursor],
+  ['opencode', async () => (await import('@runlith/adapter-opencode/harness')).opencode],
+  ['codex', async () => (await import('@runlith/adapter-openai/harness')).codex],
   ['grok', async () => (await import('@runlith/adapter-xai/harness')).grok],
   ['gemini', async () => (await import('@runlith/adapter-google/harness')).gemini],
+  ['devin', async () => (await import('@runlith/adapter-devin/harness')).devin],
 ]);

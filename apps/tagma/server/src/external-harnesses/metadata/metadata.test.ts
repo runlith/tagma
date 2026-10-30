@@ -6,13 +6,12 @@ import { join } from 'node:path';
 import { MetadataInvalid, emptyValues, fileSource } from '@runlith/tagma/adapter/metadata';
 import { MetadataFile, fileLocationReader } from './file.js';
 import { claudeCode } from '@runlith/adapter-anthropic/harness';
-import { codex, codexIndex, codexRolloutName, codexSources } from '../vendors/codex/metadata.js';
-import { cursorSources } from '../vendors/cursor/metadata.js';
+import { codexTerminal } from '@runlith/adapter-openai/harness';
 import { MetadataIndex } from './sessionIndex.js';
 import { metadataField } from './fields.js';
 import { METADATA_LIMITS } from './policy.js';
 import type { MetadataInput } from './input.js';
-import { devin, devinTitle } from '../vendors/devin/metadata.js';
+import { devin as devinProvider } from '@runlith/adapter-devin/harness';
 import { grok } from '@runlith/adapter-xai/harness';
 import { NamespaceId } from '@runlith/files/namespace';
 import { EnvironmentId } from '../../workspace/contract/wire/environments.js';
@@ -31,6 +30,25 @@ const home = Layer.effect(
 const claudeReader = claudeCode.terminal!.metadata!;
 const claude = claudeReader.artifact!.fold;
 const claudeSources = claudeReader.sources;
+const codex = codexTerminal.metadata!.artifact!.fold;
+const codexIndexSource = codexTerminal.metadata!.sources({
+  rootKey: 'index',
+  cwd: '/work',
+  storage: { entries: [{ name: 'HOME', value: '/home' }] },
+})[0]!;
+if (codexIndexSource.kind !== 'index') throw new Error('expected an index source');
+const codexIndex = codexIndexSource.parse;
+
+const devin = (rootKey: string, text: string) => {
+  const source = devinProvider.terminal!.metadata!.sources({
+    rootKey,
+    cwd: '/work',
+    storage: { entries: [] },
+    exportPath: '/export.json',
+  })[0]!;
+  if (source.kind !== 'file') throw new Error('expected an export file source');
+  return source.fold.line(source.fold.empty(), text);
+};
 
 const line = (value: unknown) => `${JSON.stringify(value)}\n`;
 const assistant = (sessionId: string, model: string) => line({ type: 'assistant', sessionId, message: { model } });
@@ -230,20 +248,6 @@ layer(home)('vendor metadata', (it) => {
     }),
   );
 
-  test('Codex recorded effort and titles join exact ids without inventing missing effort', () => {
-    const reader = codex('codex-one');
-    let value = reader.line(reader.empty(), line({ type: 'session_meta', payload: { id: 'codex-one', session_id: 'codex-one' } }));
-    value = reader.line(value, line({ type: 'turn_context', payload: { turn_id: 'turn-one', model: 'gpt-5.6-luna', effort: 'low' } }));
-    expect(value).toMatchObject({
-      model: { value: 'gpt-5.6-luna', turnId: 'turn-one', claim: 'last-recorded' },
-      effort: { value: 'low', turnId: 'turn-one' },
-    });
-    value = reader.line(value, line({ type: 'turn_context', payload: { turn_id: 'turn-two', model: 'gpt-5.6-luna' } }));
-    expect(value.effort).toBeNull();
-    expect(() => reader.line(reader.empty(), line({ type: 'session_meta', payload: { id: 'codex-two' } }))).toThrow(MetadataInvalid);
-    expect(codexIndex(line({ id: 'codex-one', thread_name: 'One' }))).toEqual({ id: 'codex-one', title: 'One' });
-  });
-
   it.effect('a skipped codex envelope counts only when it could have carried model or effort', () =>
     Effect.gen(function* () {
       const root = yield* Home;
@@ -375,30 +379,6 @@ layer(home)('vendor metadata', (it) => {
     }),
   );
 
-  test('Devin export/list preserve recorded claims and refuse foreign identities', () => {
-    const atif = JSON.stringify({ schema_version: 'ATIF-v1.7', session_id: 'clumsy-tower', agent: { model_name: 'SWE-2 Max' } });
-    expect(devin('clumsy-tower', atif).model).toMatchObject({ value: 'SWE-2 Max', claim: 'last-recorded' });
-    expect(() => devin('other', atif)).toThrow(MetadataInvalid);
-    expect(
-      devinTitle(
-        'clumsy-tower',
-        JSON.stringify([
-          { id: 'uuid-one', short_id: 'clumsy-tower', title: 'One' },
-          { id: 'uuid-two', short_id: 'other', title: 'Two' },
-        ]),
-      )?.value,
-    ).toBe('One');
-    expect(() =>
-      devinTitle(
-        'clumsy-tower',
-        JSON.stringify([
-          { id: 'clumsy-tower', title: 'One' },
-          { id: 'uuid-two', short_id: 'clumsy-tower', title: 'Two' },
-        ]),
-      ),
-    ).toThrow(MetadataInvalid);
-  });
-
   const testInput = (overrides: Partial<MetadataInput> & { rootKey: string }): MetadataInput => ({
     cwd: '/work/proj',
     execution: { execution: 'e-1', incarnation: 1 },
@@ -413,30 +393,6 @@ layer(home)('vendor metadata', (it) => {
     } as HarnessStorage,
     ...overrides,
   });
-
-  it.effect('Codex rollout names accept thread/revert files and refuse foreign sessions', () =>
-    Effect.gen(function* () {
-      const root = yield* Home;
-      expect(codexRolloutName('rollout-2026-09-01T00-00-00-codex-one.jsonl', 'codex-one')).toBe(true);
-      expect(codexRolloutName('rollout-2026-09-01T00-00-00-codex-one_0192abcd.jsonl', 'codex-one')).toBe(true);
-      expect(codexRolloutName('rollout-2026-09-01T00-00-00-codex-two.jsonl', 'codex-one')).toBe(false);
-      expect(codexRolloutName('rollout-2026-09-01T00-00-00-xcodex-one.jsonl', 'codex-one')).toBe(false);
-      expect(codexRolloutName('rollout-2026-09-01T00-00-00-codex-one.txt', 'codex-one')).toBe(false);
-      const home = { ...testInput({ rootKey: 'codex-one' }).storage, entries: [{ name: 'HOME' as const, value: root }] } as HarnessStorage;
-      const revert = testInput({
-        rootKey: 'codex-one',
-        storage: home,
-        transcriptPath: '/home/.codex/sessions/2026/09/01/rollout-2026-09-01T00-00-00-codex-one_0192abcd.jsonl',
-      });
-      expect(codexSources(revert)[1]).toMatchObject({ kind: 'file' });
-      const foreign = testInput({
-        rootKey: 'codex-one',
-        storage: home,
-        transcriptPath: '/home/.codex/sessions/2026/09/01/rollout-2026-09-01T00-00-00-codex-two.jsonl',
-      });
-      expect(codexSources(foreign)[1]).toMatchObject({ kind: 'unreadable', reason: 'session-identity-mismatch' });
-    }),
-  );
 
   test('Claude sidechain records never poison their session', () => {
     const reader = claude('one');
@@ -494,17 +450,4 @@ layer(home)('vendor metadata', (it) => {
       expect(yield* read(files)).toMatchObject({ _tag: 'Read', value: { model: { value: 'grok-4.6' } } });
     }),
   );
-
-  test('the Cursor title is read from the text frame, and a title the program never set is no value', () => {
-    const input = testInput({ rootKey: 'cursor-title', execution: { execution: 'exec-1', incarnation: 0 } });
-    const [title] = cursorSources(input);
-    if (title === undefined || title.kind !== 'terminal') throw new Error('expected a terminal source');
-    expect(title.cells).toBe(false);
-    expect(title.parse({ title: 'Devin · my task' })).toEqual({
-      value: 'Devin · my task',
-      claim: 'last-recorded',
-      turnId: null,
-    });
-    expect(title.parse({ title: '' })).toBeNull();
-  });
 });

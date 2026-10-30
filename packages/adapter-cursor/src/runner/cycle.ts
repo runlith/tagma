@@ -5,7 +5,7 @@ import { AgentFault, FAULT } from '@runlith/acp/agent';
 import type { ContentBlock } from '@runlith/acp/content';
 import type { PromptResult } from '@runlith/acp/methods';
 import type { SessionConfigOption } from '@runlith/acp/updates';
-import { cursorSelection } from '@runlith/adapter-cursor/selection';
+import { cursorSelection } from '../selection.js';
 import type { ModelSwitches } from '@runlith/llm/models/description';
 import { COMPACTED, RETRYING, SAID } from '@runlith/hosted-runner/wire/extensions';
 import type { Cycle, Process, Session, Prepared } from '@runlith/hosted-runner/cycle';

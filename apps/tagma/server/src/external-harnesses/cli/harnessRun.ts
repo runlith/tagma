@@ -3,8 +3,6 @@ import { Argument, Command, Flag } from 'effect/cli';
 import type { HostedRunner } from '@runlith/hosted-runner/run';
 import { PROGRAM_RELEASE } from '../../platform/contract/wire/program.js';
 import { CurrentInvocation, noting } from '../../platform/cli/verb.js';
-import { runAsk, runCursor } from '../runner/cursor/run.js';
-import { runOpenCode } from '../runner/opencode/run.js';
 import type { ServerCli } from './server.js';
 import { ServerDoor } from './serverDoor.js';
 
@@ -30,29 +28,17 @@ export const harnessRun = (server: ServerCli, runners: HostedRunners) =>
     },
     ({ harness, model, effort, untitled, cut, ask, system }) =>
       Effect.flatMap(CurrentInvocation, (at) => {
-        if (ask) {
-          if (harness !== 'cursor' || cut) return Effect.die('--ask requires cursor and cannot be combined with --cut');
-          if (Option.isNone(model)) return Effect.die('--ask requires --model');
-          return runAsk(at, model.value, Option.getOrNull(effort), system);
-        }
+        if (ask && cut) return Effect.die('--ask cannot be combined with --cut');
+        if (ask && Option.isNone(model)) return Effect.die('--ask requires --model');
         const reasoning = Option.getOrNull(effort);
-        if (!cut && harness === 'opencode')
-          return runOpenCode(server, at, {
-            model: Option.getOrNull(model),
-            effort: reasoning,
-            parameters: {},
-            version: PROGRAM_RELEASE,
-          });
-        if (!cut && harness === 'cursor')
-          return runCursor(server, at, {
-            model: Option.getOrNull(model),
-            effort: reasoning,
-            parameters: {},
-            version: PROGRAM_RELEASE,
-          });
         const load = runners.get(harness);
         if (load === undefined) return Effect.die(`${harness} ships no hosted runner`);
         return Effect.flatMap(Effect.promise(load), (runner): Effect.Effect<void, unknown> => {
+          if (ask) {
+            if (runner.ask === undefined) return Effect.die(`${harness} offers no fresh ask`);
+            if (Option.isNone(model)) return Effect.die('--ask requires --model');
+            return runner.ask(at, { model: model.value, effort: reasoning, system });
+          }
           if (!cut)
             return runner.run(at, new ServerDoor(server, at), {
               model: Option.getOrNull(model),
@@ -72,8 +58,5 @@ A harness whose builtin package ships a hosted runner drives its vendor's SDK wi
         the prompt and tools of the native agent the thread hosts, the thread's grant
         on every call. With --cut it forks a session file offline for a terminal
         thread and reads the turns of the new root, where the runner offers that.
-cursor  drives the local Cursor SDK with the hosted agent's prompt and tools;
-        Tagma judges and executes every tool call.
-opencode  drives a private OpenCode V2 host with the hosted agent's prompt and tools;
-        Tagma judges and executes every tool call.`),
+`),
   );

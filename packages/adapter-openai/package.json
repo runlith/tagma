@@ -10,6 +10,17 @@
       "bun": "./src/adapter.ts",
       "default": "./src/adapter.ts"
     },
+    "./harness": {
+      "types": "./src/harness/codex.ts",
+      "bun": "./src/harness/codex.ts",
+      "default": "./src/harness/codex.ts"
+    },
+    "./harness/session": {
+      "types": "./src/harness/session.ts",
+      "bun": "./src/harness/session.ts",
+      "default": "./src/harness/session.ts"
+    },
+    "./testing/fixtures/fork-rpc.json": "./src/testing/fixtures/fork-rpc.json",
     "./icon": {
       "types": "./src/icon.ts",
       "browser": "./src/icon.ts",
@@ -40,12 +51,14 @@
     "typecheck": "runlith-typecheck"
   },
   "dependencies": {
+    "@runlith/agent": "workspace:*",
     "@runlith/llm": "workspace:*",
     "@runlith/tagma": "workspace:*",
     "effect": "catalog:"
   },
   "devDependencies": {
     "@runlith/effect-test": "workspace:*",
+    "@runlith/testbed": "workspace:*",
     "@runlith/tsconfig": "workspace:*",
     "@types/bun": "catalog:"
   },

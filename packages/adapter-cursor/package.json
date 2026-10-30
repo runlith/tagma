@@ -9,6 +9,16 @@
       "bun": "./src/adapter.ts",
       "default": "./src/adapter.ts"
     },
+    "./harness": {
+      "types": "./src/harness/cursor.ts",
+      "bun": "./src/harness/cursor.ts",
+      "default": "./src/harness/cursor.ts"
+    },
+    "./runner": {
+      "types": "./src/runner/run.ts",
+      "bun": "./src/runner/run.ts",
+      "default": "./src/runner/run.ts"
+    },
     "./icon": {
       "types": "./src/icon.ts",
       "browser": "./src/icon.ts",
@@ -28,12 +38,18 @@
   },
   "dependencies": {
     "@cursor/sdk": "1.0.40",
+    "@effect/platform-bun": "catalog:",
+    "@runlith/acp": "workspace:*",
+    "@runlith/agent": "workspace:*",
+    "@runlith/hosted-runner": "workspace:*",
     "@runlith/llm": "workspace:*",
+    "@runlith/ndjson-rpc": "workspace:*",
     "@runlith/tagma": "workspace:*",
     "effect": "catalog:"
   },
   "devDependencies": {
     "@runlith/effect-test": "workspace:*",
+    "@runlith/testbed": "workspace:*",
     "@runlith/tsconfig": "workspace:*",
     "@types/bun": "catalog:"
   }

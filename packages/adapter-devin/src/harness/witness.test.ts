@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { devin } from './row.js';
+import { devinTerminal as devin } from './devin.js';
 
 const atif = (session_id: unknown): string =>
   JSON.stringify({ schema_version: 'ATIF-v1.7', session_id, agent: { model_name: 'SWE-2 Max' } });

@@ -2,7 +2,7 @@ import { Context, type Effect } from 'effect';
 import type { AgentFault } from '@runlith/acp/agent';
 import type { PromptResult } from '@runlith/acp/methods';
 import type { TransportFailure } from '@runlith/agent/transcript/entries';
-import type { CursorSelection } from '@runlith/adapter-cursor/selection';
+import type { CursorSelection } from '../selection.js';
 import type { HostedToolWire } from '@runlith/hosted-runner/wire/messages';
 import type { OutputEvent } from '@runlith/hosted-runner/output';
 import type { Relayed } from '@runlith/hosted-runner/relay';
@@ -45,4 +45,4 @@ export class CursorSdk extends Context.Service<
   {
     readonly open: (input: Opening) => Effect.Effect<Channel, AgentFault>;
   }
->()('external-harnesses/CursorSdk') {}
+>()('adapter-cursor/CursorSdk') {}

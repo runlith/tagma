@@ -10,6 +10,11 @@
       "bun": "./src/adapter.ts",
       "default": "./src/adapter.ts"
     },
+    "./harness": {
+      "types": "./src/harness/devin.ts",
+      "bun": "./src/harness/devin.ts",
+      "default": "./src/harness/devin.ts"
+    },
     "./models/devin": {
       "types": "./src/models/devin.ts",
       "browser": "./src/models/devin.ts",
