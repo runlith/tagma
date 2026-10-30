@@ -18,8 +18,10 @@ const FIXES = {
   row: 'Read harness rows only in external-harnesses and threads/harness; ask their owner for what the feature needs.',
 } as const;
 
+type SiteGroup = { readonly act: Site['act']; readonly label: string; readonly lines: Set<number> };
+
 const findingsOf = (path: string, sites: readonly Site[], params: CallParams): Finding[] => {
-  const groups = new Map<string, { readonly act: Site['act']; readonly label: string; readonly lines: Set<number> }>();
+  const groups = new Map<string, SiteGroup>();
   for (const site of sites) {
     if (allowed(site.act, path, params)) continue;
     const key = `${site.act}\0${site.label}`;
@@ -68,13 +70,15 @@ const bearing = (registry: Registry, path: string): boolean => {
 
 export type Importers = (paths: ReadonlySet<string>) => readonly string[];
 
+type Reach = { readonly judged: readonly string[]; readonly carriers: readonly string[] };
+
 const reach = (
   world: World,
   registry: Registry,
   params: CallParams,
   region: ReadonlySet<string>,
   importers: Importers | undefined,
-): { readonly judged: readonly string[]; readonly carriers: readonly string[] } => {
+): Reach => {
   const universe = productionPaths(world.paths);
   const members = new Set(universe);
   const words = [...new Set(params.sources.map((one) => one.name))];

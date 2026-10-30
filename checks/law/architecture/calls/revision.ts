@@ -18,14 +18,12 @@ import {
 import { revisionAt, saveRevision } from '../../declarations/memo';
 import { versionAt } from '../cache';
 import { production, snapshots, within } from '../snapshot';
-import { callAnalysis, callFrontier, carrying, type Importers } from './analysis';
+import { type Analysis, callAnalysis, callFrontier, carrying, type Importers } from './analysis';
 import type { CallParams } from './params';
 import { inRegion, type World, worldOf } from './world';
 
 const record = Schema.Struct({ findings: Schema.Array(ProgramFinding), carriers: Schema.Array(Schema.String) });
 const revisions = Schema.Array(Schema.String);
-
-type Held = { readonly findings: readonly Finding[]; readonly carriers: readonly string[] };
 
 const KEPT = 6;
 
@@ -51,12 +49,12 @@ export const judgements = (root: string, params: CallParams, versionRevision: st
     return Result.isFailure(decoded) ? [] : decoded.success;
   };
 
-  const held = (commit: string): Held | undefined => {
+  const held = (commit: string): Analysis | undefined => {
     const decoded = Schema.decodeUnknownResult(record)(revisionAt(root, `${prefix}:${commit}`));
-    return Result.isFailure(decoded) ? undefined : (decoded.success as Held);
+    return Result.isFailure(decoded) ? undefined : (decoded.success as Analysis);
   };
 
-  const save = (commit: string, one: Held): Held => {
+  const save = (commit: string, one: Analysis): Analysis => {
     saveRevision(root, `${prefix}:${commit}`, one);
     saveRevision(root, recentKey, [commit, ...recent().filter((entry) => entry !== commit)].slice(0, KEPT));
     return one;
@@ -87,7 +85,7 @@ export const judgements = (root: string, params: CallParams, versionRevision: st
     };
   };
 
-  const whole = (commit: string): Held => {
+  const whole = (commit: string): Analysis => {
     const known = held(commit);
     if (known !== undefined) return known;
     prepare(root, commit, null);
@@ -97,8 +95,8 @@ export const judgements = (root: string, params: CallParams, versionRevision: st
     return save(commit, { findings: sorted(analysis.findings), carriers: [...analysis.carriers].sort() });
   };
 
-  const nearest = (commit: string): { readonly revision: string; readonly one: Held; readonly changes: readonly Change[] } => {
-    let best: { readonly revision: string; readonly one: Held; readonly changes: readonly Change[] } | undefined;
+  const nearest = (commit: string): { readonly revision: string; readonly one: Analysis; readonly changes: readonly Change[] } => {
+    let best: { readonly revision: string; readonly one: Analysis; readonly changes: readonly Change[] } | undefined;
     for (const revision of recent()) {
       const one = held(revision);
       if (one === undefined) continue;
@@ -113,7 +111,7 @@ export const judgements = (root: string, params: CallParams, versionRevision: st
     return best;
   };
 
-  const derive = (commit: string): Held => {
+  const derive = (commit: string): Analysis => {
     const { revision, one: standing, changes } = nearest(commit);
     prepare(root, commit, revision);
     const universe = (path: string): boolean => production(path) && (inRegion(path, params) || within(path, 'packages'));
@@ -162,7 +160,7 @@ export const judgements = (root: string, params: CallParams, versionRevision: st
     });
   };
 
-  const at = (commit: string): Held => held(commit) ?? derive(commit);
+  const at = (commit: string): Analysis => held(commit) ?? derive(commit);
 
   return { whole, at, save };
 };
