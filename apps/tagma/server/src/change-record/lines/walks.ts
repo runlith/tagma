@@ -72,7 +72,7 @@ export class WalkUnfinished extends Data.TaggedError('WalkUnfinished')<{ readonl
 
 export const walkCut = (path: string, unfinished: WalkUnfinished, ...ways: readonly string[]): GateRefusal<'walk-cut'> =>
   new GateRefusal('walk-cut', `the line walk over ${path} was cut before it answered: ${unfinished.reason}`, [
-    'ask again: a walk cut on a busy server finishes once the walk workers are free',
+    'for a source or configuration error, correct its reported cause before retrying; retry a transient worker failure only after its cause clears',
     ...ways,
   ]);
 
