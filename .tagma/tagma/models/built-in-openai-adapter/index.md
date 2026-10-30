@@ -16,9 +16,6 @@ fields:
         "at": "src/profiles/"
       },
       {
-        "at": "src/oauth/"
-      },
-      {
         "at": "src/icon.ts"
       },
       {
@@ -30,6 +27,9 @@ fields:
       {
         "at": "src/testing/",
         "role": "testing"
+      },
+      {
+        "at": "src/oauth/vendors/openai.ts"
       }
     ],
     "id": "@runlith/adapter-openai"

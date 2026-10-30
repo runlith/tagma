@@ -10,15 +10,6 @@ fields:
         "at": "src/adapter.ts"
       },
       {
-        "at": "src/icon.ts"
-      },
-      {
-        "at": "src/selection.ts"
-      },
-      {
-        "at": "src/harness/cursor.ts"
-      },
-      {
         "at": "src/runner/run.ts"
       }
     ],

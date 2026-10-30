@@ -19,12 +19,6 @@ fields:
         "at": "src/icon.ts"
       },
       {
-        "at": "src/usage.ts",
-        "for": [
-          "287a4906"
-        ]
-      },
-      {
         "at": "src/harness/claudeCode.ts"
       },
       {

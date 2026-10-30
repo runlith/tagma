@@ -16,12 +16,6 @@ fields:
         "at": "src/environment.ts"
       },
       {
-        "at": "src/selection.ts"
-      },
-      {
-        "at": "src/icon.ts"
-      },
-      {
         "at": "src/harness/opencode.ts"
       },
       {
