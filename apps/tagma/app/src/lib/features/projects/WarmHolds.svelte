@@ -12,9 +12,7 @@
 
   const warm = $derived.by((): readonly GraphAim[] => {
     const here = graphAim();
-    return strip.visited
-      .slice(0, WARM)
-      .map((project) => (here?.projectId === project.id ? here : { projectId: project.id, branch: visits.branchOf(project) }));
+    return strip.visited.slice(0, WARM).map((project) => visits.aimOf(project, here));
   });
 </script>
 

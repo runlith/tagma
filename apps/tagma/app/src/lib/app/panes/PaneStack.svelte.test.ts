@@ -2,11 +2,13 @@
 import { Layer } from '@runlith/layer/Layer';
 import { flush } from '@runlith/testing/flush';
 import { afterEach, expect, test } from 'vitest';
-import { mountShell, type TestApp } from '$lib/app/testing.js';
+import { mountShell, soloWorkspace, type TestApp } from '$lib/app/testing.js';
 import { BLOCK_PANE, blockPane } from '$lib/features/graph/blockPane.js';
 import { panes as graphPanes } from '$lib/features/graph/panes.js';
 import { GraphRung } from '$lib/features/workspace/GraphRung.js';
 import { ProjectRung } from '$lib/features/workspace/ProjectRung.js';
+import { Workspace } from '$lib/features/workspace/Selection.svelte.js';
+import { TileRung } from '$lib/features/workspace/TileRung.js';
 import type { PaneKind } from '$lib/shared/panes/pane.js';
 import PaneStack from './PaneStack.svelte';
 import { SidePanes } from './SidePanes.svelte.js';
@@ -25,12 +27,14 @@ test('a block tab of another project keeps that copy open while another tab is s
   const area = testArea([block, note]);
   area.panes.open(blockPane({ projectId: 2, branch: null, name: '5940aab8', diff: null, lang: null }), { activate: false });
   area.panes.open({ kind: 'note', id: 'n-1' });
-  app = mountShell(Layer.of(SidePanes, area.panes), Layer.mergeAll(), { at: { projectId: 1, branch: null } });
+  app = mountShell(Layer.of(SidePanes, area.panes), Layer.of(Workspace, soloWorkspace()), { at: { projectId: 1, branch: null } });
   app.draw(PaneStack);
   await flush();
 
-  expect(app.app.hasScope(ProjectRung, { projectId: 2 })).toBe(true);
-  const project = app.app.hold(ProjectRung, { projectId: 2 });
+  const tile = app.app.hold(TileRung, { tileId: 2 });
+  expect(app.app.hasScope(ProjectRung, { projectId: 2 }, tile.scope)).toBe(true);
+  const project = app.app.hold(ProjectRung, { projectId: 2 }, tile.scope);
   expect(app.app.hasScope(GraphRung, { projectId: 2, branch: null }, project.scope)).toBe(true);
   project.release();
+  tile.release();
 });

@@ -91,7 +91,7 @@ function peek(
       testShellOps,
       Layer.of(Live, liveFeed().live),
       Layer.of(Door, { ask: () => Promise.reject(new Error('this suite makes no call')) } as never),
-      Layer.of(ThreadList, { threads: [], busy: () => false } as never),
+      Layer.of(ThreadList, { threads: [], busy: () => false, covers: () => false } as never),
       Layer.of(ThreadsRepo, {} as never),
       Layer.of(ThreadChats, {} as never),
       Layer.of(Favorites, { list: [] } as never),

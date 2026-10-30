@@ -27,6 +27,7 @@
   import ChangesIcon from '$lib/features/checkout/ChangesIcon.svelte';
   import PathText from '$lib/shared/PathText.svelte';
   import { ThreadRung } from '$lib/features/workspace/ThreadRung.js';
+  import { holdGraphOf } from '$lib/features/workspace/holds.js';
   import { ThreadChanges, entriesIn } from '$lib/features/checkout/ThreadChanges.svelte.js';
   import { heldWords, unprovenWords } from '$lib/features/checkout/holdingWords.js';
   import { changesPane } from '$lib/features/checkout/paneContent.js';
@@ -109,6 +110,8 @@
   const notices = Notices.use();
   const shell = shellActs(ShellOps.use(), notices);
   const list = ThreadList.use();
+  const home = untrack(() => node.row.projectId);
+  if (list.covers(home)) holdGraphOf(home);
   const wallClock = WallClock.use();
   const accounts = UsageAccounts.use();
   const catalog = ProviderCatalog.use();

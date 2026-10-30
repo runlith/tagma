@@ -2,6 +2,7 @@ import type { Project } from '@tagma/server/graph/contract/wire/rows';
 import { Platform, type PlatformStorage } from '@runlith/layer/Platform';
 import { Service } from '@runlith/layer/key';
 import { SvelteMap } from 'svelte/reactivity';
+import type { GraphAim } from './GraphRung.js';
 import { type Surface, SurfaceRegistry, withBranch } from './surface.js';
 
 const STORAGE_KEY = 'tagma.visits';
@@ -42,6 +43,10 @@ export class Visits extends Service<Visits>()('Visits', { tier: 'app' }) {
 
   branchOf(project: Project): string | null {
     return this.held.get(String(project.id))?.branch ?? null;
+  }
+
+  aimOf(project: Project, here: GraphAim | undefined): GraphAim {
+    return here?.projectId === project.id ? here : { projectId: project.id, branch: this.branchOf(project) };
   }
 
   remember(project: Project, surface: Surface, place: string | null, branch: string | null): void {
