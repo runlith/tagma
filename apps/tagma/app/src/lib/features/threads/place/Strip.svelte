@@ -11,8 +11,6 @@
   import * as DropdownMenu from '$lib/shared/ui/dropdown-menu/index.js';
   import type { BirthPlace, PlaceStanding } from '../birth/BirthPlace.svelte.js';
   import { MAIN_CHECKOUT } from '../Draft.svelte.js';
-  import type { ShownThread } from '../ShownThread.js';
-  import { ThreadPlace } from '../thread/ThreadPlace.svelte.js';
   import type { ThreadWrites } from '../ThreadWrites.js';
   import { draftPlaceOf } from '../worktrees/acts.js';
   import { ProjectRung } from '$lib/features/workspace/ProjectRung.js';
@@ -20,7 +18,7 @@
   import Swatch from '$lib/features/workspace/Swatch.svelte';
   import { labelOf } from '$lib/features/workspace/mark.js';
 
-  let { shown, place, places, writes }: { shown: ShownThread; place: BirthPlace; places: Worktrees; writes: ThreadWrites } = $props();
+  let { place, places, writes }: { place: BirthPlace; places: Worktrees; writes: ThreadWrites } = $props();
 
   const workspace = Workspace.use();
   const projectId = ProjectRung.Current.use().projectId;
@@ -30,8 +28,7 @@
   const reading = untrack(() => places.window());
   const main = $derived(places.main);
   const unversioned = $derived(main !== null && reading.rowOf(main.rootId)?.reading === 'no-repository');
-  const drafting = $derived(shown.id === null);
-  const standing = $derived<PlaceStanding | null>(drafting ? place.standing : (shown.lease?.get(ThreadPlace).standing ?? null));
+  const standing = $derived<PlaceStanding | null>(place.standing);
   const chosen = $derived(place.chosen);
   const row = $derived(standing?.kind === 'row' ? standing.row : null);
   const tone = $derived(row === null || row.kind === 'main' ? null : toneOf(row));
@@ -75,7 +72,7 @@
   data-place-strip={unversioned ? 'folder' : standing === null ? undefined : standing.kind === 'row' ? standing.row.kind : standing.kind}
   {@attach main === null ? undefined : reading.observe(main.rootId)}
 >
-  {#if drafting && members !== null && project !== null}
+  {#if members !== null && project !== null}
     <DropdownMenu.Root>
       <DropdownMenu.Trigger class={PICKER} aria-label="The project this thread runs in">
         <Swatch projectId={project.id} />
@@ -98,41 +95,37 @@
       <FadeText text={main.folder.split('/').findLast((part) => part !== '') ?? main.folder} />
     </span>
   {:else if standing !== null}
-    {#if drafting}
-      <DropdownMenu.Root>
-        <DropdownMenu.Trigger class={PICKER} aria-label="Where this thread runs">
-          {@render where(standing)}
-          <ChevronsUpDown class="size-3 shrink-0 opacity-60" />
-        </DropdownMenu.Trigger>
-        <DropdownMenu.Content align="start" class="max-h-80 min-w-56 overflow-y-auto">
-          {#if main !== null}
-            <DropdownMenu.Item here={chosen.kind === 'main'} onSelect={() => place.pick(MAIN_CHECKOUT)}>
-              {#snippet lead()}<WorktreeSwatch row={main} />{/snippet}
-              Main checkout
-            </DropdownMenu.Item>
-          {/if}
-          {#each worktrees as one (one.rootId)}
-            <DropdownMenu.Item
-              here={chosen.kind === 'worktree' && chosen.rootId === one.rootId}
-              onSelect={() => place.pick(draftPlaceOf(one))}
-            >
-              {#snippet lead()}<WorktreeSwatch row={one} />{/snippet}
-              <span class="font-mono">{one.branch ?? one.name}</span>
-            </DropdownMenu.Item>
-          {/each}
-          <DropdownMenu.Separator />
-          <DropdownMenu.Item
-            here={chosen.kind === 'new'}
-            onSelect={() => place.pick({ kind: 'new', base: chosen.kind === 'new' ? chosen.base : row === null ? null : baseOf(row) })}
-          >
-            {#snippet lead()}<WorktreeSwatch row={null} />{/snippet}
-            New worktree
+    <DropdownMenu.Root>
+      <DropdownMenu.Trigger class={PICKER} aria-label="Where this thread runs">
+        {@render where(standing)}
+        <ChevronsUpDown class="size-3 shrink-0 opacity-60" />
+      </DropdownMenu.Trigger>
+      <DropdownMenu.Content align="start" class="max-h-80 min-w-56 overflow-y-auto">
+        {#if main !== null}
+          <DropdownMenu.Item here={chosen.kind === 'main'} onSelect={() => place.pick(MAIN_CHECKOUT)}>
+            {#snippet lead()}<WorktreeSwatch row={main} />{/snippet}
+            Main checkout
           </DropdownMenu.Item>
-        </DropdownMenu.Content>
-      </DropdownMenu.Root>
-    {:else}
-      <span class="flex min-w-0 shrink items-center gap-1.5 px-1.5 text-muted-foreground">{@render where(standing)}</span>
-    {/if}
+        {/if}
+        {#each worktrees as one (one.rootId)}
+          <DropdownMenu.Item
+            here={chosen.kind === 'worktree' && chosen.rootId === one.rootId}
+            onSelect={() => place.pick(draftPlaceOf(one))}
+          >
+            {#snippet lead()}<WorktreeSwatch row={one} />{/snippet}
+            <span class="font-mono">{one.branch ?? one.name}</span>
+          </DropdownMenu.Item>
+        {/each}
+        <DropdownMenu.Separator />
+        <DropdownMenu.Item
+          here={chosen.kind === 'new'}
+          onSelect={() => place.pick({ kind: 'new', base: chosen.kind === 'new' ? chosen.base : row === null ? null : baseOf(row) })}
+        >
+          {#snippet lead()}<WorktreeSwatch row={null} />{/snippet}
+          New worktree
+        </DropdownMenu.Item>
+      </DropdownMenu.Content>
+    </DropdownMenu.Root>
     <span class="flex-1"></span>
     {#if standing.kind === 'new'}
       {@const base = standing.base}

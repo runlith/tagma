@@ -22,9 +22,12 @@
     contributor: string;
   } = $props();
 
-  $effect.pre(() => composer.chip(contributor, { id: 'place', region: 'strip', body: strip }));
+  $effect.pre(() => {
+    if (shown.id !== null) return;
+    return composer.chip(contributor, { id: 'place', region: 'strip', body: strip });
+  });
 </script>
 
 {#snippet strip()}
-  <Strip {shown} place={birth.place} {places} {writes} />
+  <Strip place={birth.place} {places} {writes} />
 {/snippet}
