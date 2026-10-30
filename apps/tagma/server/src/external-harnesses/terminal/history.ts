@@ -9,6 +9,7 @@ import type { ExternalSession } from '../../threads/contract/wire/harness/extern
 import type { HarnessSeat } from '../../threads/contract/wire/harness/seat.js';
 import { harnessFacet } from '../../threads/contract/wire/harness/types.js';
 import { terminalKernel } from '../birth/seat.js';
+import { harnessPresentation } from '../contract/service/table.js';
 import type { SessionDriver } from '../sessions/drive.js';
 import type { HarnessSessionStore } from '../store/sessions.js';
 import { accountKey, type VendorTurns } from '../store/turns.js';
@@ -39,7 +40,7 @@ export const makeTerminalHistory = (
     const plain = facet.plain === true;
     const seated: HarnessSeat = {
       facet: {
-        ...harnessFacet(facet.name),
+        ...harnessFacet(facet.name, harnessPresentation(facet.name)),
         ...(facet.home === undefined ? {} : { home: facet.home }),
         ...(facet.plain === undefined ? {} : { plain: facet.plain }),
         ...(facet.permissionMode === undefined ? {} : { permissionMode: facet.permissionMode }),

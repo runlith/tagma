@@ -12,6 +12,7 @@ import { wireThread, wireThreadFacts, wireThreadShape } from '../../../threads/t
 import { asWarmthBasis } from '../../../threads/testing/doubles.js';
 import { HarnessObservations, terminalArgv } from '../../../external-harnesses/testing/doubles.js';
 import { sessionStoreOver } from '../../../external-harnesses/testing/floor.js';
+import { harnessPresentation } from '../../../external-harnesses/contract/service/table.js';
 import type { HarnessEvent } from '../../../threads/contract/wire/harness/observation.js';
 
 const setup = Effect.fnUntraced(function* () {
@@ -40,7 +41,13 @@ const setup = Effect.fnUntraced(function* () {
             threadId: row.id,
             projectId: demo.projectId,
             harness: {
-              facet: { name: 'cursor', sessionKey: ROOT, execution: null, observation: unmeasuredObservation() },
+              facet: {
+                name: 'cursor',
+                presentation: harnessPresentation('cursor'),
+                sessionKey: ROOT,
+                execution: null,
+                observation: unmeasuredObservation(),
+              },
               kernel: null,
             },
           },

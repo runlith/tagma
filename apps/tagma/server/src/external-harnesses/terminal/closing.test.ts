@@ -15,6 +15,7 @@ import { terminalKernel } from '../birth/seat.js';
 import { writes } from '../../platform/contract/service/writes.js';
 import { ThreadInbox } from '../../threads/store/inbox.js';
 import { harnessFacet } from '../../threads/contract/wire/harness/types.js';
+import { harnessPresentation } from '../contract/service/table.js';
 import type { ExternalSession } from '../../threads/contract/wire/harness/externalSession.js';
 import { transcriptFiles } from '../testing/files.js';
 import { observationRebound } from '../observations/staleness.js';
@@ -98,7 +99,7 @@ const fixture = Effect.fnUntraced(function* () {
   const open = Effect.fnUntraced(function* () {
     const run = started(yield* world.lifecycle.create(world.startFrom, APPROVAL, { kind: 'turn' })).run;
     const at = new Date(yield* Clock.currentTimeMillis).toISOString();
-    const initial = harnessFacet('claude-code');
+    const initial = harnessFacet('claude-code', harnessPresentation('claude-code'));
     const execution = { execution: 'memory-execution', incarnation: 1 };
     const facet: ExternalSession = {
       ...initial,

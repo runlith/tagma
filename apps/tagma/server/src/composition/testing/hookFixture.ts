@@ -7,7 +7,7 @@ import { sessionFor, sessionOfThread } from '../../external-harnesses/testing/se
 import { GRANT_VARIABLE, SESSION_TOKEN_VARIABLE } from '../../platform/contract/service/credentials.js';
 import { sessionTokenEnvironment, grantEnvironment } from '../../platform/testing/grants.js';
 import { unmeasuredObservation } from '../../threads/contract/wire/harness/observation.js';
-import { HARNESSES, harnessArgv } from '../../external-harnesses/contract/service/table.js';
+import { HARNESSES, harnessArgv, harnessPresentation } from '../../external-harnesses/contract/service/table.js';
 import { sessionIdentity } from '../../external-harnesses/sessionPrefix.js';
 import type { ExternalSession } from '../../threads/contract/wire/harness/externalSession.js';
 import type { makeTerminalWorld } from './fixture.js';
@@ -98,6 +98,7 @@ export const hookThreads = (world: TerminalPlace) => {
 
 export const born = (name: ExternalSession['name'] = 'devin', sessionKey: string | null = null): ExternalSession => ({
   name,
+  presentation: harnessPresentation(name),
   sessionKey,
   execution: null,
   observation: unmeasuredObservation(),
@@ -123,6 +124,7 @@ export const running = Effect.fnUntraced(function* (facet: ExternalSession) {
 
 export const naming = (name: ExternalSession['name'], sessionKey: string, model: string): ExternalSession => ({
   name,
+  presentation: harnessPresentation(name),
   sessionKey,
   execution: null,
   observation: {

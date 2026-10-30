@@ -79,6 +79,7 @@ import { AGENT_IDLE_MS, LEASE_RHYTHM, REAPER_RHYTHM, RECONCILE_INTERVAL_MS, SETT
 import { storesOver, type Stores } from '../../../executions/testing/stores.js';
 import { ENTRY_KINDS } from '../../manifest.js';
 import { ThreadEntryKinds } from '@runlith/agent/transcript/kinds';
+import { harnessPresentation } from '../../../external-harnesses/contract/service/table.js';
 const OWNER = OPERATOR_PRINCIPAL;
 const PROVIDER = 'subscription';
 const MODEL = 'claude-opus-5-5';
@@ -262,7 +263,13 @@ const setup = Effect.fn('testing.commandNotices')(function* () {
             threadId: row.id,
             projectId,
             harness: {
-              facet: { name: 'claude-code', sessionKey: 'notice-session', execution: null, observation: unmeasuredObservation() },
+              facet: {
+                name: 'claude-code',
+                presentation: harnessPresentation('claude-code'),
+                sessionKey: 'notice-session',
+                execution: null,
+                observation: unmeasuredObservation(),
+              },
               kernel: {
                 transport: { adapter: 'acp', profile: 'claude-code', agent: null },
                 capabilities: NATIVE_CAPABILITIES,

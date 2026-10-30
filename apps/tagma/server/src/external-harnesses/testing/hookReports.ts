@@ -22,7 +22,7 @@ import { notesReach } from '../notesReach.js';
 import { memorySessionRows } from './memorySessions.js';
 import type { RunHosting } from '../contract/service/guidance.js';
 import { standingAlignment } from './alignment.js';
-import { harnessArgv } from '../contract/service/table.js';
+import { harnessArgv, harnessPresentation } from '../contract/service/table.js';
 import { harnessFacet } from '../../threads/contract/wire/harness/types.js';
 import type { HarnessName } from '../../threads/contract/wire/harness/names.js';
 import type { ExternalSession } from '../../threads/contract/wire/harness/externalSession.js';
@@ -179,7 +179,7 @@ export const hookReports = Effect.fnUntraced(function* ({
   const seed = Effect.fnUntraced(function* (id: string, harness: HarnessName, root: string | null) {
     const session = crypto.randomUUID();
     const facet: ExternalSession = {
-      ...harnessFacet(harness),
+      ...harnessFacet(harness, harnessPresentation(harness)),
       sessionKey: root,
       session: {
         id: session,

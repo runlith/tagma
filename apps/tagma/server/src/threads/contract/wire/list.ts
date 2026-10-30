@@ -7,8 +7,7 @@ import type { RunHalt, RunLife } from '@runlith/agent/transcript/live';
 import type { ThreadRunStatus } from '@runlith/agent/thread/rows';
 import { Schema } from 'effect';
 import { ThreadHeld } from '../../../change-record/contract/wire/holdings.js';
-import { harnessRowSchema, type HarnessRowDetail } from './harness/externalSession.js';
-import { harnessNameSchema, type HarnessName } from './harness/names.js';
+import { harnessIdentitySchema, harnessRowSchema, type HarnessIdentity, type HarnessRowDetail } from './harness/externalSession.js';
 import { transportCapabilitiesSchema, type TransportCapabilities } from '@runlith/agent/thread/record';
 import { recapLineSchema, type RecapLine } from './recap.js';
 import { TITLE_PROVENANCES } from '../../../thread-record/contract/wire/title.js';
@@ -92,7 +91,7 @@ export type ThreadListRow = {
   readonly agentId: string;
   readonly profileId: string | null;
   readonly harness: HarnessRowDetail | null;
-  readonly cli: HarnessName | null;
+  readonly cli: HarnessIdentity | null;
   readonly capabilities: TransportCapabilities;
   readonly phase: ThreadPhase | null;
   readonly held: ThreadHeld;
@@ -140,7 +139,7 @@ const threadListRowFields = {
   agentId: Schema.String,
   profileId: Schema.NullOr(Schema.String),
   harness: Schema.NullOr(harnessRowSchema),
-  cli: Schema.NullOr(harnessNameSchema),
+  cli: Schema.NullOr(harnessIdentitySchema),
   capabilities: transportCapabilitiesSchema,
   phase: Schema.NullOr(threadPhaseSchema),
   held: ThreadHeld,

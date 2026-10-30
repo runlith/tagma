@@ -11,6 +11,7 @@ import { threadStack } from '../threadParts.js';
 import { threadRecord } from '../../../thread-record/testing/doubles.js';
 import { bornThread } from '../../../native-harness/testing/born.js';
 import { recordOf } from '../../../thread-record/testing/records.js';
+import { harnessPresentation } from '../../../external-harnesses/contract/service/table.js';
 import { ENTRY_KINDS } from '../../manifest.js';
 import { StorageFixture, storageFixture } from './storage.fixture.js';
 
@@ -45,7 +46,13 @@ const externalThread = Effect.fnUntraced(function* (id: string, createdAt?: Date
           threadId: id,
           projectId: PROJECT,
           harness: {
-            facet: { name: 'codex', sessionKey: id, execution: null, observation: unmeasuredObservation() },
+            facet: {
+              name: 'codex',
+              presentation: harnessPresentation('codex'),
+              sessionKey: id,
+              execution: null,
+              observation: unmeasuredObservation(),
+            },
             kernel: {
               transport: { adapter: 'terminal', profile: 'codex', agent: null },
               capabilities: EXTERNAL_CAPABILITIES(),

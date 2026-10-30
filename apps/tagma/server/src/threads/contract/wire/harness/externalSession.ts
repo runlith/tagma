@@ -19,6 +19,12 @@ export const harnessPresentationSchema = Schema.Struct({
 });
 export type HarnessPresentation = typeof harnessPresentationSchema.Type;
 
+export const harnessIdentitySchema = Schema.Struct({
+  name: harnessNameSchema,
+  presentation: harnessPresentationSchema,
+});
+export type HarnessIdentity = typeof harnessIdentitySchema.Type;
+
 export const harnessInstallSchema = Schema.Struct({
   harness: harnessNameSchema,
   presentation: harnessPresentationSchema,
@@ -84,6 +90,7 @@ export type HarnessInterrupting = typeof harnessInterruptingSchema.Type;
 
 export const externalSessionSchema = Schema.Struct({
   name: harnessNameSchema,
+  presentation: harnessPresentationSchema,
   home: Schema.optional(Schema.String),
   plain: Schema.optional(Schema.Boolean),
   permissionMode: Schema.optional(Schema.String),
@@ -116,6 +123,7 @@ export const harnessRowProcessSchema = Schema.Struct({
 
 export const harnessRowSchema = Schema.Struct({
   name: harnessNameSchema,
+  presentation: harnessPresentationSchema,
   transport: harnessTransportSchema,
   agent: Schema.NullOr(Schema.String),
   provider: Schema.String,

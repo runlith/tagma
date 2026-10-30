@@ -14,6 +14,7 @@ import { storesOver } from '../../../executions/testing/stores.js';
 import { ThreadId } from '../../../platform/contract/wire/thread.js';
 import { ownWork, standingOfSummary, threadInbox, threadListReads } from '../../../threads/testing/doubles.js';
 import { externalSession, thread, threadRun, unmeasuredObservation } from '../../../threads/testing/doubles.js';
+import { harnessPresentation } from '../../../external-harnesses/contract/service/table.js';
 import { transcript } from './transcript.js';
 import { saidOfRuns } from '../../../threads/list/said.js';
 import { threadSeen } from '../../../threads/testing/doubles.js';
@@ -675,7 +676,16 @@ it.live(
       .pipe(Effect.orDie);
     yield* demo.db
       .insert(externalSession())
-      .values({ id: answered, facet: { name: 'claude-code', sessionKey: null, execution: null, observation: unmeasuredObservation() } })
+      .values({
+        id: answered,
+        facet: {
+          name: 'claude-code',
+          presentation: harnessPresentation('claude-code'),
+          sessionKey: null,
+          execution: null,
+          observation: unmeasuredObservation(),
+        },
+      })
       .pipe(Effect.orDie);
     yield* transcript(demo.db, toolLast, 'run-tool-last', 'completed', [
       { text: 'Early words.' },

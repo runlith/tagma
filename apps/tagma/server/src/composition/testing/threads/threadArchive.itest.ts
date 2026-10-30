@@ -24,6 +24,7 @@ import { sessionStoreOver } from '../../../external-harnesses/testing/floor.js';
 import { ENTRY_KINDS } from '../../manifest.js';
 import { ThreadRollouts } from '../../../threads/contract/service/rollouts.js';
 import { ModelChanges } from '../../../threads/contract/service/modelChanges.js';
+import { harnessPresentation } from '../../../external-harnesses/contract/service/table.js';
 
 const fixture = doorFixture();
 const setup = Effect.gen(function* () {
@@ -107,7 +108,13 @@ const harnessChild = Effect.fn('testing.archivableHarnessChild')(function* (pare
           threadId: row.id,
           projectId,
           harness: {
-            facet: { name: 'devin', sessionKey: null, execution: null, observation: unmeasuredObservation() },
+            facet: {
+              name: 'devin',
+              presentation: harnessPresentation('devin'),
+              sessionKey: null,
+              execution: null,
+              observation: unmeasuredObservation(),
+            },
             kernel: terminalKernel('devin', undefined, false, {}),
           },
         },

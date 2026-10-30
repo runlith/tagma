@@ -5,7 +5,7 @@ import { ProviderRegistry } from '../../../providers/contract/service/registry.j
 import { Context, Effect, Layer } from 'effect';
 import { threadStoreFixture } from '../threadStoreFixture.js';
 import { unmeasuredObservation, asHarnessObservation, modelChanges } from '../../../threads/testing/doubles.js';
-import { harnessAdapter, harnessOccasion, harnessReport } from '../../../external-harnesses/contract/service/table.js';
+import { harnessAdapter, harnessOccasion, harnessPresentation, harnessReport } from '../../../external-harnesses/contract/service/table.js';
 import { asHarnessName } from '../../../threads/testing/doubles.js';
 import { asThreadListProjection } from '../../../threads/testing/doubles.js';
 import { wireThread, wireThreadFacts } from '../../../threads/testing/doubles.js';
@@ -44,7 +44,13 @@ const setup = Effect.fnUntraced(function* () {
             threadId: row.id,
             projectId: demo.projectId,
             harness: {
-              facet: { name, sessionKey: key, execution: null, observation: unmeasuredObservation() },
+              facet: {
+                name,
+                presentation: harnessPresentation(name),
+                sessionKey: key,
+                execution: null,
+                observation: unmeasuredObservation(),
+              },
               kernel: null,
             },
           },

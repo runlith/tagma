@@ -8,7 +8,7 @@ import { threadCallFailed } from '../../threads/contract/service/failure.js';
 import type { HarnessSeat } from '../../threads/contract/wire/harness/seat.js';
 import { harnessFacet } from '../../threads/contract/wire/harness/types.js';
 import { acpKernel } from '../birth/seat.js';
-import { harnessAdapter } from '../contract/service/table.js';
+import { harnessAdapter, harnessPresentation } from '../contract/service/table.js';
 import type { ProtocolRows } from '../store/protocol.js';
 import type { HarnessSessionStore } from '../store/sessions.js';
 import type { VendorTurns } from '../store/turns.js';
@@ -47,7 +47,7 @@ export class ProtocolHistory {
     if (facet === null) return yield* refused('The source conversation has no session to fork.');
     const binding = yield* store.binding(source, unit);
     const seat: HarnessSeat = {
-      facet: harnessFacet(facet.name),
+      facet: harnessFacet(facet.name, harnessPresentation(facet.name)),
       kernel: acpKernel(facet.name, binding?.agent ?? null, yield* store.asked(source, unit), {}),
     };
     return seat;

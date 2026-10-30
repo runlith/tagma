@@ -1,6 +1,7 @@
 import { it } from '@runlith/effect-test';
 import { Effect } from 'effect';
 import { harnessFacet } from '../../../threads/contract/wire/harness/types.js';
+import { harnessPresentation } from '../../../external-harnesses/contract/service/table.js';
 import { modelChanges } from '../../../threads/testing/doubles.js';
 import { sessionRowsOver } from '../../../external-harnesses/testing/floor.js';
 import { describeSessionStore } from '../../../external-harnesses/testing/sessionConformance.js';
@@ -23,7 +24,10 @@ const fixture = Effect.fnUntraced(function* () {
         {
           threadId: thread.id,
           projectId: demo.projectId,
-          harness: { facet: harnessFacet('claude-code'), kernel: terminalKernel('claude-code', undefined, false, {}) },
+          harness: {
+            facet: harnessFacet('claude-code', harnessPresentation('claude-code')),
+            kernel: terminalKernel('claude-code', undefined, false, {}),
+          },
         },
         unit,
       );

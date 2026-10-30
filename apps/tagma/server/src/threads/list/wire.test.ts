@@ -7,6 +7,7 @@ import { Usage } from '@runlith/llm/schema/events';
 import { NATIVE_BINDING, NATIVE_CAPABILITIES } from '@runlith/agent/thread/record';
 import { HARNESS_OFFER } from '../contract/wire/harness/seat.js';
 import { threadListRowSchema, type ThreadListRow } from '../contract/wire/list.js';
+import type { HarnessPresentation } from '../contract/wire/harness/externalSession.js';
 import type { ThreadListProjection } from './summary.js';
 import { LEASE_RHYTHM } from '../contract/wire/rhythm.js';
 import { unmeasuredObservation } from '../contract/wire/harness/observation.js';
@@ -14,6 +15,18 @@ import { threadLine } from '../voice/threadText.js';
 import { threadPageBefore, threadRecordAddress, threadSelectionOf, wireThread } from './wire.js';
 import type { WarmthBasis } from '../contract/wire/warmth.js';
 import type { ThreadContextLimit } from '@runlith/agent/thread/compaction/limit';
+
+const PRESENTATION: HarnessPresentation = {
+  label: 'Acme CLI',
+  iconProvider: 'acme',
+  mark: null,
+  install: null,
+  modelProvider: null,
+  terminal: true,
+  acp: false,
+  hosted: false,
+  sharedSessions: true,
+};
 
 it.effect('page cursors refuse invalid instants and preserve ordinary continuation positions', () =>
   Effect.gen(function* () {
@@ -248,6 +261,7 @@ const TERMINAL_ROAD = { transport: { adapter: 'terminal', profile: 'devin', agen
 test('a harness row names the CLI it was born to run and the model it reported, and a native row names none', () => {
   const unnamed = {
     name: 'devin',
+    presentation: PRESENTATION,
     transport: 'terminal',
     sessionKey: null,
     execution: null,
@@ -255,6 +269,7 @@ test('a harness row names the CLI it was born to run and the model it reported, 
   } as const;
   expect(wire(row({ harness: unnamed, provider: 'acme-oauth', model: null, reasoning: null, ...TERMINAL_ROAD })).harness).toEqual({
     name: 'devin',
+    presentation: PRESENTATION,
     transport: 'terminal',
     agent: null,
     provider: 'acme-oauth',
@@ -284,6 +299,7 @@ test('a harness row names the CLI it was born to run and the model it reported, 
   } as const;
   const running = {
     name: 'cursor',
+    presentation: PRESENTATION,
     transport: 'terminal',
     sessionKey: 'session-7',
     execution: { execution: 'e-1', incarnation: 5 },
@@ -291,6 +307,7 @@ test('a harness row names the CLI it was born to run and the model it reported, 
   } as const;
   expect(wire(row({ harness: running, provider: 'external', model: null, reasoning: null, ...TERMINAL_ROAD })).harness).toEqual({
     name: 'cursor',
+    presentation: PRESENTATION,
     transport: 'terminal',
     agent: null,
     provider: 'external',
@@ -324,6 +341,7 @@ test('the asked pair rides beside the reported model, and their disagreement cha
   } as const;
   const facet = {
     name: 'claude-code',
+    presentation: PRESENTATION,
     transport: 'terminal',
     sessionKey: 'session-9',
     execution: null,
@@ -347,6 +365,7 @@ test('a model the reading cannot stand behind is advertised as none', () => {
   const harness = (model: ReturnType<typeof served>, bound: string | null) =>
     ({
       name: 'cursor',
+      presentation: PRESENTATION,
       transport: 'terminal',
       sessionKey: 'session-7',
       execution: null,
@@ -417,6 +436,7 @@ test('a full thread list row survives the wire with every key equal', () => {
     profileId: 'profile-7',
     harness: {
       name: 'cursor',
+      presentation: PRESENTATION,
       transport: 'terminal',
       agent: null,
       provider: 'external',

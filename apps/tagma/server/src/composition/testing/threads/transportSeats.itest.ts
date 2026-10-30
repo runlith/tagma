@@ -10,6 +10,7 @@ import { ThreadEntryKinds } from '@runlith/agent/transcript/kinds';
 import { NativeStorage, ThreadJournal } from '../../../threads/contract/service/engine.js';
 import { ModelChanges } from '../../../threads/contract/service/modelChanges.js';
 import { harnessFacet } from '../../../threads/contract/wire/harness/types.js';
+import { harnessPresentation } from '../../../external-harnesses/contract/service/table.js';
 import { isTransportEntry } from '../../../threads/contract/wire/harness/transportEntry.js';
 import { kernelWrites, nativeTransitions } from '../../../native-harness/testing/doubles.js';
 import { modelChanges, sqliteThreadJournal, threadRebinding, threadRun } from '../../../threads/testing/doubles.js';
@@ -55,7 +56,10 @@ it.effect('SQL transport rebinding persists the hosted model default and both jo
           {
             threadId: row.id,
             projectId: demo.projectId,
-            harness: { facet: harnessFacet('claude-code'), kernel: terminalKernel('claude-code', undefined, false, {}) },
+            harness: {
+              facet: harnessFacet('claude-code', harnessPresentation('claude-code')),
+              kernel: terminalKernel('claude-code', undefined, false, {}),
+            },
           },
           unit,
         );

@@ -2,6 +2,7 @@ import { it } from '@runlith/effect-test';
 import { Effect } from 'effect';
 import { openMemoryStorage } from '@runlith/agent/thread/conformance/memoryStorage';
 import { harnessFacet } from '../../threads/contract/wire/harness/types.js';
+import { harnessPresentation } from '../contract/service/table.js';
 import { memorySessionRows } from '../testing/memorySessions.js';
 import { describeSessionStore } from '../testing/sessionConformance.js';
 import { HarnessSessionStore } from './sessions.js';
@@ -20,7 +21,7 @@ const fixture = Effect.fnUntraced(function* () {
     switches: kernel.switches,
   });
   const memory = yield* memorySessionRows(storage);
-  yield* memory.seed(thread.id, harnessFacet('claude-code'));
+  yield* memory.seed(thread.id, harnessFacet('claude-code', harnessPresentation('claude-code')));
   return { store: new HarnessSessionStore(memory.rows, () => Effect.void), rows: memory.rows, id: thread.id };
 });
 

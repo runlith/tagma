@@ -12,8 +12,7 @@ import type { ThreadFeedEvent, ThreadFeedSnapshot } from '@runlith/agent/transcr
 import { THREAD_COMPOSITION_PARTS } from '@runlith/agent/protocol/compositionParts';
 import { Schema } from 'effect';
 import { ApprovalModeView } from '@runlith/agent/modes/ApprovalMode';
-import { harnessRowSchema, type HarnessRowDetail } from './harness/externalSession.js';
-import { harnessNameSchema, type HarnessName } from './harness/names.js';
+import { harnessIdentitySchema, harnessRowSchema, type HarnessIdentity, type HarnessRowDetail } from './harness/externalSession.js';
 import type { ThreadSpawnDepth } from '@runlith/agent/collaboration/ThreadSpawnAccess';
 import { approvingSchema, type Approving } from './approving.js';
 import { delegationSchema, spawnDepthSchema, threadPlaceSchema, type Delegation, type ThreadPlace } from './birth.js';
@@ -76,7 +75,7 @@ export type WireThread = ThreadStateView['thread'] & {
   readonly detachedFrom?: ThreadParent;
   readonly cacheWarmth: typeof ThreadCacheWarmth.Type | null;
   readonly harness: HarnessRowDetail | null;
-  readonly cli: HarnessName | null;
+  readonly cli: HarnessIdentity | null;
   readonly processAccount: string | null;
   readonly delegation: Delegation;
   readonly approving: Approving;
@@ -100,7 +99,7 @@ const wireThreadSchema = Schema.Struct({
   detachedFrom: Schema.optional(threadParentSchema),
   cacheWarmth: Schema.NullOr(ThreadCacheWarmth),
   harness: Schema.NullOr(harnessRowSchema),
-  cli: Schema.NullOr(harnessNameSchema),
+  cli: Schema.NullOr(harnessIdentitySchema),
   processAccount: Schema.NullOr(Schema.String),
   delegation: delegationSchema,
   approving: approvingSchema,

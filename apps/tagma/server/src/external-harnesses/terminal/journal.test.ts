@@ -7,6 +7,7 @@ import { APPROVAL, lifecycleWorldOver, OWNER, SCOPE } from '@runlith/agent/threa
 import { fakeAdapter } from '@runlith/agent/thread/conformance/fakeTransport';
 import { ThreadInbox } from '../../threads/store/inbox.js';
 import { harnessFacet } from '../../threads/contract/wire/harness/types.js';
+import { harnessPresentation } from '../contract/service/table.js';
 import { terminalKernel } from '../birth/seat.js';
 import { RunActivities } from '../protocol/activities.js';
 import { memorySessionRows } from '../testing/memorySessions.js';
@@ -58,7 +59,9 @@ it.effect('an observed run stopped before its afterCommit activity opens still r
           ]);
           if (observed?.status !== 'applied') return yield* Effect.die('the observed start was not admitted');
           yield* unit.afterCommit(
-            journal.open({ id: observed.runId, threadId: thread.id }, harnessFacet('claude-code'), []).pipe(Effect.orDie),
+            journal
+              .open({ id: observed.runId, threadId: thread.id }, harnessFacet('claude-code', harnessPresentation('claude-code')), [])
+              .pipe(Effect.orDie),
           );
         }),
       ),

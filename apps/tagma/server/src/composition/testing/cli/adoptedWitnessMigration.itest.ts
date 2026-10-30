@@ -7,11 +7,13 @@ import { applyMigration, chain } from '../../../platform/store/chain.js';
 import { fixtureMigrations } from '../migrations.js';
 import { parseExternalSession } from '../../../threads/contract/wire/harness/externalSession.js';
 import { unmeasuredObservation } from '../../../threads/contract/wire/harness/observation.js';
+import { harnessPresentation } from '../../../external-harnesses/contract/service/table.js';
 
 const migration = chain(fixtureMigrations).find((step) => step.name === '20261011042000_adopted_job_witness');
 
 const facet = (origin: string, job: unknown) => ({
   name: 'claude-code',
+  presentation: harnessPresentation('claude-code'),
   sessionKey: 'cli-key',
   execution: { execution: 'shell', incarnation: 0 },
   observation: unmeasuredObservation(),

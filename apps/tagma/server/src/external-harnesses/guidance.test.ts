@@ -11,6 +11,7 @@ import { ThreadRecords } from '../thread-record/contract/service/records.js';
 import { ThreadInbox } from '../threads/store/inbox.js';
 import { unhosted } from './testing/hookReports.js';
 import { harnessFacet } from '../threads/contract/wire/harness/types.js';
+import { harnessPresentation } from './contract/service/table.js';
 import { writes } from '../platform/contract/service/writes.js';
 import { terminalKernel } from './birth/seat.js';
 import { memorySessionRows } from './testing/memorySessions.js';
@@ -46,7 +47,7 @@ const fixture = Effect.fnUntraced(function* () {
   });
   const world = yield* lifecycleWorldOver(storage, (yield* storage.aggregate.find(thread.id))!, undefined, fakeAdapter('terminal'));
   const memory = yield* memorySessionRows(storage);
-  yield* memory.seed(thread.id, harnessFacet('claude-code'));
+  yield* memory.seed(thread.id, harnessFacet('claude-code', harnessPresentation('claude-code')));
   const store = new HarnessSessionStore(memory.rows, () => Effect.void);
   const context = yield* Layer.build(
     Layer.mergeAll(

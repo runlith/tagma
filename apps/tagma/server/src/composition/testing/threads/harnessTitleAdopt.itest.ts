@@ -20,6 +20,7 @@ import { adoptSessionTitle } from '../../../external-harnesses/titles.js';
 import { threadStack, type ThreadParts } from '../threadParts.js';
 import { HarnessObservations, terminalArgv } from '../../../external-harnesses/testing/doubles.js';
 import { sessionStoreOver } from '../../../external-harnesses/testing/floor.js';
+import { harnessPresentation } from '../../../external-harnesses/contract/service/table.js';
 import { ENTRY_KINDS } from '../../manifest.js';
 
 const titleIdentity = (records: ThreadRecords['Service'], id: string) =>
@@ -76,6 +77,7 @@ const setup = Effect.fnUntraced(function* () {
             harness: {
               facet: {
                 name: options.name ?? 'cursor',
+                presentation: harnessPresentation(options.name ?? 'cursor'),
                 sessionKey: options.sessionKey === undefined ? ROOT : options.sessionKey,
                 execution: null,
                 observation: unmeasuredObservation(),

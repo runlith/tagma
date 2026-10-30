@@ -2,7 +2,7 @@ import { Effect } from 'effect';
 import type { HarnessName } from '../threads/contract/wire/harness/names.js';
 import { externalRolloutPart } from './rollout.js';
 import { Harness, type HarnessServes } from '../threads/contract/service/harness.js';
-import { harnessAdapter, servingProvider } from './contract/service/table.js';
+import { harnessAdapter, harnessPresentation, servingProvider } from './contract/service/table.js';
 import { acpKernel } from './birth/seat.js';
 import { harnessFacet } from '../threads/contract/wire/harness/types.js';
 import { wireHarness } from '../threads/voice/rowDetail.js';
@@ -25,7 +25,7 @@ const servedBy = (name: HarnessName, asked: AskedModel): { readonly serves?: Har
           provider,
           seat: (to, agent) =>
             Effect.map(asked(to), (model) => ({
-              facet: harnessFacet(name),
+              facet: harnessFacet(name, harnessPresentation(name)),
               kernel: acpKernel(name, agent, model, to.switches, to.account),
             })),
         },

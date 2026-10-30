@@ -1,6 +1,6 @@
-import { HARNESS_AGENT_ID, HARNESS_LABELS, HARNESS_NAMES, type HarnessName } from './names.js';
+import { HARNESS_AGENT_ID, HARNESS_NAMES, type HarnessName } from './names.js';
 import { unmeasuredObservation } from './observation.js';
-import type { ExternalSession, HarnessInstall } from './externalSession.js';
+import type { ExternalSession, HarnessInstall, HarnessPresentation } from './externalSession.js';
 
 const SEPARATOR = ':';
 const PREFIX = `${HARNESS_AGENT_ID}${SEPARATOR}`;
@@ -17,7 +17,7 @@ export function harnessOfTypeId(typeId: string): HarnessName | null {
 
 export function harnessSpawnTypes(installs: readonly HarnessInstall[]) {
   return installs.map((install) => {
-    const label = HARNESS_LABELS[install.harness];
+    const { label } = install.presentation;
     return {
       id: harnessTypeId(install.harness),
       name: label,
@@ -28,6 +28,6 @@ export function harnessSpawnTypes(installs: readonly HarnessInstall[]) {
   });
 }
 
-export function harnessFacet(name: HarnessName): ExternalSession {
-  return { name, sessionKey: null, execution: null, observation: unmeasuredObservation() };
+export function harnessFacet(name: HarnessName, presentation: HarnessPresentation): ExternalSession {
+  return { name, presentation, sessionKey: null, execution: null, observation: unmeasuredObservation() };
 }

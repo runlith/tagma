@@ -21,6 +21,7 @@ import { evidenceReads } from '../../../native-harness/testing/doubles.js';
 import { sessionFor } from '../../../external-harnesses/testing/sessions.js';
 import { acpTestSeat } from '../../../external-harnesses/testing/seats.js';
 import { harnessFacet } from '../../../threads/contract/wire/harness/types.js';
+import { harnessPresentation } from '../../../external-harnesses/contract/service/table.js';
 import {
   compressRollout,
   conversationBackfill,
@@ -403,7 +404,7 @@ describe('conversation index and journal', () => {
       for (const id of ['t-acp', 't-screen']) yield* thread(id, own);
       const seat = acpTestSeat('claude-code', 'tagma', undefined);
       yield* sessionFor(db, 't-acp', seat.facet, seat.kernel);
-      yield* sessionFor(db, 't-screen', harnessFacet('claude-code'));
+      yield* sessionFor(db, 't-screen', harnessFacet('claude-code', harnessPresentation('claude-code')));
       yield* append('t-acp', message({ id: 'h-1', text: 'Ostrog monastery', at: '2026-09-13T10:00:00.000Z' }));
       yield* append('t-screen', {
         kind: 'reasoning',

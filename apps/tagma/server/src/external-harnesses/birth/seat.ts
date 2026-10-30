@@ -5,7 +5,7 @@ import type { HarnessAskedModel } from '../../threads/contract/wire/harness/aske
 import type { HarnessName } from '../../threads/contract/wire/harness/names.js';
 import { EXTERNAL_PROVIDER, type HarnessSeat, type KernelSeat, type SeatedHarness } from '../../threads/contract/wire/harness/seat.js';
 import { harnessFacet } from '../../threads/contract/wire/harness/types.js';
-import { harnessAdapter, servingProvider } from '../contract/service/table.js';
+import { harnessAdapter, harnessPresentation, servingProvider } from '../contract/service/table.js';
 import { transcriptUsage } from '../metadata/words.js';
 import type { AcpProfile } from '@runlith/tagma/adapter/harness';
 import type { HarnessTransportOffer } from '../contract/service/table.js';
@@ -115,8 +115,13 @@ export const birthSeat = (
   profile: HarnessProfile,
 ): HarnessSeat =>
   offer.transport === 'acp'
-    ? { facet: harnessFacet(name), kernel: acpKernel(name, offer.agent, asked, {}) }
+    ? { facet: harnessFacet(name, harnessPresentation(name)), kernel: acpKernel(name, offer.agent, asked, {}) }
     : {
-        facet: { ...harnessFacet(name), home: profile.home, plain: profile.plain, permissionMode: profile.permissionMode },
+        facet: {
+          ...harnessFacet(name, harnessPresentation(name)),
+          home: profile.home,
+          plain: profile.plain,
+          permissionMode: profile.permissionMode,
+        },
         kernel: terminalKernel(name, asked, profile.plain === true, {}),
       };
