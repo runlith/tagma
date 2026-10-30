@@ -4,7 +4,7 @@ import type { StoreDb, StoreFailure } from '../platform/contract/service/store.j
 import type { WriteUnit } from '../platform/contract/service/units.js';
 import type { ThreadId } from '../platform/contract/wire/thread.js';
 import type { Detached, DetachRefused, ReattachRefused, Reattached } from './contract/service/records.js';
-import { subtreeOf } from './lineage.js';
+import { liveRootOf, subtreeOf } from './lineage.js';
 import { threadRecord } from './store/table.js';
 import { setArchived } from './shelf.js';
 
@@ -23,6 +23,8 @@ export const detach = Effect.fnUntraced(function* (
       .select({
         parentId: threadRecord.parentId,
         spawnRootId: threadRecord.spawnRootId,
+        projectId: threadRecord.projectId,
+        pinnedAt: threadRecord.pinnedAt,
         archivedAt: threadRecord.archivedAt,
         detachedFrom: threadRecord.detachedFrom,
         detachedAt: threadRecord.detachedAt,
@@ -40,15 +42,29 @@ export const detach = Effect.fnUntraced(function* (
   }
   if (row.archivedAt !== null) yield* setArchived(db, unit, [id], null);
   const root = yield* unit.run(
-    db.select({ pinnedAt: threadRecord.pinnedAt }).from(threadRecord).where(eq(threadRecord.id, row.spawnRootId)).get(),
+    db
+      .select({ pinnedAt: threadRecord.pinnedAt, folderId: threadRecord.folderId, projectId: threadRecord.projectId })
+      .from(threadRecord)
+      .where(sql`${threadRecord.id} = ${liveRootOf(id)}`)
+      .get(),
   );
+  const folderId = root !== undefined && root.projectId === row.projectId ? root.folderId : null;
   const subtree = ids(yield* unit.run(db.select({ id: threadRecord.id }).from(threadRecord).where(inSubtree(id))));
   const lifted = new Set<string>(subtree);
   const team = ids(
     yield* unit.run(db.select({ id: threadRecord.id }).from(threadRecord).where(eq(threadRecord.spawnRootId, row.spawnRootId))),
   ).filter((member) => !lifted.has(member));
   yield* unit.run(
-    db.update(threadRecord).set({ parentId: null, detachedFrom: row.parentId, detachedAt: at }).where(eq(threadRecord.id, id)),
+    db
+      .update(threadRecord)
+      .set({
+        parentId: null,
+        detachedFrom: row.parentId,
+        detachedAt: at,
+        folderId,
+        pinnedAt: folderId !== null && root?.pinnedAt == null ? null : row.pinnedAt,
+      })
+      .where(eq(threadRecord.id, id)),
   );
   yield* unit.run(
     db
