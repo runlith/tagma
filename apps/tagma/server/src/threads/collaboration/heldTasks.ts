@@ -54,13 +54,16 @@ export const makeHeldTasks = Effect.fnUntraced(function* ({ threads, places, pla
   const projects = yield* Projects;
 
   const aimsOf = Effect.fn('HeldTasks.aims')(function* (thread: Thread, rows: readonly GraphOrigin[]) {
-    const home = (yield* projects.byId(thread.projectId)).rootPath;
+    const removed = new Set(yield* projects.removed());
+    const home: GraphOrigin[] = removed.has(thread.projectId)
+      ? []
+      : [
+          { projectId: thread.projectId, root: (yield* projects.byId(thread.projectId)).rootPath },
+          ...(yield* placement.rootsOf(thread.id)).map((root) => ({ projectId: thread.projectId, root: root.path })),
+        ];
     const aims = new Map<string, CopyAim>();
-    for (const place of [
-      { projectId: thread.projectId, root: home },
-      ...(yield* placement.rootsOf(thread.id)).map((root) => ({ projectId: thread.projectId, root: root.path })),
-      ...rows,
-    ]) {
+    for (const place of [...home, ...rows]) {
+      if (removed.has(place.projectId)) continue;
       const key = `${place.projectId}\u0000${place.root}`;
       if (!aims.has(key)) aims.set(key, { projectId: place.projectId, cwd: place.root });
     }

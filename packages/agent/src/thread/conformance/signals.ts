@@ -109,6 +109,26 @@ export function describeThreadSignals<TTx, TWrite extends TTx = TTx, R = never>(
       }),
     );
     test(
+      'a waiting line arriving during the final response opens no extra step or follow-up turn',
+      Effect.fnUntraced(function* () {
+        const { storage, world, threadId, handle } = yield* opened(open);
+        const final = hold();
+        world.answers.push({ text: 'Done.', held: final }, { text: 'Read the line.' });
+        yield* started(handle, 'Finish the work.');
+        yield* final.reached;
+        const line = { id: 'line:rested', type: 'thread-event', addressee: 'transport', text: 'the child rested' } as const;
+        yield* handle.sendSignal(line, { ifActive: 'deliver', ifIdle: 'wait' });
+        final.release();
+        yield* quiet(world, threadId);
+        expect(world.requests).toHaveLength(1);
+        expect(yield* storage.inbox.receipt(line.id)).toMatchObject({ state: 'queued', body: { waits: true } });
+        yield* started(handle, 'Take the next task.');
+        yield* quiet(world, threadId);
+        expect(world.requests).toHaveLength(2);
+        expect((yield* storage.inbox.receipt(line.id))?.state).toBe('acknowledged');
+      }),
+    );
+    test(
       'a signal that comes while a keep-warm run goes is not handed to its transport, and the turn after reads it',
       Effect.fnUntraced(function* () {
         const run = yield* hosted(open, {}, { kind: 'keep-warm', reads: true });

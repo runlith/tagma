@@ -8,6 +8,7 @@ import { ProjectLifecycle } from '../../../graph/contract/service/serving.js';
 import { HarnessReports } from '../../../external-harnesses/contract/service/reports.js';
 import { HarnessCalls, ThreadHarness } from '../../../threads/contract/service/engine.js';
 import { threadCauseOf } from '@runlith/agent/thread/ThreadBorder';
+import { ThreadRunNotInterruptedError } from '@runlith/agent/thread/storage/runs';
 import { OPERATOR_PRINCIPAL } from '../../../platform/contract/wire/actor.js';
 import { MachineStore } from '../../../platform/contract/service/store.js';
 import { MachineUnits } from '../../../platform/contract/service/units.js';
@@ -42,6 +43,7 @@ const setup = Effect.gen(function* () {
   const made = new Set<string>();
   return {
     data: world.dataHome,
+    world,
     runtime,
     projectId: project.id,
     db,
@@ -68,12 +70,13 @@ const born = Effect.fnUntraced(function* (title: string) {
   made.add(id);
   return id;
 });
-const spawned = Effect.fn('testing.archiveChild')(function* (parentId: string, agentId: string) {
+const spawned = Effect.fn('testing.archiveChild')(function* (parentId: string, agentId: string, projectId?: number) {
   const { units, store, parts, made } = yield* World;
   const id = yield* units.write('threadArchive.spawned', (unit) =>
     Effect.gen(function* () {
       const child = yield* store.insertChild(parentId, { ownerId: OPERATOR_PRINCIPAL, agentId }, unit);
-      yield* parts.rows.inheritFacet({ threadId: child.id, fromThreadId: parentId, agentId }, unit);
+      if (projectId === undefined) yield* parts.rows.inheritFacet({ threadId: child.id, fromThreadId: parentId, agentId }, unit);
+      else yield* parts.rows.attachFacet({ threadId: child.id, projectId }, unit);
       return child.id;
     }),
   );
@@ -218,6 +221,58 @@ layer(Layer.effect(World, setup).pipe(Layer.provide(fixture), Layer.provideMerge
           expect((yield* list.row(child))?.activeRun).toBeNull();
           expect(yield* inboxOf(runtime.owners).receipt(signal)).toMatchObject({ state: 'queued', deliveredToRunId: null });
         }
+      }),
+    );
+
+    it.effect('bulk archive keeps a descendant in a removed home project reachable through its living ancestor', () =>
+      Effect.gen(function* () {
+        const { world, projectId, db, units } = yield* World;
+        const root = yield* born('a team with a removed home');
+        const removed = yield* world.plainProject();
+        const child = yield* spawned(root, 'tagma', removed);
+        expect((yield* world.op('remove_project', { ref: String(removed) })).status).toBe(200);
+        const stamp = new Date('2000-01-01T00:00:00.000Z');
+        yield* units.write('threadArchive.dateRemovedFamily', (unit) =>
+          unit.run(db.update(thread()).set({ updatedAt: stamp }).where(eq(thread().id, root))),
+        );
+        const archived = yield* world.op(
+          'archive_threads',
+          { updatedSince: stamp.toISOString(), updatedBefore: new Date(stamp.getTime() + 1).toISOString() },
+          `project=${projectId}`,
+        );
+        expect(archived.body).toMatchObject({ status: 'swept', moved: expect.arrayContaining([root, child]) });
+        expect(yield* archivedAt(root)).not.toBeNull();
+        expect(yield* archivedAt(child)).toBe(yield* archivedAt(root));
+      }),
+    );
+
+    it.effect('deleting an active half-born child completes its missing first rollout and removes the thread', () =>
+      Effect.gen(function* () {
+        const { world, runtime, projectId, db, units } = yield* World;
+        const child = yield* spawned(yield* born('parent of an interrupted birth'), 'tagma');
+        const files = yield* FileSystem.FileSystem;
+        const path = Context.get(runtime.owners, ThreadRollouts).pathOf(projectId, child);
+        if (path === undefined) return yield* Effect.die('The archive fixture has no rollout place.');
+        expect(yield* files.exists(path)).toBe(false);
+        const departed = new Date(0);
+        yield* units.write('threadArchive.halfBornRun', (unit) =>
+          unit.run(
+            db.insert(threadRun()).values({
+              threadId: child,
+              ownerId: 'departed-birth',
+              startedAt: departed,
+              heartbeatAt: departed,
+              createdAt: departed,
+              updatedAt: departed,
+            }),
+          ),
+        );
+        expect((yield* listOf(runtime.owners).row(child))?.activeRun).not.toBeNull();
+        expect((yield* world.op('delete_thread', { threadId: child }, `project=${projectId}`)).body).toMatchObject({
+          status: 'deleted',
+          threadId: child,
+        });
+        expect(yield* listOf(runtime.owners).row(child)).toBeUndefined();
       }),
     );
 
@@ -516,15 +571,14 @@ layer(Layer.effect(World, setup).pipe(Layer.provide(fixture), Layer.provideMerge
       }),
     );
 
-    it.effect('continuing a CLI thread that declares no continuation refuses with the capability it lacks', () =>
+    it.effect('continuing a CLI thread with no prior turn refuses without opening one', () =>
       Effect.gen(function* () {
         const { runtime, projectId } = yield* World;
-        const { child } = yield* harnessChild(yield* born('parent of a CLI that cannot continue'), 'idle');
-        expect(threadCauseOf(yield* Effect.flip(turnsOf(runtime.owners).continueThread(child, projectId)))).toMatchObject({
-          _tag: 'TransportCannot',
-          threadId: child,
-          capability: 'continue',
-        });
+        const { child } = yield* harnessChild(yield* born('parent of a CLI with no prior turn'), 'idle');
+        expect(threadCauseOf(yield* Effect.flip(turnsOf(runtime.owners).continueThread(child, projectId)))).toBeInstanceOf(
+          ThreadRunNotInterruptedError,
+        );
+        expect((yield* listOf(runtime.owners).row(child))?.activeRun).toBeNull();
       }),
     );
 

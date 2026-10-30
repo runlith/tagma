@@ -139,6 +139,7 @@ const setup = Effect.gen(function* () {
         }),
         Layer.mock(Projects, {
           byId: (id) => Effect.succeed({ id, name: 'home', repoKey: 'home', rootPath: '/main', createdAt: new Date(0), global: false }),
+          removed: () => Effect.succeed([]),
         }),
       ),
     ),

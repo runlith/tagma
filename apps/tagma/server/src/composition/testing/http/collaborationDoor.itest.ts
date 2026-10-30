@@ -235,6 +235,11 @@ layer(Layer.effect(Place, setup), { excludeTestServices: true })('collaboration 
       yield* turnsOf(world.runtime.owners).send(lead, projectId, ARCHIVE, undefined, { key: 'archive-sweeper' });
       yield* Deferred.await(archived);
       expect((yield* Context.get(world.runtime.owners, ThreadRecords).facts(watched))?.archivedAt).toBeInstanceOf(Date);
+      const waiting = yield* openRequests(watched);
+      expect(yield* asThread(cli, 'send_task', { to: ['sweeper'], task: 'Reopen the ledger.' }, 'task-archived')).toMatchObject({
+        code: 'thread-archived',
+      });
+      expect(yield* openRequests(watched)).toEqual(waiting);
       expect(yield* asThread(cli, 'read_subscriptions', { limit: 2 })).toMatchObject({ threads: [], total: 0 });
     }),
   );

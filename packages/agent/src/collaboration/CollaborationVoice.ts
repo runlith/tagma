@@ -165,10 +165,10 @@ export function collaborationBirth(input: {
             'It may send you more words, more work, or a stop.',
           ]
         : [
-            'you hold no send_message, so nothing of yours leaves this run before it ends and the last',
-            'message of the run your task arrived in is what reaches it. Write that message as the answer',
-            'itself — the findings, the decision, what you changed — and put in it whatever you need from',
-            'your parent, since asking mid-run is not something this composition can do.',
+            'you hold no send_message. The last message of the run where the work ends reaches it:',
+            'a run awaiting a report or the end of its own command or background call sends nothing.',
+            'Write that message as the answer itself — the findings, the decision, what you changed —',
+            'and put in it whatever you need from your parent: this composition cannot ask mid-run.',
           ]),
       ...(root
         ? [
