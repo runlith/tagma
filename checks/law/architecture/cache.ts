@@ -28,6 +28,15 @@ const words = Schema.Struct({ revision: Schema.String, origins: Schema.Record(Sc
 type WordIndex = typeof words.Type;
 export type WordOrigins = Record<string, readonly string[]>;
 const pointer = Schema.Struct({ key: Schema.String });
+const pointedAt = (root: string, prefix: string): string | undefined => {
+  const decoded = Schema.decodeUnknownResult(pointer)(revisionAt(root, `${prefix}:last`));
+  return Result.isFailure(decoded) ? undefined : decoded.success.key;
+};
+const remember = (root: string, prefix: string, revision: string, value: unknown): void => {
+  const key = `${prefix}:${revision}`;
+  saveRevision(root, key, value);
+  saveRevision(root, `${prefix}:last`, { key });
+};
 const vendors = Schema.Struct({ revision: Schema.String, words: Schema.Array(Schema.String), findings: Schema.Array(ProgramFinding) });
 export type VendorIndex = typeof vendors.Type;
 
@@ -59,40 +68,28 @@ export const readIndex = (root: string, key: string): CouplingIndex | undefined 
 };
 
 export const lastIndex = (root: string, prefix: string): CouplingIndex | undefined => {
-  const decoded = Schema.decodeUnknownResult(pointer)(revisionAt(root, `${prefix}:last`));
-  return Result.isFailure(decoded) ? undefined : readIndex(root, decoded.success.key);
+  const key = pointedAt(root, prefix);
+  return key === undefined ? undefined : readIndex(root, key);
 };
 
-export const saveIndex = (root: string, prefix: string, index: CouplingIndex): void => {
-  const key = `${prefix}:${index.revision}`;
-  saveRevision(root, key, index);
-  saveRevision(root, `${prefix}:last`, { key });
-};
+export const saveIndex = (root: string, prefix: string, index: CouplingIndex): void => remember(root, prefix, index.revision, index);
 
 export const readWords = (root: string, key: string): WordIndex | undefined => {
   const decoded = Schema.decodeUnknownResult(words)(revisionAt(root, key));
   return Result.isFailure(decoded) ? undefined : decoded.success;
 };
 export const lastWords = (root: string, prefix: string): WordIndex | undefined => {
-  const decoded = Schema.decodeUnknownResult(pointer)(revisionAt(root, `${prefix}:last`));
-  return Result.isFailure(decoded) ? undefined : readWords(root, decoded.success.key);
+  const key = pointedAt(root, prefix);
+  return key === undefined ? undefined : readWords(root, key);
 };
-export const saveWords = (root: string, prefix: string, words: WordIndex): void => {
-  const key = `${prefix}:${words.revision}`;
-  saveRevision(root, key, words);
-  saveRevision(root, `${prefix}:last`, { key });
-};
+export const saveWords = (root: string, prefix: string, words: WordIndex): void => remember(root, prefix, words.revision, words);
 
 export const readVendors = (root: string, key: string): VendorIndex | undefined => {
   const decoded = Schema.decodeUnknownResult(vendors)(revisionAt(root, key));
   return Result.isFailure(decoded) ? undefined : decoded.success;
 };
 export const lastVendors = (root: string, prefix: string): VendorIndex | undefined => {
-  const decoded = Schema.decodeUnknownResult(pointer)(revisionAt(root, `${prefix}:last`));
-  return Result.isFailure(decoded) ? undefined : readVendors(root, decoded.success.key);
+  const key = pointedAt(root, prefix);
+  return key === undefined ? undefined : readVendors(root, key);
 };
-export const saveVendors = (root: string, prefix: string, index: VendorIndex): void => {
-  const key = `${prefix}:${index.revision}`;
-  saveRevision(root, key, index);
-  saveRevision(root, `${prefix}:last`, { key });
-};
+export const saveVendors = (root: string, prefix: string, index: VendorIndex): void => remember(root, prefix, index.revision, index);

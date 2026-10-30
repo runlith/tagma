@@ -29,7 +29,7 @@ export const selectSources = (snapshot: Snapshot, paths: readonly string[]): Sna
 
 export const production = (path: string): boolean =>
   /\.(?:[cm]?[jt]sx?|svelte)$/.test(path) &&
-  !/\.d\.[cm]?ts$|\.(?:test|itest|e2e|stest|spec|bench|fixture)\.|\/(?:testing|test-utils|conformance|fixtures|examples|dist|build|node_modules)\//.test(
+  !/\.d\.[cm]?ts$|\.(?:test|itest|e2e|stest|spec|bench|fixture)\.|\/(?:testing|conformance)\.[^/]+$|\/(?:testing|test-utils|conformance|fixtures|examples|dist|build|node_modules)\//.test(
     path,
   );
 

@@ -106,25 +106,54 @@ const propertyCursor = (node: ts.StringLiteralLike): boolean => {
   return false;
 };
 
+const vendorRole = (name: string): boolean =>
+  name
+    .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .some((word) =>
+      ['provider', 'providers', 'harness', 'harnesses', 'model', 'models', 'adapter', 'adapters', 'runner', 'cli'].includes(word),
+    );
+const referenceName = (node: ts.Expression): string =>
+  ts.isIdentifier(node) ? node.text : ts.isPropertyAccessExpression(node) ? `${referenceName(node.expression)}.${node.name.text}` : '';
+
 const cursorVendor = (node: ts.Node & { readonly text: string }, path: string): boolean => {
-  if (path.includes('/external-harnesses/') || path.includes('/harness/')) return true;
-  if (/(?:harness:cursor|cursor:|cursor-agent|@cursor\/|\.cursor\/)/i.test(node.text)) return true;
+  if (/^(?:bad-cursor|cursor-stale)$/i.test(node.text)) return false;
+  if (/(?:harness[:.]cursor|cursor-agent|@cursor\/|\.cursor\/)/i.test(node.text)) return true;
+  if (/\/external-harnesses\/(?:vendors|runner)\/cursor\//.test(path) || path.includes('/harness/')) return true;
   for (let at: ts.Node | undefined = node.parent; at !== undefined && !ts.isSourceFile(at); at = at.parent) {
-    if (
-      ts.isPropertyAssignment(at) &&
-      /^(?:id|provider|providerId|harness|harnessId|format|cli|binary|serves|modelProvider|iconProvider)$/.test(key(at.name))
-    )
+    if (ts.isFunctionDeclaration(at) || ts.isFunctionExpression(at) || ts.isArrowFunction(at)) break;
+    if (ts.isPropertyAssignment(at)) {
+      const name = key(at.name);
+      if (/^(?:provider|providerId|harness|harnessId|format|cli|binary|serves|modelProvider|iconProvider)$/.test(name)) return true;
+      if (
+        name === 'id' &&
+        ts.isObjectLiteralExpression(at.parent) &&
+        at.parent.properties.some(
+          (one) =>
+            ts.isPropertyAssignment(one) &&
+            key(one.name) === 'kind' &&
+            literal(unwrapped(one.initializer)) &&
+            ['wire', 'harness'].includes((unwrapped(one.initializer) as ts.StringLiteralLike).text),
+        )
+      )
+        return true;
+    }
+    if (ts.isVariableDeclaration(at) && ts.isIdentifier(at.name) && at.initializer !== undefined) {
+      const value = unwrapped(at.initializer);
+      if (
+        (literal(value) || ts.isArrayLiteralExpression(value) || ts.isObjectLiteralExpression(value)) &&
+        (vendorRole(at.name.text) || (at.type !== undefined && vendorRole(at.type.getText())))
+      )
+        return true;
+    }
+    if (ts.isTypeAliasDeclaration(at) && vendorRole(at.name.text)) return true;
+    if (ts.isCallExpression(at) && vendorRole(referenceName(at.expression))) return true;
+    if (ts.isCaseClause(at) && ts.isSwitchStatement(at.parent.parent) && vendorRole(referenceName(at.parent.parent.expression)))
       return true;
-    if (
-      (ts.isVariableDeclaration(at) || ts.isTypeAliasDeclaration(at)) &&
-      ts.isIdentifier(at.name) &&
-      /provider|harness|model|adapter|runner|cli/i.test(at.name.text)
-    )
-      return true;
-    if (ts.isCallExpression(at) && /provider|harness|model|adapter|runner/i.test(at.expression.getText())) return true;
     if (ts.isBinaryExpression(at)) {
       const other = ts.isStringLiteralLike(node) && at.left === node ? at.right : at.left;
-      if (ts.isIdentifier(other) && /provider|harness|model|adapter|runner|format/i.test(other.text)) return true;
+      if (vendorRole(referenceName(other))) return true;
     }
   }
   return false;

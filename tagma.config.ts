@@ -4,8 +4,27 @@ import { names, platforms } from './checks/builtins';
 import { ALLOWED } from './checks/failures';
 import { effectStyle, environment, migrations, stepPlaces, uiTokens } from './checks/law/inspections';
 import type { EffectStyleParams } from './checks/law/effect-style/declaration';
+import { coupling, vendorIds } from './checks/law/architecture/inspections';
+import { dead, repeated } from './checks/law/declarations/declaration';
+import { askCalls } from './checks/law/architecture/calls/params';
+import couplingBaseline from './checks/law/architecture/coupling.json';
 
 const EFFECT_EXTENSIONS = ['.ts', '.tsx', '.mts', '.cts', '.js', '.jsx', '.mjs', '.cjs', '.svelte'];
+const SOURCE_TESTS = [
+  ...Files.tests,
+  '**/testing/**',
+  '**/testing.*',
+  '**/test-utils/**',
+  '**/conformance/**',
+  '**/conformance.*',
+  '**/fixtures/**',
+  '**/stand/**',
+  '**/sample/**',
+  '**/examples/**',
+  '**/dist/**',
+  '**/build/**',
+];
+const SOURCE_ALIASES = [{ prefix: '$lib/', dir: 'apps/tagma/app/src/lib/' }];
 
 const EFFECT_FILES = { exclude: ['**/node_modules/**', '**/dist/**'], extensions: EFFECT_EXTENSIONS };
 
@@ -35,6 +54,120 @@ const WRITERS = 'src/platform/contract/service/writers.ts';
 
 export default defineConfig({
   inspections: {
+    'ask-calls': askCalls(
+      {
+        region: ['apps/tagma/server/src/'],
+        aliases: [],
+        sources: [
+          {
+            path: 'apps/tagma/server/src/providers/contract/service/access.ts',
+            name: 'ModelAccess',
+            capability: 'access',
+            form: 'service',
+          },
+          { path: 'packages/agent/src/agent/modelPort.ts', name: 'ModelRequester', capability: 'requester', form: 'type' },
+          { path: 'packages/agent/src/agent/modelPort.ts', name: 'ModelRequest', capability: 'request', form: 'type' },
+          { path: 'packages/agent/src/agent/modelPort.ts', name: 'ModelCompaction', capability: 'compaction', form: 'type' },
+          {
+            path: 'packages/agent/src/thread/compaction/CompactionModels.ts',
+            name: 'CompactionModels',
+            capability: 'requester',
+            form: 'type',
+          },
+          {
+            path: 'apps/tagma/server/src/threads/contract/service/asides.ts',
+            name: 'HarnessAsides',
+            capability: 'asides',
+            form: 'service',
+          },
+          { path: 'packages/agent/src/thread/ThreadAsides.ts', name: 'ThreadAsides', capability: 'asides', form: 'type' },
+          { path: 'packages/agent/src/agent/AgentAside.ts', name: 'AgentAside', capability: 'aside', form: 'type' },
+          { path: 'apps/tagma/server/src/threads/contract/service/asks.ts', name: 'ThreadAsks', capability: 'asks', form: 'service' },
+          {
+            path: 'apps/tagma/server/src/external-harnesses/contract/service/adapters.ts',
+            name: 'HarnessAdapters',
+            capability: 'adapters',
+            form: 'service',
+          },
+          {
+            path: 'apps/tagma/server/src/external-harnesses/contract/service/adapter.ts',
+            name: 'HarnessAdapter',
+            capability: 'row',
+            form: 'type',
+          },
+          {
+            path: 'apps/tagma/server/src/external-harnesses/contract/service/adapter.ts',
+            name: 'TerminalHarnessAdapter',
+            capability: 'row',
+            form: 'type',
+          },
+        ],
+        rows: ['apps/tagma/server/src/external-harnesses/vendors/*/row.ts'],
+        allow: {
+          request: [
+            'apps/tagma/server/src/providers',
+            'apps/tagma/server/src/native-harness/kernel.ts',
+            'apps/tagma/server/src/native-harness/assembly.ts',
+          ],
+          ask: ['apps/tagma/server/src/threads/asks.ts'],
+          row: ['apps/tagma/server/src/external-harnesses', 'apps/tagma/server/src/threads/harness'],
+        },
+      },
+      {
+        files: [
+          'apps/tagma/server/src/**/*.{ts,tsx,mts,cts,js,jsx,mjs,cjs}',
+          'packages/**/*.{ts,tsx,mts,cts,js,jsx,mjs,cjs}',
+          '**/package.json',
+        ],
+      },
+    ),
+    'repeated-declarations': repeated(
+      {
+        region: [''],
+        tests: SOURCE_TESTS,
+        scope: 'all',
+        minMembers: 1,
+        minUnion: 2,
+        minLiterals: 2,
+        ignoreNames: [],
+        aliases: SOURCE_ALIASES,
+      },
+      { files: ['**/*.{ts,tsx,js,jsx,mts,cts,mjs,cjs,svelte}', '**/package.json'] },
+    ),
+    'dead-code': dead(
+      {
+        region: ['apps/tagma/server/', 'apps/tagma/app/', 'packages/'],
+        tests: SOURCE_TESTS,
+        entries: [
+          '**/{vite,vitest,drizzle,svelte}.config.*',
+          'apps/tagma/app/src/routes/**/+*.{ts,js,svelte}',
+          'apps/tagma/app/src/hooks.{client,server,universal}.{ts,js}',
+          'apps/tagma/app/src/service-worker.ts',
+        ],
+        kinds: ['function', 'class', 'const', 'type', 'interface', 'enum', 'namespace', 'default'],
+        published: ['packages/tagma'],
+        aliases: SOURCE_ALIASES,
+      },
+      { files: ['**/*.{ts,tsx,js,jsx,mts,cts,mjs,cjs,svelte}', '**/package.json'] },
+    ),
+    coupling: coupling(
+      { baseline: couplingBaseline, aliases: SOURCE_ALIASES },
+      {
+        files: [
+          'apps/tagma/{server,app}/src/**/*.{ts,tsx,js,jsx,mts,cts,mjs,cjs,svelte}',
+          'packages/**/*.{ts,tsx,js,jsx,mts,cts,mjs,cjs,svelte}',
+          '**/package.json',
+          '.tagma/**/*.md',
+        ],
+      },
+    ),
+    'vendor-ids': vendorIds(
+      {
+        source: 'apps/tagma/server/src',
+        exclude: ['external-harnesses/steps/**', 'composition/adapters.ts', 'plugin-formats/**', 'editors/**'],
+      },
+      { files: ['apps/tagma/server/src/**/*.ts', 'packages/adapter-*/**/*.{ts,tsx,js,mjs,cjs}'] },
+    ),
     'call-services': Effect.servicesOnlyIn({
       allow: ['src/invocation/'],
       base: 'apps/tagma/server',

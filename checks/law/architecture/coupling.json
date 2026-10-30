@@ -8,10 +8,10 @@
   },
   {
     "id": "@runlith/activity",
-    "path": "packages/activity/src/testing.ts",
+    "path": "packages/activity/src/store/writer.ts",
     "modules": 13,
-    "outside": 56,
-    "total": 99
+    "outside": 55,
+    "total": 96
   },
   {
     "id": "@runlith/adapter-anthropic",
@@ -240,9 +240,9 @@
   {
     "id": "@runlith/effect-test",
     "path": "packages/effect-test/vitest.config.ts",
-    "modules": 3,
-    "outside": 7,
-    "total": 10
+    "modules": 2,
+    "outside": 5,
+    "total": 7
   },
   {
     "id": "@runlith/error-boundary",
@@ -312,14 +312,14 @@
     "path": "packages/i18n/vite.config.ts",
     "modules": 4,
     "outside": 7,
-    "total": 14
+    "total": 12
   },
   {
     "id": "@runlith/layer",
     "path": "packages/layer/vite.config.ts",
     "modules": 9,
     "outside": 17,
-    "total": 124
+    "total": 117
   },
   {
     "id": "@runlith/llm",
@@ -387,16 +387,16 @@
   {
     "id": "@runlith/primitives",
     "path": "packages/primitives/vite.config.ts",
-    "modules": 6,
-    "outside": 65,
-    "total": 157
+    "modules": 5,
+    "outside": 62,
+    "total": 151
   },
   {
     "id": "@runlith/query",
     "path": "packages/query/vite.config.ts",
-    "modules": 6,
-    "outside": 31,
-    "total": 53
+    "modules": 5,
+    "outside": 25,
+    "total": 46
   },
   {
     "id": "@runlith/ripgrep",
@@ -466,14 +466,14 @@
     "path": "packages/tagma/src/rules/sources.ts",
     "modules": 6,
     "outside": 32,
-    "total": 42
+    "total": 43
   },
   {
     "id": "@runlith/tagma-kit",
     "path": "packages/tagma/kit/rules.ts",
-    "modules": 19,
-    "outside": 103,
-    "total": 106
+    "modules": 18,
+    "outside": 89,
+    "total": 91
   },
   {
     "id": "@runlith/testbed",
@@ -534,9 +534,9 @@
   {
     "id": "agent",
     "path": "packages/agent/src/workflow/storage.ts",
-    "modules": 10,
-    "outside": 618,
-    "total": 3530
+    "modules": 8,
+    "outside": 615,
+    "total": 3523
   },
   {
     "id": "agent-plugins-format",
@@ -582,10 +582,10 @@
   },
   {
     "id": "app-composition",
-    "path": "apps/tagma/app/src/lib/app/testing.ts",
+    "path": "apps/tagma/app/src/lib/app/slotWorld.ts",
     "modules": 43,
-    "outside": 293,
-    "total": 321
+    "outside": 258,
+    "total": 283
   },
   {
     "id": "app-devices",
@@ -659,10 +659,10 @@
   },
   {
     "id": "app-panes",
-    "path": "apps/tagma/app/src/lib/app/panes/testing.ts",
+    "path": "apps/tagma/app/src/lib/app/panes/seams.ts",
     "modules": 11,
-    "outside": 67,
-    "total": 94
+    "outside": 62,
+    "total": 86
   },
   {
     "id": "app-plugins",
@@ -695,9 +695,9 @@
   {
     "id": "app-providers",
     "path": "apps/tagma/app/src/lib/features/providers/usage/windows.ts",
-    "modules": 22,
-    "outside": 182,
-    "total": 311
+    "modules": 21,
+    "outside": 176,
+    "total": 304
   },
   {
     "id": "app-routes",
@@ -765,9 +765,9 @@
   {
     "id": "app-threads",
     "path": "apps/tagma/app/src/lib/features/threads/worktrees/worktrees.feed.svelte",
-    "modules": 55,
-    "outside": 1540,
-    "total": 2340
+    "modules": 54,
+    "outside": 1549,
+    "total": 2351
   },
   {
     "id": "app-views",
@@ -780,8 +780,8 @@
     "id": "app-wire",
     "path": "apps/tagma/app/src/lib/wire/wire.layer.ts",
     "modules": 33,
-    "outside": 89,
-    "total": 114
+    "outside": 87,
+    "total": 110
   },
   {
     "id": "app-workspace",
@@ -920,7 +920,7 @@
     "id": "external-harnesses",
     "path": "apps/tagma/server/src/external-harnesses/voice.ts",
     "modules": 40,
-    "outside": 1708,
+    "outside": 1710,
     "total": 2799
   },
   {
@@ -1200,8 +1200,8 @@
     "id": "threads",
     "path": "apps/tagma/server/src/threads/worlds.ts",
     "modules": 38,
-    "outside": 1959,
-    "total": 3268
+    "outside": 1961,
+    "total": 3270
   },
   {
     "id": "translations",

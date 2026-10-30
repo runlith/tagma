@@ -35,8 +35,13 @@ test('vendor strings follow adapter declarations, decode escapes and ignore non-
     [`${server}/editors/choice.ts`]: "const editor = 'orbit';",
     [`${server}/translations/data.fixture.ts`]: "export const payload = 'orbit-cloud';",
     [`${server}/translations/translate.test.ts`]: "const provider = 'orbit-cloud';",
+    [`${server}/translations/testing.ts`]: "export const fixture = 'orbit-cloud';",
     [`${server}/translations/runtime.generated.ts`]: "export const modules = { '@runlith/adapter-orbit': 1 };",
     [`${server}/translations/selection.ts`]: "const pickedProvider = 'cursor'; const theme = { label: 'Cursor', key: 'cursor' };",
+    [`${server}/providers/pagination.ts`]:
+      "const readAdapters = operation({ id: 'read_adapters', refusals: ['bad-cursor', 'cursor-stale'], cursor: Flag.String('cursor') }).pipe(registerProviders); const renderClient = Effect.gen(function* () { return `before is not a page cursor: ${raw}`; }); const html = `<style>button { cursor:pointer; }</style>`; const theme = { id: 'terminal.cursor', label: 'Cursor' };",
+    [`${server}/browser/mark.ts`]:
+      "const mark = Effect.fn('browser.mark')(function* () { yield* Effect.logDebug(`no agent cursor: ${reason}`); });",
   });
   const words = [...vendorWords(tree), 'cursor'];
   expect(new Set(words)).toEqual(
@@ -74,6 +79,7 @@ test('coupling counts literal imports against the narrowest module and keeps red
       'packages/a/package.json': '{"name":"@example/a"}',
       'packages/b/package.json': '{"name":"@example/b","exports":{"./wire":"./src/wire/row.ts"}}',
       'packages/a/src/local.ts': 'export const own = 1;',
+      'packages/a/src/testing.ts': "import { test } from '@example/testbed'; export const helper = test;",
       'packages/a/src/use.ts':
         "import { own } from './local.js'; import { row } from '@example/b/wire'; import type { Row } from '@example/b/wire'; import { Effect } from 'effect';",
       'packages/b/src/wire/row.ts': 'export const row = 1;',

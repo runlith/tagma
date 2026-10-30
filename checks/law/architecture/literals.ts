@@ -36,7 +36,7 @@ export const indexLiterals = (root: string, version: string, snapshot: Snapshot,
       const result = insert.run(version, blob, tokens);
       if (result.changes > 0) search.run(result.lastInsertRowid, tokens);
     }
-  })();
+  }).immediate();
 };
 
 export const literalCandidates = (root: string, version: string, revision: string, words: readonly string[]): readonly string[] => {
