@@ -6,7 +6,7 @@ tags: ["task"]
 fields:
   {
     "holder": "tagma:01a18e91-0057-7f4b-85b6-a35adafffddb",
-    "status": "in_work"
+    "status": "done"
   }
 ---
 The shared-type inspection recognizes only aliases whose target is an imported identifier. Namespace-qualified and inline import types name the same foreign declaration but evade that case; prove both through the public inspection and retain projections and generic applications as clean.
