@@ -46,7 +46,7 @@ A harness provider gains two optional surfaces. Their types move out of the serv
     Today's codecs (`adapter/hookFormat.ts`, `adapter/claudeFormat.ts`) and metadata readers (`metadata/*`) move into the vendor packages. Helpers that are genuinely format-neutral become shared host modules.
 - **`acp`** holds a vendor-run ACP profile, `hosts: null`: argv, configure, extensions, login, grace and handshake times, and `proves`. A builtin package may also declare a hosted runner entry.
 
-A provider must declare at least one of the two surfaces to be offered as a chat.
+A provider must declare at least one of the two surfaces to be offered as a chat. Its id is the harness id: up to 64 lowercase letters, digits and hyphens starting with a letter (the session-token grammar the MCP bridge proves), never a native id (`tagma`, `lode`). A package declaring both surfaces launches the same program on both, so the birth's install check covers the program either transport starts. The declaration refuses any other shape.
 
 ## Owners
 
@@ -78,7 +78,7 @@ A provider must declare at least one of the two surfaces to be offered as a chat
 - **Stored capabilities.** A thread's capabilities are copied into its seat at birth (`birth/seat.ts:14-91`). Where a changed declaration must reach existing threads, a step re-derives them; elsewhere they keep their birth values, as today.
 - **Declarations that need checking:**
   - The birth install check (above).
-  - The `harness` agent's library description, composed from its declarations instead of the fixed "this server never asks a model for it" (`native-harness/agents/harness/agent.ts:7`).
+  - The library descriptions: each `harness:<id>` type's is composed from its declared surfaces (`harnessSpawnTypes`), and the base `harness` agent's names no vendor and no fixed fact about one.
   - A vendor-run ACP profile's `proves` flags, compared at launch with what the agent negotiates. A claimed capability that is not negotiated refuses the launch and names it. Hosted profiles keep `proves.fork` and `proves.rewind` meaning "available, by the vendor's extension or by Tagma rebuilding the session from the journal". That is how Cursor and OpenCode fork and rewind today, and no check removes it.
 
 ## Migration
