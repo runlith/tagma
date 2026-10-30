@@ -5,7 +5,7 @@ import { AgentSignalNotice } from '../agent/contracts';
 import { RUN_ENDINGS, RUN_STAGES, WORDS_WAITS } from '../transcript/live';
 import { THREAD_ATTACHMENT_MEDIA_TYPES } from '../transcript/attachments';
 import { capTranscript, capTranscriptEntry } from '../transcript/cap';
-import { ThreadAttachment, ThreadMessageEntry, ThreadSignalEntry, WithdrawnWords } from '../transcript/entries';
+import { ThreadAttachment, ThreadFailureDiagnostics, ThreadMessageEntry, ThreadSignalEntry, WithdrawnWords } from '../transcript/entries';
 import { ThreadRewindMark, type ThreadEventDelta } from '../transcript/eventFold';
 import type { ThreadTranscriptPage } from '../transcript/rows';
 import type { ThreadSnapshot, ThreadState } from '../thread/state';
@@ -30,7 +30,6 @@ import {
   threadBornOfSchema,
   threadContextReadingSchema,
   threadAuthoritySchema,
-  threadFailureDiagnosticsSchema,
   threadProfileBirthSchema,
   threadRewindScopeSchema,
   threadRunProgressSchema,
@@ -319,7 +318,7 @@ export const serializedThreadRunSchema = Schema.Struct({
   progress: threadRunProgressSchema,
   usage: Schema.NullOr(Usage),
   failureReason: Schema.NullOr(Schema.String),
-  failure: Schema.NullOr(threadFailureDiagnosticsSchema),
+  failure: Schema.NullOr(ThreadFailureDiagnostics),
   settledBy: threadSettledBySchema,
   settledNotification: Schema.NullOr(threadNotificationRecordSchema),
   createdAt: isoString,

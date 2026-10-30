@@ -282,6 +282,36 @@ layer(evidenceLayer, { excludeTestServices: true })('thread evidence', (it) => {
     }),
   );
 
+  it.effect('a stored defect stack survives a run reading and the thread shape wire', () =>
+    Effect.gen(function* () {
+      const { runtime, call, projectId } = yield* Evidence;
+      const threadId = yield* thread(projectId);
+      const id = (yield* runsOn(threadId, 1))[0]!;
+      const failure = {
+        provider: 'subscription',
+        account: null,
+        stage: 'thread',
+        type: 'TypeError',
+        retryable: null,
+        modelStarted: null,
+        stack: 'TypeError: projection broke\n    at project (runtime.ts:42:7)',
+        record: { threadId, runId: id, entryId: `transcript:error:${id}` },
+      };
+      const db = Context.get(runtime.graph, MachineStore).db;
+      yield* Context.get(runtime.graph, MachineUnits).write('evidence.failure', (unit) =>
+        unit.run(
+          db.update(threadRun()).set({ status: 'failed', failureReason: 'projection broke', failure }).where(eq(threadRun().id, id)),
+        ),
+      );
+      const read = yield* query(projectId, { threadId, select: 'runs', fields: ['failure'], limit: 1 });
+      expect(read.status).toBe(200);
+      expect(read.answer.rows[0]?.failure).toEqual(failure);
+      const shape = yield* call(`/api/op/read_thread?project=${projectId}`, { method: 'POST', body: { threadId } });
+      expect(shape.status).toBe(200);
+      expect((shape.body as { shape: ReturnType<typeof asThreadShape> }).shape.runs[0]?.failure).toEqual(failure);
+    }),
+  );
+
   it.effect('run queries preserve notification evidence at the reading boundary', () =>
     Effect.gen(function* () {
       const { world, runtime, call, projectId } = yield* Evidence;

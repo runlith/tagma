@@ -2,10 +2,8 @@ import { Data, Result, Schema } from 'effect';
 import { AgentCallMeasurement, AgentRequestFootprint } from '../agent/AgentCallMeasurement';
 import { AgentPhase } from '../agent/AgentPhase';
 import { RUN_STAGES } from '../transcript/live';
-import { AgentRetryState } from '../agent/AgentFailure';
 import { AgentApprovalMode } from '../agent/contracts';
 import type { ThreadBornOf } from '../protocol/birth';
-import { HttpRateLimitDetails, WireFailureRecord } from '@runlith/llm/schema/errors';
 import { Message } from '@runlith/llm/schema/messages';
 import { Usage } from '@runlith/llm/schema/events';
 import type { ThreadContextReading, ThreadHistory, ThreadPendingInteraction, ThreadRunProgress, ThreadAuthority } from './rows';
@@ -14,7 +12,7 @@ import { type ThreadEntryReader, ThreadEntryUndecodable } from '../transcript/ki
 import { agentProfileSchema, type ThreadProfileBirth } from './agents/AgentProfile';
 import { transportBindingSchema, type TransportBinding } from './record';
 import { transportCapabilitiesSchema, type TransportCapabilities } from './record';
-import { ThreadQuestionEntry, type ThreadFailureDiagnostics, WithdrawnWords } from '../transcript/entries';
+import { ThreadQuestionEntry, ThreadFailureDiagnostics, WithdrawnWords } from '../transcript/entries';
 import type { ThreadEventPayload } from './events';
 import { threadInboxItemSchema, type ThreadInboxItem, type ThreadInboxRow } from './storage/inbox';
 import {
@@ -172,25 +170,10 @@ export const threadContextReadingSchema = Schema.Struct({
   staleBy: Schema.optional(Schema.Literal('rewind')),
 });
 
-export const threadFailureDiagnosticsSchema = Schema.Struct({
-  provider: Schema.NullOr(Schema.String),
-  account: Schema.NullOr(Schema.String),
-  stage: Schema.String,
-  type: Schema.String,
-  httpStatus: Schema.optional(Schema.Int),
-  retryable: Schema.NullOr(Schema.Boolean),
-  modelStarted: Schema.NullOr(Schema.Boolean),
-  detail: Schema.optional(Schema.String),
-  rateLimit: Schema.optional(HttpRateLimitDetails),
-  reason: Schema.optional(WireFailureRecord),
-  retry: Schema.optional(AgentRetryState),
-  record: Schema.Struct({ threadId: Schema.String, runId: Schema.String, entryId: Schema.String }),
-});
-
 const decodeHistory = Schema.decodeUnknownResult(Schema.Array(Message));
 const decodeProgress = Schema.decodeUnknownResult(threadRunProgressSchema);
 const decodeUsage = Schema.decodeUnknownResult(Usage);
-const decodeFailure = Schema.decodeUnknownResult(threadFailureDiagnosticsSchema);
+const decodeFailure = Schema.decodeUnknownResult(ThreadFailureDiagnostics);
 const decodeReading = Schema.decodeUnknownResult(threadContextReadingSchema);
 const decodeInboxItem = Schema.decodeUnknownResult(threadInboxItemSchema);
 
