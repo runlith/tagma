@@ -28,7 +28,7 @@ test('vendor strings follow adapter declarations, decode escapes and ignore non-
   const tree = snapshot({
     'packages/adapter-orbit/src/adapter.ts':
       "import type { ProviderDescription as Description } from '@runlith/llm/models/description'; export const ORBIT_PROVIDER = 'orbit-cloud'; export const described = { id: 'orbit-browser' } satisfies Description; export const typed: Description = { id: 'orbit-local' }; export const cast = <Description>{ id: 'orbit-shell' }; export const model = { id: 'not-a-provider' }; export const direct = defineAdapter(() => [{ id: 'orbital-cli', kind: 'harness', auth: 'cli' }]); export const catalog = { providers: [{ id: 'orbit-data' }] };",
-    [`${server}/external-harnesses/vendors/orbit/row.ts`]: "export const row = { harness: 'orbit', binary: 'orbit-cli' };",
+    'packages/adapter-orbit/src/binary.ts': "export const ORBIT_PROVIDER = 'orbit'; export const ORBIT_CLI_PROVIDER = 'orbit-cli';",
     [`${server}/translations/translate.ts`]:
       "const provider = 'orbit-cloud:model'; const command = `orbit-cli`; const escaped = 'orb\\u0069t'; const cursor = placeRole('cursor'); const page = new URL('https://example.test').searchParams.get('cursor'); type Page = Omit<Fields, 'cursor'>; // orbit-cloud",
     [`${server}/external-harnesses/steps/old.ts`]: "const provider = 'orbit-cloud';",
@@ -47,7 +47,7 @@ test('vendor strings follow adapter declarations, decode escapes and ignore non-
   expect(new Set(words)).toEqual(
     new Set(['orbit', 'orbit-browser', 'orbit-cloud', 'orbit-local', 'orbit-shell', 'orbit-cli', 'orbit-data', 'orbital-cli', 'cursor']),
   );
-  const params = { source: server, exclude: ['external-harnesses/steps/**', 'editors/**', 'external-harnesses/vendors/**'] };
+  const params = { source: server, exclude: ['external-harnesses/steps/**', 'editors/**'] };
   const expected = [
     `vendor:orbit-cloud:${server}/translations/translate.ts`,
     `vendor:orbit-cli:${server}/translations/translate.ts`,

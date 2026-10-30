@@ -42,17 +42,15 @@ const staticDir = (absolute: string): string | undefined => {
 export const patternDir = (value: string, from: string): string | undefined =>
   value.startsWith('!') ? undefined : staticDir(absoluteOf(value, from));
 
+export const probesOf = (base: string): readonly string[] => [
+  base,
+  ...(COMPILED.test(base) ? ['.ts', '.tsx', '.mts', '.cts'].map((extension) => `${base.replace(COMPILED, '')}${extension}`) : []),
+  ...EXTENSIONS.map((extension) => `${base}${extension}`),
+  ...EXTENSIONS.map((extension) => `${base}/index${extension}`),
+];
+
 export const resolverOf = (paths: Paths, packages: Packages, aliases: readonly Alias[]): Resolver => {
-  const probe = (base: string): string | undefined => {
-    if (paths.has(base)) return base;
-    if (COMPILED.test(base)) {
-      const stem = base.replace(COMPILED, '');
-      for (const extension of ['.ts', '.tsx', '.mts', '.cts']) if (paths.has(`${stem}${extension}`)) return `${stem}${extension}`;
-    }
-    for (const extension of EXTENSIONS) if (paths.has(`${base}${extension}`)) return `${base}${extension}`;
-    for (const extension of EXTENSIONS) if (paths.has(`${base}/index${extension}`)) return `${base}/index${extension}`;
-    return undefined;
-  };
+  const probe = (base: string): string | undefined => probesOf(base).find((one) => paths.has(one));
   const inside = (pkg: Package, relative: string): readonly string[] => {
     const found = probe(joined(pkg.dir, relative));
     return found === undefined ? [] : [found];
@@ -174,7 +172,7 @@ const keyedOf = (pkg: Package): Keyed => {
 
 export const keyStems = (packages: Packages, path: string): readonly string[] => {
   const stems = new Set<string>();
-  for (const pkg of packages.around(path)) {
+  for (const pkg of [...packages.containing(path), ...packages.targeting(path)]) {
     const held = keyedOf(pkg);
     if (held.whole !== undefined) stems.add(held.whole);
     for (const stem of held.exact.get(path) ?? []) stems.add(stem);

@@ -102,7 +102,7 @@ export default defineConfig({
             form: 'type',
           },
         ],
-        rows: ['apps/tagma/server/src/external-harnesses/vendors/*/row.ts'],
+        rows: [],
         allow: {
           request: [
             'apps/tagma/server/src/providers',

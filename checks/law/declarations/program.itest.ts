@@ -237,6 +237,34 @@ test('two packages sharing a name resolve to the later directory until its manif
   expect(fingerprints(second.commit.tree)).toEqual(['dead pkgs/a/src/index.ts#fromA', 'dead pkgs/a/src/index.ts#fromC']);
 });
 
+test('a file a package entry or published glob reaches outside its directory stays live through edits and goes dead with the manifest', async () => {
+  const params: DeadParams = { ...wide, published: ['pkgs/kit'] };
+  const api = (more: string) => `export const api = () => 1;\n${more}`;
+  const kit = (fields: object) => JSON.stringify({ name: '@acme/kit', ...fields });
+  const base = treeWith({
+    'pkgs/kit/package.json': kit({ main: '../shared/src/api.ts' }),
+    'pkgs/shared/src/api.ts': api(''),
+  });
+  await index(base, params);
+  const steps: readonly (readonly [string, Record<string, string | null>, string[]])[] = [
+    ['entry edited', { 'pkgs/shared/src/api.ts': api('export const more = 2;\n') }, ['pkgs/shared/src/api.ts']],
+    ['published glob', { 'pkgs/kit/package.json': kit({ exports: { './*': '../shared/src/*.ts' } }) }, ['pkgs/kit/package.json']],
+    ['glob target edited', { 'pkgs/shared/src/api.ts': api('export const more = 3;\n') }, ['pkgs/shared/src/api.ts']],
+    ['manifest removed', { 'pkgs/kit/package.json': null }, ['pkgs/kit/package.json']],
+  ];
+  let previous = base;
+  const dead: string[][] = [];
+  for (const [, files, paths] of steps) {
+    const tree = treeWith(files);
+    const { commit, whole } = await judged('dead-code', previous, tree, paths, params);
+    expect(fingerprints(commit.tree)).toEqual(fingerprints(whole.tree));
+    expect(fingerprints(commit.base)).toEqual(fingerprints(whole.base));
+    dead.push(fingerprints(commit.tree) ?? []);
+    previous = tree;
+  }
+  expect(dead).toEqual([[], [], [], ['dead pkgs/shared/src/api.ts#api', 'dead pkgs/shared/src/api.ts#more']]);
+});
+
 test('a manifest that points a package path elsewhere splits two equal types in unchanged files, as the remeasure finds', async () => {
   const page = (row: string) => `${row}\nexport type Page = { readonly items: number; readonly value: Row; readonly next: string };\n`;
   const files = (target: string) => ({

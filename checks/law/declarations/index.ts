@@ -8,7 +8,7 @@ import { blobTexts, type Entry, git } from '../git';
 import { derivedMap, rootAt, seededMap, valueAt } from '../maps';
 import { databaseAt } from '../store';
 import { type Packed, pack, unpack } from './compact';
-import { ancestorsOf, isManifest, isSource, type Package, type Packages, packageOf, shapeOf } from './corpus';
+import { ancestorsOf, isManifest, isSource, keysReaching, type Package, type Packages, packageOf, shapeOf, targetKeys } from './corpus';
 import type { Facts } from './facts';
 import { type Alias, keyStems, resolverOf } from './resolve';
 
@@ -183,16 +183,19 @@ const PACKAGES = 'packages';
 
 const byText = (left: string, right: string): number => (left < right ? -1 : left > right ? 1 : 0);
 
+const reverseKeys = (one: Package): readonly string[] => [`n:${one.name}`, ...targetKeys(one).map((key) => `x:${key}`)];
+
 const packageRows = (packages: readonly Package[]): (readonly [string, unknown])[] => {
-  const names = new Map<string, string[]>();
-  for (const one of packages) {
-    const held = names.get(one.name);
-    if (held === undefined) names.set(one.name, [one.dir]);
-    else held.push(one.dir);
-  }
+  const reverse = new Map<string, string[]>();
+  for (const one of packages)
+    for (const key of reverseKeys(one)) {
+      const held = reverse.get(key);
+      if (held === undefined) reverse.set(key, [one.dir]);
+      else held.push(one.dir);
+    }
   return [
     ...packages.map((one) => [`m:${one.dir}`, one] as const),
-    ...[...names].map(([name, dirs]) => [`n:${name}`, dirs.sort(byText)] as const),
+    ...[...reverse].map(([key, dirs]) => [key, dirs.sort(byText)] as const),
   ];
 };
 
@@ -452,18 +455,21 @@ const derivedPackages = (root: string, base: string, tree: string, changes: read
   );
   const rows = new Map<string, unknown>();
   const changed = new Set(manifests.map((one) => dirOf(one.path)));
-  const names = new Set<string>();
+  const keys = new Set<string>();
   for (const dir of changed) {
     const was = valueAt(root, from, `m:${dir}`) as Package | undefined;
     const is = now.get(dir);
     rows.set(`m:${dir}`, is);
-    for (const one of [was, is]) if (one !== undefined) names.add(one.name);
+    for (const one of [was, is]) if (one !== undefined) for (const key of reverseKeys(one)) keys.add(key);
   }
-  for (const name of names) {
-    const standing = (valueAt(root, from, `n:${name}`) as readonly string[] | undefined) ?? [];
+  for (const key of keys) {
+    const standing = (valueAt(root, from, key) as readonly string[] | undefined) ?? [];
     const dirs = new Set(standing.filter((dir) => !changed.has(dir)));
-    for (const dir of changed) if (now.get(dir)?.name === name) dirs.add(dir);
-    rows.set(`n:${name}`, dirs.size === 0 ? undefined : [...dirs].sort(byText));
+    for (const dir of changed) {
+      const is = now.get(dir);
+      if (is !== undefined && reverseKeys(is).includes(key)) dirs.add(dir);
+    }
+    rows.set(key, dirs.size === 0 ? undefined : [...dirs].sort(byText));
   }
   derivedMap(root, PACKAGES, tree, from, rows);
 };
@@ -491,7 +497,13 @@ export const manifestsAt = (root: string, commit: string): Packages => {
       }
       return names.get(name);
     },
-    around: (path) => ancestorsOf(path).flatMap((dir) => at(dir) ?? []),
+    containing: (path) => ancestorsOf(path).flatMap((dir) => at(dir) ?? []),
+    targeting: (path) => {
+      const found = new Set<string>();
+      for (const key of keysReaching(path))
+        for (const dir of (valueAt(root, id, `x:${key}`) as readonly string[] | undefined) ?? []) found.add(dir);
+      return [...found].sort(byText).flatMap((dir) => at(dir) ?? []);
+    },
   };
   if (catalogs.size > 64) catalogs.clear();
   catalogs.set(key, made);

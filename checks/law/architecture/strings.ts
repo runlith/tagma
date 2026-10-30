@@ -22,8 +22,7 @@ export const vendorWords = (snapshot: Snapshot): readonly string[] => {
   const words = new Set<string>();
   for (const path of snapshot.paths) {
     const member = /^packages\/adapter-([^/]+)\//.exec(path);
-    const vendor = /\/external-harnesses\/vendors\/([^/]+)\//.exec(path);
-    if (member === null && vendor === null) continue;
+    if (member === null) continue;
     const file = snapshot.file(path);
     const values = new Map<string, string>();
     const descriptions = new Set(['ProviderDescription']);
@@ -66,10 +65,6 @@ export const vendorWords = (snapshot: Snapshot): readonly string[] => {
           ts.isPropertyAssignment(node.parent.parent) &&
           key(node.parent.parent.name) === 'providers';
         if (catalog || (value !== undefined && literal(value) && ['wire', 'harness'].includes(value.text))) identity(node);
-      }
-      if (vendor !== null && ts.isPropertyAssignment(node) && ['harness', 'binary'].includes(key(node.name))) {
-        const value = unwrapped(node.initializer);
-        if (literal(value)) words.add(value.text);
       }
       ts.forEachChild(node, visit);
     };
@@ -120,7 +115,7 @@ const referenceName = (node: ts.Expression): string =>
 const cursorVendor = (node: ts.Node & { readonly text: string }, path: string): boolean => {
   if (/^(?:bad-cursor|cursor-stale)$/i.test(node.text)) return false;
   if (/(?:harness[:.]cursor|cursor-agent|@cursor\/|\.cursor\/)/i.test(node.text)) return true;
-  if (/\/external-harnesses\/(?:vendors|runner)\/cursor\//.test(path) || path.includes('/harness/')) return true;
+  if (path.includes('/harness/')) return true;
   for (let at: ts.Node | undefined = node.parent; at !== undefined && !ts.isSourceFile(at); at = at.parent) {
     if (ts.isFunctionDeclaration(at) || ts.isFunctionExpression(at) || ts.isArrowFunction(at)) break;
     if (ts.isPropertyAssignment(at)) {

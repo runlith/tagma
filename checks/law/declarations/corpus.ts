@@ -12,7 +12,8 @@ export type Package = {
 export type Packages = {
   readonly named: (name: string) => Package | undefined;
   readonly at: (dir: string) => Package | undefined;
-  readonly around: (path: string) => readonly Package[];
+  readonly containing: (path: string) => readonly Package[];
+  readonly targeting: (path: string) => readonly Package[];
 };
 
 export type ListedPackages = Packages & { readonly all: () => readonly Package[] };
@@ -60,6 +61,34 @@ export const ancestorsOf = (path: string): readonly string[] => {
   return ['', ...parts.map((_, at) => parts.slice(0, at + 1).join('/'))];
 };
 
+const EXTENSIONLESS = /\.[^./]+$/;
+
+export const targetKeys = (pkg: Package): readonly string[] => {
+  const keys = new Set<string>();
+  const inside = (path: string): boolean => path === pkg.dir || path.startsWith(`${pkg.dir}/`);
+  if (pkg.dir === '') return [];
+  for (const leaf of [...pkg.entries, ...leavesOf(pkg.exports)]) {
+    const target = posix.normalize(`${pkg.dir}/${leaf}`);
+    if (target.includes('*')) {
+      const kept: string[] = [];
+      for (const part of target.split('/')) {
+        if (part.includes('*')) break;
+        kept.push(part);
+      }
+      const stem = kept.join('/');
+      if (!inside(stem)) keys.add(`d:${stem}`);
+    } else if (!inside(target)) keys.add(`f:${target}`);
+  }
+  return [...keys];
+};
+
+export const keysReaching = (path: string): readonly string[] => {
+  const stem = path.replace(EXTENSIONLESS, '');
+  const bases = new Set([path, stem, `${stem}.js`, `${stem}.mjs`, `${stem}.cjs`]);
+  if (stem.endsWith('/index')) bases.add(stem.slice(0, -'/index'.length));
+  return [...[...bases].map((one) => `f:${one}`), ...ancestorsOf(path).map((dir) => `d:${dir}`)];
+};
+
 export const listedPackages = (packages: readonly Package[]): ListedPackages => {
   const ordered = [...packages].sort(byDir);
   const dirs = new Map(ordered.map((one) => [one.dir, one]));
@@ -67,7 +96,11 @@ export const listedPackages = (packages: readonly Package[]): ListedPackages => 
   return {
     named: (name) => names.get(name),
     at: (dir) => dirs.get(dir),
-    around: (path) => ancestorsOf(path).flatMap((dir) => dirs.get(dir) ?? []),
+    containing: (path) => ancestorsOf(path).flatMap((dir) => dirs.get(dir) ?? []),
+    targeting: (path) => {
+      const wanted = new Set(keysReaching(path));
+      return ordered.filter((one) => targetKeys(one).some((key) => wanted.has(key)));
+    },
     all: () => ordered,
   };
 };

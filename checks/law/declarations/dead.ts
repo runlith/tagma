@@ -47,7 +47,12 @@ export const consumptions = function* (path: string, file: Facts, resolver: Reso
 export const findDead = (corpus: WholeCorpus, params: DeadParams): readonly Finding[] => deadAmong(corpus, params, corpus.packages.all());
 
 export const findDeadAmong = (corpus: Corpus, params: DeadParams, judged: ReadonlySet<string>): readonly Finding[] =>
-  deadAmong(corpus, params, [...new Set([...judged].flatMap((path) => corpus.packages.around(path)))], judged);
+  deadAmong(
+    corpus,
+    params,
+    [...new Set([...judged].flatMap((path) => [...corpus.packages.containing(path), ...corpus.packages.targeting(path)]))],
+    judged,
+  );
 
 const deadAmong = (corpus: Corpus, params: DeadParams, holders: readonly Package[], judged?: ReadonlySet<string>): readonly Finding[] => {
   const { facts, packages } = corpus;

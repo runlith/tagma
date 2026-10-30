@@ -1,12 +1,12 @@
 import type { TreeDifference } from '@runlith/git/trees';
 import type { BlobAt } from '@runlith/git/working';
 import { listedAt } from '../directories';
-import { isSource, type Packages, productionOf } from './corpus';
+import { isSource, type Packages, productionOf, targetKeys } from './corpus';
 import { consumptions } from './dead';
 import type { DeadParams } from './declaration';
 import type { Facts } from './facts';
 import { blobsAt, factsAt, importersByName, manifestsAt, movedPackages } from './index';
-import { patternDir, type Resolver, resolverOf } from './resolve';
+import { patternDir, probesOf, type Resolver, resolverOf } from './resolve';
 
 export const sideEntries = (
   changes: readonly TreeDifference[],
@@ -98,7 +98,14 @@ export const ownersOf = (
   for (const side of sides) {
     if (side.moved.length === 0) continue;
     const dirs = new Set(side.moved.map((one) => bounded(one.dir, `the manifest of package \`${one.name}\``)));
-    const resolver = resolverOf(new Set(listed(root, side.commit, dirs, sources)), side.packages, params.aliases);
+    const files = new Set<string>();
+    for (const one of side.moved)
+      for (const key of targetKeys(one)) {
+        if (key.startsWith('d:')) dirs.add(bounded(key.slice(2), `the exports of package \`${one.name}\``));
+        else for (const probe of probesOf(key.slice(2))) files.add(probe);
+      }
+    const reached = [...blobsAt(root, side.commit, [...files]).keys()].filter(sources);
+    const resolver = resolverOf(new Set([...listed(root, side.commit, dirs, sources), ...reached]), side.packages, params.aliases);
     for (const pkg of side.moved) {
       const published = params.published.some((dir) => pkg.dir === dir || (dir !== '' && pkg.dir.startsWith(`${dir}/`)));
       for (const target of published ? resolver.exported(pkg) : pkg.entries.flatMap((entry) => resolver.inside(pkg, entry)))

@@ -4,14 +4,13 @@ import { derivedMap, recentRoots, rootAt, seededMap, valueAt } from '../maps';
 import { versionAt } from './cache';
 import type { VendorParams } from './inspections';
 import { indexLiterals, literalCandidates } from './literals';
-import { production, selectSources, type Snapshot, type snapshots, within } from './snapshot';
+import { production, selectSources, type Snapshot, type snapshots } from './snapshot';
 import { indexedWords, isVendorSource, listedWords, vendorFindings, vendorWords, type VendorWords } from './strings';
 
 const NEARBY = 6;
-const WHOLE_SCOPE = ['packages', 'apps/tagma/server/src/external-harnesses/vendors'];
+const WHOLE_SCOPE = ['packages'];
 
-const declares = (path: string): boolean =>
-  production(path) && (/^packages\/adapter-[^/]+\//.test(path) || within(path, 'apps/tagma/server/src/external-harnesses/vendors'));
+const declares = (path: string): boolean => production(path) && /^packages\/adapter-[^/]+\//.test(path);
 
 const ordered = (findings: readonly Finding[]): readonly Finding[] =>
   [...findings].sort((a, b) => a.path.localeCompare(b.path) || (a.line ?? 0) - (b.line ?? 0) || a.fingerprint.localeCompare(b.fingerprint));
