@@ -14,14 +14,16 @@ import {
 } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { harnessAdapter } from '../contract/service/table.js';
+import { harnessAdaptersLayer } from '../adapters.js';
+import { HarnessAdapters } from '../contract/service/adapters.js';
+import { builtinHarness } from '../testing/builtin.js';
 import type { HarnessAdapter } from '../contract/service/adapter.js';
 import type { McpSurface } from '@runlith/tagma/adapter/harness';
 import { MCP_KEY_VARIABLE } from '../../platform/contract/wire/session.js';
 import { declareInto as declareWith, installMcpDeclarations, MCP_SERVER_NAME } from './mcpDeclaration.js';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { it } from '@runlith/effect-test';
-import { Effect } from 'effect';
+import { Effect, Layer } from 'effect';
 import { declaredForLaunch } from './upgrade.js';
 
 const CLI = ['/opt/tagma/install/current/bun', '/opt/tagma/install/current/bin/cli/main.js'] as const;
@@ -38,8 +40,8 @@ beforeEach(() => {
   mkdirSync(repo, { recursive: true });
 });
 
-const claudeCode: HarnessAdapter = harnessAdapter('claude-code');
-const codex: HarnessAdapter = harnessAdapter('codex');
+const claudeCode: HarnessAdapter = builtinHarness('claude-code');
+const codex: HarnessAdapter = builtinHarness('codex');
 const jsonSurface = claudeCode.mcp as McpSurface;
 const tomlSurface: McpSurface = {
   file: { _tag: 'Project', path: '.grok/config.toml' },
@@ -75,7 +77,7 @@ test('a second run writes nothing at all, and the key it signs with does not mov
 });
 
 test('a nested vendor declaration keeps its signing key and neighbouring settings across upgrades', async () => {
-  const adapter = harnessAdapter('opencode');
+  const adapter = builtinHarness('opencode');
   const surface = adapter.mcp!;
   const home = at('.opencode');
   plant(
@@ -323,7 +325,8 @@ it.live('startup installs declaration files without approval; a chosen harness l
           else process.env.OPENCODE_CONFIG_DIR = held.OPENCODE_CONFIG_DIR;
         }),
     );
-    const installed = yield* Effect.promise(() => installMcpDeclarations(repo, CLI));
+    const adapters = yield* HarnessAdapters;
+    const installed = yield* Effect.promise(() => installMcpDeclarations(adapters.all(), repo, CLI));
     expect(installed.find((row) => row.harness === 'cursor')).toMatchObject({ write: 'created' });
     expect(existsSync(log)).toBe(false);
     const before = text('.cursor/mcp.json');
@@ -334,7 +337,7 @@ it.live('startup installs declaration files without approval; a chosen harness l
     expect(refused).toMatchObject({ write: 'current', approved: 'refused' });
     expect(refused?.detail).toContain('fixture denied');
     expect(text('.cursor/mcp.json')).toBe(before);
-  }).pipe(Effect.provide(BunFileSystem.layer)),
+  }).pipe(Effect.provide(Layer.mergeAll(BunFileSystem.layer, harnessAdaptersLayer))),
 );
 
 test('a document this installation cannot read is refused by name, and nothing is written', async () => {

@@ -17,13 +17,20 @@ export function harnessOfTypeId(typeId: string): HarnessName | null {
   return isHarnessName(named) ? named : null;
 }
 
+const roadsOf = (presentation: HarnessPresentation): string =>
+  presentation.terminal && presentation.acp && !presentation.hosted
+    ? 'in its terminal or over ACP'
+    : presentation.terminal
+      ? 'in its terminal'
+      : 'over ACP';
+
 export function harnessSpawnTypes(installs: readonly HarnessInstall[]) {
   return installs.map((install) => {
     const { label } = install.presentation;
     return {
       id: harnessTypeId(install.harness),
       name: label,
-      description: `${label}, run as a thread of Tagma in the thread's own world.`,
+      description: `${label}'s own agent, run ${roadsOf(install.presentation)} as a thread of Tagma in the thread's own world.`,
       baseAgentId: HARNESS_AGENT_ID,
       harness: install,
     };

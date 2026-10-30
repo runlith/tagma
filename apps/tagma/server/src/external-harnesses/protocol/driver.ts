@@ -49,10 +49,10 @@ import { ProtocolInputs } from './inputs.js';
 import { HostedIntroductions } from './introductions.js';
 import type { ProtocolJournal } from './journal.js';
 import { ProtocolLauncher } from './launcher.js';
-import { LinkEnded, profileOf, ProtocolLinks, WaitExpired } from './links.js';
+import { LinkEnded, linkedOf, ProtocolLinks, WaitExpired, type Linked } from './links.js';
 import { IDLE_MS } from './idle.js';
-import type { AcpProfile } from '@runlith/tagma/adapter/harness';
-import type { HarnessName } from '../../threads/contract/wire/harness/names.js';
+import { HarnessAdapters } from '../contract/service/adapters.js';
+import type { ExternalSession } from '../../threads/contract/wire/harness/externalSession.js';
 import { Answers } from './methods/answers.js';
 import type { AsideOutcome, WithdrawOutcome } from './methods/declaration.js';
 import { ProtocolOpening } from './opening.js';
@@ -132,7 +132,11 @@ export class ProtocolDriver implements ProtocolSessions {
   ) {
     const graceMs = options.graceMs;
     const idleMs = options.idleMs ?? IDLE_MS;
-    const profile = (name: HarnessName): AcpProfile => (graceMs === undefined ? profileOf(name) : { ...profileOf(name), graceMs });
+    const adapters = yield* HarnessAdapters;
+    const linked = (facet: ExternalSession): Effect.Effect<Linked, HarnessFailure> =>
+      Effect.map(linkedOf(adapters, facet), (found) =>
+        graceMs === undefined ? found : { ...found, profile: { ...found.profile, graceMs } },
+      );
     const fibers = yield* FiberMap.make<string, void, never>();
     const asking = yield* FiberSet.make<void, never>();
     const compacting = (threadId: string): Effect.Effect<void> =>
@@ -208,7 +212,7 @@ export class ProtocolDriver implements ProtocolSessions {
       ended,
       launches,
       nativeRuns,
-      profile,
+      linked,
       ownerId,
     );
     const launcher = new ProtocolLauncher(
@@ -227,6 +231,7 @@ export class ProtocolDriver implements ProtocolSessions {
       cli,
       files,
       declaring,
+      adapters,
     );
     const process = new ProtocolProcess(
       links,
@@ -245,7 +250,8 @@ export class ProtocolDriver implements ProtocolSessions {
       inbox,
       nativeRuns,
       launches,
-      profile,
+      linked,
+      adapters,
       idleMs,
       ownerId,
       build,
@@ -290,7 +296,7 @@ export class ProtocolDriver implements ProtocolSessions {
     );
     const cancels = new ProtocolCancels(links, launches, attendance, steps, store, rows, nativeRuns, ownerId);
     const runs = new ProtocolRuns(launching, delivery, cancels, steps, introductions);
-    const history = new ProtocolHistory(reactor, attendance, store, rows, turns, guidance, standing);
+    const history = new ProtocolHistory(reactor, attendance, store, rows, turns, guidance, standing, adapters);
     const state = (threadId: string) => protocolState({ store, rows, records, terminals, attendance, ownerId }, threadId);
     return new ProtocolDriver(attendance, inputs, steps, runs.transport, history, runs.compaction, rows, turns, links, state);
   });

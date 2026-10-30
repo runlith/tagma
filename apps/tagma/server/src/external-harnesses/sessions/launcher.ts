@@ -6,6 +6,8 @@ import { installForAccount } from '../installs/skillInstall.js';
 import type { Settings } from '../../settings/contract/service/values.js';
 import type { GrantSigner } from '../../platform/contract/service/grantSigner.js';
 import { transportOf } from '../contract/service/table.js';
+import type { HarnessAdapter } from '../contract/service/adapter.js';
+import { HarnessAdapters } from '../contract/service/adapters.js';
 import type { ExternalSession } from '../../threads/contract/wire/harness/externalSession.js';
 import { launchChoice } from '../birth/modelChoice.js';
 import type { HarnessProcessOutcome, HarnessSession } from '../../threads/contract/wire/harness/session.js';
@@ -32,6 +34,7 @@ type Finish = (
 type Unsent = (threadId: string, sessionId: string, cause: Cause.Cause<unknown>, reason?: string) => Effect.Effect<void, HarnessFailure>;
 
 type Ready = {
+  readonly adapter: HarnessAdapter;
   readonly where: HarnessPlace;
   readonly prepared: ExternalSession;
   readonly choice: HarnessModelChoice | undefined;
@@ -58,6 +61,7 @@ export class SessionLauncher {
     private readonly unsent: Unsent,
     private readonly files: FileSystem.FileSystem,
     private readonly declaring: ProjectDeclaring,
+    private readonly adapters: HarnessAdapters['Service'],
   ) {}
 
   readonly launch = Effect.fnUntraced(function* (
@@ -86,7 +90,8 @@ export class SessionLauncher {
     declaresExport: boolean,
   ) {
     const { store, terminals, host, settings, grants, accounts, providers, scratch, roots, ownerId, cli, finish, files, declaring } = this;
-    const offer = yield* transportOf(facet.name, 'terminal');
+    const adapter = yield* this.adapters.row(facet.name, facet.presentation.install);
+    const offer = yield* transportOf(adapter, 'terminal');
     const { launch } = offer;
     const place = yield* this.place(threadId);
     if (launching && declaresExport && session.exportPath === undefined) {
@@ -108,7 +113,7 @@ export class SessionLauncher {
     }
     const cwd = session.cwd ?? place.root;
     const { models } = yield* providers.catalog;
-    const chosen = yield* Effect.result(launchChoice(models, facet.name, yield* store.asked(threadId)));
+    const chosen = yield* Effect.result(launchChoice(models, adapter, yield* store.asked(threadId)));
     if (Result.isFailure(chosen)) {
       yield* finish(threadId, session.id, 'failed', `${chosen.failure.code}: ${chosen.failure.reason}`);
       return null;
@@ -116,7 +121,7 @@ export class SessionLauncher {
     const choice = chosen.success;
     const selected = yield* (
       facet.home === undefined && facet.plain !== true
-        ? accountFor(accounts, facet.name, place.selection, session.account)
+        ? accountFor(accounts, adapter, place.selection, session.account)
         : Effect.succeed(null)
     ).pipe(
       Effect.map((account) => ({ _tag: 'Ready' as const, account })),
@@ -134,6 +139,7 @@ export class SessionLauncher {
     if (into !== undefined)
       yield* installForAccount(facet.name, into, doctrineOf(yield* Doctrine).contributed, cli).pipe(
         Effect.provideService(FileSystem.FileSystem, files),
+        Effect.provideService(HarnessAdapters, this.adapters),
         Effect.mapError(threadCallFailed),
       );
     if (facet.plain !== true) yield* declaring(facet.name, place.projectId, place.root);
@@ -144,7 +150,7 @@ export class SessionLauncher {
       grants,
       threadId,
       place.projectId,
-      facet.name,
+      adapter,
       { id: session.id, cwd },
       offer,
       account,
@@ -165,7 +171,7 @@ export class SessionLauncher {
     }
     const aligned = answered.facet;
     const rooted = launching
-      ? yield* roots.rootFor(threadId, aligned, aligned.session!, where, cwd)
+      ? yield* roots.rootFor(threadId, adapter, aligned, aligned.session!, where, cwd)
       : { _tag: 'Ready' as const, minted: undefined };
     if (rooted._tag === 'Ended') return null;
     const minted = rooted.minted;
@@ -205,7 +211,7 @@ export class SessionLauncher {
         return null;
       }
     }
-    return { where, prepared, choice } satisfies Ready;
+    return { adapter, where, prepared, choice } satisfies Ready;
   });
 
   private readonly dispatch = Effect.fnUntraced(function* (this: SessionLauncher, threadId: string, session: HarnessSession, ready: Ready) {
@@ -250,9 +256,9 @@ export class SessionLauncher {
     return record;
   });
 
-  private start(threadId: string, session: HarnessSession, { where, prepared, choice }: Ready) {
+  private start(threadId: string, session: HarnessSession, { adapter, where, prepared, choice }: Ready) {
     const { store, terminals } = this;
-    return launchHarness(terminals, where, prepared, { ...prepared.session!, cwd: prepared.session!.cwd! }, choice, (storage) =>
+    return launchHarness(terminals, where, adapter, prepared, { ...prepared.session!, cwd: prepared.session!.cwd! }, choice, (storage) =>
       store.change(threadId, (current) => {
         const verdict = recordStorageGate(current.session, session.id, storage);
         if (verdict !== 'record' && verdict !== 'keep') return verdict;

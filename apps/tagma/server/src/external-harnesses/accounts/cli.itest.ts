@@ -10,6 +10,7 @@ import { existsSync, writeFileSync } from 'node:fs';
 import { UserEnvironment } from '../../installation/contract/service/userEnvironment.js';
 import { makeUserEnvironment } from '../../installation/process/userEnvironment.js';
 import { installedHarnessesLayer } from '../birth/installed.js';
+import { harnessAdaptersLayer } from '../adapters.js';
 import { AccountCli } from '../../providers/contract/service/cli.js';
 import { Terminals, TerminalRequests } from '../../executions/contract/service/terminals.js';
 import { HostManagement } from '../../executions/contract/service/host.js';
@@ -76,7 +77,7 @@ const projects = Layer.succeed(
 );
 const fixture = Layer.merge(
   BunFileSystem.layer,
-  accountCliLayer.pipe(Layer.provide(Layer.mergeAll(terminals, host, endings, requests, installs, projects))),
+  accountCliLayer.pipe(Layer.provide(Layer.mergeAll(terminals, host, endings, requests, installs, projects, harnessAdaptersLayer))),
 );
 
 layer(fixture, { excludeTestServices: true })('account CLI', (it) => {
@@ -94,6 +95,7 @@ layer(fixture, { excludeTestServices: true })('account CLI', (it) => {
             Layer.succeed(UserEnvironment, UserEnvironment.of({ ...users, locate: (name) => users.locate(name, []) })),
           ),
         ),
+        Layer.provideMerge(harnessAdaptersLayer),
       );
       const context = yield* Layer.build(
         Layer.fresh(accountCliLayer.pipe(Layer.provide(Layer.mergeAll(terminals, host, endings, requests, actual, projects)))),
@@ -176,6 +178,7 @@ layer(fixture, { excludeTestServices: true })('account CLI', (it) => {
                 endings,
                 installs,
                 projects,
+                harnessAdaptersLayer,
                 Layer.succeed(Terminals, fakeTerminals),
                 Layer.succeed(TerminalRequests, fakeRequests),
               ),

@@ -102,6 +102,7 @@ it.effect('a plain CLI reaches the host with its chosen permission mode, verbati
       Context.get(world.ports, SessionObservations),
       unused,
       unused,
+      world.adapters,
     );
     const launcher = new SessionLauncher(
       world.store,
@@ -123,6 +124,7 @@ it.effect('a plain CLI reaches the host with its chosen permission mode, verbati
       unused,
       memory.files,
       unused,
+      world.adapters,
     );
     const facet = (yield* world.store.read(world.id))!;
     yield* launcher.launch(world.id, facet, facet.session!, true, false);

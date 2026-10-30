@@ -11,4 +11,5 @@ export const EXTERNAL_HARNESS_BINDINGS: readonly VerbBinding[] = [
     const { ask, here } = await door();
     return { ask, here };
   },
+  async () => (await import('./installedHarness.js')).harnessDeclarations,
 ];

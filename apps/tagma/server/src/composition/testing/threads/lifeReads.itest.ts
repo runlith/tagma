@@ -7,6 +7,7 @@ import { ProviderRegistry } from '../../../providers/contract/service/registry.j
 import { acpTestSeat } from '../../../external-harnesses/testing/seats.js';
 import { sessionStoreOver } from '../../../external-harnesses/testing/floor.js';
 import { terminalArgv } from '../../../external-harnesses/testing/doubles.js';
+import { makeHarnessAdapters } from '../../../external-harnesses/adapters.js';
 import { SCOPED_RUN, threadRunStore } from '../../../native-harness/testing/doubles.js';
 import { thread, threadDirectoryStore, modelChanges } from '../../../threads/testing/doubles.js';
 import { threadStoreFixture } from '../threadStoreFixture.js';
@@ -46,7 +47,7 @@ layer(builtinRegistry, { excludeTestServices: true })('thread lifecycle readings
       const native = yield* born(false);
       const acp = yield* born(true);
       const healthy = yield* born(false);
-      const opened = yield* sessions.open(acp, '', 'operator', terminalArgv(catalog.models, ''));
+      const opened = yield* sessions.open(acp, '', 'operator', terminalArgv(yield* makeHarnessAdapters, catalog.models, ''));
       yield* sessions.change(acp, (facet) =>
         Effect.succeed({ facet: { ...facet, session: { ...opened, state: 'running' as const } }, value: undefined }),
       );

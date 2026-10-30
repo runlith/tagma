@@ -80,6 +80,7 @@ import { storesOver, type Stores } from '../../../executions/testing/stores.js';
 import { ENTRY_KINDS } from '../../manifest.js';
 import { ThreadEntryKinds } from '@runlith/agent/transcript/kinds';
 import { harnessPresentation } from '../../../external-harnesses/contract/service/table.js';
+import { builtinHarness } from '../../../external-harnesses/testing/builtin.js';
 const OWNER = OPERATOR_PRINCIPAL;
 const PROVIDER = 'subscription';
 const MODEL = 'claude-opus-5-5';
@@ -265,7 +266,7 @@ const setup = Effect.fn('testing.commandNotices')(function* () {
             harness: {
               facet: {
                 name: 'claude-code',
-                presentation: harnessPresentation('claude-code'),
+                presentation: harnessPresentation(builtinHarness('claude-code')),
                 sessionKey: 'notice-session',
                 execution: null,
                 observation: unmeasuredObservation(),

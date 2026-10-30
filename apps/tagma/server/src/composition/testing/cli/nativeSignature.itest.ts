@@ -10,7 +10,7 @@ import { bornThread } from '../../../native-harness/testing/born.js';
 import { GRANT_HEADER, GRANT_VARIABLE } from '../../../platform/contract/service/credentials.js';
 import { grantEnvironment } from '../../../platform/testing/grants.js';
 import { Projects } from '../../../projects/contract/service/registry.js';
-import { HARNESSES } from '../../../external-harnesses/contract/service/table.js';
+import { BUILTIN_HARNESSES } from '../../../external-harnesses/vendors/builtin.js';
 import { sessionIdentity } from '../../../external-harnesses/sessionPrefix.js';
 import { suiteGit } from '../suiteGit.js';
 import type { Environment } from '../../../platform/cli/verb.js';
@@ -74,7 +74,7 @@ const session = Effect.fnUntraced(function* (id: string, name: string, options: 
 
 const unsigned = (url: string): Record<string, string | undefined> => {
   const env: Record<string, string | undefined> = { ...process.env, TAGMA_SERVER_URL: url };
-  for (const { variable } of HARNESSES) if (variable !== undefined) delete env[variable];
+  for (const { variable } of BUILTIN_HARNESSES) if (variable !== undefined) delete env[variable];
   delete env[GRANT_VARIABLE];
   return env;
 };

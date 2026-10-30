@@ -7,7 +7,7 @@ import { ActivityLog } from '@runlith/activity/log';
 import { HostRequestKey } from '@runlith/executions/protocol/execution';
 import { GateRefusal } from '../../platform/contract/wire/refusal.js';
 import type { GrantSigner } from '../../platform/contract/service/grantSigner.js';
-import { harnessAdapter } from '../contract/service/table.js';
+import { HarnessAdapters } from '../contract/service/adapters.js';
 import type { SessionProcesses } from '../contract/service/sessions.js';
 import type { ExternalSession } from '../../threads/contract/wire/harness/externalSession.js';
 import type { HarnessExecutionRef } from '../../threads/contract/wire/harness/observation.js';
@@ -105,6 +105,7 @@ export class SessionDriver implements Driving {
     files: FileSystem.FileSystem,
     private readonly executionEndings: ExecutionEndings['Service'],
     private readonly log: ActivityLog,
+    private readonly adapters: HarnessAdapters['Service'],
   ) {
     this.lease = new SessionLease(store, terminals, executionEndings, endings, owners, idle, ownerId, (threadId) => this.attend(threadId));
     this.roots = new SessionRoots(
@@ -118,6 +119,7 @@ export class SessionDriver implements Driving {
       observations,
       (threadId, sessionId, outcome, failure) => this.finish(threadId, sessionId, outcome, failure),
       (threadId, held) => endings.held(threadId, held),
+      adapters,
     );
     this.lifecycle = new SessionLifecycle(
       store,
@@ -131,6 +133,7 @@ export class SessionDriver implements Driving {
       fibers,
       ownerId,
       (threadId, sessionId, outcome, failure, options) => this.finish(threadId, sessionId, outcome, failure, options),
+      adapters,
     );
     this.launcher = new SessionLauncher(
       store,
@@ -152,6 +155,7 @@ export class SessionDriver implements Driving {
       (threadId, sessionId, cause, reason) => this.unsent(threadId, sessionId, cause, reason),
       files,
       declaring,
+      adapters,
     );
   }
 
@@ -182,7 +186,7 @@ export class SessionDriver implements Driving {
     declaring: ProjectDeclaring,
     alignment: SessionAlignment,
     ownerId: string = crypto.randomUUID(),
-  ): Effect.Effect<SessionDriver, never, Scope.Scope | FileSystem.FileSystem | ExecutionEndings> {
+  ): Effect.Effect<SessionDriver, never, Scope.Scope | FileSystem.FileSystem | ExecutionEndings | HarnessAdapters> {
     return Effect.flatMap(
       Effect.all([
         FiberMap.make<string, void, never>(),
@@ -192,8 +196,9 @@ export class SessionDriver implements Driving {
         FileSystem.FileSystem,
         ExecutionEndings,
         ActivityLog,
+        HarnessAdapters,
       ]),
-      ([fibers, owners, idle, realigns, files, executionEndings, log]) => {
+      ([fibers, owners, idle, realigns, files, executionEndings, log, adapters]) => {
         const driver = new SessionDriver(
           store,
           records,
@@ -228,6 +233,7 @@ export class SessionDriver implements Driving {
           files,
           executionEndings,
           log,
+          adapters,
         );
         return Effect.as(Effect.forkScoped(driver.lease.beating()), driver);
       },
@@ -237,7 +243,14 @@ export class SessionDriver implements Driving {
   readonly launch = Effect.fnUntraced(function* (this: SessionDriver, threadId: string, runId: string | null, words: string) {
     yield* this.reattend(threadId);
     const { models } = yield* this.providers.catalog;
-    const session = yield* this.store.open(threadId, words, this.ownerId, terminalArgv(models, words), undefined, runId ?? undefined);
+    const session = yield* this.store.open(
+      threadId,
+      words,
+      this.ownerId,
+      terminalArgv(this.adapters, models, words),
+      undefined,
+      runId ?? undefined,
+    );
     yield* this.attend(threadId);
     return session;
   }, Effect.uninterruptible);
@@ -284,7 +297,7 @@ export class SessionDriver implements Driving {
     execution: HarnessExecutionRef,
     act: (keyboard: Keyboard) => Effect.Effect<A, HarnessFailure>,
   ): Effect.Effect<A, HarnessFailure> {
-    const { store, lanes, terminals, screens, writing } = this;
+    const { store, lanes, terminals, screens, writing, adapters } = this;
     return Effect.flatMap(store.read(threadId), (facet) => {
       const session = facet?.session;
       if (facet === null || session === undefined) {
@@ -293,19 +306,19 @@ export class SessionDriver implements Driving {
         ]);
       }
       const frame = readHarnessFrame(terminals, screens, execution);
-      const composer = harnessAdapter(facet.name).composer;
-      return lanes.typing(session.id, (lane) =>
-        act({
-          words: (text) => typeHarnessWords(terminals, screens, writing, lane, execution, text),
-          draft: (text) => typeHarnessWords(terminals, screens, writing, lane, execution, text, false),
-          keys: (keys, operation) => typeHarnessKeys(terminals, screens, writing, lane, execution, keys, operation),
-          asking: readsScreen(harnessAdapter(facet.name))
-            ? Effect.map(frame, (shown) => widgetStands(widgetOn(facet.name, shown)))
-            : Effect.succeed(false),
-          lines: this.lines(execution),
-          composer: composer === undefined ? Effect.succeed(null) : Effect.map(this.lines(execution), composer.of),
-        }),
-      );
+      return Effect.flatMap(adapters.row(facet.name, facet.presentation.install), (adapter) => {
+        const composer = adapter.composer;
+        return lanes.typing(session.id, (lane) =>
+          act({
+            words: (text) => typeHarnessWords(terminals, screens, writing, lane, execution, text),
+            draft: (text) => typeHarnessWords(terminals, screens, writing, lane, execution, text, false),
+            keys: (keys, operation) => typeHarnessKeys(terminals, screens, writing, lane, execution, keys, operation),
+            asking: readsScreen(adapter) ? Effect.map(frame, (shown) => widgetStands(widgetOn(adapter, shown))) : Effect.succeed(false),
+            lines: this.lines(execution),
+            composer: composer === undefined ? Effect.succeed(null) : Effect.map(this.lines(execution), composer.of),
+          }),
+        );
+      });
     });
   }
 
@@ -488,7 +501,7 @@ export class SessionDriver implements Driving {
       yield* lifecycle.gone(threadId, session, facet.retiring);
       return;
     }
-    const declaresExport = harnessAdapter(facet.name).launch?.export !== undefined;
+    const declaresExport = this.adapters.find(facet.name)?.launch?.export !== undefined;
     const launching = session.state !== 'stopping';
     if (record === null) {
       const launched = yield* launcher.launch(threadId, facet, session, launching, declaresExport);

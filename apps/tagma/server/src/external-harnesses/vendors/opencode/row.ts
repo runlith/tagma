@@ -1,11 +1,10 @@
 import { installedProgram } from '@runlith/adapter-opencode/host';
-import { HARNESS_LABELS } from '../../../threads/contract/wire/harness/names.js';
 import { adoptedPermissionArgv, UNMEASURED_HOOK_CONTEXT } from '@runlith/tagma/adapter/harness';
 
 import { icon } from '@runlith/adapter-opencode/icon';
 import { ASKS_IN_REVIEW, ASKS_NEVER } from '../../../platform/contract/wire/conditions.js';
 import type { TerminalHarnessAdapter } from '../../contract/service/adapter.js';
-import { claudeOccasion } from '../../adapter/claudeFormat.js';
+import { claudeCodec, claudeOccasion } from '../../adapter/claudeFormat.js';
 import { field, modelField, namedCall, rootOfArgv, sessionIdOf } from '../../adapter/payload.js';
 import { events, filesOf, printedOf } from './format.js';
 import plugin from './plugin.ts' with { type: 'text' };
@@ -17,7 +16,7 @@ const prompted = (prompt: string | undefined): string[] => (prompt === undefined
 
 export const opencode: TerminalHarnessAdapter = {
   harness: 'opencode',
-  label: HARNESS_LABELS.opencode,
+  label: 'OpenCode',
   mark: icon,
   prefix: 'oc',
   variable: SESSION_VARIABLES.opencode,
@@ -68,7 +67,7 @@ export const opencode: TerminalHarnessAdapter = {
   },
   hooks: {
     file: '.opencode/tagma-hooks.json',
-    format: 'claude-code',
+    codec: claudeCodec,
     events,
     user: { folder: ['.config', 'opencode'], file: 'tagma-hooks.json', homeEnv: 'OPENCODE_CONFIG_DIR' },
     context: UNMEASURED_HOOK_CONTEXT,

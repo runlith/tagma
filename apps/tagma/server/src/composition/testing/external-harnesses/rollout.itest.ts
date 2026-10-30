@@ -32,6 +32,7 @@ import { sessionFor } from '../../../external-harnesses/testing/sessions.js';
 import { acpTestKernel as acpKernel } from '../../../external-harnesses/testing/seats.js';
 import { harnessFacet } from '../../../threads/contract/wire/harness/types.js';
 import { harnessPresentation } from '../../../external-harnesses/contract/service/table.js';
+import { builtinHarness } from '../../../external-harnesses/testing/builtin.js';
 
 const parts = { native: nativeOnlyParts.native, external: externalRolloutPart };
 
@@ -267,7 +268,7 @@ describe('the external rollout part', () => {
         yield* sessionFor(
           db,
           't-acp-now',
-          harnessFacet('claude-code', harnessPresentation('claude-code')),
+          harnessFacet('claude-code', harnessPresentation(builtinHarness('claude-code'))),
           acpKernel('claude-code', 'tagma', { model: 'sonnet', reasoning: 'high' }),
         );
         yield* birth('t-term-live');
@@ -328,7 +329,7 @@ describe('the external rollout part', () => {
       );
       const facet: ReturnType<typeof asExternalSession> = {
         name: 'claude-code',
-        presentation: harnessPresentation('claude-code'),
+        presentation: harnessPresentation(builtinHarness('claude-code')),
         sessionKey: 'k-new',
         session: {
           id: 's-new',

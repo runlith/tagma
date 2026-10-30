@@ -1,12 +1,13 @@
 import { expect } from 'bun:test';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { it } from '@runlith/effect-test';
-import { Deferred, Effect, FileSystem } from 'effect';
+import { Deferred, Effect, FileSystem, Layer } from 'effect';
+import { harnessAdaptersLayer } from '../../adapters.js';
 import { accountEnvironment } from '@runlith/adapter-opencode/environment';
 import { installedProgram, openHost } from '@runlith/adapter-opencode/host';
 import { entryPath } from '../../../installation/contract/wire/junction.js';
 import { installHooks } from '../../installs/hookWrite.js';
-import { declareInto } from '../../installs/mcpDeclaration.js';
+import { declareInto, MCP_SERVER_NAME } from '../../installs/mcpDeclaration.js';
 import { opencode } from './row.js';
 import { dirname, join } from 'node:path';
 
@@ -176,6 +177,15 @@ if (process.argv[2] === 'mcp-serve') {
       },
       onStderr: (text) => process.stderr.write(text),
     });
+    yield* Effect.tryPromise(async (signal) => {
+      for await (const event of host.client.event.subscribe({ signal })) {
+        if (event.type !== 'server.connected' && !(event.type === 'mcp.status.changed' && event.data.server === MCP_SERVER_NAME)) continue;
+        const listed = await host.client.mcp.list({ location: { directory: root } });
+        const standing = listed.data.find((server) => server.name === MCP_SERVER_NAME);
+        if (standing?.status.status === 'connected') return;
+        if (standing?.status.status === 'failed') throw new Error(standing.status.error);
+      }
+    });
     const session = yield* Effect.tryPromise(() =>
       host.client.session.create({ location: { directory: root }, permissions: [{ action: '*', resource: '*', effect: 'allow' }] }),
     );
@@ -214,5 +224,5 @@ if (process.argv[2] === 'mcp-serve') {
     yield* Effect.tryPromise(() => host.client.session.interrupt({ sessionID: interrupted.id }));
     expect((yield* Deferred.await(cancelled)).status).toBe('aborted');
     expect((yield* Effect.tryPromise(() => host.client.session.get({ sessionID: interrupted.id }))).outcome).toBe('interrupted');
-  }).pipe(Effect.provide(BunFileSystem.layer)),
+  }).pipe(Effect.provide(Layer.mergeAll(BunFileSystem.layer, harnessAdaptersLayer))),
 );

@@ -1,8 +1,10 @@
 import { isAbsolute, join } from 'node:path';
 import { Context, Effect, FileSystem, Schedule, Stream } from 'effect';
-import { HARNESSES } from '../../../external-harnesses/contract/service/table.js';
+import { BUILTIN_HARNESSES } from '../../../external-harnesses/vendors/builtin.js';
 import { WORLD_COMMAND } from '../../../installation/contract/wire/layout.js';
 import { Coverage } from '../../../workspace/contract/service/roots.js';
+import { Settings } from '../../../settings/contract/service/values.js';
+import { autoTitle } from '../../../threads/contract/wire/settings.js';
 import { Terminals } from '../../../executions/contract/service/terminals.js';
 import { TerminalScreens } from '../../../executions/contract/service/records.js';
 import { screenLines } from '@runlith/executions/protocol/presentationText';
@@ -162,7 +164,7 @@ export const terminalHistoryWorld = Effect.gen(function* () {
   const stage = yield* files.makeTempDirectoryScoped({ prefix: 'terminal-history-' });
   const bin = join(stage, 'bin');
   yield* files.makeDirectory(bin);
-  for (const binary of HARNESSES.map(({ binary }) => binary).filter((binary) => !isAbsolute(binary)))
+  for (const binary of BUILTIN_HARNESSES.map(({ binary }) => binary).filter((binary) => !isAbsolute(binary)))
     yield* files.writeFileString(join(bin, binary), '#!/bin/sh\nprintf "fixture\\n"\n', { mode: 0o755 });
   yield* files.writeFileString(join(stage, 'tui.js'), TUI);
   yield* files.writeFileString(join(stage, 'cut.js'), CUT_SERVER);
@@ -193,6 +195,7 @@ export const terminalHistoryWorld = Effect.gen(function* () {
   });
   yield* claudeLogin(world);
   const projectId = yield* world.stealthProject(yield* world.directory('history-project'));
+  yield* Context.get(world.runtime.graph, Settings).write({ key: autoTitle.id, value: false, scope: 'project', projectId });
   yield* projectLeaving(world, projectId);
   yield* Context.get(world.runtime.workspace, Coverage).cover(projectId);
   const rig = yield* terminalRig(world, projectId, yield* world.directory('terminal-history'));

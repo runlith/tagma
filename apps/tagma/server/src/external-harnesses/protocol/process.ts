@@ -21,9 +21,10 @@ import { due, idling, resting, restingRow, touch } from './idle.js';
 import type { ProtocolLauncher } from './launcher.js';
 import type { ProtocolLaunches } from './launches.js';
 import { reading, stderrTail, type Ending } from './link.js';
-import { facetOf, type Link, type ProtocolLinks } from './links.js';
-import type { AcpProfile } from '@runlith/tagma/adapter/harness';
+import { facetOf, type Link, type Linked, type ProtocolLinks } from './links.js';
+import type { HarnessAdapters } from '../contract/service/adapters.js';
 import type { HarnessName } from '../../threads/contract/wire/harness/names.js';
+import type { HarnessFailure } from '../../threads/contract/service/failure.js';
 import type { ProtocolAsides } from './asides.js';
 import type { ProtocolReactor } from './reactor.js';
 import { freshRow, prompting, type ProtocolRow } from './row.js';
@@ -54,14 +55,16 @@ export class ProtocolProcess {
     private readonly inbox: ThreadInbox['Service'],
     private readonly runs: NativeStorage['Service']['runs'],
     private readonly launches: ProtocolLaunches,
-    private readonly profile: (name: HarnessName) => AcpProfile,
+    private readonly linked: (facet: ExternalSession) => Effect.Effect<Linked, HarnessFailure>,
+    private readonly adapters: HarnessAdapters['Service'],
     private readonly idleMs: number,
     private readonly ownerId: string,
     private readonly build: string,
   ) {}
 
   stale(row: ProtocolRow, name: HarnessName): boolean {
-    return this.profile(name).hosts !== null && row.build !== this.build;
+    const hosts = this.adapters.find(name)?.acp?.hosts ?? null;
+    return hosts !== null && row.build !== this.build;
   }
 
   readonly drive = Effect.fnUntraced(function* (this: ProtocolProcess, threadId: string, linked: () => void = () => {}) {
@@ -89,7 +92,7 @@ export class ProtocolProcess {
             ...freshRow(`${session.id}.${carried?.launches ?? 0}.${execution.incarnation}`, carried, execution),
             build: launched ? this.build : undefined,
           };
-      const link = yield* steps.link(facet, session.id, this.profile(facet.name), threadId, row);
+      const link = yield* steps.link(facet, session.id, yield* this.linked(facet), threadId, row);
       link.stale = this.stale(row, facet.name);
       links.set(link);
       linked();

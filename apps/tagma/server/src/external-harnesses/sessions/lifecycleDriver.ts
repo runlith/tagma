@@ -13,7 +13,7 @@ import type { HarnessExecutionRef } from '../../threads/contract/wire/harness/ob
 import type { HarnessProcessOutcome, HarnessSession } from '../../threads/contract/wire/harness/session.js';
 import type { ExternalSession } from '../../threads/contract/wire/harness/externalSession.js';
 import type { HarnessFailure } from '../../threads/contract/service/failure.js';
-import { harnessAdapter } from '../contract/service/table.js';
+import type { HarnessAdapters } from '../contract/service/adapters.js';
 import type { HarnessSessionStore } from '../store/sessions.js';
 import type { HarnessLanes } from './lanes.js';
 import { jobState, RETAINED_READING_MS, type JobState } from '../adoption/shellJob.js';
@@ -54,6 +54,7 @@ export class SessionLifecycle {
     private readonly fibers: FiberMap.FiberMap<string, void, never>,
     private readonly ownerId: string,
     private readonly finish: Finish,
+    private readonly adapters: HarnessAdapters['Service'],
   ) {}
 
   readonly jobOf = Effect.fnUntraced(
@@ -99,8 +100,8 @@ export class SessionLifecycle {
     const shell = facet.execution;
     const witness = session.job;
     if (shell === null || witness === undefined) return yield* this.awaitDrive(threadId);
-    const declared = harnessAdapter(facet.name).quit;
-    let why = declared === null ? `no way to quit ${harnessAdapter(facet.name).label} is measured` : null;
+    const declared = this.adapters.find(facet.name)?.quit ?? null;
+    let why = declared === null ? `no way to quit ${facet.presentation.label} is measured` : null;
     const act = `quit:${sessionId}:${crypto.randomUUID()}`;
     for (const [index, keys] of (declared ?? []).entries()) {
       const job = yield* this.jobOf(shell, witness);

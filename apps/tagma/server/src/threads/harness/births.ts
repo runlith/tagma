@@ -14,7 +14,7 @@ import type { RootId } from '../../workspace/contract/wire/ids.js';
 import { BirthPlace } from '../contract/wire/birth.js';
 import { failedAs } from '../contract/service/failure.js';
 import { BornFacets, HarnessSandboxes } from '../contract/service/engine.js';
-import { HarnessFaceMissing, HarnessRegistry, SessionRead, type HarnessSeated } from '../contract/service/harness.js';
+import { HarnessFaceMissing, HarnessRegistry, harnessNotInstalled, SessionRead, type HarnessSeated } from '../contract/service/harness.js';
 import { ThreadRollouts } from '../contract/service/rollouts.js';
 import type { HarnessSeat } from '../contract/wire/harness/seat.js';
 import { HARNESS_AGENT_ID } from '../contract/wire/harness/names.js';
@@ -183,7 +183,14 @@ export const makeEngineBirths = Effect.fnUntraced(function* ({
       const asked = served?.seat.kernel.account ?? null;
       if (served !== null && (served.name !== source.name || (held !== undefined && !named) || (asked !== null && asked !== launched)))
         return undefined;
-      const face = yield* registry.resolve(source.name as HarnessId).pipe(Effect.mapError((cause) => new ThreadCallBroke({ cause })));
+      const face = yield* registry
+        .resolve(source.name as HarnessId)
+        .pipe(
+          Effect.mapError(
+            (missing) =>
+              new ThreadCallBroke({ cause: birthRefusal(childId, harnessNotInstalled(missing.harness, source.presentation.install)) }),
+          ),
+        );
       const history = (yield* transports()
         .of(parent.transport)
         .pipe(Effect.mapError((cause) => new ThreadCallBroke({ cause })))).history;

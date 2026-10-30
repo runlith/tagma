@@ -11,6 +11,7 @@ import { makeUserEnvironment, type EnvironmentInput } from '../../installation/p
 import { InstalledHarnesses } from '../../threads/contract/service/harness.js';
 import type { HarnessInstall } from '../../threads/contract/wire/harness/externalSession.js';
 import { installedHarnessesWith } from './installed.js';
+import { harnessAdaptersLayer } from '../adapters.js';
 import type { Terminals, TerminalStart } from '../../executions/contract/service/terminals.js';
 import { WORLD_COMMAND } from '../../installation/contract/wire/layout.js';
 import { HARNESS_PROGRAM } from '../contract/wire/program.js';
@@ -64,7 +65,9 @@ const machine = (home: string) =>
 const installsOver = (users: UserEnvironment['Service'], budgetMs = 5_000) =>
   Effect.map(
     Layer.build(
-      installedHarnessesWith(budgetMs).pipe(Layer.provide(Layer.merge(BunFileSystem.layer, Layer.succeed(UserEnvironment, users)))),
+      installedHarnessesWith(budgetMs).pipe(
+        Layer.provide(Layer.mergeAll(BunFileSystem.layer, Layer.succeed(UserEnvironment, users), harnessAdaptersLayer)),
+      ),
     ),
     (context) => Context.get(context, InstalledHarnesses),
   );

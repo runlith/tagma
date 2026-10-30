@@ -5,7 +5,8 @@ import { threadCallFailed } from '../../threads/contract/service/failure.js';
 import { Settings } from '../../settings/contract/service/values.js';
 import { GrantSigner } from '../../platform/contract/service/grantSigner.js';
 import { GateRefusal } from '../../platform/contract/wire/refusal.js';
-import { harnessAdapter } from '../contract/service/table.js';
+import type { HarnessAdapter } from '../contract/service/adapter.js';
+import { HarnessAdapters } from '../contract/service/adapters.js';
 import type { HarnessAdoptInput } from '../contract/wire/adoption.js';
 import { HARNESS_HOOK_BYTES } from '../../threads/contract/wire/harness/observation.js';
 import type { HarnessStorage } from '../../threads/contract/wire/harness/session.js';
@@ -43,6 +44,7 @@ export const makeAdoption = Effect.fnUntraced(function* ({
   const settings = yield* Settings;
   const grants = yield* GrantSigner;
   const modes = yield* ApprovalModes;
+  const adapters = yield* HarnessAdapters;
 
   const standing = (shell: TerminalRecord) =>
     shell.transport !== 'pty' || shell.holder !== OPERATOR || shell.launchedFor !== undefined
@@ -75,7 +77,7 @@ export const makeAdoption = Effect.fnUntraced(function* ({
     return (yield* read).proof;
   });
 
-  const found = Effect.fn('HarnessAdoption.found')(function* (shell: TerminalRecord, ask: HarnessAdoptInput) {
+  const found = Effect.fn('HarnessAdoption.found')(function* (shell: TerminalRecord, ask: HarnessAdoptInput, adapter: HarnessAdapter) {
     const mode = yield* settings.value(birthApprovalMode, shell.projectId).pipe(Effect.mapError((cause) => threadCallFailed(cause)));
     yield* registeredMode(modes, mode);
     const place =
@@ -86,7 +88,7 @@ export const makeAdoption = Effect.fnUntraced(function* ({
               projectId: shell.projectId,
               rootId: shell.rootId,
               operationId: `adopt:${ask.harness}:${ask.key}`,
-              name: harnessAdapter(ask.harness).label,
+              name: adapter.label,
             })
             .pipe(
               Effect.catch((refusal) =>
@@ -127,7 +129,7 @@ export const makeAdoption = Effect.fnUntraced(function* ({
     adopt: Effect.fn('HarnessAdoption.adopt')(
       function* (ask, projectId) {
         const arrivedAt = yield* Clock.currentTimeMillis;
-        const adapter = harnessAdapter(ask.harness);
+        const adapter = yield* adapters.row(ask.harness);
         if (adapter.hooks === null) {
           return yield* new GateRefusal(
             'harness-unhooked',
@@ -158,7 +160,7 @@ export const makeAdoption = Effect.fnUntraced(function* ({
         }
         const at = { execution: shell.execution.execution, incarnation: shell.execution.incarnation };
         const joined = yield* lookups.adoptedOn(at.execution, proof.witness).pipe(Effect.mapError((cause) => threadCallFailed(cause)));
-        const { threadId, born } = joined === null ? yield* found(shell, ask) : { threadId: joined, born: false };
+        const { threadId, born } = joined === null ? yield* found(shell, ask, adapter) : { threadId: joined, born: false };
         const session = yield* sessions.adopt(threadId, {
           shell: at,
           job: proof.witness,

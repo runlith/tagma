@@ -8,6 +8,7 @@ import type { ModelCredentials, ProductIdentity, ProviderQuota, ProviderRegistra
 import type { ModelSpecs } from '@runlith/llm/models/description';
 import type { Usage } from '@runlith/llm/schema/events';
 import type { JsonSchema } from '@runlith/llm/schema/ids';
+import type { HarnessSurfaces } from './harness';
 
 export const PROGRAM_REFUSALS = [
   'ask-not-connected',
@@ -119,14 +120,15 @@ export type WireProvider = ProviderRegistration & {
   readonly catalog?: ProviderCatalogReader;
 };
 
-type HarnessDescription = ProviderDescription & {
-  readonly kind: 'harness';
-  readonly accountMode?: AccountMode;
-  readonly icon?: string;
-  readonly quota?: ProviderQuota;
-  readonly keyHint?: string;
-  readonly asks?: ProviderAsks;
-};
+type HarnessDescription = ProviderDescription &
+  HarnessSurfaces & {
+    readonly kind: 'harness';
+    readonly accountMode?: AccountMode;
+    readonly icon?: string;
+    readonly quota?: ProviderQuota;
+    readonly keyHint?: string;
+    readonly asks?: ProviderAsks;
+  };
 
 export type CliHarnessProvider = HarnessDescription & {
   readonly auth: 'cli';

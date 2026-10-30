@@ -5,6 +5,7 @@ import { AccountKey } from '@runlith/llm/models/authStatus';
 import { GateRefusal } from '../../platform/contract/wire/refusal.js';
 import type { HarnessAccounts } from '../../providers/contract/service/harness.js';
 import { accountFor } from './launch.js';
+import { builtinHarness } from '../testing/builtin.js';
 
 const unused = () => Effect.die('this selection does not edit accounts');
 const accounts: HarnessAccounts['Service'] = {
@@ -26,7 +27,7 @@ const accounts: HarnessAccounts['Service'] = {
 it.effect('account-less harnesses launch without interpreting the thread marker as a model provider', () =>
   Effect.gen(function* () {
     for (const name of ['cursor', 'gemini', 'grok'] as const)
-      expect(yield* accountFor(accounts, name, { provider: 'external', account: null })).toBeNull();
+      expect(yield* accountFor(accounts, builtinHarness(name), { provider: 'external', account: null })).toBeNull();
   }),
 );
 
@@ -34,7 +35,7 @@ it.effect('a pinned session resolves its account instead of a later thread selec
   Effect.gen(function* () {
     const selected = yield* accountFor(
       accounts,
-      'claude-code',
+      builtinHarness('claude-code'),
       { provider: 'next', account: 'next' },
       { provider: 'original', key: 'kept' },
     );

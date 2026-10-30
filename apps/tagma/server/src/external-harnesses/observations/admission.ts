@@ -2,6 +2,7 @@ import { Clock, Effect } from 'effect';
 import type { HarnessAccepted } from '../contract/service/observations.js';
 import { rootOf, workBound, sameField, sourceOf, sameBinding, field } from './binding.js';
 import type { ExternalSession } from '../../threads/contract/wire/harness/externalSession.js';
+import type { HarnessAdapter } from '../contract/service/adapter.js';
 import { HARNESS_DETAIL_MAX } from '@runlith/tagma/adapter/harness';
 import {
   HARNESS_DIAGNOSTIC_LIMIT,
@@ -277,7 +278,7 @@ export class HarnessObservations {
       .pipe(Effect.withSpan('HarnessObservations.expireHeld'));
   }
 
-  admit(facet: ExternalSession, event: HarnessEvent): HarnessAccepted {
+  admit(facet: ExternalSession, event: HarnessEvent, adapter: HarnessAdapter): HarnessAccepted {
     const standing = facet.observation;
     const sessionId = facet.session?.id ?? null;
     const base =
@@ -316,7 +317,7 @@ export class HarnessObservations {
     }
     const proven = event.sessionId !== null && event.sessionId === sessionId;
     const bound = base.binding.rootKey;
-    const root = rootOf(facet, base, event, proven);
+    const root = rootOf(adapter, facet, base, event, proven);
     if (root === 'foreign') {
       return stop(
         'foreign-root',
@@ -332,7 +333,7 @@ export class HarnessObservations {
     }
     const authoritative = proven && root !== 'unproven';
     const rootKey = root === 'binding' ? event.rootKey : bound;
-    const workRoad = workBound(facet, base, event, proven, root);
+    const workRoad = workBound(adapter, facet, base, event, proven, root);
     if (workRoad === 'foreign') {
       return stop('foreign-root', 'This reading names a session other than the one this execution bound its work clock to.');
     }

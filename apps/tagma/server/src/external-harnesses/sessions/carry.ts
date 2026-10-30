@@ -2,12 +2,11 @@ import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { Effect, type FileSystem } from 'effect';
 import type { HarnessAccounts } from '../../providers/contract/service/harness.js';
-import type { HarnessName } from '../../threads/contract/wire/harness/names.js';
 import { threadCallFailed, type HarnessFailure } from '../../threads/contract/service/failure.js';
-import { harnessAdapter } from '../contract/service/table.js';
+import type { HarnessAdapter } from '../contract/service/adapter.js';
 
 export type Carrying = {
-  readonly name: HarnessName;
+  readonly adapter: HarnessAdapter;
   readonly provider: string;
   readonly from: string;
   readonly into: string;
@@ -25,9 +24,9 @@ const refused = (reason: string): Carried => ({ _tag: 'Refused', reason });
 
 export const makeSessionCarrying = (accounts: HarnessAccounts['Service'], files: FileSystem.FileSystem): SessionCarrying =>
   Effect.fn('SessionCarrying.carry')(
-    function* ({ name, provider, from, into, root, replaced }: Carrying) {
-      const carry = harnessAdapter(name).launch?.carry;
-      if (carry === undefined) return refused(`${name} declares no session folder to carry`);
+    function* ({ adapter, provider, from, into, root, replaced }: Carrying) {
+      const carry = adapter.launch?.carry;
+      if (carry === undefined) return refused(`${adapter.harness} declares no session folder to carry`);
       const home = (account: string) =>
         Effect.map(accounts.launch(provider, account), (launch) => launch?.directory ?? join(homedir(), carry.folder));
       const source = yield* home(from);

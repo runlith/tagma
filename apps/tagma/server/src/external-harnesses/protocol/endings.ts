@@ -11,9 +11,7 @@ import type { HarnessSessionStore } from '../store/sessions.js';
 import type { RunActivities } from './activities.js';
 import type { ProtocolLaunches } from './launches.js';
 import { halt } from './halts.js';
-import { facetOf } from './links.js';
-import type { AcpProfile } from '@runlith/tagma/adapter/harness';
-import type { HarnessName } from '../../threads/contract/wire/harness/names.js';
+import { facetOf, type Linked } from './links.js';
 import type { ProtocolReactor } from './reactor.js';
 import { freshRow, type ProtocolRow } from './row.js';
 import type { ProtocolSteps } from './steps.js';
@@ -41,7 +39,7 @@ export class ProtocolEndings {
     private readonly ended: SessionEnded,
     private readonly launches: ProtocolLaunches,
     private readonly runs: NativeStorage['Service']['runs'],
-    private readonly profile: (name: HarnessName) => AcpProfile,
+    private readonly linked: (facet: ExternalSession) => Effect.Effect<Linked, HarnessFailure>,
     private readonly ownerId: string,
   ) {}
 
@@ -141,7 +139,7 @@ export class ProtocolEndings {
     detail = 'the agent process was replaced',
   ) {
     const { steps, reactor } = this;
-    const old = yield* steps.link(facet, sessionId, this.profile(facet.name), threadId, stored);
+    const old = yield* steps.link(facet, sessionId, yield* this.linked(facet), threadId, stored);
     old.poisoned = detail;
     old.halted = true;
     yield* reactor.locked(

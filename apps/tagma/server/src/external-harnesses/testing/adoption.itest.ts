@@ -12,6 +12,7 @@ import { adoptionKeptName, harnessAdoptedSchema } from '../contract/wire/adoptio
 import { adoptedHook } from '../hooks/adoption.js';
 import { makeHookDelivery, type HookDoor } from '../hooks/delivery.js';
 import { hookEventOf } from '../hooks/dispatch.js';
+import { builtinRows } from './hookRows.js';
 
 const home = mkdtempSync(join(tmpdir(), 'adopted-hook-'));
 afterAll(() => rmSync(home, { recursive: true, force: true }));
@@ -68,11 +69,13 @@ layer(BunFileSystem.layer, { excludeTestServices: true })('hook adoption', (it) 
 
       answering = { ...answer, grant: 'renewed-grant', session: 'renewed-session' };
       const startup = invoking({ ...event, hook_event_name: 'SessionStart' });
-      yield* hookEventOf('session-start', startup, connect, 'claude-code').pipe(Effect.provideService(CurrentInvocation, startup));
+      yield* hookEventOf('session-start', startup, connect, builtinRows('claude-code')!).pipe(
+        Effect.provideService(CurrentInvocation, startup),
+      );
       expect(startup.env[GRANT_VARIABLE]).toBe(answering.grant);
       expect(startup.env[SESSION_TOKEN_VARIABLE]).toBe(answering.session);
       const ended = invoking({ ...event, hook_event_name: 'SessionEnd' }, answering.grant);
-      yield* hookEventOf('observe', ended, connect, 'claude-code').pipe(Effect.provideService(CurrentInvocation, ended));
+      yield* hookEventOf('observe', ended, connect, builtinRows('claude-code')!).pipe(Effect.provideService(CurrentInvocation, ended));
       expect(yield* files.exists(file)).toBe(false);
 
       refusal = 'shell-unknown';

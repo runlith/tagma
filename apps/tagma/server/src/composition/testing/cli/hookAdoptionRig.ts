@@ -7,7 +7,9 @@ import { GRANT_HEADER, GRANT_VARIABLE, TERMINAL_VARIABLE } from '../../../platfo
 import { grantFor } from '../../../platform/testing/grants.js';
 import type { HarnessAdoptInput } from '../../../external-harnesses/contract/wire/adoption.js';
 import { unmeasuredObservation, type HarnessReportInput } from '../../../threads/contract/wire/harness/observation.js';
-import { HARNESSES, harnessPresentation } from '../../../external-harnesses/contract/service/table.js';
+import { harnessPresentation } from '../../../external-harnesses/contract/service/table.js';
+import { BUILTIN_HARNESSES } from '../../../external-harnesses/vendors/builtin.js';
+import { builtinHarness } from '../../../external-harnesses/testing/builtin.js';
 import type { ExternalSession } from '../../../threads/contract/wire/harness/externalSession.js';
 import { makeTerminalWorld } from '../fixture.js';
 
@@ -25,14 +27,14 @@ export const adoptionWorld = Effect.fnUntraced(function* () {
 
   const bare = (): Record<string, string | undefined> => {
     const env: Record<string, string | undefined> = { [GRANT_VARIABLE]: undefined, [TERMINAL_VARIABLE]: undefined };
-    for (const { variable } of HARNESSES) if (variable !== undefined) env[variable] = undefined;
+    for (const { variable } of BUILTIN_HARNESSES) if (variable !== undefined) env[variable] = undefined;
     return env;
   };
 
   const adoptedThread = Effect.fnUntraced(function* (id: string, projectId: number, key: string) {
     const facet: ExternalSession = {
       name: 'claude-code',
-      presentation: harnessPresentation('claude-code'),
+      presentation: harnessPresentation(builtinHarness('claude-code')),
       sessionKey: key,
       execution: null,
       observation: unmeasuredObservation(),

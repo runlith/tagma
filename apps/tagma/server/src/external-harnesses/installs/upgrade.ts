@@ -9,7 +9,7 @@ import { installFailure, type McpDeclarationWrite } from '../../installation/con
 import { installForUser, installInto } from './skillInstall.js';
 import { declareForLaunch } from './mcpDeclaration.js';
 import { skillTarget, userSkillTarget } from './targets.js';
-import { harnessAdapter } from '../contract/service/table.js';
+import { HarnessAdapters } from '../contract/service/adapters.js';
 import type { HarnessName } from '../../threads/contract/wire/harness/names.js';
 import type { SectionCatalog } from '../../platform/contract/service/sections.js';
 
@@ -111,7 +111,7 @@ export const declaredForLaunch = Effect.fn('harnessInstall.declaredForLaunch')(f
   env: NodeJS.ProcessEnv = process.env,
 ) {
   if (!integratesProjects(env)) return null;
-  const adapter = harnessAdapter(name);
+  const adapter = yield* (yield* HarnessAdapters).row(name);
   const surface = adapter.mcp;
   if (surface === null || surface.file._tag !== 'Project') return null;
   const stand = yield* standing(privately, root);

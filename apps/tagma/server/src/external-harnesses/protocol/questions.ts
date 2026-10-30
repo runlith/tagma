@@ -6,7 +6,6 @@ import type { ThreadQuestionEntry } from '@runlith/agent/transcript/entries';
 import { GateRefusal } from '../../platform/contract/wire/refusal.js';
 import type { HarnessFailure } from '../../threads/contract/service/failure.js';
 import type { HarnessJudging } from '../contract/service/permissions.js';
-import { harnessAdapter } from '../contract/service/table.js';
 import { allowOnce, chosenOption, judgedCall, questionEntry, questionId, refusal, type PermissionAsk } from './asks.js';
 import type { ProtocolJournal } from './journal.js';
 import type { AskLandings } from './landings.js';
@@ -38,7 +37,7 @@ export class ProtocolAsks {
       });
     }
     const known = link.row.client.turn?.calls[ask.params.toolCall.toolCallId];
-    const judged = judgedCall(ask, known, link.profile.otherMutates, harnessAdapter(link.name).tools);
+    const judged = judgedCall(ask, known, link.profile.otherMutates, link.adapter.tools);
     const verdict = yield* permissions.verdict(link.threadId, judged.call, judged.mutating);
     if (verdict._tag === 'Denies') {
       const refused = refusal(ask);
@@ -56,7 +55,7 @@ export class ProtocolAsks {
     const entry = questionEntry(
       ask,
       run,
-      permissions.prompt(link.name, judged.call),
+      permissions.prompt(link.adapter, judged.call),
       verdict._tag === 'Asks' ? verdict.reason : null,
       verdict._tag === 'Asks' ? { ruleId: verdict.ruleId, action: judged.call.tool, asked: verdict.asked } : AGENT_CHOICE,
       new Date(yield* Clock.currentTimeMillis).toISOString(),

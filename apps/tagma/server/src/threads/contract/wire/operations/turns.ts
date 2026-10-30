@@ -50,6 +50,7 @@ const TURN_REFUSALS = [
   'interaction-conflict',
   'not-a-harness-thread',
   'harness-missing',
+  'harness-not-installed',
   'cli-background',
   'answer-invalid',
   'withdraw-failed',

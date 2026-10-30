@@ -27,7 +27,7 @@ export class ProtocolAsides {
   ) {}
 
   of(link: Link): SessionAside | undefined {
-    const served = harnessServed(link.facet, link.asked);
+    const served = harnessServed(link.adapter, link.facet, link.asked);
     if (served === null || !this.offered(link)) return undefined;
     const threadId = link.threadId;
     return { served, ask: (question) => this.ask(threadId, question) };

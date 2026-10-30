@@ -7,9 +7,12 @@ import { sessionFor, sessionOfThread } from '../../external-harnesses/testing/se
 import { GRANT_VARIABLE, SESSION_TOKEN_VARIABLE } from '../../platform/contract/service/credentials.js';
 import { sessionTokenEnvironment, grantEnvironment } from '../../platform/testing/grants.js';
 import { unmeasuredObservation } from '../../threads/contract/wire/harness/observation.js';
-import { HARNESSES, harnessArgv, harnessPresentation } from '../../external-harnesses/contract/service/table.js';
+import { harnessArgv, harnessPresentation } from '../../external-harnesses/contract/service/table.js';
+import { BUILTIN_HARNESSES } from '../../external-harnesses/vendors/builtin.js';
+import { builtinHarness } from '../../external-harnesses/testing/builtin.js';
 import { sessionIdentity } from '../../external-harnesses/sessionPrefix.js';
 import type { ExternalSession } from '../../threads/contract/wire/harness/externalSession.js';
+import type { KernelSeat } from '../../threads/contract/wire/harness/seat.js';
 import type { makeTerminalWorld } from './fixture.js';
 
 export const HOOK_SESSION = '01a09400-0000-7000-8000-00000000dd01';
@@ -23,7 +26,7 @@ export const unsigned = (): Record<string, string | undefined> => {
     [GRANT_VARIABLE]: undefined,
     [SESSION_TOKEN_VARIABLE]: undefined,
   };
-  for (const { variable } of HARNESSES) if (variable !== undefined) env[variable] = undefined;
+  for (const { variable } of BUILTIN_HARNESSES) if (variable !== undefined) env[variable] = undefined;
   return env;
 };
 
@@ -50,7 +53,7 @@ export const hookThreads = (world: TerminalPlace) => {
               : sessionTokenEnvironment(granted, session, sessionIdentity)),
         },
       }),
-    bornThread: Effect.fnUntraced(function* (id: string, projectId: number, harness: ExternalSession | null) {
+    bornThread: Effect.fnUntraced(function* (id: string, projectId: number, harness: ExternalSession | null, kernel?: KernelSeat) {
       yield* owned(
         bornKernelThread(
           store.db,
@@ -74,7 +77,7 @@ export const hookThreads = (world: TerminalPlace) => {
       );
       if (harness !== null) {
         yield* owned(store.db.insert(threadLog()).values({ threadId: id }));
-        yield* owned(sessionFor(store.db, id, harness));
+        yield* owned(sessionFor(store.db, id, harness, kernel));
       }
       return id;
     }),
@@ -98,14 +101,14 @@ export const hookThreads = (world: TerminalPlace) => {
 
 export const born = (name: ExternalSession['name'] = 'devin', sessionKey: string | null = null): ExternalSession => ({
   name,
-  presentation: harnessPresentation(name),
+  presentation: harnessPresentation(builtinHarness(name)),
   sessionKey,
   execution: null,
   observation: unmeasuredObservation(),
 });
 
 export const running = Effect.fnUntraced(function* (facet: ExternalSession) {
-  const argv = yield* harnessArgv(facet.name, facet.sessionKey, HOOK_SESSION, '');
+  const argv = yield* harnessArgv(builtinHarness(facet.name), facet.sessionKey, HOOK_SESSION, '');
   return {
     ...facet,
     session: {
@@ -124,7 +127,7 @@ export const running = Effect.fnUntraced(function* (facet: ExternalSession) {
 
 export const naming = (name: ExternalSession['name'], sessionKey: string, model: string): ExternalSession => ({
   name,
-  presentation: harnessPresentation(name),
+  presentation: harnessPresentation(builtinHarness(name)),
   sessionKey,
   execution: null,
   observation: {

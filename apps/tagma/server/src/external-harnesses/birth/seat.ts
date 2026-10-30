@@ -2,10 +2,10 @@ import type { TransportCapabilities, TransportCopies } from '@runlith/agent/thre
 import type { DeclaredHistory } from '../../threads/store/seat.js';
 import type { ModelSwitches } from '@runlith/llm/models/description';
 import type { HarnessAskedModel } from '../../threads/contract/wire/harness/askedModel.js';
-import type { HarnessName } from '../../threads/contract/wire/harness/names.js';
 import { EXTERNAL_PROVIDER, type HarnessSeat, type KernelSeat, type SeatedHarness } from '../../threads/contract/wire/harness/seat.js';
 import { harnessFacet } from '../../threads/contract/wire/harness/types.js';
-import { harnessAdapter, harnessPresentation, servingProvider } from '../contract/service/table.js';
+import { harnessPresentation, servingProvider } from '../contract/service/table.js';
+import type { HarnessAdapter } from '../contract/service/adapter.js';
 import { transcriptUsage } from '../metadata/words.js';
 import type { AcpProfile } from '@runlith/tagma/adapter/harness';
 import type { HarnessTransportOffer } from '../contract/service/table.js';
@@ -35,20 +35,19 @@ export const acpCapabilities = (profile: AcpProfile): TransportCapabilities => (
 });
 
 export const acpKernel = (
-  name: HarnessName,
+  adapter: HarnessAdapter,
   agent: string | null,
   asked: HarnessAskedModel | undefined,
   switches: ModelSwitches,
   account: string | null = null,
 ): KernelSeat => {
-  const adapter = harnessAdapter(name);
   const profile = adapter.acp;
-  if (profile === undefined) throw new Error(`${name} carries no ACP profile, so no thread of it runs on acp.`);
+  if (profile === undefined) throw new Error(`${adapter.harness} carries no ACP profile, so no thread of it runs on acp.`);
   return {
-    transport: { adapter: 'acp', profile: name, agent },
+    transport: { adapter: 'acp', profile: adapter.harness, agent },
     capabilities: acpCapabilities(profile),
     selection: {
-      provider: servingProvider(name, 'acp') ?? EXTERNAL_PROVIDER,
+      provider: servingProvider(adapter, 'acp') ?? EXTERNAL_PROVIDER,
       model: asked?.model ?? null,
       reasoning: asked?.reasoning ?? null,
     },
@@ -57,22 +56,22 @@ export const acpKernel = (
   };
 };
 
-export const terminalHistory = (name: HarnessName, plain: boolean): DeclaredHistory => {
-  const cut = harnessAdapter(name).launch?.cut;
+export const terminalHistory = (adapter: HarnessAdapter, plain: boolean): DeclaredHistory => {
+  const cut = adapter.launch?.cut;
   const copies: TransportCopies = plain
     ? { whole: cut?.whole?._tag === 'Prepare' ? 'vendor' : 'none', point: 'none' }
     : { whole: cut?.whole == null ? 'record' : 'vendor', point: cut?.point == null ? 'record' : 'vendor' };
   return { history: copies.whole === 'none' && copies.point === 'none' ? 'none' : 'session', copies };
 };
 
-export const terminalCapabilities = (name: HarnessName, plain: boolean): TransportCapabilities => {
-  const events = plain ? undefined : harnessAdapter(name).hooks?.events;
+export const terminalCapabilities = (adapter: HarnessAdapter, plain: boolean): TransportCapabilities => {
+  const events = plain ? undefined : adapter.hooks?.events;
   return {
     messaging: !plain,
     judgedModel: false,
-    steer: harnessAdapter(name).steer,
+    steer: adapter.steer,
     withdraw: false,
-    ...terminalHistory(name, plain),
+    ...terminalHistory(adapter, plain),
     compaction: 'none',
     modelMove: 'pinned',
     openings: plain ? 'core' : 'core-and-observed',
@@ -81,26 +80,26 @@ export const terminalCapabilities = (name: HarnessName, plain: boolean): Transpo
     law: events?.permission == null ? null : 'asked-calls',
     touch: events?.postRead != null ? 'reads-and-writes' : events?.postWrite != null ? 'writes' : null,
     authorship: events?.postWrite != null ? 'observed' : null,
-    callEnvelopeMs: harnessAdapter(name).callEnvelopeMs,
+    callEnvelopeMs: adapter.callEnvelopeMs,
     screen: true,
     continue: true,
     feed: 'turns',
-    usage: transcriptUsage(harnessAdapter(name)) ? 'partial' : 'none',
+    usage: transcriptUsage(adapter) ? 'partial' : 'none',
     aside: 'none',
   };
 };
 
 export const terminalKernel = (
-  name: HarnessName,
+  adapter: HarnessAdapter,
   asked: HarnessAskedModel | undefined,
   plain: boolean,
   switches: ModelSwitches,
   account: string | null = null,
 ): KernelSeat => ({
-  transport: { adapter: 'terminal', profile: name, agent: null },
-  capabilities: terminalCapabilities(name, plain),
+  transport: { adapter: 'terminal', profile: adapter.harness, agent: null },
+  capabilities: terminalCapabilities(adapter, plain),
   selection: {
-    provider: harnessAdapter(name).launch?.model?.provider ?? EXTERNAL_PROVIDER,
+    provider: adapter.launch?.model?.provider ?? EXTERNAL_PROVIDER,
     model: asked?.model ?? null,
     reasoning: asked?.reasoning ?? null,
   },
@@ -109,19 +108,19 @@ export const terminalKernel = (
 });
 
 export const birthSeat = (
-  name: HarnessName,
+  adapter: HarnessAdapter,
   offer: HarnessTransportOffer,
   asked: HarnessAskedModel | undefined,
   profile: HarnessProfile,
 ): HarnessSeat =>
   offer.transport === 'acp'
-    ? { facet: harnessFacet(name, harnessPresentation(name)), kernel: acpKernel(name, offer.agent, asked, {}) }
+    ? { facet: harnessFacet(adapter.harness, harnessPresentation(adapter)), kernel: acpKernel(adapter, offer.agent, asked, {}) }
     : {
         facet: {
-          ...harnessFacet(name, harnessPresentation(name)),
+          ...harnessFacet(adapter.harness, harnessPresentation(adapter)),
           home: profile.home,
           plain: profile.plain,
           permissionMode: profile.permissionMode,
         },
-        kernel: terminalKernel(name, asked, profile.plain === true, {}),
+        kernel: terminalKernel(adapter, asked, profile.plain === true, {}),
       };

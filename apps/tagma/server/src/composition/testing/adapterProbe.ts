@@ -4,6 +4,7 @@ import { runConformance } from '@runlith/tagma/adapter/conformance';
 import { LLMError } from '@runlith/llm/schema/errors';
 import type { WireProvider } from '@runlith/tagma/adapter/provider';
 import { Effect, Layer } from 'effect';
+import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { HttpClient, HttpClientResponse } from 'effect/http';
 import { LlmClient, llmClientLayer } from '@runlith/llm/route/client';
 import { doorExecutorLayer } from '@runlith/llm/route/executor';
@@ -153,6 +154,7 @@ const program = Effect.gen(function* () {
 const layer = registryLayer.pipe(
   Layer.provide(Layer.succeed(BuiltinAdapters, { sources: [] })),
   Layer.provide(Layer.succeed(AdapterPlaces, { machine, host: HOST_MODULES })),
+  Layer.provide(BunFileSystem.layer),
 );
 
 console.log(JSON.stringify(await Effect.runPromise(Effect.provide(program, layer))));

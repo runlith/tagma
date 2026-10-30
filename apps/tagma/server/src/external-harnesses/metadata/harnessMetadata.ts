@@ -3,7 +3,7 @@ import { declare } from '@runlith/held/Held';
 import { Holding } from '@runlith/held/holding';
 import { GateRefusal } from '../../platform/contract/wire/refusal.js';
 import type { StoreFailure } from '../../platform/contract/service/store.js';
-import { harnessAdapter } from '../contract/service/table.js';
+import type { HarnessAdapters } from '../contract/service/adapters.js';
 import type { ExternalSession } from '../../threads/contract/wire/harness/externalSession.js';
 import { harnessSessionActive } from '../../threads/contract/wire/harness/session.js';
 import type { HarnessFields } from '../../threads/contract/wire/harness/observation.js';
@@ -61,6 +61,7 @@ export class SessionMetadata extends Context.Service<
 >()('tagma/external-harnesses/SessionMetadata') {}
 
 export const makeSessionMetadata = Effect.fnUntraced(function* (
+  adapters: HarnessAdapters['Service'],
   store: HarnessSessionStore,
   observations: HarnessObservations,
   terminals: Terminals['Service'],
@@ -104,7 +105,7 @@ export const makeSessionMetadata = Effect.fnUntraced(function* (
                   jobs.delete(threadId);
                   yield* Effect.withFiberSucceed((fiber) => prior.fiber?.interruptUnsafe(fiber.id));
                 }
-                if (key === null || harnessAdapter(facet.name).metadata === undefined) return prior?.fiber ?? null;
+                if (key === null || adapters.find(facet.name)?.metadata === undefined) return prior?.fiber ?? null;
                 const job: Job = { key, boundary, wake: yield* Queue.sliding<void>(1), fiber: null };
                 jobs.set(threadId, job);
                 job.fiber = yield* Effect.forkIn(
@@ -152,8 +153,10 @@ export const makeSessionMetadata = Effect.fnUntraced(function* (
       let published: string | null = null;
       while (true) {
         const facet = yield* store.read(threadId);
+        const reader = facet === null ? undefined : adapters.find(facet.name)?.metadata;
         if (
           facet === null ||
+          reader === undefined ||
           !harnessSessionActive(facet.session) ||
           keyOf(facet) !== job.key ||
           facet.execution === null ||
@@ -167,7 +170,6 @@ export const makeSessionMetadata = Effect.fnUntraced(function* (
           title: { _tag: 'NotRead' },
         };
         let failure: string | null = null;
-        const reader = harnessAdapter(facet.name).metadata;
         const input: MetadataInput | null = inputOf(facet);
         if (input === null) failure = 'launch-storage-unavailable';
         else if (input.storage.unreadable !== undefined) failure = input.storage.unreadable;
@@ -179,7 +181,7 @@ export const makeSessionMetadata = Effect.fnUntraced(function* (
                 const scope = yield* Scope.make();
                 const opened = yield* restore(
                   slotsHeld
-                    .hold('slot', runtime.open(input, reader!.sources(input)).pipe(Scope.provide(scope)))
+                    .hold('slot', runtime.open(input, reader.sources(input)).pipe(Scope.provide(scope)))
                     .pipe(Effect.withSpan('HarnessMetadata.queue'), Effect.timeout(METADATA_CADENCE)),
                 ).pipe(
                   Effect.onInterrupt(() => Scope.close(scope, Exit.void)),
@@ -227,7 +229,7 @@ export const makeSessionMetadata = Effect.fnUntraced(function* (
           }
         }
         if (failure !== null) {
-          const declared = reader!.provenance;
+          const declared = reader.provenance;
           const at = new Date(yield* Clock.currentTimeMillis).toISOString();
           for (const name of ['model', 'effort', 'title'] as const) {
             const field = declared[name];
@@ -265,12 +267,13 @@ export const makeSessionMetadata = Effect.fnUntraced(function* (
   const readerWords = Effect.fn('HarnessMetadata.readerWords')(function* (threadId: string) {
     const facet = yield* store.read(threadId);
     const input = facet === null ? null : inputOf(facet);
-    if (facet === null || input === null) return [] as readonly string[];
+    const adapter = facet === null ? null : adapters.find(facet.name);
+    if (input === null || adapter === null) return [] as readonly string[];
     if (input.storage.unreadable !== undefined)
       return yield* new GateRefusal('metadata-unreadable', 'The session launch storage was truncated.', [
         'restore access to the session environment and retry',
       ]);
-    return (yield* readHarnessTranscript(access, input, harnessAdapter(facet.name))).words;
+    return (yield* readHarnessTranscript(access, input, adapter)).words;
   });
 
   return SessionMetadata.of({ observed, readerWords });

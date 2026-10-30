@@ -14,6 +14,7 @@ import { hookReports } from './hookReports.js';
 import { toolEntryId } from '@runlith/agent/transcript/entryNames';
 import { CurrentInvocation, Invocation } from '../../platform/cli/verb.js';
 import { hookEventOf } from '../hooks/dispatch.js';
+import { builtinRows } from './hookRows.js';
 import { hookConnectOver } from '../hooks/door.js';
 import { hookPendingDir, keepPendingOp, listPendingOps } from '../hooks/pendingWrites.js';
 import type { HarnessName } from '../../threads/contract/wire/harness/names.js';
@@ -24,7 +25,7 @@ const writeSchema = CHANGE_WRITES.record_write.input;
 type Write = typeof writeSchema.Type;
 type Reports = Effect.Success<ReturnType<typeof hookReports>>;
 
-const scenario = (name: string, named: HarnessName | null = null, reports?: Reports) => {
+const scenario = (name: string, named: HarnessName = 'claude-code', reports?: Reports) => {
   const path = join(root, `${name}.ts`);
   const pending = hookPendingDir(root, name);
   const recorded: Write[] = [];
@@ -79,7 +80,7 @@ const scenario = (name: string, named: HarnessName | null = null, reports?: Repo
       () => new Blob([JSON.stringify(payload)]).stream(),
       'hook',
     );
-    return hookEventOf(event, at, connect, named).pipe(
+    return hookEventOf(event, at, connect, builtinRows(named)!).pipe(
       Effect.provideService(CurrentInvocation, at),
       Effect.provideService(Console.Console, console),
     );

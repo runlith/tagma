@@ -29,7 +29,7 @@ import type { AskLandings } from './landings.js';
 import { settledFacet, type Seated } from './facets.js';
 import { UNWRITTEN, type ProtocolJournal } from './journal.js';
 import type { Written } from './link.js';
-import type { Link, ProtocolLinks } from './links.js';
+import type { Link, Linked, ProtocolLinks } from './links.js';
 import type { Answers } from './methods/answers.js';
 import type { Answered, AsideOutcome, Fate, WithdrawOutcome } from './methods/declaration.js';
 import { doubted, read } from './methods/declared.js';
@@ -182,7 +182,7 @@ export class ProtocolSteps {
     this: ProtocolSteps,
     facet: ExternalSession,
     sessionId: string,
-    profile: AcpProfile,
+    { adapter, profile }: Linked,
     threadId: string,
     row: ProtocolRow,
   ) {
@@ -205,6 +205,7 @@ export class ProtocolSteps {
       threadId,
       sessionId,
       name: facet.name,
+      adapter,
       profile,
       lock: Semaphore.makeUnsafe(1),
       writer,
@@ -597,7 +598,7 @@ export class ProtocolSteps {
     const compacted = link.row.compact !== null && base.compact === null;
     const last = ended.at(-1)?.turn ?? null;
     const measuredIn = base.turns.at(-1)?.id ?? last ?? cancelledTurn(link.row);
-    const served = harnessServed(link.facet, link.asked);
+    const served = harnessServed(link.adapter, link.facet, link.asked);
     const contexts = contextsOf(measurements, {
       compacted: compacted ? (last ?? measuredIn) : null,
       measuredIn,

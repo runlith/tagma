@@ -8,6 +8,7 @@ import { fakeAdapter } from '@runlith/agent/thread/conformance/fakeTransport';
 import { ThreadInbox } from '../../threads/store/inbox.js';
 import { harnessFacet } from '../../threads/contract/wire/harness/types.js';
 import { harnessPresentation } from '../contract/service/table.js';
+import { builtinHarness } from '../testing/builtin.js';
 import { terminalKernel } from '../birth/seat.js';
 import { RunActivities } from '../protocol/activities.js';
 import { memorySessionRows } from '../testing/memorySessions.js';
@@ -36,7 +37,7 @@ it.effect('an observed run stopped before its afterCommit activity opens still r
         };
       },
     };
-    const kernel = terminalKernel('claude-code', undefined, false, {});
+    const kernel = terminalKernel(builtinHarness('claude-code'), undefined, false, {});
     const thread = yield* storage.createThread({ ownerId: OWNER, scope: SCOPE, transport: kernel.transport });
     yield* storage.aggregate.update(thread.id, { capabilities: kernel.capabilities });
     const world = yield* lifecycleWorldOver(controlled, (yield* storage.aggregate.find(thread.id))!, undefined, fakeAdapter('terminal'));
@@ -60,7 +61,11 @@ it.effect('an observed run stopped before its afterCommit activity opens still r
           if (observed?.status !== 'applied') return yield* Effect.die('the observed start was not admitted');
           yield* unit.afterCommit(
             journal
-              .open({ id: observed.runId, threadId: thread.id }, harnessFacet('claude-code', harnessPresentation('claude-code')), [])
+              .open(
+                { id: observed.runId, threadId: thread.id },
+                harnessFacet('claude-code', harnessPresentation(builtinHarness('claude-code'))),
+                [],
+              )
               .pipe(Effect.orDie),
           );
         }),

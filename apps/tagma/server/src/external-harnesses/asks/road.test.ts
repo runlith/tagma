@@ -10,6 +10,8 @@ import type { HarnessSessionStore } from '../store/sessions.js';
 import { HarnessLanes } from '../sessions/lanes.js';
 import { keyboardFrame, keyboardRig, KEYBOARD_EXECUTION, WIDGET_ASK, WIDGET_GONE } from '../testing/keyboard.js';
 import { terminalFaces } from './faces.js';
+import { makeHarnessAdapters } from '../adapters.js';
+import { builtinHarness } from '../testing/builtin.js';
 import { TerminalAsks, type AskLedger } from './terminal.js';
 
 const RUN: ThreadRunRef = { id: 'run-1', threadId: 't' };
@@ -26,10 +28,15 @@ const road = Effect.fnUntraced(function* (options: { readonly lostReplyAt?: numb
   } as unknown as TerminalScreens['Service'];
   const sessions = {
     read: () =>
-      Effect.succeed({ name: 'devin', session: { id: 's1', state: 'running' }, execution: { execution: 'exec-1', incarnation: 0 } }),
+      Effect.succeed({
+        name: 'devin',
+        presentation: { install: null },
+        session: { id: 's1', state: 'running' },
+        execution: { execution: 'exec-1', incarnation: 0 },
+      }),
     wait: () => Effect.never,
   } as unknown as HarnessSessionStore;
-  const faces = terminalFaces(sessions, face.terminals, screens, face.writing, lanes);
+  const faces = terminalFaces(sessions, face.terminals, screens, face.writing, lanes, yield* makeHarnessAdapters);
   const entries: ThreadQuestionEntry[] = [];
   const update = (questionId: string, change: Partial<ThreadQuestionEntry>) => {
     const at = entries.findIndex((entry) => entry.questionId === questionId);
@@ -49,7 +56,7 @@ const road = Effect.fnUntraced(function* (options: { readonly lostReplyAt?: numb
       verdict: () => Effect.succeed({ _tag: 'Asks', ruleId: 'mode:review', reason: null, asked: ['review'] }),
       prompt: (_name, call) => `Devin asks to run \`${call.subject}\``,
     },
-    () => Effect.succeed('devin' as const),
+    () => Effect.succeed(builtinHarness('devin')),
     ledger,
     faces,
     (threadId, questionId, answers: readonly ThreadInteractionAnswer[]) =>

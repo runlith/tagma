@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { harnessAdapter } from '../contract/service/table.js';
+import { builtinHarness } from '../testing/builtin.js';
 import type { HarnessName } from '../../threads/contract/wire/harness/names.js';
 import type { TailEnd } from '@runlith/tagma/adapter/metadata';
 import { TailScan } from './tail.js';
@@ -7,7 +7,7 @@ import { TailScan } from './tail.js';
 const START = Date.parse('2026-10-08T22:00:10.000Z');
 
 const endOf = (name: HarnessName, records: readonly unknown[], since: number = START): TailEnd => {
-  const source = harnessAdapter(name).metadata?.ends;
+  const source = builtinHarness(name).metadata?.ends;
   if (source === undefined) throw new Error(`${name} has no transcript reader`);
   const scan = new TailScan(source.reader, { since, offset: 0, turn: null });
   const steps = source.reader.records?.({ steps: records }) ?? records;

@@ -23,6 +23,8 @@ import { memorySessionRows } from './memorySessions.js';
 import type { RunHosting } from '../contract/service/guidance.js';
 import { standingAlignment } from './alignment.js';
 import { harnessArgv, harnessPresentation } from '../contract/service/table.js';
+import { makeHarnessAdapters } from '../adapters.js';
+import { builtinHarness } from './builtin.js';
 import { harnessFacet } from '../../threads/contract/wire/harness/types.js';
 import type { HarnessName } from '../../threads/contract/wire/harness/names.js';
 import type { ExternalSession } from '../../threads/contract/wire/harness/externalSession.js';
@@ -72,7 +74,8 @@ export const hookReports = Effect.fnUntraced(function* ({
   published = () => Effect.void,
 }: HookReportOptions = {}) {
   const storage = yield* openMemoryStorage();
-  const kernel = terminalKernel(name, undefined, false, {});
+  const adapters = yield* makeHarnessAdapters;
+  const kernel = terminalKernel(builtinHarness(name), undefined, false, {});
   const first = yield* storage.createThread({ ownerId: OWNER, scope: SCOPE, transport: kernel.transport });
   yield* storage.aggregate.update(first.id, { capabilities: kernel.capabilities });
   const world = yield* lifecycleWorldOver(storage, (yield* storage.aggregate.find(first.id))!, undefined, fakeAdapter('terminal'));
@@ -133,7 +136,7 @@ export const hookReports = Effect.fnUntraced(function* ({
   yield* world.settlements.subscribe({ name: 'hook report activity', at: 'first', handle: (event) => journal.settled(event) });
   const open = new OpenRuns();
   const access = Context.get(ports, Environments);
-  const closing = new TerminalClosing(access, Effect.succeed(modelCatalog([])), journal.reports);
+  const closing = new TerminalClosing(access, Effect.succeed(modelCatalog([])), journal.reports, adapters);
   const watch = new TerminalWatch(
     store,
     journal,
@@ -147,6 +150,7 @@ export const hookReports = Effect.fnUntraced(function* ({
     yield* FiberMap.make<string>(),
     closing,
     standingAlignment(store),
+    adapters,
   );
   const guidance = makeHookGuidance(
     world.guidance,
@@ -174,12 +178,13 @@ export const hookReports = Effect.fnUntraced(function* ({
     unused,
     { opened: () => Effect.void, settled: () => Effect.void, ended: () => Effect.void },
     standingAlignment(store),
+    adapters,
   );
   const reports = HarnessReports.of({ reported: (threadId, input) => events.reported(threadId, input) });
   const seed = Effect.fnUntraced(function* (id: string, harness: HarnessName, root: string | null) {
     const session = crypto.randomUUID();
     const facet: ExternalSession = {
-      ...harnessFacet(harness, harnessPresentation(harness)),
+      ...harnessFacet(harness, harnessPresentation(builtinHarness(harness))),
       sessionKey: root,
       session: {
         id: session,
@@ -187,7 +192,7 @@ export const hookReports = Effect.fnUntraced(function* ({
         state: 'running',
         prompt: '',
         cwd: '/project',
-        argv: yield* harnessArgv(harness, root, session, ''),
+        argv: yield* harnessArgv(builtinHarness(harness), root, session, ''),
         startedAt: new Date(yield* Clock.currentTimeMillis).toISOString(),
       },
     };
@@ -196,7 +201,7 @@ export const hookReports = Effect.fnUntraced(function* ({
   });
   const initial = yield* seed(first.id, name, key);
   const create = Effect.fnUntraced(function* (harness: HarnessName, root: string | null = null) {
-    const seat = terminalKernel(harness, undefined, false, {});
+    const seat = terminalKernel(builtinHarness(harness), undefined, false, {});
     const row = yield* storage.createThread({ ownerId: OWNER, scope: SCOPE, transport: seat.transport });
     yield* storage.aggregate.update(row.id, { capabilities: seat.capabilities });
     return yield* seed(row.id, harness, root);
@@ -209,7 +214,8 @@ export const hookReports = Effect.fnUntraced(function* ({
     rows: memory.rows,
     reports,
     guidance,
-    notes: notesReach(Context.get(ports, SessionLookupStore), store),
+    notes: notesReach(Context.get(ports, SessionLookupStore), store, adapters),
+    adapters,
     activities,
     ports,
     journal,

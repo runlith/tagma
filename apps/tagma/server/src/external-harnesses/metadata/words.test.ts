@@ -3,7 +3,7 @@ import { layer } from '@runlith/effect-test';
 import * as MemoryFileSystem from '@runlith/testbed/memory';
 import { Context, Effect, FileSystem, Layer } from 'effect';
 import { join } from 'node:path';
-import { harnessAdapter } from '../contract/service/table.js';
+import { builtinHarness } from '../testing/builtin.js';
 import type { WordsSource } from '@runlith/tagma/adapter/metadata';
 import { MetadataFile } from './file.js';
 import { DOCUMENT_LIMITS, TRANSCRIPT_LIMITS } from './policy.js';
@@ -32,7 +32,7 @@ const input = (rootKey: string, over: Partial<MetadataInput>): MetadataInput => 
 const readWords = Effect.fnUntraced(function* (name: 'devin' | 'claude-code' | 'codex', rootKey: string, fileName: string, text: string) {
   const dir = yield* Home;
   const file = join(dir, fileName);
-  const declared = harnessAdapter(name).metadata?.words?.sources;
+  const declared = builtinHarness(name).metadata?.words?.sources;
   if (declared === undefined) return yield* Effect.die(new Error(`${name} declares no reader-word source`));
   const over: Partial<MetadataInput> = name === 'devin' ? { rootKey, exportPath: file } : { rootKey, transcriptPath: file };
   const source = declared(input(rootKey, over)).find(
@@ -198,7 +198,7 @@ layer(home)('reader words', (it) => {
   it.effect('vendors carrying no readable reader-word source declare none', () =>
     Effect.sync(() => {
       for (const name of ['grok', 'cursor', 'gemini'] as const) {
-        expect(harnessAdapter(name).metadata?.words).toBeUndefined();
+        expect(builtinHarness(name).metadata?.words).toBeUndefined();
       }
     }),
   );

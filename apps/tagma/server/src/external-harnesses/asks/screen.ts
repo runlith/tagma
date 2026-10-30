@@ -6,7 +6,7 @@ import type { ScreenAnswer } from '@runlith/executions/protocol/presentation';
 import type { ScreenAsk } from '@runlith/tagma/adapter/harness';
 import { screenLines } from '@runlith/executions/protocol/presentationText';
 import { readsScreen, sameScreenAsk, widgetStands } from '../adapter/screenAsk.js';
-import { harnessAdapter } from '../contract/service/table.js';
+import { HarnessAdapters } from '../contract/service/adapters.js';
 import type { ExternalSession } from '../../threads/contract/wire/harness/externalSession.js';
 import { harnessSessionActive } from '../../threads/contract/wire/harness/session.js';
 import type { TerminalFailure, Terminals } from '../../executions/contract/service/terminals.js';
@@ -59,6 +59,7 @@ export class HarnessScreenAsks {
     private readonly asks: TerminalAsks,
     private readonly cleared: WidgetCleared,
     private readonly scope: Scope.Scope,
+    private readonly adapters: HarnessAdapters['Service'],
   ) {}
 
   static readonly make = Effect.fnUntraced(function* (
@@ -68,7 +69,7 @@ export class HarnessScreenAsks {
     asks: TerminalAsks,
     cleared: WidgetCleared,
   ) {
-    return new HarnessScreenAsks(store, terminals, screens, asks, cleared, yield* Effect.scope);
+    return new HarnessScreenAsks(store, terminals, screens, asks, cleared, yield* Effect.scope, yield* HarnessAdapters);
   });
 
   observed(threadId: string, facet: ExternalSession): Effect.Effect<void, StoreFailure | GateRefusal> {
@@ -101,12 +102,14 @@ export class HarnessScreenAsks {
   ) {
     const prior = this.jobs.get(threadId);
     const terminal = binding?.adapter === 'terminal';
+    const adapter = this.adapters.find(facet.name);
     const eligible =
       harnessSessionActive(facet.session) &&
       terminal &&
       facet.session.state === 'running' &&
       facet.execution !== null &&
-      readsScreen(harnessAdapter(facet.name));
+      adapter !== null &&
+      readsScreen(adapter);
     const key = eligible ? JSON.stringify([facet.session!.id, facet.execution]) : null;
     if (prior !== undefined && prior.key === key) return;
     if (prior !== undefined) this.jobs.delete(threadId);
@@ -231,8 +234,8 @@ export class HarnessScreenAsks {
 
   private readAsk(facet: ExternalSession): Effect.Effect<ScreenAskSeen> {
     const execution = facet.execution;
-    if (execution === null) return Effect.succeed({ _tag: 'Unreadable' });
-    const reader = harnessAdapter(facet.name).screenAskOf;
+    const reader = this.adapters.find(facet.name)?.screenAskOf;
+    if (execution === null || reader === undefined) return Effect.succeed({ _tag: 'Unreadable' });
     return this.terminals.record(execution.execution, execution.incarnation).pipe(
       Effect.flatMap((record) =>
         record === null

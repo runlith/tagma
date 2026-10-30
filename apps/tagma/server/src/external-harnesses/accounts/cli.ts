@@ -2,7 +2,7 @@ import { homedir } from 'node:os';
 import { Effect, Layer } from 'effect';
 import { HostRequestKey } from '@runlith/executions/protocol/execution';
 import { AccountCli, type AccountCommand, type ProgramState } from '../../providers/contract/service/cli.js';
-import { harnessAdapter } from '../contract/service/table.js';
+import { HarnessAdapters } from '../contract/service/adapters.js';
 import { GateRefusal } from '../../platform/contract/wire/refusal.js';
 import { Projects } from '../../projects/contract/service/registry.js';
 import { Terminals, TerminalRequests } from '../../executions/contract/service/terminals.js';
@@ -42,11 +42,12 @@ const makeAccountCli = Effect.gen(function* () {
   const endings = yield* TerminalEndings;
   const projects = yield* Projects;
   const requests = yield* TerminalRequests;
+  const adapters = yield* HarnessAdapters;
   const stops = new Map<string, number>();
   return AccountCli.of({
     installed: (program) =>
       Effect.map(installs.read, (rows): ProgramState => {
-        const row = rows.find((one) => harnessAdapter(one.harness).binary === program);
+        const row = rows.find((one) => adapters.find(one.harness)?.binary === program);
         if (row === undefined) return { _tag: 'Missing', reason: `no harness runs ${program}` };
         if (row.binary !== null) return { _tag: 'Found' };
         return row.searching ? { _tag: 'Searching' } : { _tag: 'Missing', reason: row.missing ?? `${program} was not found` };

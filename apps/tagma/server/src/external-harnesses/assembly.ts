@@ -38,6 +38,7 @@ import { TerminalWriting } from '../executions/contract/service/writing.js';
 import { Environments } from '../workspace/contract/service/environments.js';
 import { HarnessAdoption } from './contract/service/adoption.js';
 import { HarnessPermissions } from './contract/service/permissions.js';
+import { HarnessAdapters } from './contract/service/adapters.js';
 import { HarnessReports } from './contract/service/reports.js';
 import { HarnessImplementations } from './contract/service/sessionPorts.js';
 import { HarnessSpeech, ScreenAsks } from './contract/service/speech.js';
@@ -99,8 +100,8 @@ import { acpTransport } from './protocol/transport.js';
 import { HarnessSessions } from './contract/service/sessions.js';
 import { HarnessLanes } from './sessions/lanes.js';
 import { harnessSpeech, screenTexts } from './sessions/speech.js';
+import { cliTitles } from './titles.js';
 import { harnessTitle } from './settings.js';
-import { autoTitle } from '../threads/contract/wire/settings.js';
 import { HarnessSessionStore } from './store/sessions.js';
 import { makeSessionRows } from './store/rows.js';
 import { entryCommand } from '../installation/contract/wire/junction.js';
@@ -138,11 +139,16 @@ export const externalHarnessesLayer = Layer.effectContext(
     const cli = entryCommand(process.env);
     const policy = yield* ProjectPolicy;
     const files = yield* FileSystem.FileSystem;
+    const adapters = yield* HarnessAdapters;
     const declaring: ProjectDeclaring = (name, projectId, root) =>
       Effect.flatMap(policy.read([projectId]), (found) => {
         const row = found.get(projectId);
         return row === undefined ? Effect.void : Effect.asVoid(declaredForLaunch(name, row.private, root, cli));
-      }).pipe(Effect.provideService(FileSystem.FileSystem, files), Effect.mapError(threadCallFailed));
+      }).pipe(
+        Effect.provideService(FileSystem.FileSystem, files),
+        Effect.provideService(HarnessAdapters, adapters),
+        Effect.mapError(threadCallFailed),
+      );
     const lookups = yield* SessionLookupStore;
     const harness = yield* ThreadHarness;
     const list = yield* ThreadList;
@@ -187,16 +193,9 @@ export const externalHarnessesLayer = Layer.effectContext(
     const naming = (threadId: string) =>
       records
         .projectOf(threadId)
-        .pipe(
-          Effect.flatMap((projectId) =>
-            projectId === undefined
-              ? Effect.succeed(null)
-              : Effect.all({ cli: settings.value(harnessTitle, projectId), auto: settings.value(autoTitle, projectId) }),
-          ),
-        );
+        .pipe(Effect.flatMap((projectId) => (projectId === undefined ? Effect.succeed(false) : cliTitles(settings, projectId))));
     const titleAdoption = (threadId: string): Effect.Effect<boolean> =>
       naming(threadId).pipe(
-        Effect.map((standing) => standing !== null && standing.cli && standing.auto),
         Effect.catchTag(['EffectDrizzleQueryError', 'SqlError'], (cause) =>
           Effect.logWarning('the harness title preference could not be read; keeping the current title', { threadId, cause }).pipe(
             Effect.as(false),
@@ -217,7 +216,11 @@ export const externalHarnessesLayer = Layer.effectContext(
     const titleBegun = (threadId: string, run: string) =>
       aside(
         threadId,
-        Effect.flatMap(naming(threadId), (standing) => (standing === null || standing.cli ? Effect.void : titles.begun(threadId, run))),
+        Effect.flatMap(records.projectOf(threadId), (projectId) =>
+          projectId === undefined
+            ? Effect.void
+            : Effect.flatMap(settings.value(harnessTitle, projectId), (cli) => (cli ? Effect.void : titles.begun(threadId, run))),
+        ),
       );
     const adoptions = yield* Effect.acquireRelease(PubSub.sliding<void>({ capacity: 1 }), PubSub.shutdown);
     const store: HarnessSessionStore = new HarnessSessionStore(yield* makeSessionRows({ db }), (threadId, facet) => {
@@ -231,7 +234,16 @@ export const externalHarnessesLayer = Layer.effectContext(
     });
     const observations = new HarnessObservations(store, db, units, records, notices.titled, titleAdoption);
     const lanes = new HarnessLanes(grants, writing);
-    const metadata = yield* makeSessionMetadata(store, observations, terminals, screens, executionRecords, discharge, environments);
+    const metadata = yield* makeSessionMetadata(
+      adapters,
+      store,
+      observations,
+      terminals,
+      screens,
+      executionRecords,
+      discharge,
+      environments,
+    );
     const owner = yield* HarnessOwner;
     const ownerId = owner.id;
     const sessionEnded = (threadId: string, _session?: HarnessSession, _announce?: boolean, _runs?: readonly string[]) => ended(threadId);
@@ -259,11 +271,13 @@ export const externalHarnessesLayer = Layer.effectContext(
       { terminals, writing, records: executionRecords, discharge, access: environments },
       makeSessionCarrying(accounts, files),
       ownerId,
+      adapters,
     );
     const terminalClosing = new TerminalClosing(
       environments,
       Effect.map(providers.catalog, (catalog) => catalog.models),
       terminalJournal.reports,
+      adapters,
     );
     const terminalWatch = new TerminalWatch(
       store,
@@ -278,6 +292,7 @@ export const externalHarnessesLayer = Layer.effectContext(
       yield* FiberMap.make<string>(),
       terminalClosing,
       alignment,
+      adapters,
     );
     const ownership = yield* harness.runs.ownership();
     const terminalEndings = new TerminalEndings(store, terminalJournal, open, terminalWatch, ownership, terminalClosing);
@@ -310,13 +325,14 @@ export const externalHarnessesLayer = Layer.effectContext(
       alignment,
       ownerId,
     );
-    const terminalHistory = makeTerminalHistory(store, turns, harness.runs.history(), sessions);
+    const terminalHistory = makeTerminalHistory(store, turns, harness.runs.history(), sessions, adapters);
     const terminalInterrupts = new TerminalInterrupts(
       store,
       sessions,
       terminalWatch,
       terminalEndings,
       yield* FiberMap.make<string, void, never>(),
+      adapters,
     );
     const terminalRuns = new TerminalRuns(
       store,
@@ -331,11 +347,15 @@ export const externalHarnessesLayer = Layer.effectContext(
       terminalJournal,
       yield* FiberMap.make<string, void, never>(),
       new ComposerDrafts(statePublished),
+      adapters,
     );
-    const judging = harnessJudging(threads, yield* ApprovalModes);
+    const judging = harnessJudging(threads, yield* ApprovalModes, adapters);
     const terminalAsks: TerminalAsks = new TerminalAsks(
       judging,
-      (threadId) => Effect.map(store.read(threadId), (facet) => facet?.name ?? null),
+      (threadId) =>
+        Effect.flatMap(store.read(threadId), (facet) =>
+          facet === null ? Effect.succeed(null) : adapters.row(facet.name, facet.presentation.install),
+        ),
       askLedger(
         store,
         terminalJournal,
@@ -344,7 +364,7 @@ export const externalHarnessesLayer = Layer.effectContext(
         (threadId) => Effect.mapError(harness.runs.questions().reroute(threadId), threadCallFailed),
         statePublished,
       ),
-      terminalFaces(store, terminals, screens, writing, lanes),
+      terminalFaces(store, terminals, screens, writing, lanes, adapters),
       (threadId, questionId, answers) =>
         Effect.asVoid(Effect.mapError(harness.runs.questions().answer(threadId, questionId, answers), threadCallFailed)),
     );
@@ -438,6 +458,7 @@ export const externalHarnessesLayer = Layer.effectContext(
       (threadId, turn) => terminalInterrupts.restarted(threadId, turn),
       yield* makeTerminalCommands,
       alignment,
+      adapters,
     );
     yield* Effect.orDie(
       harness.runs.transports().register(
@@ -473,7 +494,7 @@ export const externalHarnessesLayer = Layer.effectContext(
       Context.add(HarnessReports, reports),
       Context.add(HarnessPermissions, permissions),
       Context.add(HarnessGuidance, terminalGuidance),
-      Context.add(NotesReach, notesReach(lookups, store)),
+      Context.add(NotesReach, notesReach(lookups, store, adapters)),
       Context.add(HarnessSpeech, harnessSpeech(records, threads, words, notices.wrote)),
       Context.add(ScreenAsks, screenTexts(records, threads, terminals, screens)),
       Context.add(ProtocolStates, protocolStates(records, threads, protocol.state)),
@@ -481,10 +502,10 @@ export const externalHarnessesLayer = Layer.effectContext(
         HostedOpenings,
         HostedOpenings.of({ owe: (threadId, told, unit) => turns.owe(unit, threadId, told), owed: (threadId) => turns.owed(threadId) }),
       ),
-      Context.add(TransportSwitch, transportSwitch(records, lookup, store, yield* ThreadRebinding, registry, providers)),
-      Context.add(HarnessImplementations, (name, retract) =>
+      Context.add(TransportSwitch, transportSwitch(records, lookup, store, yield* ThreadRebinding, registry, providers, adapters)),
+      Context.add(HarnessImplementations, (row, retract) =>
         externalHarness(
-          name,
+          row,
           births,
           protocol,
           terminalHistory,

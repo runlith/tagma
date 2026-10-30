@@ -12,6 +12,7 @@ import { ThreadInbox } from '../threads/store/inbox.js';
 import { unhosted } from './testing/hookReports.js';
 import { harnessFacet } from '../threads/contract/wire/harness/types.js';
 import { harnessPresentation } from './contract/service/table.js';
+import { builtinHarness } from './testing/builtin.js';
 import { writes } from '../platform/contract/service/writes.js';
 import { terminalKernel } from './birth/seat.js';
 import { memorySessionRows } from './testing/memorySessions.js';
@@ -35,7 +36,7 @@ const unobserved = () => {
 };
 const fixture = Effect.fnUntraced(function* () {
   const storage = yield* openMemoryStorage();
-  const kernel = terminalKernel('claude-code', undefined, false, {});
+  const kernel = terminalKernel(builtinHarness('claude-code'), undefined, false, {});
   const thread = yield* storage.createThread({ ownerId: OWNER, scope: SCOPE, transport: kernel.transport });
   yield* storage.aggregate.update(thread.id, {
     capabilities: kernel.capabilities,
@@ -47,7 +48,7 @@ const fixture = Effect.fnUntraced(function* () {
   });
   const world = yield* lifecycleWorldOver(storage, (yield* storage.aggregate.find(thread.id))!, undefined, fakeAdapter('terminal'));
   const memory = yield* memorySessionRows(storage);
-  yield* memory.seed(thread.id, harnessFacet('claude-code', harnessPresentation('claude-code')));
+  yield* memory.seed(thread.id, harnessFacet('claude-code', harnessPresentation(builtinHarness('claude-code'))));
   const store = new HarnessSessionStore(memory.rows, () => Effect.void);
   const context = yield* Layer.build(
     Layer.mergeAll(

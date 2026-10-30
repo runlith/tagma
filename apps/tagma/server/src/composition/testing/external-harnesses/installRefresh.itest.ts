@@ -6,7 +6,8 @@ import { dirname, join } from 'node:path';
 import { Context, Effect, FileSystem, Layer, Schema } from 'effect';
 import { doctrine } from '../../doctrine.js';
 import { fixtureMigrations } from '../migrations.js';
-import { harnessAdapter } from '../../../external-harnesses/contract/service/table.js';
+import { harnessAdaptersLayer } from '../../../external-harnesses/adapters.js';
+import { builtinHarness } from '../../../external-harnesses/testing/builtin.js';
 import type { McpSurface } from '@runlith/tagma/adapter/harness';
 import { declareInto } from '../../../external-harnesses/installs/mcpDeclaration.js';
 import { besideEnv } from '../../../installation/cut/beside.js';
@@ -35,10 +36,11 @@ const fixture = Layer.effect(
     ),
   ),
   Layer.provideMerge(BunFileSystem.layer),
+  Layer.provideMerge(harnessAdaptersLayer),
 );
 
 const CLI = ['/opt/tagma/install/current/bun', '/opt/tagma/install/current/bin/cli/main.js'];
-const claudeCode = harnessAdapter('claude-code');
+const claudeCode = builtinHarness('claude-code');
 const surface = claudeCode.mcp as McpSurface;
 const KEY = 'the-key-this-checkout-signs-with';
 const FOREIGN = 'echo foreign keeper';
@@ -104,7 +106,7 @@ layer(fixture, { excludeTestServices: true })('installations brought up to a new
       const { contributed } = yield* RefreshFixture;
       const disk = yield* FileSystem.FileSystem;
       const root = yield* staleProject('beside-integrations-');
-      const adapters = (['claude-code', 'devin', 'gemini', 'grok'] as const).map(harnessAdapter);
+      const adapters = (['claude-code', 'devin', 'gemini', 'grok'] as const).map(builtinHarness);
       const declare = (repo: string, cli: readonly string[]) =>
         Promise.all(adapters.map((adapter) => declareInto(repo, adapter, adapter.mcp as McpSurface, cli)));
       yield* Effect.promise(() => declare(root, ['/old/tagma']));

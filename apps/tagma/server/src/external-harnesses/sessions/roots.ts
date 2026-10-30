@@ -1,6 +1,8 @@
 import { dirname } from 'node:path';
 import { Cause, Effect, Exit } from 'effect';
-import { harnessAdapter, harnessRoot } from '../contract/service/table.js';
+import { harnessRoot } from '../contract/service/table.js';
+import type { HarnessAdapter } from '../contract/service/adapter.js';
+import type { HarnessAdapters } from '../contract/service/adapters.js';
 import type { ExternalSession } from '../../threads/contract/wire/harness/externalSession.js';
 import type { HarnessProcessOutcome, HarnessSession } from '../../threads/contract/wire/harness/session.js';
 import type { HarnessFailure } from '../../threads/contract/service/failure.js';
@@ -41,6 +43,7 @@ export class SessionRoots {
       failure: string | null,
     ) => Effect.Effect<void, HarnessFailure>,
     private readonly answered: SessionAnswered,
+    private readonly adapters: HarnessAdapters['Service'],
   ) {}
 
   provisionPersistedExport(threadId: string, exportPath: string): Effect.Effect<'ready' | Unprovisioned, never> {
@@ -61,6 +64,7 @@ export class SessionRoots {
   readonly rootFor = Effect.fnUntraced(function* (
     this: SessionRoots,
     threadId: string,
+    adapter: HarnessAdapter,
     facet: ExternalSession,
     session: HarnessSession,
     place: HarnessPlace,
@@ -69,7 +73,6 @@ export class SessionRoots {
     const { access, finish, terminals, writing, executionRecords, discharge, store } = this;
     const ready = { _tag: 'Ready' as const, minted: undefined as PreparedRoot | undefined };
     const ended = { _tag: 'Ended' as const };
-    const adapter = harnessAdapter(facet.name);
     const prepare = adapter.launch?.prepare;
     if (prepare === undefined) return ready;
     const standing = session.prepared;
@@ -124,7 +127,7 @@ export class SessionRoots {
     const session = facet.session;
     const exportPath = session?.exportPath;
     const storage = session?.storage;
-    const declared = harnessAdapter(facet.name).launch?.witness;
+    const declared = this.adapters.find(facet.name)?.launch?.witness;
     if (session === undefined || exportPath === undefined || storage === undefined || declared === undefined) {
       return Effect.succeed(null);
     }
@@ -134,7 +137,7 @@ export class SessionRoots {
   }
 
   witnessed(facet: ExternalSession): boolean {
-    return facet.plain === true || harnessAdapter(facet.name).launch?.witness !== undefined;
+    return facet.plain === true || this.adapters.find(facet.name)?.launch?.witness !== undefined;
   }
 
   witness(threadId: string, facet: ExternalSession): Effect.Effect<WitnessTry, HarnessFailure> {
@@ -142,7 +145,9 @@ export class SessionRoots {
     if (session === undefined || session.state !== 'running' || facet.observation.binding.rootKey !== null) {
       return Effect.succeed('moot');
     }
-    const named = facet.plain === true ? Effect.succeed(harnessRoot(facet.name, session.argv)) : this.exportedRoot(facet);
+    const adapter = this.adapters.find(facet.name);
+    const named =
+      facet.plain !== true ? this.exportedRoot(facet) : Effect.succeed(adapter === null ? null : harnessRoot(adapter, session.argv));
     return named.pipe(
       Effect.flatMap((named) =>
         named === null

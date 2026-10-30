@@ -9,10 +9,12 @@ import { sessionFor } from '../../../external-harnesses/testing/sessions.js';
 import { GRANT_HEADER, GRANT_VARIABLE, SESSION_TOKEN_VARIABLE } from '../../../platform/contract/service/credentials.js';
 import { grantFor, sessionTokenEnvironment } from '../../../platform/testing/grants.js';
 import { unmeasuredObservation } from '../../../threads/contract/wire/harness/observation.js';
-import { HARNESSES, harnessArgv, harnessPresentation } from '../../../external-harnesses/contract/service/table.js';
+import { harnessArgv, harnessPresentation } from '../../../external-harnesses/contract/service/table.js';
+import { BUILTIN_HARNESSES } from '../../../external-harnesses/vendors/builtin.js';
+import { builtinHarness } from '../../../external-harnesses/testing/builtin.js';
+import { spawnedEffect } from '../../../platform/testing/spawn.js';
 import { sessionIdentity } from '../../../external-harnesses/sessionPrefix.js';
 import type { ExternalSession } from '../../../threads/contract/wire/harness/externalSession.js';
-import { spawnedEffect } from '../../../platform/testing/spawn.js';
 import { makeTerminalWorld } from '../fixture.js';
 
 const figure = (name: string, fallback: number): number => {
@@ -24,8 +26,9 @@ const figure = (name: string, fallback: number): number => {
 };
 const posts = figure('posts', 24);
 const spawns = figure('spawns', 6);
-const admissionPosts = figure('admission', 200);
 const unanswered = figure('unanswered', 1);
+const launched = figure('launched', 6);
+const baselineEntry = Bun.argv.find((argument) => argument.startsWith('--baseline-entry='))?.slice('--baseline-entry='.length);
 const UNANSWERED_CUT_MS = 20_000;
 const SESSION = '01a09400-0000-7000-8000-0000000000f1';
 const ROOT = 'cursor-root';
@@ -52,7 +55,7 @@ const reading = (road: string, samples: readonly number[]): Reading => {
 };
 const bare = (): Record<string, string | undefined> => {
   const env: Record<string, string | undefined> = { [GRANT_VARIABLE]: undefined, [SESSION_TOKEN_VARIABLE]: undefined };
-  for (const { variable } of HARNESSES) if (variable !== undefined) env[variable] = undefined;
+  for (const { variable } of BUILTIN_HARNESSES) if (variable !== undefined) env[variable] = undefined;
   return env;
 };
 const elapsed = (started: bigint) => Effect.map(Clock.monotonicTimeNanos, (ended) => Number(ended - started) / 1_000_000);
@@ -60,13 +63,13 @@ const READING = 'hook-ingress-reading';
 
 const program = Effect.gen(function* () {
   const files = yield* FileSystem.FileSystem;
-  const world = yield* makeTerminalWorld();
+  const world = yield* makeTerminalWorld({ own: 'a measuring program closes its world so its process ends' });
   const project = yield* world.checkout();
   const store = Context.get(world.runtime.graph, MachineStore);
   const threadId = '01a09400-0000-7000-8000-0000000000f2';
   const facet: ExternalSession = {
     name: 'cursor',
-    presentation: harnessPresentation('cursor'),
+    presentation: harnessPresentation(builtinHarness('cursor')),
     sessionKey: ROOT,
     execution: null,
     observation: unmeasuredObservation(),
@@ -76,7 +79,7 @@ const program = Effect.gen(function* () {
       state: 'running',
       prompt: '',
       cwd: null,
-      argv: yield* harnessArgv('cursor', ROOT, SESSION, ''),
+      argv: yield* harnessArgv(builtinHarness('cursor'), ROOT, SESSION, ''),
       ownerId: null,
       startedAt: '2026-09-13T10:00:00.000Z',
       heartbeatAt: '2026-09-13T10:00:00.000Z',
@@ -132,15 +135,35 @@ const program = Effect.gen(function* () {
     yield* Effect.tryPromise(() => answered.json());
     doorSamples.push(yield* elapsed(started));
   }
+  const granted = { ...bare(), ...sessionTokenEnvironment(threadId, SESSION, sessionIdentity) };
   const observeSamples: number[] = [];
   for (let index = 0; index < spawns; index += 1) {
     const started = yield* Clock.monotonicTimeNanos;
     yield* world.tagma(['hook', 'observe'], {
       cwd: project.root,
       stdin: JSON.stringify({ ...toolEvent, generation_id: `observe-turn-${index}` }),
-      env: { ...bare(), ...sessionTokenEnvironment(threadId, SESSION, sessionIdentity) },
+      env: granted,
     });
     observeSamples.push(yield* elapsed(started));
+  }
+  const launchedSamples: number[] = [];
+  const baselineSamples: number[] = [];
+  const temporary = yield* world.directory('tmp');
+  const processEnv = { ...process.env, TAGMA_SERVER_URL: world.url, TMPDIR: temporary, TMP: temporary, TEMP: temporary, ...granted };
+  const entries = [{ path: join(import.meta.dir, '../../entries/cli.ts'), samples: launchedSamples }];
+  if (baselineEntry !== undefined) entries.push({ path: baselineEntry, samples: baselineSamples });
+  for (let index = 0; index < launched; index += 1) {
+    const ordered = index % 2 === 0 ? entries : [...entries].reverse();
+    for (const [lane, entry] of ordered.entries()) {
+      const started = yield* Clock.monotonicTimeNanos;
+      const ran = yield* spawnedEffect([process.execPath, '--no-install', entry.path, 'hook', 'observe', '--harness', 'cursor'], {
+        cwd: project.root,
+        stdin: new Blob([JSON.stringify({ ...toolEvent, generation_id: `launched-turn-${index}-${lane}` })]),
+        env: processEnv,
+      });
+      entry.samples.push(yield* elapsed(started));
+      if (ran.exitCode !== 0) return yield* Effect.die(new Error(`the launched hook exited ${ran.exitCode}: ${ran.stderr.toString()}`));
+    }
   }
   const written = join(project.root, 'note.txt');
   const writeSamples: number[] = [];
@@ -156,14 +179,14 @@ const program = Effect.gen(function* () {
     yield* world.tagma(['hook', 'pre-tool-use'], {
       cwd: project.root,
       stdin: JSON.stringify({ ...event, hook_event_name: 'preToolUse' }),
-      env: { ...bare(), ...sessionTokenEnvironment(threadId, SESSION, sessionIdentity) },
+      env: granted,
     });
     yield* files.writeFileString(written, `the note says ok\nrun ${index}\ncursor-edit-ok\n`);
     const started = yield* Clock.monotonicTimeNanos;
     yield* world.tagma(['hook', 'post-tool-use'], {
       cwd: project.root,
       stdin: JSON.stringify({ ...event, hook_event_name: 'postToolUse' }),
-      env: { ...bare(), ...sessionTokenEnvironment(threadId, SESSION, sessionIdentity) },
+      env: granted,
     });
     writeSamples.push(yield* elapsed(started));
   }
@@ -179,7 +202,7 @@ const program = Effect.gen(function* () {
             cwd: project.root,
             server: `http://127.0.0.1:${deaf.port}`,
             stdin: JSON.stringify({ ...toolEvent, generation_id: `deaf-turn-${index}` }),
-            env: { ...bare(), ...sessionTokenEnvironment(threadId, SESSION, sessionIdentity) },
+            env: granted,
           });
           const raced = yield* Effect.raceFirst(
             Effect.as(held, 'answered' as const),
@@ -192,24 +215,15 @@ const program = Effect.gen(function* () {
       }),
     (deaf) => Effect.sync(() => deaf.stop(true)),
   );
-  const admission =
-    admissionPosts === 0
-      ? null
-      : yield* Effect.map(
-          spawnedEffect([
-            process.execPath,
-            join(import.meta.dir, '../../..', 'harness', 'harnessAdmission.bench.ts'),
-            `--posts=${admissionPosts}`,
-          ]),
-          (child) =>
-            child.exitCode === 0
-              ? (JSON.parse(child.stdout.toString()) as unknown)
-              : { failed: child.exitCode, said: child.stdout.toString().slice(0, 400) },
-        );
   return {
     fixture: { harness: 'cursor', source: 'hand-authored' },
     door: reading('door', doorSamples),
     process: reading('observe', observeSamples),
+    launched: reading('observe in a launched process', launchedSamples),
+    baseline:
+      baselineEntry === undefined
+        ? null
+        : { entry: baselineEntry, ...reading('observe in a baseline process on the same server', baselineSamples) },
     write: reading('post-tool-use over one named file', writeSamples),
     unanswered: {
       ...reading('observe against an endpoint that answers nothing', measured.samples),
@@ -220,7 +234,6 @@ const program = Effect.gen(function* () {
           ? 'lower bound: the product applied no deadline and this runner cut its own wait'
           : 'the process ended on its own',
     },
-    admission,
   };
 }).pipe(Effect.provide(BunFileSystem.layer), Effect.scoped);
 

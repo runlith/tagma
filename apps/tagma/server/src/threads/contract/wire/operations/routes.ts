@@ -43,6 +43,7 @@ export const BIRTH_REFUSALS = [
   'parent-required',
   'unknown-type',
   'type-withheld',
+  'harness-not-installed',
   'mode-unknown',
   'model-unavailable',
   'model-unserved',

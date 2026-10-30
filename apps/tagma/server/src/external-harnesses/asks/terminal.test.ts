@@ -7,6 +7,7 @@ import type { ThreadInteractionAnswer, ThreadQuestionEntry } from '@runlith/agen
 import type { HarnessCall, HarnessWidgetKey, ScreenAsk } from '@runlith/tagma/adapter/harness';
 import { threadCallFailed } from '../../threads/contract/service/failure.js';
 import { widgetAsksAbout } from './routes.js';
+import { builtinHarness } from '../testing/builtin.js';
 import { askEntry, TerminalAsks, type AskFaces, type AskLedger, type Typed } from './terminal.js';
 
 const RUN: ThreadRunRef = { id: 'run-1', threadId: 'thread-1' };
@@ -73,7 +74,7 @@ const rig = () => {
       verdict: () => Effect.succeed({ _tag: 'Asks', ruleId: 'mode:review', reason: null, asked: ['review'] }),
       prompt: (_name, call) => `Claude asks to run \`${call.subject}\``,
     },
-    () => Effect.succeed('claude-code' as const),
+    () => Effect.succeed(builtinHarness('claude-code')),
     ledger,
     faces,
     (threadId, questionId, answers: readonly ThreadInteractionAnswer[]) =>

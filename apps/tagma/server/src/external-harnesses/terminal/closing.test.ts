@@ -16,6 +16,8 @@ import { writes } from '../../platform/contract/service/writes.js';
 import { ThreadInbox } from '../../threads/store/inbox.js';
 import { harnessFacet } from '../../threads/contract/wire/harness/types.js';
 import { harnessPresentation } from '../contract/service/table.js';
+import { makeHarnessAdapters } from '../adapters.js';
+import { builtinHarness } from '../testing/builtin.js';
 import type { ExternalSession } from '../../threads/contract/wire/harness/externalSession.js';
 import { transcriptFiles } from '../testing/files.js';
 import { observationRebound } from '../observations/staleness.js';
@@ -51,7 +53,8 @@ const unused = () => Effect.die('This transcript reader needs no command or envi
 
 const fixture = Effect.fnUntraced(function* () {
   const storage = yield* openMemoryStorage();
-  const kernel = terminalKernel('claude-code', undefined, false, {});
+  const kernel = terminalKernel(builtinHarness('claude-code'), undefined, false, {});
+  const adapters = yield* makeHarnessAdapters;
   const thread = yield* storage.createThread({ ownerId: OWNER, scope: SCOPE, transport: kernel.transport });
   yield* storage.aggregate.update(thread.id, {
     capabilities: kernel.capabilities,
@@ -77,7 +80,7 @@ const fixture = Effect.fnUntraced(function* () {
     world.ledger,
   );
   yield* world.settlements.subscribe({ name: 'terminal run activity', at: 'first', handle: (event) => journal.settled(event) });
-  const closing = new TerminalClosing(access, Effect.succeed(modelCatalog(DEFAULT_PROVIDER_DESCRIPTIONS)), journal.reports);
+  const closing = new TerminalClosing(access, Effect.succeed(modelCatalog(DEFAULT_PROVIDER_DESCRIPTIONS)), journal.reports, adapters);
   const memory = yield* memorySessionRows(storage);
   const store = new HarnessSessionStore(memory.rows, () => Effect.void);
   const ports = yield* Layer.build(Layer.mergeAll(Layer.mock(Terminals, {}), Layer.mock(TerminalScreens, {})));
@@ -95,11 +98,12 @@ const fixture = Effect.fnUntraced(function* () {
     yield* FiberMap.make<string>(),
     closing,
     standingAlignment(store),
+    adapters,
   );
   const open = Effect.fnUntraced(function* () {
     const run = started(yield* world.lifecycle.create(world.startFrom, APPROVAL, { kind: 'turn' })).run;
     const at = new Date(yield* Clock.currentTimeMillis).toISOString();
-    const initial = harnessFacet('claude-code', harnessPresentation('claude-code'));
+    const initial = harnessFacet('claude-code', harnessPresentation(builtinHarness('claude-code')));
     const execution = { execution: 'memory-execution', incarnation: 1 };
     const facet: ExternalSession = {
       ...initial,

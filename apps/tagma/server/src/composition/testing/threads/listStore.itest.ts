@@ -15,6 +15,7 @@ import { ThreadId } from '../../../platform/contract/wire/thread.js';
 import { ownWork, standingOfSummary, threadInbox, threadListReads } from '../../../threads/testing/doubles.js';
 import { externalSession, thread, threadRun, unmeasuredObservation } from '../../../threads/testing/doubles.js';
 import { harnessPresentation } from '../../../external-harnesses/contract/service/table.js';
+import { builtinHarness } from '../../../external-harnesses/testing/builtin.js';
 import { transcript } from './transcript.js';
 import { saidOfRuns } from '../../../threads/list/said.js';
 import { threadSeen } from '../../../threads/testing/doubles.js';
@@ -688,7 +689,7 @@ it.live(
         id: answered,
         facet: {
           name: 'claude-code',
-          presentation: harnessPresentation('claude-code'),
+          presentation: harnessPresentation(builtinHarness('claude-code')),
           sessionKey: null,
           execution: null,
           observation: unmeasuredObservation(),

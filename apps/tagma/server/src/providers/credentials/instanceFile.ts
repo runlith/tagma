@@ -1,7 +1,8 @@
 import { join } from 'node:path';
 import { makeCredentialFile } from '@runlith/credential-file/CredentialFile';
 import { CredentialFileInvalid } from '@runlith/credential-file/failure';
-import type { SettingRow } from '@runlith/tagma/adapter/provider';
+import type { SettingInstance, SettingRow } from '@runlith/tagma/adapter/provider';
+import type { InstanceSnapshot } from '../contract/service/instances.js';
 import { Effect, Schema } from 'effect';
 
 export type InstanceRecord = {
@@ -12,6 +13,19 @@ export type InstanceRecord = {
   readonly secrets: SettingRow;
 };
 export type InstanceDocument = Readonly<Record<string, InstanceRecord>>;
+
+export const instanceSnapshot = (document: InstanceDocument): InstanceSnapshot => {
+  const instances = new Map<string, SettingInstance[]>();
+  const secrets: Record<string, SettingRow> = {};
+  const rows = Object.entries(document).sort(([idA, a], [idB, b]) => a.createdAt - b.createdAt || idA.localeCompare(idB));
+  for (const [id, row] of rows) {
+    const list = instances.get(row.adapter) ?? [];
+    list.push({ id, values: row.values, revision: row.revision });
+    instances.set(row.adapter, list);
+    secrets[id] = row.secrets;
+  }
+  return { instances, secrets };
+};
 
 const values = Schema.Record(Schema.String, Schema.Unknown);
 const document = Schema.Record(

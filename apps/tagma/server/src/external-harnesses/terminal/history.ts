@@ -10,6 +10,7 @@ import type { HarnessSeat } from '../../threads/contract/wire/harness/seat.js';
 import { harnessFacet } from '../../threads/contract/wire/harness/types.js';
 import { terminalKernel } from '../birth/seat.js';
 import { harnessPresentation } from '../contract/service/table.js';
+import type { HarnessAdapters } from '../contract/service/adapters.js';
 import type { SessionDriver } from '../sessions/drive.js';
 import type { HarnessSessionStore } from '../store/sessions.js';
 import { accountKey, type VendorTurns } from '../store/turns.js';
@@ -33,19 +34,21 @@ export const makeTerminalHistory = (
   turns: VendorTurns,
   journal: JournalRuns,
   sessions: SessionDriver,
+  adapters: HarnessAdapters['Service'],
 ): TerminalHistory => {
   const seat = Effect.fnUntraced(function* (source: string, unit: WriteUnit<'machine'>) {
     const facet = yield* store.readIn(source, unit);
     if (facet === null) return yield* refused('The source conversation has no session to fork.');
+    const adapter = yield* adapters.row(facet.name, facet.presentation.install);
     const plain = facet.plain === true;
     const seated: HarnessSeat = {
       facet: {
-        ...harnessFacet(facet.name, harnessPresentation(facet.name)),
+        ...harnessFacet(facet.name, harnessPresentation(adapter)),
         ...(facet.home === undefined ? {} : { home: facet.home }),
         ...(facet.plain === undefined ? {} : { plain: facet.plain }),
         ...(facet.permissionMode === undefined ? {} : { permissionMode: facet.permissionMode }),
       },
-      kernel: terminalKernel(facet.name, yield* store.asked(source, unit), plain, {}),
+      kernel: terminalKernel(adapter, yield* store.asked(source, unit), plain, {}),
     };
     return seated;
   });

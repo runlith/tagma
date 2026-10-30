@@ -3,8 +3,8 @@ import { hostname } from 'node:os';
 import { join } from 'node:path';
 import { GRANT_VARIABLE, SESSION_TOKEN_VARIABLE, TERMINAL_VARIABLE } from '../../platform/contract/service/credentials.js';
 import { shellDigest } from '../../platform/credentials/grants.js';
-import { HARNESSES } from '../contract/service/table.js';
-import type { HarnessName } from '../../threads/contract/wire/harness/names.js';
+import type { HarnessAdapter } from '../contract/service/adapter.js';
+import { SESSION_SIGNERS } from '../contract/wire/sessionVariables.js';
 import {
   adoptionKeptName,
   ANCESTRY_LIMIT,
@@ -107,14 +107,14 @@ const ancestry = Effect.fn('hookAdoption.ancestry')(function* () {
   return chain;
 });
 
-export const publishedHarness = (at: Invocation, key: string): HarnessName | undefined =>
-  HARNESSES.find((row) => row.variable !== undefined && at.env[row.variable]?.trim() === key)?.harness;
+export const publishedHarness = (at: Invocation, key: string): string | undefined =>
+  SESSION_SIGNERS.find((signer) => at.env[signer.variable]?.trim() === key)?.harness;
 
 export const adoptedHook = Effect.fn('hookAdoption.adoptedHook')(function* (
   at: Invocation,
   delivery: HookDelivery['Service'],
   event: Record<string, unknown>,
-  named: HarnessName | null,
+  named: string | null,
   fresh: boolean,
 ) {
   if ((at.env[GRANT_VARIABLE] ?? '').trim().length > 0) return;
@@ -155,10 +155,14 @@ export const adoptedHook = Effect.fn('hookAdoption.adoptedHook')(function* (
   granted(at, landed.value);
 });
 
-export const forgetAdoption = Effect.fn('hookAdoption.forgetAdoption')(function* (at: Invocation, event: Record<string, unknown>) {
+export const forgetAdoption = Effect.fn('hookAdoption.forgetAdoption')(function* (
+  at: Invocation,
+  rows: readonly HarnessAdapter[],
+  event: Record<string, unknown>,
+) {
   const key = sessionIdOf(event);
   const name = event.hook_event_name ?? event.hookEventName;
-  if (key === null || typeof name !== 'string' || !HARNESSES.some((row) => row.hooks?.events.sessionEnd === name)) return;
+  if (key === null || typeof name !== 'string' || !rows.some((row) => row.hooks?.events.sessionEnd === name)) return;
   const files = yield* FileSystem.FileSystem;
   yield* files
     .remove(keptFile(at, key), { force: true })

@@ -1,4 +1,3 @@
-import { HARNESS_LABELS } from '../../../threads/contract/wire/harness/names.js';
 import { LEGACY_TOOLS } from '../tools.js';
 import type { TerminalHarnessAdapter } from '../../contract/service/adapter.js';
 import { grokReader } from './reader.js';
@@ -12,7 +11,7 @@ import {
   type HarnessPermissionArgv,
   type HookOccasion,
 } from '@runlith/tagma/adapter/harness';
-import { CLAUDE_EVENTS, claudeFiles, claudePrinted, claudeOccasion } from '../../adapter/claudeFormat.js';
+import { CLAUDE_EVENTS, claudeCodec, claudeFiles, claudePrinted, claudeOccasion } from '../../adapter/claudeFormat.js';
 import { rootOfArgv, sessionIdOf, tail, unasked, unreported, unturned } from '../../adapter/payload.js';
 import { unmeasuredKeys, unmeasuredScreen } from '../../adapter/screenAsk.js';
 import { SESSION_VARIABLES } from '../../contract/wire/sessionVariables.js';
@@ -59,7 +58,7 @@ const grokComposer = (lines: readonly string[]): string | null => {
 export const grok: TerminalHarnessAdapter = {
   harness: 'grok',
   tools: LEGACY_TOOLS,
-  label: HARNESS_LABELS.grok,
+  label: 'Grok Build',
   iconProvider: 'xai',
   prefix: 'gb',
   variable: SESSION_VARIABLES.grok,
@@ -107,7 +106,7 @@ export const grok: TerminalHarnessAdapter = {
   },
   hooks: {
     file: '.grok/hooks/tagma.json',
-    format: 'claude-code',
+    codec: claudeCodec,
     events: { ...CLAUDE_EVENTS, permission: null },
     user: { folder: ['.grok'], file: 'hooks/tagma.json', homeEnv: 'GROK_HOME' },
     context: UNMEASURED_HOOK_CONTEXT,

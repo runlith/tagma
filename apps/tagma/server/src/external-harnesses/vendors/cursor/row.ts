@@ -1,4 +1,3 @@
-import { HARNESS_LABELS } from '../../../threads/contract/wire/harness/names.js';
 import { LEGACY_TOOLS } from '../tools.js';
 import type { TerminalHarnessAdapter } from '../../contract/service/adapter.js';
 import { cursorReader } from './reader.js';
@@ -22,6 +21,7 @@ import { oneValue } from '../../adapter/screenAsk.js';
 import { icon as CURSOR_MARK } from '@runlith/adapter-cursor/icon';
 
 import { cursorAcp } from './acp.js';
+import { cursorCodec } from './codec.js';
 
 const CURSOR_SELECTED = /^→ (.+)$/;
 const CURSOR_UNSELECTED = /^  (.+)$/;
@@ -149,7 +149,7 @@ const cursorOccasion: HookOccasion = (event) => {
 export const cursor: TerminalHarnessAdapter = {
   harness: 'cursor',
   tools: LEGACY_TOOLS,
-  label: HARNESS_LABELS.cursor,
+  label: 'Cursor',
   mark: CURSOR_MARK,
   prefix: 'cu',
   binary: 'cursor-agent',
@@ -185,7 +185,7 @@ export const cursor: TerminalHarnessAdapter = {
   },
   hooks: {
     file: '.cursor/hooks.json',
-    format: 'cursor',
+    codec: cursorCodec,
     events: {
       sessionStart: 'sessionStart',
       preWrite: 'preToolUse',

@@ -3,7 +3,7 @@ import { layer } from '@runlith/effect-test';
 import * as MemoryFileSystem from '@runlith/testbed/memory';
 import { Context, Effect, FileSystem, Layer } from 'effect';
 import { join } from 'node:path';
-import { harnessAdapter } from '../contract/service/table.js';
+import { builtinHarness } from '../testing/builtin.js';
 import { readRootArtifact } from './rootArtifact.js';
 import source from '../testing/fixtures/claude-code/source.jsonl' with { type: 'text' };
 import full from '../testing/fixtures/claude-code/sdk-full.jsonl' with { type: 'text' };
@@ -18,7 +18,7 @@ const home = Layer.effect(
   }),
 ).pipe(Layer.provideMerge(MemoryFileSystem.layer));
 
-const codex = harnessAdapter('codex');
+const codex = builtinHarness('codex');
 const ROOT = '01a0ab90-4444-7000-8000-00000000f00d';
 
 const meta = (id: string) =>
@@ -62,7 +62,7 @@ layer(home)('root artifact', (it) => {
 
   it.effect('a Claude Code fork binds the session it was written for, and its source does not bind it', () =>
     Effect.gen(function* () {
-      const claude = harnessAdapter('claude-code');
+      const claude = builtinHarness('claude-code');
       const copy = '1fc80a2c-3ad0-4331-a75b-15fd97028d6a';
       expect(yield* reading('copy.jsonl', full, copy, claude)).toEqual({ _tag: 'Bound' });
       expect((yield* reading('source.jsonl', source, copy, claude))._tag).toBe('Refused');

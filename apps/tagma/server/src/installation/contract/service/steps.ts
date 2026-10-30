@@ -1,13 +1,13 @@
 import { Context, type Effect } from 'effect';
 import type { SnapshotFailed, SnapshotLoss } from '../../../platform/contract/service/snapshots.js';
-import type { McpDeclarationWrite } from '../wire/install.js';
+import type { InstallFailed, McpDeclarationWrite } from '../wire/install.js';
 import type { RestartHost } from '../wire/source.js';
 import type { HostUnprepared } from './succession.js';
 
 export class SetupSteps extends Context.Service<
   SetupSteps,
   {
-    run(repoRoot: string): Effect.Effect<readonly McpDeclarationWrite[]>;
+    run(repoRoot: string): Effect.Effect<readonly McpDeclarationWrite[], InstallFailed>;
   }
 >()('tagma/installation/SetupSteps') {}
 

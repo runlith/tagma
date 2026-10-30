@@ -9,8 +9,17 @@ import type { ThreadRecords } from '../thread-record/contract/service/records.js
 import type { TitleProvenance } from '../thread-record/contract/wire/title.js';
 import { threadRecord } from '../thread-record/store/table.js';
 import { externalSession } from '../threads/store/harnessFacet.js';
+import type { Settings } from '../settings/contract/service/values.js';
+import { autoTitle } from '../threads/contract/wire/settings.js';
+import { harnessTitle } from './settings.js';
 
 const ADOPTABLE: readonly TitleProvenance[] = ['random', 'harness'];
+
+export const cliTitles = (settings: Settings['Service'], projectId: number) =>
+  Effect.map(
+    Effect.all({ cli: settings.value(harnessTitle, projectId), auto: settings.value(autoTitle, projectId) }),
+    ({ cli, auto }) => cli && auto,
+  );
 
 export const adoptSessionTitle = (
   db: StoreDb<'machine'>,

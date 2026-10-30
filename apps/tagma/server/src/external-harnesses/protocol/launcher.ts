@@ -17,9 +17,10 @@ import type { HostManagement } from '../../executions/contract/service/host.js';
 import type { TerminalRequests, Terminals } from '../../executions/contract/service/terminals.js';
 import { HostRequestKey } from '@runlith/executions/protocol/execution';
 import { launchChoice, resolvedAsked } from '../birth/modelChoice.js';
-import { harnessAdapter, servingProvider, transportOf } from '../contract/service/table.js';
+import { servingProvider, transportOf } from '../contract/service/table.js';
+import { HarnessAdapters } from '../contract/service/adapters.js';
 import { accountFor, harnessPlace, type ProjectDeclaring } from '../sessions/launch.js';
-import { harnessTitle } from '../settings.js';
+import { cliTitles } from '../titles.js';
 import type { ProtocolRows } from '../store/protocol.js';
 import type { HarnessSessionStore } from '../store/sessions.js';
 import type { ProtocolEndings } from './endings.js';
@@ -46,6 +47,7 @@ export class ProtocolLauncher {
     private readonly cli: readonly string[],
     private readonly files: FileSystem.FileSystem,
     private readonly declaring: ProjectDeclaring,
+    private readonly adapters: HarnessAdapters['Service'],
   ) {}
 
   readonly launch = Effect.fnUntraced(function* (
@@ -113,14 +115,15 @@ export class ProtocolLauncher {
     stored: ProtocolRow | null,
   ) {
     const { providers, store, rows, accounts, cli, files, terminals, host, settings, grants, ownerId, declaring } = this;
-    const offer = yield* transportOf(facet.name, 'acp');
+    const adapter = yield* this.adapters.row(facet.name, facet.presentation.install);
+    const offer = yield* transportOf(adapter, 'acp');
     const place = yield* this.place(threadId);
     const cwd = offer.profile.hosts === null ? (session.cwd ?? place.root) : place.root;
     const { models } = yield* providers.catalog;
     const choice = yield* launchChoice(
       models,
-      facet.name,
-      resolvedAsked(models, servingProvider(facet.name, 'acp'), yield* store.asked(threadId)),
+      adapter,
+      resolvedAsked(models, servingProvider(adapter, 'acp'), yield* store.asked(threadId)),
       'acp',
     );
     const launches = Math.max(stored?.launches ?? 1, 1);
@@ -135,10 +138,11 @@ export class ProtocolLauncher {
         rows.writes,
       );
     }
-    const account = yield* accountFor(accounts, facet.name, place.selection, session.account, 'acp');
-    if (account !== null && account.directory !== null && harnessAdapter(facet.name).hooks?.user != null)
+    const account = yield* accountFor(accounts, adapter, place.selection, session.account, 'acp');
+    if (account !== null && account.directory !== null && adapter.hooks?.user != null)
       yield* installForAccount(facet.name, account.directory, doctrineOf(yield* Doctrine).contributed, cli).pipe(
         Effect.provideService(FileSystem.FileSystem, files),
+        Effect.provideService(HarnessAdapters, this.adapters),
         Effect.mapError(threadCallFailed),
       );
     yield* declaring(facet.name, place.projectId, place.root);
@@ -154,7 +158,7 @@ export class ProtocolLauncher {
       grants,
       threadId,
       place.projectId,
-      facet.name,
+      adapter,
       { id: session.id, cwd },
       offer,
       account,
@@ -173,15 +177,15 @@ export class ProtocolLauncher {
         },
       };
     }
-    const titled =
-      profile.untitled === undefined || (yield* settings.value(harnessTitle, place.projectId).pipe(Effect.mapError(threadCallFailed)));
+    const titled = profile.untitled === undefined || (yield* cliTitles(settings, place.projectId).pipe(Effect.mapError(threadCallFailed)));
     const [program, ...args] = [...profile.argv(choice), ...(titled ? [] : (profile.untitled ?? []))];
-    const argv: readonly [string, ...string[]] = [program ?? harnessAdapter(facet.name).binary, ...args];
+    const argv: readonly [string, ...string[]] = [program ?? adapter.binary, ...args];
     return { projectId: place.projectId, cwd, launches, account, where, argv };
   });
 }
 
 const LASTING: ReadonlySet<string> = new Set([
+  'harness-not-installed',
   'account-required',
   'unknown-account',
   'login-unreadable',

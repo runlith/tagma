@@ -3,7 +3,7 @@ import { layer } from '@runlith/effect-test';
 import { join } from 'node:path';
 import { Context, Effect, FileSystem, Layer } from 'effect';
 import * as MemoryFileSystem from '@runlith/testbed/memory';
-import { hookEntry, hookTrust } from '../adapter/hookFormat.js';
+import { codexCodec } from '../vendors/codex/codec.js';
 import { hookLedger } from './hookLedger.js';
 import { hookFiles } from './hookInstall.js';
 import { ownPlaces, type OwnPlace } from './targets.js';
@@ -21,9 +21,9 @@ const home = Layer.effect(
     const codex = join(root, 'home');
     yield* files.makeDirectory(codex);
     const source = hookFiles().find((file) => file.file === '.codex/hooks.json')!;
-    const hooks: Record<string, ReturnType<typeof hookEntry>[]> = {};
+    const hooks: Record<string, Readonly<Record<string, unknown>>[]> = {};
     for (const entry of source.entries) {
-      (hooks[entry.event] ??= []).push(hookEntry(source.format, entry.command, entry.timeout));
+      (hooks[entry.event] ??= []).push(source.codec.file.entry(entry.command, entry.timeout));
     }
     yield* files.makeDirectory(join(repo, '.codex'), { recursive: true });
     yield* files.writeFileString(join(repo, source.file), JSON.stringify({ hooks }));
@@ -44,8 +44,8 @@ const home = Layer.effect(
 ).pipe(Layer.provideMerge(MemoryFileSystem.layer));
 
 const keyOf = (target: string, place: OwnPlace): string => {
-  const descriptor = hookTrust('codex');
-  if (descriptor === null) throw new Error('the codex format declares no trust address');
+  const descriptor = codexCodec.file.trust;
+  if (descriptor === null) throw new Error('the codex codec declares no trust address');
   return descriptor.key(target, place.event, place.group, place.handler);
 };
 

@@ -5,7 +5,9 @@ import { ProviderRegistry } from '../../../providers/contract/service/registry.j
 import { Context, Effect, Layer } from 'effect';
 import { threadStoreFixture } from '../threadStoreFixture.js';
 import { unmeasuredObservation, asHarnessObservation, modelChanges } from '../../../threads/testing/doubles.js';
-import { harnessAdapter, harnessOccasion, harnessPresentation, harnessReport } from '../../../external-harnesses/contract/service/table.js';
+import { harnessPresentation, harnessReport } from '../../../external-harnesses/contract/service/table.js';
+import { makeHarnessAdapters } from '../../../external-harnesses/adapters.js';
+import { builtinHarness } from '../../../external-harnesses/testing/builtin.js';
 import { asHarnessName } from '../../../threads/testing/doubles.js';
 import { asThreadListProjection } from '../../../threads/testing/doubles.js';
 import { wireThread, wireThreadFacts } from '../../../threads/testing/doubles.js';
@@ -16,6 +18,7 @@ import type { HarnessEvent } from '../../../threads/contract/wire/harness/observ
 
 const setup = Effect.fnUntraced(function* () {
   const catalog = yield* (yield* ProviderRegistry).catalog;
+  const adapters = yield* makeHarnessAdapters;
   const NO_BASIS = {
     warmth: { curves: new Map(), accounts: new Map(), models: catalog.models } satisfies ReturnType<typeof asWarmthBasis>,
     limits: new Map(),
@@ -46,7 +49,7 @@ const setup = Effect.fnUntraced(function* () {
             harness: {
               facet: {
                 name,
-                presentation: harnessPresentation(name),
+                presentation: harnessPresentation(builtinHarness(name)),
                 sessionKey: key,
                 execution: null,
                 observation: unmeasuredObservation(),
@@ -59,7 +62,7 @@ const setup = Effect.fnUntraced(function* () {
         return row.id;
       }),
     );
-    yield* facets.open(threadId, '', 'owner', terminalArgv(catalog.models, ''));
+    yield* facets.open(threadId, '', 'owner', terminalArgv(adapters, catalog.models, ''));
     yield* facets.change(threadId, (facet) =>
       Effect.succeed({
         facet: {
@@ -72,10 +75,10 @@ const setup = Effect.fnUntraced(function* () {
     );
     published.length = 0;
     const post = Effect.fnUntraced(function* (payload: Record<string, unknown>, minute: number, over: Record<string, unknown> = {}) {
-      const adapter = harnessAdapter(name);
+      const adapter = builtinHarness(name);
       const read = harnessReport(adapter, { ...payload, ...over });
       const named = (payload.hook_event_name ?? payload.hookEventName) as string;
-      const occasion = harnessOccasion(name, {
+      const occasion = adapter.occasionOf({
         name: named,
         tool: (payload.tool_name ?? payload.toolName) as string | undefined,
         notification: payload.notification_type as string | undefined,
@@ -110,7 +113,7 @@ const setup = Effect.fnUntraced(function* () {
     });
     const accept = (event: HarnessEvent) =>
       facets.change(threadId, (facet) => {
-        const admitted = observations.admit(facet, event);
+        const admitted = observations.admit(facet, event, builtinHarness(name));
         return Effect.succeed({ facet: admitted.facet, value: admitted });
       });
     const reading = Effect.fnUntraced(function* () {
@@ -128,7 +131,7 @@ const setup = Effect.fnUntraced(function* () {
     });
     return { facets, observations, threadId, post, accept, reading, summary, wire, facts, published };
   });
-  return { raise, catalog };
+  return { raise, catalog, adapters };
 });
 
 const at = (minute: number): string => new Date(Date.UTC(2026, 8, 13, 10, minute)).toISOString();
@@ -167,7 +170,7 @@ layer(Layer.effect(World, setup()).pipe(Layer.provide(builtinRegistry)), { exclu
           value: undefined,
         }),
       );
-      yield* world.facets.open(world.threadId, '', 'owner', terminalArgv((yield* World).catalog.models, ''));
+      yield* world.facets.open(world.threadId, '', 'owner', terminalArgv((yield* World).adapters, (yield* World).catalog.models, ''));
       const late = yield* world.accept({
         occasion: 'turn-start',
         observedAt: at(1),

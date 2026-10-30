@@ -101,7 +101,7 @@ export const mcpCatalog = <Id extends string>({
   registry,
   inputSchema,
   operationSchema,
-}: Pick<OperationsCli<Id, string>, 'registry' | 'inputSchema' | 'operationSchema'>) => {
+}: Pick<OperationsCli<Id>, 'registry' | 'inputSchema' | 'operationSchema'>) => {
   const served: readonly Id[] = registry.ids.filter((id) => registry.doors(id).includes('mcp'));
   const routable = (name: string): boolean => {
     const id = registry.named(name);

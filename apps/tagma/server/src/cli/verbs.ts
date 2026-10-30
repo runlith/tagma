@@ -6,7 +6,7 @@ export type VerbSources = Readonly<Record<string, Load>>;
 
 export type Preface = (argv: readonly string[]) => string | undefined;
 
-export const cliVerbs = <Id extends string, Harness extends string>(binding: () => Promise<OperationsCli<Id, Harness>>): VerbSources => {
+export const cliVerbs = <Id extends string>(binding: () => Promise<OperationsCli<Id>>): VerbSources => {
   return {
     op: async () => {
       const [{ operations }, cli] = await Promise.all([import('./verbs/op.js'), binding()]);

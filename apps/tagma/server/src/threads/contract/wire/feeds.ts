@@ -23,7 +23,7 @@ export const THREAD_AIM = {
   threadId: Schema.String.check(Schema.isMinLength(1)),
 } as const;
 
-const TURN_REFUSALS = ['not-found', 'foreign-project', 'thread-gone', 'run-active', 'unknown-project'] as const;
+const TURN_REFUSALS = ['not-found', 'foreign-project', 'thread-gone', 'run-active', 'unknown-project', 'harness-not-installed'] as const;
 
 const KEYED_REFUSALS = [...TURN_REFUSALS, 'key-reused', 'act-spent', 'sequence-unavailable'] as const;
 

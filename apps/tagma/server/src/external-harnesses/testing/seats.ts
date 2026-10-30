@@ -2,13 +2,17 @@ import type { HarnessAskedModel } from '../../threads/contract/wire/harness/aske
 import type { HarnessName } from '../../threads/contract/wire/harness/names.js';
 import type { KernelSeat, SeatedHarness } from '../../threads/contract/wire/harness/seat.js';
 import { harnessFacet } from '../../threads/contract/wire/harness/types.js';
-import { acpKernel } from '../birth/seat.js';
+import { acpKernel, terminalKernel } from '../birth/seat.js';
+import type { HarnessAdapter } from '../contract/service/adapter.js';
 import { harnessPresentation } from '../contract/service/table.js';
+import { builtinHarness } from './builtin.js';
+
+export const terminalTestKernel = (row: HarnessAdapter): KernelSeat => terminalKernel(row, undefined, false, {});
 
 export const acpTestKernel = (name: HarnessName, agent: string | null, asked: HarnessAskedModel | undefined): KernelSeat =>
-  acpKernel(name, agent, asked, {});
+  acpKernel(builtinHarness(name), agent, asked, {});
 
 export const acpTestSeat = (name: HarnessName, agent: string | null, asked: HarnessAskedModel | undefined): SeatedHarness => ({
-  facet: harnessFacet(name, harnessPresentation(name)),
-  kernel: acpKernel(name, agent, asked, {}),
+  facet: harnessFacet(name, harnessPresentation(builtinHarness(name))),
+  kernel: acpKernel(builtinHarness(name), agent, asked, {}),
 });

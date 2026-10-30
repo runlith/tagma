@@ -1,8 +1,8 @@
 import { Effect, FileSystem } from 'effect';
-import { hookEventsAt } from '../adapter/hookFormat.js';
 import { hookFiles, type HookEntry } from './hookInstall.js';
 import { handlersOf, holdsOwnHook, malformedAt, spells } from './refresh.js';
-import { ownedEntry } from './targets.js';
+import { eventsIn, ownedEntry } from './targets.js';
+import { HarnessAdapters } from '../contract/service/adapters.js';
 import { dirname, join } from 'node:path';
 import type { SectionCatalog } from '../../platform/contract/service/sections.js';
 import { InstallFailed, installFailure } from '../../installation/contract/wire/install.js';
@@ -50,9 +50,10 @@ export type HooksStatus =
   | { state: 'current'; target: string }
   | ({ state: 'unreadable'; target: string } & UnreadablePlace);
 
-export const hooksStatus = (repoRoot: string) =>
-  Effect.forEach(
-    hookFiles(),
+export const hooksStatus = Effect.fnUntraced(function* (repoRoot: string) {
+  const adapters = yield* HarnessAdapters;
+  return yield* Effect.forEach(
+    hookFiles(adapters.all()),
     (group) => {
       const target = join(repoRoot, ...group.file.split('/'));
       return reading(
@@ -64,8 +65,7 @@ export const hooksStatus = (repoRoot: string) =>
           const text = yield* files.readFileString(target);
           const doc: unknown = yield* Effect.try({ try: () => JSON.parse(text), catch: installFailure });
           const root = doc !== null && typeof doc === 'object' && !Array.isArray(doc) ? (doc as Record<string, unknown>) : {};
-          const held = hookEventsAt(group.format) === 'hooks' ? root.hooks : root;
-          const events = held !== null && typeof held === 'object' && !Array.isArray(held) ? (held as Record<string, unknown>) : {};
+          const events = eventsIn(root, group.codec.file.events) ?? {};
           const missing: string[] = [];
           const differing: string[] = [];
           const extra: string[] = [];
@@ -106,3 +106,4 @@ export const hooksStatus = (repoRoot: string) =>
     },
     { concurrency: 'unbounded' },
   );
+});

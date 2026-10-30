@@ -1,4 +1,5 @@
 import { dirname } from 'node:path';
+import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { openModelClient } from '@runlith/llm/models/client';
 import { vendorWire } from '@runlith/llm/oauth/vendorCall';
 import { Context, Effect, Layer, Option, Result } from 'effect';
@@ -229,5 +230,5 @@ export const providersLayer = Layer.mergeAll(access, adapters, signing, movedKey
   Layer.provideMerge(credentials),
   Layer.provideMerge(defaultLoginsLayer),
   Layer.provideMerge(harnessDirectoriesLayer),
-  Layer.provideMerge(registryLayer.pipe(Layer.provideMerge(instancesLayer))),
+  Layer.provideMerge(registryLayer.pipe(Layer.provide(BunFileSystem.layer), Layer.provideMerge(instancesLayer))),
 );

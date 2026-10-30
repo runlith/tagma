@@ -8,6 +8,8 @@ import type { Operation } from '../../../platform/contract/wire/operation.js';
 
 export type JsonObjectSchema = Readonly<Record<string, unknown>> & { readonly type: 'object' };
 
+export type HarnessUnreadable = Error & { readonly _tag: 'HarnessUnreadable' };
+
 export type BridgedHarness = {
   readonly harness: string;
   readonly variable?: string | undefined;
@@ -33,14 +35,13 @@ export type VerbsDoor = {
   };
 };
 
-export type OperationsCli<Id extends string, Harness extends string> = {
+export type OperationsCli<Id extends string> = {
   readonly registry: OperationRegistry<Id>;
   readonly inputSchema: (schema: Schema.Top) => JsonObjectSchema;
   readonly operationSchema: (entry: Operation) => JsonObjectSchema;
   readonly blockRefFlag: (name: string) => Flag.Flag<string>;
   readonly version: string;
-  readonly harnesses: readonly [Harness, ...Harness[]];
-  readonly harness: (name: Harness) => BridgedHarness;
+  readonly harness: (id: string, at: Invocation) => Effect.Effect<BridgedHarness | null, HarnessUnreadable>;
   readonly ask: <A>(call: (door: VerbsDoor, at: Invocation) => Effect.Effect<A, unknown>) => Effect.Effect<A, unknown>;
   readonly baseUrl: (at: Invocation) => string;
   readonly declareBridge: (at: Invocation, declared: SessionRef) => void;

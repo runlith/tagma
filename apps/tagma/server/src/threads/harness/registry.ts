@@ -15,6 +15,15 @@ export function harnessRegistry(): HarnessRegistry['Service'] {
         joined.clear();
         return Effect.void;
       }),
+    replace: (harness, implementation) =>
+      Effect.sync(() => {
+        bound.set(harness, implementation);
+        joined.clear();
+      }),
+    withdraw: (harness) =>
+      Effect.sync(() => {
+        if (bound.delete(harness)) joined.clear();
+      }),
     resolve: (harness) => {
       const found = bound.get(harness);
       return found === undefined ? Effect.fail(new HarnessMissing({ harness })) : Effect.succeed(found);

@@ -1,7 +1,7 @@
 import { descriptionFault, modelCatalog } from '@runlith/llm/models/catalog';
 import type { SubscriptionAccounts } from '@runlith/llm/oauth/vendor';
 import { Schema } from 'effect';
-import type { Adapter, AdapterHost, AdapterSettings, HarnessAccountAuth, HarnessCommand, Provider } from './provider';
+import type { Adapter, AdapterHost, AdapterSettings, HarnessAccountAuth, HarnessCommand, HarnessProvider, Provider } from './provider';
 import { type SettingField, settingFieldSchema } from './settings';
 
 export type Declaration = { readonly providers: readonly Provider[]; readonly settings: AdapterSettings | undefined };
@@ -77,6 +77,22 @@ const subscriptionFault = (accounts: SubscriptionAccounts | undefined): boolean 
   return false;
 };
 
+const surfaceFault = (provider: HarnessProvider): string | null => {
+  const { terminal, acp } = provider;
+  if (
+    terminal !== undefined &&
+    (!hasText(terminal.binary) ||
+      !hasText(terminal.prefix) ||
+      typeof terminal.launch?.interactive !== 'function' ||
+      typeof terminal.launch.resume !== 'function' ||
+      typeof terminal.launch.root !== 'function')
+  )
+    return `harness provider "${provider.id}" declares a terminal surface without its binary, session prefix or launch`;
+  if (acp !== undefined && (typeof acp.argv !== 'function' || typeof acp.configure !== 'function'))
+    return `harness provider "${provider.id}" declares an ACP surface without its argv or configure`;
+  return null;
+};
+
 function shapeFault(provider: Provider): string | null {
   if (typeof provider.id !== 'string' || provider.id === '') return 'a provider declares no id';
   if (provider.catalog !== undefined && typeof provider.catalog.read !== 'function')
@@ -103,6 +119,8 @@ function shapeFault(provider: Provider): string | null {
   }
   if (provider.kind === 'harness') {
     if (provider.imageModels !== undefined) return `harness provider "${provider.id}" declares image models`;
+    const surface = surfaceFault(provider);
+    if (surface !== null) return surface;
     if (typeof provider.environment !== 'function') return `provider "${provider.id}" declares no account environment`;
     if (provider.auth === 'api-key')
       return subscriptionFault(provider.accounts) ? `provider "${provider.id}" declares malformed key accounts` : null;

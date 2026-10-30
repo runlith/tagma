@@ -20,7 +20,7 @@ import { nativeLeads } from '../claudeLogin.js';
 import { Coverage } from '../../../workspace/contract/service/roots.js';
 import { isTransportEntry } from '../../../threads/contract/wire/harness/transportEntry.js';
 import { coreEntry } from '@runlith/agent/transcript/kinds';
-import { HARNESSES } from '../../../external-harnesses/contract/service/table.js';
+import { BUILTIN_HARNESSES } from '../../../external-harnesses/vendors/builtin.js';
 import { WORLD_COMMAND } from '../../../installation/contract/wire/layout.js';
 
 const LIBRARY = join(EXECUTION_HOST_ROOT, 'native', 'target', 'release', 'libexecution_platform.dylib');
@@ -36,7 +36,7 @@ const setup = Effect.gen(function* () {
   const stage = yield* files.makeTempDirectoryScoped({ prefix: 'protocol-transport-' });
   const bin = join(stage, 'bin');
   yield* files.makeDirectory(bin);
-  for (const binary of [WORLD_COMMAND, ...HARNESSES.map(({ binary }) => binary).filter((binary) => !isAbsolute(binary))])
+  for (const binary of [WORLD_COMMAND, ...BUILTIN_HARNESSES.map(({ binary }) => binary).filter((binary) => !isAbsolute(binary))])
     yield* files.writeFileString(join(bin, binary), '#!/bin/sh\nprintf "fixture\\n"\n', { mode: 0o755 });
   const path = process.env.PATH;
   yield* Effect.acquireRelease(

@@ -1,9 +1,10 @@
 import { Effect } from 'effect';
 import type { JournalRuns } from '@runlith/agent/thread/transport/contract';
 import type { HarnessCut, HarnessCutAsk, HarnessCutMaking, HarnessModelChoice } from '@runlith/tagma/adapter/harness';
-import { cutArgv, harnessAdapter, harnessArgv, harnessRoot } from '../contract/service/table.js';
+import { cutArgv, harnessArgv, harnessRoot } from '../contract/service/table.js';
+import type { HarnessAdapter } from '../contract/service/adapter.js';
+import type { HarnessAdapters } from '../contract/service/adapters.js';
 import type { ExternalSession } from '../../threads/contract/wire/harness/externalSession.js';
-import type { HarnessName } from '../../threads/contract/wire/harness/names.js';
 import type { HarnessSession } from '../../threads/contract/wire/harness/session.js';
 import { threadCallFailed, type HarnessFailure } from '../../threads/contract/service/failure.js';
 import type { Unit, WriteUnit } from '../../platform/contract/service/units.js';
@@ -147,7 +148,7 @@ type Decided =
   | ({ readonly _tag: 'Carry' } & Carrying)
   | {
       readonly _tag: 'Prepare';
-      readonly name: HarnessName;
+      readonly adapter: HarnessAdapter;
       readonly ask: HarnessCutAsk;
       readonly making: Prepared;
       readonly at: string | null;
@@ -166,6 +167,7 @@ export const makeSessionAlignment = (
   preparing: CutPreparing,
   carrying: SessionCarrying,
   ownerId: string,
+  adapters: HarnessAdapters['Service'],
 ): SessionAlignment => {
   const aligning = writes('SessionAlignment.align', [thread], turns.writes);
 
@@ -173,6 +175,8 @@ export const makeSessionAlignment = (
     const session = facet.session;
     return session === undefined || session.id !== sessionId || session.ownerId !== ownerId || session.state === 'ended' ? null : session;
   };
+
+  const rowOf = (facet: ExternalSession) => adapters.row(facet.name, facet.presentation.install);
 
   const judged = Effect.fnUntraced(function* (
     threadId: string,
@@ -182,12 +186,13 @@ export const makeSessionAlignment = (
     unit?: Unit<'machine'>,
     uncarried: string | null = null,
   ) {
+    const adapter = yield* rowOf(facet);
     const header = yield* turns.session(threadId, unit);
     const kept = yield* Effect.mapError(journal.kept(threadId, unit), threadCallFailed);
     const rewound = header === null ? yield* Effect.mapError(journal.rewound(threadId, unit), threadCallFailed) : [];
     const cut = header === null ? [] : yield* Effect.mapError(journal.cut(threadId, unit), threadCallFailed);
     const point = yield* turns.point(threadId, cut, null, unit);
-    const launch = harnessAdapter(facet.name).launch;
+    const launch = adapter.launch;
     const alignment = alignmentOf({
       root,
       plain: facet.plain === true,
@@ -200,11 +205,12 @@ export const makeSessionAlignment = (
       unmapped: header === null && rewound.length > 0,
       kept: kept.length,
     });
-    return { header, kept, alignment };
+    return { adapter, header, kept, alignment };
   });
 
   const freshly = Effect.fnUntraced(function* (
     threadId: string,
+    adapter: HarnessAdapter,
     facet: ExternalSession,
     session: HarnessSession,
     unit: WriteUnit<'machine'>,
@@ -218,7 +224,7 @@ export const makeSessionAlignment = (
     }
     yield* turns.based(unit, threadId, kept);
     yield* turns.established(unit, threadId, accountKey(session.account));
-    const argv = yield* harnessArgv(facet.name, null, session.id, session.prompt, choice, facet.permissionMode);
+    const argv = yield* harnessArgv(adapter, null, session.id, session.prompt, choice, facet.permissionMode);
     const seeded = kept.length > 0 && facet.plain !== true;
     const aligned: ExternalSession = {
       ...facet,
@@ -241,11 +247,11 @@ export const makeSessionAlignment = (
     const session = held(facet, sessionId);
     if (session === null) return { facet, value: GONE };
     const account = accountKey(session.account);
-    yield* declareHistory(db, unit, threadId, terminalHistory(facet.name, facet.plain === true));
-    const { header, kept, alignment } = yield* judged(threadId, facet, account, facet.sessionKey, unit, uncarried);
+    yield* declareHistory(db, unit, threadId, terminalHistory(yield* rowOf(facet), facet.plain === true));
+    const { adapter, header, kept, alignment } = yield* judged(threadId, facet, account, facet.sessionKey, unit, uncarried);
     if (alignment._tag === 'Carry') {
       const { root, replaced, from, into } = alignment;
-      const carry: Decided = { _tag: 'Carry', name: facet.name, provider: session.account!.provider, root, replaced, from, into };
+      const carry: Decided = { _tag: 'Carry', adapter, provider: session.account!.provider, root, replaced, from, into };
       return { facet, value: carry };
     }
     if (alignment._tag === 'Keep') {
@@ -258,13 +264,13 @@ export const makeSessionAlignment = (
       const decided: Decided = { _tag: 'Aligned', facet, reason: null };
       return { facet, value: decided };
     }
-    if (alignment._tag === 'Fresh') return yield* freshly(threadId, facet, session, unit, choice, alignment, kept);
+    if (alignment._tag === 'Fresh') return yield* freshly(threadId, adapter, facet, session, unit, choice, alignment, kept);
     const { making, ask, at, own } = alignment;
     if (making._tag === 'Prepare') {
-      const decided: Decided = { _tag: 'Prepare', name: facet.name, ask, making, at, own };
+      const decided: Decided = { _tag: 'Prepare', adapter, ask, making, at, own };
       return { facet, value: decided };
     }
-    const argv = yield* cutArgv(facet.name, making, ask, session.id, session.prompt, choice, facet.permissionMode);
+    const argv = yield* cutArgv(adapter, making, ask, session.id, session.prompt, choice, facet.permissionMode);
     const aligned: ExternalSession = {
       ...facet,
       session: { ...session, argv, cut: { root: ask.root, into: session.id, at, own, rows: making.rows } },
@@ -285,11 +291,12 @@ export const makeSessionAlignment = (
     const session = held(facet, sessionId);
     if (session === null) return { facet, value: GONE };
     const account = accountKey(session.account);
-    const { kept, alignment } = yield* judged(threadId, facet, account, facet.sessionKey, unit);
+    const { adapter, kept, alignment } = yield* judged(threadId, facet, account, facet.sessionKey, unit);
     if (!sameCut(alignment, { root: decided.ask.root, at: decided.at, own: decided.own })) return { facet, value: AGAIN };
     if (answer._tag === 'Refused')
       return yield* freshly(
         threadId,
+        adapter,
         facet,
         session,
         unit,
@@ -300,7 +307,7 @@ export const makeSessionAlignment = (
     if (decided.at !== null) yield* turns.cut(unit, threadId, decided.own ? decided.ask.root : null, decided.at);
     if (answer.addresses !== 'copied') yield* turns.addressed(unit, threadId, answer.addresses === 'unaddressed' ? null : answer.addresses);
     yield* turns.established(unit, threadId, account);
-    const argv = yield* harnessArgv(facet.name, answer.root.id, session.id, session.prompt, choice, facet.permissionMode);
+    const argv = yield* harnessArgv(adapter, answer.root.id, session.id, session.prompt, choice, facet.permissionMode);
     const aligned: ExternalSession = { ...facet, sessionKey: answer.root.id, session: { ...session, argv } };
     const committed: Decided = { _tag: 'Aligned', facet: aligned, reason: null };
     return { facet: aligned, value: committed };
@@ -342,7 +349,7 @@ export const makeSessionAlignment = (
         continue;
       }
       const { terminals, writing, records, discharge, access } = preparing;
-      const answer = yield* cutRoot(terminals, writing, records, discharge, access, harnessAdapter(decided.name), decided.making, place, {
+      const answer = yield* cutRoot(terminals, writing, records, discharge, access, decided.adapter, decided.making, place, {
         sessionId,
         cwd,
         ask: decided.ask,
@@ -370,9 +377,10 @@ export const makeSessionAlignment = (
   const due = Effect.fnUntraced(function* (threadId: string) {
     const facet = yield* store.read(threadId);
     const session = facet?.session;
-    if (facet === null || session === undefined || facet.plain === true) return false;
+    const adapter = facet === null ? null : adapters.find(facet.name);
+    if (facet === null || adapter === null || session === undefined || facet.plain === true) return false;
     if (session.cut !== undefined) return !(yield* holds(threadId, facet, session.cut));
-    const standing = facet.observation.binding.rootKey ?? harnessRoot(facet.name, session.argv);
+    const standing = facet.observation.binding.rootKey ?? harnessRoot(adapter, session.argv);
     if (facet.sessionKey === null)
       return facet.observation.binding.rootKey !== null || (standing !== null && (yield* turns.session(threadId)) === null);
     if (standing !== null && standing !== facet.sessionKey) return true;

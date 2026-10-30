@@ -5,6 +5,7 @@ import { sql } from 'drizzle-orm';
 import { chain } from '../../../platform/store/chain.js';
 import { terminalKernel } from '../../../external-harnesses/testing/doubles.js';
 import { harnessPresentation } from '../../../external-harnesses/contract/service/table.js';
+import { builtinHarness } from '../../../external-harnesses/testing/builtin.js';
 import { harnessFacet } from '../../../threads/contract/wire/harness/types.js';
 import { threadStoreFixture } from '../threadStoreFixture.js';
 import { fixtureMigrations } from '../migrations.js';
@@ -26,8 +27,8 @@ it.live(
               threadId: created.id,
               projectId: demo.projectId,
               harness: {
-                facet: harnessFacet('cursor', harnessPresentation('cursor')),
-                kernel: terminalKernel('cursor', undefined, false, {}),
+                facet: harnessFacet('cursor', harnessPresentation(builtinHarness('cursor'))),
+                kernel: terminalKernel(builtinHarness('cursor'), undefined, false, {}),
               },
             },
             unit,

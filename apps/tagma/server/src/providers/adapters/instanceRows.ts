@@ -1,9 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import type { SettingInstance, SettingRow } from '@runlith/tagma/adapter/provider';
 import type { CredentialFile } from '@runlith/credential-file/CredentialFile';
-import type { InstanceDocument } from '../credentials/instanceFile.js';
+import { instanceSnapshot, type InstanceDocument } from '../credentials/instanceFile.js';
 import type { ConsoleKeyStore } from '../credentials/consoleKeys.js';
-import type { InstanceSnapshot } from '../contract/service/instances.js';
 import { inArray } from 'drizzle-orm';
 import { Effect, Schema } from 'effect';
 import { adapterInstance } from '../store/tables.js';
@@ -22,20 +21,7 @@ export const makeAdapterInstanceRows = (input: {
 }) => {
   const { db, units, file } = input;
 
-  const read = () => {
-    return Effect.map(file.read(), (document): InstanceSnapshot => {
-      const instances = new Map<string, SettingInstance[]>();
-      const secrets: Record<string, SettingRow> = {};
-      const rows = Object.entries(document).sort(([idA, a], [idB, b]) => a.createdAt - b.createdAt || idA.localeCompare(idB));
-      for (const [id, row] of rows) {
-        const list = instances.get(row.adapter) ?? [];
-        list.push({ id, values: row.values, revision: row.revision });
-        instances.set(row.adapter, list);
-        secrets[id] = row.secrets;
-      }
-      return { instances, secrets };
-    });
-  };
+  const read = () => Effect.map(file.read(), instanceSnapshot);
   const moveSecrets = Effect.fnUntraced(function* (keys: ConsoleKeyStore) {
     const stored = yield* units.read((unit) => unit.run(db.select().from(adapterInstance).all()));
     const current = yield* file.read();

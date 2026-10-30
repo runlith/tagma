@@ -2,7 +2,8 @@ import { Effect } from 'effect';
 import type { HarnessName } from '../threads/contract/wire/harness/names.js';
 import { externalRolloutPart } from './rollout.js';
 import { Harness, type HarnessServes } from '../threads/contract/service/harness.js';
-import { harnessAdapter, harnessPresentation, servingProvider } from './contract/service/table.js';
+import { harnessPresentation, servingProvider } from './contract/service/table.js';
+import type { HarnessAdapter } from './contract/service/adapter.js';
 import { acpKernel } from './birth/seat.js';
 import { harnessFacet } from '../threads/contract/wire/harness/types.js';
 import { wireHarness } from '../threads/voice/rowDetail.js';
@@ -15,9 +16,9 @@ import type { TerminalHistory } from './terminal/history.js';
 import type { SessionMetadata } from './metadata/harnessMetadata.js';
 import type { ProviderRegistry } from '../providers/contract/service/registry.js';
 
-const servedBy = (name: HarnessName, asked: AskedModel): { readonly serves?: HarnessServes } => {
-  const provider = servingProvider(name, 'acp');
-  const profile = harnessAdapter(name).acp;
+const servedBy = (row: HarnessAdapter, asked: AskedModel): { readonly serves?: HarnessServes } => {
+  const provider = servingProvider(row, 'acp');
+  const profile = row.acp;
   return provider === null || profile?.hosts == null
     ? {}
     : {
@@ -25,15 +26,15 @@ const servedBy = (name: HarnessName, asked: AskedModel): { readonly serves?: Har
           provider,
           seat: (to, agent) =>
             Effect.map(asked(to), (model) => ({
-              facet: harnessFacet(name, harnessPresentation(name)),
-              kernel: acpKernel(name, agent, model, to.switches, to.account),
+              facet: harnessFacet(row.harness, harnessPresentation(row)),
+              kernel: acpKernel(row, agent, model, to.switches, to.account),
             })),
         },
       };
 };
 
 export function externalHarness(
-  name: HarnessName,
+  row: HarnessAdapter,
   births: SessionBirths,
   protocol: ProtocolSessions,
   terminal: TerminalHistory,
@@ -43,8 +44,9 @@ export function externalHarness(
   metadata: SessionMetadata['Service'],
   providers: ProviderRegistry['Service'],
 ): Harness['Service'] {
-  const provider = servingProvider(name, 'acp') ?? undefined;
-  const asked: AskedModel = (to) => Effect.flatMap(providers.catalog, ({ models }) => askedModelOf(models, name, to, 'acp'));
+  const name = row.harness;
+  const provider = servingProvider(row, 'acp') ?? undefined;
+  const asked: AskedModel = (to) => Effect.flatMap(providers.catalog, ({ models }) => askedModelOf(models, row, to, 'acp'));
   return Harness.of({
     born: (request, within) => births.create(request, within),
     recover: () => Effect.void,
@@ -61,12 +63,12 @@ export function externalHarness(
         facet === null ? Effect.succeed(null) : Effect.map(store.road(threadId), (road) => wireHarness(facet, road)),
       ),
     models: asked,
-    move: harnessMove(name, store, asked),
+    move: harnessMove(row, store, asked),
     release: (threadId, unit) => protocol.release(threadId, unit),
     spent: (spawnRootId, principal) => spent(name, spawnRootId, principal),
     spawn: (input) => births.born(input),
-    transportAt: (projectId, preferred) => births.transportAt(name, projectId, preferred),
-    ...servedBy(name, asked),
+    transportAt: (projectId, preferred) => births.transportAt(row, projectId, preferred),
+    ...servedBy(row, asked),
     readerWords: (threadId) => metadata.readerWords(threadId),
     provider,
   });

@@ -34,6 +34,8 @@ import { sharedPool } from '@runlith/sqlite-process/testing/pool';
 import { fixtureHome } from '../../../platform/testing/roots.js';
 import { bornThread } from '../../../native-harness/testing/born.js';
 import { acpTestSeat as acpSeat } from '../../../external-harnesses/testing/seats.js';
+import { makeHarnessAdapters } from '../../../external-harnesses/adapters.js';
+import { HarnessAdapters } from '../../../external-harnesses/contract/service/adapters.js';
 import { makeThreadRecords } from '../../../thread-record/layer.js';
 import { testGrantSigner } from '../../../platform/testing/grants.js';
 import type { GraphServices } from '../../../graph/contract/service/services.js';
@@ -636,6 +638,7 @@ export const protocolRig = Effect.fn('testing.protocolRig')(function* (fixture: 
     const touched = new Set<string>();
     let stopper: ((threadId: string) => Effect.Effect<unknown, unknown>) | null = null;
     const scenarioScope = yield* Effect.scope;
+    const adapters = yield* makeHarnessAdapters;
     const driver = Effect.fn('testing.protocolDriver')(function* (
       owner: string,
       timing: {
@@ -706,11 +709,10 @@ export const protocolRig = Effect.fn('testing.protocolRig')(function* (fixture: 
         entryCommand(process.env),
         () => Effect.void,
         (threadId) => Effect.mapError(harness.runs.questions().reroute(threadId), threadCallFailed),
-        {
-          idleMs: timing.idleMs,
-          graceMs: timing.graceMs,
-        },
-      ).pipe((make) => (timing.clock === undefined ? make : Effect.provideService(make, Clock.Clock, timing.clock)));
+        { idleMs: timing.idleMs, graceMs: timing.graceMs },
+      ).pipe(Effect.provideService(HarnessAdapters, adapters), (make) =>
+        timing.clock === undefined ? make : Effect.provideService(make, Clock.Clock, timing.clock),
+      );
       const lost = dropping;
       dropping = false;
       yield* Effect.orDie(

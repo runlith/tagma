@@ -14,6 +14,7 @@ import { hookReports } from '../testing/hookReports.js';
 import type { TouchBrief } from '../../graph/contract/service/orientation.js';
 import { hookConnectOver } from './door.js';
 import { hookEventOf } from './dispatch.js';
+import { builtinRows } from '../testing/hookRows.js';
 
 type Reports = Effect.Success<ReturnType<typeof hookReports>>;
 type Hook = Parameters<typeof hookEventOf>[0];
@@ -74,7 +75,7 @@ const invoke = Effect.fnUntraced(function* (
       },
     }),
   );
-  yield* hookEventOf(command, at, connect, named).pipe(
+  yield* hookEventOf(command, at, connect, builtinRows(named)!).pipe(
     Effect.provideService(CurrentInvocation, at),
     Effect.provide(MemoryFileSystem.layer),
   );

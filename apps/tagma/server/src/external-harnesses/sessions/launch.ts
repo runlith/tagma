@@ -5,7 +5,9 @@ import { HARNESS_HOOK_BYTES } from '../../threads/contract/wire/harness/observat
 import { HostRequestKey } from '@runlith/executions/protocol/execution';
 import type { CommandEnvironmentRequest } from '@runlith/executions/CommandEnvironment';
 import type { HarnessModelChoice } from '@runlith/tagma/adapter/harness';
-import { harnessAdapter, harnessArgv, servingProvider, type HarnessTransportOffer } from '../contract/service/table.js';
+import { harnessArgv, servingProvider, type HarnessTransportOffer } from '../contract/service/table.js';
+import type { HarnessAdapter } from '../contract/service/adapter.js';
+import type { HarnessAdapters } from '../contract/service/adapters.js';
 import { sessionIdentity } from '../sessionPrefix.js';
 import type { ExternalSession } from '../../threads/contract/wire/harness/externalSession.js';
 import type { HarnessName, HarnessTransport } from '../../threads/contract/wire/harness/names.js';
@@ -30,9 +32,12 @@ import type { HostManagement } from '../../executions/contract/service/host.js';
 import type { HarnessFailure } from '../../threads/contract/service/failure.js';
 
 export const terminalArgv =
-  (models: ModelCatalog, prompt: string) => (facet: ExternalSession, id: string, asked: HarnessAskedModel | undefined) =>
-    Effect.flatMap(launchChoice(models, facet.name, asked), (choice) =>
-      harnessArgv(facet.name, facet.sessionKey, id, prompt, choice, facet.permissionMode),
+  (adapters: HarnessAdapters['Service'], models: ModelCatalog, prompt: string) =>
+  (facet: ExternalSession, id: string, asked: HarnessAskedModel | undefined) =>
+    Effect.flatMap(adapters.row(facet.name, facet.presentation.install), (adapter) =>
+      Effect.flatMap(launchChoice(models, adapter, asked), (choice) =>
+        harnessArgv(adapter, facet.sessionKey, id, prompt, choice, facet.permissionMode),
+      ),
     );
 
 export type AccountSelection = { readonly provider: string; readonly account: string | null };
@@ -41,12 +46,12 @@ export type ProjectDeclaring = (name: HarnessName, projectId: number, root: stri
 
 export const accountFor = (
   accounts: HarnessAccounts['Service'],
-  name: HarnessName,
+  adapter: HarnessAdapter,
   selection?: AccountSelection,
   held?: HarnessSession['account'],
   transport: HarnessTransport = 'terminal',
 ) => {
-  const declared = servingProvider(name, transport);
+  const declared = servingProvider(adapter, transport);
   if (declared === null) return Effect.succeed(null);
   const provider = held?.provider ?? selection?.provider ?? declared;
   return Effect.map(accounts.launch(provider, held?.key ?? selection?.account ?? undefined), (launch) =>
@@ -70,7 +75,7 @@ export const harnessPlace = Effect.fnUntraced(function* (
   grants: GrantSigner['Service'],
   threadId: string,
   projectId: number,
-  name: HarnessName,
+  adapter: HarnessAdapter,
   session: { readonly id: string; readonly cwd: string },
   offer: HarnessTransportOffer,
   account?: HarnessLaunch | null,
@@ -81,9 +86,9 @@ export const harnessPlace = Effect.fnUntraced(function* (
   const target = yield* terminals.target({ projectId, kind: 'host', cwd: session.cwd });
   const measured = yield* settings.value(terminalLastGrid, projectId);
   const reserve = (yield* host.standing).geometry;
-  const homeEnv = offer.transport === 'terminal' ? homeVariable(name) : null;
+  const homeEnv = offer.transport === 'terminal' ? homeVariable(adapter) : null;
   if (profile.home !== undefined && homeEnv === null) {
-    return yield* new GateRefusal('profile-unsupported', `${harnessAdapter(name).label} names no configuration folder to launch it with.`, [
+    return yield* new GateRefusal('profile-unsupported', `${adapter.label} names no configuration folder to launch it with.`, [
       'start the thread in a project without threads.harnessProfile.home for this CLI',
     ]);
   }
@@ -102,7 +107,7 @@ export const harnessPlace = Effect.fnUntraced(function* (
         ...Object.entries(identity).map(([variable, value]) =>
           value === undefined ? { _tag: 'Unset' as const, name: variable } : { _tag: 'Set' as const, name: variable, value },
         ),
-        ...Object.entries(harnessAdapter(name).env ?? {}).map(([variable, value]) => ({ _tag: 'Set' as const, name: variable, value })),
+        ...Object.entries(adapter.env ?? {}).map(([variable, value]) => ({ _tag: 'Set' as const, name: variable, value })),
         ...(profile.home === undefined || homeEnv === null ? [] : [{ _tag: 'Set' as const, name: homeEnv, value: profile.home }]),
         ...(account?.entries ?? []),
       ],
@@ -115,13 +120,13 @@ export const harnessRunKey = (sessionId: string): HostRequestKey => HostRequestK
 export const launchHarness = Effect.fnUntraced(function* <E>(
   terminals: Terminals['Service'],
   place: HarnessPlace,
+  adapter: HarnessAdapter,
   facet: ExternalSession,
   session: HarnessSession & { readonly cwd: string },
   choice: HarnessModelChoice | undefined,
   recordStorage: (storage: HarnessStorage) => Effect.Effect<void, E>,
 ) {
-  const adapter = harnessAdapter(facet.name);
-  const argv = session.argv ?? (yield* harnessArgv(facet.name, facet.sessionKey, session.id, session.prompt, choice, facet.permissionMode));
+  const argv = session.argv ?? (yield* harnessArgv(adapter, facet.sessionKey, session.id, session.prompt, choice, facet.permissionMode));
   return yield* terminals.start({
     actor: place.actor,
     operationId: harnessRunKey(session.id),

@@ -1,5 +1,4 @@
 import { Predicate, Schema } from 'effect';
-import { HARNESS_LABELS } from '../../../threads/contract/wire/harness/names.js';
 import { ASKS_IN_REVIEW, ASKS_NEVER } from '../../../platform/contract/wire/conditions.js';
 import { codexReader } from './reader.js';
 
@@ -27,6 +26,7 @@ import { oneValue } from '../../adapter/screenAsk.js';
 import { field, modelField, namedCall, nested, patchFiles, rootOfArgv, sessionIdOf, tail } from '../../adapter/payload.js';
 import { SESSION_VARIABLES } from '../../contract/wire/sessionVariables.js';
 import { codexCarry } from './carry.js';
+import { codexCodec } from './codec.js';
 
 const CODEX_FOOTER = 'Press enter to confirm or esc to cancel';
 const CODEX_SELECTED = /^› (\d+)\. (.+)$/;
@@ -237,7 +237,7 @@ export const codex: TerminalHarnessAdapter = {
       image_genimagegen: { kind: 'write', approval: ASKS_IN_REVIEW },
     },
   },
-  label: HARNESS_LABELS.codex,
+  label: 'Codex',
   prefix: 'cx',
   variable: SESSION_VARIABLES.codex,
   binary: 'codex',
@@ -265,7 +265,7 @@ export const codex: TerminalHarnessAdapter = {
   },
   hooks: {
     file: '.codex/hooks.json',
-    format: 'codex',
+    codec: codexCodec,
     events: { ...CLAUDE_EVENTS, toolFailure: undefined, stopFailure: undefined, notification: undefined },
     user: { folder: ['.codex'], file: 'hooks.json', homeEnv: 'CODEX_HOME' },
     context: UNMEASURED_HOOK_CONTEXT,

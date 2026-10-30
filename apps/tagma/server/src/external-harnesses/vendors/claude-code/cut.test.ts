@@ -65,8 +65,8 @@ test("the new root's turn addresses pair in order with the runs kept from the so
 });
 
 test('both cuts are copies the vendor makes by preparing the new root through the cut server', () => {
-  expect(terminalHistory('claude-code', false)).toEqual({ history: 'session', copies: { whole: 'vendor', point: 'vendor' } });
-  expect(terminalHistory('claude-code', true).copies).toEqual({ whole: 'vendor', point: 'none' });
+  expect(terminalHistory(claudeCode, false)).toEqual({ history: 'session', copies: { whole: 'vendor', point: 'vendor' } });
+  expect(terminalHistory(claudeCode, true).copies).toEqual({ whole: 'vendor', point: 'none' });
   const { whole, point } = launch.cut!;
   if (whole?._tag !== 'Prepare' || point?._tag !== 'Prepare' || typeof point.rows === 'string')
     throw new Error('Claude Code prepares both cuts');

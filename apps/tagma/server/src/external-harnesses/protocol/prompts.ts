@@ -452,7 +452,7 @@ export class ProtocolPrompts {
 
   private overflowing(link: Link): Effect.Effect<boolean, HarnessFailure> {
     const measured = link.row.context;
-    const provider = servingProvider(link.name, 'acp');
+    const provider = servingProvider(link.adapter, 'acp');
     if (measured === null || provider === null || link.profile.proves.compaction === false) return Effect.succeed(false);
     const model = currentModel(link.facet.observation);
     return Effect.map(this.planning.threshold(link.threadId, provider, model, measured.size), (threshold) => measured.used >= threshold);

@@ -1,5 +1,3 @@
-import type { HookFormat } from '@runlith/tagma/adapter/harness';
-import { hookHole } from '../adapter/hookFormat.js';
 import { ownedEntry, nestedOf, portableEntry } from './targets.js';
 import type { HookEntry } from './hookInstall.js';
 
@@ -71,7 +69,7 @@ function commandPlaces(held: readonly unknown[]): CommandPlace[] {
 
 type Refresh = { readonly changed: boolean; readonly deferred: readonly string[] };
 
-export function refreshStale(held: unknown[], format: HookFormat, event: string, asked: readonly HookEntry[]): Refresh {
+export function refreshStale(held: unknown[], holes: boolean, event: string, asked: readonly HookEntry[]): Refresh {
   const places = commandPlaces(held);
   const settled = new Set<HookEntry>();
   const keeping = new Set<Record<string, unknown>>();
@@ -103,7 +101,7 @@ export function refreshStale(held: unknown[], format: HookFormat, event: string,
       if (place.matcher !== null) deferred.push(`${event}: our hook stands under your matcher ${JSON.stringify(place.matcher)}`);
       continue;
     }
-    if (place.behindInGroup || (place.onlyHandler && place.laterForeign && !hookHole(format))) {
+    if (place.behindInGroup || (place.onlyHandler && place.laterForeign && !holes)) {
       const current = asked[0];
       const command = current?.command ?? portableEntry(place.at);
       if (current !== undefined && waitOf(place.at) !== current.timeout) {

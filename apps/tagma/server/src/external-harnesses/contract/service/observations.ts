@@ -9,6 +9,7 @@ import type {
   HarnessReceipt,
 } from '../../../threads/contract/wire/harness/observation.js';
 import type { HarnessFailure } from '../../../threads/contract/service/failure.js';
+import type { HarnessAdapter } from './adapter.js';
 
 export type HarnessAccepted = { readonly facet: ExternalSession; readonly receipt: HarnessReceipt };
 
@@ -25,7 +26,7 @@ export class SessionObservations extends Context.Service<
       | { readonly _tag: 'Refused'; readonly cause: HarnessDiagnostic['cause']; readonly detail: string },
       HarnessFailure
     >;
-    admit(facet: ExternalSession, event: HarnessEvent): HarnessAccepted;
+    admit(facet: ExternalSession, event: HarnessEvent, adapter: HarnessAdapter): HarnessAccepted;
     bindWitness(threadId: string, sessionId: string, revision: number, rootKey: string): Effect.Effect<HarnessReceipt, HarnessFailure>;
     notedWords(threadId: string, cause: HarnessDiagnostic['cause'], detail: string): Effect.Effect<void, HarnessFailure>;
     holdWords(threadId: string, sessionId: string, entry: HarnessHeldAnswer): Effect.Effect<void, HarnessFailure>;

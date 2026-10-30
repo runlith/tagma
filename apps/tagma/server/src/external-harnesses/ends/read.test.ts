@@ -3,7 +3,7 @@ import { layer } from '@runlith/effect-test';
 import * as MemoryFileSystem from '@runlith/testbed/memory';
 import { Context, Effect, FileSystem, Layer } from 'effect';
 import { join } from 'node:path';
-import { harnessAdapter } from '../contract/service/table.js';
+import { builtinHarness } from '../testing/builtin.js';
 import type { MetadataInput } from '../metadata/input.js';
 import { readTail } from './read.js';
 
@@ -34,7 +34,7 @@ const readFrom = Effect.fnUntraced(function* (
   window: { since: number; offset: number | null },
   chunk: number,
 ) {
-  const source = harnessAdapter(name).metadata?.ends;
+  const source = builtinHarness(name).metadata?.ends;
   if (source === undefined) return yield* Effect.die(`${name} has no transcript reader`);
   const files = yield* FileSystem.FileSystem;
   yield* files.writeFileString(path, text);
@@ -94,7 +94,7 @@ layer(home)('transcript tails', (it) => {
           { timestamp: at(2), source: 'system', message: '[Response interrupted by user]' },
         ],
       });
-      const source = harnessAdapter('devin').metadata?.ends;
+      const source = builtinHarness('devin').metadata?.ends;
       if (source === undefined) return yield* Effect.die('devin has no transcript reader');
       const located = { ...source, locate: () => ({ root, path }) };
       const files = yield* FileSystem.FileSystem;

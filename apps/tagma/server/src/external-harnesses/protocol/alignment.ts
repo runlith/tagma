@@ -136,7 +136,7 @@ export class ProtocolAlignment {
 
   private readonly configure = Effect.fnUntraced(function* (this: ProtocolAlignment, link: Link, key: string, launch: RunLaunch) {
     const { models, asked } = yield* this.asked(launch.thread);
-    const chosen = yield* Effect.result(launchChoice(models, link.name, asked, 'acp'));
+    const chosen = yield* Effect.result(launchChoice(models, link.adapter, asked, 'acp'));
     if (chosen._tag === 'Failure') return yield* this.refuse(link, launch, chosen.failure);
     link.asked = asked;
     const { provider, switches } = launch.thread;

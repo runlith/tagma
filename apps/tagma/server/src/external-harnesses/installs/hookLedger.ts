@@ -1,9 +1,9 @@
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { Effect, FileSystem } from 'effect';
-import type { HookTrust } from '../adapter/hookFormat.js';
-import { hookTrust } from '../adapter/hookFormat.js';
+import type { HookTrust } from '@runlith/tagma/adapter/hook';
 import { hookSurfaces, ownPlaces, type OwnPlace } from './targets.js';
+import { HarnessAdapters } from '../contract/service/adapters.js';
 
 export type HookLedger =
   | { readonly state: 'unsupported'; readonly target: string }
@@ -66,10 +66,11 @@ const sorted = (
 
 export const hookLedger = Effect.fn('harnessInstall.hookLedger')(function* (repoRoot: string) {
   const files = yield* FileSystem.FileSystem;
+  const adapters = yield* HarnessAdapters;
   const rows: HookLedger[] = [];
-  for (const surface of hookSurfaces()) {
+  for (const surface of hookSurfaces(adapters.all())) {
     const target = join(repoRoot, ...surface.file.split('/'));
-    const descriptor = hookTrust(surface.format);
+    const descriptor = surface.codec.file.trust;
     if (descriptor === null) {
       rows.push({ state: 'unsupported', target });
       continue;
@@ -80,7 +81,7 @@ export const hookLedger = Effect.fn('harnessInstall.hookLedger')(function* (repo
       rows.push({ state: 'unreadable', target, path: target, reason: written.failed });
       continue;
     }
-    const places = 'text' in written ? placesIn(written.text) : [];
+    const places = 'text' in written ? placesIn(written.text, surface.codec.file.events) : [];
     if (places === null) {
       rows.push({ state: 'unreadable', target, path: target, reason: 'not JSON' });
       continue;
@@ -100,9 +101,9 @@ export const hookLedger = Effect.fn('harnessInstall.hookLedger')(function* (repo
   return rows;
 });
 
-const placesIn = (text: string): OwnPlace[] | null => {
+const placesIn = (text: string, path: readonly string[]): OwnPlace[] | null => {
   try {
-    return ownPlaces(JSON.parse(text) as unknown);
+    return ownPlaces(JSON.parse(text) as unknown, path);
   } catch {
     return null;
   }

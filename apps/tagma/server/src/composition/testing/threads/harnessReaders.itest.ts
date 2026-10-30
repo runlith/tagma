@@ -13,10 +13,13 @@ import { asWarmthBasis } from '../../../threads/testing/doubles.js';
 import { HarnessObservations, terminalArgv } from '../../../external-harnesses/testing/doubles.js';
 import { sessionStoreOver } from '../../../external-harnesses/testing/floor.js';
 import { harnessPresentation } from '../../../external-harnesses/contract/service/table.js';
+import { builtinHarness } from '../../../external-harnesses/testing/builtin.js';
+import { makeHarnessAdapters } from '../../../external-harnesses/adapters.js';
 import type { HarnessEvent } from '../../../threads/contract/wire/harness/observation.js';
 
 const setup = Effect.fnUntraced(function* () {
   const catalog = yield* (yield* ProviderRegistry).catalog;
+  const adapters = yield* makeHarnessAdapters;
   const NO_BASIS = {
     warmth: { curves: new Map(), accounts: new Map(), models: catalog.models } satisfies ReturnType<typeof asWarmthBasis>,
     limits: new Map(),
@@ -43,7 +46,7 @@ const setup = Effect.fnUntraced(function* () {
             harness: {
               facet: {
                 name: 'cursor',
-                presentation: harnessPresentation('cursor'),
+                presentation: harnessPresentation(builtinHarness('cursor')),
                 sessionKey: ROOT,
                 execution: null,
                 observation: unmeasuredObservation(),
@@ -56,7 +59,7 @@ const setup = Effect.fnUntraced(function* () {
         return row.id;
       }),
     );
-    yield* facets.open(threadId, '', 'owner', terminalArgv(catalog.models, ''));
+    yield* facets.open(threadId, '', 'owner', terminalArgv(adapters, catalog.models, ''));
     yield* facets.change(threadId, (facet) =>
       Effect.succeed({
         facet: {
@@ -70,17 +73,21 @@ const setup = Effect.fnUntraced(function* () {
     const post = Effect.fnUntraced(function* (minute: number, over: Record<string, unknown> = {}) {
       const facet = yield* facets.read(threadId);
       return yield* facets.change(threadId, (standing) => {
-        const admitted = observations.admit(standing, {
-          occasion: 'session-start',
-          observedAt: at(minute),
-          sessionId: facet?.session?.id ?? null,
-          rootKey: ROOT,
-          turnId: null,
-          receipt: null,
-          atRevision: null,
-          model: { _tag: 'NotRead' },
-          ...over,
-        } as HarnessEvent);
+        const admitted = observations.admit(
+          standing,
+          {
+            occasion: 'session-start',
+            observedAt: at(minute),
+            sessionId: facet?.session?.id ?? null,
+            rootKey: ROOT,
+            turnId: null,
+            receipt: null,
+            atRevision: null,
+            model: { _tag: 'NotRead' },
+            ...over,
+          } as HarnessEvent,
+          builtinHarness('cursor'),
+        );
         return Effect.succeed({ facet: admitted.facet, value: admitted });
       });
     });

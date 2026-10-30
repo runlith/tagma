@@ -13,11 +13,19 @@ import type { ThreadListRow } from '../wire/list.js';
 import type { ExternalSession, HarnessInstall } from '../wire/harness/externalSession.js';
 import type { ModelCatalog } from '@runlith/llm/models/catalog';
 import type { HarnessSeat, SeatChoice, SeatedHarness } from '../wire/harness/seat.js';
-import type { GateRefusal } from '../../../platform/contract/wire/refusal.js';
+import { GateRefusal } from '../../../platform/contract/wire/refusal.js';
 import type { CarriedRecord, RolloutPart } from '../../journal/rolloutMeta.js';
 import type { HarnessFailure } from './failure.js';
 
 export class HarnessMissing extends Data.TaggedError('HarnessMissing')<{ readonly harness: string }> {}
+
+export type HarnessNotInstalled = GateRefusal<'harness-not-installed'>;
+
+export const harnessNotInstalled = (harness: string, install: string | null = null): HarnessNotInstalled =>
+  new GateRefusal('harness-not-installed', `No installed adapter declares the ${harness} harness.`, [
+    install ?? `install the adapter package that declares ${harness}`,
+    'continue on a harness or model this machine has',
+  ]);
 
 export class HarnessFaceMissing extends Data.TaggedError('HarnessFaceMissing')<{
   readonly harness: string;
@@ -76,6 +84,8 @@ export class HarnessRegistry extends Context.Service<
   HarnessRegistry,
   {
     register(harness: HarnessId, bound: Harness['Service']): Effect.Effect<void>;
+    replace(harness: HarnessId, bound: Harness['Service']): Effect.Effect<void>;
+    withdraw(harness: HarnessId): Effect.Effect<void>;
     resolve(harness: HarnessId): Effect.Effect<Harness['Service'], HarnessMissing>;
     list(): readonly HarnessId[];
     writes(base: WriteSet): WriteSet;

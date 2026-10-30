@@ -13,7 +13,8 @@ import { NOTES_RULE } from '../threads/contract/wire/notes.js';
 import { sectionContext } from '../threads/doctrine/render.js';
 import { teamLaw } from './installs/teamLaw.js';
 import { instructionDelivery } from './instructions.js';
-import { profileOf } from './protocol/links.js';
+import { linkedOf } from './protocol/links.js';
+import { HarnessAdapters } from './contract/service/adapters.js';
 import type { HomePlace, SessionHome } from './sessions/place.js';
 import type { HarnessSessionStore } from './store/sessions.js';
 
@@ -22,6 +23,7 @@ export const makeGuidanceSources = Effect.fnUntraced(function* (store: HarnessSe
   const places = yield* WorkPlaces;
   const records = yield* ThreadRecords;
   const operatorNotes = yield* OperatorNotes;
+  const adapters = yield* HarnessAdapters;
   const instructions = Effect.fn('HarnessGuidance.instructions')(function* (threadId: string, known?: HomePlace) {
     const home = known ?? (yield* place(threadId));
     const origins = [{ projectId: home.projectId, root: home.root }, ...(yield* places.held(threadId))];
@@ -47,16 +49,15 @@ export const makeGuidanceSources = Effect.fnUntraced(function* (store: HarnessSe
     }
     return { sets, unavailable };
   });
-  const nameOf = (threadId: string) =>
+  const hosted = (threadId: string) =>
     Effect.flatMap(store.read(threadId), (facet) =>
       facet === null || facet === undefined
         ? Effect.fail(new ThreadStorageFailed({ call: 'guidance', cause: `thread ${threadId} has no harness` }))
-        : Effect.succeed(facet.name),
+        : Effect.map(linkedOf(adapters, facet), ({ profile }) => profile.hosts !== null),
     );
   const sources: GuidanceSources = {
     orientation: Effect.fnUntraced(function* (thread: ThreadRow) {
-      const name = yield* nameOf(thread.id);
-      if (profileOf(name).hosts !== null) return { texts: [], law: null };
+      if (yield* hosted(thread.id)) return { texts: [], law: null };
       const home = yield* place(thread.id);
       const current = yield* instructions(thread.id, home);
       const own = current.sets.find((set) => set.projectId === home.projectId);
@@ -81,8 +82,7 @@ export const makeGuidanceSources = Effect.fnUntraced(function* (store: HarnessSe
       };
     }, Effect.mapError(threadCallFailed)),
     law: Effect.fnUntraced(function* (thread: ThreadRow, delivered: unknown) {
-      const name = yield* nameOf(thread.id);
-      if (profileOf(name).hosts !== null) return { text: '', law: delivered };
+      if (yield* hosted(thread.id)) return { text: '', law: delivered };
       const current = yield* instructions(thread.id);
       const updated = yield* instructionDelivery(
         delivered ?? null,

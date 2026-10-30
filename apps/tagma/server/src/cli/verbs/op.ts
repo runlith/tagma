@@ -87,12 +87,7 @@ function readInput(at: Invocation, source: string | undefined): Effect.Effect<un
   }).pipe(Effect.mapError((reason) => invalid(`inline JSON failed: ${inline.reason}; file lookup for ${source} failed: ${reason}`)));
 }
 
-export const operations = <Id extends string, Harness extends string>({
-  registry,
-  blockRefFlag,
-  ask,
-  inputSchema,
-}: OperationsCli<Id, Harness>) => {
+export const operations = <Id extends string>({ registry, blockRefFlag, ask, inputSchema }: OperationsCli<Id>) => {
   const scope = blockRefFlag('scope').pipe(Flag.optional);
   const performedBy = (named: string): Id =>
     registry.named(named) ??

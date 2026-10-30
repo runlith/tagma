@@ -1,15 +1,12 @@
 import { Layer } from 'effect';
 import { SessionIdentity } from '../platform/contract/wire/session.js';
-import { HARNESSES, harnessAdapter } from './contract/service/table.js';
-import type { HarnessName } from '../threads/contract/wire/harness/names.js';
-
-const prefixOf = (harness: HarnessName): string => harnessAdapter(harness).prefix;
+import { BUILTIN_HARNESSES } from './vendors/builtin.js';
 
 export const sessionIdentity: SessionIdentity['Service'] = {
-  prefix: Object.fromEntries(HARNESSES.map((adapter) => [adapter.harness, prefixOf(adapter.harness)])),
+  prefix: Object.fromEntries(BUILTIN_HARNESSES.map((adapter) => [adapter.harness, adapter.prefix])),
   extras: [
-    ...HARNESSES.flatMap((adapter) => (adapter.variable === undefined ? [] : [adapter.variable])),
-    ...HARNESSES.flatMap((adapter) => adapter.exports ?? []),
+    ...BUILTIN_HARNESSES.flatMap((adapter) => (adapter.variable === undefined ? [] : [adapter.variable])),
+    ...BUILTIN_HARNESSES.flatMap((adapter) => adapter.exports ?? []),
   ],
 };
 

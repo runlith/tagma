@@ -1,8 +1,8 @@
-import { HARNESSES } from '../contract/service/table.js';
 import { entryLine } from '../../installation/contract/wire/junction.js';
 import { PERMISSION_TIMEOUT_SECONDS } from '../contract/wire/call.js';
 import type { HarnessAdapter } from '../contract/service/adapter.js';
-import type { HookAsset, HookEvents, HookFormat, HookSurface } from '@runlith/tagma/adapter/harness';
+import type { HookAsset, HookEvents, HookSurface } from '@runlith/tagma/adapter/harness';
+import type { HookCodec } from '@runlith/tagma/adapter/hook';
 
 export type HooksWrite = { path: string; write: 'created' | 'updated' | 'current'; deferred?: string[] };
 
@@ -25,9 +25,9 @@ const HOOK_VERBS: Partial<Record<keyof HookEvents, HookVerb>> = {
 
 export type HookEntry = { event: string; command: string; timeout?: number };
 
-type HookFile = { file: string; format: HookFormat; entries: HookEntry[]; assets: readonly HookAsset[] };
+type HookFile = { file: string; codec: HookCodec; entries: HookEntry[]; assets: readonly HookAsset[] };
 
-type HookGroup = { readonly file: string; readonly format: HookFormat; readonly adapters: readonly HarnessAdapter[] };
+type HookGroup = { readonly file: string; readonly codec: HookCodec; readonly adapters: readonly HarnessAdapter[] };
 
 const hookCommand = (verb: string, served: readonly HarnessAdapter[]): string =>
   entryLine(served.length === 1 ? `hook ${verb} --harness ${served[0]!.harness}` : `hook ${verb}`);
@@ -48,22 +48,32 @@ export function entriesOf(served: readonly HarnessAdapter[]): HookEntry[] {
   return entries;
 }
 
-export function hookGroups(key: (surface: HookSurface) => string): HookGroup[] {
-  const byKey = new Map<string, { file: string; format: HookFormat; adapters: HarnessAdapter[] }>();
-  for (const adapter of HARNESSES) {
+export function hookGroups(adapters: readonly HarnessAdapter[], key: (surface: HookSurface) => string): HookGroup[] {
+  const byKey = new Map<string, Map<HookCodec, { file: string; codec: HookCodec; adapters: HarnessAdapter[] }>>();
+  const groups: { file: string; codec: HookCodec; adapters: HarnessAdapter[] }[] = [];
+  for (const adapter of adapters) {
     const surface = adapter.hooks;
     if (surface === null) continue;
-    const group = byKey.get(key(surface)) ?? { file: surface.file, format: surface.format, adapters: [] };
-    byKey.set(key(surface), group);
-    group.adapters.push(adapter);
+    const at = key(surface);
+    let codecs = byKey.get(at);
+    if (codecs === undefined) {
+      codecs = new Map();
+      byKey.set(at, codecs);
+    }
+    const group = codecs.get(surface.codec);
+    if (group === undefined) {
+      const made = { file: surface.file, codec: surface.codec, adapters: [adapter] };
+      codecs.set(surface.codec, made);
+      groups.push(made);
+    } else group.adapters.push(adapter);
   }
-  return [...byKey.values()];
+  return groups;
 }
 
-export function hookFiles(): HookFile[] {
-  return hookGroups((surface) => surface.file).map((group) => ({
+export function hookFiles(adapters: readonly HarnessAdapter[]): HookFile[] {
+  return hookGroups(adapters, (surface) => surface.file).map((group) => ({
     file: group.file,
-    format: group.format,
+    codec: group.codec,
     entries: entriesOf(group.adapters),
     assets: group.adapters.flatMap((adapter) => adapter.hooks?.assets ?? []),
   }));

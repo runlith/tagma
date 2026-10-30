@@ -5,7 +5,7 @@ import { ThreadStorageFailed } from '@runlith/agent/thread/persisted';
 import type { HarnessName } from '../contract/wire/harness/names.js';
 import type { HarnessId } from '../../platform/contract/wire/session.js';
 import { GateRefusal } from '../../platform/contract/wire/refusal.js';
-import { HarnessFaceMissing, HarnessRegistry, HarnessMissing } from '../contract/service/harness.js';
+import { HarnessFaceMissing, HarnessRegistry, HarnessMissing, harnessNotInstalled } from '../contract/service/harness.js';
 import type { HarnessFailure } from '../contract/service/failure.js';
 import { harnessOfTypeId } from '../contract/wire/harness/types.js';
 
@@ -50,7 +50,8 @@ export const birthRefusal = (childId: string, cause: GateRefusal): BirthRefused 
 
 const birthFailure = (input: BirthInput, cause: unknown): BirthFailure => {
   if (cause instanceof BirthConflict || cause instanceof BirthRefused || cause instanceof ThreadMissing) return cause;
-  if (cause instanceof HarnessMissing || cause instanceof HarnessFaceMissing) {
+  if (cause instanceof HarnessMissing) return birthRefusal(input.childId, harnessNotInstalled(cause.harness));
+  if (cause instanceof HarnessFaceMissing) {
     return new BirthRefused({ childId: input.childId, reason: 'harness-refused', detail: `${cause.harness} answers no spawn` });
   }
   if (cause instanceof GateRefusal) return birthRefusal(input.childId, cause);
@@ -73,13 +74,7 @@ export function withExternalThreads(
           cause._tag === 'ThreadStorageFailed' ? cause : new ThreadStorageFailed({ call: 'harness.born', cause }),
         );
         if (parent === null) return yield* new ThreadMissing({ threadId: input.creatorThreadId });
-        if (!external.registry.list().includes(name as HarnessId)) {
-          return yield* new BirthRefused({
-            childId: input.childId,
-            reason: 'harness-refused',
-            detail: `${name} is not installed on this machine`,
-          });
-        }
+        if (!external.registry.list().includes(name as HarnessId)) return yield* birthRefusal(input.childId, harnessNotInstalled(name));
         const made = yield* Effect.mapError(external.born(name, input), (cause) => birthFailure(input, cause));
         const thread = yield* Effect.mapError(native.find(made.threadId, input.principal), (cause) =>
           cause._tag === 'ThreadStorageFailed' ? cause : new ThreadStorageFailed({ call: 'harness.born', cause }),

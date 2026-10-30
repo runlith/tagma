@@ -2,7 +2,7 @@ import { Context, type Effect } from 'effect';
 import type { HarnessDecision, HarnessAnswer } from '../wire/call.js';
 import type { HarnessCall } from '@runlith/tagma/adapter/harness';
 import type { HarnessFailure } from '../../../threads/contract/service/failure.js';
-import type { HarnessName } from '../../../threads/contract/wire/harness/names.js';
+import type { HarnessAdapter } from './adapter.js';
 
 export type HarnessVerdict =
   | { readonly _tag: 'Unspoken' }
@@ -16,7 +16,7 @@ export type HarnessVerdict =
 
 export type HarnessJudging = {
   verdict(threadId: string, call: HarnessCall, mutating?: boolean): Effect.Effect<HarnessVerdict, HarnessFailure>;
-  prompt(name: HarnessName, call: HarnessCall): string;
+  prompt(adapter: HarnessAdapter, call: HarnessCall): string;
 };
 
 export class HarnessPermissions extends Context.Service<

@@ -2,16 +2,15 @@ import { Effect } from 'effect';
 import type { StoreFailure } from '../../platform/contract/service/store.js';
 import type { GateRefusal } from '../../platform/contract/wire/refusal.js';
 import type { Settings } from '../../settings/contract/service/values.js';
-import type { HarnessName, HarnessTransport } from '../../threads/contract/wire/harness/names.js';
-import { harnessAdapter, transportOf, type HarnessTransportOffer } from '../contract/service/table.js';
+import type { HarnessAdapter } from '../contract/service/adapter.js';
+import { transportOf, type HarnessTransportOffer } from '../contract/service/table.js';
 import { harnessTransport } from '../settings.js';
 
 export const birthTransport = (
   settings: Settings['Service'],
-  name: HarnessName,
+  adapter: HarnessAdapter,
   projectId: number,
 ): Effect.Effect<HarnessTransportOffer, StoreFailure | GateRefusal> =>
-  Effect.flatMap(settings.value(harnessTransport, projectId), (asked) => {
-    const roads: Partial<Record<HarnessName, HarnessTransport>> = asked;
-    return transportOf(name, harnessAdapter(name).acp?.hosts == null ? roads[name] : undefined);
-  });
+  Effect.flatMap(settings.value(harnessTransport, projectId), (asked) =>
+    transportOf(adapter, adapter.acp?.hosts == null ? asked[adapter.harness] : undefined),
+  );

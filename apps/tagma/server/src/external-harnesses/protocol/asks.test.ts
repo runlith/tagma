@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { askOptions, chosenOption, judgedCall, type PermissionAsk } from './asks.js';
-import { harnessAdapter } from '../contract/service/table.js';
+import { builtinHarness } from '../testing/builtin.js';
 
 const ask = (
   toolCall: PermissionAsk['params']['toolCall'],
@@ -21,7 +21,7 @@ test('a call is judged by its kind and the subject its input names, from the ear
       bare,
       { toolCallId: 'exec_1', title: 'Run', kind: 'execute', rawInput: '{"command": "git push"}' },
       true,
-      harnessAdapter('devin').tools,
+      builtinHarness('devin').tools,
     ),
   ).toEqual({
     call: { id: 'exec_1', tool: 'bash', subject: 'git push' },
@@ -32,7 +32,7 @@ test('a call is judged by its kind and the subject its input names, from the ear
       ask({ toolCallId: 'r', kind: 'read', locations: [{ path: '/repo/a.ts' }] }, ['allow_once']),
       undefined,
       true,
-      harnessAdapter('devin').tools,
+      builtinHarness('devin').tools,
     ),
   ).toEqual({
     call: { id: 'r', tool: 'read', subject: '/repo/a.ts' },
@@ -43,14 +43,14 @@ test('a call is judged by its kind and the subject its input names, from the ear
       ask({ toolCallId: 'mcp', title: 'mcp__tagma__send_message' }, ['allow_once']),
       undefined,
       true,
-      harnessAdapter('devin').tools,
+      builtinHarness('devin').tools,
     ),
   ).toEqual({
     call: { id: 'mcp', tool: 'other', subject: 'mcp__tagma__send_message' },
     mutating: true,
   });
   expect(
-    judgedCall(ask({ toolCallId: 'plan', kind: 'switch_mode' }, ['allow_once']), undefined, true, harnessAdapter('devin').tools),
+    judgedCall(ask({ toolCallId: 'plan', kind: 'switch_mode' }, ['allow_once']), undefined, true, builtinHarness('devin').tools),
   ).toEqual({
     call: { id: 'plan', tool: 'other', subject: 'plan' },
     mutating: true,
@@ -66,15 +66,15 @@ test('permission requests retain the vendor name from the request or the earlier
     kind: 'edit' as const,
     rawInput: { path: '/repo/a.ipynb' },
   };
-  expect(judgedCall(bare, known, false, harnessAdapter('claude-code').tools)).toEqual({
+  expect(judgedCall(bare, known, false, builtinHarness('claude-code').tools)).toEqual({
     call: { id: 'c', tool: 'NotebookEdit', subject: '/repo/a.ipynb' },
     mutating: true,
   });
-  expect(judgedCall(ask({ toolCallId: 'c', name: 'apply_patch' }, ['allow_once']), known, true, harnessAdapter('codex').tools)).toEqual({
+  expect(judgedCall(ask({ toolCallId: 'c', name: 'apply_patch' }, ['allow_once']), known, true, builtinHarness('codex').tools)).toEqual({
     call: { id: 'c', tool: 'apply_patch', subject: '/repo/a.ipynb' },
     mutating: true,
   });
-  expect(judgedCall(bare, known, false, harnessAdapter('devin').tools)).toEqual({
+  expect(judgedCall(bare, known, false, builtinHarness('devin').tools)).toEqual({
     call: { id: 'c', tool: 'write', subject: '/repo/a.ipynb' },
     mutating: true,
   });

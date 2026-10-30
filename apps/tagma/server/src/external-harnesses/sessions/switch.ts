@@ -7,7 +7,7 @@ import type { ThreadRecords } from '../../thread-record/contract/service/records
 import type { ThreadLookup } from '../../threads/contract/service/reads.js';
 import { HarnessTurnStale, JOURNAL_MOVED, STALE_RETRIES } from '../../threads/contract/service/rebinding.js';
 import type { ThreadRebinding } from '../../threads/contract/service/rebinding.js';
-import type { HarnessName, HarnessTransport } from '../../threads/contract/wire/harness/names.js';
+import type { HarnessTransport } from '../../threads/contract/wire/harness/names.js';
 import { writes } from '../../platform/contract/service/writes.js';
 import { harnessSessionActive } from '../../threads/contract/wire/harness/session.js';
 import { gated } from '../../threads/projectGate.js';
@@ -15,7 +15,9 @@ import { acpKernel, terminalKernel } from '../birth/seat.js';
 import { resolvedAsked } from '../birth/modelChoice.js';
 import { currentEffort, currentModel } from '../../threads/contract/wire/harness/observation.js';
 import type { ProviderRegistry } from '../../providers/contract/service/registry.js';
-import { harnessAdapter, servingProvider, transportOf, type HarnessTransportOffer } from '../contract/service/table.js';
+import { servingProvider, transportOf, type HarnessTransportOffer } from '../contract/service/table.js';
+import type { HarnessAdapter } from '../contract/service/adapter.js';
+import type { HarnessAdapters } from '../contract/service/adapters.js';
 import { TransportSwitch, type TransportSwitched } from '../contract/service/transport.js';
 import type { HarnessSessionStore } from '../store/sessions.js';
 import { releaseResource } from './release.js';
@@ -27,6 +29,7 @@ export function transportSwitch(
   rebinding: ThreadRebinding['Service'],
   transports: TransportRegistry,
   providers: ProviderRegistry['Service'],
+  adapters: HarnessAdapters['Service'],
 ): TransportSwitch['Service'] {
   const release = releaseResource(store, transports);
   const joined = writes('TransportSwitch.to', [], rebinding.writes);
@@ -42,11 +45,11 @@ export function transportSwitch(
     return cause instanceof GateRefusal ? cause.reason : cause instanceof Error ? cause.message : String(cause);
   });
 
-  const hostedAsked = Effect.fnUntraced(function* (threadId: string, name: HarnessName, transport: HarnessTransport) {
+  const hostedAsked = Effect.fnUntraced(function* (threadId: string, adapter: HarnessAdapter, transport: HarnessTransport) {
     const stored = yield* store.asked(threadId);
     const facet = yield* store.read(threadId);
     const { models } = yield* providers.catalog;
-    const provider = servingProvider(name, transport);
+    const provider = servingProvider(adapter, transport);
     const reported = facet === null ? null : currentModel(facet.observation);
     const option = provider === null || reported === null ? undefined : models.modelsOf(provider).find((one) => one.id === reported);
     const effort = facet === null ? null : currentEffort(facet.observation);
@@ -58,18 +61,18 @@ export function transportSwitch(
 
   const moved = Effect.fnUntraced(function* (
     threadId: string,
-    name: HarnessName,
+    adapter: HarnessAdapter,
     from: HarnessTransport,
     offer: HarnessTransportOffer,
     plain: boolean,
     account: string | null,
   ) {
-    const asked = offer.agent === null ? yield* store.asked(threadId) : yield* hostedAsked(threadId, name, offer.transport);
+    const asked = offer.agent === null ? yield* store.asked(threadId) : yield* hostedAsked(threadId, adapter, offer.transport);
     const switches = yield* store.switches(threadId);
     const seat =
       offer.transport === 'acp'
-        ? acpKernel(name, offer.agent, asked, switches, account)
-        : terminalKernel(name, asked, plain, switches, account);
+        ? acpKernel(adapter, offer.agent, asked, switches, account)
+        : terminalKernel(adapter, asked, plain, switches, account);
     const recorded = yield* rebinding.prepare(threadId, from, seat);
     return yield* store.change<TransportSwitched>(
       threadId,
@@ -115,17 +118,16 @@ export function transportSwitch(
               ['name a thread opened as a harness type — harness:<name>'],
             );
           }
-          const offer = yield* transportOf(standing.name, transport);
+          const adapter = yield* adapters.row(standing.name, standing.presentation.install);
+          const offer = yield* transportOf(adapter, transport);
           const from: HarnessTransport = (yield* store.binding(threadId))?.adapter === 'acp' ? 'acp' : 'terminal';
           if (from === transport) return { status: 'unchanged', transport } satisfies TransportSwitched;
           const facet = yield* store.read(threadId);
-          const profile = harnessAdapter(standing.name).acp;
+          const profile = adapter.acp;
           if (profile?.hosts !== null && profile !== undefined && !profile.sharedSessions) {
-            return yield* new GateRefusal(
-              'transport-unavailable',
-              `${harnessAdapter(standing.name).label} keeps separate sessions on these transports.`,
-              ['start a separate thread on the transport you need'],
-            );
+            return yield* new GateRefusal('transport-unavailable', `${adapter.label} keeps separate sessions on these transports.`, [
+              'start a separate thread on the transport you need',
+            ]);
           }
           if (transport === 'acp' && (facet?.plain === true || facet?.home !== undefined || facet?.permissionMode !== undefined)) {
             return yield* new GateRefusal(
@@ -145,7 +147,7 @@ export function transportSwitch(
             }
             yield* release(threadId);
           }
-          const switched = yield* moved(threadId, standing.name, from, offer, facet?.plain === true, row.account).pipe(
+          const switched = yield* moved(threadId, adapter, from, offer, facet?.plain === true, row.account).pipe(
             Effect.retry({ times: STALE_RETRIES, while: (failure) => failure instanceof GateRefusal && failure.code === JOURNAL_MOVED }),
           );
           return switched.status === 'switched' ? { ...switched, unstarted: yield* seated(threadId) } : switched;

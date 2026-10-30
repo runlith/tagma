@@ -21,6 +21,7 @@ import {
   type HarnessMoved,
   type HarnessMoveTo,
   HarnessRegistry,
+  harnessNotInstalled,
   type HarnessSeated,
   SessionRead,
 } from '../contract/service/harness.js';
@@ -52,7 +53,7 @@ const pinned = (threadId: string, name: string) =>
   ]);
 
 const resolved = (registry: HarnessRegistry['Service'], name: string) =>
-  registry.resolve(name as HarnessId).pipe(Effect.mapError((cause) => new ThreadCallBroke({ cause })));
+  registry.resolve(name as HarnessId).pipe(Effect.mapError((missing) => harnessNotInstalled(missing.harness)));
 
 const nativeSeat = (models: ModelCatalog, to: HarnessMoveTo): KernelSeat => ({
   transport: NATIVE_BINDING,

@@ -9,7 +9,7 @@ import { harnessSessionActive, ALLOW_ONCE, DENY } from '../../threads/contract/w
 import type { ExternalSession } from '../../threads/contract/wire/harness/externalSession.js';
 import type { HarnessLanes } from '../sessions/lanes.js';
 import { readHarnessFrame, typeHarnessKeys, waitForWidget, widgetOn } from '../sessions/keyboard.js';
-import { harnessAdapter } from '../contract/service/table.js';
+import type { HarnessAdapters } from '../contract/service/adapters.js';
 import type { HarnessSessionStore } from '../store/sessions.js';
 import type { AskFaces, Typed } from './terminal.js';
 
@@ -21,8 +21,10 @@ export function terminalFaces(
   screens: TerminalScreens['Service'],
   writing: TerminalWriting['Service'],
   lanes: HarnessLanes,
+  adapters: HarnessAdapters['Service'],
 ): AskFaces {
   type Standing = { readonly facet: ExternalSession; readonly sessionId: string; readonly execution: HarnessExecutionRef };
+  const rowOf = (held: Standing) => adapters.row(held.facet.name, held.facet.presentation.install);
   const standing = (threadId: string): Effect.Effect<Standing | null, HarnessFailure> =>
     Effect.map(sessions.read(threadId), (facet) =>
       facet !== null && harnessSessionActive(facet.session) && facet.execution !== null
@@ -33,12 +35,12 @@ export function terminalFaces(
     widget: Effect.fnUntraced(function* (threadId) {
       const held = yield* standing(threadId);
       if (held === null) return null;
-      return widgetOn(held.facet.name, yield* readHarnessFrame(terminals, screens, held.execution));
+      return widgetOn(yield* rowOf(held), yield* readHarnessFrame(terminals, screens, held.execution));
     }),
     keys: Effect.fnUntraced(function* (threadId, widget, values, permission) {
       const held = yield* standing(threadId);
       if (held === null) return null;
-      const adapter = harnessAdapter(held.facet.name);
+      const adapter = yield* rowOf(held);
       if (!permission || values.length !== 1) return adapter.keysOf(widget, values);
       if (values[0] === DENY) return adapter.cancelKeysOf(widget);
       const first = widget.options[0]?.value;
@@ -73,11 +75,9 @@ export function terminalFaces(
     left: Effect.fnUntraced(function* (threadId, widget) {
       const held = yield* standing(threadId);
       if (held === null) return 'unreadable' as const;
+      const adapter = yield* rowOf(held);
       const ended = sessions.wait(threadId, (facet) => facet.session?.id !== held.sessionId || !harnessSessionActive(facet.session));
-      return yield* Effect.raceFirst(
-        waitForWidget(terminals, screens, held.execution, held.facet.name, widget),
-        Effect.as(ended, 'gone' as const),
-      );
+      return yield* Effect.raceFirst(waitForWidget(terminals, screens, held.execution, adapter, widget), Effect.as(ended, 'gone' as const));
     }),
   };
 }

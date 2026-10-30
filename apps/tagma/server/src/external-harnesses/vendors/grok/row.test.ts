@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { grok } from './row.js';
-import { HARNESS_ANSWER_KEYS, harnessAnswer } from '../../contract/service/table.js';
+import { harnessAnswer } from '../../contract/service/table.js';
 import started from '../../testing/fixtures/grok/session-start.json';
 import source from '../../testing/fixtures/grok/source.summary.json';
 
@@ -22,6 +22,5 @@ test('a whole fork launches into the id reported by the recorded idle SessionSta
 
 test('a grok turn-boundary payload delivers its answer', () => {
   const said = { lastAssistantMessage: 'PLUMBLINE-9d4c1f2' };
-  expect(HARNESS_ANSWER_KEYS).toContain('lastAssistantMessage');
   expect(harnessAnswer(grok, said)).toBe('PLUMBLINE-9d4c1f2');
 });

@@ -1,11 +1,12 @@
 import { Effect, Option } from 'effect';
 import { Argument, Command, Flag } from 'effect/cli';
-import { HARNESS_NAMES } from '../../threads/contract/wire/harness/names.js';
 import { hookEventOf } from '../hooks/dispatch.js';
 import type { HookConnect } from '../hooks/delivery.js';
-import { noting, CurrentInvocation } from '../../platform/cli/verb.js';
+import { harnessRows, type HarnessDeclarations } from '../hooks/rows.js';
+import { InstalledChannel } from '../../installation/contract/service/channel.js';
+import { noting, refuse, CurrentInvocation } from '../../platform/cli/verb.js';
 
-export const hook = ({ connect }: { readonly connect: HookConnect }) =>
+export const hook = ({ connect, installed }: { readonly connect: HookConnect; readonly installed: HarnessDeclarations }) =>
   Command.make(
     'hook',
     {
@@ -18,13 +19,31 @@ export const hook = ({ connect }: { readonly connect: HookConnect }) =>
         'permission-request',
         'observe',
       ] as const),
-      harness: Flag.Literals('harness', HARNESS_NAMES).pipe(
+      harness: Flag.String('harness').pipe(
         Flag.optional,
-        Flag.withMetavar(HARNESS_NAMES.join('|')),
-        Flag.withDescription('the CLI whose hook file this registration was written into'),
+        Flag.withMetavar('id'),
+        Flag.withDescription('the installed harness whose hook file this registration was written into'),
       ),
     },
-    ({ event, harness }) => Effect.flatMap(CurrentInvocation, (at) => hookEventOf(event, at, connect, Option.getOrNull(harness))),
+    ({ event, harness }) =>
+      Effect.gen(function* () {
+        const at = yield* CurrentInvocation;
+        const named = Option.getOrNull(harness);
+        const rows = yield* harnessRows(installed, at, yield* InstalledChannel, named).pipe(
+          Effect.catchTag('HarnessUnreadable', (unreadable) =>
+            Effect.sync(() =>
+              refuse('harness-unreadable', unreadable.message, ['read_adapters — whether the adapter package still loads']),
+            ),
+          ),
+        );
+        if (rows === null) {
+          return refuse('harness-not-installed', `no builtin harness and no adapter installed on this machine declares ${named}`, [
+            'install_adapter — install the package that declares it',
+            'tagma upgrade — rewrite hook files written for a harness since removed',
+          ]);
+        }
+        return yield* hookEventOf(event, at, connect, rows);
+      }),
   ).pipe(
     Command.withDescription('the harness hook door: reads the event JSON on stdin and answers with what the graph knows'),
     noting(`Wired by \`tagma install\` into the project layer of every harness the repo
@@ -47,6 +66,8 @@ carries; never called by hand. Events:
                  question on this thread's run and waits for the operator, and
                  any other call prints nothing at all, leaving the harness its
                  own prompt
+--harness names a builtin harness or one an installed adapter package declares;
+only that harness's declarations are loaded.
 A CLI started in a Tagma terminal carries no grant: its hooks first ask the
 server to adopt its session as a thread of that terminal, naming the CLI by
 --harness where the hook file serves one CLI and by its published session id

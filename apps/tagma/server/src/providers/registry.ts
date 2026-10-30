@@ -1,13 +1,11 @@
 import { modelCatalog } from '@runlith/llm/models/catalog';
 import { pickerOrder } from '@runlith/llm/models/description';
-import type { ProductIdentity } from '@runlith/llm/profiles/contract';
 import type { AdapterHost, HarnessProvider, Provider, SettingInstance, WireProvider } from '@runlith/tagma/adapter/provider';
 import { ASK_KINDS, type AskKind, type ModelCapability } from '@runlith/llm/models/description';
 import type { AskPath } from './contract/wire/asks.js';
 import { claimSections, type SectionClaim } from '@runlith/tagma/adapter/declaration';
-import { Effect, Layer, Result, Semaphore, Stream, SubscriptionRef } from 'effect';
+import { Effect, FileSystem, Layer, Result, Semaphore, Stream, SubscriptionRef } from 'effect';
 import { GateRefusal } from '../platform/contract/wire/refusal.js';
-import { PROGRAM_RELEASE } from '../platform/contract/wire/program.js';
 import type { ServedProvider, ServedSettings, CatalogSnapshot } from './contract/wire/catalog.js';
 import { AdapterInstances } from './contract/service/instances.js';
 import {
@@ -22,7 +20,8 @@ import {
   ProviderRegistry,
   type SignedProviders,
 } from './contract/service/registry.js';
-import { machineSources } from './adapters/external.js';
+import { machineSources, adapterHost } from './adapters/external.js';
+import { indexHarnesses } from './adapters/harnessIndex.js';
 import { failed, type Loaded, load } from './adapters/judge.js';
 import { publicValues } from './adapters/settingValues.js';
 import { dirname, join } from 'node:path';
@@ -30,8 +29,6 @@ import { accountSource, makeAccountModes, modeSections } from './accounts/modes.
 import type { AccountSection } from './contract/wire/catalog.js';
 import { CredentialFiles } from './contract/service/credentials.js';
 import { AccountCli } from './contract/service/cli.js';
-
-const product: ProductIdentity = { mcpServer: 'tagma', client: { name: 'tagma', version: PROGRAM_RELEASE } };
 
 const kindsOf = (path: AskPath, capabilities: readonly ModelCapability[]): readonly AskKind[] => {
   if (capabilities.includes('text')) return ASK_KINDS;
@@ -240,6 +237,7 @@ export const registryLayer = Layer.effect(
     const { sources } = yield* BuiltinAdapters;
     const places = yield* Effect.serviceOption(AdapterPlaces);
     const place = places._tag === 'Some' ? places.value : { machine: null, host: {} };
+    const disk = yield* Effect.serviceOption(FileSystem.FileSystem);
     const stored = yield* Effect.serviceOption(AdapterInstances);
     const files = yield* Effect.serviceOption(CredentialFiles);
     const cli = yield* Effect.serviceOption(AccountCli);
@@ -260,10 +258,7 @@ export const registryLayer = Layer.effect(
         stored._tag === 'Some'
           ? yield* Effect.orDie(stored.value.read())
           : { instances: new Map<string, readonly SettingInstance[]>(), secrets: {} };
-      const hostOf = (adapter: string): AdapterHost => ({
-        product,
-        instances: (instances.get(adapter) ?? []).map((instance) => ({ ...instance, secrets: secrets[instance.id] ?? {} })),
-      });
+      const hostOf = (adapter: string): AdapterHost => adapterHost({ instances, secrets }, adapter);
       const priorMachine = previous.filter((adapter) => adapter.state.origin === 'machine');
       const machine = yield* machineSources(place.machine, place.host, process.execArgv).pipe(
         Effect.map((installed) => ({ installed, unreadable: [] as readonly Loaded[] })),
@@ -284,6 +279,10 @@ export const registryLayer = Layer.effect(
       const { unreadable } = machine;
       const loaded = yield* loadAll([...sources, ...machine.installed], hostOf, unreadable, previous);
       const next = [...loaded, ...unreadable];
+      if (place.machine !== null && unreadable.length === 0) {
+        if (disk._tag === 'None') return yield* Effect.die('machine adapter indexing requires FileSystem');
+        yield* indexHarnesses(place.machine, next).pipe(Effect.provideService(FileSystem.FileSystem, disk.value), Effect.orDie);
+      }
       const catalog = catalogOf(next, instances, yield* sectionsOf(next), snapshots);
       previousInstances = instances;
       previous = next;

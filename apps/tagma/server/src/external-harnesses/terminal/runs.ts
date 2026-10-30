@@ -19,7 +19,7 @@ import { failedAs, type HarnessFailure } from '../../threads/contract/service/fa
 import type { ExternalSession, HarnessTypedShape, HarnessUnread } from '../../threads/contract/wire/harness/externalSession.js';
 import type { HarnessExecutionRef } from '../../threads/contract/wire/harness/observation.js';
 import { harnessSessionActive } from '../../threads/contract/wire/harness/session.js';
-import { harnessAdapter } from '../contract/service/table.js';
+import type { HarnessAdapters } from '../contract/service/adapters.js';
 import { CONTINUE_WORDS, inputWords, plainWords, promptDigest, typedShape } from '../adapter/input.js';
 import type { Keyboard, SessionDriver } from '../sessions/drive.js';
 import type { HarnessSessionStore } from '../store/sessions.js';
@@ -102,6 +102,7 @@ export class TerminalRuns {
     private readonly journal: TerminalJournal,
     private readonly steering: FiberMap.FiberMap<string, void, never>,
     private readonly drafts: ComposerDrafts,
+    private readonly adapters: HarnessAdapters['Service'],
   ) {}
 
   readonly transport: TransportRuns = {
@@ -382,7 +383,7 @@ export class TerminalRuns {
     yield* this.open.landing(run.id);
     if (this.stopped(run.id)) return;
     const facet = yield* this.store.read(threadId);
-    if (facet === null || harnessAdapter(facet.name).steer !== 'step' || !harnessSessionActive(facet.session)) return;
+    if (facet === null || this.adapters.find(facet.name)?.steer !== 'step' || !harnessSessionActive(facet.session)) return;
     const delivery = yield* this.launched(threadId, items);
     if (delivery.items.length === 0) return;
     if (!(yield* this.words.steered(threadId, run.id, delivery.items, delivery.digest))) return;

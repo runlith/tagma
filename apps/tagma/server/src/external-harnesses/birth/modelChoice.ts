@@ -1,8 +1,9 @@
 import { Effect } from 'effect';
-import { harnessAdapter, servingProvider } from '../contract/service/table.js';
+import { servingProvider } from '../contract/service/table.js';
+import type { HarnessAdapter } from '../contract/service/adapter.js';
 import type { HarnessAskedModel } from '../../threads/contract/wire/harness/askedModel.js';
 import type { HarnessModelChoice } from '@runlith/tagma/adapter/harness';
-import type { HarnessName, HarnessTransport } from '../../threads/contract/wire/harness/names.js';
+import type { HarnessTransport } from '../../threads/contract/wire/harness/names.js';
 import type { ModelCatalog } from '@runlith/llm/models/catalog';
 import { GateRefusal, type Unblock } from '../../platform/contract/wire/refusal.js';
 
@@ -15,23 +16,22 @@ const unavailable = (reason: string, unblock: Unblock): ChosenModel => ({ _tag: 
 
 export function chosenModel(
   models: ModelCatalog,
-  name: HarnessName,
+  adapter: HarnessAdapter,
   asked: HarnessAskedModel | undefined,
   transport: HarnessTransport = 'terminal',
 ): ChosenModel {
   if (asked === undefined) return { _tag: 'None' };
-  const provider = servingProvider(name, transport);
+  const provider = servingProvider(adapter, transport);
   if (provider === null) {
-    return unavailable(`${harnessAdapter(name).label} declares no model surface, so ${asked.model} cannot reach it.`, [
+    return unavailable(`${adapter.label} declares no model surface, so ${asked.model} cannot reach it.`, [
       'start it without a model',
       'start it on a harness that carries one',
     ]);
   }
   if (!models.registered(provider)) {
-    return unavailable(
-      `This installation composes no ${provider} row, so nothing says which models ${harnessAdapter(name).label} serves.`,
-      ['start it without a model'],
-    );
+    return unavailable(`This installation composes no ${provider} row, so nothing says which models ${adapter.label} serves.`, [
+      'start it without a model',
+    ]);
   }
   const row = models.named(provider);
   const served = models.modelsOf(provider);
@@ -73,11 +73,11 @@ export const resolvedAsked = (
 
 export const launchChoice = (
   models: ModelCatalog,
-  name: HarnessName,
+  adapter: HarnessAdapter,
   asked: HarnessAskedModel | undefined,
   transport: HarnessTransport = 'terminal',
 ): Effect.Effect<HarnessModelChoice | undefined, GateRefusal<'model-unavailable'>> => {
-  const chosen = chosenModel(models, name, asked, transport);
+  const chosen = chosenModel(models, adapter, asked, transport);
   if (chosen._tag === 'Unavailable') return Effect.fail(new GateRefusal('model-unavailable', chosen.reason, chosen.unblock));
   return Effect.succeed(chosen._tag === 'None' ? undefined : chosen.choice);
 };

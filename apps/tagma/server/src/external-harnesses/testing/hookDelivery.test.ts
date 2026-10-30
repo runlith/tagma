@@ -9,6 +9,7 @@ import { CurrentInvocation, Invocation } from '../../platform/cli/verb.js';
 import { PERMISSION_TIMEOUT_SECONDS, RUN_UNOWNED, type HarnessAnswer } from '../contract/wire/call.js';
 import { makeHookDelivery, type HookDoor } from '../hooks/delivery.js';
 import { hookEventOf } from '../hooks/dispatch.js';
+import { builtinRows } from './hookRows.js';
 import { GRANT_VARIABLE } from '../../platform/contract/service/credentials.js';
 import type { HarnessReceipt, HarnessReportInput } from '../../threads/contract/wire/harness/observation.js';
 
@@ -52,7 +53,7 @@ const permissionHook = (permissionOutcome: () => Effect.Effect<HarnessAnswer, un
       permissionOutcome,
     },
   };
-  const answer = hookEventOf('permission-request', invocation, () => Effect.succeed(door), 'claude-code').pipe(
+  const answer = hookEventOf('permission-request', invocation, () => Effect.succeed(door), builtinRows('claude-code')!).pipe(
     Effect.provideService(CurrentInvocation, invocation),
     Effect.provideService(Console.Console, console),
   );
@@ -165,7 +166,7 @@ layer(Layer.merge(MemoryFileSystem.layer, Layer.succeed(CurrentInvocation, at)))
           () => new Blob([JSON.stringify({ hook_event_name: 'Stop', session_id: 'ses_terminal', ...outcome })]).stream(),
           'hook',
         );
-        yield* hookEventOf('stop', invocation, () => Effect.succeed(door), 'opencode').pipe(
+        yield* hookEventOf('stop', invocation, () => Effect.succeed(door), builtinRows('opencode')!).pipe(
           Effect.provideService(CurrentInvocation, invocation),
         );
         expect(reports.at(-1)?.event).toMatchObject(outcome);
@@ -195,7 +196,7 @@ layer(Layer.merge(MemoryFileSystem.layer, Layer.succeed(CurrentInvocation, at)))
           () => new Blob([event]).stream(),
           'hook',
         );
-        return hookEventOf('stop', invocation, () => Effect.succeed(door), named).pipe(
+        return hookEventOf('stop', invocation, () => Effect.succeed(door), builtinRows(named)!).pipe(
           Effect.provideService(CurrentInvocation, invocation),
         );
       };

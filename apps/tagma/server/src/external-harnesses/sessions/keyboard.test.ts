@@ -5,6 +5,7 @@ import { TestClock } from 'effect/testing';
 import { GateRefusal } from '../../platform/contract/wire/refusal.js';
 import type { ScreenAsk, HarnessWidgetKey } from '@runlith/tagma/adapter/harness';
 import { readHarnessFrame, sameWidget, typeHarnessKeys, typeHarnessWords, waitForWidget } from './keyboard.js';
+import { builtinHarness } from '../testing/builtin.js';
 import {
   cellScreen,
   keyboardRig,
@@ -288,14 +289,14 @@ it.effect('readHarnessFrame answers the text frame, and refuses what a widget re
 it.effect('a widget gone on the first read is taken without waiting', () =>
   Effect.gen(function* () {
     const face = keyboardRig({ frames: [keyboardFrame(WIDGET_GONE)] });
-    expect(yield* waitForWidget(face.terminals, face.screens, EXECUTION, 'devin', widgetTarget())).toBe('gone');
+    expect(yield* waitForWidget(face.terminals, face.screens, EXECUTION, builtinHarness('devin'), widgetTarget())).toBe('gone');
   }),
 );
 
 it.effect('a widget that leaves between beats is taken', () =>
   Effect.gen(function* () {
     const face = keyboardRig({ frames: [keyboardFrame(WIDGET_ASK), keyboardFrame(WIDGET_GONE)] });
-    const fiber = yield* Effect.forkChild(waitForWidget(face.terminals, face.screens, EXECUTION, 'devin', widgetTarget()));
+    const fiber = yield* Effect.forkChild(waitForWidget(face.terminals, face.screens, EXECUTION, builtinHarness('devin'), widgetTarget()));
     yield* Effect.yieldNow;
     yield* TestClock.adjust(Duration.seconds(20));
     expect(yield* Fiber.join(fiber)).toBe('gone');
@@ -305,7 +306,7 @@ it.effect('a widget that leaves between beats is taken', () =>
 it.effect('a widget still standing at the takeover bound is not taken', () =>
   Effect.gen(function* () {
     const face = keyboardRig({ frames: [keyboardFrame(WIDGET_ASK)] });
-    const fiber = yield* Effect.forkChild(waitForWidget(face.terminals, face.screens, EXECUTION, 'devin', widgetTarget()));
+    const fiber = yield* Effect.forkChild(waitForWidget(face.terminals, face.screens, EXECUTION, builtinHarness('devin'), widgetTarget()));
     yield* Effect.yieldNow;
     yield* TestClock.adjust(Duration.seconds(20));
     expect(yield* Fiber.join(fiber)).toBe('standing');

@@ -21,6 +21,8 @@ import { threadStack, type ThreadParts } from '../threadParts.js';
 import { HarnessObservations, terminalArgv } from '../../../external-harnesses/testing/doubles.js';
 import { sessionStoreOver } from '../../../external-harnesses/testing/floor.js';
 import { harnessPresentation } from '../../../external-harnesses/contract/service/table.js';
+import { makeHarnessAdapters } from '../../../external-harnesses/adapters.js';
+import { builtinHarness } from '../../../external-harnesses/testing/builtin.js';
 import { ENTRY_KINDS } from '../../manifest.js';
 
 const titleIdentity = (records: ThreadRecords['Service'], id: string) =>
@@ -30,6 +32,7 @@ const titleIdentity = (records: ThreadRecords['Service'], id: string) =>
 
 const setup = Effect.fnUntraced(function* () {
   const catalog = yield* (yield* ProviderRegistry).catalog;
+  const adapters = yield* makeHarnessAdapters;
   const lifetime = graphFixture();
   const demo = yield* Effect.map(
     Effect.acquireRelease(lifetime.openEffect(), () => Effect.orDie(lifetime.releaseEffect)),
@@ -38,6 +41,7 @@ const setup = Effect.fnUntraced(function* () {
   const raise = Effect.fnUntraced(function* (
     options: { readonly autoAdopt?: boolean; readonly sessionKey?: string | null; readonly name?: 'cursor' | 'devin' } = {},
   ) {
+    const harness = builtinHarness(options.name ?? 'cursor');
     const records = yield* Effect.provide(makeThreadRecords, demo.context);
     const { store, threads } = yield* Effect.provide(
       threadStack({ db: demo.graph.store.db, units: demo.graph.units, records, kinds: ENTRY_KINDS }),
@@ -77,7 +81,7 @@ const setup = Effect.fnUntraced(function* () {
             harness: {
               facet: {
                 name: options.name ?? 'cursor',
-                presentation: harnessPresentation(options.name ?? 'cursor'),
+                presentation: harnessPresentation(harness),
                 sessionKey: options.sessionKey === undefined ? ROOT : options.sessionKey,
                 execution: null,
                 observation: unmeasuredObservation(),
@@ -90,7 +94,7 @@ const setup = Effect.fnUntraced(function* () {
         return row.id;
       }),
     );
-    yield* facets.open(threadId, '', 'owner', terminalArgv(catalog.models, ''));
+    yield* facets.open(threadId, '', 'owner', terminalArgv(adapters, catalog.models, ''));
     yield* facets.change(threadId, (facet) =>
       Effect.succeed({
         facet: {
@@ -104,17 +108,21 @@ const setup = Effect.fnUntraced(function* () {
     const accept = Effect.fnUntraced(function* (minute: number, over: Partial<HarnessEvent> = {}) {
       const facet = yield* facets.read(threadId);
       return yield* facets.change(threadId, (standing) => {
-        const admitted = observations.admit(standing, {
-          occasion: 'session-start',
-          observedAt: at(minute),
-          sessionId: facet?.session?.id ?? null,
-          rootKey: ROOT,
-          turnId: null,
-          receipt: null,
-          atRevision: null,
-          model: { _tag: 'NotRead' },
-          ...over,
-        });
+        const admitted = observations.admit(
+          standing,
+          {
+            occasion: 'session-start',
+            observedAt: at(minute),
+            sessionId: facet?.session?.id ?? null,
+            rootKey: ROOT,
+            turnId: null,
+            receipt: null,
+            atRevision: null,
+            model: { _tag: 'NotRead' },
+            ...over,
+          },
+          harness,
+        );
         return Effect.succeed({ facet: admitted.facet, value: admitted });
       });
     });
@@ -165,7 +173,7 @@ const setup = Effect.fnUntraced(function* () {
       order,
     };
   });
-  return { demo, raise, catalog };
+  return { demo, raise, catalog, adapters };
 });
 
 const at = (minute: number): string => new Date(Date.UTC(2026, 8, 13, 10, minute)).toISOString();
@@ -292,7 +300,7 @@ layer(Layer.effect(World, setup()).pipe(Layer.provide(builtinRegistry)), { exclu
           value: undefined,
         }),
       );
-      yield* world.facets.open(world.threadId, '', 'owner', terminalArgv((yield* World).catalog.models, ''));
+      yield* world.facets.open(world.threadId, '', 'owner', terminalArgv((yield* World).adapters, (yield* World).catalog.models, ''));
       yield* world.facets.change(world.threadId, (facet) =>
         Effect.succeed({
           facet: {

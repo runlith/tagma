@@ -7,6 +7,7 @@ import type { ProviderRegistry } from '../contract/service/registry.js';
 import type { AdapterInstallRefusal, AdapterInstalls } from '../contract/service/adapters.js';
 import { fetchInto, installDependencies, sourceOf } from './fetch.js';
 import { type AdapterInstall, RECORD_FILE, readInstalls, RecordUnreadable, writeInstalls } from './record.js';
+import { HARNESS_INDEX_FILE } from './harnessIndex.js';
 
 const STAGING = '.staging-';
 
@@ -152,7 +153,7 @@ export const makeMachineAdapters = (input: { readonly machine: string; readonly 
     }),
     sweep: Effect.fn('MachineAdapters.sweep')(function* () {
       const installs = yield* readInstalls(machine);
-      const kept = new Set([RECORD_FILE, ...installs.map((install) => install.directory)]);
+      const kept = new Set([RECORD_FILE, HARNESS_INDEX_FILE, ...installs.map((install) => install.directory)]);
       yield* Effect.tryPromise({
         try: async () => {
           for (const name of await names()) {

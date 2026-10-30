@@ -239,8 +239,16 @@ export const keyboardSession = Effect.fnUntraced(function* ({
     memory.files,
     Context.get(ports, ExecutionEndings),
     log ?? unrecorded,
+    base.adapters,
   );
-  const interrupts = new TerminalInterrupts(base.store, driver, base.watch, endings, yield* FiberMap.make<string, void, never>());
+  const interrupts = new TerminalInterrupts(
+    base.store,
+    driver,
+    base.watch,
+    endings,
+    yield* FiberMap.make<string, void, never>(),
+    base.adapters,
+  );
   const drafts = new ComposerDrafts(() => Effect.void);
   const runs = new TerminalRuns(
     base.store,
@@ -255,6 +263,7 @@ export const keyboardSession = Effect.fnUntraced(function* ({
     base.journal,
     yield* FiberMap.make<string, void, never>(),
     drafts,
+    base.adapters,
   );
   return { ...base, driver, interrupts, endings, words, runs, drafts, lanes, keyboard, execution };
 });

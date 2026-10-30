@@ -24,6 +24,7 @@ import { EnabledPlugins, type LoadedAgent, type PluginLoaded } from '../../../pl
 import { enabledPlugins } from '../../../plugins/testing/enabled.js';
 import { servedCapabilities } from '../native-harness/capabilities.js';
 import { harnessPresentation } from '../../../external-harnesses/contract/service/table.js';
+import { builtinHarness } from '../../../external-harnesses/testing/builtin.js';
 
 import { declaredAgents, PERSONAL_AGENTS_DIRECTORY, PROJECT_AGENTS_DIRECTORY } from '../../../threads/testing/doubles.js';
 
@@ -331,7 +332,7 @@ it.live(
     const stand = yield* world([
       {
         harness: 'devin',
-        presentation: harnessPresentation('devin'),
+        presentation: harnessPresentation(builtinHarness('devin')),
         binary: '/usr/local/bin/devin',
         version: 'devin 1.4.0',
         unreadable: null,
@@ -341,7 +342,7 @@ it.live(
       },
       {
         harness: 'gemini',
-        presentation: harnessPresentation('gemini'),
+        presentation: harnessPresentation(builtinHarness('gemini')),
         binary: null,
         version: null,
         unreadable: null,
@@ -351,7 +352,7 @@ it.live(
       },
       {
         harness: 'grok',
-        presentation: harnessPresentation('grok'),
+        presentation: harnessPresentation(builtinHarness('grok')),
         binary: '/usr/local/bin/grok',
         version: null,
         unreadable: '--version exited 1',
@@ -391,7 +392,7 @@ it.live(
     const stand = yield* world([
       {
         harness: 'gemini',
-        presentation: harnessPresentation('gemini'),
+        presentation: harnessPresentation(builtinHarness('gemini')),
         binary: null,
         version: null,
         unreadable: null,

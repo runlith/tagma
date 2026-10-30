@@ -8,7 +8,9 @@ import { threadCallFailed } from '../../threads/contract/service/failure.js';
 import type { HarnessSeat } from '../../threads/contract/wire/harness/seat.js';
 import { harnessFacet } from '../../threads/contract/wire/harness/types.js';
 import { acpKernel } from '../birth/seat.js';
-import { harnessAdapter, harnessPresentation } from '../contract/service/table.js';
+import { harnessPresentation } from '../contract/service/table.js';
+import type { HarnessAdapters } from '../contract/service/adapters.js';
+import type { ExternalSession } from '../../threads/contract/wire/harness/externalSession.js';
 import type { ProtocolRows } from '../store/protocol.js';
 import type { HarnessSessionStore } from '../store/sessions.js';
 import type { VendorTurns } from '../store/turns.js';
@@ -32,7 +34,12 @@ export class ProtocolHistory {
     private readonly turns: VendorTurns,
     private readonly guidance: LaunchGuidance,
     private readonly journal: JournalRuns,
+    private readonly adapters: HarnessAdapters['Service'],
   ) {}
+
+  private rowOf(facet: ExternalSession) {
+    return this.adapters.row(facet.name, facet.presentation.install);
+  }
 
   readonly transport: TransportHistory = {
     restore: (threadId, runIds) => bordered(this.restore(threadId, runIds)),
@@ -45,10 +52,11 @@ export class ProtocolHistory {
     const { store } = this;
     const facet = yield* store.readIn(source, unit);
     if (facet === null) return yield* refused('The source conversation has no session to fork.');
+    const adapter = yield* this.rowOf(facet);
     const binding = yield* store.binding(source, unit);
     const seat: HarnessSeat = {
-      facet: harnessFacet(facet.name, harnessPresentation(facet.name)),
-      kernel: acpKernel(facet.name, binding?.agent ?? null, yield* store.asked(source, unit), {}),
+      facet: harnessFacet(facet.name, harnessPresentation(adapter)),
+      kernel: acpKernel(adapter, binding?.agent ?? null, yield* store.asked(source, unit), {}),
     };
     return seat;
   });
@@ -63,7 +71,7 @@ export class ProtocolHistory {
   ) {
     const { store, rows, turns, journal } = this;
     const facet = yield* store.readIn(source, unit);
-    const profile = facet === null ? undefined : harnessAdapter(facet.name).acp;
+    const profile = facet === null ? undefined : (yield* this.rowOf(facet)).acp;
     if (facet === null || profile?.proves.fork !== true) return yield* refused('This harness does not fork its conversation.');
     const reachable = facet.session?.account === undefined || facet.session.account.key === account;
     const before = cut.kind === 'before' ? yield* turns.turn(source, cut.runId, unit) : undefined;
@@ -134,7 +142,7 @@ export class ProtocolHistory {
   readonly reset = Effect.fnUntraced(function* (this: ProtocolHistory, threadId: string) {
     const { store, rows, turns, attendance, guidance } = this;
     const facet = yield* store.read(threadId);
-    if (facet === null || harnessAdapter(facet.name).acp?.proves.rewind !== true)
+    if (facet === null || (yield* this.rowOf(facet)).acp?.proves.rewind !== true)
       return yield* refused('This harness does not restore its conversation.');
     const row = yield* rows.load(threadId);
     if (row === null) return;

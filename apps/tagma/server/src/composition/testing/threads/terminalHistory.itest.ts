@@ -7,6 +7,7 @@ import { sql } from 'drizzle-orm';
 import { Context, Effect, FileSystem, Layer } from 'effect';
 import { Settings } from '../../../settings/contract/service/values.js';
 import { harnessRoot } from '../../../external-harnesses/contract/service/table.js';
+import { builtinHarness } from '../../../external-harnesses/testing/builtin.js';
 import { OPERATOR_PRINCIPAL } from '../../../platform/contract/wire/actor.js';
 import { HarnessReports } from '../../../external-harnesses/contract/service/reports.js';
 import { VendorTurns } from '../../../external-harnesses/testing/doubles.js';
@@ -96,7 +97,7 @@ const grokSpoken = Effect.fnUntraced(function* (name: string, words: readonly st
   yield* op('restart_thread', { threadId: fake.cli.threadId });
   yield* booted(fake, 1);
   const source = (yield* fake.cli.facet())!;
-  const root = harnessRoot('grok', source.session!.argv)!;
+  const root = harnessRoot(builtinHarness('grok'), source.session!.argv)!;
   const session = source.session!.id;
   yield* fake.cli.hook('SessionStart', { session_id: root, source: 'startup', transcript_path: fake.transcript }, { session });
   const runs: string[] = [];
@@ -387,7 +388,7 @@ describe.skipIf(!existsSync(LIBRARY))('terminal history', () => {
           yield* op('restart_thread', { threadId: fake.cli.threadId });
           yield* booted(fake, 1);
           const source = (yield* fake.cli.facet())!;
-          const root = harnessRoot('codex', source.session!.argv)!;
+          const root = harnessRoot(builtinHarness('codex'), source.session!.argv)!;
           const ids = forkRpc.wholeRead.thread.turns.map((turn) => turn.id).slice(0, 2);
           const runs: string[] = [];
           for (const [n, id] of ids.entries()) {
@@ -434,7 +435,7 @@ describe.skipIf(!existsSync(LIBRARY))('terminal history', () => {
           yield* op('restart_thread', { threadId: fake.cli.threadId });
           yield* booted(fake, 1);
           const source = (yield* fake.cli.facet())!;
-          const root = harnessRoot('codex', source.session!.argv)!;
+          const root = harnessRoot(builtinHarness('codex'), source.session!.argv)!;
           const at = (turn: string) => ({ session_id: root, turn_id: turn, transcript_path: fake.transcript });
           const limitedTurn = Effect.fnUntraced(function* (turn: string) {
             yield* fake.record({ type: 'event_msg', payload: { type: 'task_started', turn_id: turn } });

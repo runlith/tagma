@@ -109,6 +109,8 @@ import { accountCliLayer } from '../external-harnesses/accounts/cli.js';
 import { askProgramsLayer } from '../external-harnesses/programs/asks.js';
 import { AccountCli } from '../providers/contract/service/cli.js';
 import { installedHarnessesLayer } from '../external-harnesses/birth/installed.js';
+import { harnessAdaptersLayer } from '../external-harnesses/adapters.js';
+import type { HarnessAdapters } from '../external-harnesses/contract/service/adapters.js';
 import { UserEnvironment } from '../installation/contract/service/userEnvironment.js';
 import type { InstalledHarnesses } from '../threads/contract/service/harness.js';
 import { makeUserEnvironment } from '../installation/process/userEnvironment.js';
@@ -244,7 +246,8 @@ export type ServerRuntime = {
     | ExecutionServices
     | AwakePolicy
     | InspectionsInstalled
-    | InstalledHarnesses,
+    | InstalledHarnesses
+    | HarnessAdapters,
     never
   >;
   graph: Context.Context<GraphServices | GraphStore | GraphUnits | MachineStore | MachineUnits>;
@@ -524,6 +527,7 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
       ),
     ),
     Layer.provide(BunFileSystem.layer),
+    Layer.provideMerge(harnessAdaptersLayer),
   );
   const accountCli =
     options.accountCli === undefined

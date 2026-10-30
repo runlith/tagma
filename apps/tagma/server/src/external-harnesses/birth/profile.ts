@@ -2,21 +2,20 @@ import { Effect, type FileSystem, Schema } from 'effect';
 import type { StoreFailure } from '../../platform/contract/service/store.js';
 import { GateRefusal } from '../../platform/contract/wire/refusal.js';
 import type { Settings } from '../../settings/contract/service/values.js';
-import type { HarnessName } from '../../threads/contract/wire/harness/names.js';
-import { harnessAdapter } from '../contract/service/table.js';
+import type { HarnessAdapter } from '../contract/service/adapter.js';
 import { harnessProfile, type HarnessProfile } from '../settings.js';
 import type { HarnessTransportOffer } from '../contract/service/table.js';
 
-export const homeVariable = (name: HarnessName): string | null => harnessAdapter(name).hooks?.user?.homeEnv ?? null;
+export const homeVariable = (adapter: HarnessAdapter): string | null => adapter.hooks?.user?.homeEnv ?? null;
 
 export const profileOf = (
-  name: HarnessName,
+  adapter: HarnessAdapter,
   asked: HarnessProfile | undefined,
   offer: HarnessTransportOffer,
 ): Effect.Effect<HarnessProfile, GateRefusal> => {
   if (asked === undefined || (asked.home === undefined && asked.plain !== true && asked.permissionMode === undefined))
     return Effect.succeed({});
-  const adapter = harnessAdapter(name);
+  const name = adapter.harness;
   if (offer.transport !== 'terminal') {
     return new GateRefusal(
       'profile-transport',
@@ -24,7 +23,7 @@ export const profileOf = (
       [`set threads.harnessTransport.${name} to terminal`, `clear threads.harnessProfile.${name}`],
     );
   }
-  if (asked.home !== undefined && homeVariable(name) === null) {
+  if (asked.home !== undefined && homeVariable(adapter) === null) {
     return new GateRefusal('profile-unsupported', `${adapter.label} names no configuration folder Tagma can launch it with.`, [
       `clear threads.harnessProfile.${name}.home`,
     ]);
@@ -60,8 +59,8 @@ export const profileOf = (
 
 const setupRecord = Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Record(Schema.String, Schema.Unknown)));
 
-export const homeSetUp = Effect.fnUntraced(function* (files: FileSystem.FileSystem, name: HarnessName, profile: HarnessProfile) {
-  const adapter = harnessAdapter(name);
+export const homeSetUp = Effect.fnUntraced(function* (files: FileSystem.FileSystem, adapter: HarnessAdapter, profile: HarnessProfile) {
+  const name = adapter.harness;
   const setup = adapter.setup;
   if (profile.home === undefined || setup === undefined) return;
   const path = `${profile.home}/${setup.file}`;
@@ -78,17 +77,14 @@ export const homeSetUp = Effect.fnUntraced(function* (files: FileSystem.FileSyst
   return yield* new GateRefusal(
     'profile-home-setup',
     `${adapter.label} has not finished its first-run setup in ${profile.home}: its theme and login screens would stand in the thread's terminal before the task.`,
-    [`run ${adapter.binary} once with ${homeVariable(name) ?? 'its configuration folder'}=${profile.home}, finish its setup and log in`],
+    [`run ${adapter.binary} once with ${homeVariable(adapter) ?? 'its configuration folder'}=${profile.home}, finish its setup and log in`],
   );
 });
 
 export const birthProfile = (
   settings: Settings['Service'],
-  name: HarnessName,
+  adapter: HarnessAdapter,
   projectId: number,
   offer: HarnessTransportOffer,
 ): Effect.Effect<HarnessProfile, GateRefusal | StoreFailure> =>
-  Effect.flatMap(settings.value(harnessProfile, projectId), (asked) => {
-    const profiles: Partial<Record<HarnessName, HarnessProfile>> = asked;
-    return profileOf(name, profiles[name], offer);
-  });
+  Effect.flatMap(settings.value(harnessProfile, projectId), (asked) => profileOf(adapter, asked[adapter.harness], offer));

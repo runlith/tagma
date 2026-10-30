@@ -3,6 +3,7 @@ import type { Approval, PermissionKind } from '@runlith/agent/permissions';
 import type { TransportFailure } from '@runlith/agent/transcript/entries';
 import type { TransportCapabilities, TransportWeb } from '@runlith/agent/thread/record';
 import type { ModelSwitches } from '@runlith/llm/models/description';
+import type { HookCodec } from './hook';
 import type { MetadataReader } from './metadata';
 
 export const HARNESS_ID_MAX = 200;
@@ -49,9 +50,6 @@ export type HarnessCall = typeof harnessCallSchema.Type;
 export const MCP_TOOL_SHAPES = ['catalog', 'proxy'] as const;
 export type McpToolShape = (typeof MCP_TOOL_SHAPES)[number];
 
-export const HOOK_FORMATS = ['claude-code', 'cursor', 'codex', 'gemini', 'devin'] as const;
-export type HookFormat = (typeof HOOK_FORMATS)[number];
-
 export type HookEvents = {
   readonly sessionStart: string | null;
   readonly preWrite: string | null;
@@ -80,7 +78,7 @@ export const UNMEASURED_HOOK_CONTEXT: HookContextLimit = { chars: HOOK_CONTEXT_C
 export type HookSurface = {
   readonly file: string;
   readonly assets?: readonly HookAsset[];
-  readonly format: HookFormat;
+  readonly codec: HookCodec;
   readonly events: HookEvents;
   readonly user: HookUserFile | null;
   readonly context: HookContextLimit;

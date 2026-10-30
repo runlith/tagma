@@ -4,7 +4,9 @@ import type { HarnessFailure } from '../../threads/contract/service/failure.js';
 import type { HarnessAskedModel } from '../../threads/contract/wire/harness/askedModel.js';
 import type { ExternalSession } from '../../threads/contract/wire/harness/externalSession.js';
 import type { HarnessName } from '../../threads/contract/wire/harness/names.js';
-import { harnessAdapter } from '../contract/service/table.js';
+import { transportOf } from '../contract/service/table.js';
+import type { HarnessAdapter } from '../contract/service/adapter.js';
+import type { HarnessAdapters } from '../contract/service/adapters.js';
 import type { ProtocolRows } from '../store/protocol.js';
 import type { HarnessSessionStore } from '../store/sessions.js';
 import type { AcpProfile } from '@runlith/tagma/adapter/harness';
@@ -18,6 +20,7 @@ export type Link = {
   readonly threadId: string;
   readonly sessionId: string;
   readonly name: HarnessName;
+  readonly adapter: HarnessAdapter;
   readonly profile: AcpProfile;
   readonly lock: Semaphore.Semaphore;
   readonly writer: ProtocolWriter;
@@ -41,11 +44,12 @@ export class LinkEnded extends Data.TaggedError('LinkEnded')<{ readonly refusal:
 
 export class WaitExpired extends Data.TaggedError('WaitExpired')<{ readonly threadId: string }> {}
 
-export const profileOf = (name: HarnessName): AcpProfile => {
-  const profile = harnessAdapter(name).acp;
-  if (profile === undefined) throw new Error(`${name} carries no ACP profile, so no thread of it runs on acp.`);
-  return profile;
-};
+export type Linked = { readonly adapter: HarnessAdapter; readonly profile: AcpProfile };
+
+export const linkedOf = (adapters: HarnessAdapters['Service'], facet: ExternalSession): Effect.Effect<Linked, HarnessFailure> =>
+  Effect.flatMap(adapters.row(facet.name, facet.presentation.install), (adapter) =>
+    Effect.map(transportOf(adapter, 'acp'), ({ profile }) => ({ adapter, profile })),
+  );
 
 export const facetOf = (store: HarnessSessionStore, threadId: string): Effect.Effect<ExternalSession, HarnessFailure> =>
   Effect.flatMap(store.read(threadId), (facet): Effect.Effect<ExternalSession, HarnessFailure> =>

@@ -59,6 +59,8 @@ const cli = (claudeSignedIn: boolean): AccountCli['Service'] => ({
 
 const hosting = HarnessRegistry.of({
   register: () => Effect.die('choosing a default model registers no harness'),
+  replace: () => Effect.die('choosing a default model replaces no harness'),
+  withdraw: () => Effect.die('choosing a default model withdraws no harness'),
   resolve: () => Effect.die('choosing a default model resolves no harness'),
   list: () => [],
   writes: (base) => base,

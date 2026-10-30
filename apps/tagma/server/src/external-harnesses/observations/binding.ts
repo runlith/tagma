@@ -1,4 +1,5 @@
 import { harnessRoot } from '../contract/service/table.js';
+import type { HarnessAdapter } from '../contract/service/adapter.js';
 import type { ExternalSession } from '../../threads/contract/wire/harness/externalSession.js';
 import {
   harnessBindingSchema,
@@ -24,6 +25,7 @@ export type Landed = {
 };
 
 export const rootOf = (
+  adapter: HarnessAdapter,
   facet: ExternalSession,
   base: HarnessObservation,
   event: HarnessEvent,
@@ -33,11 +35,12 @@ export const rootOf = (
   const bound = base.binding.rootKey;
   if (bound !== null) return bound === event.rootKey ? 'proven' : 'foreign';
   if (!proven) return 'unproven';
-  const expected = facet.session?.cut?.into ?? harnessRoot(facet.name, facet.session?.argv ?? null);
+  const expected = facet.session?.cut?.into ?? harnessRoot(adapter, facet.session?.argv ?? null);
   return expected === null ? 'unproven' : expected === event.rootKey ? 'binding' : 'foreign';
 };
 
 export const workBound = (
+  adapter: HarnessAdapter,
   facet: ExternalSession,
   base: HarnessObservation,
   event: HarnessEvent,
@@ -49,7 +52,7 @@ export const workBound = (
   const bound = base.binding.workKey;
   if (bound !== undefined) return bound === event.rootKey ? 'proven' : 'foreign';
   if (!proven || event.occasion !== 'session-start') return 'unproven';
-  return harnessRoot(facet.name, facet.session?.argv ?? null) === null ? 'binding' : 'unproven';
+  return harnessRoot(adapter, facet.session?.argv ?? null) === null ? 'binding' : 'unproven';
 };
 
 export const sourceOf = (field: HarnessField): HarnessProvenance | null =>

@@ -10,7 +10,7 @@ import { ALLOW_ONCE, DENY, PERMISSION_OPTIONS } from '../../threads/contract/wir
 import { sameScreenAsk } from '../adapter/screenAsk.js';
 import type { HarnessCall, HarnessQuestionOption, HarnessWidgetKey, ScreenAsk } from '@runlith/tagma/adapter/harness';
 import type { HarnessJudging } from '../contract/service/permissions.js';
-import type { HarnessName } from '../../threads/contract/wire/harness/names.js';
+import type { HarnessAdapter } from '../contract/service/adapter.js';
 import { PERMISSION_TIMEOUT_SECONDS, type HarnessDecision, type HarnessAnswer } from '../contract/wire/call.js';
 import { AskRoutes, widgetAsksAbout, type AskRoute } from './routes.js';
 
@@ -140,7 +140,7 @@ export class TerminalAsks {
 
   constructor(
     private readonly judging: HarnessJudging,
-    private readonly named: (threadId: string) => Effect.Effect<HarnessName | null, HarnessFailure>,
+    private readonly harnessOf: (threadId: string) => Effect.Effect<HarnessAdapter | null, HarnessFailure>,
     private readonly ledger: AskLedger,
     private readonly faces: AskFaces,
     private readonly redeliver: Redelivery,
@@ -179,8 +179,8 @@ export class TerminalAsks {
       this.routes.opened(threadId, run.id, questionId, until);
       return { _tag: 'Asked', requestId: questionId } as const;
     }
-    const name = yield* this.named(threadId);
-    if (name === null) return { _tag: 'Unspoken' } as const;
+    const adapter = yield* this.harnessOf(threadId);
+    if (adapter === null) return { _tag: 'Unspoken' } as const;
     const data: AskData = {
       ruleId: verdict.ruleId,
       callId: call.id,
@@ -193,7 +193,7 @@ export class TerminalAsks {
     const entry = askEntry(
       run.id,
       questionId,
-      capped(this.judging.prompt(name, call), 1000),
+      capped(this.judging.prompt(adapter, call), 1000),
       reason === '' ? null : capped(reason, 400),
       PERMISSION_OPTIONS,
       data,

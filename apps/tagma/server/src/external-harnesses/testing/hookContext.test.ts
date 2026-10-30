@@ -7,6 +7,7 @@ import { GRANT_VARIABLE } from '../../platform/contract/service/credentials.js';
 import { CurrentInvocation, Invocation } from '../../platform/cli/verb.js';
 import type { TouchBrief } from '../../graph/contract/service/orientation.js';
 import { hookEventOf } from '../hooks/dispatch.js';
+import { builtinRows } from './hookRows.js';
 import { hookConnectOver } from '../hooks/door.js';
 
 describe('post-tool context', () => {
@@ -62,7 +63,7 @@ describe('post-tool context', () => {
             ]).stream(),
           'hook',
         );
-        yield* hookEventOf('post-tool-use', at, connect, null).pipe(Effect.provideService(CurrentInvocation, at));
+        yield* hookEventOf('post-tool-use', at, connect, builtinRows(null)!).pipe(Effect.provideService(CurrentInvocation, at));
       }
       expect((yield* TestConsole.logLines).map((line) => JSON.parse(String(line)))).toEqual([
         { additional_context: text },
@@ -142,7 +143,7 @@ describe('post-tool context', () => {
             ]).stream(),
           'hook',
         );
-        yield* hookEventOf('post-tool-use', at, connect, 'claude-code').pipe(Effect.provideService(CurrentInvocation, at));
+        yield* hookEventOf('post-tool-use', at, connect, builtinRows('claude-code')!).pipe(Effect.provideService(CurrentInvocation, at));
       }
       const found = (...names: string[]) => names.map((name) => ({ path: `${root}/src/${name}`, as: 'found' }));
       expect(asked).toEqual([found('gate.ts', 'peer.ts'), found('gate.ts', 'peer.ts'), found('gate.ts'), found('peer.ts')]);
@@ -216,7 +217,7 @@ describe('post-tool context', () => {
             ]).stream(),
           'hook',
         );
-        yield* hookEventOf('post-tool-use', at, connect, 'codex').pipe(Effect.provideService(CurrentInvocation, at));
+        yield* hookEventOf('post-tool-use', at, connect, builtinRows('codex')!).pipe(Effect.provideService(CurrentInvocation, at));
       }
       expect(asked).toEqual([[{ path: `${root}/docs/notes.txt`, as: 'read' }], [{ path: `${root}/docs/other.md`, as: 'found' }]]);
       expect((yield* TestConsole.logLines).slice(-calls.length).map((line) => JSON.parse(String(line)))).toEqual(

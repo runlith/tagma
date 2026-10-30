@@ -6,7 +6,7 @@ import type { ThreadRunRef } from '@runlith/agent/thread/run/ThreadRunLedger';
 import type { AdapterReports, MeasuredRequest, ReportPlan, RunEnding } from '@runlith/agent/thread/run/lifecycle/RunReports';
 import type { Environments } from '../../workspace/contract/service/environments.js';
 import type { ExternalSession } from '../../threads/contract/wire/harness/externalSession.js';
-import { harnessAdapter } from '../contract/service/table.js';
+import type { HarnessAdapters } from '../contract/service/adapters.js';
 import { inputOf } from '../metadata/harnessMetadata.js';
 import type { TranscriptRequest } from '@runlith/tagma/adapter/metadata';
 import { readHarnessTranscript, transcriptUsage, type HarnessReading } from '../metadata/words.js';
@@ -29,13 +29,14 @@ export class TerminalClosing {
     private readonly access: Environments['Service'],
     private readonly models: Effect.Effect<ModelCatalog>,
     private readonly reports: AdapterReports,
+    private readonly adapters: HarnessAdapters['Service'],
   ) {}
 
   readonly spent = Effect.fnUntraced(function* (this: TerminalClosing, threadId: string, facet: ExternalSession) {
     const turn = facet.turn;
     const input = inputOf(facet);
-    const adapter = harnessAdapter(facet.name);
-    if (turn === undefined || input === null || !transcriptUsage(adapter)) return null;
+    const adapter = this.adapters.find(facet.name);
+    if (turn === undefined || input === null || adapter === null || !transcriptUsage(adapter)) return null;
     const read = yield* Effect.result(readHarnessTranscript(this.access, input, adapter, turn.offset ?? 0));
     if (read._tag === 'Failure' || !read.success.complete) {
       yield* Effect.logWarning('the transcript of an ended terminal turn was not read whole; its run records no requests', {
@@ -65,7 +66,7 @@ export class TerminalClosing {
       .reduce<Usage | undefined>((total, request) => sumUsage(total, request.usage), undefined);
     if (main.length === 0) return { run: turn.run, requests: [], rest } satisfies TurnSpend;
     const models = yield* this.models;
-    const provider = harnessAdapter(facet.name).launch?.model?.provider ?? null;
+    const provider = facet.presentation.modelProvider;
     const now = yield* Clock.currentTimeMillis;
     const readingOf = (request: TranscriptRequest): ThreadContextReading => {
       const option = catalogued(models, provider, request.model);

@@ -48,7 +48,7 @@ const callKey = (meta: Readonly<Record<string, unknown>>, harness: BridgedHarnes
   metaText(meta, CALL_META) ?? metaText(meta, harness.mcpCallMeta) ?? JSON.stringify([bridge, requestId]);
 
 const performed = (
-  { ask, baseUrl }: Pick<OperationsCli<string, string>, 'ask' | 'baseUrl'>,
+  { ask, baseUrl }: Pick<OperationsCli<string>, 'ask' | 'baseUrl'>,
   at: Invocation,
   name: string,
   input: unknown,
@@ -91,17 +91,35 @@ const performed = (
   );
 };
 
-export const mcpServe = <Id extends string, Harness extends string>(cli: OperationsCli<Id, Harness>) => {
-  const harness = Flag.Literals('harness', cli.harnesses).pipe(
-    Flag.withMetavar(cli.harnesses.join('|')),
-    Flag.withDescription('the CLI whose configuration this declaration was written into'),
+export const mcpServe = <Id extends string>(cli: OperationsCli<Id>) => {
+  const harness = Flag.String('harness').pipe(
+    Flag.withMetavar('id'),
+    Flag.withDescription('the installed harness whose configuration this declaration was written into'),
   );
   const catalog = mcpCatalog(cli);
   return Command.make('mcp-serve', { harness }, (options) =>
     Effect.flatMap(
       CurrentInvocation,
       Effect.fnUntraced(function* (at: Invocation) {
-        const row = cli.harness(options.harness);
+        const row = yield* cli
+          .harness(options.harness, at)
+          .pipe(
+            Effect.catchTag('HarnessUnreadable', (unreadable) =>
+              Effect.sync(() =>
+                refuse('harness-unreadable', unreadable.message, ['read_adapters — whether the adapter package still loads']),
+              ),
+            ),
+          );
+        if (row === null) {
+          return refuse(
+            'harness-not-installed',
+            `no builtin harness and no adapter installed on this machine declares ${options.harness}`,
+            [
+              'install_adapter — install the package that declares it',
+              'tagma upgrade — rewrite declarations written for a harness since removed',
+            ],
+          );
+        }
         const key = (row.variable === undefined ? undefined : at.env[row.variable]?.trim()) || at.env[MCP_KEY_VARIABLE]?.trim();
         if (!key) {
           return refuse(

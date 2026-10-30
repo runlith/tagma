@@ -5,7 +5,7 @@ import { Coverage } from '../../../workspace/contract/service/roots.js';
 import { ThreadHarness } from '../../../threads/contract/service/engine.js';
 import { birthsOf } from '../../../threads/testing/doubles.js';
 import { WORLD_COMMAND } from '../../../installation/contract/wire/layout.js';
-import { HARNESSES } from '../../../external-harnesses/contract/service/table.js';
+import { BUILTIN_HARNESSES } from '../../../external-harnesses/vendors/builtin.js';
 import { fixtureHome } from '../../../platform/testing/roots.js';
 import { makeDoorWorld, type DoorFixture } from '../doorFixture.js';
 import { hostedChild } from './hostedChild.js';
@@ -26,7 +26,7 @@ type Input<E, R> = {
 const makeProtocolWorld = Effect.fn('testing.protocolWorld')(function* <E, R>({ name, own, vendorWire, models, prepare }: Input<E, R>) {
   const files = yield* FileSystem.FileSystem;
   const installation = yield* files.makeTempDirectoryScoped({ directory: fixtureHome(), prefix: `${name}-runner-` });
-  for (const program of [WORLD_COMMAND, ...HARNESSES.map(({ binary }) => binary)].filter((program) => !isAbsolute(program))) {
+  for (const program of [WORLD_COMMAND, ...BUILTIN_HARNESSES.map(({ binary }) => binary)].filter((program) => !isAbsolute(program))) {
     yield* files.writeFileString(join(installation, program), '#!/bin/sh\nprintf "fixture\\n"\n', { mode: 0o755 });
   }
   const stood = process.env.PATH;

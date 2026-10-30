@@ -20,7 +20,8 @@ import type { SessionLookupStore } from '../../threads/store/sessionLookups.js';
 import type { HarnessAdapter } from '../contract/service/adapter.js';
 import type { HarnessPermissions } from '../contract/service/permissions.js';
 import type { SessionThreads } from '../contract/service/sessionThreads.js';
-import { harnessAdapter, harnessOccasion, harnessReport } from '../contract/service/table.js';
+import { harnessReport } from '../contract/service/table.js';
+import type { HarnessAdapters } from '../contract/service/adapters.js';
 import type { SessionObservations } from '../contract/service/observations.js';
 import type { HarnessSessionStore } from '../store/sessions.js';
 import { assistantWords, callOpened, callSettled, userWords } from './entries.js';
@@ -83,6 +84,7 @@ export class TerminalEvents {
     private readonly restarted: (threadId: string, turn: string) => Effect.Effect<void>,
     private readonly commands: TerminalCommands,
     private readonly alignment: SessionAlignment,
+    private readonly adapters: HarnessAdapters['Service'],
   ) {
     this.writes = writes('TerminalEvents.reported', [], journal.writes, alignment.writes);
   }
@@ -123,7 +125,7 @@ export class TerminalEvents {
         'post the original hook capture time from the execution host',
       ]);
     }
-    const adapter = harnessAdapter(born.name);
+    const adapter = yield* this.adapters.row(born.name, born.presentation.install);
     const hook = reported.event ?? {};
     const raw: Record<string, unknown> = { ...hook };
     const read = harnessReport(adapter, raw);
@@ -131,7 +133,7 @@ export class TerminalEvents {
     const occasion =
       named === undefined
         ? (reported.occasion ?? 'self-description')
-        : harnessOccasion(born.name, { name: named, tool: hook.tool_name ?? hook.toolName, notification: hook.notification_type });
+        : adapter.occasionOf({ name: named, tool: hook.tool_name ?? hook.toolName, notification: hook.notification_type });
     const sessionKey = reported.sessionKey ?? read.sessionKey;
     const turnId = reported.turn ?? (read.turnId === sessionKey ? null : read.turnId);
     const scope = { rootKey: sessionKey, turnId };
@@ -196,7 +198,7 @@ export class TerminalEvents {
     seen: Seen,
     reset: Effect.Success<ReturnType<HarnessGuidance['Service']['cleared']>> | null,
   ): Effect.fn.Return<{ facet: ExternalSession; value: { receipt: HarnessReceipt; after: Effect.Effect<void> } }, HarnessFailure> {
-    const admitted = this.observations.admit(facet, seen.event);
+    const admitted = this.observations.admit(facet, seen.event, seen.adapter);
     if (admitted.receipt.outcome === 'refused' || admitted.receipt.outcome === 'duplicate') {
       return { facet: admitted.facet, value: { receipt: admitted.receipt, after: Effect.void } };
     }

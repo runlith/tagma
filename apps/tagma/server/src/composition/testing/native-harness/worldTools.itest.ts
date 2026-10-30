@@ -14,7 +14,7 @@ import { CheckoutFlights } from '@runlith/agent-tools/CheckoutFlights';
 import { landedOf } from '@runlith/agent-tools/WorkspaceChanges';
 import { GRANT_VARIABLE } from '../../../platform/contract/service/credentials.js';
 import { testGrantSigner, threadOfGrant } from '../../../platform/testing/grants.js';
-import { HARNESSES } from '../../../external-harnesses/contract/service/table.js';
+import { BUILTIN_HARNESSES } from '../../../external-harnesses/vendors/builtin.js';
 import { checkoutWorld, makeMachineWorld } from '../../../executions/testing/doubles.js';
 import type { ThreadWorld } from '../../../executions/contract/service/worlds.js';
 import { asThreadContext, worldTools } from '../../../native-harness/testing/doubles.js';
@@ -118,7 +118,7 @@ layer(BunFileSystem.layer, { excludeTestServices: true })('world tools', (it) =>
       const files = yield* FileSystem.FileSystem;
       const root = yield* files.makeTempDirectoryScoped({ prefix: 'tagma-world-tools-' });
       const thread = '01a07000-0000-7000-8000-0000000000c1';
-      const inherited = HARNESSES.find((entry) => entry.variable !== undefined)?.variable;
+      const inherited = BUILTIN_HARNESSES.find((entry) => entry.variable !== undefined)?.variable;
       if (inherited === undefined) return yield* Effect.die('the harness catalog declares no environment variable');
       yield* environment(inherited, 'a-transcript-of-the-server');
       const bash = worldTools(context(thread, root), { web: false }).bash as Tool;

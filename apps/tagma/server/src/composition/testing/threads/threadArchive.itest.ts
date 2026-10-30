@@ -25,6 +25,8 @@ import { ENTRY_KINDS } from '../../manifest.js';
 import { ThreadRollouts } from '../../../threads/contract/service/rollouts.js';
 import { ModelChanges } from '../../../threads/contract/service/modelChanges.js';
 import { harnessPresentation } from '../../../external-harnesses/contract/service/table.js';
+import { builtinHarness } from '../../../external-harnesses/testing/builtin.js';
+import { makeHarnessAdapters } from '../../../external-harnesses/adapters.js';
 
 const fixture = doorFixture();
 const setup = Effect.gen(function* () {
@@ -41,6 +43,7 @@ const setup = Effect.gen(function* () {
   const selection = catalog.defaultModel;
   if (selection === null) return yield* Effect.die('The archive fixture serves no default model');
   const facets = yield* sessionStoreOver(db, units, parts.spells, records, Context.get(runtime.owners, ModelChanges), () => Effect.void);
+  const adapters = yield* makeHarnessAdapters;
   const made = new Set<string>();
   return {
     data: world.dataHome,
@@ -54,6 +57,7 @@ const setup = Effect.gen(function* () {
     parts,
     facets,
     models: catalog.models,
+    adapters,
     selection,
     made,
   };
@@ -98,7 +102,7 @@ const actor = (threadId: string, projectId: number) =>
   ({ kind: 'thread', threadId, projectId, principalId: 'owner-1', session: { harness: 'tagma', key: threadId } }) as const;
 const harnessChild = Effect.fn('testing.archivableHarnessChild')(function* (parentId: string, work: 'idle' | 'working', within?: number) {
   const world = yield* World;
-  const { runtime, units, store, parts, facets, records, models, made } = world;
+  const { runtime, units, store, parts, facets, records, models, adapters, made } = world;
   const projectId = within ?? world.projectId;
   const child = yield* units.write('threadArchive.child', (unit) =>
     Effect.gen(function* () {
@@ -110,12 +114,12 @@ const harnessChild = Effect.fn('testing.archivableHarnessChild')(function* (pare
           harness: {
             facet: {
               name: 'devin',
-              presentation: harnessPresentation('devin'),
+              presentation: harnessPresentation(builtinHarness('devin')),
               sessionKey: null,
               execution: null,
               observation: unmeasuredObservation(),
             },
-            kernel: terminalKernel('devin', undefined, false, {}),
+            kernel: terminalKernel(builtinHarness('devin'), undefined, false, {}),
           },
         },
         unit,
@@ -124,7 +128,7 @@ const harnessChild = Effect.fn('testing.archivableHarnessChild')(function* (pare
     }),
   );
   made.add(child);
-  yield* facets.open(child, '', 'a departed server', terminalArgv(models, ''));
+  yield* facets.open(child, '', 'a departed server', terminalArgv(adapters, models, ''));
   yield* Effect.addFinalizer(() =>
     facets
       .change(child, (facet) =>
@@ -565,7 +569,7 @@ layer(Layer.effect(World, setup).pipe(Layer.provide(fixture), Layer.provideMerge
 
     it.effect('a harness child at rest is put away in one act, and its CLI ends with it', () =>
       Effect.gen(function* () {
-        const { runtime, projectId, models } = yield* World;
+        const { runtime, projectId, models, adapters } = yield* World;
         const root = yield* born('parent of a resting CLI');
         const { child, facets } = yield* harnessChild(root, 'idle');
         yield* listOf(runtime.owners).setArchived(root, projectId, true);
@@ -573,7 +577,7 @@ layer(Layer.effect(World, setup).pipe(Layer.provide(fixture), Layer.provideMerge
         expect(yield* archivedAt(child)).toBe(yield* archivedAt(root));
         expect((yield* facets.read(child))?.session?.state).toBe('ended');
         yield* listOf(runtime.owners).setArchived(root, projectId, false);
-        yield* facets.open(child, '', 'a word after the thread came back', terminalArgv(models, ''));
+        yield* facets.open(child, '', 'a word after the thread came back', terminalArgv(adapters, models, ''));
         expect((yield* facets.read(child))?.session?.state).not.toBe('ended');
       }),
     );

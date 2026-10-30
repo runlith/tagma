@@ -1,7 +1,6 @@
 import { chmodSync, existsSync, mkdirSync, readFileSync, realpathSync, renameSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { HARNESSES } from '../contract/service/table.js';
 import type { HarnessName } from '../../threads/contract/wire/harness/names.js';
 import type { HarnessAdapter } from '../contract/service/adapter.js';
 import type { McpConfigFile, McpSurface } from '@runlith/tagma/adapter/harness';
@@ -426,9 +425,13 @@ export const declareForLaunch = async (
     : { ...written, ...(await approve(programmed(adapter, surface.approve(MCP_SERVER_NAME)), repoRoot)) };
 };
 
-export async function installMcpDeclarations(repoRoot: string, cli: readonly string[]): Promise<McpDeclarationWrite[]> {
+export async function installMcpDeclarations(
+  adapters: readonly HarnessAdapter[],
+  repoRoot: string,
+  cli: readonly string[],
+): Promise<McpDeclarationWrite[]> {
   const written: McpDeclarationWrite[] = [];
-  for (const adapter of HARNESSES) {
+  for (const adapter of adapters) {
     if (adapter.mcp === null || installedHere(adapter) === null) continue;
     written.push(await declareInto(repoRoot, adapter, adapter.mcp, cli));
   }

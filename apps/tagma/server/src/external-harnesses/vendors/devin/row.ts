@@ -1,4 +1,3 @@
-import { HARNESS_LABELS } from '../../../threads/contract/wire/harness/names.js';
 import { LEGACY_TOOLS } from '../tools.js';
 import type { TerminalHarnessAdapter } from '../../contract/service/adapter.js';
 import { devinReader } from './reader.js';
@@ -18,6 +17,7 @@ import { CLAUDE_EVENTS, claudeFiles, claudePrinted, claudeOccasion, claudeSubjec
 import { field, rootOfArgv, sessionIdOf, unreported } from '../../adapter/payload.js';
 import { oneValue } from '../../adapter/screenAsk.js';
 import { devinAcp } from './acp.js';
+import { devinCodec } from './codec.js';
 
 const FOOTER = '↑↓ select · ↵ confirm · esc cancel';
 const OPTION = /^(❭|·) (\d+) (.+)$/;
@@ -113,7 +113,7 @@ const devinWidgetKeys = (ask: ScreenAsk, value: string): readonly HarnessWidgetK
 export const devin: TerminalHarnessAdapter = {
   harness: 'devin',
   tools: LEGACY_TOOLS,
-  label: HARNESS_LABELS.devin,
+  label: 'Devin',
   prefix: 'dv',
   binary: 'devin',
   metadata: devinReader,
@@ -150,7 +150,7 @@ export const devin: TerminalHarnessAdapter = {
   },
   hooks: {
     file: '.devin/hooks.v1.json',
-    format: 'devin',
+    codec: devinCodec,
     events: { ...CLAUDE_EVENTS, toolFailure: undefined, stopFailure: undefined, notification: undefined },
     user: null,
     context: UNMEASURED_HOOK_CONTEXT,

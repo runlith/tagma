@@ -1,7 +1,6 @@
 import type { TerminalHarnessAdapter } from '../../contract/service/adapter.js';
 import { claudeReader } from './reader.js';
 import { ASKS_IN_REVIEW, ASKS_NEVER } from '../../../platform/contract/wire/conditions.js';
-import { HARNESS_LABELS } from '../../../threads/contract/wire/harness/names.js';
 
 import { CLAUDE_CODE_PROVIDER } from '@runlith/adapter-anthropic/models/anthropic';
 import { claudeCodeIcon } from '@runlith/adapter-anthropic/icon';
@@ -17,7 +16,7 @@ import {
 } from '@runlith/tagma/adapter/harness';
 import { claudeScreenAsk, claudeWidgetKeys } from './screen.js';
 import { claudeComposer, claudePromptScreen } from './composer.js';
-import { CLAUDE_EVENTS, claudeFiles, claudePrinted, claudeOccasion } from '../../adapter/claudeFormat.js';
+import { CLAUDE_EVENTS, claudeCodec, claudeFiles, claudePrinted, claudeOccasion } from '../../adapter/claudeFormat.js';
 import { field, namedCall, rootOfArgv, sessionIdOf, unreported } from '../../adapter/payload.js';
 import { claudeAcp } from './acp.js';
 import { claudeAddress, claudeCut } from './cut.js';
@@ -99,7 +98,7 @@ export const claudeCode: TerminalHarnessAdapter = {
       write: { kind: 'write', approval: ASKS_IN_REVIEW },
     },
   },
-  label: HARNESS_LABELS['claude-code'],
+  label: 'Claude Code',
   mark: claudeCodeIcon,
   prefix: 'cc',
   variable: SESSION_VARIABLES['claude-code'],
@@ -152,7 +151,7 @@ export const claudeCode: TerminalHarnessAdapter = {
   },
   hooks: {
     file: '.claude/settings.json',
-    format: 'claude-code',
+    codec: claudeCodec,
     events: CLAUDE_EVENTS,
     user: { folder: ['.claude'], file: 'settings.json', homeEnv: 'CLAUDE_CONFIG_DIR' },
     context: { chars: HOOK_CONTEXT_CHARS, basis: 'reported' },

@@ -1,4 +1,3 @@
-import { HARNESS_LABELS } from '../../../threads/contract/wire/harness/names.js';
 import { LEGACY_TOOLS } from '../tools.js';
 import type { TerminalHarnessAdapter } from '../../contract/service/adapter.js';
 
@@ -13,9 +12,11 @@ import {
   type HarnessWidgetKey,
   type HookOccasion,
 } from '@runlith/tagma/adapter/harness';
-import { rootOfArgv, sessionIdOf, tail, unasked, unfiled, unprinted, unreported, unturned } from '../../adapter/payload.js';
+import { rootOfArgv, sessionIdOf, tail, unasked, unprinted, unreported, unturned } from '../../adapter/payload.js';
+import { claudeFiles } from '../../adapter/claudeFormat.js';
 import { oneValue } from '../../adapter/screenAsk.js';
 import { GEMINI_MARK } from './mark.js';
+import { geminiCodec } from './codec.js';
 
 const GEMINI_SELECTED = /^● (\d+)\. (.+)$/;
 const GEMINI_UNSELECTED = /^  (\d+)\. (.+)$/;
@@ -85,7 +86,7 @@ const geminiOccasion: HookOccasion = (event) => {
 export const gemini: TerminalHarnessAdapter = {
   harness: 'gemini',
   tools: LEGACY_TOOLS,
-  label: HARNESS_LABELS.gemini,
+  label: 'Gemini CLI',
   mark: GEMINI_MARK,
   prefix: 'gm',
   binary: 'gemini',
@@ -106,7 +107,7 @@ export const gemini: TerminalHarnessAdapter = {
   },
   hooks: {
     file: '.gemini/settings.json',
-    format: 'gemini',
+    codec: geminiCodec,
     events: {
       sessionStart: 'SessionStart',
       preWrite: 'BeforeTool',
@@ -130,7 +131,7 @@ export const gemini: TerminalHarnessAdapter = {
   turnOf: unturned,
   answerKey: null,
   subjectOf: unasked,
-  filesOf: unfiled,
+  filesOf: claudeFiles,
   printedOf: unprinted,
   eventKeys: ['hook_event_name', 'hookEventName', 'session_id', 'sessionId', 'notification_type'],
   screenAskOf: geminiScreenAsk,

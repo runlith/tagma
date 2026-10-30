@@ -10,12 +10,18 @@ export type HookTrust = {
   readonly key: (filePath: string, event: string, group: number, handler: number) => string;
 };
 
+export type HookCommand = { readonly command: string; readonly timeout?: number };
+
+export type HookHandler = HookCommand & { readonly type: 'command' };
+
+export type HookEntry = HookCommand | { readonly hooks: readonly HookHandler[] };
+
 export type HookFileShape = {
   readonly keys: Readonly<Record<string, unknown>>;
-  readonly events: 'hooks' | 'root';
+  readonly events: readonly string[];
   readonly holes: boolean;
   readonly trust: HookTrust | null;
-  readonly entry: (command: string, timeout: number | undefined) => Readonly<Record<string, unknown>>;
+  readonly entry: (command: string, timeout: number | undefined) => HookEntry;
 };
 
 export type HookCodec = {

@@ -1,5 +1,15 @@
 import type { FileEffect, HarnessCall, HarnessPrinted, HookEvents, HookOccasion } from '@runlith/tagma/adapter/harness';
+import type { HookCodec } from '@runlith/tagma/adapter/hook';
+import { commandGroup, specificOutput } from './hookFormat.js';
 import { field, nested, questionTool, toolCall } from './payload.js';
+
+export const claudeCodec: HookCodec = {
+  file: { keys: {}, events: ['hooks'], holes: false, trust: null, entry: commandGroup },
+  permission: ({ allowed, words }) => JSON.stringify({ decision: allowed ? 'approve' : 'deny', reason: words }),
+  context: (text) => text,
+  tool: (text, moment) => specificOutput(moment === 'before' ? 'PreToolUse' : 'PostToolUse', text),
+  prompt: (text) => specificOutput('UserPromptSubmit', text),
+};
 
 export const CLAUDE_EVENTS: HookEvents = {
   sessionStart: 'SessionStart',

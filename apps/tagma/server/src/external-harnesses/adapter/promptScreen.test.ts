@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { harnessAdapter } from '../contract/service/table.js';
+import { builtinHarness } from '../testing/builtin.js';
 import { typedBack, typedShape } from './input.js';
 
 const frame = (text: string): readonly string[] => text.split('\n');
@@ -68,7 +68,7 @@ ${RULE}
 ${footer}`);
 
 test('Claude Code 2.1.306 is at its prompt when no spinner counts time, and its composer shows words in any phase', () => {
-  const claude = harnessAdapter('claude-code');
+  const claude = builtinHarness('claude-code');
   const shown = claude.promptScreenOf!;
   const words = claude.composer!.of;
   expect([shown(claudeWorking), shown(claudeInterrupted), shown(claudeReturned)]).toEqual([false, true, true]);
@@ -130,9 +130,9 @@ ${inside}
  Ctrl+x:shortcuts`);
 
 test('Codex 0.162.0, Devin 3000.11.92 and Grok Build 1.0.62 composers read the words standing in them, idle or working, and nothing for a placeholder', () => {
-  const codex = harnessAdapter('codex').composer!.of;
-  const devin = harnessAdapter('devin').composer!.of;
-  const grok = harnessAdapter('grok').composer!.of;
+  const codex = builtinHarness('codex').composer!.of;
+  const devin = builtinHarness('devin').composer!.of;
+  const grok = builtinHarness('grok').composer!.of;
   expect([
     codex(idle),
     codex(working),
@@ -173,7 +173,7 @@ const cursorLines = frame(`  → Add a follow-up
 ${cursorFooter}`);
 
 test('the Cursor Agent 2026.10.01 composer reads words other than its placeholder on any of its lines, and its working hint is no word', () => {
-  const words = harnessAdapter('cursor').composer!.of;
+  const words = builtinHarness('cursor').composer!.of;
   const queued = frame(`  follow-ups
   ○ Reply only QUEUED_MARK after this turn.
   enter steer · ↑ select/edit · esc cancel
@@ -194,7 +194,7 @@ ${cursorFooter}`);
 });
 
 test('the Codex 0.159.0 composer placeholder with no working indicator is the returned prompt; a working or drafted screen is not', () => {
-  const shown = harnessAdapter('codex').promptScreenOf!;
+  const shown = builtinHarness('codex').promptScreenOf!;
   expect(shown(idle)).toBe(true);
   expect(shown(working)).toBe(false);
   expect(shown(frame('› draft stays\n\n  ? for shortcuts'))).toBe(false);

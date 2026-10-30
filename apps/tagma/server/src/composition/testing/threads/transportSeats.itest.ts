@@ -11,6 +11,8 @@ import { NativeStorage, ThreadJournal } from '../../../threads/contract/service/
 import { ModelChanges } from '../../../threads/contract/service/modelChanges.js';
 import { harnessFacet } from '../../../threads/contract/wire/harness/types.js';
 import { harnessPresentation } from '../../../external-harnesses/contract/service/table.js';
+import { builtinHarness } from '../../../external-harnesses/testing/builtin.js';
+import { makeHarnessAdapters } from '../../../external-harnesses/adapters.js';
 import { isTransportEntry } from '../../../threads/contract/wire/harness/transportEntry.js';
 import { kernelWrites, nativeTransitions } from '../../../native-harness/testing/doubles.js';
 import { modelChanges, sqliteThreadJournal, threadRebinding, threadRun } from '../../../threads/testing/doubles.js';
@@ -57,8 +59,8 @@ it.effect('SQL transport rebinding persists the hosted model default and both jo
             threadId: row.id,
             projectId: demo.projectId,
             harness: {
-              facet: harnessFacet('claude-code', harnessPresentation('claude-code')),
-              kernel: terminalKernel('claude-code', undefined, false, {}),
+              facet: harnessFacet('claude-code', harnessPresentation(builtinHarness('claude-code'))),
+              kernel: terminalKernel(builtinHarness('claude-code'), undefined, false, {}),
             },
           },
           unit,
@@ -77,6 +79,7 @@ it.effect('SQL transport rebinding persists the hosted model default and both jo
       rebinding,
       registry,
       staticRegistry(providerCatalogOf([provider])),
+      yield* makeHarnessAdapters,
     );
     expect(yield* switching.to(id, demo.projectId, { kind: 'operator' }, 'acp')).toMatchObject({ status: 'switched', transport: 'acp' });
     expect(yield* demo.store.find(id)).toMatchObject({

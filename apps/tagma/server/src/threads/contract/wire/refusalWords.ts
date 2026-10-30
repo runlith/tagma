@@ -55,6 +55,7 @@ export const REFUSAL_WORDS = {
   'folder-not-found': 'Folder not found',
   'guest-mobility': 'Thread stays in its host',
   'harness-missing': 'CLI session not found',
+  'harness-not-installed': 'Harness not installed',
   'harness-pinned': 'CLI keeps its launch folder',
   'host-unknown': 'Host not supported',
   'interaction-conflict': 'Question no longer open',

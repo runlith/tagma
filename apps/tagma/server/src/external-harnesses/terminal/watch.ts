@@ -11,7 +11,7 @@ import type { TerminalScreens } from '../../executions/contract/service/records.
 import { readHarnessFrame } from '../sessions/keyboard.js';
 import type { HarnessAdapter } from '../contract/service/adapter.js';
 import type { HarnessAddress } from '@runlith/tagma/adapter/harness';
-import { harnessAdapter } from '../contract/service/table.js';
+import type { HarnessAdapters } from '../contract/service/adapters.js';
 import { readBefore, readTail } from '../ends/read.js';
 import { writes, type WriteSet } from '../../platform/contract/service/writes.js';
 import type { SessionAlignment } from '../sessions/alignment.js';
@@ -79,6 +79,7 @@ export class TerminalWatch {
     private readonly timers: FiberMap.FiberMap<string>,
     private readonly closing: TerminalClosing,
     private readonly alignment: SessionAlignment,
+    private readonly adapters: HarnessAdapters['Service'],
   ) {
     this.placing = writes('TerminalWatch.baseline', [], journal.writes, alignment.writes);
   }
@@ -108,7 +109,8 @@ export class TerminalWatch {
 
   private silence(facet: ExternalSession): Silence | null {
     if (facet.plain === true) return { window: PLAIN_BEAT_MS, proof: 'tail' };
-    const proof = this.proofOf(harnessAdapter(facet.name));
+    const adapter = this.adapters.find(facet.name);
+    const proof = adapter === null ? null : this.proofOf(adapter);
     return proof === null ? null : { window: QUIET_WINDOW_MS, proof };
   }
 
@@ -211,8 +213,8 @@ export class TerminalWatch {
     facet: ExternalSession,
     silence: Silence | null,
   ): Effect.fn.Return<CheckOptions | null, HarnessFailure> {
-    if (silence === null) return null;
-    const adapter = harnessAdapter(facet.name);
+    const adapter = this.adapters.find(facet.name);
+    if (silence === null || adapter === null) return null;
     if (silence.proof === 'screen') return (yield* this.promptShown(threadId, adapter)) === null ? null : RETURNED;
     if ((facet.unread ?? []).length > 0 || untaken(facet, yield* Clock.currentTimeMillis)) return RETURNED;
     if ((yield* this.evidence(threadId)) !== null) return RETURNED;
@@ -271,7 +273,7 @@ export class TerminalWatch {
     turn: HarnessTurn,
   ): Effect.fn.Return<ProvenEnd | null> {
     const input = inputOf(standing);
-    const source = endsSource(harnessAdapter(standing.name));
+    const source = this.adapters.find(standing.name)?.metadata?.ends ?? null;
     if (input === null || source === null) return null;
     const tail = yield* this.tail(input, source, turn);
     if (tail._tag === 'Failure') {
@@ -293,9 +295,10 @@ export class TerminalWatch {
     if (standing === null) return;
     const { turn } = standing;
     const input = inputOf(standing);
-    const source = endsSource(harnessAdapter(standing.name));
+    const adapter = this.adapters.find(standing.name);
+    const source = adapter?.metadata?.ends ?? null;
     if (turn === undefined || turn.offset !== null || input === null || source === null) return;
-    const placed = yield* Effect.result(this.baseline(threadId, turn.run, source, input, harnessAdapter(standing.name).launch?.address));
+    const placed = yield* Effect.result(this.baseline(threadId, turn.run, source, input, adapter?.launch?.address));
     if (placed._tag === 'Failure')
       yield* Effect.logWarning('the transcript offset of a run could not be taken', { threadId, cause: placed.failure });
   });
@@ -332,7 +335,7 @@ export class TerminalWatch {
   private readonly placeCompaction = Effect.fnUntraced(function* (this: TerminalWatch, threadId: string) {
     const standing = yield* this.store.read(threadId);
     const input = standing === null ? null : inputOf(standing);
-    const source = standing === null ? null : endsSource(harnessAdapter(standing.name));
+    const source = standing === null ? null : (this.adapters.find(standing.name)?.metadata?.ends ?? null);
     if (standing === null || input === null || source === null) return;
     const from = yield* this.transcriptSize(input, source);
     if (from === null) return;
@@ -344,13 +347,14 @@ export class TerminalWatch {
   });
 
   private readonly compaction = Effect.fnUntraced(function* (this: TerminalWatch, threadId: string, from: number, run: string | null) {
-    const { store, access, journal } = this;
+    const { store, access, journal, adapters } = this;
     const look = Effect.gen(function* () {
       const facet = yield* store.read(threadId);
       const input = facet === null ? null : inputOf(facet);
-      if (facet === null || input === null || !harnessSessionActive(facet.session) || (facet.turn?.run ?? null) !== run)
+      const adapter = facet === null ? null : adapters.find(facet.name);
+      if (facet === null || input === null || adapter === null || !harnessSessionActive(facet.session) || (facet.turn?.run ?? null) !== run)
         return { moved: true, compacted: null };
-      const read = yield* readHarnessTranscript(access, input, harnessAdapter(facet.name), from);
+      const read = yield* readHarnessTranscript(access, input, adapter, from);
       return { moved: false, compacted: read.compacted };
     });
     const seen = yield* Effect.delay(look, Duration.millis(COMPACTION_BEAT_MS)).pipe(
@@ -434,17 +438,26 @@ export class TerminalWatch {
     if (facet.turn === undefined && unread.length === 0) return;
     const input = inputOf(facet);
     const waiting = facet.turn !== undefined && (yield* this.wordWaits(threadId));
-    const adapter = harnessAdapter(facet.name);
-    const source = endsSource(adapter);
+    const adapter = this.adapters.find(facet.name);
+    const source = adapter?.metadata?.ends ?? null;
     const turn = facet.turn;
     const tail =
       turn === undefined || source === null || input === null || (!waiting && unread.length === 0 && options.returned !== true)
         ? null
         : yield* this.tail(input, source, turn);
     const from = unread.length === 0 ? 0 : Math.min(...unread.map((entry) => entry.offset ?? 0));
-    const read = unread.length === 0 || input === null ? null : yield* Effect.result(readHarnessTranscript(access, input, adapter, from));
+    const read =
+      unread.length === 0 || input === null || adapter === null
+        ? null
+        : yield* Effect.result(readHarnessTranscript(access, input, adapter, from));
     const inTurn =
-      read === null || read._tag !== 'Success' || turn === undefined || turn.offset === null || turn.offset <= from || input === null
+      read === null ||
+      read._tag !== 'Success' ||
+      turn === undefined ||
+      turn.offset === null ||
+      turn.offset <= from ||
+      input === null ||
+      adapter === null
         ? null
         : yield* Effect.result(readHarnessTranscript(access, input, adapter, turn.offset));
     const heardIn = (reading: HarnessReading | null): ReadonlySet<string> => {
@@ -466,7 +479,7 @@ export class TerminalWatch {
     const ending = end === null ? null : finishedBy(end);
     const message = end !== null && end._tag === 'Completed' ? end.message : null;
     const spending =
-      ending === null || turn === undefined || input === null
+      ending === null || turn === undefined || input === null || adapter === null
         ? null
         : inTurn !== null && inTurn._tag === 'Success'
           ? inTurn
@@ -519,10 +532,7 @@ export class TerminalWatch {
             const lastTurn = verdict.end === null || turn === undefined || turn.turn === null || turn.turn === '' ? undefined : turn.turn;
             const settled = closedWords(journal, threadId, lastTurn === undefined ? rest : { ...rest, lastTurn }, run.id);
             plans.push(...settled.plans);
-            next =
-              harnessAdapter(standing.name).ends.interrupt === 'record'
-                ? armedConfirmed(settled.facet, new Date(now).toISOString())
-                : settled.facet;
+            next = adapter?.ends.interrupt === 'record' ? armedConfirmed(settled.facet, new Date(now).toISOString()) : settled.facet;
             yield* unit.afterCommit(Effect.sync(() => open.drop(run.id)));
           }
           if (plans.length === 0) return { facet: standing, value: undefined };

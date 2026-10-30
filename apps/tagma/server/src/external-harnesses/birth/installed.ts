@@ -5,8 +5,9 @@ import { Clock, Data, Deferred, Effect, Exit, FileSystem, Layer, PubSub, Semapho
 import { UserEnvironment, type UserPaths } from '../../installation/contract/service/userEnvironment.js';
 import { locatedIn } from '../../installation/process/userEnvironment.js';
 import { type HarnessProgram, InstalledHarnesses } from '../../threads/contract/service/harness.js';
-import { HARNESSES, harnessPresentation } from '../contract/service/table.js';
+import { harnessPresentation } from '../contract/service/table.js';
 import type { HarnessAdapter } from '../contract/service/adapter.js';
+import { HarnessAdapters } from '../contract/service/adapters.js';
 import type { HarnessInstall } from '../../threads/contract/wire/harness/externalSession.js';
 
 const VERSION_BUDGET_MS = 5_000;
@@ -55,6 +56,7 @@ export const makeInstalledHarnesses = Effect.fnUntraced(function* (input: { read
   const { budgetMs } = input;
   const users = yield* UserEnvironment;
   const files = yield* FileSystem.FileSystem;
+  const adapters = yield* HarnessAdapters;
   const home = homedir();
   const memo = new Map<string, Entry>();
   const failed = new Map<string, string>();
@@ -245,7 +247,7 @@ export const makeInstalledHarnesses = Effect.fnUntraced(function* (input: { read
       const { found } = resolved;
       return {
         harness: adapter.harness,
-        presentation: harnessPresentation(adapter.harness),
+        presentation: harnessPresentation(adapter),
         binary: found.program.path,
         version: found.version,
         unreadable: found.unreadable,
@@ -261,7 +263,7 @@ export const makeInstalledHarnesses = Effect.fnUntraced(function* (input: { read
         : `${resolved.reason}; the login profile was not read (${profile.outcome}${profile.detail === null ? '' : `: ${profile.detail}`})`;
     return {
       harness: adapter.harness,
-      presentation: harnessPresentation(adapter.harness),
+      presentation: harnessPresentation(adapter),
       binary: null,
       version: null,
       unreadable: null,
@@ -273,24 +275,27 @@ export const makeInstalledHarnesses = Effect.fnUntraced(function* (input: { read
 
   let observed: readonly HarnessInstall[] = [];
   const rows = Effect.fnUntraced(function* (paths: UserPaths) {
-    const found = yield* Effect.forEach(HARNESSES, (adapter) => standing(adapter, paths), { concurrency: 3 });
-    const changed = found.some((row, index) => {
-      const before = observed[index];
-      return (
-        before === undefined ||
-        row.binary !== before.binary ||
-        row.version !== before.version ||
-        row.unreadable !== before.unreadable ||
-        row.searching !== before.searching ||
-        row.missing !== before.missing
-      );
-    });
+    const found = yield* Effect.forEach(adapters.all(), (adapter) => standing(adapter, paths), { concurrency: 3 });
+    const changed =
+      found.length !== observed.length ||
+      found.some((row) => {
+        const before = observed.find((one) => one.harness === row.harness);
+        return (
+          before === undefined ||
+          row.binary !== before.binary ||
+          row.version !== before.version ||
+          row.unreadable !== before.unreadable ||
+          row.searching !== before.searching ||
+          row.missing !== before.missing
+        );
+      });
     observed = found;
     if (changed) yield* PubSub.publish(moved, undefined);
     return found;
   });
 
   yield* Effect.forkScoped(Effect.andThen(users.ready, PubSub.publish(moved, undefined)));
+  yield* Effect.forkScoped(Stream.runForEach(adapters.changes, () => PubSub.publish(moved, undefined)));
 
   return InstalledHarnesses.of({
     read: Effect.flatMap(users.now, rows).pipe(Effect.withSpan('InstalledHarnesses.read')),
@@ -305,7 +310,7 @@ export const makeInstalledHarnesses = Effect.fnUntraced(function* (input: { read
       return answered;
     }).pipe(Effect.withSpan('InstalledHarnesses.refresh')),
     program: Effect.fn('InstalledHarnesses.program')(function* (name, by = 'binary') {
-      const adapter = HARNESSES.find((one) => one[by] === name);
+      const adapter = adapters.all().find((one) => one[by] === name);
       if (adapter === undefined) return null;
       yield* users.ready;
       const resolved = yield* resolveProgram(adapter);
@@ -315,7 +320,9 @@ export const makeInstalledHarnesses = Effect.fnUntraced(function* (input: { read
   });
 });
 
-export const installedHarnessesWith = (budgetMs: number): Layer.Layer<InstalledHarnesses, never, UserEnvironment | FileSystem.FileSystem> =>
+export const installedHarnessesWith = (
+  budgetMs: number,
+): Layer.Layer<InstalledHarnesses, never, UserEnvironment | FileSystem.FileSystem | HarnessAdapters> =>
   Layer.effect(InstalledHarnesses, makeInstalledHarnesses({ budgetMs }));
 
 export const installedHarnessesLayer = installedHarnessesWith(VERSION_BUDGET_MS);

@@ -3,6 +3,7 @@ import { Effect } from 'effect';
 import type { InstallationCli } from '../../installation/cli/port.js';
 import { here, lens } from '../../cli/door.js';
 import { door } from './door.js';
+import { installerAdapters } from './installerAdapters.js';
 import { perform } from './perform.js';
 import { renderInstallResult, renderUpgradeResult, renderUserInstallResult } from '../../external-harnesses/installs/render.js';
 import type { RepoInstall, UserInstall } from '../../external-harnesses/installs/skillInstall.js';
@@ -26,17 +27,17 @@ export const installationCli: InstallationCli<UserInstall, RepoInstall, UpgradeE
     Effect.flatMap(
       Effect.all([Effect.promise(() => import('../../external-harnesses/installs/skillInstall.js')), doctrine]),
       ([{ installForUser }, { contributed }]) => installForUser(contributed),
-    ).pipe(Effect.provide(BunFileSystem.layer)),
+    ).pipe(Effect.provide(BunFileSystem.layer), Effect.provide(installerAdapters)),
   installInto: (repoRoot, lawSection, declare) =>
     Effect.flatMap(
       Effect.all([Effect.promise(() => import('../../external-harnesses/installs/skillInstall.js')), doctrine]),
       ([{ installInto }, { contributed }]) => installInto(repoRoot, lawSection, declare, contributed),
-    ).pipe(Effect.provide(BunFileSystem.layer)),
+    ).pipe(Effect.provide(BunFileSystem.layer), Effect.provide(installerAdapters)),
   refreshInstallations: (deps) =>
     Effect.flatMap(
       Effect.all([Effect.promise(() => import('../../external-harnesses/installs/upgrade.js')), doctrine]),
       ([{ refreshInstallations }, { contributed }]) => refreshInstallations(deps.projects, deps.law, deps.declare, contributed),
-    ).pipe(Effect.provide(BunFileSystem.layer)),
+    ).pipe(Effect.provide(BunFileSystem.layer), Effect.provide(installerAdapters)),
   renderInstallResult,
   renderUserInstallResult,
   renderUpgradeResult,

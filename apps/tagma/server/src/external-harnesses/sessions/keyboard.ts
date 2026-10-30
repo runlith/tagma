@@ -6,10 +6,9 @@ import type { ScreenTextFrame } from '@runlith/executions/protocol/presentation'
 import { screenLines } from '@runlith/executions/protocol/presentationText';
 import { GateRefusal } from '../../platform/contract/wire/refusal.js';
 import type { ScreenAsk, HarnessWidgetKey } from '@runlith/tagma/adapter/harness';
-import type { HarnessName } from '../../threads/contract/wire/harness/names.js';
 import { sameScreenAsk } from '../adapter/screenAsk.js';
 import type { HarnessExecutionRef } from '../../threads/contract/wire/harness/observation.js';
-import { harnessAdapter } from '../contract/service/table.js';
+import type { HarnessAdapter } from '../contract/service/adapter.js';
 import { TERMINAL_PERMISSION_REVISION } from '../../executions/contract/service/subjectPolicy.js';
 import type { TerminalFailure, Terminals } from '../../executions/contract/service/terminals.js';
 import type { TerminalScreens } from '../../executions/contract/service/records.js';
@@ -34,8 +33,7 @@ export type HarnessKeyed = {
   readonly bytes: number;
 };
 
-export const widgetOn = (name: HarnessName, frame: ScreenTextFrame): ScreenAsk | null =>
-  harnessAdapter(name).screenAskOf(screenLines(frame));
+export const widgetOn = (adapter: HarnessAdapter, frame: ScreenTextFrame): ScreenAsk | null => adapter.screenAskOf(screenLines(frame));
 
 export const sameWidget = (live: ScreenAsk, target: ScreenAsk): boolean => sameScreenAsk(target, live);
 
@@ -46,7 +44,7 @@ export const waitForWidget = Effect.fnUntraced(function* (
   terminals: Terminals['Service'],
   screens: TerminalScreens['Service'],
   execution: HarnessExecutionRef,
-  name: HarnessName,
+  adapter: HarnessAdapter,
   target: ScreenAsk,
 ) {
   const started = yield* Clock.currentTimeMillis;
@@ -55,7 +53,7 @@ export const waitForWidget = Effect.fnUntraced(function* (
     const frame = yield* readHarnessFrame(terminals, screens, execution).pipe(Effect.catch(() => Effect.succeed(null)));
     if (frame !== null) {
       looked = true;
-      const live = widgetOn(name, frame);
+      const live = widgetOn(adapter, frame);
       if (live === null || !sameWidget(live, target)) return 'gone' as const;
     }
     const now = yield* Clock.currentTimeMillis;

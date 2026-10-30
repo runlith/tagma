@@ -4,9 +4,9 @@ import type { ExternalSession, HarnessInterrupt, HarnessInterrupting } from '../
 import { harnessSessionActive } from '../../threads/contract/wire/harness/session.js';
 import type { HarnessFailure } from '../../threads/contract/service/failure.js';
 import type { HarnessExecutionRef } from '../../threads/contract/wire/harness/observation.js';
-import type { HarnessName } from '../../threads/contract/wire/harness/names.js';
 import type { HarnessExitArm, HarnessWidgetKey } from '@runlith/tagma/adapter/harness';
-import { harnessAdapter } from '../contract/service/table.js';
+import type { HarnessAdapter } from '../contract/service/adapter.js';
+import type { HarnessAdapters } from '../contract/service/adapters.js';
 import { promptDigest, typedBack } from '../adapter/input.js';
 import type { Keyboard, SessionDriver } from '../sessions/drive.js';
 import type { HarnessSessionStore } from '../store/sessions.js';
@@ -51,7 +51,12 @@ export class TerminalInterrupts {
     private readonly watch: TerminalWatch,
     private readonly endings: TerminalEndings,
     private readonly confirming: FiberMap.FiberMap<string, void, never>,
+    private readonly adapters: HarnessAdapters['Service'],
   ) {}
+
+  private rowOf(facet: ExternalSession) {
+    return this.adapters.row(facet.name, facet.presentation.install);
+  }
 
   readonly press = Effect.fn('TerminalInterrupts.press')(function* (
     this: TerminalInterrupts,
@@ -59,7 +64,8 @@ export class TerminalInterrupts {
     runId: string,
     facet: ExternalSession,
   ): Effect.fn.Return<void, HarnessFailure> {
-    const keys = harnessAdapter(facet.name).interrupt;
+    const adapter = yield* this.rowOf(facet);
+    const keys = adapter.interrupt;
     const session = facet.session;
     if (keys === null || facet.turn?.run !== runId || !harnessSessionActive(session) || session.state === 'stopping') {
       yield* this.endings.stopped(threadId, runId, false);
@@ -69,7 +75,7 @@ export class TerminalInterrupts {
     if (execution !== null) yield* this.unarmed(threadId);
     const typed =
       execution !== null &&
-      (yield* this.keyed(threadId, execution, facet.name, keys, { run: runId, operation: `interrupt:${runId}` }).pipe(
+      (yield* this.keyed(threadId, execution, adapter, keys, { run: runId, operation: `interrupt:${runId}` }).pipe(
         Effect.map((keyed) => keyed === 'typed'),
         Effect.catchTag('GateRefusal', (refusal) => (CLI_GONE.has(refusal.code) ? Effect.succeed(false) : Effect.fail(refusal))),
       ));
@@ -79,7 +85,7 @@ export class TerminalInterrupts {
   private readonly unarmed = Effect.fnUntraced(function* (this: TerminalInterrupts, threadId: string) {
     for (;;) {
       const facet = yield* this.store.read(threadId);
-      const arm = facet === null ? undefined : harnessAdapter(facet.name).exitArm;
+      const arm = facet === null ? undefined : this.adapters.find(facet.name)?.exitArm;
       const confirmedAt = facet?.armed?.confirmedAt;
       if (arm === undefined || confirmedAt === undefined) return;
       const left = arm.windowMs - ((yield* Clock.currentTimeMillis) - Date.parse(confirmedAt));
@@ -91,13 +97,12 @@ export class TerminalInterrupts {
   private keyed(
     threadId: string,
     execution: HarnessExecutionRef,
-    name: HarnessName,
+    adapter: HarnessAdapter,
     keys: readonly HarnessWidgetKey[],
     pressing: { readonly run: string; readonly operation: string },
     aimed: (facet: ExternalSession | null) => boolean = () => true,
   ): Effect.Effect<Keyed, HarnessFailure> {
     const { store } = this;
-    const adapter = harnessAdapter(name);
     const drafted = adapter.composer?.drafted;
     const arm = adapter.exitArm;
     const strokes = (chosen: HarnessInterrupting): readonly HarnessWidgetKey[] =>
@@ -153,14 +158,15 @@ export class TerminalInterrupts {
     const facet = yield* this.store.read(threadId);
     if (facet === null) return;
     const mark = facet.interrupted;
-    const keys = harnessAdapter(facet.name).interrupt;
+    const adapter = yield* this.rowOf(facet);
+    const keys = adapter.interrupt;
     if (mark === undefined || keys === null) return;
     const execution = yield* this.driver.seated(threadId);
     if (execution === null) return;
     yield* this.keyed(
       threadId,
       execution,
-      facet.name,
+      adapter,
       keys,
       { run: mark.turn.run, operation: `interrupt:${mark.turn.run}:${turn}` },
       (standing) => standing?.interrupted?.at === mark.at,
@@ -173,13 +179,14 @@ export class TerminalInterrupts {
     runId: string,
     facet: ExternalSession,
   ): Effect.fn.Return<InterruptReceipt, HarnessFailure> {
-    const keys = harnessAdapter(facet.name).interrupt;
+    const adapter = yield* this.rowOf(facet);
+    const keys = adapter.interrupt;
     if (facet.interrupted?.turn.run !== runId || keys === null) return 'no-turn';
     const execution = yield* this.driver.seated(threadId);
     if (execution === null) return 'no-turn';
     const operation = `interrupt:${runId}:again:${yield* Clock.currentTimeMillis}`;
     const marked = (standing: ExternalSession | null) => standing?.interrupted?.turn.run === runId;
-    return yield* this.keyed(threadId, execution, facet.name, keys, { run: runId, operation }, marked).pipe(
+    return yield* this.keyed(threadId, execution, adapter, keys, { run: runId, operation }, marked).pipe(
       Effect.map((keyed) => (keyed === 'aimless' ? ('no-turn' as const) : ('interrupted' as const))),
       Effect.catchTag('GateRefusal', (refusal) => (CLI_GONE.has(refusal.code) ? Effect.succeed('no-turn' as const) : Effect.fail(refusal))),
     );
@@ -264,7 +271,8 @@ export class TerminalInterrupts {
     progress: Clearing,
   ): Effect.fn.Return<'confirmed' | 'cleared' | 'unconfirmed', HarnessFailure> {
     const { store } = this;
-    const adapter = harnessAdapter(facet.name);
+    const adapter = this.adapters.find(facet.name);
+    if (adapter === null) return 'confirmed';
     const record = adapter.ends.interrupt === 'record';
     const transcribed = mark.heard === undefined && (yield* this.watch.endOf(threadId, facet, mark.turn)) !== null;
     const ended = mark.heard !== undefined || transcribed;

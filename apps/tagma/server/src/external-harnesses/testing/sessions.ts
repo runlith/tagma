@@ -10,6 +10,7 @@ import { activeOf, externalSession, sessionValues } from '../../threads/store/ha
 import { thread } from '../../threads/store/kernel.js';
 import { seatColumns } from '../../threads/store/seat.js';
 import { terminalKernel } from '../birth/seat.js';
+import { builtinHarness } from './builtin.js';
 
 export const sessionFor = (
   db: StoreDb<'machine'>,
@@ -27,7 +28,7 @@ export const sessionFor = (
           .values({ id, ...values })
           .onConflictDoUpdate({ target: externalSession.id, set: values });
         if (kernel === undefined) {
-          const seat = seatColumns(terminalKernel(facet.name, undefined, facet.plain === true, {}));
+          const seat = seatColumns(terminalKernel(builtinHarness(facet.name), undefined, facet.plain === true, {}));
           yield* db
             .insert(thread)
             .values({ id, cacheGroup: id, ...seat })

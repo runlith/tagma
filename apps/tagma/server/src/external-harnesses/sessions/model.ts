@@ -5,25 +5,28 @@ import type { Harness, HarnessMoveTo } from '../../threads/contract/service/harn
 import type { HarnessAskedModel } from '../../threads/contract/wire/harness/askedModel.js';
 import type { ExternalSession } from '../../threads/contract/wire/harness/externalSession.js';
 import { servedSelection } from '../../threads/contract/wire/harness/seat.js';
-import type { HarnessName } from '../../threads/contract/wire/harness/names.js';
 import type { AskedModel } from '../birth/selection.js';
-import { harnessAdapter, servingProvider } from '../contract/service/table.js';
+import type { HarnessAdapter } from '../contract/service/adapter.js';
+import { servingProvider } from '../contract/service/table.js';
 import type { HarnessSessionStore } from '../store/sessions.js';
 
-export const harnessServed = (facet: ExternalSession, asked: HarnessAskedModel | undefined): ThreadModelSelection | null => {
-  const provider = servingProvider(facet.name, 'acp');
+export const harnessServed = (
+  adapter: HarnessAdapter,
+  facet: ExternalSession,
+  asked: HarnessAskedModel | undefined,
+): ThreadModelSelection | null => {
+  const provider = servingProvider(adapter, 'acp');
   return provider === null ? null : servedSelection(provider, asked, facet);
 };
 
 export function harnessMove(
-  name: HarnessName,
+  adapter: HarnessAdapter,
   store: HarnessSessionStore,
   askedModel: AskedModel,
 ): NonNullable<Harness['Service']['move']> {
-  const adapter = harnessAdapter(name);
+  const provider = servingProvider(adapter, 'acp');
   return Effect.fnUntraced(function* (threadId: string, to: HarnessMoveTo) {
     const facet = yield* store.read(threadId);
-    const provider = servingProvider(name, 'acp');
     if (facet === null || (yield* store.binding(threadId))?.adapter !== 'acp' || provider === null || to.provider !== provider) {
       return yield* new GateRefusal(
         'model-pinned',

@@ -10,9 +10,9 @@ import type { HookUserFile } from '@runlith/tagma/adapter/harness';
 import { applyClaudeLaw, applyLaw, planClaudeLaw, planLawSection, type ClaudeLawWrite, type LawWrite } from './law.js';
 import type { McpDeclarationWrite } from '../../installation/contract/wire/install.js';
 import { entriesOf, hookGroups, type HooksWrite } from './hookInstall.js';
-import { HARNESSES, harnessAdapter } from '../contract/service/table.js';
+import { HarnessAdapters } from '../contract/service/adapters.js';
 import type { HarnessName } from '../../threads/contract/wire/harness/names.js';
-import { applyHooks, planHooks, planHookFiles } from './hookWrite.js';
+import { applyHooks, planHooks, planHookTargets } from './hookWrite.js';
 import { installedBody, sourceFiles } from './skill.js';
 import { skillLinkTarget, skillTarget, userSkillTarget } from './targets.js';
 import { skillStatus } from './status.js';
@@ -70,21 +70,26 @@ export type UserInstall = {
 const userFileKey = (declared: HookUserFile): string => join(...declared.folder, declared.file);
 
 export const installForUser = Effect.fnUntraced(function* (contributed: SectionCatalog) {
-  const plans = yield* Effect.forEach(
-    hookGroups((surface) => (surface.user === null ? `project:${surface.file}` : userFileKey(surface.user))).flatMap((group) => {
-      const declared = group.adapters[0]!.hooks?.user ?? null;
-      return declared === null ? [] : [{ declared, group }];
-    }),
-    ({ declared, group }) =>
-      planHookFiles(
-        join(userHome(declared), declared.file),
-        group.format,
-        entriesOf(group.adapters),
-        group.adapters.flatMap((adapter) => adapter.hooks?.assets ?? []),
-      ),
+  const adapters = yield* HarnessAdapters;
+  const plans = yield* planHookTargets(
+    hookGroups(adapters.all(), (surface) => (surface.user === null ? `project:${surface.file}` : userFileKey(surface.user))).flatMap(
+      (group) => {
+        const declared = group.adapters[0]!.hooks?.user ?? null;
+        return declared === null
+          ? []
+          : [
+              {
+                path: join(userHome(declared), declared.file),
+                codec: group.codec,
+                entries: entriesOf(group.adapters),
+                assets: group.adapters.flatMap((adapter) => adapter.hooks?.assets ?? []),
+              },
+            ];
+      },
+    ),
   );
   const skill = yield* installSkill(userSkillTarget(), contributed);
-  const hooks = yield* applyHooks(plans.flat());
+  const hooks = yield* applyHooks(plans);
   return { skill, hooks };
 });
 
@@ -99,22 +104,25 @@ export const installForAccount = Effect.fn('harnessInstall.installForAccount')(f
   contributed: SectionCatalog,
   cli: readonly string[],
 ) {
-  const adapter = harnessAdapter(name);
+  const adapters = yield* HarnessAdapters;
+  const adapter = yield* adapters.row(name);
   const surface = adapter.hooks;
   const declared = surface?.user ?? null;
   if (surface === null || declared === null) return yield* installFailure(new Error(`${name} declares no account layer`));
   const home = directory ?? userHome(declared);
   return yield* withFileLock(join(home, '.tagma-install.lock'), 15_000, () =>
     Effect.gen(function* () {
-      const sharing = HARNESSES.filter((other) => {
+      const sharing = adapters.all().filter((other) => {
         const user = other.hooks?.user ?? null;
         return user !== null && userFileKey(user) === userFileKey(declared);
       });
-      const plans = yield* planHookFiles(
-        join(home, declared.file),
-        surface.format,
-        entriesOf(sharing),
-        sharing.flatMap((adapter) => adapter.hooks?.assets ?? []),
+      const plans = yield* planHookTargets(
+        hookGroups(sharing, () => declared.file).map((group) => ({
+          path: join(home, declared.file),
+          codec: group.codec,
+          entries: entriesOf(group.adapters),
+          assets: group.adapters.flatMap((adapter) => adapter.hooks?.assets ?? []),
+        })),
       );
       const target = join(home, 'skills', 'tagma');
       const status = yield* skillStatus(target, contributed);
@@ -138,8 +146,9 @@ export type HomeIntegration =
 export const installHomes = Effect.fnUntraced(function* (cli: readonly string[]) {
   const contributed = doctrineOf(yield* Doctrine).contributed;
   const installs = yield* InstalledHarnesses;
+  const adapters = yield* HarnessAdapters;
   const disk = yield* FileSystem.FileSystem;
-  const hooked = HARNESSES.flatMap((adapter) => {
+  const hooked = adapters.all().flatMap((adapter) => {
     const user = adapter.hooks?.user ?? null;
     return user === null ? [] : [{ adapter, file: join(userHome(user), user.file) }];
   });
@@ -160,7 +169,7 @@ export const installInto = Effect.fn('harnessInstall.installInto')(function* (
   lawSection: string,
   declare: (repoRoot: string) => Promise<McpDeclarationWrite[]>,
   contributed: SectionCatalog,
-): Effect.fn.Return<RepoInstall, InstallFailed, FileSystem.FileSystem> {
+): Effect.fn.Return<RepoInstall, InstallFailed, FileSystem.FileSystem | HarnessAdapters> {
   const agentsPath = join(repoRoot, AGENTS_FILE);
   const claudePath = join(repoRoot, CLAUDE_FILE);
   const agentsPlan = yield* planLawSection(agentsPath, lawSection);

@@ -3,6 +3,7 @@ import { Effect } from 'effect';
 import { openMemoryStorage } from '@runlith/agent/thread/conformance/memoryStorage';
 import { harnessFacet } from '../../threads/contract/wire/harness/types.js';
 import { harnessPresentation } from '../contract/service/table.js';
+import { builtinHarness } from '../testing/builtin.js';
 import { memorySessionRows } from '../testing/memorySessions.js';
 import { describeSessionStore } from '../testing/sessionConformance.js';
 import { HarnessSessionStore } from './sessions.js';
@@ -10,7 +11,7 @@ import { terminalKernel } from '../birth/seat.js';
 
 const fixture = Effect.fnUntraced(function* () {
   const storage = yield* openMemoryStorage();
-  const kernel = terminalKernel('claude-code', undefined, false, {});
+  const kernel = terminalKernel(builtinHarness('claude-code'), undefined, false, {});
   const thread = yield* storage.createThread({ ownerId: 'owner', scope: 'scope-a', transport: kernel.transport });
   yield* storage.aggregate.update(thread.id, {
     capabilities: kernel.capabilities,
@@ -21,7 +22,7 @@ const fixture = Effect.fnUntraced(function* () {
     switches: kernel.switches,
   });
   const memory = yield* memorySessionRows(storage);
-  yield* memory.seed(thread.id, harnessFacet('claude-code', harnessPresentation('claude-code')));
+  yield* memory.seed(thread.id, harnessFacet('claude-code', harnessPresentation(builtinHarness('claude-code'))));
   return { store: new HarnessSessionStore(memory.rows, () => Effect.void), rows: memory.rows, id: thread.id };
 });
 

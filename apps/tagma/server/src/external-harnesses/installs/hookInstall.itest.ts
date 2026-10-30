@@ -5,6 +5,11 @@ import { spawnSync } from 'node:child_process';
 import { dirname, join } from 'node:path';
 import { Context, Effect, FileSystem, Layer } from 'effect';
 import { entryPath } from '../../installation/contract/wire/junction.js';
+import { harnessAdaptersLayer, makeHarnessAdapters } from '../adapters.js';
+import { HarnessAdapters } from '../contract/service/adapters.js';
+import { builtinHarness } from '../testing/builtin.js';
+import type { HarnessProvider } from '@runlith/tagma/adapter/provider';
+import { codexCodec } from '../vendors/codex/codec.js';
 import { installHooks } from './hookWrite.js';
 import { ownPlaces } from './targets.js';
 
@@ -21,7 +26,7 @@ const home = Layer.effect(
     yield* installHooks(repo);
     return { repo, home, bare: join(root, 'bare') };
   }),
-).pipe(Layer.provideMerge(BunFileSystem.layer));
+).pipe(Layer.provideMerge(BunFileSystem.layer), Layer.provideMerge(harnessAdaptersLayer));
 
 const read = (repo: string) =>
   Effect.flatMap(FileSystem.FileSystem, (files) => Effect.map(files.readFileString(join(repo, '.codex', 'hooks.json')), JSON.parse));
@@ -79,11 +84,50 @@ layer(home, { excludeTestServices: true })('portable hooks', (it) => {
       yield* installHooks(repo);
       const document = yield* read(repo);
       expect(document.hooks.PreToolUse[0].hooks[1]).toEqual(foreign);
-      expect(ownPlaces(document).filter((place) => place.event === 'PreToolUse')).toHaveLength(1);
+      expect(ownPlaces(document, codexCodec.file.events).filter((place) => place.event === 'PreToolUse')).toHaveLength(1);
       const command = document.hooks.PreToolUse[0].hooks[0].command;
       const absent = spawnSync('/bin/sh', ['-c', command], { env: { HOME: bare, PATH: repo }, encoding: 'utf8' });
       expect([absent.status, absent.stdout, absent.stderr]).toEqual([0, '', '']);
       expect((yield* installHooks(repo)).every((row) => row.write === 'current')).toBe(true);
+    }),
+  );
+
+  it.effect('distinct codecs sharing one file retain each registration across install and refresh', () =>
+    Effect.gen(function* () {
+      const files = yield* FileSystem.FileSystem;
+      const repo = yield* files.makeTempDirectoryScoped({ prefix: 'shared-codecs-' });
+      const adapters = yield* makeHarnessAdapters;
+      const { harness: _harness, label: _label, acp: _acp, iconProvider: _icon, mark: _mark, ...base } = builtinHarness('cursor');
+      const hooks = base.hooks!;
+      const provider = (id: string, events: readonly string[]): HarnessProvider => ({
+        id,
+        label: id,
+        kind: 'harness',
+        auth: 'cli',
+        environment: () => [],
+        models: {},
+        defaultTextModel: '',
+        cacheLifetime: { promisedSeconds: null, prior: null },
+        terminal: {
+          ...base,
+          launch: base.launch!,
+          hooks: { ...hooks, file: '.shared/hooks.json', codec: { ...hooks.codec, file: { ...hooks.codec.file, events } } },
+        },
+      });
+      yield* adapters.declared([
+        provider('shared-one', ['hooks']),
+        provider('shared-two', ['signals']),
+        provider('shared-three', ['signals']),
+      ]);
+      const install = () => installHooks(repo).pipe(Effect.provideService(HarnessAdapters, adapters));
+      const first = yield* install();
+      const path = join(repo, '.shared', 'hooks.json');
+      expect(first.filter((row) => row.path === path)).toHaveLength(1);
+      const document = JSON.parse(yield* files.readFileString(path));
+      expect(JSON.stringify(document.hooks)).toContain('--harness shared-one');
+      expect(JSON.stringify(document.signals)).toContain('--harness shared-two');
+      expect(JSON.stringify(document.signals)).toContain('--harness shared-three');
+      expect((yield* install()).find((row) => row.path === path)?.write).toBe('current');
     }),
   );
 
