@@ -4,8 +4,8 @@ import { adoptedPermissionArgv, UNMEASURED_HOOK_CONTEXT } from '@runlith/tagma/a
 import { icon } from '@runlith/adapter-opencode/icon';
 import { ASKS_IN_REVIEW, ASKS_NEVER } from '../../../platform/contract/wire/conditions.js';
 import type { TerminalHarnessAdapter } from '../../contract/service/adapter.js';
-import { claudeCodec, claudeOccasion } from '../../adapter/claudeFormat.js';
-import { field, modelField, namedCall, rootOfArgv, sessionIdOf } from '../../adapter/payload.js';
+import { claudeCodec, claudeOccasion } from '@runlith/tagma/adapter/claude-hooks';
+import { field, modelField, namedCall, rootOfArgv, sessionIdOf } from '@runlith/tagma/adapter/payload';
 import { events, filesOf, printedOf } from './format.js';
 import plugin from './plugin.ts' with { type: 'text' };
 import { opencodeAcp } from './acp.js';

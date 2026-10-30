@@ -104,13 +104,13 @@ import { CarrierAdmission } from '../change-record/contract/service/carriers.js'
 import { PreparedChanges } from '../change-record/contract/service/prepared.js';
 import { WORKTREE_HOME, WorktreeHome } from '../worktrees/contract/service/home.js';
 import { installationAnchor } from '../installation/paths.js';
-import { sessionIdentity } from '../external-harnesses/sessionPrefix.js';
+import { harnessIdentity } from '../external-harnesses/sessionPrefix.js';
 import { accountCliLayer } from '../external-harnesses/accounts/cli.js';
 import { askProgramsLayer } from '../external-harnesses/programs/asks.js';
 import { AccountCli } from '../providers/contract/service/cli.js';
 import { installedHarnessesLayer } from '../external-harnesses/birth/installed.js';
-import { harnessAdaptersLayer } from '../external-harnesses/adapters.js';
-import type { HarnessAdapters } from '../external-harnesses/contract/service/adapters.js';
+import { makeHarnessAdapters } from '../external-harnesses/adapters.js';
+import { HarnessAdapters } from '../external-harnesses/contract/service/adapters.js';
 import { UserEnvironment } from '../installation/contract/service/userEnvironment.js';
 import type { InstalledHarnesses } from '../threads/contract/service/harness.js';
 import { makeUserEnvironment } from '../installation/process/userEnvironment.js';
@@ -389,6 +389,7 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
     ),
   );
   const [foundation] = manifests(platform);
+  const adapters = yield* makeHarnessAdapters;
   const storePath = options.databasePath ?? databasePath(CHANNEL);
   const dataPath = dataPathOf(storePath);
   const {
@@ -401,7 +402,7 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
     start(
       migrationsFolder,
       options.seedPath ?? seedDirectory(),
-      sessionIdentity,
+      harnessIdentity(adapters),
       options.grants,
       SETTING_DECLARATIONS.keys,
       OPERATION_IDS,
@@ -527,7 +528,7 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
       ),
     ),
     Layer.provide(BunFileSystem.layer),
-    Layer.provideMerge(harnessAdaptersLayer),
+    Layer.provideMerge(Layer.succeed(HarnessAdapters, adapters)),
   );
   const accountCli =
     options.accountCli === undefined

@@ -35,15 +35,13 @@ import type { Invocation } from '../../platform/cli/verb.js';
 import { hookCall } from './call.js';
 import { baseFile, CREATION_MARKER, keepBase, dropBase, writtenTexts } from './base.js';
 
-export type Road = {
+export type Road = HookRows & {
   readonly at: Invocation;
   readonly temporary: string;
   readonly delivery: HookDelivery['Service'];
   readonly capturedAt: string;
   readonly receipt: string;
   readonly diagnostics: HarnessCallReport[];
-  readonly named: HarnessAdapter | null;
-  readonly rows: readonly HarnessAdapter[];
 };
 
 const HOOK_DOOR_KEYS = ['agent_id', 'source'] as const;
@@ -543,17 +541,16 @@ export const hookEventOf = Effect.fnUntraced(function* (
   event: 'session-start' | 'pre-tool-use' | 'post-tool-use' | 'stop' | 'answer' | 'permission-request' | 'observe',
   at: Invocation,
   connect: HookConnect,
-  { named, rows }: HookRows,
+  loaded: HookRows,
 ) {
   const road: Road = {
+    ...loaded,
     at,
     temporary: at.temporary,
     delivery: makeHookDelivery({ connect }),
     capturedAt: new Date(yield* Clock.currentTimeMillis).toISOString(),
     receipt: `harness-report:${crypto.randomUUID()}`,
     diagnostics: [],
-    named,
-    rows,
   };
   return yield* event === 'pre-tool-use'
     ? preToolUse(road)

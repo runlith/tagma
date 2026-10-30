@@ -1,6 +1,7 @@
 import { join } from 'node:path';
 import { ADAPTERS } from '../installation/contract/wire/layout.js';
 import type { AdapterEntry } from '@runlith/tagma/adapter/loader';
+import type { HarnessProvider } from '@runlith/tagma/adapter/provider';
 import type { AdapterPlaces, AdapterSource } from '../providers/contract/service/registry.js';
 import { HOST_MODULES } from './hostModules.generated.js';
 
@@ -25,3 +26,7 @@ export const BUILTIN_ADAPTERS: readonly AdapterSource[] = [
   builtin('openrouter', () => import('@runlith/adapter-openrouter/adapter')),
   builtin('openai-compatible', () => import('@runlith/adapter-openai-compatible/adapter')),
 ];
+
+export const BUILTIN_HARNESS_PROVIDERS: ReadonlyMap<string, () => Promise<HarnessProvider>> = new Map([
+  ['grok', async () => (await import('@runlith/adapter-xai/harness')).grok],
+]);

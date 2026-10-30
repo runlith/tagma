@@ -1,5 +1,4 @@
-import type { HookCodec } from '@runlith/tagma/adapter/hook';
-import { commandGroup, specificOutput } from '../../adapter/hookFormat.js';
+import { commandGroup, specificOutput, type HookCodec } from '@runlith/tagma/adapter/hook';
 
 export const codexCodec: HookCodec = {
   file: {

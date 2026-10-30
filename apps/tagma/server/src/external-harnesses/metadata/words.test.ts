@@ -197,7 +197,7 @@ layer(home)('reader words', (it) => {
 
   it.effect('vendors carrying no readable reader-word source declare none', () =>
     Effect.sync(() => {
-      for (const name of ['grok', 'cursor', 'gemini'] as const) {
+      for (const name of ['cursor', 'gemini'] as const) {
         expect(builtinHarness(name).metadata?.words).toBeUndefined();
       }
     }),

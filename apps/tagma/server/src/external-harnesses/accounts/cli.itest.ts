@@ -86,7 +86,7 @@ layer(fixture, { excludeTestServices: true })('account CLI', (it) => {
       const disk = yield* FileSystem.FileSystem;
       const directory = yield* disk.makeTempDirectoryScoped({ prefix: 'account-availability-' });
       const log = join(directory, 'runs.log');
-      writeFileSync(join(directory, 'grok'), `#!/bin/sh\necho ran >> '${log}'\necho 'grok 1.0.52'\n`, { mode: 0o755 });
+      writeFileSync(join(directory, 'gemini'), `#!/bin/sh\necho ran >> '${log}'\necho '0.12.0'\n`, { mode: 0o755 });
       const users = makeUserEnvironment({ shell: null, env: { PATH: directory }, world: null, home: null });
       const actual = installedHarnessesLayer.pipe(
         Layer.provide(
@@ -101,7 +101,7 @@ layer(fixture, { excludeTestServices: true })('account CLI', (it) => {
         Layer.fresh(accountCliLayer.pipe(Layer.provide(Layer.mergeAll(terminals, host, endings, requests, actual, projects)))),
       );
       const cli = Context.get(context, AccountCli);
-      expect(yield* cli.installed('grok')).toEqual({ _tag: 'Found' });
+      expect(yield* cli.installed('gemini')).toEqual({ _tag: 'Found' });
       expect(yield* cli.installed('codex')).toMatchObject({ _tag: 'Missing' });
       expect(existsSync(log)).toBe(false);
     }),

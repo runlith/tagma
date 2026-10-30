@@ -6,7 +6,7 @@ import { includeInstructions } from '../graph/orientation/tagPrompts.js';
 import type { TouchBrief } from '../graph/contract/service/orientation.js';
 import type { HarnessFailure } from '../threads/contract/service/failure.js';
 import type { ClearedGuidance, Guided, HarnessGuidance, RunGuiding, RunHosting } from './contract/service/guidance.js';
-import { sessionIdentity } from './sessionPrefix.js';
+import type { SessionIdentity } from '../platform/contract/wire/session.js';
 import type { HarnessSessionStore } from './store/sessions.js';
 import type { TerminalJournal } from './terminal/journal.js';
 import type { WorkPlaces } from '../threads/contract/service/working.js';
@@ -30,6 +30,7 @@ export const makeHookGuidance = (
   records: ThreadRecords['Service'],
   reportsFor: RunReports['Service'],
   hosting: RunHosting,
+  identity: SessionIdentity['Service'],
 ): HarnessGuidance['Service'] => {
   const runOf = (threadId: string): Effect.Effect<string, HarnessFailure> =>
     Effect.map(store.read(threadId), (facet) => facet?.turn?.run ?? threadId);
@@ -100,7 +101,7 @@ export const makeHookGuidance = (
       (ledger) => {
         for (const set of instructions) includeInstructions(ledger.delivered, set);
         const lines = briefs.flatMap((brief) => {
-          const line = touchText(brief, ledger, sessionIdentity, {});
+          const line = touchText(brief, ledger, identity, {});
           return line === null ? [] : [line];
         });
         return lines.length === 0 ? null : lines.join('\n\n');

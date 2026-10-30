@@ -3,7 +3,6 @@ import { hostname } from 'node:os';
 import { join } from 'node:path';
 import { GRANT_VARIABLE, SESSION_TOKEN_VARIABLE, TERMINAL_VARIABLE } from '../../platform/contract/service/credentials.js';
 import { shellDigest } from '../../platform/credentials/grants.js';
-import { SESSION_SIGNERS } from '../contract/wire/sessionVariables.js';
 import type { HookRows } from './rows.js';
 import {
   adoptionKeptName,
@@ -116,8 +115,8 @@ export const hookSession = (loaded: HookRows, event: Record<string, unknown>): s
 };
 
 export const publishedHarness = (at: Invocation, loaded: HookRows, key: string): string | undefined =>
-  [...loaded.rows.flatMap(({ harness, variable }) => (variable === undefined ? [] : [{ harness, variable }])), ...SESSION_SIGNERS].find(
-    (signer) => at.env[signer.variable]?.trim() === key,
+  [...loaded.rows.map(({ harness, variable }) => ({ harness, variable })), ...loaded.signers].find(
+    (signer) => signer.variable !== undefined && at.env[signer.variable]?.trim() === key,
   )?.harness;
 
 export const adoptedHook = Effect.fn('hookAdoption.adoptedHook')(function* (

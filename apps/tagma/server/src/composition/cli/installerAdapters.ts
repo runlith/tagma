@@ -6,15 +6,17 @@ import { HarnessAdapters } from '../../external-harnesses/contract/service/adapt
 import { installFailure } from '../../installation/contract/wire/install.js';
 import { ADAPTERS, dataDirectory } from '../../installation/contract/wire/layout.js';
 import { CurrentInvocation } from '../../platform/cli/verb.js';
-import { installedHarnesses } from './installedHarness.js';
+import { harnessDeclarations } from './installedHarness.js';
 
 export const installerAdapters = Layer.effect(
   HarnessAdapters,
   Effect.gen(function* () {
     const adapters = yield* makeHarnessAdapters;
     const data = dataDirectory(CHANNEL, (yield* CurrentInvocation).env);
-    if (data === null) return adapters;
-    const providers = yield* Effect.tryPromise({ try: () => installedHarnesses(join(data, ADAPTERS)), catch: installFailure });
+    const providers = yield* Effect.tryPromise({
+      try: () => harnessDeclarations(data === null ? null : join(data, ADAPTERS), null),
+      catch: installFailure,
+    });
     yield* adapters.declared(providers);
     return adapters;
   }),

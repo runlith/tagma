@@ -1,14 +1,5 @@
 import type { HarnessAdapter } from '../contract/service/adapter.js';
-import type { HarnessWidgetKey, ScreenAsk } from '@runlith/tagma/adapter/harness';
-
-export const unmeasuredScreen = (_lines: readonly string[]): ScreenAsk | null => null;
-
-export const oneValue =
-  (keys: (ask: ScreenAsk, value: string) => readonly HarnessWidgetKey[] | null) =>
-  (ask: ScreenAsk, values: readonly string[]): readonly HarnessWidgetKey[] | null =>
-    values.length === 1 ? keys(ask, values[0]!) : null;
-
-export const unmeasuredKeys = (): null => null;
+import { unmeasuredScreen, type ScreenAsk } from '@runlith/tagma/adapter/harness';
 
 export const readsScreen = (adapter: HarnessAdapter): boolean => adapter.screenAskOf !== unmeasuredScreen;
 

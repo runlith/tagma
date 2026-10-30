@@ -24,6 +24,13 @@ export type HookFileShape = {
   readonly entry: (command: string, timeout: number | undefined) => HookEntry;
 };
 
+export const commandGroup = (command: string, timeout: number | undefined): HookEntry => ({
+  hooks: [{ type: 'command', command, ...(timeout === undefined ? {} : { timeout }) }],
+});
+
+export const specificOutput = (hookEventName: string, additionalContext: string): string =>
+  JSON.stringify({ hookSpecificOutput: { hookEventName, additionalContext } });
+
 export type HookCodec = {
   readonly file: HookFileShape;
   readonly permission: (verdict: HookVerdict) => string;

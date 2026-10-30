@@ -1,4 +1,3 @@
-import { LEGACY_TOOLS } from '../tools.js';
 import type { TerminalHarnessAdapter } from '../../contract/service/adapter.js';
 import { devinReader } from './reader.js';
 
@@ -6,6 +5,8 @@ import { DEVIN_PROVIDER } from '@runlith/adapter-devin/models/devin';
 import {
   adoptedPermissionArgv,
   chosenModelArgv,
+  LEGACY_TOOLS,
+  oneValue,
   UNMEASURED_HOOK_CONTEXT,
   type HarnessModelArgv,
   type HarnessPermissionArgv,
@@ -13,9 +14,8 @@ import {
   type ScreenAsk,
   type HarnessWidgetKey,
 } from '@runlith/tagma/adapter/harness';
-import { CLAUDE_EVENTS, claudeFiles, claudePrinted, claudeOccasion, claudeSubject } from '../../adapter/claudeFormat.js';
-import { field, rootOfArgv, sessionIdOf, unreported } from '../../adapter/payload.js';
-import { oneValue } from '../../adapter/screenAsk.js';
+import { CLAUDE_EVENTS, claudeFiles, claudePrinted, claudeOccasion, claudeSubject } from '@runlith/tagma/adapter/claude-hooks';
+import { field, rootOfArgv, sessionIdOf, unreported } from '@runlith/tagma/adapter/payload';
 import { devinAcp } from './acp.js';
 import { devinCodec } from './codec.js';
 

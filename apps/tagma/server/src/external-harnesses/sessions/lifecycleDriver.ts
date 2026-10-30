@@ -100,7 +100,7 @@ export class SessionLifecycle {
     const shell = facet.execution;
     const witness = session.job;
     if (shell === null || witness === undefined) return yield* this.awaitDrive(threadId);
-    const declared = this.adapters.find(facet.name)?.quit ?? null;
+    const declared = this.adapters.last(facet.name)?.quit ?? null;
     let why = declared === null ? `no way to quit ${facet.presentation.label} is measured` : null;
     const act = `quit:${sessionId}:${crypto.randomUUID()}`;
     for (const [index, keys] of (declared ?? []).entries()) {

@@ -1,20 +1,22 @@
-import { LEGACY_TOOLS } from '../tools.js';
-import type { TerminalHarnessAdapter } from '../../contract/service/adapter.js';
-import { grokReader } from './reader.js';
-
+import type { HarnessProvider } from '@runlith/tagma/adapter/provider';
 import {
   adoptedPermissionArgv,
   chosenModelArgv,
   INTERRUPT_KEY,
+  LEGACY_TOOLS,
   UNMEASURED_HOOK_CONTEXT,
+  unmeasuredKeys,
+  unmeasuredScreen,
   type HarnessModelArgv,
   type HarnessPermissionArgv,
   type HookOccasion,
+  type TerminalSurface,
 } from '@runlith/tagma/adapter/harness';
-import { CLAUDE_EVENTS, claudeCodec, claudeFiles, claudePrinted, claudeOccasion } from '../../adapter/claudeFormat.js';
-import { rootOfArgv, sessionIdOf, tail, unasked, unreported, unturned } from '../../adapter/payload.js';
-import { unmeasuredKeys, unmeasuredScreen } from '../../adapter/screenAsk.js';
-import { SESSION_VARIABLES } from '../../contract/wire/sessionVariables.js';
+import { CLAUDE_EVENTS, claudeCodec, claudeFiles, claudePrinted, claudeOccasion } from '@runlith/tagma/adapter/claude-hooks';
+import { rootOfArgv, sessionIdOf, tail, unasked, unreported, unturned } from '@runlith/tagma/adapter/payload';
+import { icon } from '../icon';
+import { grokReader } from './metadata';
+import { GROK_SESSION } from './session';
 
 const permission = { tagma: ['--always-approve'] } as const satisfies HarnessPermissionArgv;
 
@@ -55,13 +57,10 @@ const grokComposer = (lines: readonly string[]): string | null => {
   return text === '' ? null : text;
 };
 
-export const grok: TerminalHarnessAdapter = {
-  harness: 'grok',
+export const grokTerminal: TerminalSurface = {
   tools: LEGACY_TOOLS,
-  label: 'Grok Build',
-  iconProvider: 'xai',
   prefix: 'gb',
-  variable: SESSION_VARIABLES.grok,
+  variable: GROK_SESSION.variable,
   binary: 'grok',
   metadata: grokReader,
   launch: {
@@ -146,4 +145,17 @@ export const grok: TerminalHarnessAdapter = {
   quit: null,
   callEnvelopeMs: null,
   ends: { interrupt: 'screen', idle: 'notification', tail: 'prompt' },
+};
+
+export const grok: HarnessProvider = {
+  id: GROK_SESSION.harness,
+  label: 'Grok Build',
+  kind: 'harness',
+  auth: 'cli',
+  icon,
+  environment: () => [],
+  models: {},
+  defaultTextModel: '',
+  cacheLifetime: { promisedSeconds: null, prior: null },
+  terminal: grokTerminal,
 };

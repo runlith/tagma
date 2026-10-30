@@ -22,6 +22,7 @@ export const makeHarnessAdapters = Effect.gen(function* () {
     return next;
   };
   let rows = rowsOf([]);
+  const held = new Map(rows);
   const moves = yield* Effect.acquireRelease(PubSub.sliding<void>({ capacity: 1 }), PubSub.shutdown);
   return HarnessAdapters.of({
     declared: (providers) =>
@@ -29,9 +30,11 @@ export const makeHarnessAdapters = Effect.gen(function* () {
         const next = rowsOf(providers);
         if (same(rows, next)) return Effect.void;
         rows = next;
+        for (const [id, row] of next) held.set(id, row);
         return PubSub.publish(moves, undefined);
       }),
     find: (id) => rows.get(id) ?? null,
+    last: (id) => rows.get(id) ?? held.get(id) ?? null,
     row: (id, install) =>
       Effect.suspend(() => {
         const row = rows.get(id);

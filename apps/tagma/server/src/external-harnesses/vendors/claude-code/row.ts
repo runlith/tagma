@@ -16,8 +16,8 @@ import {
 } from '@runlith/tagma/adapter/harness';
 import { claudeScreenAsk, claudeWidgetKeys } from './screen.js';
 import { claudeComposer, claudePromptScreen } from './composer.js';
-import { CLAUDE_EVENTS, claudeCodec, claudeFiles, claudePrinted, claudeOccasion } from '../../adapter/claudeFormat.js';
-import { field, namedCall, rootOfArgv, sessionIdOf, unreported } from '../../adapter/payload.js';
+import { CLAUDE_EVENTS, claudeCodec, claudeFiles, claudePrinted, claudeOccasion } from '@runlith/tagma/adapter/claude-hooks';
+import { field, namedCall, rootOfArgv, sessionIdOf, unreported } from '@runlith/tagma/adapter/payload';
 import { claudeAcp } from './acp.js';
 import { claudeAddress, claudeCut } from './cut.js';
 import { stopFailureOf } from './failure.js';

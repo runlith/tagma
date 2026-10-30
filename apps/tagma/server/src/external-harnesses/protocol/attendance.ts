@@ -121,6 +121,21 @@ export class ProtocolAttendance {
     for (const threadId of yield* this.store.standing('acp')) yield* this.observe(threadId);
   });
 
+  readonly moved = Effect.fn('ProtocolAttendance.moved')(function* (this: ProtocolAttendance) {
+    const { links, store, process, fibers, watchers } = this;
+    for (const link of links.all()) {
+      link.stale = process.stale(link.row, link.name);
+      links.raise(link.threadId);
+    }
+    for (const threadId of yield* store.standing('acp')) {
+      if (links.get(threadId) !== undefined || (yield* FiberMap.has(fibers, threadId))) continue;
+      const facet = yield* store.read(threadId);
+      if (facet === null || !process.withdrawn(facet.name)) continue;
+      yield* FiberMap.remove(watchers, threadId);
+      yield* this.observe(threadId);
+    }
+  });
+
   readonly connect = Effect.fnUntraced(function* (this: ProtocolAttendance, threadId: string) {
     const { store, links, watchers } = this;
     const facet = yield* store.read(threadId);

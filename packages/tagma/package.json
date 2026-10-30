@@ -44,6 +44,18 @@
       "bun": "./src/adapter/hook.ts",
       "default": "./src/adapter/hook.ts"
     },
+    "./adapter/payload": {
+      "types": "./src/adapter/payload.ts",
+      "browser": "./src/adapter/payload.ts",
+      "bun": "./src/adapter/payload.ts",
+      "default": "./src/adapter/payload.ts"
+    },
+    "./adapter/claude-hooks": {
+      "types": "./src/adapter/claudeHooks.ts",
+      "browser": "./src/adapter/claudeHooks.ts",
+      "bun": "./src/adapter/claudeHooks.ts",
+      "default": "./src/adapter/claudeHooks.ts"
+    },
     "./adapter/settings": {
       "types": "./src/adapter/settings.ts",
       "browser": "./src/adapter/settings.ts",
@@ -112,9 +124,11 @@
   },
   "tagma": {
     "host": [
+      "./adapter/claude-hooks",
       "./adapter/harness",
       "./adapter/hook",
       "./adapter/metadata",
+      "./adapter/payload",
       "./adapter/provider",
       "./adapter/settings",
       "effect",

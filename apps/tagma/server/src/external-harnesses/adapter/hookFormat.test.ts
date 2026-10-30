@@ -6,7 +6,7 @@ import { cursorCodec } from '../vendors/cursor/codec.js';
 import { devinCodec } from '../vendors/devin/codec.js';
 import { geminiCodec } from '../vendors/gemini/codec.js';
 import type { HarnessAnswer } from '../contract/wire/call.js';
-import { claudeCodec } from './claudeFormat.js';
+import { claudeCodec } from '@runlith/tagma/adapter/claude-hooks';
 import { promptSupported, verdictOf } from './hookFormat.js';
 
 const allowed = verdictOf({ _tag: 'Allowed', ruleId: 'ask-pushing', reason: 'Pushing is done by hand here.' }) as HookVerdict;
@@ -66,7 +66,7 @@ test('a prompt answer rides top-level additional_context to Cursor, the nested e
   expect(devinCodec.prompt).toBeNull();
 });
 
-test('a prompt answer is taken only from CLIs whose own row declares it measured: Claude Code, Codex and Cursor, not Grok, OpenCode or Devin', () => {
+test('a prompt answer is taken only from CLIs whose own row declares it measured: Claude Code, Codex and Cursor, not OpenCode or Devin', () => {
   const taken = BUILTIN_HARNESSES.filter((row) => promptSupported(row.hooks)).map((row) => row.harness);
   expect(taken.sort()).toEqual(['claude-code', 'codex', 'cursor']);
 });

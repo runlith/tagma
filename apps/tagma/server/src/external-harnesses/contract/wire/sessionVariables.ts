@@ -1,7 +1,8 @@
+export type SessionSigner = { readonly harness: string; readonly variable?: string | undefined };
+
 export const SESSION_VARIABLES = {
   'claude-code': 'CLAUDE_CODE_SESSION_ID',
   codex: 'CODEX_THREAD_ID',
-  grok: 'GROK_SESSION_ID',
   opencode: 'OPENCODE_SESSION_ID',
 } as const;
 

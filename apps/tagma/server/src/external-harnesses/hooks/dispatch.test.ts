@@ -14,7 +14,8 @@ import { hookReports } from '../testing/hookReports.js';
 import type { TouchBrief } from '../../graph/contract/service/orientation.js';
 import { hookConnectOver } from './door.js';
 import { hookEventOf } from './dispatch.js';
-import { builtinRows } from '../testing/hookRows.js';
+import { hookRowsOf } from '../testing/hookRows.js';
+import { grok } from '@runlith/adapter-xai/harness';
 
 type Reports = Effect.Success<ReturnType<typeof hookReports>>;
 type Hook = Parameters<typeof hookEventOf>[0];
@@ -75,7 +76,7 @@ const invoke = Effect.fnUntraced(function* (
       },
     }),
   );
-  yield* hookEventOf(command, at, connect, builtinRows(named)!).pipe(
+  yield* hookEventOf(command, at, connect, hookRowsOf(world.adapters, named)!).pipe(
     Effect.provideService(CurrentInvocation, at),
     Effect.provide(MemoryFileSystem.layer),
   );
@@ -203,7 +204,7 @@ it.effect(
 
 it.effect('the five hook vocabularies open and finish real core runs without ending their CLI sessions or inventing a question', () =>
   Effect.gen(function* () {
-    const base = yield* hookReports();
+    const base = yield* hookReports({ harnesses: [grok] });
     const grokNames: Record<string, string> = {
       UserPromptSubmit: 'user_prompt_submit',
       PreToolUse: 'pre_tool_use',
@@ -260,7 +261,7 @@ it.effect(
         recap: unused,
         tail: () => Effect.succeed({ text: note, ruleId: 'operator-notes', state: {} }),
       };
-      const world = yield* hookReports({ key: 'root', sources });
+      const world = yield* hookReports({ key: 'root', sources, harnesses: [grok] });
       const prompt = (turn: string) => ({ hook_event_name: 'UserPromptSubmit', session_id: 'root', turn_id: turn, prompt: 'hello' });
       const first = JSON.parse(yield* invoke(world, 'observe', prompt('one')));
       const again = JSON.parse(yield* invoke(world, 'observe', prompt('one')));

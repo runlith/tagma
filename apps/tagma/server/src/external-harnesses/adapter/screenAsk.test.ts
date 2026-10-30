@@ -8,9 +8,8 @@ import { codex } from '../vendors/codex/row.js';
 import { cursor } from '../vendors/cursor/row.js';
 import { devin } from '../vendors/devin/row.js';
 import { gemini } from '../vendors/gemini/row.js';
-import { grok } from '../vendors/grok/row.js';
 import { screenLines } from '@runlith/executions/protocol/presentationText';
-import { sameScreenAsk, unmeasuredScreen } from './screenAsk.js';
+import { sameScreenAsk } from './screenAsk.js';
 
 const WIDGET = [
   '',
@@ -118,11 +117,6 @@ test('a widget whose first options are not drawn yet raises nothing', () => {
 
 test('a transcript with no footer declaring the widget’s keys raises nothing', () => {
   expect(devin.screenAskOf(WIDGET.filter((line) => !line.startsWith('↑↓')))).toBeNull();
-});
-
-test('a row whose own screens nobody measured raises nothing from the widget of another vendor', () => {
-  expect(unmeasuredScreen(WIDGET)).toBeNull();
-  expect(grok.screenAskOf(WIDGET)).toBeNull();
 });
 
 const CLAUDE_WIDGET = [
@@ -522,12 +516,6 @@ test('Cursor walks its cursor to the option answered, and refuses without one', 
   expect(cursor.keysOf({ ...ask, selected: null }, [last])).toBeNull();
   expect(cursor.keysOf(ask, ['Run Everything'])).toBeNull();
   expect(cursor.cancelKeysOf(ask)).toEqual(['esc']);
-});
-
-test('Grok names no strokes at all', () => {
-  const ask = devin.screenAskOf(WIDGET)!;
-  expect(grok.keysOf(ask, ['1'])).toBeNull();
-  expect(grok.cancelKeysOf(ask)).toBeNull();
 });
 
 test('screenLines offers the visible display and never the scrollback above it', () => {

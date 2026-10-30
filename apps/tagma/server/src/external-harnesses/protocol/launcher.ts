@@ -20,6 +20,7 @@ import { launchChoice, resolvedAsked } from '../birth/modelChoice.js';
 import { servingProvider, transportOf } from '../contract/service/table.js';
 import { HarnessAdapters } from '../contract/service/adapters.js';
 import { accountFor, harnessPlace, type ProjectDeclaring } from '../sessions/launch.js';
+import { sessionIdentityOf } from '../sessionPrefix.js';
 import { cliTitles } from '../titles.js';
 import type { ProtocolRows } from '../store/protocol.js';
 import type { HarnessSessionStore } from '../store/sessions.js';
@@ -156,6 +157,7 @@ export class ProtocolLauncher {
       host,
       settings,
       grants,
+      sessionIdentityOf(this.adapters.all()),
       threadId,
       place.projectId,
       adapter,

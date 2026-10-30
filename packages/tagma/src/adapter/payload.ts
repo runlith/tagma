@@ -1,4 +1,4 @@
-import type { FileEffect, HarnessCall, HarnessModelReport } from '@runlith/tagma/adapter/harness';
+import type { FileEffect, HarnessCall, HarnessModelReport } from './harness';
 
 export const tail = (prompt: string | undefined): string[] => (prompt === undefined ? [] : [prompt]);
 

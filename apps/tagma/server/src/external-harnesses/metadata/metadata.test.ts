@@ -13,7 +13,7 @@ import { metadataField } from './fields.js';
 import { METADATA_LIMITS } from './policy.js';
 import type { MetadataInput } from './input.js';
 import { devin, devinTitle } from '../vendors/devin/metadata.js';
-import { grok, grokSources } from '../vendors/grok/metadata.js';
+import { grok } from '@runlith/adapter-xai/harness';
 import { NamespaceId } from '@runlith/files/namespace';
 import { EnvironmentId } from '../../workspace/contract/wire/environments.js';
 import type { HarnessStorage } from '../../threads/contract/wire/harness/session.js';
@@ -371,11 +371,7 @@ layer(home)('vendor metadata', (it) => {
     }),
   );
 
-  test('Grok summary and Devin export/list preserve recorded claims and refuse foreign identities', () => {
-    expect(
-      grok('grok-one', JSON.stringify({ info: { id: 'grok-one' }, current_model_id: 'grok-4.6', generated_title: 'Summary' })),
-    ).toMatchObject({ model: { value: 'grok-4.6', claim: 'last-recorded' }, title: { value: 'Summary' }, effort: null });
-    expect(() => grok('other', JSON.stringify({ info: { id: 'grok-one' } }))).toThrow(MetadataInvalid);
+  test('Devin export/list preserve recorded claims and refuse foreign identities', () => {
     const atif = JSON.stringify({ schema_version: 'ATIF-v1.7', session_id: 'clumsy-tower', agent: { model_name: 'SWE-2 Max' } });
     expect(devin('clumsy-tower', atif).model).toMatchObject({ value: 'SWE-2 Max', claim: 'last-recorded' });
     expect(() => devin('other', atif)).toThrow(MetadataInvalid);
@@ -484,7 +480,7 @@ layer(home)('vendor metadata', (it) => {
         entries: [{ name: 'GROK_HOME' as const, value: home }],
       } as HarnessStorage;
       const input = testInput({ rootKey: 'grok-one', storage });
-      const [summary] = grokSources(input);
+      const [summary] = grok.terminal!.metadata!.sources(input);
       if (summary === undefined || summary.kind !== 'file') return yield* Effect.die(new Error('expected a file source'));
       const read = fileLocationReader(summary);
       expect(yield* read(files)).toEqual({ _tag: 'Unreadable', reason: 'session-path-unresolved' });

@@ -20,6 +20,16 @@
       "types": "./src/profiles/xai.ts",
       "default": "./src/profiles/xai.ts"
     },
+    "./harness": {
+      "types": "./src/harness/grok.ts",
+      "bun": "./src/harness/grok.ts",
+      "default": "./src/harness/grok.ts"
+    },
+    "./harness/session": {
+      "types": "./src/harness/session.ts",
+      "bun": "./src/harness/session.ts",
+      "default": "./src/harness/session.ts"
+    },
     "./icon": {
       "types": "./src/icon.ts",
       "browser": "./src/icon.ts",

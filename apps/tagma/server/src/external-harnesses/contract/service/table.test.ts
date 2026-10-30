@@ -22,7 +22,6 @@ test('terminal copy fidelity names the vendor only on the sides that have a vend
   expect(copies).toEqual({
     'claude-code': { whole: 'vendor', point: 'vendor' },
     codex: { whole: 'vendor', point: 'vendor' },
-    grok: { whole: 'vendor', point: 'record' },
     devin: { whole: 'record', point: 'record' },
     cursor: { whole: 'record', point: 'record' },
     gemini: { whole: 'record', point: 'record' },
@@ -61,11 +60,6 @@ test('declared start, prompt and ending occasions classify to the timer contract
     if (events.stop !== null) expect(row.occasionOf({ name: events.stop })).toBe('turn-end');
     if (events.sessionEnd !== undefined) expect(row.occasionOf({ name: events.sessionEnd })).toBe('turn-end');
   }
-  const grok = builtinHarness('grok');
-  expect(grok.occasionOf({ name: 'session_start' })).toBe('session-start');
-  expect(grok.occasionOf({ name: 'user_prompt_submit' })).toBe('turn-start');
-  expect(grok.occasionOf({ name: 'stop' })).toBe('turn-end');
-  expect(grok.occasionOf({ name: 'session_end' })).toBe('turn-end');
 });
 
 test('permission gates prove presence; question tools wait the clock', () => {
@@ -73,7 +67,7 @@ test('permission gates prove presence; question tools wait the clock', () => {
     const row = builtinHarness(name);
     expect(row.occasionOf({ name: row.hooks!.events.permission! })).toBe('self-description');
   }
-  for (const name of ['claude-code', 'codex', 'grok', 'devin', 'cursor'] as const) {
+  for (const name of ['claude-code', 'codex', 'devin', 'cursor'] as const) {
     const row = builtinHarness(name);
     expect(row.occasionOf({ name: row.hooks!.events.preWrite!, tool: 'AskUserQuestion' })).toBe('wait');
   }
@@ -83,7 +77,6 @@ test('every launch shape carries the row permission stance', () => {
   const measured = {
     'claude-code': ['--dangerously-skip-permissions'],
     codex: ['--dangerously-bypass-approvals-and-sandbox'],
-    grok: ['--always-approve'],
     devin: ['--permission-mode', 'dangerous', '--respect-workspace-trust', 'false'],
     cursor: ['--force'],
     gemini: ['--approval-mode', 'yolo'],
@@ -242,8 +235,7 @@ it.effect('a chosen permission mode replaces the bypass in every launch shape, a
 test('a row that cannot spell the pair refuses, and an undeclared row launches exactly as it did', () => {
   expect(() => launchOf('devin').interactive('go', { model: 'gpt-5-6-sol', rung: 'high' })).toThrow(/rung/);
 
-  const frozen: Record<'grok' | 'cursor' | 'gemini', readonly string[]> = {
-    grok: ['grok', '--always-approve', '--resume', 'root-4', 'go'],
+  const frozen: Record<'cursor' | 'gemini', readonly string[]> = {
     cursor: ['cursor-agent', '--force', '--resume', 'root-4', 'go'],
     gemini: ['gemini', '--approval-mode', 'yolo', '--resume', 'root-4', 'go'],
   };

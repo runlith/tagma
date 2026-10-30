@@ -39,6 +39,7 @@ import { Environments } from '../workspace/contract/service/environments.js';
 import { HarnessAdoption } from './contract/service/adoption.js';
 import { HarnessPermissions } from './contract/service/permissions.js';
 import { HarnessAdapters } from './contract/service/adapters.js';
+import { harnessIdentity } from './sessionPrefix.js';
 import { HarnessReports } from './contract/service/reports.js';
 import { HarnessImplementations } from './contract/service/sessionPorts.js';
 import { HarnessSpeech, ScreenAsks } from './contract/service/speech.js';
@@ -441,6 +442,7 @@ export const externalHarnessesLayer = Layer.effectContext(
       records,
       harness.runs.reports(),
       harness.runs.hosting(),
+      harnessIdentity(adapters),
     );
     const terminalEvents = new TerminalEvents(
       lookups,

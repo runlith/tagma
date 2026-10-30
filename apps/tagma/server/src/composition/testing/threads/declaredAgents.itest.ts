@@ -25,6 +25,8 @@ import { enabledPlugins } from '../../../plugins/testing/enabled.js';
 import { servedCapabilities } from '../native-harness/capabilities.js';
 import { harnessPresentation } from '../../../external-harnesses/contract/service/table.js';
 import { builtinHarness } from '../../../external-harnesses/testing/builtin.js';
+import { declaredHarness } from '../../../external-harnesses/adapter/declared.js';
+import { grok } from '@runlith/adapter-xai/harness';
 
 import { declaredAgents, PERSONAL_AGENTS_DIRECTORY, PROJECT_AGENTS_DIRECTORY } from '../../../threads/testing/doubles.js';
 
@@ -327,7 +329,7 @@ it.live(
 );
 
 it.live(
-  'a harness type is offered per measured row, the base itself is no type, and an unknown harness is no name',
+  'a harness type is offered per measured row, the base itself is no type, and a name outside the harness id grammar is no type',
   Effect.fnUntraced(function* () {
     const stand = yield* world([
       {
@@ -352,7 +354,7 @@ it.live(
       },
       {
         harness: 'grok',
-        presentation: harnessPresentation(builtinHarness('grok')),
+        presentation: harnessPresentation(declaredHarness(grok)!),
         binary: '/usr/local/bin/grok',
         version: null,
         unreadable: '--version exited 1',
@@ -381,7 +383,7 @@ it.live(
       capabilities: EXTERNAL_CAPABILITIES(),
     });
     expect(yield* stand.resolve(HARNESS_AGENT_ID(), 'operator')).toBeNull();
-    expect(yield* stand.resolve('harness:nothing', 'operator')).toBeNull();
+    expect(yield* stand.resolve('harness:No Such CLI', 'operator')).toBeNull();
     expect(offered.map((type) => type.id)).not.toContain(HARNESS_AGENT_ID());
   }),
 );

@@ -2,7 +2,7 @@ import { Effect } from 'effect';
 import { GateRefusal } from '../../../platform/contract/wire/refusal.js';
 import type { HarnessAdapter, HarnessReport } from './adapter.js';
 import type { AcpProfile, HarnessCutAsk, HarnessCutMaking, HarnessLaunch, HarnessModelChoice } from '@runlith/tagma/adapter/harness';
-import { answerField } from '../../adapter/payload.js';
+import { answerField } from '@runlith/tagma/adapter/payload';
 import type { HarnessTransport } from '../../../threads/contract/wire/harness/names.js';
 import type { HarnessPresentation } from '../../../threads/contract/wire/harness/externalSession.js';
 

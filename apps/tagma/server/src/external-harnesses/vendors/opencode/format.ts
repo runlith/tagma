@@ -1,5 +1,5 @@
 import type { FileEffect, HarnessPrinted, HookEvents } from '@runlith/tagma/adapter/harness';
-import { field, nested, patchFiles } from '../../adapter/payload.js';
+import { field, nested, patchFiles } from '@runlith/tagma/adapter/payload';
 
 export const events: HookEvents = {
   sessionStart: 'SessionStart',

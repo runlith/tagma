@@ -1,7 +1,6 @@
-import type { FileEffect, HarnessCall, HarnessPrinted, HookEvents, HookOccasion } from '@runlith/tagma/adapter/harness';
-import type { HookCodec } from '@runlith/tagma/adapter/hook';
-import { commandGroup, specificOutput } from './hookFormat.js';
-import { field, nested, questionTool, toolCall } from './payload.js';
+import type { FileEffect, HarnessCall, HarnessPrinted, HookEvents, HookOccasion } from './harness';
+import { commandGroup, specificOutput, type HookCodec } from './hook';
+import { field, nested, questionTool, toolCall } from './payload';
 
 export const claudeCodec: HookCodec = {
   file: { keys: {}, events: ['hooks'], holes: false, trust: null, entry: commandGroup },

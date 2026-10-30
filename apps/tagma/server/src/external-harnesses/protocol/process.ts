@@ -17,6 +17,7 @@ import type { ProtocolRows } from '../store/protocol.js';
 import type { HarnessSessionStore } from '../store/sessions.js';
 import { unfinished, type ProtocolEndings } from './endings.js';
 import { halt, type ProtocolHalts } from './halts.js';
+import { harnessNotInstalled } from '../../threads/contract/service/harness.js';
 import { due, idling, resting, restingRow, touch } from './idle.js';
 import type { ProtocolLauncher } from './launcher.js';
 import type { ProtocolLaunches } from './launches.js';
@@ -62,7 +63,12 @@ export class ProtocolProcess {
     private readonly build: string,
   ) {}
 
+  withdrawn(name: HarnessName): boolean {
+    return this.adapters.find(name) === null && this.adapters.last(name) !== null;
+  }
+
   stale(row: ProtocolRow, name: HarnessName): boolean {
+    if (this.withdrawn(name)) return true;
     const hosts = this.adapters.find(name)?.acp?.hosts ?? null;
     return hosts !== null && row.build !== this.build;
   }
@@ -76,6 +82,10 @@ export class ProtocolProcess {
       if (session === undefined || session.state === 'ended') return;
       const stored = yield* rows.load(threadId);
       if (session.state === 'stopping' && facet.execution === null) return yield* endings.finish(threadId, session.id, 'aborted', null);
+      if (facet.execution !== null && this.adapters.last(facet.name) === null) {
+        yield* halt(terminals, threadId, facet);
+        return yield* endings.finish(threadId, session.id, 'failed', harnessNotInstalled(facet.name, facet.presentation.install).reason);
+      }
       const launch = facet.execution === null ? yield* launcher.launch(threadId, facet, session, stored) : null;
       const execution = facet.execution ?? launch?.execution ?? null;
       if (execution === null) return;
@@ -162,7 +172,7 @@ export class ProtocolProcess {
       Effect.gen(function* () {
         if (link.row.phase !== 'ready') yield* Effect.forkScoped(handshaking);
         if (link.facet.session?.state === 'stopping') yield* Effect.forkScoped(winding);
-        if (link.stale) yield* Effect.forkScoped(retiring);
+        yield* Effect.forkScoped(retiring);
         yield* Effect.forkScoped(idling(link, releasing, idleMs));
         yield* Effect.forkScoped(unconfirmed);
         yield* Effect.raceFirst(
@@ -256,20 +266,23 @@ export class ProtocolProcess {
   private readonly retire = Effect.fnUntraced(function* (this: ProtocolProcess, link: Link) {
     const { links } = this;
     let refused = false;
+    const retiring = () => link.stale && resting(link);
     const marking = Effect.suspend(() =>
-      resting(link) ? Effect.tap(this.mark(link), (stopped) => Effect.sync(() => (refused = !stopped))) : Effect.succeed(false),
+      retiring() ? Effect.tap(this.mark(link), (stopped) => Effect.sync(() => (refused = !stopped))) : Effect.succeed(false),
     );
     while (!refused) {
       const rested = yield* links
-        .until(link.threadId, (current) => (current !== link ? false : resting(link) ? true : null))
+        .until(link.threadId, (current) => (current !== link ? false : retiring() ? true : null))
         .pipe(Effect.catchTag('LinkEnded', () => Effect.succeed(false)));
       if (!rested) return;
-      if (yield* this.release(link, marking)) {
-        return yield* Effect.logInfo('an agent process of another Tagma build was replaced at rest', {
-          threadId: link.threadId,
-          build: link.row.build ?? null,
-        });
+      if (!(yield* this.release(link, marking))) continue;
+      if (this.withdrawn(link.name)) {
+        return yield* Effect.logInfo('an agent process whose harness was removed ended at rest', { threadId: link.threadId });
       }
+      return yield* Effect.logInfo('an agent process of another Tagma build was replaced at rest', {
+        threadId: link.threadId,
+        build: link.row.build ?? null,
+      });
     }
   });
 

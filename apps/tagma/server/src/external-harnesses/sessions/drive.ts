@@ -25,6 +25,7 @@ import { SessionRoots } from './roots.js';
 import { SessionLauncher } from './launcher.js';
 import type { SessionAlignment } from './alignment.js';
 import { SessionLease } from './lease.js';
+import { retireWithdrawn } from './retirement.js';
 import type { SessionPlace } from '../protocol/prompts.js';
 import type { ScratchAreas } from '../../threads/contract/service/scratch.js';
 import type { Environments } from '../../workspace/contract/service/environments.js';
@@ -235,7 +236,11 @@ export class SessionDriver implements Driving {
           log,
           adapters,
         );
-        return Effect.as(Effect.forkScoped(driver.lease.beating()), driver);
+        const stop = (threadId: string, sessionId: string) => driver.stop(threadId, sessionId, true);
+        return Effect.forkScoped(driver.lease.beating()).pipe(
+          Effect.andThen(retireWithdrawn({ store, adapters, stop })),
+          Effect.as(driver),
+        );
       },
     );
   }

@@ -70,7 +70,7 @@ test('a row spelling one word takes the rung inside the id, and the pair is refu
     choice: { model: 'gpt-5-6-sol-high', rung: null },
   });
   expect(chosenModel(MODELS, builtinHarness('devin'), { model: 'gpt-5.6-sol', reasoning: 'ultra' })._tag).toBe('Unavailable');
-  expect(chosenModel(MODELS, builtinHarness('grok'), { model: 'grok-4.6', reasoning: 'high' })._tag).toBe('Unavailable');
+  expect(chosenModel(MODELS, builtinHarness('gemini'), { model: 'grok-4.6', reasoning: 'high' })._tag).toBe('Unavailable');
   expect(chosenModel(MODELS, builtinHarness('claude-code'), undefined)).toEqual({ _tag: 'None' });
 });
 

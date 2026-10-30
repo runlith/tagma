@@ -78,7 +78,7 @@ it.live(
       const sections = fileURLToPath(new URL('../../../platform/contract/service/sections.ts', import.meta.url));
       const graph = fileURLToPath(new URL('../../doctrine.ts', import.meta.url));
       const installed = fileURLToPath(new URL('../../../external-harnesses/birth/installed.ts', import.meta.url));
-      const adapters = fileURLToPath(new URL('../../../external-harnesses/adapters.ts', import.meta.url));
+      const adapters = fileURLToPath(new URL('./shipped.ts', import.meta.url));
       const environment = fileURLToPath(new URL('../../../installation/process/userEnvironment.ts', import.meta.url));
       const userEnvironment = fileURLToPath(new URL('../../../installation/contract/service/userEnvironment.ts', import.meta.url));
       writeFileSync(
@@ -91,13 +91,13 @@ it.live(
           `import { Doctrine } from ${JSON.stringify(sections)};`,
           `import { doctrine } from ${JSON.stringify(graph)};`,
           `import { installedHarnessesLayer } from ${JSON.stringify(installed)};`,
-          `import { harnessAdaptersLayer } from ${JSON.stringify(adapters)};`,
+          `import { shippedAdaptersLayer } from ${JSON.stringify(adapters)};`,
           `import { makeUserEnvironment } from ${JSON.stringify(environment)};`,
           `import { UserEnvironment } from ${JSON.stringify(userEnvironment)};`,
           `import { readFileSync } from 'node:fs';`,
           `const files = ${JSON.stringify([...SEED.map(([file]) => join(home, ...file.split('/'))), join(home, '.codex', 'config.toml'), ...['tagma-hooks.json', 'plugins/tagma/index.ts', 'plugins/tagma/package.json', 'opencode.json'].map((file) => join(home, '.config', 'opencode', ...file.split('/')))])};`,
           `const users = makeUserEnvironment({ shell: null, env: process.env, world: null, home: null });`,
-          `const installs = installedHarnessesLayer.pipe(Layer.provide(Layer.merge(BunFileSystem.layer, Layer.succeed(UserEnvironment, users))), Layer.provideMerge(harnessAdaptersLayer));`,
+          `const installs = installedHarnessesLayer.pipe(Layer.provide(Layer.merge(BunFileSystem.layer, Layer.succeed(UserEnvironment, users))), Layer.provideMerge(shippedAdaptersLayer));`,
           `const run = () => Effect.runPromise(Effect.provide(installHomes(entryCommand(process.env)), Layer.mergeAll(Layer.effect(Doctrine, doctrine), installs, BunFileSystem.layer)));`,
           `const first = await run();`,
           `const between = files.map((file) => readFileSync(file, 'utf8'));`,

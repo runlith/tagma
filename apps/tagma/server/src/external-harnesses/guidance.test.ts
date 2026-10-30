@@ -20,6 +20,7 @@ import { HarnessSessionStore } from './store/sessions.js';
 import { RunActivities } from './protocol/activities.js';
 import { TerminalJournal } from './terminal/journal.js';
 import { makeHookGuidance } from './guidance.js';
+import { sessionIdentity } from './sessionPrefix.js';
 
 const TITLE = 'zone-rule-7f3';
 const brief: TouchBrief = {
@@ -81,6 +82,7 @@ const fixture = Effect.fnUntraced(function* () {
     Context.get(context, ThreadRecords),
     world.reports,
     unhosted,
+    sessionIdentity,
   );
   return { guidance, rows: memory.rows, journal, id: thread.id };
 });

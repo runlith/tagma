@@ -273,6 +273,15 @@ export type HarnessQuit = readonly (readonly HarnessWidgetKey[])[];
 
 export const INTERRUPT_KEY: HarnessWidgetKey = { _tag: 'char', char: '\u0003' };
 
+export const unmeasuredScreen: HarnessScreenReader = () => null;
+
+export const unmeasuredKeys = (): null => null;
+
+export const oneValue =
+  (keys: (ask: ScreenAsk, value: string) => readonly HarnessWidgetKey[] | null) =>
+  (ask: ScreenAsk, values: readonly string[]): readonly HarnessWidgetKey[] | null =>
+    values.length === 1 ? keys(ask, values[0]!) : null;
+
 export type HarnessReturned = { readonly clear: readonly HarnessWidgetKey[]; readonly counts: 'breaks' | 'lines' };
 
 export type HarnessComposer = {
@@ -301,6 +310,26 @@ export type HarnessTool = { readonly kind: PermissionKind; readonly approval: Ap
 export type HarnessTools = {
   readonly names: 'vendor' | 'kind';
   readonly byName: Readonly<Record<string, HarnessTool>>;
+};
+
+const ASKS_NEVER: Approval = { asksFrom: 'never' };
+const ASKS_IN_REVIEW: Approval = { asksFrom: 'review', timeout: 'none' };
+
+export const LEGACY_TOOLS: HarnessTools = {
+  names: 'kind',
+  byName: {
+    bash: { kind: 'execute', approval: ASKS_IN_REVIEW },
+    read: { kind: 'read', approval: ASKS_NEVER },
+    ls: { kind: 'read', approval: ASKS_NEVER },
+    glob: { kind: 'read', approval: ASKS_NEVER },
+    grep: { kind: 'read', approval: ASKS_NEVER },
+    write: { kind: 'write', approval: ASKS_IN_REVIEW },
+    edit: { kind: 'write', approval: ASKS_IN_REVIEW },
+    delete: { kind: 'write', approval: ASKS_IN_REVIEW },
+    rename: { kind: 'write', approval: ASKS_IN_REVIEW },
+    webfetch: { kind: 'network', approval: ASKS_IN_REVIEW },
+    websearch: { kind: 'network', approval: ASKS_IN_REVIEW },
+  },
 };
 
 export type TerminalSurface = {

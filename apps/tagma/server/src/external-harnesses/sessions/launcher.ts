@@ -22,6 +22,7 @@ import { threadCallFailed, type HarnessFailure } from '../../threads/contract/se
 import type { SessionPlace } from '../protocol/prompts.js';
 import type { HarnessModelChoice } from '@runlith/tagma/adapter/harness';
 import { accountFor, harnessPlace, harnessRunKey, launchHarness, type HarnessPlace, type ProjectDeclaring } from './launch.js';
+import { sessionIdentityOf } from '../sessionPrefix.js';
 import { recordStorageGate, provisionReason } from './lifecycle.js';
 
 type Finish = (
@@ -148,6 +149,7 @@ export class SessionLauncher {
       host,
       settings,
       grants,
+      sessionIdentityOf(this.adapters.all()),
       threadId,
       place.projectId,
       adapter,

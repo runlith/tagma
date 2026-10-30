@@ -2,6 +2,7 @@ import { expect } from 'bun:test';
 import { it } from '@runlith/effect-test';
 import { Effect } from 'effect';
 import { TestClock } from 'effect/testing';
+import { grok } from '@runlith/adapter-xai/harness';
 import { keyboardSession } from '../testing/driver.js';
 import { keyboardFrame, keyboardRig } from '../testing/keyboard.js';
 
@@ -22,7 +23,7 @@ const working = Effect.fnUntraced(function* (world: Session, name = 'UserPromptS
 it.effect('a persisted Grok draft interruption finishes its recorded sequence after the composer has emptied', () =>
   Effect.gen(function* () {
     const keyboard = keyboardRig({ frames: [keyboardFrame(['│ ❯ │', '╰────'])] });
-    const world = yield* keyboardSession({ name: 'grok', keyboard });
+    const world = yield* keyboardSession({ name: 'grok', keyboard, harnesses: [grok] });
     const run = yield* working(world);
     yield* world.store.change(world.id, (facet) =>
       Effect.succeed({

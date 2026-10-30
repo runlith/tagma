@@ -1,4 +1,4 @@
-import { Clock, Effect, FiberMap, FiberSet, FileSystem, Scope, Stream } from 'effect';
+import { Clock, Duration, Effect, FiberMap, FiberSet, FileSystem, Schedule, Scope, Stream } from 'effect';
 import { ActivityLog } from '@runlith/activity/log';
 import type { RequestLanded } from '@runlith/agent/thread/run/requests';
 import type { RunOwnership } from '@runlith/agent/thread/run/ThreadRunLedger';
@@ -20,6 +20,7 @@ import type { AccountQuota } from '../../providers/contract/service/quota.js';
 import type { Attachments } from '../../threads/contract/service/attachments.js';
 import type { CompactionPlanning } from '../../threads/contract/service/compaction.js';
 import { failedAs, threadCallFailed, type HarnessFailure } from '../../threads/contract/service/failure.js';
+import { LEASE_RHYTHM } from '../../threads/contract/wire/rhythm.js';
 import type { NativeStorage } from '../../threads/contract/service/engine.js';
 import { HarnessAsides } from '../../threads/contract/service/asides.js';
 import type { ThreadInbox } from '../../threads/store/inbox.js';
@@ -275,6 +276,14 @@ export class ProtocolDriver implements ProtocolSessions {
       ownerId,
     );
     yield* Effect.forkScoped(attendance.hold());
+    yield* Effect.forkScoped(
+      Stream.runForEach(adapters.changes, () =>
+        attendance.moved().pipe(
+          Effect.tapError((failure) => Effect.logWarning('the sessions of a removed harness could not be read; trying again', { failure })),
+          Effect.retry(Schedule.spaced(Duration.millis(LEASE_RHYTHM.takeoverAfterMs))),
+        ),
+      ),
+    );
     const inputs = new ProtocolInputs(links, attendance, reactor, asks);
     const delivery = new ProtocolDelivery(links, reactor, prompts, launches, withdrawals, inbox);
     const launching = new ProtocolLaunching(

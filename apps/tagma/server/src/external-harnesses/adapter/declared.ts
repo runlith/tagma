@@ -27,11 +27,12 @@ const ACP_ONLY: Omit<TerminalSurface, 'launch' | 'binary' | 'prefix'> = {
   ends: { interrupt: 'record', idle: null, tail: 'final' },
 };
 
+const markOf = (provider: HarnessProvider): string | undefined => provider.mark ?? provider.icon;
+
 const acpOnly = (provider: HarnessProvider, acp: AcpProfile): HarnessAdapter => ({
   harness: provider.id,
   label: provider.label,
-  iconProvider: provider.icon,
-  mark: provider.mark,
+  mark: markOf(provider),
   prefix: provider.id,
   binary: acp.argv(undefined)[0] ?? provider.id,
   ...ACP_ONLY,
@@ -42,5 +43,5 @@ const acpOnly = (provider: HarnessProvider, acp: AcpProfile): HarnessAdapter => 
 export const declaredHarness = (provider: HarnessProvider): HarnessAdapter | null => {
   const { terminal, acp } = provider;
   if (terminal === undefined) return acp === undefined ? null : acpOnly(provider, acp);
-  return { harness: provider.id, label: provider.label, iconProvider: provider.icon, mark: provider.mark, ...terminal, acp };
+  return { harness: provider.id, label: provider.label, mark: markOf(provider), ...terminal, acp };
 };

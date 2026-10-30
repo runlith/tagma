@@ -1,4 +1,3 @@
-import { LEGACY_TOOLS } from '../tools.js';
 import type { TerminalHarnessAdapter } from '../../contract/service/adapter.js';
 import { cursorReader } from './reader.js';
 
@@ -6,6 +5,8 @@ import {
   adoptedPermissionArgv,
   chosenModelArgv,
   INTERRUPT_KEY,
+  LEGACY_TOOLS,
+  oneValue,
   UNMEASURED_HOOK_CONTEXT,
   type HarnessCall,
   type HarnessModelArgv,
@@ -15,9 +16,8 @@ import {
   type HarnessWidgetKey,
   type HookOccasion,
 } from '@runlith/tagma/adapter/harness';
-import { claudeFiles, claudePrinted } from '../../adapter/claudeFormat.js';
-import { field, modelField, nested, questionTool, rootOfArgv, sessionIdOf, tail } from '../../adapter/payload.js';
-import { oneValue } from '../../adapter/screenAsk.js';
+import { claudeFiles, claudePrinted } from '@runlith/tagma/adapter/claude-hooks';
+import { field, modelField, nested, questionTool, rootOfArgv, sessionIdOf, tail } from '@runlith/tagma/adapter/payload';
 import { icon as CURSOR_MARK } from '@runlith/adapter-cursor/icon';
 
 import { cursorAcp } from './acp.js';

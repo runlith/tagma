@@ -6,10 +6,11 @@ import type { ExternalSession } from '../../threads/contract/wire/harness/extern
 import type { HarnessName } from '../../threads/contract/wire/harness/names.js';
 import { transportOf } from '../contract/service/table.js';
 import type { HarnessAdapter } from '../contract/service/adapter.js';
-import type { HarnessAdapters } from '../contract/service/adapters.js';
 import type { ProtocolRows } from '../store/protocol.js';
 import type { HarnessSessionStore } from '../store/sessions.js';
 import type { AcpProfile } from '@runlith/tagma/adapter/harness';
+import type { HarnessAdapters } from '../contract/service/adapters.js';
+import { harnessNotInstalled } from '../../threads/contract/service/harness.js';
 import type { ProtocolRow } from './row.js';
 import type { HarnessTurnEnded } from './turns.js';
 import type { ProtocolWriter } from './writing.js';
@@ -47,9 +48,12 @@ export class WaitExpired extends Data.TaggedError('WaitExpired')<{ readonly thre
 export type Linked = { readonly adapter: HarnessAdapter; readonly profile: AcpProfile };
 
 export const linkedOf = (adapters: HarnessAdapters['Service'], facet: ExternalSession): Effect.Effect<Linked, HarnessFailure> =>
-  Effect.flatMap(adapters.row(facet.name, facet.presentation.install), (adapter) =>
-    Effect.map(transportOf(adapter, 'acp'), ({ profile }) => ({ adapter, profile })),
-  );
+  Effect.suspend(() => {
+    const adapter = adapters.last(facet.name);
+    return adapter === null
+      ? Effect.fail(harnessNotInstalled(facet.name, facet.presentation.install))
+      : Effect.map(transportOf(adapter, 'acp'), ({ profile }) => ({ adapter, profile }));
+  });
 
 export const facetOf = (store: HarnessSessionStore, threadId: string): Effect.Effect<ExternalSession, HarnessFailure> =>
   Effect.flatMap(store.read(threadId), (facet): Effect.Effect<ExternalSession, HarnessFailure> =>

@@ -2,7 +2,7 @@ import { expect } from 'bun:test';
 import { delimiter, join } from 'node:path';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { layer } from '@runlith/effect-test';
-import { Context, Effect, FileSystem, Layer, Schedule } from 'effect';
+import { Context, Effect, FileSystem, Layer, Predicate, Schedule } from 'effect';
 import { SessionRead } from '../../../threads/contract/service/harness.js';
 import { makeDoorWorld } from '../doorFixture.js';
 import { QUILL, quillPackage } from './quill.js';
@@ -55,7 +55,7 @@ const world = Layer.effect(
     const launched = join(root, 'launched');
     yield* files.writeFileString(
       join(quill.bin, QUILL.binary),
-      `#!/bin/sh\ncase "$1" in --version) echo "quill 1.0.0"; exit 0;; esac\necho "$0" > '${launched}'\nwhile IFS= read -r line; do echo "quill heard: $line"; done\n`,
+      `#!/bin/sh\ncase "$1" in --version) echo "quill 1.0.0"; exit 0;; esac\necho "$$" > '${launched}'\nwhile IFS= read -r line; do echo "quill heard: $line"; done\n`,
       { mode: 0o755 },
     );
     return {
@@ -75,7 +75,7 @@ layer(world.pipe(Layer.provideMerge(noInstall), Layer.provideMerge(BunFileSystem
   'a harness an installed package declares',
   (it) => {
     it.effect(
-      'is offered, refuses birth while its program is missing, launches its CLI, and after removal its chat reads while a turn refuses',
+      'is offered, refuses birth while its program is missing, launches its CLI, and after removal its resting CLI ends, its chat reads and a turn refuses',
       () =>
         Effect.gen(function* () {
           const { op, source, bin, launched, projectId, sessions } = yield* World;
@@ -105,8 +105,23 @@ layer(world.pipe(Layer.provideMerge(noInstall), Layer.provideMerge(BunFileSystem
               times: 250,
             }),
           ).toBe(true);
+          const pid = Number((yield* files.readFileString(launched)).trim());
+          const alive = Effect.try({ try: () => process.kill(pid, 0), catch: (cause) => cause }).pipe(
+            Effect.as(true),
+            Effect.catchIf(
+              (cause) => Predicate.isObject(cause) && 'code' in cause && cause.code === 'ESRCH',
+              () => Effect.succeed(false),
+            ),
+          );
+          expect(yield* alive).toBe(true);
 
           expect(yield* op('remove_adapter', { id: QUILL.name })).toMatchObject({ status: 200, body: { status: 'removed' } });
+          const rested = yield* Effect.repeat(sessions(threadId), {
+            until: (facet) => facet?.session?.state === 'ended',
+            schedule: Schedule.spaced('20 millis'),
+          });
+          expect(rested?.session?.state).toBe('ended');
+          expect(yield* alive).toBe(false);
           expect(yield* op('read_thread_snapshot', { threadId }, project)).toMatchObject({
             status: 200,
             body: {

@@ -1,6 +1,6 @@
 import { HARNESS_CALL_OUTPUT_MAX, type HarnessCallReport } from '../../threads/contract/wire/harness/observation.js';
 import type { HarnessAdapter } from '../contract/service/adapter.js';
-import { field } from '../adapter/payload.js';
+import { field } from '@runlith/tagma/adapter/payload';
 
 const RESPONSE_KEYS = ['tool_response', 'tool_output', 'toolResult'] as const;
 

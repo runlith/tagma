@@ -6,6 +6,7 @@ import {
   adoptedPermissionArgv,
   chosenModelArgv,
   INTERRUPT_KEY,
+  oneValue,
   UNMEASURED_HOOK_CONTEXT,
   type FileEffect,
   type HarnessModelArgv,
@@ -21,9 +22,8 @@ import {
 } from '@runlith/tagma/adapter/harness';
 import type { TerminalHarnessAdapter } from '../../contract/service/adapter.js';
 import { CODEX_PROVIDER } from '@runlith/adapter-openai/models/openai';
-import { CLAUDE_EVENTS, claudeFiles, claudePrinted, claudeOccasion } from '../../adapter/claudeFormat.js';
-import { oneValue } from '../../adapter/screenAsk.js';
-import { field, modelField, namedCall, nested, patchFiles, rootOfArgv, sessionIdOf, tail } from '../../adapter/payload.js';
+import { CLAUDE_EVENTS, claudeFiles, claudePrinted, claudeOccasion } from '@runlith/tagma/adapter/claude-hooks';
+import { field, modelField, namedCall, nested, patchFiles, rootOfArgv, sessionIdOf, tail } from '@runlith/tagma/adapter/payload';
 import { SESSION_VARIABLES } from '../../contract/wire/sessionVariables.js';
 import { codexCarry } from './carry.js';
 import { codexCodec } from './codec.js';

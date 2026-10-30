@@ -1,4 +1,5 @@
 import { Context, Deferred, Effect, FiberMap, Layer } from 'effect';
+import type { HarnessProvider } from '@runlith/tagma/adapter/provider';
 import { ExecutionId } from '@runlith/executions/protocol/execution';
 import { providerCatalogOf, staticRegistry } from '../../providers/testing/registry.js';
 import { transcriptFiles } from './files.js';
@@ -48,6 +49,7 @@ export type KeyboardSessionInput = {
   readonly request?: TerminalRequests['Service']['request'];
   readonly log?: ActivityLog;
   readonly published?: SessionPublished;
+  readonly harnesses?: readonly HarnessProvider[];
 };
 const unused = () => Effect.die('An already seated keyboard session does not use that process boundary.');
 const uncalled = (): never => {
@@ -65,9 +67,10 @@ export const keyboardSession = Effect.fnUntraced(function* ({
   request,
   log,
   published,
+  harnesses,
 }: KeyboardSessionInput) {
   const memory = yield* transcriptFiles();
-  const base = yield* hookReports({ name, key: 'root', access: memory.access, published });
+  const base = yield* hookReports({ name, key: 'root', access: memory.access, published, harnesses });
   const launched = new Map<string, ReturnType<typeof keyboardRecord>>();
   const record = keyboardRecord();
   const execution = { execution: record.execution.execution, incarnation: record.execution.incarnation };

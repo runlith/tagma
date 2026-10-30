@@ -9,7 +9,7 @@ import { spawnedEffect } from '../../../platform/testing/spawn.js';
 import { LAW_START } from '../../../graph/contract/wire/law.js';
 import { Doctrine, doctrineOf } from '../../../platform/contract/service/sections.js';
 import { doctrine } from '../../doctrine.js';
-import { harnessAdaptersLayer } from '../../../external-harnesses/adapters.js';
+import { shippedAdaptersLayer } from './shipped.js';
 import type { UserInstall } from '../../../external-harnesses/installs/skillInstall.js';
 import {
   installHooks,
@@ -20,7 +20,7 @@ import {
   skillTarget,
 } from '../../../external-harnesses/testing/doubles.js';
 
-const fixture = Layer.mergeAll(BunFileSystem.layer, Layer.effect(Doctrine, doctrine), harnessAdaptersLayer);
+const fixture = Layer.mergeAll(BunFileSystem.layer, Layer.effect(Doctrine, doctrine), shippedAdaptersLayer);
 const temporary = Effect.flatMap(FileSystem.FileSystem, (disk) => disk.makeTempDirectoryScoped({ prefix: 'tagma-install-' }));
 
 layer(fixture, { excludeTestServices: true })('installation', (it) => {
@@ -606,8 +606,8 @@ layer(fixture, { excludeTestServices: true })('installation', (it) => {
           `import * as BunFileSystem from ${JSON.stringify(import.meta.resolve('@effect/platform-bun/BunFileSystem'))};`,
           `import { installForUser } from ${JSON.stringify(installModule)};`,
           `import { doctrine } from ${JSON.stringify(graphModule)};`,
-          `import { harnessAdaptersLayer } from ${JSON.stringify(fileURLToPath(new URL('../../../external-harnesses/adapters.ts', import.meta.url)))};`,
-          `console.log(JSON.stringify(await Effect.runPromise(Effect.flatMap(doctrine, ({ contributed }) => installForUser(contributed)).pipe(Effect.provide(BunFileSystem.layer), Effect.provide(harnessAdaptersLayer)))));`,
+          `import { shippedAdaptersLayer } from ${JSON.stringify(fileURLToPath(new URL('./shipped.ts', import.meta.url)))};`,
+          `console.log(JSON.stringify(await Effect.runPromise(Effect.flatMap(doctrine, ({ contributed }) => installForUser(contributed)).pipe(Effect.provide(BunFileSystem.layer), Effect.provide(shippedAdaptersLayer)))));`,
         ].join('\n'),
       );
       const {
@@ -672,8 +672,8 @@ layer(fixture, { excludeTestServices: true })('installation', (it) => {
           `import * as BunFileSystem from ${JSON.stringify(import.meta.resolve('@effect/platform-bun/BunFileSystem'))};`,
           `import { installForUser } from ${JSON.stringify(installModule)};`,
           `import { doctrine } from ${JSON.stringify(graphModule)};`,
-          `import { harnessAdaptersLayer } from ${JSON.stringify(fileURLToPath(new URL('../../../external-harnesses/adapters.ts', import.meta.url)))};`,
-          `console.log(JSON.stringify(await Effect.runPromise(Effect.flatMap(doctrine, ({ contributed }) => installForUser(contributed)).pipe(Effect.provide(BunFileSystem.layer), Effect.provide(harnessAdaptersLayer)))));`,
+          `import { shippedAdaptersLayer } from ${JSON.stringify(fileURLToPath(new URL('./shipped.ts', import.meta.url)))};`,
+          `console.log(JSON.stringify(await Effect.runPromise(Effect.flatMap(doctrine, ({ contributed }) => installForUser(contributed)).pipe(Effect.provide(BunFileSystem.layer), Effect.provide(shippedAdaptersLayer)))));`,
         ].join('\n'),
       );
       const {

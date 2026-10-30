@@ -8,7 +8,7 @@ import type { HarnessModelChoice } from '@runlith/tagma/adapter/harness';
 import { harnessArgv, servingProvider, type HarnessTransportOffer } from '../contract/service/table.js';
 import type { HarnessAdapter } from '../contract/service/adapter.js';
 import type { HarnessAdapters } from '../contract/service/adapters.js';
-import { sessionIdentity } from '../sessionPrefix.js';
+import type { SessionIdentity } from '../../platform/contract/wire/session.js';
 import type { ExternalSession } from '../../threads/contract/wire/harness/externalSession.js';
 import type { HarnessName, HarnessTransport } from '../../threads/contract/wire/harness/names.js';
 import type { HarnessAskedModel } from '../../threads/contract/wire/harness/askedModel.js';
@@ -73,6 +73,7 @@ export const harnessPlace = Effect.fnUntraced(function* (
   host: HostManagement['Service'],
   settings: Settings['Service'],
   grants: GrantSigner['Service'],
+  identity: SessionIdentity['Service'],
   threadId: string,
   projectId: number,
   adapter: HarnessAdapter,
@@ -92,8 +93,7 @@ export const harnessPlace = Effect.fnUntraced(function* (
       'start the thread in a project without threads.harnessProfile.home for this CLI',
     ]);
   }
-  const identity =
-    profile.plain === true ? nobodyEnvironment(sessionIdentity) : sessionTokenEnvironment(grants, threadId, session.id, sessionIdentity);
+  const signed = profile.plain === true ? nobodyEnvironment(identity) : sessionTokenEnvironment(grants, threadId, session.id, identity);
   return {
     actor,
     target,
@@ -104,7 +104,7 @@ export const harnessPlace = Effect.fnUntraced(function* (
     environment: {
       inherit: true,
       entries: [
-        ...Object.entries(identity).map(([variable, value]) =>
+        ...Object.entries(signed).map(([variable, value]) =>
           value === undefined ? { _tag: 'Unset' as const, name: variable } : { _tag: 'Set' as const, name: variable, value },
         ),
         ...Object.entries(adapter.env ?? {}).map(([variable, value]) => ({ _tag: 'Set' as const, name: variable, value })),

@@ -2,11 +2,11 @@ import { Effect, Option } from 'effect';
 import { Argument, Command, Flag } from 'effect/cli';
 import { hookEventOf } from '../hooks/dispatch.js';
 import type { HookConnect } from '../hooks/delivery.js';
-import { harnessRows, type HarnessDeclarations } from '../hooks/rows.js';
+import { harnessRows, type HarnessCatalog } from '../hooks/rows.js';
 import { InstalledChannel } from '../../installation/contract/service/channel.js';
 import { noting, refuse, CurrentInvocation } from '../../platform/cli/verb.js';
 
-export const hook = ({ connect, installed }: { readonly connect: HookConnect; readonly installed: HarnessDeclarations }) =>
+export const hook = ({ connect, catalog }: { readonly connect: HookConnect; readonly catalog: () => Promise<HarnessCatalog> }) =>
   Command.make(
     'hook',
     {
@@ -29,7 +29,7 @@ export const hook = ({ connect, installed }: { readonly connect: HookConnect; re
       Effect.gen(function* () {
         const at = yield* CurrentInvocation;
         const named = Option.getOrNull(harness);
-        const rows = yield* harnessRows(installed, at, yield* InstalledChannel, named).pipe(
+        const rows = yield* harnessRows(catalog, at, yield* InstalledChannel, named).pipe(
           Effect.catchTag('HarnessUnreadable', (unreadable) =>
             Effect.sync(() =>
               refuse('harness-unreadable', unreadable.message, ['read_adapters — whether the adapter package still loads']),

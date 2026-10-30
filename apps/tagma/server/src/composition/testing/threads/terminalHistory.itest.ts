@@ -8,12 +8,13 @@ import { Context, Effect, FileSystem, Layer } from 'effect';
 import { Settings } from '../../../settings/contract/service/values.js';
 import { harnessRoot } from '../../../external-harnesses/contract/service/table.js';
 import { builtinHarness } from '../../../external-harnesses/testing/builtin.js';
+import { declaredHarness } from '../../../external-harnesses/adapter/declared.js';
+import { grok } from '@runlith/adapter-xai/harness';
 import { OPERATOR_PRINCIPAL } from '../../../platform/contract/wire/actor.js';
 import { HarnessReports } from '../../../external-harnesses/contract/service/reports.js';
 import { VendorTurns } from '../../../external-harnesses/testing/doubles.js';
 import { MachineUnits } from '../../../platform/contract/service/units.js';
 import forkRpc from '../../../external-harnesses/testing/fixtures/codex/fork-rpc.json';
-import grokStart from '../../../external-harnesses/testing/fixtures/grok/session-start.json';
 import { GRANT_HEADER } from '../../../platform/contract/service/credentials.js';
 import { grantFor } from '../../../platform/testing/grants.js';
 import { harnessSessionActive } from '../../../threads/contract/wire/harness/session.js';
@@ -24,6 +25,17 @@ import { OLD_MS, stamp } from './terminalRig.js';
 import { windowChannel } from './windowChannel.js';
 
 const LIBRARY = join(EXECUTION_HOST_ROOT, 'native', 'target', 'release', 'libexecution_platform.dylib');
+
+const grokStart = {
+  hookEventName: 'session_start',
+  cwd: '/fixtures/grok/work',
+  workspaceRoot: '/fixtures/grok/work',
+  timestamp: '2026-10-25T13:23:37.650940+00:00',
+  permissionMode: 'default',
+  source: 'load',
+  hook_event_name: 'SessionStart',
+  permission_mode: 'default',
+};
 
 class World extends Context.Service<World, Effect.Success<typeof terminalHistoryWorld>>()('testing/TerminalHistoryWorld') {}
 
@@ -97,7 +109,7 @@ const grokSpoken = Effect.fnUntraced(function* (name: string, words: readonly st
   yield* op('restart_thread', { threadId: fake.cli.threadId });
   yield* booted(fake, 1);
   const source = (yield* fake.cli.facet())!;
-  const root = harnessRoot(builtinHarness('grok'), source.session!.argv)!;
+  const root = harnessRoot(declaredHarness(grok)!, source.session!.argv)!;
   const session = source.session!.id;
   yield* fake.cli.hook('SessionStart', { session_id: root, source: 'startup', transcript_path: fake.transcript }, { session });
   const runs: string[] = [];

@@ -5,6 +5,7 @@ import { importAdapter } from '@runlith/tagma/adapter/loader';
 import type { HarnessDeclarations } from '../../external-harnesses/hooks/rows.js';
 import { machineHosts } from '../../providers/adapters/external.js';
 import { harnessPackage, harnessPackages } from '../../providers/adapters/harnessIndex.js';
+import { BUILTIN_HARNESS_PROVIDERS } from '../adapters.js';
 import { HOST_MODULES } from '../hostModules.generated.js';
 
 const declares =
@@ -20,7 +21,7 @@ const installedHarness = async (machine: string, harness: string): Promise<Harne
   return adapter(hosts(entry.id)).find(declares(harness)) ?? null;
 };
 
-export const installedHarnesses = async (machine: string): Promise<readonly HarnessProvider[]> => {
+const installedHarnesses = async (machine: string): Promise<readonly HarnessProvider[]> => {
   const entries = await Effect.runPromise(harnessPackages(machine).pipe(Effect.provide(BunFileSystem.layer)));
   if (entries.length === 0) return [];
   const hosts = await Effect.runPromise(machineHosts(machine));
@@ -33,7 +34,12 @@ export const installedHarnesses = async (machine: string): Promise<readonly Harn
 };
 
 export const harnessDeclarations: HarnessDeclarations = async (machine, harness) => {
-  if (harness === null) return installedHarnesses(machine);
-  const provider = await installedHarness(machine, harness);
+  if (harness === null) {
+    const builtins = await Promise.all([...BUILTIN_HARNESS_PROVIDERS.values()].map((load) => load()));
+    return machine === null ? builtins : [...builtins, ...(await installedHarnesses(machine))];
+  }
+  const builtin = BUILTIN_HARNESS_PROVIDERS.get(harness);
+  if (builtin !== undefined) return [await builtin()];
+  const provider = machine === null ? null : await installedHarness(machine, harness);
   return provider === null ? [] : [provider];
 };

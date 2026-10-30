@@ -7,6 +7,7 @@ export class HarnessAdapters extends Context.Service<
   HarnessAdapters,
   {
     find(id: string): HarnessAdapter | null;
+    last(id: string): HarnessAdapter | null;
     row(id: string, install?: string | null): Effect.Effect<HarnessAdapter, HarnessNotInstalled>;
     all(): readonly HarnessAdapter[];
     readonly changes: Stream.Stream<void>;

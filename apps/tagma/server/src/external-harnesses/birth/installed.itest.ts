@@ -11,7 +11,9 @@ import { makeUserEnvironment, type EnvironmentInput } from '../../installation/p
 import { InstalledHarnesses } from '../../threads/contract/service/harness.js';
 import type { HarnessInstall } from '../../threads/contract/wire/harness/externalSession.js';
 import { installedHarnessesWith } from './installed.js';
-import { harnessAdaptersLayer } from '../adapters.js';
+import { grok } from '@runlith/adapter-xai/harness';
+import { makeHarnessAdapters } from '../adapters.js';
+import { HarnessAdapters } from '../contract/service/adapters.js';
 import type { Terminals, TerminalStart } from '../../executions/contract/service/terminals.js';
 import { WORLD_COMMAND } from '../../installation/contract/wire/layout.js';
 import { HARNESS_PROGRAM } from '../contract/wire/program.js';
@@ -20,6 +22,11 @@ import { HostRequestKey } from '@runlith/executions/protocol/execution';
 import { NamespaceId } from '@runlith/files/namespace';
 import { TargetKey } from '../../executions/contract/wire/targets.js';
 import { EnvironmentId } from '../../workspace/contract/wire/environments.js';
+
+const withGrok = Layer.effect(
+  HarnessAdapters,
+  Effect.tap(makeHarnessAdapters, (adapters) => adapters.declared([grok])),
+);
 
 const root = realpathSync(mkdtempSync(join(tmpdir(), 'installed-harnesses-')));
 afterAll(() => rmSync(root, { recursive: true, force: true }));
@@ -66,7 +73,7 @@ const installsOver = (users: UserEnvironment['Service'], budgetMs = 5_000) =>
   Effect.map(
     Layer.build(
       installedHarnessesWith(budgetMs).pipe(
-        Layer.provide(Layer.mergeAll(BunFileSystem.layer, Layer.succeed(UserEnvironment, users), harnessAdaptersLayer)),
+        Layer.provide(Layer.mergeAll(BunFileSystem.layer, Layer.succeed(UserEnvironment, users), withGrok)),
       ),
     ),
     (context) => Context.get(context, InstalledHarnesses),

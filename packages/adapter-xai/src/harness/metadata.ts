@@ -10,9 +10,11 @@ import {
   recordedValue,
   storageHome,
   type MetadataLocation,
+  type MetadataReader,
   type MetadataSession,
   type MetadataValues,
 } from '@runlith/tagma/adapter/metadata';
+import { grokEnds } from './ends';
 
 const summary = metadataDecode(
   Schema.Struct({
@@ -23,13 +25,13 @@ const summary = metadataDecode(
   }),
 );
 
-export function grok(rootKey: string, text: string): MetadataValues {
+const summaryValues = (rootKey: string, text: string): MetadataValues => {
   const row = summary(jsonValue(text));
   if (row.info.id !== rootKey) throw new MetadataInvalid({ reason: 'identity' });
   return { ...emptyValues(), model: recordedValue(row.current_model_id), title: recordedValue(row.generated_title || row.session_summary) };
-}
+};
 
-export const grokSources = (input: MetadataSession): readonly MetadataLocation[] => {
+const grokSources = (input: MetadataSession): readonly MetadataLocation[] => {
   const home = storageHome(input, 'GROK_HOME', '.grok');
   const root = home === null ? null : join(home, 'sessions', encodeURIComponent(input.cwd));
   return [
@@ -39,7 +41,7 @@ export const grokSources = (input: MetadataSession): readonly MetadataLocation[]
       {
         json: true,
         empty: emptyValues,
-        line: (_, text) => grok(input.rootKey, text),
+        line: (_, text) => summaryValues(input.rootKey, text),
       },
       ['model', 'title'],
       'session-store',
@@ -47,4 +49,14 @@ export const grokSources = (input: MetadataSession): readonly MetadataLocation[]
     ),
     { kind: 'unsupported', source: 'session-store', fields: ['effort'] },
   ];
+};
+
+export const grokReader: MetadataReader = {
+  sources: grokSources,
+  provenance: {
+    model: { source: 'session-store', readable: true },
+    effort: { source: 'session-store', readable: false },
+    title: { source: 'session-store', readable: true },
+  },
+  ends: grokEnds,
 };

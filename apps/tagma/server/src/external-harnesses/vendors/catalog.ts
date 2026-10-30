@@ -5,7 +5,6 @@ export type BuiltinHarness = () => Promise<HarnessAdapter>;
 export const BUILTIN_LOADERS: ReadonlyMap<string, BuiltinHarness> = new Map([
   ['claude-code', async () => (await import('./claude-code/row.js')).claudeCode],
   ['codex', async () => (await import('./codex/row.js')).codex],
-  ['grok', async () => (await import('./grok/row.js')).grok],
   ['devin', async () => (await import('./devin/row.js')).devin],
   ['cursor', async () => (await import('./cursor/row.js')).cursor],
   ['gemini', async () => (await import('./gemini/row.js')).gemini],

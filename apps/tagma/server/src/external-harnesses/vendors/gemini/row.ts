@@ -1,9 +1,10 @@
-import { LEGACY_TOOLS } from '../tools.js';
 import type { TerminalHarnessAdapter } from '../../contract/service/adapter.js';
 
 import {
   adoptedPermissionArgv,
   chosenModelArgv,
+  LEGACY_TOOLS,
+  oneValue,
   UNMEASURED_HOOK_CONTEXT,
   type HarnessModelArgv,
   type HarnessPermissionArgv,
@@ -12,9 +13,8 @@ import {
   type HarnessWidgetKey,
   type HookOccasion,
 } from '@runlith/tagma/adapter/harness';
-import { rootOfArgv, sessionIdOf, tail, unasked, unprinted, unreported, unturned } from '../../adapter/payload.js';
-import { claudeFiles } from '../../adapter/claudeFormat.js';
-import { oneValue } from '../../adapter/screenAsk.js';
+import { rootOfArgv, sessionIdOf, tail, unasked, unprinted, unreported, unturned } from '@runlith/tagma/adapter/payload';
+import { claudeFiles } from '@runlith/tagma/adapter/claude-hooks';
 import { GEMINI_MARK } from './mark.js';
 import { geminiCodec } from './codec.js';
 

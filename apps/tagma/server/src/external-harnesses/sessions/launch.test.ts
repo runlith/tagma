@@ -26,7 +26,7 @@ const accounts: HarnessAccounts['Service'] = {
 
 it.effect('account-less harnesses launch without interpreting the thread marker as a model provider', () =>
   Effect.gen(function* () {
-    for (const name of ['cursor', 'gemini', 'grok'] as const)
+    for (const name of ['cursor', 'gemini'] as const)
       expect(yield* accountFor(accounts, builtinHarness(name), { provider: 'external', account: null })).toBeNull();
   }),
 );

@@ -122,17 +122,9 @@ ${RULE} (bypass permissions on) ─
 ${RULE}
 SWE-1.6 Slow`);
 
-const grokBox = (inside: string): readonly string[] =>
-  frame(`  ⠸ Run Node setTimeout for 20 seconds… 4.5s                         7.3s ⇣26.2k [↓][stop]
- ╭${'─'.repeat(60)}╮
-${inside}
- ╰${'─'.repeat(30)} Grok 4.5 (low) · always-approve ─╯
- Ctrl+x:shortcuts`);
-
-test('Codex 0.162.0, Devin 3000.11.92 and Grok Build 1.0.62 composers read the words standing in them, idle or working, and nothing for a placeholder', () => {
+test('Codex 0.162.0 and Devin 3000.11.92 composers read the words standing in them, idle or working, and nothing for a placeholder', () => {
   const codex = builtinHarness('codex').composer!.of;
   const devin = builtinHarness('devin').composer!.of;
-  const grok = builtinHarness('grok').composer!.of;
   expect([
     codex(idle),
     codex(working),
@@ -140,10 +132,6 @@ test('Codex 0.162.0, Devin 3000.11.92 and Grok Build 1.0.62 composers read the w
     codex(frame('› first\n\n  second\n\n  GPT-6.1-Sol low\n  ? for shortcuts')),
   ]).toEqual([null, 'draft stays', 'my draft while working\nsecond line', 'first\n\nsecond']);
   expect([devin(devinIdle), devin(devinWorking), devin(devinDrafting)]).toEqual([null, null, 'my draft while working\nsecond line']);
-  expect([grok(grokBox(` │ ❯${' '.repeat(57)}│`)), grok(grokBox(` │ ❯ hello draft[Pasted: 3 lines]${' '.repeat(28)}│`))]).toEqual([
-    null,
-    'hello draft[Pasted: 3 lines]',
-  ]);
 });
 
 const cursorFooter = `  Auto                                                                                                  Run Everything

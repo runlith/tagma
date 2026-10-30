@@ -21,12 +21,7 @@ export const operationsCli: OperationsCli<OperationId> = {
   version: PROGRAM_RELEASE,
   harness: (id, at) =>
     Effect.map(
-      harnessRows(
-        async (machine, harness) => (await import('./installedHarness.js')).harnessDeclarations(machine, harness),
-        at,
-        CHANNEL,
-        id,
-      ),
+      harnessRows(async () => (await import('./harnessCatalog.js')).HARNESS_CATALOG, at, CHANNEL, id),
       (rows) => rows?.named ?? null,
     ),
   ask: door.ask,

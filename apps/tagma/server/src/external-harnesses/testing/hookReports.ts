@@ -4,6 +4,7 @@ import { openMemoryStorage } from '@runlith/agent/thread/conformance/memoryStora
 import { lifecycleWorldOver, OWNER, SCOPE } from '@runlith/agent/thread/conformance/lifecycleWorld';
 import { fakeAdapter } from '@runlith/agent/thread/conformance/fakeTransport';
 import type { GuidanceSources } from '@runlith/agent/thread/transport/contract';
+import type { HarnessProvider } from '@runlith/tagma/adapter/provider';
 import { modelCatalog } from '@runlith/llm/models/catalog';
 import { terminalKernel } from '../birth/seat.js';
 import { HarnessReports } from '../contract/service/reports.js';
@@ -24,6 +25,7 @@ import type { RunHosting } from '../contract/service/guidance.js';
 import { standingAlignment } from './alignment.js';
 import { harnessArgv, harnessPresentation } from '../contract/service/table.js';
 import { makeHarnessAdapters } from '../adapters.js';
+import { harnessIdentity } from '../sessionPrefix.js';
 import { builtinHarness } from './builtin.js';
 import { harnessFacet } from '../../threads/contract/wire/harness/types.js';
 import type { HarnessName } from '../../threads/contract/wire/harness/names.js';
@@ -62,6 +64,7 @@ export type HookReportOptions = {
   readonly terminals?: Layer.PartialEffectful<Terminals['Service']>;
   readonly screens?: Layer.PartialEffectful<TerminalScreens['Service']>;
   readonly published?: SessionPublished;
+  readonly harnesses?: readonly HarnessProvider[];
 };
 
 export const hookReports = Effect.fnUntraced(function* ({
@@ -72,10 +75,13 @@ export const hookReports = Effect.fnUntraced(function* ({
   terminals = {},
   screens = {},
   published = () => Effect.void,
+  harnesses = [],
 }: HookReportOptions = {}) {
   const storage = yield* openMemoryStorage();
   const adapters = yield* makeHarnessAdapters;
-  const kernel = terminalKernel(builtinHarness(name), undefined, false, {});
+  yield* adapters.declared(harnesses);
+  const rowOf = (harness: HarnessName) => adapters.find(harness) ?? builtinHarness(harness);
+  const kernel = terminalKernel(rowOf(name), undefined, false, {});
   const first = yield* storage.createThread({ ownerId: OWNER, scope: SCOPE, transport: kernel.transport });
   yield* storage.aggregate.update(first.id, { capabilities: kernel.capabilities });
   const world = yield* lifecycleWorldOver(storage, (yield* storage.aggregate.find(first.id))!, undefined, fakeAdapter('terminal'));
@@ -161,6 +167,7 @@ export const hookReports = Effect.fnUntraced(function* ({
     records,
     world.reports,
     unhosted,
+    harnessIdentity(adapters),
   );
   const events = new TerminalEvents(
     Context.get(ports, SessionLookupStore),
@@ -184,7 +191,7 @@ export const hookReports = Effect.fnUntraced(function* ({
   const seed = Effect.fnUntraced(function* (id: string, harness: HarnessName, root: string | null) {
     const session = crypto.randomUUID();
     const facet: ExternalSession = {
-      ...harnessFacet(harness, harnessPresentation(builtinHarness(harness))),
+      ...harnessFacet(harness, harnessPresentation(rowOf(harness))),
       sessionKey: root,
       session: {
         id: session,
@@ -192,7 +199,7 @@ export const hookReports = Effect.fnUntraced(function* ({
         state: 'running',
         prompt: '',
         cwd: '/project',
-        argv: yield* harnessArgv(builtinHarness(harness), root, session, ''),
+        argv: yield* harnessArgv(rowOf(harness), root, session, ''),
         startedAt: new Date(yield* Clock.currentTimeMillis).toISOString(),
       },
     };
@@ -201,7 +208,7 @@ export const hookReports = Effect.fnUntraced(function* ({
   });
   const initial = yield* seed(first.id, name, key);
   const create = Effect.fnUntraced(function* (harness: HarnessName, root: string | null = null) {
-    const seat = terminalKernel(builtinHarness(harness), undefined, false, {});
+    const seat = terminalKernel(rowOf(harness), undefined, false, {});
     const row = yield* storage.createThread({ ownerId: OWNER, scope: SCOPE, transport: seat.transport });
     yield* storage.aggregate.update(row.id, { capabilities: seat.capabilities });
     return yield* seed(row.id, harness, root);
