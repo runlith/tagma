@@ -8,4 +8,4 @@ fields:
     "delivery": "prompt"
   }
 ---
-Only whoever started the agent, or the operator, may hand it to another.
+Only whoever started the agent, or the operator, may hand it to another. A defect of the Tagma tool is the exception: it goes to an agent at once.

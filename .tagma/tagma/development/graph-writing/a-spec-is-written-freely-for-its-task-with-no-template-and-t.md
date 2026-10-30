@@ -7,5 +7,8 @@ fields:
   {
     "enabled": true
   }
+edges:
+  - kind: supersedes
+    to: 01a151a3-0418-766c-9bfc-23a3a9cf196a
 ---
-A spec thinks through benefit and use, UX and UI; packages, modules and layers architecture, calls, data flows, injection and patterns; the simplest clean and reliable solution with minimum code; proof of result. Performer and operator checks separated: the latter never a task-completion condition. Each concern — permissions, data, failures — gets exactly what the product requires.
+A spec thinks through benefit and use, UX and UI; packages, modules and layers architecture, calls, data flows, injection and patterns; the simplest clean and reliable solution with minimum code; proof of result. Performer and operator checks are separate: the operator's check is never an acceptance condition, and a spec or task with only it left is closed. Each concern — permissions, data, failures — gets exactly what the product requires.
