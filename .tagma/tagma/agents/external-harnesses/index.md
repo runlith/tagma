@@ -105,6 +105,13 @@ fields:
         "for": [
           "13182a9f"
         ]
+      },
+      {
+        "at": "vendors/builtin.ts",
+        "for": [
+          "13182a9f"
+        ],
+        "role": "testing"
       }
     ],
     "id": "external-harnesses",
