@@ -216,6 +216,7 @@ export class FileModel {
   private readonly classes = new Map<ts.Node, Value>();
   private readonly declared = new Map<ts.Node, () => Value | undefined>();
   private pending: Fn[] = [];
+  private analyzed = false;
 
   constructor(
     private readonly registry: Registry,
@@ -252,13 +253,16 @@ export class FileModel {
   }
 
   analyze(): void {
+    if (this.analyzed) return;
+    this.analyzed = true;
     for (const statement of this.sf.statements) this.statement(statement, this.top);
     this.settle(this.top);
     this.drain();
   }
 
   private drain(): void {
-    while (this.pending.length > 0) this.pending.shift()!.analyze();
+    for (let at = 0; at < this.pending.length; at += 1) this.pending[at]!.analyze();
+    this.pending.length = 0;
   }
 
   private emit(act: Act, label: string, node: ts.Node): void {

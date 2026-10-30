@@ -12,7 +12,6 @@ export type Boundaries = {
 
 type Territory = readonly (readonly [card: string, id: string])[];
 type State = Boundaries & {
-  readonly root: string;
   readonly card: (path: string) => Module | undefined;
   readonly module: (id: string) => Module | undefined;
   readonly dependents: (id: string) => readonly string[];
@@ -38,7 +37,6 @@ export const boundaryState = (root: string, revision: string, modules?: readonly
       return found;
     };
     return {
-      root: id,
       owner,
       card: (path) => valueAt(root, id, `c:${path}`) as Module | undefined,
       module: (name) => valueAt(root, id, `m:${name}`) as Module | undefined,
