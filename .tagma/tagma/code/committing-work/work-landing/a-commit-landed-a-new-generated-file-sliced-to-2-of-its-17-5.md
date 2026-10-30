@@ -16,4 +16,4 @@ Found 2026-10-30 when `submit_work` with `paths: ["apps/tagma/server"]` in commi
 
 Evidence: `git show 66482318 --stat` lists `snapshot.json | 2 +`, `migration.sql | 92 +` and `heavy.json | 1 +`, all new. The working snapshot.json has mtime 2026-10-29 18:49, before the commit (19:43:59), and parses as a whole drizzle snapshot. The two lines that landed are the ones a plugin→app rename would edit.
 
-Inference, unverified: the landing sliced a generator-written new file down to the lines the renaming session's file tools held, instead of carrying it whole. A truncated drizzle snapshot breaks the next migration generation that diffs against it.
+Checked and refuted at the fold level: a new file whose creation no record holds, with one line replaced by a session, makes `selectFold` refuse `lines-held` naming nobody, not slice (fold.test.ts scenario run 2026-10-30, not kept). So the slice came from another path — the session's record of that landing, its `paths`/`whole` and the commit steps are not recoverable now. A truncated drizzle snapshot breaks the next migration generation that diffs against it.
