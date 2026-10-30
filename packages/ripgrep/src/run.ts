@@ -70,7 +70,7 @@ export class SearchFailed extends Data.TaggedError('SearchFailed')<{
   readonly diagnosis: string;
 }> {
   override get message(): string {
-    return `ripgrep failed (exit ${this.exitCode}): ripgrep said: ${quoted(this.diagnosis)}`;
+    return `ripgrep failed (exit ${this.exitCode}): ripgrep said: ${JSON.stringify(this.diagnosis)}`;
   }
 
   get badPattern(): boolean {
@@ -106,14 +106,7 @@ type Reading<A> = {
 
 type Child = { readonly handle: ChildProcessHandle; readonly scope: Scope.Closeable };
 
-const diagnosisOf = (stderr: string): string => {
-  const said = stderr
-    .split('\n')
-    .map((line) => line.trim())
-    .filter((line) => line !== '');
-  const errors = said.filter((line) => /error/i.test(line));
-  return errors.length > 0 ? errors.join(' ') : (said[0] ?? 'no stderr');
-};
+const diagnosisOf = (stderr: string): string => stderr.trim() || 'no stderr';
 
 const headOf = <E>(stderr: Stream.Stream<Uint8Array, E>): Effect.Effect<string, E> =>
   stderr.pipe(

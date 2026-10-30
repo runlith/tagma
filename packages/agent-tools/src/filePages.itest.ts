@@ -24,6 +24,23 @@ const rowsOf = (text: string): string[] => {
   return lines.at(-1)?.startsWith('(') === true ? lines.slice(0, -1) : lines;
 };
 
+it.live('grep preserves the regex source, error position and cause in a bad-pattern refusal', () =>
+  Effect.gen(function* () {
+    const dir = yield* createTempDir();
+    yield* host.writeFile(join(dir, 'source.ts'), 'token\n', 'utf8');
+    const tools = createTools(options({ cwd: dir }));
+    const pattern = 'records.held|record.held|changes.held|\\({';
+
+    const result = yield* answer(tools.grep, { pattern, output_mode: 'content', limit: 1 });
+
+    expect(result.refusal?.code).toBe('bad-pattern');
+    const diagnosis = String(result.value);
+    expect(diagnosis).toContain('records.held|record.held|changes.held');
+    expect(diagnosis).toContain('^');
+    expect(diagnosis).toContain('repetition quantifier expects a valid decimal');
+  }),
+);
+
 const BASE_MS = 1_700_000_000_000;
 
 const aged = (path: string, index: number) => {
