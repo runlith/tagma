@@ -1,11 +1,11 @@
 import { Effect } from 'effect';
-import { WorkerUnavailable, eventReason, workerGone } from '@runlith/utils/worker';
+import { type WorkerLink, type WorkerUnavailable, workerGone, workerLink } from '@runlith/utils/worker';
 import type { ThreadCompactionCheckpointRow, ThreadHistory } from '@runlith/agent/thread/rows';
 import type { ThreadPrunedVolume } from '@runlith/agent/thread/storage/compaction';
 import type { ThreadEntryReader, ThreadReaderWorker } from '@runlith/agent/transcript/kinds';
 import { RolloutUnreadable } from '../../threads/journal/rolloutFile.js';
 import type { RolloutFiles, TranscriptKey } from '../../threads/contract/service/rested.js';
-import { RolloutReads, type RolloutRead, type ReadRollout } from '../../threads/contract/service/rolloutReads.js';
+import { RolloutReads, type RolloutRead } from '../../threads/contract/service/rolloutReads.js';
 import type { RolloutStage, StagedFile } from '../../threads/journal/rolloutStaging.js';
 import type { CarryAsk, Carrying, CarryOpening } from '../../threads/journal/rolloutCarry.js';
 import type { FoldRow, RolloutLayer } from '../../threads/journal/rolloutMeta.js';
@@ -47,46 +47,17 @@ export type RestedAnswer = { readonly id: number } & (
 );
 
 export type RestedRead = { readonly id: number; readonly kind: 'read'; readonly reads: readonly RolloutRead[] };
-type Waiting = { readonly answer: (answer: RestedAnswer | WorkerUnavailable) => void; readonly read: ReadRollout };
-
-type Served = { readonly thread: Worker; readonly waiting: Map<number, Waiting> };
-
-const served = new Map<ThreadReaderWorker, Served>();
-let asked = 0;
 
 const WORKER = 'rested fold worker';
 
-const failed = (start: ThreadReaderWorker, standing: Served, reason: string): void => {
-  if (served.get(start) !== standing) return;
-  served.delete(start);
-  standing.thread.terminate();
-  const gone = workerGone(WORKER, reason);
-  const asks = [...standing.waiting.values()];
-  standing.waiting.clear();
-  for (const answered of asks) answered.answer(gone);
-};
+const links = new Map<ThreadReaderWorker, WorkerLink<RestedAsk, RestedAnswer, RestedRead>>();
 
-const started = (start: ThreadReaderWorker): Served => {
-  const held = served.get(start);
+const linkOf = (start: ThreadReaderWorker): WorkerLink<RestedAsk, RestedAnswer, RestedRead> => {
+  const held = links.get(start);
   if (held !== undefined) return held;
-  const standing: Served = { thread: start(), waiting: new Map() };
-  const { thread, waiting } = standing;
-  served.set(start, standing);
-  thread.addEventListener('message', (event: MessageEvent<RestedAnswer | RestedRead>) => {
-    const answered = waiting.get(event.data.id);
-    if (event.data.kind === 'read') {
-      for (const read of event.data.reads) answered?.read(read);
-      return;
-    }
-    waiting.delete(event.data.id);
-    if (waiting.size === 0) thread.unref();
-    answered?.answer(event.data);
-  });
-  thread.addEventListener('error', (event: ErrorEvent) => failed(start, standing, eventReason(event, 'the rested fold worker failed')));
-  thread.addEventListener('messageerror', () => failed(start, standing, 'a rested fold answer could not be read'));
-  thread.addEventListener('close', () => failed(start, standing, 'the rested fold worker closed'));
-  thread.unref();
-  return standing;
+  const link = workerLink<RestedAsk, RestedAnswer, RestedRead>(WORKER, start, (message): message is RestedRead => message.kind === 'read');
+  links.set(start, link);
+  return link;
 };
 
 const ask = (
@@ -95,38 +66,13 @@ const ask = (
   asking: (id: number) => RestedAsk,
   span = 'ThreadTranscript.rested.fold',
 ): Effect.Effect<RestedAnswer, WorkerUnavailable> =>
-  Effect.flatMap(RolloutReads, (read) =>
-    Effect.callback<RestedAnswer, WorkerUnavailable>((resume) => {
-      const start = kinds.worker;
-      if (start === null) {
-        resume(Effect.fail(workerGone(WORKER, 'its entry reader names no worker that folds with it')));
-        return;
-      }
-      const id = ++asked;
-      let standing: Served;
-      try {
-        standing = started(start);
-      } catch (cause) {
-        resume(Effect.fail(workerGone(WORKER, `it could not start: ${String(cause)}`)));
-        return;
-      }
-      const { thread, waiting } = standing;
-      waiting.set(id, {
-        read,
-        answer: (answer) => resume(answer instanceof WorkerUnavailable ? Effect.fail(answer) : Effect.succeed(answer)),
-      });
-      thread.ref();
-      try {
-        thread.postMessage(asking(id));
-      } catch (cause) {
-        failed(start, standing, `it took no ask: ${String(cause)}`);
-      }
-      return Effect.sync(() => {
-        waiting.delete(id);
-        if (waiting.size === 0) thread.unref();
-      });
-    }),
-  ).pipe(Effect.withSpan(span, { attributes: { rollout: rollout.path } }));
+  Effect.flatMap(RolloutReads, (read) => {
+    const start = kinds.worker;
+    if (start === null) return Effect.fail(workerGone(WORKER, 'its entry reader names no worker that folds with it'));
+    return linkOf(start).ask(asking, [], (note) => {
+      for (const one of note.reads) read(one);
+    });
+  }).pipe(Effect.withSpan(span, { attributes: { rollout: rollout.path } }));
 
 const unreadable = (rollout: RolloutFiles, answer: RestedAnswer): RolloutUnreadable =>
   new RolloutUnreadable({
@@ -158,13 +104,7 @@ export const stageRollout = (
 const tell = (kinds: ThreadEntryReader, message: RestedTell): Effect.Effect<void> =>
   Effect.sync(() => {
     const start = kinds.worker;
-    const standing = start === null ? undefined : served.get(start);
-    if (start === null || standing === undefined) return;
-    try {
-      standing.thread.postMessage(message);
-    } catch (cause) {
-      failed(start, standing, `it took no message: ${String(cause)}`);
-    }
+    if (start !== null) links.get(start)?.tell(message);
   });
 
 export const carryRollout = (
