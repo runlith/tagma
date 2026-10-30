@@ -8,7 +8,8 @@ export type Import = { readonly specifier: string; readonly bindings: readonly B
 
 export type Forward = {
   readonly specifier: string;
-  readonly names: readonly { readonly imported: string; readonly exported: string }[] | 'all';
+  readonly names: readonly { readonly imported: string; readonly exported: string; readonly typed?: true }[] | 'all';
+  readonly typed?: true;
 };
 
 export type Load = { readonly specifier: string; readonly pattern: boolean };

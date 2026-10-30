@@ -182,6 +182,42 @@ test('re-exports count as consumers of the file that defines the export', () => 
   ).toEqual(['dead src/impl.ts#hidden']);
 });
 
+test('a function its own file calls at runtime has a production caller; recursion, metadata reads and shadowed names do not', () => {
+  expect(
+    judge({
+      'src/functions.ts': [
+        'export function calledHere() {}',
+        'export function recursive(): void { recursive(); }',
+        'export function metadataHere() {}',
+        'export function shadowed() {}',
+        'export const run = () => [calledHere(), metadataHere.name, ((shadowed: () => void) => shadowed())(() => {})];',
+      ].join('\n'),
+      'src/user.ts':
+        "import type { calledHere, recursive, metadataHere, shadowed } from './functions';\nexport type Shape = [typeof calledHere, typeof recursive, typeof metadataHere, typeof shadowed];\n",
+      'src/entry.ts':
+        "import type { Shape } from './user';\nimport { run } from './functions';\nexport const all = (shape?: Shape) => [shape, run()];\n",
+    }),
+  ).toEqual(['dead src/functions.ts#recursive', 'dead src/functions.ts#metadataHere', 'dead src/functions.ts#shadowed']);
+});
+
+test('a type-only re-export or local type export reaches an exported function without calling it', () => {
+  expect(
+    judge({
+      'src/functions.ts':
+        'export function statementTyped() {}\nexport function specifierTyped() {}\nexport function valueForwarded() {}\nexport function localTyped() {}\n',
+      'src/stars.ts': 'export function starTyped() {}\n',
+      'src/barrel.ts':
+        "export type { statementTyped } from './functions';\nexport { type specifierTyped, valueForwarded } from './functions';\nexport type * from './stars';\n",
+      'src/entry.ts': "import { localTyped } from './functions';\nexport type { localTyped };\nexport * from './barrel';\n",
+    }),
+  ).toEqual([
+    'dead src/functions.ts#statementTyped',
+    'dead src/functions.ts#specifierTyped',
+    'dead src/functions.ts#localTyped',
+    'dead src/stars.ts#starTyped',
+  ]);
+});
+
 test('a file without exports is never reported, and a file with exports nothing imports is reported per export', () => {
   expect(
     judge({

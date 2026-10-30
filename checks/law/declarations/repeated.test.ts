@@ -77,6 +77,16 @@ test('a copy of an exported dependency type needs at least three members or alte
   expect(paths({ 'src/owner.ts': wide.replace('export ', ''), 'src/copy.ts': files['src/copy.ts']! }, map)).toEqual([]);
 });
 
+test('a type published through an export list is a dependency type like one exported where it is declared', () => {
+  const map = boundaries([['src/copy.ts', 'src/owner.ts']]);
+  const copy = 'type Local = { readonly c: number; readonly b: string; readonly a: string };\n';
+  for (const owner of [
+    `${wide.replace('export ', '')}export { Shared };\n`,
+    `${wide.replace('export ', '')}export type { Shared as Published };\n`,
+  ])
+    expect(paths({ 'src/owner.ts': owner, 'src/copy.ts': copy }, map)).toEqual(['src/copy.ts']);
+});
+
 test('ProgramRan repeats an exported ProgramOutput already reached by the harness module', () => {
   const output = '{ readonly stdout: string; readonly stderr: string; readonly exit: number | null };\n';
   const files = {

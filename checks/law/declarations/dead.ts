@@ -11,11 +11,17 @@ const nodeOf = (path: string, name: string): string => `${path}\0${name}`;
 
 const label = (kind: ExportKind, name: string): string => (kind === 'default' ? 'default export' : `${kind} \`${name}\``);
 
-export type Consumption = readonly [target: string, name: string, runtime: boolean];
+export type Consumption = readonly [target: string, name: string, runtime: boolean, own?: true];
+
+const OWN = '';
 
 export const consumptions = function* (path: string, file: Facts, resolver: Resolver): Generator<Consumption> {
   const usesOf = new Map<string, (readonly [string, string])[]>();
   for (const [local, member, kind] of file.uses) {
+    if (local === OWN) {
+      if (kind === 'v') yield [path, member, true, true];
+      continue;
+    }
     const held = usesOf.get(local);
     if (held === undefined) usesOf.set(local, [[member, kind]]);
     else held.push([member, kind]);
@@ -36,8 +42,10 @@ export const consumptions = function* (path: string, file: Facts, resolver: Reso
   for (const one of file.forwards)
     for (const target of resolver.resolve(one.specifier, path)) {
       if (target === path) continue;
-      if (one.names === 'all') yield [target, ALL, true];
-      else for (const pair of one.names) yield [target, pair.imported === '*' ? ALL : pair.imported, true];
+      if (one.names === 'all') yield [target, ALL, one.typed !== true];
+      else
+        for (const pair of one.names)
+          yield [target, pair.imported === '*' ? ALL : pair.imported, one.typed !== true && pair.typed !== true];
     }
   for (const one of file.loads)
     for (const target of one.pattern ? resolver.pattern(one.specifier, path) : resolver.resolve(one.specifier, path))
@@ -67,7 +75,9 @@ const deadAmong = (corpus: Corpus, params: DeadParams, holders: readonly Package
   const consumeAll = (path: string): void => consume(path, ALL, true);
 
   for (const [path, file] of facts)
-    for (const [target, name, runtime] of consumptions(path, file, resolver)) consume(target, name, runtime);
+    for (const [target, name, runtime, own] of consumptions(path, file, resolver))
+      if (own === true) called.add(nodeOf(target, name));
+      else consume(target, name, runtime);
 
   const entry = matcher(params.entries);
   for (const path of facts.keys()) if (entry(path)) consumeAll(path);

@@ -183,6 +183,44 @@ const boundNames = (name: ts.BindingName, into: string[]): void => {
   else for (const element of name.elements) if (!ts.isOmittedExpression(element)) boundNames(element.name, into);
 };
 
+const OWN = '';
+
+const NONE: ReadonlySet<string> = new Set();
+
+const declaredWithin = (node: ts.Node, into: Set<string>): void =>
+  ts.forEachChild(node, (child) => {
+    if (ts.isFunctionDeclaration(child) || ts.isClassDeclaration(child)) {
+      if (child.name !== undefined) into.add(child.name.text);
+      return;
+    }
+    if (ts.isFunctionLike(child) || ts.isClassLike(child)) return;
+    if (ts.isVariableDeclaration(child)) {
+      const names: string[] = [];
+      boundNames(child.name, names);
+      for (const name of names) into.add(name);
+    }
+    if (ts.isCatchClause(child) && child.variableDeclaration !== undefined) {
+      const names: string[] = [];
+      boundNames(child.variableDeclaration.name, names);
+      for (const name of names) into.add(name);
+    }
+    declaredWithin(child, into);
+  });
+
+const hiddenBy = (node: ts.Node, hidden: ReadonlySet<string>): ReadonlySet<string> => {
+  if (!ts.isFunctionLike(node) || ts.isTypeNode(node)) return hidden;
+  const names = new Set(hidden);
+  for (const parameter of node.parameters) {
+    const bound: string[] = [];
+    boundNames(parameter.name, bound);
+    for (const name of bound) names.add(name);
+  }
+  if (ts.isFunctionExpression(node) && node.name !== undefined) names.add(node.name.text);
+  const body = (node as ts.FunctionLikeDeclaration).body;
+  if (body !== undefined) declaredWithin(body, names);
+  return names;
+};
+
 const callable = (initializer: ts.Expression | undefined): boolean => {
   if (initializer === undefined) return false;
   const value = unwrapped(initializer);
@@ -238,6 +276,8 @@ const read = (path: string, text: string): Facts => {
   const scriptKind = KINDS[extensionOf(path)] ?? ts.ScriptKind.TS;
   for (const block of blocks) {
     const before = exports.length;
+    const shapesBefore = shapes.length;
+    const listed = new Set<string>();
     const file = ts.createSourceFile(path, block.text, ts.ScriptTarget.Latest, false, scriptKind);
     const lineOf = (node: ts.Node): number => file.getLineAndCharacterOfPosition(node.getStart(file)).line + 1 + block.line;
     const declared = new Map<string, ExportKind>();
@@ -275,23 +315,29 @@ const read = (path: string, text: string): Facts => {
         const specifier = statement.moduleSpecifier !== undefined ? literalText(statement.moduleSpecifier) : undefined;
         const clause = statement.exportClause;
         if (specifier !== undefined) {
-          if (clause === undefined) forwards.push({ specifier, names: 'all' });
-          else if (ts.isNamespaceExport(clause)) forwards.push({ specifier, names: [{ imported: '*', exported: clause.name.text }] });
+          const typed = statement.isTypeOnly ? { typed: true as const } : {};
+          if (clause === undefined) forwards.push({ specifier, names: 'all', ...typed });
+          else if (ts.isNamespaceExport(clause))
+            forwards.push({ specifier, names: [{ imported: '*', exported: clause.name.text }], ...typed });
           else
             forwards.push({
               specifier,
               names: clause.elements.map((element) => ({
                 imported: (element.propertyName ?? element.name).text,
                 exported: element.name.text,
+                ...(element.isTypeOnly ? { typed: true as const } : {}),
               })),
+              ...typed,
             });
         } else if (clause !== undefined && ts.isNamedExports(clause))
-          for (const element of clause.elements)
+          for (const element of clause.elements) {
+            listed.add((element.propertyName ?? element.name).text);
             exports.push({
               name: element.name.text,
               kind: declared.get((element.propertyName ?? element.name).text) ?? 'const',
               line: lineOf(element),
             });
+          }
       }
     }
     scopes.set(file, (head) => {
@@ -343,7 +389,8 @@ const read = (path: string, text: string): Facts => {
         visit(statement.expression, statement, { within: 'default', top: 'default' });
       } else if (ts.isExportDeclaration(statement)) {
         if (statement.moduleSpecifier === undefined && statement.exportClause !== undefined && ts.isNamedExports(statement.exportClause))
-          for (const element of statement.exportClause.elements) use((element.propertyName ?? element.name).text, '*', 'v');
+          for (const element of statement.exportClause.elements)
+            use((element.propertyName ?? element.name).text, '*', statement.isTypeOnly || element.isTypeOnly ? 't' : 'v');
       } else if (!ts.isImportDeclaration(statement) && !ts.isImportEqualsDeclaration(statement)) {
         visit(statement, file, { within: '', top: '' });
       }
@@ -366,6 +413,7 @@ const read = (path: string, text: string): Facts => {
       while (target !== undefined && (ts.isParenthesizedExpression(target) || ts.isNonNullExpression(target))) target = target.expression;
       if (target === undefined) return undefined;
       if (ts.isIdentifier(target) && locals.has(target.text) && !namespaces.has(target.text)) return `${target.text}\0*`;
+      if (ts.isIdentifier(target) && !locals.has(target.text) && declared.get(target.text) === 'function') return `${OWN}\0${target.text}`;
       if (ts.isPropertyAccessExpression(target) && ts.isIdentifier(target.expression) && namespaces.has(target.expression.text))
         return `${target.expression.text}\0${target.name.text}`;
       return undefined;
@@ -434,7 +482,7 @@ const read = (path: string, text: string): Facts => {
       }
     }
 
-    function visit(node: ts.Node, parent: ts.Node, context: Context, typed = false): void {
+    function visit(node: ts.Node, parent: ts.Node, context: Context, typed = false, outer: ReadonlySet<string> = NONE): void {
       if (!typed && !ts.isTypeNode(node)) {
         const metadata = metadataUse(node);
         if (metadata !== undefined) {
@@ -442,8 +490,14 @@ const read = (path: string, text: string): Facts => {
           return;
         }
       }
+      const hidden = hiddenBy(node, outer);
       if (ts.isIdentifier(node)) {
-        if (!locals.has(node.text) || nameAt(parent, node)) return;
+        if (nameAt(parent, node)) return;
+        if (!locals.has(node.text)) {
+          if (!typed && declared.get(node.text) === 'function' && node.text !== context.top && !hidden.has(node.text))
+            uses.add(`${OWN}\0${node.text}\0v`);
+          return;
+        }
         const member =
           namespaces.has(node.text) && ts.isPropertyAccessExpression(parent) && parent.expression === node
             ? parent.name.text
@@ -496,17 +550,22 @@ const read = (path: string, text: string): Facts => {
         ts.forEachChild(node, (child) => {
           if (ts.isHeritageClause(child) && child.token === ts.SyntaxKind.ExtendsKeyword)
             for (const type of child.types) {
-              visit(type.expression, type, context, typed);
-              for (const argument of type.typeArguments ?? []) visit(argument, type, context, true);
+              visit(type.expression, type, context, typed, hidden);
+              for (const argument of type.typeArguments ?? []) visit(argument, type, context, true, hidden);
             }
-          else visit(child, node, context, typed);
+          else visit(child, node, context, typed, hidden);
         });
         return;
       }
       const inside = typed || ts.isTypeNode(node);
-      ts.forEachChild(node, (child) => visit(child, node, context, inside));
+      ts.forEachChild(node, (child) => visit(child, node, context, inside, hidden));
     }
     if (!block.exports) exports.length = before;
+    else
+      for (let at = shapesBefore; at < shapes.length; at += 1) {
+        const one = shapes[at]!;
+        if (!one.exported && listed.has(one.name)) shapes[at] = { ...one, exported: true };
+      }
   }
   if (template !== '')
     for (const local of locals)

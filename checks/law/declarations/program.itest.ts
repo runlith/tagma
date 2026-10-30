@@ -154,6 +154,20 @@ test('a commit that adds an unused export, an unused function and a type-only fu
   expect(fingerprints(commit.base)).toEqual(fingerprints(whole.base));
 });
 
+test('stored facts keep type-only forwarding apart from calls and count an own-file caller, as the remeasure does', async () => {
+  const base = treeWith(initial);
+  await index(base);
+  const tree = treeWith({
+    'src/kinds.ts': 'export function typedForward() {}\nexport function ownCalled() {}\nexport const local = () => ownCalled();\n',
+    'src/barrel.ts': "export type { typedForward } from './kinds';\nexport { local } from './kinds';\n",
+    'src/entry.ts':
+      "import { used } from './lib';\nimport { viaUser } from './user';\nimport { local } from './barrel';\nimport type { ownCalled } from './kinds';\nexport const run = (x?: typeof ownCalled) => [used(), viaUser(), local(), x];\n",
+  });
+  const { commit, whole } = await judged('dead-code', base, tree, ['src/kinds.ts', 'src/barrel.ts', 'src/entry.ts']);
+  expect(fingerprints(commit.tree)).toEqual(['dead src/kinds.ts#typedForward']);
+  expect(fingerprints(commit.tree)).toEqual(fingerprints(whole.tree));
+});
+
 test('a card-declared testing entry is neither a judged export nor a production consumer, and a role change rejudges its exporters', async () => {
   const ordinary = card('app', 'dir', 'src');
   const base = treeWith({
