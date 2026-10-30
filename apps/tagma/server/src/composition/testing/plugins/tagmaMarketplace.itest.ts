@@ -3,8 +3,10 @@ import { join, resolve } from 'node:path';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { layer } from '@runlith/effect-test';
 import { oauthServer } from '@runlith/mcp/testing/oauth';
-import { Context, Effect, FileSystem, Layer } from 'effect';
+import { Context, Effect, FileSystem, Layer, Stream } from 'effect';
 import { McpServers } from '../../../mcp/contract/service/servers.js';
+import { Notifications } from '../../../notify/contract/service/notifications.js';
+import type { Notification } from '../../../notify/contract/wire/notification.js';
 import { DoorFixture, doorFixture, projectLeaving } from '../doorFixture.js';
 import { repository } from './files.js';
 
@@ -71,14 +73,34 @@ layer(Layer.mergeAll(doorFixture(), BunFileSystem.layer), { excludeTestServices:
         expect(offered).toEqual(expect.arrayContaining(SERVICES.map((service) => `${service}-${service}`)));
 
         const servers = Context.get(world.runtime.owners, McpServers);
+        const notices = Context.get(world.runtime.owners, Notifications);
+        const asking = (holds: (titles: readonly string[]) => boolean) =>
+          notices.changes.pipe(
+            Stream.mapAccum(
+              (): readonly Notification[] => [],
+              (rows, change) => {
+                const next =
+                  change._tag === 'all'
+                    ? change.rows
+                    : change._tag === 'put'
+                      ? [...rows.filter((row) => row.id !== change.row.id), change.row]
+                      : rows.filter((row) => row.id !== change.id);
+                return [next, [next]] as const;
+              },
+            ),
+            Stream.filter((rows) => holds(rows.filter((row) => row.sender === 'mcp').map((row) => row.title))),
+            Stream.runHead,
+          );
         for (const service of SERVICES) {
           const name = `${service}-${service}`;
           const rowOf = Effect.map(answered('read_mcp_servers', {}), (read) => read.mcp?.find((row) => row.name === name));
           expect((yield* rowOf)?.status).toBe('needs-sign-in');
+          yield* asking((titles) => titles.includes(`Sign in to ${name}`));
           const { url } = yield* answered('sign_in_mcp_server', { name, scope: 'contributed' });
           const returned = yield* oauth.follow(url ?? '');
           expect((yield* world.call(`${returned.pathname}${returned.search}`)).status).toBe(200);
           expect(yield* rowOf).toMatchObject({ status: 'connected', signIn: { signedIn: true } });
+          yield* asking((titles) => !titles.includes(`Sign in to ${name}`));
           const said = yield* servers.caller(projectId).call(name, 'whoami', {}, {});
           expect('content' in said ? said.content : said).toEqual([expect.objectContaining({ type: 'text', text: 'Bearer [redacted]' })]);
         }

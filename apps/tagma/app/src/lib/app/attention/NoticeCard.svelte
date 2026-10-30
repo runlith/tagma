@@ -1,7 +1,11 @@
 <script lang="ts">
   import X from '@lucide/svelte/icons/x';
   import type { Notification } from '@tagma/server/notify/contract/wire/notification';
+  import { App } from '@runlith/layer/svelte/App.svelte';
+  import { linkTarget } from '$lib/features/opening/linkTarget.js';
+  import { Opening } from '$lib/features/opening/Opening.svelte.js';
   import { WallClock } from '$lib/features/workspace/WallClock.svelte.js';
+  import FadeText from '$lib/shared/FadeText.svelte';
   import { timeCompact } from '$lib/shared/time.js';
   import { cn } from '$lib/shared/utils.js';
   import { Attention } from './Attention.svelte.js';
@@ -10,10 +14,13 @@
 
   const attention = Attention.use();
   const clock = WallClock.use();
+  const opening = Opening.use();
+  const here = App.current();
 
   let typed = $state('');
 
   const question = $derived(row.question);
+  const link = $derived(row.link !== null && opening.knows(row.link) ? row.link : null);
   const reply = $derived(attention.noticeReplyOf(row));
   const busy = $derived(reply?.state === 'sending');
   const sender = $derived(row.sender.replace(/^app:/, ''));
@@ -37,15 +44,27 @@
 >
   <div class="flex min-w-0 items-start gap-2">
     <span class={cn('mt-1.5 size-1.5 shrink-0 rounded-full', question === null ? 'bg-status-done' : 'bg-status-open')}></span>
-    <div class="flex min-w-0 flex-1 flex-col gap-0.5">
+    {#snippet said()}
       <div class="flex items-baseline gap-2">
-        <span class={cn('min-w-0 flex-1 truncate font-medium', touch ? 'text-body' : 'text-ui')}>{row.title}</span>
+        <FadeText class={cn('min-w-0 flex-1 font-medium', touch ? 'text-body' : 'text-ui')} text={row.title} />
         <span class="shrink-0 tabular text-meta text-muted-foreground">{timeCompact(row.at, clock.now)}</span>
       </div>
       <span class="text-small text-muted-foreground">{sender}</span>
       {#if row.body !== ''}<p class={cn('text-ui', touch ? 'line-clamp-4' : 'line-clamp-3')}>{row.body}</p>{/if}
       {#if question !== null}<p class={cn(touch ? 'text-body' : 'text-ui', 'font-medium')}>{question.text}</p>{/if}
-    </div>
+    {/snippet}
+    {#if link !== null}
+      <div
+        role="link"
+        tabindex="0"
+        class="-m-1 flex min-w-0 flex-1 cursor-pointer flex-col gap-0.5 rounded-md p-1 transition-colors select-none hover:bg-hover"
+        {@attach linkTarget(opening, () => link, here)}
+      >
+        {@render said()}
+      </div>
+    {:else}
+      <div class="flex min-w-0 flex-1 flex-col gap-0.5">{@render said()}</div>
+    {/if}
     {#if question === null}
       <button
         type="button"

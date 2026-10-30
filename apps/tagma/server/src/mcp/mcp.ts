@@ -28,6 +28,10 @@ export const mcp = manifest({
       () => import('./serverPool.js'),
       ({ mcpServersLayer }) => mcpServersLayer(),
     ),
+    serving: lazyLayer(
+      () => import('./waits.js'),
+      ({ waitsLayer }) => waitsLayer,
+    ),
     call: (input: { readonly mcpServers: McpServers['Service'] }) => Context.make(McpServers, input.mcpServers),
   },
 });

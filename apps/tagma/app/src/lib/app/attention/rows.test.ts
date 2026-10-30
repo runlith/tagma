@@ -57,6 +57,7 @@ const notice = (id: string, at: string, asks: boolean): Notification => ({
   body: '',
   at,
   question: asks ? { text: 'Raise?', options: [] } : null,
+  link: null,
 });
 
 test('notifications keep newest first as the feed lists, puts and removes them', () => {

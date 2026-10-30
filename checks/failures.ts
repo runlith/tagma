@@ -2,6 +2,20 @@ import type { SwallowedFailuresParams } from '@runlith/tagma/rules/effect';
 
 export const ALLOWED: SwallowedFailuresParams['allow'] = [
   {
+    path: 'apps/tagma/server/src/mcp/waits.ts',
+    symbol: 'quietly',
+    form: 'catch',
+    site: '78a37d70',
+    why: 'Showing an MCP wait to the operator is best-effort: a failed send or withdraw is logged and leaves the shown waits as they were, so the next pulse of the pool sends or withdraws them again.',
+  },
+  {
+    path: 'apps/tagma/server/src/mcp/waits.ts',
+    symbol: 'waitsLayer.now',
+    form: 'orElseSucceed',
+    site: 'fee9f824',
+    why: 'A project whose servers cannot be read keeps the waits it showed, logged; the next pulse of its pool reads them again, and withdrawing on a read failure would tell the operator a wait ended that did not.',
+  },
+  {
     path: 'packages/agent/src/thread/run/ParkedMoves.ts',
     symbol: 'makeParkedMoves.completed',
     form: 'catchCause',

@@ -15,6 +15,7 @@ export const notificationOf = (row: Row): Notification => ({
   body: row.body,
   at: new Date(row.createdAt).toISOString(),
   question: row.questionText === null ? null : { text: row.questionText, options: row.questionOptions ?? [] },
+  link: row.link,
 });
 
 export const outcomeOf = (row: Row): Outcome | null =>
@@ -75,6 +76,16 @@ export const makeLedger = Effect.gen(function* () {
             .where(and(eq(notification.id, id), isNull(notification.endedAt)))
             .returning()
             .get(),
+        ),
+      ),
+    withdraw: (sender: string, key: string | null) =>
+      units.write(writes('Ledger.withdraw', [notification]), (unit) =>
+        unit.run(
+          db
+            .delete(notification)
+            .where(key === null ? eq(notification.sender, sender) : and(eq(notification.sender, sender), eq(notification.key, key)))
+            .returning()
+            .all(),
         ),
       ),
     handed: (id: string, at: number) =>

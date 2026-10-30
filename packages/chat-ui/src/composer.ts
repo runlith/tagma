@@ -88,6 +88,8 @@ export type ComposerMentionOption = {
   id: string;
   label: string;
   description?: string;
+  value?: string;
+  act?: boolean;
   disabled?: boolean;
   hits?: readonly number[];
 };

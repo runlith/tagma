@@ -1,5 +1,5 @@
 import { index, integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
-import { OUTCOME_KINDS } from '../contract/wire/notification.js';
+import { type NotificationLink, OUTCOME_KINDS } from '../contract/wire/notification.js';
 
 export const notification = sqliteTable(
   'notification',
@@ -11,6 +11,7 @@ export const notification = sqliteTable(
     body: text('body').notNull(),
     questionText: text('question_text'),
     questionOptions: text('question_options', { mode: 'json' }).$type<string[]>(),
+    link: text('link', { mode: 'json' }).$type<NotificationLink>(),
     createdAt: integer('created_at').notNull(),
     endedAt: integer('ended_at'),
     outcome: text('outcome', { enum: OUTCOME_KINDS }),

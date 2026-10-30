@@ -1,4 +1,5 @@
 import type { Component } from 'svelte';
+import type { SurfaceMark } from '$lib/features/workspace/surface.js';
 
 const LAUNCH = 'app.';
 
@@ -16,6 +17,7 @@ export type RailPlace = {
   readonly label: string;
   readonly icon: Component<{ class?: string }>;
   readonly iconUrl?: string;
+  readonly mark?: SurfaceMark;
   readonly current: boolean;
   readonly reach: PlaceReach;
 };

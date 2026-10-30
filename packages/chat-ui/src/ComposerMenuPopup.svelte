@@ -141,11 +141,12 @@
                 description: option.description,
               })}{/if}
             <span
-              class={['min-w-0 text-small', menu.provider?.accent ? 'mention-label font-mono' : 'font-medium']}
+              class={['min-w-0 text-small', menu.provider?.accent && option.act !== true ? 'mention-label font-mono' : 'font-medium']}
               data-fade
               {@attach clipFade}
               >{#each pieces(option.label, option.hits ?? []) as piece, at (at)}{#if piece.hit}<span
-                    class={['underline underline-offset-2', !menu.provider?.accent && 'text-foreground']}>{piece.text}</span
+                    class={['underline underline-offset-2', (!menu.provider?.accent || option.act === true) && 'text-foreground']}
+                    >{piece.text}</span
                   >{:else}{piece.text}{/if}{/each}</span
             >
           </span>

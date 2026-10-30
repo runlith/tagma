@@ -57,6 +57,7 @@ const asked = Effect.fnUntraced(function* (id: string, title = id): Effect.fn.Re
     body: '',
     at: new Date(yield* Clock.currentTimeMillis).toISOString(),
     question: { text: 'Raise to 40?', options: ['Yes', 'No'] },
+    link: null,
   };
 });
 
@@ -81,6 +82,7 @@ const server = Effect.fnUntraced(function* () {
         send: unused,
         answer: unused,
         dismiss: unused,
+        withdraw: unused,
         changes: Stream.fromQueue(notices),
       }),
       Context.add(Devices, {

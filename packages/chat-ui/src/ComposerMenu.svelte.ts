@@ -20,6 +20,7 @@ export type ComposerOption = {
   readonly keyHint?: ComposerKeyHint;
   readonly value?: string;
   readonly active?: boolean;
+  readonly act?: boolean;
   readonly disabled?: boolean;
   readonly hits?: readonly number[];
 };

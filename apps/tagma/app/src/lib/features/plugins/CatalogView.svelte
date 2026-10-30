@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { MarketplaceRow } from '@tagma/server/marketplaces/contract/wire/rows';
   import Search from '@lucide/svelte/icons/search';
+  import { untrack } from 'svelte';
   import Waiting from '@runlith/chat-ui/Waiting.svelte';
   import FadeText from '$lib/shared/FadeText.svelte';
   import { Input } from '$lib/shared/ui/input/index.js';
@@ -27,7 +28,7 @@
     onremoved: () => void;
   } = $props();
 
-  let query = $state('');
+  let query = $state(untrack(() => (place.kind === 'find' ? place.query : '')));
 
   const source = $derived(place.kind === 'source' ? marketplaces.find((marketplace) => marketplace.id === place.id) : undefined);
   const scoped = $derived(

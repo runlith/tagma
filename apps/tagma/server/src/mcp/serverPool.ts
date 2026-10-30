@@ -731,6 +731,8 @@ const makeMcpServers = Effect.fnUntraced(function* ({
     servers: McpServers.of({
       list,
       rows,
+      moves: Stream.fromPubSub(pulses),
+      opened: () => [...pools.keys()],
       add,
       remove,
       setEnabled,

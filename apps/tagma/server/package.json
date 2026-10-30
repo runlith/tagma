@@ -624,6 +624,11 @@
       "browser": "./src/mcp/contract/wire/servers.ts",
       "default": "./src/mcp/contract/wire/servers.ts"
     },
+    "./mcp/contract/wire/link": {
+      "types": "./src/mcp/contract/wire/link.ts",
+      "browser": "./src/mcp/contract/wire/link.ts",
+      "default": "./src/mcp/contract/wire/link.ts"
+    },
     "./mcp/contract/wire/feeds": {
       "types": "./src/mcp/contract/wire/feeds.ts",
       "browser": "./src/mcp/contract/wire/feeds.ts",
@@ -653,6 +658,11 @@
       "types": "./src/plugins/contract/wire/rows.ts",
       "browser": "./src/plugins/contract/wire/rows.ts",
       "default": "./src/plugins/contract/wire/rows.ts"
+    },
+    "./plugins/contract/wire/link": {
+      "types": "./src/plugins/contract/wire/link.ts",
+      "browser": "./src/plugins/contract/wire/link.ts",
+      "default": "./src/plugins/contract/wire/link.ts"
     },
     "./plugins/contract/wire/settings": {
       "types": "./src/plugins/contract/wire/settings.ts",

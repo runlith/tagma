@@ -53,6 +53,7 @@
         label: entry.label,
         icon: entry.icon,
         iconUrl: entry.iconUrl,
+        mark: entry.mark,
         current: standing === entry.surface,
         reach: { href: visits.href(project, entry.surface) },
       } satisfies RailPlace,
@@ -91,6 +92,7 @@
       {@const carried = reorder.carried === place.id}
       {@const reach = place.reach}
       {@const Icon = place.icon}
+      {@const Mark = place.mark}
       <div
         class={cn(
           'shrink-0 rounded-md',
@@ -102,6 +104,13 @@
         data-carried={carried || undefined}
         animate:glide
       >
+        {#snippet glyph()}
+          {#if place.iconUrl !== undefined}
+            <TagmaAppIcon src={place.iconUrl} class="size-4" />
+          {:else}
+            <Icon class="size-4" />
+          {/if}
+        {/snippet}
         <Tooltip text={reorder.carried !== null ? null : place.label} side="right">
           {#if 'href' in reach}
             <a
@@ -112,10 +121,10 @@
               data-reorder-handle={place.id}
             >
               <RailMark current={place.current} />
-              {#if place.iconUrl !== undefined}
-                <TagmaAppIcon src={place.iconUrl} class="size-4" />
+              {#if Mark !== undefined}
+                <Mark {project}>{@render glyph()}</Mark>
               {:else}
-                <Icon class="size-4" />
+                {@render glyph()}
               {/if}
             </a>
           {:else}
@@ -126,7 +135,7 @@
               data-reorder-handle={place.id}
               onclick={reach.open}
             >
-              <Icon class="size-4" />
+              {@render glyph()}
             </button>
           {/if}
         </Tooltip>

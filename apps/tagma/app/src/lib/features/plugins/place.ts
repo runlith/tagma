@@ -2,6 +2,7 @@ export const PLUGINS = 'plugins';
 
 export type Place =
   | { readonly kind: 'catalog' }
+  | { readonly kind: 'find'; readonly query: string }
   | { readonly kind: 'category'; readonly name: string }
   | { readonly kind: 'source'; readonly id: string }
   | { readonly kind: 'entry'; readonly marketplace: string; readonly name: string }
@@ -20,6 +21,7 @@ export function placeOf(id: string | null): Place {
   const head = split(id);
   if (head === null) return { kind: 'catalog' };
   const [kind, rest] = head;
+  if (kind === 'find') return { kind, query: rest };
   if (kind === 'category') return { kind, name: rest };
   if (kind === 'source') return { kind, id: rest };
   if (kind === 'plugin') return { kind, id: rest };
@@ -34,6 +36,8 @@ export function idOf(place: Place): string | null {
   switch (place.kind) {
     case 'catalog':
       return null;
+    case 'find':
+      return `find${CUT}${place.query}`;
     case 'category':
       return `category${CUT}${place.name}`;
     case 'source':

@@ -1,13 +1,14 @@
 import { Context, type Effect, type Stream } from 'effect';
 import type { StoreFailure } from '../../../platform/contract/service/store.js';
 import type { GateRefusal } from '../../../platform/contract/wire/refusal.js';
-import type { Notification, Outcome, Question } from '../wire/notification.js';
+import type { Notification, NotificationLink, Outcome, Question } from '../wire/notification.js';
 
 export type Draft = {
   readonly title: string;
   readonly body: string;
   readonly question: Question | null;
   readonly key?: string;
+  readonly link?: NotificationLink;
 };
 
 export type Sent = Notification & { readonly repeated: boolean };
@@ -25,6 +26,7 @@ export class Notifications extends Context.Service<
     send(sender: string, draft: Draft): Effect.Effect<Sent, GateRefusal<'too-many-open'> | StoreFailure>;
     answer(id: string, answer: string): Effect.Effect<Resolved, GateRefusal<'not-found' | 'no-question' | 'bad-answer'> | StoreFailure>;
     dismiss(id: string): Effect.Effect<Resolved, GateRefusal<'not-found'> | StoreFailure>;
+    withdraw(sender: string, key: string | null): Effect.Effect<void, StoreFailure>;
     readonly changes: Stream.Stream<NotificationChange, StoreFailure>;
   }
 >()('tagma/notify/Notifications') {}

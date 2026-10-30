@@ -42,6 +42,7 @@ import { runAdmissionLayer } from '@runlith/agent/thread/run/runAdmission';
 import { landingAdmissionLayer } from './preparedChanges.js';
 import { operationChecks } from './operationChecks.js';
 import { landing } from '../landing/landing.js';
+import { mcp } from '../mcp/mcp.js';
 import { notify } from '../notify/notify.js';
 import { outcomes } from './outcomes.js';
 import { push } from '../push/push.js';
@@ -280,7 +281,9 @@ const landed = landing.lifetimes.serving.pipe(Layer.provideMerge(takeBack));
 
 const notified = notify.lifetimes.serving.pipe(Layer.provideMerge(outcomes), Layer.provideMerge(landed));
 
-const pushed = push.lifetimes.serving.pipe(Layer.provideMerge(notified));
+const waited = mcp.lifetimes.serving.pipe(Layer.provideMerge(notified));
+
+const pushed = push.lifetimes.serving.pipe(Layer.provideMerge(waited));
 
 const scheduled = schedule.lifetimes.serving.pipe(Layer.provideMerge(ticks), Layer.provideMerge(pushed));
 

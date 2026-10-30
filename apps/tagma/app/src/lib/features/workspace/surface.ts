@@ -1,6 +1,7 @@
+import type { Project } from '@tagma/server/graph/contract/wire/rows';
 import { RegistryClash, clashOf } from '@runlith/chat-ui/RegistryClash';
 import { Service } from '@runlith/layer/key';
-import type { Component } from 'svelte';
+import type { Component, Snippet } from 'svelte';
 import { SvelteMap } from 'svelte/reactivity';
 
 export type Surface = string;
@@ -16,6 +17,7 @@ export type SurfaceDeclaration = {
   readonly place?: string;
   readonly label: string;
   readonly icon: Component<{ class?: string }>;
+  readonly mark?: SurfaceMark;
   readonly rail?: number;
   readonly pinned?: true;
   readonly under?: Surface;
@@ -28,6 +30,8 @@ export type SurfaceDeclaration = {
   readonly nested?: true;
   readonly phone?: true;
 };
+
+export type SurfaceMark = Component<{ project: Project; children: Snippet }>;
 
 export type RouteParams = Readonly<Record<string, string | undefined>>;
 

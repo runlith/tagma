@@ -46,6 +46,7 @@ export const makeInbox = Effect.fnUntraced(function* ({ handback }: { readonly h
         body: draft.body,
         questionText: draft.question?.text ?? null,
         questionOptions: draft.question === null ? null : [...draft.question.options],
+        link: draft.link ?? null,
         createdAt: yield* Clock.currentTimeMillis,
         endedAt: null,
         outcome: null,
@@ -85,5 +86,16 @@ export const makeInbox = Effect.fnUntraced(function* ({ handback }: { readonly h
       return yield* settle(id, 'answered', answer);
     }),
     dismiss: (id) => settle(id, 'dismissed', null),
+    withdraw: Effect.fn('Notifications.withdraw')(function* (sender, key) {
+      yield* Effect.uninterruptible(
+        Effect.tap(ledger.withdraw(sender, key), (rows) =>
+          Effect.forEach(
+            rows.filter((row) => row.endedAt === null),
+            (row) => PubSub.publish(published, { _tag: 'gone', id: row.id }),
+            { discard: true },
+          ),
+        ),
+      );
+    }),
   });
 });

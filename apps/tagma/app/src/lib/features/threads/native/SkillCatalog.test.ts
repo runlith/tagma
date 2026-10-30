@@ -15,7 +15,12 @@ function deferred() {
   });
   return { promise, resolve };
 }
-const answer = (id: string): AgentSkillCatalog => ({ skills: [{ id, description: id }], available: true, basis: 'thread', note: null });
+const answer = (id: string): AgentSkillCatalog => ({
+  skills: [{ id, description: id, plugin: null }],
+  available: true,
+  basis: 'thread',
+  note: null,
+});
 const nextTurnAnswer = (id: string): AgentSkillCatalog => ({ ...answer(id), basis: 'next-turn' });
 
 function world(load: (key: SkillCatalogKey) => Promise<AgentSkillCatalog>) {

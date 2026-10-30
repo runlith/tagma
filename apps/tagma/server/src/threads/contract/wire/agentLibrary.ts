@@ -111,7 +111,13 @@ export const agentSkillAimSchema = Schema.Union([
 export type AgentSkillAim = typeof agentSkillAimSchema.Type;
 
 export const agentSkillCatalogSchema = Schema.Struct({
-  skills: Schema.Array(Schema.Struct({ id: Schema.String, description: Schema.String })),
+  skills: Schema.Array(
+    Schema.Struct({
+      id: Schema.String,
+      description: Schema.String,
+      plugin: Schema.NullOr(Schema.String).annotate({ description: 'The plugin that brings it, null for any other skill.' }),
+    }),
+  ),
   basis: Schema.Literals(['thread', 'next-turn']),
   available: Schema.Boolean,
   note: Schema.NullOr(Schema.String),

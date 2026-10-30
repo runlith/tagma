@@ -32,6 +32,9 @@ export const outcomeSchema = Schema.Struct({
 });
 export type Outcome = typeof outcomeSchema.Type;
 
+export const notificationLinkSchema = Schema.Struct({ kind: Schema.String, target: Schema.Json });
+export type NotificationLink = typeof notificationLinkSchema.Type;
+
 export const notificationSchema = Schema.Struct({
   id: Schema.String,
   sender: Schema.String,
@@ -39,6 +42,7 @@ export const notificationSchema = Schema.Struct({
   body: Schema.String,
   at: Schema.String,
   question: Schema.NullOr(questionSchema),
+  link: Schema.NullOr(notificationLinkSchema),
 });
 export type Notification = typeof notificationSchema.Type;
 
