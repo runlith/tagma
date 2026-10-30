@@ -12,9 +12,13 @@
   import type { Told } from '$lib/wire/told.js';
   import McpDeclarationForm from '$lib/features/mcp/DeclarationForm.svelte';
   import { McpRepo, type McpDeclarationInput } from '$lib/features/mcp/Repo.js';
+  import Waiting from '@runlith/chat-ui/Waiting.svelte';
+  import FadeText from '$lib/shared/FadeText.svelte';
   import { addressOf } from '$lib/features/plugins/address.js';
+  import Gives from '$lib/features/plugins/Gives.svelte';
   import { idOf, type Place } from '$lib/features/plugins/place.js';
-  import { PluginsRepo } from '$lib/features/plugins/Repo.js';
+  import { type Found, PluginsRepo } from '$lib/features/plugins/Repo.js';
+  import Tile from '$lib/features/plugins/Tile.svelte';
 
   let {
     open = $bindable(false),
@@ -33,12 +37,14 @@
   let busy = $state(false);
   let failed = $state<Told | undefined>(undefined);
   let refusal = $state<{ code: string; reason: string; unblock: readonly string[] } | undefined>(undefined);
+  let found = $state<{ readonly at: string; readonly what: Found } | undefined>(undefined);
 
   const address = $derived(addressOf(typed));
 
   $effect(() => {
     if (open) return;
     typed = '';
+    found = undefined;
     failed = undefined;
     refusal = undefined;
   });
@@ -63,11 +69,24 @@
       const marketplace = await plugins.addMarketplace.run({ source }, { throwOnError: true });
       return marketplace === undefined ? null : { kind: 'source', id: marketplace.id };
     });
-  const installPlugin = (source: string) =>
+  const installPrepared = (prepared: string) =>
     act(async () => {
-      const plugin = await plugins.install.run({ projectId: project.id, source, scope: 'project' }, { throwOnError: true });
+      const plugin = await plugins.installPrepared.run({ projectId: project.id, prepared, scope: 'project' }, { throwOnError: true });
       return plugin === undefined ? null : { kind: 'plugin', id: plugin.id };
     });
+
+  async function inspect(source: string): Promise<void> {
+    busy = true;
+    failed = undefined;
+    try {
+      const what = await plugins.inspect.run({ projectId: project.id, source }, { throwOnError: true });
+      found = what === undefined ? undefined : { at: source, what };
+    } catch (error: unknown) {
+      failed = toldOf(error);
+    } finally {
+      busy = false;
+    }
+  }
   const declare = (declaration: McpDeclarationInput) =>
     act(async () => {
       await mcp.add.run({ projectId: project.id, scope: 'project', declaration }, { throwOnError: true });
@@ -97,17 +116,43 @@
         >
       </div>
     {:else if address.kind === 'source'}
-      <div class="grid gap-2">
-        <p class="text-ui">
-          A repository or folder: add it as a source of plugins, or install the one plugin it holds into {project.name}.
-        </p>
-        <div class="flex gap-2">
-          <Button disabled={busy} onclick={() => void addSource(address.source)}><Store class="size-3.5" />Add as a source</Button>
-          <Button variant="outline" disabled={busy} onclick={() => void installPlugin(address.source)}>
-            <Package class="size-3.5" />Install as a plugin
+      {@const shown = found !== undefined && found.at === address.source ? found.what : undefined}
+      {#if shown === undefined}
+        <div class="flex items-center gap-3">
+          <p class="flex-1 text-ui text-muted-foreground">A repository or folder. Tagma reads it first and says what it holds.</p>
+          <Button disabled={busy} onclick={() => void inspect(address.source)}>
+            {#if busy}<Waiting class="size-3" />{/if}Read it
           </Button>
         </div>
-      </div>
+      {:else if shown.kind === 'marketplace'}
+        <div class="grid grid-cols-[auto_1fr_auto] items-center gap-3 rounded-lg border bg-raised p-3">
+          <Store class="size-4 text-muted-foreground" />
+          <span class="grid min-w-0 gap-0.5">
+            <FadeText text="A source of plugins: {shown.title ?? shown.name}" class="text-ui font-medium" />
+            <span class="text-small text-muted-foreground tabular"
+              >{shown.entries} {shown.entries === 1 ? 'plugin' : 'plugins'}. Unreviewed: Tagma has not read them.</span
+            >
+          </span>
+          <Button disabled={busy} onclick={() => void addSource(address.source)}>Add source</Button>
+        </div>
+      {:else}
+        <div class="grid max-h-96 gap-4 overflow-y-auto">
+          <div class="grid grid-cols-[auto_1fr_auto] items-center gap-3">
+            <Tile title={shown.preview.title ?? shown.preview.id} />
+            <span class="grid min-w-0 gap-0.5">
+              <FadeText text={shown.preview.title ?? shown.preview.id} class="text-ui font-medium" />
+              <FadeText text={shown.preview.description ?? 'One plugin'} class="text-small text-muted-foreground" />
+            </span>
+            <Button disabled={busy} onclick={() => void installPrepared(shown.preview.prepared)}>Add to {project.name}</Button>
+          </div>
+          <Gives
+            components={shown.preview.components}
+            ignored={shown.preview.ignored}
+            consent={shown.preview.consent}
+            options={shown.preview.options}
+          />
+        </div>
+      {/if}
     {:else}
       {#key typed}
         <div class="overflow-hidden rounded-lg border">

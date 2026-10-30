@@ -80,6 +80,28 @@ export const MARKETPLACE_PAIRS = {
       }),
     }),
   ),
+  inspect_source: pair(
+    OPS.inspect_source,
+    body(OPS.inspect_source, {
+      execute: Effect.fnUntraced(function* (input) {
+        if (!isGitUrl(input.source) && !isAbsolute(input.source)) {
+          return yield* new GateRefusal('field-invalid', `${input.source} is neither a git URL nor an absolute folder path.`, [
+            'name it by its git URL or by the absolute path of its folder',
+          ]);
+        }
+        const source = isGitUrl(input.source)
+          ? { kind: 'git' as const, url: input.source }
+          : { kind: 'folder' as const, path: input.source };
+        const list = yield* (yield* Marketplaces).look(source);
+        if (list !== null) {
+          const found = { kind: 'marketplace' as const, name: list.name, title: list.title, description: list.description };
+          return { status: 'ok' as const, found: { ...found, entries: list.entries.length + list.faults.length } };
+        }
+        const prepared = yield* (yield* Plugins).prepare({ projectId: yield* projectId, source: input.source });
+        return { status: 'ok' as const, found: { kind: 'plugin' as const, preview: prepared.preview } };
+      }),
+    }),
+  ),
   remove_marketplace: pair(
     OPS.remove_marketplace,
     body(OPS.remove_marketplace, {

@@ -48,6 +48,9 @@ type Answer = {
   readonly plugin?: Plugin;
   readonly plugins?: readonly Plugin[];
   readonly mcp?: readonly { readonly name: string; readonly status: string }[];
+  readonly found?:
+    | { readonly kind: 'marketplace'; readonly name: string; readonly entries: number }
+    | { readonly kind: 'plugin'; readonly preview: Preview };
 };
 
 const claudeList = (name: string, plugins: readonly unknown[]): Files => ({
@@ -275,6 +278,32 @@ layer(Layer.effect(Market, setup).pipe(Layer.provideMerge(BunFileSystem.layer)),
           'rooted-later',
         ]);
       }),
+  );
+
+  it.effect('an address is read as the marketplace or the plugin it holds, and the plugin installs as read', () =>
+    Effect.gen(function* () {
+      const { world, call, kept } = yield* Market;
+      yield* kept([], ['loose']);
+      const market = yield* world.directory('inspected-market');
+      yield* repository(market, claudeList('fixture-inspected', [{ name: 'one', source: './plugins/one' }]));
+      const loose = yield* world.directory('loose-plugin');
+      yield* repository(loose, {
+        '.claude-plugin/plugin.json': JSON.stringify({ name: 'loose' }),
+        'skills/act/SKILL.md': skill('Acts.'),
+      });
+
+      expect((yield* call('inspect_source', { source: `file://${market}` })).found).toEqual({
+        kind: 'marketplace',
+        name: 'fixture-inspected',
+        title: null,
+        description: null,
+        entries: 1,
+      });
+      const found = (yield* call('inspect_source', { source: `file://${loose}` })).found;
+      expect(found?.kind === 'plugin' ? names(found.preview.components) : []).toEqual(['loose-act']);
+      const prepared = found?.kind === 'plugin' ? found.preview.prepared : '';
+      expect((yield* call('install_plugin', { prepared })).plugin?.id).toBe('loose');
+    }),
   );
 
   it.effect('an entry its list leaves bare is described by its own manifest and filed under a Tagma category', () =>

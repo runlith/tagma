@@ -54,7 +54,7 @@ const OTHER: CatalogCategory = 'Other';
 export function categoriesOf(listings: readonly Listing[]): readonly Category[] {
   const counts = new Map<string, number>();
   for (const { entry } of listings) {
-    if (entry.category === null || entry.category === '') continue;
+    if (entry.category === null) continue;
     counts.set(entry.category, (counts.get(entry.category) ?? 0) + 1);
   }
   return [...counts]

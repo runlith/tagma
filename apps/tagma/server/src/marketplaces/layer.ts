@@ -320,6 +320,15 @@ export const makeMarketplaces = Effect.gen(function* () {
       );
     }),
     refresh,
+    look: Effect.fn('Marketplaces.look')(function* (source) {
+      const got = yield* provided(fetchRevision({ home, source, formats, now: yield* Clock.currentTimeMillis })).pipe(
+        Effect.catchTag('ListUnreadable', () => Effect.succeed(null)),
+        Effect.mapError((failure) => refusedOf(failure, source)),
+      );
+      if (got === null) return null;
+      yield* provided(dropFetched(got)).pipe(Effect.mapError(unstored(source.kind === 'git' ? source.url : source.path)));
+      return got.list;
+    }),
     entry: (marketplace, name, use) =>
       reading(Effect.flatMap(pick(marketplace, name), use)).pipe(Effect.withSpan('Marketplaces.entry', { attributes: { marketplace } })),
     changes: Stream.fromPubSub(pulses),

@@ -3,6 +3,7 @@ import type { StoreFailure } from '../../../platform/contract/service/store.js';
 import type { GateRefusal } from '../../../platform/contract/wire/refusal.js';
 import type { PluginResolved } from '../../../plugins/contract/service/plugins.js';
 import type { SettingLandRefusal } from '../../../settings/contract/service/values.js';
+import type { MarketplaceList } from './lists.js';
 import type { MarketplacePreset } from '../wire/presets.js';
 import type { EntryRow, MarketplaceRow, MarketplaceSource } from '../wire/rows.js';
 
@@ -34,6 +35,9 @@ export class Marketplaces extends Context.Service<
     add(source: MarketplaceSource): Effect.Effect<MarketplaceRow, MarketplaceFailure<AddRefusal>>;
     remove(id: string): Effect.Effect<MarketplaceRow, MarketplaceFailure<RemoveRefusal>>;
     refresh(id: string): Effect.Effect<MarketplaceRow, MarketplaceFailure<RefreshRefusal>>;
+    look(
+      source: MarketplaceSource,
+    ): Effect.Effect<MarketplaceList | null, MarketplaceFailure<'marketplace-unreachable' | 'marketplace-unreadable'>>;
     entry<A, E, R>(
       marketplace: string,
       name: string,

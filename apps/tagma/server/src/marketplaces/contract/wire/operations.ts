@@ -128,6 +128,51 @@ export const MARKETPLACE_OPERATIONS = {
     presentation: { running: 'Previewing a plugin', done: 'Previewed a plugin' },
     subjects: () => [],
   }),
+  inspect_source: operation('inspect_source', {
+    ...placed,
+    ...offered,
+    approval: ASKS_NEVER,
+    effect: 'external',
+    identity: { key: 'call' },
+    answer: arms({
+      ok: {
+        found: Schema.Union([
+          Schema.Struct({
+            kind: Schema.Literal('marketplace'),
+            name: Schema.String,
+            title: Schema.NullOr(Schema.String),
+            description: Schema.NullOr(Schema.String),
+            entries: Schema.Int,
+          }),
+          Schema.Struct({ kind: Schema.Literal('plugin'), preview: pluginPreviewSchema }),
+        ]),
+      },
+    }),
+    meaning: 'Read what a git URL or folder holds before adding it: a marketplace list, or one plugin prepared for install.',
+    grammar:
+      'A marketplace is named with its list; add_marketplace adds it. A plugin is answered as preview_plugin answers an entry, and install_plugin with its `prepared` installs that revision. Adds and runs nothing.',
+    input: Schema.Struct({
+      project: projectField,
+      source: Schema.String.check(Schema.isMinLength(1)).annotate({ description: 'A git URL, or the absolute path of a folder.' }),
+    }),
+    refusals: [
+      'field-invalid',
+      'marketplace-unreachable',
+      'marketplace-unreadable',
+      'unknown-project',
+      'secret-store-failed',
+      'plugin-source-unreadable',
+      'plugin-clone-failed',
+      'plugin-pin-unreachable',
+      'plugin-refused',
+      'plugin-names-collide',
+      'plugin-id-taken',
+    ],
+    confirmation: (input) => ({ summary: `Read what ${input.source} holds?` }),
+    confirmLabel: 'Read',
+    presentation: { running: 'Reading an address', done: 'Read an address' },
+    subjects: () => [],
+  }),
   add_marketplace: operation('add_marketplace', {
     ...machine,
     ...operatorOnly,

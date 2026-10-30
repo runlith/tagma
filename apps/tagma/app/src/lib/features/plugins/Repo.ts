@@ -1,5 +1,5 @@
 import type { SettableScope } from '@tagma/server/platform/contract/wire/setting';
-import type { PluginRow } from '@tagma/server/plugins/contract/wire/rows';
+import type { PluginPreview, PluginRow } from '@tagma/server/plugins/contract/wire/rows';
 import type { KeyedLoaderContext } from '@runlith/query/types';
 import { Repo } from '@runlith/query/repo';
 import { Door, type Lens } from '$lib/wire/Door.js';
@@ -13,6 +13,16 @@ export type PluginTarget = { readonly projectId: number; readonly id: string };
 export type PluginReach = { readonly enabled: boolean; readonly scope: SettableScope };
 
 export type EntryTarget = { readonly projectId: number; readonly marketplace: string; readonly entry: string };
+
+export type Found =
+  | {
+      readonly kind: 'marketplace';
+      readonly name: string;
+      readonly title: string | null;
+      readonly description: string | null;
+      readonly entries: number;
+    }
+  | { readonly kind: 'plugin'; readonly preview: PluginPreview };
 
 export const PluginsRepo = Repo.define(
   'plugins',
@@ -65,6 +75,11 @@ export const PluginsRepo = Repo.define(
       mutator: async (input: EntryTarget, { signal }, door) =>
         (await door.perform('preview_plugin', { marketplace: input.marketplace, entry: input.entry }, lens(input.projectId), { signal }))
           .preview,
+    }),
+
+    inspect: mutation({
+      mutator: async (input: { readonly projectId: number; readonly source: string }, { signal }, door): Promise<Found> =>
+        (await door.perform('inspect_source', { source: input.source }, lens(input.projectId), { signal })).found,
     }),
 
     addMarketplace: mutation({
