@@ -44,6 +44,10 @@
       "types": "./src/slots.ts",
       "default": "./src/slots.ts"
     },
+    "./sampling": {
+      "types": "./src/sampling.ts",
+      "default": "./src/sampling.ts"
+    },
     "./kinds": {
       "types": "./src/core/files.ts",
       "default": "./src/core/files.ts"

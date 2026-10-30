@@ -52,7 +52,11 @@ const graph = (records?: Records): Graph => new Graph(root, [...files.keys()], n
 const variant = { seed: 0, adapter: 'default', isolated: false };
 
 const checking = (checkout: string, ...args: string[]) =>
-  Bun.spawn(['bun', join(import.meta.dir, 'check.ts'), '--root', checkout, ...args], { stdout: 'pipe', stderr: 'pipe' });
+  Bun.spawn(['bun', join(import.meta.dir, 'check.ts'), '--root', checkout, ...args], {
+    stdout: 'pipe',
+    stderr: 'pipe',
+    env: { ...process.env, RUNLITH_SQLITE_HOSTING: 'inline' },
+  });
 const ended = async (run: ReturnType<typeof checking>): Promise<{ code: number; stdout: string; stderr: string }> => {
   const [stdout, stderr, code] = await Promise.all([new Response(run.stdout).text(), new Response(run.stderr).text(), run.exited]);
   return { code, stdout, stderr };
@@ -144,6 +148,15 @@ test('a nonliteral import selects its tests until their run traces what it loade
     expect(await adapterOf('lib/other.ts')).toBe('default');
     expect(await adapterOf('packages/sqlite-process/src/inline.ts')).toBe('child');
     expect(await adapterOf('packages/sqlite-process/src/inline.itest.ts')).toBe('default');
+    const forced = Bun.spawn(
+      ['bun', join(import.meta.dir, 'check.ts'), '--root', checkout, '--plan', '--paths-from', paths('changed', 'lib/other.ts')],
+      {
+        stdout: 'pipe',
+        stderr: 'pipe',
+        env: { ...process.env, RUNLITH_SQLITE_HOSTING: 'child' },
+      },
+    );
+    expect((JSON.parse(await answer(forced)) as { adapter: string }).adapter).toBe('child');
     expect(await run()).toMatchObject({ ran: 0, cached: 2 });
     const stray = await ended(checking(checkout, '--paths-from', paths('ran', 'app/stray.test.ts')));
     expect(stray.code, stray.stdout + stray.stderr).toBe(1);
@@ -406,6 +419,7 @@ test('reads through open', () => {
       ...process.env,
       TESTBED_CORES: '1',
       TESTBED_BUDGET_ROOT: join(external, 'budget'),
+      RUNLITH_SQLITE_HOSTING: 'inline',
     };
     delete env['RUNLITH_TEST_SLOT'];
     const run = Bun.spawn(

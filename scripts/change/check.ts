@@ -13,6 +13,7 @@ import { kindOf } from '@runlith/testbed/kinds';
 import type { FileRow, Row } from '@runlith/testbed/ledger';
 import { slowLine, type FileVerdict, type RunRow, type SlowRow } from '@runlith/testbed/report';
 import { runJobs } from '@runlith/testbed/schedule';
+import { sampledShare } from '@runlith/testbed/sampling';
 
 const started = performance.now();
 const ownCpu = process.cpuUsage();
@@ -127,7 +128,8 @@ const variant: Variant = {
   seed: Number(value('--seed') ?? 0),
   adapter:
     value('--adapter') ??
-    (changed.some((path) => /^packages\/sqlite-process\/src\/(?!testing\/).*\.ts$/.test(path) && !/\.(?:test|itest|bench)\.ts$/.test(path))
+    (process.env['RUNLITH_SQLITE_HOSTING'] === 'child' ||
+    changed.some((path) => /^packages\/sqlite-process\/src\/(?!testing\/).*\.ts$/.test(path) && !/\.(?:test|itest|bench)\.ts$/.test(path))
       ? 'child'
       : 'default'),
   isolated: args.includes('--isolated'),
@@ -160,6 +162,7 @@ const run = join(cache, randomUUID());
 mkdirSync(run);
 type Previous = { readonly code: number; readonly wall: number; readonly cpu: number; readonly reason?: string; readonly bypass?: string };
 type Planned = (typeof selected)[number] & {
+  readonly hosting: 'child' | 'inline';
   readonly inputs: Inputs;
   readonly cached: boolean;
   readonly bypass: string | undefined;
@@ -168,12 +171,18 @@ type Planned = (typeof selected)[number] & {
 const plans: Planned[] = selected.map((item) => {
   const inputs = hashes.of(item.file);
   const previous = records.read<Previous>(inputs.key);
+  const hosting =
+    variant.adapter === 'child' || (process.env['RUNLITH_SQLITE_HOSTING'] !== 'inline' && sampledShare(String(variant.seed), item.file))
+      ? 'child'
+      : 'inline';
   const bypass = args.includes('--no-cache')
     ? 'cache bypass requested'
     : variant.adapter !== 'default'
       ? `adapter label ${variant.adapter} disables reuse`
-      : (inputs.uncertain[0] ?? previous?.bypass);
-  return { ...item, inputs, previous, bypass, cached: bypass === undefined && previous?.code === 0 };
+      : hosting === 'child'
+        ? 'this file is in the seed-selected share that runs on real SQLite processes'
+        : (inputs.uncertain[0] ?? previous?.bypass);
+  return { ...item, hosting, inputs, previous, bypass, cached: bypass === undefined && previous?.code === 0 };
 });
 const output = plans.map((plan) => ({
   file: plan.file,
@@ -194,7 +203,7 @@ let ran = 0;
 let notRun = 0;
 const groups = new Map<string, Planned[]>();
 for (const plan of plans.filter((plan) => !plan.cached)) {
-  const key = `${plan.pkg.dir}\0${plan.runner}\0${kindOf(plan.file)}`;
+  const key = `${plan.pkg.dir}\0${plan.runner}\0${kindOf(plan.file)}\0${plan.hosting}`;
   const group = groups.get(key) ?? [];
   group.push(plan);
   groups.set(key, group);
@@ -271,7 +280,7 @@ const jobs = suites.map((suite, at) => {
       RUNLITH_TEST_REPORT: report,
       RUNLITH_CHANGE_AUDIT: manifest,
       RUNLITH_CHANGE_CONFIG: config,
-      ...(variant.adapter === 'child' ? { RUNLITH_SQLITE_HOSTING: 'child' } : {}),
+      RUNLITH_SQLITE_HOSTING: suite[0]!.hosting,
     },
   };
 });
@@ -373,7 +382,7 @@ for (const { plan, row, problem, skipped, issue } of settled) {
   if (result.code !== 0) code = code || 1;
   if (isSkipped) notRun++;
   else if (row !== undefined) ran++;
-  if (!args.includes('--no-cache') && variant.adapter === 'default') records.write(inputs.key, result);
+  if (!args.includes('--no-cache') && variant.adapter === 'default' && plan.hosting === 'inline') records.write(inputs.key, result);
   console.log(
     isSkipped
       ? `not run ${plan.file}: ${skipped}; not cached`
