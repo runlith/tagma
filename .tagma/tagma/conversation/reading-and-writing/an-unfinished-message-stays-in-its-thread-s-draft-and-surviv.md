@@ -34,7 +34,7 @@ sources:
 **How.** By itself: everything typed and attached in the composer is written to the draft on every change.
 
 **Behaviour.**
-- Each thread has its own draft, and the new-thread draft is one per project; the new-thread draft also keeps the pre-birth choice — agent type, model, approval mode, delegation, worktree — and passes it to the born thread.
+- Each thread has its own draft, and the new-thread draft is one per project; the new-thread draft also keeps the pre-birth choice — agent type, model, approval mode, delegation, place (the main checkout, a worktree or a new worktree) — and passes it to the born thread.
 - Words of a refused, recalled, or rolled-back turn stand in their thread's draft before the already typed text, without overwriting it, even when another thread is on screen.
 - A bounded number of drafts is kept; the one touched longest ago leaves first.
 

@@ -1,6 +1,6 @@
 ---
 id: 01a14c13-c481-7acc-8aa6-03d2b3b3a55f
-title: "The worktree switcher in the window header picks where the window stands: graph, Git, agents, and the new thread and terminal place"
+title: "The worktree switcher in the window header picks where the window stands: graph, Git, agents, terminals, and an open draft's place"
 ord: 11
 tags: ["feature"]
 fields:
@@ -24,8 +24,8 @@ sources:
 
 **Behaviour.**
 - The list: the main checkout, then active by movement, quiet ones collapsed; each with color, agent work, and the running act. Search runs over all worktree metadata and branches without a worktree; such a branch opens with "Create & go". Expensive facts are labeled with their freshness and requested only for visible rows, including after search and expanding the quiet.
-- The window moves to the picked worktree, while the open thread stays in place; the tooltip names thread moving (A1).
-- "Draft in a new worktree" makes a thread draft whose worktree is created with the first message, under a temporary name settable at once.
+- The window moves to the picked worktree. With a thread open, the thread stays where it works and a new draft opens at the picked place; the note at the bottom of the list points to moving the thread. With a draft open, the pick sets that draft's place.
+- While the open draft is set to start in a new worktree, the button shows that worktree and the branch it will start from. The draft's new worktree is picked in the strip under the composer.
 - The button shows how many of its worktree's agents wait and work, at any worktree count. With one worktree, a branch the graph looks at stands instead of the diamond.
 
 **Limits.** A worktree without a branch doesn't open. A missing worktree whose folder is gone isn't shown by the switcher: they're deleted on the board.
