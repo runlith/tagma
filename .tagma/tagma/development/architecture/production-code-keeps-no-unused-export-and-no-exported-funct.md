@@ -5,8 +5,12 @@ ord: 24
 tags: ["rule"]
 sources:
   - kind: dir
-    ref: apps/tagma/server/src
-  - kind: dir
     ref: packages
+  - kind: dir
+    ref: apps/tagma/app
+  - kind: dir
+    ref: apps/tagma/server
+  - kind: file
+    ref: package.json
 ---
 A published package entry or a runtime contribution consumed through its declared framework contract counts as a production consumer. Reach through tests alone does not.

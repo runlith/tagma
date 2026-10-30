@@ -8,5 +8,15 @@ sources:
     ref: apps/tagma/server/src
   - kind: dir
     ref: packages
+  - kind: dir
+    ref: apps/tagma/app/src
+  - kind: dir
+    ref: .tagma
+  - kind: file
+    ref: package.json
+  - kind: file
+    ref: apps/tagma/server/package.json
+  - kind: file
+    ref: apps/tagma/app/package.json
 ---
-Measure production literal imports in server and package modules. A new module starts at the project median; a reduction lowers the ceiling for the next change.
+Measure production literal imports in server, app and package modules. A new module starts at the project median; a reduction lowers the ceiling for the next change.
