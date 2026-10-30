@@ -101,9 +101,13 @@ test('coupling counts literal imports against the narrowest module and keeps red
   const app = measured.find((one) => one.id === 'app')!;
   expect([app.modules, app.outside, app.total]).toEqual([1, 1, 2]);
   const a = measured.find((one) => one.id === 'a')!;
-  expect([a.modules, a.outside, a.total]).toEqual([2, 3, 6]);
+  expect([a.modules, a.outside, a.total]).toEqual([1, 2, 6]);
+  expect(couplingFindings([a], { baseline: [a], aliases: [] }, null)).toEqual([]);
   expect(measured.find((one) => one.id === 'b-wire')?.total).toBe(0);
-  const baseline: CouplingMeasure[] = [a, { id: 'other', path: 'packages/other/src/row.ts', modules: 2, outside: 2, total: 4 }];
+  const baseline: CouplingMeasure[] = [
+    { ...a, modules: 2, outside: 3 },
+    { id: 'other', path: 'packages/other/src/row.ts', modules: 2, outside: 2, total: 4 },
+  ];
   expect(couplingFindings([{ ...a, modules: 0, outside: 0 }], { baseline, aliases: [] }, null)).toEqual([]);
   const reduced = { ...a, modules: 1, outside: 1, total: 4 };
   const regressed = { ...a, modules: 2, outside: 2, total: 4 };

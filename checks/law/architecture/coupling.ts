@@ -83,8 +83,7 @@ export const contributions = (
               ? posix.join(member.dir, entry)
               : member.dir);
       const to = target === undefined ? undefined : owner(target);
-      const id = to?.id ?? (target === undefined ? name : target);
-      if (id !== from.id) targets[id] = (targets[id] ?? 0) + 1;
+      if (to !== undefined && to.id !== from.id) targets[to.id] = (targets[to.id] ?? 0) + 1;
     }
     entries.push({ module: from.id, path, total, targets });
   }
@@ -154,22 +153,6 @@ export const couplingFindings = (
     const base = before.get(now.id);
     const prefix = `coupling:${now.id}`;
     const findings: Finding[] = [];
-    if (was !== undefined && now.modules > 0)
-      findings.push({
-        fingerprint: `${prefix}:modules`,
-        path: now.path,
-        value: now.modules,
-        message: `${now.id} imports ${now.modules} other modules`,
-        fix: 'Reduce the module’s external dependencies; do not raise its recorded ceiling.',
-      });
-    if (was !== undefined && now.outside > 0)
-      findings.push({
-        fingerprint: `${prefix}:share`,
-        path: now.path,
-        value: share(now),
-        message: `${now.id} has ${now.outside}/${now.total} imports leaving its boundary`,
-        fix: 'Keep behavior with its owner so fewer imports cross the module boundary.',
-      });
     const moduleFinding = (kind: string, ceiling: number): Finding => ({
       fingerprint: `${prefix}:modules-${kind}`,
       path: now.path,

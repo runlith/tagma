@@ -8,7 +8,6 @@ import { ProgramAnswer, type ProgramInvocation, type ProgramSide } from '@tagma/
 
 const RUNNER = join(import.meta.dir, '../../../apps/tagma/server/src/enforcement/programs/runner.ts');
 const PROGRAM = join(import.meta.dir, '../programs.ts');
-const RELOCATED = /:(?:modules|share)-(?:increase|ceiling)$/;
 
 test('a module card move leaves every standing coupling finding reported on its covered path, as a complete reading of the same state does', () => {
   const root = mkdtempSync(join(tmpdir(), 'architecture-coupling-'));
@@ -79,8 +78,8 @@ test('a module card move leaves every standing coupling finding reported on its 
       for (const [print, one] of standing) expect(whole.get(print)?.value).toBe(one.value);
       const modules = new Set<string>();
       for (const one of full.findings)
-        if (!RELOCATED.test(one.fingerprint) && covered.includes(one.path)) {
-          expect(standing.get(one.fingerprint)?.path).toBe(one.path);
+        if (covered.includes(one.path)) {
+          expect(standing.get(one.fingerprint)?.value).toBe(one.value);
           modules.add(one.fingerprint.split(':')[1]!);
         }
       for (const one of full.findings)
@@ -108,15 +107,15 @@ test('a module card move leaves every standing coupling finding reported on its 
     const moved = git('write-tree');
     const step = compare(moved, first, ['.tagma/b.md']);
     expect(step.tree.findings.some((one) => one.fingerprint.startsWith('coupling:a:'))).toBe(true);
-    expect(step.base.findings.find((one) => one.fingerprint === 'coupling:d:modules')?.value).toBe(2);
-    expect(step.tree.findings.find((one) => one.fingerprint === 'coupling:d:modules')?.value).toBe(1);
+    expect(step.base.findings.find((one) => one.fingerprint === 'coupling:d:modules-ceiling')?.value).toBe(2);
+    expect(step.tree.findings.find((one) => one.fingerprint === 'coupling:d:modules-ceiling')?.value).toBe(1);
 
     put('packages/a/src/zmove.ts', "import { b } from '../../b/src/b1'; import { d } from '../../d/src/d1'; export const moved = [b, d];");
     git('add', '.');
     const edited = git('write-tree');
     const next = compare(edited, moved, ['packages/a/src/zmove.ts']);
     for (const reading of [next.tree, next.base]) {
-      const standing = reading.findings.filter((one) => one.fingerprint.startsWith('coupling:a:') && !RELOCATED.test(one.fingerprint));
+      const standing = reading.findings.filter((one) => one.fingerprint.startsWith('coupling:a:'));
       expect(standing.map((one) => one.path)).toContain('packages/a/src/zmove.ts');
     }
     const unrelated = (list: readonly { readonly fingerprint: string }[]) =>
