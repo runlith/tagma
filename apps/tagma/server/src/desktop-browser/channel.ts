@@ -19,10 +19,14 @@ export const makeDesktopChannel = Effect.gen(function* () {
   const end = Effect.fnUntraced(function* (held: Held, reason: string) {
     if (attachments.get(held.attachment.host.id) === held) attachments.delete(held.attachment.host.id);
     if (held.attachment.done()) return;
-    yield* Effect.logInfo(`desktop browser: host ${held.attachment.host.id} generation ${held.attachment.generation} ends: ${reason}`);
-    yield* held.attachment.end(reason);
-    yield* windows.end(held.attachment.host.id, held.attachment.generation);
-    yield* Scope.close(held.scope, Exit.void);
+    yield* Effect.uninterruptible(
+      Effect.gen(function* () {
+        yield* Effect.logInfo(`desktop browser: host ${held.attachment.host.id} generation ${held.attachment.generation} ends: ${reason}`);
+        yield* held.attachment.end(reason);
+        yield* windows.end(held.attachment.host.id, held.attachment.generation);
+        yield* Scope.close(held.scope, Exit.void);
+      }),
+    );
   });
 
   const attach = (host: string, pid: number): Stream.Stream<Order, GateRefusal<'channel-broken'>> =>

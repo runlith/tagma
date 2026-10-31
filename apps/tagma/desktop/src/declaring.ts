@@ -1,15 +1,10 @@
-import type { PageId } from '@tagma/server/browser/contract/wire/ids';
 import { app, type WebContents, webContents } from 'electron';
 import type { Declarations } from './browser/connection.js';
+import type { BrowserHost } from './browser/host.js';
 import { creationPrecisionMs, declared, type Frame, type Hosted, type Role } from './declared.js';
 
 const SETTLE_MS = 100;
 const RECHECK_MS = 5_000;
-
-export type DeclaringPages = {
-  readonly pageOf: (contents: WebContents) => PageId | null;
-  readonly observe: (listener: () => void) => void;
-};
 
 const framesOf = (contents: WebContents): readonly Frame[] => {
   if (contents.isDestroyed()) return [];
@@ -27,7 +22,7 @@ export class Declaring {
   private sent = '';
 
   constructor(
-    private readonly pages: DeclaringPages,
+    private readonly pages: BrowserHost,
     private readonly trusted: (url: string) => boolean,
   ) {}
 

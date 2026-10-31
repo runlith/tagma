@@ -146,7 +146,6 @@ layer(browserWorld({ host: Layer.empty, adapters: [desktopAdapter], home }), { e
       const fake = yield* fakeHost(url);
       const live = yield* fake.called;
       fake.answer(live.id, []);
-      yield* standing;
       const declaration = {
         precisionMs: 10,
         processes: [
