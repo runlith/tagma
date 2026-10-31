@@ -102,26 +102,29 @@ export const subscribe = (
   if (source._tag === 'Load') {
     if (usage === undefined) return refused({ _tag: 'UnsupportedCapability' });
     return Effect.scoped(
-      Effect.flatMap(span('Subscribe.Load', undefined, undefined, admitted.subscribe(body.credits)), (subscription) =>
-        subscription === undefined
-          ? Effect.void
-          : tailed(
-              'subscribe-load',
-              subscription,
-              Effect.gen(function* () {
-                yield* usage.subscribe(`${admitted.connection}:${subscription.id}`, source.serverPid, source.parts);
-                let waiting = yield* Effect.forkChild(usage.sampled());
-                const standing = yield* usage.load;
-                if (standing !== undefined && !(yield* subscription.load(standing))) return;
-                while (true) {
-                  yield* Fiber.join(waiting);
-                  waiting = yield* Effect.forkChild(usage.sampled());
-                  const reading = yield* usage.load;
-                  if (reading !== undefined && !(yield* subscription.load(reading))) return;
-                }
-              }),
-            ),
-      ),
+      Effect.gen(function* () {
+        const scope = yield* Effect.scope;
+        const opened = admitted.subscribe(body.credits, (id) =>
+          usage.subscribe(`${admitted.connection}:${id}`, source.serverPid, source.parts).pipe(Effect.provideService(Scope.Scope, scope)),
+        );
+        const subscription = yield* span('Subscribe.Load', undefined, undefined, opened);
+        if (subscription === undefined) return;
+        yield* tailed(
+          'subscribe-load',
+          subscription,
+          Effect.gen(function* () {
+            let waiting = yield* Effect.forkChild(usage.sampled());
+            const standing = yield* usage.load;
+            if (standing !== undefined && !(yield* subscription.load(standing))) return;
+            while (true) {
+              yield* Fiber.join(waiting);
+              waiting = yield* Effect.forkChild(usage.sampled());
+              const reading = yield* usage.load;
+              if (reading !== undefined && !(yield* subscription.load(reading))) return;
+            }
+          }),
+        );
+      }),
     );
   }
   if (source._tag === 'Inventory') {

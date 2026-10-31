@@ -5,6 +5,7 @@ export type ListedProcess = {
   readonly identity: ProcessIdentity;
   readonly parent?: number | undefined;
   readonly work?: number | undefined;
+  readonly onBehalfOf?: number | undefined;
   readonly terminal?: string | undefined;
 };
 
@@ -13,6 +14,7 @@ export type ListedLeader = { readonly pid: number; readonly terminal?: string | 
 export class ProcessTree {
   private readonly rows = new Map<number, ListedProcess>();
   private readonly children = new Map<number, number[]>();
+  private readonly delegated = new Map<number, number[]>();
   private readonly groups = new Map<number, number[]>();
   private readonly terminals = new Map<string, number[]>();
 
@@ -21,6 +23,7 @@ export class ProcessTree {
       const pid = row.identity.pid;
       this.rows.set(pid, row);
       if (row.parent !== undefined) this.add(this.children, row.parent, pid);
+      if (row.onBehalfOf !== undefined && row.onBehalfOf !== pid) this.add(this.delegated, row.onBehalfOf, pid);
       if (row.work !== undefined && row.work > 0) this.add(this.groups, row.work, pid);
       if (row.terminal !== undefined) this.add(this.terminals, row.terminal, pid);
     }
@@ -36,25 +39,36 @@ export class ProcessTree {
     return this.rows.get(pid);
   }
 
-  assign<T>(roots: ReadonlyMap<number, T>, groups = true): ReadonlyMap<number, T> {
+  assign<T>(roots: ReadonlyMap<number, T>, groups = true, behalf = false): ReadonlyMap<number, T> {
     const found = new Map(roots);
     const frontier = [...roots.keys()];
-    for (let at = 0; at < frontier.length; at += 1) {
-      const pid = frontier[at]!;
-      const owner = found.get(pid)!;
-      for (const child of this.children.get(pid) ?? []) {
-        if (found.has(child)) continue;
-        found.set(child, owner);
-        frontier.push(child);
+    let at = 0;
+    const drain = () => {
+      for (; at < frontier.length; at += 1) {
+        const pid = frontier[at]!;
+        const owner = found.get(pid)!;
+        const add = (child: number) => {
+          if (found.has(child)) return;
+          found.set(child, owner);
+          frontier.push(child);
+        };
+        if (behalf) for (const child of this.delegated.get(pid) ?? []) add(child);
+        for (const child of this.children.get(pid) ?? []) add(child);
       }
-    }
+    };
+    drain();
     const visited = new Set<number>();
     for (const [pid, owner] of groups ? roots : []) {
       const work = this.rows.get(pid)?.work;
       if (work === undefined || visited.has(work)) continue;
       visited.add(work);
-      for (const member of this.groups.get(work) ?? []) if (!found.has(member)) found.set(member, owner);
+      for (const member of this.groups.get(work) ?? []) {
+        if (found.has(member)) continue;
+        found.set(member, owner);
+        if (behalf) frontier.push(member);
+      }
     }
+    if (behalf) drain();
     return found;
   }
 

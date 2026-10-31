@@ -1,6 +1,6 @@
 import { Data, Deferred, Effect, type Scope } from 'effect';
 import type { ProcessProbe, ProcessReading, ProcessRow } from '../ProcessReader';
-import type { UsageRead } from '../UsageReader';
+import type { UsageDemand, UsageRead } from '../UsageReader';
 import type { Refused } from './refusal';
 import type { Answer, Question, Request } from './processes.worker';
 
@@ -13,7 +13,8 @@ export class WorkerUnanswered extends Data.TaggedError('WorkerUnanswered')<{ rea
 }
 
 export type ProcessWorker = {
-  readonly usage: Effect.Effect<UsageRead, WorkerUnanswered>;
+  readonly machineName: string;
+  readonly usage: (demand: UsageDemand) => Effect.Effect<UsageRead, WorkerUnanswered>;
   readonly scan: (probe: ProcessProbe) => Effect.Effect<ReadonlyArray<ProcessRow> | Refused, WorkerUnanswered>;
   readonly facts: (pids: ReadonlyArray<number>) => Effect.Effect<ProcessReading | Refused, WorkerUnanswered>;
   readonly lost: () => boolean;
@@ -26,7 +27,7 @@ type Settle = (answer: Replied | WorkerUnanswered) => void;
 export const openProcessWorker = Effect.fn('posix.ProcessWorker.open')(function* (
   path: string,
 ): Effect.fn.Return<ProcessWorker, WorkerUnanswered, Scope.Scope> {
-  const opened = yield* Deferred.make<void, WorkerUnanswered>();
+  const opened = yield* Deferred.make<string, WorkerUnanswered>();
   const waiting = new Map<number, Settle>();
   let next = 0;
   let lost: WorkerUnanswered | undefined;
@@ -47,7 +48,7 @@ export const openProcessWorker = Effect.fn('posix.ProcessWorker.open')(function*
       worker.onmessage = (event: MessageEvent<Answer>) => {
         const answer = event.data;
         if (answer._tag === 'Ready') return worker.postMessage({ _tag: 'Open', path } satisfies Request);
-        if (answer._tag === 'Opened') return void Deferred.doneUnsafe(opened, Effect.void);
+        if (answer._tag === 'Opened') return void Deferred.doneUnsafe(opened, Effect.succeed(answer.machineName));
         if (answer._tag === 'Refused') return end(worker, new WorkerUnanswered({ detail: answer.detail }));
         const settle = waiting.get(answer.id);
         waiting.delete(answer.id);
@@ -57,7 +58,7 @@ export const openProcessWorker = Effect.fn('posix.ProcessWorker.open')(function*
     }),
     (worker) => Effect.sync(() => end(worker, new WorkerUnanswered({ detail: 'the process worker was closed' }))),
   );
-  yield* Deferred.await(opened).pipe(
+  const machineName = yield* Deferred.await(opened).pipe(
     Effect.timeoutOrElse({
       duration: OPEN_MS,
       orElse: () => new WorkerUnanswered({ detail: `the process worker did not open within ${OPEN_MS} ms` }),
@@ -82,7 +83,8 @@ export const openProcessWorker = Effect.fn('posix.ProcessWorker.open')(function*
       return Effect.sync(() => void waiting.delete(id));
     });
   return {
-    usage: asked({ _tag: 'Usage' }, (answer) => (answer._tag === 'Usage' ? answer.reply : undefined)),
+    machineName,
+    usage: (demand) => asked({ _tag: 'Usage', demand }, (answer) => (answer._tag === 'Usage' ? answer.reply : undefined)),
     scan: (probe) => asked({ _tag: 'Scan', probe }, (answer) => (answer._tag === 'Scan' ? answer.reply : undefined)),
     facts: (pids) => asked({ _tag: 'Facts', pids }, (answer) => (answer._tag === 'Facts' ? answer.reply : undefined)),
     lost: () => lost !== undefined,

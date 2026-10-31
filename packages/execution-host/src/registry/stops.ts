@@ -105,13 +105,13 @@ export const executionStopOf = (registry: RegistryState) => {
               detail: 'this identity is not in the current machine reading',
               steps: [],
             } as const);
-          if (group.owner._tag === 'Installation' || !row.signal)
+          if (group.owner._tag === 'Installation' || group.owner._tag === 'Part' || !row.signal)
             return Effect.succeed({
               _tag: 'Refused',
               target,
               reason: 'managed-process',
               detail:
-                group.owner._tag === 'Installation'
+                group.owner._tag === 'Installation' || group.owner._tag === 'Part'
                   ? "this process is Tagma's own: its server, execution host or window"
                   : 'the operating system does not let this user signal the process',
               steps: [],

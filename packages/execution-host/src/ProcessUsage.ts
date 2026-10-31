@@ -18,7 +18,7 @@ import { grouped, place } from './ProcessAccount';
 import type { ExecutionTopology, ObservedExecution } from './ProcessEvidence';
 import { Processes } from './ProcessReader';
 import { ProcessTree } from './processTree';
-import { Spending, type Spent } from './processSpending';
+import { executionKey, Spending, type Spent } from './processSpending';
 import type { MachineCounters, ProcessCounters, UsageReader, UsageRead, UsageUnavailable } from './UsageReader';
 import { makeLoadRecorder, usageStep } from './usageTelemetry';
 
@@ -189,24 +189,27 @@ export const makeProcessUsage = Effect.fnUntraced(function* ({
     const residuals = topology.residuals === undefined ? [] : yield* topology.residuals;
     const ended = topology.ended === undefined ? [] : yield* topology.ended;
     const subscribers = yield* Ref.get(subscribersRef);
-    yield* Effect.matchEffect(counterSource.read(), {
+    const declarations = [...subscribers.values()].flatMap(({ parts }) => parts);
+    const others = [...subscribers.values()].some(({ interest }) => interest.others);
+    yield* Effect.matchEffect(counterSource.read({ others }), {
       onFailure: Effect.fnUntraced(function* (failure: UsageUnavailable) {
         const takenAtMicros = yield* monotonicMicros;
         const revision = (revisionValue += 1);
-        yield* Ref.set(frame, {
+        const reading: LoadReading = {
           scope,
           observedAt: yield* Clock.currentTimeMillis,
           revision,
           takenAtMicros,
           overMicros: 0,
           cores,
-          machineName: 'Computer',
+          machineName: counterSource.machineName,
           cpu: null,
           memory: UNREAD_MEMORY,
           groups: [],
-          unresolvedParts: [...subscribers.values()].flatMap(({ parts }) => parts.map((part) => ({ part, reason: 'unknown' as const }))),
+          unresolvedParts: declarations.map((part) => ({ part, reason: 'unknown' as const })),
           unread: failure.detail,
-        });
+        };
+        yield* Ref.set(frame, bounded(reading, budgetBytes));
         spending.reset();
         machineSample = undefined;
         yield* Ref.set(heldRef, new Map());
@@ -216,16 +219,41 @@ export const makeProcessUsage = Effect.fnUntraced(function* ({
         const takenAtMicros = yield* monotonicMicros;
         const revision = (revisionValue += 1);
         const rows = new Map(native.processes.map((row) => [row.pid, row]));
-        const endedRefs = new Map(ended.map((one) => [one.ref.execution as string, one.ref]));
+        const parts = new Map<number, string>();
+        const unresolvedParts: Array<LoadReading['unresolvedParts'][number]> = [];
+        for (const part of declarations) {
+          const witness = reader.resolve(part);
+          if (witness === 'different' || witness === 'unknown') {
+            unresolvedParts.push({ part, reason: witness });
+            continue;
+          }
+          const row = rows.get(witness.pid);
+          if (row === undefined || row.birth !== witness.birth) {
+            unresolvedParts.push({ part, reason: 'unknown' });
+            continue;
+          }
+          parts.set(witness.pid, part.key);
+        }
+        const endedRefs = new Map(ended.map((one) => [executionKey(one.ref), one.ref]));
+        const leaders = new Map(
+          [...watching, ...ended].flatMap((one) => (one.leader === undefined ? [] : [[executionKey(one.ref), one.leader] as const])),
+        );
         const spent = spending.next(
           native.processes,
           native.observedAt,
           native.takenAtMicros,
-          ended.map((one) => ({ key: one.ref.execution, leader: one.leader, cpuMicros: one.cpuMicros })),
+          ended.map((one) => ({ key: executionKey(one.ref), leader: one.leader, cpuMicros: one.cpuMicros })),
           holderPid,
+          native.containers,
+          leaders,
         );
         const tree = new ProcessTree(
-          native.processes.map((row) => ({ identity: { pid: row.pid, birth: row.birth }, parent: row.parent, work: row.work })),
+          native.processes.map((row) => ({
+            identity: { pid: row.pid, birth: row.birth },
+            parent: row.parent,
+            work: row.work,
+            onBehalfOf: row.onBehalfOf,
+          })),
         );
         const serverPids = [...new Set([...subscribers.values()].map((subscriber) => subscriber.serverPid))];
         const holderRow = rows.get(holderPid);
@@ -238,7 +266,7 @@ export const makeProcessUsage = Effect.fnUntraced(function* ({
           ...(hostPid > 0 ? [[hostPid, 'host'] as const] : []),
           ...(holderStanding ? [[holderPid, 'holder'] as const] : []),
         ]);
-        const placement = place(rows, tree, watching, residuals, installation);
+        const placement = place(rows, tree, watching, residuals, installation, parts);
         if (topology.dropResiduals !== undefined && placement.gone.length > 0) yield* topology.dropResiduals(placement.gone);
         const latest = new Map<ExecutionId, UsageReading>();
         for (const observed of watching) {
@@ -260,12 +288,22 @@ export const makeProcessUsage = Effect.fnUntraced(function* ({
         yield* Ref.set(heldRef, latest);
         if (subscribers.size > 0) {
           const machine = machineOf(native.machine, takenAtMicros);
-          const groups = withReaped(grouped(rows, placement.owners, spent, installation), spent.reaped, endedRefs);
+          const groups = withExecutions(grouped(rows, placement.owners, spent, installation), spent, endedRefs, rows);
           const measured = groups.reduce((sum, group) => sum + group.cores, 0);
           const kernel: ReadonlyArray<LoadGroup> =
             machine.cpu === null || machine.cpu <= measured
               ? []
-              : [{ owner: { _tag: 'Kernel' }, cores: machine.cpu - measured, memoryBytes: 0, unread: 0, processes: [] }];
+              : [
+                  {
+                    owner: { _tag: 'Kernel' },
+                    cores: machine.cpu - measured,
+                    gpuCores: 0,
+                    gpuUnread: 1,
+                    memoryBytes: 0,
+                    unread: 0,
+                    processes: [],
+                  },
+                ];
           const reading: LoadReading = {
             scope: scope,
             observedAt: native.observedAt,
@@ -273,11 +311,11 @@ export const makeProcessUsage = Effect.fnUntraced(function* ({
             takenAtMicros,
             overMicros: spent.overMicros,
             cores: machine.cores,
-            machineName: 'Computer',
+            machineName: counterSource.machineName,
             cpu: machine.cpu,
             memory: machine.memory,
             groups: [...groups, ...kernel].sort((left, right) => right.cores - left.cores),
-            unresolvedParts: [...subscribers.values()].flatMap(({ parts }) => parts.map((part) => ({ part, reason: 'unknown' as const }))),
+            unresolvedParts,
             unread: machine.unread,
           };
           yield* Ref.set(frame, bounded(reading, budgetBytes));
@@ -327,7 +365,7 @@ export const makeProcessUsage = Effect.fnUntraced(function* ({
     for (const pid of members) {
       const row = rows.get(pid);
       if (row === undefined) continue;
-      const relation = relations.get(pid) ?? 'ancestry';
+      const relation = relations.get(pid);
       const spentCores = spent.cores.get(pid);
       if (row.cpu === undefined) unread += 1;
       cores += spentCores ?? 0;
@@ -337,19 +375,25 @@ export const makeProcessUsage = Effect.fnUntraced(function* ({
         work: row.work > 0 ? row.work : undefined,
         cpuMicros: row.cpu?.micros ?? 0,
         residentBytes: row.residentBytes ?? 0,
-        memoryKind: row.footprintBytes === undefined ? undefined : 'footprint',
+        memoryKind: row.memoryKind,
         footprintBytes: row.footprintBytes,
-        association: {
-          execution: observed.ref,
-          relation,
-          identity: relation === 'leader' ? identityMatch(leader, { pid, birth: row.birth }) : 'unknown',
-        },
+        association:
+          relation === undefined
+            ? undefined
+            : {
+                execution: observed.ref,
+                relation,
+                identity: relation === 'leader' ? identityMatch(leader, { pid, birth: row.birth }) : 'unknown',
+              },
       });
       if (relation === 'leader') continue;
       const order = reader.compareBirth(row.birth, current?.birth ?? row.birth);
       if (typeof order === 'number' && (current === undefined || order >= 0)) current = { pid, birth: row.birth };
     }
-    const footprints = processes.every((row) => row.footprintBytes !== undefined);
+    const memoryKind = processes[0]?.memoryKind;
+    const footprints = processes.every((row) => row.footprintBytes !== undefined && row.memoryKind === memoryKind);
+    const containerCores = spent.containers.get(executionKey(observed.ref));
+    if (containerCores !== undefined) cores = containerCores;
     return {
       scope: observed.scope,
       source: OWN,
@@ -357,16 +401,19 @@ export const makeProcessUsage = Effect.fnUntraced(function* ({
       revision,
       takenAtMicros,
       execution: observed.ref,
-      completeness: processes.length === 0 ? 'unavailable' : unread > 0 ? 'partial' : 'complete',
+      completeness:
+        processes.length === 0 ? (containerCores === undefined ? 'unavailable' : 'partial') : unread > 0 ? 'partial' : 'complete',
       unmeasured:
-        unread === 0
-          ? []
-          : [{ region: `${unread} processes of this execution`, reason: 'refused', detail: 'their counters were not read this step' }],
+        processes.length === 0 && containerCores !== undefined
+          ? [{ region: 'execution processes', reason: 'unknown', detail: 'the container was measured without listed processes' }]
+          : unread === 0
+            ? []
+            : [{ region: `${unread} processes of this execution`, reason: 'refused', detail: 'their counters were not read this step' }],
       coverage: processes.length === 0 ? [] : COVERAGE,
       processes,
       current,
       cpu:
-        processes.length === 0
+        processes.length === 0 && containerCores === undefined
           ? { _tag: 'Unknown', reason: 'unmeasured', detail: 'no process of this execution was listed' }
           : spent.overMicros === 0
             ? { _tag: 'Unknown', reason: 'first-sample', detail: 'one cumulative counter is not a rate' }
@@ -383,10 +430,10 @@ export const makeProcessUsage = Effect.fnUntraced(function* ({
           ? { _tag: 'Unknown', reason: 'unknown', detail: 'no process was measured, so there is no memory to sum' }
           : { _tag: 'ResidentSum', bytes: processes.reduce((sum, row) => sum + row.residentBytes, 0), processes: processes.length },
       footprint:
-        processes.length > 0 && footprints
+        processes.length > 0 && footprints && memoryKind !== undefined && memoryKind !== 'resident'
           ? {
               _tag: 'Measured',
-              kind: 'footprint',
+              kind: memoryKind,
               bytes: processes.reduce((sum, row) => sum + (row.footprintBytes ?? 0), 0),
               processes: processes.length,
             }
@@ -409,26 +456,44 @@ export const makeProcessUsage = Effect.fnUntraced(function* ({
   } satisfies ProcessUsage;
 });
 
-const withReaped = (
+const withExecutions = (
   groups: ReadonlyArray<LoadGroup>,
-  reaped: ReadonlyMap<string, number>,
+  spent: Spent,
   refs: ReadonlyMap<string, ExecutionRef>,
+  rows: ReadonlyMap<number, ProcessCounters>,
 ): ReadonlyArray<LoadGroup> => {
-  if (reaped.size === 0) return groups;
-  const left = new Map(reaped);
-  const merged = groups.map((group) => {
-    if (group.owner._tag !== 'Execution') return group;
-    const cores = left.get(group.owner.execution.execution);
-    if (cores === undefined) return group;
-    left.delete(group.owner.execution.execution);
-    return { ...group, cores: group.cores + cores };
-  });
-  for (const [execution, cores] of left) {
-    const ref = refs.get(execution);
-    if (ref !== undefined)
-      merged.push({ owner: { _tag: 'Execution', execution: ref, ended: true }, cores, memoryBytes: 0, unread: 0, processes: [] });
+  const merged = [...groups];
+  const present = new Set(groups.flatMap((group) => (group.owner._tag === 'Execution' ? [executionKey(group.owner.execution)] : [])));
+  const extra = new Set([...spent.ended, ...spent.reaped.keys()]);
+  for (const [key, cores] of spent.containers) if (cores !== undefined && cores > 0) extra.add(key);
+  for (const key of extra) {
+    const ref = refs.get(key);
+    if (ref === undefined || present.has(key)) continue;
+    merged.push({
+      owner: { _tag: 'Execution', execution: ref, ended: true },
+      cores: 0,
+      gpuCores: 0,
+      gpuUnread: 1,
+      memoryBytes: 0,
+      unread: 0,
+      processes: [],
+    });
   }
-  return merged;
+  return merged.map((group) => {
+    if (group.owner._tag !== 'Execution') return group;
+    const key = executionKey(group.owner.execution);
+    const container = spent.containers.get(key);
+    const reaped = spent.reaped.get(key);
+    const reaping =
+      group.processes.length === 0
+        ? reaped !== undefined
+        : group.processes.every((one) => rows.get(one.identity.pid)?.cpu?.reapedMicros !== undefined);
+    return {
+      ...group,
+      cores: container ?? group.cores + (reaped ?? 0),
+      lowerBound: container === undefined && !reaping ? true : undefined,
+    };
+  });
 };
 
 const encoder = new TextEncoder();
@@ -439,18 +504,32 @@ const fits = (reading: LoadReading, budget: number): boolean => {
   return json.length * 3 <= budget || encoder.encode(json).byteLength <= budget;
 };
 
-const owned = (group: LoadGroup): boolean => group.owner._tag === 'Installation' || group.owner._tag === 'Execution';
+const owned = (group: LoadGroup): boolean =>
+  group.owner._tag === 'Installation' || group.owner._tag === 'Execution' || group.owner._tag === 'Part';
 
 const bounded = (reading: LoadReading, budget: number): LoadReading => {
   if (fits(reading, budget)) return reading;
-  const plain: LoadReading = {
+  let plain: LoadReading = {
     ...reading,
     groups: reading.groups.map((group) => ({ ...group, processes: group.processes.map(({ command: _, ...one }) => one) })),
   };
   if (sizeOf(plain) <= budget) return plain;
-  const spill = (owner: LoadGroup['owner']) => ({ owner, cores: 0, memoryBytes: 0, unread: 0, processes: [], took: 0 });
+  const spill = (owner: LoadGroup['owner']) => ({
+    owner,
+    cores: 0,
+    gpuCores: 0,
+    gpuUnread: 0,
+    memoryBytes: 0,
+    unread: 0,
+    processes: [],
+    took: 0,
+  });
   const others = spill({ _tag: 'Program', key: 'overflow', name: 'Other programs' });
   const installation = spill({ _tag: 'Installation' });
+  if (plain.unresolvedParts.length > 0 && sizeOf({ ...plain, groups: [others, installation] }) > budget) {
+    const omitted = `${plain.unresolvedParts.length} declared process resolutions did not fit the reading`;
+    plain = { ...plain, unresolvedParts: [], unread: plain.unread === undefined ? omitted : `${plain.unread}; ${omitted}` };
+  }
   let used = sizeOf({ ...plain, groups: [others, installation] });
   const kept: LoadGroup[] = [];
   for (const group of plain.groups.toSorted((left, right) => Number(owned(right)) - Number(owned(left)))) {
@@ -466,6 +545,8 @@ const bounded = (reading: LoadReading, budget: number): LoadReading => {
     } else {
       const into = owned(group) ? installation : others;
       into.cores += group.cores;
+      into.gpuCores += group.gpuCores;
+      into.gpuUnread += group.gpuUnread;
       into.memoryBytes += group.memoryBytes;
       into.unread += group.unread;
       into.took += 1;

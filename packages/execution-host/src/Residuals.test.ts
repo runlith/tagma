@@ -17,6 +17,7 @@ const withProof = Effect.fnUntraced(function* (identity: ProcessIdentity) {
     },
     compareBirth: (left, right) => Number(left) - Number(right),
     bornBetween: () => false,
+    resolve: () => 'unknown',
     identity: () => identity,
     facts: () => Effect.die('no fields are needed to re-prove the start witness'),
   };

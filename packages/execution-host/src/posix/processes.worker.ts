@@ -1,14 +1,15 @@
 /// <reference types="bun" />
 
 import type { ProcessProbe, ProcessReading, ProcessRow } from '../ProcessReader';
-import type { UsageRead } from '../UsageReader';
-import { Abi } from './ProcessAbi';
+import type { UsageDemand, UsageRead } from '../UsageReader';
+import { Abi } from './macos/ProcessAbi';
 import type { Refused } from './refusal';
-import { Sampler } from './Sampler';
-import { UsageAbi } from './UsageAbi';
+import { Sampler } from './macos/Sampler';
+import { NativeUsage } from './macos/UsageAbi';
+import { psUsage } from './macos/ps';
 
 export type Question =
-  | { readonly _tag: 'Usage' }
+  | { readonly _tag: 'Usage'; readonly demand: UsageDemand }
   | { readonly _tag: 'Scan'; readonly probe: ProcessProbe }
   | { readonly _tag: 'Facts'; readonly pids: ReadonlyArray<number> };
 
@@ -18,7 +19,7 @@ export type Request =
 
 export type Answer =
   | { readonly _tag: 'Ready' }
-  | { readonly _tag: 'Opened' }
+  | { readonly _tag: 'Opened'; readonly machineName: string }
   | { readonly _tag: 'Refused'; readonly detail: string }
   | { readonly _tag: 'Usage'; readonly id: number; readonly reply: UsageRead }
   | { readonly _tag: 'Scan'; readonly id: number; readonly reply: ReadonlyArray<ProcessRow> | Refused }
@@ -34,7 +35,7 @@ const send = (answer: Answer): void => self.postMessage(answer);
 const answered = (opened: Opened, id: number, question: Question): Answer => {
   switch (question._tag) {
     case 'Usage': {
-      const read = opened.sampler.read();
+      const read = opened.sampler.read(question.demand);
       return typeof read === 'string' ? { _tag: 'Failed', id, detail: read } : { _tag: 'Usage', id, reply: read };
     }
     case 'Scan':
@@ -51,8 +52,8 @@ self.onmessage = (event: MessageEvent<Request>) => {
   if (request._tag === 'Open') {
     try {
       const processes = Abi.load(request.path);
-      opened = { processes, sampler: new Sampler(UsageAbi.load(request.path), processes) };
-      send({ _tag: 'Opened' });
+      opened = { processes, sampler: new Sampler(NativeUsage.load(request.path), processes, psUsage) };
+      send({ _tag: 'Opened', machineName: opened.sampler.machineName });
     } catch (error) {
       send({ _tag: 'Refused', detail: String(error) });
     }

@@ -6,5 +6,5 @@ const unavailable = (failure: WorkerUnanswered) => new UsageUnavailable({ detail
 
 export const openUsage = Effect.fn('posix.Usage.open')(function* (path: string) {
   const worker = yield* openProcessWorker(path).pipe(Effect.mapError(unavailable));
-  return { read: () => Effect.mapError(worker.usage, unavailable) } satisfies UsageReader;
+  return { machineName: worker.machineName, read: (demand) => Effect.mapError(worker.usage(demand), unavailable) } satisfies UsageReader;
 });

@@ -42,6 +42,7 @@ export const place = (
   watching: ReadonlyArray<ObservedExecution>,
   residuals: ReadonlyArray<ResidualProcess>,
   installation: ReadonlyMap<number, InstallationRole>,
+  parts: ReadonlyMap<number, string>,
 ): Placement => {
   const roots = new Map<number, ObservedExecution>();
   for (const observed of watching) {
@@ -49,14 +50,14 @@ export const place = (
     const row = leader === undefined ? undefined : tree.process(leader.pid);
     if (leader !== undefined && row !== undefined && identityMatch(leader, row.identity) !== 'different') roots.set(leader.pid, observed);
   }
-  const seeded = new Map(tree.assign(roots, false));
+  const seeded = new Map(tree.assign(roots, false, true));
   for (const observed of watching)
     for (const member of observed.members ?? []) {
       const row = tree.process(member.pid);
       if (!seeded.has(member.pid) && row !== undefined && sameProcess(row.identity, member)) seeded.set(member.pid, observed);
     }
-  const assigned = new Map(tree.assign(seeded, false));
-  for (const [pid, observed] of tree.assign(roots)) if (!assigned.has(pid)) assigned.set(pid, observed);
+  const assigned = new Map(tree.assign(seeded, false, true));
+  for (const [pid, observed] of tree.assign(roots, true, true)) if (!assigned.has(pid)) assigned.set(pid, observed);
   const owners = new Map<number, GroupOwner>();
   const executions = new Map<ExecutionId, number[]>();
   for (const [pid, observed] of assigned) {
@@ -78,12 +79,14 @@ export const place = (
       continue;
     }
     if (residual.identity.birth === undefined) continue;
-    const members = residual.relation === 'work' ? tree.relations({ pid }).keys() : tree.assign(new Map([[pid, pid]]), false).keys();
+    const members = tree.assign(new Map([[pid, pid]]), residual.relation === 'work', true).keys();
     for (const member of members)
       if (!owners.has(member)) owners.set(member, { _tag: 'Execution', execution: residual.origin, ended: true });
   }
-  for (const root of installation.keys())
-    for (const member of tree.assign(new Map([[root, root]]), false).keys()) if (!owners.has(member)) owners.set(member, INSTALLATION);
+  const rootsOfParts = new Map<number, GroupOwner>();
+  for (const [pid, key] of parts) if (!installation.has(pid)) rootsOfParts.set(pid, { _tag: 'Part', key });
+  for (const root of installation.keys()) rootsOfParts.set(root, INSTALLATION);
+  for (const [pid, owner] of tree.assign(rootsOfParts, false, true)) if (!owners.has(pid)) owners.set(pid, owner);
   for (const row of rows.values())
     if (!owners.has(row.pid))
       owners.set(row.pid, { _tag: 'Program', key: row.program.key, name: row.program.name, where: row.program.where });
@@ -98,19 +101,25 @@ export const grouped = (
   spent: Spent,
   installation: ReadonlyMap<number, InstallationRole>,
 ): ReadonlyArray<LoadGroup> => {
-  const groups = new Map<string, { owner: GroupOwner; cores: number; memoryBytes: number; unread: number; processes: LoadProcess[] }>();
+  const groups = new Map<
+    string,
+    { owner: GroupOwner; cores: number; gpuCores: number; gpuUnread: number; memoryBytes: number; unread: number; processes: LoadProcess[] }
+  >();
   for (const row of rows.values()) {
     const owner = owners.get(row.pid);
     if (owner === undefined) continue;
     const key = keyOf(owner);
     let group = groups.get(key);
     if (group === undefined) {
-      group = { owner, cores: 0, memoryBytes: 0, unread: 0, processes: [] };
+      group = { owner, cores: 0, gpuCores: 0, gpuUnread: 0, memoryBytes: 0, unread: 0, processes: [] };
       groups.set(key, group);
     }
     const cores = spent.cores.get(row.pid) ?? null;
+    const gpu = spent.gpu.get(row.pid) ?? { _tag: 'Unavailable' as const, reason: 'the GPU counter was not read' };
     const memoryBytes = memoryOf(row);
     group.cores += cores ?? 0;
+    if (gpu._tag === 'Measured') group.gpuCores += gpu.cores;
+    else group.gpuUnread += 1;
     group.memoryBytes += memoryBytes ?? 0;
     if (cores === null) group.unread += 1;
     group.processes.push({
@@ -120,9 +129,10 @@ export const grouped = (
       command: row.command,
       role: owner._tag === 'Installation' ? installation.get(row.pid) : undefined,
       cores,
+      gpu,
       reapedCores: spent.fromChildren.get(row.pid),
       memoryBytes,
-      signal: row.signal && owner._tag !== 'Installation',
+      signal: row.signal && owner._tag !== 'Installation' && owner._tag !== 'Part',
       unread:
         row.unread ??
         (cores === null ? 'its CPU over this interval is not known yet: it has no earlier reading to compare with' : undefined),

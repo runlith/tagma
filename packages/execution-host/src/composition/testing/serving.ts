@@ -33,6 +33,21 @@ export const machineLoadContract = Effect.fnUntraced(function* (host: Host['Serv
   const holder = own?.processes.find((row) => row.role === 'holder');
   expect(holder?.parent).toBe(process.pid);
   expect(own?.processes.some((row) => row.role === 'host' && row.parent === holder?.identity.pid)).toBe(true);
+  yield* opened.success.setInterest({ interested: true, others: false });
+  yield* opened.success.setParts([{ key: 'mismatched', pid: process.pid, createdMs: 0, precisionMs: 0 }]);
+  const changed = yield* opened.success.readings.pipe(
+    Stream.filter((reading) => reading.unresolvedParts.some(({ part }) => part.key === 'mismatched')),
+    Stream.runHead,
+    Effect.flatMap(Effect.fromOption),
+  );
+  expect(changed.unresolvedParts.find(({ part }) => part.key === 'mismatched')?.reason).toBe('different');
+  yield* opened.success.setParts([]);
+  const cleared = yield* opened.success.readings.pipe(
+    Stream.filter((reading) => reading.revision > changed.revision && reading.unresolvedParts.length === 0),
+    Stream.runHead,
+    Effect.flatMap(Effect.fromOption),
+  );
+  expect(cleared.revision).toBeGreaterThan(changed.revision);
 });
 
 export const servingContracts = (adapter: HostAdapter, expected: Served) =>

@@ -1,10 +1,10 @@
 import { dlopen, FFIType, ptr } from 'bun:ffi';
 import { constants } from 'node:os';
 import type { MachineMemory, MemoryPressure } from '@runlith/executions/protocol/evidence';
-import type { MachineCounters } from '../UsageReader';
-import { birthOf } from './macos/birth';
+import type { MachineCounters } from '../../UsageReader';
+import { birthOf } from './birth';
 
-export const USAGE_SYMBOLS = {
+const USAGE_SYMBOLS = {
   execution_usage_all: { args: [FFIType.ptr, FFIType.i32], returns: FFIType.i32 },
   execution_usage_machine: { args: [FFIType.ptr], returns: FFIType.i32 },
 } as const;
@@ -27,14 +27,20 @@ export type NativeCounters = {
   readonly responsible: number;
 };
 
-export class UsageAbi {
+export interface UsageAbi {
+  unload(): void;
+  all(): ReadonlyArray<NativeCounters> | { readonly errno: number };
+  machine(): MachineCounters | { readonly errno: number };
+}
+
+export class NativeUsage implements UsageAbi {
   private capacity = 2048;
   private values = new BigUint64Array(this.capacity * ROW);
 
   private constructor(private readonly library: ReturnType<typeof dlopen<typeof USAGE_SYMBOLS>>) {}
 
-  static load(path: string): UsageAbi {
-    return new UsageAbi(dlopen(path, USAGE_SYMBOLS));
+  static load(path: string): NativeUsage {
+    return new NativeUsage(dlopen(path, USAGE_SYMBOLS));
   }
 
   unload(): void {
@@ -82,10 +88,10 @@ export class UsageAbi {
     if (errno !== 0) return { errno };
     const [busy, total, cores, memoryBytes, usedBytes, availableBytes, level, value, memoryErrno, pressureErrno, platform, shape] =
       Array.from(values, Number) as [number, number, number, number, number, number, number, number, number, number, number, number];
-    if (platform !== 1 && platform !== 2) return { errno: constants.errno.ENOTSUP };
-    const adapter = platform === 1 ? 'darwin' : 'linux';
-    const probe = platform === 1 ? 'host_statistics64:HOST_VM_INFO64 + hw.memsize' : '/proc/meminfo:MemTotal,MemAvailable';
-    const pressureProbe = platform === 1 ? 'kern.memorystatus_vm_pressure_level' : '/proc/pressure/memory:avg10 some/full stalls';
+    if (platform !== 1) return { errno: constants.errno.ENOTSUP };
+    const adapter = 'darwin';
+    const probe = 'host_statistics64:HOST_VM_INFO64 + hw.memsize';
+    const pressureProbe = 'kern.memorystatus_vm_pressure_level';
     const pressure: MemoryPressure =
       pressureErrno !== 0 || level === 0
         ? {
@@ -97,7 +103,7 @@ export class UsageAbi {
             _tag: 'Measured',
             level: level === 1 ? 'normal' : level === 2 ? 'warning' : 'critical',
             source: { adapter, probe: pressureProbe },
-            value: platform === 2 ? value / 1000 : value,
+            value,
           };
     const memory: MachineMemory =
       shape !== 1

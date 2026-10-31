@@ -1,13 +1,13 @@
 import { CString, dlopen, FFIType, ptr, toArrayBuffer, type Pointer } from 'bun:ffi';
 import { constants } from 'node:os';
-import { birthOf } from './macos/birth';
-import { refusalOf, type NativeStatus, type Refused } from './refusal';
-import type { Field, ProcessFacts, ProcessIdentity, ProcessReading, ProcessRow, ProcessProbe } from '../ProcessReader';
+import { birthOf } from './birth';
+import { refusalOf, type NativeStatus, type Refused } from '../refusal';
+import type { Field, ProcessFacts, ProcessIdentity, ProcessReading, ProcessRow, ProcessProbe } from '../../ProcessReader';
 
 const unread = (errno: number): { readonly _tag: 'Gone' } | { readonly _tag: 'Unreadable'; readonly detail: string } =>
   errno === constants.errno.ESRCH ? { _tag: 'Gone' } : { _tag: 'Unreadable', detail: `the native process read answered errno ${errno}` };
 
-export const SYMBOLS = {
+const SYMBOLS = {
   execution_platform_identity: { args: [], returns: FFIType.ptr },
   execution_platform_error: { args: [], returns: FFIType.ptr },
   execution_platform_uptime_nanos: { args: [], returns: FFIType.u64 },
@@ -22,9 +22,20 @@ export const SYMBOLS = {
   execution_platform_process_descriptors: { args: [FFIType.i32], returns: FFIType.i32 },
 } as const;
 
-export type Library = ReturnType<typeof dlopen<typeof SYMBOLS>>;
+type Library = ReturnType<typeof dlopen<typeof SYMBOLS>>;
 
-export class Abi {
+export interface ProcessAbi {
+  unload(): void;
+  identity(): string;
+  uptimeNanos(): bigint;
+  limits(): { readonly openFiles: number; readonly processes: number; readonly terminals: number } | Refused;
+  descriptors(pid: number): { readonly count: number } | Refused;
+  processTable(request: ProcessProbe): ReadonlyArray<ProcessRow> | Refused;
+  processFacts(pids: ReadonlyArray<number>): ProcessReading | Refused;
+  processIdentity(pid: number): ProcessIdentity | Refused;
+}
+
+export class Abi implements ProcessAbi {
   constructor(private readonly library: Library) {}
 
   static load(path: string): Abi {

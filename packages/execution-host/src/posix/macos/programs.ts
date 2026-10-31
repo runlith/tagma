@@ -1,9 +1,9 @@
-import type { ProcessProgram } from '../UsageReader';
+import type { ProcessProgram } from '../../UsageReader';
 
-export type Placed = {
+type Placed = {
   readonly pid: number;
   readonly parent: number;
-  readonly responsible: number;
+  readonly responsible: number | undefined;
   readonly executable: string | undefined;
   readonly invoked: string | undefined;
   readonly name: string;
@@ -11,7 +11,7 @@ export type Placed = {
 
 const BUNDLE = '.app/';
 
-export const bundleOf = (executable: string | undefined): ProcessProgram | undefined => {
+const bundleOf = (executable: string | undefined): ProcessProgram | undefined => {
   if (executable === undefined) return undefined;
   const at = executable.indexOf(BUNDLE);
   if (at < 0) return undefined;
@@ -45,7 +45,9 @@ export const programsOf = (listed: ReadonlyArray<Placed>): ReadonlyMap<number, P
       const one = byPid.get(pid);
       if (one === undefined) break;
       path.push(pid);
-      const own = bundleOf(one.executable) ?? (one.responsible === pid ? undefined : bundleOf(byPid.get(one.responsible)?.executable));
+      const own =
+        bundleOf(one.executable) ??
+        (one.responsible === undefined || one.responsible === pid ? undefined : bundleOf(byPid.get(one.responsible)?.executable));
       if (own !== undefined) {
         found = own;
         break;
@@ -57,7 +59,7 @@ export const programsOf = (listed: ReadonlyArray<Placed>): ReadonlyMap<number, P
   };
   const programs = new Map<number, ProcessProgram>();
   for (const one of listed) {
-    const responsible = one.responsible === one.pid ? undefined : byPid.get(one.responsible);
+    const responsible = one.responsible === undefined || one.responsible === one.pid ? undefined : byPid.get(one.responsible);
     programs.set(one.pid, bundleAbove(one.pid) ?? ownProgram(responsible ?? one));
   }
   return programs;

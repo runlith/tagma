@@ -26,6 +26,7 @@ const readerOver = (table: (call: number) => Effect.Effect<ReadonlyArray<Process
     },
     compareBirth: (left, right) => Number(left) - Number(right),
     bornBetween: () => false,
+    resolve: () => 'unknown',
     identity: () => ({ _tag: 'Gone' }),
   };
 };
@@ -137,6 +138,7 @@ it.effect('one round reads the fields of at most its budget of members across ev
       },
       compareBirth: (left, right) => Number(left) - Number(right),
       bornBetween: () => false,
+      resolve: () => 'unknown',
       identity: () => ({ _tag: 'Gone' }),
     };
     const [first, second, unread] = yield* Effect.scoped(

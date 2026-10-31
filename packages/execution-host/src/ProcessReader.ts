@@ -1,5 +1,5 @@
 import { Data, Context, type Effect } from 'effect';
-import type { ProcessWitness } from '@runlith/executions/protocol/evidence';
+import type { DeclaredPart, ProcessWitness } from '@runlith/executions/protocol/evidence';
 
 export type Field<A> = { readonly _tag: 'Read'; readonly value: A } | { readonly _tag: 'Unreadable'; readonly detail: string };
 
@@ -48,6 +48,7 @@ export type ProcessReader = {
   readonly members: (work: number) => Effect.Effect<ReadonlyArray<ProcessRow>, ProcessesUnreadable>;
   readonly facts: (pids: ReadonlyArray<number>) => Effect.Effect<ProcessReading, ProcessesUnreadable>;
   readonly identity: (pid: number) => ProcessIdentity;
+  readonly resolve: (part: DeclaredPart) => ProcessWitness | 'different' | 'unknown';
   readonly compareBirth: BirthOrder;
   readonly bornBetween: (birth: string, fromMs: number, untilMs: number) => boolean | ProcessesUnreadable;
 };

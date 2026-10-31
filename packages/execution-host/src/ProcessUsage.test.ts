@@ -7,7 +7,7 @@ import type { EvidenceScope, LoadGroup } from '@runlith/executions/protocol/evid
 import { makeProcessUsage } from './ProcessUsage';
 import { Processes, type ProcessReader } from './ProcessReader';
 import type { ProcessCounters, UsageRead, UsageReader } from './UsageReader';
-import type { ObservedExecution } from './ProcessEvidence';
+import type { EndedExecution, ObservedExecution } from './ProcessEvidence';
 
 const machine = { _tag: 'Local', machine: 'usage-fixture' } as const;
 const scope: EvidenceScope = { host: machine, network: machine };
@@ -21,6 +21,7 @@ const reader: ProcessReader = {
   members: () => Effect.succeed([]),
   facts: () => Effect.succeed({ processes: [], unread: [] }),
   identity: () => ({ _tag: 'Gone' }),
+  resolve: (part) => ({ pid: part.pid, birth: String(part.pid) }),
   scan() {
     return this.table;
   },
@@ -35,6 +36,8 @@ const row = (pid: number, parent: number, micros: number, program: string, reape
   work: 0,
   zombie: false,
   cpu: { micros, reapedMicros },
+  gpu: { _tag: 'Unavailable', reason: 'not measured' },
+  memoryKind: 'footprint',
   residentBytes: 1_000,
   footprintBytes: 1_000,
   signal: true,
@@ -44,6 +47,7 @@ const row = (pid: number, parent: number, micros: number, program: string, reape
 
 const readings = (steps: ReadonlyArray<UsageRead>): Effect.Effect<UsageReader> =>
   Effect.map(Ref.make(0), (taken) => ({
+    machineName: 'Computer',
     read: () =>
       Effect.map(
         Ref.getAndUpdate(taken, (at) => at + 1),
@@ -94,13 +98,14 @@ it.effect("a reading too large for its envelope keeps Tagma's own CPU on Tagma's
       cores: 4,
       budgetBytes: 1,
     }).pipe(Effect.provideService(Processes, reader));
-    yield* usage.subscribe('fixture', 50, []);
+    yield* usage.subscribe('fixture', 50, [{ key: 'part', pid: 300, createdMs: 1, precisionMs: 1 }]);
     yield* usage.sample();
     yield* TestClock.adjust(Duration.seconds(1));
     yield* usage.sample();
     const groups = (yield* usage.load)?.groups ?? [];
-    const own = (group: LoadGroup) => group.owner._tag === 'Installation' || group.owner._tag === 'Execution';
-    expect(groups.filter(own).reduce((sum, group) => sum + group.cores, 0)).toBeCloseTo(1.3, 6);
+    const own = (group: LoadGroup) =>
+      group.owner._tag === 'Installation' || group.owner._tag === 'Execution' || group.owner._tag === 'Part';
+    expect(groups.filter(own).reduce((sum, group) => sum + group.cores, 0)).toBeCloseTo(1.7, 6);
     expect(groups.filter((group) => !own(group)).map((group) => group.owner)).toEqual([
       { _tag: 'Program', key: 'overflow', name: 'Other programs' },
     ]);
@@ -115,7 +120,12 @@ it.effect('every process is charged to one row, a reaped child to its execution,
         topology: { of: () => Effect.succeed(observed), watching: Effect.succeed([observed]) },
         scope,
         policy: { periodMs: 100 },
-        native: yield* readings([before, after]),
+        native: yield* readings(
+          [before, after].map((read) => ({
+            ...read,
+            processes: read.processes.map((one) => (one.pid === 100 ? { ...one, memoryKind: 'pss' as const } : one)),
+          })),
+        ),
         hostPid: 60,
         cores: 4,
         budgetBytes: 1_000_000,
@@ -146,6 +156,7 @@ it.effect('every process is charged to one row, a reaped child to its execution,
     expect(groups.reduce((sum, group) => sum + group.cores, 0)).toBeCloseTo(3, 6);
     expect(new Set(groups.flatMap((group) => group.processes.map((one) => one.identity.pid))).size).toBe(6);
     expect(result.latest?.cpu).toMatchObject({ _tag: 'Measured', cores: expect.closeTo(1, 6) });
+    expect(result.latest?.footprint).toMatchObject({ _tag: 'Measured', kind: 'pss', bytes: 1_000 });
   }),
 );
 
@@ -176,6 +187,142 @@ it.effect("Tagma's processes carry their role, and the server's own CPU stands a
     expect(of(50)).toMatchObject({ role: 'server', cores: expect.closeTo(0.9, 6), reapedCores: expect.closeTo(0.7, 6) });
     expect(of(60)).toMatchObject({ role: 'host', cores: expect.closeTo(0.1, 6), reapedCores: 0 });
     expect(installation?.cores).toBeCloseTo(1, 6);
+  }),
+);
+
+it.effect('declared parts and processes working on their behalf are placed by resolved identity and replaced live', () =>
+  Effect.gen(function* () {
+    const process = (pid: number, parent: number, extra: Partial<ProcessCounters> = {}) => ({
+      ...row(pid, parent, 0, `p${pid}`),
+      ...extra,
+    });
+    const snapshot: UsageRead = {
+      ...before,
+      processes: [
+        process(10, 1),
+        process(11, 10, { gpu: { _tag: 'Measured', micros: 100_000 } }),
+        process(50, 1),
+        process(51, 50),
+        process(60, 1),
+        process(90, 50, { onBehalfOf: 11 }),
+        process(91, 90),
+        process(92, 1, { onBehalfOf: 11 }),
+        process(100, 11),
+        process(101, 100),
+        process(200, 1),
+      ],
+    };
+    const next: UsageRead = {
+      ...snapshot,
+      observedAt: 2_000,
+      takenAtMicros: SECOND,
+      processes: snapshot.processes.map((one) => (one.pid === 11 ? { ...one, gpu: { _tag: 'Measured', micros: 400_000 } } : one)),
+    };
+    const parts = [
+      { key: 'window', pid: 10, createdMs: 1, precisionMs: 1 },
+      { key: 'renderer', pid: 11, createdMs: 1, precisionMs: 1 },
+      { key: 'execution-child', pid: 101, createdMs: 1, precisionMs: 1 },
+      { key: 'reused', pid: 200, createdMs: 1, precisionMs: 1 },
+      { key: 'unreadable', pid: 300, createdMs: 1, precisionMs: 1 },
+    ];
+    const resolved: ProcessReader = {
+      ...reader,
+      resolve: (part) =>
+        part.key === 'reused' ? 'different' : part.key === 'unreadable' ? 'unknown' : { pid: part.pid, birth: String(part.pid) },
+    };
+    const usage = yield* makeProcessUsage({
+      topology: { of: () => Effect.succeed(observed), watching: Effect.succeed([observed]) },
+      scope,
+      policy: { periodMs: 100 },
+      native: yield* readings([snapshot, next]),
+      hostPid: 60,
+      cores: 4,
+      budgetBytes: 1_000_000,
+    }).pipe(Effect.provideService(Processes, resolved));
+    yield* usage.subscribe('fixture', 50, parts);
+    yield* usage.sample();
+    yield* TestClock.adjust(Duration.seconds(1));
+    yield* usage.sample();
+    const first = yield* usage.load;
+    const owned = (key: string) => first?.groups.find((group) => group.owner._tag === 'Part' && group.owner.key === key);
+    expect(owned('window')?.processes.map((one) => one.identity.pid)).toEqual([10]);
+    expect(
+      owned('renderer')
+        ?.processes.map((one) => one.identity.pid)
+        .toSorted(),
+    ).toEqual([11, 90, 91, 92]);
+    expect(owned('renderer')?.gpuCores).toBeCloseTo(0.3, 6);
+    expect(owned('renderer')?.gpuUnread).toBe(3);
+    expect(owned('renderer')?.processes.find((one) => one.identity.pid === 11)?.gpu).toEqual({ _tag: 'Measured', cores: 0.3 });
+    expect(owned('renderer')?.processes.find((one) => one.identity.pid === 90)?.gpu).toEqual({
+      _tag: 'Unavailable',
+      reason: 'not measured',
+    });
+    expect(
+      first?.groups
+        .find((group) => group.owner._tag === 'Execution')
+        ?.processes.map((one) => one.identity.pid)
+        .toSorted(),
+    ).toEqual([100, 101]);
+    expect(
+      first?.groups
+        .find((group) => group.owner._tag === 'Installation')
+        ?.processes.map((one) => one.identity.pid)
+        .toSorted(),
+    ).toEqual([50, 51, 60]);
+    expect(first?.unresolvedParts.map(({ part, reason }) => [part.key, reason])).toEqual([
+      ['reused', 'different'],
+      ['unreadable', 'unknown'],
+    ]);
+    yield* usage.parts('fixture', [parts[1]!]);
+    yield* usage.sample();
+    const replacement = yield* usage.load;
+    expect(replacement?.groups.some((group) => group.owner._tag === 'Part' && group.owner.key === 'window')).toBe(false);
+    expect(replacement?.unresolvedParts).toEqual([]);
+  }),
+);
+
+it.effect('a completed execution uses its container counter or marks the process sum as a lower bound', () =>
+  Effect.gen(function* () {
+    const ended: EndedExecution = { ref, leader: { pid: 100, birth: '1500' }, cpuMicros: 600_000 };
+    const noChildren = (micros: number): ProcessCounters => ({ ...row(60, 1, micros, 'host'), cpu: { micros, reapedMicros: undefined } });
+    const initial: UsageRead = {
+      ...before,
+      processes: [noChildren(0)],
+      machine: { busy: 0, total: 0, cores: 4, memory },
+    };
+    const final: UsageRead = {
+      ...after,
+      processes: [noChildren(100_000)],
+      machine: { busy: 100, total: 400, cores: 4, memory },
+    };
+    const resolved: ProcessReader = { ...reader, bornBetween: (birth, from, until) => Number(birth) > from && Number(birth) <= until };
+    const scenario = Effect.fnUntraced(function* (container: boolean) {
+      const endings = yield* Ref.make<ReadonlyArray<EndedExecution>>([]);
+      const usage = yield* makeProcessUsage({
+        topology: { of: () => Effect.succeed(undefined), watching: Effect.succeed([]), ended: Ref.get(endings) },
+        scope,
+        policy: { periodMs: 100 },
+        native: yield* readings([initial, { ...final, containers: container ? [{ execution: ref, cpuMicros: 600_000 }] : undefined }]),
+        hostPid: 60,
+        cores: 4,
+        budgetBytes: 1_000_000,
+      }).pipe(Effect.provideService(Processes, resolved));
+      yield* usage.subscribe('fixture', 50, []);
+      yield* usage.sample();
+      yield* Ref.set(endings, [ended]);
+      yield* TestClock.adjust(Duration.seconds(1));
+      yield* usage.sample();
+      return yield* usage.load;
+    });
+    const measured = yield* scenario(true);
+    const lower = yield* scenario(false);
+    const execution = (reading: typeof measured) => reading?.groups.find((group) => group.owner._tag === 'Execution');
+    expect(execution(measured)?.cores).toBeCloseTo(0.6, 6);
+    expect(execution(measured)?.lowerBound).toBeUndefined();
+    expect(measured?.groups.reduce((sum, group) => sum + group.cores, 0)).toBeCloseTo(1, 6);
+    expect(execution(lower)).toMatchObject({ cores: 0, lowerBound: true });
+    expect(lower?.groups.reduce((sum, group) => sum + group.cores, 0)).toBeCloseTo(1, 6);
   }),
 );
 

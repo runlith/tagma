@@ -314,7 +314,8 @@ export const requiredCapability = (body: Request): Capability | undefined =>
 
 export const unsupported = (body: Request, served: Served): Refusal | undefined => {
   const capability = requiredCapability(body);
-  return capability === undefined || (served.has(capability) && (capability !== 'machine-load' || served.has('machine-load-parts')))
+  return capability === undefined ||
+    (served.has(capability) && (capability !== 'machine-load' || (served.has('machine-load-parts') && served.has('machine-load-gpu'))))
     ? undefined
     : { _tag: 'UnsupportedCapability', capability, reason: `the host on this connection does not serve ${capability}` };
 };

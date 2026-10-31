@@ -166,7 +166,7 @@ describe('what a connection serves', () => {
   it('refuses a request whose capability the connection does not serve, and names it', () => {
     const previous = servedOn(PREVIOUS_RELEASE.version, CAPABILITIES);
     const current = servedOn(WIRE_VERSION, CAPABILITIES);
-    const limited = servedOn(WIRE_VERSION, announced(['machine-load', 'machine-load-parts']));
+    const limited = servedOn(WIRE_VERSION, announced(['machine-load', 'machine-load-parts', 'machine-load-gpu']));
     const recorded = [...corpus[WIRE_VERSION].frames, ...corpus[WIRE_VERSION].arms]
       .filter((frame) => frame.side === 'client' && !isPreface(frame.header) && messageOf(frame)?._tag === 'Call')
       .map(requestOf);

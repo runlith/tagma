@@ -42,6 +42,10 @@ export const processReader = Effect.fnUntraced(function* (library: LoadedLibrary
       Effect.withSpan('Processes.scan'),
     );
   const table = scan({ _tag: 'Table' });
+  const identity: ProcessReader['identity'] = (pid) => {
+    const read = library.abi.processIdentity(pid);
+    return 'refusal' in read ? { _tag: 'Unreadable', detail: read.detail || read.refusal } : read;
+  };
   return {
     scan,
     table,
@@ -52,9 +56,13 @@ export const processReader = Effect.fnUntraced(function* (library: LoadedLibrary
         Effect.flatMap(answered),
         Effect.withSpan('Processes.facts'),
       ),
-    identity: (pid) => {
-      const read = library.abi.processIdentity(pid);
-      return 'refusal' in read ? { _tag: 'Unreadable', detail: read.detail || read.refusal } : read;
+    identity,
+    resolve: (part) => {
+      const read = identity(part.pid);
+      if (read._tag !== 'Read' || read.pid !== part.pid) return 'unknown';
+      const matched = bornBetween(read.birth, part.createdMs - part.precisionMs, part.createdMs + part.precisionMs);
+      if (matched instanceof ProcessesUnreadable) return 'unknown';
+      return matched ? { pid: read.pid, birth: read.birth } : 'different';
     },
     compareBirth,
     bornBetween,

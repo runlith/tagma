@@ -7,6 +7,7 @@ servingContracts(
   new Set([
     'machine-load',
     'machine-load-parts',
+    'machine-load-gpu',
     'end-residual',
     'end-process',
     'named-signals',

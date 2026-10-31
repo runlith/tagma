@@ -73,6 +73,11 @@ export class World {
     },
     compareBirth: (left, right) => Number(left) - Number(right),
     bornBetween: () => false,
+    resolve: ({ pid, createdMs, precisionMs }) => {
+      const proc = this.procs.get(pid);
+      if (proc === undefined) return 'unknown';
+      return Math.abs(Number(proc.birth) - createdMs) <= precisionMs ? { pid, birth: proc.birth } : 'different';
+    },
     identity: (pid) => {
       const proc = this.procs.get(pid);
       return proc === undefined

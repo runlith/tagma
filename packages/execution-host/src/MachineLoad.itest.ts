@@ -35,10 +35,10 @@ if (process.platform === 'darwin')
       );
       yield* printed(child.stdout, 'READY\n');
       const usage = yield* openUsage(libraryPath);
-      const before = yield* usage.read();
+      const before = yield* usage.read({ others: false });
       yield* Effect.sync(() => child.stdin.write('run\n'));
       yield* printed(child.stdout, 'REAPED\n');
-      const after = yield* usage.read();
+      const after = yield* usage.read({ others: false });
       const first = before.processes.find((row) => row.pid === child.pid)?.cpu;
       const last = after.processes.find((row) => row.pid === child.pid)?.cpu;
       expect(first).toBeDefined();

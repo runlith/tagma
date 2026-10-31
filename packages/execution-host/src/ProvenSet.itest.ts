@@ -98,6 +98,7 @@ const scripted = (world: World): ProcessReader => ({
   },
   compareBirth: (left, right) => Number(left) - Number(right),
   bornBetween: () => false,
+  resolve: () => 'unknown',
   identity: (pid) => {
     const answer = world.identities.get(pid) ?? { _tag: 'Gone' as const };
     world.onIdentity(pid);

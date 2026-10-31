@@ -1,5 +1,9 @@
+import type { LoadProcess, ProcessIdentity } from '@runlith/executions/protocol/evidence';
+import type { ExecutionRef } from '@runlith/executions/protocol/execution';
 import type { ProcessReader } from './ProcessReader';
-import type { ProcessCounters } from './UsageReader';
+import type { ContainerCounter, ProcessCounters } from './UsageReader';
+
+export const executionKey = (ref: ExecutionRef): string => `${ref.installation}/${ref.incarnation}/${ref.execution}`;
 
 type Held = {
   readonly birth: string;
@@ -19,7 +23,10 @@ export type Spent = {
   readonly overMicros: number;
   readonly cores: ReadonlyMap<number, number | undefined>;
   readonly fromChildren: ReadonlyMap<number, number>;
+  readonly gpu: ReadonlyMap<number, LoadProcess['gpu']>;
   readonly reaped: ReadonlyMap<string, number>;
+  readonly containers: ReadonlyMap<string, number | undefined>;
+  readonly ended: ReadonlySet<string>;
 };
 
 type Uncharged = { readonly birth: string; readonly micros: number };
@@ -33,6 +40,8 @@ export class Spending {
   private observedAt = 0;
   private settled: ReadonlySet<string> | undefined;
   private uncharged = new Map<number, Uncharged>();
+  private containers = new Map<string, number>();
+  private gpu = new Map<number, { readonly birth: string; readonly micros: number }>();
 
   constructor(private readonly reader: ProcessReader) {}
 
@@ -41,6 +50,8 @@ export class Spending {
     this.takenAtMicros = undefined;
     this.settled = undefined;
     this.uncharged = new Map();
+    this.containers = new Map();
+    this.gpu = new Map();
   }
 
   next(
@@ -49,6 +60,8 @@ export class Spending {
     takenAtMicros: number,
     ended: ReadonlyArray<Reaped> = [],
     reaper?: number,
+    containers: ReadonlyArray<ContainerCounter> = [],
+    leaders: ReadonlyMap<string, ProcessIdentity> = new Map(),
   ): Spent {
     const before = this.held;
     const overMicros = this.takenAtMicros === undefined ? 0 : Math.max(0, takenAtMicros - this.takenAtMicros);
@@ -119,7 +132,40 @@ export class Spending {
       else if (reaper.cpu === undefined && before.get(up.parent)?.reapedMicros !== undefined)
         uncharged.set(up.parent, { birth: reaper.birth, micros: (uncharged.get(up.parent)?.micros ?? 0) + gone.micros });
     }
+    const newlyEnded = new Set(ended.filter((one) => this.settled !== undefined && !this.settled.has(one.key)).map((one) => one.key));
     const reapedMicros = this.reap(ended, before, listed, deltas, owns, whole, departed, reaper, observedAt);
+    const containerCores = new Map<string, number | undefined>();
+    const nextContainers = new Map<string, number>();
+    for (const counter of containers) {
+      const key = executionKey(counter.execution);
+      const previous = this.containers.get(key);
+      const birth = leaders.get(key)?.birth;
+      const born = birth !== undefined && this.reader.bornBetween(birth, this.observedAt, observedAt) === true;
+      const delta = previous === undefined ? (born ? counter.cpuMicros : undefined) : counter.cpuMicros - previous;
+      containerCores.set(key, overMicros > 0 && delta !== undefined && delta >= 0 ? delta / overMicros : undefined);
+      nextContainers.set(key, counter.cpuMicros);
+    }
+    this.containers = nextContainers;
+    const gpu = new Map<number, LoadProcess['gpu']>();
+    const nextGpu = new Map<number, { readonly birth: string; readonly micros: number }>();
+    for (const row of rows) {
+      if (row.gpu._tag === 'Unavailable') {
+        gpu.set(row.pid, row.gpu);
+        continue;
+      }
+      const beforeGpu = this.gpu.get(row.pid);
+      const same = beforeGpu?.birth === row.birth ? beforeGpu : undefined;
+      const born = this.reader.bornBetween(row.birth, this.observedAt, observedAt) === true;
+      const delta = same === undefined ? (born ? row.gpu.micros : undefined) : row.gpu.micros - same.micros;
+      gpu.set(
+        row.pid,
+        overMicros > 0 && delta !== undefined && delta >= 0
+          ? { _tag: 'Measured', cores: delta / overMicros }
+          : { _tag: 'Unavailable', reason: 'the GPU counter has no comparable earlier reading' },
+      );
+      nextGpu.set(row.pid, { birth: row.birth, micros: row.gpu.micros });
+    }
+    this.gpu = nextGpu;
     this.uncharged = uncharged;
     this.held = held;
     this.takenAtMicros = takenAtMicros;
@@ -138,7 +184,7 @@ export class Spending {
     }
     const reapedCores = new Map<string, number>();
     if (overMicros > 0) for (const [key, micros] of reapedMicros) reapedCores.set(key, micros / overMicros);
-    return { overMicros, cores, fromChildren, reaped: reapedCores };
+    return { overMicros, cores, fromChildren, gpu, reaped: reapedCores, containers: containerCores, ended: newlyEnded };
   }
 
   //! a leader's final rusage lands in its reaper's child counter; the reaper hands the part not yet charged back to its execution

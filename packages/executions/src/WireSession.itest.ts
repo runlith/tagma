@@ -422,21 +422,23 @@ layer(services, { excludeTestServices: true })('wire sessions', (it) => {
 
     it.effect('an older host announcing machine load is refused before the revised request is sent', () =>
       Effect.gen(function* () {
-        const welcome = JSON.parse(currentWelcome);
-        welcome.message.capabilities = ['machine-load'];
-        const { registration, address } = yield* registered;
-        const seen = serving(registration.endpoint.path, WIRE_RANGE, JSON.stringify(welcome), answering);
-        const client = yield* ExecutionClient.make({ address, role: 'custodian', limits });
-        const load = yield* Effect.result(Effect.scoped(client.load(42, [])));
-        expect(refusalOf(load)?.refusal).toMatchObject({ _tag: 'UnsupportedCapability', capability: 'machine-load' });
-        expect(seen).toEqual(['Hello']);
+        for (const capabilities of [['machine-load'], ['machine-load', 'machine-load-parts']]) {
+          const welcome = JSON.parse(currentWelcome);
+          welcome.message.capabilities = capabilities;
+          const { registration, address } = yield* registered;
+          const seen = serving(registration.endpoint.path, WIRE_RANGE, JSON.stringify(welcome), answering);
+          const client = yield* ExecutionClient.make({ address, role: 'custodian', limits });
+          const load = yield* Effect.result(Effect.scoped(client.load(42, [])));
+          expect(refusalOf(load)?.refusal).toMatchObject({ _tag: 'UnsupportedCapability', capability: 'machine-load' });
+          expect(seen).toEqual(['Hello']);
+        }
       }),
     );
 
     it.effect('a host that announces one capability is sent what needs it and refused locally the one it did not announce', () =>
       Effect.gen(function* () {
         const welcome = JSON.parse(currentWelcome);
-        welcome.message.capabilities = ['machine-load', 'machine-load-parts'];
+        welcome.message.capabilities = ['machine-load', 'machine-load-parts', 'machine-load-gpu'];
         const announced = JSON.stringify(welcome);
         const { registration, address } = yield* registered;
         const seen = serving(registration.endpoint.path, WIRE_RANGE, announced, answering);

@@ -237,6 +237,11 @@ const Cores = Schema.Number.check(Schema.isGreaterThanOrEqualTo(0));
 export const InstallationRole = Schema.Literals(['window', 'server', 'host', 'holder']);
 export type InstallationRole = typeof InstallationRole.Type;
 
+const LoadGpu = Schema.Union([
+  Schema.Struct({ _tag: Schema.Literal('Measured'), cores: Cores }),
+  Schema.Struct({ _tag: Schema.Literal('Unavailable'), reason: Schema.String }),
+]).pipe(Schema.toTaggedUnion('_tag'));
+
 export const LoadProcess = Schema.Struct({
   identity: ProcessWitness,
   parent: Schema.optional(Pid),
@@ -244,6 +249,7 @@ export const LoadProcess = Schema.Struct({
   command: Schema.optional(Schema.String),
   role: Schema.optional(InstallationRole),
   cores: Schema.NullOr(Cores),
+  gpu: LoadGpu,
   reapedCores: Schema.optional(Cores).annotate({
     description: 'Of cores, the part spent by children this process ran and reaped between two readings.',
   }),
@@ -283,6 +289,8 @@ export type GroupOwner = typeof GroupOwner.Type;
 export const LoadGroup = Schema.Struct({
   owner: GroupOwner,
   cores: Cores,
+  gpuCores: Cores,
+  gpuUnread: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
   memoryBytes: Bytes,
   unread: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
   processes: Schema.Array(LoadProcess),

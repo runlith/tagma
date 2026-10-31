@@ -23,6 +23,7 @@ const world = (started: number, denied = false) => {
     },
     compareBirth: (left, right) => Number(left) - Number(right),
     bornBetween: () => false,
+    resolve: () => 'unknown',
     identity: () => (alive ? { _tag: 'Read', pid: 42, birth: String(started), parent: 1, work: 42, zombie: false } : { _tag: 'Gone' }),
   };
   const control = ProcessControl.of({

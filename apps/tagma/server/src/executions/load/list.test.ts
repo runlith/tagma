@@ -18,6 +18,7 @@ const process = (pid: number, cores: number, extra: Partial<LoadGroup['processes
   parent: 1,
   name: `p${pid}`,
   cores,
+  gpu: { _tag: 'Unavailable', reason: 'not measured' },
   memoryBytes: 100,
   signal: true,
   ...extra,
@@ -26,6 +27,8 @@ const process = (pid: number, cores: number, extra: Partial<LoadGroup['processes
 const group = (owner: LoadGroup['owner'], cores: number, pid: number): LoadGroup => ({
   owner,
   cores,
+  gpuCores: 0,
+  gpuUnread: 1,
   memoryBytes: 100,
   unread: 0,
   processes: [process(pid, cores)],

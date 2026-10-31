@@ -106,7 +106,7 @@ export type Admitted = {
   readonly parent: Tracer.AnySpan | undefined;
   readonly reply: (response: HostAnswer, payload?: Uint8Array) => Effect.Effect<void>;
   readonly refuse: (refusal: Refusal) => Effect.Effect<void>;
-  readonly subscribe: (credits: number) => Effect.Effect<Subscription | undefined>;
+  readonly subscribe: (credits: number, prepare?: (id: SubscriptionId) => Effect.Effect<void>) => Effect.Effect<Subscription | undefined>;
   readonly hasSubscription: (subscription: SubscriptionId) => Effect.Effect<boolean>;
 };
 
@@ -300,7 +300,11 @@ const make = Effect.fn('HostConnections.make')(function* ({
       closed: Deferred.await(entry.closed),
     });
 
-    const opened = Effect.fnUntraced(function* (request: RequestId, credits: number) {
+    const opened = Effect.fnUntraced(function* (
+      request: RequestId,
+      credits: number,
+      prepare?: (id: SubscriptionId) => Effect.Effect<void>,
+    ) {
       const granted = Math.min(credits, limits.credits);
       const entry: Reader = {
         id: SubscriptionId.make(yield* Ref.updateAndGet(numbering, (held) => held + 1)),
@@ -321,6 +325,7 @@ const make = Effect.fn('HostConnections.make')(function* ({
         yield* withdraw(request);
         return undefined;
       }
+      if (prepare !== undefined) yield* prepare(entry.id).pipe(Effect.onError(() => release(entry.id)));
       if (yield* answer(request)({ _tag: 'Subscribed', subscription: entry.id })) return subscription(entry);
       yield* release(entry.id);
       return undefined;
@@ -483,7 +488,8 @@ const make = Effect.fn('HostConnections.make')(function* ({
         parent,
         reply,
         refuse: (refusal) => reply({ _tag: 'Refused', refusal }),
-        subscribe: (credits) => (message.body._tag === 'Subscribe' ? opened(message.request, credits) : Effect.succeed(undefined)),
+        subscribe: (credits, prepare) =>
+          message.body._tag === 'Subscribe' ? opened(message.request, credits, prepare) : Effect.succeed(undefined),
         hasSubscription: (id) => Effect.map(Ref.get(readers), (held) => held.has(id)),
       });
       yield* noteSendQueueDepth(Queue.sizeUnsafe(waiting));

@@ -22,9 +22,20 @@ const loadAt = (takenAtMicros: number, cores: number, bytes: number): LoadReadin
     {
       owner: { _tag: 'Installation' },
       cores,
+      gpuCores: 0,
+      gpuUnread: 1,
       memoryBytes: bytes,
       unread: 0,
-      processes: [{ identity: { pid: 7, birth: '7' }, name: 'bun', cores, memoryBytes: bytes, signal: false }],
+      processes: [
+        {
+          identity: { pid: 7, birth: '7' },
+          name: 'bun',
+          cores,
+          gpu: { _tag: 'Unavailable', reason: 'not measured' },
+          memoryBytes: bytes,
+          signal: false,
+        },
+      ],
     },
   ],
 });

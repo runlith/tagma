@@ -14,6 +14,7 @@ const reader: ProcessReader = {
   },
   compareBirth: (left, right) => Number(left) - Number(right),
   bornBetween: (birth, from, until) => Number(birth) > from && Number(birth) <= until,
+  resolve: () => 'unknown',
 };
 
 const SECOND = 1_000_000;
@@ -25,6 +26,7 @@ const row = (pid: number, parent: number, micros: number | undefined, birth = 10
   work: 0,
   zombie: false,
   cpu: micros === undefined ? undefined : { micros, reapedMicros: 0 },
+  gpu: { _tag: 'Unavailable', reason: 'not measured' },
   residentBytes: 1,
   footprintBytes: 1,
   signal: true,
