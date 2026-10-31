@@ -118,6 +118,7 @@ const progressSchema = Schema.fromJsonString(
 );
 type Call = typeof callSchema.Type;
 type Probe = typeof probeSchema.Type;
+type ProbeJob = { readonly probe: Probe; readonly measured: boolean };
 type Agent = { readonly threadId: string; readonly report: string };
 const COST_FIELDS = ['statements', 'units', 'programs', 'writerHoldMs', 'writerWaitMs', 'requestBytes', 'responseBytes', 'spans'] as const;
 type CostField = (typeof COST_FIELDS)[number];
@@ -610,8 +611,14 @@ const program = Effect.gen(function* () {
         return received - changed.marker.at;
       }
     }, Effect.scoped);
-    const listJobs = yield* Effect.acquireRelease(Queue.unbounded<Probe>(), Queue.shutdown);
-    const finished = Effect.fn('agentLoad.probeFinished')(function* (kind: 'graph' | 'thread' | 'list', probe: Probe, latency: CostFigure) {
+    const listJobs = yield* Effect.acquireRelease(Queue.unbounded<ProbeJob>(), Queue.shutdown);
+    const finished = Effect.fn('agentLoad.probeFinished')(function* (
+      kind: 'graph' | 'thread' | 'list',
+      job: ProbeJob,
+      latency: CostFigure,
+    ) {
+      if (!job.measured) return;
+      const probe = job.probe;
       const now = yield* Clock.currentTimeMillis;
       if (now - probe.offeredAt < 0) return yield* new BenchRefused({ message: 'the interface producer clock moved backwards' });
       if (now < costEnd) {
@@ -623,10 +630,10 @@ const program = Effect.gen(function* () {
       streams,
       Effect.forever(
         Effect.gen(function* () {
-          const probe = yield* Queue.take(listJobs);
+          const job = yield* Queue.take(listJobs);
           const acknowledged = yield* sampleList();
-          if ((yield* Clock.currentTimeMillis) < costEnd) addFigure(listLatency, acknowledged);
-          yield* finished('list', probe, listOfferedLatency);
+          if (job.measured && (yield* Clock.currentTimeMillis) < costEnd) addFigure(listLatency, acknowledged);
+          yield* finished('list', job, listOfferedLatency);
         }),
       ),
     );
@@ -640,16 +647,19 @@ const program = Effect.gen(function* () {
             return;
           }
           if (probe.id === 0) firstProbeAt = probe.scheduledAt;
-          if (probe.scheduledAt < costStart || probe.scheduledAt >= costEnd) return;
-          probesOffered += 1;
-          addFigure(producerDelay, probe.offeredAt - probe.scheduledAt);
+          if (probe.scheduledAt >= costEnd) return;
+          const job: ProbeJob = { probe, measured: probe.scheduledAt >= costStart };
+          if (job.measured) {
+            probesOffered += 1;
+            addFigure(producerDelay, probe.offeredAt - probe.scheduledAt);
+          }
           yield* FiberSet.run(
             streams,
             Effect.gen(function* () {
               const answer = yield* world.op('read_block', { blockIds: [root] }, at);
               if (answer.status !== 200 || (answer.body as { status?: string }).status === 'refused')
                 return yield* new BenchRefused({ message: `graph open: ${JSON.stringify(answer)}` });
-              yield* finished('graph', probe, graphLatency);
+              yield* finished('graph', job, graphLatency);
             }),
           );
           yield* FiberSet.run(
@@ -665,11 +675,11 @@ const program = Effect.gen(function* () {
               if (Option.isNone(first) || (first.value.type !== 'snapshot' && first.value.type !== 'resume'))
                 return yield* new BenchRefused({ message: `thread opened without a usable frame: ${JSON.stringify(first)}` });
               if (threadCursor === undefined || first.value.at.seq > threadCursor.seq) threadCursor = first.value.at;
-              if ((yield* Clock.currentTimeMillis) < costEnd) openings[first.value.type] += 1;
-              yield* finished('thread', probe, threadLatency);
+              if (job.measured && (yield* Clock.currentTimeMillis) < costEnd) openings[first.value.type] += 1;
+              yield* finished('thread', job, threadLatency);
             }),
           );
-          yield* Queue.offer(listJobs, probe);
+          yield* Queue.offer(listJobs, job);
         }),
       ),
     );
