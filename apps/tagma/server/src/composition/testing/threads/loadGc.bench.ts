@@ -32,6 +32,7 @@ let beganAt: string | undefined;
 let endedAt: string | undefined;
 let ambiguousFragments = 0;
 let markerAmbiguousSegments = 0;
+let unparseablePauses = 0;
 let suppressedFragments = 0;
 let windowSuppressedFragments = 0;
 let tail = '';
@@ -59,10 +60,9 @@ const marker = (value: string): void => {
     if (!identifying || identified) refuse('invalid GC identification end marker');
     identifying = false;
     identified = true;
-    if (heaps.size !== 1) refuse(`main heap identification found ${heaps.size} distinct full-sweep heaps`);
-    else heap = heaps.values().next().value;
+    if (heaps.size === 1) heap = heaps.values().next().value;
   } else if (value === windowBegin) {
-    if (!identified || heap === undefined || window !== 'before') refuse('invalid GC observation window begin marker');
+    if (!identified || window !== 'before') refuse('invalid GC observation window begin marker');
     window = 'open';
     beganAt = new Date().toISOString();
   } else if (value === windowEnd) {
@@ -101,12 +101,18 @@ const segment = (line: string, affected: boolean): void => {
   }
   const id = ids[0]![1]!;
   if (heap !== undefined && id === heap) {
-    if (pauseFields.length !== pauses.length) refuse('the main heap reported an unparseable GC pause');
+    if (pauseFields.length !== pauses.length) {
+      unparseablePauses += 1;
+      retain(line);
+      return;
+    }
     const pause = pauses[0];
     if (pause !== undefined) {
       const value = Number(pause[1]);
-      if (!Number.isFinite(value) || value < 0) refuse('the main heap reported an invalid GC pause');
-      else if (window === 'open') samples.push(value);
+      if (!Number.isFinite(value) || value < 0) {
+        unparseablePauses += 1;
+        retain(line);
+      } else if (window === 'open') samples.push(value);
     }
   }
 };
@@ -146,30 +152,30 @@ if (code !== 0 || signal !== null) {
     process.kill(process.pid, signal);
   } else process.exitCode = code ?? 1;
 } else {
-  if (!identified || identifying || heap === undefined) refuse('main heap identification did not complete');
+  if (!identified || identifying) refuse('main heap identification did not complete');
   if (!windowClosed() || beganAt === undefined || endedAt === undefined) refuse('GC observation window did not complete');
-  if (problem !== undefined) {
-    printTail();
-    process.stderr.write(`agent-load-gc: ${problem}\n`);
-    process.exitCode = 1;
-  } else {
-    samples.sort((a, b) => a - b);
-    const percentile = (share: number): number | null => (samples.length === 0 ? null : samples[Math.ceil(samples.length * share) - 1]!);
-    process.stdout.write(
-      `${JSON.stringify({
-        benchmark: 'agent-load-gc',
-        heap,
-        window: { beganAt, endedAt },
-        completeness: 'unverified',
-        ambiguousFragments,
-        markerAmbiguousSegments,
-        suppressedFragments,
-        windowSuppressedFragments,
-        samples: samples.length,
-        sampleP50Ms: percentile(0.5),
-        sampleP99Ms: percentile(0.99),
-        sampleMaxMs: samples.at(-1) ?? null,
-      })}\n`,
-    );
-  }
+  if (problem !== undefined) printTail();
+  const usable = problem === undefined && heap !== undefined;
+  samples.sort((a, b) => a - b);
+  const percentile = (share: number): number | null =>
+    !usable || samples.length === 0 ? null : samples[Math.ceil(samples.length * share) - 1]!;
+  process.stdout.write(
+    `${JSON.stringify({
+      benchmark: 'agent-load-gc',
+      heap: usable ? heap : null,
+      heapCandidates: [...heaps],
+      window: { beganAt: beganAt ?? null, endedAt: endedAt ?? null },
+      completeness: usable ? 'unverified' : 'unmeasured',
+      diagnosticError: problem ?? (heap === undefined ? `main heap identification found ${heaps.size} distinct full-sweep heaps` : null),
+      ambiguousFragments,
+      markerAmbiguousSegments,
+      unparseablePauses,
+      suppressedFragments,
+      windowSuppressedFragments,
+      samples: usable ? samples.length : 0,
+      sampleP50Ms: percentile(0.5),
+      sampleP99Ms: percentile(0.99),
+      sampleMaxMs: usable ? (samples.at(-1) ?? null) : null,
+    })}\n`,
+  );
 }

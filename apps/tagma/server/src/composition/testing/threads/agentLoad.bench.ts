@@ -1104,7 +1104,7 @@ const program = Effect.gen(function* () {
             'allocator requested bytes are process-wide and are not total JavaScript allocation',
             'history is synthetic alternating spoken messages without historical tool calls; extra projects have no code',
             'idle agents hold an open prompt without frames; genuine keep-warm pings are not forced',
-            'loadGc.bench.ts reports a sample of GC phases with completeness unverified, and GC logging adds overhead',
+            'loadGc.bench.ts reports GC phases only where heap identification permits it; completeness is unverified, and GC logging adds overhead',
           ],
         },
         null,
