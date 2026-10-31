@@ -39,7 +39,6 @@ import type { ThreadAggregateStorage } from '../storage/aggregate';
 import { emptyToolOutputs, runRow } from '../conformance/runCycle/runDoubles';
 import { RunEndings, type RunEnding } from './lifecycle/endings';
 import { LaunchGate, LAUNCH_REFUSALS_BEFORE_BLOCK, launchGateLayer } from './LaunchGate';
-import { RunControl, runControlLayer } from './RunControl';
 import { ThreadRunLedger } from './ThreadRunLedger';
 import { ThreadSnapshots, threadSnapshotsLayer } from './ThreadSnapshots';
 import { wordsInFlightLayer } from './WordsInFlight';
@@ -349,7 +348,7 @@ it.effect(
   }),
 );
 it.effect(
-  'a heartbeat its owner lands makes the next change read the run again instead of carrying the one held',
+  'a write no change describes, such as a heartbeat, breaks the revision chain and the next change reads the thread again',
   Effect.fnUntraced(function* () {
     const world = yield* snapshotsOver();
     const run = runRow('run-1', { threadId: 't', heartbeatAt: new Date(0) });
@@ -358,7 +357,7 @@ it.effect(
     yield* world.snapshots.publish('t');
     const reads = world.reads.latest;
     world.active.set('t', { ...run, heartbeatAt: new Date(5_000), updatedAt: new Date(5_000) });
-    world.control.beaten([{ id: run.id, threadId: 't' }]);
+    yield* world.written();
     yield* world.transit([words('a', 'one', 'run-1')]);
     const frame = yield* frames.at(1);
     expect(world.reads.latest).toBe(reads + 1);
@@ -597,7 +596,7 @@ const snapshotsOver = Effect.fnUntraced(function* (
       }),
     ),
   );
-  const context = yield* Layer.build(threadSnapshotsLayer.pipe(Layer.provideMerge(runControlLayer), Layer.provideMerge(dependencies)));
+  const context = yield* Layer.build(threadSnapshotsLayer.pipe(Layer.provideMerge(dependencies)));
   const snapshots = Context.get(context, ThreadSnapshots);
   const deps = yield* Effect.provide(transitionDeps, context);
   const append = (entry: ThreadTranscriptEntry) =>
@@ -665,7 +664,13 @@ const snapshotsOver = Effect.fnUntraced(function* (
     capabilities,
     snapshots,
     gate: Context.get(context, LaunchGate),
-    control: Context.get(context, RunControl),
+    written: (id = 't') =>
+      rows.transaction((tx) =>
+        Effect.sync(() => {
+          const held = memory.held(id);
+          if (held) tx.keep(held);
+        }),
+      ),
   };
 });
 const LATER = new Date('2100-01-01T00:00:00.000Z');

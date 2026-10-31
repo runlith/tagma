@@ -29,7 +29,7 @@ const statements = <A>(work: Effect.Effect<A, unknown>) =>
 
 layer(demoGraphLayer(), { excludeTestServices: true })('run heartbeat', (it) => {
   it.effect(
-    'a beat of the going runs and the search for abandoned runs cost the same however many threads idle beside them, and touch only the going runs',
+    'a beat of the going runs and the search for abandoned runs cost the same however many threads idle beside them, and touch only the going runs and their threads’ change revisions',
     () =>
       withDemo((demo) =>
         Effect.gen(function* () {
@@ -116,7 +116,7 @@ layer(demoGraphLayer(), { excludeTestServices: true })('run heartbeat', (it) => 
           const many = yield* measure;
           expect(few.changed).toEqual(['0', '1']);
           expect(many.changed).toEqual(['0', '1']);
-          expect(few.beatRows).toBe(2);
+          expect(few.beatRows).toBe(2 * going.length);
           expect(many.beatRows).toBe(few.beatRows);
           expect(few.searchRows).toBe(0);
           expect(many.searchRows).toBe(0);

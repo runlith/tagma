@@ -175,6 +175,9 @@ export const makeRacingThreadTransitions = Effect.gen(function* () {
         }
         return 0;
       }),
+    revision: offPath,
+    opened: offPath,
+    revised: offPath,
   };
   const store: ThreadAggregateStorage<undefined> = {
     transaction: offPath,

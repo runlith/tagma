@@ -125,6 +125,9 @@ const setup = Effect.fn('testing.commandNotices')(function* () {
       writeRecord: (threadId, evidence, write, tx) => inner.writeRecord(threadId, evidence, write, tx),
       appliedSeq: (runId) => inner.appliedSeq(runId),
       spend: (threadId, at, tx) => inner.spend(threadId, at, tx),
+      revision: (threadId, tx) => inner.revision(threadId, tx),
+      opened: (threadId, tx) => inner.opened(threadId, tx),
+      revised: (threadId, tx, after) => inner.revised(threadId, tx, after),
     };
   }
   type RunStore = Effect.Success<ReturnType<typeof threadRunStore>>;

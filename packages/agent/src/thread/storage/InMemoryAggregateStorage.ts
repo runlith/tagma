@@ -21,6 +21,7 @@ import type { ThreadQuestionEntry } from '../../transcript/entries';
 import { coreEntry } from '../../transcript/kinds';
 import type { ThreadTranscript } from '../../transcript/rows';
 import { NATIVE_BINDING, NATIVE_CAPABILITIES } from '../record';
+import type { ThreadChangeRevision } from '../state';
 
 export type AggregateMemoryInput = {
   readonly transcript?: ThreadTranscript;
@@ -65,6 +66,7 @@ export const makeAggregateStorage = ({
     trace,
   };
   let foldRev = 0;
+  let commits = 0;
   let records = new Map<string, RecordWrite>();
   const applied = new Map<string, number>();
   let staged: ThreadFoldWrite[] | null = null;
@@ -164,6 +166,7 @@ export const makeAggregateStorage = ({
           Effect.sync(() => {
             staged = null;
             for (const write of writes) landFold(id, write);
+            commits += 1;
             trace.push('unit-close');
           }),
         ),
@@ -206,6 +209,13 @@ export const makeAggregateStorage = ({
     writeRecord,
     spend: () => Effect.void,
     appliedSeq: (runId: string) => Effect.sync(() => applied.get(runId) ?? 0),
+    revision: () => Effect.sync(() => commits),
+    opened: () => Effect.void,
+    revised: (_id: string, tx: ThreadWriteTx, after: (revision: ThreadChangeRevision) => Effect.Effect<void>) =>
+      Effect.suspend(() => {
+        const from = commits;
+        return tx.afterCommit(after({ from, to: from + 1 }));
+      }),
     transaction: <T, E>(body: (tx: ThreadWriteTx) => Effect.Effect<T, E>) => inUnit('', body),
     find: () => offPath('find'),
     findOwned: () => offPath('findOwned'),

@@ -14,6 +14,7 @@ import type { ThreadEntryReader } from '../../transcript/kinds';
 import { describeThreadCompactionPort } from './storagePort/compaction';
 import { describeThreadEventLogPort } from './storagePort/eventLog';
 import { describeThreadOwnerSettingsPort } from './storagePort/ownerSettings';
+import { describeThreadRevisionPort } from './storagePort/revisions';
 import { describeThreadEndingsPort } from './storagePort/endings';
 import { describeThreadLifecyclePort } from './storagePort/lifecycle';
 import { describeThreadRunPort } from './storagePort/runs';
@@ -68,6 +69,7 @@ export function describeThreadStorageRows<TTx, TWrite extends TTx = TTx, R = nev
   describeThreadSpawnPort(name, open, test);
   describeThreadEventLogPort(name, open, test);
   describeThreadOwnerSettingsPort(name, open, test);
+  describeThreadRevisionPort(name, open, test);
 }
 
 export function describeThreadStorageRuns<TTx, TWrite extends TTx = TTx, R = never>(

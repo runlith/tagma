@@ -5,7 +5,7 @@ import type { ThreadAtomicPatch, ThreadPatch } from '../storage/aggregate';
 import type { ThreadEventInput } from '../events';
 import type { ThreadSealedEvent, ThreadLogState } from '../ThreadEventDoor';
 import type { ThreadBorderFailed, ThreadPortFailure } from '../ThreadBorder';
-import type { ThreadStateChange } from '../state';
+import type { ThreadChangeRevision, ThreadStateChange } from '../state';
 
 export type ThreadVersion = {
   readonly foldRev: number;
@@ -72,6 +72,13 @@ export interface ThreadTransitionStorage<TTx, TWrite extends TTx = TTx> {
   writeRecord(threadId: string, evidence: Evidence, write: RecordWrite, tx: TWrite): Effect.Effect<void, ThreadPortFailure>;
   appliedSeq(runId: string): Effect.Effect<number, ThreadPortFailure>;
   spend(threadIds: readonly string[], at: Date, tx: TWrite): Effect.Effect<void, ThreadPortFailure>;
+  revision(threadId: string, tx?: TTx): Effect.Effect<number, ThreadPortFailure>;
+  opened(threadId: string, tx: TWrite): Effect.Effect<void, ThreadPortFailure>;
+  revised(
+    threadId: string,
+    tx: TWrite,
+    after: (revision: ThreadChangeRevision) => Effect.Effect<void>,
+  ): Effect.Effect<void, ThreadPortFailure>;
 }
 
 export type TransitionView = {
@@ -101,7 +108,7 @@ export type OwnedRecord<TWrite, E = ThreadBorderFailed> = {
 export type TransitionPlan<A, TWrite, E = ThreadBorderFailed> = {
   readonly declared: readonly ThreadSealedEvent[];
   readonly owned?: OwnedRecord<TWrite, E>;
-  readonly published?: (change: ThreadStateChange, tx: TWrite) => Effect.Effect<void>;
+  readonly published?: (change: ThreadStateChange) => Effect.Effect<void>;
   decide(view: TransitionView, tx: TWrite): Effect.Effect<Decision<A, TWrite, E>, E>;
 };
 

@@ -190,6 +190,16 @@ export const inMemoryThreadTransitions = ({ memory }: MemoryStorageInput): Threa
           });
         }
       }),
+
+    revision: () => Effect.sync(() => memory.units.revision()),
+
+    opened: () => Effect.void,
+
+    revised: (_threadId, tx, after) =>
+      Effect.suspend(() => {
+        const from = memory.units.revision();
+        return tx.afterCommit(after({ from, to: from + 1 }));
+      }),
   };
 };
 

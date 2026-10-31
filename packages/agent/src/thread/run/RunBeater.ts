@@ -56,7 +56,6 @@ export const runBeaterLayer: Layer.Layer<never, never, RunControl | RunLifecycle
               Exit.isFailure(exit)
                 ? Effect.logWarning('run heartbeats did not land', { runs: [...runs.keys()], cause: Cause.pretty(exit.cause) })
                 : Effect.sync(() => {
-                    control.beaten(alive);
                     for (const asked of exit.value) {
                       const run = runs.get(asked.runId);
                       if (run !== undefined) interrupt(run, asked.by);

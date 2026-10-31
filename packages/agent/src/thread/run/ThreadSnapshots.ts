@@ -34,7 +34,6 @@ import {
   ThreadResting,
   ThreadStore,
   ThreadTransitions,
-  type ThreadWriteTx,
 } from '../ThreadPorts';
 import type { RunStatus, StatusRow } from '../../transcript/live';
 import { inputAddressOf } from '../keyed';
@@ -42,7 +41,6 @@ import { recordedReceiptOf, runStatusOf, type RecordedReceipt } from './runStatu
 import { ThreadCallBroke, isThreadBorderFailure, type ThreadBorderFailed } from '../ThreadBorder';
 import { RunEndings, type RunEnding } from './lifecycle/endings';
 import { LaunchGate } from './LaunchGate';
-import { RunControl } from './RunControl';
 import { openQuestionsOf } from './openQuestions';
 import { decodeRecord } from './scheduler/answers';
 import { ThreadRunLedger } from './ThreadRunLedger';
@@ -59,7 +57,7 @@ export class ThreadSnapshots extends Context.Service<
     attachFrom(threadId: string, sincePosition: number): Effect.Effect<ThreadResumeOf<ThreadState> | null, ThreadBorderFailed>;
     page(threadId: string, before: number): Effect.Effect<ThreadTranscriptPage, ThreadBorderFailed>;
     publish(threadId: string): Effect.Effect<void, ThreadBorderFailed>;
-    committed(change: ThreadStateChange, tx: ThreadWriteTx): Effect.Effect<void>;
+    committed(change: ThreadStateChange): Effect.Effect<void>;
     statuses(ownerId: string, threadIds: readonly string[]): Effect.Effect<readonly StatusRow[], ThreadBorderFailed>;
     forget(threadIds: readonly string[]): Effect.Effect<void>;
   }
@@ -69,8 +67,13 @@ type StatusInputs = {
   readonly openQuestions: readonly string[];
   readonly ended: RunEnding | null;
 };
-type SnapshotReading = { readonly state: ThreadState; readonly changesAt: Date | null; readonly inputs: StatusInputs };
-type Projection = { readonly state: ThreadState; readonly inputs: StatusInputs };
+type SnapshotReading = {
+  readonly state: ThreadState;
+  readonly revision: number;
+  readonly changesAt: Date | null;
+  readonly inputs: StatusInputs;
+};
+type Projection = { readonly state: ThreadState; readonly revision: number; readonly inputs: StatusInputs };
 type Appended = Extract<ThreadStateChange, { readonly kind: 'appended' }>;
 type Asked = { readonly cause: CostCause | null; readonly parent: Tracer.AnySpan | null };
 type Work = Asked & { readonly change: ThreadStateChange };
@@ -102,17 +105,10 @@ export const makeThreadSnapshots = Effect.gen(function* () {
       ? wordsWaitOf(owners, transports, thread, { active: activeRun !== null, after: latestRun?.id ?? null })
       : Effect.succeed(null);
   const published = new Map<string, number>();
+  const framedAt = new Map<string, number>();
   const ahead = new Map<string, number>();
   const projections = new Map<string, Projection>();
-  const reads = new Map<string, object>();
   const queues = new Map<string, Work[]>();
-  const unseen = (threadIds: readonly string[]): void => {
-    for (const threadId of threadIds) {
-      projections.delete(threadId);
-      reads.delete(threadId);
-    }
-  };
-  (yield* RunControl).onBeaten((runs) => unseen(runs.map((run) => run.threadId)));
   const draining = yield* FiberSet.make<void>();
   const lifetime = yield* Effect.context<never>();
   const deadlines = yield* FiberMap.make<string>();
@@ -147,6 +143,7 @@ export const makeThreadSnapshots = Effect.gen(function* () {
       (rows) => new Map(rows.filter((row) => row !== null)),
     );
   const reading = Effect.fn(READING)(function* (threadId: string): Effect.fn.Return<SnapshotReading, ThreadBorderFailed> {
+    const revision = yield* transitions.revision(threadId);
     const position = yield* journal.headPosition(threadId);
     const thread = yield* store.metadata(threadId);
     if (!thread) return yield* new ThreadCallBroke({ cause: new Error(`Thread not found: ${threadId}.`) });
@@ -169,6 +166,7 @@ export const makeThreadSnapshots = Effect.gen(function* () {
     );
     return {
       state: { thread, position, activeRun, latestRun, pendingInput, status, now: now.toISOString() },
+      revision,
       changesAt,
       inputs: { recorded, openQuestions, ended },
     };
@@ -230,8 +228,8 @@ export const makeThreadSnapshots = Effect.gen(function* () {
     residence === null ? cut(threadId, read) : residence.reading(threadId, cut(threadId, read));
   const cut = Effect.fnUntraced(function* <A>(threadId: string, read: (current: ThreadState) => Effect.Effect<A, ThreadBorderFailed>) {
     const once = Effect.fnUntraced(function* () {
-      const current = yield* state(threadId);
-      return { current, value: yield* read(current) };
+      const { state: current, revision } = yield* reading(threadId);
+      return { current, revision, value: yield* read(current) };
     });
     return yield* feed.atCut(
       threadId,
@@ -239,10 +237,9 @@ export const makeThreadSnapshots = Effect.gen(function* () {
         const first = yield* once();
         const still = (yield* journal.headPosition(threadId)) === first.current.position;
         if (!still) yield* Effect.annotateCurrentSpan({ writersHeld: true });
-        const { current, value } = still ? first : yield* store.transaction(() => once());
-        const shownAt = published.get(threadId);
-        if (shownAt === undefined) published.set(threadId, current.position);
-        else if (current.position > shownAt) ahead.set(threadId, Math.max(ahead.get(threadId) ?? shownAt, current.position));
+        const { current, revision, value } = still ? first : yield* store.transaction(() => once());
+        if (!published.has(threadId)) published.set(threadId, current.position);
+        ahead.set(threadId, Math.max(ahead.get(threadId) ?? revision, revision));
         const live = feed.view(threadId);
         return { value, live: { ...live, at: { position: current.position, seq: live.at.seq } } };
       }),
@@ -325,9 +322,10 @@ export const makeThreadSnapshots = Effect.gen(function* () {
           Effect.sync(() => {
             shown.delete(threadId);
             published.delete(threadId);
+            framedAt.delete(threadId);
             ahead.delete(threadId);
             queues.delete(threadId);
-            unseen([threadId]);
+            projections.delete(threadId);
           }),
         ),
       { discard: true },
@@ -347,29 +345,24 @@ export const makeThreadSnapshots = Effect.gen(function* () {
     inLane(
       threadId,
       Effect.gen(function* () {
-        const token = {};
         const read = yield* feed.atCut(
           threadId,
           Effect.gen(function* () {
-            reads.set(threadId, token);
             const read = yield* reading(threadId);
             const current = read.state;
             const from = published.get(threadId) ?? current.position;
             const deltas = from < current.position ? yield* threadWireDeltas(journal, kinds, threadId, from) : [];
-            const at = Math.max(from, current.position);
-            published.set(threadId, at);
-            if ((ahead.get(threadId) ?? at) <= at) ahead.delete(threadId);
+            published.set(threadId, Math.max(from, current.position));
+            framedAt.set(threadId, Math.max(framedAt.get(threadId) ?? read.revision, read.revision));
+            if ((ahead.get(threadId) ?? read.revision) <= read.revision) ahead.delete(threadId);
             yield* feed.publish({ state: current, from, deltas: deltas ?? [] });
             return read;
           }),
         );
-        if (reads.get(threadId) === token) {
-          reads.delete(threadId);
-          hold(threadId, { state: read.state, inputs: read.inputs });
-        }
+        hold(threadId, { state: read.state, revision: read.revision, inputs: read.inputs });
         yield* arm(threadId, read.state.status, read.changesAt);
       }).pipe(
-        Effect.onError(() => Effect.sync(() => unseen([threadId]))),
+        Effect.onError(() => Effect.sync(() => projections.delete(threadId))),
         Effect.withSpan(PUBLISHING, { attributes: { threadId } }),
       ),
     );
@@ -379,12 +372,13 @@ export const makeThreadSnapshots = Effect.gen(function* () {
     inLane(
       threadId,
       Effect.gen(function* () {
+        const { revision } = change;
+        if (revision.to <= (framedAt.get(threadId) ?? -1)) return true;
         const position = change.from + change.records.length;
-        const shownAt = published.get(threadId);
-        if (shownAt !== undefined && shownAt >= position && shownAt > change.from) return true;
         const held = projections.get(threadId);
         const activeRun = held?.state.activeRun ?? null;
-        if (held === undefined || activeRun === null || shownAt !== change.from) return false;
+        if (held === undefined || activeRun === null || held.revision !== revision.from || published.get(threadId) !== change.from)
+          return false;
         if (awaitsAnswer(activeRun.progress.stage) || !change.records.every(plainEntry)) return false;
         const now = new Date(yield* Clock.currentTimeMillis);
         const thread = { ...held.state.thread, ...change.thread };
@@ -408,8 +402,10 @@ export const makeThreadSnapshots = Effect.gen(function* () {
           threadId,
           Effect.suspend(() => {
             const current = projections.get(threadId) === held && published.get(threadId) === change.from;
-            if (!current || (ahead.get(threadId) ?? change.from) > change.from) return Effect.succeed(false);
+            if (!current || (ahead.get(threadId) ?? revision.from) > revision.from) return Effect.succeed(false);
             published.set(threadId, position);
+            framedAt.set(threadId, revision.to);
+            if ((ahead.get(threadId) ?? revision.to) <= revision.to) ahead.delete(threadId);
             return Effect.as(
               feed.carry({
                 state: next,
@@ -421,7 +417,7 @@ export const makeThreadSnapshots = Effect.gen(function* () {
           }),
         );
         if (!carried) return false;
-        if (projections.get(threadId) === held) hold(threadId, { state: next, inputs: held.inputs });
+        if (projections.get(threadId) === held) hold(threadId, { state: next, revision: revision.to, inputs: held.inputs });
         yield* arm(threadId, status, changesAt);
         return true;
       }),
@@ -455,24 +451,22 @@ export const makeThreadSnapshots = Effect.gen(function* () {
       parent: Context.getOrUndefined(fiber.context, Tracer.ParentSpan) ?? null,
     }),
   );
-  const committed = (change: ThreadStateChange, tx: ThreadWriteTx): Effect.Effect<void> =>
-    tx.afterCommit(
-      Effect.flatMap(asking, (by) =>
-        Effect.suspend(() => {
-          const queue = queues.get(change.threadId);
-          if (queue !== undefined) {
-            if (queue.at(-1)?.change.kind === 'moved') return Effect.void;
-            if (queue.length < QUEUED_CHANGES) queue.push({ ...by, change });
-            else queue.splice(0, queue.length, { ...by, change: { kind: 'moved', threadId: change.threadId } });
-            return Effect.void;
-          }
-          const started: Work[] = [{ ...by, change }];
-          queues.set(change.threadId, started);
-          return Effect.asVoid(
-            FiberSet.run(draining, Effect.provideContext(drain(change.threadId, started), lifetime), { startImmediately: false }),
-          );
-        }),
-      ),
+  const committed = (change: ThreadStateChange): Effect.Effect<void> =>
+    Effect.flatMap(asking, (by) =>
+      Effect.suspend(() => {
+        const queue = queues.get(change.threadId);
+        if (queue !== undefined) {
+          if (queue.at(-1)?.change.kind === 'moved') return Effect.void;
+          if (queue.length < QUEUED_CHANGES) queue.push({ ...by, change });
+          else queue.splice(0, queue.length, { ...by, change: { kind: 'moved', threadId: change.threadId } });
+          return Effect.void;
+        }
+        const started: Work[] = [{ ...by, change }];
+        queues.set(change.threadId, started);
+        return Effect.asVoid(
+          FiberSet.run(draining, Effect.provideContext(drain(change.threadId, started), lifetime), { startImmediately: false }),
+        );
+      }),
     );
   return ThreadSnapshots.of({ state, snapshot, attachFrom, page, publish, committed, statuses, forget });
 });

@@ -34,10 +34,13 @@ export type ThreadStateFrame<TState> = {
 
 export type ThreadMetadataChange = Partial<Pick<ThreadMetadataRow, 'updatedAt' | 'contextReading' | 'pendingInteraction'>>;
 
+export type ThreadChangeRevision = { readonly from: number; readonly to: number };
+
 export type ThreadStateChange =
   | {
       readonly kind: 'appended';
       readonly threadId: string;
+      readonly revision: ThreadChangeRevision;
       readonly from: number;
       readonly records: readonly ThreadEventRecord[];
       readonly thread: ThreadMetadataChange;

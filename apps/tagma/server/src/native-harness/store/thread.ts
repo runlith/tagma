@@ -26,6 +26,8 @@ export const threadRev = sqliteTable('native_thread_rev', {
     .references(() => thread.id, { onDelete: 'cascade' }),
   foldRev: integer('fold_rev').notNull().default(0),
   inheritRev: integer('inherit_rev').notNull().default(0),
+  changeRev: integer('change_rev').notNull().default(0),
+  changeOpen: integer('change_open').notNull().default(0),
 });
 
 export const threadLog = sqliteTable('thread_log', {

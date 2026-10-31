@@ -37,6 +37,7 @@ import type { ThreadMetadataRow, ThreadRow } from '@runlith/agent/thread/rows';
 import { failedAs } from '../../threads/contract/service/failure.js';
 import type { WriteSet } from '../../platform/contract/service/writes.js';
 import { kernelStorageWrites } from '../rows/storageWrites.js';
+import { makeChangeRevisions } from './changeRevision.js';
 
 export type TransitionsInput = {
   readonly threads: ThreadStore;
@@ -364,6 +365,7 @@ export const makeTransitions = Effect.fnUntraced(function* ({
   });
 
   return {
+    ...(yield* makeChangeRevisions),
     readAt: (threadId, work, tx) => {
       const program = tx === undefined ? null : programOf(tx);
       if (program !== null) {

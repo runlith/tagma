@@ -46,6 +46,10 @@ export class MemoryTx {
     return this.tails ?? NO_TAILS;
   }
 
+  changed(): boolean {
+    return this.changes.length > 0;
+  }
+
   rollback(): void {
     for (let at = this.changes.length - 1; at >= 0; at -= 1) this.changes[at]!();
     this.changes.length = 0;
@@ -123,6 +127,11 @@ export class MemoryUnits {
   private readonly gate = Semaphore.makeUnsafe(1);
   private active: MemoryTx | null = null;
   private viewing = false;
+  private commits = 0;
+
+  revision(): number {
+    return this.commits;
+  }
 
   commit<T, E>(work: (tx: MemoryTx) => Effect.Effect<T, E>, joined?: MemoryTx): Effect.Effect<T, E> {
     if (joined) return work(joined);
@@ -139,6 +148,7 @@ export class MemoryUnits {
                   Effect.sync(() => {
                     tails = own.end();
                     if (Exit.isFailure(exit)) own.rollback();
+                    else if (own.changed()) this.commits += 1;
                     this.active = null;
                   }),
                 ),
