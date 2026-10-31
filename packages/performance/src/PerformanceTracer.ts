@@ -14,7 +14,7 @@ import { PerformanceStore } from './store/store.js';
 import { recordByteSize, type JsonValue, type PerformanceRecord } from './store/records.js';
 import type { SpanPayload } from './protocol/records.js';
 import type { SampledSpan, TraceHandover, TraceProducer } from './TraceSampler.js';
-import { CurrentTraceSampler, KEEP_ONE_TRACE_IN } from './TraceSampler.js';
+import { CurrentTraceSampler, KEEP_ONE_TRACE_IN, TRACE_BUFFER_BYTES } from './TraceSampler.js';
 
 export type Options = {
   readonly instanceId: string;
@@ -175,6 +175,7 @@ const ATTRIBUTE_ALLOWLIST = new Map<string, string>([
 const SPAN_DURATION_BOUNDARIES = Metric.exponentialBoundaries({ start: 0.5, factor: 2, count: 35 });
 
 type Primitive = string | number | boolean | null;
+type RawAttribute = Primitive | bigint | undefined;
 type SpanOptions = Parameters<Tracer.Tracer['span']>[0];
 type SpanMetrics = {
   readonly timer: Metric.Histogram<Duration.Duration>;
@@ -189,7 +190,10 @@ class PerformanceSpan implements Tracer.Span {
   readonly name: string;
   readonly parent: Option.Option<Tracer.AnySpan>;
   readonly annotations: Context.Context<never>;
-  readonly projected: Record<string, Primitive> = {};
+  projected: Record<string, Primitive> | null;
+  rawKeys: Array<string> | undefined;
+  rawValues: Array<RawAttribute> | undefined;
+  rawBound = 0;
   attributeBytes = 0;
   private attributeCount = 0;
   readonly links: Array<Tracer.SpanLink>;
@@ -207,6 +211,7 @@ class PerformanceSpan implements Tracer.Span {
     private readonly onEnd: (span: PerformanceSpan, endTime: bigint, exit: Exit.Exit<unknown, unknown>) => void,
   ) {
     this.name = options.name;
+    this.projected = options.name === 'sql.execute' ? null : {};
     this.parent = options.parent;
     this.annotations = options.annotations;
     this.links = options.links;
@@ -227,13 +232,29 @@ class PerformanceSpan implements Tracer.Span {
   }
 
   get attributes(): ReadonlyMap<string, unknown> {
-    return new Map(Object.entries(this.projected));
+    const attributes = this.projected ?? projectRaw(this.rawKeys, this.rawValues);
+    return new Map(Object.entries(attributes));
   }
 
   attribute(key: string, value: unknown): void {
     if (!this.sampled || this.status._tag === 'Ended') return;
     const target = ATTRIBUTE_ALLOWLIST.get(key);
     if (target === undefined) return;
+    if (this.projected === null) {
+      const raw = rawAttribute(value);
+      const bound = attributeBound(target, raw);
+      if (bound !== null && this.rawBound + bound <= TRACE_BUFFER_BYTES) {
+        (this.rawKeys ??= []).push(key);
+        (this.rawValues ??= []).push(raw);
+        this.rawBound += bound;
+        return;
+      }
+      this.projected = projectRaw(this.rawKeys, this.rawValues);
+      this.rawKeys = undefined;
+      this.rawValues = undefined;
+      this.attributeCount = Object.keys(this.projected).length;
+      this.attributeBytes = attributesByteSize(this.projected, this.weigh);
+    }
     const encoded = projectAttribute(value);
     const previous = this.projected[target];
     if (encoded === undefined) {
@@ -256,6 +277,55 @@ class PerformanceSpan implements Tracer.Span {
 
   addLinks(links: ReadonlyArray<Tracer.SpanLink>): void {
     this.links.push(...links);
+  }
+}
+
+class SqlTail implements SampledSpan {
+  readonly traceId: string;
+  readonly spanId: string;
+  readonly parentId: string | null;
+  readonly name: string;
+  readonly spanKind: Tracer.SpanKind;
+  readonly monotonicEnd: number;
+  readonly root: boolean;
+  readonly unit: string | null;
+  readonly upperBytes: number;
+  private readonly keys: ReadonlyArray<string> | undefined;
+  private readonly values: ReadonlyArray<RawAttribute> | undefined;
+  private projected: Record<string, Primitive> | undefined;
+  private weight: number | undefined;
+
+  constructor(
+    span: PerformanceSpan,
+    readonly exit: SpanPayload['exit'],
+    readonly wallTime: number,
+    readonly monotonicStart: number,
+    durationMs: number,
+    readonly durationMicros: number,
+    readonly failed: boolean,
+    readonly slow: boolean,
+    private readonly baseBytes: number,
+    private readonly weigh: Weigher,
+  ) {
+    this.traceId = span.traceId;
+    this.spanId = span.spanId;
+    this.parentId = Option.getOrUndefined(span.parent)?.spanId ?? null;
+    this.name = span.name;
+    this.spanKind = span.kind;
+    this.monotonicEnd = monotonicStart + durationMs;
+    this.root = span.traceRoot;
+    this.unit = span.unit;
+    this.keys = span.rawKeys;
+    this.values = span.rawValues;
+    this.upperBytes = baseBytes + span.rawBound;
+  }
+
+  get attributes(): Record<string, Primitive> {
+    return (this.projected ??= projectRaw(this.keys, this.values));
+  }
+
+  get byteSize(): number {
+    return (this.weight ??= this.baseBytes + attributesByteSize(this.attributes, this.weigh));
   }
 }
 
@@ -330,30 +400,36 @@ export const make = Effect.fnUntraced(function* (options: Options) {
         if (!ended.sampled) return;
 
         const durationMs = Duration.toMillis(duration);
-        const parent = Option.getOrUndefined(ended.parent);
+        const durationMicros = Number(durationNanos) / 1_000;
         const heads = ended.unit !== null && ended.unit === ended.spanId;
-        const attributes = ended.projected;
+        const slow = ended.traceRoot
+          ? isSlow(metrics, durationMs, SLOW_ROOT_MS)
+          : heads && isSlow(metrics, durationMs, Number.POSITIVE_INFINITY);
         const outcome: SpanPayload['exit'] =
           exit._tag === 'Success' ? SUCCESS_EXIT : { _tag: 'Failure', reasons: exit.cause.reasons.map((reason) => reason._tag) };
+        const baseBytes = spanByteSize(metrics.nameBytes, 0, outcome);
+        if (ended.projected === null) {
+          sampler.end(new SqlTail(ended, outcome, wallTime, monotonicStart, durationMs, durationMicros, failed, slow, baseBytes, weigh));
+          return;
+        }
+        const parent = Option.getOrUndefined(ended.parent);
         sampler.end({
           traceId: ended.traceId,
           spanId: ended.spanId,
           parentId: parent?.spanId ?? null,
           name: ended.name,
           spanKind: ended.kind,
-          attributes,
+          attributes: ended.projected,
           exit: outcome,
           wallTime,
           monotonicStart,
           monotonicEnd: monotonicStart + durationMs,
-          durationMicros: Number(durationNanos) / 1_000,
+          durationMicros,
           failed,
           root: ended.traceRoot,
           unit: ended.unit,
-          slow: ended.traceRoot
-            ? isSlow(metrics, durationMs, SLOW_ROOT_MS)
-            : heads && isSlow(metrics, durationMs, Number.POSITIVE_INFINITY),
-          byteSize: spanByteSize(metrics.nameBytes, ended.attributeBytes, outcome),
+          slow,
+          byteSize: baseBytes + ended.attributeBytes,
         });
       });
       if (!span.sampled) return span;
@@ -398,6 +474,7 @@ const SUCCESS_EXIT: SpanPayload['exit'] = Object.freeze({ _tag: 'Success' });
 
 const STRING_WEIGHTS = 1024;
 const STRING_WEIGHT_CHARS = 1024;
+const BIGINT_BOUND = 10n ** 256n;
 
 type Weigher = (value: Primitive) => number;
 
@@ -448,6 +525,48 @@ function spanRecord(span: SampledSpan, instanceId: string): SpanRecord {
     name: span.name,
     payload,
   };
+}
+
+function rawAttribute(value: unknown): RawAttribute {
+  if (value === null || typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean' || typeof value === 'bigint') {
+    return value;
+  }
+  return undefined;
+}
+
+function attributeBound(target: string, value: RawAttribute): number | null {
+  let valueBytes = 0;
+  if (typeof value === 'string') valueBytes = value.length * 6 + 2;
+  else if (typeof value === 'number') valueBytes = 64;
+  else if (typeof value === 'bigint') {
+    if (value > BIGINT_BOUND || value < -BIGINT_BOUND) return null;
+    valueBytes = 260;
+  } else if (value === null) valueBytes = 4;
+  else if (typeof value === 'boolean') valueBytes = 5;
+  return Math.max(16, (TARGET_BYTES.get(target) ?? 0) + 2 + valueBytes);
+}
+
+function projectRaw(keys: ReadonlyArray<string> | undefined, values: ReadonlyArray<RawAttribute> | undefined): Record<string, Primitive> {
+  const attributes: Record<string, Primitive> = {};
+  if (keys === undefined || values === undefined) return attributes;
+  for (let index = 0; index < keys.length; index += 1) {
+    const target = ATTRIBUTE_ALLOWLIST.get(keys[index]!);
+    if (target === undefined) continue;
+    const value = projectAttribute(values[index]);
+    if (value === undefined) delete attributes[target];
+    else attributes[target] = value;
+  }
+  return attributes;
+}
+
+function attributesByteSize(attributes: Record<string, Primitive>, weigh: Weigher): number {
+  let bytes = 0;
+  let count = 0;
+  for (const [key, value] of Object.entries(attributes)) {
+    bytes += (count === 0 ? 0 : 1) + (TARGET_BYTES.get(key) ?? 0) + 1 + weigh(value);
+    count += 1;
+  }
+  return bytes;
 }
 
 function projectAttribute(value: unknown): string | number | boolean | null | undefined {

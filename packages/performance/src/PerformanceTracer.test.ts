@@ -139,9 +139,9 @@ it.effect("a span's buffer weight is the exact serialized size of its projected 
     const root = open(tracer, 'run', 0n);
     const summary = 'select "id", "né" from "t" where a = \\ ?';
     for (let round = 0; round < 2; round += 1) {
-      const bare = open(tracer, 's', 0n, root);
+      const bare = open(tracer, 'sql.execute', 0n, root);
       bare.end(MS, Exit.void);
-      const full = open(tracer, 's', 0n, root);
+      const full = open(tracer, 'sql.execute', 0n, root);
       full.attribute('db.query.summary', summary);
       full.attribute('db.exec.ms', 1);
       full.attribute('db.exec.ms', 0.125);
@@ -152,14 +152,14 @@ it.effect("a span's buffer weight is the exact serialized size of its projected 
     const added = Buffer.byteLength(JSON.stringify(attributes)) - 2;
     expect(retained.map((span) => span.byteSize - (retained[0]?.byteSize ?? 0))).toEqual([0, added, 0, added]);
 
-    const replaced = open(tracer, 's', 0n, root);
+    const replaced = open(tracer, 'sql.execute', 0n, root);
     replaced.attribute('db.query.summary', 'x');
     replaced.attribute('db.queue.ms', 3);
     replaced.attribute('db.query.summary', { rows: 1 });
     replaced.attribute('db.exec.ms', 2);
     replaced.attribute('db.exec.ms', Number.NaN);
     replaced.end(MS, Exit.void);
-    const only = open(tracer, 's', 0n, root);
+    const only = open(tracer, 'sql.execute', 0n, root);
     only.attribute('db.queue.ms', 3);
     only.end(MS, Exit.void);
     const [replacedSpan, onlySpan] = retained.slice(-2);
@@ -318,6 +318,148 @@ it.effect('a root is slow at its absolute ceiling until its name settles, then o
     const steady = records.filter((record) => record.name === 'steady');
     expect(steady).toHaveLength(100);
     expect(steady.at(-1)!.monotonicEnd - steady.at(-1)!.monotonicStart).toBeCloseTo(2_000, 6);
+  }),
+);
+
+it.effect('kept SQL spans preserve attributes and ancestry for failed, slow and hash traces', () =>
+  Effect.gen(function* () {
+    const records: PerformanceRecord[] = [];
+    for (const kind of ['failed', 'slow', 'hash'] as const) {
+      const tracer = yield* PerformanceTracer.make({
+        instanceId: 'process',
+        recordFloorMicros: 0,
+        keepOneTraceIn: () => (kind === 'hash' ? 1 : Number.MAX_SAFE_INTEGER),
+      }).pipe(
+        Effect.provideService(PerformanceStore, capturing([], records)),
+        Effect.provideService(CurrentTraceSampler, new TraceSampler(() => 300)),
+        Effect.provideService(Metric.MetricRegistry, new Map()),
+      );
+      const root = open(tracer, 'request', 0n, Tracer.externalSpan({ spanId: 'outside', traceId: '0' }));
+      const query = open(tracer, 'sql.execute', 0n, root);
+      query.attribute('db.system.name', 'sqlite');
+      query.attribute('db.operation.name', 'execute');
+      query.attribute('db.query.fingerprint', 'cafe');
+      query.attribute('db.query.summary', 'SELECT "é"');
+      query.attribute('db.queue.ms', 0.125);
+      query.attribute('db.exec.ms', 2.5);
+      query.attribute('runId', 'old');
+      query.attribute('run.id', 42n);
+      query.attribute('rows', { secret: 'not retained' });
+      query.end(MS, kind === 'failed' ? Exit.fail('refused') : Exit.void);
+      query.attribute('db.exec.ms', 999);
+      root.end((kind === 'slow' ? 300n : 2n) * MS, Exit.void);
+      const parent = records.find((record) => record.name === 'request');
+      const sql = records.find((record) => record.name === 'sql.execute');
+      expect(records).toHaveLength(2);
+      expect(sql?.parentId).toBe(parent?.id);
+      expect(sql?.traceId).toBe(parent?.traceId);
+      expect(sql?.payload).toMatchObject({
+        exit: kind === 'failed' ? { _tag: 'Failure', reasons: ['Fail'] } : { _tag: 'Success' },
+        attributes: {
+          'db.system.name': 'sqlite',
+          'db.operation.name': 'execute',
+          'db.query.fingerprint': 'cafe',
+          'db.query.summary': 'SELECT "é"',
+          'db.queue.ms': 0.125,
+          'db.exec.ms': 2.5,
+          'run.id': '42',
+        },
+      });
+      expect(JSON.stringify(sql?.payload)).not.toContain('not retained');
+      records.length = 0;
+    }
+  }),
+);
+
+it.effect('a stall keeps the SQL spans that crossed it and their unit ancestry', () =>
+  Effect.gen(function* () {
+    let clock = 0;
+    const sampler = new TraceSampler(() => clock);
+    const records: PerformanceRecord[] = [];
+    const tracer = yield* PerformanceTracer.make({
+      instanceId: 'process',
+      recordFloorMicros: 0,
+      keepOneTraceIn: () => Number.MAX_SAFE_INTEGER,
+      units: new Set(['unit']),
+    }).pipe(
+      Effect.provideService(PerformanceStore, capturing([], records)),
+      Effect.provideService(CurrentTraceSampler, sampler),
+      Effect.provideService(Metric.MetricRegistry, new Map()),
+    );
+    const root = open(tracer, 'request', 0n, Tracer.externalSpan({ spanId: 'outside', traceId: '0' }));
+    const unit = open(tracer, 'unit', 0n, root);
+    const parent = open(tracer, 'read', 0n, unit);
+    const query = open(tracer, 'sql.execute', 0n, parent);
+    query.attribute('db.query.summary', 'SELECT ?');
+    clock = 100;
+    query.end(100n * MS, Exit.void);
+    clock = 120;
+    parent.end(120n * MS, Exit.void);
+    sampler.coverStall(50, 75);
+    clock = 140;
+    unit.end(140n * MS, Exit.void);
+    clock = 150;
+    root.end(150n * MS, Exit.void);
+    expect(records.map((record) => record.name).sort()).toEqual(['read', 'request', 'sql.execute', 'unit']);
+    const sql = records.find((record) => record.name === 'sql.execute');
+    expect(sql?.parentId).toBe(records.find((record) => record.name === 'read')?.id);
+    expect(sql?.payload).toMatchObject({ attributes: { 'db.query.summary': 'SELECT ?' } });
+  }),
+);
+
+it.effect('SQL tails refine their bound before eviction and retain joined units until their exact weight crosses it', () =>
+  Effect.gen(function* () {
+    const records: PerformanceRecord[] = [];
+    const registry = new Map();
+    const sampler = new TraceSampler(() => 1);
+    const tracer = yield* PerformanceTracer.make({
+      instanceId: 'process',
+      recordFloorMicros: 0,
+      keepOneTraceIn: () => Number.MAX_SAFE_INTEGER,
+      units: new Set(['unit', 'inner']),
+    }).pipe(
+      Effect.provideService(PerformanceStore, capturing([], records)),
+      Effect.provideService(CurrentTraceSampler, sampler),
+      Effect.provideService(Metric.MetricRegistry, registry),
+    );
+    const root = open(tracer, 'request', 0n, Tracer.externalSpan({ spanId: 'outside', traceId: '0' }));
+    const unit = open(tracer, 'unit', 0n, root);
+    const inner = open(tracer, 'inner', 0n, unit);
+    const summary = `select "é" ${'x'.repeat(20_000)}`;
+    for (const parent of [inner, inner, unit]) {
+      if (parent === unit) inner.end(MS, Exit.void);
+      const query = open(tracer, 'sql.execute', 0n, parent);
+      query.attribute('runId', 'first');
+      query.attribute('run.id', 'second');
+      query.attribute('runId', { rows: 1 });
+      query.attribute('run.id', 'last');
+      query.attribute('db.query.summary', summary);
+      query.attribute('db.queue.ms', 0.125);
+      query.end(MS, Exit.void);
+    }
+    unit.end(2n * MS, Exit.fail('refused'));
+    root.end(3n * MS, Exit.void);
+    const retained = records.filter((record) => record.name === 'sql.execute');
+    expect(retained).toHaveLength(3);
+    expect(records.map((record) => record.name).sort()).toEqual(['inner', 'sql.execute', 'sql.execute', 'sql.execute', 'unit']);
+    for (const query of retained) {
+      expect(query.payload).toMatchObject({ attributes: { 'run.id': 'last', 'db.query.summary': summary, 'db.queue.ms': 0.125 } });
+    }
+
+    records.length = 0;
+    const next = open(tracer, 'request', 0n, Tracer.externalSpan({ spanId: 'outside', traceId: '1' }));
+    const overflow = open(tracer, 'unit', 0n, next);
+    for (let index = 0; index < 8; index += 1) {
+      const query = open(tracer, 'sql.execute', 0n, overflow);
+      query.attribute('db.query.summary', '\u0000'.repeat(6_000));
+      query.end(MS, Exit.void);
+    }
+    overflow.end(2n * MS, Exit.fail('refused'));
+    next.end(3n * MS, Exit.void);
+    expect(records.map((record) => record.name)).toEqual(['unit']);
+    expect(sampler.counts.droppedSpans).toBeGreaterThanOrEqual(8);
+    const metrics = yield* Metric.snapshot.pipe(Effect.provideService(Metric.MetricRegistry, registry));
+    expect(metrics.find((metric) => metric.id === 'sql.execute' && metric.type === 'Histogram')?.state).toMatchObject({ count: 11 });
   }),
 );
 
