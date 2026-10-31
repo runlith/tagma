@@ -9,4 +9,4 @@ fields:
     "status": "in_work"
   }
 ---
-Reproduce a thread dropped on a newly created empty folder through the app, fix the first broken owner in that path, and prove that filing persists and the list updates.
+Folder filing IDs inherited the thread-subject role, so invocation rejected a group-selected drag as place-mismatch before the shared folder owner could handle it. Mark filing IDs as values of the selected list. The HTTP regression failed on mixed member IDs before the fix; after it, grouped filing, detach placement and the browser drag of a working thread into a newly created empty folder pass, including persistence after reload. Finish after the required shuffled-file checks and independent review.
