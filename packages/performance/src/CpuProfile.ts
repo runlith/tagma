@@ -4,18 +4,18 @@ export const CPU_PROFILE_OPERATIONS = ['connect', 'enable', 'start', 'stop', 'di
 export const cpuProfileOperationSchema = Schema.Literals(CPU_PROFILE_OPERATIONS);
 export type CpuProfileOperation = typeof cpuProfileOperationSchema.Type;
 
-const cpuProfileRequestFields = {
+const storedRequestFields = {
   requestedBy: Schema.String.check(Schema.isMinLength(1)),
-  requestedDurationMs: Schema.Finite.check(Schema.isGreaterThan(0)),
+  requestedDurationMs: Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0)),
 } as const;
 
-export const storedProfileRequestSchema = Schema.Struct(cpuProfileRequestFields);
+export const storedProfileRequestSchema = Schema.Struct(storedRequestFields);
 
 export const CPU_PROFILE_CAPTURE_MAX_MS = 300_000;
 
 export const cpuProfileRequestSchema = Schema.Struct({
-  requestedBy: cpuProfileRequestFields.requestedBy,
-  requestedDurationMs: cpuProfileRequestFields.requestedDurationMs.check(Schema.isLessThanOrEqualTo(CPU_PROFILE_CAPTURE_MAX_MS)),
+  requestedBy: storedRequestFields.requestedBy,
+  requestedDurationMs: Schema.Finite.check(Schema.isGreaterThan(0)).check(Schema.isLessThanOrEqualTo(CPU_PROFILE_CAPTURE_MAX_MS)),
 });
 export type CpuProfileRequest = typeof cpuProfileRequestSchema.Type;
 
@@ -229,13 +229,13 @@ const storedCpuProfileArtifactSchema = Schema.Json.pipe(
 );
 
 export const cpuProfilePayloadSchema = Schema.Struct({
-  ...cpuProfileRequestFields,
+  ...storedRequestFields,
   profile: storedCpuProfileArtifactSchema,
 });
 export type CpuProfilePayload = typeof cpuProfilePayloadSchema.Type;
 
 export const cpuProfileReadPayloadSchema = Schema.Struct({
-  ...cpuProfileRequestFields,
+  ...storedRequestFields,
   profile: Schema.optional(storedCpuProfileArtifactSchema),
 });
 export type CpuProfileReadPayload = typeof cpuProfileReadPayloadSchema.Type;

@@ -28,19 +28,40 @@ it.effect('capture persists sampled work and durable cuts across standing window
       const profiles = yield* CpuProfiles;
       const reports = yield* PerformanceReports;
       const profiler = yield* CpuProfiler;
+      const clock = yield* Clock.Clock;
       const capturing = yield* startCapture(profiles, { requestedBy: 'busy-control', requestedDurationMs: 600 });
       yield* capturing.started;
-      yield* TestClock.adjust(300);
+      yield* TestClock.adjust(Duration.micros(250n));
+      const early = yield* profiler.cut('stall').pipe(
+        Effect.provideService(Clock.Clock, {
+          ...clock,
+          currentTimeMillis: Effect.map(clock.currentTimeMillis, Math.floor),
+          currentTimeMillisUnsafe: () => Math.floor(clock.currentTimeMillisUnsafe()),
+        }),
+      );
+      if (early === null) return yield* Effect.die('the early cut kept no profile');
+      yield* TestClock.adjust(299.75);
       const cut = yield* profiler.cut('stall');
       if (cut === null) return yield* Effect.die('the cut kept no profile');
       measuredStringify({ text: 'x'.repeat(8 * 1024 * 1024) }, 250);
       yield* TestClock.adjust(300);
       const { record, cuts } = yield* Fiber.join(capturing.fiber);
-      expect(cuts).toEqual([{ id: cut.id, requestedBy: 'stall' }]);
+      expect(cuts).toEqual([
+        { id: early.id, requestedBy: 'stall' },
+        { id: cut.id, requestedBy: 'stall' },
+      ]);
+      expect(early.monotonicEnd - early.monotonicStart).toBe(0.25);
+      expect(early.payload.requestedDurationMs).toBe(0);
+      const first = yield* reports.read({ type: 'profile', id: cuts[0]!.id, raw: true, limit: 1 });
+      if (first.type !== 'profile' || first.profile.payload.profile === undefined)
+        return yield* Effect.die('the early cut has no raw profile');
+      expect(first.profile.id).toBe(early.id);
+      expect(first.profile.payload.requestedDurationMs).toBe(0);
+      yield* decodeArtifact(first.profile.payload.profile);
       const held = yield* reports.read({ type: 'profile', id: cut.id });
       if (held.type !== 'profile') return yield* Effect.die('the cut named no stored profile');
       expect(held.profile.monotonicEnd).toBeLessThanOrEqual(record.monotonicStart);
-      expect(record.monotonicEnd - held.profile.monotonicStart).toBeGreaterThanOrEqual(600);
+      expect(record.monotonicEnd - first.profile.monotonicStart).toBeGreaterThanOrEqual(600);
       expect(record.payload.requestedDurationMs).toBe(600);
 
       const point = yield* reports.read({ type: 'profile', id: record.id, raw: true });
@@ -74,7 +95,8 @@ it.effect('capture persists sampled work and durable cuts across standing window
 
       const list = yield* reports.read({ type: 'profiles', limit: 10 });
       if (list.type !== 'profiles') return yield* Effect.die('unexpected report');
-      expect(list.profiles.map((profile) => profile.requestedBy)).toEqual(['stall', 'busy-control', 'idle-control']);
+      expect(list.profiles.map((profile) => profile.requestedBy)).toEqual(['stall', 'stall', 'busy-control', 'idle-control']);
+      expect(list.profiles.find((profile) => profile.id === early.id)?.requestedDurationMs).toBe(0);
     }).pipe(Effect.provide(cpuLayer(storeOptions(path), 40)));
   }),
 );

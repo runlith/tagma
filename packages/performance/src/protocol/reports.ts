@@ -5,7 +5,7 @@ export const metricPercentileSchema = Schema.Union([
 ]);
 export type MetricPercentile = typeof metricPercentileSchema.Type;
 import { CommandClass } from '@runlith/executions/protocol/command';
-import { cpuProfileFrameSchema, stallSamplingSchema } from '../CpuProfile.js';
+import { cpuProfileFrameSchema, stallSamplingSchema, storedProfileRequestSchema } from '../CpuProfile.js';
 import { costPageSchema, type CostPage } from '../CostLedger.js';
 import {
   breakdownCursorSchema,
@@ -58,8 +58,7 @@ export const traceSegmentSchema = Schema.Struct({
 export type TraceSegment = typeof traceSegmentSchema.Type;
 export const profileSummarySchema = Schema.Struct({
   ...recordFields,
-  requestedBy: nonEmptyString,
-  requestedDurationMs: Schema.Number.check(Schema.isGreaterThan(0)),
+  ...storedProfileRequestSchema.fields,
 });
 export type ProfileSummary = typeof profileSummarySchema.Type;
 
