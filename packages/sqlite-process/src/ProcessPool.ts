@@ -4,6 +4,7 @@ import type { SpawnedChild } from './connection.js';
 import type { SqliteAsk, SqliteReply, SqliteRequest, SqliteSaid } from './channel.js';
 import { ReaderLanes } from './ReaderLanes.js';
 import { Checkpoints } from './Checkpoints.js';
+import { StatementMetrics } from './StatementMetrics.js';
 import { prepareEngine } from './engine.js';
 import type { Host, Hosting } from './hosting.js';
 
@@ -43,6 +44,7 @@ export type IdleChildren = 'stop' | 'keep';
 export class ProcessPool {
   readonly readers: ReaderLanes;
   unattributedStatements = 0;
+  readonly statements = new StatementMetrics();
   private readonly children = new Map<number, Child>();
   private readonly checkpoints = new Checkpoints(this, () => this.idle === 'keep');
   private readonly prepared: Record<'writer' | 'checkpoint', Child[]> = { writer: [], checkpoint: [] };

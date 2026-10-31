@@ -17,6 +17,7 @@ import type { Connection } from 'effect/sql/SqlConnection';
 import { classifySqliteError, SqlError } from 'effect/sql/SqlError';
 import type { Committed, ProgramBatch, SqliteAsk, SqliteSaid, ThrownShape } from './channel.js';
 import { prepareEngine } from './engine.js';
+import type { StatementCounts } from './StatementMetrics.js';
 import { parameterBytes, rowBytes, thrownBytes } from './payload.js';
 
 export type StatementTiming = {
@@ -76,29 +77,6 @@ const STATEMENT_SPAN = 'sql.execute';
 
 const ABANDONED = 'a read was left by its caller while its statement ran, so its reader process was stopped';
 
-const QUERY_TEXTS = 4096;
-const QUERY_TEXT_BYTES = 16_384;
-
-type Query = { readonly fingerprint: string; readonly summary: string };
-
-const queries = new Map<string, Query>();
-
-const queryOf = (sql: string): Query => {
-  const known = queries.get(sql);
-  if (known !== undefined) return known;
-  const normalized = sql
-    .replace(
-      /"(?:""|[^"])*"|`(?:``|[^`])*`|\[[^\]]*\]|(?:\s|--[^\r\n]*|\/\*[\s\S]*?\*\/)+|'(?:''|[^'])*'|\?\d*|[:@$]\w+|\b(?:0x[\da-f]+|\d+(?:\.\d*)?(?:e[+-]?\d+)?)\b/gi,
-      (token) => (/^["`\[]/.test(token) ? token : /^\s|^--|^\/\*/.test(token) ? ' ' : '?'),
-    )
-    .trim();
-  const query = { fingerprint: Bun.hash(normalized).toString(16), summary: normalized.slice(0, 512) };
-  if (sql.length > QUERY_TEXT_BYTES) return query;
-  if (queries.size >= QUERY_TEXTS) queries.clear();
-  queries.set(sql, query);
-  return query;
-};
-
 const brokenChannel = (message: string, operation: string) =>
   new SqlError({ reason: classifySqliteError(new Error(message), { message, operation }) });
 
@@ -112,6 +90,7 @@ type Outstanding = {
   readonly sentAt: number;
   readonly cost: CostCause | null;
   readonly writer: WriterFrame | null;
+  readonly statement: StatementCounts | null;
   due: number;
 };
 
@@ -216,9 +195,19 @@ export const openConnection = Effect.fnUntraced(function* (processes: ProcessPoo
         if (said._tag === 'Rows' && said.commitReturnedAt !== undefined) waiting.writer.commitReturnedAt = said.commitReturnedAt;
       } else waiting.writer.repliesComplete = false;
     }
-    if (waiting.cost !== null && waiting.ask._tag === 'Run') {
-      if (said._tag === 'Rows') waiting.cost.counts.responseBytes += rowBytes(said.rows);
-      else if (said._tag === 'Failed') waiting.cost.counts.responseBytes += thrownBytes(said.thrown);
+    if ((said._tag === 'Rows' || said._tag === 'Failed') && waiting.ask._tag === 'Run') {
+      const totalMs = nowMs() - waiting.sentAt;
+      const measured = waiting.statement!;
+      measured.completed++;
+      if (said._tag === 'Failed') measured.failed++;
+      measured.totalMs += totalMs;
+      measured.queueMs += said.queueMs;
+      measured.execMs += said.execMs;
+      if (waiting.cost !== null) {
+        waiting.cost.counts.statementMs += totalMs;
+        waiting.cost.counts.statementExecMs += said.execMs;
+        waiting.cost.counts.responseBytes += said._tag === 'Rows' ? rowBytes(said.rows) : thrownBytes(said.thrown);
+      }
     }
     if ((said._tag === 'Rows' || said._tag === 'Failed') && waiting.ask._tag === 'Run' && options.onStatement !== undefined) {
       try {
@@ -292,7 +281,8 @@ export const openConnection = Effect.fnUntraced(function* (processes: ProcessPoo
       if (gone !== null) return Effect.fail(gone);
       const cell = Deferred.makeUnsafe<SqliteSaid, SqlError>();
       const sentAt = nowMs();
-      pending.set(ask.id, { cell, operation, ask, sentAt, cost, writer, due: sentAt + SLOW_STATEMENT_MS });
+      const statement = ask._tag === 'Run' ? processes.statements.query(ask.sql) : null;
+      pending.set(ask.id, { cell, operation, ask, sentAt, cost, writer, statement, due: sentAt + SLOW_STATEMENT_MS });
       quietSince = null;
       try {
         connected.send(ask);
@@ -302,10 +292,15 @@ export const openConnection = Effect.fnUntraced(function* (processes: ProcessPoo
         return Effect.fail(brokenChannel(`the sqlite process would not take a statement: ${String(cause)}`, operation));
       }
       if (ask._tag === 'Run') {
+        statement!.statements++;
         if (cost === null) processes.unattributedStatements++;
         else {
           cost.counts.statements += 1;
           cost.counts.requestBytes += Buffer.byteLength(ask.sql, 'utf8') + parameterBytes(ask.params);
+        }
+      } else if (ask._tag === 'Programs') {
+        for (const program of ask.programs) {
+          for (const statement of program.statements) processes.statements.query(statement.sql).programStatements++;
         }
       }
       outstanding.openUnsafe();
@@ -345,7 +340,7 @@ export const openConnection = Effect.fnUntraced(function* (processes: ProcessPoo
           const writer = lane === undefined && observed?.owner === connection ? observed : null;
           const measured = (span: Tracer.Span): Effect.Effect<Array<any>, SqlError> => {
             if (span.sampled) {
-              const query = queryOf(sql);
+              const query = processes.statements.query(sql);
               span.attribute('db.query.fingerprint', query.fingerprint);
               span.attribute('db.query.summary', query.summary);
             }

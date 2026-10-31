@@ -5,6 +5,7 @@ import { Clock, Context, Effect, Layer, Tracer } from 'effect';
 import { SafeIntegers, SqlClient } from 'effect/sql/SqlClient';
 import { classifySqliteError, SqlError } from 'effect/sql/SqlError';
 import { sqliteProcessLayer } from './SqliteProcess.js';
+import { Programs } from './programs.js';
 import { sharedPool } from './testing/pool.js';
 
 it.live('unsampled Run costs count logical UTF-8, scalar and blob payloads before row transforms', () =>
@@ -14,6 +15,7 @@ it.live('unsampled Run costs count logical UTF-8, scalar and blob payloads befor
       Effect.provide(costLedgerLayer({ capacity: 1, unattributedStatements: () => pool.unattributedStatements })),
     );
     const cause = ledger.open('read');
+    const censusBefore = pool.statements.read({ limit: 2048 });
     const spans: Tracer.NativeSpan[] = [];
     const tracer = Tracer.make({
       span: (options) => {
@@ -69,6 +71,28 @@ it.live('unsampled Run costs count logical UTF-8, scalar and blob payloads befor
       expect(ledger.read({ limit: 1 }).unattributedStatements).toBe(beforeUnattributedStatements + 1);
     }).pipe(Effect.provideService(CurrentCost, cause), Effect.provideService(SafeIntegers, true), Effect.withTracer(tracer));
     expect(spans.some((span) => span.name === 'sql.execute' && !span.sampled)).toBe(true);
+    const census = pool.statements.read({ limit: 2048 });
+    const measured = census.rows.find((row) => row.summary.startsWith('SELECT ? AS row_name'))!;
+    const previous = censusBefore.rows.find((row) => row.fingerprint === measured.fingerprint);
+    expect(measured.statements - (previous?.statements ?? 0)).toBe(2);
+    expect(measured.completed - (previous?.completed ?? 0)).toBe(2);
+    expect(measured.failed - (previous?.failed ?? 0)).toBe(0);
+    expect(measured.totalMs - (previous?.totalMs ?? 0)).toBeGreaterThan(0);
+    expect(cause.counts.statementMs).toBeGreaterThanOrEqual(cause.counts.statementExecMs);
+    const submitted = yield* Context.get(context, Programs).submit({
+      operation: 'costs',
+      program: {
+        statements: [
+          { sql: query, params, counts: 'rows', expect: 0 },
+          { sql: query, params, counts: 'rows', expect: null },
+        ],
+      },
+      synchronous: null,
+    });
+    expect(submitted.outcome._tag).toBe('Conflict');
+    const carried = pool.statements.read({ limit: 2048 }).rows.find((row) => row.fingerprint === measured.fingerprint)!;
+    expect(carried.programStatements - measured.programStatements).toBe(2);
+    expect(carried.statements).toBe(measured.statements);
   }),
 );
 

@@ -22,6 +22,8 @@ it.effect('a root totals disjoint own and memoized producer work while nested ro
               publishing.counts.units++;
               publishing.counts.programs++;
               publishing.counts.programStatements += 3;
+              publishing.counts.statementMs += 8;
+              publishing.counts.statementExecMs += 2;
               publishing.counts.writerHoldMs += 3;
               publishing.counts.writerWaitMs += 4;
               publishing.counts.requestBytes += 5;
@@ -60,6 +62,8 @@ it.effect('a root totals disjoint own and memoized producer work while nested ro
       units: 1,
       programs: 1,
       programStatements: 5,
+      statementMs: 8,
+      statementExecMs: 2,
       writerHoldMs: 3,
       writerWaitMs: 4,
       requestBytes: 5,
