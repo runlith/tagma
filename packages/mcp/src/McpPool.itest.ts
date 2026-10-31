@@ -6,7 +6,7 @@ import { CallToolRequestSchema, ErrorCode, ListToolsRequestSchema, McpError } fr
 import { existsSync, mkdtempSync, readFileSync, watch } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { Cause, Deferred, Effect, Exit, Fiber, Scope } from 'effect';
+import { Cause, Deferred, Effect, Exit, Fiber, Scope, Stream } from 'effect';
 import { type McpPalette, McpPool } from './McpPool';
 import type { McpHttpServerDeclaration, McpStdioServerDeclaration } from './McpServerDeclaration';
 import type { McpSdkCallResult } from './sdk';
@@ -191,6 +191,31 @@ describe('McpPool', () => {
       expect(heard.slice(0, 2).sort()).toEqual(pids.map((pid) => `eof ${pid}`).sort());
       expect(heard.slice(2).sort()).toEqual(pids.map((pid) => `term ${pid}`).sort());
       expect(pids.filter(alive)).toEqual([]);
+    }),
+  );
+
+  it.live(
+    'keeps the final stdio result and refuses a request whose peer exits before answering',
+    Effect.fnUntraced(function* () {
+      const pool = yield* McpPool.make();
+      yield* pool.reconcile([declare('pages', ['--exit-after-result'])]);
+      yield* pool.awaitHandshakes();
+      const closed = yield* Effect.forkScoped(
+        Stream.runHead(pool.changes.pipe(Stream.filter(() => pool.states()[0]?.status === 'failed'))),
+        { startImmediately: true },
+      );
+
+      expect(text(yield* pool.call('pages', 'list_pages', {}))).toBe('1: fixture page');
+      yield* Fiber.join(closed);
+      expect(pool.states()).toMatchObject([{ name: 'pages', status: 'failed', failure: { _tag: 'McpConnectFailed' } }]);
+      expect(pool.paletteUnsafe()).toEqual([]);
+
+      yield* pool.reconcile([declare('pages', ['--exit-before-result'])]);
+      yield* pool.awaitHandshakes();
+      const refused = yield* Effect.result(pool.call('pages', 'list_pages', {}));
+      expect(refused).toMatchObject({ _tag: 'Failure', failure: { _tag: 'McpCallFailed', server: 'pages', tool: 'list_pages' } });
+      expect(pool.states()).toMatchObject([{ name: 'pages', status: 'failed' }]);
+      expect(pool.paletteUnsafe()).toEqual([]);
     }),
   );
 

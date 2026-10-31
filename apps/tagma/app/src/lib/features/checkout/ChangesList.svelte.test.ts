@@ -15,7 +15,7 @@ import { waitUntil } from '@runlith/testing/flush';
 import { flushSync } from 'svelte';
 import { afterEach, beforeEach, expect, test } from 'vitest';
 
-import { liveFeed, mountShell, screen, type TestApp, testPlaces } from '$lib/app/testing.js';
+import { liveFeed, mountShell, screen, type TestApp, testLinks, testPlaces } from '$lib/app/testing.js';
 import { Worktrees } from '$lib/features/worktrees/BoardState.svelte.js';
 import { Workspace } from '$lib/features/workspace/Selection.svelte.js';
 import { Notices } from '$lib/features/notices/Service.svelte.js';
@@ -28,7 +28,6 @@ import { ThreadChanges } from './ThreadChanges.svelte.js';
 import { ThreadHistory } from './ThreadHistory.svelte.js';
 import ChangesList from './ChangesList.svelte';
 import { Host } from '@runlith/layer/Host';
-import { DECLARED_LINKS } from '$lib/app/opening/declaredLinks.js';
 import { SidePanes } from '$lib/app/panes/SidePanes.svelte.js';
 import { ThreadSeats } from '$lib/features/threads/seats/ThreadSeats.svelte.js';
 import { testArea, testKind } from '$lib/app/panes/testing.js';
@@ -152,13 +151,7 @@ function draw(view: unknown = ChangesList): HTMLElement {
   area = testArea([testKind(CHANGES_PANE)]);
   const { panes } = area;
   const seats = new ThreadSeats(panes);
-  const opening = new Opening(
-    DECLARED_LINKS,
-    {} as never,
-    {} as never,
-    { refusal: () => undefined } as never,
-    new Host('desktop', 'macos'),
-  );
+  const opening = new Opening(testLinks(), {} as never, {} as never, { refusal: () => undefined } as never, new Host('desktop', 'macos'));
   app = mountShell(
     Layer.mergeAll(
       screen(),

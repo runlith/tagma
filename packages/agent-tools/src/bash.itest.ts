@@ -915,32 +915,45 @@ it.live('a commit into another registered checkout is a consent; into this one o
   }),
 );
 
-it.live('a bare commit mid-merge asks in a shared checkout, and git merge --continue concludes the merge', () =>
+it.live('both finishing forms classify a resolved merge in another registered worktree as committing elsewhere', () =>
   Effect.gen(function* () {
-    const dir = yield* checkout();
-    yield* host.writeFile(join(dir, 'shared.ts'), 'export const value = 1;\n');
-    yield* sh(dir, 'git add shared.ts && git commit -qm first');
-    yield* sh(dir, 'git checkout -q -b other');
-    yield* host.writeFile(join(dir, 'shared.ts'), 'export const value = 2;\n');
-    yield* sh(dir, 'git commit -qam theirs');
-    yield* sh(dir, 'git checkout -q main');
+    const dir = yield* checkout({ 'shared.ts': 'export const value = 1;\n' });
+    const other = yield* createTempDir();
+    yield* sh(dir, `git worktree add -q -b other ${JSON.stringify(other)}`);
+    yield* host.writeFile(join(other, 'shared.ts'), 'export const value = 2;\n');
+    yield* sh(other, 'git commit -qam theirs');
     yield* host.writeFile(join(dir, 'shared.ts'), 'export const value = 3;\n');
     yield* sh(dir, 'git commit -qam ours');
-    yield* sh(dir, 'git merge other', true);
-    yield* host.writeFile(join(dir, 'shared.ts'), 'export const value = 4;\n');
-    yield* sh(dir, 'git add shared.ts');
+    yield* sh(other, 'git merge main', true);
+    yield* host.writeFile(join(other, 'shared.ts'), 'export const value = 4;\n');
+    yield* sh(other, 'git add shared.ts');
 
-    const tools = createTools(options({ cwd: dir, changes: recorder().port, checkout: () => Effect.succeed('shared') }));
-    expect(consentIds(yield* preparationOf(tools.bash, { command: 'git commit -m merged', description: 'Commit the merge' }))).toEqual([
+    const own = createTools(options({ cwd: other, changes: recorder().port, checkout: () => Effect.succeed('shared') }));
+    expect(consentIds(yield* preparationOf(own.bash, { command: 'git commit --no-edit', description: 'Commit the merge' }))).toEqual([
       'shared-checkout-sweep',
     ]);
-    expect((yield* sh(dir, 'git rev-parse -q --verify MERGE_HEAD', true)).exitCode).toBe(0);
+    expect(consentIds(yield* preparationOf(own.bash, { command: 'git merge --continue', description: 'Conclude the merge' }))).toEqual([]);
+    const registered = yield* host.realpath(other);
+    const tools = createTools(
+      options({
+        cwd: dir,
+        allowOutsideCwd: true,
+        changes: recorder().port,
+        checkoutAt: (tree) => Effect.succeed(tree === registered),
+      }),
+    );
+    const continued = { command: 'GIT_EDITOR=true git merge --continue', workdir: other, description: 'Conclude the merge' };
+    expect(
+      consentIds(yield* preparationOf(tools.bash, { command: 'git commit --no-edit', workdir: other, description: 'Commit the merge' })),
+    ).toEqual(['commit-elsewhere']);
+    expect(consentIds(yield* preparationOf(tools.bash, continued))).toEqual(['commit-elsewhere']);
+    expect((yield* sh(other, 'git rev-parse -q --verify MERGE_HEAD', true)).exitCode).toBe(0);
 
-    yield* call(tools.bash, { command: 'git -c core.editor=true merge --continue', description: 'Conclude the merge' });
+    yield* call(tools.bash, continued);
 
-    const parents = (yield* shText(dir, 'git rev-list --parents -n 1 HEAD')).trim().split(' ');
+    const parents = (yield* shText(other, 'git rev-list --parents -n 1 HEAD')).trim().split(' ');
     expect(parents).toHaveLength(3);
-    expect((yield* sh(dir, 'git rev-parse -q --verify MERGE_HEAD', true)).exitCode).not.toBe(0);
+    expect((yield* sh(other, 'git rev-parse -q --verify MERGE_HEAD', true)).exitCode).not.toBe(0);
   }),
 );
 

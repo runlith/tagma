@@ -20,6 +20,7 @@ import { loadOperations } from '$lib/wire/operation.js';
 import { ServerOrigin } from '$lib/wire/ServerOrigin.svelte.js';
 import { SessionNaming } from '$lib/wire/SessionNaming.svelte.js';
 import { testDoor } from '$lib/wire/testing.js';
+import { SectionContributions, SettingSections } from '../section.js';
 import { SectionRegistry } from '../SectionRegistry.js';
 import { SettingsRepo } from '../SettingsRepo.js';
 import { SettingChips } from './SettingChips.svelte.js';
@@ -79,7 +80,9 @@ function world(writes: unknown[]) {
       ServerOrigin.of('http://localhost'),
       Layer.of(Router, makeRouter({ params: { project: 'demo' }, url: new URL('http://localhost/demo') })),
       Layer.of(Opening, { knows: () => true, tip: () => ({ text: null }) } as never),
-      Layer.of(SectionRegistry, new SectionRegistry({})),
+      SettingSections,
+      SectionContributions,
+      SectionRegistry,
     ),
   );
 }

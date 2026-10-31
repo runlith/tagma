@@ -4,7 +4,7 @@ import PanelRight from '@lucide/svelte/icons/panel-right';
 import type { Resolver } from '@runlith/layer/key';
 import { Router } from '@runlith/layer/Router';
 import { paneThread, THREAD_PANE } from './seats/pane.js';
-import type { Link, LinkItems, LinkKind } from '$lib/features/opening/Link.js';
+import { type Link, type LinkItems, type LinkKind, linkKinds } from '$lib/features/opening/Link.js';
 import { Notices } from '$lib/features/notices/Service.svelte.js';
 import { THREAD_LINK, threadLink, type ThreadRef } from '$lib/features/presence/link.js';
 import { type OpenTarget, ShellOps, shellActs } from '$lib/features/workspace/ShellOps.js';
@@ -59,6 +59,6 @@ const copies: LinkItems<ThreadRef> = {
   ],
 };
 
-export const links = [threads];
+export const links = linkKinds(threads);
 
 export const items = [copies];

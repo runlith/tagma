@@ -110,6 +110,8 @@ test('a followed cd moves where a sweep and every commit run; an unfollowed one 
   expect(shellCommitDirs('cd /work/other && git add a && git commit -m change -- a')).toEqual([['/work/other']]);
   expect(shellCommitDirs('cd ../other && git -C sub commit -- a')).toEqual([['../other', 'sub']]);
   expect(shellCommitDirs('git commit -- a')).toEqual([[]]);
+  expect(shellCommitDirs('cd ../other && git -c core.editor=true merge --continue')).toEqual([['../other']]);
+  expect(shellCommitDirs('git merge --abort')).toEqual([]);
   expect(shellCommitDirs('git log')).toEqual([]);
 });
 

@@ -148,7 +148,26 @@ it.effect('serving roots use retained local listener ownership and targeted term
     retainedOnly = true;
     expect(yield* root()).toBeNull();
     retainedOnly = false;
-    report = { ...report, listeners: [socket], scope: { host: scope.host, network: { _tag: 'Foreign', kind: 'guest', id: 'container' } } };
+    const udp = { region: 'udp sockets', reason: 'unsupported', detail: 'tcp alone' } as const;
+    report = { ...report, listeners: [socket], completeness: 'partial', unmeasured: [udp] };
+    yield* inventory.refresh();
+    retainedOnly = true;
+    expect(yield* root()).toBe('/checkout/app');
+    retainedOnly = false;
+    report = {
+      ...report,
+      unmeasured: [udp, { region: 'rows past the answer bound', reason: 'truncated', detail: '2 measured, 1 answered' }],
+    };
+    yield* inventory.refresh();
+    retainedOnly = true;
+    expect(yield* root()).toBeNull();
+    retainedOnly = false;
+    report = {
+      ...report,
+      listeners: [socket],
+      unmeasured: [],
+      scope: { host: scope.host, network: { _tag: 'Foreign', kind: 'guest', id: 'container' } },
+    };
     yield* inventory.refresh();
     retainedOnly = true;
     expect(yield* root()).toBeNull();

@@ -1,5 +1,5 @@
 import { dirname } from 'node:path';
-import { Effect, FileSystem, Fiber, Layer, Option, type Scope, Stream } from 'effect';
+import { Effect, FileSystem, Fiber, Layer, Option, Result, type Scope, Stream } from 'effect';
 import type { ChildProcessSpawner } from 'effect/process';
 import type { Git } from '@runlith/git/Git';
 import type { workingAt } from '@runlith/files/working';
@@ -456,11 +456,20 @@ export class ShellRun {
   ): Effect.Effect<void, unknown> =>
     Effect.all(
       [
-        stdout.pipe(Stream.runForEach((bytes) => Effect.sync(() => this.out.append(bytes)))),
-        stderr.pipe(Stream.runForEach((bytes) => Effect.sync(() => this.errors.append(bytes)))),
+        stdout.pipe(
+          Stream.runForEach((bytes) => Effect.sync(() => this.out.append(bytes))),
+          Effect.result,
+        ),
+        stderr.pipe(
+          Stream.runForEach((bytes) => Effect.sync(() => this.errors.append(bytes))),
+          Effect.result,
+        ),
       ],
       { concurrency: 'unbounded' },
-    ).pipe(Effect.asVoid);
+    ).pipe(
+      Effect.flatMap((collected) => Effect.fromResult(Result.all(collected))),
+      Effect.asVoid,
+    );
 
   readonly joinCollector = <A, E>(collector: Fiber.Fiber<A, E>, settled: Settled): Effect.Effect<Settled> =>
     Effect.result(Fiber.join(collector)).pipe(

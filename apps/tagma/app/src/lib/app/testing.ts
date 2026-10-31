@@ -9,7 +9,7 @@ import { Platform, type PlatformStorage } from '@runlith/layer/Platform';
 import { Scope } from '@runlith/layer/Scope';
 import { test as mountApp } from '@runlith/layer/svelte/test.svelte';
 import { Router } from '@runlith/layer/Router';
-import { makePlatform, makeRouter, makeStorage } from '@runlith/layer/testing';
+import { makePlatform, makePoint, makeRouter, makeStorage } from '@runlith/layer/testing';
 import { stubAll, stubFamily, stubMutation, stubSingle } from '@runlith/query/testing';
 import type { Vocabulary } from '@tagma/server/graph/contract/wire/tags/table';
 import { Dialogs } from '@runlith/primitives/DialogRegistry.svelte';
@@ -32,18 +32,48 @@ import { ServerOrigin } from '$lib/wire/ServerOrigin.svelte.js';
 import { ExternalLinks } from '$lib/shared/ExternalLinks.js';
 import { FileSaver } from '$lib/shared/FileSaver.js';
 import { Addresses } from '$lib/features/workspace/Addresses.js';
-import { SurfaceRegistry } from '$lib/features/workspace/surface.js';
+import { Surfaces, SurfaceRegistry } from '$lib/features/workspace/surface.js';
 import type { Workspace } from '$lib/features/workspace/Selection.svelte.js';
+import { surfaces as browserSurfaces } from '$lib/features/browser/surfaces.js';
+import { surfaces as checkoutSurfaces } from '$lib/features/checkout/surfaces.js';
+import { surfaces as graphSurfaces } from '$lib/features/graph/surfaces.js';
+import { surfaces as pluginSurfaces } from '$lib/features/plugins/surfaces.js';
+import { surfaces as ruleSurfaces } from '$lib/features/rules/surfaces.js';
+import { surfaces as speechSurfaces } from '$lib/features/speech/surfaces.js';
+import { surfaces as tagmaAppSurfaces } from '$lib/features/tagma-apps/surfaces.js';
+import { surfaces as threadSurfaces } from '$lib/features/threads/surfaces.js';
+import { items as browserItems, links as browserLinks } from '$lib/features/browser/links.js';
+import { items as checkoutItems, links as checkoutLinks } from '$lib/features/checkout/links.js';
+import { items as graphItems, links as graphLinks } from '$lib/features/graph/links.js';
+import { links as pluginLinks } from '$lib/features/plugins/links.js';
+import { items as threadItems, links as threadLinks } from '$lib/features/threads/links.js';
+import { type LinkItems, type LinkKind, LinkKinds, LinkMenuItems } from '$lib/features/opening/Link.js';
+import { LinkRegistry } from '$lib/features/opening/LinkRegistry.js';
 import TestHost from './TestHost.svelte';
-import { DECLARED_SURFACES } from './declaredSurfaces.js';
 
 export const testAim: GraphAim = { projectId: 1, branch: null };
 
-export const testSurfaces = (): SurfaceRegistry => new SurfaceRegistry(DECLARED_SURFACES);
+const coreSurfaces = [
+  ...browserSurfaces,
+  ...checkoutSurfaces,
+  ...graphSurfaces,
+  ...pluginSurfaces,
+  ...ruleSurfaces,
+  ...speechSurfaces,
+  ...tagmaAppSurfaces,
+  ...threadSurfaces,
+];
+
+export const testLinks = (
+  kinds: readonly LinkKind<never>[] = [...browserLinks, ...checkoutLinks, ...graphLinks, ...pluginLinks, ...threadLinks],
+  items: readonly LinkItems<never>[] = [...browserItems, ...checkoutItems, ...graphItems, ...threadItems],
+): LinkRegistry => new LinkRegistry(makePoint(LinkKinds, ...kinds), makePoint(LinkMenuItems, ...items));
+
+export const testSurfaces = (): SurfaceRegistry => new SurfaceRegistry(makePoint(Surfaces, ...coreSurfaces));
 
 export const testAddresses = (router: Router = makeRouter()): Addresses => new Addresses(router, testSurfaces());
 
-export const testAddressing = Layer.mergeAll(Layer.provide(SurfaceRegistry, testSurfaces), Addresses);
+export const testAddressing = Layer.mergeAll(Surfaces, Surfaces.contribute('core', ...coreSurfaces), SurfaceRegistry, Addresses);
 
 export const soloWorkspace = (over: Record<string, unknown> = {}): Workspace =>
   ({

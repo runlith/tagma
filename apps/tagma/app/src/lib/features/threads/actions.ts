@@ -2,14 +2,14 @@ import Columns2 from '@lucide/svelte/icons/columns-2';
 import Plus from '@lucide/svelte/icons/plus';
 import { Overlay } from '@runlith/primitives/Overlay.svelte';
 import { SidePanes } from '$lib/app/panes/SidePanes.svelte.js';
-import type { ActionsModule } from '$lib/features/workspace/action.js';
+import type { PaletteActionList } from '$lib/features/workspace/action.js';
 import { AgentTypes } from '$lib/features/threads/AgentTypes.svelte.js';
 import { AgentLibraryOverlay } from '$lib/features/threads/overlay.js';
 import LibraryIcon from './LibraryIcon.svelte';
 import { PageDraft } from './PageDraft.js';
 import { THREAD_PANE } from './seats/pane.js';
 
-export const actions: ActionsModule['actions'] = [
+export const actions: PaletteActionList = [
   {
     id: 'thread.new',
     order: 10,

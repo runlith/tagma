@@ -1,6 +1,8 @@
 import type { Project } from '@tagma/server/graph/contract/wire/rows';
 import type { SettableScope } from '@tagma/server/platform/contract/wire/setting';
 import type { HostKind } from '@runlith/layer/Host';
+import { Point } from '@runlith/layer/Point';
+import type { Shown } from '@runlith/layer/svelte/payload';
 import type { Component } from 'svelte';
 import type { SettingEntry, SettingsCatalog } from '$lib/features/settings/SettingsCatalog.svelte.js';
 
@@ -27,16 +29,24 @@ export type SettingsSection = {
   readonly hosts?: readonly HostKind[];
 };
 
-export type SectionContribution = {
+export interface SectionContribution extends Shown<SectionProps> {
+  readonly id: string;
   readonly section: string;
   readonly order: number;
-  readonly view: Component<SectionProps>;
-};
+}
 
-export type SectionsModule = {
-  readonly sections?: readonly SettingsSection[];
-  readonly contributions?: readonly SectionContribution[];
-};
+export const SettingSections = Point.define<SettingsSection>()('SettingSections', {
+  tier: 'app',
+  key: (section) => section.id,
+  order: (section) => section.order,
+  claims: (section) => (section.keys ?? []).map((key) => `Setting "${key}"`),
+});
+
+export const SectionContributions = Point.define<SectionContribution>()('SectionContributions', {
+  tier: 'app',
+  key: (contribution) => contribution.id,
+  order: (contribution) => contribution.order,
+});
 
 export function pick(entries: readonly SettingEntry[], ids: readonly string[]): readonly SettingEntry[] {
   return ids.flatMap((id) => entries.filter((entry) => entry.id === id));

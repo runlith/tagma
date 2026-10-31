@@ -1,3 +1,5 @@
+import type { Cell } from '@runlith/roster/cell';
+
 import { nameFacts, type GraphUse } from './condition.js';
 import { hasRecipe, isDeferredKey, optionalOf, type AnyKeyClass, type Deferred, type KeyClass, type Tier } from './key.js';
 import type { AnyLayer, EntryItem, LayerItem, LayerLoader } from './Layer.js';
@@ -5,10 +7,6 @@ import { placeOf, type AnyRung } from './Rung.js';
 import { Scope, ScopeAbort } from './Scope.js';
 
 export type DataBuild = 'eager' | 'lazy';
-
-export interface Cell<T> {
-  current: T | undefined;
-}
 
 export type Answer = (key: AnyKeyClass, scope: Scope) => unknown;
 
@@ -54,9 +52,24 @@ export class KeyIdCollisionError extends Error {
 }
 
 export class DuplicateProviderError extends Error {
-  constructor(readonly id: string) {
-    super(`Service "${id}" is provided twice in the manifest`);
+  constructor(
+    readonly id: string,
+    reason?: string,
+  ) {
+    super(reason === undefined ? `Service "${id}" is provided twice in the manifest` : `Service "${id}" is provided twice: ${reason}`);
   }
+}
+
+const LATE_REPLACEMENT =
+  'its fallback already stands, and a replacement admitted later — under a condition, from a chunk or an entry — would swap it under its readers; list the replacement in the manifest itself';
+
+function isFallback(definition: Definition): boolean {
+  return definition.kind === 'make' && definition.fallback === true;
+}
+
+function standing(existing: Definition, arriving: Definition): Definition {
+  if (isFallback(existing) === isFallback(arriving)) throw new DuplicateProviderError(arriving.key.id);
+  return isFallback(existing) ? arriving : existing;
 }
 
 export class DependencyCycleError extends Error {
@@ -158,12 +171,13 @@ function askedAt(scope: Scope, tiers: readonly Tier[]): boolean {
 export class Graph {
   readonly definitions = new Map<AnyKeyClass, Definition>();
   private readonly ids = new Map<string, AnyKeyClass>();
+  private readonly fallbacks = new Map<AnyKeyClass, Definition>();
   readonly conditional: WhenItem[] = [];
   readonly data: DataBuild;
   readonly ladder: readonly AnyRung[];
   private readonly effectRoot: GraphOptions['effectRoot'];
   private readonly watch: GraphOptions['watch'];
-  private readonly cell: <T>() => Cell<T>;
+  readonly cell: <T>() => Cell<T>;
   readonly report: (error: unknown) => void;
   private readonly tiers = new Set<string>(['app']);
   private readonly rungOfKind = new Map<string, string>();
@@ -602,6 +616,8 @@ export class Graph {
     const admitted: { definition: Definition; owner: Scope; into: Map<AnyKeyClass, Definition> }[] = [];
     const reused: { key: AnyKeyClass; owner: Scope }[] = [];
     const seen = new Map<AnyKeyClass, Definition>();
+    const fallbacks = new Map<AnyKeyClass, Definition>();
+    const named = new Map<string, AnyKeyClass>();
     const nested: WhenItem[] = [];
     for (const item of layer.items) {
       if (item.kind === 'when') {
@@ -624,21 +640,39 @@ export class Graph {
         into = new Map();
         this.local.set(owner, into);
       }
-      const existing = seen.get(item.key) ?? into.get(item.key) ?? this.definitions.get(item.key);
-      if (existing === item) {
+      const filed = seen.get(item.key) ?? into.get(item.key) ?? this.definitions.get(item.key);
+      if (filed === item) {
         if (source && !seen.has(item.key) && into.get(item.key) === item) reused.push({ key: item.key, owner });
         continue;
       }
-      if (existing && !chunkOf(existing)) throw new DuplicateProviderError(item.key.id);
+      const above = filed ?? this.lookup(item.key, owner);
+      const existing = above === item ? undefined : above;
+      this.claimFallback(item, fallbacks);
+      const replaced = existing !== undefined && seen.get(item.key) === existing && isFallback(existing);
+      if (existing && !chunkOf(existing)) {
+        if (!seen.has(item.key)) {
+          if (isFallback(item) && !isFallback(existing)) continue;
+          throw new DuplicateProviderError(item.key.id, isFallback(existing) && !isFallback(item) ? LATE_REPLACEMENT : undefined);
+        }
+        if (standing(existing, item) === existing) continue;
+      }
       if (item.kind === 'key' && !hasRecipe(item.key)) throw new MissingRecipeError(item.key.id);
-      this.assertOwnId(item.key);
+      this.assertOwnId(item.key, named);
       seen.set(item.key, item);
-      admitted.push({ definition: item, owner, into });
+      const entry = { definition: item, owner, into };
+      if (replaced)
+        admitted.splice(
+          admitted.findIndex((one) => one.definition === existing),
+          1,
+          entry,
+        );
+      else admitted.push(entry);
     }
     for (const { definition, into } of admitted) {
       into.set(definition.key, definition);
       this.ids.set(definition.key.id, definition.key);
     }
+    for (const [key, fallback] of fallbacks) this.fallbacks.set(key, fallback);
     if (source) {
       let bySource = this.included.get(scope);
       if (!bySource) {
@@ -709,7 +743,8 @@ export class Graph {
       this.admitTier(item.key);
       const existing = into.get(item.key) ?? this.definitions.get(item.key);
       if (existing === item) continue;
-      if (existing) throw new DuplicateProviderError(item.key.id);
+      this.claimFallback(item, this.fallbacks);
+      if (existing && standing(existing, item) === existing) continue;
       if (item.kind === 'key' && !hasRecipe(item.key)) throw new MissingRecipeError(item.key.id);
       this.assertOwnId(item.key);
       into.set(item.key, item);
@@ -717,9 +752,17 @@ export class Graph {
     }
   }
 
-  private assertOwnId(key: AnyKeyClass): void {
-    const holder = this.ids.get(key.id);
+  private claimFallback(item: Definition, staged: Map<AnyKeyClass, Definition>): void {
+    if (!isFallback(item)) return;
+    const declared = staged.get(item.key) ?? this.fallbacks.get(item.key);
+    if (declared !== undefined && declared !== item) throw new DuplicateProviderError(item.key.id, 'two fallbacks declare it');
+    staged.set(item.key, item);
+  }
+
+  private assertOwnId(key: AnyKeyClass, staged?: Map<string, AnyKeyClass>): void {
+    const holder = staged?.get(key.id) ?? this.ids.get(key.id);
     if (holder && holder !== key) throw new KeyIdCollisionError(key.id);
+    staged?.set(key.id, key);
   }
 
   private admitTier(key: AnyKeyClass): void {

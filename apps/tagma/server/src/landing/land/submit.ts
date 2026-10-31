@@ -311,7 +311,9 @@ const submitHeld = Effect.fn('submitWork.held')(function* (
   const [standing, unreadable] = yield* Effect.partition(carriers, ({ projectId, threadId }) =>
     pathsOfThread(units, store, projectId, threadId, placed),
   );
-  const candidates = [...new Set([...paths, ...standing.flatMap((rows) => rows.map((one) => one.path))])];
+  const candidates = [
+    ...new Set([...paths, ...done.built.plan.map((one) => one.path), ...standing.flatMap((rows) => rows.map((one) => one.path))]),
+  ];
   const discharge = yield* discharged(candidates);
   const swept = yield* recorded('discharge', changes.sweep(git, root, placed));
   const owedIn = (judged: ReadonlyMap<string, Judged>) =>
@@ -320,10 +322,10 @@ const submitHeld = Effect.fn('submitWork.held')(function* (
       .map((one) => one.holding.path)
       .sort();
   const before = discharge.judged === null ? null : owedIn(discharge.judged);
-  const after = before !== null && before.length > 0 && discharge.ended ? yield* Effect.result(holdings.judged(checkoutId, before)) : null;
+  const after =
+    before !== null && before.length > 0 && discharge.ended ? yield* Effect.result(holdings.judged(checkoutId, candidates)) : null;
   const judged = after?._tag === 'Success' ? after.success : discharge.judged;
-  const asked = after?._tag === 'Success' ? (before ?? []) : candidates;
-  const unanswered = judged === null ? [] : asked.filter((path) => !judged.has(path)).sort();
+  const unanswered = judged === null ? [] : candidates.filter((path) => !judged.has(path)).sort();
   const unread = [
     ...unreadable.map((failure) => ({
       step: 'receipt' as const,
@@ -333,7 +335,7 @@ const submitHeld = Effect.fn('submitWork.held')(function* (
       ? [
           {
             step: 'receipt' as const,
-            reason: `left names the judgement taken before the record was discharged, because judging again failed: ${after.failure.message}`,
+            reason: `left and unattributed use the judgement taken before the record was discharged, because judging again failed: ${after.failure.message}`,
           },
         ]
       : []),
@@ -342,6 +344,15 @@ const submitHeld = Effect.fn('submitWork.held')(function* (
       : [{ step: 'receipt' as const, reason: `whether this session still holds lines in ${unanswered.join(', ')} could not be judged` }]),
   ];
   const left = judged === null || unreadable.length > 0 ? null : owedIn(judged);
+  const unowned = [
+    ...new Set([
+      ...unattributed,
+      ...done.built.plan.flatMap(({ path }) => {
+        const one = judged?.get(path);
+        return one?.verdict.verdict === 'proven' && one.verdict.unheld ? [path] : [];
+      }),
+    ]),
+  ].sort();
   const unrecorded = [
     ...(done.conclusion === null ? [] : [{ step: 'receipt' as const, reason: done.conclusion }]),
     ...receipt,
@@ -379,6 +390,7 @@ const submitHeld = Effect.fn('submitWork.held')(function* (
   return {
     ...done.receipt,
     left: left === null || left.length === 0 ? undefined : left,
+    unattributed: unowned.length === 0 ? undefined : unowned,
     unsynced: done.unsynced.length === 0 ? undefined : done.unsynced,
     unrecorded: unrecorded.length + unread.length === 0 ? undefined : [...unrecorded, ...unread],
     ...hookFields(edits),

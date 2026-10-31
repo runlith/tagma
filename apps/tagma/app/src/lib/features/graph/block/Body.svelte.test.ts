@@ -10,11 +10,10 @@ import { expect, test } from 'vitest';
 import { waitUntil } from '@runlith/testing/flush';
 import { Overlays } from '$lib/app/overlays.js';
 import TestHost from '$lib/app/TestHost.svelte';
-import { testAddresses, testAddressing } from '$lib/app/testing.js';
+import { testAddresses, testAddressing, testLinks } from '$lib/app/testing.js';
 import { BlockTitles } from '$lib/features/graph/BlockTitles.svelte.js';
 import type { Link, LinkPlace } from '$lib/features/opening/Link.js';
 import LinkMenu from '$lib/features/opening/LinkMenu.svelte';
-import { LinkRegistry } from '$lib/features/opening/LinkRegistry.js';
 import { Opening } from '$lib/features/opening/Opening.svelte.js';
 import { Notices } from '$lib/features/notices/Service.svelte.js';
 import { ThreadNames, type OwnerWords } from '$lib/shared/threads/Names.svelte.js';
@@ -104,7 +103,7 @@ test('the block body renders thread references, follows live names and opens the
 
 test('the link menu opened by a right click on a reference in the body stays open when the button is released', async () => {
   const place: LinkPlace<unknown> = { words: 'block', icon: PanelRight, open: () => undefined };
-  const kinds = new LinkRegistry([{ links: [{ kind: 'block', what: () => 'block', beside: place, full: place }] as never }]);
+  const kinds = testLinks([{ kind: 'block', what: () => 'block', beside: place, full: place }] as never, []);
   const notices = { background: () => undefined, refusal: () => undefined } as unknown as Notices;
   const opening = new Opening(kinds, {} as never, {} as never, notices, new Host('desktop', 'macos'));
   const app = mountApp(

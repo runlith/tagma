@@ -1,7 +1,7 @@
-import type { SurfacesModule } from '$lib/features/workspace/surface.js';
+import type { SurfaceDeclaration } from '$lib/features/workspace/surface.js';
 import RulesIcon from './RulesIcon.svelte';
 
-export const surfaces: SurfacesModule['surfaces'] = [
+export const surfaces: readonly SurfaceDeclaration[] = [
   {
     surface: 'rules',
     route: 'rules',

@@ -642,12 +642,17 @@ const placing =
           seen.add(node);
           if (ts.isIdentifier(node)) {
             const symbol = identifierSymbol(node, checker);
-            for (const declaration of symbol?.declarations ?? []) {
-              const from = moduleAt(declaration);
-              const owner = units.get(declaration.getSourceFile().fileName)?.path;
-              if (from === undefined || owner === undefined) continue;
-              const found = resolve(from, owner);
-              if (found !== null && 'to' in found) beyond.add(tree.realpath?.(found.to) ?? found.to);
+            const chain = new Set<ts.Symbol>();
+            for (let held = symbol; held !== undefined && !chain.has(held);) {
+              chain.add(held);
+              for (const declaration of held.declarations ?? []) {
+                const from = moduleAt(declaration);
+                const owner = units.get(declaration.getSourceFile().fileName)?.path;
+                if (from === undefined || owner === undefined) continue;
+                const found = resolve(from, owner);
+                if (found !== null && 'to' in found) beyond.add(tree.realpath?.(found.to) ?? found.to);
+              }
+              held = (held.flags & ts.SymbolFlags.Alias) === 0 ? undefined : checker.getImmediateAliasedSymbol(held);
             }
             pending.push(...(aliased(symbol)?.declarations ?? []));
             continue;

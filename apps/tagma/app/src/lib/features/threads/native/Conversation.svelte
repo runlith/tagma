@@ -48,7 +48,6 @@
   import ChatButtonView from './ChatButton.svelte';
   import type { SlotOwners } from './contribution.js';
   import Contributions from './Contributions.svelte';
-  import { declared } from './declared.js';
   import { imageFileName } from './imageFile.js';
   import ImageMenu, { type ImageAim } from './ImageMenu.svelte';
   import { ThreadPreferences } from './preferences.js';
@@ -264,7 +263,7 @@
 
 {#snippet key(shown: ChatKey)}<Kbd chord={spelled(shown)} size={shown.size} />{/snippet}
 
-<Contributions {owners} {surface} {composer} {kinds} {regions} rendering={ports} {transcript} {declared} />
+<Contributions {owners} {surface} {composer} {kinds} {regions} rendering={ports} {transcript} />
 
 <ImageMenu
   aim={imageAim}

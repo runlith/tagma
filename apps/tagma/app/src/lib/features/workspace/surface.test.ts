@@ -1,8 +1,8 @@
 import type { Project } from '@tagma/server/graph/contract/wire/rows';
-import { RegistryClash } from '@runlith/chat-ui/RegistryClash';
-import { makeStorage } from '@runlith/layer/testing';
+import { RegistryClash } from '@runlith/roster/RegistryClash';
+import { makePoint, makeStorage } from '@runlith/layer/testing';
 import { expect, test } from 'vitest';
-import { type SurfaceDeclaration, SurfaceRegistry } from './surface.js';
+import { type SurfaceDeclaration, SurfaceRegistry, Surfaces } from './surface.js';
 import { Visits } from './Visits.svelte.js';
 
 const icon = (() => undefined) as unknown as SurfaceDeclaration['icon'];
@@ -31,12 +31,14 @@ const declared = (surface: string, over: Partial<SurfaceDeclaration> = {}): Surf
   ...over,
 });
 
+const of = (...declarations: readonly SurfaceDeclaration[]) => new SurfaceRegistry(makePoint(Surfaces, ...declarations));
+
 const registry = () =>
-  new SurfaceRegistry([
+  of(
     declared('home', { route: '', place: 'b', rail: 20, column: 'shelf' }),
     declared('mail', { rail: 10, home: true }),
     declared('archive', { under: 'home' }),
-  ]);
+  );
 
 test('a route id belongs to the surface that declared its directory, and the project root to the surface with the empty route', () => {
   const surfaces = registry();
@@ -66,22 +68,18 @@ test('a place of a surface lives under its place directory, the root surface und
   expect(surfaces.pathOf('runlith', 'home')).toBe('/runlith');
 });
 
-test('a doubled surface or route, a missing or doubled home, an undeclared under and the visit record’s own name refuse at assembly', () => {
+test('a doubled route or former name, a second home, a home off the rail and the visit record’s own name refuse', () => {
   const home = declared('home', { home: true, rail: 1 });
 
-  expect(() => new SurfaceRegistry([home, declared('a', { route: 'x' }), declared('b', { route: 'x' })])).toThrow(RegistryClash);
-  expect(() => new SurfaceRegistry([home, declared('a'), declared('a', { route: 'other' })])).toThrow(RegistryClash);
-  expect(() => new SurfaceRegistry([declared('a', { rail: 1 })])).toThrow(RegistryClash);
-  expect(() => new SurfaceRegistry([home, declared('b', { home: true, rail: 2 })])).toThrow(RegistryClash);
-  expect(() => new SurfaceRegistry([home, declared('a', { under: 'nowhere' })])).toThrow(RegistryClash);
-  expect(() => new SurfaceRegistry([home, declared('branch')])).toThrow(RegistryClash);
+  expect(() => of(home, declared('a', { route: 'x' }), declared('b', { route: 'x' }))).toThrow(RegistryClash);
+  expect(() => of(home, declared('a'), declared('b', { formerly: 'a' }))).toThrow(RegistryClash);
+  expect(() => of(home, declared('b', { home: true, rail: 2 }))).toThrow(RegistryClash);
+  expect(() => of(declared('a', { home: true }))).toThrow(RegistryClash);
+  expect(() => of(home, declared('branch'))).toThrow(RegistryClash);
 });
 
 test('a section registered on the fly joins the rail and answers its route until its disposer runs', () => {
-  const surfaces = new SurfaceRegistry([
-    declared('mail', { rail: 10, home: true }),
-    declared('app', { route: 'p', nested: true, remembers: false }),
-  ]);
+  const surfaces = of(declared('mail', { rail: 10, home: true }), declared('app', { route: 'p', nested: true, remembers: false }));
   const params = { project: 'runlith', app: 'crm', view: 'deals' };
   const section = declared('app/crm/deals', { route: 'p/crm/deals', rail: 100, remembers: false });
 
@@ -101,7 +99,7 @@ test('a section registered on the fly joins the rail and answers its route until
 });
 
 test('a visit remembers a place only on the surfaces that declared it', () => {
-  const surfaces = new SurfaceRegistry([declared('home', { route: '', remembers: false, home: true, rail: 1 }), declared('mail')]);
+  const surfaces = of(declared('home', { route: '', remembers: false, home: true, rail: 1 }), declared('mail'));
   const visits = new Visits(makeStorage(), surfaces);
   const five = { ...project, id: 5, name: '5' };
 

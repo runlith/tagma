@@ -180,12 +180,9 @@ export function asAgentSkills<TCtx>(discovered: readonly DiscoveredSkill[]): Age
     id: skill.name,
     description: skill.whenToUse ? `${skill.description} Use when: ${skill.whenToUse}` : skill.description,
     location: skill.location,
-    references: skill.references.map((reference) => ({
-      name: reference.name,
-      description: reference.description,
-      text: () => currentText(reference.path, skill.bound),
-    })),
+    references: skill.references.map(({ name, description }) => ({ name, description })),
     instructions: () => currentBody(skill.path, skill.bound),
+    reference: (name) => currentReference(skill, name),
   }));
 }
 
@@ -199,6 +196,13 @@ const currentText = (file: string, bound: SkillBound | undefined) =>
     catch: (cause) =>
       new AgentSkillUnreadable({ reason: `${file} cannot be read: ${cause instanceof Error ? cause.message : String(cause)}` }),
   });
+
+const currentReference = Effect.fn('SkillDirectories.currentReference')(function* (skill: DiscoveredSkill, name: string) {
+  if (path.basename(name) !== name) {
+    return yield* new AgentSkillUnreadable({ reason: `${name} is not a reference name of ${skill.name}.` });
+  }
+  return yield* currentText(path.join(skill.location, REFERENCES_DIRECTORY, `${name}.md`), skill.bound);
+});
 
 const currentBody = Effect.fn('SkillDirectories.currentBody')(function* (file: string, bound: SkillBound | undefined) {
   const raw = yield* currentText(file, bound);

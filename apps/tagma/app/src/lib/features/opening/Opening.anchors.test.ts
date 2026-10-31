@@ -5,7 +5,7 @@ import type { Resolver } from '@runlith/layer/key';
 import { makeRouterWithLog } from '@runlith/layer/testing';
 import { expect, test } from 'vitest';
 import type { LinkHow, LinkPlace } from './Link.js';
-import { LinkRegistry } from './LinkRegistry.js';
+import { testLinks } from '$lib/app/testing.js';
 import { Opening } from './Opening.svelte.js';
 
 test('the one anchor listener opens declared anchors by the rule, takes modified clicks on app routes inside the app, and leaves the rest to the page', () => {
@@ -16,19 +16,18 @@ test('the one anchor listener opens declared anchors by the rule, takes modified
     icon: PanelRight,
     open: (_app, link) => void opened.push([link.target, how]),
   });
-  const kinds = new LinkRegistry([
-    {
-      links: [
-        {
-          kind: 'site',
-          what: () => 'site',
-          beside: place('beside'),
-          full: place('full'),
-          anchor: (_app: Resolver, href: string) => (href.startsWith('https://example.com/') ? { kind: 'site', target: href } : null),
-        },
-      ] as never,
-    },
-  ]);
+  const kinds = testLinks(
+    [
+      {
+        kind: 'site',
+        what: () => 'site',
+        beside: place('beside'),
+        full: place('full'),
+        anchor: (_app: Resolver, href: string) => (href.startsWith('https://example.com/') ? { kind: 'site', target: href } : null),
+      },
+    ] as never,
+    [],
+  );
   const opening = new Opening(kinds, {} as never, {} as never, {} as never, new Host('desktop', 'macos'));
   const detach = opening.attach({ resolve: () => undefined as never });
   const stop = opening.listen(router);
@@ -77,20 +76,19 @@ test('an app route a kind owns stays the page’s click, opens beside on the mod
     icon: PanelRight,
     open: (_app, link) => void opened.push([link.target, how]),
   });
-  const kinds = new LinkRegistry([
-    {
-      links: [
-        {
-          kind: 'note',
-          what: () => 'note',
-          beside: place('beside'),
-          full: place('full'),
-          route: (_app: Resolver, anchor: HTMLAnchorElement) =>
-            anchor.dataset['note'] === undefined ? null : { kind: 'note', target: anchor.dataset['note'] },
-        },
-      ] as never,
-    },
-  ]);
+  const kinds = testLinks(
+    [
+      {
+        kind: 'note',
+        what: () => 'note',
+        beside: place('beside'),
+        full: place('full'),
+        route: (_app: Resolver, anchor: HTMLAnchorElement) =>
+          anchor.dataset['note'] === undefined ? null : { kind: 'note', target: anchor.dataset['note'] },
+      },
+    ] as never,
+    [],
+  );
   const opening = new Opening(kinds, {} as never, { contextProject: null } as never, {} as never, new Host('desktop', 'macos'));
   const detach = opening.attach({ resolve: () => undefined as never });
   const stop = opening.listen(router);

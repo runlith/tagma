@@ -1,6 +1,7 @@
 import type { Project } from '@tagma/server/graph/contract/wire/rows';
-import { RegistryClash, clashOf } from '@runlith/chat-ui/RegistryClash';
+import { RegistryClash, clashOf } from '@runlith/roster/RegistryClash';
 import { Service } from '@runlith/layer/key';
+import { Point } from '@runlith/layer/Point';
 import type { Component, Snippet } from 'svelte';
 import { SvelteMap } from 'svelte/reactivity';
 
@@ -35,9 +36,64 @@ export type SurfaceMark = Component<{ project: Project; children: Snippet }>;
 
 export type RouteParams = Readonly<Record<string, string | undefined>>;
 
-export type SurfacesModule = { readonly surfaces: readonly SurfaceDeclaration[] };
-
 const RESERVED: readonly string[] = ['branch', 'surface'];
+
+const claimsOf = (declaration: SurfaceDeclaration): readonly string[] => {
+  if (RESERVED.includes(declaration.surface)) {
+    throw new RegistryClash({
+      message: `Surface "${declaration.surface}" is a name the visit record keeps for itself.`,
+      holders: [declaration.surface],
+    });
+  }
+  if (declaration.home === true && declaration.rail === undefined) {
+    throw new RegistryClash({
+      message: `The home surface "${declaration.surface}" has no place in the rail.`,
+      holders: [declaration.surface],
+    });
+  }
+  return [
+    `Surface "${declaration.surface}"`,
+    ...(declaration.formerly === undefined ? [] : [`Surface "${declaration.formerly}"`]),
+    `Route "${declaration.route}"`,
+    ...(declaration.place === undefined ? [] : [`Route "${declaration.place}"`]),
+    ...(declaration.home === true ? ['The home surface'] : []),
+  ];
+};
+
+export const Surfaces = Point.define<SurfaceDeclaration>()('Surfaces', {
+  tier: 'app',
+  key: (declaration) => declaration.surface,
+  claims: claimsOf,
+});
+
+type SurfaceIndex = {
+  readonly items: readonly SurfaceDeclaration[];
+  readonly bySurface: ReadonlyMap<Surface, SurfaceDeclaration>;
+  readonly former: ReadonlyMap<Surface, Surface>;
+  readonly byRoute: ReadonlyMap<string, SurfaceDeclaration>;
+  readonly rail: readonly SurfaceDeclaration[];
+  readonly home: Surface;
+};
+
+const indexOf = (items: readonly SurfaceDeclaration[]): SurfaceIndex => {
+  const bySurface = new Map<Surface, SurfaceDeclaration>();
+  const former = new Map<Surface, Surface>();
+  const byRoute = new Map<string, SurfaceDeclaration>();
+  for (const declaration of items) {
+    bySurface.set(declaration.surface, declaration);
+    if (declaration.formerly !== undefined) former.set(declaration.formerly, declaration.surface);
+    byRoute.set(declaration.route, declaration);
+    if (declaration.place !== undefined) byRoute.set(declaration.place, declaration);
+  }
+  return {
+    items,
+    bySurface,
+    former,
+    byRoute,
+    rail: items.filter((one) => one.rail !== undefined).toSorted((left, right) => (left.rail ?? 0) - (right.rail ?? 0)),
+    home: items.find((one) => one.home === true)?.surface ?? '',
+  };
+};
 
 export const withBranch = (path: string, branch: string | null): string =>
   branch === null ? path : `${path}?branch=${encodeURIComponent(branch)}`;
@@ -54,78 +110,52 @@ const memberRoute = (routeId: string, params: RouteParams): string | null => {
 };
 
 export class SurfaceRegistry extends Service<SurfaceRegistry>()('SurfaceRegistry', { tier: 'app' }) {
-  readonly home: Surface;
-  readonly root: Surface;
+  static *make() {
+    return new SurfaceRegistry(yield* Surfaces);
+  }
 
-  private readonly fixed: readonly SurfaceDeclaration[];
-  private readonly fixedRail: readonly SurfaceDeclaration[];
-  private readonly bySurface = new Map<Surface, SurfaceDeclaration>();
-  private readonly former = new Map<Surface, Surface>();
-  private readonly byRoute = new Map<string, SurfaceDeclaration>();
+  private indexed: SurfaceIndex | undefined;
   private readonly members = new SvelteMap<Surface, SurfaceDeclaration>();
   private readonly memberRoutes = new SvelteMap<string, SurfaceDeclaration>();
 
-  constructor(declarations: readonly SurfaceDeclaration[]) {
+  constructor(private readonly surfaces: Point<SurfaceDeclaration>) {
     super();
-    for (const declaration of declarations) {
-      if (RESERVED.includes(declaration.surface)) {
-        throw new RegistryClash({
-          message: `Surface "${declaration.surface}" is a name the visit record keeps for itself.`,
-          holders: [declaration.surface],
-        });
-      }
-      if (this.bySurface.has(declaration.surface)) {
-        throw new RegistryClash({ message: `Surface "${declaration.surface}" is declared twice.`, holders: [declaration.surface] });
-      }
-      this.bySurface.set(declaration.surface, declaration);
-      for (const route of [declaration.route, ...(declaration.place === undefined ? [] : [declaration.place])]) {
-        const claimant = this.byRoute.get(route);
-        if (claimant !== undefined) throw clashOf(`Route "${route}"`, claimant.surface, declaration.surface);
-        this.byRoute.set(route, declaration);
-      }
-    }
-    for (const declaration of declarations) {
-      if (declaration.formerly !== undefined) {
-        const holder = this.bySurface.get(declaration.formerly)?.surface ?? this.former.get(declaration.formerly);
-        if (holder !== undefined) throw clashOf(`Surface "${declaration.formerly}"`, holder, declaration.surface);
-        this.former.set(declaration.formerly, declaration.surface);
-      }
-      if (declaration.under !== undefined && !this.bySurface.has(declaration.under)) {
-        throw new RegistryClash({
-          message: `Surface "${declaration.surface}" stands under "${declaration.under}", which is not declared.`,
-          holders: [declaration.surface],
-        });
-      }
-    }
-    const homes = declarations.filter((one) => one.home === true);
-    if (declarations.length > 0 && homes.length !== 1) {
-      throw new RegistryClash({
-        message: `Exactly one surface is the home, ${homes.length} declare it.`,
-        holders: homes.map((one) => one.surface),
-      });
-    }
-    const home = homes[0];
-    if (home !== undefined && home.rail === undefined) {
-      throw new RegistryClash({ message: `The home surface "${home.surface}" has no place in the rail.`, holders: [home.surface] });
-    }
-    this.fixed = declarations;
-    this.fixedRail = declarations.filter((one) => one.rail !== undefined).toSorted((left, right) => (left.rail ?? 0) - (right.rail ?? 0));
-    this.home = home?.surface ?? '';
-    this.root = this.byRoute.get('')?.surface ?? this.home;
+  }
+
+  private get index(): SurfaceIndex {
+    const items = this.surfaces.items;
+    if (this.indexed?.items !== items) this.indexed = indexOf(items);
+    return this.indexed;
+  }
+
+  private get bySurface(): ReadonlyMap<Surface, SurfaceDeclaration> {
+    return this.index.bySurface;
+  }
+
+  private get byRoute(): ReadonlyMap<string, SurfaceDeclaration> {
+    return this.index.byRoute;
+  }
+
+  get home(): Surface {
+    return this.index.home;
+  }
+
+  get root(): Surface {
+    return this.byRoute.get('')?.surface ?? this.home;
   }
 
   get declared(): readonly SurfaceDeclaration[] {
-    return this.fixed;
+    return this.index.items;
   }
 
   get all(): readonly SurfaceDeclaration[] {
-    return this.members.size === 0 ? this.fixed : [...this.fixed, ...this.members.values()];
+    return this.members.size === 0 ? this.declared : [...this.declared, ...this.members.values()];
   }
 
   get rail(): readonly SurfaceDeclaration[] {
-    if (this.members.size === 0) return this.fixedRail;
+    if (this.members.size === 0) return this.index.rail;
     const placed = [...this.members.values()].filter((one) => one.rail !== undefined);
-    return [...this.fixedRail, ...placed].toSorted((left, right) => (left.rail ?? 0) - (right.rail ?? 0));
+    return [...this.index.rail, ...placed].toSorted((left, right) => (left.rail ?? 0) - (right.rail ?? 0));
   }
 
   register(declaration: SurfaceDeclaration): () => void {
@@ -146,7 +176,7 @@ export class SurfaceRegistry extends Service<SurfaceRegistry>()('SurfaceRegistry
   named(stored: string): Surface {
     const cut = stored.indexOf('/');
     const head = cut === -1 ? stored : stored.slice(0, cut);
-    const now = this.former.get(head);
+    const now = this.index.former.get(head);
     return now === undefined ? stored : `${now}${stored.slice(head.length)}`;
   }
 

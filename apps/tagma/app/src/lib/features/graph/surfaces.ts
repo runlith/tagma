@@ -1,9 +1,9 @@
 import Share2 from '@lucide/svelte/icons/share-2';
-import type { SurfacesModule } from '$lib/features/workspace/surface.js';
+import type { SurfaceDeclaration } from '$lib/features/workspace/surface.js';
 import JournalIcon from './JournalIcon.svelte';
 import KnowledgeIcon from './KnowledgeIcon.svelte';
 
-export const surfaces: SurfacesModule['surfaces'] = [
+export const surfaces: readonly SurfaceDeclaration[] = [
   {
     surface: 'outline',
     route: '',

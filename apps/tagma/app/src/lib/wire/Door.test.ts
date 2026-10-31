@@ -1,14 +1,16 @@
 import { ThreadId } from '@tagma/server/platform/contract/wire/thread';
 import { ThreadEntryUnreadable } from '@runlith/agent/transcript/kinds';
-import { createFeedKinds } from '$lib/features/threads/native/feedRecords.js';
+import { testWireKinds } from '$lib/features/threads/native/testing.js';
 import { Effect, Schema } from 'effect';
 import { PAIRING_ENDPOINT, PairedAnswer } from '@tagma/server/remote/contract/wire/access';
 import { expect, test } from 'vitest';
-import { makeRouter } from '@runlith/layer/testing';
+import { THREADS_ENTRY_KINDS } from '@tagma/server/threads/contract/wire/entryKinds';
+import { makePoint, makeRouter } from '@runlith/layer/testing';
 import { Refusal } from './refusal.js';
 import { Door } from './Door.js';
 import { loadOperations } from './operation.js';
 import { ServerOrigin } from './ServerOrigin.svelte.js';
+import { readingOf, WireEntryKinds } from './WireEntryKinds.js';
 
 await loadOperations();
 
@@ -31,7 +33,7 @@ test.each([
 });
 
 test('evidence decodes installed product entries and retains a typed diagnostic for an unknown kind', async () => {
-  const door = new Door(fetch, new ServerOrigin('http://tagma.test'), makeRouter(), createFeedKinds().wire());
+  const door = new Door(fetch, new ServerOrigin('http://tagma.test'), makeRouter(), readingOf(testWireKinds()));
   const entry = { type: 'transport', id: 'transport:1', from: 'terminal', to: 'acp', occurredAt: '' };
   answer = () => Response.json({ status: 'found', entry });
   expect(await door.perform('read_thread_entry', { threadId: ThreadId.make('t1'), entryId: entry.id }, {})).toEqual({
@@ -44,6 +46,29 @@ test('evidence decodes installed product entries and retains a typed diagnostic 
   if (read.status !== 'found') return;
   expect(read.entry).toBeInstanceOf(ThreadEntryUnreadable);
   if (read.entry instanceof ThreadEntryUnreadable) expect(read.entry.refusal).toMatchObject({ type: 'not-installed', id: 'other' });
+});
+
+test('a kind contributed after the door was built is read by its next request, and a kind the agent core reads is refused', async () => {
+  const kinds = makePoint(WireEntryKinds);
+  const door = new Door(fetch, new ServerOrigin('http://tagma.test'), makeRouter(), readingOf(kinds));
+  const entry = { type: 'transport', id: 'transport:1', from: 'terminal', to: 'acp', occurredAt: '' };
+  answer = () => Response.json({ status: 'found', entry });
+  const before = await door.perform('read_thread_entry', { threadId: ThreadId.make('t1'), entryId: entry.id }, {});
+  expect(before.status === 'found' && before.entry).toBeInstanceOf(ThreadEntryUnreadable);
+
+  kinds.register('threads', ...THREADS_ENTRY_KINDS);
+  expect(await door.perform('read_thread_entry', { threadId: ThreadId.make('t1'), entryId: entry.id }, {})).toEqual({
+    status: 'found',
+    entry,
+  });
+  const refused = (() => {
+    try {
+      kinds.register('other', { type: 'message', schema: THREADS_ENTRY_KINDS[0]!.schema });
+    } catch (thrown) {
+      return thrown;
+    }
+  })();
+  expect(refused).toMatchObject({ _tag: 'CoreEntryKindRefused', type: 'message' });
 });
 
 test('an operation input with an undefined optional reaches the server without that key', async () => {

@@ -31,4 +31,4 @@ sources:
 - Waiting is observation with a budget: its expiry does not touch the work, and the operator's words or a due report end it earlier.
 - Each reading names others who typed into the execution.
 
-**Limits.** Reading gives nothing: observing another's work does not make the agent its holder. Only executions of its own project are visible.
+**Limits.** Reading gives nothing: observing another's work does not make the agent its holder. Each call reads one project's executions; `project` selects it, defaulting to the calling thread's home.

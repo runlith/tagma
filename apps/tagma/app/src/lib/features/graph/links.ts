@@ -5,7 +5,7 @@ import { blockAddress } from '@tagma/server/graph/contract/wire/references';
 import type { Resolver } from '@runlith/layer/key';
 import { Router } from '@runlith/layer/Router';
 import { Beside } from '$lib/features/opening/Beside.js';
-import type { Link, LinkItems, LinkKind, LinkFrom } from '$lib/features/opening/Link.js';
+import { type Link, type LinkItems, type LinkKind, type LinkFrom, linkKinds } from '$lib/features/opening/Link.js';
 import { type BlockLens, languageTag } from '$lib/features/workspace/address.js';
 import { Addresses } from '$lib/features/workspace/Addresses.js';
 import type { GraphAim } from '$lib/features/workspace/GraphRung.js';
@@ -18,17 +18,17 @@ import { ProjectTree } from './ProjectTree.svelte.js';
 import { TagCatalog } from './TagCatalog.svelte.js';
 import { START_WORDS, startable, ThreadWork } from './ThreadWork.svelte.js';
 
-export const BLOCK_LINK = 'block';
+const BLOCK_LINK = 'block';
 
-export type BlockTarget = BlockLens & { readonly name: string; readonly copy?: GraphAim | undefined };
+type BlockTarget = BlockLens & { readonly name: string; readonly copy?: GraphAim | undefined };
 
 export const blockLink = (target: BlockTarget, from?: LinkFrom): Link<BlockTarget> => ({ kind: BLOCK_LINK, target, from });
 
-export async function blockPlace(app: Resolver, target: BlockTarget): Promise<GraphAim | null> {
+async function blockPlace(app: Resolver, target: BlockTarget): Promise<GraphAim | null> {
   return target.copy ?? (await app.resolve(BlockTitles).copy(target.name));
 }
 
-export function knowledgeHref(app: Resolver, name: string, copy: GraphAim, lens: BlockLens = {}): string | null {
+function knowledgeHref(app: Resolver, name: string, copy: GraphAim, lens: BlockLens = {}): string | null {
   const project = app.resolve(Workspace).find(copy.projectId);
   return project === null
     ? null
@@ -133,6 +133,6 @@ const starts: LinkItems<BlockTarget> = {
   },
 };
 
-export const links = [blocks];
+export const links = linkKinds(blocks);
 
 export const items = [starts, copies];

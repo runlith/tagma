@@ -1,9 +1,9 @@
 import { Notices } from '$lib/features/notices/Service.svelte.js';
-import type { ActionsModule } from '$lib/features/workspace/action.js';
+import type { PaletteActionList } from '$lib/features/workspace/action.js';
 import { ShellOps, shellActs } from '$lib/features/workspace/ShellOps.js';
 import { SurfaceRegistry } from './surface.js';
 
-export const actions: ActionsModule['actions'] = (app) =>
+export const actions: PaletteActionList = (app) =>
   app
     .resolve(SurfaceRegistry)
     .declared.filter((entry) => entry.nested !== true)

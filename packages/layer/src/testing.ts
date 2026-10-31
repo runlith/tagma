@@ -1,5 +1,6 @@
 import { Host, type HostInput } from './Host.js';
 import type { Deferred } from './key.js';
+import { Point } from './Point.js';
 import { Platform, type PlatformCookies, type PlatformFetch, type PlatformSocket, type PlatformStorage } from './Platform.js';
 import { emptyRouteData, Router, type RouteData, type RouteId, type RouterSource } from './Router.js';
 import { Rung } from './Rung.js';
@@ -22,6 +23,14 @@ export const Visitor = {
 
 export function makeHost(at: Partial<HostInput> = {}): Host {
   return new Host(at.kind ?? 'tab', at.os ?? 'unknown', { touch: at.touch, installed: at.installed });
+}
+
+type PointKey<Item> = { readonly id: string; readonly definition: Parameters<typeof Point.over<Item>>[1] };
+
+export function makePoint<Item>(key: PointKey<Item>, ...items: readonly NoInfer<Item>[]): Point<Item> {
+  const point = Point.over<Item>(key.id, key.definition, { current: undefined });
+  if (items.length > 0) point.register('test', ...items);
+  return point;
 }
 
 export function makeDeferred<T>(value: T): Deferred<T> {

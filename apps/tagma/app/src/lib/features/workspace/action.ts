@@ -1,5 +1,6 @@
 import type { Project } from '@tagma/server/graph/contract/wire/rows';
 import type { KeyClass, Resolver } from '@runlith/layer/key';
+import { Point } from '@runlith/layer/Point';
 import type { Component } from 'svelte';
 import type { Surface } from '$lib/features/workspace/surface.js';
 
@@ -23,4 +24,8 @@ export type PaletteAction = {
   run(env: ActionEnv): void | Promise<void>;
 };
 
-export type ActionsModule = { readonly actions: readonly PaletteAction[] | ((app: Resolver) => readonly PaletteAction[]) };
+export type PaletteActionList = readonly PaletteAction[] | ((app: Resolver) => readonly PaletteAction[]);
+
+export type ActionSet = { readonly id: string; readonly actions: PaletteActionList };
+
+export const PaletteActions = Point.define<ActionSet>()('PaletteActions', { tier: 'app', key: (set) => set.id });

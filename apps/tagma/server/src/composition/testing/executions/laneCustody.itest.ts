@@ -2,55 +2,21 @@ import { describe, expect } from 'bun:test';
 import { layer } from '@runlith/effect-test';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import * as BunPath from '@effect/platform-bun/BunPath';
-import { Context, Effect, Fiber, Layer, Ref, Stream } from 'effect';
+import { Context, Effect, Fiber, Layer, Stream } from 'effect';
 import { endpointConnection } from '@runlith/executions/posix/endpoint';
 import { HostRegistration } from '@runlith/executions/HostRegistration';
-import { hostAddress } from '@runlith/executions/hostAddress';
 import { InstallationId, HostRequestKey } from '@runlith/executions/protocol/execution';
 import { ByteOffset } from '@runlith/executions/protocol/record';
-import { MachineStore } from '../../../platform/contract/service/store.js';
-import { SessionIdentity } from '../../../platform/contract/wire/session.js';
 import { ThreadId } from '../../../platform/contract/wire/thread.js';
 import { principalOf } from '../../../executions/terminals/principals.js';
 import { targetIdentity, targetKeyOf } from '../../../executions/terminals/subjectPolicy.js';
 import type { TerminalStart } from '../../../executions/contract/service/terminals.js';
-import { guardedFloor } from '../../../executions/testing/guardedFloor.js';
-import { executionHost, executionPolicy, terminalHostCustody } from '../../../executions/testing/doubles.js';
-import { shippedChain } from '../../../platform/store/chain.js';
-import { sessionIdentity } from '../../../external-harnesses/testing/builtin.js';
-import { fixtureMigrations } from '../migrations.js';
-import { hostFixtureLayer, makeHostCase } from './fixture.js';
+import { hostFixtureLayer, makeTerminalFloor } from './fixture.js';
 
 const installation = InstallationId.make('held-stdin');
 const thread = ThreadId.make('held-stdin-thread');
 const platform = Layer.mergeAll(BunFileSystem.layer, BunPath.layer);
-const makeFixture = Effect.gen(function* () {
-  const raised = yield* makeHostCase({ name: 'pipe', installation, threads: [thread] });
-  const connection = yield* executionHost(yield* hostAddress(raised.canonical, 'held-stdin'));
-  const store = Context.get(raised.context, MachineStore);
-  const custody = yield* terminalHostCustody({
-    executions: connection.port,
-    welcome: connection.welcome,
-    installation,
-    state: raised.canonical,
-    offered: {
-      bundle: raised.bundle.root,
-      digest: raised.bundle.manifest.identity.digest,
-      database: store.schema,
-      application: shippedChain(fixtureMigrations),
-      policy: executionPolicy(),
-      lifetime: 'with-parent',
-    },
-  });
-  yield* Ref.set(connection.opened, custody.opened);
-  const { terminals } = yield* guardedFloor({
-    port: connection.port,
-    guarded: custody.guarded(),
-    db: store.db,
-    installation,
-  }).pipe(Effect.provide(Context.add(raised.context, SessionIdentity, sessionIdentity)));
-  return { ...raised, terminals };
-});
+const makeFixture = makeTerminalFloor({ name: 'pipe', installation, threads: [thread] });
 class Fixture extends Context.Service<Fixture, Effect.Success<typeof makeFixture>>()('testing/executions/HeldStdin') {}
 const fixture = Layer.effect(Fixture, makeFixture).pipe(
   Layer.provide(hostFixtureLayer('held-stdin')),

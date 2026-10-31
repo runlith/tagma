@@ -14,6 +14,8 @@ import { testDoor } from '$lib/wire/testing.js';
 import { ThreadChats } from '../ThreadChats.js';
 import { SurfaceChoices } from '../external/Surface.svelte.js';
 import { ThreadRung } from '$lib/features/workspace/ThreadRung.js';
+import { ProductRecords } from '../native/records.js';
+import { testRecords } from '../native/testing.js';
 import { ThreadEffects } from './ThreadEffects.js';
 import { ThreadFeed } from './ThreadFeed.svelte.js';
 
@@ -34,6 +36,7 @@ function mount(port: TestConnection<WireThread>): TestApp {
       Layer.of(SettingsRepo, { catalog: stubFamily() } as never),
       SurfaceChoices,
       Layer.of(Door, testDoor()),
+      Layer.of(ProductRecords, testRecords()),
     ),
   );
   return app;

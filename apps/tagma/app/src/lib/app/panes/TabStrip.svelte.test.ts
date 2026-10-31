@@ -5,10 +5,9 @@ import { Host } from '@runlith/layer/Host';
 import { Layer } from '@runlith/layer/Layer';
 import { flushSync } from 'svelte';
 import { afterEach, expect, test, vi } from 'vitest';
-import { mountShell, type TestApp } from '$lib/app/testing.js';
+import { mountShell, testLinks, type TestApp } from '$lib/app/testing.js';
 import { Keymap } from '$lib/app/keys/Keymap.svelte.js';
 import type { LinkKind, LinkPlace } from '$lib/features/opening/Link.js';
-import { LinkRegistry } from '$lib/features/opening/LinkRegistry.js';
 import { Opening } from '$lib/features/opening/Opening.svelte.js';
 import { Notices } from '$lib/features/notices/Service.svelte.js';
 import { SidePanes } from './SidePanes.svelte.js';
@@ -42,7 +41,7 @@ test('the strip opens the active tab’s thing in the full place of its link, an
   });
   const notices = { refusal: vi.fn() } as unknown as Notices;
   const opening = new Opening(
-    new LinkRegistry([{ links: [kind('note'), kind('talk')] as never }]),
+    testLinks([kind('note'), kind('talk')] as never, []),
     {} as never,
     {} as never,
     notices,

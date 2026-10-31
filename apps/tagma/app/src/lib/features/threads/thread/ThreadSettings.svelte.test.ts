@@ -20,7 +20,8 @@ import { feedSnapshot, testLive, testThreadChat, testThreadSlot, commitRoute } f
 import type { UsageAccounts } from '$lib/features/providers/usage/Accounts.svelte.js';
 import { Notices } from '$lib/features/notices/Service.svelte.js';
 import { Favorites } from '../Favorites.svelte.js';
-import { modelCommand, reasoningCommand } from '../native/commands/model.commands.js';
+import * as modelCommands from '../native/commands/model.commands.js';
+import { declaredCommand } from '../native/testing.js';
 import type { ThreadSlot } from '../ThreadSlot.svelte.js';
 import { ThreadSettings } from './ThreadSettings.svelte.js';
 
@@ -210,8 +211,7 @@ it.live(
       door.setModelSettings.mockResolvedValue({ status: 'ok' });
 
       const opened = yield* Effect.promise(() => open({ ...thread('k1'), reasoning: 'high' } as WireThread));
-      const command = (name: 'model' | 'reasoning') =>
-        name === 'model' ? modelCommand(opened.views, opened.panel) : reasoningCommand(opened.views, opened.panel);
+      const command = (name: 'model' | 'reasoning') => declaredCommand(modelCommands.commands, name, opened);
       expect(command('model')?.value).toBe('Opus 5.5');
       expect(command('reasoning')?.value).toBe('High');
       yield* command('model')!.run({ gesture: 'send', query: 'sol' });

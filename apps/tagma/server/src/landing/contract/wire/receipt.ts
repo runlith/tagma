@@ -110,7 +110,7 @@ const Unrecorded = Schema.Struct({ step: Schema.Literals(UNRECORDED_STEPS), reas
 const UNATTRIBUTED = Schema.optional(
   Schema.Array(Schema.String).annotate({
     description:
-      'Paths in this checkout that changed while a command of this session, or of a session it took, ran, and that no session’s record claims — another writer ran beside it, a restart cut its window, or its lines could not be written — and that still stand changed, left outside this commit. Overlap proves no author: read_changes names every session whose command met the change; name a path in `paths` and `whole` only when it is this session’s work.',
+      'Paths with unowned changes left outside this commit: selected paths whose nobody’s lines remain on disk, and unselected paths that changed while a command of this session, or of a session it took, ran without proven authorship. read_changes explains whose lines or command observations remain; a command’s observation proves no author. Name a path in `paths` and `whole` only when it is this session’s work.',
   }),
 );
 

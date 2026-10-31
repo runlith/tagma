@@ -33,13 +33,17 @@ export function prepareLinks(
   const seen = new Set<Source>();
   const pending = [...valuesOf(state.snapshot.live)];
   const existence = state.snapshot.existence;
-  const creators = absent && typeof existence !== 'string' ? (lookup(state.snapshot.byRow, existence.row) ?? []) : [];
+  const creators = !absent
+    ? []
+    : typeof existence === 'string'
+      ? [...new Set(regions.flatMap((region) => region.lines.flatMap((line) => (line.mark === 'external' ? [line.unit] : []))))]
+      : (lookup(state.snapshot.byRow, existence.row) ?? []).map((source) => source.serial);
   while (pending.length > 0) {
     const source = pending.pop()!;
     if (seen.has(source)) continue;
     seen.add(source);
     if (budget.expired(1)) return { reason: 'budget' };
-    for (const creator of creators) addLink(links, source.serial, creator.serial, false);
+    for (const creator of creators) addLink(links, source.serial, creator, false);
     const parents =
       source.displaced.length > 0
         ? source.displaced
@@ -52,9 +56,17 @@ export function prepareLinks(
       pending.push(parent);
     }
   }
+  const units = new Map<string, number>();
+  for (const region of regions)
+    for (const line of region.lines) {
+      if (budget.expired(1)) return { reason: 'budget' };
+      if (line.mark !== 'external' && !units.has(line.mark.holder)) units.set(line.mark.holder, line.unit);
+    }
   const sources: LinkSource[] = [];
   for (const source of seen) {
     if (typeof source.mark === 'string') continue;
+    const unit = units.get(source.mark.holder);
+    if (unit !== undefined) addLink(links, unit, source.serial);
     const affected: TextSlice[] = [];
     for (const rope of [source.removed, source.origins])
       for (const run of runsOf(rope)) affected.push(sliceText(run.source.shared, run.offset, run.offset + run.count));

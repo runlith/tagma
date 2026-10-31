@@ -1,13 +1,13 @@
 import type { PageId } from '@tagma/server/browser/contract/wire/ids';
 import type { SidePanes } from '$lib/app/panes/SidePanes.svelte.js';
-import { type PaneContent, type PanesModule, projectScopedId, projectScopedOf } from '$lib/shared/panes/pane.js';
+import { type PaneContent, type PaneKind, projectScopedId, projectScopedOf } from '$lib/shared/panes/pane.js';
 import BrowserOffer from './BrowserOffer.svelte';
 import BrowserTitle from './BrowserTitle.svelte';
 import { OpenPages } from './OpenPages.svelte.js';
 
 export const BROWSER_PANE = 'browser';
 
-export type Shown = { readonly project: number; readonly page: PageId };
+type Shown = { readonly project: number; readonly page: PageId };
 
 export const shownId = (shown: Shown): string => projectScopedId(shown.project, shown.page);
 
@@ -18,7 +18,7 @@ export const shownOf = (id: string | null): Shown | null => {
 
 export const browserPane = (shown: Shown | null): PaneContent => ({ kind: BROWSER_PANE, id: shown === null ? null : shownId(shown) });
 
-export const panes: PanesModule['panes'] = [
+export const panes: readonly PaneKind[] = [
   {
     kind: BROWSER_PANE,
     noun: 'page',

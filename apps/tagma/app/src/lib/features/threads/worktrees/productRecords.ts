@@ -8,7 +8,7 @@ import { WORKTREE_MOVE, worktreeMove, type WorktreeMove } from './worktreeMove.j
 import { WORKTREE_PLACE, type WorktreePlace } from './worktreePlace.js';
 
 export const worktreeMoveId = productId<WorktreeMove>(WORKTREE_MOVE);
-export const worktreePlaceId = productId<WorktreePlace>(WORKTREE_PLACE);
+const worktreePlaceId = productId<WorktreePlace>(WORKTREE_PLACE);
 export const worktreeMoveKind = productKind(worktreeMoveId);
 export const worktreePlaceKind = productKind(worktreePlaceId);
 export const entryKinds = WORKTREES_ENTRY_KINDS;

@@ -3,6 +3,7 @@
   import Search from '@lucide/svelte/icons/search';
   import SlidersHorizontal from '@lucide/svelte/icons/sliders-horizontal';
   import { Host } from '@runlith/layer/Host';
+  import PointView from '@runlith/layer/svelte/PointView.svelte';
   import { untrack } from 'svelte';
   import { Router } from '@runlith/layer/Router';
   import { standFound } from '$lib/features/settings/found.js';
@@ -50,10 +51,12 @@
 
   type Known = { readonly id: string; readonly title: string; readonly description: string; readonly place: SectionPlace | null };
 
-  const LOCAL_SECTIONS: readonly Known[] = registry.sections.flatMap((section) =>
-    section.local === undefined || (section.hosts !== undefined && !section.hosts.includes(host.kind))
-      ? []
-      : [{ id: section.id, ...section.local, place: section.place ?? null }],
+  const localSections = $derived<readonly Known[]>(
+    registry.sections.flatMap((section) =>
+      section.local === undefined || (section.hosts !== undefined && !section.hosts.includes(host.kind))
+        ? []
+        : [{ id: section.id, ...section.local, place: section.place ?? null }],
+    ),
   );
 
   let query = $state('');
@@ -99,7 +102,7 @@
       description: section.description,
       place: registry.find(section.id)?.place ?? null,
     })),
-    ...LOCAL_SECTIONS,
+    ...localSections,
   ]);
 
   function scopeOf(sectionId: string): SettableScope {
@@ -270,6 +273,13 @@
           <View {catalog} scope={effective} {project} />
         {:else if activeId !== null}
           <KeyCard entries={catalog.entriesOf(activeId)} {catalog} scope={effective} {project} />
+        {/if}
+        {#if activeId !== null && !unread && !reading}
+          <PointView
+            point={registry.contributions}
+            only={(contribution) => contribution.section === activeId}
+            props={{ catalog, scope: effective, project }}
+          />
         {/if}
       {/if}
     </div>

@@ -39,7 +39,7 @@ function tiersOf(keys: readonly AnyKeyClass[]): readonly Tier[] {
 export type LayerItem =
   | { readonly kind: 'key'; readonly key: AnySelfMadeKeyClass }
   | { readonly kind: 'value'; readonly key: AnyKeyClass; readonly instance: object }
-  | { readonly kind: 'make'; readonly key: AnyKeyClass; readonly make: Recipe }
+  | { readonly kind: 'make'; readonly key: AnyKeyClass; readonly make: Recipe; readonly fallback?: true }
   | { readonly kind: 'deferred'; readonly key: AnyKeyClass; readonly load: LayerLoader }
   | {
       readonly kind: 'when';
@@ -148,6 +148,16 @@ export class Layer<ROut extends Out, RIn extends Want> {
     make: () => Generator<Y, InstanceOfKey<K>, unknown> | InstanceOfKey<K>,
   ): Layer<Provided<K>, ReachableFrom<K, Extract<Y, AnyKey>>> {
     return new Layer([{ kind: 'make', key: key as AnyKeyClass, make: make as Recipe }]);
+  }
+
+  static fallback<K extends AnySelfMadeKeyClass>(key: K): Layer<Provided<K>, ReachableFrom<K, Requires<K>>>;
+  static fallback<K extends AnyKeyClass | AnyDeferredKeyClass, Y extends Ask = never>(
+    key: K,
+    make: () => Generator<Y, InstanceOfKey<K>, unknown> | InstanceOfKey<K>,
+  ): Layer<Provided<K>, ReachableFrom<K, Extract<Y, AnyKey>>>;
+  static fallback(key: AnyKeyClass | AnyDeferredKeyClass, make?: Recipe): Layer<never, never> {
+    const recipe = make ?? (() => (key as AnySelfMadeKeyClass).make());
+    return new Layer<never, never>([{ kind: 'make', key: key as AnyKeyClass, make: recipe, fallback: true }]);
   }
 
   static member<O extends AnyKeyClass, M>(owner: () => O, join: (owner: InstanceOf<O>, member: M, key: AnyKeyClass) => () => void) {

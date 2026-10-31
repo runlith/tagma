@@ -4,7 +4,7 @@ import type { ModelPanelState } from '../../ModelPanelState.svelte.js';
 import type { ThreadViews } from '../../thread/ThreadViews.js';
 import type { CommandDeclaration } from '../contribution.js';
 
-export function modelCommand(views: ThreadViews, panel: ModelPanelState): ComposerSlashCommand {
+function modelCommand(views: ThreadViews, panel: ModelPanelState): ComposerSlashCommand {
   return {
     name: 'model',
     order: 40,
@@ -21,7 +21,7 @@ export function modelCommand(views: ThreadViews, panel: ModelPanelState): Compos
   };
 }
 
-export function reasoningCommand(views: ThreadViews, panel: ModelPanelState): ComposerSlashCommand {
+function reasoningCommand(views: ThreadViews, panel: ModelPanelState): ComposerSlashCommand {
   return {
     name: 'reasoning',
     order: 50,

@@ -1,4 +1,5 @@
-import { Roster } from './Roster.svelte';
+import { reactiveCell } from '@runlith/roster/cell.svelte';
+import { Roster } from '@runlith/roster/Roster';
 import type { ChatHero, ChatInterlude, ChatPin, ChatRegions } from './surface';
 
 const subject =
@@ -9,9 +10,9 @@ const subject =
 const idOf = (mount: { readonly id: string }): string => mount.id;
 
 export class FeedRegions implements ChatRegions {
-  private readonly interludeMounts = new Roster<ChatInterlude>(subject('interlude'), idOf);
-  private readonly pinMounts = new Roster<ChatPin>(subject('pin'), idOf);
-  private readonly heroMounts = new Roster<ChatHero>(subject('hero'), idOf);
+  private readonly interludeMounts = new Roster<ChatInterlude>(subject('interlude'), idOf, reactiveCell());
+  private readonly pinMounts = new Roster<ChatPin>(subject('pin'), idOf, reactiveCell());
+  private readonly heroMounts = new Roster<ChatHero>(subject('hero'), idOf, reactiveCell());
 
   get interludes(): readonly ChatInterlude[] {
     return this.interludeMounts.items;

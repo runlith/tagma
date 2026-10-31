@@ -256,7 +256,7 @@ export const makeRunClosing = Effect.fnUntraced(function* ({
 });
 
 export function withdrawnTurn(run: ThreadRunRow, thread: ThreadRow, ofRun: ThreadTranscript): readonly ThreadEventBody[] {
-  return wordsOfTurn(run, ofRun) === 1 ? turnWithdrawal(run, thread) : [];
+  return wordsOfTurn(run, ofRun) === 1 ? turnWithdrawal(run, thread, ofRun) : [];
 }
 
 export function wordsOnly(run: ThreadRunRow, ofRun: ThreadTranscript): boolean {
@@ -266,10 +266,12 @@ export function wordsOnly(run: ThreadRunRow, ofRun: ThreadTranscript): boolean {
 export function displacedTurn(run: ThreadRunRow, thread: ThreadRow, ofRun: ThreadTranscript): readonly ThreadEventBody[] {
   const said = wordsOfTurn(run, ofRun);
   if (said === 0) return [threadWithdrawalEvent(run.id, thread.history.length)];
-  return said === 1 ? turnWithdrawal(run, thread) : [];
+  return said === 1 ? turnWithdrawal(run, thread, ofRun) : [];
 }
 
-function turnWithdrawal(run: ThreadRunRow, thread: ThreadRow): readonly ThreadEventBody[] {
+function turnWithdrawal(run: ThreadRunRow, thread: ThreadRow, ofRun: ThreadTranscript): readonly ThreadEventBody[] {
+  const opening = ofRun.find(opensTurnEntry);
+  if (opening !== undefined && coreEntry(opening) && opening.type === 'signal' && opening.addressee !== 'reader') return [];
   const from = thread.history.findLastIndex(opensTurnMessage);
   return from < 0 ? [] : [threadWithdrawalEvent(run.id, from)];
 }

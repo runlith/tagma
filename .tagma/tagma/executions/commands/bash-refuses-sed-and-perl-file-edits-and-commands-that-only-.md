@@ -21,6 +21,6 @@ sources:
 - In-place file edits via `sed -i` or `perl -pi` refuse and name the files: file tools change them.
 - A command that only sleeps refuses: ending the turn waits for input at no cost, while a condition is awaited with a background loop.
 - Commands sweeping the whole shared checkout — bare `git commit` and `--amend`, `git add -A`, `git stash`, `git reset --hard`, `git checkout .`, `git restore .`, `git clean` without paths — ask the operator in the shared checkout and name the reason.
-- `git commit` in another checkout, where the session does not work, also asks the operator.
+- In another registered checkout, where the session does not work, `git commit` and `git merge --continue` raise the same committing condition.
 
 **Limits.** Only these forms are recognized. The `bash` description tells to search with `grep` and `glob`, but searching via shell does not refuse. The sleep refusal acts where the command has a background; the file-edit refusal acts where the world has file tools.

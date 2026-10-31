@@ -12,7 +12,7 @@ import { WallClock } from '$lib/features/workspace/WallClock.svelte.js';
 import { ThreadOnScreen } from '$lib/features/threads/OnScreen.svelte.js';
 import { Notices } from '$lib/features/notices/Service.svelte.js';
 import { AccountsRepo } from '$lib/features/providers/AccountsRepo.js';
-import { keyedBy, liveFeed, mountShell, testAim, testPlaces, testShellOps, type TestApp } from '$lib/app/testing.js';
+import { keyedBy, liveFeed, mountShell, testAim, testLinks, testPlaces, testShellOps, type TestApp } from '$lib/app/testing.js';
 import { Worktrees } from '$lib/features/worktrees/BoardState.svelte.js';
 import { Holdings } from '$lib/features/checkout/Holdings.svelte.js';
 import { Checkout } from '$lib/features/checkout/Selection.svelte.js';
@@ -41,7 +41,6 @@ import { Standing } from './Standing.svelte.js';
 import StatusBar from './StatusBar.svelte';
 import { WireState } from './WireState.svelte.js';
 import { Host } from '@runlith/layer/Host';
-import { LinkRegistry } from '$lib/features/opening/LinkRegistry.js';
 import { Opening } from '$lib/features/opening/Opening.svelte.js';
 
 const host = $state({
@@ -201,7 +200,7 @@ function draw(options: { at?: GraphAim | undefined } = {}): HTMLElement {
       testShellOps,
       Layer.of(
         Opening,
-        new Opening(new LinkRegistry([]), {} as never, {} as never, { refusal: vi.fn() } as never, new Host('desktop', 'macos')),
+        new Opening(testLinks([], []), {} as never, {} as never, { refusal: vi.fn() } as never, new Host('desktop', 'macos')),
       ),
       WireState,
       Layer.of(ThreadOnScreen, {

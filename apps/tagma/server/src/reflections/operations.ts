@@ -41,6 +41,7 @@ const FILING_ROUTED = {
         project: filer,
         ontoId: input.ontoId === undefined ? undefined : yield* (yield* BlockNames).idOfName(input.ontoId),
         body: input.body,
+        storage: input.storage,
       });
     }),
     answer: (filed: FiledReflection) => ({

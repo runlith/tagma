@@ -3,7 +3,7 @@ import { MCP_SERVER_LINK, type McpServerLinkTarget } from '@tagma/server/mcp/con
 import { PLUGIN_LINK, PLUGINS_FIND_LINK, type PluginLinkTarget, type PluginsFindTarget } from '@tagma/server/plugins/contract/wire/link';
 import type { Resolver } from '@runlith/layer/key';
 import { Router } from '@runlith/layer/Router';
-import type { LinkKind } from '$lib/features/opening/Link.js';
+import { type LinkKind, linkKinds } from '$lib/features/opening/Link.js';
 import { Addresses } from '$lib/features/workspace/Addresses.js';
 import { Workspace } from '$lib/features/workspace/Selection.svelte.js';
 import { idOf, PLUGINS, type Place } from './place.js';
@@ -45,4 +45,4 @@ const finds: LinkKind<PluginsFindTarget> = {
   full: { words: WORDS, icon: Blocks, open: (app, link) => opened(app, link.target.projectId, { kind: 'find', query: link.target.query }) },
 };
 
-export const links = [plugins, servers, finds];
+export const links = linkKinds(plugins, servers, finds);

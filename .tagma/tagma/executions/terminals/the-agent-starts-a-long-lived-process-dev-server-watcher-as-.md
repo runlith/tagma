@@ -36,4 +36,4 @@ sources:
 - Custody lies with the starter; a pty terminal in the project place immediately becomes a tab in that place's panel.
 - The stop answers with three groups: confirmed endings, resources that exactly survived the stop, and what could not be measured.
 
-**Limits.** Starting and stopping ask the operator in review mode. A sandbox guest serves no held executions and refuses instead of starting work on the machine. Terminal tools exist only for agents with the terminals capability.
+**Limits.** Starting and stopping ask the operator in review mode. `project` addresses the execution's project without moving the calling thread's home; custody and destination checks still apply. A sandbox guest serves no held executions and refuses instead of starting work on the machine. Terminal tools exist only for agents with the terminals capability.

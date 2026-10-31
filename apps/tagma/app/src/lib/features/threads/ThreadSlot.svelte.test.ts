@@ -20,14 +20,14 @@ import { Scope } from '@runlith/layer/Scope';
 import { makeStorage } from '@runlith/layer/testing';
 import { stubFamily, stubMutation } from '@runlith/query/testing';
 import { feedSnapshot, testLive, testThreadChat, testThreadSlot, testThreadSlots, commitRoute, routeOf } from '$lib/app/slotWorld.js';
-import { testShelf } from './native/testing.js';
+import { declaredCommand, testShelf } from './native/testing.js';
 import type { LiveConnection } from '$lib/wire/Live.js';
-import { agentCommand } from './native/commands/agent.commands.js';
-import { compactCommand } from './native/commands/compact.commands.js';
-import { delegationCommand } from './native/commands/delegation.commands.js';
+import * as agentCommands from './native/commands/agent.commands.js';
+import * as compactCommands from './native/commands/compact.commands.js';
+import * as delegationCommands from './native/commands/delegation.commands.js';
 import { modeCycle } from './native/commands/mode.commands.js';
-import { recapCommand } from './native/commands/recap.commands.js';
-import { refreshInstructionsCommand } from './native/commands/refreshInstructions.commands.js';
+import * as recapCommands from './native/commands/recap.commands.js';
+import * as refreshInstructionsCommands from './native/commands/refreshInstructions.commands.js';
 import type { DraftShelf } from './native/DraftShelf.svelte.js';
 import type { ThreadSlot } from './ThreadSlot.svelte.js';
 import { ThreadCompaction } from './thread/ThreadCompaction.svelte.js';
@@ -218,7 +218,7 @@ test('/delegation lands on the draft the birth carries or on the open thread', a
     },
     threads: { setDelegation: stubMutation(setDelegation) },
   });
-  const delegation = delegationCommand(host.views, host.writes);
+  const delegation = declaredCommand(delegationCommands.commands, 'delegation', host);
   const pick = (id: string) => host.writes.perform(delegation.run({ gesture: 'send', optionId: id }));
 
   host.startDraft();
@@ -247,7 +247,7 @@ test('/recap writes the open thread’s recap, waits without holding the compose
   const written = Promise.withResolvers<{ status: 'written' }>();
   const generateRecap = vi.fn().mockReturnValueOnce(written.promise);
   const host = open({ threads: { generateRecap: stubMutation(generateRecap) } });
-  const recap = recapCommand(host.shown, host.chat, host.writes);
+  const recap = declaredCommand(recapCommands.commands, 'recap', host);
   const write = () => host.writes.perform(recap.run({ gesture: 'send' }));
 
   host.startDraft();
@@ -292,13 +292,13 @@ test('a write in flight holds the thread it was started in, leaves every other t
   const written = Promise.withResolvers<{ status: 'written' }>();
   const host = open({ threads: { generateRecap: stubMutation(() => written.promise) } });
   await shows('thread-1');
-  void host.writes.perform(recapCommand(host.shown, host.chat, host.writes).run({ gesture: 'send' }));
+  void host.writes.perform(declaredCommand(recapCommands.commands, 'recap', host).run({ gesture: 'send' }));
   await waitUntil(() => host.writes.holding);
 
   await shows('thread-2');
   host.chat.target.fold.beginUserMessage({ text: 'what happened here?', turnKey: 'turn-1' });
   expect(host.writes.holding).toBe(false);
-  expect(recapCommand(host.shown, host.chat, host.writes).disabled).toBe(false);
+  expect(declaredCommand(recapCommands.commands, 'recap', host).disabled).toBe(false);
 
   host.open('thread-1');
   commitRoute(host);
@@ -487,7 +487,7 @@ it.live('/agent picks the draft type among agents alone, and on a born thread of
     yield* Effect.promise(() => host.birth.types.read());
     expect(host.birth.draftType).toBeNull();
 
-    const agent = agentCommand(host.shown, host.birth, host.writes);
+    const agent = declaredCommand(agentCommands.commands, 'agent', host);
     expect(agent.value).toBe('Tagma');
     expect(agent.options?.map((option) => [option.id, option.active ?? false, option.disabled ?? false])).toEqual([
       ['tagma', true, false],
@@ -520,7 +520,7 @@ it.live(
       port.emit(feedSnapshot(opened(), 'run-1'), 'thread-1');
       yield* Effect.promise(() => waitFor(() => expect(host.chat.commands.runId).toBe('run-1')));
 
-      const command = compactCommand(host.shown, host.chat, host.writes, host.panel);
+      const command = declaredCommand(compactCommands.commands, 'compact', host);
       expect(command.disabled).toBe(false);
       yield* command.run({ gesture: 'send', query: 'flash' });
       expect(host.panel.current).toMatchObject({ mode: 'compact', query: 'flash' });
@@ -767,7 +767,7 @@ test('a refresh answered after the slot moved to another thread is not published
   const host = open();
   host.open('thread-a');
   commitRoute(host);
-  const refresh = refreshInstructionsCommand(host.shown, host.writes);
+  const refresh = declaredCommand(refreshInstructionsCommands.commands, 'refresh-instructions', host);
 
   const first = host.writes.perform(refresh.run({ gesture: 'send' }));
   await waitFor(() => expect(door.refresh).toHaveBeenCalledWith({ id: 'thread-a', projectId: 47 }, expect.anything()));

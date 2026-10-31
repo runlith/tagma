@@ -1,48 +1,63 @@
-import { clashOf } from '@runlith/chat-ui/RegistryClash';
 import { Service } from '@runlith/layer/key';
+import type { Point } from '@runlith/layer/Point';
 import type { Holder } from '$lib/shared/panes/holder.js';
-import { type PaneContent, type PaneKind, type PaneOffer, PaneUndeclared, type PaneRefusal } from '$lib/shared/panes/pane.js';
+import { type PaneContent, type PaneKind, type PaneOffer, PaneUndeclared, type PaneRefusal, Panes } from '$lib/shared/panes/pane.js';
+
+type PaneIndex = {
+  readonly items: readonly PaneKind[];
+  readonly kinds: ReadonlyMap<string, PaneKind>;
+  readonly former: ReadonlyMap<string, string>;
+  readonly offers: readonly PaneOffer[];
+};
+
+const indexOf = (items: readonly PaneKind[]): PaneIndex => ({
+  items,
+  kinds: new Map(items.map((declared) => [declared.kind, declared])),
+  former: new Map(items.flatMap((declared) => (declared.formerly === undefined ? [] : [[declared.formerly, declared.kind] as const]))),
+  offers: items.flatMap((declared) => (declared.offer === undefined ? [] : [declared.offer])).toSorted((one, two) => one.order - two.order),
+});
 
 export class PaneRegistry extends Service<PaneRegistry>()('PaneRegistry', { tier: 'app' }) {
-  readonly offers: readonly PaneOffer[];
+  static *make() {
+    return new PaneRegistry(yield* Panes);
+  }
 
-  private readonly kinds = new Map<string, PaneKind>();
+  private indexed: PaneIndex | undefined;
 
-  private readonly former = new Map<string, string>();
-
-  constructor(readonly all: readonly PaneKind[]) {
+  constructor(private readonly panes: Point<PaneKind>) {
     super();
-    for (const declared of all) {
-      if (this.kinds.has(declared.kind)) throw clashOf(`Pane kind "${declared.kind}"`, declared.kind, declared.kind);
-      this.kinds.set(declared.kind, declared);
-    }
-    for (const declared of all) {
-      if (declared.formerly === undefined) continue;
-      const holder = this.kinds.get(declared.formerly)?.kind ?? this.former.get(declared.formerly);
-      if (holder !== undefined) throw clashOf(`Pane kind "${declared.formerly}"`, holder, declared.kind);
-      this.former.set(declared.formerly, declared.kind);
-    }
-    this.offers = all
-      .flatMap((declared) => (declared.offer === undefined ? [] : [declared.offer]))
-      .toSorted((one, two) => one.order - two.order);
+  }
+
+  private get index(): PaneIndex {
+    const items = this.panes.items;
+    if (this.indexed?.items !== items) this.indexed = indexOf(items);
+    return this.indexed;
+  }
+
+  get all(): readonly PaneKind[] {
+    return this.index.items;
+  }
+
+  get offers(): readonly PaneOffer[] {
+    return this.index.offers;
   }
 
   named(stored: string): string {
-    return this.former.get(stored) ?? stored;
+    return this.index.former.get(stored) ?? stored;
   }
 
   find(kind: string): PaneKind | undefined {
-    return this.kinds.get(kind);
+    return this.index.kinds.get(kind);
   }
 
   declared(kind: string): PaneKind {
-    const found = this.kinds.get(kind);
+    const found = this.find(kind);
     if (found === undefined) throw new PaneUndeclared({ kind, message: `No pane of kind "${kind}" is declared.` });
     return found;
   }
 
   refusal(content: PaneContent, holder: Holder): PaneRefusal | null {
-    const declared = this.kinds.get(content.kind);
+    const declared = this.find(content.kind);
     if (declared === undefined) return 'undeclared';
     return (declared.admits?.(content.id, holder) ?? true) ? null : 'inadmissible';
   }

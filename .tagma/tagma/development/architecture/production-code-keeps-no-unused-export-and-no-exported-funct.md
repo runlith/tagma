@@ -1900,23 +1900,11 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead apps/tagma/app/src/lib/features/threads/native/contribution.ts#DeclarationMissing",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "dead-code dead apps/tagma/app/src/lib/features/threads/native/contribution.ts#ComposerPart",
           "owner": "5a3bed29"
         },
         {
           "fingerprint": "dead-code dead apps/tagma/app/src/lib/features/threads/native/contribution.ts#FeedPart",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/app/src/lib/features/threads/native/contribution.ts#Declared",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/app/src/lib/features/threads/native/contribution.ts#DeclarationSources",
           "owner": "5a3bed29"
         },
         {
@@ -16428,11 +16416,6 @@ fields:
         {
           "count": 2,
           "fingerprint": "dead-code dead packages/executions/src/protocol/control.ts#CustodyReceipt",
-          "owner": "5a3bed29"
-        },
-        {
-          "count": 2,
-          "fingerprint": "dead-code dead packages/executions/src/protocol/evidence.ts#UnmeasuredReason",
           "owner": "5a3bed29"
         },
         {

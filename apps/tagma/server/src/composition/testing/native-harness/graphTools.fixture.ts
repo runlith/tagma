@@ -134,15 +134,17 @@ const payload = (answer: unknown) => (answer instanceof ToolAnswer ? answer.valu
 const makeGraphTools = Effect.fnUntraced(function* ({
   demo,
   projectId = demo.project('tools').id,
+  mcpServers,
 }: {
   demo: EffectDemo;
   projectId?: number;
+  mcpServers?: McpServers['Service'];
 }) {
   const files = yield* FileSystem.FileSystem;
   const project = yield* demo.graph.projects.byId(projectId);
   if (project.rootPath === null) return yield* Effect.die('The native tool fixture needs a checkout.');
   const root = yield* files.realPath(project.rootPath);
-  const mcp = Context.get(yield* Layer.build(mcpServersLayer({})), McpServers);
+  const mcp = mcpServers ?? Context.get(yield* Layer.build(mcpServersLayer({})), McpServers);
   const scratch = yield* threadScratch(yield* files.realPath(yield* tempRootEffect(demo.fixture, 'tagma-scratch-')));
   yield* scratch.ensure('thread-1');
   const vocabulary = yield* (yield* Tags).reader(projectId);
@@ -293,11 +295,11 @@ export const withGraphTools =
   () =>
     Effect.scoped(
       Effect.gen(function* () {
-        const { demo, graph } = yield* GraphTools;
+        const { demo, graph, ctx } = yield* GraphTools;
         const root = yield* tempRootEffect(demo.fixture, 'native-case-');
         const project = yield* graph.projectLifecycle.create({ name: basename(root), rootPath: root });
         yield* zoneDeclared(project.id);
-        const world = yield* makeGraphTools({ demo, projectId: project.id });
+        const world = yield* makeGraphTools({ demo, projectId: project.id, mcpServers: ctx.mcpServers });
         return yield* Effect.provideService(Effect.gen(body), GraphTools, world);
       }),
     );

@@ -130,7 +130,7 @@ export const makeEvidenceScans = Effect.fnUntraced(function* ({ limits }: Eviden
     makeRetained<ListenerSnapshot>({ keep: limits.retained }),
   ]);
   function processes(request: ProcessProbe): Effect.Effect<Scan<ProcessSnapshot>> {
-    return run(retainedProcesses, processKey(request), probe.processes(request), limits.results);
+    return run(retainedProcesses, processKey(request), probe.processes(request), request._tag === 'Table' ? Infinity : limits.results);
   }
 
   function listeners(request: ListenerProbe): Effect.Effect<Scan<ListenerSnapshot>> {

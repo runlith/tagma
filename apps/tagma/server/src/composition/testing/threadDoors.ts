@@ -1,4 +1,7 @@
 import { unthreadedCaller } from './callers';
+import { createEditTool } from '@runlith/agent-tools/edit';
+import { LONGEST_ACT_MS } from '@runlith/agent/callProgress';
+import { ChangeRecord } from '../../change-record/contract/service/record.js';
 import { Context, Effect } from 'effect';
 import { ToolAnswer, toolExecute, toolPrepare, type Tool } from '@runlith/agent/tool';
 import { testSessionIdentity } from '../../platform/testing/identity.js';
@@ -114,7 +117,19 @@ export const makeThreadDoors = (
       servingGit: Context.get(world.runtime.owners, ServingGit),
       mcpServers: Context.get(world.runtime.owners, McpServers),
     } as unknown as Parameters<ThreadExecution['Service']['tools']>[0];
-    const native = (execution ?? Context.get(world.runtime.owners, ThreadExecution)).tools(opened, tools) as Record<string, Tool>;
+    const native = (execution ?? Context.get(world.runtime.owners, ThreadExecution)).tools(
+      opened,
+      tools.filter((id) => id !== 'edit'),
+    ) as Record<string, Tool>;
+    if (tools.includes('edit'))
+      native.edit = createEditTool({
+        cwd: place.root,
+        world: admitted.world.world,
+        changes: Context.get(world.runtime.owners, ChangeRecord).changes({ work: { projectId: project, threadId } }),
+        comments: work.comments,
+        commandTimes: work.times,
+        searchMs: LONGEST_ACT_MS,
+      });
     return {
       threadId,
       grant: grantEnvironment(threadId, testSessionIdentity)[GRANT_VARIABLE] as string,

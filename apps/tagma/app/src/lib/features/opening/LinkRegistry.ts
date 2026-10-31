@@ -1,40 +1,41 @@
-import { clashOf } from '@runlith/chat-ui/RegistryClash';
 import { type Resolver, Service } from '@runlith/layer/key';
+import type { Point } from '@runlith/layer/Point';
 import type { PaneContent } from '$lib/shared/panes/pane.js';
-import type { Link, LinkItems, LinkKind, LinksModule, LinkTab } from './Link.js';
+import { type Link, type LinkItems, type LinkKind, LinkKinds, LinkMenuItems, type LinkTab } from './Link.js';
+
+type TabIndex = { readonly items: readonly LinkKind<never>[]; readonly tabs: ReadonlyMap<string, LinkTab<never>> };
 
 export class LinkRegistry extends Service<LinkRegistry>()('LinkRegistry', { tier: 'app' }) {
-  private readonly kinds = new Map<string, LinkKind<never>>();
-  private readonly tabs = new Map<string, LinkTab<never>>();
-  private readonly items = new Map<string, readonly LinkItems<never>[]>();
+  static *make() {
+    return new LinkRegistry(yield* LinkKinds, yield* LinkMenuItems);
+  }
 
-  constructor(modules: readonly LinksModule[]) {
+  private indexed: TabIndex | undefined;
+
+  constructor(
+    private readonly kinds: Point<LinkKind<never>>,
+    private readonly items: Point<LinkItems<never>>,
+  ) {
     super();
-    for (const module of modules) {
-      for (const declared of module.links ?? []) {
-        if (this.kinds.has(declared.kind)) throw clashOf(`Link kind "${declared.kind}"`, declared.kind, declared.kind);
-        this.kinds.set(declared.kind, declared);
-        const tab = declared.tab;
-        if (tab === undefined) continue;
-        const holder = [...this.kinds.values()].find((one) => one !== declared && one.tab?.kind === tab.kind);
-        if (holder !== undefined) throw clashOf(`The link of tab kind "${tab.kind}"`, holder.kind, declared.kind);
-        this.tabs.set(tab.kind, tab);
-      }
-      for (const items of module.items ?? []) this.items.set(items.kind, [...(this.items.get(items.kind) ?? []), items]);
+  }
+
+  private get tabs(): ReadonlyMap<string, LinkTab<never>> {
+    const items = this.kinds.items;
+    if (this.indexed?.items !== items) {
+      this.indexed = {
+        items,
+        tabs: new Map(items.flatMap((kind) => (kind.tab === undefined ? [] : [[kind.tab.kind, kind.tab] as const]))),
+      };
     }
-    for (const [kind, items] of this.items)
-      this.items.set(
-        kind,
-        items.toSorted((one, two) => one.order - two.order),
-      );
+    return this.indexed.tabs;
   }
 
   find(kind: string): LinkKind<never> | undefined {
-    return this.kinds.get(kind);
+    return this.kinds.find(kind);
   }
 
   anchored(app: Resolver, href: string): Link | null {
-    for (const kind of this.kinds.values()) {
+    for (const kind of this.kinds.items) {
       const link = kind.anchor?.(app, href) ?? null;
       if (link !== null) return link;
     }
@@ -42,7 +43,7 @@ export class LinkRegistry extends Service<LinkRegistry>()('LinkRegistry', { tier
   }
 
   routed(app: Resolver, anchor: HTMLAnchorElement): Link | null {
-    for (const kind of this.kinds.values()) {
+    for (const kind of this.kinds.items) {
       const link = kind.route?.(app, anchor) ?? null;
       if (link !== null) return link;
     }
@@ -54,6 +55,6 @@ export class LinkRegistry extends Service<LinkRegistry>()('LinkRegistry', { tier
   }
 
   itemsOf(kind: string): readonly LinkItems<never>[] {
-    return this.items.get(kind) ?? [];
+    return this.items.items.filter((items) => items.kind === kind);
   }
 }

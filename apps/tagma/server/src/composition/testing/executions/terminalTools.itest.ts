@@ -8,6 +8,7 @@ import { join } from 'node:path';
 import { afterAll, expect } from 'bun:test';
 import { layer } from '@runlith/effect-test';
 import { Clock, Context, Deferred, Effect, Fiber, Layer, Stream } from 'effect';
+import { RoutedGraphs, type ServedGraphs } from '../../../graph/contract/service/serving.js';
 import { ToolAnswer, toolConfirmation, toolExecute, toolPrepare, type Tool } from '@runlith/agent/tool';
 import type { PermissionSubject } from '@runlith/agent/permissions';
 import { THREAD_AUTHORITY_DEFAULT } from '@runlith/agent/thread/rows';
@@ -256,16 +257,16 @@ const seeded = Effect.gen(function* () {
   yield* runGit(git, 'fixture', ['-C', checkout, '-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '-m', 'as it stood']);
   const store = Context.get(context, MachineStore);
   const at = new Date(yield* Clock.currentTimeMillis);
-  const projectOf = (name: string) =>
+  const projectOf = (name: string, rootPath: string) =>
     Effect.map(
       store.db
         .insert(projectRow())
-        .values({ name, repoKey: `${name}-key`, rootPath: checkout, createdAt: at })
+        .values({ name, repoKey: `${name}-key`, rootPath, createdAt: at })
         .returning({ id: projectRow().id }),
       (rows) => rows[0]?.id ?? 0,
     );
-  const projectId = yield* projectOf('terminal-tools');
-  const otherProjectId = yield* projectOf('terminal-elsewhere');
+  const projectId = yield* projectOf('terminal-tools', checkout);
+  const otherProjectId = yield* projectOf('terminal-elsewhere', join(home, 'elsewhere'));
   for (const id of [holder, stranger, archived, elsewhere]) {
     yield* bornThread(store.db, {
       id,
@@ -367,6 +368,7 @@ const catalogOver = Effect.fnUntraced(function* (
       Context.add(TerminalAccess, access),
       Context.add(TerminalTargets, targets),
       Context.add(ActingRun, { runId }),
+      Context.add(RoutedGraphs, { checkout: () => Effect.succeed(checkout) } as unknown as ServedGraphs['Service']),
     ),
   );
   const tools = yield* nativeCatalog(

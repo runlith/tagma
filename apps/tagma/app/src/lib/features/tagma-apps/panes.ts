@@ -1,4 +1,4 @@
-import type { PanesModule } from '$lib/shared/panes/pane.js';
+import type { PaneKind } from '$lib/shared/panes/pane.js';
 import TagmaAppTitle from './TagmaAppTitle.svelte';
 import { ViewSets } from './ViewSets.svelte.js';
 
@@ -11,7 +11,7 @@ export const paneOf = (id: string | null): { readonly tagmaApp: string; readonly
   return id === null || cut <= 0 || cut === id.length - 1 ? null : { tagmaApp: id.slice(0, cut), view: id.slice(cut + 1) };
 };
 
-export const panes: PanesModule['panes'] = [
+export const panes: readonly PaneKind[] = [
   {
     kind: TAGMA_APP_PANE,
     formerly: 'plugin',

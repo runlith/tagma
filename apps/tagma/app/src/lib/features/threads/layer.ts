@@ -6,6 +6,7 @@ import { ArchivedThreadsOpen } from './ArchivedThreadsOpen.svelte.js';
 import { CallActivity } from './CallActivity.svelte.js';
 import { ContextPanelState } from './native/PanelState.svelte.js';
 import { DraftShelf } from './native/DraftShelf.svelte.js';
+import { ThreadContributions } from './native/layer.js';
 import { PageDraft } from './PageDraft.js';
 import { ThreadChats } from './ThreadChats.js';
 import { Asking } from './Asking.js';
@@ -39,8 +40,27 @@ import { ThreadsRepo } from './Repo.js';
 import { ThreadSeats } from './seats/ThreadSeats.svelte.js';
 import { TeamRepo } from './team/TeamRepo.js';
 import { ThreadTeam } from './team/ThreadTeam.svelte.js';
+import { LinkKinds, LinkMenuItems } from '$lib/features/opening/Link.js';
+import { SettingSections } from '$lib/features/settings/section.js';
+import { PaletteActions } from '$lib/features/workspace/action.js';
+import { Columns } from '$lib/features/workspace/column.js';
+import { Surfaces } from '$lib/features/workspace/surface.js';
+import { Panes } from '$lib/shared/panes/pane.js';
+import { actions } from './actions.js';
+import { columns } from './columns.js';
+import { items, links } from './links.js';
+import { panes } from './panes.js';
+import { sections } from './settings.js';
+import { surfaces } from './surfaces.js';
 
 export const HarnessLayer = Layer.mergeAll(
+  Surfaces.contribute('threads', ...surfaces),
+  Panes.contribute('threads', ...panes),
+  Columns.contribute('threads', ...columns),
+  SettingSections.contribute('threads', ...sections),
+  LinkKinds.contribute('threads', ...links),
+  LinkMenuItems.contribute('threads', ...items),
+  PaletteActions.contribute('threads', { id: 'threads', actions }),
   ThreadSeats,
   AgentsColumn,
   ThreadsRepo,
@@ -82,4 +102,5 @@ export const HarnessLayer = Layer.mergeAll(
   ArchivedThreadsOpen,
   MentionDrops,
   ThreadRungSource,
+  ThreadContributions,
 );

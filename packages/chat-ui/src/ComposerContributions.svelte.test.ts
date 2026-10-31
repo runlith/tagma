@@ -4,7 +4,7 @@ import { describe, expect, test } from 'vitest';
 import { ComposerRefused, type ComposerSlashCommand, settled } from './composer';
 import { ComposerContributions } from './ComposerContributions.svelte';
 import { ComposerMenu } from './ComposerMenu.svelte';
-import { RegistryClash } from './RegistryClash';
+import { RegistryClash } from '@runlith/roster/RegistryClash';
 const command = (name: string, rest: Partial<ComposerSlashCommand> = {}): ComposerSlashCommand => ({
   name,
   run: () => Effect.void,

@@ -22,6 +22,7 @@ import { indexedWords } from '../graph/search/words.js';
 import { spokenAnswer } from '../graph/work/filedReflections.js';
 import { Reflections, type ReflectionEntry } from '../graph/contract/service/work.js';
 import type { BlockPosition } from '../graph/contract/service/reads.js';
+import type { StorageMode } from '../projects/contract/wire/project.js';
 
 type OntoRefusal = BlockCreateRefusal | 'not-a-reflection' | 'already-answered';
 
@@ -78,6 +79,7 @@ export type Filing = {
   readonly body?: string | undefined;
   readonly project?: string | undefined;
   readonly cwd?: string | undefined;
+  readonly storage?: StorageMode | undefined;
 };
 
 const resolved = Effect.fn('Reflection.resolve')(function* (ref: string | undefined, cwd: string | undefined) {
@@ -98,6 +100,7 @@ const fileAt = Effect.fn('Reflection.fileAt')(function* (
   place: string,
   facts: ReflectionPayload,
   body?: string,
+  storage?: StorageMode,
 ) {
   const table = yield* (yield* Tags).of(parent.projectId);
   const tag = yield* table.creationType(REFLECTION);
@@ -110,6 +113,7 @@ const fileAt = Effect.fn('Reflection.fileAt')(function* (
     title,
     body: yield* provenance(place, body?.trim()),
     fields: { [binding.command]: facts.command, [binding.expected]: facts.expected, [binding.actual]: facts.actual },
+    storage,
   });
 });
 
@@ -120,6 +124,7 @@ const onto = Effect.fn('Reflection.onto')(function* (
   place: string,
   facts: ReflectionPayload,
   body?: string,
+  storage?: StorageMode,
 ) {
   const blockRows = yield* BlockRows;
   const named = yield* blockRows.blockById(ontoId);
@@ -156,7 +161,7 @@ const onto = Effect.fn('Reflection.onto')(function* (
       'read_reflections — name the standing entry that groups these sightings',
     ]);
   }
-  const written = yield* fileAt(named, title, place, facts, body);
+  const written = yield* fileAt(named, title, place, facts, body, storage);
   return { entry: { ...keeper, sightings: keeper.sightings + 1 }, written };
 });
 
@@ -213,7 +218,7 @@ export const fileReflection = Effect.fn('Reflection.file')(function* (input: Fil
   const place = yield* where(input.project, input.cwd);
   if (input.ontoId !== undefined) {
     return {
-      ...(yield* onto(at.root, input.ontoId, input.title, place, facts, input.body)),
+      ...(yield* onto(at.root, input.ontoId, input.title, place, facts, input.body, input.storage)),
       already: [],
       receivedBy: received,
       unplaced: null,
@@ -221,7 +226,7 @@ export const fileReflection = Effect.fn('Reflection.file')(function* (input: Fil
   }
   const standing = yield* already(at.root, `${input.title} ${input.command}`);
   const placed = yield* declaring(at, input.command);
-  const entry = yield* fileAt(placed.at, input.title, place, facts, input.body);
+  const entry = yield* fileAt(placed.at, input.title, place, facts, input.body, input.storage);
   return {
     entry: { ...entry, sightings: 1 },
     written: entry,

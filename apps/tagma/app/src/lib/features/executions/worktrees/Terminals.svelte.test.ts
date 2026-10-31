@@ -343,6 +343,21 @@ test('a shell an agent starts lands as a background tab in its thread’s layout
   owned.stop();
 });
 
+test('a terminal a thread holds outside every checkout opens as a tab of that thread and stands in no panel', async () => {
+  const unplaced = listingFor('far:0', { rootId: null, holder: 'thread:t-1', heldBy: 't-1' });
+  const owned = await stand([]);
+  owned.feed([unplaced]);
+  await until(() => owned.terminals.rootOf('far:0') !== null, 'the unplaced terminal adopted');
+
+  await owned.terminals.reveal('far:0');
+
+  expect(owned.addresses.at(-1)).toBe('/proj/chat/t-1');
+  expect(owned.layouts.layout(threadHolder('t-1')).tabs).toMatchObject([{ kind: 'terminal', id: 'far:0' }]);
+  expect(owned.worktree(MAIN).tabs).toEqual([]);
+  expect(owned.terminals.home?.panel).toEqual([]);
+  owned.stop();
+});
+
 test('an address revealed before the worktree listing arrives aims the frame once the listing is read', async () => {
   const owned = await stand([listingFor('m:0'), listingFor('f:0', { rootId: FEATURE })], { unlisted: true });
 

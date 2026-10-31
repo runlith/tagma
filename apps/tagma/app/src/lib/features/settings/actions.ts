@@ -1,9 +1,9 @@
 import Settings2 from '@lucide/svelte/icons/settings-2';
 import { Router } from '@runlith/layer/Router';
-import type { ActionsModule } from '$lib/features/workspace/action.js';
+import type { PaletteActionList } from '$lib/features/workspace/action.js';
 import { settingsHref } from '$lib/features/workspace/address.js';
 
-export const actions: ActionsModule['actions'] = [
+export const actions: PaletteActionList = [
   {
     id: 'settings.open',
     order: 50,

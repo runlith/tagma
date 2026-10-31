@@ -7,6 +7,7 @@ import { graphArms as arms } from '../../../graph/contract/wire/answers.js';
 import { blockMention, line, title } from '../../../graph/contract/wire/fields.js';
 import { GRAPH_ACT, GRAPH_READ, graphInput, noSubjects } from '../../../graph/contract/wire/operations/shared.js';
 import { REFLECTIONS, reflectionFiledFields, reflectionListFields } from './answers.js';
+import { STORAGE_MODES } from '../../../projects/contract/wire/project.js';
 
 export const REFLECTION_FILING_OPERATIONS = {
   file_reflection: operation('file_reflection', {
@@ -44,6 +45,10 @@ export const REFLECTION_FILING_OPERATIONS = {
       }),
       body: Schema.optional(Schema.String).annotate({
         description: 'Optional explanatory prose below the three required facts; not parsed.',
+      }),
+      storage: Schema.optional(Schema.Literals(STORAGE_MODES)).annotate({
+        description:
+          "Where this occurrence is born: team rides the repository, stealth stays in Tagma's data directory. Omit to inherit its parent's storage.",
       }),
     }),
     refusals: [

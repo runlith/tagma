@@ -19,6 +19,8 @@ import { Readings } from '$lib/features/executions/load/Readings.svelte.js';
 import { View } from '$lib/features/executions/load/View.svelte.js';
 import { Scope } from '@runlith/layer/Scope';
 import { ExecutionsRepo } from '$lib/features/executions/Repo.js';
+import { Terminals } from '$lib/features/executions/worktrees/Terminals.svelte.js';
+import { Opening } from '$lib/features/opening/Opening.svelte.js';
 import { WallClock } from '$lib/features/workspace/WallClock.svelte.js';
 import { Workspace } from '$lib/features/workspace/Selection.svelte.js';
 import { Live } from '$lib/wire/Live.js';
@@ -112,6 +114,8 @@ function draw(
       Layer.of(ExecutionsRepo, { inventory: stubFamily(), commands: stubFamily() } as never),
       Layer.of(Workspace, soloWorkspace({ contextProject: { rootPath: '/repo' }, find: () => ({ rootPath: '/repo' }) })),
       Layer.of(Live, feed.live),
+      Layer.of(Opening, {} as never),
+      Layer.of(Terminals, {} as never),
       Layer.of(Door, { ask: () => Promise.reject(new Error('this suite makes no call')) } as never),
     ),
   );

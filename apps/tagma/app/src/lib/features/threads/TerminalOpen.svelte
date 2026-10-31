@@ -9,12 +9,12 @@
   const terminals = Terminals.use();
 </script>
 
-<Tooltip text="Open in the terminal panel">
+<Tooltip text="Open its terminal">
   <Button
     variant="ghost"
     size="icon-xs"
     class="size-6"
-    aria-label="Open in the terminal panel"
+    aria-label="Open its terminal"
     onclick={() => {
       onOpen();
       void terminals.reveal(terminalKey);

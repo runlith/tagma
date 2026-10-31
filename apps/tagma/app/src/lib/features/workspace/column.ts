@@ -1,4 +1,5 @@
 import type { KeyClass, Resolver } from '@runlith/layer/key';
+import { Point } from '@runlith/layer/Point';
 import type { Component } from 'svelte';
 
 export type ColumnState = {
@@ -19,4 +20,8 @@ export type ColumnDeclaration = {
   readonly room?: (app: Resolver) => boolean;
 };
 
-export type ColumnsModule = { readonly columns: readonly ColumnDeclaration[] };
+export const Columns = Point.define<ColumnDeclaration>()('Columns', {
+  tier: 'app',
+  key: (declaration) => declaration.id,
+  claims: (declaration) => (declaration.routes ?? []).map((route) => `Column route "${route}"`),
+});
