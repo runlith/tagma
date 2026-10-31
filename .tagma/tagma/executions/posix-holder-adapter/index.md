@@ -15,6 +15,20 @@ fields:
       {
         "at": "testing/",
         "role": "testing"
+      },
+      {
+        "at": "credentials.ts",
+        "for": [
+          "f37a2606"
+        ],
+        "role": "testing"
+      },
+      {
+        "at": "endpoint.ts",
+        "for": [
+          "f37a2606"
+        ],
+        "role": "testing"
       }
     ],
     "id": "posix-holder",
