@@ -213,7 +213,19 @@ export const runReportsLayer = Layer.effect(
       return open.length === 0 ? null : open;
     });
     const snapshotted = Effect.fnUntraced(function* (run: ThreadRunRef, tx: ThreadWriteTx, durable: boolean) {
-      yield* runs.writeStreamTail(run.id, yield* openTail(run, false, tx), new Date(yield* Clock.currentTimeMillis), tx, durable);
+      const tail = yield* openTail(run, false, tx);
+      const at = new Date(yield* Clock.currentTimeMillis);
+      yield* runs.writeStreamTail(run.id, tail, at, tx, durable);
+      changes.note(run.threadId, tx, {
+        kind: 'run',
+        run: {
+          id: run.id,
+          streamTail: tail === null ? null : JSON.parse(JSON.stringify(tail)),
+          heartbeatAt: at,
+          updatedAt: at,
+          ...(durable || tail?.length ? { resumes: 0 } : {}),
+        },
+      });
     });
     const kernel = yield* transitionDeps;
     const ownerId = (yield* ThreadOwner).id;

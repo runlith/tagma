@@ -30,7 +30,7 @@ export function describeRunLifecycleActs<TTx, TWrite extends TTx = TTx, R = neve
         const at = new Date((yield* Clock.currentTimeMillis) + 60_000);
         yield* world.lifecycle.beat([{ id: run.id, threadId: run.threadId }], at);
         const ours = handed.filter(
-          (change) => change.kind === 'ran' && change.runs.some((beat) => beat.heartbeatAt.getTime() === at.getTime()),
+          (change) => change.kind === 'ran' && change.runs.some((beat) => beat.heartbeatAt?.getTime() === at.getTime()),
         );
         expect(ours).toEqual([
           {

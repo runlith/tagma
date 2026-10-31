@@ -372,7 +372,7 @@ export function makeMemoryRuns({ memory, ownerId, scope }: MemoryRunsInput): Thr
         tx,
       ),
     writeStreamTail: (runId, tail, heartbeatAt, tx, durable = false) =>
-      patched(runId, { streamTail: tail, ...(durable || tail?.length ? { resumes: 0 } : {}), heartbeatAt }, tx),
+      patched(runId, { streamTail: tail, ...(durable || tail?.length ? { resumes: 0 } : {}), heartbeatAt, updatedAt: heartbeatAt }, tx),
     reapableRuns: (selector, limit) =>
       attempt('reapableRuns', () =>
         memory.read(undefined, () => {

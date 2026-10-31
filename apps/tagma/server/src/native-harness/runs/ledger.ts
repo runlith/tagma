@@ -87,7 +87,7 @@ export const makeRunStores = Effect.gen(function* () {
               unit.run(
                 db
                   .update(threadRun)
-                  .set({ ...patch, updatedAt: new Date(clock.currentTimeMillisUnsafe()) })
+                  .set({ ...patch, updatedAt: patch.heartbeatAt })
                   .where(owned(runId)),
               ),
             ),

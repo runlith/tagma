@@ -169,11 +169,18 @@ export const UNWRITTEN: TurnWrite = {
   closed: () => Effect.succeed(new Map()),
 };
 
+type ProtocolProjecting = {
+  readonly stepping: (threadId: string, unit: WriteUnit<'machine'>) => Effect.Effect<void, ThreadBorderFailed>;
+  readonly unseen: (threadId: string, unit: WriteUnit<'machine'>) => Effect.Effect<void>;
+  readonly stepped: (threadId: string, unit: WriteUnit<'machine'>) => Effect.Effect<void, ThreadBorderFailed>;
+};
+
 export class ProtocolJournal {
   constructor(
     private readonly reports: AdapterReports,
     private readonly threads: NativeStorage['Service']['threads'],
     private readonly publishing: (threadId: string) => Effect.Effect<void, ThreadBorderFailed>,
+    private readonly projecting: ProtocolProjecting,
     private readonly inbox: ThreadInbox['Service'],
     private readonly pictures: ThreadAttachmentStore,
     private readonly asides: ThreadAsides,
@@ -263,6 +270,18 @@ export class ProtocolJournal {
 
   publish(threadId: string) {
     return this.publishing(threadId);
+  }
+
+  claim(threadId: string, unit: WriteUnit<'machine'>) {
+    return this.projecting.stepping(threadId, unit).pipe(Effect.mapError(storage('protocolJournal.claim')));
+  }
+
+  unseen(threadId: string, unit: WriteUnit<'machine'>) {
+    return this.projecting.unseen(threadId, unit);
+  }
+
+  settle(threadId: string, unit: WriteUnit<'machine'>) {
+    return this.projecting.stepped(threadId, unit).pipe(Effect.mapError(storage('protocolJournal.settle')));
   }
 
   readonly prepare = Effect.fnUntraced(

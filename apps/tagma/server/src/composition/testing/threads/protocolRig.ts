@@ -627,6 +627,7 @@ export const protocolRig = Effect.fn('testing.protocolRig')(function* (fixture: 
         reports,
         kernel,
         (threadId) => harness.threads.publish(threadId),
+        harness.threads,
         inbox,
         pictures,
         held,

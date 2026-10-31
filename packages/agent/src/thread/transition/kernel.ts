@@ -1,4 +1,4 @@
-import { Clock, Effect } from 'effect';
+import { Clock, Effect, Option } from 'effect';
 import { actDigest, callParts, evidenceKey, INPUT_OPERATION, type Evidence, type Keyed, type TransitionOutcome } from '../keyed';
 import type { ThreadMetadataRow, ThreadRow } from '../rows';
 import type { ThreadMetadataChange } from '../state';
@@ -12,6 +12,7 @@ import { ThreadStorageFailed } from '../persisted';
 import {
   ThreadActReusedError,
   ThreadActSpentError,
+  ThreadChangeCollector,
   ThreadVersionStaleError,
   type ControlPlan,
   type Decision,
@@ -32,6 +33,7 @@ export type TransitionDeps<TTx, TWrite extends TTx = TTx> = {
   readonly transitions: ThreadTransitionStorage<TTx, TWrite>;
   readonly lane: ThreadJournalLaneFaces;
   readonly kinds: ThreadEntryReader;
+  readonly changes?: ThreadChangeCollector['Service'];
 };
 export type TransitionCall = {
   readonly key: Keyed;
@@ -49,6 +51,7 @@ export const transitionDeps: Effect.Effect<
     transitions: yield* ThreadTransitions,
     lane: yield* ThreadJournalLane,
     kinds: yield* ThreadEntryKinds,
+    changes: Option.getOrUndefined(yield* Effect.serviceOption(ThreadChangeCollector)),
   };
 });
 export function answerOf<A>(threadId: string, outcome: TransitionOutcome<A>): Effect.Effect<A, ThreadStorageFailed | ThreadActSpentError> {
@@ -286,12 +289,15 @@ const applyPrepared = Effect.fnUntraced(function* <A, TTx, TWrite extends TTx, E
     digest: key.digest,
     result: decision.result,
   });
+  const collector = !own && deps.changes?.claimed(threadId, at.tx as object) === true ? deps.changes : undefined;
+  if (published === undefined && collector === undefined) return { outcome: { committed: decision.result } } as Step<A>;
+  const shown = decision.participants === undefined || decision.participantsUnseen === true ? shownFold(fold, stamped) : null;
+  const appended =
+    shown === null || !recordsUnseen(key.evidence)
+      ? null
+      : { from: head, records: yield* journalForm(deps.kinds, threadId, head, declared), thread: shown };
+  collector?.note(threadId, at.tx as object, appended === null ? { kind: 'unseen' } : { kind: 'appended', ...appended });
   if (published !== undefined) {
-    const shown = decision.participants === undefined || decision.participantsUnseen === true ? shownFold(fold, stamped) : null;
-    const appended =
-      shown === null || !recordsUnseen(key.evidence)
-        ? null
-        : { from: head, records: yield* journalForm(deps.kinds, threadId, head, declared), thread: shown };
     yield* deps.transitions.revised([threadId], at.tx, (revisions) => {
       const revision = revisions.get(threadId);
       return published(
