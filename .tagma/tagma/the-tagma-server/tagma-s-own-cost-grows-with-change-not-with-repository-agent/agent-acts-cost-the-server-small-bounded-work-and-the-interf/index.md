@@ -173,11 +173,12 @@ Kind: a design decision — state re-derived on pull, the writer coupled to loop
    - Process allocation per act over a steady interval.
    - The workload below.
    - Baseline and budgets recorded in this spec.
-1. **A**, producers by ledger rank; the thread list, keep-warm and graph-copy holding move to narrow events.
-2. **B**, hot units first.
-3. **C, D and E**, by rank.
-4. **F**.
-5. **The G gate.**
+1. **B**, first by measurement: in the 5× stress run the writer was the ceiling. Loop p99 stayed at 7 ms while writer wait p99 reached 2 s and throughput capped near 9 calls/s. 89.6% of all writer hold was outside the child. `HarnessSessionStore.change` (ACP protocol row) and `ThreadStore.kernel` (journal append) held 95% of it; they migrate first.
+2. **E** with the same owner as B's `HarnessSessionStore.change` migration, or right after it: the protocol row write shrinks to what changed.
+3. **A**, producers by ledger rank; the thread list, keep-warm and graph-copy holding move to narrow events.
+4. **C and D**, by rank.
+5. **F**.
+6. **The G gate.**
 
 ## Proof
 
