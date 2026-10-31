@@ -175,7 +175,7 @@ const ATTRIBUTE_ALLOWLIST = new Map<string, string>([
 const SPAN_DURATION_BOUNDARIES = Metric.exponentialBoundaries({ start: 0.5, factor: 2, count: 35 });
 
 type Primitive = string | number | boolean | null;
-type RawAttribute = Primitive | bigint | undefined;
+type RawAttribute = Primitive | bigint;
 type SpanOptions = Parameters<Tracer.Tracer['span']>[0];
 type SpanMetrics = {
   readonly timer: Metric.Histogram<Duration.Duration>;
@@ -191,8 +191,7 @@ class PerformanceSpan implements Tracer.Span {
   readonly parent: Option.Option<Tracer.AnySpan>;
   readonly annotations: Context.Context<never>;
   projected: Record<string, Primitive> | null;
-  rawKeys: Array<string> | undefined;
-  rawValues: Array<RawAttribute> | undefined;
+  raw: Map<string, RawAttribute> | undefined;
   tail: SqlTail | undefined;
   rawBound = 0;
   attributeBytes = 0;
@@ -233,7 +232,7 @@ class PerformanceSpan implements Tracer.Span {
   }
 
   get attributes(): ReadonlyMap<string, unknown> {
-    const attributes = this.projected ?? this.tail?.attributes ?? projectRaw(this.rawKeys, this.rawValues);
+    const attributes = this.projected ?? this.tail?.attributes ?? projectRaw(this.raw);
     return new Map(Object.entries(attributes));
   }
 
@@ -243,16 +242,23 @@ class PerformanceSpan implements Tracer.Span {
     if (target === undefined) return;
     if (this.projected === null) {
       const raw = rawAttribute(value);
-      const bound = attributeBound(target, raw);
-      if (bound !== null && this.rawBound + bound <= TRACE_BUFFER_BYTES) {
-        (this.rawKeys ??= []).push(key);
-        (this.rawValues ??= []).push(raw);
-        this.rawBound += bound;
+      const previous = this.raw?.get(target);
+      const previousBound = previous === undefined ? 0 : attributeBound(target, previous)!;
+      if (raw === undefined) {
+        if (previous !== undefined) {
+          this.raw!.delete(target);
+          this.rawBound -= previousBound;
+        }
         return;
       }
-      this.projected = projectRaw(this.rawKeys, this.rawValues);
-      this.rawKeys = undefined;
-      this.rawValues = undefined;
+      const bound = attributeBound(target, raw);
+      if (bound !== null && this.rawBound - previousBound + bound <= TRACE_BUFFER_BYTES) {
+        (this.raw ??= new Map()).set(target, raw);
+        this.rawBound += bound - previousBound;
+        return;
+      }
+      this.projected = projectRaw(this.raw);
+      this.raw = undefined;
       this.attributeCount = Object.keys(this.projected).length;
       this.attributeBytes = attributesByteSize(this.projected, this.weigh);
     }
@@ -291,8 +297,7 @@ class SqlTail implements SampledSpan {
   readonly root: boolean;
   readonly unit: string | null;
   readonly upperBytes: number;
-  private keys: ReadonlyArray<string> | undefined;
-  private values: ReadonlyArray<RawAttribute> | undefined;
+  private raw: ReadonlyMap<string, RawAttribute> | undefined;
   private projected: Record<string, Primitive> | undefined;
   private weight: number | undefined;
 
@@ -316,19 +321,16 @@ class SqlTail implements SampledSpan {
     this.monotonicEnd = monotonicStart + durationMs;
     this.root = span.traceRoot;
     this.unit = span.unit;
-    this.keys = span.rawKeys;
-    this.values = span.rawValues;
+    this.raw = span.raw;
     this.upperBytes = baseBytes + span.rawBound;
-    span.rawKeys = undefined;
-    span.rawValues = undefined;
+    span.raw = undefined;
     span.tail = this;
   }
 
   get attributes(): Record<string, Primitive> {
     if (this.projected === undefined) {
-      this.projected = projectRaw(this.keys, this.values);
-      this.keys = undefined;
-      this.values = undefined;
+      this.projected = projectRaw(this.raw);
+      this.raw = undefined;
     }
     return this.projected;
   }
@@ -536,10 +538,9 @@ function spanRecord(span: SampledSpan, instanceId: string): SpanRecord {
   };
 }
 
-function rawAttribute(value: unknown): RawAttribute {
-  if (value === null || typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean' || typeof value === 'bigint') {
-    return value;
-  }
+function rawAttribute(value: unknown): RawAttribute | undefined {
+  if (value === null || typeof value === 'string' || typeof value === 'boolean' || typeof value === 'bigint') return value;
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
   return undefined;
 }
 
@@ -555,16 +556,10 @@ function attributeBound(target: string, value: RawAttribute): number | null {
   return Math.max(16, (TARGET_BYTES.get(target) ?? 0) + 2 + valueBytes);
 }
 
-function projectRaw(keys: ReadonlyArray<string> | undefined, values: ReadonlyArray<RawAttribute> | undefined): Record<string, Primitive> {
+function projectRaw(raw: ReadonlyMap<string, RawAttribute> | undefined): Record<string, Primitive> {
   const attributes: Record<string, Primitive> = {};
-  if (keys === undefined || values === undefined) return attributes;
-  for (let index = 0; index < keys.length; index += 1) {
-    const target = ATTRIBUTE_ALLOWLIST.get(keys[index]!);
-    if (target === undefined) continue;
-    const value = projectAttribute(values[index]);
-    if (value === undefined) delete attributes[target];
-    else attributes[target] = value;
-  }
+  if (raw === undefined) return attributes;
+  for (const [target, value] of raw) attributes[target] = typeof value === 'bigint' ? String(value) : value;
   return attributes;
 }
 
