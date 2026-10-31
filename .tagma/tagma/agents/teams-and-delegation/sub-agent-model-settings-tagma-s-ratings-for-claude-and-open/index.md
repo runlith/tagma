@@ -57,8 +57,8 @@ Review is picked per delivery like a child's model: the operator says which rows
 
 - A row carries `reviews` beside `on`, written by the same `agent.models` edits, thread copy included; the whole-provider switch covers both. Shipped rows start with both off. Ratings are one set per row, used for both.
 - `agent.review` keeps `reviewers` (0 for none, otherwise a ceiling the agent stays under) and `lenses`. `pool` and `split` go: a stored pool lands once as `reviews: true` edits on its rows, in machine, project and thread layers alike; the split follows from lenses — none chosen, each reviewer reads the whole; chosen, the first reads the whole and each next one a lens.
-- The `spawn_agent.model` description lists every row that works or reviews; a row that reviews is marked `reviews`, one that only reviews `review only`, and starts reviewers alone.
-- The review line names no models: up to N reviewers, picked for the delivery from rows marked for review by the same rule as a child's model, rating the review on depth, taste and ui as the work needs, a model other than the one that wrote the work first, an exhausted account skipped. With 0 reviewers or no row marked, "Review: none".
+- The `spawn_agent.model` description lists every row that works or reviews, whatever the reviewer count; a row that reviews is marked `reviews`, one that only reviews `review only`, and starts reviewers alone.
+- The review line names no models: up to N reviewers, picked for the delivery from rows marked for review by their ratings, as a child's model is, an exhausted account skipped. With 0 reviewers or no row marked, "Review: none". Tagma adds no preference of its own among them (rule c9e0cb28): the choice follows the operator's ratings alone.
 
 ## The Team section
 
