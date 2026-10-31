@@ -16,19 +16,35 @@ import type { SubscriptionEnding, WireFault } from './protocol/wire';
 export class WireLost extends Data.TaggedError('WireLost')<{
   readonly reason: string;
   readonly sent: boolean;
-}> {}
+}> {
+  override get message(): string {
+    return `the host connection was lost${this.sent ? ' after the request was sent' : ''}: ${this.reason}`;
+  }
+}
 
 export class WireInvalid extends Data.TaggedError('WireInvalid')<{
   readonly detail: string;
-}> {}
+}> {
+  override get message(): string {
+    return `a message for the host could not be encoded: ${this.detail}`;
+  }
+}
 
 export class WireUnreadable extends Data.TaggedError('WireUnreadable')<{
   readonly detail: string;
-}> {}
+}> {
+  override get message(): string {
+    return `the host answered unreadably: ${this.detail}`;
+  }
+}
 
 export class WireFailed extends Data.TaggedError('WireFailed')<{
   readonly fault: WireFault;
-}> {}
+}> {
+  override get message(): string {
+    return `the host faulted the connection (${this.fault.kind}): ${this.fault.detail}`;
+  }
+}
 
 export const Unavailability = Schema.Literals(['absent', 'invalid', 'mismatched', 'unreachable', 'credential']);
 export type Unavailability = typeof Unavailability.Type;
@@ -37,11 +53,19 @@ export class WireUnavailable extends Data.TaggedError('WireUnavailable')<{
   readonly kind: Unavailability;
   readonly reason: string;
   readonly sent: boolean;
-}> {}
+}> {
+  override get message(): string {
+    return `the execution host is unavailable (${this.kind}): ${this.reason}`;
+  }
+}
 
 export class HostRefused extends Data.TaggedError('HostRefused')<{
   readonly refusal: Refusal;
-}> {}
+}> {
+  override get message(): string {
+    return `the execution host refused (${this.refusal._tag}): ${this.refusal.reason}`;
+  }
+}
 
 export type ExecutionsFailure = WireLost | WireInvalid | WireUnreadable | WireFailed | WireUnavailable | HostRefused;
 
