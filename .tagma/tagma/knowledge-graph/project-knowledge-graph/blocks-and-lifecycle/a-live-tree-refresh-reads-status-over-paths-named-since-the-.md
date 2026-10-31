@@ -13,7 +13,7 @@ sources:
     ref: apps/tagma/server/src/graph/tree/freshness.ts
     symbol: treeSeen
 ---
-The freshness gate accumulates paths the tree watcher named since the last refresh, and refresh reads `git status` only over them; it takes the remaining dirty paths from the previous read. Tagma's own writes' echoes count as named too: they never wake a refresh but join the set — otherwise the dirty paths receiving `batches.carry` and the stamp comparison would diverge from a full status.
+The freshness gate accumulates paths the tree watcher named since the last refresh, and refresh reads `git status` only over them; it takes the remaining dirty paths from the previous read. Tagma's own writes' echoes count as named too: they never wake a refresh but join the set — otherwise the dirty paths receiving `batches.carry` and the stamp comparison would diverge from a full status. Each background refresh opens its own cost root rather than inheriting the act that registered the long-lived tree runtime.
 
 If HEAD moved since the last read, paths from the old HEAD vs new `diff` are re-read too: a commit, reset, or checkout changes the status of files nobody touched. With no named paths and no HEAD move, status is not read at all.
 
