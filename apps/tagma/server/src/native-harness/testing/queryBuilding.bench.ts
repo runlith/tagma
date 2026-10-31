@@ -1,10 +1,13 @@
 import * as BunRuntime from '@effect/platform-bun/BunRuntime';
 import { Effect, Layer } from 'effect';
-import { and, asc, eq, isNull, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, isNull, or, sql } from 'drizzle-orm';
 import { makeWithDefaults } from 'drizzle-orm/effect-sqlite-bun';
 import { heldPool } from '@runlith/sqlite-process/testing/pool';
 import { sqliteProcessLayer } from '@runlith/sqlite-process/SqliteProcess';
 import { metadataColumns, threadRow } from '../row.js';
+import { threadRun } from '../../threads/store/kernel.js';
+import { threadRev } from '../store/thread.js';
+import { journalHead } from '../../threads/journal/base.js';
 import { recordFacts } from '../../thread-record/facts.js';
 import { factsWhere } from '../../thread-record/identity.js';
 import { storeDb } from '../../platform/contract/service/store.js';
@@ -67,6 +70,27 @@ BunRuntime.runMain(
               ),
         },
         { name: 'thread record', build: () => factsWhere(storeDb<'machine'>(db), eq(recordFacts.id, id)) },
+        { name: 'run by id', build: () => db.select().from(threadRun).where(eq(threadRun.id, id)) },
+        {
+          name: 'latest run',
+          build: () => db.select().from(threadRun).where(eq(threadRun.threadId, id)).orderBy(desc(threadRun.createdAt), desc(threadRun.id)),
+        },
+        {
+          name: 'thread runs',
+          build: () => db.select().from(threadRun).where(eq(threadRun.threadId, id)).orderBy(asc(threadRun.createdAt), asc(threadRun.id)),
+        },
+        {
+          name: 'thread version',
+          build: () =>
+            db
+              .select({
+                foldRev: sql<number>`coalesce((select ${threadRev.foldRev} from ${threadRev} where ${threadRev.threadId} = ${id}), 0)`,
+                inheritRev: sql<number>`coalesce((select ${threadRev.inheritRev} from ${threadRev} where ${threadRev.threadId} = ${id}), 0)`,
+                head: sql<number>`${journalHead(sql`${id}`)}`,
+              })
+              .from(threadRow)
+              .where(eq(threadRow.id, id)),
+        },
       ];
       yield* Effect.sync(() => {
         const rows = shapes.map(({ name, build }) => {

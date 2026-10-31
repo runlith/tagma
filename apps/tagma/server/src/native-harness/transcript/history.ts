@@ -22,11 +22,30 @@ import { GuidanceIndex } from './guidanceIndex.js';
 
 export type ThreadHistoryStore = Effect.Success<ReturnType<typeof makeHistoryStore>>;
 
+type HistoryFact =
+  | { readonly fact: 0; readonly at: number | null; readonly kind: null; readonly body: null }
+  | { readonly fact: 1; readonly at: number; readonly kind: string; readonly body: string };
+
 export const makeHistoryStore = Effect.fnUntraced(function* ({ reads }: { readonly reads: RestedFolds | undefined }) {
   const { db } = yield* MachineStore;
   const kinds = yield* ThreadEntryKinds;
   const foldsByUnit = new WeakMap<Unit<'machine'>, Map<string, Held>>();
   const live = new HeldHistories();
+  const suffixById = db
+    .select({ position: threadEvent.position, kind: threadEvent.kind, payload: threadEvent.payload })
+    .from(threadEvent)
+    .where(and(eq(threadEvent.threadId, sql.placeholder('id')), gt(threadEvent.position, sql.placeholder('through'))))
+    .orderBy(asc(threadEvent.position))
+    .prepare();
+  const factsById = db.all<HistoryFact>(sql`
+    select 0 as fact, ${threadLog.historyThrough} as at, null as kind, null as body
+      from ${threadLog}
+     where ${threadLog.threadId} = ${sql.placeholder('id')}
+    union all
+    select 1, ${threadEvent.position}, ${threadEvent.kind}, ${threadEvent.payload}
+      from ${threadEvent}
+     where ${threadEvent.threadId} = ${sql.placeholder('id')} and ${threadEvent.position} > ${sql.placeholder('through')}
+    order by 1, 2`);
 
   const payloadOf = (value: unknown): ThreadEventPayload | null => {
     const formed = kinds.formEvent(value);
@@ -66,13 +85,7 @@ export const makeHistoryStore = Effect.fnUntraced(function* ({ reads }: { readon
 
   const replay = Effect.fnUntraced(
     function* (unit: Unit<'machine'>, id: string, stored: ThreadHistory, through: number, guidance: GuidanceIndex) {
-      const suffix = yield* unit.run(
-        db
-          .select({ position: threadEvent.position, kind: threadEvent.kind, payload: threadEvent.payload })
-          .from(threadEvent)
-          .where(and(eq(threadEvent.threadId, id), gt(threadEvent.position, through)))
-          .orderBy(asc(threadEvent.position)),
-      );
+      const suffix = yield* unit.run(suffixById.all({ id, through }));
       yield* Effect.annotateCurrentSpan({ events: suffix.length });
       const events: FoldedEvent[] = [];
       for (const event of suffix) {
@@ -90,17 +103,7 @@ export const makeHistoryStore = Effect.fnUntraced(function* ({ reads }: { readon
 
   const caughtUp = Effect.fnUntraced(
     function* (unit: Unit<'machine'>, id: string, history: ThreadHistory, standing: HistoryState) {
-      const rows = yield* unit.run(
-        db.all<{ fact: 0 | 1; at: number | null; kind: string | null; body: string | null }>(sql`
-          select 0 as fact, ${threadLog.historyThrough} as at, null as kind, null as body
-            from ${threadLog}
-           where ${threadLog.threadId} = ${id}
-          union all
-          select 1, ${threadEvent.position}, ${threadEvent.kind}, ${threadEvent.payload}
-            from ${threadEvent}
-           where ${threadEvent.threadId} = ${id} and ${threadEvent.position} > ${standing.through}
-          order by 1, 2`),
-      );
+      const rows = yield* unit.run(factsById.execute({ id, through: standing.through }));
       const log = rows[0];
       if (log === undefined || log.fact !== 0 || log.at !== standing.cursor) return null;
       const suffix: FoldedEvent[] = [];
@@ -263,15 +266,7 @@ export const makeHistoryStore = Effect.fnUntraced(function* ({ reads }: { readon
       const warm = heldIn(unit).has(id) ? null : live.held(id);
       if (warm !== null) {
         const known = toldStates.get(warm.entry) ?? warm.standing;
-        const rows = yield* unit.run(
-          db.all<{ fact: 0 | 1; at: number; kind: string | null; body: string | null }>(sql`
-            select 0 as fact, ${threadLog.historyThrough} as at, null as kind, null as body
-              from ${threadLog} where ${threadLog.threadId} = ${id}
-            union all
-            select 1, ${threadEvent.position}, ${threadEvent.kind}, ${threadEvent.payload}
-              from ${threadEvent} where ${threadEvent.threadId} = ${id} and ${threadEvent.position} > ${known.through}
-            order by 1, 2`),
-        );
+        const rows = yield* unit.run(factsById.execute({ id, through: known.through }));
         if (rows[0]?.fact === 0 && rows[0].at === known.cursor && live.current(id, warm.entry)) {
           const indexed = yield* Effect.try({
             try: () => {

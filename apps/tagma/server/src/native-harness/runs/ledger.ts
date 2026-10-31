@@ -48,6 +48,18 @@ export const makeRunStores = Effect.gen(function* () {
   const clock = yield* Clock.Clock;
   const endedIn = yield* makeEndedRuns;
   const reapingOf = yield* makeReaping;
+  const latestByThread = db
+    .select()
+    .from(threadRun)
+    .where(eq(threadRun.threadId, sql.placeholder('threadId')))
+    .orderBy(desc(threadRun.createdAt), desc(threadRun.id))
+    .prepare();
+  const runsByThread = db
+    .select()
+    .from(threadRun)
+    .where(eq(threadRun.threadId, sql.placeholder('threadId')))
+    .orderBy(asc(threadRun.createdAt), asc(threadRun.id))
+    .prepare();
 
   const writing = <A, E>(set: WriteSet, work: (unit: WriteUnit<'machine'>) => Effect.Effect<A, E>, tx?: WriteUnit<'machine'>) =>
     tx ? work(tx) : units.write(set, work);
@@ -334,7 +346,12 @@ export const makeRunStores = Effect.gen(function* () {
           : eq(threadRun.threadId, threadId);
         const latest = (unit: Unit<'machine'>) =>
           Effect.flatMap(
-            unit.run(db.select().from(threadRun).where(of).orderBy(desc(threadRun.createdAt), desc(threadRun.id)).get()),
+            unit.run(
+              statuses
+                ? db.select().from(threadRun).where(of).orderBy(desc(threadRun.createdAt), desc(threadRun.id)).get()
+                : latestByThread.get({ threadId }),
+            ),
+
             (row) => (row ? trustedRun(kinds, 'latestRun', row) : Effect.succeed(null)),
           );
         const program = tx === undefined ? null : programOf(tx);
@@ -399,11 +416,8 @@ export const makeRunStores = Effect.gen(function* () {
         stored('runsOf')(
           reading(
             (unit) =>
-              Effect.flatMap(
-                unit.run(
-                  db.select().from(threadRun).where(eq(threadRun.threadId, threadId)).orderBy(asc(threadRun.createdAt), asc(threadRun.id)),
-                ),
-                (rows) => Effect.all(rows.map((row) => trustedRun(kinds, 'runsOf', row))),
+              Effect.flatMap(unit.run(runsByThread.all({ threadId })), (rows) =>
+                Effect.all(rows.map((row) => trustedRun(kinds, 'runsOf', row))),
               ),
             tx,
           ),

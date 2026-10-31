@@ -1,5 +1,5 @@
 import { Cause, Clock, Effect } from 'effect';
-import { and, desc, eq, inArray, isNotNull, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNotNull, sql, type SQL } from 'drizzle-orm';
 import { among } from '../../platform/store/rows.js';
 import {
   callParts,
@@ -50,9 +50,19 @@ export const makeTransitions = Effect.fnUntraced(function* ({
   const { db } = yield* MachineStore;
   const units = yield* MachineUnits;
   let epoch: Date | null | undefined;
+  const versionById = db
+    .select(versionColumns(sql`${sql.placeholder('threadId')}`))
+    .from(threadRow)
+    .where(eq(threadRow.id, sql.placeholder('threadId')))
+    .prepare();
+  const heldById = db
+    .select({ ...metadataColumns, ...versionColumns(sql`${sql.placeholder('threadId')}`) })
+    .from(threadRow)
+    .where(eq(threadRow.id, sql.placeholder('threadId')))
+    .prepare();
 
   const version = (unit: Unit<'machine'>, threadId: string): Effect.Effect<ThreadVersion | undefined, StoredFailure> =>
-    unit.run(db.select(versionColumns(threadId)).from(threadRow).where(eq(threadRow.id, threadId)).get());
+    unit.run(versionById.get({ threadId }));
 
   const snapshot = Effect.fnUntraced(function* <T, E>(
     unit: Unit<'machine'>,
@@ -78,15 +88,7 @@ export const makeTransitions = Effect.fnUntraced(function* ({
     threadId: string,
     work: (at: ThreadHold<WriteUnit<'machine'>>) => Effect.Effect<T, E>,
   ) {
-    const held = yield* stored('writeAt')(
-      unit.run(
-        db
-          .select({ ...metadataColumns, ...versionColumns(threadId) })
-          .from(threadRow)
-          .where(eq(threadRow.id, threadId))
-          .get(),
-      ),
-    );
+    const held = yield* stored('writeAt')(unit.run(heldById.get({ threadId })));
     if (held === undefined) return undefined;
     const { foldRev, inheritRev, head, ...metadata } = held;
     const row = yield* threadRowOf(threads.kinds, metadata);
@@ -482,7 +484,7 @@ const SNAPSHOT_ATTEMPTS = 8;
 //! SQLite binds at most 32766 parameters to one statement, and a spent key takes five.
 const SPENT_PER_STATEMENT = Math.floor(32_766 / 5);
 
-function versionColumns(threadId: string) {
+function versionColumns(threadId: string | SQL) {
   return {
     foldRev: sql<number>`coalesce((select ${threadRev.foldRev} from ${threadRev} where ${threadRev.threadId} = ${threadId}), 0)`,
     inheritRev: sql<number>`coalesce((select ${threadRev.inheritRev} from ${threadRev} where ${threadRev.threadId} = ${threadId}), 0)`,

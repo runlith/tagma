@@ -21,15 +21,23 @@ export const makeEndedRuns = Effect.gen(function* () {
   const { db } = yield* MachineStore;
   const units = yield* MachineUnits;
   const kinds = yield* ThreadEntryKinds;
+  const runById = db
+    .select()
+    .from(threadRun)
+    .where(eq(threadRun.id, sql.placeholder('runId')))
+    .prepare();
+  const runByKey = db
+    .select()
+    .from(threadRun)
+    .where(and(eq(threadRun.threadId, sql.placeholder('threadId')), eq(threadRun.startKey, sql.placeholder('key'))))
+    .prepare();
 
   const byNewest = (left: Ended, right: Ended) =>
     (right.finishedAt?.getTime() ?? 0) - (left.finishedAt?.getTime() ?? 0) || right.id.localeCompare(left.id);
 
-  const runWhere = (call: string, where: SQL | undefined, tx?: Unit<'machine'>) => {
+  const runWhere = (call: string, where: SQL | undefined, query: ReturnType<typeof runById.get>, tx?: Unit<'machine'>) => {
     const work = (unit: Unit<'machine'>): Effect.Effect<ThreadRunRow | null, StoredFailure> =>
-      Effect.flatMap(unit.run(db.select().from(threadRun).where(where).get()), (row) =>
-        row ? trustedRun(kinds, call, row) : Effect.succeed(null),
-      );
+      Effect.flatMap(unit.run(query), (row) => (row ? trustedRun(kinds, call, row) : Effect.succeed(null)));
     const program = tx === undefined ? null : programOf(tx);
     if (program === null) return stored(call)(tx ? work(tx) : units.read(work));
     return stored(call)(
@@ -89,9 +97,9 @@ export const makeEndedRuns = Effect.gen(function* () {
               },
             }),
         ),
-      byId: (runId: string, tx?: Unit<'machine'>) => runWhere('runById', eq(threadRun.id, runId), tx),
+      byId: (runId: string, tx?: Unit<'machine'>) => runWhere('runById', eq(threadRun.id, runId), runById.get({ runId }), tx),
       byStartKey: (threadId: string, key: string, tx?: Unit<'machine'>) =>
-        runWhere('runByStartKey', and(eq(threadRun.threadId, threadId), eq(threadRun.startKey, key)), tx),
+        runWhere('runByStartKey', and(eq(threadRun.threadId, threadId), eq(threadRun.startKey, key)), runByKey.get({ threadId, key }), tx),
       page: (input: { threadIds: readonly string[]; limit: number; after?: ThreadSettledPosition }) => {
         const threadIds = [...new Set(input.threadIds)];
         const after = input.after;

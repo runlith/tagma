@@ -73,6 +73,7 @@ export const makeSqliteThreadJournal = Effect.gen(function* () {
   const floor = Option.getOrUndefined(yield* Effect.serviceOption(RolloutWriting));
   const reads = Option.getOrUndefined(yield* Effect.serviceOption(RestedRollouts));
   const carrying = new WeakMap<WriteUnit<'machine'>, Map<string, ThreadEventRow[]>>();
+  const headById = db.get<{ head: number }>(sql`select ${journalHead(sql`${sql.placeholder('threadId')}`)} as head`);
 
   const facts = () =>
     db
@@ -431,7 +432,7 @@ export const makeSqliteThreadJournal = Effect.gen(function* () {
 
     headPosition: (threadId: string, tx?: Unit<'machine'>) => {
       const work = (unit: Unit<'machine'>): Effect.Effect<number, StoreFailure> =>
-        Effect.map(unit.run(db.get<{ head: number }>(sql`select ${journalHead(sql`${threadId}`)} as head`)), (row) => row?.head ?? 0);
+        Effect.map(unit.run(headById.execute({ threadId })), (row) => row?.head ?? 0);
       return filed(
         threadId,
         tx,
