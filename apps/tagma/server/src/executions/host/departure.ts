@@ -87,7 +87,9 @@ export const prepareChange = Effect.fnUntraced(function* (
   }
   const answered = yield* Effect.result(executions.prepare(keyed(installation, 'prepare')));
   if (answered._tag === 'Failure') {
-    return yield* refused(`the execution host could not be asked to prepare its successor: ${answered.failure._tag}`);
+    return yield* refused(
+      `the execution host could not be asked to prepare its successor: ${answered.failure._tag}: ${answered.failure.message}`,
+    );
   }
   const prepared = answered.success;
   switch (prepared._tag) {
@@ -116,7 +118,7 @@ const unasked = (detail: string): HostVerdict => ({ _tag: 'Unasked', detail });
 
 const preparedOf = (installation: InstallationId, executions: HostLifecycle['Service']): Effect.Effect<HostVerdict> =>
   Effect.match(executions.prepare(keyed(installation, 'weigh')), {
-    onFailure: (failure) => unasked(`the execution host could not be asked: ${failure._tag}`),
+    onFailure: (failure) => unasked(`the execution host could not be asked: ${failure._tag}: ${failure.message}`),
     onSuccess: (answer): HostVerdict => {
       switch (answer._tag) {
         case 'Prepared':
@@ -249,7 +251,7 @@ const stays = Effect.fnUntraced(function* (
   const boot = restored._tag === 'Failure' ? `; its boot input could not be put back: ${restored.failure.detail}` : '';
   const admission =
     resumed._tag === 'Failure'
-      ? `; it could not be asked to resume (${resumed.failure._tag})`
+      ? `; it could not be asked to resume (${resumed.failure._tag}: ${resumed.failure.message})`
       : resumed.success._tag === 'Resumed'
         ? ''
         : `; it did not know its ticket on resume (admission ${resumed.success.phase})`;
@@ -278,7 +280,9 @@ export const yieldPlace = Effect.fnUntraced(function* (
   const awaited = pending === undefined || pending._tag === 'Unread' ? undefined : pending.digest;
   const fenced = yield* Effect.result(executions.quiesce(keyed(installation, 'quiesce')));
   if (fenced._tag === 'Failure') {
-    return yield* Effect.logError(`the execution host could not be quiesced for its successor: ${fenced.failure._tag}; its logic stays`);
+    return yield* Effect.logError(
+      `the execution host could not be quiesced for its successor: ${fenced.failure._tag}: ${fenced.failure.message}; its logic stays`,
+    );
   }
   if (fenced.success._tag === 'Refused') {
     const { refusal } = fenced.success;
@@ -298,7 +302,12 @@ export const yieldPlace = Effect.fnUntraced(function* (
   const answered = yield* Effect.result(executions.yield(ticket));
   if (answered._tag === 'Failure') {
     if (answered.failure._tag !== 'WireLost') {
-      return yield* stays(executions, ticket, restore, `the execution host logic could not be asked to yield: ${answered.failure._tag}`);
+      return yield* stays(
+        executions,
+        ticket,
+        restore,
+        `the execution host logic could not be asked to yield: ${answered.failure._tag}: ${answered.failure.message}`,
+      );
     }
     const after = yield* departed(executions, files, registrations, state, leaving, awaited, ticket, claim);
     switch (after._tag) {

@@ -7,6 +7,9 @@ import { join } from 'node:path';
 import * as BunServices from '@effect/platform-bun/BunServices';
 import { Context, Data, Deferred, Effect, Exit, Fiber, FileSystem, Layer, Schedule, Schema, Scope, Tracer } from 'effect';
 import { HostRegistration } from '@runlith/executions/HostRegistration';
+import { ExecutionClient } from '@runlith/executions/ExecutionClient';
+import { SuccessionSteps } from '../../../installation/contract/service/steps.js';
+import { hostBundleOwn, placeCandidate } from '../../../executions/host/offer.js';
 import { endpointConnection } from '@runlith/executions/posix/endpoint';
 import { ARTIFACT_FILE, ArtifactManifest } from '@runlith/executions/protocol/artifact';
 import { HostRequestKey, type ExecutionRef } from '@runlith/executions/protocol/execution';
@@ -291,6 +294,53 @@ describe('host activation after the server door', () => {
           expect(standing.custodian).toBe(false);
           yield* leave(failing);
         }),
+    );
+  });
+  layer(fixture, { excludeTestServices: true })('handover gap', (it) => {
+    it.effect('hands prepared host logic over before a successor connects, keeping the live process and record', () =>
+      Effect.gen(function* () {
+        const { boot, leave, closures, files, projectId } = yield* Fixture;
+        const first = yield* boot(closures.before);
+        const counter = yield* started(first, projectId, 'handover-counter', 'i=0; while :; do echo n$i; i=$((i+1)); sleep 0.02; done');
+        const before = yield* until(output(first, counter), (read) => counted(read.text).length > 1, 'the counter before handover');
+        const process = (yield* Context.get(first, Terminals).state(counter))?.native;
+        expect(process).toBeDefined();
+        const { address } = Context.get(first, HostManagement).connection;
+        const registrations = Context.get(yield* Layer.build(HostRegistration.layer), HostRegistration);
+        const old = yield* registrations.read(address.state);
+        const placement = yield* placeCandidate({
+          files,
+          registrations,
+          source: { _tag: 'Closure', path: join(closures.after, EXECUTIONS) },
+          state: address.state,
+          own: hostBundleOwn(address.state),
+          restart: 'host-handover',
+        });
+        expect(placement._tag).toBe('Placed');
+        yield* Context.get(first, SuccessionSteps).prepare('host-handover', 'hand-over');
+        yield* leave(first);
+        const observer = yield* ExecutionClient.make({
+          address,
+          role: 'custodian',
+          limits: { frameBytes: 65_536, headerBytes: 16_384, connections: 1, requests: 1, subscriptions: 1, credits: 65_536 },
+        }).pipe(Effect.provideService(HostRegistration, registrations), Effect.provide(endpointConnection));
+        const departed = yield* Effect.result(observer.status());
+        expect(departed._tag === 'Success' ? departed.success.phase : undefined).not.toBe('open');
+        const next = yield* until(
+          registrations.read(address.state),
+          (registration) => registration.logic?.pid !== old.logic?.pid,
+          'the replacement logic before any successor connects',
+        );
+        expect(next.artifact?.identity.digest).toBe(placement._tag === 'Placed' ? placement.digest : undefined);
+        const successor = yield* boot(closures.after);
+        const running = yield* Context.get(successor, Terminals).state(counter);
+        expect(running?.state.phase).toBe('running');
+        expect(running?.native).toEqual(process);
+        yield* until(output(successor, counter, before.through), (read) => counted(read.text).length > 1, 'the counter after handover');
+        const whole = counted((yield* output(successor, counter)).text);
+        expect(whole).toEqual(whole.map((_, index) => index));
+        yield* leave(successor);
+      }),
     );
   });
 });

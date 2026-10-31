@@ -3,7 +3,7 @@ import { afterEach, describe, expect } from 'bun:test';
 import { layer } from '@runlith/effect-test';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import * as BunPath from '@effect/platform-bun/BunPath';
-import { Deferred, Effect, Fiber, FileSystem, Layer, Path, Schema, Tracer } from 'effect';
+import { Deferred, Effect, Exit, Fiber, FileSystem, Layer, Path, Schema, Scope, Tracer } from 'effect';
 import { ExecutionClient } from './ExecutionClient';
 import { HostRegistration } from './HostRegistration';
 import { Digest, rangeText } from './protocol/artifact';
@@ -331,6 +331,27 @@ layer(services, { excludeTestServices: true })('wire sessions', (it) => {
         const connecting = yield* Effect.forkChild(client.status());
         yield* Deferred.await(accepted);
         yield* Fiber.interrupt(connecting);
+        yield* Deferred.await(gone);
+      }),
+    );
+
+    it.effect('closing the client ends a pending welcome without waiting for the connect permit it holds', () =>
+      Effect.gen(function* () {
+        const { registration, address } = yield* registered;
+        const accepted = yield* Deferred.make<void>();
+        const gone = yield* Deferred.make<void>();
+        yield* listening(
+          registration.endpoint.path,
+          () => Deferred.doneUnsafe(accepted, Effect.void),
+          () => Deferred.doneUnsafe(gone, Effect.void),
+        );
+        const owner = yield* Scope.fork(yield* Effect.scope);
+        const client = yield* ExecutionClient.make({ address, role: 'custodian', limits }).pipe(Scope.provide(owner));
+        const connecting = yield* Effect.forkChild(Effect.result(client.status()));
+        yield* Deferred.await(accepted);
+        yield* Scope.close(owner, Exit.void);
+        const answer = yield* Fiber.join(connecting);
+        expect(answer).toMatchObject({ _tag: 'Failure', failure: { _tag: 'WireUnavailable', sent: false } });
         yield* Deferred.await(gone);
       }),
     );

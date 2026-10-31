@@ -78,12 +78,14 @@ export type ClientInput = {
 };
 
 const make = Effect.fnUntraced(function* ({ address, role, limits, budget = {}, opened }: ClientInput) {
-  const owner = yield* Effect.scope;
   const files = yield* FileSystem.FileSystem;
   const registrations = yield* HostRegistration;
   const connection = yield* EndpointConnection;
   const held = yield* Ref.make<Held | undefined>(undefined);
   const connecting = yield* Semaphore.make(1);
+  const owner = yield* Effect.acquireRelease(Scope.make(), (scope, exit) =>
+    Effect.andThen(Scope.close(scope, exit), connecting.withPermits(1)(Ref.set(held, undefined))),
+  );
 
   const session = Effect.fnUntraced(
     function* () {
@@ -118,15 +120,6 @@ const make = Effect.fnUntraced(function* ({ address, role, limits, budget = {}, 
       );
     },
     (effect) => connecting.withPermits(1)(effect),
-  );
-
-  yield* Effect.addFinalizer(() =>
-    connecting.withPermits(1)(
-      Effect.gen(function* () {
-        const standing = yield* Ref.getAndSet(held, undefined);
-        if (standing !== undefined) yield* Scope.close(standing.scope, Exit.void);
-      }),
-    ),
   );
 
   const over = (session: WireSession, body: Request, payload: Uint8Array) =>
