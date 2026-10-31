@@ -30,6 +30,8 @@ const ORIGIN = 'http://tagma';
 
 class Greeting extends Context.Service<Greeting, { readonly of: (name: string) => string }>()('testing/Greeting') {}
 
+class Salutation extends Context.Service<Salutation, { readonly word: string }>()('testing/Salutation') {}
+
 const GREETING_OPERATIONS = {
   greet: operation('greet', {
     approval: ASKS_NEVER,
@@ -68,9 +70,12 @@ const greeting = manifest({
     ),
   ],
   lifetimes: {
+    installation: Layer.succeed(Salutation, { word: 'Hello' }),
     serving: Layer.effect(
       Greeting,
-      Effect.map(MachineStore, (store) => ({ of: (name: string) => `${name} at ${basename(store.path)}` })),
+      Effect.map(Effect.all([Salutation, MachineStore]), ([salutation, store]) => ({
+        of: (name: string) => `${salutation.word} ${name} at ${basename(store.path)}`,
+      })),
     ),
   },
 });
@@ -123,7 +128,7 @@ it.live('a root composing the core with a module of its own serves its operation
       ),
       routed,
     );
-    expect(answered.body).toEqual({ status: 'greeted', text: 'Ada at tagma.sqlite' });
+    expect(answered.body).toEqual({ status: 'greeted', text: 'Hello Ada at tagma.sqlite' });
     expect(ASSEMBLY.registry.named('greet')).toBeNull();
   }).pipe(Effect.provide(BunFileSystem.layer)),
 );

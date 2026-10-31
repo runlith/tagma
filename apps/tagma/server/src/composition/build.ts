@@ -12,19 +12,20 @@ import type { CORE_MODULES } from './core.js';
 type Installed = ServerRuntime['runtime'] extends ManagedRuntime.ManagedRuntime<infer R, never> ? R : never;
 type Served = ServerRuntime['owners'] extends Context.Context<infer R> ? R : never;
 
-type LifetimeNeeds<M, Tier extends 'installation' | 'serving'> = M extends {
-  readonly lifetimes: { readonly [K in Tier]: Layer.Layer<never, unknown, infer R> };
-}
-  ? R
-  : never;
+type Tier = 'installation' | 'serving';
+
+type LifetimeOf<M, T extends Tier> = M extends { readonly lifetimes: { readonly [K in T]: infer L extends Layer.Any } } ? L : never;
+
+type Needs<M, T extends Tier> = Layer.Services<LifetimeOf<M, T>>;
+type Gives<M, T extends Tier> = Layer.Success<LifetimeOf<M, T>>;
 
 type Extension<Modules extends readonly Manifest[]> = Exclude<Modules[number], (typeof CORE_MODULES)[number]>;
 
-type Unserved<Modules extends readonly Manifest[]> =
-  | Exclude<LiveDoorOf<Modules[number]>, SocketDoor>
+type Unserved<Modules extends readonly Manifest[], E = Extension<Modules>> =
+  | Exclude<LiveDoorOf<Modules[number]>, SocketDoor | Gives<E, 'installation'> | Gives<E, 'serving'>>
   | Exclude<ControlServices<Modules[number]>, SettingControlNeeds>
-  | Exclude<LifetimeNeeds<Extension<Modules>, 'installation'>, Installed>
-  | Exclude<LifetimeNeeds<Extension<Modules>, 'serving'>, Served | Installed>;
+  | Exclude<Needs<E, 'installation'>, Installed | Gives<E, 'installation'>>
+  | Exclude<Needs<E, 'serving'>, Served | Installed | Gives<E, 'installation'> | Gives<E, 'serving'>>;
 
 export type ServerParts<Modules extends readonly Manifest[] = readonly Manifest[]> = {
   readonly modules: Modules;

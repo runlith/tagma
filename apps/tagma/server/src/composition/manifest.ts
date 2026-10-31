@@ -1,7 +1,7 @@
 import { Effect, Layer } from 'effect';
 import { prepareSqlite } from './sqlite.js';
 import type { CheckSubjectKind, FeedDeclaration, Operation, OperationDeclaration } from '../platform/contract/wire/operation.js';
-import { type DeclaredOperations, type Manifest, operationsOf } from '../platform/contract/service/manifest.js';
+import { type DeclaredOperations, type Manifest, manifests, operationsOf } from '../platform/contract/service/manifest.js';
 import type { Machine } from '../platform/contract/service/capacity.js';
 import type { PoolDeclaration } from '@runlith/held/Capacity';
 import type { SubjectKind } from '../platform/contract/wire/place.js';
@@ -126,6 +126,7 @@ export const participantsOf =
     );
 
 export const assemble = async ({ modules, rested }: ServerParts): Promise<Assembly> => {
+  manifests(...modules);
   const operations = collect(await Effect.runPromise(operationsOf(modules)));
   const registry = operationRegistry<OperationId>(
     projectedOperations(Object.fromEntries(operations.declarations.map((declaration) => [declaration.id, declaration]))),

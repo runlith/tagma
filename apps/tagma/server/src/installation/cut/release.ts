@@ -163,7 +163,8 @@ const bundled = Effect.fnUntraced(function* (
             {
               name: 'closure-entry',
               setup(plugin) {
-                plugin.onResolve({ filter: external.from }, () => {
+                plugin.onResolve({ filter: external.from }, (asked) => {
+                  if (resolve(asked.importer) !== resolve(entry)) return undefined;
                   rewrote += 1;
                   return { path: external.to, external: true };
                 });
