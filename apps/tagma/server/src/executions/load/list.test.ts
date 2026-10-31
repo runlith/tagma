@@ -114,6 +114,14 @@ test('an agent row holds every execution of its thread with its own label, CPU, 
   expect(view.rows.find((row) => row.title === 'Idle')?.minor).toBe(true);
   expect(view.totals.others).toMatchObject({ count: 1, share: 0.001 });
   expect(view.gpu).toEqual({ _tag: 'Unavailable', reason: 'not measured' });
+  const trimmed = new LoadList().compose(
+    reading([{ ...group({ _tag: 'Program', key: 'game', name: 'Game' }, 1, 16), gpuCores: 0.5, gpuUnread: 0, processes: [] }]),
+    named,
+    noParts,
+    1_000,
+    [],
+  );
+  expect(trimmed.view.gpu).toEqual({ _tag: 'Measured' });
 });
 
 test("an agent's own harness session is never named as its work, and still gives the row its project", () => {

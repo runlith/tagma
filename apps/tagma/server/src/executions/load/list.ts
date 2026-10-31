@@ -92,11 +92,13 @@ const unresolvedOf = (reading: LoadReading, parts: PartNames): readonly Unresolv
 
 const gpuState = (reading: LoadReading): LoadView['gpu'] => {
   let reason: string | undefined;
-  for (const group of reading.groups)
+  for (const group of reading.groups) {
+    if (group.gpuCores > 0) return { _tag: 'Measured' };
     for (const one of group.processes) {
       if (one.gpu._tag === 'Measured') return { _tag: 'Measured' };
       reason ??= one.gpu.reason;
     }
+  }
   return { _tag: 'Unavailable', reason: reason ?? 'no process was read' };
 };
 
@@ -126,16 +128,29 @@ const partOf = (row: PartRow | undefined, key: string, open: Open): Building => 
 
 const installationSlices = (group: LoadGroup, open: Open): readonly Slice[] => {
   const byPid = new Map(group.processes.map((one) => [one.identity.pid, one]));
+  const roles = new Map<number, string | undefined>();
   const roleOf = (one: HostProcess): string | undefined => {
+    const walked = new Set<number>();
     let at: HostProcess | undefined = one;
-    for (let hops = 0; at !== undefined && hops <= byPid.size; hops += 1) {
-      if (at.role !== undefined) return at.role;
+    let role: string | undefined;
+    while (at !== undefined && !walked.has(at.identity.pid)) {
+      if (roles.has(at.identity.pid)) {
+        role = roles.get(at.identity.pid);
+        break;
+      }
+      walked.add(at.identity.pid);
+      if (at.role !== undefined) {
+        role = at.role;
+        break;
+      }
       at = at.parent === undefined ? undefined : byPid.get(at.parent);
     }
-    return undefined;
+    for (const pid of walked) roles.set(pid, role);
+    return role;
   };
-  const host = group.processes.filter((one) => HOST_ROLES.has(roleOf(one) ?? ''));
-  const server = group.processes.filter((one) => !HOST_ROLES.has(roleOf(one) ?? ''));
+  const hosted = (one: HostProcess) => HOST_ROLES.has(roleOf(one) ?? '');
+  const host = group.processes.filter(hosted);
+  const server = group.processes.filter((one) => !hosted(one));
   const hostCores = host.reduce((sum, one) => sum + (one.cores ?? 0), 0);
   const hostMemory = host.reduce((sum, one) => sum + (one.memoryBytes ?? 0), 0);
   const hostUnread = host.filter((one) => one.unread !== undefined).length;

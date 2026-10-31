@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest';
 import type { LoadProcess, LoadRow, LoadRowKind, LoadView } from '@tagma/server/executions/contract/wire/load';
-import { executionProcesses, listing } from './rows.js';
+import { executionProcesses, heldListing, listing, rowGpu } from './rows.js';
 
 const loadRow = (key: string, kind: LoadRowKind, rank: number, memoryBytes: number, title = key): LoadRow => ({
   key,
@@ -35,6 +35,19 @@ test('Tagma rows stand in one list by the chosen order, and idle ones fold to it
   expect(keys(byMemory.own)).toEqual(['agent', 'server', 'pages']);
   expect(byMemory.idle).toEqual([]);
   expect(keys(listing(view, 'cpu', 'example').own)).toEqual(['pages']);
+  const later = {
+    ...view,
+    rows: [loadRow('server', 'server', 0.6, 500), loadRow('pages', 'renderer', 0.0001, 100), loadRow('chrome', 'program', 0.5, 50)],
+  } as LoadView;
+  const held = heldListing(byCpu, listing(later, 'cpu', ''));
+  expect(keys(held.own)).toEqual(['pages', 'server']);
+  expect(held.own[1]?.row.share).toBe(0.6);
+  expect(held.idle).toEqual([]);
+});
+
+test('a row whose GPU nobody measured shows no figure, never zero', () => {
+  expect(rowGpu({ ...loadRow('system', 'kernel', 0.1, 0), gpuUnread: 1 }).text).toBe('—');
+  expect(rowGpu({ ...loadRow('gpu', 'graphics', 0.1, 0), gpu: 0.25, gpuUnread: 1 }).text).toBe('≥25%');
 });
 
 const process = (pid: number, parent: number | undefined, execution: string | undefined): LoadProcess => ({

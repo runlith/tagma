@@ -28,8 +28,10 @@ export const localSiteOf = (host: string | undefined): string | null => {
 export const originOwners = (sandbox: string): LoadOrigins['Service'] => ({
   owner: (origin) => {
     if (origin === sandbox) return { _tag: 'McpView' };
-    if (!URL.canParse(origin)) return undefined;
-    const app = localSiteOf(new URL(origin).host);
+    if (!URL.canParse(origin) || !URL.canParse(sandbox)) return undefined;
+    const site = new URL(origin);
+    if (site.port !== new URL(sandbox).port) return undefined;
+    const app = localSiteOf(site.host);
     return app === null ? undefined : { _tag: 'App', name: app };
   },
 });

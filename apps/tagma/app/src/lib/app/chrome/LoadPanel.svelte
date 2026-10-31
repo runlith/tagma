@@ -9,6 +9,7 @@
   import {
     gpuMeasured,
     gpuWords,
+    heldListing,
     idleTotal,
     layersOf,
     listing,
@@ -17,6 +18,7 @@
     totalShare,
     totalUnread,
     unresolvedWords,
+    type Listing,
     type Order,
     type Shown,
   } from '$lib/features/executions/load/rows.js';
@@ -56,7 +58,9 @@
   const now = $derived(clock.now);
   const history = $derived(readings.history);
   const end = $derived(history.at(-1)?.at ?? loaded?.readAt ?? now);
-  const listed = $derived(loaded === null ? null : listing(loaded, order, query));
+  const live = $derived(loaded === null ? null : listing(loaded, order, query));
+  let held = $state.raw<{ readonly listing: Listing; readonly by: string } | null>(null);
+  const listed = $derived(live === null || held === null || held.by !== `${order}\n${query}` ? live : heldListing(held.listing, live));
   const layers = $derived(loaded === null ? [] : layersOf(loaded));
   const tones = $derived(new Map(layers.map((layer) => [layer.key, layer])));
   const lighted = $derived(loaded === null ? null : litOf(loaded, layers, lit));
@@ -228,7 +232,13 @@
     <span class="w-5 shrink-0"></span>
   </div>
 
-  <div bind:this={body} class={['min-h-0 flex-1 overflow-y-auto overscroll-contain', silent !== null ? 'opacity-60' : '']} data-load-list>
+  <div
+    bind:this={body}
+    class={['min-h-0 flex-1 overflow-y-auto overscroll-contain', silent !== null ? 'opacity-60' : '']}
+    data-load-list
+    onpointerenter={() => (held = listed === null ? null : { listing: listed, by: `${order}\n${query}` })}
+    onpointerleave={() => (held = null)}
+  >
     {#if listed === null || loaded === null}
       <p class="px-3 py-4 text-center text-muted-foreground">{silent === null ? 'Reading the machine…' : silentWords(silent, now)}</p>
     {:else if nothing}

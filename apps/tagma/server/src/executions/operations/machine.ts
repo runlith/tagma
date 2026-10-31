@@ -24,16 +24,23 @@ export const MACHINE_PAIRS = {
       execute: Effect.fnUntraced(function* (input) {
         const feed = yield* LoadFeed;
         let held: MachineLoadSnapshot | undefined;
+        let demandedAfter = -Infinity;
         const state = yield* feed.machine().pipe(
-          Stream.tap((frame) =>
-            frame._tag === 'Snapshot' ? feed.interest(frame.snapshot.reader, { interested: true, others: true }) : Effect.void,
-          ),
+          Stream.tap((frame) => {
+            if (frame._tag !== 'Snapshot') return Effect.void;
+            const standing = frame.snapshot.state;
+            if (standing._tag === 'Read') demandedAfter = standing.view.readAt;
+            return feed.interest(frame.snapshot.reader, { interested: true, others: true });
+          }),
           Stream.map((frame) => {
             held = frame._tag === 'Snapshot' ? frame.snapshot : held === undefined ? undefined : appliedMachineLoad(held, frame.delta);
             return held?.state;
           }),
           Stream.filter(
-            (state) => state !== undefined && state._tag !== 'Waiting' && !(state._tag === 'Read' && state.view.share === null),
+            (state) =>
+              state !== undefined &&
+              state._tag !== 'Waiting' &&
+              !(state._tag === 'Read' && (state.view.share === null || state.view.readAt <= demandedAfter)),
           ),
           Stream.runHead,
         );

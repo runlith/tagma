@@ -63,6 +63,25 @@ export const listing = (view: LoadView, order: Order, query: string): Listing =>
   };
 };
 
+export const heldListing = (held: Listing, live: Listing): Listing => {
+  const current = new Map([...live.own, ...live.idle, ...live.outside, ...live.minor].map((one) => [one.row.key, one]));
+  const placed = new Set([...held.own, ...held.idle, ...held.outside, ...held.minor].map((one) => one.row.key));
+  const kept = (was: readonly Shown[], now: readonly Shown[]): readonly Shown[] => [
+    ...was.flatMap((one) => {
+      const standing = current.get(one.row.key);
+      return standing === undefined ? [] : [standing];
+    }),
+    ...now.filter((one) => !placed.has(one.row.key)),
+  ];
+  return {
+    own: kept(held.own, live.own),
+    idle: kept(held.idle, live.idle),
+    outside: kept(held.outside, live.outside),
+    minor: kept(held.minor, live.minor),
+    others: live.others,
+  };
+};
+
 export const idleTotal = (rows: readonly Shown[]): LoadTotal => ({
   count: rows.length,
   share: rows.reduce((sum, one) => sum + one.row.share, 0),
@@ -186,7 +205,7 @@ export const gpuWords = (view: LoadView): string | undefined =>
   view.gpu._tag === 'Unavailable' ? `GPU is not measured on this system: ${view.gpu.reason}` : undefined;
 
 export const rowGpu = (row: LoadRow): { readonly text: string; readonly hint: string | undefined } => ({
-  text: row.gpuUnread === row.processes.length && row.gpu === 0 ? '—' : `${row.gpuUnread > 0 ? '≥' : ''}${percent(row.gpu)}`,
+  text: row.gpuUnread > 0 && row.gpu === 0 ? '—' : `${row.gpuUnread > 0 ? '≥' : ''}${percent(row.gpu)}`,
   hint:
     row.gpuUnread === 0
       ? undefined

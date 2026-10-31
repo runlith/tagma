@@ -28,9 +28,9 @@ const row = (key: string, share: number, processes: number): LoadRow => ({
 
 const none = { count: 0, share: 0, memoryBytes: 0, unread: 0 };
 
-const view = (share: number | null): LoadView => ({
+const view = (share: number | null, readAt: number): LoadView => ({
   scope: { host: { _tag: 'Local', machine: 'fixture' }, network: { _tag: 'Local', machine: 'fixture' } },
-  readAt: 2000,
+  readAt,
   cores: 4,
   machine: 'Computer',
   gpu: { _tag: 'Unavailable', reason: 'fixture' },
@@ -43,43 +43,45 @@ const view = (share: number | null): LoadView => ({
   unresolved: [],
 });
 
-it.live('the read waits for an interval, answers the heaviest rows with their heaviest processes and releases its subscription', () =>
-  Effect.gen(function* () {
-    let released = false;
-    const frames: MachineLoadFrame[] = [
-      {
-        _tag: 'Snapshot',
-        sequence: 1,
-        snapshot: {
-          composedAt: 1000,
-          reader: LoadReader.make('fixture'),
-          state: { _tag: 'Read', view: view(null) },
-          history: [],
+it.live(
+  'the read waits for a reading taken after its demand, answers the heaviest rows with their heaviest processes and releases its subscription',
+  () =>
+    Effect.gen(function* () {
+      let released = false;
+      const frames: MachineLoadFrame[] = [
+        {
+          _tag: 'Snapshot',
+          sequence: 1,
+          snapshot: {
+            composedAt: 1000,
+            reader: LoadReader.make('fixture'),
+            state: { _tag: 'Read', view: view(0.5, 1000) },
+            history: [],
+          },
         },
-      },
-      { _tag: 'Delta', sequence: 2, base: 1, delta: { composedAt: 2000, state: { _tag: 'Read', view: view(0.75) } } },
-    ];
-    const answer = yield* MACHINE_PAIRS.read_machine_load.body
-      .execute({ limit: 1 }, undefined, { actor: { kind: 'operator' }, files: null })
-      .pipe(
-        Effect.provideService(LoadFeed, {
-          interest: () => Effect.succeed(true),
-          machine: () =>
-            Stream.fromIterable(frames).pipe(
-              Stream.ensuring(
-                Effect.sync(() => {
-                  released = true;
-                }),
+        { _tag: 'Delta', sequence: 2, base: 1, delta: { composedAt: 2000, state: { _tag: 'Read', view: view(0.75, 2000) } } },
+      ];
+      const answer = yield* MACHINE_PAIRS.read_machine_load.body
+        .execute({ limit: 1 }, undefined, { actor: { kind: 'operator' }, files: null })
+        .pipe(
+          Effect.provideService(LoadFeed, {
+            interest: () => Effect.succeed(true),
+            machine: () =>
+              Stream.fromIterable(frames).pipe(
+                Stream.ensuring(
+                  Effect.sync(() => {
+                    released = true;
+                  }),
+                ),
               ),
-            ),
-        }),
-      );
-    expect(answer).toMatchObject({ status: 'ok', shown: 1, state: { _tag: 'Read', share: 0.75, total: 2 } });
-    if (answer.status === 'ok' && answer.state._tag === 'Read') {
-      expect(answer.state.rows.map((one) => one.key)).toEqual(['chrome']);
-      expect(answer.state.rows[0]?.processes).toHaveLength(8);
-      expect(answer.state.rows[0]?.more).toBe(4);
-    }
-    expect(released).toBe(true);
-  }),
+          }),
+        );
+      expect(answer).toMatchObject({ status: 'ok', shown: 1, state: { _tag: 'Read', share: 0.75, total: 2 } });
+      if (answer.status === 'ok' && answer.state._tag === 'Read') {
+        expect(answer.state.rows.map((one) => one.key)).toEqual(['chrome']);
+        expect(answer.state.rows[0]?.processes).toHaveLength(8);
+        expect(answer.state.rows[0]?.more).toBe(4);
+      }
+      expect(released).toBe(true);
+    }),
 );
