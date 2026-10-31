@@ -1,3 +1,4 @@
+ALTER TABLE `native_thread_rev` ADD `change_rev` integer DEFAULT 0 NOT NULL;--> statement-breakpoint
 ALTER TABLE `native_thread_rev` ADD `change_open` integer DEFAULT 0 NOT NULL;--> statement-breakpoint
 CREATE TRIGGER `native_thread_change_rev_insert` AFTER INSERT ON `native_thread` BEGIN INSERT INTO `native_thread_rev` (`thread_id`, `change_rev`) SELECT NEW.`id`, 1 WHERE EXISTS (SELECT 1 FROM `native_thread` WHERE `id` = NEW.`id`) ON CONFLICT (`thread_id`) DO UPDATE SET `change_rev` = `change_rev` + 1; END;
 --> statement-breakpoint
