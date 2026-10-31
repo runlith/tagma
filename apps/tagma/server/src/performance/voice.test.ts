@@ -1,6 +1,39 @@
 import { expect, test } from 'bun:test';
-import { performanceText } from './voice.js';
+import { performanceAnswerText, performanceText } from './voice.js';
 import type { PerformanceValue } from './contract/wire/performance.js';
+
+test('the ledger text retains both acknowledged statement elapsed measures', () => {
+  const counts = {
+    statements: 2,
+    units: 0,
+    programs: 1,
+    programStatements: 3,
+    statementMs: 17.5,
+    statementExecMs: 3.25,
+    writerHoldMs: 4,
+    writerWaitMs: 5,
+    requestBytes: 6,
+    responseBytes: 7,
+    spans: 8,
+  };
+  const performance = {
+    type: 'ledger',
+    ledgerId: 'ledger',
+    reset: false,
+    rows: [{ id: 'root', sequence: 1, name: 'read', startedAt: 1, endedAt: 2, total: counts, own: counts, producers: [] }],
+    total: 1,
+    next: null,
+    evicted: 0,
+    unattributedStatements: 0,
+  } satisfies PerformanceValue;
+  const lines = performanceAnswerText({ performance })!.split('\n');
+  const header = lines.find((line) => line.startsWith('bucket\t'))!.split('\t');
+  const values = lines.find((line) => line.startsWith('own\t'))!.split('\t');
+  expect(Object.fromEntries(header.map((key, index) => [key, values[index]]))).toMatchObject({
+    statementMs: '17.5',
+    statementExecMs: '3.25',
+  });
+});
 
 const memory = {
   rssBytes: 1_213_923_328,
