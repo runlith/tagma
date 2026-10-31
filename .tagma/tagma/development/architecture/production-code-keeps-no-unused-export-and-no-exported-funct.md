@@ -19591,10 +19591,6 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead packages/sqlite-process/src/SqliteProcess.ts#Synchronous",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "dead-code dead packages/sqlite-process/src/SqliteProcess.ts#ReaderEvent",
           "owner": "5a3bed29"
         },
