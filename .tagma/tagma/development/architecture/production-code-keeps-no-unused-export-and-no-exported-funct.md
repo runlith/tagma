@@ -1900,14 +1900,6 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead apps/tagma/app/src/lib/features/threads/native/contribution.ts#ComposerPart",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/app/src/lib/features/threads/native/contribution.ts#FeedPart",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "dead-code dead apps/tagma/app/src/lib/features/threads/native/fieldModels.ts#FieldModels",
           "owner": "5a3bed29"
         },
@@ -2145,10 +2137,6 @@ fields:
         },
         {
           "fingerprint": "dead-code dead apps/tagma/app/src/lib/features/workspace/address.ts#DiffRange",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/app/src/lib/features/workspace/column.ts#ColumnState",
           "owner": "5a3bed29"
         },
         {
