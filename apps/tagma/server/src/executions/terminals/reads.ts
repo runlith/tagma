@@ -4,7 +4,7 @@ import { TerminalInventory } from './inventory.js';
 import { TerminalIntents } from '../store/intentLifecycle.js';
 import { CommandRows } from '../store/commandRows.js';
 import { TerminalRows } from '../store/terminalRows.js';
-import { Executions } from '@runlith/executions/Executions';
+import { Executions, HostRefused } from '@runlith/executions/Executions';
 import { ExecutionRequest } from '@runlith/executions/ExecutionRequest';
 import { ExecutionRecord } from '@runlith/executions/ExecutionRecord';
 import { ExecutionFeed } from '@runlith/executions/ExecutionFeed';
@@ -41,7 +41,7 @@ import type { ExecutionHandle, TerminalFailure } from '../contract/service/termi
 import type { BytesOptions } from '../contract/service/records.js';
 import { writes } from '../../platform/contract/service/writes.js';
 import { terminalIntent, terminalRequestKey, terminalRequestKeyTally } from '../store/terminal.js';
-import { refKey } from './refs.js';
+import { refKey, type StopDispatches } from './refs.js';
 import { INVENTORY_PAGE } from '../store/terminalRows.js';
 import { lostState } from '../host/generationEnded.js';
 import * as capacity from '@runlith/executions/protocol/capacity';
@@ -69,7 +69,13 @@ export const makeTerminalRecord = Effect.gen(function* () {
   });
 });
 
-export const makeTerminalReads = Effect.fnUntraced(function* ({ installation }: { readonly installation: InstallationId }) {
+export const makeTerminalReads = Effect.fnUntraced(function* ({
+  installation,
+  dispatches,
+}: {
+  readonly installation: InstallationId;
+  readonly dispatches: StopDispatches;
+}) {
   const units = yield* MachineUnits;
   const requestKeys = yield* RequestKeys;
   const cell = yield* TerminalInventory;
@@ -100,6 +106,7 @@ export const makeTerminalReads = Effect.fnUntraced(function* ({ installation }: 
       local.key.mutation === 'resize'
     )
       return local;
+    if (local.key.mutation === 'stop' && dispatches.has(projectId, operationId)) return local;
     const answer = yield* executionRequest.operation(ref(operationId));
     switch (answer._tag) {
       case 'Accepted': {
@@ -122,8 +129,28 @@ export const makeTerminalReads = Effect.fnUntraced(function* ({ installation }: 
           intents.settle(unit, projectId, operationId, { _tag: 'Uncertain', effect: answer.effect }),
         );
         return { _tag: 'Uncertain', key: local.key, effect: answer.effect };
-      case 'Unanswered':
-        return local;
+      case 'Unanswered': {
+        if (local.key.mutation !== 'stop' || local.key.execution === undefined) return local;
+        const unresolved = yield* units.write(writes('reads.operation', [terminalRequestKey, terminalRequestKeyTally]), (unit) =>
+          Effect.gen(function* () {
+            const standing = yield* requestKeys.operation(unit, projectId, operationId);
+            if (standing._tag !== 'Pending') return standing;
+            const effect = { _tag: 'InFlight' as const, operation: ref(operationId) };
+            yield* intents.settle(unit, projectId, operationId, { _tag: 'Uncertain', effect });
+            return { _tag: 'Uncertain' as const, key: standing.key, effect };
+          }),
+        );
+        if (unresolved._tag !== 'Uncertain') return unresolved;
+        const prevention = yield* executionRequest.preventStop(ref(operationId), local.key.execution);
+        if (prevention._tag === 'Taken') return unresolved;
+        if (prevention._tag === 'Refused') return yield* new HostRefused({ refusal: prevention.refusal });
+        const settlement =
+          prevention._tag === 'Prevented' ? { _tag: 'Settled' as const } : { _tag: 'Uncertain' as const, effect: prevention.effect };
+        yield* units.write(writes('reads.operation', [terminalRequestKey, terminalRequestKeyTally, terminalIntent]), (unit) =>
+          intents.settle(unit, projectId, operationId, settlement),
+        );
+        return { ...settlement, key: unresolved.key };
+      }
     }
   });
 

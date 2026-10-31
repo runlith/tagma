@@ -53,6 +53,7 @@ import {
   SignalAnswer,
   StopAction,
   StopReceipt,
+  StopPrevention,
 } from './stop';
 
 export const WIRE_VERSION = 41;
@@ -296,6 +297,7 @@ const requests = [
 
 export const Request = Schema.Union([
   ...requests,
+  needing('prevent-stop', Schema.Struct({ _tag: Schema.Literal('PreventStop'), operation: HostRequestRef, execution: ExecutionRef })),
   needing('machine-load', Schema.Struct({ _tag: Schema.Literal('LoadInterest'), subscription: SubscriptionId, ...LoadInterest.fields })),
   needing(
     'machine-load',
@@ -421,6 +423,7 @@ const answers = [
 
 export const HostAnswer = Schema.Union([
   ...answers,
+  needing('prevent-stop', Schema.Struct({ _tag: Schema.Literal('PreventStop'), outcome: StopPrevention })),
   needing('machine-load', Schema.Struct({ _tag: Schema.Literal('LoadInterest'), applied: Schema.Boolean })),
   needing('machine-load', Schema.Struct({ _tag: Schema.Literal('LoadParts'), applied: Schema.Boolean })),
   needing('end-residual', Schema.Struct({ _tag: Schema.Literal('EndResidual'), outcome: ResidualEnding })),

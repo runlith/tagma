@@ -193,6 +193,7 @@ export const unreadHost: HostExecutions = {
   commandsAt: () => Effect.die('this fixture does not read host commands by key'),
   revise: () => Effect.die('this fixture does not revise a host command'),
   operation: () => Effect.die('this fixture does not read a host operation'),
+  preventStop: () => Effect.die('this fixture does not prevent a stop'),
   callResult: () => Effect.die('this fixture does not read a host call'),
   read: () => Effect.die('this fixture does not read host bytes'),
   subscribe: () => Stream.fromEffect(Effect.die('this fixture does not follow the host')),

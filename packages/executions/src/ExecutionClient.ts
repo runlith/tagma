@@ -315,6 +315,11 @@ const make = Effect.fnUntraced(function* ({ address, role, limits, budget = {}, 
       }),
 
       ...ExecutionRequest.of({
+        preventStop: (operation, execution) =>
+          ask({ _tag: 'PreventStop', operation, execution }).pipe(
+            Effect.flatMap((answer) => expect('PreventStop', answer)),
+            Effect.map((response) => response.outcome),
+          ),
         operation: (operation) =>
           ask({ _tag: 'Operation', operation }).pipe(
             Effect.flatMap((answer) => expect('Operation', answer)),

@@ -507,10 +507,13 @@ export const threadAggregateLayer = Layer.effect(
           const going = yield* ledger.activeRun(thread.id);
           const open = going === null ? [] : yield* openCallsOf(going);
           if (going !== null) {
+            const stop = yield* Effect.forkDetach(
+              Effect.result(
+                stopping.stop(thread, { door: 'restart', by: 'reader', expected: going.id, settled: { within: RESTART_PATIENCE } }),
+              ),
+            );
             const stopped = yield* Effect.result(
-              stopping
-                .stop(thread, { door: 'restart', by: 'reader', expected: going.id, settled: { within: RESTART_PATIENCE } })
-                .pipe(Effect.timeoutOption(RESTART_PATIENCE)),
+              Fiber.join(stop).pipe(Effect.flatMap(Effect.fromResult), Effect.timeoutOption(RESTART_PATIENCE)),
             );
             const settled = stopped._tag === 'Success' && stopped.success._tag === 'Some' ? stopped.success.value : null;
             if (settled === null || settled.status === 'still-settling')

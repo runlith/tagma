@@ -195,6 +195,7 @@ const hostThat = (answers: HostAnswers): ControlledHost => {
       return answers.operation?.() ?? undeclared<OperationAnswer>('operation');
     },
     callResult: () => undeclared<never>('callResult'),
+    preventStop: () => undeclared<never>('preventStop'),
     start: (operation: HostRequestRef, launch: LaunchRequest) => {
       count('start');
       return answers.start?.(operation, launch) ?? undeclared<StartAnswer>('start');

@@ -4,7 +4,13 @@ import type { ExecutionsFailure } from '@runlith/executions/Executions';
 import type { SessionTake, SessionWelcome } from '@runlith/executions/ExecutionClient';
 import type { CancellationCause } from '@runlith/executions/protocol/call';
 import type { CancelAnswer, LaunchRequest, StartAnswer } from '@runlith/executions/protocol/launch';
-import { type Incarnation, type InstallationId, type HostRequestRef, HostRequestKey } from '@runlith/executions/protocol/execution';
+import {
+  type ExecutionRef,
+  type Incarnation,
+  type InstallationId,
+  type HostRequestRef,
+  HostRequestKey,
+} from '@runlith/executions/protocol/execution';
 import type { Refusal } from '@runlith/executions/protocol/host';
 import type { HostCustody } from '@runlith/executions/protocol/registration';
 import type { AuthorityAnswer } from '@runlith/executions/protocol/wire';
@@ -13,6 +19,7 @@ import type { Digest } from '@runlith/executions/protocol/artifact';
 import type { HostLifetime } from '@runlith/executions/protocol/boot';
 import { makeHostActivation, type Deferral, type SchemaPosition } from './activation.js';
 import type { HostPort } from './connection.js';
+import type { StopPrevention } from '@runlith/executions/protocol/stop';
 
 export type CustodyDeferral =
   | { readonly _tag: 'NoBundle' }
@@ -309,6 +316,22 @@ export const makeTerminalHostCustody = Effect.fnUntraced(function* ({
     return yield* executions.cancelStart(operation, cause, trigger, when);
   });
 
+  const preventing = Effect.fnUntraced(function* (
+    operation: HostRequestRef,
+    execution: ExecutionRef,
+  ): Effect.fn.Return<StopPrevention, ExecutionsFailure> {
+    yield* ready;
+    const assurance = yield* ensure();
+    if (assurance._tag === 'Declined')
+      return { _tag: 'Refused', operation, refusal: refusalOf(assurance.reason, detailOf(assurance.reason, state)) };
+    const answered = yield* executions.preventStop(operation, execution);
+    if (answered._tag !== 'Refused' || answered.refusal._tag !== 'Unauthorized') return answered;
+    const second = yield* ensure({ fresh: true });
+    if (second._tag === 'Declined')
+      return { _tag: 'Refused', operation, refusal: refusalOf(second.reason, detailOf(second.reason, state)) };
+    return yield* executions.preventStop(operation, execution);
+  });
+
   return {
     opened: Effect.fnUntraced(function* (session: SessionWelcome, take: SessionTake) {
       const remembered = yield* Ref.get(custody);
@@ -342,6 +365,7 @@ export const makeTerminalHostCustody = Effect.fnUntraced(function* ({
       ...served,
       start: starting,
       cancelStart: (operation, cause, trigger, when = 'always') => cancelling(operation, cause, trigger, when),
+      preventStop: preventing,
     }),
   };
 });

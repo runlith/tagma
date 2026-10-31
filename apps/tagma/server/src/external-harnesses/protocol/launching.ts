@@ -54,10 +54,12 @@ export class ProtocolLaunching {
     return Effect.suspend(() => {
       if (!this.launches.oweCompaction({ run, keep, mode })) return Effect.void;
       const flight = this.launches.pending(run.id)!;
-      const opening = Effect.flatMap(this.threads.find(run.threadId), (thread) => this.opened(run, thread, []));
-      return Effect.flatMap(
-        Effect.raceFirst(Effect.as(opening, true), Effect.as(Deferred.await(flight.cancelled), false)),
-        (ready) => ready ? this.started(run.threadId, run.id) : this.abandoned(run, Cause.interrupt()),
+      const opening = Effect.andThen(
+        Effect.flatMap(this.threads.find(run.threadId), (thread) => this.opened(run, thread, [])),
+        this.started(run.threadId, run.id),
+      );
+      return Effect.flatMap(Effect.raceFirst(Effect.as(opening, true), Effect.as(Deferred.await(flight.cancelled), false)), (ready) =>
+        ready ? Effect.void : this.abandoned(run, Cause.interrupt()),
       ).pipe(
         Effect.tapCause((cause) =>
           Effect.andThen(
@@ -110,14 +112,16 @@ export class ProtocolLaunching {
     return Effect.suspend(() => {
       if (!this.launches.owe(launch)) return Effect.void;
       const flight = this.launches.pending(launch.run.id)!;
-      const opening = this.starting(
-        launch.run,
-        launch.thread,
-        launch.seed.map((item) => item.id),
+      const opening = Effect.andThen(
+        this.starting(
+          launch.run,
+          launch.thread,
+          launch.seed.map((item) => item.id),
+        ),
+        this.started(launch.thread.id, launch.run.id),
       );
-      return Effect.flatMap(
-        Effect.raceFirst(Effect.as(opening, true), Effect.as(Deferred.await(flight.cancelled), false)),
-        (ready) => ready ? this.started(launch.thread.id, launch.run.id) : this.abandoned(launch.run, Cause.interrupt()),
+      return Effect.flatMap(Effect.raceFirst(Effect.as(opening, true), Effect.as(Deferred.await(flight.cancelled), false)), (ready) =>
+        ready ? Effect.void : this.abandoned(launch.run, Cause.interrupt()),
       ).pipe(
         Effect.catchCause((cause) => {
           this.launches.finish(launch.run.id);

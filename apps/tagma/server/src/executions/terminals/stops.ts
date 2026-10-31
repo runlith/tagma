@@ -30,13 +30,19 @@ import type { CommandSubject } from '../contract/wire/commandSubject.js';
 import type { TerminalFailure } from '../contract/service/terminals.js';
 import type { CommandAuthority, CommandSweep } from '../contract/service/commands.js';
 import { replacedReceipt } from '../host/generationEnded.js';
-import { sameRef, retaken } from './refs.js';
+import { sameRef, retaken, type StopDispatches } from './refs.js';
 
 const stopSettles = writes('stops.stop', [terminalRequestKey, terminalRequestKeyTally, terminalIntent]);
 
 const sentSettles = writes('stops.sent', [terminalRequestKey, terminalRequestKeyTally, terminalIntent]);
 
-export const makeTerminalStops = Effect.fnUntraced(function* ({ installation }: { readonly installation: InstallationId }) {
+export const makeTerminalStops = Effect.fnUntraced(function* ({
+  installation,
+  dispatches,
+}: {
+  readonly installation: InstallationId;
+  readonly dispatches: StopDispatches;
+}) {
   const cell = yield* TerminalInventory;
   const units = yield* MachineUnits;
   const requestKeys = yield* RequestKeys;
@@ -69,6 +75,36 @@ export const makeTerminalStops = Effect.fnUntraced(function* ({ installation }: 
         });
         return turn;
       });
+
+  const unresolved = (key: TerminalOperationKey) =>
+    units.write(stopSettles, (unit) =>
+      Effect.gen(function* () {
+        const standing = yield* requestKeys.operation(unit, key.projectId, key.operationId);
+        if (standing._tag !== 'Pending') return;
+        yield* intents.settle(unit, key.projectId, key.operationId, {
+          _tag: 'Uncertain',
+          effect: { _tag: 'InFlight', operation: ref(key.operationId) },
+        });
+      }),
+    );
+
+  const dispatch = Effect.fnUntraced(function* <A, E, R>(key: TerminalOperationKey, work: Effect.Effect<A, E, R>) {
+    return yield* dispatches.hold(
+      key,
+      Effect.uninterruptibleMask((restore) =>
+        Effect.gen(function* () {
+          yield* units.write(writes('stops.stop', [terminalRequestKey, terminalRequestKeyTally]), (unit) =>
+            Effect.gen(function* () {
+              const taken = yield* requestKeys.operation(unit, key.projectId, key.operationId);
+              if (taken._tag !== 'Unknown') return yield* retaken(key, taken);
+              yield* requestKeys.register(unit, key);
+            }),
+          );
+          return yield* restore(work).pipe(Effect.onExit((exit) => (Exit.isSuccess(exit) ? Effect.void : unresolved(key))));
+        }),
+      ),
+    );
+  });
 
   const commandChanges = (): Stream.Stream<InventoryFeedItem> => cell.changes();
 
@@ -125,32 +161,34 @@ export const makeTerminalStops = Effect.fnUntraced(function* ({ installation }: 
     const replaced = yield* dischargeOwner.dischargeReplaced(projectId, execution);
     if (replaced._tag === 'Discharged') return replacedReceipt(execution, key, cause, action);
     yield* atRevision(execution, expected);
-    const taken = yield* units.read((unit) => requestKeys.operation(unit, projectId, key.operationId));
-    if (taken._tag !== 'Unknown') return yield* retaken(key, taken);
-    yield* units.write(writes('stops.stop', [terminalRequestKey, terminalRequestKeyTally]), (unit) => requestKeys.register(unit, key));
-    const sent = yield* Effect.result(host.stop(ref(key.operationId), execution, cause, action, trigger));
-    if (sent._tag === 'Failure') {
-      const unsent = sent.failure._tag === 'WireUnavailable' && sent.failure.sent === false;
-      yield* units.write(stopSettles, (unit) =>
-        unsent
-          ? intents.settle(unit, projectId, key.operationId, { _tag: 'Settled' })
-          : intents.settle(unit, projectId, key.operationId, {
-              _tag: 'Uncertain',
-              effect: { _tag: 'InFlight', operation: ref(key.operationId) },
-            }),
-      );
-      return yield* sent.failure;
-    }
-    yield* units.write(stopSettles, (unit) =>
-      intents.settle(unit, projectId, key.operationId, {
-        _tag: 'Settled',
-        executionId: execution.execution,
-        incarnation: execution.incarnation,
-        stop: sent.success,
+    return yield* dispatch(
+      key,
+      Effect.gen(function* () {
+        const sent = yield* Effect.result(host.stop(ref(key.operationId), execution, cause, action, trigger));
+        if (sent._tag === 'Failure') {
+          const unsent = sent.failure._tag === 'WireUnavailable' && sent.failure.sent === false;
+          yield* units.write(stopSettles, (unit) =>
+            unsent
+              ? intents.settle(unit, projectId, key.operationId, { _tag: 'Settled' })
+              : intents.settle(unit, projectId, key.operationId, {
+                  _tag: 'Uncertain',
+                  effect: { _tag: 'InFlight', operation: ref(key.operationId) },
+                }),
+          );
+          return yield* sent.failure;
+        }
+        yield* units.write(stopSettles, (unit) =>
+          intents.settle(unit, projectId, key.operationId, {
+            _tag: 'Settled',
+            executionId: execution.execution,
+            incarnation: execution.incarnation,
+            stop: sent.success,
+          }),
+        );
+        yield* dischargeOwner.discharge(projectId, execution, sent.success);
+        return sent.success;
       }),
     );
-    yield* dischargeOwner.discharge(projectId, execution, sent.success);
-    return sent.success;
   });
 
   const stopCommand = Effect.fn('Terminals.stopCommand')(function* (
@@ -171,54 +209,54 @@ export const makeTerminalStops = Effect.fnUntraced(function* ({ installation }: 
     yield* units.read((unit) => authority.recheck(unit));
     const replaced = yield* dischargeOwner.dischargeReplaced(projectId, execution);
     if (replaced._tag === 'Discharged') return replacedReceipt(execution, key, cause, action);
-    const taken = yield* units.read((unit) => requestKeys.operation(unit, projectId, key.operationId));
-    if (taken._tag !== 'Unknown') return yield* retaken(key, taken);
-    yield* units.write(writes('stops.stopCommand', [terminalRequestKey, terminalRequestKeyTally]), (unit) =>
-      requestKeys.register(unit, key),
-    );
-    const stopper = authority.prepared.request.actor;
-    const stopping = stopper._tag === 'Thread' ? stopper.threadId : undefined;
-    const record = stopping === undefined ? null : yield* units.read((unit) => commandRows.recordCommand(unit, execution.execution));
-    const notice =
-      record !== null && record.origin._tag === 'Thread' && record.origin.thread === stopping
-        ? { thread: record.origin.thread, signalId: commandSignalId(record.execution, record.origin.toolCall) }
-        : undefined;
-    const sent = yield* Effect.acquireUseRelease(
-      takeNotice(execution, notice?.thread),
-      () =>
-        Effect.gen(function* () {
-          const sent = yield* Effect.result(host.stop(ref(key.operationId), execution, cause, action, trigger));
-          if (sent._tag === 'Failure') {
-            const unsent = sent.failure._tag === 'WireUnavailable' && sent.failure.sent === false;
-            yield* units.write(sentSettles, (unit) =>
-              unsent
-                ? intents.settle(unit, projectId, key.operationId, { _tag: 'Settled' })
-                : intents.settle(unit, projectId, key.operationId, {
-                    _tag: 'Uncertain',
-                    effect: { _tag: 'InFlight', operation: ref(key.operationId) },
+    return yield* dispatch(
+      key,
+      Effect.gen(function* () {
+        const stopper = authority.prepared.request.actor;
+        const stopping = stopper._tag === 'Thread' ? stopper.threadId : undefined;
+        const record = stopping === undefined ? null : yield* units.read((unit) => commandRows.recordCommand(unit, execution.execution));
+        const notice =
+          record !== null && record.origin._tag === 'Thread' && record.origin.thread === stopping
+            ? { thread: record.origin.thread, signalId: commandSignalId(record.execution, record.origin.toolCall) }
+            : undefined;
+        const sent = yield* Effect.acquireUseRelease(
+          takeNotice(execution, notice?.thread),
+          () =>
+            Effect.gen(function* () {
+              const sent = yield* Effect.result(host.stop(ref(key.operationId), execution, cause, action, trigger));
+              if (sent._tag === 'Failure') {
+                const unsent = sent.failure._tag === 'WireUnavailable' && sent.failure.sent === false;
+                yield* units.write(sentSettles, (unit) =>
+                  unsent
+                    ? intents.settle(unit, projectId, key.operationId, { _tag: 'Settled' })
+                    : intents.settle(unit, projectId, key.operationId, {
+                        _tag: 'Uncertain',
+                        effect: { _tag: 'InFlight', operation: ref(key.operationId) },
+                      }),
+                );
+                return sent;
+              }
+              const settled = (unit: WriteUnit<'machine'>) =>
+                Effect.asVoid(
+                  intents.settle(unit, projectId, key.operationId, {
+                    _tag: 'Settled',
+                    executionId: execution.execution,
+                    incarnation: execution.incarnation,
+                    stop: sent.success,
                   }),
-            );
-            return sent;
-          }
-          const settled = (unit: WriteUnit<'machine'>) =>
-            Effect.asVoid(
-              intents.settle(unit, projectId, key.operationId, {
-                _tag: 'Settled',
-                executionId: execution.execution,
-                incarnation: execution.incarnation,
-                stop: sent.success,
-              }),
-            );
-          yield* notice === undefined
-            ? units.write(sentSettles, settled)
-            : waiters.answered(execution, notice.thread, notice.signalId, settled);
-          return sent;
-        }),
-      (taken, exit) => (taken && (Exit.isFailure(exit) || exit.value._tag === 'Failure') ? handNoticeBack(execution) : Effect.void),
+                );
+              yield* notice === undefined
+                ? units.write(sentSettles, settled)
+                : waiters.answered(execution, notice.thread, notice.signalId, settled);
+              return sent;
+            }),
+          (taken, exit) => (taken && (Exit.isFailure(exit) || exit.value._tag === 'Failure') ? handNoticeBack(execution) : Effect.void),
+        );
+        if (sent._tag === 'Failure') return yield* sent.failure;
+        yield* dischargeOwner.discharge(projectId, execution, sent.success);
+        return sent.success;
+      }),
     );
-    if (sent._tag === 'Failure') return yield* sent.failure;
-    yield* dischargeOwner.discharge(projectId, execution, sent.success);
-    return sent.success;
   });
 
   const takeNotice = Effect.fn('Terminals.takeNotice')(function* (
@@ -328,7 +366,10 @@ export const makeTerminalStops = Effect.fnUntraced(function* ({ installation }: 
       );
       return { fences: swept.fences, stopped, refused, ...remaining };
     },
-    (sweep, projectId, _owners, key) => inTurn(`${projectId}:${key.operationId}`)(sweep),
+    (sweep, projectId, _owners, key) =>
+      inTurn(`${projectId}:${key.operationId}`)(
+        sweep.pipe(Effect.onExit((exit) => (Exit.isSuccess(exit) ? Effect.void : unresolved(key)))),
+      ),
   );
 
   return { processes, ports, signal, stop, stopCommand, stopCommands, commandChanges, commandMoves };

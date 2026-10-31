@@ -9,6 +9,14 @@ import { EvidenceScope, ProcessWitness } from './evidence';
 export const StopAction = Schema.Literals(['signal', 'destroy']);
 export type StopAction = typeof StopAction.Type;
 
+export const StopPrevention = Schema.Union([
+  Schema.Struct({ _tag: Schema.Literal('Prevented'), operation: HostRequestRef }),
+  Schema.Struct({ _tag: Schema.Literal('Taken'), operation: HostRequestRef }),
+  Schema.Struct({ _tag: Schema.Literal('Uncertain'), effect: UncertainEffect }),
+  Schema.Struct({ _tag: Schema.Literal('Refused'), operation: HostRequestRef, refusal: Refusal }),
+]).pipe(Schema.toTaggedUnion('_tag'));
+export type StopPrevention = typeof StopPrevention.Type;
+
 export const EndedAt = Schema.Literals(['unsignalled', ...STOP_STEPS]);
 export type EndedAt = typeof EndedAt.Type;
 

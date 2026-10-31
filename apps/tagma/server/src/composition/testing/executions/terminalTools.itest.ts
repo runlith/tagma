@@ -137,6 +137,7 @@ const hostThat = (answers: HostAnswers): ControlledHost => {
     retained: () => undeclared<never>('retained'),
     operation: () => undeclared<never>('operation'),
     callResult: () => undeclared<never>('callResult'),
+    preventStop: () => undeclared<never>('preventStop'),
     start: () => {
       count('start');
       return answers.start?.() ?? undeclared<StartAnswer>('start');

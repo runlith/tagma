@@ -38,6 +38,8 @@ export const refusalOf = (failure: { readonly _tag: string }): Refusal => {
     return { _tag: failure.reason === 'yielding' ? 'InputYielding' : 'InputFenced', reason: failure.message };
   if (failure instanceof LaneUnserved) return { _tag: 'UnsupportedCapability', reason: failure.detail };
   switch (failure._tag) {
+    case 'OperationConflict':
+      return { _tag: 'OperationConflict', reason: 'the operation key is already taken or was fenced before admission' };
     case 'ExecutionUnknown':
     case 'StoredExecutionMissing':
       return { _tag: 'UnknownExecution', reason: 'this host holds no execution under that reference' };
@@ -67,6 +69,11 @@ export const refusalOf = (failure: { readonly _tag: string }): Refusal => {
       return {
         _tag: 'HostUnavailable',
         reason: `this host could not read what it holds: ${'reason' in failure ? String(failure.reason) : 'unstated'}`,
+      };
+    case 'StopUnadmitted':
+      return {
+        _tag: 'HostUnavailable',
+        reason: `the stop was not admitted: ${'reason' in failure ? String(failure.reason) : 'unstated'}`,
       };
     case 'ExecutionUnrecorded':
       return {

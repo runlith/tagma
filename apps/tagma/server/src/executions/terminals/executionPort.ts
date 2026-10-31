@@ -256,6 +256,7 @@ export const makeTerminalExecutions = ({
     commandsAt: (refs) => host.port.commandsAt(refs),
     revise: () => granted("revising a bounded command's deadline"),
     operation: (operation) => host.port.operation(operation),
+    preventStop: (operation, execution) => host.port.preventStop(operation, execution),
     callResult: (operation, options) => host.port.callResult(operation, options),
     read: (cursor, limit) => host.port.read(cursor, limit),
     subscribe: (source, credits) =>

@@ -16,6 +16,7 @@ export const Capability = Schema.Literals([
   'holder-replaces-itself',
   'screen-point',
   'screen-settled',
+  'prevent-stop',
 ]);
 export type Capability = typeof Capability.Type;
 

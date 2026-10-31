@@ -430,7 +430,7 @@ layer(protocolFixture('protocol-continuity'), { excludeTestServices: true })('AC
     }),
   );
 
-  it.effect('restart replaces a dead drive while its earlier halt is indefinite', () =>
+  it.effect('restart replaces a dead drive after its earlier stop is proven unsent', () =>
     Effect.gen(function* () {
       const rig = yield* ProtocolRig;
       const threadId = 'thread-restart-spent-stop';
@@ -473,7 +473,7 @@ layer(protocolFixture('protocol-continuity'), { excludeTestServices: true })('AC
             ),
           );
           expect(failed._tag).toBe('Failure');
-          expect((yield* floor.terminals.request(record.projectId, operationId))._tag).toBe('Uncertain');
+          expect((yield* floor.terminals.request(record.projectId, operationId))._tag).toBe('Settled');
           absent = false;
           yield* Scope.close(scope, Exit.void);
           const row = (yield* floor.rows.load(threadId))!;

@@ -195,7 +195,7 @@ export class ExecutionStore extends Context.Service<
 
     readonly recordStop: (
       intent: StopIntent,
-    ) => Effect.Effect<void, StoreLost | IncarnationRefused | StoredExecutionMissing | StoreFailure>;
+    ) => Effect.Effect<void, StoreLost | IncarnationRefused | StoredExecutionMissing | OperationConflict | StoreFailure>;
     readonly stopOf: (
       execution: ExecutionId,
     ) => Effect.Effect<StopIntent | undefined, StoreLost | StoredExecutionMissing | StoreUnreadable | StoreFailure>;

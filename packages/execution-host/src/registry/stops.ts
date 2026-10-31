@@ -1,4 +1,4 @@
-import { Context, Effect } from 'effect';
+import { Context, Effect, Ref } from 'effect';
 import { CancellationCause } from '@runlith/executions/protocol/call';
 import { type CustodianRefused } from '../Custodian';
 import { type CustodyLost } from '../store/errors';
@@ -10,7 +10,7 @@ import {
   type StopReceipt,
 } from '@runlith/executions/protocol/stop';
 import { ExecutionId, type ExecutionRef, type HostRequestRef } from '@runlith/executions/protocol/execution';
-import { ExecutionUnknown, ExecutionUnreadable, ExecutionUnrecorded } from '../executionFailures';
+import { ExecutionUnknown, ExecutionUnreadable, ExecutionUnrecorded, StopUnadmitted } from '../executionFailures';
 import { type HostClaim, type RegistryState, commanding, live, moved } from './state';
 import { ending, signal, stopOrphan, stoppedWithoutChild, sweepAfter } from './endings';
 import { releaseSoon } from './retention';
@@ -20,6 +20,7 @@ import { Processes } from '../ProcessReader';
 import { ProcessControl } from '../ProcessControl';
 import { sameProcess, sameScope, type LoadReading } from '@runlith/executions/protocol/evidence';
 import type { ProcessTarget, ProcessEnding as ProcessOutcome } from '@runlith/executions/protocol/stop';
+import type { OperationConflict } from '../store/errors';
 
 export class ExecutionStop extends Context.Service<
   ExecutionStop,
@@ -31,7 +32,10 @@ export class ExecutionStop extends Context.Service<
       cause: CancellationCause,
       action: StopAction,
       trigger?: string,
-    ) => Effect.Effect<StopReceipt, ExecutionUnknown | ExecutionUnreadable | ExecutionUnrecorded | CustodianRefused | CustodyLost>;
+    ) => Effect.Effect<
+      StopReceipt,
+      ExecutionUnknown | ExecutionUnreadable | ExecutionUnrecorded | CustodianRefused | CustodyLost | OperationConflict | StopUnadmitted
+    >;
     readonly endProcess: (
       claim: HostClaim,
       target: ProcessTarget,
@@ -55,32 +59,55 @@ export const executionStopOf = (registry: RegistryState) => {
   const { calls, held, shelf } = registry;
   const control = Context.make(ProcessControl, registry.control);
   const native = registry.strays === undefined ? control : Context.add(control, Processes, registry.strays);
+  const admitStop = Effect.fn('ExecutionStop.admit')(function* (
+    operation: HostRequestRef,
+    execution: ExecutionId,
+    cause: CancellationCause,
+    action: StopAction,
+  ) {
+    const orphan = (yield* Ref.get(registry.orphans)).get(execution);
+    const admitted = yield* Effect.result(
+      registry.store.recordStop({
+        operation,
+        execution: { installation: registry.entered.installation, incarnation: registry.entered.incarnation, execution },
+        cause,
+        requested: action,
+        coverage: held.get(execution)?.native.target.relations ?? orphan?.native.target.relations ?? [],
+      }),
+    );
+    if (admitted._tag === 'Success') return;
+    if (admitted.failure._tag === 'OperationConflict') return yield* admitted.failure;
+    return yield* new StopUnadmitted({ execution, reason: admitted.failure._tag });
+  });
   return ExecutionStop.of({
     stop: (claim, operation, execution, cause, action, trigger) =>
       Effect.flatMap(commanding(registry, claim, 'end'), () =>
-        Effect.flatMap(stopQueued(registry, operation, execution, cause, action, trigger), (given) =>
-          given !== undefined
-            ? Effect.succeed(given)
-            : Effect.flatMap(stopOrphan(registry, operation, execution, cause, action, trigger), (orphaned) =>
-                orphaned !== undefined
-                  ? Effect.succeed(orphaned)
-                  : !held.has(execution) && shelf.has(execution)
-                    ? Effect.flatMap(stoppedWithoutChild(registry, operation, execution, cause, action), (kept) =>
-                        kept === undefined ? Effect.fail(new ExecutionUnknown({ execution })) : Effect.succeed(kept),
-                      )
-                    : Effect.flatMap(live(registry, execution), (found) =>
-                        Effect.gen(function* () {
-                          yield* calls
-                            .settle(found.operation, { _tag: 'Cancel', cause, trigger: trigger || `stop:${operation.operation}` })
-                            .pipe(Effect.catchTag('CallMissing', () => Effect.void));
-                          const receipt = yield* found.execution.stop.stop(operation, cause, action);
-                          yield* sweepAfter(registry, execution, receipt);
-                          yield* moved(registry, found);
-                          yield* releaseSoon(registry, found);
-                          return receipt;
-                        }),
-                      ),
-              ),
+        Effect.andThen(
+          admitStop(operation, execution, cause, action),
+          Effect.flatMap(stopQueued(registry, operation, execution, cause, action, trigger), (given) =>
+            given !== undefined
+              ? Effect.succeed(given)
+              : Effect.flatMap(stopOrphan(registry, operation, execution, cause, action, trigger), (orphaned) =>
+                  orphaned !== undefined
+                    ? Effect.succeed(orphaned)
+                    : !held.has(execution) && shelf.has(execution)
+                      ? Effect.flatMap(stoppedWithoutChild(registry, operation, execution, cause, action), (kept) =>
+                          kept === undefined ? Effect.fail(new ExecutionUnknown({ execution })) : Effect.succeed(kept),
+                        )
+                      : Effect.flatMap(live(registry, execution), (found) =>
+                          Effect.gen(function* () {
+                            yield* calls
+                              .settle(found.operation, { _tag: 'Cancel', cause, trigger: trigger || `stop:${operation.operation}` })
+                              .pipe(Effect.catchTag('CallMissing', () => Effect.void));
+                            const receipt = yield* found.execution.stop.stop(operation, cause, action);
+                            yield* sweepAfter(registry, execution, receipt);
+                            yield* moved(registry, found);
+                            yield* releaseSoon(registry, found);
+                            return receipt;
+                          }),
+                        ),
+                ),
+          ),
         ),
       ),
     endProcess: (claim, target, reading) =>

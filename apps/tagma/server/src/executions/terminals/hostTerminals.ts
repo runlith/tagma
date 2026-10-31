@@ -17,6 +17,7 @@ import { makeTerminalCustody } from './custody.js';
 import { makeTerminalStops } from './stops.js';
 import { makeCommandActs } from '../commands/acts.js';
 import { makeTerminalDischarge } from './discharge.js';
+import { makeStopDispatches } from './refs.js';
 
 export const UNVERSIONED = 'unversioned';
 
@@ -57,7 +58,8 @@ export const makeHostTerminals = Effect.fnUntraced(function* ({
   const gate = makeExecutionGate();
   const watched = givenWatched ?? (yield* Effect.acquireRelease(Queue.unbounded<TerminalWatched>(), Queue.shutdown));
   const displaced = givenDisplaced ?? (yield* Effect.acquireRelease(Queue.unbounded<TerminalDisplaced>(), Queue.shutdown));
-  const reading = yield* makeTerminalReads({ installation });
+  const dispatches = makeStopDispatches();
+  const reading = yield* makeTerminalReads({ installation, dispatches });
   const writing = yield* makeTerminalWriting({ installation, gate });
   const releasing = yield* makeTerminalDischarge({ installation });
   const discharge = Discharge.of(releasing);
@@ -65,7 +67,7 @@ export const makeHostTerminals = Effect.fnUntraced(function* ({
   const starts = yield* makeTerminalStart({ installation, programVersion, watched, ready }).pipe(
     Effect.provideService(TerminalWriting, writing),
   );
-  const stops = yield* makeTerminalStops({ installation }).pipe(Effect.provideService(Discharge, discharge));
+  const stops = yield* makeTerminalStops({ installation, dispatches }).pipe(Effect.provideService(Discharge, discharge));
   const evidence = yield* ExecutionEvidence;
   const terminals = Terminals.of({
     ...starts,

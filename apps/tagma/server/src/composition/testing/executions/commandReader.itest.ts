@@ -107,6 +107,7 @@ const host: Executions['Service'] &
   commands: unavailable,
   revise: unavailable,
   operation: unavailable,
+  preventStop: unavailable,
   callResult: unavailable,
   start: unavailable,
   cancelStart: unavailable,

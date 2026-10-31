@@ -15,6 +15,7 @@ const LANES: Record<Request['_tag'], Lane> = {
   Authority: 'control',
   Stop: 'control',
   CancelStart: 'control',
+  PreventStop: 'control',
   Retire: 'control',
   Shutdown: 'control',
   Quiesce: 'control',

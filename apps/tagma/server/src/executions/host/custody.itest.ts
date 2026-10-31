@@ -215,6 +215,7 @@ const scripted = (script: PortScript): ScriptedPort => {
     commandsAt: () => none<never>('commandsAt'),
     revise: () => none<never>('revise'),
     operation: () => next(operations, 'operation'),
+    preventStop: () => none<never>('preventStop'),
     callResult: () => none<never>('callResult'),
     start: () => next(starts, 'start'),
     cancelStart: () => next(cancels, 'cancelStart'),

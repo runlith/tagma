@@ -19,6 +19,7 @@ import { CommandRows } from '../store/commandRows.js';
 import { TerminalRows } from '../store/terminalRows.js';
 import { TerminalInventory } from './inventory.js';
 import { makeTerminalStops } from './stops.js';
+import { makeStopDispatches } from './refs.js';
 
 it.effect('a repeated sweep waits for the active pass and answers its discharged commands', () =>
   Effect.gen(function* () {
@@ -127,7 +128,7 @@ it.effect('a repeated sweep waits for the active pass and answers its discharged
       retire: () => Effect.die('the sweep does not retire records'),
       disposition: () => Effect.die('the sweep does not read the inventory'),
     });
-    const stops = yield* makeTerminalStops({ installation }).pipe(
+    const stops = yield* makeTerminalStops({ installation, dispatches: makeStopDispatches() }).pipe(
       Effect.provide(
         Layer.mergeAll(
           Layer.succeed(MachineUnits, units),

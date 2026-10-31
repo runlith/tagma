@@ -9,7 +9,7 @@ import {
   stopIntent as stopIntentTable,
 } from '../db/schema';
 import type { ExecutionStore, OpenedStore } from './ExecutionStore';
-import { StoredExecutionMissing, StoreUnreadable } from './errors';
+import { OperationConflict, StoredExecutionMissing, StoreUnreadable } from './errors';
 import { decodeCallRecord, finalFrom, stopFrom, unreadable, type CallDecided } from './records';
 
 type Shape = Context.Service.Shape<typeof ExecutionStore>;
@@ -31,7 +31,7 @@ export const endings = (
   | 'decide'
   | 'decisionOf'
 > => {
-  const { db, held, unit, owns, executionRow, rememberSpent } = store;
+  const { db, held, unit, owns, executionRow, operationRow, rememberSpent } = store;
 
   const stopIntentsOf = Effect.fn('ExecutionStore.stopIntentsOf')(function* (execution: ExecutionId) {
     const rows = yield* db
@@ -53,6 +53,37 @@ export const endings = (
           if (row === undefined) return yield* new StoredExecutionMissing({ execution: intent.execution.execution });
           const mismatch = owns(intent.execution, row.incarnation);
           if (mismatch !== undefined) return yield* mismatch;
+          const existing = yield* db
+            .select()
+            .from(stopIntentTable)
+            .where(
+              and(
+                eq(stopIntentTable.installation, intent.operation.installation),
+                eq(stopIntentTable.operationId, intent.operation.operation),
+              ),
+            )
+            .limit(1);
+          const admitted = existing[0];
+          const taken = yield* operationRow(intent.operation);
+          if (
+            taken !== undefined &&
+            !(taken.kind === 'receipt' && (taken.executionId === intent.execution.execution || admitted !== undefined))
+          ) {
+            return yield* new OperationConflict({ operation: intent.operation.operation });
+          }
+          if (admitted !== undefined && intent.joined !== undefined) {
+            yield* db
+              .update(stopIntentTable)
+              .set({ joined: intent.joined, coverage: intent.coverage })
+              .where(
+                and(
+                  eq(stopIntentTable.executionId, intent.execution.execution),
+                  eq(stopIntentTable.installation, intent.operation.installation),
+                  eq(stopIntentTable.operationId, intent.operation.operation),
+                ),
+              );
+          }
+          if (admitted?.executionId === intent.execution.execution && admitted.incarnation === intent.execution.incarnation) return;
           yield* db
             .insert(stopIntentTable)
             .values({

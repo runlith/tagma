@@ -2911,6 +2911,16 @@
         "side": "host",
         "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Event\",\"body\":{\"_tag\":\"Inputs\",\"subscription\":7,\"binding\":\"binding-1\",\"principal\":\"principal-operator\",\"receipt\":{\"execution\":{\"installation\":\"installation-1\",\"execution\":\"execution-1\",\"incarnation\":1},\"sequence\":3,\"cause\":\"typed\",\"bytes\":1,\"acceptedThrough\":\"42\"}}}}",
         "payload": ""
+      },
+      {
+        "side": "client",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Call\",\"request\":701,\"installation\":\"installation-1\",\"incarnation\":1,\"epoch\":1,\"body\":{\"_tag\":\"PreventStop\",\"operation\":{\"installation\":\"installation-1\",\"operation\":\"stop-1\"},\"execution\":{\"installation\":\"installation-1\",\"execution\":\"execution-1\",\"incarnation\":1}}}}",
+        "payload": ""
+      },
+      {
+        "side": "host",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Reply\",\"request\":701,\"body\":{\"_tag\":\"PreventStop\",\"outcome\":{\"_tag\":\"Prevented\",\"operation\":{\"installation\":\"installation-1\",\"operation\":\"stop-1\"}}}}}",
+        "payload": ""
       }
     ]
   }

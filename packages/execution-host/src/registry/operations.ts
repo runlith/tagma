@@ -4,6 +4,8 @@ import { type CallAnswer, type OperationAnswer } from '@runlith/executions/proto
 import { StoreLost } from '../store/errors';
 import { type RegistryState } from './state';
 import { retainedOf } from './retention';
+import type { StopPrevention } from '@runlith/executions/protocol/stop';
+import { commanding, type HostClaim } from './state';
 
 const executionOf = (decision: { readonly execution?: ExecutionRef } | undefined): ExecutionId =>
   (decision?.execution?.execution ?? '') as ExecutionId;
@@ -200,10 +202,38 @@ const callResult = Effect.fn('ExecutionRequest.callResult')(function* (registry:
     : yield* forgottenCall(registry, operation);
 });
 
+const preventStop = Effect.fn('ExecutionRequest.preventStop')(function* (
+  registry: RegistryState,
+  claim: HostClaim,
+  operation: HostRequestRef,
+  execution: ExecutionRef,
+): Effect.fn.Return<StopPrevention> {
+  const allowed = yield* Effect.result(commanding(registry, claim, 'end'));
+  if (allowed._tag === 'Failure') {
+    return {
+      _tag: 'Refused',
+      operation,
+      refusal: { _tag: 'Unauthorized', reason: `the stop key could not be fenced: ${allowed.failure._tag}` },
+    };
+  }
+  const prevented = yield* Effect.result(
+    registry.store.settle({
+      operation,
+      kind: 'tombstone',
+      fingerprint: `prevent-stop:${execution.installation}:${execution.execution}:${execution.incarnation}`,
+      receipt: { _tag: 'Accepted' },
+    }),
+  );
+  if (prevented._tag === 'Success') return { _tag: 'Prevented', operation };
+  if (prevented.failure._tag === 'OperationConflict') return { _tag: 'Taken', operation };
+  return { _tag: 'Uncertain', effect: { _tag: 'InFlight', operation } };
+});
+
 export class ExecutionRequest extends Context.Service<
   ExecutionRequest,
   {
     readonly operation: (operation: HostRequestRef) => Effect.Effect<OperationAnswer>;
+    readonly preventStop: (claim: HostClaim, operation: HostRequestRef, execution: ExecutionRef) => Effect.Effect<StopPrevention>;
     readonly callResult: (operation: HostRequestRef) => Effect.Effect<CallAnswer>;
   }
 >()('@runlith/execution-host/ExecutionRequest') {}
@@ -211,5 +241,6 @@ export class ExecutionRequest extends Context.Service<
 export const executionRequestOf = (registry: RegistryState) =>
   ExecutionRequest.of({
     operation: (operation) => operationAnswer(registry, operation),
+    preventStop: (claim, operation, execution) => preventStop(registry, claim, operation, execution),
     callResult: (operation) => callResult(registry, operation),
   });

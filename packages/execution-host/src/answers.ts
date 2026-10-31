@@ -52,6 +52,7 @@ const RECOVERY_MAY: ReadonlySet<Request['_tag']> = new Set<Request['_tag']>([
   'ListenerInventory',
   'Stop',
   'CancelStart',
+  'PreventStop',
   'Signal',
   'Retire',
   'Shutdown',
@@ -203,6 +204,20 @@ export const answer = (
         body.operation.operation,
         Effect.flatMap(requests.operation(body.operation), (answer) => answered({ _tag: 'Operation', answer })),
       );
+
+    case 'PreventStop': {
+      const stale = actingRefusal(body.execution, installation, incarnation);
+      return span(
+        'PreventStop',
+        body.execution.execution,
+        body.operation.operation,
+        stale !== undefined
+          ? refusedAs(stale)
+          : Effect.flatMap(requests.preventStop(host, body.operation, body.execution), (outcome) =>
+              answered({ _tag: 'PreventStop', outcome }),
+            ),
+      );
+    }
 
     case 'CallResult':
       return span(

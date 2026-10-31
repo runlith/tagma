@@ -229,6 +229,7 @@ const servedBy = (profile: CapabilityProfile, measured: Measuring, platform: Rea
     'end-residual',
     'screen-point',
     'screen-settled',
+    'prevent-stop',
     ...(profile.usage !== undefined && measured?.native !== undefined
       ? [
           'machine-load' as const,

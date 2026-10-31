@@ -86,6 +86,7 @@ const makeAccess = Effect.fnUntraced(function* (demo: EffectDemo) {
     commands: unavailable,
     commandsAt: unavailable,
     operation: unavailable,
+    preventStop: unavailable,
     callResult: unavailable,
     start: unavailable,
     cancelStart: unavailable,
