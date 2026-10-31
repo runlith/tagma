@@ -17,7 +17,9 @@ import {
   DESKTOP,
   MIGRATIONS,
   REQUIRED_ROLES,
+  STORE_MIGRATIONS,
 } from '../contract/wire/manifest.js';
+import type { OwnStore } from '../../platform/contract/service/ownStore.js';
 
 const bundledMigrations = fileURLToPath(new URL(`../../${MIGRATIONS}`, import.meta.url));
 
@@ -30,6 +32,11 @@ const bundledActivityMigrations = fileURLToPath(new URL(`../../${ACTIVITY_MIGRAT
 export const activityMigrations = existsSync(bundledActivityMigrations)
   ? bundledActivityMigrations
   : fileURLToPath(new URL('../../../../../../packages/activity/drizzle', import.meta.url));
+
+export const ownStoreChain = (store: OwnStore): string => {
+  const bundled = fileURLToPath(new URL(`../../${STORE_MIGRATIONS}/${store.id}`, import.meta.url));
+  return existsSync(bundled) ? bundled : store.migrations;
+};
 
 export const identityInput = (manifest: {
   readonly platform: InstallationPlatform;

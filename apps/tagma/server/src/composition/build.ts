@@ -19,13 +19,19 @@ type LifetimeOf<M, T extends Tier> = M extends { readonly lifetimes: { readonly 
 type Needs<M, T extends Tier> = Layer.Services<LifetimeOf<M, T>>;
 type Gives<M, T extends Tier> = Layer.Success<LifetimeOf<M, T>>;
 
+type Stored<M> = M extends { readonly stores: readonly (infer S)[] }
+  ? S extends { readonly key: Context.Key<infer I, any> }
+    ? I
+    : never
+  : never;
+
 type Extension<Modules extends readonly Manifest[]> = Exclude<Modules[number], (typeof CORE_MODULES)[number]>;
 
 type Unserved<Modules extends readonly Manifest[], E = Extension<Modules>> =
-  | Exclude<LiveDoorOf<Modules[number]>, SocketDoor | Gives<E, 'installation'> | Gives<E, 'serving'>>
+  | Exclude<LiveDoorOf<Modules[number]>, SocketDoor | Stored<E> | Gives<E, 'installation'> | Gives<E, 'serving'>>
   | Exclude<ControlServices<Modules[number]>, SettingControlNeeds>
-  | Exclude<Needs<E, 'installation'>, Installed>
-  | Exclude<Needs<E, 'serving'>, Served | Installed | Gives<E, 'installation'>>
+  | Exclude<Needs<E, 'installation'>, Installed | Stored<E>>
+  | Exclude<Needs<E, 'serving'>, Served | Installed | Stored<E> | Gives<E, 'installation'>>
   | Untiered<E>;
 
 type Untiered<E> = E extends { readonly lifetimes: infer L } ? Extract<keyof L, 'workspace' | 'run' | 'call'> : never;

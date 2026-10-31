@@ -18,6 +18,7 @@ export const REQUIRED_ROLES: ReadonlyArray<InstallationRole> = ['runtime', 'cli'
 export const SERVER_ENTRY = 'bin/server/http.js';
 export const EVIDENCE_MIGRATIONS = 'bin/drizzle';
 export const ACTIVITY_MIGRATIONS = 'bin/activity';
+export const STORE_MIGRATIONS = 'bin/stores';
 export const NATIVE_MODULES = 'node_modules';
 export const PACKAGE_FILE = 'package.json';
 export const MIGRATIONS = 'drizzle';
