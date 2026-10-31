@@ -1,7 +1,6 @@
 <script lang="ts">
   import Activity from '@lucide/svelte/icons/activity';
   import Waiting from '@runlith/chat-ui/Waiting.svelte';
-  import Square from '@lucide/svelte/icons/square';
   import Terminal from '@lucide/svelte/icons/terminal';
   import type { LoadExecution, LoadRow } from '@tagma/server/executions/contract/wire/load';
   import FadeText from '$lib/shared/FadeText.svelte';
@@ -12,6 +11,7 @@
   import type { CommandView } from '$lib/features/executions/commands/Activity.svelte.js';
   import { percent } from '$lib/features/executions/load/rows.js';
   import { View } from '$lib/features/executions/load/View.svelte.js';
+  import { onLinkOpened } from '$lib/features/opening/linkTarget.js';
   import { threadPeeks } from './threadPeek.svelte.js';
   import WorkLine from './WorkLine.svelte';
 
@@ -79,11 +79,12 @@
     trapFocus={false}
     initialFocus={byKey ? () => panel : false}
     returnFocus={() => (byKey || panel?.contains(document.activeElement) ? badge : null)}
-    class={['max-w-[calc(100vw-1.5rem)] gap-0 p-0', expanded === null ? 'w-80' : 'w-120']}
+    class="w-120 max-w-[calc(100vw-1.5rem)] gap-0 p-0"
   >
     <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
     <div
       bind:this={panel}
+      {@attach onLinkOpened(close)}
       tabindex="-1"
       class="flex min-w-0 flex-col text-small outline-none"
       role="group"
@@ -101,8 +102,8 @@
             text={ending.text}
           />
         {/if}
-        <span class="ml-auto font-mono text-meta whitespace-nowrap text-muted-foreground tabular-nums" data-work-total>
-          {#if work.some((one) => one.share !== null)}{`${percent(row.share)} · `}{/if}{formatBytes(row.memoryBytes)}
+        <span class="ml-auto flex gap-3 font-mono text-meta whitespace-nowrap text-muted-foreground tabular-nums" data-work-total>
+          {#if work.some((one) => one.share !== null)}<span>{percent(row.share)}</span>{/if}<span>{formatBytes(row.memoryBytes)}</span>
         </span>
         <Tooltip text="Open in Load — its processes and PIDs">
           <Button variant="quiet" size="icon-xs" aria-label="Open in Load" onclick={openLoad}>
@@ -117,7 +118,7 @@
             disabled={stopping}
             onclick={() => void load.stop(row)}
           >
-            {#if stopping}<Waiting class="size-3" />{:else}<Square class="size-3" />{/if}
+            {#if stopping}<Waiting class="size-3" />{/if}
             Stop all
           </Button>
         </Tooltip>

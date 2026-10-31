@@ -25,7 +25,7 @@ import { STANDING_INVENTORY, ExecutionsRepo, terminalAddress, terminalKey } from
 import type { FitGrid } from '../terminal/Fit.js';
 import type { TerminalAct } from '../terminal/Keymap.js';
 import { storedLeafTabs, type StoredLayout, type StoredWorktrees } from './layout.js';
-import { terminalOpens } from './opens.js';
+import { terminalPlace, UNPLACED } from './opens.js';
 import { standing } from './standing.js';
 import { TerminalSettings } from './TerminalSettings.svelte.js';
 import { WorktreeTerminals } from './WorktreeTerminals.svelte.js';
@@ -308,16 +308,22 @@ export class Terminals extends Service<Terminals>()('Terminals', { tier: 'projec
           await this.readdress(null, record.launchedFor);
           return;
         }
-        if (record === undefined || !terminalOpens(record) || record.rootId === undefined) {
+        const place = record === undefined ? null : terminalPlace(record);
+        if (record === undefined || place === null) {
           this.notices.error('Terminal', `Terminal ${key} is gone: no place of this project holds it.`);
           await this.readdress(null);
           return;
         }
-        rootId = record.rootId;
+        rootId = place;
         this.worktree(rootId).bear(record);
+        if (rootId === UNPLACED) this.layAgent(key, record);
       }
       const worktree = this.worktree(rootId);
       const owner = worktree.holderOf(key);
+      if (owner === null && rootId === UNPLACED) {
+        this.notices.error('Terminal', `Terminal ${key} stands in no checkout, and the thread holding it is gone.`);
+        return;
+      }
       const thread = owner === null ? null : holderThread(owner);
       await this.readdress(rootId, thread);
       const revealed = worktree.reveal(key);
@@ -573,7 +579,6 @@ export class Terminals extends Service<Terminals>()('Terminals', { tier: 'projec
 }
 
 function rootOf(listing: TerminalRow): string | null {
-  const record = listing.record;
-  if (record.launchedFor !== undefined || record.rootId === undefined || !terminalOpens(record)) return null;
-  return standing(listing) ? record.rootId : null;
+  const place = terminalPlace(listing.record);
+  return place !== null && standing(listing) ? place : null;
 }

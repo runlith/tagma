@@ -15,6 +15,7 @@
   import Bar from '$lib/shared/ui/Bar.svelte';
   import FadeText from '$lib/shared/FadeText.svelte';
   import { formatBytes, formatLimit, formatSpan, UNMEASURED } from '$lib/shared/figures.js';
+  import { timeCompact } from '$lib/shared/time.js';
 
   let {
     line,
@@ -32,6 +33,7 @@
     figures?: boolean;
   } = $props();
 
+  const HOUR_MS = 3_600_000;
   const readings = Readings.use();
   const live = $derived(isLive(line));
   const measuring = $derived(figures && live);
@@ -46,6 +48,13 @@
   const span = $derived(wait ?? line.limit?.executionMs ?? null);
   const share = $derived(elapsed === null || span === null || span === 0 ? 0 : (elapsed / span) * 100);
   const changeable = $derived(adjustable && wait === null && line.kind === 'command' && line.limit !== null);
+  const age = $derived(
+    elapsed === null
+      ? UNMEASURED
+      : span === null && elapsed >= HOUR_MS
+        ? timeCompact(new Date(now - elapsed).toISOString(), now)
+        : formatSpan(elapsed),
+  );
 
   $effect(() => (live ? view.watch() : undefined));
 
@@ -62,8 +71,7 @@
     />
   {/if}
   <span class="tabular-nums">
-    <span class={near || line.phase === 'stopping' ? 'text-status-in-work' : 'text-muted-foreground/90'}
-      >{elapsed === null ? UNMEASURED : formatSpan(elapsed)}</span
+    <span class={near || line.phase === 'stopping' ? 'text-status-in-work' : 'text-muted-foreground/90'}>{age}</span
     >{#if wait !== null}&nbsp;of {formatLimit(wait)} wait{:else if line.limit !== null}{line.limit.executionMs === null
         ? ', no limit'
         : ` of ${formatLimit(line.limit.executionMs)}`}{/if}

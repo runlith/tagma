@@ -1,6 +1,6 @@
 <script lang="ts">
   import Waiting from '@runlith/chat-ui/Waiting.svelte';
-  import Square from '@lucide/svelte/icons/square';
+  import CircleStop from '@lucide/svelte/icons/circle-stop';
   import Timer from '@lucide/svelte/icons/timer';
   import X from '@lucide/svelte/icons/x';
   import Tooltip from '$lib/shared/ui/tooltip/Tooltip.svelte';
@@ -37,7 +37,7 @@
         aria-label={queued ? 'Cancel command' : line.kind === 'terminal' ? 'Stop terminal' : 'Stop command'}
         onclick={() => void view.stop(line)}
       >
-        {#if busy === 'stop'}<Waiting class="size-3" />{:else if queued}<X class="size-3" />{:else}<Square class="size-3" />{/if}
+        {#if busy === 'stop'}<Waiting class="size-3" />{:else if queued}<X class="size-3" />{:else}<CircleStop class="size-3" />{/if}
       </Button>
     </Tooltip>
     {#if life && line.kind === 'command' && line.limit !== null}
