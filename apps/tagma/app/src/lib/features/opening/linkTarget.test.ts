@@ -8,7 +8,7 @@ import { expect, test, vi } from 'vitest';
 import type { Notices } from '$lib/features/notices/Service.svelte.js';
 import type { LinkHow, LinkPlace } from './Link.js';
 import LinkRow from './LinkRow.fixture.svelte';
-import { LinkRegistry } from './LinkRegistry.js';
+import { testLinks } from '$lib/app/testing.js';
 import { LINK_OPENED, linkTarget, linkWithin } from './linkTarget.js';
 import { Opening } from './Opening.svelte.js';
 
@@ -19,9 +19,7 @@ test('a link row of a menu opens its link once by click, Enter and Space, closes
     icon: PanelRight,
     open: (_app, link) => void opened.push([link.target, how]),
   });
-  const kinds = new LinkRegistry([
-    { links: [{ kind: 'note', what: () => 'note', beside: place('beside'), full: place('full') }] as never },
-  ]);
+  const kinds = testLinks([{ kind: 'note', what: () => 'note', beside: place('beside'), full: place('full') }] as never, []);
   const opening = new Opening(kinds, {} as never, {} as never, { refusal: vi.fn() } as unknown as Notices, new Host('desktop', 'macos'));
   const target = document.createElement('div');
   document.body.append(target);
@@ -64,9 +62,7 @@ test('a link on an element and one within a root open beside by click and Enter,
     icon: PanelRight,
     open: (_app, link) => void opened.push([link.target, how]),
   });
-  const kinds = new LinkRegistry([
-    { links: [{ kind: 'note', what: () => 'note', beside: place('beside'), full: place('full') }] as never },
-  ]);
+  const kinds = testLinks([{ kind: 'note', what: () => 'note', beside: place('beside'), full: place('full') }] as never, []);
   const opening = new Opening(kinds, {} as never, {} as never, { refusal: vi.fn() } as unknown as Notices, new Host('desktop', 'macos'));
   const here: Resolver = { resolve: () => undefined as never };
 
@@ -104,7 +100,7 @@ test('a link on an element and one within a root open beside by click and Enter,
 
 test('the keyboard menu gesture in editable text gives the menu of the link under the caret, and a pointer there gives none, even on the focused root', () => {
   const place: LinkPlace<string> = { words: 'note', icon: PanelRight, open: () => undefined };
-  const kinds = new LinkRegistry([{ links: [{ kind: 'note', what: () => 'note', beside: place, full: place }] as never }]);
+  const kinds = testLinks([{ kind: 'note', what: () => 'note', beside: place, full: place }] as never, []);
   const opening = new Opening(kinds, {} as never, {} as never, { refusal: vi.fn() } as unknown as Notices, new Host('desktop', 'macos'));
   const root = document.createElement('div');
   const editable = document.createElement('div');
@@ -134,7 +130,7 @@ test('the keyboard menu gesture in editable text gives the menu of the link unde
 test('a kind with no place beside opens its full place by click and modified click, and its menu has one step to open it', async () => {
   const opened: LinkHow[] = [];
   const full: LinkPlace<string> = { words: 'full', icon: PanelRight, open: () => void opened.push('full') };
-  const kinds = new LinkRegistry([{ links: [{ kind: 'folder', what: () => 'folder', full }] as never }]);
+  const kinds = testLinks([{ kind: 'folder', what: () => 'folder', full }] as never, []);
   const opening = new Opening(kinds, {} as never, {} as never, { refusal: vi.fn() } as unknown as Notices, new Host('desktop', 'macos'));
   const here: Resolver = { resolve: () => undefined as never };
   const button = document.body.appendChild(document.createElement('button'));

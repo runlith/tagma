@@ -1,10 +1,10 @@
 import Globe from '@lucide/svelte/icons/globe';
 import { Host } from '@runlith/layer/Host';
 import { SidePanes } from '$lib/app/panes/SidePanes.svelte.js';
-import type { ActionsModule } from '$lib/features/workspace/action.js';
+import type { PaletteActionList } from '$lib/features/workspace/action.js';
 import { browserPane } from './panes.js';
 
-export const actions: ActionsModule['actions'] = [
+export const actions: PaletteActionList = [
   {
     id: 'browser.open',
     order: 36,

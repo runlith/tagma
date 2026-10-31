@@ -8,7 +8,7 @@ import Sun from '@lucide/svelte/icons/sun';
 import type { Component } from 'svelte';
 import { labelOf } from '$lib/features/workspace/mark.js';
 import { ProjectRemoval } from '$lib/features/projects/Removal.svelte.js';
-import type { ActionsModule, PaletteAction } from '$lib/features/workspace/action.js';
+import type { PaletteAction, PaletteActionList } from '$lib/features/workspace/action.js';
 import { Theme, type ThemeChoice } from '$lib/shared/Theme.svelte.js';
 import { ColumnRegistry } from './ColumnRegistry.js';
 import { ProjectCreation } from './ProjectCreation.svelte.js';
@@ -46,7 +46,7 @@ const update: PaletteAction = {
   },
 };
 
-export const actions: ActionsModule['actions'] = [
+export const actions: PaletteActionList = [
   {
     id: 'column.toggle',
     order: 30,

@@ -20,8 +20,27 @@ import { RemoteRepo } from './RemoteRepo.js';
 import { ThreadWork } from './ThreadWork.svelte.js';
 import { ThreadWorkRepo } from './ThreadWorkRepo.js';
 import { TranslationLayer } from './translation/layer.js';
+import { LinkKinds, LinkMenuItems } from '$lib/features/opening/Link.js';
+import { SettingSections } from '$lib/features/settings/section.js';
+import { PaletteActions } from '$lib/features/workspace/action.js';
+import { Columns } from '$lib/features/workspace/column.js';
+import { Surfaces } from '$lib/features/workspace/surface.js';
+import { Panes } from '$lib/shared/panes/pane.js';
+import { actions } from './actions.js';
+import { columns } from './columns.js';
+import { items, links } from './links.js';
+import { panes } from './panes.js';
+import { sections } from './settings.js';
+import { surfaces } from './surfaces.js';
 
 export const GraphLayer = Layer.mergeAll(
+  Surfaces.contribute('graph', ...surfaces),
+  Panes.contribute('graph', ...panes),
+  Columns.contribute('graph', ...columns),
+  SettingSections.contribute('graph', ...sections),
+  LinkKinds.contribute('graph', ...links),
+  LinkMenuItems.contribute('graph', ...items),
+  PaletteActions.contribute('graph', { id: 'graph', actions }),
   ThreadWorkRepo,
   ThreadWork,
   Sidebar,

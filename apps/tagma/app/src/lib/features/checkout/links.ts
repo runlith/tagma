@@ -9,7 +9,7 @@ import type { RootId } from '@tagma/server/workspace/contract/wire/ids';
 import type { Resolver } from '@runlith/layer/key';
 import { Router } from '@runlith/layer/Router';
 import { Beside } from '$lib/features/opening/Beside.js';
-import type { Link, LinkFrom, LinkItems, LinkKind } from '$lib/features/opening/Link.js';
+import { type Link, type LinkFrom, type LinkItems, type LinkKind, linkKinds } from '$lib/features/opening/Link.js';
 import { FileOpener, type OpenAsk, type PathTarget, type Picture } from './files/FileOpener.svelte.js';
 import { Outside } from './files/Outside.svelte.js';
 import { Workspace } from '$lib/features/workspace/Selection.svelte.js';
@@ -23,30 +23,30 @@ import { CHANGES_PANE, changesPane, COMMIT_PANE, commitOf, commitPane, FILE_PANE
 import { SHORT_SHA } from './reading.js';
 import { ThreadChanges } from './ThreadChanges.svelte.js';
 
-export const FILE_LINK = 'file';
+const FILE_LINK = 'file';
 
-export const COMMIT_LINK = 'commit';
+const COMMIT_LINK = 'commit';
 
-export const CHANGE_LINK = 'change';
+const CHANGE_LINK = 'change';
 
-export const CHANGES_LINK = 'changes';
+const CHANGES_LINK = 'changes';
 
-export const DIRECTORY_LINK = 'directory';
+const DIRECTORY_LINK = 'directory';
 
-export type FileRef = PathTarget & {
+type FileRef = PathTarget & {
   readonly root?: RootId | undefined;
   readonly picture?: ((picture: Picture) => void) | undefined;
 };
 
-export type CommitRef = { readonly sha: string; readonly project: string; readonly subject?: string | undefined };
+type CommitRef = { readonly sha: string; readonly project: string; readonly subject?: string | undefined };
 
-export type ChangeRef =
+type ChangeRef =
   | { readonly projectId: number; readonly rootId: RootId; readonly path: string; readonly commit: string | null }
   | { readonly projectId: number; readonly rootId: null; readonly path: string; readonly commit: null; readonly mediaType: string };
 
 export type ChangesRef = { readonly threadId: string; readonly summary?: string | undefined };
 
-export type DirectoryRef = { readonly absolute: string; readonly place: PlacedPath | null };
+type DirectoryRef = { readonly absolute: string; readonly place: PlacedPath | null };
 
 export const fileLink = (target: FileRef, from?: LinkFrom): Link<FileRef> => ({ kind: FILE_LINK, target, from });
 
@@ -329,6 +329,6 @@ const directoryPaths: LinkItems<DirectoryRef> = {
   ],
 };
 
-export const links = [files, commits, changes, changeLists, directories];
+export const links = linkKinds(files, commits, changes, changeLists, directories);
 
 export const items = [outsides, paths, shas, changePlaces, changePaths, directoryPlaces, directoryPaths];

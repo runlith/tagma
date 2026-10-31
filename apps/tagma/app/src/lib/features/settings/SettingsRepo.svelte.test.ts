@@ -55,6 +55,7 @@ test.each([
         ],
       });
     }
+    if (path === '/api/op/list_groups') return json({ status: 'ok', groups: [] });
     if (path !== '/api/op/read_settings') throw new Error(`Unexpected request: ${path}`);
     reads += 1;
     if (reads > requests) {

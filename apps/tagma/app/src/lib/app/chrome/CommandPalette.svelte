@@ -104,7 +104,8 @@
   };
 
   const tagmaAppActions = TagmaAppActions.use();
-  const declared = ActionRegistry.use().of(app);
+  const registry = ActionRegistry.use();
+  const declared = $derived(registry.of(app));
 
   const model = new PaletteModel(
     workspace,

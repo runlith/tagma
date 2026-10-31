@@ -6,6 +6,8 @@ import { afterEach, beforeEach, expect, test } from 'vitest';
 import { waitUntil } from '@runlith/testing/flush';
 import { testDoor } from '$lib/wire/testing.js';
 import { loadOperations } from '$lib/wire/operation.js';
+import { makePoint } from '@runlith/layer/testing';
+import { SectionContributions, SettingSections, type SettingsSection } from './section.js';
 import { SectionRegistry } from './SectionRegistry.js';
 import { SettingsCatalog } from './SettingsCatalog.svelte.js';
 import { SettingsRepo } from './SettingsRepo.js';
@@ -100,7 +102,10 @@ afterEach(async () => {
   for (const release of close.splice(0)) await release();
 });
 
-async function read(sections = new SectionRegistry({})): Promise<SettingsCatalog> {
+const registry = (...declared: readonly SettingsSection[]) =>
+  new SectionRegistry(makePoint(SettingSections, ...declared), makePoint(SectionContributions));
+
+async function read(sections = registry()): Promise<SettingsCatalog> {
   const queryClient = new QueryClient();
   const mounted = mountRepo(SettingsRepo, { door: testDoor(fetch), queryClient });
   const scope = Scope.make();
@@ -172,7 +177,7 @@ test('the page holds the keys a person SETS: a key a machine writes for itself i
 
 test('a key an app section holds stands in that section, whatever section the catalog files it under', async () => {
   const holding = { id: 'context', group: 'agent', order: 2, icon: {} as never, keys: ['agent.toolOutputShare'] } as const;
-  const catalog = await read(new SectionRegistry({ './threads/settings.ts': { sections: [holding] } }));
+  const catalog = await read(registry(holding));
 
   expect(catalog.entriesOf('context').map((entry) => entry.id)).toEqual(['agent.toolOutputShare']);
   expect(catalog.entriesOf('agent')).toEqual([]);

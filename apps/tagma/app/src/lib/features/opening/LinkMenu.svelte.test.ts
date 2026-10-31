@@ -5,12 +5,11 @@ import { Layer } from '@runlith/layer/Layer';
 import type { Resolver } from '@runlith/layer/key';
 import { flushSync } from 'svelte';
 import { afterEach, expect, test } from 'vitest';
-import { mountShell, type TestApp } from '$lib/app/testing.js';
+import { mountShell, testLinks, type TestApp } from '$lib/app/testing.js';
 import { Notices } from '$lib/features/notices/Service.svelte.js';
 import type { LinkHow, LinkPlace } from './Link.js';
 import LinkMenu from './LinkMenu.svelte';
 import { LINK_OPENED } from './linkTarget.js';
-import { LinkRegistry } from './LinkRegistry.js';
 import { Opening } from './Opening.svelte.js';
 
 let app: TestApp | undefined;
@@ -32,9 +31,7 @@ test('a step chosen in the link menu opens the link it was chosen on, whatever t
       completed.resolve();
     },
   });
-  const kinds = new LinkRegistry([
-    { links: [{ kind: 'note', what: () => 'note', beside: place('beside'), full: place('full') }] as never },
-  ]);
+  const kinds = testLinks([{ kind: 'note', what: () => 'note', beside: place('beside'), full: place('full') }] as never, []);
   const notices = { refusal: (error: unknown) => void refused.push(error) } as unknown as Notices;
   const opening = new Opening(kinds, {} as never, {} as never, notices, new Host('desktop', 'macos'));
   app = mountShell(Layer.mergeAll(Layer.of(Opening, opening), Layer.of(Notices, notices)));

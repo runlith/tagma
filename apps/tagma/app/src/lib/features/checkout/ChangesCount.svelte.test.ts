@@ -5,11 +5,10 @@ import { Host } from '@runlith/layer/Host';
 import { Layer } from '@runlith/layer/Layer';
 import { flushSync } from 'svelte';
 import { afterEach, expect, test } from 'vitest';
-import { DECLARED_LINKS } from '$lib/app/opening/declaredLinks.js';
 import { besideOf } from '$lib/app/opening/beside.js';
 import { SidePanes } from '$lib/app/panes/SidePanes.svelte.js';
 import { testArea, testKind } from '$lib/app/panes/testing.js';
-import { liveFeed, mountShell, screen, type TestApp } from '$lib/app/testing.js';
+import { liveFeed, mountShell, screen, testLinks, type TestApp } from '$lib/app/testing.js';
 import { Beside } from '$lib/features/opening/Beside.js';
 import { Opening } from '$lib/features/opening/Opening.svelte.js';
 import { ThreadSeats } from '$lib/features/threads/seats/ThreadSeats.svelte.js';
@@ -65,13 +64,7 @@ afterEach(() => {
 function draw(first: ThreadChangesFrame) {
   const area = testArea([testKind(CHANGES_PANE)]);
   const seats = new ThreadSeats(area.panes);
-  const opening = new Opening(
-    DECLARED_LINKS,
-    {} as never,
-    {} as never,
-    { refusal: () => undefined } as never,
-    new Host('desktop', 'macos'),
-  );
+  const opening = new Opening(testLinks(), {} as never, {} as never, { refusal: () => undefined } as never, new Host('desktop', 'macos'));
   const feed = liveFeed();
   app = mountShell(
     Layer.mergeAll(

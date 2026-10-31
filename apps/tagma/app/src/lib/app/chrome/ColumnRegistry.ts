@@ -1,7 +1,7 @@
-import { RegistryClash, clashOf } from '@runlith/roster/RegistryClash';
 import { type Resolver, Service } from '@runlith/layer/key';
-import type { ColumnDeclaration, ColumnFrame } from '$lib/features/workspace/column.js';
-import type { Surface, SurfaceRegistry } from '$lib/features/workspace/surface.js';
+import type { Point } from '@runlith/layer/Point';
+import { type ColumnDeclaration, type ColumnFrame, Columns } from '$lib/features/workspace/column.js';
+import { type Surface, SurfaceRegistry } from '$lib/features/workspace/surface.js';
 
 export type SectionColumn = {
   readonly id: string;
@@ -13,47 +13,48 @@ export type SectionColumn = {
   toggle(): void;
 };
 
-export class ColumnRegistry extends Service<ColumnRegistry>()('ColumnRegistry', { tier: 'app' }) {
-  private readonly byId = new Map<string, ColumnDeclaration>();
+type ColumnIndex = {
+  readonly items: readonly ColumnDeclaration[];
+  readonly byId: ReadonlyMap<string, ColumnDeclaration>;
+  readonly byRoute: ReadonlyMap<string, ColumnDeclaration>;
+};
 
-  private readonly byRoute = new Map<string, ColumnDeclaration>();
+const indexOf = (items: readonly ColumnDeclaration[]): ColumnIndex => ({
+  items,
+  byId: new Map(items.map((declaration) => [declaration.id, declaration])),
+  byRoute: new Map(items.flatMap((declaration) => (declaration.routes ?? []).map((route) => [route, declaration] as const))),
+});
+
+export class ColumnRegistry extends Service<ColumnRegistry>()('ColumnRegistry', { tier: 'app' }) {
+  static *make() {
+    return new ColumnRegistry(yield* SurfaceRegistry, yield* Columns);
+  }
+
+  private indexed: ColumnIndex | undefined;
 
   private readonly standing = new WeakMap<Resolver, Map<string, SectionColumn>>();
 
   constructor(
     private readonly surfaces: SurfaceRegistry,
-    declarations: readonly ColumnDeclaration[],
+    private readonly columns: Point<ColumnDeclaration>,
   ) {
     super();
-    for (const declaration of declarations) {
-      const held = this.byId.get(declaration.id);
-      if (held !== undefined) throw clashOf(`Column "${declaration.id}"`, held.id, declaration.id);
-      this.byId.set(declaration.id, declaration);
-      for (const route of declaration.routes ?? []) {
-        const claimant = this.byRoute.get(route);
-        if (claimant !== undefined) throw clashOf(`Route "${route}"`, claimant.id, declaration.id);
-        this.byRoute.set(route, declaration);
-      }
-    }
-    for (const surface of surfaces.all) {
-      const id = surfaces.columnOf(surface.surface);
-      if (id !== undefined && !this.byId.has(id)) {
-        throw new RegistryClash({
-          message: `Surface "${surface.surface}" names the column "${id}", which no feature declares.`,
-          holders: [surface.surface],
-        });
-      }
-    }
+  }
+
+  private get index(): ColumnIndex {
+    const items = this.columns.items;
+    if (this.indexed?.items !== items) this.indexed = indexOf(items);
+    return this.indexed;
   }
 
   of(surface: Surface, app: Resolver): SectionColumn | null {
     const id = this.surfaces.columnOf(surface);
-    return id === undefined ? null : this.column(this.byId.get(id), app);
+    return id === undefined ? null : this.column(this.index.byId.get(id), app);
   }
 
   at(routeId: string | undefined, inProject: boolean, app: Resolver): SectionColumn | null {
     if (inProject) return this.of(this.surfaces.of(routeId), app);
-    return routeId === undefined ? null : this.column(this.byRoute.get(routeId), app);
+    return routeId === undefined ? null : this.column(this.index.byRoute.get(routeId), app);
   }
 
   private column(declaration: ColumnDeclaration | undefined, app: Resolver): SectionColumn | null {

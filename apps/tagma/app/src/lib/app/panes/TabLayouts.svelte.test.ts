@@ -4,11 +4,10 @@ import { testSurfaces } from '$lib/app/testing.js';
 import { draftHolder, type Holder, sectionHolder, threadHolder as held } from '$lib/shared/panes/holder.js';
 import { panes as tagmaAppKinds } from '$lib/features/tagma-apps/panes.js';
 import { panes as threadKinds } from '$lib/features/threads/panes.js';
-import { PaneRegistry } from './PaneRegistry.js';
 import { KEPT_DAYS, KEPT_HOLDERS, TabLayouts } from './TabLayouts.svelte.js';
-import { testKind } from './testing.js';
+import { testKind, testPanes } from './testing.js';
 
-const KINDS = new PaneRegistry([...threadKinds, ...tagmaAppKinds, testKind('file'), testKind('browser')]);
+const KINDS = testPanes(...threadKinds, ...tagmaAppKinds, testKind('file'), testKind('browser'));
 const SURFACES = testSurfaces();
 const DAY_MS = 86_400_000;
 

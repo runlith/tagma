@@ -7,8 +7,24 @@ import { GitLists } from './GitLists.svelte.js';
 import { PathRoads } from './PathRoads.js';
 import { ThreadChanges } from './ThreadChanges.svelte.js';
 import { ThreadHistory } from './ThreadHistory.svelte.js';
+import { LinkKinds, LinkMenuItems } from '$lib/features/opening/Link.js';
+import { SettingSections } from '$lib/features/settings/section.js';
+import { PaletteActions } from '$lib/features/workspace/action.js';
+import { Surfaces } from '$lib/features/workspace/surface.js';
+import { Panes } from '$lib/shared/panes/pane.js';
+import { actions } from './actions.js';
+import { items, links } from './links.js';
+import { panes } from './panes.js';
+import { sections } from './settings.js';
+import { surfaces } from './surfaces.js';
 
 export const CheckoutLayer = Layer.mergeAll(
+  Surfaces.contribute('checkout', ...surfaces),
+  Panes.contribute('checkout', ...panes),
+  SettingSections.contribute('checkout', ...sections),
+  LinkKinds.contribute('checkout', ...links),
+  LinkMenuItems.contribute('checkout', ...items),
+  PaletteActions.contribute('checkout', { id: 'checkout', actions }),
   Checkout,
   Holdings,
   CheckoutRepo,

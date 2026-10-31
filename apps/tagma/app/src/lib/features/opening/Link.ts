@@ -1,4 +1,5 @@
 import type { Resolver } from '@runlith/layer/key';
+import { Point } from '@runlith/layer/Point';
 import type { Component } from 'svelte';
 
 export type LinkFrom = {
@@ -53,4 +54,20 @@ export type LinkKind<T> = {
   readonly tab?: LinkTab<T>;
 };
 
-export type LinksModule = { readonly links?: readonly LinkKind<never>[]; readonly items?: readonly LinkItems<never>[] };
+export function linkKinds<const T extends readonly unknown[]>(
+  ...kinds: { readonly [I in keyof T]: LinkKind<T[I]> }
+): readonly LinkKind<never>[] {
+  return kinds as unknown as readonly LinkKind<never>[];
+}
+
+export const LinkKinds = Point.define<LinkKind<never>>()('LinkKinds', {
+  tier: 'app',
+  key: (declared) => declared.kind,
+  claims: (declared) => (declared.tab === undefined ? [] : [`The link of tab kind "${declared.tab.kind}"`]),
+});
+
+export const LinkMenuItems = Point.define<LinkItems<never>>()('LinkMenuItems', {
+  tier: 'app',
+  key: (items) => `${items.kind} ${items.group} ${items.order}`,
+  order: (items) => items.order,
+});

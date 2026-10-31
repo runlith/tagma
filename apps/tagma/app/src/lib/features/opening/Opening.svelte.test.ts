@@ -8,9 +8,8 @@ import { makeRouterWithLog } from '@runlith/layer/testing';
 import { waitUntil } from '@runlith/testing/flush';
 import { expect, test } from 'vitest';
 import { besideOf } from '$lib/app/opening/beside.js';
-import { DECLARED_LINKS } from '$lib/app/opening/declaredLinks.js';
 import { testArea, testKind } from '$lib/app/panes/testing.js';
-import { testAddresses } from '$lib/app/testing.js';
+import { testAddresses, testLinks } from '$lib/app/testing.js';
 import { Addresses } from '$lib/features/workspace/Addresses.js';
 import { ThreadSeats } from '$lib/features/threads/seats/ThreadSeats.svelte.js';
 import { Links } from '$lib/features/browser/Links.svelte.js';
@@ -125,7 +124,7 @@ function world(click: 'beside' | 'section') {
     [Outside, { local: true, finder: 'Reveal in Finder', reveal: async (file: { path: string }) => void revealed.push(file.path) }],
   ]);
   const app: Resolver = { resolve: <Self>(key: KeyClass<string, Self>) => services.get(key) as Self };
-  const opening = new Opening(DECLARED_LINKS, settings, workspace, notices, new Host('desktop', 'macos'));
+  const opening = new Opening(testLinks(), settings, workspace, notices, new Host('desktop', 'macos'));
   const tabs = (holder = sectionHolder('test')) => panes.layouts?.layout(holder).tabs ?? [];
   const press = (link: Parameters<Opening['open']>[0], modified: boolean) => opening.open(link, opening.how(modified), app);
   const paths = () => visited.map((visit) => new URL(visit.href, 'https://tagma.test').pathname);

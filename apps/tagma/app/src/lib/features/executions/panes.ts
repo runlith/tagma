@@ -1,4 +1,4 @@
-import type { PanesModule } from '$lib/shared/panes/pane.js';
+import type { PaneKind } from '$lib/shared/panes/pane.js';
 import { OUTPUT_TAB } from './commands/outputTab.js';
 import OutputTabTitle from './commands/OutputTabTitle.svelte';
 import { TERMINAL_PANE } from './kind.js';
@@ -6,7 +6,7 @@ import Offer from './terminal/Offer.svelte';
 import TabTitle from './terminal/TabTitle.svelte';
 import { Terminals } from './worktrees/Terminals.svelte.js';
 
-export const panes: PanesModule['panes'] = [
+export const panes: readonly PaneKind[] = [
   {
     kind: TERMINAL_PANE,
     noun: 'terminal',

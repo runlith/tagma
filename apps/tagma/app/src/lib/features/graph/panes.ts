@@ -1,9 +1,9 @@
-import type { PanesModule } from '$lib/shared/panes/pane.js';
+import type { PaneKind } from '$lib/shared/panes/pane.js';
 import BlockHold from './BlockHold.svelte';
 import BlockPaneTitle from './BlockPaneTitle.svelte';
 import { BLOCK_PANE } from './blockPane.js';
 
-export const panes: PanesModule['panes'] = [
+export const panes: readonly PaneKind[] = [
   {
     kind: BLOCK_PANE,
     noun: 'block',

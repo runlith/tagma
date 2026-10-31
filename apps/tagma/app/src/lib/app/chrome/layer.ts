@@ -19,8 +19,15 @@ import { RailPins } from './RailPins.svelte.js';
 import { ServerFaults } from './ServerFaults.svelte.js';
 import { Standing } from './Standing.svelte.js';
 import { WireState } from './WireState.svelte.js';
+import { PaletteActions } from '$lib/features/workspace/action.js';
+import { ActionRegistry } from './ActionRegistry.js';
+import { actions } from './actions.js';
+import { ColumnRegistry } from './ColumnRegistry.js';
 
 export const FrameLayer = Layer.mergeAll(
+  ActionRegistry,
+  ColumnRegistry,
+  PaletteActions.contribute('chrome', { id: 'chrome', actions }),
   Bar,
   Frame,
   WireState,

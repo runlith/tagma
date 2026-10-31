@@ -1,7 +1,7 @@
-import { CHECKOUT, type SurfacesModule } from '$lib/features/workspace/surface.js';
+import { CHECKOUT, type SurfaceDeclaration } from '$lib/features/workspace/surface.js';
 import CheckoutIcon from './CheckoutIcon.svelte';
 
-export const surfaces: SurfacesModule['surfaces'] = [
+export const surfaces: readonly SurfaceDeclaration[] = [
   {
     surface: CHECKOUT,
     route: 'checkout',

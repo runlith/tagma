@@ -1,4 +1,4 @@
-import type { PanesModule } from '$lib/shared/panes/pane.js';
+import type { PaneKind } from '$lib/shared/panes/pane.js';
 import ChangesOffer from './ChangesOffer.svelte';
 import ChangesTitle from './ChangesTitle.svelte';
 import CommitPaneTitle from './CommitPaneTitle.svelte';
@@ -6,7 +6,7 @@ import FileOffer from './FileOffer.svelte';
 import FileTitle from './FileTitle.svelte';
 import { CHANGES_PANE, COMMIT_PANE, FILE_PANE } from './paneContent.js';
 
-export const panes: PanesModule['panes'] = [
+export const panes: readonly PaneKind[] = [
   {
     kind: CHANGES_PANE,
     noun: 'changes',

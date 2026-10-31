@@ -1,9 +1,9 @@
 import Globe from '@lucide/svelte/icons/globe';
-import type { SurfacesModule } from '$lib/features/workspace/surface.js';
+import type { SurfaceDeclaration } from '$lib/features/workspace/surface.js';
 
-export const BROWSER_SURFACE = 'browser';
+const BROWSER_SURFACE = 'browser';
 
-export const surfaces: SurfacesModule['surfaces'] = [
+export const surfaces: readonly SurfaceDeclaration[] = [
   {
     surface: BROWSER_SURFACE,
     route: 'w',

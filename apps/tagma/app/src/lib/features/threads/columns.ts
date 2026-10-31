@@ -1,7 +1,7 @@
-import type { ColumnsModule } from '$lib/features/workspace/column.js';
+import type { ColumnDeclaration } from '$lib/features/workspace/column.js';
 import { AgentsColumn } from './AgentsColumn.svelte.js';
 
-export const columns: ColumnsModule['columns'] = [
+export const columns: readonly ColumnDeclaration[] = [
   {
     id: 'agents',
     label: 'agents column',

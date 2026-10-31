@@ -1,7 +1,7 @@
-import { CHAT, type SurfacesModule } from '$lib/features/workspace/surface.js';
+import { CHAT, type SurfaceDeclaration } from '$lib/features/workspace/surface.js';
 import AgentIcon from '$lib/shared/AgentIcon.svelte';
 
-export const surfaces: SurfacesModule['surfaces'] = [
+export const surfaces: readonly SurfaceDeclaration[] = [
   {
     surface: CHAT,
     route: 'chat',

@@ -10,7 +10,6 @@ import { SurfaceRegistry } from '$lib/features/workspace/surface.js';
 import { Live } from '$lib/wire/Live.js';
 import { Sections } from './Sections.svelte.js';
 import { sectionActions, sectionDeclarations } from './sections.js';
-import { TAGMA_APP_SURFACE } from './surfaces.js';
 import { TagmaAppActions } from './TagmaAppActions.svelte.js';
 import { ViewSets } from './ViewSets.svelte.js';
 
@@ -26,7 +25,7 @@ const board = (projectId: number): TagmaAppViewSet => ({
 });
 
 const railOf = (surfaces: SurfaceRegistry): string[] =>
-  surfaces.rail.filter((entry) => entry.surface.startsWith(`${TAGMA_APP_SURFACE}/`)).map((entry) => entry.label);
+  surfaces.rail.filter((entry) => entry.surface.startsWith('app/')).map((entry) => entry.label);
 
 let app: TestApp | undefined;
 

@@ -9,10 +9,7 @@ import { CheckoutLayer } from '$lib/features/checkout/layer.js';
 import { FilesLayer } from '$lib/features/checkout/files/layer.js';
 import { MarkdownPreview } from '$lib/features/checkout/files/MarkdownPreview.js';
 import MarkdownBody from '$lib/features/graph/MarkdownBody.svelte';
-import { PageStates } from '$lib/features/pages/PageStates.svelte.js';
-import { PageZoom } from '$lib/features/pages/PageZoom.svelte.js';
-import { VideosRepo } from '$lib/features/pages/VideosRepo.js';
-import { ThreadPages } from '$lib/features/pages/ThreadPages.svelte.js';
+import { PagesLayer } from '$lib/features/pages/layer.js';
 import { PageTeams } from '$lib/features/pages/team.js';
 import { ThreadList } from '$lib/features/threads/List.svelte.js';
 import { pageTeam } from '$lib/features/threads/team.js';
@@ -26,24 +23,23 @@ import { PanesLayer } from '$lib/app/panes/layer.js';
 import { OpeningLayer } from '$lib/app/opening/layer.js';
 import { Keymap } from '$lib/app/keys/Keymap.svelte.js';
 import { BrowserLayer } from '$lib/features/browser/layer.js';
-import { DevicesRepo } from '$lib/features/devices/Repo.js';
-import { McpRepo } from '$lib/features/mcp/Repo.js';
-import { McpFeed } from '$lib/features/mcp/Feed.js';
-import { Sections } from '$lib/features/tagma-apps/Sections.svelte.js';
-import { TagmaAppActions } from '$lib/features/tagma-apps/TagmaAppActions.svelte.js';
-import { ViewSets } from '$lib/features/tagma-apps/ViewSets.svelte.js';
+import { ActivityLayer } from '$lib/features/activity/layer.js';
+import { DevicesLayer } from '$lib/features/devices/layer.js';
+import { McpLayer } from '$lib/features/mcp/layer.js';
+import { PowerLayer } from '$lib/features/power/layer.js';
+import { ShellLayer } from '$lib/features/shell/layer.js';
+import { TelemetryLayer } from '$lib/features/telemetry/layer.js';
+import { TagmaAppsLayer } from '$lib/features/tagma-apps/layer.js';
 import { FloatingPanels } from '$lib/features/tagma-apps/windows/FloatingPanels.svelte.js';
 import { NativeWindows } from '$lib/features/tagma-apps/windows/NativeWindows.js';
 import { ViewWindows } from '$lib/features/tagma-apps/windows/ViewWindows.js';
 import { PaletteRepo } from '$lib/features/palette/Repo.js';
 import { ProjectPrefetch } from '$lib/features/projects/Prefetch.js';
 import { ProjectsLayer } from '$lib/features/projects/layer.js';
-import { RulesRepo } from '$lib/features/rules/Repo.js';
+import { RulesLayer } from '$lib/features/rules/layer.js';
 import { PluginsLayer } from '$lib/features/plugins/layer.js';
 import { SecretsRepo } from '$lib/features/secrets/Repo.js';
-import { SettingsColumn } from '$lib/features/settings/SettingsColumn.svelte.js';
-import { SettingsRepo } from '$lib/features/settings/SettingsRepo.js';
-import { SectionRegistry } from '$lib/features/settings/SectionRegistry.js';
+import { SettingsLayer } from '$lib/features/settings/layer.js';
 import { ModelChoices } from '$lib/features/settings/controls/catalogs.js';
 import { ModelFields } from '$lib/features/settings/controls/modelField.js';
 import ModelField from '$lib/features/threads/native/ModelField.svelte';
@@ -80,15 +76,7 @@ import { DesktopTabs } from '$lib/shared/desktop/DesktopTabs.js';
 import { MainWindow } from '$lib/shared/desktop/MainWindow.js';
 import { ProjectWindows } from '$lib/shared/desktop/ProjectWindows.js';
 import { ThreadSeats } from '$lib/features/threads/seats/ThreadSeats.svelte.js';
-import { PaneRegistry } from './panes/PaneRegistry.js';
 import { SidePanes } from './panes/SidePanes.svelte.js';
-import { DECLARED_PANES } from './declaredPanes.js';
-import { DECLARED_SECTIONS } from './declaredSections.js';
-import { DECLARED_SURFACES } from './declaredSurfaces.js';
-import { DECLARED_COLUMNS } from './declaredColumns.js';
-import { DECLARED_ACTIONS } from './declaredActions.js';
-import { ColumnRegistry } from './chrome/ColumnRegistry.js';
-import { ActionRegistry } from './chrome/ActionRegistry.js';
 import { ThreadPlaces } from './panes/ThreadPlaces.js';
 import { DesktopShell } from './shell/DesktopShell.js';
 import { MobileShell } from './shell/MobileShell.js';
@@ -149,7 +137,6 @@ export function appLayers(desktop: DesktopApi | undefined) {
   return Layer.mergeAll(
     WireLayer,
     WorkspaceLayer,
-    Layer.provide(SurfaceRegistry, () => new SurfaceRegistry(DECLARED_SURFACES)),
     ProjectsLayer,
     WorktreesLayer,
     NoticesLayer,
@@ -158,23 +145,20 @@ export function appLayers(desktop: DesktopApi | undefined) {
     TerminalsLayer,
     AccountsLayer,
     SpeechLayer,
-    SettingsRepo,
-    SettingsColumn,
-    Layer.of(SectionRegistry, DECLARED_SECTIONS),
+    SettingsLayer,
+    ActivityLayer,
+    PowerLayer,
+    ShellLayer,
+    TelemetryLayer,
     Layer.provide(ModelChoices, function* () {
       const catalog = yield* ProviderCatalog;
       return { entries: (of) => modelChoices(catalog.models, of) };
     }),
     PaletteRepo,
-    Layer.of(ActionRegistry, DECLARED_ACTIONS),
-    McpRepo,
-    McpFeed,
+    McpLayer,
     SecretsRepo,
     PluginsLayer,
-    ViewSets,
-    Sections,
-    TagmaAppActions,
-    FloatingPanels,
+    TagmaAppsLayer,
     Layer.provide(ViewWindows, function* () {
       return (yield* Host).isDesktop ? new NativeWindows(bridged((bridge) => bridge.windows)()) : yield* FloatingPanels;
     }),
@@ -187,11 +171,10 @@ export function appLayers(desktop: DesktopApi | undefined) {
     ),
     //! The permission belongs to the Mac the server runs on, which only the desktop window stands on.
     Layer.when(Host, (host) => host.isDesktop && host.os === 'macos', SystemSettings),
-    DevicesRepo,
-    RulesRepo,
+    DevicesLayer,
+    RulesLayer,
     HarnessLayer,
     PanesLayer,
-    Layer.of(PaneRegistry, DECLARED_PANES),
     OpeningLayer,
     Keymap,
     BrowserLayer,
@@ -257,18 +240,12 @@ export function appLayers(desktop: DesktopApi | undefined) {
     FilesLayer,
     Layer.of(MarkdownPreview, { Markdown: MarkdownBody }),
     Layer.of(ModelFields, { field: ModelField }),
-    ThreadPages,
+    PagesLayer,
     Layer.provide(PageTeams, function* () {
       const list = yield* ThreadList;
       return { of: (threadId: string) => pageTeam(list.node(threadId), threadId) };
     }),
-    PageStates,
-    PageZoom,
-    VideosRepo,
     FrameLayer,
-    Layer.provide(ColumnRegistry, function* () {
-      return new ColumnRegistry(yield* SurfaceRegistry, DECLARED_COLUMNS);
-    }),
     Cache.of({ defaultOptions: { queries: { retry: (count, error) => count < RETRIES && retriable(error) } } }),
     Overlays,
     Theme,

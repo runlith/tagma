@@ -6,7 +6,7 @@ import { stubAll, stubMutation, stubSingle } from '@runlith/query/testing';
 import { flushSync } from 'svelte';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 
-import { keyedBy, liveFeed, mountShell, screen, type TestApp, testPlaces } from '$lib/app/testing.js';
+import { keyedBy, liveFeed, mountShell, screen, type TestApp, testLinks, testPlaces } from '$lib/app/testing.js';
 import { Worktrees } from '$lib/features/worktrees/BoardState.svelte.js';
 import { Keymap } from '$lib/app/keys/Keymap.svelte.js';
 import { Notices } from '$lib/features/notices/Service.svelte.js';
@@ -35,7 +35,6 @@ import { Workspace } from '$lib/features/workspace/Selection.svelte.js';
 import { GitLists } from './GitLists.svelte.js';
 import { makeRouter, makeStorage } from '@runlith/layer/testing';
 import { Host } from '@runlith/layer/Host';
-import { DECLARED_LINKS } from '$lib/app/opening/declaredLinks.js';
 import { Opening } from '$lib/features/opening/Opening.svelte.js';
 import type { Component } from 'svelte';
 import type { Router } from '@runlith/layer/Router';
@@ -118,7 +117,7 @@ function draw(over: { places?: Worktrees; history?: unknown; view?: Component; r
       Layer.of(ThreadList, { homeOf: () => 1 } as never),
       Layer.of(
         Opening,
-        new Opening(DECLARED_LINKS, {} as never, {} as never, { refusal: () => undefined } as never, new Host('desktop', 'macos')),
+        new Opening(testLinks(), {} as never, {} as never, { refusal: () => undefined } as never, new Host('desktop', 'macos')),
       ),
       Layer.of(CheckoutRepo, {
         authorship: {

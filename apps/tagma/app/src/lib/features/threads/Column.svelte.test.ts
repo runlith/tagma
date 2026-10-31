@@ -28,6 +28,7 @@ import { Workspace } from '$lib/features/workspace/Selection.svelte.js';
 import { WallClock } from '$lib/features/workspace/WallClock.svelte.js';
 import { Finishing } from '$lib/features/worktrees/Finishing.svelte.js';
 import { Seams } from '$lib/shared/seams/Seams.svelte.js';
+import { Panes } from '$lib/shared/panes/pane.js';
 import { ReaderMarks } from '$lib/shared/reading/ReaderMarks.svelte.js';
 import { ThreadNames } from '$lib/shared/threads/Names.svelte.js';
 import { Door } from '$lib/wire/Door.js';
@@ -137,7 +138,8 @@ function shell(): { shown: TestApp; host: ThreadSlot } {
       SidePanes,
       ThreadSeats,
       AgentsColumn,
-      Layer.of(PaneRegistry, new PaneRegistry([])),
+      Panes,
+      PaneRegistry,
       Readings,
       View,
       ExecutionActs,

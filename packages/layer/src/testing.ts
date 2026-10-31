@@ -27,7 +27,7 @@ export function makeHost(at: Partial<HostInput> = {}): Host {
 
 type PointKey<Item> = { readonly id: string; readonly definition: Parameters<typeof Point.over<Item>>[1] };
 
-export function makePoint<Item>(key: PointKey<Item>, ...items: readonly Item[]): Point<Item> {
+export function makePoint<Item>(key: PointKey<Item>, ...items: readonly NoInfer<Item>[]): Point<Item> {
   const point = Point.over<Item>(key.id, key.definition, { current: undefined });
   if (items.length > 0) point.register('test', ...items);
   return point;

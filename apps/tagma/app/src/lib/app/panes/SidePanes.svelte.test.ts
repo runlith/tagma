@@ -1,11 +1,9 @@
 import type { Resolver } from '@runlith/layer/key';
 import { makeStorage } from '@runlith/layer/testing';
-import { RegistryClash } from '@runlith/roster/RegistryClash';
 import { expect, test } from 'vitest';
 import type { PaneKind } from '$lib/shared/panes/pane.js';
 import { Seams } from '$lib/shared/seams/Seams.svelte.js';
 import { AreaFrame, MAIN_MIN } from './AreaFrame.svelte.js';
-import { PaneRegistry } from './PaneRegistry.js';
 import type { MainSeat, SidePanes } from './SidePanes.svelte.js';
 import { testArea, testKind } from './testing.js';
 
@@ -86,8 +84,4 @@ test('the area has one width the operator drags, kept across a reload and held i
   expect(reloaded.width).toBe(512);
   reloaded.measure(512 + MAIN_MIN);
   expect(reloaded.room).toBe(512);
-});
-
-test('two kinds claiming one name refuse at assembly', () => {
-  expect(() => new PaneRegistry([testKind('thread'), testKind('thread')])).toThrow(RegistryClash);
 });

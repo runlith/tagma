@@ -1,35 +1,18 @@
+import { makePoint } from '@runlith/layer/testing';
 import { expect, test } from 'vitest';
-import type { SectionContribution, SettingsSection } from '$lib/features/settings/section.js';
-import { SectionRegistry } from '$lib/features/settings/SectionRegistry.js';
+import { SettingSections, type SettingsSection } from '$lib/features/settings/section.js';
 
-const component = (() => undefined) as never;
-
-const section = (id: string, order: number): SettingsSection => ({ id, group: 'agent', order, icon: component });
-const contribution = (target: string, order: number): SectionContribution => ({ section: target, order, view: component });
-
-test('a section is declared by one feature and others contribute into it in order', () => {
-  const registry = new SectionRegistry({
-    '../mcp/settings.ts': { sections: [section('mcp', 4)] },
-    '../tagma-apps/settings.ts': { sections: [section('apps', 5)] },
-    '../secrets/settings.ts': { contributions: [contribution('apps', 20)] },
-    '../launchers/settings.ts': { contributions: [contribution('apps', 10)] },
-  });
-  expect(registry.sections.map(({ id }) => id)).toEqual(['mcp', 'apps']);
-  expect(registry.contributionsTo('apps').map(({ order }) => order)).toEqual([10, 20]);
+const section = (id: string, keys: readonly string[]): SettingsSection => ({
+  id,
+  group: 'agent',
+  order: 1,
+  icon: (() => undefined) as never,
+  keys,
 });
 
-test('two features declaring one section id are refused with both names', () => {
-  expect(
-    () =>
-      new SectionRegistry({
-        '../tagma-apps/settings.ts': { sections: [section('apps', 5)] },
-        '../secrets/settings.ts': { sections: [section('apps', 6)] },
-      }),
-  ).toThrow('../tagma-apps/settings.ts and again by ../secrets/settings.ts');
-});
+test('two sections holding one setting refuse, naming the setting', () => {
+  const sections = makePoint(SettingSections, section('context', ['agent.toolOutputShare']));
 
-test('a contribution to a section nobody declares is refused with the contributor and the section', () => {
-  expect(() => new SectionRegistry({ '../secrets/settings.ts': { contributions: [contribution('apps', 1)] } })).toThrow(
-    '../secrets/settings.ts contributes to the settings section apps',
-  );
+  expect(() => sections.register('features/other', section('other', ['agent.toolOutputShare']))).toThrow('Setting "agent.toolOutputShare"');
+  expect(sections.items.map(({ id }) => id)).toEqual(['context']);
 });

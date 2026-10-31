@@ -1,8 +1,8 @@
 import { Terminals } from '$lib/features/executions/worktrees/Terminals.svelte.js';
-import type { ActionsModule } from '$lib/features/workspace/action.js';
+import type { PaletteActionList } from '$lib/features/workspace/action.js';
 import TerminalIcon from './TerminalIcon.svelte';
 
-export const actions: ActionsModule['actions'] = [
+export const actions: PaletteActionList = [
   {
     id: 'terminal.new',
     order: 20,

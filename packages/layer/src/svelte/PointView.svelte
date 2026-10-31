@@ -5,14 +5,16 @@
   import type { Point } from '../Point.js';
   import type { Shown, ViewOf } from './payload.js';
 
-  type Base = { point: Point<Item>; props: Props; frame?: Snippet<[Snippet]> };
+  type Base = { point: Point<Item>; props: Props; only?: (item: Item) => boolean; frame?: Snippet<[Snippet]> };
   type Views = [ViewOf<Item>] extends [never] ? { view?: never } : { view: Snippet<[ViewOf<Item>, Props]> };
 
-  let { point, props, frame, view }: Base & Views = $props();
+  let { point, props, only, frame, view }: Base & Views = $props();
+
+  const items = $derived(only === undefined ? point.items : point.items.filter(only));
 </script>
 
 {#snippet list()}
-  {#each point.items as item (point.key(item))}
+  {#each items as item (point.key(item))}
     <ErrorBoundary id={`${point.id}/${point.key(item)}`}>
       {#if 'component' in item.payload}
         {@const Contributed = item.payload.component}
@@ -24,7 +26,7 @@
   {/each}
 {/snippet}
 
-{#if point.items.length > 0}
+{#if items.length > 0}
   {#if frame}
     {@render frame(list)}
   {:else}

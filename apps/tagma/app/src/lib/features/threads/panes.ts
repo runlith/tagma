@@ -1,5 +1,5 @@
 import { ThreadNames } from '$lib/shared/threads/Names.svelte.js';
-import type { PanesModule } from '$lib/shared/panes/pane.js';
+import type { PaneKind } from '$lib/shared/panes/pane.js';
 import { holderThread } from '$lib/shared/panes/holder.js';
 import { paneThread, THREAD_PANE } from './seats/pane.js';
 import ThreadOffer from './seats/ThreadOffer.svelte';
@@ -8,7 +8,7 @@ import WorkOffer from './work/WorkOffer.svelte';
 import { WORK_PANE } from './work/workPane.js';
 import WorkTitle from './work/WorkTitle.svelte';
 
-export const panes: PanesModule['panes'] = [
+export const panes: readonly PaneKind[] = [
   {
     kind: THREAD_PANE,
     noun: 'thread',

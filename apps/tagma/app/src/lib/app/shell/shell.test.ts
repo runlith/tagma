@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { Router, type RouterSource } from '@runlith/layer/Router';
-import { makeStorage } from '@runlith/layer/testing';
+import { makePoint, makeStorage } from '@runlith/layer/testing';
 import { Effect } from 'effect';
 import { expect } from 'vitest';
 import { it } from '@runlith/effect-test/vitest';
@@ -16,7 +16,7 @@ import {
   SurfaceNotDeclared,
   ThreadGone,
 } from '$lib/features/workspace/ShellOps.js';
-import { type SurfaceDeclaration, SurfaceRegistry } from '$lib/features/workspace/surface.js';
+import { type SurfaceDeclaration, SurfaceRegistry, Surfaces } from '$lib/features/workspace/surface.js';
 import { Visits } from '$lib/features/workspace/Visits.svelte.js';
 import { Addresses } from '$lib/features/workspace/Addresses.js';
 import { Refusal } from '$lib/wire/refusal.js';
@@ -33,10 +33,13 @@ import { MobileShell } from './MobileShell.js';
 
 const icon = (() => undefined) as unknown as SurfaceDeclaration['icon'];
 
-const surfaces = new SurfaceRegistry([
-  { surface: 'chat', route: 'chat', label: 'Agents', icon, rail: 1, home: true, stands: 'project', remembers: true },
-  { surface: 'notes', route: 'notes', label: 'Notes', icon, rail: 2, stands: 'graph', remembers: true },
-]);
+const surfaces = new SurfaceRegistry(
+  makePoint(
+    Surfaces,
+    { surface: 'chat', route: 'chat', label: 'Agents', icon, rail: 1, home: true, stands: 'project', remembers: true },
+    { surface: 'notes', route: 'notes', label: 'Notes', icon, rail: 2, stands: 'graph', remembers: true },
+  ),
+);
 
 function world(standing: readonly string[] = ['t1', 't9'], goto: (href: string) => Promise<void> = async () => undefined) {
   const went: string[] = [];

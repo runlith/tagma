@@ -1,9 +1,9 @@
 import Blocks from '@lucide/svelte/icons/blocks';
-import type { SurfacesModule } from '$lib/features/workspace/surface.js';
+import type { SurfaceDeclaration } from '$lib/features/workspace/surface.js';
 import { PLUGINS } from './place.js';
 import WaitsMark from './WaitsMark.svelte';
 
-export const surfaces: SurfacesModule['surfaces'] = [
+export const surfaces: readonly SurfaceDeclaration[] = [
   {
     surface: PLUGINS,
     route: 'plugins',
