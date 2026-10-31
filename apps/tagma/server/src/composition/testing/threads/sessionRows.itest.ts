@@ -1,5 +1,8 @@
+import { expect } from 'bun:test';
 import { it } from '@runlith/effect-test';
+import { sql } from 'drizzle-orm';
 import { Effect } from 'effect';
+import { TestClock } from 'effect/testing';
 import { harnessFacet } from '../../../threads/contract/wire/harness/types.js';
 import { harnessPresentation } from '../../../external-harnesses/contract/service/table.js';
 import { builtinHarness } from '../../../external-harnesses/testing/builtin.js';
@@ -35,7 +38,27 @@ const fixture = Effect.fnUntraced(function* () {
       return thread.id;
     }),
   );
-  return { store: new HarnessSessionStore(rows, () => Effect.void), rows, id };
+  const revision = () =>
+    demo.units.read((unit) =>
+      Effect.map(
+        unit.run(demo.db.get<{ revision: number }>(sql`select change_rev as revision from native_thread_rev where thread_id = ${id}`)),
+        (row) => row?.revision ?? 0,
+      ),
+    );
+  return { store: new HarnessSessionStore(rows, () => Effect.void), rows, id, revision };
 });
 
 describeSessionStore('SQL', fixture, it.effect);
+
+it.effect('a lease beat leaves the thread change revision where it stood and a facet change advances it', () =>
+  Effect.gen(function* () {
+    const { store, id, revision } = yield* fixture();
+    yield* store.open(id, '', 'first', () => Effect.succeed(null));
+    const opened = yield* revision();
+    yield* TestClock.adjust(1_000);
+    expect(yield* store.beat('first', 'terminal', [id])).toContain(id);
+    expect(yield* revision()).toBe(opened);
+    yield* store.change(id, (facet) => Effect.succeed({ facet: { ...facet, sessionKey: 'changed' }, value: undefined }));
+    expect(yield* revision()).toBeGreaterThan(opened);
+  }),
+);
