@@ -48,15 +48,9 @@ type ProgramWriter = {
   readonly admission: Effect.Effect<void, SqlError>;
   readonly level: () => Synchronous | undefined;
   readonly settled: (level: Synchronous | undefined) => void;
-  readonly contended: () => boolean;
 };
 
-type Flying = {
-  readonly batch: readonly Pending[];
-  readonly synchronous: Synchronous | null;
-  said: Committed | SqlError | undefined;
-  answeredAt: number;
-};
+type Flying = { readonly batch: readonly Pending[]; said: Committed | SqlError | undefined };
 
 const broken = (message: string) => new SqlError({ reason: classifySqliteError(new Error(message), { message, operation: 'programs' }) });
 
@@ -100,17 +94,22 @@ export const makePrograms = Effect.fnUntraced(function* (input: ProgramWriter) {
     return batch;
   };
 
-  const settle = (batch: readonly Pending[], outcomes: readonly ProgramOutcome[], execMs: number, heldMs: number, at: number) => {
+  const settle = (batch: readonly Pending[], said: Committed) => {
+    const { outcomes, execMs, queueMs, commitReturnedAt: at } = said;
     const own = outcomes.reduce((sum, outcome) => sum + outcome.execMs, 0);
     const shared = Math.max(0, execMs - own);
     for (const [index, member] of batch.entries()) {
       const outcome = outcomes[index]!;
       const weight = own > 0 ? outcome.execMs / own : 1 / batch.length;
-      const holdMs = heldMs * weight;
-      if (member.cost !== null) member.cost.counts.writerHoldMs += holdMs;
+      const heldMs = outcome.execMs + shared * weight;
+      if (member.cost !== null) {
+        member.cost.counts.writerWaitMs += queueMs;
+        member.cost.counts.writerHoldMs += heldMs;
+      }
       if (member.frame !== null) {
-        member.frame.holdMs += holdMs;
-        member.frame.childMs += outcome.execMs + shared * weight;
+        member.frame.waitMs += queueMs;
+        member.frame.holdMs += heldMs;
+        member.frame.childMs += heldMs;
         member.frame.writerPid = input.writer.pid;
         member.frame.commitReturnedAt = at;
       }
@@ -120,41 +119,33 @@ export const makePrograms = Effect.fnUntraced(function* (input: ProgramWriter) {
 
   const flying: Flying[] = [];
   let sending: readonly Pending[] = [];
+  const quiet = Latch.makeUnsafe(true);
 
-  const landed = (batch: readonly Pending[], synchronous: Synchronous | null, said: Committed | SqlError, heldMs: number): boolean => {
+  const landed = (batch: readonly Pending[], said: Committed | SqlError): void => {
     if (said instanceof SqlError) {
-      for (const member of batch) {
-        if (member.cost !== null) member.cost.counts.writerHoldMs += heldMs / batch.length;
-        if (member.frame !== null) member.frame.holdMs += heldMs / batch.length;
-      }
-      failed(batch, said);
-      return false;
+      input.settled(undefined);
+      return failed(batch, said);
     }
-    if (synchronous !== null) input.settled(synchronous);
-    if (said.outcomes.length !== batch.length) {
-      failed(batch, broken(`the sqlite process answered ${said.outcomes.length} of ${batch.length} programs`));
-      return true;
-    }
-    settle(batch, said.outcomes, said.execMs, heldMs, said.commitReturnedAt);
-    return true;
+    if (said.outcomes.length !== batch.length)
+      return failed(batch, broken(`the sqlite process answered ${said.outcomes.length} of ${batch.length} programs`));
+    settle(batch, said);
   };
 
   const orphaned = (error: SqlError): void => {
     failed(sending, error);
     sending = [];
-    for (const { batch, synchronous, said } of flying.splice(0)) landed(batch, synchronous, said ?? error, 0);
+    for (const { batch, said } of flying.splice(0)) landed(batch, said ?? error);
+    quiet.openUnsafe();
   };
 
-  const run = (opening: readonly Pending[]) =>
-    Effect.scoped(
-      Effect.gen(function* () {
-        const label = [...new Set(opening.map((member) => member.submission.operation))].join(', ');
-        const leased = yield* Effect.result(Effect.provideService(input.exclusive, HeldFor, label));
-        if (leased._tag === 'Failure') return failed(opening, leased.failure);
-        let level = input.level();
-        let freeSince = now();
-        const launch = Effect.fnUntraced(function* (batch: readonly Pending[]) {
-          sending = batch;
+  const send = Effect.fnUntraced(function* (batch: readonly Pending[], scope: Scope.Scope) {
+    sending = batch;
+    quiet.closeUnsafe();
+    const label = [...new Set(batch.map((member) => member.submission.operation))].join(', ');
+    const sent = yield* Effect.result(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const release = yield* Effect.provideService(input.exclusive, HeldFor, label);
           const sentAt = now();
           for (const member of batch) {
             const waitedMs = sentAt - member.askedAt;
@@ -165,52 +156,30 @@ export const makePrograms = Effect.fnUntraced(function* (input: ProgramWriter) {
             }
           }
           const wanted = strictest(batch);
-          const synchronous = wanted !== null && wanted !== level ? wanted : null;
-          const sent = yield* Effect.result(
-            input.writer.programs({ programs: batch.map((member) => member.submission.program), synchronous }),
-          );
-          sending = [];
-          if (sent._tag === 'Failure') return failed(batch, sent.failure);
-          if (synchronous !== null) level = synchronous;
-          const flight: Flying = { batch, synchronous, said: undefined, answeredAt: 0 };
-          flying.push(flight);
-          yield* Effect.forkScoped(
-            Effect.flatMap(Effect.exit(sent.success), (exit) =>
-              Effect.sync(() => {
-                flight.said = Exit.isSuccess(exit) ? exit.value : errorOf(exit.cause);
-                flight.answeredAt = now();
-                arrived.openUnsafe();
-              }),
-            ),
-          );
-        });
-        yield* launch(opening);
-        for (;;) {
-          arrived.closeUnsafe();
-          while (flying.length < DEPTH && queue.length > 0 && !input.contended()) {
-            const admitted = yield* Effect.result(input.admission);
-            const batch = take();
-            if (admitted._tag === 'Failure') failed(batch, admitted.failure);
-            else yield* launch(batch);
-          }
-          const head = flying[0];
-          if (head === undefined) break;
-          const { batch, synchronous, said, answeredAt } = head;
-          if (said === undefined) {
-            yield* arrived.await;
-            continue;
-          }
-          flying.shift();
-          const heldMs = answeredAt - freeSince;
-          freeSince = answeredAt;
-          if (!landed(batch, synchronous, said, heldMs)) {
-            level = undefined;
-            input.settled(undefined);
-          }
-        }
-        leased.success();
-      }),
+          const synchronous = wanted !== null && wanted !== input.level() ? wanted : null;
+          const answer = yield* input.writer.programs({ programs: batch.map((member) => member.submission.program), synchronous });
+          if (synchronous !== null) input.settled(synchronous);
+          release();
+          return answer;
+        }),
+      ),
     );
+    sending = [];
+    if (sent._tag === 'Failure') return failed(batch, sent.failure);
+    const flight: Flying = { batch, said: undefined };
+    flying.push(flight);
+    yield* Effect.forkIn(
+      Effect.flatMap(Effect.exit(sent.success), (exit) =>
+        Effect.sync(() => {
+          flight.said = Exit.isSuccess(exit) ? exit.value : errorOf(exit.cause);
+          arrived.openUnsafe();
+        }),
+      ),
+      scope,
+    );
+  });
+
+  const scope = yield* Effect.scope;
 
   yield* Effect.addFinalizer(() =>
     Effect.sync(() => {
@@ -224,16 +193,17 @@ export const makePrograms = Effect.fnUntraced(function* (input: ProgramWriter) {
     Effect.forever(
       Effect.gen(function* () {
         arrived.closeUnsafe();
-        if (queue.length === 0) return yield* arrived.await;
-        const admitted = yield* Effect.result(input.admission);
-        const opening = take();
-        if (admitted._tag === 'Failure') return failed(opening, admitted.failure);
-        const ran = yield* Effect.exit(run(opening));
-        if (Exit.isFailure(ran)) {
-          const died = broken(`a program batch died: ${Cause.pretty(ran.cause)}`);
-          failed(opening, died);
-          orphaned(died);
+        for (let head = flying[0]; head?.said !== undefined; head = flying[0]) {
+          flying.shift();
+          landed(head.batch, head.said);
         }
+        if (flying.length === 0) quiet.openUnsafe();
+        if (queue.length === 0 || flying.length >= DEPTH) return yield* arrived.await;
+        const admitted = yield* Effect.result(input.admission);
+        const batch = take();
+        if (admitted._tag === 'Failure') return failed(batch, admitted.failure);
+        const ran = yield* Effect.exit(send(batch, scope));
+        if (Exit.isFailure(ran)) orphaned(broken(`a program batch died: ${Cause.pretty(ran.cause)}`));
       }),
     ),
   );
@@ -259,5 +229,5 @@ export const makePrograms = Effect.fnUntraced(function* (input: ProgramWriter) {
       }),
     );
 
-  return Programs.of({ submit });
+  return { programs: Programs.of({ submit }), drained: quiet.await };
 });

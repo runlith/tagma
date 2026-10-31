@@ -189,7 +189,7 @@ const make = Effect.fnUntraced(function* (processes: ProcessPool, options: Sqlit
     external: { named: 'sqlite child', callsBack: false },
   });
   const permit = writerPermit(writer, writerHold, options.filename, setLevel, options.synchronous, Marked, live);
-  const programs = yield* makePrograms({
+  const { programs, drained } = yield* makePrograms({
     writer,
     exclusive: permit.exclusive,
     admission,
@@ -197,7 +197,6 @@ const make = Effect.fnUntraced(function* (processes: ProcessPool, options: Sqlit
     settled: (wanted) => {
       level = wanted;
     },
-    contended: () => (writerHold.standing(options.filename)[0]?.waiters ?? 0) > 0,
   });
   const onWriter = permit.statement;
   pool = wanted ? yield* makeReaderPool({ ceiling, open: openReader, lanes: processes.readers }) : undefined;
@@ -266,6 +265,7 @@ const make = Effect.fnUntraced(function* (processes: ProcessPool, options: Sqlit
       Effect.gen(function* () {
         accepting = false;
         yield* permit.drain;
+        yield* drained;
         retired = true;
         const ended = yield* Effect.forEach([writer, ...(pool?.connections ?? [])], (connection) => Effect.exit(connection.handover), {
           concurrency: 3,

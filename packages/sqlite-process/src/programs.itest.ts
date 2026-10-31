@@ -2,6 +2,7 @@ import { expect } from 'bun:test';
 import { it } from '@runlith/effect-test';
 import { Context, Deferred, Effect, Exit, Fiber, Layer } from 'effect';
 import { SqlClient } from 'effect/sql/SqlClient';
+import { CurrentWriter, type WriterFrame } from '@runlith/performance/WriterMetrics';
 import type { SqliteProgram } from './channel.js';
 import { childHosting } from './children.js';
 import { ProcessPool } from './ProcessPool.js';
@@ -80,6 +81,44 @@ it.live('a transaction waiting for the writer takes it between program batches w
       (SELECT count(*) FROM t WHERE rowid < (SELECT rowid FROM t WHERE n = -1)) AS before,
       (SELECT count(*) FROM t WHERE rowid > (SELECT rowid FROM t WHERE n = -1)) AS after`;
     expect({ before: (order?.before ?? 0) > 0, after: (order?.after ?? 0) > 0 }).toEqual({ before: true, after: true });
+  }),
+);
+
+it.live('a handover waits for a program batch already sent to the writer to be answered', () =>
+  Effect.gen(function* () {
+    const { sql, connections, programs } = yield* opened;
+    yield* sql`CREATE TABLE t (n INTEGER)`;
+    const frame: WriterFrame = {
+      operation: 'test',
+      store: ':memory:',
+      rootId: null,
+      owner: null,
+      acquired: false,
+      waitMs: 0,
+      holdMs: 0,
+      childMs: 0,
+      repliesComplete: true,
+      commitReturnedAt: null,
+      writerPid: null,
+    };
+    const slow: SqliteProgram = {
+      statements: [
+        {
+          sql: 'WITH RECURSIVE c(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM c WHERE x < 2000000) SELECT count(*) FROM c',
+          params: [],
+          counts: 'rows',
+          expect: 1,
+        },
+        { sql: 'INSERT INTO t VALUES (1)', params: [], counts: 'changes', expect: 1 },
+      ],
+    };
+    const submitted = yield* Effect.forkChild(
+      Effect.provideService(programs.submit({ operation: 'test', program: slow, synchronous: null }), CurrentWriter, frame),
+      { startImmediately: true },
+    );
+    while (!frame.acquired) yield* Effect.yieldNow;
+    yield* connections.handover;
+    expect((yield* Fiber.join(submitted)).outcome._tag).toBe('Applied');
   }),
 );
 
