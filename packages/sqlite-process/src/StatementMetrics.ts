@@ -30,13 +30,19 @@ const counts = (fingerprint: string, summary: string): StatementCounts => ({
 export class StatementMetrics {
   private readonly texts = new Map<string, StatementCounts>();
   private readonly fingerprints = new Map<string, StatementCounts>();
-  private readonly overflow = counts('overflow', 'SQL outside the bounded fingerprint census');
+  private overflow = counts('overflow', 'SQL outside the bounded fingerprint census');
   private textUnits = 0;
+  private censusId = crypto.randomUUID();
 
   query(sql: string): StatementCounts {
     const known = this.texts.get(sql);
     if (known !== undefined) return known;
     if (sql.length > MAX_TEXT_UNITS || this.texts.size >= TEXTS || this.textUnits + sql.length > TEXT_UNITS) return this.overflow;
+    if (this.fingerprints.size >= FINGERPRINTS) {
+      this.texts.set(sql, this.overflow);
+      this.textUnits += sql.length;
+      return this.overflow;
+    }
     const normalized = sql
       .replace(
         /"(?:""|[^"])*"|`(?:``|[^`])*`|\[[^\]]*\]|(?:\s|--[^\r\n]*|\/\*[\s\S]*?\*\/)+|'(?:''|[^'])*'|\?\d*|[:@$]\w+|\b(?:0x[\da-f]+|\d+(?:\.\d*)?(?:e[+-]?\d+)?)\b/gi,
@@ -46,7 +52,6 @@ export class StatementMetrics {
     const fingerprint = Bun.hash(normalized).toString(16);
     let row = this.fingerprints.get(fingerprint);
     if (row === undefined) {
-      if (this.fingerprints.size >= FINGERPRINTS) return this.overflow;
       row = counts(fingerprint, normalized.slice(0, 512));
       this.fingerprints.set(fingerprint, row);
     }
@@ -55,10 +60,18 @@ export class StatementMetrics {
     return row;
   }
 
+  reset(): void {
+    this.texts.clear();
+    this.fingerprints.clear();
+    this.overflow = counts('overflow', 'SQL outside the bounded fingerprint census');
+    this.textUnits = 0;
+    this.censusId = crypto.randomUUID();
+  }
+
   read(input: { readonly limit: number }) {
     const rows = [...this.fingerprints.values(), this.overflow]
       .filter((row) => row.statements + row.programStatements > 0)
       .sort((a, b) => b.statements + b.programStatements - a.statements - a.programStatements);
-    return { rows: rows.slice(0, input.limit).map((row) => ({ ...row })), total: rows.length };
+    return { censusId: this.censusId, rows: rows.slice(0, input.limit).map((row) => ({ ...row })), total: rows.length };
   }
 }
