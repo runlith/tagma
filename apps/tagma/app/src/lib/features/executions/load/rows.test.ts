@@ -10,6 +10,8 @@ const loadRow = (key: string, kind: LoadRowKind, rank: number, memoryBytes: numb
   rank,
   memoryBytes,
   unread: 0,
+  gpu: 0,
+  gpuUnread: 0,
   minor: false,
   processes: [],
 });

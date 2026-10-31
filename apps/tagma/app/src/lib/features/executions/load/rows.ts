@@ -180,6 +180,19 @@ export const shareWords = (row: LoadRow): string | undefined =>
     .filter((one) => one !== undefined)
     .join('\n') || undefined;
 
+export const gpuMeasured = (view: LoadView): boolean => view.gpu._tag === 'Measured';
+
+export const gpuWords = (view: LoadView): string | undefined =>
+  view.gpu._tag === 'Unavailable' ? `GPU is not measured on this system: ${view.gpu.reason}` : undefined;
+
+export const rowGpu = (row: LoadRow): { readonly text: string; readonly hint: string | undefined } => ({
+  text: row.gpuUnread === row.processes.length && row.gpu === 0 ? '—' : `${row.gpuUnread > 0 ? '≥' : ''}${percent(row.gpu)}`,
+  hint:
+    row.gpuUnread === 0
+      ? undefined
+      : `${row.gpuUnread} of its ${row.processes.length} processes have no GPU measurement; the figure counts the rest.`,
+});
+
 export const unresolvedWords = (view: LoadView): string | undefined => {
   if (view.unresolved.length === 0) return undefined;
   const lines = view.unresolved.map(

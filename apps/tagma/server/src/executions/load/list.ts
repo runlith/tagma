@@ -45,6 +45,8 @@ type Building = {
   cores: number;
   memoryBytes: number;
   unread: number;
+  gpu: number;
+  gpuUnread: number;
   readonly processes: LoadProcess[];
   readonly executions: LoadExecution[];
   readonly residuals: LoadResidual[];
@@ -60,8 +62,15 @@ type Slice = {
   readonly cores: number;
   readonly memoryBytes: number;
   readonly unread: number;
+  readonly gpuCores: number;
+  readonly gpuUnread: number;
   readonly processes: readonly HostProcess[];
 };
+
+const gpuOf = (processes: readonly HostProcess[]) => ({
+  gpuCores: processes.reduce((sum, one) => sum + (one.gpu._tag === 'Measured' ? one.gpu.cores : 0), 0),
+  gpuUnread: processes.filter((one) => one.gpu._tag === 'Unavailable').length,
+});
 
 const HOST_ROLES = new Set(['host', 'holder']);
 
@@ -81,6 +90,16 @@ const partTitle = (row: PartRow | undefined): string => {
 const unresolvedOf = (reading: LoadReading, parts: PartNames): readonly UnresolvedPart[] =>
   reading.unresolvedParts.map(({ part, reason }) => ({ title: partTitle(parts(part.key)), pid: part.pid, reason }));
 
+const gpuState = (reading: LoadReading): LoadView['gpu'] => {
+  let reason: string | undefined;
+  for (const group of reading.groups)
+    for (const one of group.processes) {
+      if (one.gpu._tag === 'Measured') return { _tag: 'Measured' };
+      reason ??= one.gpu.reason;
+    }
+  return { _tag: 'Unavailable', reason: reason ?? 'no process was read' };
+};
+
 const SIGNALLED: ReadonlySet<LoadRowKind> = new Set(['agent', 'work', 'program']);
 
 const whole = (row: Building, group: LoadGroup): Slice => ({
@@ -88,6 +107,8 @@ const whole = (row: Building, group: LoadGroup): Slice => ({
   cores: group.cores,
   memoryBytes: group.memoryBytes,
   unread: group.unread,
+  gpuCores: group.gpuCores,
+  gpuUnread: group.gpuUnread,
   processes: group.processes,
 });
 
@@ -118,11 +139,14 @@ const installationSlices = (group: LoadGroup, open: Open): readonly Slice[] => {
   const hostCores = host.reduce((sum, one) => sum + (one.cores ?? 0), 0);
   const hostMemory = host.reduce((sum, one) => sum + (one.memoryBytes ?? 0), 0);
   const hostUnread = host.filter((one) => one.unread !== undefined).length;
+  const hostGpu = gpuOf(host);
   const serverSlice: Slice = {
     row: open('server', 'server', 'Server'),
     cores: Math.max(0, group.cores - hostCores),
     memoryBytes: Math.max(0, group.memoryBytes - hostMemory),
     unread: Math.max(0, group.unread - hostUnread),
+    gpuCores: Math.max(0, group.gpuCores - hostGpu.gpuCores),
+    gpuUnread: Math.max(0, group.gpuUnread - hostGpu.gpuUnread),
     processes: server,
   };
   if (host.length === 0) return [serverSlice];
@@ -133,6 +157,8 @@ const installationSlices = (group: LoadGroup, open: Open): readonly Slice[] => {
       cores: hostCores,
       memoryBytes: hostMemory,
       unread: Math.min(group.unread, hostUnread),
+      gpuCores: Math.min(group.gpuCores, hostGpu.gpuCores),
+      gpuUnread: Math.min(group.gpuUnread, hostGpu.gpuUnread),
       processes: host,
     },
   ];
@@ -186,6 +212,8 @@ export class LoadList {
         cores: 0,
         memoryBytes: 0,
         unread: 0,
+        gpu: 0,
+        gpuUnread: 0,
         processes: [],
         executions: [],
         residuals: [],
@@ -240,6 +268,8 @@ export class LoadList {
         rank,
         memoryBytes: row.memoryBytes,
         unread: row.unread,
+        gpu: row.gpu,
+        gpuUnread: row.gpuUnread,
         minor: !OWN_KINDS.has(row.kind) && rank < MINOR && (totalMemory === undefined || row.memoryBytes < totalMemory * MINOR),
         processes: row.processes.sort((left, right) => (right.share ?? 0) - (left.share ?? 0)),
         work: row.executions.length + row.residuals.length === 0 ? undefined : { executions: row.executions, residuals: row.residuals },
@@ -264,6 +294,7 @@ export class LoadList {
         readAt,
         cores,
         machine: reading.machineName,
+        gpu: gpuState(reading),
         share,
         memory: reading.memory,
         saturated: saturation.length >= 2 && saturation.reduce((sum, one) => sum + (one.machine ?? 0), 0) / saturation.length >= SATURATED,
@@ -301,6 +332,8 @@ export class LoadList {
     row.cores += slice.cores;
     row.memoryBytes += slice.memoryBytes;
     row.unread += slice.unread;
+    row.gpu += slice.gpuCores;
+    row.gpuUnread += slice.gpuUnread;
     if (group.lowerBound === true) row.lowerBound = true;
     const owner = group.owner;
     const execution = owner._tag === 'Execution' && !owner.ended ? commandKey(owner.execution) : undefined;
@@ -315,6 +348,8 @@ export class LoadList {
         role: one.role,
         share: one.cores === null ? null : one.cores / cores,
         reapedShare: one.reapedCores === undefined ? undefined : one.reapedCores / cores,
+        gpu: one.gpu._tag === 'Measured' ? one.gpu.cores : undefined,
+        gpuUnread: one.gpu._tag === 'Unavailable' ? one.gpu.reason : undefined,
         memoryBytes: one.memoryBytes,
         killable: one.signal && SIGNALLED.has(row.kind),
         unread: one.unread,

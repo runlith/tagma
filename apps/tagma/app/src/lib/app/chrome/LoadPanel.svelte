@@ -7,6 +7,8 @@
   import { SvelteSet } from 'svelte/reactivity';
   import { Readings, silentWords } from '$lib/features/executions/load/Readings.svelte.js';
   import {
+    gpuMeasured,
+    gpuWords,
     idleTotal,
     layersOf,
     listing,
@@ -68,6 +70,8 @@
   const nothing = $derived(listed !== null && listed.own.length + listed.idle.length + listed.outside.length === 0);
   const idle = $derived(listed === null ? null : idleTotal(listed.idle));
   const unresolved = $derived(loaded === null ? undefined : unresolvedWords(loaded));
+  const gpu = $derived(loaded !== null && gpuMeasured(loaded));
+  const gpuMissing = $derived(loaded === null ? undefined : gpuWords(loaded));
 
   $effect(() => readings.demandOthers(outsideShown));
   $effect(() => () => untrack(() => readings.demandOthers(false)));
@@ -137,6 +141,7 @@
     {end}
     {now}
     open={opened.has(shown.row.key)}
+    {gpu}
     flash={flashed === shown.row.key}
     onToggle={() => toggle(shown.row.key)}
     onLit={(key) => (lit = key)}
@@ -183,6 +188,9 @@
     {#if silent === null && unresolved !== undefined}
       <FadeText class="text-meta text-muted-foreground" title={unresolved} text={unresolved.split('\n')[0]} data-load-unresolved />
     {/if}
+    {#if silent === null && gpuMissing !== undefined}
+      <FadeText class="text-meta text-muted-foreground" title={gpuMissing} text={gpuMissing} data-load-gpu />
+    {/if}
     {#each departed as one (one.key)}
       <FadeText
         class={['text-meta', one.failed ? 'text-destructive' : 'text-muted-foreground']}
@@ -215,6 +223,7 @@
     >
     <span class="w-14 shrink-0"></span>
     {@render sortBy('cpu', 'CPU', 'w-12')}
+    {#if gpu}<span class="w-12 shrink-0 text-right text-meta">GPU</span>{/if}
     {@render sortBy('memory', 'Memory', 'w-16')}
     <span class="w-5 shrink-0"></span>
   </div>
@@ -244,6 +253,7 @@
             <FadeText class="flex-1" text="Idle — {idle.count}" />
             <span class="w-14 shrink-0"></span>
             <span class={FIGURE} title={totalUnread(idle)}>{totalShare(idle)}</span>
+            {#if gpu}<span class="w-12 shrink-0"></span>{/if}
             <span class={MEMORY}>{totalMemory(idle)}</span>
             <span class="w-5 shrink-0"></span>
           </button>
@@ -273,6 +283,7 @@
             </span>
             <span class="w-14 shrink-0"></span>
             <span class={FIGURE} title={totalUnread(loaded.totals.outside)}>{totalShare(loaded.totals.outside)}</span>
+            {#if gpu}<span class="w-12 shrink-0"></span>{/if}
             <span class={[MEMORY, 'text-muted-foreground']}>{totalMemory(loaded.totals.outside)}</span>
             <span class="w-5 shrink-0"></span>
           </button>
@@ -295,6 +306,7 @@
                   <FadeText class="flex-1" text="Others — {listed.others.count}, each under half a percent" />
                   <span class="w-14 shrink-0"></span>
                   <span class={FIGURE} title={totalUnread(listed.others)}>{totalShare(listed.others)}</span>
+                  {#if gpu}<span class="w-12 shrink-0"></span>{/if}
                   <span class={MEMORY}>{totalMemory(listed.others)}</span>
                   <span class="w-5 shrink-0"></span>
                 </button>

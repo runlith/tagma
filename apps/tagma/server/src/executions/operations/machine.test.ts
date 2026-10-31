@@ -13,6 +13,8 @@ const row = (key: string, share: number, processes: number): LoadRow => ({
   rank: share,
   memoryBytes: 1,
   unread: 0,
+  gpu: 0,
+  gpuUnread: 0,
   minor: false,
   processes: Array.from({ length: processes }, (_, at) => ({
     pid: 100 + at,
@@ -31,6 +33,7 @@ const view = (share: number | null): LoadView => ({
   readAt: 2000,
   cores: 4,
   machine: 'Computer',
+  gpu: { _tag: 'Unavailable', reason: 'fixture' },
   share,
   memory: { _tag: 'Unknown', reason: 'unknown', detail: 'fixture' },
   saturated: false,

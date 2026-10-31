@@ -69,6 +69,10 @@ export const LoadProcess = Schema.Struct({
     description:
       'Of share, the part spent by children this process ran and reaped between two readings, such as the git commands of the server.',
   }),
+  gpu: Schema.optional(Share).annotate({
+    description: 'Its GPU use, 1 being one GPU busy the whole interval; present only where the system measures it.',
+  }),
+  gpuUnread: Schema.optional(Schema.String).annotate({ description: 'Why its GPU share is not measured.' }),
   memoryBytes: Schema.NullOr(Count),
   killable: Schema.Boolean,
   unread: Schema.optional(Schema.String),
@@ -128,6 +132,8 @@ export const LoadRow = Schema.Struct({
   rank: Share,
   memoryBytes: Count,
   unread: Count,
+  gpu: Share.annotate({ description: 'The GPU use of its processes the system measured, 1 being one GPU busy the whole interval.' }),
+  gpuUnread: Count.annotate({ description: 'How many of its processes have no GPU measurement.' }),
   minor: Schema.Boolean,
   processes: Schema.Array(LoadProcess),
   work: Schema.optional(LoadWork),
@@ -163,6 +169,12 @@ export const LoadView = Schema.Struct({
   readAt: Schema.Number,
   cores: Schema.Int.check(Schema.isGreaterThan(0)),
   machine: Schema.NonEmptyString.annotate({ description: 'What this kind of machine is called, in the words of its system.' }),
+  gpu: Schema.Union([
+    Schema.Struct({ _tag: Schema.Literal('Measured') }),
+    Schema.Struct({ _tag: Schema.Literal('Unavailable'), reason: Schema.String }),
+  ])
+    .pipe(Schema.toTaggedUnion('_tag'))
+    .annotate({ description: 'Whether the system measures GPU for any process; Unavailable says why it measures none.' }),
   share: Schema.NullOr(Share),
   memory: MachineMemory,
   saturated: Schema.Boolean,

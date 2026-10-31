@@ -16,6 +16,7 @@
     processTitle,
     reapedOf,
     reapedWords,
+    rowGpu,
     shareWords,
     sparkOf,
     stopWords,
@@ -33,11 +34,13 @@
     end,
     now,
     open,
+    gpu = false,
     flash = false,
     onToggle,
     onLit,
   }: {
     shown: Shown;
+    gpu?: boolean;
     layer: Layer | undefined;
     history: readonly LoadPoint[];
     end: number;
@@ -98,6 +101,8 @@
     </span>
     <span class={CELLS}>
       <span class={[FIGURE, 'text-muted-foreground']} title={one.unread}>{one.share === null ? '—' : percent(one.share)}</span>
+      {#if gpu}<span class={[FIGURE, 'text-muted-foreground']} title={one.gpuUnread}>{one.gpu === undefined ? '—' : percent(one.gpu)}</span
+        >{/if}
       <span class={MEMORY}>{one.memoryBytes === null ? '—' : formatBytes(one.memoryBytes)}</span>
     </span>
     {@render gutter(one.killable ? () => void view.kill(row, one) : null, `Kill ${title} (pid ${one.pid})`, view.working(key), true)}
@@ -153,6 +158,7 @@
     <span class={CELLS}>
       <LoadSpark points={sparkOf(history, row.key)} {end} />
       <span class={FIGURE} title={partial}>{partial === undefined ? '' : '≥'}{percent(row.share)}</span>
+      {#if gpu}{@const used = rowGpu(row)}<span class={[FIGURE, 'text-muted-foreground']} title={used.hint}>{used.text}</span>{/if}
       <span class={MEMORY}>{formatBytes(row.memoryBytes)}</span>
     </span>
     {@render gutter(view.stoppable(row) ? () => void view.stop(row) : null, stopWords(row), stopping, !agent)}

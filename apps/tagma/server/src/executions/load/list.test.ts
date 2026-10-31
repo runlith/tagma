@@ -113,6 +113,7 @@ test('an agent row holds every execution of its thread with its own label, CPU, 
   expect(view.top).toMatchObject({ key: agent?.key, title: 'release-publish' });
   expect(view.rows.find((row) => row.title === 'Idle')?.minor).toBe(true);
   expect(view.totals.others).toMatchObject({ count: 1, share: 0.001 });
+  expect(view.gpu).toEqual({ _tag: 'Unavailable', reason: 'not measured' });
 });
 
 test("an agent's own harness session is never named as its work, and still gives the row its project", () => {
@@ -248,7 +249,12 @@ test('window parts land in Interface, Graphics and one row per renderer titled b
         },
         group({ _tag: 'Part', key: 'main' }, 0.2, 31),
         group({ _tag: 'Part', key: 'gone' }, 0.1, 32),
-        group({ _tag: 'Part', key: 'gpu' }, 2, 33),
+        {
+          ...group({ _tag: 'Part', key: 'gpu' }, 2, 33),
+          gpuCores: 0.4,
+          gpuUnread: 0,
+          processes: [process(33, 2, { gpu: { _tag: 'Measured', cores: 0.4 } })],
+        },
         group({ _tag: 'Part', key: 'pages' }, 3, 34),
       ]),
       unresolvedParts: [{ part: { key: 'pages', pid: 99, createdMs: 1, precisionMs: 1 }, reason: 'different' }],
@@ -265,7 +271,11 @@ test('window parts land in Interface, Graphics and one row per renderer titled b
   expect(row('host')).toMatchObject({ title: 'Terminal host', memoryBytes: 200 });
   expect(row('host')?.share).toBeCloseTo(0.04, 9);
   expect(row('interface')?.share).toBeCloseTo(0.03, 9);
-  expect(row('graphics')).toMatchObject({ title: 'Graphics', share: 0.2 });
+  expect(row('graphics')).toMatchObject({ title: 'Graphics', share: 0.2, gpu: 0.4, gpuUnread: 0 });
+  expect(row('graphics')?.processes[0]).toMatchObject({ gpu: 0.4, gpuUnread: undefined });
+  expect(row('renderer')).toMatchObject({ gpu: 0, gpuUnread: 1 });
+  expect(row('renderer')?.processes[0]).toMatchObject({ gpu: undefined, gpuUnread: 'not measured' });
+  expect(view.gpu).toEqual({ _tag: 'Measured' });
   expect(row('renderer')).toMatchObject({ title: 'Page — Docs (example.com), App — board', close: [{ page, projectId: 5 }], share: 0.3 });
   expect(row('renderer')?.processes[0]?.killable).toBe(false);
   expect(view.totals.own.count).toBe(5);

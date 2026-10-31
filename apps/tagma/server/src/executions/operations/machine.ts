@@ -57,6 +57,7 @@ export const MACHINE_PAIRS = {
           _tag: 'Read',
           cores: view.cores,
           machine: view.machine,
+          gpu: view.gpu,
           share: view.share,
           memory: view.memory,
           saturated: view.saturated,
