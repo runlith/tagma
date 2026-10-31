@@ -198,7 +198,7 @@ Kind: a design decision — state re-derived on pull, the writer coupled to loop
 - each projection recomputed at most once per key per commit batch, and zero storage reads for a change applied incrementally;
 - telemetry ≤ 5% of server CPU at N = 50.
 
-**Relative gates** (same machine, same bench): server CPU per act and allocation per act ≥ 10× below the step-0 baseline.
+**Relative gates** (same machine, same bench): server CPU per act and allocator-requested bytes per act ≥ 10× below the step-0 baseline. Bun 1.4.4 exposes no exact per-isolate JS allocation counter; `mimalloc.malloc_requested` is process-wide, workers and native traffic included, so it is compared only between runs of the same bench composition.
 
 **Interface gates** at N = 50, each measured on a finite boundary:
 - graph block open: request arrival to answer;
@@ -211,7 +211,7 @@ The e2e lane's `tagma.thread-open` p99 is reported beside them: renderer cost is
 
 **Loop and memory gates** at N = 50 on the reference profile, heap size reported beside each:
 - loop delay p99 ≤ 20 ms, no stall over 100 ms;
-- collection pause p99 ≤ 50 ms (`BUN_JSC_logGC` in the bench);
+- collection pauses are reported beside these gates, not gated: Bun 1.4.4 gives no bounded, exact mutator-pause stream of the serving isolate (GC log lines carry no tested isolate mapping; `GCProfiler` times concurrent cycles). The loop-delay and stall gates are what the interface feels whatever the pause's cause;
 - writer wait p99 ≤ 20 ms;
 - program hold p99 ≤ 5 ms;
 - backlog and retained memory flat over the last 15 minutes of the steady-state run;
