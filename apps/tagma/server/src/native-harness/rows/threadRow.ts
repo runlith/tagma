@@ -22,13 +22,13 @@ import { metadataColumns, rowColumns, threadRow } from '../row.js';
 import { makeFoldWriter } from '../transcript/foldWrite.js';
 import type { RestedFolds } from '../transcript/restedFolds.js';
 import { ThreadEntryKinds } from '@runlith/agent/transcript/kinds';
-import { inUnit, stored } from '../../platform/store/crossing.js';
+import { inProgram, inUnit, stored } from '../../platform/store/crossing.js';
 import { among } from '../../platform/store/rows.js';
 import { failedAs } from '../../threads/contract/service/failure.js';
 import { capabilitiesOf } from '../../threads/store/seat.js';
 import { kernelStorageWrites } from './storageWrites.js';
 import { makeThreadBranching } from './branch.js';
-import { programOf } from '../../platform/store/programs.js';
+import { programOf, programWriteUnit } from '../../platform/store/programs.js';
 import { plannedFacts } from '../../threads/journal/log.js';
 import type { ThreadTranscriptEntry } from '@runlith/agent/transcript/rows';
 
@@ -75,6 +75,8 @@ export const makeThreadStore = Effect.fnUntraced(function* (input: { readonly re
     kinds,
     metadata,
     transaction: <T, E>(body: (tx: WriteUnit<'machine'>) => Effect.Effect<T, E>) => inUnit(units, kernelStorageWrites, 'transaction', body),
+    program: <T, E>(identity: string, body: (tx: WriteUnit<'machine'>) => Effect.Effect<T, E>) =>
+      inProgram(units, kernelStorageWrites, identity, 'program', (program) => body(programWriteUnit(program))),
     metadataOf: (ids: readonly string[], tx?: Unit<'machine'>): Effect.Effect<readonly ThreadMetadataRow[], ThreadStorageFailed> =>
       ids.length === 0
         ? Effect.succeed([])

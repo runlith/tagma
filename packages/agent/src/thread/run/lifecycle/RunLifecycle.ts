@@ -496,40 +496,38 @@ export const runLifecycleLayer = Layer.effect(
         return 'stopped' as const;
       }),
 
-      beat: (beaten, at) =>
-        beaten.length === 0
-          ? Effect.succeed([])
-          : kernel.store.transaction((tx) =>
-              Effect.gen(function* () {
-                const threadIds = [...new Set(beaten.map((run) => run.threadId))];
-                yield* kernel.transitions.opened(threadIds, tx);
-                const asked = yield* runs.writeHeartbeats(
-                  beaten.map((run) => run.id),
-                  at,
-                  tx,
-                );
-                yield* kernel.transitions.revised(threadIds, tx, (revisions) =>
-                  Effect.forEach(
-                    threadIds,
-                    (threadId) => {
-                      const revision = revisions.get(threadId);
-                      return revision === undefined
-                        ? Effect.void
-                        : changes.deliver({
-                            kind: 'ran',
-                            threadId,
-                            revision,
-                            runs: beaten.flatMap((run) =>
-                              run.threadId === threadId ? [{ id: run.id, heartbeatAt: at, updatedAt: at }] : [],
-                            ),
-                          });
-                    },
-                    { discard: true },
-                  ),
-                );
-                return asked;
-              }),
+      beat: Effect.fnUntraced(function* (beaten, at) {
+        if (beaten.length === 0) return [];
+        const threadIds = [...new Set(beaten.map((run) => run.threadId))];
+        const runIds = beaten.map((run) => run.id);
+        const write = Effect.fnUntraced(function* (tx: ThreadWriteTx) {
+          yield* kernel.transitions.opened(threadIds, tx);
+          const asked = yield* runs.writeHeartbeats(runIds, at, tx);
+          yield* kernel.transitions.revised(threadIds, tx, (revisions) =>
+            Effect.forEach(
+              threadIds,
+              (threadId) => {
+                const revision = revisions.get(threadId);
+                return revision === undefined
+                  ? Effect.void
+                  : changes.deliver({
+                      kind: 'ran',
+                      threadId,
+                      revision,
+                      runs: beaten.flatMap((run) => (run.threadId === threadId ? [{ id: run.id, heartbeatAt: at, updatedAt: at }] : [])),
+                    });
+              },
+              { discard: true },
             ),
+          );
+          return asked;
+        });
+        if (kernel.store.program !== undefined) {
+          const programmed = yield* kernel.store.program(`beat:${at.getTime()}:${runIds.join(',')}`, write);
+          if (programmed !== null) return programmed;
+        }
+        return yield* kernel.store.transaction(write);
+      }),
 
       stop: Effect.fnUntraced(function* (run, intent, live, tx) {
         if (live) {
