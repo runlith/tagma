@@ -8229,10 +8229,6 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead apps/tagma/server/src/platform/contract/service/store.ts#IN_MEMORY",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "dead-code dead apps/tagma/server/src/platform/contract/service/watch.ts#WatchHearing",
           "owner": "5a3bed29"
         },
