@@ -35,7 +35,7 @@ type ProgramWrite<Brand extends StoreBrand> = WriteUnit<Brand> & { readonly prog
 
 const plainWrite = (query: unknown): query is ProgramQuery =>
   (is(query, SQLiteInsertBase) || is(query, SQLiteUpdateBase) || is(query, SQLiteDeleteBase)) &&
-  !/\breturning\b/i.test((query as unknown as ProgramQuery).toSQL().sql);
+  !/\breturning\b/i.test((query as unknown as { toSQL(): { readonly sql: string } }).toSQL().sql);
 
 export const programWriteUnit = <Brand extends StoreBrand>(program: ProgramUnit<Brand>): ProgramWrite<Brand> => ({
   ...writeUnitOf<Brand>({
@@ -71,7 +71,7 @@ const UNIQUE = /^SQLITE_CONSTRAINT_(UNIQUE|PRIMARYKEY)$/;
 const built = <Brand extends StoreBrand>(building: Building, set: WriteSet): ProgramUnit<Brand> => {
   const add = (statement: ProgramQuery, counts: 'rows' | 'changes', expect: number | null) =>
     Effect.sync(() => {
-      const { sql, params } = statement.toSQL();
+      const { sql, params } = 'toSQL' in statement ? statement.toSQL() : statement.getQuery();
       building.statements.push({ sql, params, counts, expect, set });
     });
   return programUnitOf<Brand>({

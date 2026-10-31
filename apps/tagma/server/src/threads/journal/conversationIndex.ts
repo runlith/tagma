@@ -3,13 +3,16 @@ import { and, eq, inArray, isNull, sql, type SQL } from 'drizzle-orm';
 import { KEEP_WARM_SIGNAL_TYPE } from '@runlith/agent/transcript/keepWarm';
 import { USER_MESSAGE_SIGNAL_TYPE } from '@runlith/agent/contracts';
 import type { ThreadEventPayloadValue } from '@runlith/agent/thread/storage/eventLog';
-import type { StoreDb } from '../../platform/contract/service/store.js';
-import type { ProgramUnit, WriteUnit } from '../../platform/contract/service/units.js';
+import type { StoreDb, StoreFailure } from '../../platform/contract/service/store.js';
+import type { ProgramUnit, Unit, WriteUnit } from '../../platform/contract/service/units.js';
+import { unplannable } from '../../platform/store/programs.js';
 import { MESSAGE_FTS, threadConversation, threadMessage, threadMessageGap, threadQuietRun } from '../store/conversation.js';
 import type { ConversationRole } from '../contract/wire/conversation.js';
+import { recapVoiding } from '../../thread-record/recaps.js';
 import { threadRecord } from '../../thread-record/store/table.js';
 import { BUCKET, keyable, projectionOf } from '@runlith/search-text/fts';
 import { voidCovered } from '../recap/voiding.js';
+import { threadBase } from '../store/journal.js';
 import { threadEntry } from '../store/kernel.js';
 import { type BaseLayer, referrersOf } from './base.js';
 
@@ -114,7 +117,7 @@ const closeGap = (db: Db, unit: Write, threadId: string, entryId: string) =>
     unit.run(db.delete(threadMessageGap).where(and(eq(threadMessageGap.threadId, threadId), eq(threadMessageGap.entryId, entryId)))),
   );
 
-const quiet = (db: Db, unit: Write, threadId: string, runId: string) =>
+const quiet = (db: Db, unit: Unit<'machine'>, threadId: string, runId: string) =>
   Effect.map(
     unit.run(
       db
@@ -327,24 +330,162 @@ const place = Effect.fnUntraced(function* (db: Db, unit: Write, threadId: string
   if (entry?.type === 'message' && typeof entry.id === 'string') yield* message(db, unit, threadId, event.position, entry, entry.id);
 });
 
-export const conversationMarked = (db: Db, program: ProgramUnit<'machine'>, threadId: string, at: number) =>
-  Effect.andThen(
-    program.write(
-      db
-        .update(threadConversation)
-        .set({
-          through: sql`case when ${threadConversation.through} = ${at - 1} then ${at} else ${threadConversation.through} end`,
-          seen: sql`max(${threadConversation.seen}, ${at})`,
-        })
-        .where(eq(threadConversation.threadId, threadId)),
-    ),
-    program.write(
-      db
-        .insert(threadConversation)
-        .values({ threadId, through: at === 1 ? 1 : 0, seen: at })
-        .onConflictDoNothing(),
-    ),
+type Reads = <A>(work: (unit: Unit<'machine'>) => Effect.Effect<A, StoreFailure>) => Effect.Effect<A, StoreFailure>;
+
+type Program = ProgramUnit<'machine'>;
+
+const placing = new WeakMap<Program, Set<string>>();
+
+const markedAt = (threadId: string, at: number): SQL =>
+  sql`exists (select 1 from ${threadConversation} where ${threadConversation.threadId} = ${threadId} and ${threadConversation.through} = ${at})`;
+
+const gapWhen = (db: Db, program: Program, threadId: string, entryId: string, runId: string | null, when: SQL) =>
+  program.write(
+    db.run(sql`insert into ${threadMessageGap} (thread_id, entry_id, run_id) select ${threadId}, ${entryId}, ${runId} where ${when}
+      on conflict (thread_id, entry_id) do update set run_id = excluded.run_id`),
   );
+
+const closeGapWhen = (db: Db, program: Program, threadId: string, entryId: string, when: SQL) =>
+  program.write(
+    db.delete(threadMessageGap).where(and(eq(threadMessageGap.threadId, threadId), eq(threadMessageGap.entryId, entryId), when)),
+  );
+
+const dropWhen = (db: Db, program: Program, key: string, when: SQL) =>
+  program.write(db.run(sql`delete from ${threadMessage} where key = cast(${key} as integer) and ${when}`));
+
+const messagePlanned = Effect.fnUntraced(function* (
+  db: Db,
+  program: Program,
+  read: Reads,
+  threadId: string,
+  position: number,
+  entry: Said,
+  entryId: string,
+) {
+  const seen = placing.get(program) ?? new Set<string>();
+  placing.set(program, seen);
+  const placed = `${threadId}\u0000${entryId}`;
+  if (seen.has(placed)) return yield* unplannable(program, 'one program places the same message twice');
+  seen.add(placed);
+  const role = roleOf(entry.role);
+  const runId = typeof entry.runId === 'string' ? entry.runId : null;
+  const text = typeof entry.text === 'string' ? entry.text : '';
+  const listened = role === 'agent' && runId !== null;
+  const { readers, standing, silent } = yield* read((unit) =>
+    Effect.all({
+      readers: referrersOf(db, unit, threadId),
+      standing: Effect.map(
+        unit.run(
+          db.all<Standing>(sql`select cast(${threadMessage.key} as text) as key, ${threadMessage.appeared} as appeared,
+            ${threadMessage.occurredAt} as occurred_at, ${threadMessage.text} as text, ${threadMessage.rewound} as rewound
+            from ${threadMessage} where ${threadMessage.threadId} = ${threadId} and ${threadMessage.entryId} = ${entryId}`),
+        ),
+        (rows) => rows[0],
+      ),
+      silent: listened ? quiet(db, unit, threadId, runId) : Effect.succeed(false),
+    }),
+  );
+  if (readers.length > 0) return yield* unplannable(program, 'a branch reads this conversation');
+  yield* program.guard(db.select({ threadId: threadBase.threadId }).from(threadBase).where(eq(threadBase.sourceId, threadId)), 0);
+  yield* standing === undefined
+    ? program.guard(
+        db
+          .select({ entryId: threadMessage.entryId })
+          .from(threadMessage)
+          .where(and(eq(threadMessage.threadId, threadId), eq(threadMessage.entryId, entryId))),
+        0,
+      )
+    : program.guard(
+        db.all(sql`select 1 from ${threadMessage} where key = cast(${standing.key} as integer)
+          and ${threadMessage.threadId} = ${threadId} and ${threadMessage.entryId} = ${entryId}
+          and ${threadMessage.appeared} = ${standing.appeared} and ${threadMessage.occurredAt} = ${standing.occurred_at}
+          and ${threadMessage.text} = ${standing.text} and ${threadMessage.rewound} is ${standing.rewound}`),
+        1,
+      );
+  if (listened)
+    yield* program.guard(
+      db
+        .select({ runId: threadQuietRun.runId })
+        .from(threadQuietRun)
+        .where(and(eq(threadQuietRun.threadId, threadId), eq(threadQuietRun.runId, runId))),
+      silent ? 1 : 0,
+    );
+  const when = markedAt(threadId, position);
+  const ms = typeof entry.occurredAt === 'string' ? Date.parse(entry.occurredAt) : Number.NaN;
+  const dropped = role === null || silent || text.trim() === '' || !keyable(ms);
+  const rewound = typeof entry.rewound?.by === 'string' ? entry.rewound.by : (standing?.rewound ?? null);
+  if (standing !== undefined && (dropped || standing.text !== text || standing.rewound !== rewound)) {
+    yield* program.write(recapVoiding(db, threadId, standing.appeared, when));
+  }
+  const unkeyed = role !== null && !silent && text.trim() !== '' && !keyable(ms);
+  if (dropped) {
+    if (standing !== undefined) yield* dropWhen(db, program, standing.key, when);
+    yield* unkeyed ? gapWhen(db, program, threadId, entryId, runId, when) : closeGapWhen(db, program, threadId, entryId, when);
+    return;
+  }
+  yield* closeGapWhen(db, program, threadId, entryId, when);
+  const said = role as ConversationRole;
+  if (standing !== undefined && standing.occurred_at === ms) {
+    yield* program.write(
+      db.run(sql`update ${threadMessage} set position = ${position}, run_id = ${runId}, role = ${said}, rewound = ${rewound},
+            text = ${text} where key = cast(${standing.key} as integer) and ${when}`),
+    );
+    if (standing.text !== text) {
+      yield* program.write(db.run(sql`delete from ${fts} where rowid = cast(${standing.key} as integer) and ${when}`));
+      yield* program.write(
+        db.run(sql`insert into ${fts}(rowid, text) select cast(${standing.key} as integer), ${projectionOf(text)} where ${when}`),
+      );
+    }
+    return;
+  }
+  if (standing !== undefined) yield* dropWhen(db, program, standing.key, when);
+  yield* program.write(
+    db.run(sql`insert into ${threadMessage} (key, thread_id, entry_id, position, appeared, run_id, role, occurred_at, rewound, text)
+          select coalesce(max(key) + 1, ${ms} * ${BUCKET}), ${threadId}, ${entryId}, ${position}, ${standing?.appeared ?? position}, ${runId}, ${said}, ${ms}, ${rewound}, ${text}
+          from ${threadMessage} where key >= ${ms} * ${BUCKET} and key < (${ms} + 1) * ${BUCKET}
+          having coalesce(max(key) + 1, ${ms} * ${BUCKET}) < (${ms} + 1) * ${BUCKET} and ${when}`),
+  );
+  const born = sql`${threadMessage.threadId} = ${threadId} and ${threadMessage.entryId} = ${entryId}`;
+  yield* program.write(
+    db.run(sql`insert into ${fts}(rowid, text) select key, ${projectionOf(text)} from ${threadMessage} where ${born} and ${when}`),
+  );
+  yield* gapWhen(db, program, threadId, entryId, runId, sql`${when} and not exists (select 1 from ${threadMessage} where ${born})`);
+});
+
+export const conversationPlanned = Effect.fnUntraced(function* (
+  db: Db,
+  program: Program,
+  read: Reads,
+  threadId: string,
+  event: IndexedEvent,
+) {
+  const at = event.position;
+  yield* program.write(
+    db
+      .update(threadConversation)
+      .set({
+        through: sql`case when ${threadConversation.through} = ${at - 1} then ${at} else ${threadConversation.through} end`,
+        seen: sql`max(${threadConversation.seen}, ${at})`,
+      })
+      .where(eq(threadConversation.threadId, threadId)),
+  );
+  yield* program.write(
+    db
+      .insert(threadConversation)
+      .values({ threadId, through: at === 1 ? 1 : 0, seen: at })
+      .onConflictDoNothing(),
+  );
+  if (!speaks(event.payload)) return;
+  const facts = event.payload as Facts;
+  if (facts.withdrawn !== undefined || facts.branched !== undefined || facts.rewound !== undefined || facts.restored !== undefined)
+    return yield* unplannable(program, 'a fact that rewrites the conversation');
+  const entry = facts.entry;
+  if (entry?.type === 'signal' && entry.signalType === KEEP_WARM_SIGNAL_TYPE && typeof entry.runId === 'string')
+    return yield* unplannable(program, 'a keep-warm signal quiets its run');
+  if (entry?.type === 'signal' && entry.signalType === USER_MESSAGE_SIGNAL_TYPE && typeof entry.id === 'string')
+    return yield* messagePlanned(db, program, read, threadId, at, { ...entry, role: 'user' }, entry.id);
+  if (entry?.type === 'message' && typeof entry.id === 'string') yield* messagePlanned(db, program, read, threadId, at, entry, entry.id);
+});
 
 export const conversationAppended = Effect.fnUntraced(function* (db: Db, unit: Write, threadId: string, event: IndexedEvent) {
   const at = event.position;

@@ -19,7 +19,7 @@ import { payloadField } from '../store/fields.js';
 import { foldedBody, foldedEntryId, restoredFact } from './foldedFacts.js';
 import { RolloutWriterFailed, RolloutWriting } from './rolloutWriter.js';
 import { RestedRollouts } from '../contract/service/rested.js';
-import { conversationAppended, conversationMarked, speaks } from './conversationIndex.js';
+import { conversationAppended, conversationPlanned } from './conversationIndex.js';
 import { type StoredFailure, stored } from '../../platform/store/crossing.js';
 import { byPosition, type EventArm, eventArmsOf, journalHead, layersOf, merged } from './base.js';
 
@@ -245,7 +245,6 @@ export const makeSqliteThreadJournal = Effect.gen(function* () {
     const plan = planned.get(program)?.get(event.threadId);
     if (plan === undefined || floor?.refusal(event.threadId) !== undefined)
       return yield* unplannable(program, 'an append with no planned head');
-    if (speaks(event.payload)) return yield* unplannable(program, 'a spoken fact reindexes the conversation');
     const position = plan.head + 1;
     const held = floor?.held(event.threadId);
     if (held !== undefined && position <= held) return yield* unplannable(program, 'the rollout already holds the planned position');
@@ -263,7 +262,7 @@ export const makeSqliteThreadJournal = Effect.gen(function* () {
           .set({ updatedAt: new Date(yield* Clock.currentTimeMillis) })
           .where(eq(thread.id, event.threadId)),
       );
-    yield* conversationMarked(db, program, event.threadId, position);
+    yield* conversationPlanned(db, program, (work) => units.read(work), event.threadId, { position, payload: event.payload });
     const appended = { threadId: event.threadId, position, id: event.id, kind: event.kind, payload: event.payload };
     plan.head = position;
     plan.facts.push(appended);

@@ -47,8 +47,7 @@ export const makeSessionRows = Effect.fnUntraced(function* ({ db }: { readonly d
             and(
               eq(externalSession.id, id),
               eq(externalSession.facet, values.facet),
-              sql`${externalSession.leaseOwner} is ${values.leaseOwner ?? null}`,
-              sql`${externalSession.leaseBeat} is ${values.leaseBeat ?? null}`,
+              sql`${externalSession.leaseOwner} is ${values.leaseOwner}`,
             ),
           ),
         1,
@@ -57,7 +56,25 @@ export const makeSessionRows = Effect.fnUntraced(function* ({ db }: { readonly d
     writes: changing,
     choosing,
     read: (id, unit) => readExternalSession(db, unit, id),
-    write: (id, facet, unit) => writeSession(db, unit, id, facet),
+    write: (id, facet, unit) => {
+      if (programOf(unit) === null) return writeSession(db, unit, id, facet);
+      const values = sessionValues(facet);
+      return Effect.flatMap(Clock.currentTimeMillis, (now) =>
+        Effect.asVoid(
+          unit.run(
+            db
+              .update(externalSession)
+              .set({
+                facet: values.facet,
+                leaseOwner: values.leaseOwner,
+                leaseBeat: values.leaseBeat === null ? null : undefined,
+                updatedAt: new Date(now),
+              })
+              .where(eq(externalSession.id, id)),
+          ),
+        ),
+      );
+    },
     sessionsStanding: (transport) =>
       units.read((unit) =>
         Effect.gen(function* () {

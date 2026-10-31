@@ -24,6 +24,7 @@ import { harnessFacet } from '../../../threads/contract/wire/harness/types.js';
 import { harnessPresentation } from '../../../external-harnesses/contract/service/table.js';
 import { builtinHarness } from '../../../external-harnesses/testing/builtin.js';
 import {
+  appendedInProgram,
   compressRollout,
   conversationBackfill,
   conversationReads,
@@ -741,6 +742,58 @@ describe('conversation index and journal', () => {
         complete: true,
         unindexed: 0,
       });
+    }).pipe(Effect.provide(fixture)),
+  );
+  it.live('messages journaled by a write program are indexed as an interactive unit indexes them', () =>
+    Effect.gen(function* () {
+      const { units, log, sequence } = yield* World;
+      const own = yield* registered('planned');
+      yield* thread('t-planned', own);
+      const planned = (head: number, ...events: readonly ThreadEventBody[]) =>
+        appendedInProgram(
+          units,
+          log,
+          't-planned',
+          head,
+          events.map((event) => ({ threadId: 't-planned', id: `event-${++sequence.event}`, ...event })),
+        );
+      yield* planned(
+        0,
+        message({ id: 'p-1', text: 'Tallinn ferry', at: '2026-09-20T10:00:00.000Z' }),
+        message({ id: 'p-2', role: 'assistant', text: 'Tallinn reserved', at: '2026-09-20T10:01:00.000Z' }),
+        {
+          kind: 'signal',
+          payload: {
+            entry: {
+              type: 'signal',
+              id: 'p-steer',
+              runId: 'run-1',
+              signalType: 'user-message',
+              addressee: 'reader',
+              text: 'Tallinn by night',
+              occurredAt: '2026-09-20T10:02:00.000Z',
+            },
+          },
+        },
+        message({ id: 'p-3', text: 'Tallinn unkeyed', at: 'not a time' }),
+      );
+      yield* planned(
+        4,
+        message({ id: 'p-2', role: 'assistant', text: 'Tallinn rebooked', at: '2026-09-20T10:01:00.000Z' }),
+        message({ id: 'p-1', text: 'Tallinn ferry, said later', at: '2026-09-21T10:00:00.000Z' }),
+      );
+      const said = Effect.fnUntraced(function* (query: string) {
+        const found = yield* search({ query, scope: { kind: 'projects', ids: [own] } });
+        return [
+          found.coverage,
+          ...found.matches.map((hit) => [hit.match.entryId, hit.match.role, hit.match.occurredAt, hit.match.snippet]),
+        ];
+      });
+      const open = { complete: false, unindexed: 1 };
+      expect(yield* said('ferry')).toEqual([open, ['p-1', 'operator', '2026-09-21T10:00:00.000Z', 'Tallinn ferry, said later']]);
+      expect(yield* said('night')).toEqual([open, ['p-steer', 'operator', '2026-09-20T10:02:00.000Z', 'Tallinn by night']]);
+      expect(yield* said('rebooked')).toEqual([open, ['p-2', 'agent', '2026-09-20T10:01:00.000Z', 'Tallinn rebooked']]);
+      expect(yield* said('reserved')).toEqual([open]);
     }).pipe(Effect.provide(fixture)),
   );
 });

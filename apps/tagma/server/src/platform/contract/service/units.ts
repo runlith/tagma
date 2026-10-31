@@ -6,9 +6,9 @@ declare const unitBrand: unique symbol;
 declare const writeUnit: unique symbol;
 declare const programBrand: unique symbol;
 
-export type ProgramQuery = Effect.Effect<unknown, StoreFailure> & {
-  toSQL(): { readonly sql: string; readonly params: ReadonlyArray<unknown> };
-};
+type ProgramText = { readonly sql: string; readonly params: ReadonlyArray<unknown> };
+
+export type ProgramQuery = Effect.Effect<unknown, StoreFailure> & ({ toSQL(): ProgramText } | { getQuery(): ProgramText });
 
 export type ProgramUnit<Brand extends StoreBrand> = {
   readonly store: StoreIdentity;

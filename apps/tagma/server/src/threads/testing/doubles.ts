@@ -1,7 +1,10 @@
 import { Context, Effect, Layer } from 'effect';
 import { NamespaceId } from '@runlith/files/namespace';
 import { ThreadRollouts as ThreadRolloutsTag } from '../contract/service/rollouts.js';
-import { makeSqliteThreadJournal, type SqliteThreadJournal } from '../journal/log.js';
+import { makeSqliteThreadJournal, planHead, type SqliteThreadJournal } from '../journal/log.js';
+import type { ThreadEventInsert } from '@runlith/agent/thread/storage/eventLog';
+import { programWriteUnit } from '../../platform/store/programs.js';
+import { threadRecord } from '../../thread-record/store/table.js';
 import { RestedRollouts } from '../contract/service/rested.js';
 import { makeConversationReads } from '../journal/conversationReads.js';
 import { makeModelChanges } from '../events/modelChanges.js';
@@ -44,6 +47,7 @@ import { evictThreadProjection as evictThreadProjectionOver } from '../journal/r
 import { compressRollout as compressRolloutOver } from '../journal/rolloutForms.js';
 import { thread as threadTable, threadEntry as threadEntryTable, threadRun as threadRunTable } from '../store/kernel.js';
 import {
+  conversationWrites,
   threadEvent as threadEventTable,
   threadRolloutCursor as threadRolloutCursorTable,
   threadRolloutForm as threadRolloutFormTable,
@@ -377,6 +381,23 @@ export const sqliteThreadJournal = (rested?: RestedRollouts['Service']) =>
   rested === undefined ? makeSqliteThreadJournal : Effect.provideService(makeSqliteThreadJournal, RestedRollouts, rested);
 
 export const filedThreadJournal = (writer: RolloutWriter) => Effect.provideService(makeSqliteThreadJournal, RolloutWriting, writer);
+
+export const appendedInProgram = (
+  units: MachineUnits['Service'],
+  journal: SqliteThreadJournal,
+  threadId: string,
+  head: number,
+  events: readonly ThreadEventInsert[],
+) =>
+  units.program(
+    writes('testing.appendedInProgram', [threadEventTable, threadTable, threadRecord], conversationWrites),
+    `testing:${threadId}:${head}`,
+    (program) => {
+      planHead(program, threadId, head);
+      const unit = programWriteUnit(program);
+      return Effect.forEach(events, (event) => journal.append(event, unit), { discard: true });
+    },
+  );
 
 export const conversationReads = () => makeConversationReads;
 
