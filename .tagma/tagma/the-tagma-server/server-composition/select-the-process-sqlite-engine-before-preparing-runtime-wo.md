@@ -12,4 +12,4 @@ edges:
   - kind: relates
     to: 01a127c8-442b-7600-9d5b-c533114f680f
 ---
-Fix startup order so Bun workers cannot select the system SQLite before activity storage and graph readers select the supplied engine. Reproduce the failure in a fresh process through runtime preparation, performance storage and activity storage; preserve existing data and source-identity enforcement.
+Bun shares SQLite engine selection across Worker isolates. A telemetry worker opening first selected system SQLite, after which activity storage and graph readers refused its source identity. Composition now prepares and selects the supplied engine before worker preparation and cold runtime assembly. The fresh-process test through PREPARATION, a real telemetry read, and an activity write/read failed with the reported source mismatch before the fix and passed seeds 1, 2 and 3 afterward; server typecheck passed. Existing data and source-identity enforcement are unchanged.
