@@ -88,6 +88,7 @@ it.effect('a repeated sweep waits for the active pass and answers its discharged
     const units = MachineUnits.of({
       read: (work) => work(unit),
       write: (_operation, work) => work(unit),
+      program: () => Effect.die(new Error('the stops test runs no programs')),
       markReadOnly: (effect) => effect,
       markWrite: (effect) => effect,
     });

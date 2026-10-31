@@ -169,6 +169,7 @@ layer(Layer.mergeAll(BunFileSystem.layer, liveGitLayer, storage, capacity), { ex
       const units = yield* MachineUnits;
       const slow = MachineUnits.of({
         write: (operation, work) => units.write(operation, work),
+        program: (operation, identity, work) => units.program(operation, identity, work),
         markReadOnly: (work) => units.markReadOnly(work),
         markWrite: (work) => units.markWrite(work),
         read: (work, options) =>

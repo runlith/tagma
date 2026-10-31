@@ -121,6 +121,7 @@ it.live(
       read: (work) => units.read(work),
       markReadOnly: (effect) => units.markReadOnly(effect),
       markWrite: (effect) => units.markWrite(effect),
+      program: (operation, identity, work) => units.program(operation, identity, work),
       write: <T, E>(
         operation: Parameters<MachineUnits['Service']['write']>[0],
         work: (unit: WriteUnit<'machine'>) => Effect.Effect<T, E>,

@@ -502,6 +502,7 @@ layer(fixture)('recap schedule', (it) => {
         read: (work, options) => units.read(work, options),
         markReadOnly: (work) => units.markReadOnly(work),
         markWrite: (work) => units.markWrite(work),
+        program: (writes, identity, work) => units.program(writes, identity, work),
         write: (writes, work) =>
           Effect.andThen(Deferred.succeed(pendingWrite, undefined), Deferred.await(ready)).pipe(Effect.andThen(units.write(writes, work))),
       });

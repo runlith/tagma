@@ -261,6 +261,7 @@ it.live('only a row this door moves takes the write permit, and a value that esc
         taken += 1;
         return on.units.write(operation, work);
       },
+      program: (operation, identity, work) => on.units.program(operation, identity, work),
     };
     const bounding = yield* boundingOver(on.outputs, CORE_KINDS).pipe(Effect.provideService(MachineUnits, permits));
     const escaping = '\u0001'.repeat(WIRE_ENTRY_MAX_BYTES / 4);

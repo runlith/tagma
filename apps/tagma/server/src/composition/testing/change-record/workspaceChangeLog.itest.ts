@@ -462,6 +462,7 @@ const unacknowledged = (units: MachineUnits['Service']): MachineUnits['Service']
   read: (work) => units.read(work),
   markReadOnly: (effect) => units.markReadOnly(effect),
   markWrite: (effect) => units.markWrite(effect),
+  program: (operation, identity, work) => units.program(operation, identity, work),
   write: (operation, work) =>
     units
       .write(operation, work)

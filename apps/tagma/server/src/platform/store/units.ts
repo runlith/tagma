@@ -1,7 +1,15 @@
 import { bulk, readOnly, writes } from '@runlith/sqlite-process/SqliteProcess';
 import { type Context, Effect, Layer } from 'effect';
 import type { Store, StoreBrand, StoreFailure } from '../contract/service/store.js';
-import { type ReadOptions, type Unit, unitOf, type Units, type WriteUnit } from '../contract/service/units.js';
+import {
+  type ProgramConflict,
+  type ProgramUnit,
+  type ReadOptions,
+  type Unit,
+  unitOf,
+  type Units,
+  type WriteUnit,
+} from '../contract/service/units.js';
 import type { WriteSet } from '../contract/service/writes.js';
 import { UnitStore } from './transaction.js';
 
@@ -19,6 +27,14 @@ class ConnectionUnits<Brand extends StoreBrand> implements Units<Brand> {
 
   write<T, E>(operation: WriteSet | string, work: (unit: WriteUnit<Brand>) => Effect.Effect<T, E>): Effect.Effect<T, E | StoreFailure> {
     return this.store.transaction(operation, work);
+  }
+
+  program<T, E>(
+    operation: WriteSet,
+    identity: string,
+    work: (unit: ProgramUnit<Brand>) => Effect.Effect<T, E>,
+  ): Effect.Effect<T, E | StoreFailure | ProgramConflict> {
+    return this.store.program(operation, identity, work);
   }
 
   read<T, E>(work: (unit: Unit<Brand>) => Effect.Effect<T, E>, options?: ReadOptions): Effect.Effect<T, E | StoreFailure> {

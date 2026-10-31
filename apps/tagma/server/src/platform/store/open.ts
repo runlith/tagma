@@ -1,4 +1,5 @@
 import { Connections, sqliteProcessLayer } from '@runlith/sqlite-process/SqliteProcess';
+import { Programs } from '@runlith/sqlite-process/programs';
 import { ProcessPool } from '@runlith/sqlite-process/ProcessPool';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { Clock, Context, Effect, FileSystem, Layer } from 'effect';
@@ -27,6 +28,7 @@ import { applyMigration, chain, pendingMigrations, resolveMigration, schemaState
 import { translateBaseline } from './baseline.js';
 import { seedDatabase } from './seed.js';
 import { storeTransaction, UnitStore, WriterTimings } from './transaction.js';
+import { storeProgram } from './programs.js';
 import { type Freeing, reclaiming, vacuumStore } from './vacuum.js';
 import { checkStatement, readConsequences } from './writes.js';
 import { WriteSetMode } from '../contract/service/writes.js';
@@ -237,6 +239,7 @@ type Opened = {
   readonly classed: boolean;
   readonly freeing: Freeing;
   readonly moves: TableMoves;
+  readonly programs: Programs['Service'];
   readonly stalled: Effect.Effect<WriterStall | null>;
 };
 
@@ -249,6 +252,7 @@ const storeOf = <Brand extends StoreBrand>({
   classed,
   freeing,
   moves,
+  programs,
   stalled,
   processes,
   durable,
@@ -260,6 +264,7 @@ const storeOf = <Brand extends StoreBrand>({
   identity,
   schema,
   transaction: storeTransaction<Brand>(db, timings, identity, moves, classed, processes.writerMetrics),
+  program: storeProgram<Brand>(db, programs, identity, moves, classed, processes.writerMetrics),
   readOnly: (work) =>
     Effect.scoped(
       Effect.flatMap(makeWithDefaults(), (reader) => work(storeDb<Brand>(reader))).pipe(
@@ -300,10 +305,13 @@ const open = <Brand extends StoreBrand>(
     Effect.tap(migrated(identity.path, migrations, processes, withoutSnapshot), ({ db }) => readConsequences(identity, db)),
     ({ db, schema }) => {
       const moves = new TableMoves();
-      return Effect.zipWith(
-        reclaiming(db, storeTransaction<'machine'>(db, timings, identity, moves, classed, processes.writerMetrics)),
-        Connections,
-        (freeing, connections) => ({
+      return Effect.map(
+        Effect.all([
+          reclaiming(db, storeTransaction<'machine'>(db, timings, identity, moves, classed, processes.writerMetrics)),
+          Connections,
+          Programs,
+        ]),
+        ([freeing, connections, programs]) => ({
           db,
           schema,
           identity,
@@ -312,6 +320,7 @@ const open = <Brand extends StoreBrand>(
           classed,
           freeing,
           moves,
+          programs,
           stalled: Effect.map(connections.writer, ({ holder, waiting }) =>
             holder === null || holder.quietMs < WRITER_STALL_MS ? null : { ...holder, waiting },
           ),

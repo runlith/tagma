@@ -29,6 +29,7 @@ const stand = Effect.fnUntraced(function* (w: Effect.Success<ReturnType<typeof m
     read: (work, options) => w.units.read(work, options),
     markReadOnly: (work) => w.units.markReadOnly(work),
     markWrite: (work) => w.units.markWrite(work),
+    program: (op, identity, work) => w.units.program(op, identity, work),
     write: (op, work) => {
       if (outage) {
         outage = false;

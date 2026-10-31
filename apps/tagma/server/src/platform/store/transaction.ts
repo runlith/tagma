@@ -14,7 +14,7 @@ import { HeldFor } from '@runlith/held/holding';
 import { synchronously } from '@runlith/sqlite-process/SqliteProcess';
 import { type WriteUnit, writeUnitOf } from '../contract/service/units.js';
 import { UnitWriteRefused, type WriteSet } from '../contract/service/writes.js';
-import { LateStatementRefused, UnitLife } from './life.js';
+import { LateStatementRefused, ProgramOpen, UnitInProgramRefused, UnitLife } from './life.js';
 import type { DurabilityClass } from '../contract/service/durability.js';
 import { breach, movedTables, UnitDurability, UnitWrites } from './writes.js';
 import type { TableMoves } from './moves.js';
@@ -111,6 +111,9 @@ export const storeTransaction =
       Effect.uninterruptibleMask((restore) =>
         Effect.useSpan('Store.transaction', { attributes: { opKind: operation } }, (parent) =>
           Effect.gen(function* () {
+            const building = yield* ProgramOpen;
+            if (building !== null && building.store.path === identity.path && building.store.generation === identity.generation)
+              return yield* Effect.die(new UnitInProgramRefused({ store: identity.path, operation }));
             const cost = yield* CurrentCost;
             if (cost !== null) cost.counts.units++;
             const attributes = { opKind: operation };
@@ -236,6 +239,13 @@ export const storeTransaction =
       ),
     );
   };
+
+export const afterOuterCommit = (effect: Effect.Effect<void>): Effect.Effect<void> =>
+  Effect.flatMap(Effect.all([CommitQueue, UnitLife]), ([commits, life]) =>
+    commits !== null && life !== null && life.open
+      ? Effect.sync(() => void commits.queued.push(carryCost(effect)))
+      : Effect.die(new LateStatementRefused({ store: life?.identity.path ?? commits?.store.path ?? '', operation: life?.operation ?? '' })),
+  );
 
 const heldUnit = <Brand extends StoreBrand>(
   held: Context.Context<never>,

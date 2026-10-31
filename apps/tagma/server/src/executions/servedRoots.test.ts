@@ -107,6 +107,7 @@ it.effect('serving roots use retained local listener ownership and targeted term
     const units = MachineUnits.of({
       read: (work) => work(unit),
       write: unread,
+      program: unread,
       markReadOnly: (effect) => effect,
       markWrite: (effect) => effect,
     });

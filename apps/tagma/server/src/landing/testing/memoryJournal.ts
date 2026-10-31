@@ -17,6 +17,7 @@ export const memoryMergeJournal = () => {
   const units = MachineUnits.of({
     read: (work) => work(unit),
     write: (_operation, work) => work(unit),
+    program: () => Effect.die(new Error('the memory landing journal runs no programs')),
     markReadOnly: (work) => work,
     markWrite: (work) => work,
   });

@@ -46,6 +46,7 @@ const fixture = Effect.fnUntraced(function* () {
   const units = MachineUnits.of({
     read: (work) => work(unit),
     write: (_operation, work) => work(unit),
+    program: () => Effect.die(new Error('the provisional branch test runs no programs')),
     markReadOnly: (work) => work,
     markWrite: (work) => work,
   });

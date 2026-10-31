@@ -112,6 +112,7 @@ layer(checkoutFixture, { excludeTestServices: true })('checkout', (it) => {
           markReadOnly: (work) => w.units.markReadOnly(work),
           markWrite: (work) => w.units.markWrite(work),
           write: () => Effect.fail(new SqlError({ reason: new ConnectionError({ cause: new Error('the store is down') }) })),
+          program: () => Effect.fail(new SqlError({ reason: new ConnectionError({ cause: new Error('the store is down') }) })),
         };
         const refusing = yield* toolsFor(w, MINE, down);
         expect(yield* call(refusing.write, { path: join(w.root, 'src/a.ts'), content: second })).toContain('Nothing was written');

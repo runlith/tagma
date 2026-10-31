@@ -6,7 +6,7 @@ import type { SqlError } from 'effect/sql/SqlError';
 import type { EffectDrizzleQueryError, MigratorInitError } from 'drizzle-orm/effect-core/errors';
 import type { EffectSQLiteBunDatabase } from 'drizzle-orm/effect-sqlite-bun';
 import type { VacuumVerdict } from '../wire/vacuum.js';
-import type { WriteUnit } from './units.js';
+import type { ProgramConflict, ProgramUnit, WriteUnit } from './units.js';
 import type { WriteSet } from './writes.js';
 import type { TableMoves } from '../../store/moves.js';
 import type { SnapshotFailed, StoreSnapshots } from './snapshots.js';
@@ -108,6 +108,11 @@ export type Store<Brand extends StoreBrand> = {
     body: (unit: WriteUnit<Brand>) => Effect.Effect<A, E, R>,
     options?: StoreTransactionOptions<A, RCommit>,
   ) => Effect.Effect<A, E | StoreFailure, R | RCommit>;
+  readonly program: <A, E>(
+    operation: WriteSet,
+    identity: string,
+    work: (unit: ProgramUnit<Brand>) => Effect.Effect<A, E>,
+  ) => Effect.Effect<A, E | StoreFailure | ProgramConflict>;
   readonly readOnly: <A, E, R>(work: (db: StoreDb<Brand>) => Effect.Effect<A, E, R>) => Effect.Effect<A, E | StoreFailure, R>;
   readonly vacuum: () => Effect.Effect<VacuumVerdict, StoreFailure>;
   readonly freeing: <A, E, R>(work: Effect.Effect<A, E, R>) => Effect.Effect<readonly [A, number], E | StoreFailure, R>;
