@@ -8,6 +8,7 @@ import { MachineStore } from '../../platform/contract/service/store.js';
 import { MachineUnits, type Unit, type WriteUnit } from '../../platform/contract/service/units.js';
 import { among } from '../../platform/store/rows.js';
 import { stored, type StoredFailure } from '../../platform/store/crossing.js';
+import { programOf } from '../../platform/store/programs.js';
 import { ENDED_RUN, ENDINGS_LIST, threadRun, threadRunTally } from '../../threads/store/kernel.js';
 import { trustedRun } from './reaping.js';
 import { ThreadEntryKinds } from '@runlith/agent/transcript/kinds';
@@ -29,7 +30,21 @@ export const makeEndedRuns = Effect.gen(function* () {
       Effect.flatMap(unit.run(db.select().from(threadRun).where(where).get()), (row) =>
         row ? trustedRun(kinds, call, row) : Effect.succeed(null),
       );
-    return stored(call)(tx ? work(tx) : units.read(work));
+    const program = tx === undefined ? null : programOf(tx);
+    if (program === null) return stored(call)(tx ? work(tx) : units.read(work));
+    return stored(call)(
+      Effect.tap(units.read(work), (row) =>
+        row === null
+          ? program.guard(db.select({ id: threadRun.id }).from(threadRun).where(where), 0)
+          : program.guard(
+              db
+                .select({ id: threadRun.id })
+                .from(threadRun)
+                .where(and(eq(threadRun.id, row.id), eq(threadRun.status, row.status), sql`${threadRun.ownerId} is ${row.ownerId}`)),
+              1,
+            ),
+      ),
+    );
   };
 
   return (scope: SQL) => {

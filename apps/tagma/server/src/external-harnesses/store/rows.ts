@@ -6,7 +6,9 @@ import { writes } from '../../platform/contract/service/writes.js';
 import { WorkSpells } from '../../thread-record/contract/service/spells.js';
 import { ThreadRecords } from '../../thread-record/contract/service/records.js';
 import { ModelChanges } from '../../threads/contract/service/modelChanges.js';
-import { externalSession, leased } from '../../threads/store/harnessFacet.js';
+import { externalSession, leased, sessionValues } from '../../threads/store/harnessFacet.js';
+import { inProgram } from '../../platform/store/crossing.js';
+import { programOf, programWriteUnit } from '../../platform/store/programs.js';
 import { thread, threadRun, unparkedRun } from '../../threads/store/kernel.js';
 import { askedOf, bindingOf, capabilitiesOf, chooseModel, roadOf, switchesOf } from '../../threads/store/seat.js';
 import { parseExternalSession } from '../../threads/contract/wire/harness/externalSession.js';
@@ -31,6 +33,27 @@ export const makeSessionRows = Effect.fnUntraced(function* ({ db }: { readonly d
   return SessionRows.of({
     inspect: (work) => units.read(work),
     within: (operation, work) => units.write(operation, work),
+    planned: (operation, identity, work) =>
+      inProgram(units, operation, identity, 'HarnessSessionStore.planned', (program) => work(programWriteUnit(program))),
+    held: (id, facet, unit) => {
+      const program = programOf(unit);
+      if (program === null) return Effect.void;
+      const values = sessionValues(facet);
+      return program.guard(
+        db
+          .select({ id: externalSession.id })
+          .from(externalSession)
+          .where(
+            and(
+              eq(externalSession.id, id),
+              eq(externalSession.facet, values.facet),
+              sql`${externalSession.leaseOwner} is ${values.leaseOwner ?? null}`,
+              sql`${externalSession.leaseBeat} is ${values.leaseBeat ?? null}`,
+            ),
+          ),
+        1,
+      );
+    },
     writes: changing,
     choosing,
     read: (id, unit) => readExternalSession(db, unit, id),

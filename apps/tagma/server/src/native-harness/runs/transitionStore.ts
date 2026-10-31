@@ -21,7 +21,7 @@ import type {
   ThreadVersion,
 } from '@runlith/agent/thread/transition/port';
 import { MachineStore } from '../../platform/contract/service/store.js';
-import { MachineUnits, type Unit, type WriteUnit } from '../../platform/contract/service/units.js';
+import { MachineUnits, type ProgramUnit, type Unit, type WriteUnit } from '../../platform/contract/service/units.js';
 import { threadRev, threadRunReceipt } from '../store/thread.js';
 import { threadRun } from '../../threads/store/kernel.js';
 import { metadataColumns, threadRow } from '../row.js';
@@ -31,8 +31,9 @@ import { journalHead } from '../../threads/journal/base.js';
 import { threadInbox } from '../../threads/store/tables.js';
 import { spentCallKey, spentEpoch, threadCall } from '../../threads/store/calls.js';
 import { inProgram, inUnit, stored, type StoredFailure } from '../../platform/store/crossing.js';
-import { programOf, programWriteUnit } from '../../platform/store/programs.js';
-import { planHead } from '../../threads/journal/log.js';
+import { programOf, programWriteUnit, unplannable } from '../../platform/store/programs.js';
+import { planHead, plannedFacts } from '../../threads/journal/log.js';
+import type { ThreadMetadataRow, ThreadRow } from '@runlith/agent/thread/rows';
 import { failedAs } from '../../threads/contract/service/failure.js';
 import type { WriteSet } from '../../platform/contract/service/writes.js';
 import { kernelStorageWrites } from '../rows/storageWrites.js';
@@ -278,38 +279,73 @@ export const makeTransitions = Effect.fnUntraced(function* ({
     );
   });
 
+  const settled = new WeakMap<
+    ProgramUnit<'machine'>,
+    { readonly threadId: string; readonly row: ThreadRow; readonly version: ThreadVersion }
+  >();
+
+  const planned = Effect.fnUntraced(function* <T, E>(
+    program: ProgramUnit<'machine'>,
+    threadId: string,
+    row: ThreadMetadataRow,
+    version: ThreadVersion,
+    work: (at: ThreadHold<WriteUnit<'machine'>>) => Effect.Effect<T, E>,
+    tx: WriteUnit<'machine'>,
+  ) {
+    const standing = versionColumns(threadId);
+    yield* stored('programAt')(
+      program.guard(
+        db
+          .select({ id: threadRow.id })
+          .from(threadRow)
+          .where(
+            and(
+              eq(threadRow.id, threadId),
+              sql`${standing.foldRev} = ${version.foldRev}`,
+              sql`${standing.inheritRev} = ${version.inheritRev}`,
+              sql`${standing.head} = ${version.head}`,
+              eq(threadRow.updatedAt, row.updatedAt),
+            ),
+          ),
+        1,
+      ),
+    );
+    planHead(program, threadId, version.head);
+    return yield* work({ row, version, tx });
+  });
+
   return {
-    readAt: (threadId, work, tx) =>
-      tx !== undefined
+    readAt: (threadId, work, tx) => {
+      const program = tx === undefined ? null : programOf(tx);
+      if (program !== null) {
+        if (plannedFacts(program, threadId) !== null) return unplannable(program, 'a second transition of one thread in one program');
+        return Effect.flatMap(
+          stored('readAt')(
+            units.read((unit) =>
+              Effect.exit(
+                snapshot(unit, threadId, (at) => Effect.tap(work(at), () => Effect.sync(() => settled.set(program, { threadId, ...at })))),
+              ),
+            ),
+          ),
+          (exit) => exit,
+        );
+      }
+      return tx !== undefined
         ? snapshot(tx, threadId, work)
-        : Effect.flatMap(stored('readAt')(units.read((unit) => Effect.exit(snapshot(unit, threadId, work)))), (exit) => exit),
+        : Effect.flatMap(stored('readAt')(units.read((unit) => Effect.exit(snapshot(unit, threadId, work)))), (exit) => exit);
+    },
     writeAt: (threadId, work) => inUnit(units, writes(), 'writeAt', (unit) => hold(unit, threadId, work)),
-    writeAtIn: (threadId, work, tx) => hold(tx, threadId, work),
+    writeAtIn: (threadId, work, tx) => {
+      const program = programOf(tx);
+      if (program === null) return hold(tx, threadId, work);
+      const read = settled.get(program);
+      if (read === undefined || read.threadId !== threadId || plannedFacts(program, threadId) !== null)
+        return unplannable(program, 'a transition without its planned snapshot');
+      return planned(program, threadId, read.row, read.version, work, tx);
+    },
     programAt: (threadId, prepared, identity, work) =>
       inProgram(units, writes(), identity, 'programAt', (program) =>
-        Effect.gen(function* () {
-          const { version } = prepared;
-          const standing = versionColumns(threadId);
-          yield* stored('programAt')(
-            program.guard(
-              db
-                .select({ id: threadRow.id })
-                .from(threadRow)
-                .where(
-                  and(
-                    eq(threadRow.id, threadId),
-                    sql`${standing.foldRev} = ${version.foldRev}`,
-                    sql`${standing.inheritRev} = ${version.inheritRev}`,
-                    sql`${standing.head} = ${version.head}`,
-                    eq(threadRow.updatedAt, prepared.row.updatedAt),
-                  ),
-                ),
-              1,
-            ),
-          );
-          planHead(program, threadId, version.head);
-          return yield* work({ row: prepared.row, version, tx: programWriteUnit(program) });
-        }),
+        planned(program, threadId, prepared.row, prepared.version, work, programWriteUnit(program)),
       ),
     writeFold: (threadId, write, unit) =>
       Object.keys(write.fold).length === 0

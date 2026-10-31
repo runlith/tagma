@@ -1,7 +1,8 @@
 import { carryCost, rootCost } from '@runlith/performance/CostLedger';
 import { CurrentWriter, type WriterMetrics } from '@runlith/performance/WriterMetrics';
 import type { Programs } from '@runlith/sqlite-process/programs';
-import { sql } from 'drizzle-orm';
+import { is, sql } from 'drizzle-orm';
+import { SQLiteDeleteBase, SQLiteInsertBase, SQLiteUpdateBase } from 'drizzle-orm/sqlite-core';
 import type { EffectSQLiteBunDatabase } from 'drizzle-orm/effect-sqlite-bun';
 import { Cause, Data, Effect, Exit } from 'effect';
 import { classifySqliteError, SqlError } from 'effect/sql/SqlError';
@@ -32,10 +33,15 @@ class ProgramUnplannable extends Data.TaggedError('ProgramUnplannable')<{ readon
 
 type ProgramWrite<Brand extends StoreBrand> = WriteUnit<Brand> & { readonly program: ProgramUnit<Brand> };
 
+const plainWrite = (query: unknown): query is ProgramQuery =>
+  (is(query, SQLiteInsertBase) || is(query, SQLiteUpdateBase) || is(query, SQLiteDeleteBase)) &&
+  !/\breturning\b/i.test((query as unknown as ProgramQuery).toSQL().sql);
+
 export const programWriteUnit = <Brand extends StoreBrand>(program: ProgramUnit<Brand>): ProgramWrite<Brand> => ({
   ...writeUnitOf<Brand>({
     store: program.store,
-    run: () => unplannable(program, 'a read through the program unit'),
+    run: <A>(query: Effect.Effect<A, StoreFailure>): Effect.Effect<A, StoreFailure> =>
+      plainWrite(query) ? Effect.as(program.write(query), [] as A) : unplannable(program, 'a read through the program unit'),
     afterCommit: program.afterCommit,
   }),
   program,

@@ -60,6 +60,8 @@ export const memorySessionRows = Effect.fnUntraced(function* (storage: MemorySto
   const rows = SessionRows.of({
     inspect: (work) => work(readUnit),
     within: (_operation, work) => within(work),
+    planned: () => Effect.succeed(null),
+    held: () => Effect.void,
     writes: writes('HarnessSessionStore.change', []),
     choosing: writes('HarnessSessionStore.choose', []),
     read: (id, unit) => Effect.sync(() => current(id, unit)),

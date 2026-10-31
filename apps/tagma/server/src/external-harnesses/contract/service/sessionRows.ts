@@ -21,6 +21,12 @@ export class SessionRows extends Context.Service<
       operation: WriteSet | string,
       work: (unit: WriteUnit<'machine'>) => Effect.Effect<A, E>,
     ): Effect.Effect<A, E | HarnessFailure>;
+    planned<A, E>(
+      operation: WriteSet,
+      identity: string,
+      work: (unit: WriteUnit<'machine'>) => Effect.Effect<A, E>,
+    ): Effect.Effect<A | null, E | HarnessFailure>;
+    held(threadId: string, facet: ExternalSession, unit: WriteUnit<'machine'>): Effect.Effect<void, HarnessFailure>;
     readonly writes: WriteSet;
     readonly choosing: WriteSet;
     read(threadId: string, unit: Unit<'machine'>): Effect.Effect<ExternalSession | null, StoreFailure | GateRefusal>;

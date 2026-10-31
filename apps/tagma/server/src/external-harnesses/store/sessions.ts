@@ -94,38 +94,59 @@ export class HarnessSessionStore {
     work: (facet: ExternalSession, unit: WriteUnit<'machine'>) => Effect.Effect<SessionChange<A>, HarnessFailure>,
     joined?: WriteSet,
   ): Effect.Effect<{ readonly value: A; readonly facet: ExternalSession; readonly moved: boolean }, HarnessFailure> {
-    const { rows, listeners } = this;
     const readIn = (unit: WriteUnit<'machine'>) => this.readIn(threadId, unit);
-    return rows.within(this.changingWith(joined), (unit) =>
+    const landed = this.landed(threadId);
+    return this.rows.within(this.changingWith(joined), (unit) =>
       Effect.gen(function* () {
         const current = yield* readIn(unit);
         if (current === null)
           return yield* new GateRefusal('harness-missing', `No external session ${threadId} stands here.`, [
             'read the project session list',
           ]);
-        const { facet, value } = yield* work(current, unit);
-        const visible =
-          facet !== current &&
-          (facet.observation.revision !== current.observation.revision ||
-            facet.session !== current.session ||
-            facet.execution !== current.execution ||
-            facet.sessionKey !== current.sessionKey ||
-            facet.retiring !== current.retiring ||
-            facet.turn?.run !== current.turn?.run ||
-            facet.turn?.openedAt !== current.turn?.openedAt ||
-            facet.interrupted?.at !== current.interrupted?.at ||
-            facet.name !== current.name);
-        if (facet !== current) yield* rows.write(threadId, facet, unit);
-        const moved = visible && !heartbeatOnly(facet, current);
-        if (moved)
-          yield* unit.afterCommit(
-            Effect.sync(() => {
-              for (const changed of listeners.get(threadId) ?? []) changed(facet);
-            }),
-          );
-        return { value, facet, moved };
+        return yield* landed(current, yield* work(current, unit), unit);
       }),
     );
+  }
+  planned<A>(
+    threadId: string,
+    held: ExternalSession,
+    identity: string,
+    work: (facet: ExternalSession, unit: WriteUnit<'machine'>) => Effect.Effect<SessionChange<A>, HarnessFailure>,
+    joined?: WriteSet,
+  ): Effect.Effect<{ readonly value: A; readonly facet: ExternalSession; readonly moved: boolean } | null, HarnessFailure> {
+    const { rows } = this;
+    const landed = this.landed(threadId);
+    return rows.planned(this.changingWith(joined), identity, (unit) =>
+      Effect.andThen(
+        rows.held(threadId, held, unit),
+        Effect.flatMap(work(held, unit), (change) => landed(held, change, unit)),
+      ),
+    );
+  }
+  private landed(threadId: string) {
+    const { rows, listeners } = this;
+    return Effect.fnUntraced(function* <A>(current: ExternalSession, { facet, value }: SessionChange<A>, unit: WriteUnit<'machine'>) {
+      const visible =
+        facet !== current &&
+        (facet.observation.revision !== current.observation.revision ||
+          facet.session !== current.session ||
+          facet.execution !== current.execution ||
+          facet.sessionKey !== current.sessionKey ||
+          facet.retiring !== current.retiring ||
+          facet.turn?.run !== current.turn?.run ||
+          facet.turn?.openedAt !== current.turn?.openedAt ||
+          facet.interrupted?.at !== current.interrupted?.at ||
+          facet.name !== current.name);
+      if (facet !== current) yield* rows.write(threadId, facet, unit);
+      const moved = visible && !heartbeatOnly(facet, current);
+      if (moved)
+        yield* unit.afterCommit(
+          Effect.sync(() => {
+            for (const changed of listeners.get(threadId) ?? []) changed(facet);
+          }),
+        );
+      return { value, facet, moved };
+    });
   }
   open(
     threadId: string,

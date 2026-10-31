@@ -28,6 +28,9 @@ import { failedAs } from '../../threads/contract/service/failure.js';
 import { capabilitiesOf } from '../../threads/store/seat.js';
 import { kernelStorageWrites } from './storageWrites.js';
 import { makeThreadBranching } from './branch.js';
+import { programOf } from '../../platform/store/programs.js';
+import { plannedFacts } from '../../threads/journal/log.js';
+import type { ThreadTranscriptEntry } from '@runlith/agent/transcript/rows';
 
 import { EMPTY_HISTORY, EMPTY_TRANSCRIPT, makeThreadMetadata, makeThreadUnits, threadRowOf } from './threadUnits.js';
 
@@ -138,7 +141,15 @@ export const makeThreadStore = Effect.fnUntraced(function* (input: { readonly re
       work.read('entriesOfRun', tx, (unit) => entries.ofRun(unit, id, runId)),
     openQuestionsOfRun: (id: string, runId: string, tx?: Unit<'machine'>) =>
       work.read('openQuestionsOfRun', tx, (unit) => entries.openQuestionsOfRun(unit, id, runId)),
-    entryById: (id: string, entryId: string, tx?: Unit<'machine'>) => work.read('entryById', tx, (unit) => entries.byId(unit, id, entryId)),
+    entryById: (id: string, entryId: string, tx?: Unit<'machine'>) => {
+      const program = tx === undefined ? null : programOf(tx);
+      if (program === null) return work.read('entryById', tx, (unit) => entries.byId(unit, id, entryId));
+      const own = plannedFacts(program, id)?.findLast(
+        (fact) => (fact.payload as { readonly entry?: { readonly id?: unknown } }).entry?.id === entryId,
+      );
+      if (own !== undefined) return Effect.succeed((own.payload as { readonly entry: ThreadTranscriptEntry }).entry);
+      return work.read('entryById', undefined, (unit) => entries.byId(unit, id, entryId));
+    },
     questionById: (id: string, questionId: string, tx?: Unit<'machine'>) =>
       work.read('questionById', tx, (unit) => entries.questionById(unit, id, questionId)),
     transcriptWindow: (id: string, query: ThreadTranscriptQuery, tx?: Unit<'machine'>) =>

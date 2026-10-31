@@ -11,7 +11,8 @@ import {
   parseTransportBinding,
   parseTransportCapabilities,
 } from '@runlith/agent/thread/persisted';
-import { eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
+import { programOf } from '../../platform/store/programs.js';
 import { ThreadEntryKinds, type ThreadEntryReader } from '@runlith/agent/transcript/kinds';
 import { ProviderRegistry } from '../../providers/contract/service/registry.js';
 import { MachineStore } from '../../platform/contract/service/store.js';
@@ -123,7 +124,23 @@ export const makeThreadMetadata = Effect.gen(function* () {
         Effect.flatMap(unit.run(db.select(metadataColumns).from(threadRow).where(eq(threadRow.id, id)).get()), (row) =>
           row ? threadRowOf(kinds, row) : Effect.succeed(undefined),
         );
-      return stored('metadata')(tx ? read(tx) : units.read(read));
+      const program = tx === undefined ? null : programOf(tx);
+      if (program === null) return stored('metadata')(tx ? read(tx) : units.read(read));
+      return stored('metadata')(
+        Effect.tap(units.read(read), (row) =>
+          program.guard(
+            db
+              .select({ id: threadRow.id })
+              .from(threadRow)
+              .where(
+                row === undefined
+                  ? eq(threadRow.id, id)
+                  : and(eq(threadRow.id, id), sql`json_extract(${threadRow.transport}, '$.adapter') is ${row.transport.adapter}`),
+              ),
+            row === undefined ? 0 : 1,
+          ),
+        ),
+      );
     },
   });
 });

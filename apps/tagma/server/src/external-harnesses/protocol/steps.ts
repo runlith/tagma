@@ -624,36 +624,36 @@ export class ProtocolSteps {
         turns: projected.turns,
         sent: stamped(base.sent, link.row.client.requests, step.state.requests, at),
       };
+      const body = Effect.fnUntraced(function* (current: ExternalSession, unit: WriteUnit<'machine'>) {
+        const within = plan.within === undefined ? { facet: current, row } : yield* plan.within(current, unit, row);
+        const seated = settledFacet(within.facet, events, within, link.profile.reportedModel, at);
+        yield* rows.write(unit, link.threadId, seated.row);
+        for (const at of trims) yield* turns.cut(unit, link.threadId, current.sessionKey, at);
+        yield* turns.record(unit, link.threadId, projected.vendor);
+        if (projected.heard) yield* turns.heard(unit, link.threadId);
+        yield* unit.afterCommit(
+          Effect.sync(() => {
+            links.landed(link, seated.row);
+            link.facet = seated.facet;
+          }),
+        );
+        const journaled = written ?? UNWRITTEN;
+        yield* journaled.opened(unit, [...(plan.reports ?? []), ...resolved]);
+        const held = step.state.requests.flatMap((sent) => (sent.meaning === 'extension' ? sent.envelopes : []));
+        for (const turn of ended) {
+          const released = yield* inbox.releaseInput(link.threadId, turn.turn, held, unit);
+          if (released.length > 0)
+            yield* UNWRITTEN.opened(unit, [journal.fated({ id: turn.turn, threadId: link.threadId }, 'returned', released)]);
+        }
+        const closed = yield* journaled.closed(unit);
+        return { facet: seated.facet, value: { seated, closed } };
+      });
+      const identity = `${link.threadId}:${step.state.incarnation}:${step.state.cursor.offset}:${step.state.counter}`;
       const settledStep = yield* journal.cut(
         link.threadId,
-        store.settle(
-          link.threadId,
-          (current, unit) =>
-            Effect.gen(function* () {
-              const within = plan.within === undefined ? { facet: current, row } : yield* plan.within(current, unit, row);
-              const seated = settledFacet(within.facet, events, within, link.profile.reportedModel, at);
-              yield* rows.write(unit, link.threadId, seated.row);
-              for (const at of trims) yield* turns.cut(unit, link.threadId, current.sessionKey, at);
-              yield* turns.record(unit, link.threadId, projected.vendor);
-              if (projected.heard) yield* turns.heard(unit, link.threadId);
-              yield* unit.afterCommit(
-                Effect.sync(() => {
-                  links.landed(link, seated.row);
-                  link.facet = seated.facet;
-                }),
-              );
-              const journaled = written ?? UNWRITTEN;
-              yield* journaled.opened(unit, [...(plan.reports ?? []), ...resolved]);
-              const held = step.state.requests.flatMap((sent) => (sent.meaning === 'extension' ? sent.envelopes : []));
-              for (const turn of ended) {
-                const released = yield* inbox.releaseInput(link.threadId, turn.turn, held, unit);
-                if (released.length > 0)
-                  yield* UNWRITTEN.opened(unit, [journal.fated({ id: turn.turn, threadId: link.threadId }, 'returned', released)]);
-              }
-              const closed = yield* journaled.closed(unit);
-              return { facet: seated.facet, value: { seated, closed } };
-            }),
-          joined,
+        Effect.flatMap(
+          plan.within === undefined ? store.planned(link.threadId, link.facet, identity, body, joined) : Effect.succeed(null),
+          (planned) => (planned === null ? store.settle(link.threadId, body, joined) : Effect.succeed(planned)),
         ),
       );
       yield* store.announce(link.threadId, settledStep);
