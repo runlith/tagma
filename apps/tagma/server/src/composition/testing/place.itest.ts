@@ -1,4 +1,5 @@
 import { expect } from 'bun:test';
+import { tmpdir } from 'node:os';
 import { layer } from '@runlith/effect-test';
 import { Context, Effect, Layer } from 'effect';
 import { toolExecute, toolPrepare, toolSettleEffect, type Tool } from '@runlith/agent/tool';
@@ -109,6 +110,43 @@ const preparedCall = Effect.fnUntraced(function* (id: string, input: unknown, ke
 
 const valueOf = (value: unknown): unknown =>
   typeof value === 'object' && value !== null && 'value' in value && 'display' in value ? value.value : value;
+
+const holdInTarget = Effect.fnUntraced(function* (key: string) {
+  const { world, target } = yield* Placed;
+  const started = yield* world.tagma(
+    [
+      'op',
+      'start_terminal',
+      '--json',
+      '--project',
+      target.name,
+      JSON.stringify({ operationId: `${key}-start`, cwd: target.root, program: '/bin/sh', transport: 'pty', lifetime: 'held' }),
+    ],
+    { cwd: target.root },
+  );
+  expect({ code: started.code, err: started.err }).toEqual({ code: 0, err: '' });
+  const launch = JSON.parse(started.out) as { operation: { state: { execution: { execution: string; incarnation: number } } } };
+  const { execution, incarnation } = launch.operation.state.execution;
+  const address = { execution, incarnation };
+  yield* Effect.addFinalizer(() =>
+    Effect.gen(function* () {
+      const stopped = yield* world.tagma(
+        [
+          'op',
+          'stop_terminal',
+          '--yes',
+          '--json',
+          '--project',
+          target.name,
+          JSON.stringify({ ...address, operationId: `${key}-cleanup`, cause: 'explicit-stop' }),
+        ],
+        { cwd: target.root },
+      );
+      expect(stopped.code, stopped.out + stopped.err).toBe(0);
+    }),
+  );
+  return address;
+});
 
 layer(Layer.effect(Placed, setup), { excludeTestServices: true })('place', (it) => {
   it.effect('native, CLI and MCP proxy act in the selected project while the caller keeps its home', () =>
@@ -224,51 +262,94 @@ layer(Layer.effect(Placed, setup), { excludeTestServices: true })('place', (it) 
     }),
   );
 
+  it.effect('a thread lists the terminals of the project it names, whichever door it calls through', () =>
+    Effect.gen(function* () {
+      const { world, home, target, grant } = yield* Placed;
+      const address = yield* holdInTarget('listed-terminal');
+      const held = {
+        record: expect.objectContaining({ projectId: target.id, execution: expect.objectContaining(address) }),
+      };
+      const listed = (answer: { readonly terminals: readonly unknown[] }) => answer.terminals;
+      const asThread = { cwd: home.root, env: { [GRANT_VARIABLE]: grant } };
+      const cli = Effect.fnUntraced(function* (argv: readonly string[]) {
+        const ran = yield* world.tagma(['op', 'read_terminals', '--json', ...argv], asThread);
+        expect({ code: ran.code, err: ran.err }).toEqual({ code: 0, err: '' });
+        return listed(JSON.parse(ran.out));
+      });
+
+      expect(yield* cli([JSON.stringify({ project: target.id })])).toContainEqual(expect.objectContaining(held));
+      expect(yield* cli(['--project', target.name, '{}'])).toContainEqual(expect.objectContaining(held));
+      const served = yield* http('read_terminals', {}, target.id);
+      expect(served.status).toBe(200);
+      expect(listed(served.body as Parameters<typeof listed>[0])).toContainEqual(expect.objectContaining(held));
+      const byInput = yield* http('read_terminals', { project: target.name });
+      expect(byInput.status).toBe(200);
+      expect(listed(byInput.body as Parameters<typeof listed>[0])).toContainEqual(expect.objectContaining(held));
+
+      expect(yield* cli(['{}'])).not.toContainEqual(expect.objectContaining(held));
+      expect(yield* cli([JSON.stringify({ project: home.id })])).not.toContainEqual(expect.objectContaining(held));
+    }),
+  );
+
+  it.effect('a terminal started from another project’s home with no project lands in the project and root holding its cwd', () =>
+    Effect.gen(function* () {
+      const { world, home, target, grant } = yield* Placed;
+      const asThread = { cwd: home.root, env: { [GRANT_VARIABLE]: grant } };
+      const start = Effect.fnUntraced(function* (key: string, cwd: string) {
+        const ran = yield* world.tagma(
+          [
+            'op',
+            'start_terminal',
+            '--json',
+            JSON.stringify({ operationId: key, cwd, program: '/bin/sh', transport: 'pty', lifetime: 'held' }),
+          ],
+          asThread,
+        );
+        expect({ code: ran.code, err: ran.err }).toEqual({ code: 0, err: '' });
+        const { execution, incarnation } = (
+          JSON.parse(ran.out) as { operation: { state: { execution: { execution: string; incarnation: number } } } }
+        ).operation.state.execution;
+        const address = { execution, incarnation };
+        yield* Effect.addFinalizer(() =>
+          Effect.gen(function* () {
+            for (const project of [target.name, home.name]) {
+              yield* world.tagma(
+                [
+                  'op',
+                  'stop_terminal',
+                  '--yes',
+                  '--json',
+                  '--project',
+                  project,
+                  JSON.stringify({ ...address, operationId: `${key}-stop`, cause: 'explicit-stop' }),
+                ],
+                asThread,
+              );
+            }
+          }),
+        );
+        return address;
+      });
+      const read = Effect.fnUntraced(function* (address: { readonly execution: string; readonly incarnation: number }, project: number) {
+        const ran = yield* world.tagma(['op', 'read_terminal', '--json', JSON.stringify({ ...address, project })], asThread);
+        return ran.code === 0 ? (JSON.parse(ran.out) as { terminal: { projectId: number; rootId?: string } }).terminal : null;
+      });
+
+      const inTarget = yield* start('cwd-places-terminal', target.root);
+      expect(yield* read(inTarget, target.id)).toMatchObject({ projectId: target.id, rootId: expect.any(String) });
+      expect(yield* read(inTarget, home.id)).toBeNull();
+
+      const outside = yield* start('cwd-outside-every-checkout', tmpdir());
+      const unplaced = yield* read(outside, home.id);
+      expect(unplaced).toMatchObject({ projectId: home.id });
+      expect(unplaced?.rootId).toBeUndefined();
+    }),
+  );
+
   it.effect('a native thread reads and stops an execution in its recorded project without moving its home', () =>
     Effect.gen(function* () {
-      const { world, target, tools } = yield* Placed;
-      const started = yield* world.tagma(
-        [
-          'op',
-          'start_terminal',
-          '--json',
-          '--project',
-          target.name,
-          JSON.stringify({
-            operationId: 'foreign-terminal-start',
-            cwd: target.root,
-            program: '/bin/sh',
-            transport: 'pty',
-            lifetime: 'held',
-          }),
-        ],
-        { cwd: target.root },
-      );
-      expect({ code: started.code, err: started.err }).toEqual({ code: 0, err: '' });
-      const launch = JSON.parse(started.out) as { operation: { state: { execution: { execution: string; incarnation: number } } } };
-      const { execution, incarnation } = launch.operation.state.execution;
-      const address = { execution, incarnation };
-      yield* Effect.addFinalizer(() =>
-        Effect.gen(function* () {
-          const stopped = yield* world.tagma(
-            [
-              'op',
-              'stop_terminal',
-              '--yes',
-              '--json',
-              '--project',
-              target.name,
-              JSON.stringify({
-                ...address,
-                operationId: 'foreign-terminal-cleanup',
-                cause: 'explicit-stop',
-              }),
-            ],
-            { cwd: target.root },
-          );
-          expect(stopped.code, stopped.out + stopped.err).toBe(0);
-        }),
-      );
+      const { target, tools } = yield* Placed;
+      const address = yield* holdInTarget('foreign-terminal');
       const readInput = { ...address, project: target.id };
       const readCall = yield* preparedCall('read_terminal', readInput, 'foreign-terminal-read');
       expect(valueOf(yield* toolExecute(tools.read_terminal!)!(readInput, readCall))).toMatchObject({

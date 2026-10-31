@@ -120,7 +120,7 @@ ${RECOVERY}`,
       project: projectField,
       operationId,
       cwd: Schema.NonEmptyString.annotate({
-        ...placeRole('value'),
+        ...placeRole('path'),
         description:
           'Absolute working directory. It is resolved against this installation\u2019s registry, and an external directory is legal only because the lookup was complete.',
       }),
