@@ -1900,23 +1900,11 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead apps/tagma/app/src/lib/features/threads/native/contribution.ts#DeclarationMissing",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "dead-code dead apps/tagma/app/src/lib/features/threads/native/contribution.ts#ComposerPart",
           "owner": "5a3bed29"
         },
         {
           "fingerprint": "dead-code dead apps/tagma/app/src/lib/features/threads/native/contribution.ts#FeedPart",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/app/src/lib/features/threads/native/contribution.ts#Declared",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/app/src/lib/features/threads/native/contribution.ts#DeclarationSources",
           "owner": "5a3bed29"
         },
         {
