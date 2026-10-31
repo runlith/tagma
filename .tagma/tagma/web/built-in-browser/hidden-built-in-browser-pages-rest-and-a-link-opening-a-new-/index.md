@@ -27,7 +27,7 @@ sources:
 **What will be.**
 
 *A new tab stands beside its opener.*
-- **Placement.** A page that another page opens as a tab becomes a right-area tab right after the opener's tab, in every window that shows the opener's tab. Such a tab comes from `target=_blank`, from `window.open` without window features, or from "Open link in new tab".
+- **Placement.** A page that another page opens as a tab becomes a right-area tab right after the opener's tab, in every window that shows the opener's tab, including another project's screen where that tab stands as a portable page. Such a tab comes from `target=_blank`, from `window.open` without window features, or from "Open link in new tab".
 - **Activation.** A foreground tab (a plain click) activates only when the opener's tab is the active one and the area is shown. A background tab (⌘-click, middle click or the context menu) never activates.
 - **Agent-driven opener.** When an agent drives the opener, the new tab opens in the background with the agent mark, so it never steals focus.
 - **Opener tab shown nowhere.** If a thread started the chain, the page goes to that thread's layout quietly, as today. An operator page whose opener no window shows gets no tab: it rests under *A page nobody sees rests* below and stays listed in the address-bar suggestions.
@@ -45,6 +45,7 @@ How each layer carries it:
   - its popup window is visible;
   - an engine session drives it, whether an agent, a remote viewer or element picking;
   - a paint hold stands on it.
+- **Frozen panels.** A panel frozen under an overlay or a window drag still counts as shown: the operator sees its still in place. Resting it would flip the page's visibility on every menu, popover and drag, and its cost stays that of the one page in view.
 - **At rest.** Otherwise `Placement` hides its view with `WebContentsView.setVisible(false)`. Chromium then treats it as a background tab: no painting, no animation frames, timers at Chromium's background rate and background video paused.
 - **Waking.** Waking shows the view again.
 - **Process switch.** The switch stays. Without it a page held on the hidden stand draws one frame a second, and after a renderer restart it captures nothing. That is the failure recorded in [[761cf71f]].
@@ -63,9 +64,9 @@ How each layer carries it:
 - The managed host's pages are outside this spec: they unload 15 minutes after their last engine session ([[088225c2]]).
 
 **Acceptance.**
-1. A desktop Electron test passes all of these:
-   - a page on the stand with no hold and no session reports `hidden` and draws no animation frame over a second;
-   - a paint hold makes it visible with a non-empty capture;
+1. A desktop e2e test on the Electron lane, driving `BrowserHost` through its calls, passes all of these:
+   - a page on the stand with no hold and no session reports `hidden`, which in Chromium means no animation frames;
+   - a paint hold makes it visible, and an animation frame arrives;
    - releasing the hold returns it to rest;
    - a renderer restart at rest leaves it at rest;
    - an engine session wakes it.
@@ -74,7 +75,8 @@ How each layer carries it:
    - a `background-tab` lands after it without activating;
    - an agent-driven opener puts it in the background with the agent mark;
    - an opener that this window does not show, with an opening thread, puts it in that thread's layout;
-   - an operator opener that this window does not show gives no tab.
+   - an operator opener that this window does not show gives no tab;
+   - an opener standing on another project's screen gets its child beside it there.
 3. The server's `put` for a page adopted from a host `opened` event carries its `opening`.
 4. The desktop engine scenarios in `apps/tagma/server/src/desktop-browser/*.itest.ts` pass.
 5. [[761cf71f]] and [[886d0b63]] state the new behaviour.
