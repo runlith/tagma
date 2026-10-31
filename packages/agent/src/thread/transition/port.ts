@@ -73,11 +73,11 @@ export interface ThreadTransitionStorage<TTx, TWrite extends TTx = TTx> {
   appliedSeq(runId: string): Effect.Effect<number, ThreadPortFailure>;
   spend(threadIds: readonly string[], at: Date, tx: TWrite): Effect.Effect<void, ThreadPortFailure>;
   revision(threadId: string, tx?: TTx): Effect.Effect<number, ThreadPortFailure>;
-  opened(threadId: string, tx: TWrite): Effect.Effect<void, ThreadPortFailure>;
+  opened(threadIds: readonly string[], tx: TWrite): Effect.Effect<void, ThreadPortFailure>;
   revised(
-    threadId: string,
+    threadIds: readonly string[],
     tx: TWrite,
-    after: (revision: ThreadChangeRevision) => Effect.Effect<void>,
+    after: (revisions: ReadonlyMap<string, ThreadChangeRevision>) => Effect.Effect<void>,
   ): Effect.Effect<void, ThreadPortFailure>;
 }
 

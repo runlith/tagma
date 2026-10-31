@@ -36,36 +36,41 @@ export function describeThreadRevisionPort<TTx, TWrite extends TTx = TTx, R = ne
       }),
     );
     test(
-      'a unit names the revision before its first write and after its last; a unit that rolls back names none',
+      'a unit names each thread’s revision before its first write and after its last; a unit that rolls back names none',
       Effect.fnUntraced(function* () {
         const harness = yield* open();
         const thread = yield* harness.createThread({ ownerId: OWNER, scope: SCOPE });
-        const named: ThreadChangeRevision[] = [];
-        const name = (revision: ThreadChangeRevision) => Effect.sync(() => void named.push(revision));
+        const other = yield* harness.createThread({ ownerId: OWNER, scope: SCOPE });
+        const both = [thread.id, other.id];
+        const named: ReadonlyMap<string, ThreadChangeRevision>[] = [];
+        const name = (revisions: ReadonlyMap<string, ThreadChangeRevision>) => Effect.sync(() => void named.push(revisions));
         const before = yield* harness.transitions.revision(thread.id);
+        const otherBefore = yield* harness.transitions.revision(other.id);
         yield* harness.aggregate.transaction((tx) =>
           Effect.gen(function* () {
-            yield* harness.transitions.opened(thread.id, tx);
+            yield* harness.transitions.opened(both, tx);
             yield* harness.eventLog.append({ threadId: thread.id, id: 'event:b', kind: 'message', payload: { entry: entry('b') } }, tx);
             yield* harness.eventLog.append({ threadId: thread.id, id: 'event:c', kind: 'message', payload: { entry: entry('c') } }, tx);
-            yield* harness.transitions.revised(thread.id, tx, name);
+            yield* harness.transitions.revised(both, tx, name);
           }),
         );
-        expect(named).toEqual([{ from: before, to: yield* harness.transitions.revision(thread.id) }]);
-        expect(named[0]!.to).toBeGreaterThan(before);
+        expect(named).toHaveLength(1);
+        expect(named[0]!.get(thread.id)).toEqual({ from: before, to: yield* harness.transitions.revision(thread.id) });
+        expect(named[0]!.get(other.id)).toEqual({ from: otherBefore, to: yield* harness.transitions.revision(other.id) });
+        expect(named[0]!.get(thread.id)!.to).toBeGreaterThan(before);
         const refused = yield* Effect.exit(
           harness.aggregate.transaction((tx) =>
             Effect.gen(function* () {
-              yield* harness.transitions.opened(thread.id, tx);
+              yield* harness.transitions.opened([thread.id], tx);
               yield* harness.eventLog.append({ threadId: thread.id, id: 'event:d', kind: 'message', payload: { entry: entry('d') } }, tx);
-              yield* harness.transitions.revised(thread.id, tx, name);
+              yield* harness.transitions.revised([thread.id], tx, name);
               return yield* Effect.fail('refused' as const);
             }),
           ),
         );
         expect(Exit.isFailure(refused)).toBe(true);
         expect(named).toHaveLength(1);
-        expect(yield* harness.transitions.revision(thread.id)).toBe(named[0]!.to);
+        expect(yield* harness.transitions.revision(thread.id)).toBe(named[0]!.get(thread.id)!.to);
       }),
     );
   });

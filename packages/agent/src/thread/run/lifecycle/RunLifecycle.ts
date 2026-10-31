@@ -96,7 +96,7 @@ export class RunLifecycle extends Context.Service<
     observe(opening: ObservedOpening): Effect.Effect<ObservedRuns, ThreadPortFailure>;
     resume(threadId: string, runId: string, awaiting?: boolean): Effect.Effect<void, ThreadPortFailure>;
     park(run: ThreadRunRef): Effect.Effect<RunParked, ThreadPortFailure>;
-    beat(runIds: readonly string[], at: Date): Effect.Effect<readonly ThreadRunStopAsked[], ThreadPortFailure>;
+    beat(runs: readonly ThreadRunRef[], at: Date): Effect.Effect<readonly ThreadRunStopAsked[], ThreadPortFailure>;
     stop(run: ThreadRunRef, intent: ThreadRunStopIntent, live: boolean, tx?: ThreadWriteTx): Effect.Effect<RunStopped, ThreadPortFailure>;
     drain(run: ThreadRunRef, intent: ThreadRunStopIntent): Effect.Effect<RunStopped, ThreadPortFailure>;
     finish(run: ThreadRunRef, finish: RunFinish, tx?: ThreadWriteTx): Effect.Effect<RunEnd, ThreadPortFailure>;
@@ -496,7 +496,40 @@ export const runLifecycleLayer = Layer.effect(
         return 'stopped' as const;
       }),
 
-      beat: (runIds, at) => (runIds.length === 0 ? Effect.succeed([]) : runs.writeHeartbeats(runIds, at)),
+      beat: (beaten, at) =>
+        beaten.length === 0
+          ? Effect.succeed([])
+          : kernel.store.transaction((tx) =>
+              Effect.gen(function* () {
+                const threadIds = [...new Set(beaten.map((run) => run.threadId))];
+                yield* kernel.transitions.opened(threadIds, tx);
+                const asked = yield* runs.writeHeartbeats(
+                  beaten.map((run) => run.id),
+                  at,
+                  tx,
+                );
+                yield* kernel.transitions.revised(threadIds, tx, (revisions) =>
+                  Effect.forEach(
+                    threadIds,
+                    (threadId) => {
+                      const revision = revisions.get(threadId);
+                      return revision === undefined
+                        ? Effect.void
+                        : changes.deliver({
+                            kind: 'ran',
+                            threadId,
+                            revision,
+                            runs: beaten.flatMap((run) =>
+                              run.threadId === threadId ? [{ id: run.id, heartbeatAt: at, updatedAt: at }] : [],
+                            ),
+                          });
+                    },
+                    { discard: true },
+                  ),
+                );
+                return asked;
+              }),
+            ),
 
       stop: Effect.fnUntraced(function* (run, intent, live, tx) {
         if (live) {

@@ -1,10 +1,13 @@
 import { Context, Deferred, Effect, Layer, type Scope } from 'effect';
+import type { ThreadStateChange } from '../state';
 
 export class ThreadChanges extends Context.Service<
   ThreadChanges,
   {
     watch(threadIds: readonly string[]): Effect.Effect<Effect.Effect<readonly string[]>, never, Scope.Scope>;
     publish(threadId: string): Effect.Effect<void>;
+    deliver(change: ThreadStateChange): Effect.Effect<void>;
+    project(projector: (change: ThreadStateChange) => Effect.Effect<void>): void;
   }
 >()('@runlith/agent/ThreadChanges') {}
 
@@ -12,6 +15,7 @@ type Subscription = { readonly moved: Set<string>; wake: Deferred.Deferred<void>
 
 export const threadChangesLayer = Layer.sync(ThreadChanges, () => {
   const subscribed = new Map<string, Set<Subscription>>();
+  let projector: ((change: ThreadStateChange) => Effect.Effect<void>) | null = null;
 
   const drain = Effect.fnUntraced(function* (subscription: Subscription): Effect.fn.Return<readonly string[]> {
     const wake = yield* Deferred.make<void>();
@@ -61,5 +65,9 @@ export const threadChangesLayer = Layer.sync(ThreadChanges, () => {
           { discard: true },
         ),
       ),
+    deliver: (change) => Effect.suspend(() => (projector === null ? Effect.void : projector(change))),
+    project: (next) => {
+      projector = next;
+    },
   });
 });

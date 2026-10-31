@@ -39,6 +39,7 @@ import type { ThreadAggregateStorage } from '../storage/aggregate';
 import { emptyToolOutputs, runRow } from '../conformance/runCycle/runDoubles';
 import { RunEndings, type RunEnding } from './lifecycle/endings';
 import { LaunchGate, LAUNCH_REFUSALS_BEFORE_BLOCK, launchGateLayer } from './LaunchGate';
+import { ThreadChanges, threadChangesLayer } from './ThreadChanges';
 import { ThreadRunLedger } from './ThreadRunLedger';
 import { ThreadSnapshots, threadSnapshotsLayer } from './ThreadSnapshots';
 import { wordsInFlightLayer } from './WordsInFlight';
@@ -366,6 +367,27 @@ it.effect(
   }),
 );
 it.effect(
+  'a heartbeat handed as a typed change keeps the held run fresh, and the next change is carried without a read',
+  Effect.fnUntraced(function* () {
+    const world = yield* snapshotsOver();
+    const run = runRow('run-1', { threadId: 't', heartbeatAt: new Date(0) });
+    world.active.set('t', run);
+    const frames = yield* world.frames;
+    yield* world.snapshots.publish('t');
+    const reads = world.reads.latest;
+    const from = world.memory.units.revision();
+    yield* world.written();
+    const beat = { id: run.id, heartbeatAt: new Date(5_000), updatedAt: new Date(5_000) };
+    world.active.set('t', { ...run, ...beat });
+    yield* world.changes.deliver({ kind: 'ran', threadId: 't', revision: { from, to: from + 1 }, runs: [beat] });
+    yield* world.transit([words('a', 'one', 'run-1')]);
+    const frame = yield* frames.at(1);
+    expect(world.reads.latest).toBe(reads);
+    expect(frame.state.activeRun?.heartbeatAt).toEqual(new Date(5_000));
+    expect(stripped(frame.state)).toEqual(stripped(yield* world.snapshots.state('t')));
+  }),
+);
+it.effect(
   'a change that does not follow the published position reads the thread again and publishes every fact once',
   Effect.fnUntraced(function* () {
     const world = yield* snapshotsOver();
@@ -596,7 +618,7 @@ const snapshotsOver = Effect.fnUntraced(function* (
       }),
     ),
   );
-  const context = yield* Layer.build(threadSnapshotsLayer.pipe(Layer.provideMerge(dependencies)));
+  const context = yield* Layer.build(threadSnapshotsLayer.pipe(Layer.provideMerge(threadChangesLayer), Layer.provideMerge(dependencies)));
   const snapshots = Context.get(context, ThreadSnapshots);
   const deps = yield* Effect.provide(transitionDeps, context);
   const append = (entry: ThreadTranscriptEntry) =>
@@ -664,6 +686,7 @@ const snapshotsOver = Effect.fnUntraced(function* (
     capabilities,
     snapshots,
     gate: Context.get(context, LaunchGate),
+    changes: Context.get(context, ThreadChanges),
     written: (id = 't') =>
       rows.transaction((tx) =>
         Effect.sync(() => {

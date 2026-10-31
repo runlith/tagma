@@ -41,6 +41,7 @@ import { recordedReceiptOf, runStatusOf, type RecordedReceipt } from './runStatu
 import { ThreadCallBroke, isThreadBorderFailure, type ThreadBorderFailed } from '../ThreadBorder';
 import { RunEndings, type RunEnding } from './lifecycle/endings';
 import { LaunchGate } from './LaunchGate';
+import { ThreadChanges } from './ThreadChanges';
 import { openQuestionsOf } from './openQuestions';
 import { decodeRecord } from './scheduler/answers';
 import { ThreadRunLedger } from './ThreadRunLedger';
@@ -75,6 +76,7 @@ type SnapshotReading = {
 };
 type Projection = { readonly state: ThreadState; readonly revision: number; readonly inputs: StatusInputs };
 type Appended = Extract<ThreadStateChange, { readonly kind: 'appended' }>;
+type Ran = Extract<ThreadStateChange, { readonly kind: 'ran' }>;
 type Asked = { readonly cause: CostCause | null; readonly parent: Tracer.AnySpan | null };
 type Work = Asked & { readonly change: ThreadStateChange };
 const HELD_PROJECTIONS = 256;
@@ -422,6 +424,52 @@ export const makeThreadSnapshots = Effect.gen(function* () {
         return true;
       }),
     );
+  const ran = (threadId: string, change: Ran): Effect.Effect<void, ThreadBorderFailed> =>
+    inLane(
+      threadId,
+      Effect.gen(function* () {
+        const { revision } = change;
+        const held = projections.get(threadId);
+        if (held === undefined || revision.to <= held.revision) return;
+        if (held.revision !== revision.from) return void projections.delete(threadId);
+        const running = held.state.activeRun;
+        const beat = running === null ? undefined : change.runs.find((one) => one.id === running.id);
+        if (running === null || beat === undefined) return hold(threadId, { ...held, revision: revision.to });
+        const activeRun: ThreadRunRow = { ...running, heartbeatAt: beat.heartbeatAt, updatedAt: beat.updatedAt };
+        const latestRun = held.state.latestRun?.id === activeRun.id ? activeRun : held.state.latestRun;
+        const now = new Date(yield* Clock.currentTimeMillis);
+        const wordsWait = yield* wordsWaitOf(owners, transports, held.state.thread, { active: true, after: latestRun?.id ?? null });
+        const { status, changesAt } = runStatusOf(
+          {
+            thread: held.state.thread,
+            activeRun,
+            pendingInput: held.state.pendingInput,
+            openQuestions: held.inputs.openQuestions,
+            recorded: held.inputs.recorded,
+            launchBlocked: gate.blocked(threadId),
+            wordsWait,
+          },
+          now,
+          lease,
+          held.inputs.ended,
+        );
+        const next: ThreadState = { ...held.state, activeRun, latestRun, status, now: now.toISOString() };
+        if (standing(status) !== standing(held.state.status)) {
+          const carried = yield* feed.atCut(
+            threadId,
+            Effect.suspend(() => {
+              if (projections.get(threadId) !== held || (ahead.get(threadId) ?? revision.from) > revision.from)
+                return Effect.succeed(false);
+              framedAt.set(threadId, revision.to);
+              return Effect.as(feed.carry({ state: next, from: next.position, deltas: [] }), true);
+            }),
+          );
+          if (!carried) return void projections.delete(threadId);
+        }
+        if (projections.get(threadId) === held) hold(threadId, { state: next, revision: revision.to, inputs: held.inputs });
+        yield* arm(threadId, status, changesAt);
+      }),
+    );
   const asked = <A, E>(work: Effect.Effect<A, E>, by: Asked): Effect.Effect<A, E> =>
     Effect.provideService(by.parent === null ? work : Effect.withParentSpan(work, by.parent), CurrentCost, by.cause);
   const drain = Effect.fnUntraced(function* (threadId: string, queue: Work[]) {
@@ -430,6 +478,18 @@ export const makeThreadSnapshots = Effect.gen(function* () {
       if (next === undefined) {
         if (queues.get(threadId) === queue) queues.delete(threadId);
         return;
+      }
+      if (next.change.kind === 'ran') {
+        const kept = yield* asked(Effect.exit(producerCost(PUBLISHING, ran(threadId, next.change))), next);
+        if (kept._tag === 'Failure') {
+          projections.delete(threadId);
+          if (!Cause.hasInterruptsOnly(kept.cause))
+            yield* Effect.logWarning('a heartbeat could not be applied, so the next change reads the thread', {
+              threadId,
+              cause: kept.cause,
+            });
+        }
+        continue;
       }
       const applied =
         next.change.kind === 'appended' ? yield* asked(Effect.exit(producerCost(PUBLISHING, applying(threadId, next.change))), next) : null;
@@ -468,6 +528,7 @@ export const makeThreadSnapshots = Effect.gen(function* () {
         );
       }),
     );
+  (yield* ThreadChanges).project(committed);
   return ThreadSnapshots.of({ state, snapshot, attachFrom, page, publish, committed, statuses, forget });
 });
 

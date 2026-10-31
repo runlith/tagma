@@ -546,26 +546,29 @@ export const makeRunStores = Effect.gen(function* () {
             tx,
           ),
         ),
-      writeHeartbeats: (runIds, heartbeatAt) =>
+      writeHeartbeats: (runIds, heartbeatAt, tx) =>
         runIds.length === 0
           ? Effect.succeed([])
           : stored('writeHeartbeats')(
-              units.write(writes('ThreadRunStore.writeHeartbeats', [threadRun]), (unit) =>
-                Effect.map(
-                  unit.run(
-                    db
-                      .update(threadRun)
-                      .set({ heartbeatAt, updatedAt: new Date(clock.currentTimeMillisUnsafe()) })
-                      .where(ownedRows(inArray(threadRun.id, among(runIds))))
-                      .returning({ id: threadRun.id, stopRequest: threadRun.stopRequest })
-                      .all(),
+              writing(
+                writes('ThreadRunStore.writeHeartbeats', [threadRun]),
+                (unit) =>
+                  Effect.map(
+                    unit.run(
+                      db
+                        .update(threadRun)
+                        .set({ heartbeatAt, updatedAt: heartbeatAt })
+                        .where(ownedRows(inArray(threadRun.id, among(runIds))))
+                        .returning({ id: threadRun.id, stopRequest: threadRun.stopRequest })
+                        .all(),
+                    ),
+                    (beaten) =>
+                      beaten.flatMap((row) => {
+                        const request = parseThreadRunStopRequest(row.stopRequest);
+                        return request === null ? [] : [{ runId: row.id, by: request.by }];
+                      }),
                   ),
-                  (beaten) =>
-                    beaten.flatMap((row) => {
-                      const request = parseThreadRunStopRequest(row.stopRequest);
-                      return request === null ? [] : [{ runId: row.id, by: request.by }];
-                    }),
-                ),
+                tx,
               ),
             ),
       requestStop: (runId, intent, at, tx) => {

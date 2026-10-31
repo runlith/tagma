@@ -212,7 +212,11 @@ export interface ThreadRunStorage<TTx, TWrite extends TTx = TTx> {
   writePhase(runId: string, phase: AgentPhase | null, tx?: TWrite): Effect.Effect<void, ThreadPortFailure>;
   addUsage(runId: string, delta: Usage, heartbeatAt: Date, tx?: TWrite): Effect.Effect<void, ThreadPortFailure>;
   charge(runId: string, charge: ThreadRunCharge, tx?: TWrite): Effect.Effect<void, ThreadPortFailure>;
-  writeHeartbeats(runIds: readonly string[], heartbeatAt: Date): Effect.Effect<readonly ThreadRunStopAsked[], ThreadPortFailure>;
+  writeHeartbeats(
+    runIds: readonly string[],
+    heartbeatAt: Date,
+    tx?: TWrite,
+  ): Effect.Effect<readonly ThreadRunStopAsked[], ThreadPortFailure>;
 
   requestStop(
     runId: string,
