@@ -9,6 +9,7 @@ import type { HarnessAdapter } from '../contract/service/adapter.js';
 import type { ProtocolRows } from '../store/protocol.js';
 import type { HarnessSessionStore } from '../store/sessions.js';
 import type { AcpProfile } from '@runlith/tagma/adapter/harness';
+import type { ThreadToolEntry } from '@runlith/agent/transcript/entries';
 import type { HarnessAdapters } from '../contract/service/adapters.js';
 import { harnessNotInstalled } from '../../threads/contract/service/harness.js';
 import type { ProtocolRow } from './row.js';
@@ -37,6 +38,7 @@ export type Link = {
   ended: HarnessTurnEnded | null;
   activeAt: number;
   readonly noise: Map<string, Noise>;
+  readonly calls: Map<string, ThreadToolEntry>;
 };
 
 export type Until = { readonly within?: Duration.Input; readonly stored?: boolean };

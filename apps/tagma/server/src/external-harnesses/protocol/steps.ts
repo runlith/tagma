@@ -6,6 +6,7 @@ import type { Inbound } from '@runlith/ndjson-rpc/exchange';
 import type { ClientState } from '@runlith/acp/state';
 import type { ToolDisplay } from '@runlith/agent/tool/display';
 import type { ThreadEntry, ThreadToolEntry } from '@runlith/agent/transcript/entries';
+import { entryOf } from '@runlith/agent/transcript/kinds';
 import type { ThreadRunStoppedBy } from '@runlith/agent/thread/ending';
 import type { ThreadRunRow } from '@runlith/agent/thread/rows';
 import type { AdapterDisplay, ReportPlan, ReportResult } from '@runlith/agent/thread/run/lifecycle/RunReports';
@@ -41,7 +42,7 @@ import { contextsOf, measurementOf, measures, type Measurement } from './measure
 import { boundedClient } from './calls.js';
 import type { HostedIntroductions } from './introductions.js';
 import { textOf } from './content.js';
-import { project, standingIds, type Interrupted, type Sealed } from './projection.js';
+import { executed, project, standingIds, type Interrupted, type Sealed } from './projection.js';
 import { stamped, type OpenedTurn, type ProtocolRow } from './row.js';
 import { begunOf, unsaidNotes } from './noted.js';
 import type { HarnessRetry, HarnessTurnBegun, HarnessTurnEnded, HarnessTurnFate, HarnessTurnStarted } from './turns.js';
@@ -89,10 +90,23 @@ export type StepPlan = {
 
 export const IDLE: Persisted = { events: [], begun: [], ended: [], endings: [] };
 
-const moved = (before: ClientState, event: ClientEvent): boolean =>
+const moved = (before: ClientState, event: ClientEvent, hosted: boolean): boolean =>
   event._tag === 'ToolCallChanged' &&
   event.update.status != null &&
+  !(hosted && executed(event.call)) &&
   before.turn?.calls[event.call.toolCallId]?.status !== event.update.status;
+
+const heldCalls = (link: Link, written: readonly ThreadEntry[], client: ClientState): void => {
+  const turn = client.turn;
+  const open = (entry: ThreadToolEntry): boolean =>
+    turn !== null && turn.id === entry.runId && entry.toolCallId !== undefined && Object.hasOwn(turn.calls, entry.toolCallId);
+  for (const entry of written) {
+    if (!entryOf('tool')(entry)) continue;
+    if (open(entry)) link.calls.set(entry.id, entry);
+    else link.calls.delete(entry.id);
+  }
+  for (const [id, entry] of link.calls) if (!open(entry)) link.calls.delete(id);
+};
 
 const heard = (link: Link, key: string, event: ClientEvent): void => {
   const standing = link.noise.get(key);
@@ -222,6 +236,7 @@ export class ProtocolSteps {
       ended: null,
       activeAt: 0,
       noise: new Map(),
+      calls: new Map(),
     };
     return link;
   });
@@ -420,7 +435,7 @@ export class ProtocolSteps {
         plan.begun !== undefined ||
         plan.interrupted !== undefined ||
         plan.tail === true ||
-        step.events.some((event) => measures(event) || moved(link.row.client, event)) ||
+        step.events.some((event) => measures(event) || moved(link.row.client, event, link.profile.hosts !== null)) ||
         journal.tailDue(link.threadId, step.state.turn?.id ?? null)
       ) {
         persisted = yield* this.saved(link, step, plan, request);
@@ -578,7 +593,7 @@ export class ProtocolSteps {
       const hosted = link.profile.hosts !== null;
       const standing = new Map<string, ThreadToolEntry>();
       for (const id of standingIds(events, hosted)) {
-        const entry = yield* journal.tool(link.threadId, id);
+        const entry = link.calls.get(id) ?? (yield* journal.tool(link.threadId, id));
         if (entry !== null) standing.set(id, entry);
       }
       const projected = project(projecting, base.turns, at, hosted, standing, link.facet.session?.cwd || null, (name, input) =>
@@ -635,6 +650,7 @@ export class ProtocolSteps {
           Effect.sync(() => {
             links.landed(link, seated.row);
             link.facet = seated.facet;
+            heldCalls(link, projected.boundaries, step.state);
           }),
         );
         const journaled = written ?? UNWRITTEN;

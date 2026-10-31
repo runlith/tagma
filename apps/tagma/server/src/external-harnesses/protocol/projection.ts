@@ -33,7 +33,7 @@ export type Projection = {
   readonly failure: string | null;
 };
 
-const executed = (call: ToolCall | ToolCallUpdate): boolean => field(call._meta, EXECUTES) === true;
+export const executed = (call: ToolCall | ToolCallUpdate): boolean => field(call._meta, EXECUTES) === true;
 
 export type CallDisplay = (name: string, input: unknown) => ToolDisplay | undefined;
 
