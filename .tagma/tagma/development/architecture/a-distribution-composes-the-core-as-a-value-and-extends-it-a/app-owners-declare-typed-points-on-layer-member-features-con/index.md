@@ -11,7 +11,7 @@ edges:
   - kind: relates
     to: 01a174f2-3d4c-7763-bb7b-749e7b63e87f
 ---
-**Draft.** Paths under `apps/tagma/app/src/` unless stated.
+Paths under `apps/tagma/app/src/` unless stated.
 
 ## What stands
 

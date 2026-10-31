@@ -15,7 +15,7 @@ edges:
   - kind: relates
     to: 01a0eaa1-2c4c-7cbd-9014-d7496f758080
 ---
-**Draft.** Written from a reading of the server, the app and `@runlith/layer` on 2026-10-31; no prototype yet. Sections still open are marked.
+Read against the server, the app and `@runlith/layer` on 2026-10-31. Tasks stand under the part they change; those spanning both parts stand here.
 
 ## Why
 
@@ -47,5 +47,5 @@ Tagma's core must be buildable on its own, and a distribution must be able to co
 ## Open
 
 - Whether module cards of another repository may import this project's modules, so one import check spans the core and a distribution.
-- How a capability woven through core flows is first extracted: each one is a port at its owner, measured feature by feature.
+- A capability woven through core flows is extracted as a port at its owner, one feature at a time; the first is the stealth repository's remote side, [[e41dca93]].
 - Acceptance criteria for the whole are the children's together, plus a distribution root in a test that adds one module with an operation, a feed, a setting, a point item, a flow step and a replaced port, and a core build without it that passes the same core tests.

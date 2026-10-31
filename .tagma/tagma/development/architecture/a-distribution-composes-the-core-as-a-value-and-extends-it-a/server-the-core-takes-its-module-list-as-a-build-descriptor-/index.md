@@ -11,7 +11,7 @@ edges:
   - kind: relates
     to: 01a0fd8b-bf0d-7231-8383-459013182a9f
 ---
-**Draft.** Paths under `apps/tagma/server/src/` unless stated.
+Paths under `apps/tagma/server/src/` unless stated.
 
 ## What stands
 
@@ -50,4 +50,4 @@ Desktop main-process IPC channels are fixed today; extending them is out of this
 ## Open
 
 - Whether the descriptor's generic types keep today's client typing of operations.
-- The order of extracting woven capabilities, each measured on its own.
+- The order of extracting woven capabilities after the first, [[e41dca93]]; each is measured on its own.
