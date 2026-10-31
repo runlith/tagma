@@ -25,13 +25,13 @@ const FOLDER_TOOL = {
 const FOLDER_WRITE = { ...FOLDER_TOOL, effect: 'write', identity: { key: 'call' } } as const;
 
 const FOLDER_GRAMMAR =
-  "A folder is the reader's own shelf in the project's thread list: it holds whole spawn trees, filed by their root, and subfolders to any depth; `parentId` names the folder a folder stands in, `null` is the top level. It is the reader's arrangement of a surface you cannot see, so under `trust` it is asked before it happens.";
+  "A folder is the reader's own shelf in the project's thread list: it holds whole spawn trees, filed by their root, and subfolders to any depth; `parentId` names the folder a folder stands in, `null` is the top level. Group members share their list's folders; filing targets the selected list and can take trees from several members in one act. It is the reader's arrangement of a surface you cannot see, so under `trust` it is asked before it happens.";
 
 const folderId = Schema.NonEmptyString.annotate({ description: 'A folder of this project, as list_thread_folders answers it.' });
 const folderName = Schema.NonEmptyString.check(Schema.isMaxLength(FOLDER_NAME_CHARS)).annotate({
   description: `The folder's name, up to ${FOLDER_NAME_CHARS} characters; whitespace collapses.`,
 });
-const filedIds = Schema.Array(ThreadId).annotate({
+const filedIds = Schema.Array(ThreadId.annotate(placeRole('value'))).annotate({
   description: 'Threads to file. An id inside a spawn tree files the tree it belongs to.',
 });
 const parentId = Schema.NullOr(folderId).annotate({

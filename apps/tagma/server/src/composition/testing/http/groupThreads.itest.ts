@@ -67,7 +67,7 @@ layer(fixture, { excludeTestServices: true })('the thread list and folders of a 
           ]),
         );
         expect([...(yield* rows(alpha)).keys()]).toEqual([ours]);
-        expect((yield* world.op('file_threads', { threadIds: [theirs], folderId: site.id }, at(beta))).body).toMatchObject({
+        expect((yield* world.op('file_threads', { threadIds: [ours, theirs], folderId: site.id }, at(groupId))).body).toMatchObject({
           status: 'filed',
         });
 
