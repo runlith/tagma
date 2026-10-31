@@ -22,9 +22,6 @@ fields:
         "at": "cli.ts"
       },
       {
-        "at": "terminals/orcaProfile.ts"
-      },
-      {
         "at": "commands/outputTail.ts",
         "for": [
           "1a45453a"

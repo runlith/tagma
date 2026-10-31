@@ -1,5 +1,4 @@
-import { and, eq, inArray, sql } from 'drizzle-orm';
-import { integer, sqliteTable } from 'drizzle-orm/sqlite-core';
+import { and, eq, inArray, type SQLWrapper, sql } from 'drizzle-orm';
 import { Effect, Schema } from 'effect';
 import { GraphStore } from '../../platform/contract/service/store.js';
 import { writes } from '../../platform/contract/service/writes.js';
@@ -11,11 +10,7 @@ import { Tags } from '../contract/service/vocabulary.js';
 import { block, edge, event, farEdge, touch } from '../store/tables.js';
 import { sessionFields } from '../tree/sessions.js';
 
-const remap = sqliteTable('writer_move', {
-  oldId: integer('old_id').primaryKey(),
-  newId: integer('new_id').notNull(),
-});
-const stepping = writes('Tree.step.sessionNamespace', [session, block, edge, event, farEdge, touch, remap]);
+const stepping = writes('Tree.step.sessionNamespace', [session, block, edge, event, farEdge, touch]);
 const payload = Schema.fromJsonString(Schema.Record(Schema.String, Schema.Unknown));
 
 export const sessionNamespace = Effect.fn('GraphStep.sessionNamespace')(function* (project: ProjectRow) {
@@ -92,31 +87,34 @@ export const sessionNamespace = Effect.fn('GraphStep.sessionNamespace')(function
             .set({ payload: JSON.stringify({ ...value, wasFields: fields }) })
             .where(eq(event.id, row.id));
       }
-      yield* db.run(sql`create temporary table ${remap} (old_id integer primary key, new_id integer not null)`);
-      for (const page of pagesOf(
-        [...moved].map(([oldId, newId]) => ({ oldId, newId })),
-        2,
-      ))
-        yield* db.insert(remap).values(page);
-      const ids = db.select({ id: remap.oldId }).from(remap);
+      yield* db.run(sql`create temporary table writer_move (old_id integer primary key, new_id integer not null)`);
+      for (const page of pagesOf([...moved], 2))
+        yield* db.run(
+          sql`insert into temp.writer_move (old_id, new_id) values ${sql.join(
+            page.map(([oldId, newId]) => sql`(${oldId}, ${newId})`),
+            sql`, `,
+          )}`,
+        );
+      const ids = sql`(select old_id from temp.writer_move)`;
+      const next = (column: SQLWrapper) => sql`(select new_id from temp.writer_move where old_id = ${column})`;
       yield* db
         .update(edge)
-        .set({ createdBySessionId: sql`(select new_id from ${remap} where old_id = ${edge.createdBySessionId})` })
+        .set({ createdBySessionId: next(edge.createdBySessionId) })
         .where(inArray(edge.createdBySessionId, ids));
       yield* db
         .update(farEdge)
-        .set({ createdBySessionId: sql`(select new_id from ${remap} where old_id = ${farEdge.createdBySessionId})` })
+        .set({ createdBySessionId: next(farEdge.createdBySessionId) })
         .where(inArray(farEdge.createdBySessionId, ids));
       yield* db
         .update(event)
-        .set({ sessionId: sql`(select new_id from ${remap} where old_id = ${event.sessionId})` })
+        .set({ sessionId: next(event.sessionId) })
         .where(inArray(event.sessionId, ids));
       yield* db
         .update(touch)
-        .set({ sessionId: sql`(select new_id from ${remap} where old_id = ${touch.sessionId})` })
+        .set({ sessionId: next(touch.sessionId) })
         .where(inArray(touch.sessionId, ids));
       yield* db.delete(session).where(inArray(session.id, ids));
-      yield* db.run(sql`drop table ${remap}`);
+      yield* db.run(sql`drop table temp.writer_move`);
     }),
   );
 });
