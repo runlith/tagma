@@ -14,11 +14,11 @@ edges:
   - kind: implements
     to: 01a19236-e2ce-7b34-8015-7c0e70df78a3
 sources:
-  - kind: file
-    ref: apps/tagma/desktop/src/declared.ts
-  - kind: file
-    ref: apps/tagma/app/src/lib/features/views/Frame.svelte
   - kind: dir
     ref: apps/tagma/server/src/executions/load
+  - kind: file
+    ref: apps/tagma/app/src/lib/features/views/Frame.svelte
+  - kind: file
+    ref: apps/tagma/desktop/src/declared.ts
 ---
 Gaps left by [[27dfcfc2]], against the spec's revised window declaration: a frame of a built-in page on another renderer is declared as `Origin` and its row cannot close the page; app views are named by app id rather than title; MCP App views carry no server, since every one shares the sandbox origin. Fix: the client names each view iframe with its identity, desktop main reads `frame.name` and declares a page's frames as that page, the server names app views by title and MCP views by server. Add the missing proofs: a feed test of `setParts` replacement and of the `others` demand union across readers and reopen, and the declaration chain through each seam's real door.

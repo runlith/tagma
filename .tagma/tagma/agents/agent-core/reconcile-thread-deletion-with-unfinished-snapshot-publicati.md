@@ -8,9 +8,6 @@ fields:
     "holder": "tagma:01a16d35-28c9-72b1-8626-98f11e1223c3",
     "status": "done"
   }
-edges:
-  - kind: discovered-from
-    to: 01a16d1e-a3b3-71f4-a72a-bcc27993639d
 sources:
   - kind: file
     ref: packages/agent/src/thread/run/ThreadDeletion.ts

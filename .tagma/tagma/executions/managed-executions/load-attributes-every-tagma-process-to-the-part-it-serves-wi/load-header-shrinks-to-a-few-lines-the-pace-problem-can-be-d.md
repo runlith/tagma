@@ -13,11 +13,11 @@ edges:
     to: 01a19236-e2ce-7b34-8015-7c0e70df78a3
 sources:
   - kind: file
-    ref: apps/tagma/app/src/lib/app/chrome/LoadPanel.svelte
+    ref: apps/tagma/app/src/lib/app/chrome/LoadChart.svelte
   - kind: file
     ref: apps/tagma/app/src/lib/app/chrome/LoadFigures.svelte
   - kind: file
-    ref: apps/tagma/app/src/lib/app/chrome/LoadChart.svelte
+    ref: apps/tagma/app/src/lib/app/chrome/LoadPanel.svelte
   - kind: file
     ref: apps/tagma/app/src/lib/app/chrome/PaceProblem.svelte
   - kind: file

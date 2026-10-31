@@ -3,9 +3,6 @@ id: 01a10492-c27e-7eba-8137-4f3e4915e590
 title: "The local signing identity is created once per machine and never silently recreated: replacing it resets every macOS permission granted to Tagma"
 ord: 1
 tags: ["explanation"]
-edges:
-  - kind: discovered-from
-    to: 01a1047e-ddf0-7edd-b8da-e671479a7f7a
 sources:
   - kind: file
     ref: apps/tagma/server/src/installation/setup/signing.ts

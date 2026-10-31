@@ -13,9 +13,9 @@ edges:
     to: 01a18cde-5f93-73e8-aa31-64572afe6fec
 sources:
   - kind: file
-    ref: packages/sqlite-process/src/programs.ts
-  - kind: file
     ref: apps/tagma/server/src/platform/store/programs.ts
+  - kind: file
+    ref: packages/sqlite-process/src/programs.ts
 ---
 Spec A's durable per-thread change revision needs `insert … on conflict do update set change_rev = change_rev + 1 returning change_rev` inside a write program. The increment must stay unguarded, because writers of a thread's readable storage outside its journal lane (run progress ticks, heartbeats, session facet writes, inbox puts from other threads, titles) would turn an equality guard into constant conflicts, as `lease_beat` did.
 

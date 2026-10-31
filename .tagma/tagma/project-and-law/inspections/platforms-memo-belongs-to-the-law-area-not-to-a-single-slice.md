@@ -3,9 +3,6 @@ id: 01a132e9-2f89-7313-9b6c-b5c5e8737cb7
 title: Platforms memo belongs to the law area, not to a single slice
 ord: 27
 tags: ["explanation"]
-edges:
-  - kind: discovered-from
-    to: 01a132b7-5d57-78fb-8b39-f075b32630c3
 sources:
   - kind: file
     ref: apps/tagma/inspection/src/packs/js/platforms/walk.ts

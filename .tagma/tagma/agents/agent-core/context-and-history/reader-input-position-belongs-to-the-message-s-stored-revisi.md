@@ -5,9 +5,9 @@ ord: 3
 tags: ["explanation"]
 sources:
   - kind: file
-    ref: apps/tagma/server/src/native-harness/transcript/history.ts
-  - kind: file
     ref: apps/tagma/server/src/native-harness/transcript/foldServer.ts
+  - kind: file
+    ref: apps/tagma/server/src/native-harness/transcript/history.ts
   - kind: file
     ref: packages/agent/src/agent/AgentAside.ts
   - kind: file

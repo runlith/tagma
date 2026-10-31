@@ -37,7 +37,5 @@ edges:
     to: 01a0e532-cc3d-7f0f-85d5-717a64fe5ad3
   - kind: waits-on
     to: 01a0e532-cf8d-764d-ab2a-33306876a2fb
-  - kind: waits-on
-    to: 01a0ea30-4a9a-72e7-9eea-a2fc65e4ceff
 ---
 §7.2.2 milestone `M1` of the `threads` card ([[f7e0b9dd]]), with its vocabulary amendment [[aa1b0681]].

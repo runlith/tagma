@@ -10,8 +10,6 @@ fields:
 edges:
   - kind: relates
     to: 01a11127-7009-727d-9639-b5f1db7ababc
-  - kind: relates
-    to: 01a189d1-58cf-7a28-b84e-4bb4320bb563
   - kind: waits-on
     to: 01a189cf-911d-7f0f-bd39-03cc0ca4dfa0
 ---

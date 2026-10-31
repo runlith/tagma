@@ -3,9 +3,6 @@ id: 01a146ca-49a1-756b-8020-330d35c0e724
 title: "A refused call in the feed is a red collapsed row: it never expands itself and never counts into the group's failure count"
 ord: 48
 tags: ["explanation"]
-edges:
-  - kind: relates
-    to: 01a0ca6f-f1f0-726e-b853-da8686165526
 sources:
   - kind: file
     ref: packages/chat-ui/src/ActivityStep.svelte

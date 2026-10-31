@@ -19,8 +19,6 @@ edges:
   - kind: waits-on
     to: 01a0e532-c8fe-7e28-a96f-0163155e2b41
   - kind: waits-on
-    to: 01a0e532-c977-7ae5-ba79-c0cedb416adf
-  - kind: waits-on
     to: 01a0e532-c9fd-7bd4-a50c-bd345b1c2c01
   - kind: waits-on
     to: 01a0e532-ca7c-7f96-97dd-247ba9fd89de

@@ -3,9 +3,6 @@ id: 01a10492-c297-723e-a543-e2015077d129
 title: Tagma.app is signed inside out, and every Electron executable's entitlements are named explicitly; which of them were measured is stated at each
 ord: 1
 tags: ["explanation"]
-edges:
-  - kind: discovered-from
-    to: 01a1047e-ddf0-7edd-b8da-e671479a7f7a
 sources:
   - kind: file
     ref: apps/tagma/desktop/scripts/build-host.ts

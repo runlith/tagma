@@ -11,7 +11,5 @@ fields:
 edges:
   - kind: implements
     to: 01a0e7ea-163c-7b00-9d75-6d1927d2324e
-  - kind: relates
-    to: 01a0e470-f876-7433-b54b-0ba8e4a0488f
 ---
 The `package-boundary` card [[e4a0488f]] is superseded by [[27d2324e]]. Stage 1 delivers the replacement builtin, platform declarations, benchmark and owned debt while retaining the old package, suites and both Vite guards until stage 2 after the merge.

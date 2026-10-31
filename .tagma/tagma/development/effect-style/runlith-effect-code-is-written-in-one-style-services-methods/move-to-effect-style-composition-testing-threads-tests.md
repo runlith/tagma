@@ -7,9 +7,6 @@ fields:
   {
     "status": "done"
   }
-edges:
-  - kind: discovered-from
-    to: 01a147b5-9ae1-71bf-ba7b-05bc6479bb9c
 sources:
   - kind: dir
     ref: apps/tagma/server/src/composition/testing/threads

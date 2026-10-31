@@ -8,11 +8,11 @@ edges:
     to: 01a19024-7ec1-7479-b7dc-1386eb690904
 sources:
   - kind: file
-    ref: apps/tagma/server/src/platform/store/programs.ts
-  - kind: file
     ref: apps/tagma/server/src/platform/contract/service/units.ts
   - kind: file
     ref: apps/tagma/server/src/platform/store/crossing.ts
+  - kind: file
+    ref: apps/tagma/server/src/platform/store/programs.ts
 ---
 `Units.program` collects a write unit's statements instead of running them: a write without RETURNING, optionally with the change count it must produce, and guards — selects with the row count the decision relied on. The decision's own reads go through `units.read`, outside the program, and the guards re-check at commit what those reads saw: a guard miss or a uniqueness refusal answers `ProgramConflict`, and the caller decides again in an interactive unit, so a stale read costs one redecision, never a wrong write. Work that needs a value back from a write while it is still deciding, or reads through the program's own unit, cannot be planned: `programWriteUnit.run` dies `ProgramUnplannable`, `planned` and `inProgram` answer null, and the caller writes the same work in an interactive unit. A write whose rows are needed only after the commit can be planned with `returning`. The child returns that statement's rows with the program's answer, as value arrays in RETURNING order and in the caller's safe-integer mode. They reach their continuation as one of the program's after-commit tails, in its place among them. A refused program hands nothing. A program joined into an open unit runs the statement at once, and its continuation is first called after the outer commit. A caller with a program form therefore keeps its interactive form until no hot path falls back to it.
 

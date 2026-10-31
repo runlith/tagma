@@ -5,9 +5,9 @@ ord: 2
 tags: ["explanation"]
 sources:
   - kind: file
-    ref: apps/tagma/server/src/marketplaces/layer.ts
-  - kind: file
     ref: apps/tagma/server/src/marketplaces/contract/wire/presets.ts
+  - kind: file
+    ref: apps/tagma/server/src/marketplaces/layer.ts
 ---
 `plugins.marketplacePresets` remembers every preset ever registered on the machine; the server registers only presets missing from it, so a preset the person removed is never added back, and a preset shipped later reaches an existing machine at its next start. A preset is registered without waiting for the network and fetched in the background; a failed fetch leaves it registered with no stored list and the failure on its row, and the person refreshes it.
 

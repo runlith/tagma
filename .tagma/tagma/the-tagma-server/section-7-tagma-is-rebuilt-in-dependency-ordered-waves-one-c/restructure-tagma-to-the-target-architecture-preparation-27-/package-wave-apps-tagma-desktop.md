@@ -9,8 +9,6 @@ fields:
     "status": "done"
   }
 edges:
-  - kind: implements
-    to: 01a0e470-f876-7433-b54b-0ba8e4a0488f
   - kind: waits-on
     to: 01a0e532-cabb-7020-924a-237a4954809f
 ---

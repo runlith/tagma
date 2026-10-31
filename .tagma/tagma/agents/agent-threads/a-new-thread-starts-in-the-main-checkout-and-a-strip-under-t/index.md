@@ -9,11 +9,11 @@ fields:
   }
 sources:
   - kind: file
-    ref: apps/tagma/app/src/lib/features/threads/birth/ThreadBirth.svelte.ts
-  - kind: file
     ref: apps/tagma/app/src/lib/app/chrome/FrameFollow.svelte
   - kind: file
     ref: apps/tagma/app/src/lib/app/chrome/WorktreeSwitcher.svelte
+  - kind: file
+    ref: apps/tagma/app/src/lib/features/threads/birth/ThreadBirth.svelte.ts
   - kind: file
     ref: apps/tagma/app/src/lib/features/threads/worktrees/Chip.svelte
   - kind: file

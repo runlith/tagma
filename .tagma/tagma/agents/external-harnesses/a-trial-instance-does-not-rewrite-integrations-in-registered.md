@@ -8,9 +8,6 @@ fields:
     "holder": "tagma:01a156e1-0024-75f9-aab2-3f2639ccf5ae",
     "status": "done"
   }
-edges:
-  - kind: discovered-from
-    to: 01a156e0-50e8-75ab-92c6-45be3fa106f0
 sources:
   - kind: file
     ref: apps/tagma/server/src/installation/cut/beside.ts

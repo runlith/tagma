@@ -8,9 +8,6 @@ fields:
     "holder": "tagma:01a16d17-c236-71fc-87b6-65116f13c574",
     "status": "done"
   }
-edges:
-  - kind: discovered-from
-    to: 01a16d17-9430-7444-afab-182a2eb0e214
 ---
 A formed-line deletion stays nobody's when the form step changes the line count, and a peer's landing can then commit a duplicate.
 

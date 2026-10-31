@@ -8,13 +8,13 @@ fields:
     "enabled": true
   }
 sources:
+  - kind: file
+    ref: packages/execution-host/src/registry/departure.ts
   - kind: symbol
     ref: packages/executions/src/hostArtifacts.ts
     symbol: ArtifactInvalid
   - kind: symbol
     ref: packages/executions/src/hostArtifacts.ts
     symbol: verifyArtifact
-  - kind: file
-    ref: packages/execution-host/src/registry/departure.ts
 ---
 The standing host keeps running until a verified successor is ready.

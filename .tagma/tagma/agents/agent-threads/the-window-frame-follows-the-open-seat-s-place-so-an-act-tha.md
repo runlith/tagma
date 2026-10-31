@@ -12,9 +12,9 @@ sources:
   - kind: file
     ref: apps/tagma/app/src/lib/app/chrome/WorktreeSwitcher.svelte
   - kind: file
-    ref: apps/tagma/app/src/lib/features/threads/worktrees/acts.ts
-  - kind: file
     ref: apps/tagma/app/src/lib/features/threads/birth/BirthPlace.svelte.ts
+  - kind: file
+    ref: apps/tagma/app/src/lib/features/threads/worktrees/acts.ts
 ---
 While a thread slot is the host on the chat surface, `FrameFollow` aims the window frame (the address's `branch`) at the place of that slot's open seat (`ThreadSlot.place`). For a thread that is where the thread works. For the draft it is the draft's own place, except a new worktree, which has no folder yet and so leaves the frame where it is. The main checkout clears the address's `branch` even when its HEAD is detached. The effect runs again on every change of the address, so a frame move that leaves the seat's place unchanged is undone at once.
 

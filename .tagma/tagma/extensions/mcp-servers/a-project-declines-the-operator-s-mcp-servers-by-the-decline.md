@@ -5,9 +5,9 @@ ord: 14
 tags: ["explanation"]
 sources:
   - kind: file
-    ref: apps/tagma/server/src/settings/writes.ts
-  - kind: file
     ref: apps/tagma/server/src/mcp/serverPool.ts
+  - kind: file
+    ref: apps/tagma/server/src/settings/writes.ts
 ---
 `mcp.servers` is written whole by no door: its servers change one at a time through `add_mcp_server` and `remove_mcp_server`, which go through `Settings.amend`. So its managed writer (`decline` in the pool) answers `write_setting_layer` only for an explicitly given `declined` alone in project scope — `declinedGiven` tells it from an omitted flag, so a clear through `write_setting` is refused rather than read as `declined: false` — refuses any value `setting-managed`, and writes with `kept`, which keeps the row's stored value byte for byte, unreadable members included, and changes only the flag. `amend` keeps the flag the row already holds: writing `false` there would silently give a declining project the operator's servers back the moment it declared one of its own.
 

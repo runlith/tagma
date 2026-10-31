@@ -7,9 +7,6 @@ fields:
   {
     "status": "done"
   }
-edges:
-  - kind: discovered-from
-    to: 01a17af6-3ba7-7537-a6fe-d15e65ed63b7
 sources:
   - kind: file
     ref: apps/tagma/inspection/src/packs/js/platforms/records.ts

@@ -8,9 +8,6 @@ fields:
     "holder": "tagma:01a0d3aa-1104-7d42-b529-e2d199a2a0d5",
     "status": "done"
   }
-edges:
-  - kind: discovered-from
-    to: 01a0d3a8-f00c-7b9b-8939-8cf68c022144
 sources:
   - kind: symbol
     ref: apps/tagma/server/src/threads/targets/decide.ts

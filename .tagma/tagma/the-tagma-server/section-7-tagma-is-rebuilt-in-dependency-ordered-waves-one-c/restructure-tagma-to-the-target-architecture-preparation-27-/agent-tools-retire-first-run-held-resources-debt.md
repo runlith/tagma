@@ -11,7 +11,5 @@ fields:
 edges:
   - kind: discovered-from
     to: 01a0e569-e713-71b1-9af0-eca1dad05c72
-  - kind: implements
-    to: 01a0e470-f876-7433-b54b-0ba8e4a0488f
 ---
 Retire the 4 held-resources construction-site violations recorded for packages/agent-tools in checks/held-resources.server.debt.json. Replace their ad hoc resource ownership with @runlith/held and prove the package's measured reach is clean.

@@ -11,9 +11,9 @@ sources:
   - kind: dir
     ref: apps/tagma/server/src/external-harnesses
   - kind: dir
-    ref: apps/tagma/server/src/threads/harness
-  - kind: dir
     ref: apps/tagma/server/src/threads/contract/wire/harness
+  - kind: dir
+    ref: apps/tagma/server/src/threads/harness
   - kind: dir
     ref: packages/adapter-anthropic
   - kind: dir

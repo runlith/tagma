@@ -7,10 +7,10 @@ edges:
   - kind: relates
     to: 01a18975-644d-7413-ab91-26fe9668a6b0
 sources:
-  - kind: file
-    ref: apps/tagma/server/src/marketplaces/contract/wire/presets.ts
   - kind: dir
     ref: apps/tagma/server/src/composition/testing/plugins/tagma-plugins
+  - kind: file
+    ref: apps/tagma/server/src/marketplaces/contract/wire/presets.ts
 ---
 The public repository `runlith/tagma-plugins` is the marketplace Tagma registers as its `tagma` preset. `composition/testing/plugins/tagma-plugins` is a copy of its published revision (`54ad879`), which the acceptance itest installs with each server's URL swapped for the test OAuth server; a change to the repository lands in that copy in the same work.
 

@@ -23,8 +23,6 @@ edges:
   - kind: relates
     to: 01a0e0cf-71b2-76da-963d-3a62e04cfdcb
   - kind: relates
-    to: 01a0e134-d622-7eef-b19a-5c2070083b67
-  - kind: relates
     to: 01a0e2a3-49a3-7e17-b24c-0979511b13e3
   - kind: relates
     to: 01a0e2ed-be23-7fd5-882c-a6edd925fa0c
@@ -39,11 +37,7 @@ edges:
   - kind: relates
     to: 01a0e462-f64c-7e26-8420-c84d44f7f1c3
   - kind: relates
-    to: 01a0e470-f876-7433-b54b-0ba8e4a0488f
-  - kind: relates
     to: 01a0e470-ffc4-7261-8631-2ffbf7e0b9dd
-  - kind: relates
-    to: 01a0e510-adca-77f5-9728-9df02cecbcac
   - kind: relates
     to: 01a0e55d-7385-7116-a91b-a9a5e4f76910
   - kind: relates

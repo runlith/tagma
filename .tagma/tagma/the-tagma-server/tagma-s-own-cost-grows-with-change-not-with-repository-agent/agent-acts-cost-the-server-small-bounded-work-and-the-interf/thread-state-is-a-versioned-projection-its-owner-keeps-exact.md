@@ -13,9 +13,9 @@ edges:
     to: 01a18cde-5f93-73e8-aa31-64572afe6fec
 sources:
   - kind: file
-    ref: packages/agent/src/thread/run/ThreadSnapshots.ts
-  - kind: file
     ref: apps/tagma/server/src/threads/list/threadList.ts
+  - kind: file
+    ref: packages/agent/src/thread/run/ThreadSnapshots.ts
 ---
 Section A of [[2afe6fec]]: thread state becomes a versioned projection its owner keeps exact, and consumers subscribe to typed changes and narrow events instead of re-reading whole state per publication.
 

@@ -9,8 +9,6 @@ fields:
     "status": "done"
   }
 edges:
-  - kind: discovered-from
-    to: 01a16dee-711a-7f81-adcb-ef57275907fb
   - kind: implements
     to: 01a16b01-cb85-7e31-9936-47664dbd9a84
 ---

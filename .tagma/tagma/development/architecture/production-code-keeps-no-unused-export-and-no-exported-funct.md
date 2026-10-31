@@ -20308,11 +20308,11 @@ fields:
   }
 sources:
   - kind: dir
-    ref: packages
-  - kind: dir
     ref: apps/tagma/app
   - kind: dir
     ref: apps/tagma/server
+  - kind: dir
+    ref: packages
   - kind: file
     ref: package.json
 ---

@@ -11,7 +11,5 @@ fields:
 edges:
   - kind: discovered-from
     to: 01a0e569-e72b-764e-aecf-9a7ee8918b55
-  - kind: implements
-    to: 01a0e470-f876-7433-b54b-0ba8e4a0488f
 ---
 Retire the 3 held-resources construction-site violations recorded for packages/mcp in checks/held-resources.server.debt.json. Replace their ad hoc resource ownership with @runlith/held and prove the package's measured reach is clean.

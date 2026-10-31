@@ -5,11 +5,11 @@ ord: 204
 tags: ["explanation"]
 sources:
   - kind: file
-    ref: apps/tagma/server/src/external-harnesses/installs/targets.ts
-  - kind: file
     ref: apps/tagma/server/src/external-harnesses/installs/law.ts
   - kind: file
     ref: apps/tagma/server/src/external-harnesses/installs/skillInstall.ts
+  - kind: file
+    ref: apps/tagma/server/src/external-harnesses/installs/targets.ts
   - kind: symbol
     ref: packages/tagma/src/adapter/harness.ts
     symbol: InstructionSurface

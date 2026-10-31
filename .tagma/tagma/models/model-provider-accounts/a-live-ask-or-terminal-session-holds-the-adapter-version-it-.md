@@ -10,13 +10,13 @@ edges:
     to: 01a18de6-f105-7aa9-9e69-70e8074b1336
 sources:
   - kind: file
-    ref: apps/tagma/server/src/providers/adapters/installs.ts
-  - kind: file
-    ref: apps/tagma/server/src/external-harnesses/store/packages.ts
-  - kind: file
     ref: apps/tagma/server/src/composition/cli/installedHarness.ts
   - kind: file
     ref: apps/tagma/server/src/external-harnesses/adapters.ts
+  - kind: file
+    ref: apps/tagma/server/src/external-harnesses/store/packages.ts
+  - kind: file
+    ref: apps/tagma/server/src/providers/adapters/installs.ts
 ---
 A version directory keeps the files a running process still reads after the registry moved on: a program ask may run a script its package ships, and the hook process of a CLI imports its codec from the package on every event. Deleting the directory under such a process breaks the ask, or leaves a running turn without its stop hook, so its CLI never reaches rest and is never retired.
 

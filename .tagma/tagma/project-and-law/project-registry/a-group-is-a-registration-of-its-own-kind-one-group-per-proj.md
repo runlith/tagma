@@ -5,9 +5,9 @@ ord: 13
 tags: ["explanation"]
 sources:
   - kind: file
-    ref: apps/tagma/server/src/projects/groups.ts
-  - kind: file
     ref: apps/tagma/server/src/projects/contract/service/changes.ts
+  - kind: file
+    ref: apps/tagma/server/src/projects/groups.ts
 ---
 A registration is one of three kinds: a folder (a project the user added), the global project, or a group. A group's own graph is a registration like any other, so the graph pool, storage, the graph remote and `project` fields serve it by its id with no group-specific path; its root is a folder in Tagma's data directory that holds no code, which is why removing it, re-pointing it, a team storage move and sources on its blocks refuse `group-graph` or `group-source`. That folder is made before the registration is written, for a returned group too, so a data directory refusing it refuses the group (`unwritable-root`) instead of leaving a registration whose graph has no folder. Its name shares the project namespace because it becomes the first segment of its graph's addresses.
 

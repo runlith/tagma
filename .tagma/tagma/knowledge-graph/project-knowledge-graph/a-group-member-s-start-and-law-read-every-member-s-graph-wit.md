@@ -5,9 +5,9 @@ ord: 256
 tags: ["explanation"]
 sources:
   - kind: file
-    ref: apps/tagma/server/src/graph/orientation/prime.ts
-  - kind: file
     ref: apps/tagma/server/src/graph/orientation/Instructions.ts
+  - kind: file
+    ref: apps/tagma/server/src/graph/orientation/prime.ts
 ---
 A thread whose home is a member of a group reads every member's graph, each from that member's own main copy. Prompt law runs global, then the group's rules under the group's name, then each member's prompt rules in the group's order under that member's name; the home member's come from the copy the thread stands in. The start draws the global line, the group root, the home member's section marked as where the thread stands with its map, then each other member's root and top regions.
 

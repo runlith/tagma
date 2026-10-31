@@ -8,9 +8,9 @@ edges:
     to: 01a18d49-eba5-7e14-8517-20f9249b762f
 sources:
   - kind: file
-    ref: apps/tagma/server/src/threads/list/threadList.ts
-  - kind: file
     ref: apps/tagma/server/src/threads/list/select.ts
+  - kind: file
+    ref: apps/tagma/server/src/threads/list/threadList.ts
 ---
 The window's agent column subscribes to the group's own id, so its list, folders and scroll stay while the window moves between members. Every read of a list — `rootWindow`, `list` with its pinned selections, `families`, the archive selections — takes the homes it covers: the group's members for a group's id, the project itself for any other id. A root is a thread whose parent is not live in any of those homes, so a child born in one member under another member's thread stands under its parent in the group's list and as a root in its own project's list.
 

@@ -18,9 +18,9 @@ sources:
   - kind: file
     ref: apps/tagma/server/src/external-harnesses/protocol/opening.ts
   - kind: file
-    ref: packages/adapter-anthropic/src/runner/settings.ts
-  - kind: file
     ref: apps/tagma/server/src/external-harnesses/sessions/model.ts
+  - kind: file
+    ref: packages/adapter-anthropic/src/runner/settings.ts
 ---
 Goal: a model or effort change on Claude on `acp` behaves as on native: the choice is written at once, the live turn finishes on its old model, the next turn runs on the new one. The process does not restart, the turn is not interrupted. This changes the Claude runner's `modelMove` in [[0f8d8726]] from `relaunch` to `live`.
 

@@ -8,11 +8,11 @@ edges:
     to: 01a19024-7ec1-7479-b7dc-1386eb690904
 sources:
   - kind: file
-    ref: packages/sqlite-process/src/programs.ts
+    ref: packages/sqlite-process/src/channel.ts
   - kind: file
     ref: packages/sqlite-process/src/host.ts
   - kind: file
-    ref: packages/sqlite-process/src/channel.ts
+    ref: packages/sqlite-process/src/programs.ts
 ---
 The writer child runs a `Programs` batch between one `BEGIN IMMEDIATE` and one `COMMIT`, so programs queued while the writer was busy share one commit, and the writer is held for engine time instead of a loop round trip per statement. Each program runs under its own SAVEPOINT: a guard whose counted rows or changes miss its expectation, or a statement SQLite refuses while the transaction stays open, rolls back to that savepoint and answers `Conflict` or `Refused` for that program alone, while the rest of the batch commits. A statement error that ends the transaction and a failed COMMIT answer every member with the failure, so no member is answered `Applied` unless the COMMIT returned. A batch runs at the strictest `synchronous` level any member asked for.
 

@@ -8,11 +8,11 @@ edges:
     to: 01a18d49-eba5-7e14-8517-20f9249b762f
 sources:
   - kind: file
-    ref: apps/tagma/app/src/lib/features/workspace/TileRung.ts
+    ref: apps/tagma/app/src/lib/features/projects/Strip.svelte.ts
   - kind: file
     ref: apps/tagma/app/src/lib/features/workspace/holds.ts
   - kind: file
-    ref: apps/tagma/app/src/lib/features/projects/Strip.svelte.ts
+    ref: apps/tagma/app/src/lib/features/workspace/TileRung.ts
 ---
 The window's ladder is tile, project, then graph and thread. The tile is the dock tile the window stands on: a project in no group, or the group whose member the window stands in (`Workspace.contextTile`). What a person keeps while moving between members — the thread list, its folders and folds, work lines — lives at the tile tier, and the agents column declares `stands: 'tile'`, so the shell remounts it only when the tile changes; Files, Git, terminals and the page stay project-scoped and move with the crumb.
 

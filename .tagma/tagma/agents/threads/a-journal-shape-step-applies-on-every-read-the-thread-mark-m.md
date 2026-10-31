@@ -7,7 +7,11 @@ sources:
   - kind: file
     ref: apps/tagma/server/src/threads/journal/formSteps.ts
   - kind: file
+    ref: apps/tagma/server/src/threads/journal/rolloutCarry.ts
+  - kind: file
     ref: apps/tagma/server/src/threads/journal/rolloutEntryForms.ts
+  - kind: file
+    ref: apps/tagma/server/src/threads/journal/rolloutStaging.ts
   - kind: file
     ref: apps/tagma/server/src/threads/journal/rolloutWhole.ts
   - kind: file
@@ -15,10 +19,6 @@ sources:
   - kind: symbol
     ref: apps/tagma/server/src/native-harness/rows/threadUnits.ts
     symbol: makeThreadUnits
-  - kind: file
-    ref: apps/tagma/server/src/threads/journal/rolloutStaging.ts
-  - kind: file
-    ref: apps/tagma/server/src/threads/journal/rolloutCarry.ts
 ---
 `ThreadEntryReader` applies steps to every decoded record with no mark check. By contract a step never changes a record in the current shape, so the reader always yields the current shape, and the mark decides whether to cast the whole thread. Maintenance decodes picked records with the same reader and never waits for the whole-thread mark; a current shape it wrote passes a repeated step unchanged by the fixed-point contract. Steps run one by one: a step shapes a whole event — payload, entry and messages inside — before the next one reads it.
 

@@ -5,9 +5,9 @@ ord: 11
 tags: ["explanation"]
 sources:
   - kind: file
-    ref: apps/tagma/server/src/mcp/signIns.ts
-  - kind: file
     ref: apps/tagma/server/src/mcp/serverPool.ts
+  - kind: file
+    ref: apps/tagma/server/src/mcp/signIns.ts
 ---
 A user-scope server is one sign-in record (`user/<server>`) that every project's pool reads. `bearer()` refreshes a token expiring within a minute; `rejected(token)` refreshes only while the stored access token is the one the server rejected. Both go through the secret store's refresh flight keyed by the record, which re-reads the record inside the flight and commits only over the refresh token it started from — so the second pool to ask finds the fresh token and spends nothing, and a refresh racing a new sign-in never overwrites it.
 

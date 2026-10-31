@@ -13,11 +13,11 @@ edges:
     to: 01a18936-d2a2-7c93-82d2-ef6195533681
 sources:
   - kind: file
-    ref: packages/agent/src/agent/AgentTurn.ts
-  - kind: file
     ref: apps/tagma/server/src/native-harness/calls/delivery.ts
   - kind: file
     ref: apps/tagma/server/src/threads/collaboration/commandEndings.ts
+  - kind: file
+    ref: packages/agent/src/agent/AgentTurn.ts
 ---
 Three gaps the review of 95533681 confirmed, sharing one cause: guidance outside the live loop has no structured, recorded road.
 

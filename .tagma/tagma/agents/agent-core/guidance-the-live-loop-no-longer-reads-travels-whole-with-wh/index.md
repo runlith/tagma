@@ -5,18 +5,18 @@ ord: 203
 tags: ["explanation"]
 sources:
   - kind: file
+    ref: apps/tagma/server/src/native-harness/calls/delivery.ts
+  - kind: file
+    ref: apps/tagma/server/src/threads/collaboration/callEndings.ts
+  - kind: file
     ref: packages/agent/src/agent/door/ToolExecution.ts
   - kind: file
     ref: packages/agent/src/thread/run/ParkedQuestions.ts
   - kind: file
-    ref: apps/tagma/server/src/native-harness/calls/delivery.ts
+    ref: packages/agent/src/thread/transport/native/launches.ts
   - kind: symbol
     ref: packages/agent/src/agent/AgentSignal.ts
     symbol: agentSignalMessages
-  - kind: file
-    ref: apps/tagma/server/src/threads/collaboration/callEndings.ts
-  - kind: file
-    ref: packages/agent/src/thread/transport/native/launches.ts
 ---
 A guide reaches the model through the live loop's step guides only while the loop that queued it still plans another step. Three cases outlive that loop. In each, the guides travel whole — text, `state`, `retell` — with a record the thread keeps, and the next request reads them as guidance messages. That way a rule judging by told state (a capability cue, the notes rule) sees them as delivered instead of offering them again.
 

@@ -3,9 +3,6 @@ id: 01a13297-9fdc-7582-80f8-5d2726e58ea2
 title: One record's metadata and hunk are stored separately, so stamping never rewrites the overflow payload
 ord: 4
 tags: ["explanation"]
-edges:
-  - kind: discovered-from
-    to: 01a13257-1988-73bc-9664-5607527738d1
 sources:
   - kind: symbol
     ref: apps/tagma/server/src/change-record/record/hunks.ts

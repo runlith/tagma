@@ -17,9 +17,9 @@ sources:
   - kind: file
     ref: apps/tagma/server/src/external-harnesses/protocol/alignment.ts
   - kind: file
-    ref: packages/adapter-anthropic/src/runner/lifecycle.ts
-  - kind: file
     ref: packages/adapter-anthropic/src/models/anthropic.ts
+  - kind: file
+    ref: packages/adapter-anthropic/src/runner/lifecycle.ts
 ---
 The operator's decision: a setting the native thread has works on an ACP thread too; "Thinking summary" is on by default (`summarized`, as `REASONING_DISPLAY_SWITCH` already stands).
 

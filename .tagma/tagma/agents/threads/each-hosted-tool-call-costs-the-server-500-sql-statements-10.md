@@ -12,9 +12,9 @@ edges:
     to: 01a18cde-5f93-73e8-aa31-64572afe6fec
 sources:
   - kind: file
-    ref: apps/tagma/server/src/threads/list/threadList.ts
-  - kind: file
     ref: apps/tagma/server/src/platform/store/transaction.ts
+  - kind: file
+    ref: apps/tagma/server/src/threads/list/threadList.ts
 ---
 On 2026-10-30, 11:21–11:31Z, 22 claude-code threads over ACP made 1,855 hosted tool calls. The server's one event loop saturated: it froze 139 times, 57 s in total, the longest 4.9 s. The interface stalled with it. Investigation thread `01a18c99-08a8-7d13-8c7e-283fb89b8bcd` measured this; its profiles are in that thread's scratch.
 

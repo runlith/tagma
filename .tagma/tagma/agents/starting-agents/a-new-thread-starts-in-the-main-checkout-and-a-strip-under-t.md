@@ -16,15 +16,15 @@ edges:
     to: 01a18d49-8332-708f-85d5-3198619987f6
 sources:
   - kind: file
-    ref: apps/tagma/app/src/lib/features/threads/place/Strip.svelte
+    ref: apps/tagma/app/src/lib/features/threads/birth/BirthPlace.svelte.ts
   - kind: file
     ref: apps/tagma/app/src/lib/features/threads/place/strip.composer.svelte
   - kind: file
-    ref: apps/tagma/app/src/lib/features/threads/birth/BirthPlace.svelte.ts
-  - kind: file
-    ref: apps/tagma/app/src/lib/features/threads/worktrees/GroupHeader.svelte
+    ref: apps/tagma/app/src/lib/features/threads/place/Strip.svelte
   - kind: file
     ref: apps/tagma/app/src/lib/features/threads/worktrees/acts.ts
+  - kind: file
+    ref: apps/tagma/app/src/lib/features/threads/worktrees/GroupHeader.svelte
 ---
 **Value.** A quick task meant for the main checkout no longer lands in the worktree of whichever thread was opened last: where a thread runs is chosen on purpose and stays in sight right under the field the operator types in.
 

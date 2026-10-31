@@ -13,9 +13,9 @@ edges:
     to: 01a17f5d-9e25-780b-9302-7f0783cb4628
 sources:
   - kind: file
-    ref: packages/hosted-runner/src/turn.ts
-  - kind: file
     ref: packages/agent/src/thread/run/ThreadHosting.ts
+  - kind: file
+    ref: packages/hosted-runner/src/turn.ts
 ---
 `ThreadHosting.open` (`open_hosted_turn`) records the turn context message and advances the world-state snapshot before the runner hands the context to the vendor: after the door answers, the runner still runs `session.prepare` and only then `session.start` (`external-harnesses/runner/hosted/turn.ts`). A cancellation in this window ends the turn `cancelled` with `tagma/turn.last: null`, and a lost `open_hosted_turn` response (an `unsent-only` retry) ends it failed; in both cases the Tagma journal counts the context as spoken, the next `open` does not repeat it, and the Claude session never saw it. Any ACP turn context is lost: the working note, the fork marker, graph changes, the step law.
 

@@ -27,11 +27,11 @@ edges:
   - kind: relates
     to: 01a18cbf-9775-75eb-a4a1-6542bcec10b7
 sources:
+  - kind: dir
+    ref: apps/tagma/server/src
   - kind: file
     ref: apps/tagma/server/src/providers/contract/service/access.ts
   - kind: file
     ref: apps/tagma/server/src/threads/contract/service/asides.ts
-  - kind: dir
-    ref: apps/tagma/server/src
 ---
 ModelAccess.request and returned request calls stay in providers or the native chat turn (native-harness/kernel.ts, native-harness/assembly.ts and native-harness/turns/runWebs.ts). An aside's ask stays in threads/asks.ts. Harness rows are read only in external-harnesses and threads/harness. Other server code asks through ModelAsks or ThreadAsks; provision, publication, watch, clear and metadata reads remain allowed.
