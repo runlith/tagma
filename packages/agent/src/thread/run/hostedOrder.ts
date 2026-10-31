@@ -51,6 +51,7 @@ export const placeSealed = Effect.fnUntraced(function* <E, F>(
   if (door.order.has(call.toolCallId)) return;
   const calls = sealedCalls(yield* history, call.toolCallId);
   const placing: OrderedCall[] = [];
+  const inputs = new Map<string, { readonly name: string; readonly input: unknown }>();
   for (const part of calls.some((each) => each.id === call.toolCallId)
     ? calls
     : [{ id: call.toolCallId, name: call.name, input: call.input }]) {
@@ -63,15 +64,25 @@ export const placeSealed = Effect.fnUntraced(function* <E, F>(
     const claims = yield* door
       .claims({ name: part.name, tool, input: part.input, toolCallId: part.id })
       .pipe(Effect.catchTags({ AgentToolFailed: () => Effect.succeed(null), AgentRuleFailed: () => Effect.succeed(null) }));
-    if (claims !== null) placing.push({ toolCallId: part.id, name: part.name, claims });
+    if (claims !== null) {
+      placing.push({ toolCallId: part.id, name: part.name, claims });
+      inputs.set(part.id, { name: part.name, input: part.input });
+    }
   }
   const fresh = door.order.place(placing);
   for (const toolCallId of fresh) {
     if (toolCallId === call.toolCallId) continue;
+    const input = inputs.get(toolCallId)!;
     yield* Effect.forkIn(
       closing(changes, call.threadId, entryOf, toolCallId).pipe(
         Effect.flatMap((entry) =>
-          Effect.sync(() => answeredOutside(entry) && !hosted.calls.has(toolCallId) && door.decline(toolCallId, ANSWERED_OUTSIDE)),
+          Effect.sync(
+            () =>
+              answeredOutside(entry) &&
+              !hosted.calls.has(toolCallId) &&
+              door.receipt(toolCallId, input.name, input.input) === null &&
+              door.decline(toolCallId, ANSWERED_OUTSIDE),
+          ),
         ),
         Effect.tapCause((cause) =>
           Cause.hasInterruptsOnly(cause)

@@ -59,7 +59,7 @@ export const names: Builtin<'names', NamesParams> = {
             why: 'One subject: the ACP conformance rig owns its project, execution host — including replacing it with its next generation — core harness, account and scratch context, its protocol rows and vendor turn map, and each scoped driver. Thread and scripted-agent events wake observations within those same lifetimes.',
           },
           {
-            lines: 719,
+            lines: 725,
             path: 'apps/tagma/server/src/external-harnesses/testing/acpAgent.ts',
             why: 'One subject: the scripted ACP agent the protocol system tests run as a process; its configuration, keywords and control files drive that one agent over the same prompt, steer and cancel state.',
           },

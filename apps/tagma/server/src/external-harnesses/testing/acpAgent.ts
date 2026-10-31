@@ -36,18 +36,24 @@ const update = (sessionId: string, body: Record<string, unknown>): void =>
 
 type Announced = { readonly toolCallId: string; readonly name: string; readonly input: unknown };
 
-const announce = (sessionId: string, call: Announced): void => {
-  update(sessionId, {
-    sessionUpdate: 'tool_call',
-    toolCallId: call.toolCallId,
-    title: call.name,
-    name: call.name,
-    kind: 'other',
-    status: 'pending',
-    rawInput: call.input,
-    _meta: { 'tagma/executes': true },
+const announce = (sessionId: string, input: Announced | Announced[]): void => {
+  const calls = Array.isArray(input) ? input : [input];
+  for (const call of calls) {
+    update(sessionId, {
+      sessionUpdate: 'tool_call',
+      toolCallId: call.toolCallId,
+      title: call.name,
+      name: call.name,
+      kind: 'other',
+      status: 'pending',
+      rawInput: call.input,
+      _meta: { 'tagma/executes': true },
+    });
+  }
+  send({
+    method: '_tagma/said',
+    params: { sessionId, messageId: `said-${calls[0]!.toolCallId}`, toolCallIds: calls.map((call) => call.toolCallId) },
   });
-  send({ method: '_tagma/said', params: { sessionId, messageId: `said-${call.toolCallId}`, toolCallIds: [call.toolCallId] } });
 };
 
 let prompt: { readonly id: string | number; readonly sessionId: string; readonly turn: unknown; readonly unsent: boolean } | null = null;
@@ -217,7 +223,7 @@ if (mode === 'tagma') {
       announce(prompt.sessionId, { toolCallId: 'search-call', name: 'tool_search', input: { query } });
     }
     if (prompt !== null && existsSync(`${report}.announce`)) {
-      const call = JSON.parse(readFileSync(`${report}.announce`, 'utf8')) as Announced;
+      const call = JSON.parse(readFileSync(`${report}.announce`, 'utf8')) as Announced | Announced[];
       rmSync(`${report}.announce`, { force: true });
       announce(prompt.sessionId, call);
     }

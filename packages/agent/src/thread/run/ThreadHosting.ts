@@ -552,10 +552,14 @@ export const threadHostingLayer = Layer.effect(
     const performed = Effect.fnUntraced(function* (hosted: Hosted, call: HostedCall): Effect.fn.Return<HostedAnswer, ThreadBorderFailed> {
       const replay = hosted.replays.get(call.toolCallId);
       if (replay !== undefined) return yield* replayed(call, replay);
+      yield* reached(call.threadId, hosted.runId, call.toolCallId);
+      const standing = yield* toolEntryOf(call.threadId, hosted.runId, call.toolCallId);
+      const answered = standing !== undefined && toolSettled(standing.toolState);
+      const told = answered ? replaysOf(yield* historyOf(call.threadId)).get(call.toolCallId) : undefined;
+      if (told !== undefined) return yield* replayed(call, told);
       const unoffered = unadmitted(hosted, call);
       if (unoffered !== null) return yield* recorded(hosted, call, unoffered);
       if (call.name === USER_QUESTION_TOOL_NAME) {
-        yield* reached(call.threadId, hosted.runId, call.toolCallId);
         const answered = yield* activity(
           TOOL_CALL,
           { toolName: call.name, toolCallId: call.toolCallId, executedBy: 'host' },
@@ -577,11 +581,6 @@ export const threadHostingLayer = Layer.effect(
         );
         return yield* recorded(hosted, call, answered);
       }
-      yield* reached(call.threadId, hosted.runId, call.toolCallId);
-      const standing = yield* toolEntryOf(call.threadId, hosted.runId, call.toolCallId);
-      const answered = standing !== undefined && toolSettled(standing.toolState);
-      const told = answered ? replaysOf(yield* historyOf(call.threadId)).get(call.toolCallId) : undefined;
-      if (told !== undefined) return yield* replayed(call, told);
       if (standing !== undefined && standing.execution?.state !== 'queued') {
         return yield* recorded(hosted, call, restartedSettled(standing));
       }
@@ -621,6 +620,11 @@ export const threadHostingLayer = Layer.effect(
             (fiber) =>
               Effect.sync(() => {
                 hosted.calls.set(call.toolCallId, fiber);
+                fiber.addObserver(() => {
+                  if (hosted.calls.get(call.toolCallId) !== fiber) return;
+                  hosted.calls.delete(call.toolCallId);
+                  hosted.started.delete(call.toolCallId);
+                });
               }),
           );
         }),
@@ -716,7 +720,6 @@ export const threadHostingLayer = Layer.effect(
         const fiber = yield* locked(call.threadId, admittedCall(hosted, call));
         if (fiber === null) return { ...failure(ENDED), words: [] };
         const exit = yield* Fiber.await(fiber);
-        if (Exit.isFailure(exit) && hosted.calls.get(call.toolCallId) === fiber) hosted.calls.delete(call.toolCallId);
         if (Exit.isFailure(exit))
           return yield* Cause.hasInterruptsOnly(exit.cause) ? Effect.fail(broke(new Error(ENDED))) : Effect.failCause(exit.cause);
         yield* hosted.words.refresh();
