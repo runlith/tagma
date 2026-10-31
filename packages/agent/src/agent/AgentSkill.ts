@@ -14,7 +14,6 @@ export const SKILL_REQUEST_INSTRUCTIONS =
 export type AgentSkillReference = {
   readonly name: string;
   readonly description?: string;
-  text(): Effect.Effect<string, AgentSkillUnreadable>;
 };
 
 export type AgentSkill<TCtx, TId extends string = string> = {
@@ -24,6 +23,7 @@ export type AgentSkill<TCtx, TId extends string = string> = {
   readonly references?: readonly AgentSkillReference[];
   readonly arguments?: true;
   instructions(ctx: TCtx): string | Effect.Effect<string, AgentSkillUnreadable>;
+  reference?(name: string): Effect.Effect<string, AgentSkillUnreadable>;
   tools?(ctx: TCtx): ToolCatalog;
 };
 
@@ -64,7 +64,7 @@ export type AgentSkillLoadResult<TId extends string = string> =
 export type AgentSkillSummary = {
   readonly id: string;
   readonly description: string;
-  readonly references?: readonly { readonly name: string; readonly description?: string }[];
+  readonly references?: readonly AgentSkillReference[];
 };
 
 export const SKILL_REFERENCE_INSTRUCTIONS = `A skill listing \`refs\` keeps those sections apart from its body: name the ones the task needs in \`references\` of the same \`${LOAD_SKILL_TOOL}\` call, and read any other later from its \`location\`.`;
@@ -241,15 +241,12 @@ const referenceTexts = Effect.fnUntraced(function* <TCtx>(
   skill: AgentSkill<TCtx>,
   names: readonly string[],
 ): Effect.fn.Return<readonly AgentSkillReferenceText[], AgentSkillUnreadable> {
-  const held = skill.references ?? [];
-  const missing = names.filter((name) => !held.some((one) => one.name === name));
-  if (missing.length > 0) {
-    const known = held.length === 0 ? 'it has none' : `its references are ${held.map((one) => one.name).join(', ')}`;
-    return yield* new AgentSkillUnreadable({ reason: `Agent skill ${skill.id} has no reference ${missing.join(', ')}: ${known}.` });
+  if (names.length === 0) return [];
+  const read = skill.reference;
+  if (read === undefined) {
+    return yield* new AgentSkillUnreadable({ reason: `Agent skill ${skill.id} has no references.` });
   }
-  return yield* Effect.forEach([...new Set(names)], (name) =>
-    Effect.map(held.find((one) => one.name === name)!.text(), (text) => ({ name, text })),
-  );
+  return yield* Effect.forEach([...new Set(names)], (name) => Effect.map(read(name), (text) => ({ name, text })));
 });
 
 function skillLoadResult(part: ToolResultPart): Extract<AgentSkillLoadResult, { status: 'loaded' }> | null {

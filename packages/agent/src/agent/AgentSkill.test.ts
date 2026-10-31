@@ -6,7 +6,7 @@ import { Message } from '@runlith/llm/schema/messages';
 import { Tool } from './tool';
 import { AgentRunState } from './AgentRunState';
 import { agentStepToolPolicy, AgentRuntimePolicy } from './policy/AgentRuntimePolicy';
-import { type AgentSkillPool, agentSkillRule, agentSkillTools, loadedAgentSkillIds } from './AgentSkill';
+import { type AgentSkillPool, AgentSkillUnreadable, agentSkillRule, agentSkillTools, loadedAgentSkillIds } from './AgentSkill';
 import { LOAD_SKILL_TOOL } from './skillWords';
 import { ToolAnswer, toolExecute } from './tool';
 import { ASKS_NEVER } from '../permissions/vocabulary';
@@ -222,7 +222,11 @@ describe('loading a skill twice', () => {
         {
           id: 'writer',
           description: 'Write a durable artifact.',
-          references: [{ name: 'style', description: 'House style', text: () => Effect.succeed('Style reference.') }],
+          references: [{ name: 'style', description: 'House style' }],
+          reference: (name) =>
+            name === 'style'
+              ? Effect.succeed('Style reference.')
+              : Effect.fail(new AgentSkillUnreadable({ reason: `No reference ${name}.` })),
           instructions: () => 'Writer instructions current.',
         },
       ] satisfies AgentSkillPool<SkillContext, 'writer'>;

@@ -6,7 +6,8 @@ import { join } from 'node:path';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { Effect } from 'effect';
 import { readContextFiles } from './ContextFiles';
-import type { AgentSkill } from '@runlith/agent/AgentSkill';
+import { type AgentSkill, agentSkillTools } from '@runlith/agent/AgentSkill';
+import { toolExecute } from '@runlith/agent/tool';
 import { asAgentSkills, discoverSkills } from './SkillDirectories';
 
 const roots: string[] = [];
@@ -247,15 +248,36 @@ layer(BunFileSystem.layer, { excludeTestServices: true })('agent workspace sourc
       }),
     );
 
-    it.effect('loads the body the file holds now, so an edit after the walk is what a load answers', () =>
+    it.effect('load_skill reads the current body and references added after its catalog was built', () =>
       Effect.gen(function* () {
         const root = workspace();
         skill(root, 'writer', 'description: Writes a change.', 'First revision.');
-        const [writer] = asAgentSkills((yield* discoverSkills({ directories: [root] })).skills);
+        const references = join(root, 'writer', 'references');
+        mkdirSync(references);
+        writeFileSync(join(references, 'measuring.md'), '# Measuring\n\nOriginal section.\n');
+        const skills = asAgentSkills((yield* discoverSkills({ directories: [root] })).skills);
+        const load = toolExecute(agentSkillTools(skills, {}).load_skill!)!;
+        const call = {
+          toolCallId: 'load',
+          caller: { agentId: 'agent', ownerId: 'owner', thread: { threadId: 'thread', runId: 'turn', bindings: {} } },
+          messages: [],
+        };
         skill(root, 'writer', 'description: Writes a change.', 'Second revision.');
-        expect(yield* bodyOf(writer!)).toBe('Second revision.');
+        writeFileSync(join(references, 'ios.md'), '# iOS\n\nNew native section.\n');
+        writeFileSync(join(references, 'stands.md'), '# Stands\n\nNew browser section.\n');
+        expect(yield* load({ skill: 'writer', references: ['ios', 'stands'] }, call)).toMatchObject({
+          value: {
+            status: 'loaded',
+            instructions: 'Second revision.',
+            references: [
+              { name: 'ios', text: '# iOS\n\nNew native section.\n' },
+              { name: 'stands', text: '# Stands\n\nNew browser section.\n' },
+            ],
+          },
+        });
+        expect(yield* Effect.flip(load({ skill: 'writer', references: ['../SKILL'] }, call))).toMatchObject({ _tag: 'Tool.Failed' });
         skill(root, 'writer', 'description: Writes a change.', '');
-        expect(yield* Effect.flip(bodyOf(writer!))).toMatchObject({ _tag: 'AgentSkillUnreadable' });
+        expect(yield* Effect.flip(load({ skill: 'writer' }, call))).toMatchObject({ _tag: 'Tool.Failed' });
       }),
     );
   });
