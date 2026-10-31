@@ -164,7 +164,7 @@ const program = Effect.gen(function* () {
     TEMP: temporary,
     ...granted,
   };
-  const cli = join(import.meta.dir, '../../entries/cli.ts');
+  const cli = join(import.meta.dir, '../../developer/cli.ts');
   const entries = [
     { path: cli, harness: 'cursor', samples: launchedSamples },
     { path: cli, harness: 'claude-code', samples: packagedSamples },

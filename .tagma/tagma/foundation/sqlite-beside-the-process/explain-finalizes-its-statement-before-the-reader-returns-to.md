@@ -3,9 +3,6 @@ id: 01a16cdb-5d0c-7b08-b8ef-0a6ca8b08875
 title: EXPLAIN finalizes its statement before the reader returns to the pool
 ord: 12
 tags: ["explanation"]
-edges:
-  - kind: discovered-from
-    to: 01a16cd1-51d2-79f3-a725-7aaefc741eab
 sources:
   - kind: file
     ref: packages/sqlite-process/src/host.ts

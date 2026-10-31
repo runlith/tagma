@@ -3,7 +3,7 @@ import { it } from '@runlith/effect-test';
 import { Clock, Effect } from 'effect';
 import type { Cursor } from '@runlith/paging';
 import { threadDirectoryStore, threadRun } from '../../../threads/testing/doubles.js';
-import { ENTRY_KINDS } from '../../manifest.js';
+import { ENTRY_KINDS } from '../composed.js';
 import { threadStoreFixture } from '../threadStoreFixture.js';
 
 const setup = Effect.fnUntraced(function* () {

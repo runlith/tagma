@@ -12,9 +12,9 @@ sources:
   - kind: file
     ref: packages/adapter-anthropic/src/runner/turn.ts
   - kind: file
-    ref: packages/hosted-runner/src/relay.ts
-  - kind: file
     ref: packages/agent/src/thread/run/hostedWords.ts
+  - kind: file
+    ref: packages/hosted-runner/src/relay.ts
 ---
 On an ACP turn (Claude Code), a call that waited (`wait_command`, `read_output` with waiting) ends with a `wait-ended: The operator's words arrived…` answer. But the next model request leaves without those words: the model steps blind, and the words arrive only at the next step boundary — sometimes after the final answer.
 

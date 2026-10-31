@@ -171,7 +171,7 @@ export const ALLOWED: SwallowedFailuresParams['allow'] = [
   },
   {
     path: 'apps/tagma/server/src/composition/server.ts',
-    symbol: 'announced',
+    symbol: 'serve.announced',
     form: 'catchCause',
     site: '81218884',
     why: 'The post-listen floor settlement is background maintenance: failure is logged without withdrawing the serving door, and existing thread records remain.',

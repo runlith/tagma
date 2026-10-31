@@ -8,7 +8,6 @@ import { readCallerCheckout } from '../../workspace/checkouts/git.js';
 import { Api } from '../../http/contract/wire/Api.js';
 import { CONTRACT_HEADER } from '../../invocation/contract/wire/headers.js';
 import { invocationAssembly } from '../../invocation/assembly.js';
-import { operationRegistry } from '../registry.js';
 import { callLogLayer } from '../../http/callLog.js';
 import { oneRefusalShape, outcomeStamp, unknownApiPath } from '../../http/door.js';
 import { callerMiddlewareLayer } from './caller.js';
@@ -85,7 +84,7 @@ export const doorLayer = (options: DoorOptions) => {
 };
 
 export const doorMiddleware = HttpRouter.middleware<{ provides: never; handles: never }>()(
-  Effect.map(operationRegistry, (registry) => {
+  Effect.map(OperationCatalog, ({ registry }) => {
     const stamp = contractStamp(invocationAssembly.registryEntries(registry).contract);
     return (app) => stamp(outcomeStamp(callerCheckout(oneRefusalShape(app))));
   }),

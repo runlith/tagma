@@ -11,8 +11,6 @@ fields:
 edges:
   - kind: discovered-from
     to: 01a0e569-e6a2-755e-8d2c-583a2ef79a0b
-  - kind: implements
-    to: 01a0e134-d622-7eef-b19a-5c2070083b67
 ---
 Build D7 across the executions package, execution-host, and only the server consumers required by the host wire. Start with section 2 §2.4.10 [[70083b67]]; its v4 contract supersedes the older package card's “33 and 34 accepted” line. The current wire is 35, carries v34 both directions for one release, and refuses 33 or earlier. Complete the version-neutral range handshake, capability floors with typed unsupported answers, corpus agreement, and the server's standing-host window. The new host retains prior-generation identity, final evidence and byte records read-only while spent operation keys remain spent for the installation's life. The server's replacement sweep reads `open_terminal`, filled alongside live terminal writes and by a resumable bounded rowid seed after admission; only that sweep waits for the durable seed completion.
 

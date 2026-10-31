@@ -17,7 +17,7 @@ import { testSessionIdentity } from '../../../platform/testing/identity.js';
 import { websocketHttpTracing } from '../../../socket/live.js';
 import { TAGMA_SOCKET_PATH } from '../../../socket/rpc.js';
 import { birthsOf } from '../../../threads/testing/doubles.js';
-import { LiveRpc } from '../../rpc.js';
+import { LiveRpc } from '../composed.js';
 import type { ServerRuntime } from '../../runtime.js';
 import { makeDoorWorld, type DoorFixture } from '../doorFixture.js';
 import { join } from 'node:path';

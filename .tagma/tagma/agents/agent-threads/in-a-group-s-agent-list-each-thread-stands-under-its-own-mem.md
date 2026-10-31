@@ -10,11 +10,11 @@ edges:
     to: 01a18da7-d528-7f21-b218-68e52e540ecf
 sources:
   - kind: file
-    ref: apps/tagma/app/src/lib/features/threads/worktrees/worktreeGroups.ts
+    ref: apps/tagma/app/src/lib/features/threads/worktrees/PlacesHold.svelte
   - kind: file
     ref: apps/tagma/app/src/lib/features/threads/worktrees/TilePlaces.svelte.ts
   - kind: file
-    ref: apps/tagma/app/src/lib/features/threads/worktrees/PlacesHold.svelte
+    ref: apps/tagma/app/src/lib/features/threads/worktrees/worktreeGroups.ts
 ---
 A thread's place exists only among its home's checkouts, and each project's places are a live subscription of that project's scope (`Worktrees`, project tier). Read through the window's own project, another member's thread found no place of its own and fell into that project's main checkout. So the agent column holds the project scope of every other member of its tile (`PlacesHold`, through `holdProject`) and keeps their places beside the window's own (`TilePlaces`). Grouping takes the members in group order, and each member's places become their own groups. A row is placed by the places of its own home, falling back to the first member's only for a home outside the tile. A non-first member's place header carries its member mark under the rule rows follow (`Workspace.markOf`), so neither the order nor the marks depend on where the window stands.
 

@@ -10,8 +10,6 @@ fields:
 edges:
   - kind: implements
     to: 01a1271e-2479-7971-9b0c-4ec5d86d6647
-  - kind: waits-on
-    to: 01a1271e-2479-7971-9b0c-4ecba39607f1
 sources:
   - kind: dir
     ref: packages/execution-host/native

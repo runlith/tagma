@@ -9,7 +9,7 @@ import { mcpBoundTools, mcpServerTools, asMcpToolsContext, RETRIEVAL_WORDS } fro
 import { COLLABORATION_WORDS } from '@runlith/agent/collaboration/words';
 import { SKILL_WORDS } from '@runlith/agent/skillWords';
 import { WORKSPACE_WORDS } from '@runlith/agent-tools/words';
-import { collectedOperations } from '../../manifest.js';
+import { collectedOperations } from '../composed.js';
 
 const declaration = (name: string): McpServerDeclaration => ({
   name,

@@ -5,7 +5,7 @@ import { basename, dirname, join } from 'node:path';
 import { Effect, FileSystem } from 'effect';
 import { type EffectDemo, graphFixture } from '../graphFixture.js';
 import { composed, shEffect } from '../finishingFixture.js';
-import { checkSubjectOf } from '../../catalog.js';
+import { checkSubjectOf } from '../composed.js';
 import { makeMachineWorld } from '../../../executions/testing/doubles.js';
 import {
   checksOver,

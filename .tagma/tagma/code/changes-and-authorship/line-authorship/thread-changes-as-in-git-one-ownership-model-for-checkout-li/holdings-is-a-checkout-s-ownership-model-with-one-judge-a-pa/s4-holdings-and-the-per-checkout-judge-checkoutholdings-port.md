@@ -12,10 +12,6 @@ edges:
   - kind: implements
     to: 01a1166f-7113-7752-b6b9-0a75fe04fc30
   - kind: waits-on
-    to: 01a11681-3d09-70d2-97f5-12dd417d8235
-  - kind: waits-on
-    to: 01a11681-3d09-70d2-97f5-12debc986e95
-  - kind: waits-on
     to: 01a11681-3d09-70d2-97f5-12e376c9db4f
 ---
 Build [[fe04fc30]] in the `changes-holdings` worktree on top of the folding (S3) and the new intake (S2, the `changes-intake` branch already merged to main and pulled into this branch).

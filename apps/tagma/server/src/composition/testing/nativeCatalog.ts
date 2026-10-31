@@ -16,6 +16,7 @@ import type { GraphServices } from '../../graph/contract/service/services.js';
 import { NO_RULES } from '../../enforcement/testing/doubles.js';
 import { operationChecks } from '../operationChecks.js';
 import { operationCatalog } from '../operationCatalog.js';
+import { ASSEMBLY } from './composed.js';
 import { WorkingOrigins } from '../../workspace/contract/service/places.js';
 import { Git } from '@runlith/git/Git';
 import { dirname, join } from 'node:path';
@@ -81,7 +82,7 @@ const unplaced = WorkingOrigins.of({
   placeOf: () => Effect.succeed(null),
 });
 
-export const fixtureOperationCatalog = Effect.provide(operationCatalog, approvalModesLayer);
+export const fixtureOperationCatalog = Effect.provide(operationCatalog(ASSEMBLY), approvalModesLayer);
 
 export type FixtureNativeCall<Owners> = {
   readonly caller: Caller;

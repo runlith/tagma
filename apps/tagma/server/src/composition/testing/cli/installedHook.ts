@@ -44,7 +44,7 @@ const program = Effect.gen(function* () {
       [
         process.execPath,
         '--no-install',
-        join(import.meta.dir, '../../entries/cli.ts'),
+        join(import.meta.dir, '../../developer/cli.ts'),
         'hook',
         'session-start',
         ...(harness === null ? [] : ['--harness', harness]),
@@ -98,7 +98,15 @@ const program = Effect.gen(function* () {
   );
   const answered = yield* hook(QUILL.harness);
   const read = yield* spawnedEffect(
-    [process.execPath, '--no-install', join(import.meta.dir, '../../entries/cli.ts'), 'hook', 'post-tool-use', '--harness', QUILL.harness],
+    [
+      process.execPath,
+      '--no-install',
+      join(import.meta.dir, '../../developer/cli.ts'),
+      'hook',
+      'post-tool-use',
+      '--harness',
+      QUILL.harness,
+    ],
     {
       cwd: project.root,
       env: {
@@ -121,7 +129,7 @@ const program = Effect.gen(function* () {
   const unnamed = yield* hook(null, sessionTokenEnvironment(thread, HOOK_SESSION, sessionIdentity));
   const unknown = yield* hook('constructor');
   const mcp = yield* spawnedEffect(
-    [process.execPath, '--no-install', join(import.meta.dir, '../../entries/cli.ts'), 'mcp-serve', '--harness', QUILL.harness],
+    [process.execPath, '--no-install', join(import.meta.dir, '../../developer/cli.ts'), 'mcp-serve', '--harness', QUILL.harness],
     {
       cwd: project.root,
       env: { ...env, TAGMA_SERVER_URL: world.url, TAGMA_DATABASE_PATH: join(data, 'tagma.sqlite'), [MCP_KEY_VARIABLE]: undefined },

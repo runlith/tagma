@@ -80,7 +80,7 @@ import { targetIdentity, targetKeyOf } from '../../../executions/terminals/subje
 import { terminalWriters } from '../../../executions/testing/doubles.js';
 import { waitersOver } from '../../../executions/testing/waitersFixture.js';
 import { storesOver } from '../../../executions/testing/stores.js';
-import { BEHAVIOUR_REGISTRY } from '../../manifest.js';
+import { BEHAVIOUR_REGISTRY } from '../composed.js';
 
 const machineWorld = makeMachineWorld(() => null);
 

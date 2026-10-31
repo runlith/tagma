@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { readInboxItem } from '@runlith/agent/thread/persisted';
 import { Result } from 'effect';
-import { ENTRY_KINDS } from '../../manifest.js';
+import { ENTRY_KINDS } from '../composed.js';
 
 const id = 'law-escaped:5:rule:commit';
 const text = 'This raises law-escaped until it is gone.';

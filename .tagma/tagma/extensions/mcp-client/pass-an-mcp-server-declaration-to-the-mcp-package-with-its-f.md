@@ -5,10 +5,10 @@ ord: 14
 tags: ["rule"]
 sources:
   - kind: symbol
-    ref: packages/mcp/src/McpServerDeclaration.ts
-    symbol: McpServerDeclaration
-  - kind: symbol
     ref: apps/tagma/server/src/mcp/declarations.ts
     symbol: readied
+  - kind: symbol
+    ref: packages/mcp/src/McpServerDeclaration.ts
+    symbol: McpServerDeclaration
 ---
 Tagma resolves `${NAME}` only in user and project declarations. A contributed declaration arrives final from its contributor, and a `${…}` left in it goes to the server literally: resolving it would hand an operator's value to a host the contributor chose.

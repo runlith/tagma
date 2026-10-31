@@ -5,8 +5,8 @@ ord: 3
 tags: ["explanation"]
 sources:
   - kind: file
-    ref: packages/adapter-opencode/src/harness/plugin.ts
-  - kind: file
     ref: packages/adapter-opencode/src/harness/opencode.ts
+  - kind: file
+    ref: packages/adapter-opencode/src/harness/plugin.ts
 ---
 A standalone process preserves one thread's environment and authority: connecting to a shared daemon could pick up someone else's hooks and MCP. The plugin and the hook-command table installed beside it belong to the adapter, and a shared installer serves them together with the configuration. A turn start acknowledges the delivered inbox, not the admission of a word into the queue. A child session reports a separate agent_id under an unchanged root session_id, so its Stop does not end the main turn.

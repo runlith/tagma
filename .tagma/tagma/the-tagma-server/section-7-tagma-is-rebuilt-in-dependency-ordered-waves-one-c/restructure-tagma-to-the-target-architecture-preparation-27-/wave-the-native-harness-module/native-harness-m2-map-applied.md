@@ -15,8 +15,6 @@ edges:
     to: 01a0e532-c806-7806-be5d-983121d8b775
   - kind: waits-on
     to: 01a0e532-c828-7195-a4be-9fc6f3aa2e7e
-  - kind: waits-on
-    to: 01a0e532-ccaf-7331-8d38-65646e5ffef6
 ---
 §7.2.2 milestone `M2` of the `native-harness` card ([[f7e0b9dd]]), with its vocabulary amendment [[aa1b0681]].
 

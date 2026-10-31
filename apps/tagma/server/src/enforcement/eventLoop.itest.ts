@@ -79,8 +79,8 @@ const parsingOf = (packages: ReadonlyMap<string, string>) =>
   PARSING.filter((name) => packages.has(name)).map((name) => `${name} (${packages.get(name)})`);
 
 test('the server and the CLI load no source parser on their event loop; the inspection workers load it', () => {
-  expect(parsingOf(loadedFrom('composition/server.ts'))).toEqual([]);
-  expect(parsingOf(loadedFrom('composition/entries/cli.ts'))).toEqual([]);
+  expect(parsingOf(loadedFrom('composition/developer/server.ts'))).toEqual([]);
+  expect(parsingOf(loadedFrom('composition/developer/cli.ts'))).toEqual([]);
   for (const worker of ['enforcement/workers/judge.worker.ts', 'enforcement/workers/reach.worker.ts']) {
     expect(PARSING.filter((name) => name !== 'typescript' && !loadedFrom(worker).has(name))).toEqual([]);
   }

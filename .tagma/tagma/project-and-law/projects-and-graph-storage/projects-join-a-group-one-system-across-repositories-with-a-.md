@@ -16,21 +16,21 @@ edges:
     to: 01a18d49-eba5-7e14-8517-20f9249b762f
 sources:
   - kind: file
-    ref: apps/tagma/server/src/projects/groups.ts
+    ref: apps/tagma/app/src/lib/features/projects/Grouping.svelte.ts
   - kind: file
-    ref: apps/tagma/server/src/graph/operations/groups.ts
-  - kind: file
-    ref: apps/tagma/server/src/graph/contract/wire/operations/groups.ts
+    ref: apps/tagma/app/src/lib/features/threads/place/Strip.svelte
   - kind: file
     ref: apps/tagma/app/src/lib/features/workspace/TileRung.ts
   - kind: file
-    ref: apps/tagma/app/src/lib/features/projects/Grouping.svelte.ts
+    ref: apps/tagma/server/src/graph/contract/wire/operations/groups.ts
   - kind: file
-    ref: apps/tagma/server/src/threads/list/threadList.ts
+    ref: apps/tagma/server/src/graph/operations/groups.ts
+  - kind: file
+    ref: apps/tagma/server/src/projects/groups.ts
   - kind: file
     ref: apps/tagma/server/src/thread-record/folders.ts
   - kind: file
-    ref: apps/tagma/app/src/lib/features/threads/place/Strip.svelte
+    ref: apps/tagma/server/src/threads/list/threadList.ts
 ---
 **Value.** One system often lives in several repositories — a public product and its private cloud, a library and its consumer. A group makes Tagma treat them as one: an agent in any of them starts knowing the others and their law, the knowledge spanning them has its own home, and the window shows them as one place to work, while each repository keeps its own graph, law and storage.
 

@@ -30,7 +30,7 @@ import {
 } from '../installation/contract/wire/layout.js';
 import { type Installation, releaseApplication } from '../installation/contract/wire/manifest.js';
 import { installationRoot } from '../installation/paths.js';
-import { CHANNEL } from '@tagma/server/composition/channel';
+import type { Channel } from '../installation/contract/wire/channel.js';
 import { Echo, EchoUnloaded } from '../speech/contract/service/echo.js';
 import { Handoff } from '../speech/contract/service/handoff.js';
 import { InstallFailed, LocalModels, ModelRefused } from '../speech/contract/service/models.js';
@@ -50,10 +50,10 @@ export type SpeechPlace = {
   readonly data: string;
 };
 
-export const speechPlace = (sourcePath: string, installation: Installation | undefined, data: string): SpeechPlace => {
+export const speechPlace = (channel: Channel, sourcePath: string, installation: Installation | undefined, data: string): SpeechPlace => {
   const tools = installation === undefined ? resolve(sourcePath, '..', '..', '..', 'packages', 'speech-whisper', 'bin') : undefined;
   return {
-    hostApp: releaseApplication(installation?.root ?? join(installationRoot(CHANNEL), CURRENT), CHANNEL.name),
+    hostApp: releaseApplication(installation?.root ?? join(installationRoot(channel), CURRENT), channel.name),
     engine: tools === undefined ? join(installation!.root, WHISPER_ENGINE_PART) : join(tools, 'whisper-engine'),
     silero: tools === undefined ? join(installation!.root, SILERO_PART) : join(tools, 'silero.bin'),
     absence: tools === undefined ? join(installation!.root, WHISPER_ABSENCE_PART) : join(tools, 'whisper-engine.absent'),

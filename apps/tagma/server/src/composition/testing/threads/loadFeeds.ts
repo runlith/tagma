@@ -6,7 +6,7 @@ import { Socket } from 'effect/socket';
 import { liveSerialization } from '../../../platform/contract/wire/live.js';
 import { websocketHttpTracing } from '../../../socket/live.js';
 import { TAGMA_SOCKET_PATH } from '../../../socket/rpc.js';
-import { LiveRpc } from '../../rpc.js';
+import { LiveRpc } from '../composed.js';
 import type { ServerRuntime } from '../../runtime.js';
 import { liveDoorLayer } from '../socketDoor.js';
 

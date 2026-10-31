@@ -22,9 +22,9 @@ sources:
   - kind: file
     ref: apps/tagma/server/src/mcp/operations.ts
   - kind: file
-    ref: packages/mcp/src/McpServerDeclaration.ts
-  - kind: file
     ref: apps/tagma/server/src/mcp/signIns.ts
+  - kind: file
+    ref: packages/mcp/src/McpServerDeclaration.ts
 ---
 **Value.** An external tool — GitHub, a database, browser devtools — connects to Tagma agents as a standard MCP server, with no code in Tagma.
 

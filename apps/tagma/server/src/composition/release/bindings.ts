@@ -1,5 +1,5 @@
 import { Layer } from 'effect';
-import { CHANNEL } from '@tagma/server/composition/channel';
+import { CHANNEL } from './channel.js';
 import { PROGRAM_RELEASE } from '../../platform/contract/wire/program.js';
 import { applications } from '../../mac-applications/placement.js';
 import { releasePlaces } from '../../release-channel/places.js';

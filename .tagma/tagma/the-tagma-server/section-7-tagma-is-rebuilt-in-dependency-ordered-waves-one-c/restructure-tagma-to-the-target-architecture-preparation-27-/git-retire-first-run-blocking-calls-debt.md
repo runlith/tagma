@@ -11,7 +11,5 @@ fields:
 edges:
   - kind: discovered-from
     to: 01a0e569-e621-72f5-9ecd-6129055c5c72
-  - kind: implements
-    to: 01a0e470-f876-7433-b54b-0ba8e4a0488f
 ---
 Retire the 1 blocking-calls synchronous I/O site recorded for packages/git in checks/blocking-calls.server.debt.json. Keep the serving isolate non-blocking and prove the changed reach is clean.

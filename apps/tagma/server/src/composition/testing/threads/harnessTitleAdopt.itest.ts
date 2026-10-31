@@ -23,7 +23,7 @@ import { sessionStoreOver } from '../../../external-harnesses/testing/floor.js';
 import { harnessPresentation } from '../../../external-harnesses/contract/service/table.js';
 import { shippedAdapters } from '../external-harnesses/shipped.js';
 import { builtinHarness } from '../../../external-harnesses/testing/builtin.js';
-import { ENTRY_KINDS } from '../../manifest.js';
+import { ENTRY_KINDS } from '../composed.js';
 
 const titleIdentity = (records: ThreadRecords['Service'], id: string) =>
   Effect.map(records.facts(id), (facts) =>

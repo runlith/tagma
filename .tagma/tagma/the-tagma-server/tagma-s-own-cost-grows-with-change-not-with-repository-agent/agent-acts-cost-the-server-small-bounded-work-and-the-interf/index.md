@@ -9,13 +9,13 @@ fields:
   }
 sources:
   - kind: file
-    ref: packages/agent/src/thread/run/ThreadSnapshots.ts
+    ref: apps/tagma/server/src/external-harnesses/store/protocol.ts
   - kind: file
     ref: apps/tagma/server/src/platform/store/transaction.ts
   - kind: file
     ref: apps/tagma/server/src/threads/list/threadList.ts
   - kind: file
-    ref: apps/tagma/server/src/external-harnesses/store/protocol.ts
+    ref: packages/agent/src/thread/run/ThreadSnapshots.ts
 ---
 Every agent act — a hosted tool call, a streamed CLI frame, a state change — passes through the one server process. Today that process spends far more per act than the act costs. The interface is served from the same event loop, so it freezes with it. This spec makes the server's work per act small and bounded. Within a stated load envelope it keeps the interface's latency independent of how many agents run; past the envelope agent work slows by backpressure while the interface stays responsive. It is step 2 ("SQL per act") of the parent spec for the agent path, extended to the writer, thread projections, memory and the fault domain that the 2026-10-30 incident showed. Every user who runs several agents meets the problem; a weaker machine meets it with fewer agents.
 

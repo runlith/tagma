@@ -5,9 +5,9 @@ ord: 26
 tags: ["explanation"]
 sources:
   - kind: file
-    ref: packages/testbed/src/core/bed.ts
-  - kind: file
     ref: packages/testbed/src/bun.ts
+  - kind: file
+    ref: packages/testbed/src/core/bed.ts
 ---
 Under `--no-isolate` a worker keeps a shared world alive across files, and its background work — a refresh pass, a watcher, a queue drained by a fiber the build forked — keeps spawning while the next file runs. Judged by the current file alone, such a spawn in a following unit file was refused as that file's call and charged to it as a leftover, so a resource file's world failed whichever unit file the worker happened to run next.
 

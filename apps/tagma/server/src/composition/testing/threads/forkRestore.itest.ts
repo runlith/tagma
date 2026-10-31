@@ -12,7 +12,7 @@ import { nativeOnlyParts } from '../../../native-harness/testing/rollout.js';
 import { evidenceReads } from '../../../native-harness/testing/doubles.js';
 import { conversationReads, exportThreadRollout, replayThreadRollout, sqliteThreadJournal } from '../../../threads/testing/doubles.js';
 import { threadStoreFixture } from '../threadStoreFixture.js';
-import { ENTRY_KINDS } from '../../manifest.js';
+import { ENTRY_KINDS } from '../composed.js';
 
 const said = (turn: number, role: 'user' | 'assistant'): ThreadEventBody => {
   const text = `${role === 'user' ? 'question' : 'answer'} ${turn}`;

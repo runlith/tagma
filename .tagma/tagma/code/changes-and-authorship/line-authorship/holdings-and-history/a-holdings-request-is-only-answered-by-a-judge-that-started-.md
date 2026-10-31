@@ -3,9 +3,6 @@ id: 01a13235-8df2-723d-ae81-1ea142e8ab57
 title: A Holdings request is only answered by a judge that started reading inputs after that request
 ord: 6
 tags: ["explanation"]
-edges:
-  - kind: discovered-from
-    to: 01a1321c-227d-769c-a933-e64736bef6d4
 sources:
   - kind: file
     ref: apps/tagma/server/src/change-record/holdings/judge.ts

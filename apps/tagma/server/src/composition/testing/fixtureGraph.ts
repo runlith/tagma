@@ -26,7 +26,7 @@ export const fixtureGraph = (options: {
         Layer.succeed(Catalogs, options.catalogs ?? NO_CATALOGS),
         Layer.effect(
           Behaviours,
-          Effect.promise(() => import('../manifest.js')).pipe(Effect.map(({ BEHAVIOUR_REGISTRY }) => BEHAVIOUR_REGISTRY)),
+          Effect.promise(() => import('./composed.js')).pipe(Effect.map(({ BEHAVIOUR_REGISTRY }) => BEHAVIOUR_REGISTRY)),
         ),
         Layer.succeed(GraphSource, {
           sourcePath: options.sourcePath,

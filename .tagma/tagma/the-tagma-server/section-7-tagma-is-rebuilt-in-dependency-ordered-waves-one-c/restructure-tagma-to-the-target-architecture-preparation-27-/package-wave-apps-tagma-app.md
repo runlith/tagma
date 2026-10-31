@@ -8,9 +8,6 @@ fields:
     "holder": "tagma:01a0e7e4-7092-76b7-b92e-162b17696cf9",
     "status": "done"
   }
-edges:
-  - kind: implements
-    to: 01a0e470-f876-7433-b54b-0ba8e4a0488f
 ---
 The `apps/tagma/app` card of section 7 part 2 ([[e4a0488f]]), with its vocabulary amendment [[1deb33b8]]. Owns this surface's `modules` and `names` debt. Its order follows section 6 ([[be799808]]).
 

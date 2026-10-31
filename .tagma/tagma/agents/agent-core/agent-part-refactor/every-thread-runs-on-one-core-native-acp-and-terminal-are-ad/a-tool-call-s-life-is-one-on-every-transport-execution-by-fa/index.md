@@ -9,11 +9,11 @@ fields:
   }
 sources:
   - kind: file
+    ref: apps/tagma/server/src/threads/list/phase.ts
+  - kind: file
     ref: packages/adapter-anthropic/src/runner/bridge.ts
   - kind: file
     ref: packages/adapter-anthropic/src/runner/translate.ts
-  - kind: file
-    ref: apps/tagma/server/src/threads/list/phase.ts
   - kind: file
     ref: packages/agent/src/agent/AgentCalls.ts
   - kind: file

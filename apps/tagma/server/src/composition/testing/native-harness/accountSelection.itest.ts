@@ -13,7 +13,7 @@ import { MachineStore } from '../../../platform/contract/service/store.js';
 import { MachineUnits } from '../../../platform/contract/service/units.js';
 import { makeThreadRecords } from '../../../thread-record/layer.js';
 import { threadStack } from '../threadParts.js';
-import { ENTRY_KINDS } from '../../manifest.js';
+import { ENTRY_KINDS } from '../composed.js';
 
 const anthropic = Effect.fnUntraced(function* (uuid: string): Effect.fn.Return<SubscriptionCredential> {
   return {

@@ -10,8 +10,8 @@ sources:
   - kind: file
     ref: apps/tagma/server/src/enforcement/judging/judge.ts
   - kind: file
-    ref: apps/tagma/server/src/enforcement/rules/reach.ts
-  - kind: file
     ref: apps/tagma/server/src/enforcement/judging/ruleChecks.ts
+  - kind: file
+    ref: apps/tagma/server/src/enforcement/rules/reach.ts
 ---
 While the vocabulary or a rule's enforcement document does not read, nothing says which rules run before an operation, so every agent operation that changes nothing is judged and refused — except the ways out in `judge.ts`. The refusals over unreadable law send the caller to doors that say why and name each unreadable declaration with how to correct or delete it; every such door belongs to the ways out. One missing turns recovery into a loop while every commit of the project stays refused: read_enforcement pointed at read_vocabulary, and the gate refused read_vocabulary.

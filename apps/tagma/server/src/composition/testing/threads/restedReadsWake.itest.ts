@@ -22,7 +22,7 @@ import { threadEvent } from '../../../threads/testing/doubles.js';
 import { exportThreadRollout } from '../../../threads/testing/doubles.js';
 import { rehydrateThreadRecords } from '../../../threads/testing/doubles.js';
 import { restedReads } from '../../../threads/testing/doubles.js';
-import { ENTRY_KINDS } from '../../manifest.js';
+import { ENTRY_KINDS } from '../composed.js';
 import { ThreadEntryKinds } from '@runlith/agent/transcript/kinds';
 
 const text = (id: string, body: string): ThreadTranscriptEntry => ({ id, type: 'message', role: 'assistant', text: body });

@@ -18,6 +18,8 @@ sources:
   - kind: file
     ref: apps/tagma/server/src/native-harness/inputs/cache.ts
   - kind: file
+    ref: apps/tagma/server/src/native-harness/inputs/plugins.ts
+  - kind: file
     ref: apps/tagma/server/src/native-harness/inputs/walk.ts
   - kind: file
     ref: apps/tagma/server/src/native-harness/skills/pool.ts
@@ -25,8 +27,6 @@ sources:
     ref: packages/agent-sources/src/SkillDirectories.ts
   - kind: file
     ref: packages/agent/src/agent/AgentSkill.ts
-  - kind: file
-    ref: apps/tagma/server/src/native-harness/inputs/plugins.ts
 ---
 **Value.** Repeatable know-how — how to review, how to write a report, how to work with an internal service — lies once as a folder with `SKILL.md`, and the agent picks it up only when the task fits, without inflating every start.
 

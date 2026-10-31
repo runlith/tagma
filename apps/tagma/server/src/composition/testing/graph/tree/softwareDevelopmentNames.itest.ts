@@ -11,7 +11,7 @@ import { ensureVocabulary } from '../../../../graph/serving/birth.js';
 import { block, blockTag } from '../../../../graph/store/tables.js';
 import { softwareDevelopmentNames } from '../../../../graph/steps/softwareDevelopmentNames.js';
 import { TagIndex } from '../../../../graph/vocabulary/tagIndex.js';
-import { BEHAVIOUR_REGISTRY } from '../../../manifest.js';
+import { BEHAVIOUR_REGISTRY } from '../../composed.js';
 import { demoGraphLayer, withDemo } from '../../graphFixture.js';
 import { SHIPPED_CATALOGS } from '../../settings.js';
 import { installNotes } from './notesFixture.js';

@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import type { ThreadFormRecord } from '@runlith/agent/transcript/kinds';
-import { ENTRY_KINDS } from '../../manifest.js';
+import { ENTRY_KINDS } from '../composed.js';
 
 const records: readonly ThreadFormRecord[] = ['entry', 'payload', 'message', 'reading', 'meta', 'inbox'];
 

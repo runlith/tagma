@@ -1,8 +1,7 @@
 import { expect, test } from 'bun:test';
 import { OPERATION_IDS } from './catalog.js';
 import type { FeedDeclaration } from '../platform/contract/wire/operation.js';
-import { COLLECTED_FEEDS } from './manifest.js';
-import { SOCKET_VERBS } from './socketBinding.js';
+import { COLLECTED_FEEDS, SOCKET_VERBS } from './testing/composed.js';
 
 test('every socket act performs a registered operation', () => {
   const unknown = Object.entries(SOCKET_VERBS).filter(([, id]) => !(OPERATION_IDS as readonly string[]).includes(id));

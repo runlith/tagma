@@ -18,7 +18,7 @@ import { spawnedEffect } from '../../platform/testing/spawn.js';
 import { makeTerminalWorld } from './fixture.js';
 
 const OWNER = '/tagma-commit-fixture-owner';
-const CLI = join(import.meta.dir, '../entries/cli.ts');
+const CLI = join(import.meta.dir, '../developer/cli.ts');
 export const FORWARD = "export * from './a';\n";
 export const DOWN = 'http://127.0.0.1:9';
 const REEXPORTS = { builtin: 'reexports', params: { base: '', allows: [], files: { extensions: ['.ts'], exclude: [] } } };

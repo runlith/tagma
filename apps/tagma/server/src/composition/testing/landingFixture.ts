@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { dirname, join } from 'node:path';
 import { Context, Effect, FileSystem, Layer, PlatformError, Scope } from 'effect';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
-import { checkSubjectOf } from '../catalog.js';
+import { checkSubjectOf } from './composed.js';
 import {
   changeChecked,
   checksOver,

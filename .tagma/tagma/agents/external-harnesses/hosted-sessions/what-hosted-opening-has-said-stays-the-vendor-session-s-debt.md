@@ -14,14 +14,14 @@ sources:
   - kind: file
     ref: packages/hosted-runner/src/turn.ts
   - kind: symbol
-    ref: packages/hosted-runner/src/cycle.ts
-    symbol: Input
-  - kind: symbol
     ref: apps/tagma/server/src/external-harnesses/store/turns.ts
     symbol: VendorTurns
   - kind: symbol
     ref: packages/agent/src/thread/run/hostedParts.ts
     symbol: HostedOwing
+  - kind: symbol
+    ref: packages/hosted-runner/src/cycle.ts
+    symbol: Input
 ---
 What a hosted opening has said stays the vendor session's debt until the vendor takes it, and leaves again with the next opening.
 

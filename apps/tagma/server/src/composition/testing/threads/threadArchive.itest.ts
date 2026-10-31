@@ -21,7 +21,7 @@ import { birthsOf, turnsOf, listOf, inboxOf, thread, threadRun, unmeasuredObserv
 import { terminalArgv, terminalKernel } from '../../../external-harnesses/testing/doubles.js';
 import { sessionStoreOver } from '../../../external-harnesses/testing/floor.js';
 
-import { ENTRY_KINDS } from '../../manifest.js';
+import { ENTRY_KINDS } from '../composed.js';
 import { ThreadRollouts } from '../../../threads/contract/service/rollouts.js';
 import { ModelChanges } from '../../../threads/contract/service/modelChanges.js';
 import { harnessPresentation } from '../../../external-harnesses/contract/service/table.js';

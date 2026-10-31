@@ -12,13 +12,13 @@ edges:
     to: 01a18d49-8332-708f-85d5-3198619987f6
 sources:
   - kind: file
-    ref: apps/tagma/server/src/graph/orientation/prime.ts
+    ref: apps/tagma/app/src/lib/app/chrome/ProjectList.svelte
   - kind: file
     ref: apps/tagma/app/src/lib/features/projects/Dock.svelte
   - kind: file
-    ref: apps/tagma/app/src/lib/app/chrome/ProjectList.svelte
-  - kind: file
     ref: apps/tagma/app/src/lib/features/threads/Row.svelte
+  - kind: file
+    ref: apps/tagma/server/src/graph/orientation/prime.ts
   - kind: file
     ref: apps/tagma/server/src/thread-record/folders.ts
 ---

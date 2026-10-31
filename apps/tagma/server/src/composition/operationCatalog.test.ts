@@ -10,6 +10,7 @@ import { OperationCatalog } from '../invocation/contract/service/catalog.js';
 import { OPERATIONS } from './catalog.js';
 import { operationBodies } from './bodies.js';
 import { catalogWorld } from './testing/catalogWorld.js';
+import { ASSEMBLY } from './testing/composed.js';
 
 const agent: Caller = {
   actor: {
@@ -26,7 +27,7 @@ const operator: Caller = { actor: { kind: 'operator' }, files: null };
 layer(world(catalogWorld, null))('operation dispatch', (it) => {
   it.effect('every declared operation loads one body, filed under its own id', () =>
     Effect.gen(function* () {
-      const bodies = yield* operationBodies;
+      const bodies = yield* operationBodies(ASSEMBLY.operations.modules);
       const disagreeing = Object.entries(bodies)
         .filter(([key, body]) => body.id !== key)
         .map(([key, body]) => `${key} carries ${String(body.id)}`);

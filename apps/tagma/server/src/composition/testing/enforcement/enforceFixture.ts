@@ -17,7 +17,7 @@ import { OperationCatalog } from '../../../invocation/contract/service/catalog.j
 import { fixtureOperationCatalog as operationCatalog } from '../nativeCatalog.js';
 import { operationChecks } from '../../operationChecks.js';
 import type { LawEnforcement } from '../../../graph/contract/wire/enforcement.js';
-import { checkSubjectOf } from '../../catalog.js';
+import { checkSubjectOf } from '../composed.js';
 import { RuleChecks } from '../../../enforcement/contract/service/ruleChecks.js';
 import { UNBOUND_CHECKS } from '../../../enforcement/testing/doubles.js';
 import { based, type Unbased } from '../../../enforcement/testing/based.js';

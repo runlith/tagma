@@ -38,7 +38,7 @@ import { evidenceInGroups, evidenceOfPath, heldOfThread } from '../../../change-
 import { resolveHandover } from '../../../change-record/record/sessions.js';
 import { addressOf } from '../../../thread-record/identity.js';
 import { ThreadId } from '../../../platform/contract/wire/thread.js';
-import { BEHAVIOUR_REGISTRY } from '../../manifest.js';
+import { BEHAVIOUR_REGISTRY } from '../composed.js';
 
 const ROOT = '/work/repo';
 

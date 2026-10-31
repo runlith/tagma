@@ -8,7 +8,7 @@ import { type CatalogCandidate, type Installed, prepareCandidate, type StandingT
 import { SECTION_JOIN } from '../../../../graph/vocabulary/compiler.js';
 import { sectionRevision, typeRevision } from '../../../../graph/vocabulary/layers.js';
 import { TagIndex } from '../../../../graph/vocabulary/tagIndex.js';
-import { BEHAVIOUR_REGISTRY } from '../../../manifest.js';
+import { BEHAVIOUR_REGISTRY } from '../../composed.js';
 
 const CONTRACT = 'A note states one thing.';
 const NOTE = shippedTypeId('kit', 'note');

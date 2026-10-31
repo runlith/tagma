@@ -5,9 +5,9 @@ ord: 29
 tags: ["explanation"]
 sources:
   - kind: file
-    ref: apps/tagma/server/src/workspace/roots/registry.ts
-  - kind: file
     ref: apps/tagma/server/src/workspace/roots/coverage.ts
+  - kind: file
+    ref: apps/tagma/server/src/workspace/roots/registry.ts
 ---
 Registration refuses a directory whose stat gives no safe-integer inode or no birthtime, so every registered root carries a usable identity. A directory without one therefore can never equal a root or be a root's ancestor key, and the lookups asking only that — `FileRoots.matching`, the ancestor walk of `probe`, `Coverage.follow` — treat it as "not a root" and go on. Registration and a probe of the resource itself still refuse `identity-unavailable`: there the identity is the answer.
 

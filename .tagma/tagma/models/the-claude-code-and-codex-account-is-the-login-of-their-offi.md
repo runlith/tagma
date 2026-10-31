@@ -22,8 +22,6 @@ sources:
   - kind: file
     ref: apps/tagma/server/src/external-harnesses/sessions/carry.ts
   - kind: file
-    ref: packages/adapter-openai/src/harness/ends.ts
-  - kind: file
     ref: apps/tagma/server/src/providers/accounts/defaultLogins.ts
   - kind: file
     ref: apps/tagma/server/src/providers/accounts/harnessAccounts.ts
@@ -33,6 +31,8 @@ sources:
     ref: packages/adapter-anthropic/src/accounts.ts
   - kind: file
     ref: packages/adapter-openai/src/accounts.ts
+  - kind: file
+    ref: packages/adapter-openai/src/harness/ends.ts
 ---
 **Value.** A Claude or ChatGPT subscription works in Claude Code and Codex threads the same way as in their own terminal, and Tagma neither holds nor reads their token.
 

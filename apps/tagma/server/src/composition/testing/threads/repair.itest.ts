@@ -15,7 +15,7 @@ import {
   isThreadProjectionRefused,
   threadRolloutRepair,
 } from '../../../threads/testing/doubles.js';
-import { ENTRY_KINDS } from '../../manifest.js';
+import { ENTRY_KINDS } from '../composed.js';
 
 const threadId = 'thread-under-repair';
 const meta = () => `${JSON.stringify({ thread: { id: threadId }, facet: null, session: null })}\n`;

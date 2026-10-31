@@ -10,7 +10,7 @@ import { OBSERVATION } from '../../../../graph/contract/wire/tags/observation.js
 import { REFLECTION } from '../../../../graph/contract/wire/tags/reflection.js';
 import { SELECTION } from '../../../../graph/contract/wire/tags/selection.js';
 import { TagIndex } from '../../../../graph/vocabulary/tagIndex.js';
-import { BEHAVIOUR_REGISTRY } from '../../../manifest.js';
+import { BEHAVIOUR_REGISTRY } from '../../composed.js';
 import type { Behaviour } from '../../../../graph/contract/service/behaviours.js';
 import type { ContractBindings } from '../../../../graph/contract/wire/tags/behaviour.js';
 import type { Declaration, Gate, TagFields } from '../../../../graph/contract/wire/tags/declaration.js';

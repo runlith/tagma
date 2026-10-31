@@ -8,9 +8,6 @@ fields:
     "holder": "tagma:01a13517-7ef9-7bee-86c8-94a3dc31a7f1",
     "status": "done"
   }
-edges:
-  - kind: discovered-from
-    to: 01a132b7-5d57-78fb-8b39-f075b32630c3
 sources:
   - kind: file
     ref: apps/tagma/server/src/commit-steps/declaration.ts

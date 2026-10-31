@@ -3,9 +3,6 @@ id: 01a1322a-22fd-7d53-8112-4b43352e58d6
 title: Checkout marks change Holdings inputs; a checkout line changes its dirty domain
 ord: 5
 tags: ["explanation"]
-edges:
-  - kind: discovered-from
-    to: 01a1321c-227d-769c-a933-e64736bef6d4
 sources:
   - kind: file
     ref: apps/tagma/server/src/change-record/holdings/judge.ts

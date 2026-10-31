@@ -26,7 +26,7 @@ export const makeMcpWorld = Effect.fnUntraced(function* () {
         {
           transport: 'stdio',
           command: 'bun',
-          args: [join(import.meta.dir, '../../entries/cli.ts'), 'mcp-serve', '--harness', harness],
+          args: [join(import.meta.dir, '../../developer/cli.ts'), 'mcp-serve', '--harness', harness],
           cwd: project.root,
           env: environment(extra),
           onStderr: (chunk) => {

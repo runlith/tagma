@@ -11,8 +11,6 @@ fields:
 edges:
   - kind: implements
     to: 01a151df-e920-73d7-9b09-09d091976ebe
-  - kind: relates
-    to: 01a14013-cfc1-7aab-897c-4aa8e057eae7
 sources:
   - kind: file
     ref: apps/tagma/server/src/external-harnesses/hooks/dispatch.ts

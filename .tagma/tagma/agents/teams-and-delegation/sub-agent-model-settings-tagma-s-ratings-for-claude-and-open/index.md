@@ -18,11 +18,11 @@ edges:
     to: 01a15101-ab43-7efc-a255-40e446e7ebcd
 sources:
   - kind: file
-    ref: packages/agent/src/collaboration/team.ts
-  - kind: file
     ref: apps/tagma/app/src/lib/features/threads/team/TeamSettings.svelte
   - kind: file
     ref: apps/tagma/server/src/threads/contract/wire/settings.ts
+  - kind: file
+    ref: packages/agent/src/collaboration/team.ts
   - kind: file
     ref: packages/llm/src/models/description.ts
 ---

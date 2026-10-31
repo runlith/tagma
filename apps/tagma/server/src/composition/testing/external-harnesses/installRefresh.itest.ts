@@ -4,7 +4,7 @@ import { layer } from '@runlith/effect-test';
 import { sharedPool } from '@runlith/sqlite-process/testing/pool';
 import { dirname, join } from 'node:path';
 import { Context, Effect, FileSystem, Layer, Schema } from 'effect';
-import { doctrine } from '../../doctrine.js';
+import { doctrine } from '../composed.js';
 import { fixtureMigrations } from '../migrations.js';
 import { shippedAdaptersLayer } from './shipped.js';
 import { builtinHarness } from '../../../external-harnesses/testing/builtin.js';

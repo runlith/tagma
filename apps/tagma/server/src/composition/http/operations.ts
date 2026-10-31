@@ -15,7 +15,6 @@ import {
 } from '../../invocation/contract/wire/headers.js';
 import { GateRefusal, refusalBody } from '../../platform/contract/wire/refusal.js';
 import type { CallNeeds } from '../../invocation/contract/service/performer.js';
-import { OPERATIONS, OPERATION_IDS, SOCKET_ONLY_OPERATIONS, type CatalogOperationId, type SocketOnlyOperationId } from '../catalog.js';
 import type { HttpPerformById } from './binding.js';
 import { answeringRecorded, doorStep } from './answering.js';
 import { OperationCatalog } from '../../invocation/contract/service/catalog.js';
@@ -32,16 +31,20 @@ import type { Operation } from '../../platform/contract/wire/operation.js';
 
 type Detach = ReturnType<typeof invocationAssembly.detaching>;
 
-const socketOnly = (id: string): id is SocketOnlyOperationId => SOCKET_ONLY_OPERATIONS.some((only) => only === id);
-const decoders: ReadonlyMap<string, (input: unknown) => Effect.Effect<unknown, GateRefusal<'body-shape'>>> = new Map(
-  OPERATION_IDS.filter((id) => !socketOnly(id)).map((id) => [id, inputDecoder(OPERATIONS[id].params)] as const),
-);
+type Decoders = ReadonlyMap<string, (input: unknown) => Effect.Effect<unknown, GateRefusal<'body-shape'>>>;
+
+const decodersOf = (registry: OperationCatalog['Service']['registry']): Decoders =>
+  new Map(registry.ids.flatMap((id) => (socketOnly(registry, id) ? [] : [[id, inputDecoder(registry.entry(id).params)] as const])));
+
+const socketOnly = (registry: OperationCatalog['Service']['registry'], id: OperationId): boolean =>
+  registry.doors(id).every((door) => door === 'socket');
+
 const encodeAnswer = Schema.encodeUnknownEffect(Schema.toCodecJson(Schema.Unknown));
 
 const unknownOperation = (named: string) =>
   new GateRefusal('unknown-operation', `no operation is named ${named}`, ['read_operations — the ids this server performs']);
 
-const channelRefusal = (id: SocketOnlyOperationId) =>
+const channelRefusal = (id: OperationId) =>
   new GateRefusal('thread-channel', `${id} opens a run over the live thread channel; an HTTP response cannot carry that turn`, [
     'perform it over the live thread channel',
   ]);
@@ -53,9 +56,10 @@ const withMeta = (answer: unknown, media: readonly ToolMedia[], text: string | u
   return { ...held, _meta: { ...held._meta, ...(inline.length === 0 ? {} : { media: inline }), ...(text === undefined ? {} : { text }) } };
 };
 
-const performing = (performById: HttpPerformById, catalog: OperationCatalog['Service'], detach: Detach) =>
-  Effect.fnUntraced(function* (named: string, payload: unknown, needs: CallNeeds) {
-    const { id, input } = yield* serverStep(decoded(catalog, named, payload));
+const performing = (performById: HttpPerformById, catalog: OperationCatalog['Service'], detach: Detach) => {
+  const decoders = decodersOf(catalog.registry);
+  return Effect.fnUntraced(function* (named: string, payload: unknown, needs: CallNeeds) {
+    const { id, input } = yield* serverStep(decoded(catalog, decoders, named, payload));
     const performed = Effect.gen(function* () {
       const performedNow = yield* performById(id, input, needs);
       const encoded = yield* serverStep(Effect.orDie(encodeAnswer(performedNow.shaped.answer)));
@@ -75,15 +79,16 @@ const performing = (performById: HttpPerformById, catalog: OperationCatalog['Ser
       }),
     );
   });
+};
 
 const serverStep = doorStep('server call');
 
-const decoded = Effect.fnUntraced(function* (catalog: OperationCatalog['Service'], named: string, payload: unknown) {
+const decoded = Effect.fnUntraced(function* (catalog: OperationCatalog['Service'], decoders: Decoders, named: string, payload: unknown) {
   const id = catalog.registry.named(named);
   if (id === null) return yield* unknownOperation(named);
   const entry: Operation = catalog.registry.entry(id);
   if ((yield* CurrentCaller).actor.kind === 'external' && entry.external !== true) return yield* externalRefusal(id, entry.meaning);
-  if (socketOnly(id)) return yield* channelRefusal(id);
+  if (socketOnly(catalog.registry, id)) return yield* channelRefusal(id);
   return { id, input: yield* decoders.get(id)!(withoutDoorFields(payload, DOOR_FIELDS)) };
 });
 

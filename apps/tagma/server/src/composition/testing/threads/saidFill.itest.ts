@@ -10,6 +10,7 @@ import { ThreadList, type ThreadsEvent } from '../../../threads/contract/service
 import { threadEntry, threadRun, birthsOf } from '../../../threads/testing/doubles.js';
 import { testGrantSigner } from '../../../platform/testing/grants.js';
 import { makeRuntime } from '../../runtime.js';
+import { COMPOSED } from '../composed.js';
 import { chosenModel } from '../chosenModel.js';
 import { sharedPool } from '@runlith/sqlite-process/testing/pool';
 
@@ -20,6 +21,7 @@ const setup = Effect.fn('testing.saidFillWorld')(function* () {
   const processes = yield* sharedPool;
   const runtime = yield* makeRuntime(
     {
+      ...COMPOSED,
       drivers: ['said-backfill'],
       grants: testGrantSigner,
       databasePath: join(data, 'tagma.sqlite'),

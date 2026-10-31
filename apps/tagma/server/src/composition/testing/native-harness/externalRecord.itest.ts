@@ -13,7 +13,7 @@ import { bornThread } from '../../../native-harness/testing/born.js';
 import { recordOf } from '../../../thread-record/testing/records.js';
 import { harnessPresentation } from '../../../external-harnesses/contract/service/table.js';
 import { builtinHarness } from '../../../external-harnesses/testing/builtin.js';
-import { ENTRY_KINDS } from '../../manifest.js';
+import { ENTRY_KINDS } from '../composed.js';
 import { StorageFixture, storageFixture } from './storage.fixture.js';
 
 const PROJECT = 1;

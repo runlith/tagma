@@ -3,9 +3,6 @@ id: 01a147eb-d22e-74ef-add5-0c510aa24a9f
 title: Start cost is computed by one function over measured parts; the card is written on the first model request of the operator thread first run
 ord: 20
 tags: ["explanation"]
-edges:
-  - kind: relates
-    to: 01a147a2-8160-7c3f-82a0-b2721ce2ba9f
 sources:
   - kind: file
     ref: apps/tagma/server/src/native-harness/agents/start.ts

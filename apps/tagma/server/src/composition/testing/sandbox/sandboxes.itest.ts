@@ -25,7 +25,7 @@ import { Sandboxes, SandboxUnavailable } from '../../../sandbox/contract/service
 import { SandboxFiles } from '../../../sandbox/contract/service/files.js';
 import { SandboxHolds } from '../../../sandbox/contract/service/holds.js';
 import { preparedTreeStore, preparedTreesService, sandboxStore, sandboxServices, liveGuests } from '../../../sandbox/testing/doubles.js';
-import { ENTRY_KINDS } from '../../manifest.js';
+import { ENTRY_KINDS } from '../composed.js';
 
 const OWNER = 'operator';
 const IMAGE = { reference: 'guest:abc', digest: 'sha256:abc', revision: 'abc' };

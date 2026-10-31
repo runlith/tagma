@@ -5,10 +5,10 @@ ord: 20
 tags: ["rule"]
 sources:
   - kind: dir
-    ref: packages/agent/src/collaboration
+    ref: apps/tagma/server/src/native-harness/tools
   - kind: dir
     ref: apps/tagma/server/src/threads/contract/wire/operations
   - kind: dir
-    ref: apps/tagma/server/src/native-harness/tools
+    ref: packages/agent/src/collaboration
 ---
 Covers messages, tasks, reports, questions, answer chips, words spoken to a CLI and a CLI harness's answer. The model's own output limit is the only bound. Identifiers, names and keys keep their bounds.

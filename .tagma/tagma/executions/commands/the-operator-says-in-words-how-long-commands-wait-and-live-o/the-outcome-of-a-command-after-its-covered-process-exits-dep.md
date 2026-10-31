@@ -7,8 +7,5 @@ fields:
   {
     "status": "open"
   }
-edges:
-  - kind: discovered-from
-    to: 01a16e7d-5e90-727b-95ff-38764a72e07d
 ---
 After measuring, pin down the command semantics after the exit of a process covered by a program rule, and remove the outcome's dependence on the order of observation and finalization. Whole-package seed 1 in `packages/execution-host/src/hostProcess.itest.ts` gave `Cancelled` instead of `Completed` for `sleep 2; echo done` after ≈2142 ms: default 1500 ms, sleep covered by a 20000 ms rule. `ProgramRules.ts:358–367` returns the expired default to the current elapsed after sleep exits; the shell either finishes or is cancelled, so `done` may or may not print. Removing the unreliable Completed expectation keeps the native check of the term's return and the unit coverage of the extension, but does not settle this semantics.

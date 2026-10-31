@@ -9,8 +9,6 @@ fields:
     "status": "done"
   }
 edges:
-  - kind: discovered-from
-    to: 01a17d5a-656e-76dc-b53d-177aecccd7e5
   - kind: relates
     to: 01a18087-4820-7e26-9807-02fdfddb6fd3
 sources:

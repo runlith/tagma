@@ -10,9 +10,9 @@ edges:
     to: 01a18cbf-97fc-7f17-bc60-685157787448
 sources:
   - kind: file
-    ref: apps/tagma/server/src/external-harnesses/sessions/retirement.ts
-  - kind: file
     ref: apps/tagma/server/src/external-harnesses/protocol/process.ts
+  - kind: file
+    ref: apps/tagma/server/src/external-harnesses/sessions/retirement.ts
 ---
 Removing or disabling an adapter package withdraws its harness at once, but a CLI already running for one of its threads is not killed: it is ended once that thread is at rest, by the act each transport already uses to end a process between turns. Every change of the adapter rows (`HarnessAdapters.changes`) looks again, so a package installed back before the thread rests keeps its process.
 

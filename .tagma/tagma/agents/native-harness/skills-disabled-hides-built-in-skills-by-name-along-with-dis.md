@@ -8,9 +8,6 @@ fields:
     "holder": "tagma:01a12c86-94f7-747f-9d9d-8b4f062231df",
     "status": "done"
   }
-edges:
-  - kind: discovered-from
-    to: 01a0fecc-1292-7da8-a266-476aa17d0573
 sources:
   - kind: file
     ref: apps/tagma/server/src/native-harness/contract/service/inputs.ts

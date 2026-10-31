@@ -21,7 +21,7 @@ import { GraphUnits } from '../../../../platform/contract/service/units.js';
 import { unitsLayer } from '../../../../platform/store/units.js';
 import { CORE_LIBRARY, localTypeId } from '../../../../graph/contract/wire/tags/identity.js';
 import { fixtureGraphMigrations } from '../../migrations.js';
-import { BEHAVIOUR_REGISTRY } from '../../../manifest.js';
+import { BEHAVIOUR_REGISTRY } from '../../composed.js';
 
 const DECLARATION = '0198aaaa-0000-7000-8000-00000000a001';
 const CARRIER = '0198aaaa-0000-7000-8000-00000000b002';

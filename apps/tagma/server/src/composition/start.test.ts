@@ -7,6 +7,8 @@ import { settingKey } from '../platform/contract/wire/setting.js';
 import { testGrantSigner } from '../platform/testing/grants.js';
 import { testSessionIdentity } from '../platform/testing/identity.js';
 import { start } from './start.js';
+import { OperationId } from '../platform/contract/wire/ids.js';
+import { ASSEMBLY } from './testing/composed.js';
 import { storeSnapshots } from '../platform/store/snapshot.js';
 
 const servers = settingKey({
@@ -23,12 +25,11 @@ const servers = settingKey({
 
 const started = (operations: readonly string[]) =>
   start(
+    { ...ASSEMBLY, ids: operations.map((id) => OperationId.make(id)), settings: { sections: [], keys: [servers] } },
     'drizzle',
     'seeds',
     testSessionIdentity,
     testGrantSigner,
-    [servers],
-    operations,
     storeSnapshots({}, new ProcessPool(0, 'stop', undefined, childHosting)),
   );
 

@@ -13,7 +13,7 @@ import { NATIVE_HARNESS } from '../../platform/contract/wire/session.js';
 import { Tags } from '../../graph/contract/service/vocabulary.js';
 import { routedContext } from '../../graph/testing/doubles.js';
 import { mcpCatalog } from '../../cli/mcpTools.js';
-import { operationsCli } from '../cli/operations.js';
+import { OPERATIONS_CLI as operationsCli } from './composed.js';
 
 const setup = Effect.gen(function* () {
   const world = yield* makeTerminalWorld();

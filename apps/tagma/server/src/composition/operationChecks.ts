@@ -1,7 +1,7 @@
 import { OperationChecks } from '../invocation/contract/service/operationChecks.js';
 import type { RuleChecks } from '../enforcement/contract/service/ruleChecks.js';
 import { afterEditCheck, checkedOperation } from '../enforcement/operationChecks.js';
-import { WORLD_TOOL_CHECKS } from './catalog.js';
+import { WORLD_TOOL_CHECKS } from './manifest.js';
 
 export const operationChecks = (checks: RuleChecks['Service']): OperationChecks['Service'] =>
   OperationChecks.of({

@@ -2,8 +2,11 @@ import { expect } from 'bun:test';
 import { layer } from '@runlith/effect-test';
 import { Cause, Context, Effect, Exit, Layer } from 'effect';
 import { TestConsole } from 'effect/testing';
-import { door } from '../../cli/door.js';
+import { doorOf } from '../../cli/door.js';
+import { DEVELOPER } from '../../developer/build.js';
 import { CallerSignal } from '../../../cli/door.js';
+
+const door = doorOf(DEVELOPER.channel);
 import { CurrentInvocation, Invocation, refusalOf } from '../../../platform/cli/verb.js';
 import type { healthSchema } from '../../../http/contract/wire/health.js';
 import { OUTCOME_HEADER } from '../../../invocation/contract/wire/headers.js';

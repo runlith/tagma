@@ -3,9 +3,6 @@ id: 01a17b1a-88ee-78a1-83bf-11cfedd30011
 title: The judgment reads an installed-package config from the judged checkout, the same for base and tree, and the importer index verifies its fingerprint
 ord: 36
 tags: ["explanation"]
-edges:
-  - kind: discovered-from
-    to: 01a17af6-3ba7-7537-a6fe-d15e65ed63b7
 sources:
   - kind: file
     ref: apps/tagma/inspection/src/packs/architecture/modules/probes.ts

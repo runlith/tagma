@@ -8,9 +8,6 @@ fields:
     "holder": "tagma:01a149fa-30c4-741e-ac91-360dfb76dfdc",
     "status": "done"
   }
-edges:
-  - kind: discovered-from
-    to: 01a147b5-9ae1-71bf-ba7b-05b5ee557744
 sources:
   - kind: file
     ref: apps/tagma/server/src/composition/testing/enforcement/copiedLaw.stest.ts

@@ -13,7 +13,7 @@ import { makeThreadTeams } from '../../../threads/testing/doubles.js';
 import { teamModels, teamReview } from '../../../threads/contract/wire/settings.js';
 import { threadStack } from '../threadParts.js';
 import { makeThreadRecords } from '../../../thread-record/layer.js';
-import { ENTRY_KINDS } from '../../manifest.js';
+import { ENTRY_KINDS } from '../composed.js';
 import { type AccountRows, ProviderAccounts } from '../../../providers/contract/service/accounts.js';
 import { makeConnectedProviders } from '../../../providers/accounts/connected.js';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';

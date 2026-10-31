@@ -1,6 +1,6 @@
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { Cause, Context, Effect } from 'effect';
-import { CHANNEL } from '@tagma/server/composition/channel';
+import type { Channel } from '../installation/contract/wire/channel.js';
 import { takeActive } from '../installation/setup/active.js';
 import { channelActive, entryCommand, integratesProjects, junctionDirectory } from '../installation/contract/wire/junction.js';
 import { placeEntry } from '../installation/setup/entry.js';
@@ -14,15 +14,15 @@ import { Projects } from '../projects/contract/service/registry.js';
 import { ProjectPolicy, type ServedGraphs } from '../graph/contract/service/serving.js';
 import { Orientation } from '../graph/contract/service/orientation.js';
 
-export const holdJunction = (env: NodeJS.ProcessEnv, cli: string, url: string): (() => void) => {
+export const holdJunction = (channel: Channel, env: NodeJS.ProcessEnv, cli: string, url: string): (() => void) => {
   const junction = junctionDirectory(env);
   if (junction === null) {
     console.error('[tagma] HOME names no place for the lock that keeps one Tagma running on this Mac; start it with HOME set');
     return process.exit(1);
   }
-  const taken = takeActive(junction, { channel: CHANNEL.id, cli, url, pid: process.pid });
+  const taken = takeActive(junction, { channel: channel.id, cli, url, pid: process.pid });
   if (taken._tag === 'Held') {
-    const said = channelActive(taken.holder ?? 'unnamed', CHANNEL);
+    const said = channelActive(taken.holder ?? 'unnamed', channel);
     console.error(`[tagma] channel-active: ${said.reason}`);
     for (const way of said.unblock) console.error(`[tagma] unblock: ${way}`);
     return process.exit(1);

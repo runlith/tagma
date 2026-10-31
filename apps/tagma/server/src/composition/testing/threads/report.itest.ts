@@ -10,7 +10,7 @@ import { bornThread } from '../../../native-harness/testing/born.js';
 import { threadProjection } from '../../../threads/testing/doubles.js';
 import { threadRolloutReport } from '../../../threads/testing/doubles.js';
 import { compressRollout } from '../../../threads/testing/doubles.js';
-import { ENTRY_KINDS } from '../../manifest.js';
+import { ENTRY_KINDS } from '../composed.js';
 
 const threadId = 'thread-under-report';
 

@@ -10,8 +10,6 @@ fields:
 edges:
   - kind: discovered-from
     to: 01a0e8c3-b71d-730a-9c27-889e556fc1a5
-  - kind: implements
-    to: 01a0e134-d622-7eef-b19a-5c2070083b67
 sources:
   - kind: file
     ref: packages/execution-host/src/db/schema.ts

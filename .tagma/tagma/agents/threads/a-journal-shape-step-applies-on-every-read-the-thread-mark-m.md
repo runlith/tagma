@@ -7,7 +7,11 @@ sources:
   - kind: file
     ref: apps/tagma/server/src/threads/journal/formSteps.ts
   - kind: file
+    ref: apps/tagma/server/src/threads/journal/rolloutCarry.ts
+  - kind: file
     ref: apps/tagma/server/src/threads/journal/rolloutEntryForms.ts
+  - kind: file
+    ref: apps/tagma/server/src/threads/journal/rolloutStaging.ts
   - kind: file
     ref: apps/tagma/server/src/threads/journal/rolloutWhole.ts
   - kind: file
@@ -15,14 +19,10 @@ sources:
   - kind: symbol
     ref: apps/tagma/server/src/native-harness/rows/threadUnits.ts
     symbol: makeThreadUnits
-  - kind: file
-    ref: apps/tagma/server/src/threads/journal/rolloutStaging.ts
-  - kind: file
-    ref: apps/tagma/server/src/threads/journal/rolloutCarry.ts
 ---
 `ThreadEntryReader` applies steps to every decoded record with no mark check. By contract a step never changes a record in the current shape, so the reader always yields the current shape, and the mark decides whether to cast the whole thread. Maintenance decodes picked records with the same reader and never waits for the whole-thread mark; a current shape it wrote passes a repeated step unchanged by the fixed-point contract. Steps run one by one: a step shapes a whole event — payload, entry and messages inside — before the next one reads it.
 
-A worker decodes with the same reader. Steps are functions and cannot be posted, so a reader carries `worker`, the start of a worker entry that binds that same reader to the native-harness fold server (`transcript/foldServer.ts`): `composition/rested.worker.ts` imports the composed `entryKinds` literally, and a test reader brings its own entry (`native-harness/testing/readers.ts`). The start is a literal `new Worker(new URL(...))` declared once beside its builder, so the platforms inspection judges the entry as a start, the production bundle emits it beside the server, and every reader built by that builder shares one worker. So the `.entries` transcript, the folded history and the guidance of an offloaded thread come out in the current shape before its queued cast lands. A reader without a worker fails the fold rather than folding unshaped, and a refused step fails the whole fold.
+A worker decodes with the same reader. Steps are functions and cannot be posted, so a reader carries `worker`, the start of a worker entry that binds that same reader to the native-harness fold server (`transcript/foldServer.ts`): each build's `rested.worker.ts` (`composition/developer/`, `composition/release/`) builds `entryKinds` over that build's own modules, and a test reader brings its own entry (`native-harness/testing/readers.ts`). The start is a literal `new Worker(new URL(...))` declared once beside its builder, so the platforms inspection judges the entry as a start, the production bundle emits it beside the server, and every reader built by that builder shares one worker. So the `.entries` transcript, the folded history and the guidance of an offloaded thread come out in the current shape before its queued cast lands. A reader without a worker fails the fold rather than folding unshaped, and a refused step fails the whole fold.
 
 A cast's pass over the file — parse, step, rewrite, hash and compress every line (`rolloutStaging.ts`) — runs in that same worker, reached through the native part's `stage` port and handed the pending steps by name, never on the server's loop: the pass grows with the journal, and on the loop a burst of casts freezes every request the server serves. Queued casts (`formRested`) drain through one queue one thread at a time, because each commit takes the writer and a burst of reads over lagging offloaded threads would otherwise queue hundreds of commits ahead of foreground writes. A thread's return and its import from a rollout plan their store rows in the same worker too (`rolloutCarry.ts` through the port's `carry`): it scans the file, decodes every event with its own reader, folds the native history and transcript and cuts the rows into bounded units it keeps and answers one per ask, so the loop only writes one unit at a time and never holds the whole journal; the plan is dropped when its last unit is taken, or told to drop when the return fails.
 

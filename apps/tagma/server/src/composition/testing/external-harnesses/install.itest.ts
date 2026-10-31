@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { spawnedEffect } from '../../../platform/testing/spawn.js';
 import { LAW_START } from '../../../graph/contract/wire/law.js';
 import { Doctrine, doctrineOf } from '../../../platform/contract/service/sections.js';
-import { doctrine } from '../../doctrine.js';
+import { doctrine } from '../composed.js';
 import { shippedAdaptersLayer } from './shipped.js';
 import type { UserInstall } from '../../../external-harnesses/installs/skillInstall.js';
 import {
@@ -600,7 +600,7 @@ layer(fixture, { excludeTestServices: true })('installation', (it) => {
       }
       const driver = join(home, 'drive-install.ts');
       const installModule = fileURLToPath(new URL('../../../external-harnesses/installs/skillInstall.ts', import.meta.url));
-      const graphModule = fileURLToPath(new URL('../../doctrine.ts', import.meta.url));
+      const graphModule = fileURLToPath(new URL('../composed.ts', import.meta.url));
       writeFileSync(
         driver,
         [
@@ -666,7 +666,7 @@ layer(fixture, { excludeTestServices: true })('installation', (it) => {
       writeFileSync(target, JSON.stringify({ hooks: { SessionStart: [nested] } }));
       const driver = join(home, 'drive-install.ts');
       const installModule = fileURLToPath(new URL('../../../external-harnesses/installs/skillInstall.ts', import.meta.url));
-      const graphModule = fileURLToPath(new URL('../../doctrine.ts', import.meta.url));
+      const graphModule = fileURLToPath(new URL('../composed.ts', import.meta.url));
       writeFileSync(
         driver,
         [

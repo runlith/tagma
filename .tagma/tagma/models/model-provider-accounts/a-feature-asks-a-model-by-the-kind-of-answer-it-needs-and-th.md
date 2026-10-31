@@ -10,13 +10,13 @@ edges:
     to: 01a11127-7009-727d-9639-b5f1db7ababc
 sources:
   - kind: file
-    ref: apps/tagma/server/src/providers/asks.ts
-  - kind: file
-    ref: apps/tagma/server/src/providers/registry.ts
-  - kind: file
     ref: apps/tagma/server/src/external-harnesses/programs/asks.ts
   - kind: file
+    ref: apps/tagma/server/src/providers/asks.ts
+  - kind: file
     ref: apps/tagma/server/src/providers/compactionAsks.ts
+  - kind: file
+    ref: apps/tagma/server/src/providers/registry.ts
 ---
 The path is the provider's, never the feature's: a feature names a model, the kind of answer and its input, and `ModelAsks` routes it. `ThreadAsks` reconciles a native warm copy through the same owner’s model resolution, without constructing a request outside providers; both doors translate model failures into the shared ask refusal set and record an ask with its path, model and reported spend. Admission refusals are recorded too: a missing fresh route is unresolved, while a cold thread ask leaves unknown model and spend unknown. A wire provider answers by request. A harness whose login a wire provider borrows answers through that wire provider when it serves the same model — this replaced the catalog's `family`. Otherwise a harness answers through the program it declares (`asks.program` in its adapter package), or not at all. The kinds a model answers follow from that route and its capabilities alone, so the served catalog can publish them per model and a picker never offers a row that every call would refuse.
 

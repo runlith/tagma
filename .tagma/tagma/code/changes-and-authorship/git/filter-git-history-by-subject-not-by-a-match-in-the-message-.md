@@ -8,9 +8,6 @@ fields:
     "holder": "tagma:01a16dec-fbf8-7898-a8a7-e83233ac9f35",
     "status": "done"
   }
-edges:
-  - kind: discovered-from
-    to: 01a16e3b-4666-7155-8a20-4d13e87e26b3
 sources:
   - kind: file
     ref: packages/git/src/history.ts

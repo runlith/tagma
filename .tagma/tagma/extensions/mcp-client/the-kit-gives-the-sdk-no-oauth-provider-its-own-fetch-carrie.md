@@ -5,9 +5,9 @@ ord: 31
 tags: ["explanation"]
 sources:
   - kind: file
-    ref: packages/mcp/src/sdk.ts
-  - kind: file
     ref: packages/mcp/src/mcpOAuth.ts
+  - kind: file
+    ref: packages/mcp/src/sdk.ts
 ---
 `@modelcontextprotocol/sdk` 1.30.0 runs its `auth()` orchestrator from the Streamable HTTP transport whenever it holds an auth provider, and that orchestrator is wrong for a pool of sessions:
 - it refreshes inside every call whenever it holds a refresh token and wipes the stored tokens on `invalid_grant`, so two sessions of one user-scope server — one per open project — would race a rotating refresh token and the loser would wipe the winner's tokens;

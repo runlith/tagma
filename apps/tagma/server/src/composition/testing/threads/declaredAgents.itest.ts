@@ -8,7 +8,7 @@ import { NATIVE_HARNESS, type ThreadRecord } from '@runlith/agent/thread/record'
 import { EXTERNAL_CAPABILITIES, NATIVE_CAPABILITIES } from '../../../threads/testing/doubles.js';
 import type { ThreadTypeCaller } from '@runlith/agent/thread/agents/ThreadTypeCatalog';
 import { Effect, FileSystem } from 'effect';
-import { ENTRY_KINDS } from '../../manifest.js';
+import { ENTRY_KINDS } from '../composed.js';
 import { scopeRecord } from '../../../thread-record/testing/records.js';
 import { NativeAgents } from '../../../threads/contract/service/engine.js';
 import { ThreadRecords } from '../../../thread-record/contract/service/records.js';

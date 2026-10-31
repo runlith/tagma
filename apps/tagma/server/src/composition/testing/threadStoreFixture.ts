@@ -12,7 +12,7 @@ import { project, projectsLayer } from '../../projects/testing/doubles.js';
 import { makeThreadRecords } from '../../thread-record/layer.js';
 import { ThreadRecords } from '../../thread-record/contract/service/records.js';
 import { fixtureMigrations } from './migrations.js';
-import { ENTRY_KINDS } from '../manifest.js';
+import { ENTRY_KINDS } from './composed.js';
 import { threadStack } from './threadParts.js';
 
 const build = Effect.fnUntraced(function* (home: string) {

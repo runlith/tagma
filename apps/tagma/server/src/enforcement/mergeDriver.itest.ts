@@ -12,7 +12,7 @@ import { decodeBlockFile, encodeBlockFile } from '../graph/tree/blockFile.js';
 import type { CountedDebt } from './contract/wire/document.js';
 import { liveGitLayer } from '../composition/testing/liveGit.js';
 
-const CLI = join(import.meta.dir, '../composition/entries/cli.ts');
+const CLI = join(import.meta.dir, '../composition/developer/cli.ts');
 const FILE = '.tagma/demo/files-stay-small.md';
 
 const git = (cwd: string, args: readonly string[]) => {

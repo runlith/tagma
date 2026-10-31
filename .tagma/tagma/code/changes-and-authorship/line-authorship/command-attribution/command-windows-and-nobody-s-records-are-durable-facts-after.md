@@ -3,9 +3,6 @@ id: 01a116e8-e341-7861-a5f6-564c65835438
 title: "Command windows and nobody's records are durable facts: after a restart a settled window is decided again, and an open one leaves the base's changed paths nobody's with reason restart"
 ord: 3
 tags: ["explanation"]
-edges:
-  - kind: discovered-from
-    to: 01a11681-3d09-70d2-97f5-12dd417d8235
 sources:
   - kind: file
     ref: apps/tagma/server/src/change-record/record/commands.ts

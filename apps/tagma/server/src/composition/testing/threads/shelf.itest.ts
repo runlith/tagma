@@ -18,7 +18,7 @@ import {
 } from '../../../threads/testing/doubles.js';
 import { restOf } from '../../../threads/testing/rest.js';
 import { makeDoorWorld } from '../doorFixture.js';
-import { ENTRY_KINDS } from '../../manifest.js';
+import { ENTRY_KINDS } from '../composed.js';
 
 const setup = Effect.gen(function* () {
   const files = yield* FileSystem.FileSystem;

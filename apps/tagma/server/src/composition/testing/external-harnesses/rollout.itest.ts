@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { describe, expect } from 'bun:test';
 import { Effect, FileSystem, Layer } from 'effect';
 import { ThreadEntryKinds } from '@runlith/agent/transcript/kinds';
-import { ENTRY_KINDS } from '../../manifest.js';
+import { ENTRY_KINDS } from '../composed.js';
 import { asc, eq, sql } from 'drizzle-orm';
 import { MachineStore } from '../../../platform/contract/service/store.js';
 import { MachineUnits } from '../../../platform/contract/service/units.js';

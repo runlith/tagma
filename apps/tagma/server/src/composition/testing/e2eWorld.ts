@@ -26,6 +26,7 @@ import { TURN_OPERATIONS } from '../../threads/contract/wire/operations/turns.js
 import { artifactRoutes } from '../http/artifacts.js';
 import { doorLayer, socketOperationsLayer } from '../http/door.js';
 import { liveServing } from '../socketBinding.js';
+import { ASSEMBLY } from './composed.js';
 import { makeDoorWorld, projectLeaving } from './doorFixture.js';
 import { doorServing } from './doorServices.js';
 import { scriptedModel } from './scriptedModel.js';
@@ -70,7 +71,7 @@ const built = Effect.fnUntraced(
     const routes = doorServing(
       Layer.mergeAll(
         doorLayer({ status: { ...world.runtime.status, sandboxOrigin: null }, appDist }),
-        liveServing(null).pipe(Layer.provide(socketOperationsLayer)),
+        liveServing(ASSEMBLY, null).pipe(Layer.provide(socketOperationsLayer)),
         artifactRoutes(world.runtime.artifacts, { index: ARTIFACT_PREFIX, sandboxed: true }),
       ),
       world.runtime,

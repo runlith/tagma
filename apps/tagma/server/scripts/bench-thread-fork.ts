@@ -12,6 +12,7 @@ import type { ThreadEventInput } from '@runlith/agent/thread/events';
 import { runEndEntryId, toolEntryId, userMessageEntryId } from '@runlith/agent/transcript/entryNames';
 import type { ThreadTranscriptEntry } from '@runlith/agent/transcript/rows';
 import { makeRuntime } from '../src/composition/runtime.js';
+import { COMPOSED } from '../src/composition/testing/composed.js';
 import { ProjectLifecycle } from '../src/graph/contract/service/serving.js';
 import { MachineStore } from '../src/platform/contract/service/store.js';
 import { MachineUnits } from '../src/platform/contract/service/units.js';
@@ -136,6 +137,7 @@ try {
     Scope.provide(
       makeRuntime(
         {
+          ...COMPOSED,
           grants: testGrantSigner,
           databasePath: join(home, 'home', 'tagma.sqlite'),
           tokensPath: join(home, 'home', 'tokens.json'),

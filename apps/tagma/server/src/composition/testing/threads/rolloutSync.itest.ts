@@ -34,7 +34,7 @@ import { appendRolloutItem, createRollout } from '../../../threads/testing/doubl
 import { appendThreadRollout, exportThreadRollout } from '../../../threads/testing/doubles.js';
 import { rehydrateThreadRecords, replayThreadRollout } from '../../../threads/testing/doubles.js';
 import { rolloutForms, threadRolloutMeta } from '../../../threads/testing/doubles.js';
-import { ENTRY_KINDS } from '../../manifest.js';
+import { ENTRY_KINDS } from '../composed.js';
 import { ThreadEntryKinds } from '@runlith/agent/transcript/kinds';
 import type { ThreadEventPayload } from '@runlith/agent/thread/events';
 import { Message } from '@runlith/llm/schema/messages';

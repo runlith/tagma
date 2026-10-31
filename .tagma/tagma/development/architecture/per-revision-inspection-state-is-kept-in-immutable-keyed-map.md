@@ -5,13 +5,13 @@ ord: 30
 tags: ["explanation"]
 sources:
   - kind: file
-    ref: checks/law/maps.ts
-  - kind: file
-    ref: checks/law/architecture/vendors.ts
+    ref: checks/law/architecture/boundaries.ts
   - kind: file
     ref: checks/law/architecture/calls/revision.ts
   - kind: file
-    ref: checks/law/architecture/boundaries.ts
+    ref: checks/law/architecture/vendors.ts
+  - kind: file
+    ref: checks/law/maps.ts
 ---
 Per-revision state of the architecture and declaration inspections lives in immutable keyed maps shared by every revision: `maps.ts` keeps a content-addressed hash trie in the executing reader version's law store (`map_nodes`), and `map_roots` names the root of each (family, revision). A key is found by walking at most a handful of nodes, whatever the history; a change rewrites only the nodes above its keys, and every unchanged node is shared by reference with the base, so a commit costs in proportion to what it touched and never copies, decodes or serializes the whole state. A leaf holds at most 12 entries and a node is a leaf exactly when its subtree is that small, so equal contents have one root and a map derived by changes is the map seeded from the same entries.
 

@@ -11,7 +11,7 @@ import {
 } from '../../../../graph/contract/wire/tags/declaration.js';
 import { type Candidate, SECTION_JOIN, sameSchema } from '../../../../graph/vocabulary/compiler.js';
 import { TagIndex } from '../../../../graph/vocabulary/tagIndex.js';
-import { BEHAVIOUR_REGISTRY } from '../../../manifest.js';
+import { BEHAVIOUR_REGISTRY } from '../../composed.js';
 import { WORK } from '../../../../graph/contract/wire/tags/work.js';
 
 const indexed = (declared: readonly (Declaration | Candidate)[]) => new TagIndex(declared, BEHAVIOUR_REGISTRY);

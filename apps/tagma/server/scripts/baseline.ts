@@ -3,7 +3,9 @@ import { readMigrationFiles } from 'drizzle-orm/migrator';
 import { cp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { baselineObjects, schemaDigest, type SchemaObject } from '../src/platform/store/baseline.js';
-import { RETIRED_TABLES } from '../src/composition/manifest.js';
+import { ASSEMBLY } from '../src/composition/testing/composed.js';
+
+const RETIRED_TABLES = ASSEMBLY.retiredTables;
 
 const quote = (name: string): string => `"${name.replaceAll('"', '""')}"`;
 const literal = (value: unknown): string => {

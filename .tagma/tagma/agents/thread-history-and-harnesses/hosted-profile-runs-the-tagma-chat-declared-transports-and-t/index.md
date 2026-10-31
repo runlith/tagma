@@ -26,11 +26,11 @@ sources:
   - kind: file
     ref: apps/tagma/server/src/external-harnesses/cli/harnessRun.ts
   - kind: file
+    ref: apps/tagma/server/src/threads/harness/registry.ts
+  - kind: file
     ref: packages/adapter-cursor/src/harness/acp.ts
   - kind: file
     ref: packages/adapter-devin/src/harness/acp.ts
-  - kind: file
-    ref: apps/tagma/server/src/threads/harness/registry.ts
   - kind: symbol
     ref: apps/tagma/server/src/external-harnesses/birth/seat.ts
     symbol: acpCapabilities

@@ -8,8 +8,6 @@ fields:
     "status": "done"
   }
 edges:
-  - kind: discovered-from
-    to: 01a12a53-cf8c-7b44-8069-9091a0ad97ee
   - kind: implements
     to: 01a1271e-2479-7971-9b0c-4ec5d86d6647
 sources:

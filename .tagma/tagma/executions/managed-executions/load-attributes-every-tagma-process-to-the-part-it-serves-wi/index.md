@@ -20,19 +20,19 @@ edges:
     to: 01a19222-30cc-7f51-a61f-79130ab5aec3
 sources:
   - kind: file
-    ref: packages/execution-host/src/ProcessUsage.ts
-  - kind: file
-    ref: packages/execution-host/src/ProcessAccount.ts
-  - kind: file
-    ref: packages/execution-host/src/UsageReader.ts
-  - kind: file
-    ref: packages/execution-host/src/posix/macos/Sampler.ts
-  - kind: file
-    ref: packages/execution-host/src/posix/macos/programs.ts
+    ref: apps/tagma/desktop/src/server.ts
   - kind: file
     ref: apps/tagma/server/src/executions/load/list.ts
   - kind: file
-    ref: apps/tagma/desktop/src/server.ts
+    ref: packages/execution-host/src/posix/macos/programs.ts
+  - kind: file
+    ref: packages/execution-host/src/posix/macos/Sampler.ts
+  - kind: file
+    ref: packages/execution-host/src/ProcessAccount.ts
+  - kind: file
+    ref: packages/execution-host/src/ProcessUsage.ts
+  - kind: file
+    ref: packages/execution-host/src/UsageReader.ts
 ---
 ## Outcome
 

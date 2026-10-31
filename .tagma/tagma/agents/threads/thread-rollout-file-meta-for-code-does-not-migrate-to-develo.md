@@ -8,9 +8,6 @@ fields:
     "holder": "tagma:01a149fa-30c4-741e-ac91-360dfb76dfdc",
     "status": "done"
   }
-edges:
-  - kind: discovered-from
-    to: 01a147b5-9ae1-71bf-ba7b-05bc6479bb9c
 sources:
   - kind: file
     ref: apps/tagma/server/src/composition/testing/threads/developerRollout.itest.ts

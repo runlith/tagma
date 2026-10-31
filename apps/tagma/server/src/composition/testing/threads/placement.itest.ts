@@ -49,7 +49,7 @@ import { checkoutWorld } from '../../../executions/testing/doubles.js';
 import { makeMachineWorld } from '../../../executions/testing/doubles.js';
 import { leasedWorlds } from '../../../executions/testing/doubles.js';
 import { lineageOver } from '../../../workspace/testing/lineage.js';
-import { ENTRY_KINDS } from '../../manifest.js';
+import { ENTRY_KINDS } from '../composed.js';
 
 const machineWorld = makeMachineWorld(() => null);
 const unexpected = (): never => {

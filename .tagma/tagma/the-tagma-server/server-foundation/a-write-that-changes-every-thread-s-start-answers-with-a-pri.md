@@ -3,9 +3,6 @@ id: 01a147eb-fd80-705f-993f-174d5515e456
 title: A write that changes every thread's start answers with a price through a platform port filled by the start-composition owner
 ord: 24
 tags: ["explanation"]
-edges:
-  - kind: relates
-    to: 01a147a2-8160-7c3f-82a0-b2721ce2ba9f
 sources:
   - kind: file
     ref: apps/tagma/server/src/graph/operations/start.ts

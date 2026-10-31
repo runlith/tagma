@@ -3,7 +3,7 @@ import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { layer } from '@runlith/effect-test';
 import { join } from 'node:path';
 import { Context, Effect, FileSystem, Layer, Schema } from 'effect';
-import { doctrine } from '../../doctrine.js';
+import { doctrine } from '../composed.js';
 import { shippedAdaptersLayer } from './shipped.js';
 import { installForAccount } from '../../../external-harnesses/installs/skillInstall.js';
 import { skillStatus } from '../../../external-harnesses/testing/doubles.js';

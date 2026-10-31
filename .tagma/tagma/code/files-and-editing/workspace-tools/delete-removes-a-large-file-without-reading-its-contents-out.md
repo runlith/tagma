@@ -8,9 +8,6 @@ fields:
     "holder": "tagma:01a12840-2701-7b14-bcea-6562c66293ae",
     "status": "done"
   }
-edges:
-  - kind: discovered-from
-    to: 01a1283f-2e98-7303-b877-b2115eb490fb
 sources:
   - kind: file
     ref: packages/agent-tools/src/delete.ts

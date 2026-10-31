@@ -11,7 +11,7 @@ import { PerformanceStoreReader, performanceStoreLayer } from '@runlith/performa
 import { ProcessPool } from '@runlith/sqlite-process/ProcessPool';
 import { childHosting } from '@runlith/sqlite-process/children';
 import { Clock, Context, Effect, Layer } from 'effect';
-import { PREPARATION } from '../manifest.js';
+import { PREPARATION } from './composed.js';
 
 BunRuntime.runMain(
   Effect.scoped(

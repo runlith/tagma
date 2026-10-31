@@ -5,9 +5,9 @@ ord: 201
 tags: ["explanation"]
 sources:
   - kind: file
-    ref: packages/agent/src/agent/AgentSkill.ts
-  - kind: file
     ref: packages/agent/src/agent/AgentSignal.ts
+  - kind: file
+    ref: packages/agent/src/agent/AgentSkill.ts
   - kind: file
     ref: packages/agent/src/thread/compaction/projection.ts
 ---

@@ -8,7 +8,7 @@ import { CHANNELS } from '../../../installation/contract/wire/channel.js';
 import { transferWorld, type WorldParts } from '../../../installation/move/transfer.js';
 import { migrationsFolder } from '../../../installation/closure/read.js';
 import { RELOCATIONS } from '../../../platform/contract/service/relocation.js';
-import { MODULES } from '@tagma/server/composition/modules';
+import { MODULES } from '../composed.js';
 import { lockDataDirectory } from '../../../platform/lock/dataDirectory.js';
 import { fixtureHome } from '../../../platform/testing/roots.js';
 

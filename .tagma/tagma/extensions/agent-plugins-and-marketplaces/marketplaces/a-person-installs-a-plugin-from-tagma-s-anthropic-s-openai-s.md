@@ -12,9 +12,9 @@ edges:
     to: 01a18926-2da8-763c-ae41-cdf18b835e91
 sources:
   - kind: file
-    ref: apps/tagma/server/src/marketplaces/marketplaces.ts
-  - kind: file
     ref: apps/tagma/server/src/marketplaces/contract/wire/operations.ts
+  - kind: file
+    ref: apps/tagma/server/src/marketplaces/marketplaces.ts
 ---
 **Value.** A person finds a plugin in the marketplaces of the ecosystem — Tagma's, Anthropic's, OpenAI's or any other git repository or folder carrying a Claude Code or Codex list — instead of having to know its folder or git URL, and installs it with the consent installing already asks.
 

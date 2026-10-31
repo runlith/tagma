@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test';
 import type { Declaration } from '../../../../graph/contract/wire/tags/declaration.js';
 import { ENFORCED, LAW } from '../../../../graph/contract/wire/tags/lawContracts.js';
 import { TagIndex } from '../../../../graph/vocabulary/tagIndex.js';
-import { BEHAVIOUR_REGISTRY } from '../../../manifest.js';
+import { BEHAVIOUR_REGISTRY } from '../../composed.js';
 
 const enforcement = { type: 'schema', name: 'lawEnforcement' } as const;
 const unread = (declaration: Declaration) => new TagIndex([declaration], BEHAVIOUR_REGISTRY).unreadable.map((entry) => entry.id);

@@ -1,17 +1,18 @@
 import { getTableName } from 'drizzle-orm';
-import { MODULES } from '@tagma/server/composition/modules';
+import type { Manifest } from '../platform/contract/service/manifest.js';
 import { RELOCATIONS } from '../platform/contract/service/relocation.js';
 import type { WorldParts } from '../installation/move/transfer.js';
 
-const relocations = RELOCATIONS.collect(MODULES);
-
-export const WORLD_PARTS: WorldParts = {
-  relocations,
-  entities: async () => {
-    const declared = await Promise.all(MODULES.map((module) => ('tables' in module ? (module.tables?.() ?? null) : null)));
-    return [
-      ...declared.flatMap((tables) => (tables === null ? [] : tables.entities.map((table) => getTableName(table)))),
-      ...relocations.flatMap(({ entry }) => entry.tables ?? []),
-    ];
-  },
+export const worldParts = (modules: readonly Manifest[]): WorldParts => {
+  const relocations = RELOCATIONS.collect(modules);
+  return {
+    relocations,
+    entities: async () => {
+      const declared = await Promise.all(modules.map((module) => module.tables?.() ?? null));
+      return [
+        ...declared.flatMap((tables) => (tables === null ? [] : tables.entities.map((table) => getTableName(table)))),
+        ...relocations.flatMap(({ entry }) => entry.tables ?? []),
+      ];
+    },
+  };
 };

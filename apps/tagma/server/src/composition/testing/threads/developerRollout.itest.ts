@@ -24,7 +24,7 @@ import {
   rolloutForms,
   threadRolloutMeta,
 } from '../../../threads/testing/doubles.js';
-import { ENTRY_KINDS } from '../../manifest.js';
+import { ENTRY_KINDS } from '../composed.js';
 
 const CAPABILITIES = [
   'agents',

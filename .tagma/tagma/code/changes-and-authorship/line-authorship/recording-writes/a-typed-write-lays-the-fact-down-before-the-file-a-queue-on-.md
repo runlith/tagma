@@ -3,9 +3,6 @@ id: 01a116e8-e332-7693-815b-e09acb607989
 title: "A typed write lays the fact down before the file: a queue on the path, an intent, a CAS write, confirmation; the unconfirmed is settled by startup"
 ord: 1
 tags: ["explanation"]
-edges:
-  - kind: discovered-from
-    to: 01a11681-3d09-70d2-97f5-12dd417d8235
 sources:
   - kind: file
     ref: apps/tagma/server/src/change-record/record/intake.ts

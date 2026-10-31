@@ -3,9 +3,6 @@ id: 01a116e8-e326-79fc-a543-6a4b2a177fc9
 title: A migration and its ledger write commit together; the journal body shape belongs to the shape steps
 ord: 2
 tags: ["explanation"]
-edges:
-  - kind: discovered-from
-    to: 01a11681-3d09-70d2-97f5-12dd417d8235
 sources:
   - kind: file
     ref: apps/tagma/server/src/platform/store/chain.ts

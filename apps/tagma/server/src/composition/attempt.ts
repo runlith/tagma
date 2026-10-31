@@ -8,7 +8,7 @@ import { ATTEMPT_STARTS } from '../installation/contract/wire/attempt.js';
 import { PERFORMANCE_DATABASE } from '../performance/contract/service/place.js';
 import { storeDirectory } from '../platform/contract/service/store.js';
 import { lockDataDirectory } from '../platform/lock/dataDirectory.js';
-import { CHANNEL } from '@tagma/server/composition/channel';
+import type { Channel } from '../installation/contract/wire/channel.js';
 
 export type AttemptPlace = {
   readonly installRoot: string;
@@ -58,9 +58,9 @@ export const beforeDoor = <A, E, R>(serving: Effect.Effect<A, E, R>): Effect.Eff
 
 const left = (): Effect.Effect<never> => Effect.sync((): never => process.exit(1));
 
-export const arrival = Effect.fn('composition.arrival')(function* () {
-  const store = databasePathIn(CHANNEL, process.env);
-  const installRoot = installationRootIn(CHANNEL, process.env);
+export const arrival = Effect.fn('composition.arrival')(function* (channel: Channel) {
+  const store = databasePathIn(channel, process.env);
+  const installRoot = installationRootIn(channel, process.env);
   if (Result.isFailure(store) || Result.isFailure(installRoot)) return;
   const place = trialPlace({
     installRoot: installRoot.success,

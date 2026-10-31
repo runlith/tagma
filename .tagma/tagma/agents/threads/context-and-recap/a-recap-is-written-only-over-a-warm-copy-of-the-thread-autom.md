@@ -11,8 +11,8 @@ sources:
   - kind: dir
     ref: apps/tagma/server/src/threads/recap
   - kind: file
-    ref: apps/tagma/app/src/lib/features/threads/thread/ThreadRecap.svelte.ts
-  - kind: file
     ref: apps/tagma/app/src/lib/features/threads/native/RecapCard.svelte
+  - kind: file
+    ref: apps/tagma/app/src/lib/features/threads/thread/ThreadRecap.svelte.ts
 ---
 No recap retells the journal with another model. A manual request on a thread whose transport holds no warm copy, or whose cache deadline is unknown, is refused, and the interface says why.

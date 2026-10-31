@@ -77,7 +77,7 @@ import { asNativeThreadState } from '../../../threads/testing/doubles.js';
 import { threadStack, type ThreadParts } from '../threadParts.js';
 import { AGENT_IDLE_MS, LEASE_RHYTHM, REAPER_RHYTHM, RECONCILE_INTERVAL_MS, SETTLEMENT_RHYTHM } from '../../../threads/testing/doubles.js';
 import { storesOver, type Stores } from '../../../executions/testing/stores.js';
-import { ENTRY_KINDS } from '../../manifest.js';
+import { ENTRY_KINDS } from '../composed.js';
 import { ThreadEntryKinds } from '@runlith/agent/transcript/kinds';
 import { harnessPresentation } from '../../../external-harnesses/contract/service/table.js';
 import { builtinHarness } from '../../../external-harnesses/testing/builtin.js';

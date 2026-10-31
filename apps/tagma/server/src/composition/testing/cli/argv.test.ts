@@ -6,8 +6,8 @@ import * as BunServices from '@effect/platform-bun/BunServices';
 import { invoke } from '../../../cli/invoke.js';
 import { cliVerbs } from '../../../cli/verbs.js';
 import type { RefusalBody } from '../../../platform/contract/wire/refusal.js';
-import { operationsCli } from '../../cli/operations.js';
 import { OPERATION_IDS, OPERATIONS } from '../../catalog.js';
+import { OPERATIONS_CLI as operationsCli } from '../composed.js';
 import { capturedEffect } from '../captured.js';
 
 const nowhere = { PATH: process.env.PATH, TAGMA_SERVER_URL: 'http://127.0.0.1:9' };

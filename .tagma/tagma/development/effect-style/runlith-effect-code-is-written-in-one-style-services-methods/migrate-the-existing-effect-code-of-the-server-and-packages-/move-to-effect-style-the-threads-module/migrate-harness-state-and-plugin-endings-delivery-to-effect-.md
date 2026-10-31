@@ -10,9 +10,9 @@ fields:
   }
 sources:
   - kind: file
-    ref: apps/tagma/server/src/threads/harness/tagmaAppEndings.ts
-  - kind: file
     ref: apps/tagma/server/src/threads/harness/state.ts
+  - kind: file
+    ref: apps/tagma/server/src/threads/harness/tagmaAppEndings.ts
   - kind: symbol
     ref: apps/tagma/server/src/threads/harness/engine.ts
     symbol: threadEngineLayer

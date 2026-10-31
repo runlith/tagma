@@ -11,6 +11,7 @@ import type { SlowQuery } from '@runlith/performance/protocol/queries';
 import { HostRequestKey } from '@runlith/executions/protocol/execution';
 import { Principal } from '@runlith/executions/protocol/custody';
 import { makeRuntime } from '../../runtime.js';
+import { COMPOSED } from '../composed.js';
 import { MachineStore } from '../../../platform/contract/service/store.js';
 import { MachineUnits } from '../../../platform/contract/service/units.js';
 import { project as projectRow } from '../../../projects/testing/doubles.js';
@@ -77,6 +78,7 @@ const main = Effect.gen(function* () {
   const boot = Effect.fnUntraced(function* () {
     return yield* makeRuntime(
       {
+        ...COMPOSED,
         grants: testGrantSigner,
         databasePath: join(home, 'db/tagma.sqlite'),
         tokensPath: join(home, 'tokens.json'),

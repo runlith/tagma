@@ -10,7 +10,7 @@ import { compositionEntryId } from '@runlith/agent/transcript/entryNames';
 import { threadCompactionCheckpoint, threadPrunedToolCall } from '../../../native-harness/testing/doubles.js';
 import { nativeOnlyParts } from '../../../native-harness/testing/rollout.js';
 import { restOf } from '../../../threads/testing/rest.js';
-import { ENTRY_KINDS } from '../../manifest.js';
+import { ENTRY_KINDS } from '../composed.js';
 import { ThreadEntryKinds } from '@runlith/agent/transcript/kinds';
 import type { ThreadCompositionEntry } from '@runlith/agent/transcript/entries';
 import { compactionChoicesSchema } from '../../../native-harness/contract/wire/compactionChoices.js';

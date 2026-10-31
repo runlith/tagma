@@ -25,6 +25,7 @@ import { frozenBuildsLayer } from '../../installation/testing/doubles.js';
 import { EXECUTIONS, type InstallationManifest } from '../../installation/contract/wire/manifest.js';
 import { routedContext } from '../../graph/testing/doubles.js';
 import { makeRuntime } from '../runtime.js';
+import { COMPOSED } from './composed.js';
 import { chosenModel } from './chosenModel.js';
 import { checkoutBuildsLayer } from '../../checkout-builds/testing/doubles.js';
 import { devSurfaceLayer } from '../../checkout-builds/surface.js';
@@ -198,6 +199,7 @@ const built = Effect.fnUntraced(
     }
     const runtime = yield* makeRuntime(
       {
+        ...COMPOSED,
         adapters: TESTING_ADAPTERS,
         accountCli,
         grants: testGrantSigner,

@@ -21,7 +21,7 @@ import { demoGraphLayer, withDemo } from '../../graphFixture.js';
 import { tagNodeFields } from '../../../../graph/vocabulary/declarationRules.js';
 import base from './base.json';
 import { TagIndex } from '../../../../graph/vocabulary/tagIndex.js';
-import { BEHAVIOUR_REGISTRY } from '../../../manifest.js';
+import { BEHAVIOUR_REGISTRY } from '../../composed.js';
 import { reachLeaves } from '../../../../graph/steps/reachLeaves.js';
 import { provenanceLeaves } from '../../../../graph/steps/provenanceLeaves.js';
 

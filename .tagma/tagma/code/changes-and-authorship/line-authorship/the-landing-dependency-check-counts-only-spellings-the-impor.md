@@ -11,8 +11,6 @@ fields:
 edges:
   - kind: discovered-from
     to: 01a18081-04c5-787e-aa53-5f6c0f0bc393
-  - kind: relates
-    to: 01a17d5a-656e-76dc-b53d-177aecccd7e5
 sources:
   - kind: file
     ref: packages/code-facts/src/languages/js/symbols.ts

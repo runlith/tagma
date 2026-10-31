@@ -6,7 +6,7 @@ import { makeSafariSource } from '@runlith/browser-cookies/safari';
 import * as BunChildProcessSpawner from '@effect/platform-bun/BunChildProcessSpawner';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import * as BunPath from '@effect/platform-bun/BunPath';
-import { MODULES } from '@tagma/server/composition/modules';
+import type { Manifest } from '../platform/contract/service/manifest.js';
 import { Deferred, Effect, Layer, type Scope } from 'effect';
 import { FetchHttpClient } from 'effect/http';
 import { CookieSources } from '../browser/contract/service/cookies.js';
@@ -90,12 +90,16 @@ export const cookieSourcesLayer = Layer.effect(
   }),
 ).pipe(Layer.provide(host));
 
-export const browserBindings = (input: { readonly data: string; readonly runs: ThreadRuns['Service'] }) => {
+export const browserBindings = (input: {
+  readonly modules: readonly Manifest[];
+  readonly data: string;
+  readonly runs: ThreadRuns['Service'];
+}) => {
   const root = join(input.data, 'browser');
   return Layer.mergeAll(
     Layer.succeed(BrowserPlace, { root }),
     Layer.succeed(ManagedPlace, { profiles: join(root, 'profiles'), builds: join(root, 'builds'), downloads: join(root, 'downloads') }),
-    Layer.succeed(HostAdapters, { all: HOST_ADAPTERS.collect(MODULES).map(({ entry }) => entry) }),
+    Layer.succeed(HostAdapters, { all: HOST_ADAPTERS.collect(input.modules).map(({ entry }) => entry) }),
     Layer.succeed(ThreadRuns, input.runs),
     BunChildProcessSpawner.layer.pipe(Layer.provide(host)),
     FetchHttpClient.layer,

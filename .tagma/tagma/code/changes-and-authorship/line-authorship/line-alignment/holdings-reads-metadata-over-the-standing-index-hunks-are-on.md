@@ -3,9 +3,6 @@ id: 01a13224-32b5-7f44-8ffc-39812a2de1fd
 title: Holdings reads metadata over the standing index; hunks are only needed for changed inputs
 ord: 3
 tags: ["explanation"]
-edges:
-  - kind: discovered-from
-    to: 01a1321c-227d-769c-a933-e64736bef6d4
 sources:
   - kind: file
     ref: apps/tagma/server/src/change-record/holdings/inputs.ts

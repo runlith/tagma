@@ -4,10 +4,10 @@ title: "When `inbox.put` answers `fresh: false`, do not repeat the effect of the
 ord: 2
 tags: ["rule"]
 sources:
+  - kind: file
+    ref: packages/agent/src/thread/run/scheduler/inputs.ts
   - kind: symbol
     ref: packages/agent/src/thread/storage/inbox.ts
     symbol: ThreadInboxStorage
-  - kind: file
-    ref: packages/agent/src/thread/run/scheduler/inputs.ts
 ---
 The item was already stored by an earlier attempt; the caller replays its answer only.

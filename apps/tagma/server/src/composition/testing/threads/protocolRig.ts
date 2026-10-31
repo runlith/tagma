@@ -125,7 +125,7 @@ import { ThreadStorageFailed } from '@runlith/agent/thread/persisted';
 import type { RunOwnership } from '@runlith/agent/thread/run/ThreadRunLedger';
 import type { Unit, WriteUnit } from '../../../platform/contract/service/units.js';
 import { WORLD_COMMAND } from '../../../installation/contract/wire/layout.js';
-import { ENTRY_KINDS } from '../../manifest.js';
+import { ENTRY_KINDS } from '../composed.js';
 import { builtinRegistry } from '../providerCatalog.js';
 import { ProviderRegistry } from '../../../providers/contract/service/registry.js';
 import { HarnessAccounts } from '../../../providers/contract/service/harness.js';

@@ -7,14 +7,14 @@ edges:
   - kind: relates
     to: 01a15f90-0721-7c72-be04-3eedd3668d90
 sources:
+  - kind: file
+    ref: packages/adapter-xai/src/harness/grok.ts
   - kind: symbol
     ref: apps/tagma/server/src/external-harnesses/hooks/dispatch.ts
     symbol: foreign
   - kind: symbol
     ref: apps/tagma/server/src/external-harnesses/installs/skillInstall.ts
     symbol: installForUser
-  - kind: file
-    ref: packages/adapter-xai/src/harness/grok.ts
 ---
 Grok Build reads hooks from its own files (project `.grok/hooks/*.json` and user `~/.grok/hooks/`). It reads Claude Code files (`.claude/settings.json`) only through the compatibility layer, which is turned off by `[compat.claude] hooks = false` or `GROK_CLAUDE_HOOKS_ENABLED`. Third-party tools write that setting themselves: on the probe machine Superset set it, and Grok 1.0.62 never launched a hook from `.claude/settings.json` ([[d3668d90]]). Without hooks Grok has no turn start or end, no transcript path (`transcript_path` arrives only in a hook payload), and no session adopt. So Tagma writes Grok records into `.grok/hooks/tagma.json` and `$GROK_HOME/hooks/tagma.json` (default `~/.grok`), while Claude Code keeps its own `.claude/settings.json`. The user file and the home variable (homeEnv, also the CLI profile home) are declared in the profile hook surface (`hooks.user`); they are not derived from the codec: Grok and Claude Code share one codec, but their directories differ.
 

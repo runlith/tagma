@@ -14,9 +14,9 @@ edges:
     to: 01a14c08-1c3f-7bde-a2e3-0462886d0b63
 sources:
   - kind: file
-    ref: apps/tagma/desktop/src/browser/placement.ts
-  - kind: file
     ref: apps/tagma/app/src/lib/features/browser/OpenPages.svelte.ts
+  - kind: file
+    ref: apps/tagma/desktop/src/browser/placement.ts
 ---
 **Problem.** Measured on 2026-10-31 on a 12-core Mac with 32 GB (one sample). The operator clicked about ten `target=_blank` links in a page he had opened himself. This created ten live pages that no panel showed. Five page renderers each took 7–64 % of a core. Electron's single GPU process took about 93 % of a core, and the system video decoder ran for it. Tagma's own window, which draws through the same GPU process, dropped to a few frames a second while 4–5 cores stayed idle. Closing the ten pages took the machine from about 60 % to 17 % busy.
 

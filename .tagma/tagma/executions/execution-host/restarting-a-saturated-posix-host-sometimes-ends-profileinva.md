@@ -8,9 +8,6 @@ fields:
     "holder": "tagma:01a16fbe-75e3-7f19-8568-ed3a829a1d7f",
     "status": "done"
   }
-edges:
-  - kind: discovered-from
-    to: 01a16e7d-5e90-727b-95ff-38764a72e07d
 ---
 Fixed in 2e4a5b27ca with no softening of the native capacity contract. Under load1=31.02 a real capacity.itest after nofile=36 saturation and restartLogic reproduced ProfileInvalid: 10 logic descriptors available against a 12 spend on the pipes execution. Census no longer counts its own probes' pipes as standing spend: the logic's and the holder's fds read straight from the kernel table ahead of PS/lsof.
 

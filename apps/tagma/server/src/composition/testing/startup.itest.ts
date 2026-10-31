@@ -6,8 +6,8 @@ import { Effect, FileSystem, Schema } from 'effect';
 import { readStartup } from '../../installation/process/record.js';
 import { startupStateSchema } from '../../installation/contract/wire/restart.js';
 
-const server = new URL('../server.ts', import.meta.url).pathname;
-const cli = new URL('../entries/cli.ts', import.meta.url).pathname;
+const server = new URL('../developer/server.ts', import.meta.url).pathname;
+const cli = new URL('../developer/cli.ts', import.meta.url).pathname;
 
 const spawn = (entry: string, root: string, port: number, args: string[] = []) =>
   Effect.acquireRelease(

@@ -38,7 +38,7 @@ import type { ThreadWorld } from '../../../executions/contract/service/worlds.js
 import type { Worlds } from '../../../executions/contract/service/worlds.js';
 import { leasedWorlds } from '../../../executions/testing/doubles.js';
 import { lineageOver } from '../../../workspace/testing/lineage.js';
-import { ENTRY_KINDS } from '../../manifest.js';
+import { ENTRY_KINDS } from '../composed.js';
 
 const namespaceId = NamespaceId.make('test-targets');
 const unreserved: RootReservations['Service'] = { holding: () => Effect.succeed(new Map()) };

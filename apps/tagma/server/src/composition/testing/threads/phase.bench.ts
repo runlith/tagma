@@ -6,7 +6,7 @@ import { demoGraphLayer, withDemo } from '../graphFixture.js';
 import { makeThreadRecords } from '../../../thread-record/layer.js';
 import { threadPhaseFeed, asThreadSummary } from '../../../threads/testing/doubles.js';
 import { threadStack } from '../threadParts.js';
-import { ENTRY_KINDS } from '../../manifest.js';
+import { ENTRY_KINDS } from '../composed.js';
 
 const runsArgument = Bun.argv.find((argument) => argument.startsWith('--runs='));
 const perRunArgument = Bun.argv.find((argument) => argument.startsWith('--per-run='));

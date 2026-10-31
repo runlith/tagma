@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test';
 import { softwareDevelopment } from '../../../../catalogs/contract/wire/softwareDevelopment.js';
 import { TagIndex } from '../../../../graph/vocabulary/tagIndex.js';
 import { mapLines, mapNodes, mapRegions, regionAbove, type MapNode, type MapRow } from '../../../../graph/orientation/map.js';
-import { BEHAVIOUR_REGISTRY } from '../../../manifest.js';
+import { BEHAVIOUR_REGISTRY } from '../../composed.js';
 
 const table = new TagIndex([...softwareDevelopment.tags], BEHAVIOUR_REGISTRY);
 

@@ -3,9 +3,6 @@ id: 01a13257-1967-73ee-a25d-c60dcd2b01b3
 title: Landing evidence carries references; its owner reads content and authorship
 ord: 3
 tags: ["explanation"]
-edges:
-  - kind: discovered-from
-    to: 01a1321c-227d-769c-a933-e64736bef6d4
 sources:
   - kind: file
     ref: apps/tagma/server/src/change-record/record/evidence.ts

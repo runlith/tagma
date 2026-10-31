@@ -32,8 +32,8 @@ import { DeclaredSettings } from '../../settings/contract/service/declarations.j
 import { SETTING_DECLARATIONS } from './settings.js';
 import { signedBy } from '../../invocation/testing/call.js';
 import { Behaviours } from '../../graph/contract/service/behaviours.js';
-import { BEHAVIOUR_REGISTRY } from '../manifest.js';
-import { ENTRY_KINDS } from '../manifest.js';
+import { BEHAVIOUR_REGISTRY } from './composed.js';
+import { ENTRY_KINDS } from './composed.js';
 
 const stack = settingsLayer.pipe(
   Layer.provide(Layer.succeed(DeclaredSettings, SETTING_DECLARATIONS)),

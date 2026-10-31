@@ -19,7 +19,7 @@ it.live(
         Effect.sync(() => realpathSync(mkdtempSync(join(tmpdir(), 'entry-kinds-')))),
         (made) => Effect.sync(() => rmSync(made, { recursive: true, force: true })),
       );
-      const outputs = yield* bundle(join(import.meta.dir, 'entryKinds.ts'), 'host.js');
+      const outputs = yield* bundle(join(import.meta.dir, 'testing', 'restedHost.ts'), 'host.js');
       expect(outputs.map((one) => one.name)).toContain('rested.worker.ts');
       for (const one of outputs) writeFileSync(join(root, one.name), one.text);
       const host: { readonly entryKinds: () => ThreadEntryReader } = yield* Effect.promise(

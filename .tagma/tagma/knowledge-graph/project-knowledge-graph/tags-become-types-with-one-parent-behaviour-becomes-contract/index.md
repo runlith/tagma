@@ -13,8 +13,6 @@ edges:
   - kind: relates
     to: 01a0e0e6-610c-7b6a-a755-814b46ae3e64
   - kind: relates
-    to: 01a0e134-d622-7eef-b19a-5c2070083b67
-  - kind: relates
     to: 01a0f476-04c3-7115-9d3e-ca089140c692
 ---
 A decision about the Tagma product itself, not about runlith: what replaces the closed list of tag roles, how a project adjusts a shipped vocabulary, and how a vocabulary is upgraded. It was written as section 9 of the target-architecture spec (the view [[46ae3e64]]) and stands here whole. The children carry the parts that change independently; this block carries the outcome, the problem, the model as one picture, owners, acceptance, the fate of what it touches, the order, and where it meets the law layer [[9140c692]]. Its provenance and the review record are the note [[8c6307f7]].

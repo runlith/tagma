@@ -14,6 +14,7 @@ import { testGrantSigner } from '../../../platform/testing/grants.js';
 import { ThreadFeeds } from '../../../threads/contract/service/feeds.js';
 import type { ViewSites } from '../../../views/contract/service/views.js';
 import { makeRuntime } from '../../runtime.js';
+import { COMPOSED } from '../composed.js';
 import { fixtureMigrations } from '../migrations.js';
 
 const FIXTURE = resolve(import.meta.dir, '../../../tagma-apps/testing/keyed.ts');
@@ -144,6 +145,7 @@ it.live(
 
       const runtime = yield* makeRuntime(
         {
+          ...COMPOSED,
           grants: testGrantSigner,
           databasePath,
           tokensPath: join(data, 'tokens.json'),

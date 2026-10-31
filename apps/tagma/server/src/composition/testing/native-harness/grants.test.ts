@@ -4,7 +4,7 @@ import { Effect } from 'effect';
 import { composeAgent, DECLARATIONS, agentFilesOf, grantedToolNames } from '../../../native-harness/testing/doubles.js';
 import { servedCapabilities } from './capabilities.js';
 import { AgentRuleRegistry } from '@runlith/agent/AgentRuntimePolicy';
-import { NATIVE_AGENT_RULES } from '../../manifest.js';
+import { NATIVE_AGENT_RULES } from '../composed.js';
 
 const ruleRegistry = new AgentRuleRegistry(NATIVE_AGENT_RULES);
 

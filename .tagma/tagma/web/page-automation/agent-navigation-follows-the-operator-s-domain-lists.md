@@ -18,6 +18,8 @@ sources:
   - kind: file
     ref: apps/tagma/desktop/src/browser/profiles.ts
   - kind: file
+    ref: apps/tagma/desktop/src/browser/restrictions.ts
+  - kind: file
     ref: apps/tagma/server/src/browser/contract/wire/domains.ts
   - kind: file
     ref: apps/tagma/server/src/browser/contract/wire/settings.ts
@@ -27,8 +29,6 @@ sources:
     ref: apps/tagma/server/src/browser/pages.ts
   - kind: file
     ref: apps/tagma/server/src/managed-browser/navigation.ts
-  - kind: file
-    ref: apps/tagma/desktop/src/browser/restrictions.ts
 ---
 **Value.** The operator limits the sites an agent can navigate to, including a site hop suggested by a page, without limiting the operator's own browsing.
 

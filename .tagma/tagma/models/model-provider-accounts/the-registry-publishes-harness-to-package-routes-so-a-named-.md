@@ -5,8 +5,8 @@ ord: 27
 tags: ["explanation"]
 sources:
   - kind: file
-    ref: apps/tagma/server/src/providers/adapters/harnessIndex.ts
-  - kind: file
     ref: apps/tagma/server/src/composition/cli/installedHarness.ts
+  - kind: file
+    ref: apps/tagma/server/src/providers/adapters/harnessIndex.ts
 ---
 Loading adapter packages to discover a harness on each hook would make an unrelated broken package prevent that hook from running. Registry reload instead publishes the successfully loaded declarations as a file projection; the reader checks its package directory against the current enabled install before importing it, so removal or replacement invalidates an older route.

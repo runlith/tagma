@@ -45,7 +45,7 @@ import { commandAdmission } from '../../../executions/testing/doubles.js';
 import { terminalThreads } from '../../../executions/testing/doubles.js';
 import { lineageOver } from '../../../workspace/testing/lineage.js';
 import { storesOver, type Stores } from '../../../executions/testing/stores.js';
-import { ENTRY_KINDS } from '../../manifest.js';
+import { ENTRY_KINDS } from '../composed.js';
 
 const fixture = demoGraphLayer({ projects: ['other'] }).pipe(Layer.provideMerge(BunFileSystem.layer));
 const makeAccess = Effect.fnUntraced(function* (demo: EffectDemo) {

@@ -62,7 +62,7 @@ import { RootId } from '../../../workspace/contract/wire/ids.js';
 import { heldTasks } from '../../../graph/testing/doubles.js';
 import { GraphScopes, ServedTree, TaskHolders } from '../../../graph/contract/service/serving.js';
 import { idleCommands, quietCommands } from '../../../change-record/testing/doubles.js';
-import { BEHAVIOUR_REGISTRY } from '../../manifest.js';
+import { BEHAVIOUR_REGISTRY } from '../composed.js';
 import { makeWalks } from '../../../change-record/lines/walks.js';
 import { ProtocolStates } from '../../../external-harnesses/contract/service/protocol.js';
 import type { ProtocolState } from '../../../external-harnesses/contract/wire/protocolState.js';

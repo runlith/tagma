@@ -11,7 +11,5 @@ fields:
 edges:
   - kind: discovered-from
     to: 01a0e569-e702-7e20-a06d-e9690d701139
-  - kind: implements
-    to: 01a0e470-f876-7433-b54b-0ba8e4a0488f
 ---
 Retire the 4 held-resources construction sites and 3 blocking-calls synchronous I/O sites recorded for packages/llm in checks/held-resources.server.debt.json and checks/blocking-calls.server.debt.json. Prove both measured reaches clean without changing their package contracts.
