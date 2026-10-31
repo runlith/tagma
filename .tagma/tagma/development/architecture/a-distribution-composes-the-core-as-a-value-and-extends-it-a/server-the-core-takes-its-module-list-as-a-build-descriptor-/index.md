@@ -16,8 +16,10 @@ Paths under `apps/tagma/server/src/` unless stated.
 ## What stands
 
 - Operations, feeds, settings, prompt sections, agent tools and contribution points are already assembled from module manifests.
-- The variant is chosen by export conditions on five self-imports — `@tagma/server/composition/{modules,catalogModules,bindings,verbBindings,channel}` resolve to `composition/developer/*` or `composition/release/*` — read as module-level constants whose types derive from `typeof MODULES`. A second root cannot add a module.
-- Lifetimes (`installation`, `serving`, `workspace`, `call`) are wired by module name in `composition/runtime.ts`, `serving.ts` and `callLifetimes.ts`; `CORE_VERB_MODULES` and the two-slot `Bindings` type are fixed.
+- A build is a value (`composition/build.ts`): `Build` carries the channel, the CLI verb modules and their bindings, `parts` — the lazily loaded `ServerParts` (module list, the two-slot `Bindings`, the rested-fold worker) — and the cut's `Composition`. Developer and release are two such values (`composition/{developer,release}/build.ts`); their entries `cli.ts` and `server.ts` call `runCli(build, server)` and `serve(build, parts)`, and the cut bundles the entries its `Composition.entries` names. `assemble(parts)` joins every manifest collection into one `Assembly` that runtime, serving, doors, CLI and tests take as a value.
+- Types: server code addresses operations by runtime ids from the assembly's registry; the client keeps its typing from `composition/catalog.ts`, built over the core repository's whole wire catalog (the developer catalog), so the app's operation input and answer types are unchanged. `serverParts` refuses, at type level, a module whose live door, setting controls or extension lifetime needs a service the core does not serve.
+- Lifetimes of the core's own modules (`CORE_MODULES`) stay hand-wired in `composition/runtime.ts`, `serving.ts` and `callLifetimes.ts`. A module outside `CORE_MODULES` declares its tier by the key it fills: its `lifetimes.installation` is built over the installation context once it stands, its `lifetimes.serving` over the served owners, and what they provide joins the door's context.
+- The `@tagma/server/composition/channel` export condition remains only for the desktop host and the app's scripts, which the cut builds; it goes with item 10.
 - The machine database has one migration folder; `packages/activity` and `packages/performance` already keep their own store and migration chain.
 - The package exports 256 entries and no `contract/service/*` entry: an in-process consumer outside the package has no declared surface.
 - The cut hard-codes the checkout (`checkoutOf`), brand, signing, channel and `FEED_REPOSITORY = 'runlith/tagma'` (`installation/contract/wire/feed.ts`), which is both the release channel's feed address and the repository whose GitHub Releases `installation/cut/publish.ts` publishes to; its bundlers take no plugin.
@@ -49,5 +51,4 @@ Desktop main-process IPC channels are fixed today; extending them is out of this
 
 ## Open
 
-- Whether the descriptor's generic types keep today's client typing of operations.
 - The order of extracting woven capabilities after the first, [[e41dca93]]; each is measured on its own.
