@@ -13,6 +13,7 @@ import {
 import type { FeedRegions } from '@runlith/chat-ui/FeedRegions.svelte';
 import type { PromptHandle } from '@runlith/chat-ui/PromptHandle.svelte';
 import { Point } from '@runlith/layer/Point';
+import type { Shown } from '@runlith/layer/svelte/payload';
 import type { Worktrees } from '$lib/features/worktrees/BoardState.svelte.js';
 import type { ThreadBirth } from '../birth/ThreadBirth.svelte.js';
 import type { ChatHold } from '../ChatHold.svelte.js';
@@ -80,9 +81,13 @@ export type FeedPart = SlotOwners & {
   readonly transcript: TranscriptReading;
 };
 
-export type ComposerPartDeclaration = { readonly id: string; readonly part: Component<ComposerPart> };
+export interface ComposerPartDeclaration extends Shown<ComposerPart> {
+  readonly id: string;
+}
 
-export type FeedPartDeclaration = { readonly id: string; readonly part: Component<FeedPart> };
+export interface FeedPartDeclaration extends Shown<FeedPart> {
+  readonly id: string;
+}
 
 export const ThreadCommands = Point.define<CommandDeclaration>()('ThreadCommands', { tier: 'app', key: (command) => command.name });
 

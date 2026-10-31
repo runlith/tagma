@@ -1,4 +1,5 @@
 import { Layer } from '@runlith/layer/Layer';
+import type { Component } from 'svelte';
 import { WireEntryKinds } from '$lib/wire/WireEntryKinds.js';
 import connectFeed from '../birth/connect.feed.svelte';
 import * as transportKinds from '../external/transport.kinds.svelte';
@@ -24,8 +25,10 @@ import compactionFeed from './compaction.feed.svelte';
 import * as compositionKinds from './composition.kinds.js';
 import compositionFeed from './composition.feed.svelte';
 import {
+  type ComposerPart,
   ComposerParts,
   type ComposerPartDeclaration,
+  type FeedPart,
   FeedParts,
   type FeedPartDeclaration,
   ThreadCommands,
@@ -57,9 +60,12 @@ import tagmaAppViewsFeed from './tagmaAppViews.feed.svelte';
 import teamComposer from './team.composer.svelte';
 import * as threadTools from './threadTools.tools.js';
 
-const composer = (name: string, part: ComposerPartDeclaration['part']): ComposerPartDeclaration => ({ id: `${name}.composer`, part });
+const composer = (name: string, component: Component<ComposerPart>): ComposerPartDeclaration => ({
+  id: `${name}.composer`,
+  payload: { component },
+});
 
-const feed = (name: string, part: FeedPartDeclaration['part']): FeedPartDeclaration => ({ id: `${name}.feed`, part });
+const feed = (name: string, component: Component<FeedPart>): FeedPartDeclaration => ({ id: `${name}.feed`, payload: { component } });
 
 export const ThreadContributions = Layer.mergeAll(
   ThreadCommands,

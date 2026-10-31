@@ -1,6 +1,6 @@
 import { type Resolver, Service } from '@runlith/layer/key';
 import type { Point } from '@runlith/layer/Point';
-import { type ColumnDeclaration, type ColumnFrame, Columns } from '$lib/features/workspace/column.js';
+import { type ColumnDeclaration, type ColumnFrame, Columns, type ColumnState } from '$lib/features/workspace/column.js';
 import { type Surface, SurfaceRegistry } from '$lib/features/workspace/surface.js';
 
 export type SectionColumn = {
@@ -32,7 +32,7 @@ export class ColumnRegistry extends Service<ColumnRegistry>()('ColumnRegistry', 
 
   private indexed: ColumnIndex | undefined;
 
-  private readonly standing = new WeakMap<Resolver, Map<string, SectionColumn>>();
+  private readonly standing = new WeakMap<Resolver, WeakMap<ColumnDeclaration, SectionColumn>>();
 
   constructor(
     private readonly surfaces: SurfaceRegistry,
@@ -61,12 +61,12 @@ export class ColumnRegistry extends Service<ColumnRegistry>()('ColumnRegistry', 
     if (declaration === undefined || declaration.room?.(app) === false) return null;
     let held = this.standing.get(app);
     if (held === undefined) {
-      held = new Map();
+      held = new WeakMap();
       this.standing.set(app, held);
     }
-    const kept = held.get(declaration.id);
+    const kept = held.get(declaration);
     if (kept !== undefined) return kept;
-    const state = app.resolve(declaration.state);
+    const state = (): ColumnState => app.resolve(declaration.state);
     const made: SectionColumn = {
       id: declaration.id,
       label: declaration.label,
@@ -74,11 +74,11 @@ export class ColumnRegistry extends Service<ColumnRegistry>()('ColumnRegistry', 
       stands: declaration.stands ?? 'page',
       search: declaration.search ?? false,
       get open() {
-        return state.open;
+        return state().open;
       },
-      toggle: () => state.toggle(),
+      toggle: () => state().toggle(),
     };
-    held.set(declaration.id, made);
+    held.set(declaration, made);
     return made;
   }
 }

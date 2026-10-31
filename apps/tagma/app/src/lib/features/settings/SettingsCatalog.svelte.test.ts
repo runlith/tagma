@@ -7,6 +7,7 @@ import { waitUntil } from '@runlith/testing/flush';
 import { testDoor } from '$lib/wire/testing.js';
 import { loadOperations } from '$lib/wire/operation.js';
 import { makePoint } from '@runlith/layer/testing';
+import { makeReactivePoint } from '@runlith/layer/testing/svelte';
 import { SectionContributions, SettingSections, type SettingsSection } from './section.js';
 import { SectionRegistry } from './SectionRegistry.js';
 import { SettingsCatalog } from './SettingsCatalog.svelte.js';
@@ -175,12 +176,23 @@ test('the page holds the keys a person SETS: a key a machine writes for itself i
   expect(catalog.setCount('user', 'terminal')).toBe(0);
 });
 
-test('a key an app section holds stands in that section, whatever section the catalog files it under', async () => {
-  const holding = { id: 'context', group: 'agent', order: 2, icon: {} as never, keys: ['agent.toolOutputShare'] } as const;
-  const catalog = await read(registry(holding));
+test('a key an app section holds stands in that section while the section stands, even one that joins after the catalog loaded', async () => {
+  const sections = makeReactivePoint(SettingSections);
+  const catalog = await read(new SectionRegistry(sections, makePoint(SectionContributions)));
+  expect(catalog.entriesOf('agent').map((entry) => entry.id)).toEqual(['agent.toolOutputShare']);
 
+  const leave = sections.register('features/context', {
+    id: 'context',
+    group: 'agent',
+    order: 2,
+    icon: {} as never,
+    keys: ['agent.toolOutputShare'],
+  });
   expect(catalog.entriesOf('context').map((entry) => entry.id)).toEqual(['agent.toolOutputShare']);
   expect(catalog.entriesOf('agent')).toEqual([]);
+
+  leave();
+  expect(catalog.entriesOf('agent').map((entry) => entry.id)).toEqual(['agent.toolOutputShare']);
 });
 
 test('the count a layer carries is what THAT layer decided, never what happens to be in force', async () => {

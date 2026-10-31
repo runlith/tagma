@@ -37,7 +37,7 @@ const pairs: Record<string, Pair> = {
   restore,
   reconnect,
 } as never;
-const kinds = readingOf(testWireKinds())();
+const kinds = readingOf(testWireKinds());
 const decode = Schema.decodeUnknownEffect(threadWireFeedEventSchema);
 
 const shown = (fold: ChatFold) => fold.entries.map((entry) => ({ ...entry }));

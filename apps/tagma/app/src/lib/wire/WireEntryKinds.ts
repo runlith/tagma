@@ -21,19 +21,25 @@ export const WireEntryKinds = Point.define<ThreadEntryKind>()('WireEntryKinds', 
   },
 });
 
-export type EntryReading = () => ThreadEntryReader;
-
 const NONE: readonly ThreadEntryKind[] = [];
 
-export function readingOf(kinds: Point<ThreadEntryKind> | undefined): EntryReading {
-  let standing: readonly ThreadEntryKind[] | undefined;
-  let reader = makeThreadEntryReader({ products: NONE });
-  return () => {
+export function readingOf(kinds: Point<ThreadEntryKind> | undefined): ThreadEntryReader {
+  const fixed = makeThreadEntryReader({ products: NONE });
+  let standing: readonly ThreadEntryKind[] = NONE;
+  let reader = fixed;
+  const current = (): ThreadEntryReader => {
     const items = kinds?.items ?? NONE;
     if (items !== standing) {
       standing = items;
       reader = makeThreadEntryReader({ products: items });
     }
     return reader;
+  };
+  return {
+    ...fixed,
+    decode: (value) => current().decode(value),
+    read: (formed) => current().read(formed),
+    readWire: (value) => current().readWire(value),
+    writeWire: (entry) => current().writeWire(entry),
   };
 }

@@ -21,6 +21,7 @@ import {
   productKindDeclaration,
 } from './contribution.js';
 import Contributions from './Contributions.svelte';
+import Failing from './Failing.fixture.svelte';
 import Probe, { probeEntry, probeKind } from './Probe.fixture.svelte';
 import * as probeStatic from './ProbeStatic.fixture.svelte';
 import { RenderingPorts } from './RenderingPorts.svelte.js';
@@ -51,7 +52,8 @@ function assemble() {
       ThreadCommands.contribute('probe', command('probe', 'probed')),
       ThreadTools.contribute('probe', { name: 'probe_static_tool', modelText: () => 'static text' }),
       ThreadKinds.contribute('probe', ...probeStatic.kinds),
-      FeedParts.contribute('probe', { id: 'probe.feed', part: Probe }),
+      FeedParts.contribute('failing', { id: 'failing.feed', payload: { component: Failing } }),
+      FeedParts.contribute('probe', { id: 'probe.feed', payload: { component: Probe } }),
     ),
   );
   shell.draw(Contributions, {
@@ -68,7 +70,7 @@ function assemble() {
 }
 
 it.effect(
-  'a feature declared only by a layer outside the threads feature contributes a command, an entry kind, tools and a pinned mount where the owner renders them, and takes them away when it leaves',
+  'a feature declared only by a layer outside the threads feature contributes a command, an entry kind, tools and a pinned mount where the owner renders them, beside a part that fails alone, and takes them away when it leaves',
   () =>
     Effect.gen(function* () {
       const { composer, kinds, regions, app } = assemble();

@@ -65,6 +65,21 @@ test('a column standing on a global route is found by that route and is absent w
   expect(columns.at('/preferences', false, app)).toBeNull();
 });
 
+test('a column whose contribution left and came back under the same id answers the new declaration and its state', () => {
+  const point = makePoint(Columns);
+  const columns = new ColumnRegistry(surfaces, point);
+  const leave = point.register('features/old', inbox);
+  expect(columns.of('mail', app)?.label).toBe('inbox column');
+
+  leave();
+  point.register('features/new', { ...preferences, id: 'inbox', label: 'new inbox', room: undefined } as unknown as ColumnDeclaration);
+  const column = columns.of('mail', app);
+  expect(column?.label).toBe('new inbox');
+  const open = states.get(Preferences)!.open;
+  column?.toggle();
+  expect(states.get(Preferences)!.open).toBe(!open);
+});
+
 test('a surface naming a column this build lacks opens none, and two columns sharing an id or a route refuse', () => {
   expect(registry(preferences).of('mail', app)).toBeNull();
   expect(() => registry(inbox, inbox)).toThrow(RegistryClash);

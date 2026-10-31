@@ -5,12 +5,14 @@
   import type { Point } from '../Point.js';
   import type { Shown, ViewOf } from './payload.js';
 
-  type Base = { point: Point<Item>; props: Props; only?: (item: Item) => boolean; frame?: Snippet<[Snippet]> };
+  type Given = { props: Props; propsOf?: never } | { propsOf: (item: Item) => Props; props?: never };
+  type Base = Given & { point: Point<Item>; only?: (item: Item) => boolean; frame?: Snippet<[Snippet]> };
   type Views = [ViewOf<Item>] extends [never] ? { view?: never } : { view: Snippet<[ViewOf<Item>, Props]> };
 
-  let { point, props, only, frame, view }: Base & Views = $props();
+  let { point, props, propsOf, only, frame, view }: Base & Views = $props();
 
   const items = $derived(only === undefined ? point.items : point.items.filter(only));
+  const given = (item: Item): Props => (propsOf === undefined ? (props as Props) : propsOf(item));
 </script>
 
 {#snippet list()}
@@ -18,9 +20,9 @@
     <ErrorBoundary id={`${point.id}/${point.key(item)}`}>
       {#if 'component' in item.payload}
         {@const Contributed = item.payload.component}
-        <Contributed {...props} />
+        <Contributed {...given(item)} />
       {:else}
-        {@render view?.(item.payload.view as ViewOf<Item>, props)}
+        {@render view?.(item.payload.view as ViewOf<Item>, given(item))}
       {/if}
     </ErrorBoundary>
   {/each}
