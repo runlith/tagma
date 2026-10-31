@@ -8,4 +8,4 @@ sources:
     ref: packages/execution-host/src/ProcessUsage.ts
     symbol: bounded
 ---
-The Load panel and the status bar show Tagma's total as the sum of the `Installation` and `Execution` groups. So when the reading is squeezed under the frame envelope, Tagma's groups pack first. If one of them fits not even without processes, its CPU and memory join the `Installation` group, not the shared "Other programs". Otherwise the agent's work would go to "Rest of the Mac", and Tagma's total would read low exactly when the machine is overloaded. The move's price: a folded execution loses its line and stop button but stays in Tagma's total.
+The Load panel and the status bar show Tagma's total as the sum of the `Installation`, `Part` and `Execution` groups. When the reading is squeezed under the frame envelope, those groups pack first. If one fits not even without processes, its CPU, GPU and memory join the `Installation` group, not the shared other-programs group. Otherwise Tagma's total would read low exactly when the machine is overloaded. A folded group loses its own line and action but stays in Tagma's total.
