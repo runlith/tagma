@@ -247,7 +247,7 @@ const applyPrepared = Effect.fnUntraced(function* <A, TTx, TWrite extends TTx, E
   const threadId = prepared.threadId;
   const head = at.version.head;
   const published = own ? plan.published : undefined;
-  if (published !== undefined) yield* deps.transitions.opened(threadId, at.tx);
+  if (published !== undefined) yield* deps.transitions.opened([threadId], at.tx);
   const extra = decision.events && decision.events.length > 0 ? sealThreadEvents(decision.events) : [];
   if (extra.length > 0) yield* replayable(deps.kinds, extra);
   const declared = [...prepared.declared, ...extra];
@@ -292,9 +292,12 @@ const applyPrepared = Effect.fnUntraced(function* <A, TTx, TWrite extends TTx, E
       shown === null || !recordsUnseen(key.evidence)
         ? null
         : { from: head, records: yield* journalForm(deps.kinds, threadId, head, declared), thread: shown };
-    yield* deps.transitions.revised(threadId, at.tx, (revision) =>
-      published(appended === null ? { kind: 'moved', threadId } : { kind: 'appended', threadId, revision, ...appended }),
-    );
+    yield* deps.transitions.revised([threadId], at.tx, (revisions) => {
+      const revision = revisions.get(threadId);
+      return published(
+        appended === null || revision === undefined ? { kind: 'moved', threadId } : { kind: 'appended', threadId, revision, ...appended },
+      );
+    });
   }
   return { outcome: { committed: decision.result } } as Step<A>;
 });

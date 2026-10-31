@@ -45,6 +45,12 @@ export type ThreadStateChange =
       readonly records: readonly ThreadEventRecord[];
       readonly thread: ThreadMetadataChange;
     }
+  | {
+      readonly kind: 'ran';
+      readonly threadId: string;
+      readonly revision: ThreadChangeRevision;
+      readonly runs: readonly { readonly id: string; readonly heartbeatAt: Date; readonly updatedAt: Date }[];
+    }
   | { readonly kind: 'moved'; readonly threadId: string };
 
 export type ActiveLife = 'working' | 'awaiting' | 'stalled';

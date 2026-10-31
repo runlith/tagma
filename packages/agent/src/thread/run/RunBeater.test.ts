@@ -16,8 +16,9 @@ const beaterOver = Effect.fnUntraced(function* (adapter = fakeAdapter()) {
   const beats: (readonly string[])[] = [];
   const asked: ThreadRunStopAsked[] = [];
   const lifecycle = RunLifecycle.of({
-    beat: (runIds) =>
+    beat: (runs) =>
       Effect.sync(() => {
+        const runIds = runs.map((run) => run.id);
         beats.push([...runIds].sort());
         return asked.filter((stop) => runIds.includes(stop.runId));
       }),
