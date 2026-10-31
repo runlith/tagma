@@ -19,16 +19,16 @@ fields:
       {
         "at": "credentials.ts",
         "for": [
-          "f37a2606"
-        ],
-        "role": "testing"
+          "f37a2606",
+          "d2a60527"
+        ]
       },
       {
         "at": "endpoint.ts",
         "for": [
-          "f37a2606"
-        ],
-        "role": "testing"
+          "f37a2606",
+          "d2a60527"
+        ]
       }
     ],
     "id": "posix-holder",
