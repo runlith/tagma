@@ -98,6 +98,27 @@ test('a section registered on the fly joins the rail and answers its route until
   expect(surfaces.find('app/crm/deals')).toBeUndefined();
 });
 
+test('an app section and a contributed surface share one ledger of names and routes, whichever arrives first', () => {
+  const point = makePoint(
+    Surfaces,
+    declared('mail', { rail: 10, home: true }),
+    declared('app', { route: 'p', nested: true, remembers: false }),
+  );
+  const surfaces = new SurfaceRegistry(point);
+  const section = declared('app/crm/deals', { route: 'p/crm/deals', remembers: false });
+
+  const release = surfaces.register(section);
+  expect(() => point.register('features/late', declared('deals', { route: 'p/crm/deals' }))).toThrow(RegistryClash);
+  expect(() => point.register('features/late', declared('app/crm/deals', { route: 'elsewhere' }))).toThrow(RegistryClash);
+
+  release();
+  const leave = point.register('features/late', declared('deals', { route: 'p/crm/deals' }));
+  expect(() => surfaces.register(section)).toThrow(RegistryClash);
+  leave();
+  surfaces.register(section);
+  expect(surfaces.owner('p/crm/deals')).toBe('app/crm/deals');
+});
+
 test('a visit remembers a place only on the surfaces that declared it', () => {
   const surfaces = of(declared('home', { route: '', remembers: false, home: true, rail: 1 }), declared('mail'));
   const visits = new Visits(makeStorage(), surfaces);

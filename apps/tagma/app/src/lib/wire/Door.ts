@@ -1,6 +1,6 @@
 import { Api } from '@tagma/server/api';
-import { ThreadEntryKinds } from '@runlith/agent/transcript/kinds';
-import { type EntryReading, readingOf, WireEntryKinds } from './WireEntryKinds.js';
+import { ThreadEntryKinds, type ThreadEntryReader } from '@runlith/agent/transcript/kinds';
+import { readingOf, WireEntryKinds } from './WireEntryKinds.js';
 import { CONTRACT_HEADER } from '@tagma/server/invocation/contract/wire/headers';
 import type { HttpOperationId, OperationAnswer, OperationInput } from '@tagma/server/composition/catalog';
 import type { EndpointDeclaration } from '@tagma/server/platform/contract/wire/operation';
@@ -110,7 +110,7 @@ export class Door extends Service<Door>()('Door', { tier: 'app' }) {
     private readonly fetch: PlatformFetch,
     private readonly origin: ServerOrigin,
     private readonly router: Router,
-    private readonly entries: EntryReading = readingOf(undefined),
+    private readonly entries: ThreadEntryReader = readingOf(undefined),
   ) {
     super();
   }
@@ -219,7 +219,7 @@ export class Door extends Service<Door>()('Door', { tier: 'app' }) {
       Effect.catch((error) => Effect.flatMap(serverFault(error), Effect.fail)),
       Effect.catchDefect((defect) => Effect.fail(refusalOf(readableDefect(defect)))),
       Effect.provideService(FetchHttpClient.Fetch, this.fetch),
-      Effect.provideService(ThreadEntryKinds, this.entries()),
+      Effect.provideService(ThreadEntryKinds, this.entries),
     );
     this.asking += 1;
     return Effect.runPromise(

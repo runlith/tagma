@@ -2,12 +2,13 @@ import { it } from '@runlith/effect-test/vitest';
 import { ThreadEntryUnreadable } from '@runlith/agent/transcript/kinds';
 import type { ThreadWireFeedEvent } from '@tagma/server/threads/contract/wire/snapshot';
 import empty from '@tagma/server/threads/contract/wire/feedPairs/empty.json';
+import { makePoint } from '@runlith/layer/testing';
 import { Effect } from 'effect';
 import { expect } from 'vitest';
 import { testWireKinds } from '$lib/features/threads/native/testing.js';
 import { LiveConnection } from './Live.js';
 import { ServerOrigin } from './ServerOrigin.svelte.js';
-import { readingOf } from './WireEntryKinds.js';
+import { readingOf, WireEntryKinds } from './WireEntryKinds.js';
 
 class FeedSocket extends EventTarget {
   readyState = 0;
@@ -37,14 +38,11 @@ class FeedSocket extends EventTarget {
   }
 }
 
-it.live('a live subscription decodes with its window kinds and keeps an unknown entry diagnostic beside installed entries', () =>
+it.live('a standing subscription decodes kinds that joined after it started and keeps an unknown entry diagnostic beside them', () =>
   Effect.gen(function* () {
     const socket = new FeedSocket();
-    const live = yield* LiveConnection.make(
-      () => socket as unknown as WebSocket,
-      new ServerOrigin('http://localhost'),
-      readingOf(testWireKinds()),
-    );
+    const kinds = makePoint(WireEntryKinds);
+    const live = yield* LiveConnection.make(() => socket as unknown as WebSocket, new ServerOrigin('http://localhost'), readingOf(kinds));
     const received = Promise.withResolvers<ThreadWireFeedEvent>();
     const held = live.hold(
       (client) => client['thread.subscribe']({ projectId: 1, threadId: 'thread' }),
@@ -53,6 +51,7 @@ it.live('a live subscription decodes with its window kinds and keeps an unknown 
     );
     yield* Effect.addFinalizer(() => Effect.sync(held.unsubscribe));
     const request = yield* Effect.promise(() => socket.requested.promise);
+    kinds.register('late', ...testWireKinds().items);
     const first = empty.events[0]!;
     const installed = {
       type: 'start-cost',

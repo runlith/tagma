@@ -1,9 +1,8 @@
 import type { Project } from '@tagma/server/graph/contract/wire/rows';
-import { RegistryClash, clashOf } from '@runlith/roster/RegistryClash';
+import { RegistryClash } from '@runlith/roster/RegistryClash';
 import { Service } from '@runlith/layer/key';
 import { Point } from '@runlith/layer/Point';
 import type { Component, Snippet } from 'svelte';
-import { SvelteMap } from 'svelte/reactivity';
 
 export type Surface = string;
 
@@ -68,30 +67,40 @@ export const Surfaces = Point.define<SurfaceDeclaration>()('Surfaces', {
 
 type SurfaceIndex = {
   readonly items: readonly SurfaceDeclaration[];
+  readonly declared: readonly SurfaceDeclaration[];
   readonly bySurface: ReadonlyMap<Surface, SurfaceDeclaration>;
   readonly former: ReadonlyMap<Surface, Surface>;
   readonly byRoute: ReadonlyMap<string, SurfaceDeclaration>;
+  readonly memberRoutes: ReadonlyMap<string, SurfaceDeclaration>;
   readonly rail: readonly SurfaceDeclaration[];
   readonly home: Surface;
 };
 
-const indexOf = (items: readonly SurfaceDeclaration[]): SurfaceIndex => {
+const indexOf = (items: readonly SurfaceDeclaration[], members: ReadonlySet<SurfaceDeclaration>): SurfaceIndex => {
+  const declared = items.filter((one) => !members.has(one));
   const bySurface = new Map<Surface, SurfaceDeclaration>();
   const former = new Map<Surface, Surface>();
   const byRoute = new Map<string, SurfaceDeclaration>();
+  const memberRoutes = new Map<string, SurfaceDeclaration>();
   for (const declaration of items) {
     bySurface.set(declaration.surface, declaration);
+    if (members.has(declaration)) {
+      memberRoutes.set(declaration.route, declaration);
+      continue;
+    }
     if (declaration.formerly !== undefined) former.set(declaration.formerly, declaration.surface);
     byRoute.set(declaration.route, declaration);
     if (declaration.place !== undefined) byRoute.set(declaration.place, declaration);
   }
   return {
     items,
+    declared,
     bySurface,
     former,
     byRoute,
+    memberRoutes,
     rail: items.filter((one) => one.rail !== undefined).toSorted((left, right) => (left.rail ?? 0) - (right.rail ?? 0)),
-    home: items.find((one) => one.home === true)?.surface ?? '',
+    home: declared.find((one) => one.home === true)?.surface ?? '',
   };
 };
 
@@ -115,8 +124,7 @@ export class SurfaceRegistry extends Service<SurfaceRegistry>()('SurfaceRegistry
   }
 
   private indexed: SurfaceIndex | undefined;
-  private readonly members = new SvelteMap<Surface, SurfaceDeclaration>();
-  private readonly memberRoutes = new SvelteMap<string, SurfaceDeclaration>();
+  private readonly members = new Set<SurfaceDeclaration>();
 
   constructor(private readonly surfaces: Point<SurfaceDeclaration>) {
     super();
@@ -124,7 +132,7 @@ export class SurfaceRegistry extends Service<SurfaceRegistry>()('SurfaceRegistry
 
   private get index(): SurfaceIndex {
     const items = this.surfaces.items;
-    if (this.indexed?.items !== items) this.indexed = indexOf(items);
+    if (this.indexed?.items !== items) this.indexed = indexOf(items, this.members);
     return this.indexed;
   }
 
@@ -145,32 +153,30 @@ export class SurfaceRegistry extends Service<SurfaceRegistry>()('SurfaceRegistry
   }
 
   get declared(): readonly SurfaceDeclaration[] {
-    return this.index.items;
+    return this.index.declared;
   }
 
   get all(): readonly SurfaceDeclaration[] {
-    return this.members.size === 0 ? this.declared : [...this.declared, ...this.members.values()];
+    return this.index.items;
   }
 
   get rail(): readonly SurfaceDeclaration[] {
-    if (this.members.size === 0) return this.index.rail;
-    const placed = [...this.members.values()].filter((one) => one.rail !== undefined);
-    return [...this.index.rail, ...placed].toSorted((left, right) => (left.rail ?? 0) - (right.rail ?? 0));
+    return this.index.rail;
   }
 
   register(declaration: SurfaceDeclaration): () => void {
-    if (this.bySurface.has(declaration.surface) || this.members.has(declaration.surface)) {
-      throw new RegistryClash({ message: `Surface "${declaration.surface}" is declared twice.`, holders: [declaration.surface] });
+    const standing = this.members.has(declaration);
+    this.members.add(declaration);
+    try {
+      const leave = this.surfaces.register('app sections', declaration);
+      return () => {
+        leave();
+        this.members.delete(declaration);
+      };
+    } catch (refused) {
+      if (!standing) this.members.delete(declaration);
+      throw refused;
     }
-    const claimant = this.byRoute.get(declaration.route) ?? this.memberRoutes.get(declaration.route);
-    if (claimant !== undefined) throw clashOf(`Route "${declaration.route}"`, claimant.surface, declaration.surface);
-    this.members.set(declaration.surface, declaration);
-    this.memberRoutes.set(declaration.route, declaration);
-    return () => {
-      if (this.members.get(declaration.surface) !== declaration) return;
-      this.members.delete(declaration.surface);
-      this.memberRoutes.delete(declaration.route);
-    };
   }
 
   named(stored: string): Surface {
@@ -182,11 +188,11 @@ export class SurfaceRegistry extends Service<SurfaceRegistry>()('SurfaceRegistry
 
   portable(surface: Surface): boolean {
     const declared = this.bySurface.get(surface);
-    return declared !== undefined && declared.nested !== true;
+    return declared !== undefined && declared.nested !== true && !this.members.has(declared);
   }
 
   find(surface: Surface): SurfaceDeclaration | undefined {
-    return this.bySurface.get(surface) ?? this.members.get(surface);
+    return this.bySurface.get(surface);
   }
 
   get(surface: Surface): SurfaceDeclaration {
@@ -200,7 +206,7 @@ export class SurfaceRegistry extends Service<SurfaceRegistry>()('SurfaceRegistry
     const fixed = this.byRoute.get(route) ?? this.byRoute.get('');
     if (fixed?.nested === true && routeId != null && params !== undefined) {
       const wanted = memberRoute(routeId, params);
-      const member = wanted === null ? undefined : this.memberRoutes.get(wanted);
+      const member = wanted === null ? undefined : this.index.memberRoutes.get(wanted);
       if (member !== undefined) return member.surface;
     }
     return fixed?.surface ?? this.home;
@@ -215,7 +221,7 @@ export class SurfaceRegistry extends Service<SurfaceRegistry>()('SurfaceRegistry
   }
 
   owner(route: string): Surface | undefined {
-    return (this.byRoute.get(route) ?? this.memberRoutes.get(route))?.surface;
+    return (this.byRoute.get(route) ?? this.index.memberRoutes.get(route))?.surface;
   }
 
   get routes(): readonly string[] {

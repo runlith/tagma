@@ -52,7 +52,13 @@ export class SettingsCatalog extends Process<SettingsCatalog, SettingsCatalogOpt
   }
 
   sections = $state<readonly SettingSection[]>([]);
-  entries = $state<readonly SettingEntry[]>([]);
+  private served = $state.raw<readonly SettingEntry[]>([]);
+  readonly entries = $derived<readonly SettingEntry[]>(
+    this.served.map((entry) => {
+      const section = this.registry.sectionOf(entry);
+      return section === entry.section ? entry : { ...entry, section };
+    }),
+  );
   loading = $state(false);
   error = $state<string | null>(null);
   busyKey = $state<string | null>(null);
@@ -154,15 +160,11 @@ export class SettingsCatalog extends Process<SettingsCatalog, SettingsCatalogOpt
       title: section.title,
       description: section.description ?? '',
     }));
-    this.entries = catalog.entries
+    this.served = catalog.entries
       .filter((entry) => entry.control?.kind !== 'machine')
       .map((entry) => {
         const rejection = rejections.get(entry.id);
-        return {
-          ...entry,
-          section: this.registry.sectionOf(entry),
-          rejection: rejection ? { scope: rejection.scope, reason: rejection.reason } : undefined,
-        };
+        return { ...entry, rejection: rejection ? { scope: rejection.scope, reason: rejection.reason } : undefined };
       });
   }
 }

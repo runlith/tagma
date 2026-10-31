@@ -2,7 +2,20 @@
   import type { ComposerContributions } from '@runlith/chat-ui/ComposerContributions.svelte';
   import type { EntryKinds } from '@runlith/chat-ui/EntryKinds.svelte';
   import type { FeedRegions } from '@runlith/chat-ui/FeedRegions.svelte';
-  import { ComposerParts, FeedParts, type SlotOwners, type SlotSurface, ThreadCommands, ThreadKinds, ThreadTools } from './contribution.js';
+  import PointView from '@runlith/layer/svelte/PointView.svelte';
+  import {
+    type ComposerPart,
+    type ComposerPartDeclaration,
+    ComposerParts,
+    type FeedPart,
+    type FeedPartDeclaration,
+    FeedParts,
+    type SlotOwners,
+    type SlotSurface,
+    ThreadCommands,
+    ThreadKinds,
+    ThreadTools,
+  } from './contribution.js';
   import type { RenderingPorts } from './RenderingPorts.svelte.js';
   import type { TranscriptReading } from './TranscriptReading.svelte.js';
 
@@ -42,9 +55,11 @@
   });
 </script>
 
-{#each composerParts.items as one (one.id)}
-  <one.part {...owners} contributor={one.id} {composer} {surface} {rendering} />
-{/each}
-{#each feedParts.items as one (one.id)}
-  <one.part {...owners} contributor={one.id} {kinds} {regions} {transcript} />
-{/each}
+<PointView
+  point={composerParts}
+  propsOf={(one: ComposerPartDeclaration): ComposerPart => ({ ...owners, contributor: one.id, composer, surface, rendering })}
+/>
+<PointView
+  point={feedParts}
+  propsOf={(one: FeedPartDeclaration): FeedPart => ({ ...owners, contributor: one.id, kinds, regions, transcript })}
+/>
