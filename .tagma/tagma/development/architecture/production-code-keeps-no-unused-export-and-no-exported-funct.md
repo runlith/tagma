@@ -3736,18 +3736,6 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead apps/tagma/server/src/composition/shipped.ts#shippedVocabulary",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/composition/shipped.ts#shippedSettings",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/composition/socketBinding.ts#SOCKET_VERBS",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "dead-code dead apps/tagma/server/src/composition/socketBinding.ts#LiveHandlersUnmatched",
           "owner": "5a3bed29"
         },
