@@ -782,6 +782,9 @@ const program = Effect.gen(function* () {
       ledger,
       (row) =>
         row.name.startsWith('ProtocolSteps.') ||
+        row.name.startsWith('TerminalEndings.') ||
+        row.name === 'CommandDelivery.drive' ||
+        row.name === 'FreshnessGate.refresh' ||
         row.name.startsWith('bench.turn.') ||
         (!causalDetail && row.name.startsWith('bench.hosted.')),
     );
@@ -1356,6 +1359,7 @@ const program = Effect.gen(function* () {
     const countsBefore = { submitted, completed, failed };
     const framesBefore = feeds.frames();
     const loadBefore = loadavg();
+    const unattributedBefore = ledger.read({ limit: 1 }).unattributedStatements;
     const startWall = yield* Clock.currentTimeMillis;
     costStart = startWall;
     const intervalStart = yield* Clock.monotonicTimeNanos;
@@ -1442,6 +1446,7 @@ const program = Effect.gen(function* () {
     const intervalEnd = yield* Clock.monotonicTimeNanos;
     const endWall = yield* Clock.currentTimeMillis;
     costEnd = endWall;
+    const unattributedAfter = ledger.read({ limit: 1 }).unattributedStatements;
     const after = yield* histograms();
     const cpu = process.cpuUsage(cpuBefore);
     const threadCpu = process.threadCpuUsage(threadCpuBefore);
@@ -1495,6 +1500,11 @@ const program = Effect.gen(function* () {
     const ledgerReading = {
       ...globalCosts.reading(),
       probe: probeCosts?.reading() ?? null,
+      unattributedStatements: {
+        before: unattributedBefore,
+        after: unattributedAfter,
+        duringWindow: unattributedBefore === null || unattributedAfter === null ? null : unattributedAfter - unattributedBefore,
+      },
       byAct: aggregatedCosts.read(),
     };
     const firstScheduled = (): number | null => firstProbeAt;
@@ -1771,7 +1781,8 @@ const program = Effect.gen(function* () {
             'thread-open traces are selectively retained and match a thread and time window, not a unique client probe',
             'list COMMIT-to-frame uses writer and receiver epoch clocks with no established cross-process skew bound; the probe opens an additional transient thread-list subscription',
             'producer progress is sampled at cycle boundaries, can be stale, and omits buffered ACP ingress between the CLI and server',
-            'with causal-detail enabled hosted and list probes use a separate bounded causal ledger; protocol steps use the installation ledger; both report evictions and unfinished tails',
+            'with causal-detail enabled hosted and list probes use a separate bounded causal ledger; protocol steps and selected background roots use the installation ledger; both report evictions and unfinished tails',
+            'unattributed SQL counts the serving pool during the measurement window, independent of the selected retained roots',
             'ledger units count Store transactions; direct activity-database transactions can contribute writer hold without incrementing units, and each activity batch is charged to its first accepted cause',
             'ledger root writer times are sums per act, not per-unit percentiles; late tails have a five-second settling window',
             'writer histograms cover physical outer units; child time is acknowledged statement elapsed, not engine CPU, and incomplete splits are omitted',
