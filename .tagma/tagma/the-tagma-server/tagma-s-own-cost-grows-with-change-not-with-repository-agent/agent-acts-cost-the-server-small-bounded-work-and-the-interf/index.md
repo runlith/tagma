@@ -32,7 +32,7 @@ Incident: 2026-10-30, 11:21–11:31Z. 22 claude-code threads over ACP, Tagma too
 | `OwnWork.owing` | 249 | 12,744 | 4,500 |
 | `FileRoots.probe` | 528 | 20,749 | 7,893 |
 
-- **Per-call ratios are installation-wide averages.** About 497 statements and 10.4 write units per completed call. Two whole-kept `read` call traces carry 123 and 160 statements and 3 write units in the call's own trace. The rest comes from reactive work that runs outside the call's trace (publications, list and feed projections, ACP steps), plus background. No per-producer attribution exists yet.
+- **Per-call ratios are installation-wide averages.** About 497 statements and 10.4 write units per completed call. Two whole-kept `read` call traces carry 123 and 160 statements and 3 write units in the call's own trace. The rest comes from reactive work that runs outside the call's trace (publications, list and feed projections, ACP steps), plus background. The incident predates per-producer attribution. The current causal ledger reports a retained root's own and disjoint producer counts for statements, units, writer wait and hold, logical SQLite bytes, and spans, with eviction and unfinished tails explicit; it cannot attribute this earlier incident retrospectively.
 - **Agent rates.** Per agent: 0.1 hosted call/s and 2.6 host stdout events/s. Tool mix by the activity record: `read` 64%, `grep` 15%, `bash` 10%, `glob` 3%, graph reads the rest.
 - **Server loop.** The process took 0.6–1.3 cores against 0.05–0.2 idle. The loop stopped 139 times, 57 s in total, longest 4.9 s. Each long stall's profile is one uninterrupted run of a trivial frame, with heavy system time, under machine memory pressure. That points to collection or paging pauses, not computation (inference). Some stalls show process CPU far above loop CPU (`44a84cec…`, `9913cc1e…`), i.e. off-loop runtime work; the mechanism is not settled.
 - **Main-thread busy samples outside pauses.** One profile, `2a2418b3…`, 801 samples: drizzle SQL building ≈20%, SQL transport ≈28% (reply receipt, send, row mapping), the tracer ≈8%. Across the 24 largest stall profiles, ≈30% of non-pause samples are SQL transport.
@@ -250,11 +250,13 @@ The uninterrupted N=50 steady run used 480 s warm-up and 1,020 s measurement, ta
 
 The post-full-GC census, including the in-process fixture and excluding child processes, was: idle N=0 RSS 464,455,144 B, JS heap 134,831,661 B, external memory 66,117,261 B, and allocator committed 995,229,696 B; steady loaded N=50 RSS 1,730,530,328 B, JS heap 779,021,840 B, external memory 207,076,608 B, and committed 3,125,870,592 B. Heap retained-size examples overlap; these readings do not assign all native memory or prove an exclusive retaining owner.
 
+In matched N=50 open parent-task samples on this machine, 240 s warm-up followed by 480 s measurement, the investigation found successful hosted-call fibers held until their run ended. Commit `5556c2e7` releases completed fibers while preserving recorded replay and background-call ordering. Post-full-GC heap grew 157,736,820 B over 1,959 calls before the fix and 51,870,199 B over 1,958 calls after it (19.32 versus 6.36 MB/min): a 67.1% reduction in these samples, not a plateau. Fibers with cached `call_hosted_tool` spans grew from 922 to 2,881 before the fix and remained at zero in the post-fix pair; most remaining self-byte growth was outside the snapshot's strong-root walk, so its owner is not established.
+
 List latency is writer-side COMMIT return to delivered frame across process epoch clocks whose skew is not bounded. Writer percentiles cover physical outer units and child elapsed is not engine CPU. GC attribution is diagnostic and its completeness is unverified; loop delay and stalls are the gate. No resident-memory budget or reference-profile pass is established by this sample.
 
 ## Not established
 
-- Per-producer attribution of the reactive work (step 0 gives it).
+- The owner and expected conversation/history contribution of the remaining post-full-GC heap growth after the hosted-call fix; a plateau and an exclusive retainer have not been established.
 - Collection versus paging as the stall mechanism, and the off-loop runtime work seen in some stalls.
 - Why tool-call status changes are durable on ACP.
 - Whether text accumulation is quadratic.
