@@ -487,5 +487,10 @@ export function inPlaceOperands(words: readonly ShellWord[]): readonly ShellWord
 }
 
 export function shellCommitDirs(command: string): readonly (readonly string[])[] {
-  return (gitCalls(command, 0, []) ?? []).flatMap((call) => (call.operation === 'commit' ? [call.within] : []));
+  return (gitCalls(command, 0, []) ?? []).flatMap((call) =>
+    call.operation === 'commit' ||
+    (call.operation === 'merge' && call.args.length === 1 && call.args[0]?.literal === true && call.args[0].text === '--continue')
+      ? [call.within]
+      : [],
+  );
 }
