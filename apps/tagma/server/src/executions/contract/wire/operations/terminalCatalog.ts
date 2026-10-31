@@ -1,5 +1,5 @@
 import { Schema } from 'effect';
-import { PAGE_CURSOR, pageRows } from '@runlith/paging';
+import { pageRows } from '@runlith/paging';
 import type { PermissionSubject } from '@runlith/agent/permissions';
 import { LONGEST_ACT_MS } from '@runlith/agent/callProgress';
 import type { Actor } from '../../../../platform/contract/wire/actor.js';
@@ -28,9 +28,13 @@ import { NOT_HOLDER } from '../../../../platform/contract/wire/conditions.js';
 import { ASKS_IN_REVIEW } from '../../../../platform/contract/wire/conditions.js';
 import { ASKS_NEVER } from '../../../../platform/contract/wire/conditions.js';
 import type { Raised } from '@runlith/agent/permissions';
-import { placeRole } from '../../../../platform/contract/wire/place.js';
+import { placedCursor, placeRole, projectField } from '../../../../platform/contract/wire/place.js';
 
-const { performed, read, requestWrite, write } = executionShapes({ capability: 'terminals', needs: ['shared'] });
+const shapes = executionShapes({ capability: 'terminals', needs: ['shared'] });
+const { performed } = shapes;
+const read = { ...shapes.read, place: 'project' } as const;
+const requestWrite = { ...shapes.requestWrite, place: 'project' } as const;
+const write = { ...shapes.write, place: 'project' } as const;
 
 export const TERMINALS = family('terminals', 1, 'text', { text: 351, json: 1429 }, 100, () => ({
   execution: 'exec-1',
@@ -61,6 +65,7 @@ const stopTerminalConsequence = (input: { readonly action?: 'signal' | 'destroy'
     : 'The receipt names three populations — confirmed endings, resources known to survive, and what could not be measured. Neither of the last two is a completion, and no timer turns one into it.';
 
 const INPUT = {
+  project: projectField,
   operationId,
   execution,
   incarnation,
@@ -112,6 +117,7 @@ Name the work with \`label\` and set variables with \`env\`: the label is what e
 Custody lands on YOU. Starting something directly into another holder's hands is a transfer, and it is a separate act.
 ${RECOVERY}`,
     input: Schema.Struct({
+      project: projectField,
       operationId,
       cwd: Schema.NonEmptyString.annotate({
         ...placeRole('value'),
@@ -201,6 +207,7 @@ A projection of what the host accepted: whose each execution is, what a reader p
 \`operationKeys\` is the server store's separate account: retained keys against its ceiling, split into pending, admitted, uncertain and settled, plus spent keys whose detail was reclaimed.
 \`grants\` counts the live grants to type this process holds, by road: \`view\` for an operator view's lane, \`harness\` for the server speaking for a session, \`agent\` for a run typing through the typing operations. A figure that climbs while no view is open is a leak.`,
     input: Schema.Struct({
+      project: projectField,
       standing: Schema.optional(Schema.Boolean).annotate({
         description: 'Omitted or true: the rows this installation still holds custody of. False: the history, newest first.',
       }),
@@ -210,7 +217,7 @@ A projection of what the host accepted: whose each execution is, what a reader p
           'One execution by id, in the listing\u2019s own shape. It narrows the same population the other filters do: a discharged row needs `standing: false` here too, and an empty answer means this filter set holds no such row — read_terminal is the read that answers about one execution alone.',
       }),
       limit: limitOf(TERMINALS),
-      cursor: PAGE_CURSOR,
+      cursor: placedCursor,
     }),
     refusals: ['bad-cursor', 'cursor-stale'],
     confirmation: (input: { readonly standing?: boolean; readonly holder?: string }) => ({
@@ -239,7 +246,7 @@ A projection of what the host accepted: whose each execution is, what a reader p
     grammar:
       'Observation, and nothing more. Observing another holder’s work never grants authority over it. `terminal.rootId` is the place it was started in — the narrowest root of this project holding its start directory, absent when it is unplaced — and `terminal.launchedFor` the thread whose harness session it was launched for, absent for a shell. `state` is the host’s live answer beside the stored projection, and `null` is the host not answering: neither a phase, nor an ending, nor a reason to infer one. It is ALWAYS answered and never left out, so silence is a value a reader sees rather than a key it must notice is missing.\n`endedWithHost` is true when the host generation the execution ran in has been replaced: it ended with that host, and `state` is this server’s account of that ending, carrying no exit.\n`grid` is the rows and columns the terminal stands at now, as the host recorded it beside the bytes; `null` for pipes, or where the host is not answering.\n`lanes` names each lane open into the execution by its writer: `view` for an operator view, `harness` for the server speaking for a session, `agent` for one run of a thread typing through the typing operations, `grid` for the server applying the size a view decided.\n' +
       TYPED_BY,
-    input: Schema.Struct({ execution, incarnation }),
+    input: Schema.Struct({ project: projectField, execution, incarnation }),
     refusals: ['terminal-unknown', 'terminal-foreign-project'],
     confirmation: (input: { readonly execution: string }) => ({
       summary: `Read execution ${input.execution}: whose it is, what it is doing, and who types into it?`,
@@ -260,7 +267,7 @@ A projection of what the host accepted: whose each execution is, what a reader p
     meaning: 'Read what one operation key was already answered with, without repeating or reauthorizing the mutation.',
     grammar: `${RECOVERY}
 This is the whole recovery road: no inventory search, no new approval, no launch. An expired key keeps its detail retired and stays taken until fourteen days after it was first taken; after that retention forgets it, and the same id names a new act.`,
-    input: Schema.Struct({ operationId }),
+    input: Schema.Struct({ project: projectField, operationId }),
     refusals: ['terminal-foreign-project', 'terminal-ineligible'],
     confirmation: (input: { readonly operationId: string }) => ({
       summary: `Read what operation ${input.operationId} was already answered with?`,
@@ -286,6 +293,7 @@ This is the whole recovery road: no inventory search, no new approval, no launch
       'Each row arrives as text with its trailing padding cut (a row the next one continues keeps its spaces: they are text), carrying the line number it stands at and whether it continues the row above; `geometry.viewportLine` says where the visible display begins, so the rows below it are the scrollback the frame still holds. The frame names its own revision and the byte it was parsed through. It is interpreted, never raw application bytes and never stripped history.\n`cells: true` answers the same display in the cell model instead — every cell with its width and its full style — which a viewer reproducing appearance needs and which costs megabytes for one ordinary screen, so ask for it only when the styling is the subject.\nThis is a POINT READ, answered whole: it holds no base of its own, moves no viewer\u2019s, and never answers a patch. A screen followed as it changes is a live subscription, not this.\n' +
       TYPED_BY,
     input: Schema.Struct({
+      project: projectField,
       execution,
       incarnation,
       cells: Schema.optional(Schema.Boolean).annotate({
@@ -315,6 +323,7 @@ This is the whole recovery road: no inventory search, no new approval, no launch
       'A pipes execution’s `output` carries stdout and stderr together, each chunk whole in the order the host read it, under offsets of its own. Offsets are canonical decimal STRINGS, because a JS number rounds past 2^53 and a cursor that rounds re-reads or skips bytes with nobody told. Reading consumes nothing: another reader\u2019s position is untouched, and reading twice from one cursor answers the same bytes. The answer says what the record still retains, so a reader learns of a gap instead of reading across one. `limit: 0` reads no bytes at all: it answers the positions alone, which is how a reader learns what the record holds before deciding where to read it.\n' +
       TYPED_BY,
     input: Schema.Struct({
+      project: projectField,
       execution,
       incarnation,
       stream: Schema.Literals(['stdout', 'stderr', 'pty', 'output']),
@@ -470,6 +479,7 @@ A geometry is only meaningful for a \`pty\`; a pipes execution has no size to ch
 It is an observation, not a poll: nothing is asked on a timer, and an execution that never decides costs one wait rather than a loop of reads. The operator's words or a report owed to you end the wait early when they arrive, with the execution untouched.
 ${TYPED_BY}`,
     input: Schema.Struct({
+      project: projectField,
       execution,
       incarnation,
       waitMs: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: LONGEST_ACT_MS })).annotate({
@@ -513,6 +523,7 @@ Both sides are fenced while the outcome is unknown, so neither the thread it lea
 The answer names which of four happened, so a status of ok is never read alone: \`Accepted\` moved the holder and ended every lane with it; \`Standing\` found your key already answered and changed nothing; \`RevisionStale\` means custody moved under the act — read the execution again; \`Uncertain\` means nobody can say whether it took effect — read the operation back by its key, because both sides stay fenced until it is decided. A refusal the host decided before any effect leaves as a refusal, never inside this answer.
 ${RECOVERY}`,
     input: Schema.Struct({
+      project: projectField,
       operationId,
       execution,
       incarnation,
@@ -558,7 +569,7 @@ ${RECOVERY}`,
     grammar: `A report carries its own completeness and the regions nobody measured, each with why. \`unavailable\` with an empty list is NOT "nothing is running": it is a reading that did not happen, and it is shown as one.
 A row without an association is a process that was measured and NOT tied to this execution; it is never presented as the terminal's. \`unknown\` identity means the relation was measured and the leader's identity was never proven — it is not \`same\`.
 This grants nothing. A pid read here is not an argument to any ending act: the authority to end work is the native identity the host retains, never a scanner's finding.`,
-    input: Schema.Struct({ execution, incarnation }),
+    input: Schema.Struct({ project: projectField, execution, incarnation }),
     refusals: ['terminal-unknown', 'terminal-foreign-project'],
     confirmation: (input: { readonly execution: string }) => ({
       summary: `Read the processes the host measured around execution ${input.execution}?`,
@@ -581,7 +592,7 @@ This grants nothing. A pid read here is not an argument to any ending act: the a
     grammar: `The same completeness rules as the process reading: an unmeasured region is named, and an empty population under \`unavailable\` never means a port is free.
 A URL a program printed associates NOTHING. It may decorate a listener the host already evidenced; it can never mint a listener, a port or an owner out of output text, an argument vector or a working directory.
 Ports are scoped by environment: the same number in two environments is two listeners, and neither this reading nor any other here reserves, forwards or ends one.`,
-    input: Schema.Struct({ execution, incarnation }),
+    input: Schema.Struct({ project: projectField, execution, incarnation }),
     refusals: ['terminal-unknown', 'terminal-foreign-project'],
     confirmation: (input: { readonly execution: string }) => ({
       summary: `Read the listening sockets the host evidenced for execution ${input.execution}?`,
@@ -604,7 +615,7 @@ Ports are scoped by environment: the same number in two environments is two list
     meaning: 'Deliver an exact signal to the retained native process of an execution, apart from any stop.',
     grammar: `Delivery is what the KERNEL took — never a claim about what the child did with it, and never a stop. A signal that was not sent names why: the child was reaped, the handle is closed, this build does not send it, a stop already owns the process, or the operating system refused it.
 This act keeps NO operation key, because the answer carries none to read back by: a reply you never received leaves a signal whose delivery nobody can establish, and sending it again is a second signal, not a retry.`,
-    input: Schema.Struct({ execution, incarnation, signal: Schema.NonEmptyString }),
+    input: Schema.Struct({ project: projectField, execution, incarnation, signal: Schema.NonEmptyString }),
     refusals: ['terminal-unknown', 'terminal-foreign-project', 'terminal-ineligible'],
     confirmation: (input: { readonly execution: string; readonly signal: string }) => ({
       summary: `Deliver ${input.signal} to the retained native process of execution ${input.execution}?`,
@@ -631,6 +642,7 @@ This act keeps NO operation key, because the answer carries none to read back by
 The cause is yours to declare and is recorded as it is: a timeout is a timeout, never somebody's explicit act. \`signal\` ends it down the host's one ladder — hang-up to a terminal, interrupt to work on pipes, terminate at 1.5 s if it still stands, kill at 2 s — and the receipt names the step each process ended at; \`destroy\` goes down the same ladder and may abandon output the kernel has not yet handed over, which is why it is a separate choice.
 ${RECOVERY}`,
     input: Schema.Struct({
+      project: projectField,
       operationId,
       execution,
       incarnation,

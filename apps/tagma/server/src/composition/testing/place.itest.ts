@@ -63,7 +63,7 @@ const setup = Effect.gen(function* () {
           world.runtime.enforcement,
         ),
       },
-      ['create_block', 'read_block', 'update_block'],
+      ['create_block', 'read_block', 'update_block', 'read_terminal', 'stop_terminal', 'read_terminal_operation'],
     );
   });
   const tools = yield* native;
@@ -220,6 +220,72 @@ layer(Layer.effect(Placed, setup), { excludeTestServices: true })('place', (it) 
       expect(yield* http('query_blocks', { cursor: (queryNext.body as { next: string }).next })).toMatchObject({
         status: 200,
         body: { blocks: [{ name: ids.third }], total: 3, next: null },
+      });
+    }),
+  );
+
+  it.effect('a native thread reads and stops an execution in its recorded project without moving its home', () =>
+    Effect.gen(function* () {
+      const { world, target, tools } = yield* Placed;
+      const started = yield* world.tagma(
+        [
+          'op',
+          'start_terminal',
+          '--json',
+          '--project',
+          target.name,
+          JSON.stringify({
+            operationId: 'foreign-terminal-start',
+            cwd: target.root,
+            program: '/bin/sh',
+            transport: 'pty',
+            lifetime: 'held',
+          }),
+        ],
+        { cwd: target.root },
+      );
+      expect({ code: started.code, err: started.err }).toEqual({ code: 0, err: '' });
+      const launch = JSON.parse(started.out) as { operation: { state: { execution: { execution: string; incarnation: number } } } };
+      const { execution, incarnation } = launch.operation.state.execution;
+      const address = { execution, incarnation };
+      yield* Effect.addFinalizer(() =>
+        Effect.gen(function* () {
+          const stopped = yield* world.tagma(
+            [
+              'op',
+              'stop_terminal',
+              '--yes',
+              '--json',
+              '--project',
+              target.name,
+              JSON.stringify({
+                ...address,
+                operationId: 'foreign-terminal-cleanup',
+                cause: 'explicit-stop',
+              }),
+            ],
+            { cwd: target.root },
+          );
+          expect(stopped.code, stopped.out + stopped.err).toBe(0);
+        }),
+      );
+      const readInput = { ...address, project: target.id };
+      const readCall = yield* preparedCall('read_terminal', readInput, 'foreign-terminal-read');
+      expect(valueOf(yield* toolExecute(tools.read_terminal!)!(readInput, readCall))).toMatchObject({
+        status: 'ok',
+        terminal: { projectId: target.id, execution: address },
+      });
+      const stopInput = { ...readInput, operationId: 'foreign-terminal-stop', cause: 'explicit-stop' };
+      const stopCall = yield* preparedCall('stop_terminal', stopInput, 'foreign-terminal-stop');
+      expect(valueOf(yield* toolExecute(tools.stop_terminal!)!(stopInput, stopCall))).toMatchObject({
+        status: 'ok',
+        receipt: { execution: address, cause: 'explicit-stop', residual: [], unverifiable: [] },
+      });
+      const recovery = { project: target.id, operationId: 'foreign-terminal-stop' };
+      const recoveryCall = yield* preparedCall('read_terminal_operation', recovery, 'foreign-terminal-recovery');
+      expect(valueOf(yield* toolExecute(tools.read_terminal_operation!)!(recovery, recoveryCall))).toMatchObject({
+        status: 'ok',
+        operation: { _tag: 'Whole', state: { _tag: 'Settled' } },
       });
     }),
   );
