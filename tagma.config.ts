@@ -7,6 +7,7 @@ import type { EffectStyleParams } from './checks/law/effect-style/declaration';
 import { vendorIds } from './checks/law/architecture/inspections';
 import { dead, repeated } from './checks/law/declarations/declaration';
 import { askCalls } from './checks/law/architecture/calls/params';
+import { loadOs } from './checks/law/load-os';
 
 const EFFECT_EXTENSIONS = ['.ts', '.tsx', '.mts', '.cts', '.js', '.jsx', '.mjs', '.cjs', '.svelte'];
 const SOURCE_TESTS = [
@@ -149,6 +150,18 @@ export default defineConfig({
         aliases: SOURCE_ALIASES,
       },
       { files: ['**/*.{ts,tsx,js,jsx,mts,cts,mjs,cjs,svelte}', '**/package.json'] },
+    ),
+    'load-os': loadOs(
+      {},
+      {
+        files: [
+          'packages/executions/src/protocol/{wire,evidence}.ts',
+          'packages/execution-host/src/{ProcessUsage,ProcessAccount,processTree,processSpending,UsageReader}.ts',
+          'apps/tagma/server/src/executions/load/**/*.{ts,tsx}',
+          'apps/tagma/app/src/lib/features/executions/load/**/*.{ts,svelte}',
+          'apps/tagma/app/src/lib/app/chrome/Load*.{ts,svelte}',
+        ],
+      },
     ),
     'vendor-ids': vendorIds(
       {
