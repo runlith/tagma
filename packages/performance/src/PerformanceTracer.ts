@@ -193,6 +193,7 @@ class PerformanceSpan implements Tracer.Span {
   projected: Record<string, Primitive> | null;
   rawKeys: Array<string> | undefined;
   rawValues: Array<RawAttribute> | undefined;
+  tail: SqlTail | undefined;
   rawBound = 0;
   attributeBytes = 0;
   private attributeCount = 0;
@@ -232,7 +233,7 @@ class PerformanceSpan implements Tracer.Span {
   }
 
   get attributes(): ReadonlyMap<string, unknown> {
-    const attributes = this.projected ?? projectRaw(this.rawKeys, this.rawValues);
+    const attributes = this.projected ?? this.tail?.attributes ?? projectRaw(this.rawKeys, this.rawValues);
     return new Map(Object.entries(attributes));
   }
 
@@ -290,8 +291,8 @@ class SqlTail implements SampledSpan {
   readonly root: boolean;
   readonly unit: string | null;
   readonly upperBytes: number;
-  private readonly keys: ReadonlyArray<string> | undefined;
-  private readonly values: ReadonlyArray<RawAttribute> | undefined;
+  private keys: ReadonlyArray<string> | undefined;
+  private values: ReadonlyArray<RawAttribute> | undefined;
   private projected: Record<string, Primitive> | undefined;
   private weight: number | undefined;
 
@@ -318,10 +319,18 @@ class SqlTail implements SampledSpan {
     this.keys = span.rawKeys;
     this.values = span.rawValues;
     this.upperBytes = baseBytes + span.rawBound;
+    span.rawKeys = undefined;
+    span.rawValues = undefined;
+    span.tail = this;
   }
 
   get attributes(): Record<string, Primitive> {
-    return (this.projected ??= projectRaw(this.keys, this.values));
+    if (this.projected === undefined) {
+      this.projected = projectRaw(this.keys, this.values);
+      this.keys = undefined;
+      this.values = undefined;
+    }
+    return this.projected;
   }
 
   get byteSize(): number {
