@@ -38,7 +38,10 @@ layer(doorFixture().pipe(Layer.provideMerge(BunFileSystem.layer)), {
       yield* settings.write({ scope: 'user', key: performanceKeepOneTraceIn.id, value: 1 });
       yield* Effect.provide(
         Effect.gen(function* () {
-          yield* Effect.sleep(Math.floor(performanceSpanMinMicros.fallback / 1_000) + 1).pipe(Effect.withSpan('performance.http.probe'));
+          yield* Effect.gen(function* () {
+            yield* Effect.annotateCurrentSpan({ writersHeld: true, privateData: 'not retained' });
+            yield* Effect.sleep(Math.floor(performanceSpanMinMicros.fallback / 1_000) + 1);
+          }).pipe(Effect.withSpan('performance.http.probe'));
           const store = yield* PerformanceStore;
           for (const [id, parentId, start, end] of [
             ['http-parent', null, 0, 100],
@@ -77,6 +80,16 @@ layer(doorFixture().pipe(Layer.provideMerge(BunFileSystem.layer)), {
       expect(received.sessionDrops).toBe(expected.sessionDrops);
       expect(received.retainedRange?.from).toBeLessThanOrEqual(expected.retainedRange?.from ?? Number.MAX_SAFE_INTEGER);
       expect(received.retainedRange?.to).toBeGreaterThanOrEqual(expected.retainedRange?.to ?? 0);
+      const probe = received.spans.find((span) => span.name === 'performance.http.probe');
+      expect(probe).toBeDefined();
+      if (probe === undefined) return;
+      const trace = yield* read(world, { method: 'POST', body: { type: 'trace', traceId: probe.traceId, limit: 100 } });
+      expect(trace.status).toBe(200);
+      const traceBody = yield* Schema.decodeUnknownEffect(performanceReadValueSchema)(trace.body);
+      expect(traceBody.type).toBe('trace');
+      if (traceBody.type !== 'trace') return;
+      const persistedProbe = traceBody.segments.flatMap((segment) => segment.spans).find((span) => span.id === probe.id);
+      expect(persistedProbe?.payload.attributes).toEqual({ 'thread.snapshot.writers_held': true });
 
       const breakdownQuery = { type: 'breakdown', id: 'http-parent', limit: 1 } as const;
       const expectedBreakdown = yield* readPerformance(reports, breakdownQuery);

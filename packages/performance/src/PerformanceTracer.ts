@@ -72,6 +72,8 @@ const ATTRIBUTE_ALLOWLIST = new Map<string, string>([
   ['queue.ms', 'queue.ms'],
   ['openPath', 'thread.open.path'],
   ['thread.open.path', 'thread.open.path'],
+  ['writersHeld', 'thread.snapshot.writers_held'],
+  ['thread.snapshot.writers_held', 'thread.snapshot.writers_held'],
   ['transcriptPages', 'transcript.pages'],
   ['transcript.pages', 'transcript.pages'],
   ['transcriptStop', 'transcript.stop'],
