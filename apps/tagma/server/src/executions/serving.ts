@@ -1,6 +1,5 @@
 import { Context, Effect, Layer } from 'effect';
 import { ProjectChanges } from '../projects/contract/service/changes.js';
-import { desktopPidIn } from '../installation/contract/wire/layout.js';
 import { NoticeTakeBack } from './contract/service/notices.js';
 import { Custody } from './contract/service/custody.js';
 import { ExecutionProcessEvidence } from './contract/service/records.js';
@@ -17,12 +16,7 @@ export const executionsServingLayer = Layer.effectContext(
     const unsubscribe = (yield* ProjectChanges).removed.subscribe(({ projectId }) => custody.disownProject(projectId));
     yield* Effect.addFinalizer(() => Effect.sync(unsubscribe));
     const evidence = yield* ExecutionProcessEvidence;
-    const host = yield* makeHostLoad(
-      Effect.suspend(() => {
-        const desktop = desktopPidIn(process.env);
-        return evidence.load(process.pid, desktop !== undefined && process.ppid === desktop ? desktop : undefined);
-      }),
-    );
+    const host = yield* makeHostLoad(Effect.suspend(() => evidence.load(process.pid, [])));
     return Context.make(LoadFeed, yield* makeMachineLoad(host, yield* makeWorkNames, yield* Background));
   }),
 );

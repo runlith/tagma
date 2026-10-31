@@ -6,7 +6,7 @@ import { Host, type HostAdapter } from './session';
 
 export const machineLoadContract = Effect.fnUntraced(function* (host: Host['Service']) {
   const served = yield* host.client.served();
-  const opened = yield* Effect.result(host.client.load(process.pid));
+  const opened = yield* Effect.result(host.client.load(process.pid, []));
   if (!served.has('machine-load')) {
     expect(opened._tag === 'Failure' ? opened.failure : undefined).toMatchObject({
       _tag: 'HostRefused',

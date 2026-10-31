@@ -2187,7 +2187,7 @@
       },
       {
         "side": "client",
-        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Call\",\"request\":1,\"installation\":\"installation-1\",\"incarnation\":1,\"epoch\":1,\"body\":{\"_tag\":\"Subscribe\",\"source\":{\"_tag\":\"Load\",\"serverPid\":4000,\"desktopPid\":4500},\"credits\":8192}}}",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Call\",\"request\":1,\"installation\":\"installation-1\",\"incarnation\":1,\"epoch\":1,\"body\":{\"_tag\":\"Subscribe\",\"source\":{\"_tag\":\"Load\",\"serverPid\":4000,\"parts\":[]},\"credits\":8192}}}",
         "payload": ""
       },
       {
@@ -2197,12 +2197,22 @@
       },
       {
         "side": "client",
-        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Call\",\"request\":2,\"installation\":\"installation-1\",\"incarnation\":1,\"epoch\":1,\"body\":{\"_tag\":\"LoadInterest\",\"subscription\":1,\"interested\":true}}}",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Call\",\"request\":2,\"installation\":\"installation-1\",\"incarnation\":1,\"epoch\":1,\"body\":{\"_tag\":\"LoadInterest\",\"subscription\":1,\"interested\":true,\"others\":false}}}",
         "payload": ""
       },
       {
         "side": "host",
         "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Reply\",\"request\":2,\"body\":{\"_tag\":\"LoadInterest\",\"applied\":true}}}",
+        "payload": ""
+      },
+      {
+        "side": "client",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Call\",\"request\":99,\"installation\":\"installation-1\",\"incarnation\":1,\"epoch\":1,\"body\":{\"_tag\":\"LoadParts\",\"subscription\":1,\"parts\":[{\"key\":\"window\",\"pid\":4500,\"createdMs\":1790000000000,\"precisionMs\":10}]}}}",
+        "payload": ""
+      },
+      {
+        "side": "host",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Reply\",\"request\":99,\"body\":{\"_tag\":\"LoadParts\",\"applied\":true}}}",
         "payload": ""
       },
       {
@@ -2217,7 +2227,7 @@
       },
       {
         "side": "host",
-        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Event\",\"body\":{\"_tag\":\"Load\",\"subscription\":1,\"reading\":{\"scope\":{\"host\":{\"_tag\":\"Local\",\"machine\":\"machine-1\"},\"network\":{\"_tag\":\"Local\",\"machine\":\"machine-1\"}},\"observedAt\":1790000000000,\"revision\":3,\"takenAtMicros\":5000000,\"overMicros\":1000000,\"cores\":12,\"cpu\":3.2,\"memory\":{\"_tag\":\"Measured\",\"totalBytes\":34359738368,\"usedBytes\":24000000000,\"availableBytes\":10359738368,\"source\":{\"adapter\":\"darwin\",\"probe\":\"host_statistics64\"},\"pressure\":{\"_tag\":\"Measured\",\"level\":\"normal\",\"source\":{\"adapter\":\"darwin\",\"probe\":\"kern.memorystatus_vm_pressure_level\"},\"value\":1}},\"groups\":[{\"owner\":{\"_tag\":\"Execution\",\"execution\":{\"installation\":\"installation-1\",\"execution\":\"execution-1\",\"incarnation\":1},\"ended\":false},\"cores\":1.5,\"memoryBytes\":30000000,\"unread\":0,\"processes\":[{\"identity\":{\"pid\":4100,\"birth\":\"1789999995:900000\"},\"parent\":4000,\"name\":\"svelte-check\",\"command\":\"svelte-check --tsconfig ./tsconfig.json\",\"cores\":1.5,\"memoryBytes\":30000000,\"signal\":true}]},{\"owner\":{\"_tag\":\"Execution\",\"execution\":{\"installation\":\"installation-1\",\"execution\":\"execution-1\",\"incarnation\":1},\"ended\":true},\"cores\":0.2,\"memoryBytes\":20000000,\"unread\":1,\"processes\":[{\"identity\":{\"pid\":4200,\"birth\":\"1789999995:800000\"},\"parent\":1,\"name\":\"node\",\"cores\":0.2,\"memoryBytes\":20000000,\"signal\":true},{\"identity\":{\"pid\":4201,\"birth\":\"1789999995:799000\"},\"parent\":4200,\"name\":\"node\",\"cores\":null,\"memoryBytes\":null,\"signal\":true,\"unread\":\"the native counter read answered errno 3\"}]},{\"owner\":{\"_tag\":\"Installation\"},\"cores\":0.5,\"memoryBytes\":50000000,\"unread\":0,\"processes\":[{\"identity\":{\"pid\":4000,\"birth\":\"1789999996:0\"},\"parent\":1,\"name\":\"bun\",\"cores\":0.5,\"memoryBytes\":50000000,\"signal\":false}]},{\"owner\":{\"_tag\":\"Program\",\"key\":\"/Applications/Google Chrome.app\",\"name\":\"Google Chrome\"},\"cores\":0.8,\"memoryBytes\":900000000,\"unread\":0,\"processes\":[{\"identity\":{\"pid\":7172,\"birth\":\"1789990000:0\"},\"parent\":1,\"name\":\"Google Chrome\",\"cores\":0.8,\"memoryBytes\":900000000,\"signal\":true}]},{\"owner\":{\"_tag\":\"Kernel\"},\"cores\":0.2,\"memoryBytes\":0,\"unread\":0,\"processes\":[]}]}}}}",
+        "header": "{\"v\":41,\"body\":\"bytes\",\"message\":{\"_tag\":\"Event\",\"body\":{\"_tag\":\"Load\",\"subscription\":1,\"reading\":{\"scope\":{\"host\":{\"_tag\":\"Local\",\"machine\":\"machine-1\"},\"network\":{\"_tag\":\"Local\",\"machine\":\"machine-1\"}},\"observedAt\":1790000000000,\"revision\":3,\"takenAtMicros\":5000000,\"overMicros\":1000000,\"cores\":12,\"machineName\":\"Computer\",\"unresolvedParts\":[],\"cpu\":3.2,\"memory\":{\"_tag\":\"Measured\",\"totalBytes\":34359738368,\"usedBytes\":24000000000,\"availableBytes\":10359738368,\"source\":{\"adapter\":\"darwin\",\"probe\":\"host_statistics64\"},\"pressure\":{\"_tag\":\"Measured\",\"level\":\"normal\",\"source\":{\"adapter\":\"darwin\",\"probe\":\"kern.memorystatus_vm_pressure_level\"},\"value\":1}},\"groups\":[{\"owner\":{\"_tag\":\"Execution\",\"execution\":{\"installation\":\"installation-1\",\"execution\":\"execution-1\",\"incarnation\":1},\"ended\":false},\"cores\":1.5,\"memoryBytes\":30000000,\"unread\":0,\"processes\":[{\"identity\":{\"pid\":4100,\"birth\":\"1789999995:900000\"},\"parent\":4000,\"name\":\"svelte-check\",\"command\":\"svelte-check --tsconfig ./tsconfig.json\",\"cores\":1.5,\"memoryBytes\":30000000,\"signal\":true}]},{\"owner\":{\"_tag\":\"Execution\",\"execution\":{\"installation\":\"installation-1\",\"execution\":\"execution-1\",\"incarnation\":1},\"ended\":true},\"cores\":0.2,\"memoryBytes\":20000000,\"unread\":1,\"processes\":[{\"identity\":{\"pid\":4200,\"birth\":\"1789999995:800000\"},\"parent\":1,\"name\":\"node\",\"cores\":0.2,\"memoryBytes\":20000000,\"signal\":true},{\"identity\":{\"pid\":4201,\"birth\":\"1789999995:799000\"},\"parent\":4200,\"name\":\"node\",\"cores\":null,\"memoryBytes\":null,\"signal\":true,\"unread\":\"the native counter read answered errno 3\"}]},{\"owner\":{\"_tag\":\"Installation\"},\"cores\":0.5,\"memoryBytes\":50000000,\"unread\":0,\"processes\":[{\"identity\":{\"pid\":4000,\"birth\":\"1789999996:0\"},\"parent\":1,\"name\":\"bun\",\"cores\":0.5,\"memoryBytes\":50000000,\"signal\":false}]},{\"owner\":{\"_tag\":\"Program\",\"key\":\"/Applications/Google Chrome.app\",\"name\":\"Google Chrome\"},\"cores\":0.8,\"memoryBytes\":900000000,\"unread\":0,\"processes\":[{\"identity\":{\"pid\":7172,\"birth\":\"1789990000:0\"},\"parent\":1,\"name\":\"Google Chrome\",\"cores\":0.8,\"memoryBytes\":900000000,\"signal\":true}]},{\"owner\":{\"_tag\":\"Kernel\"},\"cores\":0.2,\"memoryBytes\":0,\"unread\":0,\"processes\":[]}]}}}}",
         "payload": ""
       },
       {

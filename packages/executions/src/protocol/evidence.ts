@@ -253,8 +253,22 @@ export const LoadProcess = Schema.Struct({
 });
 export type LoadProcess = typeof LoadProcess.Type;
 
+export const DeclaredPart = Schema.Struct({
+  key: Schema.NonEmptyString,
+  pid: Pid,
+  createdMs: Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0)),
+  precisionMs: Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0)),
+});
+export type DeclaredPart = typeof DeclaredPart.Type;
+
+const UnresolvedPart = Schema.Struct({ part: DeclaredPart, reason: Schema.Literals(['different', 'unknown']) });
+
+export const LoadInterest = Schema.Struct({ interested: Schema.Boolean, others: Schema.Boolean });
+export type LoadInterest = typeof LoadInterest.Type;
+
 export const GroupOwner = Schema.Union([
   Schema.Struct({ _tag: Schema.Literal('Execution'), execution: ExecutionRef, ended: Schema.Boolean }),
+  Schema.Struct({ _tag: Schema.Literal('Part'), key: Schema.NonEmptyString }),
   Schema.Struct({ _tag: Schema.Literal('Installation') }),
   Schema.Struct({
     _tag: Schema.Literal('Program'),
@@ -272,6 +286,7 @@ export const LoadGroup = Schema.Struct({
   memoryBytes: Bytes,
   unread: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
   processes: Schema.Array(LoadProcess),
+  lowerBound: Schema.optional(Schema.Boolean),
 });
 export type LoadGroup = typeof LoadGroup.Type;
 
@@ -282,6 +297,8 @@ export const LoadReading = Schema.Struct({
   takenAtMicros: Micros,
   overMicros: Micros,
   cores: Schema.Int.check(Schema.isGreaterThan(0)),
+  machineName: Schema.NonEmptyString,
+  unresolvedParts: Schema.Array(UnresolvedPart),
   cpu: Schema.NullOr(Cores),
   memory: MachineMemory,
   groups: Schema.Array(LoadGroup),

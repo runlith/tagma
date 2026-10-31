@@ -6,6 +6,7 @@ servingContracts(
   hosted('POSIX', posix(), { usage: { periodMs: 100 } }),
   new Set([
     'machine-load',
+    'machine-load-parts',
     'end-residual',
     'end-process',
     'named-signals',

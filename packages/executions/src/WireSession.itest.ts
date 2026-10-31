@@ -408,7 +408,7 @@ layer(services, { excludeTestServices: true })('wire sessions', (it) => {
         const { registration, address } = yield* registered;
         const seen = serving(registration.endpoint.path, WIRE_RANGE, silent, answering);
         const client = yield* ExecutionClient.make({ address, role: 'custodian', limits });
-        const load = yield* Effect.result(Effect.scoped(client.load(42)));
+        const load = yield* Effect.result(Effect.scoped(client.load(42, [])));
         const residual = yield* Effect.result(client.endResidual(origin, 4242));
         const status = yield* Effect.result(client.status());
         const foreground = yield* client.foreground(origin);
@@ -420,16 +420,29 @@ layer(services, { excludeTestServices: true })('wire sessions', (it) => {
       }),
     );
 
-    it.effect('a host that announces one capability is sent what needs it and refused locally the one it did not announce', () =>
+    it.effect('an older host announcing machine load is refused before the revised request is sent', () =>
       Effect.gen(function* () {
         const welcome = JSON.parse(currentWelcome);
         welcome.message.capabilities = ['machine-load'];
+        const { registration, address } = yield* registered;
+        const seen = serving(registration.endpoint.path, WIRE_RANGE, JSON.stringify(welcome), answering);
+        const client = yield* ExecutionClient.make({ address, role: 'custodian', limits });
+        const load = yield* Effect.result(Effect.scoped(client.load(42, [])));
+        expect(refusalOf(load)?.refusal).toMatchObject({ _tag: 'UnsupportedCapability', capability: 'machine-load' });
+        expect(seen).toEqual(['Hello']);
+      }),
+    );
+
+    it.effect('a host that announces one capability is sent what needs it and refused locally the one it did not announce', () =>
+      Effect.gen(function* () {
+        const welcome = JSON.parse(currentWelcome);
+        welcome.message.capabilities = ['machine-load', 'machine-load-parts'];
         const announced = JSON.stringify(welcome);
         const { registration, address } = yield* registered;
         const seen = serving(registration.endpoint.path, WIRE_RANGE, announced, answering);
         const client = yield* ExecutionClient.make({ address, role: 'custodian', limits });
         const residual = yield* Effect.result(client.endResidual(origin, 4242));
-        const load = yield* Effect.result(Effect.scoped(client.load(42)));
+        const load = yield* Effect.result(Effect.scoped(client.load(42, [])));
         expect(refusalOf(residual)?.refusal).toMatchObject({ _tag: 'UnsupportedCapability', capability: 'end-residual' });
         expect(load._tag).toBe('Success');
         expect(seen).toEqual(['Hello', 'Subscribe']);

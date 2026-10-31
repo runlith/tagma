@@ -14,6 +14,8 @@ const loadAt = (takenAtMicros: number, cores: number, bytes: number): LoadReadin
   takenAtMicros,
   overMicros: 1_000_000,
   cores: 8,
+  machineName: 'Computer',
+  unresolvedParts: [],
   cpu: null,
   memory: { _tag: 'Unknown', reason: 'unknown', detail: 'fixture' },
   groups: [

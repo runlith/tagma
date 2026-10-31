@@ -414,7 +414,7 @@ const sampledPolicy = hostPolicy({ executions: 2, transports: ['pipes'], custody
 const sampledLimits = hostWireLimits(sampledPolicy, 2, { envelopeBytes: 16384, connections: 4, requests: 8 });
 const sampledCommand = Effect.fnUntraced(function* (name: string) {
   const host = yield* take(`${name}-take`);
-  yield* Effect.forkScoped(Stream.runDrain(host.client.subscribe({ _tag: 'Load', serverPid: process.pid }, 1 << 20)));
+  yield* Effect.forkScoped(Stream.runDrain(host.client.subscribe({ _tag: 'Load', serverPid: process.pid, parts: [] }, 1 << 20)));
   const answer = yield* host.client.start(key(host, name), {
     ...request(host, '/bin/sleep', ['30']),
     lifetime: 'command',

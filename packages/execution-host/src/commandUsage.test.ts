@@ -52,6 +52,7 @@ const usageOf = (latest: UsageReading | undefined): ProcessUsage => ({
   load: unused,
   subscribe: () => unused,
   interest: () => unused,
+  parts: () => unused,
   sample: () => unused,
   refresh: () => unused,
   sampling: unused,

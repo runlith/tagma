@@ -37,7 +37,9 @@ export const makeHostLoad = Effect.fnUntraced(function* (opening: HostLoadOpenin
         Stream.runForEach(subscription.readings, (reading) =>
           Effect.flatMap(Clock.currentTimeMillis, (readAt) => SubscriptionRef.set(latest, { _tag: 'Read', reading, readAt })),
         ),
-        Stream.runForEach(Stream.changes(SubscriptionRef.changes(wanted)), subscription.setInterest),
+        Stream.runForEach(Stream.changes(SubscriptionRef.changes(wanted)), (interested) =>
+          subscription.setInterest({ interested, others: false }),
+        ),
       );
     }),
   );

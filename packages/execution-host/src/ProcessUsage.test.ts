@@ -94,7 +94,7 @@ it.effect("a reading too large for its envelope keeps Tagma's own CPU on Tagma's
       cores: 4,
       budgetBytes: 1,
     }).pipe(Effect.provideService(Processes, reader));
-    yield* usage.subscribe('fixture', 50);
+    yield* usage.subscribe('fixture', 50, []);
     yield* usage.sample();
     yield* TestClock.adjust(Duration.seconds(1));
     yield* usage.sample();
@@ -120,7 +120,7 @@ it.effect('every process is charged to one row, a reaped child to its execution,
         cores: 4,
         budgetBytes: 1_000_000,
       }).pipe(Effect.provideService(Processes, reader));
-      yield* usage.subscribe('fixture', 50);
+      yield* usage.subscribe('fixture', 50, []);
       yield* usage.sample();
       yield* TestClock.adjust(Duration.seconds(1));
       yield* usage.sample();
@@ -167,7 +167,7 @@ it.effect("Tagma's processes carry their role, and the server's own CPU stands a
       cores: 4,
       budgetBytes: 1_000_000,
     }).pipe(Effect.provideService(Processes, reader));
-    yield* usage.subscribe('fixture', 50);
+    yield* usage.subscribe('fixture', 50, []);
     yield* usage.sample();
     yield* TestClock.adjust(Duration.seconds(1));
     yield* usage.sample();
@@ -195,7 +195,7 @@ it.effect('fits escaped command text inside its encoded load envelope without lo
         cores: 4,
         budgetBytes,
       }).pipe(Effect.provideService(Processes, reader));
-      yield* usage.subscribe('fixture', 50);
+      yield* usage.subscribe('fixture', 50, []);
       yield* usage.refresh();
       const load = yield* usage.load;
       if (load === undefined) return yield* Effect.die(new Error('the usage reader returned no frame'));

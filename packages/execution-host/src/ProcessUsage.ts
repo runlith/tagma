@@ -4,8 +4,10 @@ import type { ExecutionId, ExecutionRef } from '@runlith/executions/protocol/exe
 import {
   identityMatch,
   sameScope,
+  type DeclaredPart,
   type EvidenceScope,
   type InstallationRole,
+  type LoadInterest,
   type LoadGroup,
   type LoadReading,
   type ProcessUsageRow,
@@ -31,7 +33,7 @@ export class UsageUnreadable extends Data.TaggedError('UsageUnreadable')<{ reado
   }
 }
 
-type Subscriber = { readonly serverPid: number; readonly desktopPid?: number; readonly interested: boolean };
+type Subscriber = { readonly serverPid: number; readonly parts: ReadonlyArray<DeclaredPart>; readonly interest: LoadInterest };
 type MachineSample = { readonly counters: MachineCounters; readonly takenAtMicros: number };
 
 export type ProcessUsage = {
@@ -40,8 +42,9 @@ export type ProcessUsage = {
   readonly all: () => Effect.Effect<ReadonlyArray<UsageReading>>;
   readonly sampled: () => Effect.Effect<void>;
   readonly load: Effect.Effect<LoadReading | undefined>;
-  readonly subscribe: (key: string, serverPid: number, desktopPid?: number) => Effect.Effect<void, never, Scope.Scope>;
-  readonly interest: (key: string, interested: boolean) => Effect.Effect<void>;
+  readonly subscribe: (key: string, serverPid: number, parts: ReadonlyArray<DeclaredPart>) => Effect.Effect<void, never, Scope.Scope>;
+  readonly interest: (key: string, interest: LoadInterest) => Effect.Effect<void>;
+  readonly parts: (key: string, parts: ReadonlyArray<DeclaredPart>) => Effect.Effect<void>;
   readonly sample: () => Effect.Effect<void>;
   readonly refresh: () => Effect.Effect<void>;
   readonly sampling: Effect.Effect<never>;
@@ -101,10 +104,10 @@ export const makeProcessUsage = Effect.fnUntraced(function* ({
     return Effect.flatMap(Ref.get(wakeRef), Deferred.await);
   }
 
-  function subscribe(key: string, serverPid: number, desktopPid?: number) {
+  function subscribe(key: string, serverPid: number, parts: ReadonlyArray<DeclaredPart>) {
     return Effect.acquireRelease(
       Effect.andThen(
-        Ref.update(subscribersRef, (held) => new Map(held).set(key, { serverPid, interested: false, desktopPid })),
+        Ref.update(subscribersRef, (held) => new Map(held).set(key, { serverPid, parts, interest: { interested: false, others: false } })),
         notify(),
       ),
       () =>
@@ -119,11 +122,21 @@ export const makeProcessUsage = Effect.fnUntraced(function* ({
     );
   }
 
-  function interest(key: string, interested: boolean): Effect.Effect<void> {
+  function interest(key: string, interest: LoadInterest): Effect.Effect<void> {
     return Effect.andThen(
       Ref.update(subscribersRef, (held) => {
         const standing = held.get(key);
-        return standing === undefined || standing.interested === interested ? held : new Map(held).set(key, { ...standing, interested });
+        return standing === undefined ? held : new Map(held).set(key, { ...standing, interest });
+      }),
+      notify(),
+    );
+  }
+
+  function parts(key: string, parts: ReadonlyArray<DeclaredPart>): Effect.Effect<void> {
+    return Effect.andThen(
+      Ref.update(subscribersRef, (held) => {
+        const standing = held.get(key);
+        return standing === undefined ? held : new Map(held).set(key, { ...standing, parts });
       }),
       notify(),
     );
@@ -156,7 +169,8 @@ export const makeProcessUsage = Effect.fnUntraced(function* ({
           recorder.reset();
           return yield* Deferred.await(changed);
         }
-        const period = policy.periodMs * ([...subscribers.values()].some((subscriber) => subscriber.interested) ? 1 : IDLE_PERIODS);
+        const period =
+          policy.periodMs * ([...subscribers.values()].some((subscriber) => subscriber.interest.interested) ? 1 : IDLE_PERIODS);
         const remaining = yield* untilDue(period);
         if (remaining > 0) return yield* Effect.raceFirst(Effect.sleep(remaining), Deferred.await(changed));
         yield* Semaphore.withPermits(rounds, 1)(Effect.flatMap(untilDue(period), (left) => (left > 0 ? Effect.void : usageStep(round()))));
@@ -186,9 +200,11 @@ export const makeProcessUsage = Effect.fnUntraced(function* ({
           takenAtMicros,
           overMicros: 0,
           cores,
+          machineName: 'Computer',
           cpu: null,
           memory: UNREAD_MEMORY,
           groups: [],
+          unresolvedParts: [...subscribers.values()].flatMap(({ parts }) => parts.map((part) => ({ part, reason: 'unknown' as const }))),
           unread: failure.detail,
         });
         spending.reset();
@@ -212,16 +228,12 @@ export const makeProcessUsage = Effect.fnUntraced(function* ({
           native.processes.map((row) => ({ identity: { pid: row.pid, birth: row.birth }, parent: row.parent, work: row.work })),
         );
         const serverPids = [...new Set([...subscribers.values()].map((subscriber) => subscriber.serverPid))];
-        const desktops = [...subscribers.values()].flatMap(({ serverPid, desktopPid }) =>
-          desktopPid !== undefined && rows.get(serverPid)?.parent === desktopPid ? [desktopPid] : [],
-        );
         const holderRow = rows.get(holderPid);
         const holderStanding =
           holder?._tag === 'Read' &&
           holderRow !== undefined &&
           identityMatch(holder, { pid: holderRow.pid, birth: holderRow.birth }) === 'same';
         const installation = new Map<number, InstallationRole>([
-          ...desktops.map((pid) => [pid, 'window'] as const),
           ...serverPids.map((pid) => [pid, 'server'] as const),
           ...(hostPid > 0 ? [[hostPid, 'host'] as const] : []),
           ...(holderStanding ? [[holderPid, 'holder'] as const] : []),
@@ -261,9 +273,11 @@ export const makeProcessUsage = Effect.fnUntraced(function* ({
             takenAtMicros,
             overMicros: spent.overMicros,
             cores: machine.cores,
+            machineName: 'Computer',
             cpu: machine.cpu,
             memory: machine.memory,
             groups: [...groups, ...kernel].sort((left, right) => right.cores - left.cores),
+            unresolvedParts: [...subscribers.values()].flatMap(({ parts }) => parts.map((part) => ({ part, reason: 'unknown' as const }))),
             unread: machine.unread,
           };
           yield* Ref.set(frame, bounded(reading, budgetBytes));
@@ -388,6 +402,7 @@ export const makeProcessUsage = Effect.fnUntraced(function* ({
     load: Ref.get(frame),
     subscribe,
     interest,
+    parts,
     sample,
     refresh,
     sampling: readSampling(),

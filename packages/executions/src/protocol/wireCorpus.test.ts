@@ -166,7 +166,7 @@ describe('what a connection serves', () => {
   it('refuses a request whose capability the connection does not serve, and names it', () => {
     const previous = servedOn(PREVIOUS_RELEASE.version, CAPABILITIES);
     const current = servedOn(WIRE_VERSION, CAPABILITIES);
-    const limited = servedOn(WIRE_VERSION, announced(['machine-load']));
+    const limited = servedOn(WIRE_VERSION, announced(['machine-load', 'machine-load-parts']));
     const recorded = [...corpus[WIRE_VERSION].frames, ...corpus[WIRE_VERSION].arms]
       .filter((frame) => frame.side === 'client' && !isPreface(frame.header) && messageOf(frame)?._tag === 'Call')
       .map(requestOf);
@@ -183,7 +183,8 @@ describe('what a connection serves', () => {
           capability: needed,
           reason: expect.stringContaining(needed),
         });
-      if (PREVIOUS_RELEASE.serves.some((each) => each === needed)) expect(unsupported(body, previous)).toBeUndefined();
+      if (needed !== 'machine-load' && PREVIOUS_RELEASE.serves.some((each) => each === needed))
+        expect(unsupported(body, previous)).toBeUndefined();
       else
         expect(unsupported(body, previous)).toEqual({
           _tag: 'UnsupportedCapability',

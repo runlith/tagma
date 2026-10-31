@@ -2,7 +2,7 @@ import type { LoadSubscription } from '@runlith/executions/ExecutionEvidence';
 import type { ExecutionsFailure } from '@runlith/executions/Executions';
 import { Context, type Effect, type Scope, type Stream } from 'effect';
 import type { ExecutionRef } from '@runlith/executions/protocol/execution';
-import type { ListenerReport, ProcessReport } from '@runlith/executions/protocol/evidence';
+import type { DeclaredPart, ListenerReport, ProcessReport } from '@runlith/executions/protocol/evidence';
 import type { ForegroundAnswer } from '@runlith/executions/protocol/terminal';
 import type {
   FrameRevision,
@@ -48,6 +48,9 @@ export class ExecutionProcessEvidence extends Context.Service<
     readonly foreground: (execution: ExecutionRef) => Effect.Effect<ForegroundAnswer, TerminalFailure>;
     readonly processes: (execution: ExecutionRef) => Effect.Effect<ProcessReport | undefined, TerminalFailure>;
     readonly ports: (execution: ExecutionRef) => Effect.Effect<ListenerReport | undefined, TerminalFailure>;
-    readonly load: (serverPid: number, desktopPid?: number) => Effect.Effect<LoadSubscription, ExecutionsFailure, Scope.Scope>;
+    readonly load: (
+      serverPid: number,
+      parts: ReadonlyArray<DeclaredPart>,
+    ) => Effect.Effect<LoadSubscription, ExecutionsFailure, Scope.Scope>;
   }
 >()('tagma/executions/ExecutionProcessEvidence') {}

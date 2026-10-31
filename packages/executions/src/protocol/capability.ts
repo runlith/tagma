@@ -2,6 +2,7 @@ import { Schema } from 'effect';
 
 export const Capability = Schema.Literals([
   'machine-load',
+  'machine-load-parts',
   'end-residual',
   'end-process',
   'named-signals',

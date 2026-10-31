@@ -229,7 +229,9 @@ const servedBy = (profile: CapabilityProfile, measured: Measuring, platform: Rea
     'end-residual',
     'screen-point',
     'screen-settled',
-    ...(profile.usage !== undefined && measured?.native !== undefined ? ['machine-load' as const, 'end-process' as const] : []),
+    ...(profile.usage !== undefined && measured?.native !== undefined
+      ? ['machine-load' as const, 'machine-load-parts' as const, 'end-process' as const]
+      : []),
   ]);
 
 const ENVELOPE_BYTES = 4096;

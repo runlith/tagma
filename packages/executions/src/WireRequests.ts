@@ -26,6 +26,7 @@ const LANES: Record<Request['_tag'], Lane> = {
   Pace: 'control',
   Disown: 'control',
   LoadInterest: 'control',
+  LoadParts: 'control',
   EndResidual: 'control',
   EndProcess: 'control',
   Status: 'walk',

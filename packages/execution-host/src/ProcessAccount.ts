@@ -27,6 +27,8 @@ export const keyOf = (owner: GroupOwner): string => {
       return `execution:${owner.execution.installation}/${owner.execution.incarnation}/${owner.execution.execution}`;
     case 'Installation':
       return 'installation';
+    case 'Part':
+      return `part:${owner.key}`;
     case 'Program':
       return `program:${owner.key}`;
     case 'Kernel':

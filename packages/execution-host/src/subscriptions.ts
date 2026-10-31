@@ -109,7 +109,7 @@ export const subscribe = (
               'subscribe-load',
               subscription,
               Effect.gen(function* () {
-                yield* usage.subscribe(`${admitted.connection}:${subscription.id}`, source.serverPid, source.desktopPid);
+                yield* usage.subscribe(`${admitted.connection}:${subscription.id}`, source.serverPid, source.parts);
                 let waiting = yield* Effect.forkChild(usage.sampled());
                 const standing = yield* usage.load;
                 if (standing !== undefined && !(yield* subscription.load(standing))) return;

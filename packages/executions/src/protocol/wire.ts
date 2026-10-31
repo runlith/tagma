@@ -15,7 +15,7 @@ import {
 } from './inventory';
 import { CustodyAnswer, CustodyRequest } from './control';
 import { BindingId, Principal } from './custody';
-import { ListenerReport, LoadReading, ProcessReport } from './evidence';
+import { DeclaredPart, ListenerReport, LoadInterest, LoadReading, ProcessReport } from './evidence';
 import { ExecutionRef, Incarnation, InstallationId, HostRequestRef } from './execution';
 import { Refusal } from './host';
 import { InputCause, InputAnswer, InputSequence } from './input';
@@ -188,7 +188,7 @@ export const SubscriptionSource = Schema.Union([
   Schema.Struct({ _tag: Schema.Literal('Screen'), execution: ExecutionRef, base: Schema.optional(FrameRevision) }),
   Schema.Struct({ _tag: Schema.Literal('Inventory') }),
   Schema.Struct({ _tag: Schema.Literal('Inputs'), execution: ExecutionRef }),
-  needing('machine-load', Schema.Struct({ _tag: Schema.Literal('Load'), serverPid: Positive, desktopPid: Schema.optional(Positive) })),
+  needing('machine-load', Schema.Struct({ _tag: Schema.Literal('Load'), serverPid: Positive, parts: Schema.Array(DeclaredPart) })),
   needing('screen-settled', Schema.Struct({ _tag: Schema.Literal('ScreenSettled'), execution: ExecutionRef, quietMs: Positive })),
 ]).pipe(Schema.toTaggedUnion('_tag'));
 export type SubscriptionSource = typeof SubscriptionSource.Type;
@@ -296,9 +296,10 @@ const requests = [
 
 export const Request = Schema.Union([
   ...requests,
+  needing('machine-load', Schema.Struct({ _tag: Schema.Literal('LoadInterest'), subscription: SubscriptionId, ...LoadInterest.fields })),
   needing(
     'machine-load',
-    Schema.Struct({ _tag: Schema.Literal('LoadInterest'), subscription: SubscriptionId, interested: Schema.Boolean }),
+    Schema.Struct({ _tag: Schema.Literal('LoadParts'), subscription: SubscriptionId, parts: Schema.Array(DeclaredPart) }),
   ),
   needing('end-residual', Schema.Struct({ _tag: Schema.Literal('EndResidual'), ...ResidualInput.fields })),
   needing('end-process', Schema.Struct({ _tag: Schema.Literal('EndProcess'), target: ProcessTarget })),
@@ -313,7 +314,7 @@ export const requiredCapability = (body: Request): Capability | undefined =>
 
 export const unsupported = (body: Request, served: Served): Refusal | undefined => {
   const capability = requiredCapability(body);
-  return capability === undefined || served.has(capability)
+  return capability === undefined || (served.has(capability) && (capability !== 'machine-load' || served.has('machine-load-parts')))
     ? undefined
     : { _tag: 'UnsupportedCapability', capability, reason: `the host on this connection does not serve ${capability}` };
 };
@@ -387,6 +388,7 @@ const answers = [
 export const HostAnswer = Schema.Union([
   ...answers,
   needing('machine-load', Schema.Struct({ _tag: Schema.Literal('LoadInterest'), applied: Schema.Boolean })),
+  needing('machine-load', Schema.Struct({ _tag: Schema.Literal('LoadParts'), applied: Schema.Boolean })),
   needing('end-residual', Schema.Struct({ _tag: Schema.Literal('EndResidual'), outcome: ResidualEnding })),
   needing('end-process', Schema.Struct({ _tag: Schema.Literal('EndProcess'), outcome: ProcessEnding })),
   needing('terminal-foreground', Schema.Struct({ _tag: Schema.Literal('Foreground'), outcome: ForegroundAnswer })),

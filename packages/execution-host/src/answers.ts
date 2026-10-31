@@ -152,8 +152,21 @@ export const answer = (
         undefined,
         Effect.gen(function* () {
           const applied = usage !== undefined && (yield* admitted.hasSubscription(body.subscription));
-          if (applied) yield* usage!.interest(`${admitted.connection}:${body.subscription}`, body.interested);
+          if (applied)
+            yield* usage!.interest(`${admitted.connection}:${body.subscription}`, { interested: body.interested, others: body.others });
           yield* answered({ _tag: 'LoadInterest', applied });
+        }),
+      );
+
+    case 'LoadParts':
+      return span(
+        'LoadParts',
+        undefined,
+        undefined,
+        Effect.gen(function* () {
+          const applied = usage !== undefined && (yield* admitted.hasSubscription(body.subscription));
+          if (applied) yield* usage!.parts(`${admitted.connection}:${body.subscription}`, body.parts);
+          yield* answered({ _tag: 'LoadParts', applied });
         }),
       );
 

@@ -1,7 +1,7 @@
 import { Context, type Cause, Duration, Effect, Exit, FileSystem, Layer, type Queue, Ref, Scope, Semaphore, Stream } from 'effect';
 import { Commands } from './Commands';
 import { ExecutionCustody } from './ExecutionCustody';
-import { ExecutionEvidence } from './ExecutionEvidence';
+import { ExecutionEvidence, type LoadSubscription } from './ExecutionEvidence';
 import { ExecutionFeed } from './ExecutionFeed';
 import { ExecutionRecord } from './ExecutionRecord';
 import { ExecutionRequest } from './ExecutionRequest';
@@ -435,10 +435,10 @@ const make = Effect.fnUntraced(function* ({ address, role, limits, budget = {}, 
       }),
 
       ...ExecutionEvidence.of({
-        load: Effect.fnUntraced(function* (serverPid, desktopPid) {
+        load: Effect.fnUntraced(function* (serverPid, parts) {
           const connected = yield* connect();
           const opened = yield* Effect.acquireRelease(
-            reader(connected, { _tag: 'Load', serverPid, desktopPid }, connected.limits.credits),
+            reader(connected, { _tag: 'Load', serverPid, parts }, connected.limits.credits),
             (reader) => Effect.andThen(connected.unsubscribe(reader.subscription), connected.readers.close(reader.subscription)),
           );
           const readings = Stream.fromQueue(opened.queue).pipe(
@@ -469,14 +469,21 @@ const make = Effect.fnUntraced(function* ({ address, role, limits, budget = {}, 
                   ),
             ),
           );
-          const setInterest = (interested: boolean) =>
-            over(connected, { _tag: 'LoadInterest', subscription: opened.subscription, interested }, EMPTY_PAYLOAD).pipe(
+          const setInterest: LoadSubscription['setInterest'] = (interest) =>
+            over(connected, { _tag: 'LoadInterest', subscription: opened.subscription, ...interest }, EMPTY_PAYLOAD).pipe(
               Effect.flatMap((answer) => expect('LoadInterest', answer)),
               Effect.flatMap((answer) =>
                 answer.applied ? Effect.void : new WireUnreadable({ detail: 'the load subscription no longer stands' }),
               ),
             );
-          return { readings, setInterest };
+          const setParts: LoadSubscription['setParts'] = (parts) =>
+            over(connected, { _tag: 'LoadParts', subscription: opened.subscription, parts }, EMPTY_PAYLOAD).pipe(
+              Effect.flatMap((answer) => expect('LoadParts', answer)),
+              Effect.flatMap((answer) =>
+                answer.applied ? Effect.void : new WireUnreadable({ detail: 'the load subscription no longer stands' }),
+              ),
+            );
+          return { readings, setInterest, setParts };
         }),
 
         foreground: (execution) =>
