@@ -203,6 +203,7 @@ class PerformanceSpan implements Tracer.Span {
   constructor(
     options: SpanOptions,
     units: ReadonlySet<string>,
+    private readonly weigh: Weigher,
     private readonly onEnd: (span: PerformanceSpan, endTime: bigint, exit: Exit.Exit<unknown, unknown>) => void,
   ) {
     this.name = options.name;
@@ -234,14 +235,20 @@ class PerformanceSpan implements Tracer.Span {
     const target = ATTRIBUTE_ALLOWLIST.get(key);
     if (target === undefined) return;
     const encoded = projectAttribute(value);
-    if (encoded === undefined) return;
     const previous = this.projected[target];
-    this.projected[target] = encoded;
-    if (previous !== undefined) {
-      this.attributeBytes += jsonBytes(encoded) - jsonBytes(previous);
+    if (encoded === undefined) {
+      if (previous === undefined) return;
+      delete this.projected[target];
+      this.attributeCount -= 1;
+      this.attributeBytes -= (this.attributeCount === 0 ? 0 : 1) + (TARGET_BYTES.get(target) ?? 0) + 1 + this.weigh(previous);
       return;
     }
-    this.attributeBytes += (this.attributeCount === 0 ? 0 : 1) + (TARGET_BYTES.get(target) ?? 0) + 1 + jsonBytes(encoded);
+    this.projected[target] = encoded;
+    if (previous !== undefined) {
+      this.attributeBytes += this.weigh(encoded) - this.weigh(previous);
+      return;
+    }
+    this.attributeBytes += (this.attributeCount === 0 ? 0 : 1) + (TARGET_BYTES.get(target) ?? 0) + 1 + this.weigh(encoded);
     this.attributeCount += 1;
   }
 
@@ -260,6 +267,7 @@ export const make = Effect.fnUntraced(function* (options: Options) {
 
   const recordFloorMicros = Math.max(0, Math.trunc(options.recordFloorMicros));
   const units = options.units ?? new Set<string>();
+  const weigh = makeWeigher();
 
   const metricsFor = (name: string): SpanMetrics => {
     const existing = metricsByName.get(name);
@@ -312,7 +320,7 @@ export const make = Effect.fnUntraced(function* (options: Options) {
       if (cost !== null) cost.counts.spans++;
       const wallTime = Date.now();
       const monotonicStart = performance.now();
-      const span = new PerformanceSpan(spanOptions, units, (ended, endTime, exit) => {
+      const span = new PerformanceSpan(spanOptions, units, weigh, (ended, endTime, exit) => {
         const durationNanos = endTime - spanOptions.startTime;
         const duration = Duration.nanos(durationNanos);
         const metrics = metricsFor(ended.name);
@@ -391,23 +399,25 @@ const SUCCESS_EXIT: SpanPayload['exit'] = Object.freeze({ _tag: 'Success' });
 const STRING_WEIGHTS = 1024;
 const STRING_WEIGHT_CHARS = 1024;
 
-const stringWeights = new Map<string, number>();
+type Weigher = (value: Primitive) => number;
 
-const stringBytes = (value: string): number => {
-  if (value.length > STRING_WEIGHT_CHARS) return Buffer.byteLength(JSON.stringify(value));
-  const known = stringWeights.get(value);
-  if (known !== undefined) return known;
-  const bytes = UNESCAPED_ASCII.test(value) ? value.length + 2 : Buffer.byteLength(JSON.stringify(value));
-  if (stringWeights.size >= STRING_WEIGHTS) stringWeights.clear();
-  stringWeights.set(value, bytes);
-  return bytes;
-};
-
-const jsonBytes = (value: Primitive): number => {
-  if (value === null) return 4;
-  if (typeof value === 'boolean') return value ? 4 : 5;
-  if (typeof value === 'number') return String(value).length;
-  return stringBytes(value);
+const makeWeigher = (): Weigher => {
+  const stringWeights = new Map<string, number>();
+  const stringBytes = (value: string): number => {
+    if (value.length > STRING_WEIGHT_CHARS) return Buffer.byteLength(JSON.stringify(value));
+    const known = stringWeights.get(value);
+    if (known !== undefined) return known;
+    const bytes = UNESCAPED_ASCII.test(value) ? value.length + 2 : Buffer.byteLength(JSON.stringify(value));
+    if (stringWeights.size >= STRING_WEIGHTS) stringWeights.clear();
+    stringWeights.set(value, bytes);
+    return bytes;
+  };
+  return (value) => {
+    if (value === null) return 4;
+    if (typeof value === 'boolean') return value ? 4 : 5;
+    if (typeof value === 'number') return String(value).length;
+    return stringBytes(value);
+  };
 };
 
 function spanByteSize(nameBytes: number, attributeBytes: number, exit: SpanPayload['exit']): number {

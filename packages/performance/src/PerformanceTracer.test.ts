@@ -151,6 +151,20 @@ it.effect("a span's buffer weight is the exact serialized size of its projected 
     const attributes = { 'db.query.summary': summary, 'db.exec.ms': 0.125, 'db.queue.ms': 3 };
     const added = Buffer.byteLength(JSON.stringify(attributes)) - 2;
     expect(retained.map((span) => span.byteSize - (retained[0]?.byteSize ?? 0))).toEqual([0, added, 0, added]);
+
+    const replaced = open(tracer, 's', 0n, root);
+    replaced.attribute('db.query.summary', 'x');
+    replaced.attribute('db.queue.ms', 3);
+    replaced.attribute('db.query.summary', { rows: 1 });
+    replaced.attribute('db.exec.ms', 2);
+    replaced.attribute('db.exec.ms', Number.NaN);
+    replaced.end(MS, Exit.void);
+    const only = open(tracer, 's', 0n, root);
+    only.attribute('db.queue.ms', 3);
+    only.end(MS, Exit.void);
+    const [replacedSpan, onlySpan] = retained.slice(-2);
+    expect(replacedSpan?.attributes).toEqual({ 'db.queue.ms': 3 });
+    expect(replacedSpan?.byteSize).toBe(onlySpan?.byteSize ?? -1);
     root.end(MS, Exit.void);
   }),
 );
