@@ -6,7 +6,7 @@ tags: ["task"]
 fields:
   {
     "holder": "tagma:01a19421-dd90-73db-9615-876f36cf9295",
-    "status": "in_work"
+    "status": "done"
   }
 edges:
   - kind: discovered-from
@@ -14,4 +14,4 @@ edges:
   - kind: relates
     to: 01a1941f-f2bb-77f3-9717-654e6b8cdc4b
 ---
-file_reflection has no storage selector, so an observation containing private context can only be moved to stealth after creation, when its first team version may already be committed. Expose the existing storage choice at creation and pass it atomically to the graph producer, preserving the current default and storage policy. Prove the public operation creates a stealth reflection without an intermediate team projection; history cleanup is outside this task.
+file_reflection now accepts the existing storage choice and passes it into the initial Blocks.create call for both an entry and a new sighting. Omitting it still inherits the parent's storage, and the graph keeps its existing storage refusals. The native public-door regression first created a team record despite storage: stealth; after the fix it reads stealth immediately, has only its create event, and leaves no version in team Git history after sync. The unchanged default still creates a team entry. The changed HTTP/native scenario and fork-prefix scenario pass on seeds 1, 2 and 3; server typecheck passes. No default policy, history, or repository pin was changed.
