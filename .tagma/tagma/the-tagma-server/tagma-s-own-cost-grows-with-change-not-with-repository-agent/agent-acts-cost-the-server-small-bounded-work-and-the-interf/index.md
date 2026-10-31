@@ -234,6 +234,24 @@ The e2e lane's `tagma.thread-open` p99 is reported beside them: renderer cost is
 - refusal of undeclared writes;
 - differential tests of every C owner against a fresh read, external file changes included.
 
+## Baseline
+
+The first complete baseline is a **pre-fix reference**, measured on commit `fb19c85618` on one 12-core, 32 GB macOS arm64 machine with Bun 1.4.4. The bench includes one project, one small fixture repository, synthetic 100-entry histories, a 2 KB tool-result fixture, 54 incident subscriptions, and open parent-task turns; one agent in five is idle. Short runs measured 90 s after 15 s warm-up. These figures are not measurements of the later hosted-call fiber fix, and the machine is not the 4-core/8-GB reference profile.
+
+| Agents | Hosted calls completed | Loop p99 / stalls over 100 ms | Graph / thread / list COMMIT-to-frame p99 upper bound |
+|---|---:|---:|---:|
+| 0 | 0 | 2.032 ms / 0 | 59 / 71 / 49 ms |
+| 10 | 72 | 2.370 ms / 0 | 47 / 55 / 26 ms |
+| 50 | 360 of 361 submitted | 5.738 ms / 0 | 34 / 50 / 29 ms |
+
+At N=10, 48 attributed reads averaged 201 SQL statements and 2 write units; at N=50, 231 reads averaged 202.19 statements and 2 units. N=50 process CPU was 50,623.961 ms and process-wide mimalloc allocator-requested traffic was 47,946,953,312 B, including the driver, probes, worker isolates and native allocation. The physical writer wait/hold p99 upper bounds were 20/20 ms over 4,626 units. Writer rows evicted 3,135 observations with a cursor gap; the causal ledger evicted 9,803 roots, detected no cursor gap, and still followed four tails. These populations cannot be reconstructed as complete per-act samples.
+
+The uninterrupted N=50 steady run used 480 s warm-up and 1,020 s measurement, taking 1,550.4 s including two snapshots and teardown. It completed 4,081/4,081 submitted calls without failures; loop p99 was 6.357 ms with no stall over 100 ms, and writer wait/hold p99 upper bounds were 25/25 ms over 52,473 units. The ledger evicted 164,749 roots without a detected cursor gap and had no tails still followed; writer-row retention had a gap. Sampled memory was not flat over the last 15 minutes.
+
+The post-full-GC census, including the in-process fixture and excluding child processes, was: idle N=0 RSS 464,455,144 B, JS heap 134,831,661 B, external memory 66,117,261 B, and allocator committed 995,229,696 B; steady loaded N=50 RSS 1,730,530,328 B, JS heap 779,021,840 B, external memory 207,076,608 B, and committed 3,125,870,592 B. Heap retained-size examples overlap; these readings do not assign all native memory or prove an exclusive retaining owner.
+
+List latency is writer-side COMMIT return to delivered frame across process epoch clocks whose skew is not bounded. Writer percentiles cover physical outer units and child elapsed is not engine CPU. GC attribution is diagnostic and its completeness is unverified; loop delay and stalls are the gate. No resident-memory budget or reference-profile pass is established by this sample.
+
 ## Not established
 
 - Per-producer attribution of the reactive work (step 0 gives it).
