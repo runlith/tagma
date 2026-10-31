@@ -39,6 +39,7 @@ import type { ThreadAggregateStorage } from '../storage/aggregate';
 import { emptyToolOutputs, runRow } from '../conformance/runCycle/runDoubles';
 import { RunEndings, type RunEnding } from './lifecycle/endings';
 import { LaunchGate, LAUNCH_REFUSALS_BEFORE_BLOCK, launchGateLayer } from './LaunchGate';
+import { RunControl, runControlLayer } from './RunControl';
 import { ThreadRunLedger } from './ThreadRunLedger';
 import { ThreadSnapshots, threadSnapshotsLayer } from './ThreadSnapshots';
 import { wordsInFlightLayer } from './WordsInFlight';
@@ -348,6 +349,24 @@ it.effect(
   }),
 );
 it.effect(
+  'a heartbeat its owner lands makes the next change read the run again instead of carrying the one held',
+  Effect.fnUntraced(function* () {
+    const world = yield* snapshotsOver();
+    const run = runRow('run-1', { threadId: 't', heartbeatAt: new Date(0) });
+    world.active.set('t', run);
+    const frames = yield* world.frames;
+    yield* world.snapshots.publish('t');
+    const reads = world.reads.latest;
+    world.active.set('t', { ...run, heartbeatAt: new Date(5_000), updatedAt: new Date(5_000) });
+    world.control.beaten([{ id: run.id, threadId: 't' }]);
+    yield* world.transit([words('a', 'one', 'run-1')]);
+    const frame = yield* frames.at(1);
+    expect(world.reads.latest).toBe(reads + 1);
+    expect(frame.state.activeRun?.heartbeatAt).toEqual(new Date(5_000));
+    expect(stripped(frame.state)).toEqual(stripped(yield* world.snapshots.state('t')));
+  }),
+);
+it.effect(
   'a change that does not follow the published position reads the thread again and publishes every fact once',
   Effect.fnUntraced(function* () {
     const world = yield* snapshotsOver();
@@ -384,6 +403,57 @@ it.effect(
     }
     const carried = frames.all().flatMap((frame) => frame.deltas.map((delta) => delta.position));
     expect(carried).toEqual(Array.from({ length: yield* world.head() }, (_, index) => index + 1));
+  }),
+);
+it.effect(
+  'a snapshot read ahead of committed changes still queued is never followed by an older state',
+  Effect.fnUntraced(function* () {
+    const world = yield* snapshotsOver();
+    world.active.set('t', runRow('run-1', { threadId: 't' }));
+    const frames = yield* world.frames;
+    yield* world.snapshots.publish('t');
+    yield* frames.at(0);
+    const shown: { readonly seq: number; readonly position: number }[] = [];
+    const detach = world.live.subscribe('t', (event) => {
+      if (event.type === 'state') shown.push({ seq: event.at.seq, position: event.frame.state.position });
+    });
+    yield* Effect.addFinalizer(() => Effect.sync(detach));
+    const release = yield* Deferred.make<void>();
+    const held = yield* Effect.forkScoped(world.live.atCut('t', Deferred.await(release)), { startImmediately: true });
+    const opening = yield* Effect.forkScoped(world.snapshots.snapshot('t'), { startImmediately: true });
+    yield* world.transit([words('a', 'one', 'run-1')], { contextReading: reading(1) });
+    yield* world.transit([words('b', 'two', 'run-1')], { contextReading: reading(2) });
+    yield* Deferred.succeed(release, undefined);
+    yield* Fiber.join(held);
+    const snapshot = yield* Fiber.join(opening);
+    expect(snapshot.position).toBe(2);
+    const last = yield* frames.reaching(2);
+    expect(shown.filter((frame) => frame.seq > snapshot.live.at.seq && frame.position < snapshot.position)).toEqual([]);
+    expect(frames.all().flatMap((frame) => frame.deltas.map((delta) => delta.position))).toEqual([1, 2]);
+    expect(stripped(last.state)).toEqual(stripped(yield* world.snapshots.state('t')));
+  }),
+);
+it.effect(
+  'a backlog of committed changes past its bound is caught up by one read that carries every fact once',
+  Effect.fnUntraced(function* () {
+    const world = yield* snapshotsOver();
+    world.active.set('t', runRow('run-1', { threadId: 't' }));
+    const frames = yield* world.frames;
+    yield* world.snapshots.publish('t');
+    yield* frames.at(0);
+    const release = yield* Deferred.make<void>();
+    const held = yield* Effect.forkScoped(world.live.atCut('t', Deferred.await(release)), { startImmediately: true });
+    const reads = world.reads.latest;
+    const backlog = 100;
+    for (let step = 0; step < backlog; step += 1) yield* world.transit([words(`e${step}`, `step ${step}`, 'run-1')]);
+    yield* Deferred.succeed(release, undefined);
+    yield* Fiber.join(held);
+    const last = yield* frames.reaching(backlog);
+    expect(world.reads.latest).toBe(reads + 1);
+    expect(frames.all().flatMap((frame) => frame.deltas.map((delta) => delta.position))).toEqual(
+      Array.from({ length: backlog }, (_, index) => index + 1),
+    );
+    expect(stripped(last.state)).toEqual(stripped(yield* world.snapshots.state('t')));
   }),
 );
 type SnapshotRowState = {
@@ -527,7 +597,7 @@ const snapshotsOver = Effect.fnUntraced(function* (
       }),
     ),
   );
-  const context = yield* Layer.build(threadSnapshotsLayer.pipe(Layer.provideMerge(dependencies)));
+  const context = yield* Layer.build(threadSnapshotsLayer.pipe(Layer.provideMerge(runControlLayer), Layer.provideMerge(dependencies)));
   const snapshots = Context.get(context, ThreadSnapshots);
   const deps = yield* Effect.provide(transitionDeps, context);
   const append = (entry: ThreadTranscriptEntry) =>
@@ -595,6 +665,7 @@ const snapshotsOver = Effect.fnUntraced(function* (
     capabilities,
     snapshots,
     gate: Context.get(context, LaunchGate),
+    control: Context.get(context, RunControl),
   };
 });
 const LATER = new Date('2100-01-01T00:00:00.000Z');

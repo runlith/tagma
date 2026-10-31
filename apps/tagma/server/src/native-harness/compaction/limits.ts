@@ -133,7 +133,7 @@ export const publishLimitMoves = Effect.gen(function* () {
     pending = null;
     if (scope === null) return;
     yield* Effect.forEach(
-      live.watchedAtRest(),
+      live.watched(),
       (threadId) =>
         reaches(scope, threadId).pipe(
           Effect.flatMap((reached) => (reached ? harness.threads.publish(threadId) : Effect.void)),

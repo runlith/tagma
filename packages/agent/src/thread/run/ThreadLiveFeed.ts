@@ -133,10 +133,10 @@ export const makeThreadLiveFeed = Effect.fnUntraced(function* <TState extends Th
 
   const stateOf = (threadId: string): TState | null => lanes.get(threadId)?.state ?? null;
 
-  const watchedAtRest = (): readonly string[] => {
-    const resting: string[] = [];
-    for (const [threadId, lane] of lanes) if (lane.watchers > 0 && lane.runId === null) resting.push(threadId);
-    return resting;
+  const watched = (): readonly string[] => {
+    const followed: string[] = [];
+    for (const [threadId, lane] of lanes) if (lane.watchers > 0) followed.push(threadId);
+    return followed;
   };
 
   const subscribe = (threadId: string, listener: (event: ThreadLiveEvent<TState>) => void): (() => void) => {
@@ -201,7 +201,7 @@ export const makeThreadLiveFeed = Effect.fnUntraced(function* <TState extends Th
     if (lane.watchers > 0 || lane.runId !== null || lane.open.size > 0) return;
     if (lanes.get(threadId) === lane) lanes.delete(threadId);
   }
-  return { atCut, tail, append, progress, publishState, stateOf, view, watchedAtRest, subscribe, subscribeStates };
+  return { atCut, tail, append, progress, publishState, stateOf, view, watched, subscribe, subscribeStates };
 });
 
 function growth(held: ThreadTranscriptEntry, next: ThreadTranscriptEntry): string | null {

@@ -61,7 +61,8 @@ import type { NativeThreadState } from '../contract/service/state.js';
 import { LEASE_RHYTHM, REAPER_RHYTHM, RECONCILE_INTERVAL_MS, SETTLEMENT_RHYTHM } from '../contract/wire/rhythm.js';
 import { ThreadTeams } from '../contract/service/team.js';
 import { makeThreadTeams } from '../team.js';
-import { republishOnMachineFlip, resolveDelegation } from '../birth/delegation.js';
+import { republishOnDepthMove, republishOnMachineFlip, resolveDelegation } from '../birth/delegation.js';
+import { SettingChanges } from '../../settings/contract/service/changes.js';
 import { AwakePolicy } from '../../power/contract/service/awake.js';
 import { MadeBirths, PlacementRefused, Placing, type PlacementCoordinator } from '../birth/placement.js';
 import { JournalOrder } from '../journal/lane.js';
@@ -466,7 +467,12 @@ export const threadEngineLayer = Layer.effectContext(
     harness.runs.onDriving((count) => awake.working(count));
     yield* republishOnMachineFlip(
       settings,
-      () => live.watchedAtRest(),
+      () => live.watched(),
+      (threadId) => harness.threads.publish(threadId),
+    );
+    yield* republishOnDepthMove(
+      yield* SettingChanges,
+      () => live.watched(),
       (threadId) => harness.threads.publish(threadId),
     );
     return Context.make(ThreadHarness, harness).pipe(

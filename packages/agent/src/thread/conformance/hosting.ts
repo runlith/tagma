@@ -15,6 +15,7 @@ import {
   USER_QUESTION_TOOL_NAME,
 } from '../../transcript/parts';
 import type { ThreadQuestionEntry } from '../../transcript/entries';
+import type { ThreadSnapshot } from '../state';
 import { threadCaller, type ThreadHostedRun, type ThreadPreparedRun } from '../agents/ThreadAgent';
 import type { ApprovalNotice, ApproverRoute, ApproversPort } from '../Approvers';
 import { THREAD_RUN_AWAITING_QUESTION_STAGE } from '../storage/runs';
@@ -22,7 +23,7 @@ import { hangingTurn } from './runLog/scripts';
 import { gate, until } from './runLog/support';
 import { OWNER, openedRun, scriptedWorld, startedTurn, type ScriptedWorld } from './runLog/world';
 import type { ThreadStorageFactory } from './storagePort';
-import { ASKS_IN_REVIEW } from '../../permissions/vocabulary';
+import { ASKS_IN_REVIEW, ASKS_NEVER } from '../../permissions/vocabulary';
 const CALL = 'call-1';
 const ASKED = {
   questions: [
@@ -203,6 +204,53 @@ export function describeThreadHosting<TTx, TWrite extends TTx = TTx, R = never>(
       expect(question.failed).toBe(true);
       expect(acted).toEqual([]);
       expect(yield* world.harness.runs.questions().open(thread.id)).toEqual([]);
+    }),
+  );
+  test(
+    `${name}: a hosted call answered long after its start publishes the run as held, with the heartbeat its owner keeps writing`,
+    Effect.fnUntraced(function* () {
+      const holding = gate();
+      const catalog: ToolCatalog = {
+        hold: Tool.make({
+          display: () => ({ form: 'none' }),
+          approval: ASKS_NEVER,
+          description: 'Hold until let go.',
+          parameters: Schema.Struct({}),
+          execute: () => Effect.as(Effect.andThen(Effect.sync(holding.reach), holding.released), { held: true }),
+        }),
+      };
+      const takeoverAfterMs = 400;
+      const { world, thread } = yield* openedRun(open, {
+        catalog,
+        host: hosted(catalog, yield* makeAgentCalls({ history: 8 })),
+        harness: harnessOver(),
+        transport: HOSTED_BINDING,
+        rhythm: { heartbeatIntervalMs: 20, takeoverAfterMs },
+      });
+      const reached = gate();
+      world.plan.push(hangingTurn({ chunks: [], reached: reached.reach }));
+      yield* startedTurn(world, thread.id, 'Host this turn.');
+      yield* reached.reached;
+      const states: ThreadSnapshot[] = [];
+      const detach = world.harness.reads.subscribe(thread.id, (event) => {
+        if (event.type === 'state') states.push(event.frame.state);
+      });
+      yield* Effect.addFinalizer(() => Effect.sync(detach));
+      const answering = yield* Effect.forkScoped(
+        world.harness.runs
+          .hosting()
+          .call({ threadId: thread.id, agentId: thread.agentId, toolCallId: 'hold-1', name: 'hold', input: {}, arguments: '{}' }),
+      );
+      yield* holding.reached;
+      yield* Effect.sleep(Duration.millis(takeoverAfterMs * 3));
+      const before = states.length;
+      holding.release();
+      expect((yield* Fiber.join(answering)).failed).toBe(false);
+      yield* until(() => Effect.succeed(states.length > before));
+      for (const state of states.slice(before)) {
+        expect(state.status.ownership).toBe('held');
+        expect(Date.parse(state.now) - state.activeRun!.heartbeatAt.getTime()).toBeLessThan(takeoverAfterMs);
+      }
     }),
   );
   describe(`${name}: a hosted run asks the way a native run asks`, () => {

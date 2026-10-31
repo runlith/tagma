@@ -24,6 +24,8 @@ export class RunControl extends Context.Service<
     ended(runId: string): void;
     size(): number;
     onChange(hook: (count: number) => void): void;
+    beaten(runs: readonly ThreadRunRef[]): void;
+    onBeaten(hook: (runs: readonly ThreadRunRef[]) => void): void;
   }
 >()('@runlith/agent/RunControl') {}
 
@@ -36,6 +38,7 @@ export const runControlLayer: Layer.Layer<RunControl, never, Transports | Thread
     const launching = new Set<string>();
     const intents = new Map<string, ThreadRunStopRequest>();
     const hooks: ((count: number) => void)[] = [];
+    const beats: ((runs: readonly ThreadRunRef[]) => void)[] = [];
     const changed = () => {
       for (const hook of hooks) hook(going.size);
     };
@@ -92,6 +95,13 @@ export const runControlLayer: Layer.Layer<RunControl, never, Transports | Thread
       onChange: (hook) => {
         hooks.push(hook);
         hook(going.size);
+      },
+      beaten: (runs) => {
+        if (runs.length === 0) return;
+        for (const hook of beats) hook(runs);
+      },
+      onBeaten: (hook) => {
+        beats.push(hook);
       },
     });
   }),

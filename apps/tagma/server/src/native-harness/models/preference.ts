@@ -155,7 +155,7 @@ export const publishDefaultMoves = Effect.gen(function* () {
   const list = yield* ThreadList;
   yield* Stream.runForEach((yield* DefaultAccounts).defaultAccountMoved, (provider) =>
     Effect.forEach(
-      live.watchedAtRest(),
+      live.watched(),
       (threadId) =>
         threads.summary(threadId).pipe(
           Effect.flatMap((row) =>

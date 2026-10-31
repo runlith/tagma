@@ -6,7 +6,7 @@ import { liveOf } from '../../../settings/live.js';
 import { delegation } from '../../../threads/contract/wire/settings.js';
 import { republishOnMachineFlip } from '../../../threads/testing/doubles.js';
 
-it.effect('an observed machine flip republishes resting threads, deduplicates unchanged values and isolates a broken publisher', () =>
+it.effect('an observed machine flip republishes followed threads, deduplicates unchanged values and isolates a broken publisher', () =>
   Effect.gen(function* () {
     const live = liveOf(() => Effect.succeed([]));
     const settings = Context.get(yield* Layer.build(Layer.mock(Settings, { changes: live.changes })), Settings);
