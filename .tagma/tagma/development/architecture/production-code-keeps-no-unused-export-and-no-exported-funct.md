@@ -16075,14 +16075,6 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead packages/execution-host/src/posix/ProcessAbi.ts#SYMBOLS",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead packages/execution-host/src/posix/ProcessAbi.ts#Library",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "dead-code dead packages/execution-host/src/posix/Reactor.ts#ReactorUnavailable",
           "owner": "5a3bed29"
         },
@@ -16100,10 +16092,6 @@ fields:
         },
         {
           "fingerprint": "dead-code dead packages/execution-host/src/posix/TerminalThread.ts#isThreadTerminal",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead packages/execution-host/src/posix/UsageAbi.ts#USAGE_SYMBOLS",
           "owner": "5a3bed29"
         },
         {
@@ -16132,14 +16120,6 @@ fields:
         },
         {
           "fingerprint": "dead-code dead packages/execution-host/src/posix/native.ts#Reception",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead packages/execution-host/src/posix/programs.ts#Placed",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead packages/execution-host/src/posix/programs.ts#bundleOf",
           "owner": "5a3bed29"
         },
         {
@@ -16488,11 +16468,6 @@ fields:
         {
           "count": 2,
           "fingerprint": "dead-code dead packages/executions/src/protocol/evidence.ts#EvidenceRevision",
-          "owner": "5a3bed29"
-        },
-        {
-          "count": 2,
-          "fingerprint": "dead-code dead packages/executions/src/protocol/evidence.ts#MemoryKind",
           "owner": "5a3bed29"
         },
         {
