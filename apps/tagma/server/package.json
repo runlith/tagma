@@ -1271,6 +1271,1283 @@
       "types": "./src/threads/contract/wire/references.ts",
       "browser": "./src/threads/contract/wire/references.ts",
       "default": "./src/threads/contract/wire/references.ts"
+    },
+    "./activity/activity": {
+      "types": "./src/activity/activity.ts",
+      "bun": "./src/activity/activity.ts",
+      "default": null
+    },
+    "./activity/contract/service/place": {
+      "types": "./src/activity/contract/service/place.ts",
+      "bun": "./src/activity/contract/service/place.ts",
+      "default": null
+    },
+    "./activity/contract/wire/*": {
+      "types": "./src/activity/contract/wire/*.ts",
+      "bun": "./src/activity/contract/wire/*.ts",
+      "default": null
+    },
+    "./artifacts/*": {
+      "types": "./src/artifacts/*.ts",
+      "bun": "./src/artifacts/*.ts",
+      "default": null
+    },
+    "./artifacts/testing/*": null,
+    "./browser/browser": {
+      "types": "./src/browser/browser.ts",
+      "bun": "./src/browser/browser.ts",
+      "default": null
+    },
+    "./browser/contract/*": {
+      "types": "./src/browser/contract/*.ts",
+      "bun": "./src/browser/contract/*.ts",
+      "default": null
+    },
+    "./catalogs/*": {
+      "types": "./src/catalogs/*.ts",
+      "bun": "./src/catalogs/*.ts",
+      "default": null
+    },
+    "./catalogs/testing/*": null,
+    "./change-record/*": {
+      "types": "./src/change-record/*.ts",
+      "bun": "./src/change-record/*.ts",
+      "default": null
+    },
+    "./change-record/testing/*": null,
+    "./checkout-builds/*": {
+      "types": "./src/checkout-builds/*.ts",
+      "bun": "./src/checkout-builds/*.ts",
+      "default": null
+    },
+    "./checkout-builds/testing/*": null,
+    "./checkout-files/*": {
+      "types": "./src/checkout-files/*.ts",
+      "bun": "./src/checkout-files/*.ts",
+      "default": null
+    },
+    "./checkout-files/testing/*": null,
+    "./cli/cli": {
+      "types": "./src/cli/cli.ts",
+      "bun": "./src/cli/cli.ts",
+      "default": null
+    },
+    "./cli/contract/*": {
+      "types": "./src/cli/contract/*.ts",
+      "bun": "./src/cli/contract/*.ts",
+      "default": null
+    },
+    "./cli/door": {
+      "types": "./src/cli/door.ts",
+      "bun": "./src/cli/door.ts",
+      "default": null
+    },
+    "./cli/invoke": {
+      "types": "./src/cli/invoke.ts",
+      "bun": "./src/cli/invoke.ts",
+      "default": null
+    },
+    "./cli/live": {
+      "types": "./src/cli/live.ts",
+      "bun": "./src/cli/live.ts",
+      "default": null
+    },
+    "./cli/mcpTools": {
+      "types": "./src/cli/mcpTools.ts",
+      "bun": "./src/cli/mcpTools.ts",
+      "default": null
+    },
+    "./cli/verbs": {
+      "types": "./src/cli/verbs.ts",
+      "bun": "./src/cli/verbs.ts",
+      "default": null
+    },
+    "./commit-steps/commit-steps": {
+      "types": "./src/commit-steps/commit-steps.ts",
+      "bun": "./src/commit-steps/commit-steps.ts",
+      "default": null
+    },
+    "./commit-steps/contract/*": {
+      "types": "./src/commit-steps/contract/*.ts",
+      "bun": "./src/commit-steps/contract/*.ts",
+      "default": null
+    },
+    "./commit-steps/shape": {
+      "types": "./src/commit-steps/shape.ts",
+      "bun": "./src/commit-steps/shape.ts",
+      "default": null
+    },
+    "./composition/*": {
+      "types": "./src/composition/*.ts",
+      "bun": "./src/composition/*.ts",
+      "default": null
+    },
+    "./composition/testing/*": null,
+    "./config/config": {
+      "types": "./src/config/config.ts",
+      "bun": "./src/config/config.ts",
+      "default": null
+    },
+    "./config/contract/*": {
+      "types": "./src/config/contract/*.ts",
+      "bun": "./src/config/contract/*.ts",
+      "default": null
+    },
+    "./desktop-browser/contract/*": {
+      "types": "./src/desktop-browser/contract/*.ts",
+      "bun": "./src/desktop-browser/contract/*.ts",
+      "default": null
+    },
+    "./desktop-browser/desktop-browser": {
+      "types": "./src/desktop-browser/desktop-browser.ts",
+      "bun": "./src/desktop-browser/desktop-browser.ts",
+      "default": null
+    },
+    "./desktop-browser/door": {
+      "types": "./src/desktop-browser/door.ts",
+      "bun": "./src/desktop-browser/door.ts",
+      "default": null
+    },
+    "./editors/*": {
+      "types": "./src/editors/*.ts",
+      "bun": "./src/editors/*.ts",
+      "default": null
+    },
+    "./enforcement/cli": {
+      "types": "./src/enforcement/cli.ts",
+      "bun": "./src/enforcement/cli.ts",
+      "default": null
+    },
+    "./enforcement/cli/port": {
+      "types": "./src/enforcement/cli/port.ts",
+      "bun": "./src/enforcement/cli/port.ts",
+      "default": null
+    },
+    "./enforcement/commits/graphMerge": {
+      "types": "./src/enforcement/commits/graphMerge.ts",
+      "bun": "./src/enforcement/commits/graphMerge.ts",
+      "default": null
+    },
+    "./enforcement/commits/hooks": {
+      "types": "./src/enforcement/commits/hooks.ts",
+      "bun": "./src/enforcement/commits/hooks.ts",
+      "default": null
+    },
+    "./enforcement/commits/queue": {
+      "types": "./src/enforcement/commits/queue.ts",
+      "bun": "./src/enforcement/commits/queue.ts",
+      "default": null
+    },
+    "./enforcement/contract/*": {
+      "types": "./src/enforcement/contract/*.ts",
+      "bun": "./src/enforcement/contract/*.ts",
+      "default": null
+    },
+    "./enforcement/enforcement": {
+      "types": "./src/enforcement/enforcement.ts",
+      "bun": "./src/enforcement/enforcement.ts",
+      "default": null
+    },
+    "./enforcement/operationChecks": {
+      "types": "./src/enforcement/operationChecks.ts",
+      "bun": "./src/enforcement/operationChecks.ts",
+      "default": null
+    },
+    "./enforcement/rules/law": {
+      "types": "./src/enforcement/rules/law.ts",
+      "bun": "./src/enforcement/rules/law.ts",
+      "default": null
+    },
+    "./enforcement/serving": {
+      "types": "./src/enforcement/serving.ts",
+      "bun": "./src/enforcement/serving.ts",
+      "default": null
+    },
+    "./executions/assembly": {
+      "types": "./src/executions/assembly.ts",
+      "bun": "./src/executions/assembly.ts",
+      "default": null
+    },
+    "./executions/cli": {
+      "types": "./src/executions/cli.ts",
+      "bun": "./src/executions/cli.ts",
+      "default": null
+    },
+    "./executions/commands/outputTail": {
+      "types": "./src/executions/commands/outputTail.ts",
+      "bun": "./src/executions/commands/outputTail.ts",
+      "default": null
+    },
+    "./executions/commands/ruleResolution": {
+      "types": "./src/executions/commands/ruleResolution.ts",
+      "bun": "./src/executions/commands/ruleResolution.ts",
+      "default": null
+    },
+    "./executions/commands/times": {
+      "types": "./src/executions/commands/times.ts",
+      "bun": "./src/executions/commands/times.ts",
+      "default": null
+    },
+    "./executions/contract/*": {
+      "types": "./src/executions/contract/*.ts",
+      "bun": "./src/executions/contract/*.ts",
+      "default": null
+    },
+    "./executions/executions": {
+      "types": "./src/executions/executions.ts",
+      "bun": "./src/executions/executions.ts",
+      "default": null
+    },
+    "./executions/host/environmentBackend": {
+      "types": "./src/executions/host/environmentBackend.ts",
+      "bun": "./src/executions/host/environmentBackend.ts",
+      "default": null
+    },
+    "./executions/host/offer": {
+      "types": "./src/executions/host/offer.ts",
+      "bun": "./src/executions/host/offer.ts",
+      "default": null
+    },
+    "./executions/host/staying": {
+      "types": "./src/executions/host/staying.ts",
+      "bun": "./src/executions/host/staying.ts",
+      "default": null
+    },
+    "./executions/operations/commandRules": {
+      "types": "./src/executions/operations/commandRules.ts",
+      "bun": "./src/executions/operations/commandRules.ts",
+      "default": null
+    },
+    "./executions/ports": {
+      "types": "./src/executions/ports.ts",
+      "bun": "./src/executions/ports.ts",
+      "default": null
+    },
+    "./executions/store/standingRules": {
+      "types": "./src/executions/store/standingRules.ts",
+      "bun": "./src/executions/store/standingRules.ts",
+      "default": null
+    },
+    "./executions/store/terminal": {
+      "types": "./src/executions/store/terminal.ts",
+      "bun": "./src/executions/store/terminal.ts",
+      "default": null
+    },
+    "./executions/terminals/principals": {
+      "types": "./src/executions/terminals/principals.ts",
+      "bun": "./src/executions/terminals/principals.ts",
+      "default": null
+    },
+    "./executions/terminals/refusal": {
+      "types": "./src/executions/terminals/refusal.ts",
+      "bun": "./src/executions/terminals/refusal.ts",
+      "default": null
+    },
+    "./executions/terminals/subjectPolicy": {
+      "types": "./src/executions/terminals/subjectPolicy.ts",
+      "bun": "./src/executions/terminals/subjectPolicy.ts",
+      "default": null
+    },
+    "./executions/worlds/machine": {
+      "types": "./src/executions/worlds/machine.ts",
+      "bun": "./src/executions/worlds/machine.ts",
+      "default": null
+    },
+    "./external-harnesses/accounts/cli": {
+      "types": "./src/external-harnesses/accounts/cli.ts",
+      "bun": "./src/external-harnesses/accounts/cli.ts",
+      "default": null
+    },
+    "./external-harnesses/adapter/declared": {
+      "types": "./src/external-harnesses/adapter/declared.ts",
+      "bun": "./src/external-harnesses/adapter/declared.ts",
+      "default": null
+    },
+    "./external-harnesses/adapter/hookFormat": {
+      "types": "./src/external-harnesses/adapter/hookFormat.ts",
+      "bun": "./src/external-harnesses/adapter/hookFormat.ts",
+      "default": null
+    },
+    "./external-harnesses/adapters": {
+      "types": "./src/external-harnesses/adapters.ts",
+      "bun": "./src/external-harnesses/adapters.ts",
+      "default": null
+    },
+    "./external-harnesses/assembly": {
+      "types": "./src/external-harnesses/assembly.ts",
+      "bun": "./src/external-harnesses/assembly.ts",
+      "default": null
+    },
+    "./external-harnesses/birth/installed": {
+      "types": "./src/external-harnesses/birth/installed.ts",
+      "bun": "./src/external-harnesses/birth/installed.ts",
+      "default": null
+    },
+    "./external-harnesses/cli": {
+      "types": "./src/external-harnesses/cli.ts",
+      "bun": "./src/external-harnesses/cli.ts",
+      "default": null
+    },
+    "./external-harnesses/contract/*": {
+      "types": "./src/external-harnesses/contract/*.ts",
+      "bun": "./src/external-harnesses/contract/*.ts",
+      "default": null
+    },
+    "./external-harnesses/contribution": {
+      "types": "./src/external-harnesses/contribution.ts",
+      "bun": "./src/external-harnesses/contribution.ts",
+      "default": null
+    },
+    "./external-harnesses/external-harnesses": {
+      "types": "./src/external-harnesses/external-harnesses.ts",
+      "bun": "./src/external-harnesses/external-harnesses.ts",
+      "default": null
+    },
+    "./external-harnesses/hooks/rows": {
+      "types": "./src/external-harnesses/hooks/rows.ts",
+      "bun": "./src/external-harnesses/hooks/rows.ts",
+      "default": null
+    },
+    "./external-harnesses/installs/law": {
+      "types": "./src/external-harnesses/installs/law.ts",
+      "bun": "./src/external-harnesses/installs/law.ts",
+      "default": null
+    },
+    "./external-harnesses/installs/mcpDeclaration": {
+      "types": "./src/external-harnesses/installs/mcpDeclaration.ts",
+      "bun": "./src/external-harnesses/installs/mcpDeclaration.ts",
+      "default": null
+    },
+    "./external-harnesses/installs/render": {
+      "types": "./src/external-harnesses/installs/render.ts",
+      "bun": "./src/external-harnesses/installs/render.ts",
+      "default": null
+    },
+    "./external-harnesses/installs/skillInstall": {
+      "types": "./src/external-harnesses/installs/skillInstall.ts",
+      "bun": "./src/external-harnesses/installs/skillInstall.ts",
+      "default": null
+    },
+    "./external-harnesses/installs/statusOperation": {
+      "types": "./src/external-harnesses/installs/statusOperation.ts",
+      "bun": "./src/external-harnesses/installs/statusOperation.ts",
+      "default": null
+    },
+    "./external-harnesses/installs/targets": {
+      "types": "./src/external-harnesses/installs/targets.ts",
+      "bun": "./src/external-harnesses/installs/targets.ts",
+      "default": null
+    },
+    "./external-harnesses/installs/upgrade": {
+      "types": "./src/external-harnesses/installs/upgrade.ts",
+      "bun": "./src/external-harnesses/installs/upgrade.ts",
+      "default": null
+    },
+    "./external-harnesses/metadata/harnessMetadata": {
+      "types": "./src/external-harnesses/metadata/harnessMetadata.ts",
+      "bun": "./src/external-harnesses/metadata/harnessMetadata.ts",
+      "default": null
+    },
+    "./external-harnesses/operations": {
+      "types": "./src/external-harnesses/operations.ts",
+      "bun": "./src/external-harnesses/operations.ts",
+      "default": null
+    },
+    "./external-harnesses/programs/asks": {
+      "types": "./src/external-harnesses/programs/asks.ts",
+      "bun": "./src/external-harnesses/programs/asks.ts",
+      "default": null
+    },
+    "./external-harnesses/rollout": {
+      "types": "./src/external-harnesses/rollout.ts",
+      "bun": "./src/external-harnesses/rollout.ts",
+      "default": null
+    },
+    "./external-harnesses/sessionPrefix": {
+      "types": "./src/external-harnesses/sessionPrefix.ts",
+      "bun": "./src/external-harnesses/sessionPrefix.ts",
+      "default": null
+    },
+    "./external-harnesses/sessionResolution": {
+      "types": "./src/external-harnesses/sessionResolution.ts",
+      "bun": "./src/external-harnesses/sessionResolution.ts",
+      "default": null
+    },
+    "./external-harnesses/sessions/speech": {
+      "types": "./src/external-harnesses/sessions/speech.ts",
+      "bun": "./src/external-harnesses/sessions/speech.ts",
+      "default": null
+    },
+    "./external-harnesses/store/packages": {
+      "types": "./src/external-harnesses/store/packages.ts",
+      "bun": "./src/external-harnesses/store/packages.ts",
+      "default": null
+    },
+    "./external-harnesses/titles": {
+      "types": "./src/external-harnesses/titles.ts",
+      "bun": "./src/external-harnesses/titles.ts",
+      "default": null
+    },
+    "./graph/*": {
+      "types": "./src/graph/*.ts",
+      "bun": "./src/graph/*.ts",
+      "default": null
+    },
+    "./graph/testing/*": null,
+    "./http/*": {
+      "types": "./src/http/*.ts",
+      "bun": "./src/http/*.ts",
+      "default": null
+    },
+    "./images/contract/*": {
+      "types": "./src/images/contract/*.ts",
+      "bun": "./src/images/contract/*.ts",
+      "default": null
+    },
+    "./images/images": {
+      "types": "./src/images/images.ts",
+      "bun": "./src/images/images.ts",
+      "default": null
+    },
+    "./installation/*": {
+      "types": "./src/installation/*.ts",
+      "bun": "./src/installation/*.ts",
+      "default": null
+    },
+    "./installation/testing/*": null,
+    "./invocation/assembly": {
+      "types": "./src/invocation/assembly.ts",
+      "bun": "./src/invocation/assembly.ts",
+      "default": null
+    },
+    "./invocation/contract/*": {
+      "types": "./src/invocation/contract/*.ts",
+      "bun": "./src/invocation/contract/*.ts",
+      "default": null
+    },
+    "./invocation/invocation": {
+      "types": "./src/invocation/invocation.ts",
+      "bun": "./src/invocation/invocation.ts",
+      "default": null
+    },
+    "./invocation/presentation": {
+      "types": "./src/invocation/presentation.ts",
+      "bun": "./src/invocation/presentation.ts",
+      "default": null
+    },
+    "./invocation/registry": {
+      "types": "./src/invocation/registry.ts",
+      "bun": "./src/invocation/registry.ts",
+      "default": null
+    },
+    "./landing/assembly": {
+      "types": "./src/landing/assembly.ts",
+      "bun": "./src/landing/assembly.ts",
+      "default": null
+    },
+    "./landing/contract/*": {
+      "types": "./src/landing/contract/*.ts",
+      "bun": "./src/landing/contract/*.ts",
+      "default": null
+    },
+    "./landing/graphSync": {
+      "types": "./src/landing/graphSync.ts",
+      "bun": "./src/landing/graphSync.ts",
+      "default": null
+    },
+    "./landing/landing": {
+      "types": "./src/landing/landing.ts",
+      "bun": "./src/landing/landing.ts",
+      "default": null
+    },
+    "./mac-editors/*": {
+      "types": "./src/mac-editors/*.ts",
+      "bun": "./src/mac-editors/*.ts",
+      "default": null
+    },
+    "./mac-user-environment/*": {
+      "types": "./src/mac-user-environment/*.ts",
+      "bun": "./src/mac-user-environment/*.ts",
+      "default": null
+    },
+    "./managed-browser/contract/*": {
+      "types": "./src/managed-browser/contract/*.ts",
+      "bun": "./src/managed-browser/contract/*.ts",
+      "default": null
+    },
+    "./managed-browser/managed-browser": {
+      "types": "./src/managed-browser/managed-browser.ts",
+      "bun": "./src/managed-browser/managed-browser.ts",
+      "default": null
+    },
+    "./marketplaces/contract/*": {
+      "types": "./src/marketplaces/contract/*.ts",
+      "bun": "./src/marketplaces/contract/*.ts",
+      "default": null
+    },
+    "./marketplaces/marketplaces": {
+      "types": "./src/marketplaces/marketplaces.ts",
+      "bun": "./src/marketplaces/marketplaces.ts",
+      "default": null
+    },
+    "./mcp/*": {
+      "types": "./src/mcp/*.ts",
+      "bun": "./src/mcp/*.ts",
+      "default": null
+    },
+    "./mcp/testing/*": null,
+    "./native-harness/assembly": {
+      "types": "./src/native-harness/assembly.ts",
+      "bun": "./src/native-harness/assembly.ts",
+      "default": null
+    },
+    "./native-harness/calls/channel": {
+      "types": "./src/native-harness/calls/channel.ts",
+      "bun": "./src/native-harness/calls/channel.ts",
+      "default": null
+    },
+    "./native-harness/cli": {
+      "types": "./src/native-harness/cli.ts",
+      "bun": "./src/native-harness/cli.ts",
+      "default": null
+    },
+    "./native-harness/contract/*": {
+      "types": "./src/native-harness/contract/*.ts",
+      "bun": "./src/native-harness/contract/*.ts",
+      "default": null
+    },
+    "./native-harness/kernel": {
+      "types": "./src/native-harness/kernel.ts",
+      "bun": "./src/native-harness/kernel.ts",
+      "default": null
+    },
+    "./native-harness/models/defaultSelection": {
+      "types": "./src/native-harness/models/defaultSelection.ts",
+      "bun": "./src/native-harness/models/defaultSelection.ts",
+      "default": null
+    },
+    "./native-harness/native-harness": {
+      "types": "./src/native-harness/native-harness.ts",
+      "bun": "./src/native-harness/native-harness.ts",
+      "default": null
+    },
+    "./native-harness/row": {
+      "types": "./src/native-harness/row.ts",
+      "bun": "./src/native-harness/row.ts",
+      "default": null
+    },
+    "./native-harness/tools/projection": {
+      "types": "./src/native-harness/tools/projection.ts",
+      "bun": "./src/native-harness/tools/projection.ts",
+      "default": null
+    },
+    "./native-harness/transcript/foldServer": {
+      "types": "./src/native-harness/transcript/foldServer.ts",
+      "bun": "./src/native-harness/transcript/foldServer.ts",
+      "default": null
+    },
+    "./native-harness/turns/context": {
+      "types": "./src/native-harness/turns/context.ts",
+      "bun": "./src/native-harness/turns/context.ts",
+      "default": null
+    },
+    "./native-harness/turns/instructions": {
+      "types": "./src/native-harness/turns/instructions.ts",
+      "bun": "./src/native-harness/turns/instructions.ts",
+      "default": null
+    },
+    "./native-harness/turns/runWebs": {
+      "types": "./src/native-harness/turns/runWebs.ts",
+      "bun": "./src/native-harness/turns/runWebs.ts",
+      "default": null
+    },
+    "./navigation/contract/*": {
+      "types": "./src/navigation/contract/*.ts",
+      "bun": "./src/navigation/contract/*.ts",
+      "default": null
+    },
+    "./navigation/navigation": {
+      "types": "./src/navigation/navigation.ts",
+      "bun": "./src/navigation/navigation.ts",
+      "default": null
+    },
+    "./notify/contract/*": {
+      "types": "./src/notify/contract/*.ts",
+      "bun": "./src/notify/contract/*.ts",
+      "default": null
+    },
+    "./notify/notify": {
+      "types": "./src/notify/notify.ts",
+      "bun": "./src/notify/notify.ts",
+      "default": null
+    },
+    "./notify/receiving": {
+      "types": "./src/notify/receiving.ts",
+      "bun": "./src/notify/receiving.ts",
+      "default": null
+    },
+    "./page-render/layer": {
+      "types": "./src/page-render/layer.ts",
+      "bun": "./src/page-render/layer.ts",
+      "default": null
+    },
+    "./page-render/page-render": {
+      "types": "./src/page-render/page-render.ts",
+      "bun": "./src/page-render/page-render.ts",
+      "default": null
+    },
+    "./path-editors/*": {
+      "types": "./src/path-editors/*.ts",
+      "bun": "./src/path-editors/*.ts",
+      "default": null
+    },
+    "./performance/contract/service/measurement": {
+      "types": "./src/performance/contract/service/measurement.ts",
+      "bun": "./src/performance/contract/service/measurement.ts",
+      "default": null
+    },
+    "./performance/contract/service/place": {
+      "types": "./src/performance/contract/service/place.ts",
+      "bun": "./src/performance/contract/service/place.ts",
+      "default": null
+    },
+    "./performance/contract/wire/*": {
+      "types": "./src/performance/contract/wire/*.ts",
+      "bun": "./src/performance/contract/wire/*.ts",
+      "default": null
+    },
+    "./performance/performance": {
+      "types": "./src/performance/performance.ts",
+      "bun": "./src/performance/performance.ts",
+      "default": null
+    },
+    "./performance/reads": {
+      "types": "./src/performance/reads.ts",
+      "bun": "./src/performance/reads.ts",
+      "default": null
+    },
+    "./platform/*": {
+      "types": "./src/platform/*.ts",
+      "bun": "./src/platform/*.ts",
+      "default": null
+    },
+    "./platform/testing/*": null,
+    "./plugin-formats/agent-plugins/format": {
+      "types": "./src/plugin-formats/agent-plugins/format.ts",
+      "bun": "./src/plugin-formats/agent-plugins/format.ts",
+      "default": null
+    },
+    "./plugin-formats/agent-plugins/portable": {
+      "types": "./src/plugin-formats/agent-plugins/portable.ts",
+      "bun": "./src/plugin-formats/agent-plugins/portable.ts",
+      "default": null
+    },
+    "./plugin-formats/claude-code/format": {
+      "types": "./src/plugin-formats/claude-code/format.ts",
+      "bun": "./src/plugin-formats/claude-code/format.ts",
+      "default": null
+    },
+    "./plugin-formats/claude-code/list": {
+      "types": "./src/plugin-formats/claude-code/list.ts",
+      "bun": "./src/plugin-formats/claude-code/list.ts",
+      "default": null
+    },
+    "./plugin-formats/codex/format": {
+      "types": "./src/plugin-formats/codex/format.ts",
+      "bun": "./src/plugin-formats/codex/format.ts",
+      "default": null
+    },
+    "./plugin-formats/codex/list": {
+      "types": "./src/plugin-formats/codex/list.ts",
+      "bun": "./src/plugin-formats/codex/list.ts",
+      "default": null
+    },
+    "./plugins/contract/*": {
+      "types": "./src/plugins/contract/*.ts",
+      "bun": "./src/plugins/contract/*.ts",
+      "default": null
+    },
+    "./plugins/plugins": {
+      "types": "./src/plugins/plugins.ts",
+      "bun": "./src/plugins/plugins.ts",
+      "default": null
+    },
+    "./plugins/servers": {
+      "types": "./src/plugins/servers.ts",
+      "bun": "./src/plugins/servers.ts",
+      "default": null
+    },
+    "./power/*": {
+      "types": "./src/power/*.ts",
+      "bun": "./src/power/*.ts",
+      "default": null
+    },
+    "./power/testing/*": null,
+    "./projects/cli": {
+      "types": "./src/projects/cli.ts",
+      "bun": "./src/projects/cli.ts",
+      "default": null
+    },
+    "./projects/contract/*": {
+      "types": "./src/projects/contract/*.ts",
+      "bun": "./src/projects/contract/*.ts",
+      "default": null
+    },
+    "./projects/identity": {
+      "types": "./src/projects/identity.ts",
+      "bun": "./src/projects/identity.ts",
+      "default": null
+    },
+    "./projects/projects": {
+      "types": "./src/projects/projects.ts",
+      "bun": "./src/projects/projects.ts",
+      "default": null
+    },
+    "./projects/reach": {
+      "types": "./src/projects/reach.ts",
+      "bun": "./src/projects/reach.ts",
+      "default": null
+    },
+    "./projects/registration": {
+      "types": "./src/projects/registration.ts",
+      "bun": "./src/projects/registration.ts",
+      "default": null
+    },
+    "./projects/resolution": {
+      "types": "./src/projects/resolution.ts",
+      "bun": "./src/projects/resolution.ts",
+      "default": null
+    },
+    "./projects/store/restore": {
+      "types": "./src/projects/store/restore.ts",
+      "bun": "./src/projects/store/restore.ts",
+      "default": null
+    },
+    "./projects/store/table": {
+      "types": "./src/projects/store/table.ts",
+      "bun": "./src/projects/store/table.ts",
+      "default": null
+    },
+    "./providers/*": {
+      "types": "./src/providers/*.ts",
+      "bun": "./src/providers/*.ts",
+      "default": null
+    },
+    "./providers/testing/*": null,
+    "./push/contract/*": {
+      "types": "./src/push/contract/*.ts",
+      "bun": "./src/push/contract/*.ts",
+      "default": null
+    },
+    "./push/push": {
+      "types": "./src/push/push.ts",
+      "bun": "./src/push/push.ts",
+      "default": null
+    },
+    "./push/webpush/send": {
+      "types": "./src/push/webpush/send.ts",
+      "bun": "./src/push/webpush/send.ts",
+      "default": null
+    },
+    "./reflections/*": {
+      "types": "./src/reflections/*.ts",
+      "bun": "./src/reflections/*.ts",
+      "default": null
+    },
+    "./release-channel/*": {
+      "types": "./src/release-channel/*.ts",
+      "bun": "./src/release-channel/*.ts",
+      "default": null
+    },
+    "./release-channel/testing/*": null,
+    "./remote/contract/*": {
+      "types": "./src/remote/contract/*.ts",
+      "bun": "./src/remote/contract/*.ts",
+      "default": null
+    },
+    "./remote/remote": {
+      "types": "./src/remote/remote.ts",
+      "bun": "./src/remote/remote.ts",
+      "default": null
+    },
+    "./remote/tailscale/serve": {
+      "types": "./src/remote/tailscale/serve.ts",
+      "bun": "./src/remote/tailscale/serve.ts",
+      "default": null
+    },
+    "./sandbox/*": {
+      "types": "./src/sandbox/*.ts",
+      "bun": "./src/sandbox/*.ts",
+      "default": null
+    },
+    "./sandbox/testing/*": null,
+    "./schedule/contract/*": {
+      "types": "./src/schedule/contract/*.ts",
+      "bun": "./src/schedule/contract/*.ts",
+      "default": null
+    },
+    "./schedule/receiving": {
+      "types": "./src/schedule/receiving.ts",
+      "bun": "./src/schedule/receiving.ts",
+      "default": null
+    },
+    "./schedule/schedule": {
+      "types": "./src/schedule/schedule.ts",
+      "bun": "./src/schedule/schedule.ts",
+      "default": null
+    },
+    "./secrets/contract/*": {
+      "types": "./src/secrets/contract/*.ts",
+      "bun": "./src/secrets/contract/*.ts",
+      "default": null
+    },
+    "./secrets/secrets": {
+      "types": "./src/secrets/secrets.ts",
+      "bun": "./src/secrets/secrets.ts",
+      "default": null
+    },
+    "./settings/*": {
+      "types": "./src/settings/*.ts",
+      "bun": "./src/settings/*.ts",
+      "default": null
+    },
+    "./settings/testing/*": null,
+    "./socket/*": {
+      "types": "./src/socket/*.ts",
+      "bun": "./src/socket/*.ts",
+      "default": null
+    },
+    "./speech/*": {
+      "types": "./src/speech/*.ts",
+      "bun": "./src/speech/*.ts",
+      "default": null
+    },
+    "./tagma-apps/contract/*": {
+      "types": "./src/tagma-apps/contract/*.ts",
+      "bun": "./src/tagma-apps/contract/*.ts",
+      "default": null
+    },
+    "./tagma-apps/tagma-apps": {
+      "types": "./src/tagma-apps/tagma-apps.ts",
+      "bun": "./src/tagma-apps/tagma-apps.ts",
+      "default": null
+    },
+    "./thread-record/*": {
+      "types": "./src/thread-record/*.ts",
+      "bun": "./src/thread-record/*.ts",
+      "default": null
+    },
+    "./thread-record/testing/*": null,
+    "./threads/assembly": {
+      "types": "./src/threads/assembly.ts",
+      "bun": "./src/threads/assembly.ts",
+      "default": null
+    },
+    "./threads/birth/acts": {
+      "types": "./src/threads/birth/acts.ts",
+      "bun": "./src/threads/birth/acts.ts",
+      "default": null
+    },
+    "./threads/birth/delegation": {
+      "types": "./src/threads/birth/delegation.ts",
+      "bun": "./src/threads/birth/delegation.ts",
+      "default": null
+    },
+    "./threads/birth/placement": {
+      "types": "./src/threads/birth/placement.ts",
+      "bun": "./src/threads/birth/placement.ts",
+      "default": null
+    },
+    "./threads/birth/projectGate": {
+      "types": "./src/threads/birth/projectGate.ts",
+      "bun": "./src/threads/birth/projectGate.ts",
+      "default": null
+    },
+    "./threads/cli": {
+      "types": "./src/threads/cli.ts",
+      "bun": "./src/threads/cli.ts",
+      "default": null
+    },
+    "./threads/cli/turnVerbs": {
+      "types": "./src/threads/cli/turnVerbs.ts",
+      "bun": "./src/threads/cli/turnVerbs.ts",
+      "default": null
+    },
+    "./threads/contract/*": {
+      "types": "./src/threads/contract/*.ts",
+      "bun": "./src/threads/contract/*.ts",
+      "default": null
+    },
+    "./threads/doctrine/assemblies": {
+      "types": "./src/threads/doctrine/assemblies.ts",
+      "bun": "./src/threads/doctrine/assemblies.ts",
+      "default": null
+    },
+    "./threads/doctrine/registry": {
+      "types": "./src/threads/doctrine/registry.ts",
+      "bun": "./src/threads/doctrine/registry.ts",
+      "default": null
+    },
+    "./threads/doctrine/render": {
+      "types": "./src/threads/doctrine/render.ts",
+      "bun": "./src/threads/doctrine/render.ts",
+      "default": null
+    },
+    "./threads/harness/engine": {
+      "types": "./src/threads/harness/engine.ts",
+      "bun": "./src/threads/harness/engine.ts",
+      "default": null
+    },
+    "./threads/journal/base": {
+      "types": "./src/threads/journal/base.ts",
+      "bun": "./src/threads/journal/base.ts",
+      "default": null
+    },
+    "./threads/journal/conversationIndex": {
+      "types": "./src/threads/journal/conversationIndex.ts",
+      "bun": "./src/threads/journal/conversationIndex.ts",
+      "default": null
+    },
+    "./threads/journal/foldedFacts": {
+      "types": "./src/threads/journal/foldedFacts.ts",
+      "bun": "./src/threads/journal/foldedFacts.ts",
+      "default": null
+    },
+    "./threads/journal/formSteps": {
+      "types": "./src/threads/journal/formSteps.ts",
+      "bun": "./src/threads/journal/formSteps.ts",
+      "default": null
+    },
+    "./threads/journal/lane": {
+      "types": "./src/threads/journal/lane.ts",
+      "bun": "./src/threads/journal/lane.ts",
+      "default": null
+    },
+    "./threads/journal/log": {
+      "types": "./src/threads/journal/log.ts",
+      "bun": "./src/threads/journal/log.ts",
+      "default": null
+    },
+    "./threads/journal/restedReads": {
+      "types": "./src/threads/journal/restedReads.ts",
+      "bun": "./src/threads/journal/restedReads.ts",
+      "default": null
+    },
+    "./threads/journal/rolloutCarry": {
+      "types": "./src/threads/journal/rolloutCarry.ts",
+      "bun": "./src/threads/journal/rolloutCarry.ts",
+      "default": null
+    },
+    "./threads/journal/rolloutFile": {
+      "types": "./src/threads/journal/rolloutFile.ts",
+      "bun": "./src/threads/journal/rolloutFile.ts",
+      "default": null
+    },
+    "./threads/journal/rolloutMeta": {
+      "types": "./src/threads/journal/rolloutMeta.ts",
+      "bun": "./src/threads/journal/rolloutMeta.ts",
+      "default": null
+    },
+    "./threads/journal/rolloutStaging": {
+      "types": "./src/threads/journal/rolloutStaging.ts",
+      "bun": "./src/threads/journal/rolloutStaging.ts",
+      "default": null
+    },
+    "./threads/library/declared": {
+      "types": "./src/threads/library/declared.ts",
+      "bun": "./src/threads/library/declared.ts",
+      "default": null
+    },
+    "./threads/library/types": {
+      "types": "./src/threads/library/types.ts",
+      "bun": "./src/threads/library/types.ts",
+      "default": null
+    },
+    "./threads/lifetime": {
+      "types": "./src/threads/lifetime.ts",
+      "bun": "./src/threads/lifetime.ts",
+      "default": null
+    },
+    "./threads/list/basis": {
+      "types": "./src/threads/list/basis.ts",
+      "bun": "./src/threads/list/basis.ts",
+      "default": null
+    },
+    "./threads/list/feeds": {
+      "types": "./src/threads/list/feeds.ts",
+      "bun": "./src/threads/list/feeds.ts",
+      "default": null
+    },
+    "./threads/list/said": {
+      "types": "./src/threads/list/said.ts",
+      "bun": "./src/threads/list/said.ts",
+      "default": null
+    },
+    "./threads/list/summary": {
+      "types": "./src/threads/list/summary.ts",
+      "bun": "./src/threads/list/summary.ts",
+      "default": null
+    },
+    "./threads/list/threadList": {
+      "types": "./src/threads/list/threadList.ts",
+      "bun": "./src/threads/list/threadList.ts",
+      "default": null
+    },
+    "./threads/list/warmth": {
+      "types": "./src/threads/list/warmth.ts",
+      "bun": "./src/threads/list/warmth.ts",
+      "default": null
+    },
+    "./threads/list/wire": {
+      "types": "./src/threads/list/wire.ts",
+      "bun": "./src/threads/list/wire.ts",
+      "default": null
+    },
+    "./threads/mandate": {
+      "types": "./src/threads/mandate.ts",
+      "bun": "./src/threads/mandate.ts",
+      "default": null
+    },
+    "./threads/naming/titles": {
+      "types": "./src/threads/naming/titles.ts",
+      "bun": "./src/threads/naming/titles.ts",
+      "default": null
+    },
+    "./threads/operations/agents": {
+      "types": "./src/threads/operations/agents.ts",
+      "bun": "./src/threads/operations/agents.ts",
+      "default": null
+    },
+    "./threads/projectGate": {
+      "types": "./src/threads/projectGate.ts",
+      "bun": "./src/threads/projectGate.ts",
+      "default": null
+    },
+    "./threads/refusalAnswers": {
+      "types": "./src/threads/refusalAnswers.ts",
+      "bun": "./src/threads/refusalAnswers.ts",
+      "default": null
+    },
+    "./threads/refusals": {
+      "types": "./src/threads/refusals.ts",
+      "bun": "./src/threads/refusals.ts",
+      "default": null
+    },
+    "./threads/resources/attachments": {
+      "types": "./src/threads/resources/attachments.ts",
+      "bun": "./src/threads/resources/attachments.ts",
+      "default": null
+    },
+    "./threads/resources/kinds/evict": {
+      "types": "./src/threads/resources/kinds/evict.ts",
+      "bun": "./src/threads/resources/kinds/evict.ts",
+      "default": null
+    },
+    "./threads/resources/sandbox": {
+      "types": "./src/threads/resources/sandbox.ts",
+      "bun": "./src/threads/resources/sandbox.ts",
+      "default": null
+    },
+    "./threads/resources/scratch": {
+      "types": "./src/threads/resources/scratch.ts",
+      "bun": "./src/threads/resources/scratch.ts",
+      "default": null
+    },
+    "./threads/rest": {
+      "types": "./src/threads/rest.ts",
+      "bun": "./src/threads/rest.ts",
+      "default": null
+    },
+    "./threads/store/approvals": {
+      "types": "./src/threads/store/approvals.ts",
+      "bun": "./src/threads/store/approvals.ts",
+      "default": null
+    },
+    "./threads/store/calls": {
+      "types": "./src/threads/store/calls.ts",
+      "bun": "./src/threads/store/calls.ts",
+      "default": null
+    },
+    "./threads/store/fields": {
+      "types": "./src/threads/store/fields.ts",
+      "bun": "./src/threads/store/fields.ts",
+      "default": null
+    },
+    "./threads/store/harnessFacet": {
+      "types": "./src/threads/store/harnessFacet.ts",
+      "bun": "./src/threads/store/harnessFacet.ts",
+      "default": null
+    },
+    "./threads/store/harnessSpend": {
+      "types": "./src/threads/store/harnessSpend.ts",
+      "bun": "./src/threads/store/harnessSpend.ts",
+      "default": null
+    },
+    "./threads/store/inbox": {
+      "types": "./src/threads/store/inbox.ts",
+      "bun": "./src/threads/store/inbox.ts",
+      "default": null
+    },
+    "./threads/store/journal": {
+      "types": "./src/threads/store/journal.ts",
+      "bun": "./src/threads/store/journal.ts",
+      "default": null
+    },
+    "./threads/store/kernel": {
+      "types": "./src/threads/store/kernel.ts",
+      "bun": "./src/threads/store/kernel.ts",
+      "default": null
+    },
+    "./threads/store/mandate": {
+      "types": "./src/threads/store/mandate.ts",
+      "bun": "./src/threads/store/mandate.ts",
+      "default": null
+    },
+    "./threads/store/resources": {
+      "types": "./src/threads/store/resources.ts",
+      "bun": "./src/threads/store/resources.ts",
+      "default": null
+    },
+    "./threads/store/seat": {
+      "types": "./src/threads/store/seat.ts",
+      "bun": "./src/threads/store/seat.ts",
+      "default": null
+    },
+    "./threads/store/sessionLookups": {
+      "types": "./src/threads/store/sessionLookups.ts",
+      "bun": "./src/threads/store/sessionLookups.ts",
+      "default": null
+    },
+    "./threads/store/tables": {
+      "types": "./src/threads/store/tables.ts",
+      "bun": "./src/threads/store/tables.ts",
+      "default": null
+    },
+    "./threads/store/workflow": {
+      "types": "./src/threads/store/workflow.ts",
+      "bun": "./src/threads/store/workflow.ts",
+      "default": null
+    },
+    "./threads/teardown": {
+      "types": "./src/threads/teardown.ts",
+      "bun": "./src/threads/teardown.ts",
+      "default": null
+    },
+    "./threads/threads": {
+      "types": "./src/threads/threads.ts",
+      "bun": "./src/threads/threads.ts",
+      "default": null
+    },
+    "./threads/turns/acts": {
+      "types": "./src/threads/turns/acts.ts",
+      "bun": "./src/threads/turns/acts.ts",
+      "default": null
+    },
+    "./threads/turns/reader": {
+      "types": "./src/threads/turns/reader.ts",
+      "bun": "./src/threads/turns/reader.ts",
+      "default": null
+    },
+    "./threads/voice/rowDetail": {
+      "types": "./src/threads/voice/rowDetail.ts",
+      "bun": "./src/threads/voice/rowDetail.ts",
+      "default": null
+    },
+    "./threads/working": {
+      "types": "./src/threads/working.ts",
+      "bun": "./src/threads/working.ts",
+      "default": null
+    },
+    "./threads/worlds": {
+      "types": "./src/threads/worlds.ts",
+      "bun": "./src/threads/worlds.ts",
+      "default": null
+    },
+    "./translations/contract/*": {
+      "types": "./src/translations/contract/*.ts",
+      "bun": "./src/translations/contract/*.ts",
+      "default": null
+    },
+    "./translations/translations": {
+      "types": "./src/translations/translations.ts",
+      "bun": "./src/translations/translations.ts",
+      "default": null
+    },
+    "./views/contract/*": {
+      "types": "./src/views/contract/*.ts",
+      "bun": "./src/views/contract/*.ts",
+      "default": null
+    },
+    "./views/files": {
+      "types": "./src/views/files.ts",
+      "bun": "./src/views/files.ts",
+      "default": null
+    },
+    "./views/views": {
+      "types": "./src/views/views.ts",
+      "bun": "./src/views/views.ts",
+      "default": null
+    },
+    "./workspace/*": {
+      "types": "./src/workspace/*.ts",
+      "bun": "./src/workspace/*.ts",
+      "default": null
+    },
+    "./workspace/testing/*": null,
+    "./worktrees/assembly": {
+      "types": "./src/worktrees/assembly.ts",
+      "bun": "./src/worktrees/assembly.ts",
+      "default": null
+    },
+    "./worktrees/contract/*": {
+      "types": "./src/worktrees/contract/*.ts",
+      "bun": "./src/worktrees/contract/*.ts",
+      "default": null
+    },
+    "./worktrees/layer": {
+      "types": "./src/worktrees/layer.ts",
+      "bun": "./src/worktrees/layer.ts",
+      "default": null
+    },
+    "./worktrees/listing/channel": {
+      "types": "./src/worktrees/listing/channel.ts",
+      "bun": "./src/worktrees/listing/channel.ts",
+      "default": null
+    },
+    "./worktrees/listing/mergeChecks": {
+      "types": "./src/worktrees/listing/mergeChecks.ts",
+      "bun": "./src/worktrees/listing/mergeChecks.ts",
+      "default": null
+    },
+    "./worktrees/progress": {
+      "types": "./src/worktrees/progress.ts",
+      "bun": "./src/worktrees/progress.ts",
+      "default": null
+    },
+    "./worktrees/retirement/finishing": {
+      "types": "./src/worktrees/retirement/finishing.ts",
+      "bun": "./src/worktrees/retirement/finishing.ts",
+      "default": null
+    },
+    "./worktrees/retirement/gates": {
+      "types": "./src/worktrees/retirement/gates.ts",
+      "bun": "./src/worktrees/retirement/gates.ts",
+      "default": null
+    },
+    "./worktrees/retirement/guards": {
+      "types": "./src/worktrees/retirement/guards.ts",
+      "bun": "./src/worktrees/retirement/guards.ts",
+      "default": null
+    },
+    "./worktrees/store/tables": {
+      "types": "./src/worktrees/store/tables.ts",
+      "bun": "./src/worktrees/store/tables.ts",
+      "default": null
+    },
+    "./worktrees/worktrees": {
+      "types": "./src/worktrees/worktrees.ts",
+      "bun": "./src/worktrees/worktrees.ts",
+      "default": null
     }
   },
   "scripts": {
