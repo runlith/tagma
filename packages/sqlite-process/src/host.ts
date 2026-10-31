@@ -43,6 +43,7 @@ const applied = (db: Database, program: SqliteProgram): ProgramOutcome => {
       let count: number;
       if (step.counts === 'changes') count = statement.run(...params).changes;
       else {
+        if (step.counts === 'returned') statement.safeIntegers(step.safeIntegers === true);
         const rows = statement.values(...params) ?? [];
         if (step.counts === 'returned') returned.push(rows);
         count = rows.length;

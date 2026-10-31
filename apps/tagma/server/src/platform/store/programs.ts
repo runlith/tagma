@@ -5,6 +5,7 @@ import { is, sql } from 'drizzle-orm';
 import { SQLiteDeleteBase, SQLiteInsertBase, SQLiteUpdateBase } from 'drizzle-orm/sqlite-core';
 import type { EffectSQLiteBunDatabase } from 'drizzle-orm/effect-sqlite-bun';
 import { Cause, Data, Effect, Exit } from 'effect';
+import { SafeIntegers } from 'effect/sql/SqlClient';
 import { classifySqliteError, SqlError } from 'effect/sql/SqlError';
 import type { StoreBrand, StoreFailure, StoreIdentity } from '../contract/service/store.js';
 import {
@@ -19,7 +20,7 @@ import {
 import { UnitWriteRefused, type WriteSet } from '../contract/service/writes.js';
 import { type Building, ProgramOpen, type Returning, UnitLife } from './life.js';
 import type { TableMoves } from './moves.js';
-import { intoOuterCommit } from './transaction.js';
+import { withinCommit } from './transaction.js';
 import { breach, checkStatement, movedTables, UnitDurability, UnitWrites } from './writes.js';
 
 const same = (left: StoreIdentity | null, right: StoreIdentity): boolean =>
@@ -73,29 +74,31 @@ export const planned = <A, E>(attempt: Effect.Effect<A, E>): Effect.Effect<A | n
 const UNIQUE = /^SQLITE_CONSTRAINT_(UNIQUE|PRIMARYKEY)$/;
 
 const built = <Brand extends StoreBrand>(building: Building, set: WriteSet): ProgramUnit<Brand> => {
-  const added = (statement: ProgramQuery, counts: 'rows' | 'changes' | 'returned', expect: number | null) => {
+  const added = (statement: ProgramQuery, counts: 'rows' | 'changes' | 'returned', expect: number | null, safeIntegers?: boolean) => {
     const { sql, params } = 'toSQL' in statement ? statement.toSQL() : statement.getQuery();
-    building.statements.push({ sql, params, counts, expect, set });
+    building.statements.push({ sql, params, counts, expect, set, ...(safeIntegers === undefined ? {} : { safeIntegers }) });
   };
   return programUnitOf<Brand>({
     store: building.store,
     write: (statement, changes) => Effect.sync(() => added(statement, 'changes', changes ?? null)),
     guard: (statement, rows) => Effect.sync(() => added(statement, 'rows', rows)),
     returning: (statement, after) =>
-      Effect.sync(() => {
-        added(statement, 'returned', null);
-        const cell: Returning = { rows: null };
-        building.returning.push(cell);
-        building.tails.push(
-          carryCost(
-            Effect.suspend(() =>
-              cell.rows === null
-                ? Effect.die(new Error('a committed program carried no rows for one of its returning statements'))
-                : after(cell.rows),
+      Effect.flatMap(SafeIntegers, (safeIntegers) =>
+        Effect.sync(() => {
+          added(statement, 'returned', null, safeIntegers);
+          const cell: Returning = { rows: null };
+          building.returning.push(cell);
+          building.tails.push(
+            carryCost(
+              Effect.suspend(() =>
+                cell.rows === null
+                  ? Effect.die(new Error('a committed program carried no rows for one of its returning statements'))
+                  : after(cell.rows),
+              ),
             ),
-          ),
-        );
-      }),
+          );
+        }),
+      ),
     afterCommit: (effect) => Effect.sync(() => void building.tails.push(carryCost(effect))),
   });
 };
@@ -132,7 +135,9 @@ const joined = <Brand extends StoreBrand>(
     returning: (statement, after) =>
       Effect.suspend(() => {
         next++;
-        return Effect.flatMap(db.values(statement), (rows) => Effect.sync(() => void tails.push(carryCost(after(rows)))));
+        return Effect.flatMap(db.values(statement), (rows) =>
+          Effect.sync(() => void tails.push(carryCost(Effect.suspend(() => after(rows))))),
+        );
       }),
     afterCommit: (effect) => Effect.sync(() => void tails.push(carryCost(effect))),
   });
@@ -181,26 +186,25 @@ const submitted = Effect.fnUntraced(function* <Brand extends StoreBrand, A, E>(
         new UnitWriteRefused({ store: identity.path, operation: set.operation, table: null, reason: 'durable-in-relaxed' }),
       );
     const writing = new Map(yield* UnitWrites).set(identity, set);
-    const tails: Effect.Effect<void>[] = [];
-    const value = yield* Effect.acquireUseRelease(
-      db.run(sql`savepoint program`),
-      () => Effect.provideService(work(joined<Brand>(db, identity, set, key, tails)), UnitWrites, writing),
-      (_, exit) =>
-        Effect.orDie(
-          Exit.isSuccess(exit)
-            ? db.run(sql`release program`)
-            : Effect.andThen(db.run(sql`rollback to program`), db.run(sql`release program`)),
-        ),
-    ).pipe(
-      Effect.catchCause((cause: Cause.Cause<E | StoreFailure>): Effect.Effect<never, E | StoreFailure | ProgramConflict> => {
-        const conflict = cause.reasons.find((reason) => Cause.isDieReason(reason) && reason.defect instanceof ProgramConflict);
-        return conflict !== undefined && Cause.isDieReason(conflict)
-          ? Effect.fail(conflict.defect as ProgramConflict)
-          : Effect.failCause(cause);
-      }),
+    return yield* withinCommit(movedTables(identity, set), (tails) =>
+      Effect.acquireUseRelease(
+        db.run(sql`savepoint program`),
+        () => Effect.provideService(work(joined<Brand>(db, identity, set, key, tails)), UnitWrites, writing),
+        (_, exit) =>
+          Effect.orDie(
+            Exit.isSuccess(exit)
+              ? db.run(sql`release program`)
+              : Effect.andThen(db.run(sql`rollback to program`), db.run(sql`release program`)),
+          ),
+      ).pipe(
+        Effect.catchCause((cause: Cause.Cause<E | StoreFailure>): Effect.Effect<never, E | StoreFailure | ProgramConflict> => {
+          const conflict = cause.reasons.find((reason) => Cause.isDieReason(reason) && reason.defect instanceof ProgramConflict);
+          return conflict !== undefined && Cause.isDieReason(conflict)
+            ? Effect.fail(conflict.defect as ProgramConflict)
+            : Effect.failCause(cause);
+        }),
+      ),
     );
-    yield* intoOuterCommit(tails, movedTables(identity, set));
-    return value;
   }
   return yield* rootCost(
     set.operation,

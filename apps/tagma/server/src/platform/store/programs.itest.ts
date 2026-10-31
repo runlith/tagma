@@ -7,6 +7,7 @@ import { Cause, Deferred, Effect, Exit, Fiber, Layer } from 'effect';
 import { sharedPool } from '@runlith/sqlite-process/testing/pool';
 import { MachineStore } from '../contract/service/store.js';
 import type { ReturnedRows } from '@runlith/sqlite-process/channel';
+import { SafeIntegers } from 'effect/sql/SqlClient';
 import { MachineUnits, ProgramConflict } from '../contract/service/units.js';
 import { writes } from '../contract/service/writes.js';
 import { seededStoreLayer } from './open.js';
@@ -47,9 +48,12 @@ it.live(
   'a returning write hands its rows to its place among the after-commit work of a program and of a joined program, and nothing when refused',
   () =>
     Effect.gen(function* () {
-      const { units, insert, missing } = yield* world;
+      const { units, insert, missing, ids } = yield* world;
       const seen: unknown[] = [];
-      const note = (name: string) => (rows: ReturnedRows) => Effect.sync(() => void seen.push([name, rows]));
+      const note = (name: string) => (rows: ReturnedRows) => {
+        seen.push([name, rows]);
+        return Effect.void;
+      };
       const inserted = (id: string) => insert(id).returning({ id: kept.id });
       yield* units.program(keeping, 'test:returning', (program) =>
         Effect.gen(function* () {
@@ -60,10 +64,19 @@ it.live(
         }),
       );
       yield* units.write(writes('programs.outer', []), () =>
-        Effect.andThen(
-          units.program(keeping, 'test:joined', (program) => program.returning(inserted('b'), note('joined'))),
-          Effect.sync(() => expect(seen).toHaveLength(3)),
-        ),
+        Effect.gen(function* () {
+          yield* units.program(keeping, 'test:joined', (program) => program.returning(inserted('b'), note('joined')));
+          const enclosing = yield* Effect.exit(
+            units.program(keeping, 'test:enclosing', (program) =>
+              Effect.andThen(
+                units.program(keeping, 'test:inner', (inner) => inner.returning(inserted('d'), note('inner'))),
+                program.guard(missing, 1),
+              ),
+            ),
+          );
+          expect(Exit.isFailure(enclosing)).toBe(true);
+          expect(seen).toHaveLength(3);
+        }),
       );
       const refused = yield* Effect.exit(
         units.program(keeping, 'test:refused', (program) =>
@@ -71,8 +84,24 @@ it.live(
         ),
       );
       expect(Exit.isFailure(refused)).toBe(true);
-      expect(seen).toEqual(['before', ['program', [['a']]], 'after', ['joined', [['b']]]]);
+      expect({ seen, ids: yield* ids }).toEqual({ seen: ['before', ['program', [['a']]], 'after', ['joined', [['b']]]], ids: ['a', 'b'] });
     }).pipe(Effect.provide(storage)),
+);
+
+it.live('a returning write answers integers in the safe-integer mode of the program that carries it', () =>
+  Effect.gen(function* () {
+    const { units, insert } = yield* world;
+    const kinds: string[] = [];
+    const large = (id: string) => insert(id).returning({ large: sql<number>`9007199254740993` });
+    const typed = (rows: ReturnedRows) => Effect.sync(() => void kinds.push(typeof rows[0]?.[0]));
+    yield* Effect.provideService(
+      units.program(keeping, 'test:safe', (program) => program.returning(large('safe'), typed)),
+      SafeIntegers,
+      true,
+    );
+    yield* units.program(keeping, 'test:plain', (program) => program.returning(large('plain'), typed));
+    expect(kinds).toEqual(['bigint', 'number']);
+  }).pipe(Effect.provide(storage)),
 );
 
 it.live('a program and the programs nested in it commit together, then its after-commit work runs and its tables shift', () =>

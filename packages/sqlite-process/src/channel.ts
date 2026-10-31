@@ -34,6 +34,7 @@ type ProgramStatement = {
   readonly params: ReadonlyArray<unknown>;
   readonly counts: 'rows' | 'changes' | 'returned';
   readonly expect: number | null;
+  readonly safeIntegers?: boolean;
 };
 
 export type SqliteProgram = { readonly statements: ReadonlyArray<ProgramStatement> };

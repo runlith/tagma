@@ -240,15 +240,25 @@ export const storeTransaction =
     );
   };
 
-export const intoOuterCommit = (tails: readonly Effect.Effect<void>[], moved: ReadonlySet<string> | null): Effect.Effect<void> =>
-  Effect.flatMap(Effect.all([CommitQueue, UnitLife]), ([commits, life]) =>
-    commits !== null && life !== null && life.open
-      ? Effect.sync(() => {
-          commits.queued.push(...tails);
-          commits.moved.push(moved);
-        })
-      : Effect.die(new LateStatementRefused({ store: life?.identity.path ?? commits?.store.path ?? '', operation: life?.operation ?? '' })),
-  );
+export const withinCommit = <A, E, R>(
+  moved: ReadonlySet<string> | null,
+  work: (tails: Effect.Effect<void>[]) => Effect.Effect<A, E, R>,
+): Effect.Effect<A, E, R> =>
+  Effect.flatMap(Effect.all([CommitQueue, UnitLife]), ([outer, life]) => {
+    if (outer === null || life === null || !life.open)
+      return Effect.die(
+        new LateStatementRefused({ store: life?.identity.path ?? outer?.store.path ?? '', operation: life?.operation ?? '' }),
+      );
+    const inner: CommitQueue = { store: outer.store, queued: [], moved: [], body: outer.body };
+    return Effect.tap(Effect.provideService(work(inner.queued), CommitQueue, inner), () =>
+      life.open
+        ? Effect.sync(() => {
+            outer.queued.push(...inner.queued);
+            outer.moved.push(moved, ...inner.moved);
+          })
+        : Effect.die(new LateStatementRefused({ store: life.identity.path, operation: life.operation })),
+    );
+  });
 
 const heldUnit = <Brand extends StoreBrand>(
   held: Context.Context<never>,
