@@ -36,6 +36,7 @@ export class Pace extends Service<Pace>()('Pace', { tier: 'app' }) {
       (client) => client['pace.subscribe']({}),
       (frame) => {
         this.standing = frame;
+        if (this.dismissed !== null && this.trouble?.key !== this.dismissed) this.dismissed = null;
       },
       (reason) => {
         if (reason.kind === 'subscription') failure.report(new Error(reason.message));

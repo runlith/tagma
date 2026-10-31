@@ -104,7 +104,7 @@ export class View extends Service<View>()('LoadView', { tier: 'app' }) {
 
   ending(key: string, now: number): Ending | null {
     const shown = this.endings.get(key);
-    return shown === undefined || now - shown.at > SHOWN_MS ? null : shown;
+    return shown === undefined || (!shown.failed && now - shown.at > SHOWN_MS) ? null : shown;
   }
 
   departed(standing: ReadonlySet<string>): readonly Departed[] {
