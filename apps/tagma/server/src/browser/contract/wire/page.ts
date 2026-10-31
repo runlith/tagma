@@ -33,6 +33,11 @@ export type HistoryEntry = typeof HistoryEntry.Type;
 export const History = Schema.Struct({ entries: Schema.Array(HistoryEntry), at: Schema.Int });
 export type History = typeof History.Type;
 
+export const Disposition = Schema.Literals(['tab', 'background-tab', 'window']).annotate({
+  description: 'How the page that opened another asked to show it: a tab to switch to, a tab to leave behind, or its own window.',
+});
+export type Disposition = typeof Disposition.Type;
+
 export const Started = Schema.Struct({
   by: Schema.NullOr(Schema.String).annotate({ description: 'The thread that started it; null for the operator or an outside caller.' }),
   at: Schema.String,
@@ -85,7 +90,11 @@ export type Glance = typeof Glance.Type;
 
 export const PagesEvent = Schema.Union([
   Schema.Struct({ type: Schema.tag('list'), pages: Schema.Array(Page) }),
-  Schema.Struct({ type: Schema.tag('put'), page: Page }),
+  Schema.Struct({
+    type: Schema.tag('put'),
+    page: Page,
+    disposition: Schema.optional(Disposition).annotate({ description: 'Only on the put announcing a page another page has just opened.' }),
+  }),
   Schema.Struct({ type: Schema.tag('gone'), id: PageId }),
 ]).pipe(Schema.toTaggedUnion('type'));
 export type PagesEvent = typeof PagesEvent.Type;

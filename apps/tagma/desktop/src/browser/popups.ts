@@ -39,6 +39,7 @@ export const showPopup = (page: HeldPage, size: PopupSize, settle: () => void, r
   lay();
   told(page.contents.getURL());
   window.on('resize', lay);
+  for (const name of ['show', 'hide', 'minimize', 'restore'] as const) window.on(name as 'show', settle);
   page.contents.on('did-navigate', (_event, url) => told(url));
   page.contents.once('destroyed', () => {
     if (!window.isDestroyed()) window.destroy();

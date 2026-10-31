@@ -521,13 +521,14 @@ export const engineScenarios = (input: EngineHost): void => {
         yield* Deferred.await(recovering);
         const changes = yield* pages.changes((yield* Seeded).id);
         const popup = yield* changes.pipe(
-          Stream.filter((event) => event.type === 'put' && event.page.url === at('/recovering-peer')),
+          Stream.filter((event) => event.type === 'put' && event.page.opener === page),
           Stream.runHead,
           Effect.forkChild,
         );
         yield* evaluate(page, 'window.open("/recovering-peer"); true');
         const opened = yield* Fiber.join(popup);
         if (opened._tag === 'None' || opened.value.type !== 'put') return yield* Effect.die('the recovery popup never opened');
+        expect(opened.value.disposition).toBe('tab');
         const peer = opened.value.page.id;
         yield* Effect.addFinalizer(() => (pages.live(peer) === undefined ? Effect.void : pages.close(peer).pipe(Effect.orDie)));
         yield* loaded(peer);

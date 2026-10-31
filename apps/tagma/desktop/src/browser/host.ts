@@ -1,6 +1,7 @@
 import { totalmem } from 'node:os';
 import type { HostEvent, Strain } from '@tagma/server/browser/contract/wire/host';
 import type { PageId } from '@tagma/server/browser/contract/wire/ids';
+import type { Disposition } from '@tagma/server/browser/contract/wire/page';
 import type { Call, Failure } from '@tagma/server/desktop-browser/contract/wire/channel';
 import {
   app,
@@ -359,10 +360,12 @@ export class BrowserHost implements Executor {
           this.sessions.delete(gone.session);
           if (page.driven !== gone) return;
           page.driving(null);
+          this.placement.settle(page.placed);
         });
         if (!(driven instanceof Driven)) return fail(driven);
         this.sessions.set(call.session, driven);
         page.driving(driven);
+        this.placement.settle(page.placed);
         return answer();
       }
       case 'profileSession': {
@@ -548,7 +551,7 @@ export class BrowserHost implements Executor {
     if (!page.unloading && page.id !== null) this.reporter?.event({ kind: 'closed', page: page.id });
   }
 
-  private opened(page: HeldPage, opener: HeldPage, url: string): void {
+  private opened(page: HeldPage, opener: HeldPage, url: string, disposition: Disposition): void {
     this.reporter?.event({
       kind: 'opened',
       local: page.local,
@@ -556,17 +559,18 @@ export class BrowserHost implements Executor {
       opener: opener.id,
       url,
       restriction: page.restrictions.state,
+      disposition,
     });
   }
 
-  private openTab(opener: HeldPage, url: string, human = false): void {
+  private openTab(opener: HeldPage, url: string, disposition: Disposition, human = false): void {
     if (!human && opener.restrictions.block(url) !== null) return;
     const page = HeldPage.create(this.local(), null, opener.profile, opener.id, this.identity, this.strains, this.events);
     page.restrictions.inherit(opener.restrictions);
     if (human) this.operated(page);
     this.track(page);
     page.load(url, null);
-    this.opened(page, opener, url);
+    this.opened(page, opener, url, disposition);
   }
 
   private police(page: HeldPage): void {
@@ -593,7 +597,7 @@ export class BrowserHost implements Executor {
       const click = clicked();
       if (!allowedUrl(url) || page.restrictions.block(url) !== null || !(click || budget())) return { action: 'deny' };
       if (frameName === '' && (disposition === 'foreground-tab' || disposition === 'background-tab')) {
-        this.openTab(page, url);
+        this.openTab(page, url, disposition === 'foreground-tab' ? 'tab' : 'background-tab');
         return { action: 'deny' };
       }
       return {
@@ -615,7 +619,7 @@ export class BrowserHost implements Executor {
                 : { postData: postBody.data, extraHeaders: `content-type: ${postBody.contentType}; boundary=${postBody.boundary}` };
             popup.contents.loadURL(url, { httpReferrer: referrer, ...posted }).catch(() => undefined);
           }
-          this.opened(popup, page, url);
+          this.opened(popup, page, url, 'window');
           return popup.contents;
         },
       };
@@ -623,7 +627,7 @@ export class BrowserHost implements Executor {
     contents.on('before-input-event', (event, input) => this.key(page, event, input));
     contents.on('context-menu', (_event, params) => {
       const window = this.events.window(page);
-      if (window !== null) showPageMenu(window, contents, params, { openTab: (url) => this.openTab(page, url, true) });
+      if (window !== null) showPageMenu(window, contents, params, { openTab: (url) => this.openTab(page, url, 'background-tab', true) });
     });
     contents.on('found-in-page', (_event, result) => {
       const window = page.placed.shown?.window;

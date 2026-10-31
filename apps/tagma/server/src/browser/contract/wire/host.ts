@@ -1,7 +1,7 @@
 import { Schema } from 'effect';
 import { PageId, ProfileId } from './ids.js';
 import { DomainBlock, Restriction, RestrictionState } from './domains.js';
-import { Dialog, Download, History } from './page.js';
+import { Dialog, Disposition, Download, History } from './page.js';
 
 export const Strain = Schema.Struct({
   factor: Schema.Finite.check(Schema.isGreaterThanOrEqualTo(1)),
@@ -60,6 +60,9 @@ export const HostEvent = Schema.Union([
     opener: Schema.NullOr(PageId),
     url: Schema.String,
     restriction: RestrictionState,
+    disposition: Schema.optional(Disposition).annotate({
+      description: 'Absent when the host does not report how the page asked to be shown.',
+    }),
   }),
   Schema.Struct({ kind: Schema.Literal('changed'), page: PageId, change: PageChange }),
   Schema.Struct({ kind: Schema.Literal('navigation-blocked'), page: PageId, block: DomainBlock }),

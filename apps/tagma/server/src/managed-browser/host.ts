@@ -294,6 +294,7 @@ export const makeManagedHost = Effect.gen(function* () {
           opener,
           url: info.url,
           restriction: state.navigation.state(info.targetId),
+          disposition: 'tab',
         });
         return;
       }

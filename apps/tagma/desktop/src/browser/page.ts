@@ -118,6 +118,8 @@ export class HeldPage {
       size: { ...VIEWPORT },
       holds: new Set(),
       shownAt: Date.now(),
+      driven: false,
+      awake: null,
     };
     this.follow();
   }
@@ -316,6 +318,7 @@ export class HeldPage {
 
   driving(driven: Driven | null): void {
     this.driven = driven;
+    this.placed.driven = driven !== null;
     if (driven !== null) this.clearUnresponsive();
     driven?.probe({
       paused: () => this.dialogOpen || this.strain.paused,

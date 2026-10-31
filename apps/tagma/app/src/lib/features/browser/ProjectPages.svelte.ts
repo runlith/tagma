@@ -1,9 +1,9 @@
 import type { PageId } from '@tagma/server/browser/contract/wire/ids';
-import type { Page, PagesEvent } from '@tagma/server/browser/contract/wire/page';
+import type { Disposition, Page, PagesEvent } from '@tagma/server/browser/contract/wire/page';
 import { SvelteMap } from 'svelte/reactivity';
 import type { LiveConnection } from '$lib/wire/Live.js';
 
-export type PagesOptions = { readonly opened?: (page: Page) => void };
+export type PagesOptions = { readonly opened?: (page: Page, disposition: Disposition | undefined) => void };
 
 export class ProjectPages {
   readonly byId = new SvelteMap<PageId, Page>();
@@ -48,7 +48,7 @@ export class ProjectPages {
       case 'put': {
         const fresh = this.listed && !this.byId.has(event.page.id);
         this.byId.set(event.page.id, event.page);
-        if (fresh) this.options.opened?.(event.page);
+        if (fresh) this.options.opened?.(event.page, event.disposition);
         return;
       }
       case 'gone':

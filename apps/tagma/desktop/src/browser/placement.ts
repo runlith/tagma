@@ -17,11 +17,19 @@ export type Placed = {
   size: { width: number; height: number };
   readonly holds: Set<number>;
   shownAt: number;
+  driven: boolean;
+  awake: boolean | null;
 };
 
 export type Elsewhere = (window: BrowserWindow, panel: string, placed: Placed) => void;
 
-const visible = (window: BrowserWindow): boolean => !window.isDestroyed() && window.isVisible() && !window.isMinimized();
+const visible = (window: BaseWindow): boolean => !window.isDestroyed() && window.isVisible() && !window.isMinimized();
+
+const awake = (placed: Placed): boolean =>
+  placed.holds.size > 0 ||
+  placed.driven ||
+  (placed.shown !== null && visible(placed.shown.window)) ||
+  (placed.home !== null && visible(placed.home.window));
 
 export class Placement {
   private readonly where = new Map<WebContentsView, BaseWindow | BrowserWindow>();
@@ -69,7 +77,6 @@ export class Placement {
 
   hold(placed: Placed, hold: number, ready: () => void, stale: () => boolean): void {
     placed.holds.add(hold);
-    placed.contents.setBackgroundThrottling(false);
     this.settle(placed);
     const ask = () => {
       if (stale() || !placed.holds.has(hold) || placed.contents.isDestroyed()) return;
@@ -83,7 +90,6 @@ export class Placement {
 
   release(placed: Placed, hold: number): void {
     if (!placed.holds.delete(hold) || placed.holds.size > 0) return;
-    if (!placed.contents.isDestroyed()) placed.contents.setBackgroundThrottling(true);
     this.settle(placed);
   }
 
@@ -93,19 +99,23 @@ export class Placement {
     if (shown !== null && shown.window.isDestroyed()) placed.shown = null;
     const window =
       placed.shown === null || placed.shown.frozen || (placed.holds.size > 0 && !visible(placed.shown.window)) ? null : placed.shown.window;
-    if (window === null) {
-      this.park(placed);
-      return;
+    if (window === null) this.park(placed);
+    else {
+      this.move(placed, window);
+      const zoom = window.webContents.getZoomFactor();
+      const rect = placed.shown!.rect;
+      placed.view.setBounds({
+        x: Math.round(rect.x * zoom),
+        y: Math.round(rect.y * zoom),
+        width: Math.round(rect.width * zoom),
+        height: Math.round(rect.height * zoom),
+      });
     }
-    this.move(placed, window);
-    const zoom = window.webContents.getZoomFactor();
-    const rect = placed.shown!.rect;
-    placed.view.setBounds({
-      x: Math.round(rect.x * zoom),
-      y: Math.round(rect.y * zoom),
-      width: Math.round(rect.width * zoom),
-      height: Math.round(rect.height * zoom),
-    });
+    const wanted = awake(placed);
+    if (placed.awake === wanted) return;
+    placed.awake = wanted;
+    placed.contents.setBackgroundThrottling(!wanted);
+    placed.view.setVisible(wanted);
   }
 
   private park(placed: Placed): void {

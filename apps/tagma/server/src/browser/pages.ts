@@ -8,7 +8,7 @@ import type { HostEvent, PageChange } from './contract/wire/host.js';
 import { type FrameTarget, hostRefusal, type Opener, type PageRefusal, Pages } from './contract/service/pages.js';
 import { PageId, type ProfileId } from './contract/wire/ids.js';
 import { conditionsOf, NO_CONDITIONS } from './contract/wire/emulation.js';
-import type { Download, Glance, Live, Page, PagesEvent, PageState } from './contract/wire/page.js';
+import type { Disposition, Download, Glance, Live, Page, PagesEvent, PageState } from './contract/wire/page.js';
 import { DOWNLOADS_KEPT } from './contract/wire/rows.js';
 import { agentProfile, allowedDomains, blockedDomains, userProfile } from './contract/wire/settings.js';
 import { domainBlock, type DomainPolicy, type Restriction, type RestrictionState } from './contract/wire/domains.js';
@@ -16,6 +16,15 @@ import { navigationBlocked, navigationRefusal } from './engine/refusal.js';
 import { Ledger, type PagePatch, type PageRow } from './store/ledger.js';
 
 type Held = { row: PageRow; live: Live; holder: Host | null; restricted: boolean; restrictionRevision: number };
+
+type Adoption = {
+  readonly local: string;
+  readonly profile: ProfileId;
+  readonly opener: PageId | null;
+  readonly url: string;
+  readonly restriction: RestrictionState;
+  readonly disposition?: Disposition;
+};
 
 const QUIET: Live = {
   loading: false,
@@ -121,8 +130,8 @@ export const makePages = Effect.gen(function* () {
     return PubSub.publish(published, change);
   };
 
-  const publish = (page: Held, signal: Signal = 'changed') =>
-    Effect.andThen(announce(page, { type: 'put', page: wire(page) }), move(page, signal));
+  const publish = (page: Held, signal: Signal = 'changed', disposition?: Disposition) =>
+    Effect.andThen(announce(page, { type: 'put', page: wire(page), disposition }), move(page, signal));
 
   const forget = Effect.fnUntraced(function* (page: Held) {
     setRestriction(page, false);
@@ -355,7 +364,7 @@ export const makePages = Effect.gen(function* () {
     };
   });
 
-  const adoptPopup = Effect.fnUntraced(function* (host: Host, event: Extract<HostEvent, { readonly kind: 'opened' }>) {
+  const adoptPopup = Effect.fnUntraced(function* (host: Host, event: Adoption) {
     const opener = event.opener === null ? undefined : held.get(event.opener);
     if (opener === undefined) return;
     const now = new Date(yield* Clock.currentTimeMillis);
@@ -394,7 +403,7 @@ export const makePages = Effect.gen(function* () {
       return;
     }
     acceptRestriction(page, adopted.restriction);
-    yield* publish(page);
+    yield* publish(page, 'changed', event.disposition);
   });
 
   const upsertDownload = (downloads: readonly Download[], download: Download): readonly Download[] => {
@@ -511,7 +520,6 @@ export const makePages = Effect.gen(function* () {
       else
         yield* Effect.orDie(
           adoptPopup(host, {
-            kind: 'opened',
             local: standing.local,
             profile: standing.profile,
             opener: standing.opener,
