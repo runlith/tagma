@@ -12,4 +12,4 @@ edges:
   - kind: discovered-from
     to: 01a192d4-733a-7865-820c-9ab4a712d085
 ---
-Terminal operations currently force a thread's home project before looking up an execution, making a known foreign-project execution unreachable. Route addressed terminal operations by the execution owner's recorded project through invocation, keep caller identity and custody checks unchanged, and prove read/stop and operation recovery through the real native tool door.
+Terminal operations force a thread's home project before looking up an execution, making a known foreign-project execution unreachable. Give terminal operations the existing explicit project selector through invocation, keeping the thread's home as the default and custody checks unchanged. Prove cross-project read/stop and operation-key recovery through the real native tool door.
