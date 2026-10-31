@@ -33,13 +33,17 @@ export function prepareLinks(
   const seen = new Set<Source>();
   const pending = [...valuesOf(state.snapshot.live)];
   const existence = state.snapshot.existence;
-  const creators = absent && typeof existence !== 'string' ? (lookup(state.snapshot.byRow, existence.row) ?? []) : [];
+  const creators = !absent
+    ? []
+    : typeof existence === 'string'
+      ? [...new Set(regions.flatMap((region) => region.lines.flatMap((line) => (line.mark === 'external' ? [line.unit] : []))))]
+      : (lookup(state.snapshot.byRow, existence.row) ?? []).map((source) => source.serial);
   while (pending.length > 0) {
     const source = pending.pop()!;
     if (seen.has(source)) continue;
     seen.add(source);
     if (budget.expired(1)) return { reason: 'budget' };
-    for (const creator of creators) addLink(links, source.serial, creator.serial, false);
+    for (const creator of creators) addLink(links, source.serial, creator, false);
     const parents =
       source.displaced.length > 0
         ? source.displaced
