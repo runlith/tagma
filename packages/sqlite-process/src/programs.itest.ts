@@ -2,6 +2,7 @@ import { expect } from 'bun:test';
 import { it } from '@runlith/effect-test';
 import { Context, Deferred, Effect, Exit, Fiber, Layer } from 'effect';
 import { SqlClient } from 'effect/sql/SqlClient';
+import { CostLedger, costLedgerLayer, CurrentCost, type CostCause } from '@runlith/performance/CostLedger';
 import { CurrentWriter, type WriterFrame } from '@runlith/performance/WriterMetrics';
 import type { SqliteProgram } from './channel.js';
 import { childHosting } from './children.js';
@@ -23,7 +24,11 @@ const inserted = (table: string, value: string | number, guard?: number): Sqlite
   ],
 });
 
-const batched = Effect.fnUntraced(function* (store: Effect.Success<typeof opened>, programs: readonly SqliteProgram[]) {
+const batched = Effect.fnUntraced(function* (
+  store: Effect.Success<typeof opened>,
+  programs: readonly SqliteProgram[],
+  causes?: readonly CostCause[],
+) {
   const { sql, connections } = store;
   const submit = (program: SqliteProgram) => store.programs.submit({ operation: 'test', program, synchronous: null });
   const holding = yield* Deferred.make<void>();
@@ -34,14 +39,19 @@ const batched = Effect.fnUntraced(function* (store: Effect.Success<typeof opened
   yield* Deferred.await(holding);
   const ahead = yield* Effect.forkChild(submit({ statements: [] }), { startImmediately: true });
   while ((yield* connections.writer).waiting === 0) yield* Effect.yieldNow;
-  const queued = yield* Effect.forEach(programs, (program) => Effect.forkChild(Effect.exit(submit(program)), { startImmediately: true }));
+  const queued = yield* Effect.forEach(programs, (program, index) => {
+    const work = submit(program);
+    return Effect.forkChild(Effect.exit(causes === undefined ? work : Effect.provideService(work, CurrentCost, causes[index]!)), {
+      startImmediately: true,
+    });
+  });
   yield* Deferred.succeed(released, undefined);
   yield* Fiber.join(holder);
   yield* Fiber.join(ahead);
   return yield* Effect.forEach(queued, Fiber.join);
 });
 
-it.live('a guard conflict rolls back only its own program, and the rest of its batch commits together', () =>
+it.live('programs isolate batch conflicts and report their causal costs', () =>
   Effect.gen(function* () {
     const store = yield* opened;
     yield* store.sql`CREATE TABLE t (name TEXT PRIMARY KEY)`;
@@ -52,6 +62,44 @@ it.live('a guard conflict rolls back only its own program, and the rest of its b
     expect(new Set(answers.map((answer) => answer?.commitReturnedAt)).size).toBe(1);
     const rows = yield* store.sql<{ name: string }>`SELECT name FROM t ORDER BY name`;
     expect(rows.map((row) => row.name)).toEqual(['a', 'c']);
+
+    const ledger = yield* CostLedger.pipe(Effect.provide(costLedgerLayer({ capacity: 1 })));
+    const cause = ledger.open('programs', 'programs');
+    const submit = (program: SqliteProgram) =>
+      store.programs.submit({ operation: 'test', program, synchronous: null }).pipe(Effect.provideService(CurrentCost, cause));
+    const applied = yield* submit(inserted('t', 'd'));
+    expect(applied.outcome._tag).toBe('Applied');
+    expect(cause.counts.programStatements).toBe(1);
+    expect(cause.counts.responseBytes).toBe(Buffer.byteLength('Applied'));
+
+    const conflict = yield* submit({
+      statements: [
+        { sql: 'SELECT 1 WHERE 0', params: [], counts: 'rows', expect: 1 },
+        { sql: 'INSERT INTO t VALUES (?)', params: ['e'], counts: 'changes', expect: 1 },
+      ],
+    });
+    expect(conflict.outcome).toMatchObject({ _tag: 'Conflict', statement: 0, expected: 1, actual: 0 });
+    expect(cause.counts.programStatements).toBe(3);
+    expect(cause.counts.responseBytes).toBe(Buffer.byteLength('AppliedConflict') + 3 * 8);
+
+    const refused = yield* submit({ statements: [{ sql: 'SELECT missing FROM nowhere', params: [], counts: 'rows', expect: null }] });
+    if (refused.outcome._tag !== 'Refused') return yield* Effect.die('invalid SQL did not refuse the program');
+    const thrown = refused.outcome.thrown;
+    const errorBytes = [thrown.name, thrown.message, thrown.code, thrown.errno, thrown.constraint].reduce<number>(
+      (sum, value) => sum + (typeof value === 'string' ? Buffer.byteLength(value) : typeof value === 'number' ? 8 : 0),
+      0,
+    );
+    expect(ledger.read({ rootId: 'programs', limit: 1 }).rows[0]?.total).toMatchObject({
+      statements: 0,
+      programs: 3,
+      programStatements: 4,
+      requestBytes:
+        2 * Buffer.byteLength('INSERT INTO t VALUES (?)') +
+        Buffer.byteLength('SELECT 1 WHERE 0') +
+        Buffer.byteLength('SELECT missing FROM nowhere') +
+        2,
+      responseBytes: Buffer.byteLength('AppliedConflictRefused') + 4 * 8 + errorBytes,
+    });
   }),
 );
 
@@ -128,8 +176,15 @@ it.live('a COMMIT that fails answers every program of its batch with the failure
     yield* store.sql`PRAGMA foreign_keys = ON`;
     yield* store.sql`CREATE TABLE parent (id INTEGER PRIMARY KEY)`;
     yield* store.sql`CREATE TABLE child (parent INTEGER REFERENCES parent (id) DEFERRABLE INITIALLY DEFERRED)`;
-    const answers = yield* batched(store, [inserted('parent', 1), inserted('child', 7)]);
+    const ledger = yield* CostLedger.pipe(Effect.provide(costLedgerLayer({ capacity: 2 })));
+    const first = ledger.open('first');
+    const second = ledger.open('second');
+    const answers = yield* batched(store, [inserted('parent', 1), inserted('child', 7)], [first, second]);
     expect(answers.map((exit) => (Exit.isFailure(exit) ? 'failed' : exit.value.outcome._tag))).toEqual(['failed', 'failed']);
+    expect(first.counts.programStatements).toBe(1);
+    expect(second.counts.programStatements).toBe(1);
+    expect(first.counts.responseBytes).toBeGreaterThan(0);
+    expect(second.counts.responseBytes).toBe(0);
     const kept = yield* store.sql<{ n: number }>`SELECT (SELECT count(*) FROM parent) + (SELECT count(*) FROM child) AS n`;
     expect(kept[0]?.n).toBe(0);
   }),

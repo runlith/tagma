@@ -6,6 +6,7 @@ const costCountsSchema = Schema.Struct({
   statements: count,
   units: count,
   programs: count,
+  programStatements: count,
   writerHoldMs: count,
   writerWaitMs: count,
   requestBytes: count,
@@ -84,6 +85,7 @@ const emptyCounts = (): CostCounts => ({
   statements: 0,
   units: 0,
   programs: 0,
+  programStatements: 0,
   writerHoldMs: 0,
   writerWaitMs: 0,
   requestBytes: 0,
@@ -95,6 +97,7 @@ const addCounts = (total: CostCounts, counts: CostCounts): void => {
   total.statements += counts.statements;
   total.units += counts.units;
   total.programs += counts.programs;
+  total.programStatements += counts.programStatements;
   total.writerHoldMs += counts.writerHoldMs;
   total.writerWaitMs += counts.writerWaitMs;
   total.requestBytes += counts.requestBytes;

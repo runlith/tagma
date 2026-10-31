@@ -12,7 +12,7 @@ import type * as Scope from 'effect/Scope';
 import { classifySqliteError, SqlError } from 'effect/sql/SqlError';
 import type { Committed, ProgramOutcome, SqliteProgram, Synchronous } from './channel.js';
 import type { ProcessConnection, Unapplied } from './connection.js';
-import { parameterBytes } from './payload.js';
+import { parameterBytes, programOutcomeBytes, thrownBytes } from './payload.js';
 
 type ProgramSubmission = {
   readonly operation: string;
@@ -105,6 +105,7 @@ export const makePrograms = Effect.fnUntraced(function* (input: ProgramWriter) {
       if (member.cost !== null) {
         member.cost.counts.writerWaitMs += queueMs;
         member.cost.counts.writerHoldMs += heldMs;
+        member.cost.counts.responseBytes += programOutcomeBytes(outcome);
       }
       if (member.frame !== null) {
         member.frame.waitMs += queueMs;
@@ -128,6 +129,8 @@ export const makePrograms = Effect.fnUntraced(function* (input: ProgramWriter) {
     }
     if (said._tag === 'Unapplied') {
       input.settled(undefined);
+      const cost = batch[0]?.cost;
+      if (cost !== null && cost !== undefined) cost.counts.responseBytes += thrownBytes(said.thrown);
       for (const member of batch) {
         if (member.cost !== null) {
           member.cost.counts.writerWaitMs += said.queueMs;
@@ -235,6 +238,7 @@ export const makePrograms = Effect.fnUntraced(function* (input: ProgramWriter) {
           bytes += Buffer.byteLength(statement.sql, 'utf8') + parameterBytes(statement.params);
         if (cost !== null) {
           cost.counts.programs += 1;
+          cost.counts.programStatements += submission.program.statements.length;
           cost.counts.requestBytes += bytes;
         }
         const pending: Pending = { submission, bytes, answer: Deferred.makeUnsafe(), askedAt: now(), cost, frame };

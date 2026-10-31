@@ -17,7 +17,7 @@ import type { Connection } from 'effect/sql/SqlConnection';
 import { classifySqliteError, SqlError } from 'effect/sql/SqlError';
 import type { Committed, ProgramBatch, SqliteAsk, SqliteSaid, ThrownShape } from './channel.js';
 import { prepareEngine } from './engine.js';
-import { parameterBytes, rowBytes, scalarBytes } from './payload.js';
+import { parameterBytes, rowBytes, thrownBytes } from './payload.js';
 
 export type StatementTiming = {
   readonly operation: string;
@@ -55,7 +55,13 @@ export type ProcessConnection = Connection & {
   readonly programs: (batch: ProgramBatch) => Effect.Effect<Effect.Effect<Committed | Unapplied, SqlError>, SqlError>;
 };
 
-export type Unapplied = { readonly _tag: 'Unapplied'; readonly failure: SqlError; readonly queueMs: number; readonly execMs: number };
+export type Unapplied = {
+  readonly _tag: 'Unapplied';
+  readonly failure: SqlError;
+  readonly thrown: ThrownShape;
+  readonly queueMs: number;
+  readonly execMs: number;
+};
 
 const MAX_BUSY_TIMEOUT = 2_147_483_647;
 const DEFAULT_BUSY_TIMEOUT = Duration.seconds(5);
@@ -212,15 +218,7 @@ export const openConnection = Effect.fnUntraced(function* (processes: ProcessPoo
     }
     if (waiting.cost !== null && waiting.ask._tag === 'Run') {
       if (said._tag === 'Rows') waiting.cost.counts.responseBytes += rowBytes(said.rows);
-      else if (said._tag === 'Failed') {
-        const thrown = said.thrown;
-        waiting.cost.counts.responseBytes +=
-          scalarBytes(thrown.name) +
-          scalarBytes(thrown.message) +
-          scalarBytes(thrown.code) +
-          scalarBytes(thrown.errno) +
-          scalarBytes(thrown.constraint);
-      }
+      else if (said._tag === 'Failed') waiting.cost.counts.responseBytes += thrownBytes(said.thrown);
     }
     if ((said._tag === 'Rows' || said._tag === 'Failed') && waiting.ask._tag === 'Run' && options.onStatement !== undefined) {
       try {
@@ -505,6 +503,7 @@ export const openConnection = Effect.fnUntraced(function* (processes: ProcessPoo
                   ? Effect.succeed({
                       _tag: 'Unapplied',
                       failure: answeredWrong(said, 'Failed to commit programs', 'programs'),
+                      thrown: said.thrown,
                       queueMs: said.queueMs,
                       execMs: said.execMs,
                     })

@@ -3,12 +3,17 @@ import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { layer } from '@runlith/effect-test';
 import { join } from 'node:path';
 import { PERFORMANCE_FILE } from '@runlith/executions/protocol/registration';
+import { CostLedger, CurrentCost, endCost } from '@runlith/performance/CostLedger';
 import { PerformanceStore, performanceStoreLayer } from '@runlith/performance/PerformanceStore';
+import { sql } from 'drizzle-orm';
+import { sqliteTable, text } from 'drizzle-orm/sqlite-core';
 import { recordByteSize } from '@runlith/performance/store/records';
 import { Context, Effect, FileSystem, Layer, Schema } from 'effect';
 import { PerformanceReports } from '@runlith/performance/PerformanceReports';
 import { performanceReadValueSchema } from '../../performance/contract/wire/performance.js';
 import { readPerformance } from '../../performance/reads.js';
+import { MachineStore } from '../../platform/contract/service/store.js';
+import { writes } from '../../platform/contract/service/writes.js';
 import { Settings } from '../../settings/contract/service/values.js';
 import { performanceKeepOneTraceIn, performanceSpanMinMicros } from '../../performance/contract/wire/settings.js';
 import { DoorFixture, doorFixture } from './doorFixture.js';
@@ -24,6 +29,29 @@ const read = (world: World, init: { method: string; body: unknown }) =>
 layer(doorFixture().pipe(Layer.provideMerge(BunFileSystem.layer)), {
   excludeTestServices: true,
 })('performance door', (it) => {
+  it.effect('HTTP exposes the statements and reply of a program in its causal ledger', () =>
+    Effect.gen(function* () {
+      const world = yield* DoorFixture;
+      const store = Context.get(world.runtime.owners, MachineStore);
+      const ledger = Context.get(world.runtime.owners, CostLedger);
+      const rootId = crypto.randomUUID();
+      const cause = ledger.open('performance.program', rootId);
+      const schema = sqliteTable('sqlite_master', { name: text('name') });
+      const query = store.db
+        .select({ value: sql<number>`1` })
+        .from(schema)
+        .limit(1);
+      yield* store
+        .program(writes('performance.program', []), rootId, (unit) => unit.guard(query, 1))
+        .pipe(Effect.provideService(CurrentCost, cause), Effect.ensuring(Effect.sync(() => endCost(cause))));
+      const response = yield* read(world, { method: 'POST', body: { type: 'ledger', rootId, limit: 1 } });
+      expect(response.status).toBe(200);
+      const received = yield* Schema.decodeUnknownEffect(performanceReadValueSchema)(response.body);
+      expect(received.type).toBe('ledger');
+      if (received.type !== 'ledger') return;
+      expect(received.rows[0]?.total).toMatchObject({ statements: 0, programs: 1, programStatements: 1, responseBytes: 7 });
+    }),
+  );
   it.effect('HTTP and the runtime projection answer one PerformanceReadValue contract', () =>
     Effect.gen(function* () {
       const world = yield* DoorFixture;

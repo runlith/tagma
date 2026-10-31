@@ -11,6 +11,7 @@ it.effect('a root totals disjoint own and memoized producer work while nested ro
       Effect.gen(function* () {
         const own = (yield* CurrentCost)!;
         own.counts.statements++;
+        own.counts.programStatements += 2;
         yield* rootCost(
           'nested',
           producerCost(
@@ -20,6 +21,7 @@ it.effect('a root totals disjoint own and memoized producer work while nested ro
               publishing.counts.statements += 2;
               publishing.counts.units++;
               publishing.counts.programs++;
+              publishing.counts.programStatements += 3;
               publishing.counts.writerHoldMs += 3;
               publishing.counts.writerWaitMs += 4;
               publishing.counts.requestBytes += 5;
@@ -57,6 +59,7 @@ it.effect('a root totals disjoint own and memoized producer work while nested ro
       statements: 7,
       units: 1,
       programs: 1,
+      programStatements: 5,
       writerHoldMs: 3,
       writerWaitMs: 4,
       requestBytes: 5,

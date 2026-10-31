@@ -1,4 +1,6 @@
-export const scalarBytes = (value: unknown): number => {
+import type { ProgramOutcome, ThrownShape } from './channel.js';
+
+const scalarBytes = (value: unknown): number => {
   if (value === null) return 1;
   switch (typeof value) {
     case 'string':
@@ -12,6 +14,24 @@ export const scalarBytes = (value: unknown): number => {
       return ArrayBuffer.isView(value) || value instanceof ArrayBuffer ? value.byteLength : 0;
     default:
       return 0;
+  }
+};
+
+export const thrownBytes = (thrown: ThrownShape): number =>
+  scalarBytes(thrown.name) +
+  scalarBytes(thrown.message) +
+  scalarBytes(thrown.code) +
+  scalarBytes(thrown.errno) +
+  scalarBytes(thrown.constraint);
+
+export const programOutcomeBytes = (outcome: ProgramOutcome): number => {
+  switch (outcome._tag) {
+    case 'Applied':
+      return 'Applied'.length;
+    case 'Conflict':
+      return 'Conflict'.length + 3 * 8;
+    case 'Refused':
+      return 'Refused'.length + 8 + thrownBytes(outcome.thrown);
   }
 };
 

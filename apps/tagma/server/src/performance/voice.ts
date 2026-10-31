@@ -57,6 +57,7 @@ const ledgerCounts = (kind: string, values: CostCounts): string =>
     values.statements,
     values.units,
     values.programs,
+    values.programStatements,
     values.writerHoldMs,
     values.writerWaitMs,
     values.requestBytes,
@@ -76,9 +77,11 @@ const ledgerCursor = (cursor: CostCursor): string => JSON.stringify(cursor);
 function ledgerText(value: Extract<PerformanceValue, { readonly type: 'ledger' }>): string {
   return [
     'cost ledger: process-lifetime retained suffix; late work can update ended roots',
-    'totals are own + disjoint producers; request/response bytes measure logical SQLite payload, not IPC framing',
-    'bucket\tstatements\tunits\tprograms\twriterHoldMs\twriterWaitMs\trequestBytes\tresponseBytes\tspans',
+    'totals are own + disjoint producers; statements are standalone Run sends, programStatements are carried statements and guards',
+    'request/response bytes measure logical SQLite payload, not IPC framing',
+    'bucket\tstatements\tunits\tprograms\tprogramStatements\twriterHoldMs\twriterWaitMs\trequestBytes\tresponseBytes\tspans',
     ...value.rows.flatMap(ledgerRow),
+    `unattributed Run sends ${value.unattributedStatements ?? 'unmeasured'}`,
     `ledger ${value.ledgerId}; reset ${value.reset}; total ${value.total}; evicted ${value.evicted}; next ${value.next === null ? 'none' : ledgerCursor(value.next)}`,
   ].join('\n');
 }

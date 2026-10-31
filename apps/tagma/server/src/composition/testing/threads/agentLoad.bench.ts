@@ -200,7 +200,17 @@ type Agent = {
   pendingTurn: { readonly sealedAt: number; readonly measured: boolean } | null;
   phase: 'priming' | 'starting' | 'active' | 'settling';
 };
-const COST_FIELDS = ['statements', 'units', 'programs', 'writerHoldMs', 'writerWaitMs', 'requestBytes', 'responseBytes', 'spans'] as const;
+const COST_FIELDS = [
+  'statements',
+  'units',
+  'programs',
+  'programStatements',
+  'writerHoldMs',
+  'writerWaitMs',
+  'requestBytes',
+  'responseBytes',
+  'spans',
+] as const;
 type CostField = (typeof COST_FIELDS)[number];
 type CostFigure = { count: number; sum: number; max: number; readonly buckets: Map<number, number> };
 const figure = (): CostFigure => ({ count: 0, sum: 0, max: 0, buckets: new Map() });
@@ -229,7 +239,14 @@ const readFigure = (held: CostFigure) => {
     max: held.count === 0 ? null : held.max,
   };
 };
-type ProducerSums = { statements: number; units: number; programs: number; writerHoldMs: number; writerWaitMs: number };
+type ProducerSums = {
+  statements: number;
+  units: number;
+  programs: number;
+  programStatements: number;
+  writerHoldMs: number;
+  writerWaitMs: number;
+};
 type CostGroup = {
   readonly fields: Record<CostField, CostFigure>;
   readonly ownUnits: CostFigure | null;
@@ -250,10 +267,18 @@ const costs = () => {
     for (const producer of row.producers) {
       group.producers.set(producer.name, (group.producers.get(producer.name) ?? 0) + producer.counts.statements);
       if (group.producerCosts !== null) {
-        const sum = group.producerCosts.get(producer.name) ?? { statements: 0, units: 0, programs: 0, writerHoldMs: 0, writerWaitMs: 0 };
+        const sum = group.producerCosts.get(producer.name) ?? {
+          statements: 0,
+          units: 0,
+          programs: 0,
+          programStatements: 0,
+          writerHoldMs: 0,
+          writerWaitMs: 0,
+        };
         sum.statements += producer.counts.statements;
         sum.units += producer.counts.units;
         sum.programs += producer.counts.programs;
+        sum.programStatements += producer.counts.programStatements;
         sum.writerHoldMs += producer.counts.writerHoldMs;
         sum.writerWaitMs += producer.counts.writerWaitMs;
         group.producerCosts.set(producer.name, sum);
@@ -288,6 +313,7 @@ const costs = () => {
                     ...sum,
                     unitsPerRoot: sum.units / group.fields.units.count,
                     programsPerRoot: sum.programs / group.fields.programs.count,
+                    programStatementsPerRoot: sum.programStatements / group.fields.programStatements.count,
                   }))
                   .sort((left, right) => right.units + right.programs - left.units - left.programs),
               }),
@@ -1845,6 +1871,7 @@ const program = Effect.gen(function* () {
             'with causal-detail enabled hosted and list probes use a separate bounded causal ledger; protocol steps and selected background roots use the installation ledger; both report evictions and unfinished tails',
             'saved and no-save protocol-step groups partition the reported ProtocolSteps.run roots; a no-save step is not necessarily a text frame',
             'unattributed SQL counts the serving pool during the measurement window, independent of the selected retained roots',
+            'ledger statements count standalone Run sends; programStatements count statements and guards carried by submitted programs, including those a conflict prevents from running',
             'ledger units count Store transactions; direct activity-database transactions can contribute writer hold without incrementing units, and each activity batch is charged to its first accepted cause',
             'ledger root writer times are sums per act, not per-unit percentiles; late tails have a five-second settling window',
             'writer histograms cover physical outer units; child time is acknowledged statement elapsed, not engine CPU, and incomplete splits are omitted',
