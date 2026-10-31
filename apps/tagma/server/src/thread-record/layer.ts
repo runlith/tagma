@@ -11,7 +11,7 @@ import {
 import type { ThreadId } from '../platform/contract/wire/thread.js';
 import { insertRecord, removeRecords } from './birth.js';
 import { detach, reattach } from './detachment.js';
-import { addressOf, countIn, facts, namesIn, projectOf, projectsOf } from './identity.js';
+import { addressOf, countIn, makeIdentityReads, namesIn, projectsOf } from './identity.js';
 import { isDescendant, relationOf, subtree } from './lineage.js';
 import { harnessed, scope } from './scope.js';
 import { advanceReaderOrder, setArchived, setPinned } from './shelf.js';
@@ -54,6 +54,7 @@ const feed = <E>() => {
 export const makeThreadRecords = Effect.gen(function* () {
   const { db } = yield* MachineStore;
   const units = yield* MachineUnits;
+  const { facts, projectOf } = yield* makeIdentityReads;
   const births = feed<RecordAddress>();
   const removals = feed<RecordAddress>();
   const titles = feed<TitleRecorded>();
@@ -63,8 +64,8 @@ export const makeThreadRecords = Effect.gen(function* () {
     revision === undefined ? Effect.succeed(false) : Effect.as(titles.publish(unit, { threadId: id as ThreadId, revision }), true);
   return ThreadRecords.of({
     writes: recording,
-    facts: (id, unit) => (unit ? facts(db, unit, id) : units.read((read) => facts(db, read, id))),
-    projectOf: (id, unit) => (unit ? projectOf(db, unit, id) : units.read((read) => projectOf(db, read, id))),
+    facts: (id, unit) => (unit ? facts(unit, id) : units.read((read) => facts(read, id))),
+    projectOf: (id, unit) => (unit ? projectOf(unit, id) : units.read((read) => projectOf(read, id))),
     projectsOf: (ids) => units.read((read) => projectsOf(db, read, ids)),
     address: (address, from) => addressOf(db, address, from),
     countIn: (projectId) => units.read((read) => countIn(db, read, projectId)),

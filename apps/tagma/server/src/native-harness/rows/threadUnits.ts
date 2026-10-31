@@ -42,6 +42,21 @@ export const makeThreadUnits = Effect.fnUntraced(function* ({ fold }: { readonly
   const changes = yield* ModelChanges;
   const kinds = yield* ThreadEntryKinds;
   const providers = yield* ProviderRegistry;
+  const rowById = db
+    .select(rowColumns)
+    .from(threadRow)
+    .where(eq(threadRow.id, sql.placeholder('id')))
+    .prepare();
+  const presentById = db
+    .select({ id: threadRow.id })
+    .from(threadRow)
+    .where(eq(threadRow.id, sql.placeholder('id')))
+    .prepare();
+  const logById = db
+    .select({ threadId: threadLog.threadId })
+    .from(threadLog)
+    .where(eq(threadLog.threadId, sql.placeholder('id')))
+    .prepare();
 
   const foldMissing = Effect.fnUntraced(function* (unit: Unit<'machine'>, id: string) {
     const facet = yield* unit.run(db.select({ evictedAt: restStamps.restedAt }).from(restStamps).where(eq(restStamps.id, id)).get());
@@ -51,7 +66,7 @@ export const makeThreadUnits = Effect.fnUntraced(function* ({ fold }: { readonly
   const materialize = Effect.fnUntraced(function* (unit: Unit<'machine'>, row: StoredRow) {
     const history = yield* fold.history.read(unit, row.id);
     if (history === null) {
-      const standing = yield* unit.run(db.select({ id: threadRow.id }).from(threadRow).where(eq(threadRow.id, row.id)).get());
+      const standing = yield* unit.run(presentById.get({ id: row.id }));
       return standing ? yield* foldMissing(unit, row.id) : null;
     }
     return { ...(yield* threadRowOf(kinds, row)), history };
@@ -61,7 +76,7 @@ export const makeThreadUnits = Effect.fnUntraced(function* ({ fold }: { readonly
     materialize,
     apply: (unit: WriteUnit<'machine'>, id: string, patch: ThreadPatch) => applyPatch(db, records, changes, unit, id, patch),
     findIn: Effect.fnUntraced(function* (unit: Unit<'machine'>, id: string) {
-      const row = yield* unit.run(db.select(rowColumns).from(threadRow).where(eq(threadRow.id, id)).get());
+      const row = yield* unit.run(rowById.get({ id }));
       return row ? ((yield* materialize(unit, row)) ?? undefined) : undefined;
     }),
     insertRow: Effect.fnUntraced(function* (
@@ -80,21 +95,17 @@ export const makeThreadUnits = Effect.fnUntraced(function* ({ fold }: { readonly
       yield* unit.run(db.insert(threadRolloutForm).values({ threadId: birth.id, formedAt, step: kinds.last }));
       yield* fold.history.seed(unit, birth.id, log.history);
       yield* fold.entries.seed(unit, birth.id, log.transcript);
-      const row = yield* unit.run(db.select(rowColumns).from(threadRow).where(eq(threadRow.id, birth.id)).get());
+      const row = yield* unit.run(rowById.get({ id: birth.id }));
       if (!row) return yield* Effect.die(new Error('Thread insert returned no row.'));
       return { ...(yield* threadRowOf(kinds, row)), history: log.history };
     }),
     required: Effect.fnUntraced(function* <A>(unit: Unit<'machine'>, id: string, load: Effect.Effect<A | null, StoredFailure>) {
       const found = yield* load;
       if (found !== null) return found;
-      const row = yield* unit.run(db.select({ id: threadRow.id }).from(threadRow).where(eq(threadRow.id, id)).get());
+      const row = yield* unit.run(presentById.get({ id }));
       return row === undefined ? null : yield* foldMissing(unit, id);
     }),
-    hasLog: (unit: Unit<'machine'>, id: string) =>
-      Effect.map(
-        unit.run(db.select({ threadId: threadLog.threadId }).from(threadLog).where(eq(threadLog.threadId, id)).get()),
-        (row) => row !== undefined,
-      ),
+    hasLog: (unit: Unit<'machine'>, id: string) => Effect.map(unit.run(logById.get({ id })), (row) => row !== undefined),
     read: <A>(call: string, tx: Unit<'machine'> | undefined, work: (unit: Unit<'machine'>) => Effect.Effect<A, StoredFailure>) =>
       stored(call)(tx ? work(tx) : units.read(work)),
     write: <A>(call: string, tx: WriteUnit<'machine'> | undefined, work: (unit: WriteUnit<'machine'>) => Effect.Effect<A, StoredFailure>) =>
@@ -118,12 +129,15 @@ export const makeThreadMetadata = Effect.gen(function* () {
   const { db } = yield* MachineStore;
   const units = yield* MachineUnits;
   const kinds = yield* ThreadEntryKinds;
+  const metadataById = db
+    .select(metadataColumns)
+    .from(threadRow)
+    .where(eq(threadRow.id, sql.placeholder('id')))
+    .prepare();
   return ThreadMetadataSource.of({
     metadata: (id, tx) => {
       const read = (unit: Unit<'machine'>) =>
-        Effect.flatMap(unit.run(db.select(metadataColumns).from(threadRow).where(eq(threadRow.id, id)).get()), (row) =>
-          row ? threadRowOf(kinds, row) : Effect.succeed(undefined),
-        );
+        Effect.flatMap(unit.run(metadataById.get({ id })), (row) => (row ? threadRowOf(kinds, row) : Effect.succeed(undefined)));
       const program = tx === undefined ? null : programOf(tx);
       if (program === null) return stored('metadata')(tx ? read(tx) : units.read(read));
       return stored('metadata')(

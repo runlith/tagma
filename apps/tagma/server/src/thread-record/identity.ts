@@ -1,7 +1,7 @@
 import { parseThreadBornOf } from '@runlith/agent/thread/persisted';
-import { and, count, eq, inArray, isNotNull, type SQL } from 'drizzle-orm';
+import { and, count, eq, inArray, isNotNull, sql, type SQL } from 'drizzle-orm';
 import { Effect } from 'effect';
-import type { StoreDb } from '../platform/contract/service/store.js';
+import { MachineStore, type StoreDb } from '../platform/contract/service/store.js';
 import type { Unit } from '../platform/contract/service/units.js';
 import { NATIVE_HARNESS, type HarnessId } from '../platform/contract/wire/session.js';
 import { trusted } from '../platform/store/crossing.js';
@@ -43,16 +43,22 @@ export const factsOf = (row: FactRow): ThreadRecordFacts => ({
   createdAt: row.createdAt,
 });
 
-export const facts = (db: StoreDb<'machine'>, unit: Unit<'machine'>, id: string) =>
-  Effect.flatMap(unit.run(factsWhere(db, eq(recordFacts.id, id)).get()), (row) =>
-    row === undefined ? Effect.succeed(undefined) : trusted('ThreadRecords.facts', () => factsOf(row)),
-  );
-
-export const projectOf = (db: StoreDb<'machine'>, unit: Unit<'machine'>, id: string) =>
-  Effect.map(
-    unit.run(db.select({ projectId: recordFacts.projectId }).from(recordFacts).where(eq(recordFacts.id, id)).get()),
-    (row) => row?.projectId ?? undefined,
-  );
+export const makeIdentityReads = Effect.gen(function* () {
+  const { db } = yield* MachineStore;
+  const byId = factsWhere(db, eq(recordFacts.id, sql.placeholder('id'))).prepare();
+  const projectById = db
+    .select({ projectId: recordFacts.projectId })
+    .from(recordFacts)
+    .where(eq(recordFacts.id, sql.placeholder('id')))
+    .prepare();
+  return {
+    facts: (unit: Unit<'machine'>, id: string) =>
+      Effect.flatMap(unit.run(byId.get({ id })), (row) =>
+        row === undefined ? Effect.succeed(undefined) : trusted('ThreadRecords.facts', () => factsOf(row)),
+      ),
+    projectOf: (unit: Unit<'machine'>, id: string) => Effect.map(unit.run(projectById.get({ id })), (row) => row?.projectId ?? undefined),
+  };
+});
 
 export const projectsOf = (db: StoreDb<'machine'>, unit: Unit<'machine'>, ids: readonly string[]) =>
   Effect.map(

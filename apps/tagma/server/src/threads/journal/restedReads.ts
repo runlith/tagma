@@ -57,19 +57,25 @@ export const makeRestedReads = Effect.fnUntraced(function* ({
   const decode: PayloadDecode = (value) => decodeThreadEventPayloadResult(kinds, value);
   const indexed = new Map<string, Indexed>();
   let clock = 0;
+  const facetById = db
+    .select({ journal: journalProjectOf(recordFacts.id, recordFacts.projectId), evictedAt: restedAtOf(recordFacts.id) })
+    .from(recordFacts)
+    .where(eq(recordFacts.id, sql.placeholder('threadId')))
+    .prepare();
+  const rolloutById = db
+    .select({
+      journal: journalProjectOf(recordFacts.id, recordFacts.projectId),
+      evictedAt: restedAtOf(recordFacts.id),
+      bytes: threadRolloutCursor.nextByteOffset,
+      position: threadRolloutCursor.nextPosition,
+    })
+    .from(recordFacts)
+    .leftJoin(threadRolloutCursor, eq(threadRolloutCursor.threadId, recordFacts.id))
+    .where(eq(recordFacts.id, sql.placeholder('threadId')))
+    .prepare();
 
   const facet = (threadId: string, tx?: Unit<'machine'>) => {
-    const read = (unit: Unit<'machine'>) =>
-      unit.run(
-        db
-          .select({
-            journal: journalProjectOf(recordFacts.id, recordFacts.projectId),
-            evictedAt: restedAtOf(recordFacts.id),
-          })
-          .from(recordFacts)
-          .where(eq(recordFacts.id, threadId))
-          .get(),
-      );
+    const read = (unit: Unit<'machine'>) => unit.run(facetById.get({ threadId }));
     return Effect.map(tx ? read(tx) : units.read(read), (row) =>
       row === undefined || row.journal === null ? null : { journal: row.journal, evicted: row.evictedAt !== null },
     );
@@ -86,20 +92,7 @@ export const makeRestedReads = Effect.fnUntraced(function* ({
   });
 
   const keyedRollout = (threadId: string, tx?: Unit<'machine'>) => {
-    const read = (unit: Unit<'machine'>) =>
-      unit.run(
-        db
-          .select({
-            journal: journalProjectOf(recordFacts.id, recordFacts.projectId),
-            evictedAt: restedAtOf(recordFacts.id),
-            bytes: threadRolloutCursor.nextByteOffset,
-            position: threadRolloutCursor.nextPosition,
-          })
-          .from(recordFacts)
-          .leftJoin(threadRolloutCursor, eq(threadRolloutCursor.threadId, recordFacts.id))
-          .where(eq(recordFacts.id, threadId))
-          .get(),
-      );
+    const read = (unit: Unit<'machine'>) => unit.run(rolloutById.get({ threadId }));
     return Effect.map(tx ? read(tx) : units.read(read), (row) =>
       row === undefined || row.journal === null || row.evictedAt === null || home === undefined
         ? null
