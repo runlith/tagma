@@ -219,7 +219,7 @@ The e2e lane's `tagma.thread-open` p99 is reported beside them: renderer cost is
 - the F budgets hold.
 
 **Correctness:**
-- kill -9 between a group commit and its reply: the committed program is recognized on recovery and not repeated, a duplicate submission is recognized, and its publications are recovered from committed state;
+- a program committed but unanswered: the writer child replies right after COMMIT, so this arises only when the server itself dies, and the store exits on child loss and restarts from committed state. On restart the owner recognizes the committed act by the durable evidence its program wrote, repeats nothing, and recovers its publications from committed state; a duplicate submission is recognized. No test-only fault point is built into the child between COMMIT and reply;
 - a COMMIT failure answers every member of its batch;
 - a guard conflict aborts only its program and is decided again;
 - a decision's dependency changes while its target aggregate does not: the guard refuses;
