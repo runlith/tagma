@@ -6,7 +6,23 @@ import { CallToolRequestSchema, ErrorCode, ListToolsRequestSchema, McpError } fr
 const flags = process.argv.slice(2);
 if (process.env.MCP_TEST_PID_FILE !== undefined) writeFileSync(process.env.MCP_TEST_PID_FILE, String(process.pid));
 
-if (flags.includes('--hang')) {
+if (flags.includes('--exit-after-result') || flags.includes('--exit-before-result')) {
+  const peer = new Server({ name: 'result-lifetime', version: '0.0.0' }, { capabilities: { tools: {} } });
+  peer.setRequestHandler(ListToolsRequestSchema, async () => ({
+    tools: [{ name: 'list_pages', inputSchema: { type: 'object' as const } }],
+  }));
+  peer.setRequestHandler(CallToolRequestSchema, async () => {
+    if (flags.includes('--exit-before-result')) process.exit(0);
+    return { content: [{ type: 'text' as const, text: '1: fixture page' }] };
+  });
+  const transport = new StdioServerTransport();
+  const send = transport.send.bind(transport);
+  transport.send = async (message) => {
+    await send(message);
+    if ('result' in message && 'content' in message.result) process.stdout.write('', () => process.exit(0));
+  };
+  await peer.connect(transport);
+} else if (flags.includes('--hang')) {
   process.stdin.resume();
   setInterval(() => undefined, 60_000);
   if (!flags.includes('--no-exit')) process.stdin.on('end', () => process.exit(0));
