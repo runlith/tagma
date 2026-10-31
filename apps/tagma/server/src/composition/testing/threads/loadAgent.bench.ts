@@ -115,6 +115,7 @@ let vendors: string[] = [];
 let messageNumber = 0;
 let chunks = 0;
 let emittedFrames = 0;
+const frameCounts = { text: 0, toolStart: 0, status: 0, boundary: 0 };
 let hostedAnnounced = 0;
 let callsOffered = 0;
 let turns = 0;
@@ -136,6 +137,7 @@ const progress = (): void => {
       agent,
       recordedAt: new Date().toISOString(),
       emittedFrames,
+      frameCounts,
       hostedAnnounced,
       callsOffered,
       turns,
@@ -181,6 +183,7 @@ const tick = (): void => {
       _meta: { 'tagma/executes': true },
     });
     hostedAnnounced += 1;
+    frameCounts.toolStart += 1;
   } else if (slot === 8) {
     vendors.push(vendor);
     update(sessionId, {
@@ -191,8 +194,10 @@ const tick = (): void => {
       status: 'pending',
       rawInput: { path: 'fixture.ts' },
     });
+    frameCounts.toolStart += 1;
   } else if (slot === 9) {
     update(sessionId, { sessionUpdate: 'tool_call_update', toolCallId: vendor, status: 'in_progress' });
+    frameCounts.status += 1;
   } else if (slot === 10) {
     update(sessionId, {
       sessionUpdate: 'tool_call_update',
@@ -200,6 +205,7 @@ const tick = (): void => {
       status: 'completed',
       content: [{ type: 'content', content: { type: 'text', text: 'fixture' } }],
     });
+    frameCounts.status += 1;
   } else if (slot === 25 && hosted.length === boundaryCalls) {
     send({ method: '_tagma/said', params: { sessionId, messageId, toolCallIds: [...hosted.map((call) => call.toolCallId), ...vendors] } });
     appendFileSync(`${report}.calls`, hosted.map((call) => `${JSON.stringify(call)}\n`).join(''));
@@ -209,11 +215,13 @@ const tick = (): void => {
     vendors = [];
     messageNumber += 1;
     chunks = 0;
+    frameCounts.boundary += 1;
   } else {
     const size = Math.floor(messageBytes / textChunks) + (chunks < messageBytes % textChunks ? 1 : 0);
     chunks += 1;
     textBytesInTurn += size;
     update(sessionId, { sessionUpdate: 'agent_message_chunk', messageId, content: { type: 'text', text: 'x'.repeat(size) } });
+    frameCounts.text += 1;
   }
   frame += 1;
   emittedFrames += 1;

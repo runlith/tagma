@@ -144,11 +144,13 @@ const turnSchema = Schema.fromJsonString(
     }),
   ]),
 );
+const frameCountsSchema = Schema.Struct({ text: Schema.Number, toolStart: Schema.Number, status: Schema.Number, boundary: Schema.Number });
 const progressSchema = Schema.fromJsonString(
   Schema.Struct({
     agent: Schema.String,
     recordedAt: Schema.String,
     emittedFrames: Schema.Number,
+    frameCounts: frameCountsSchema,
     hostedAnnounced: Schema.Number,
     callsOffered: Schema.Number,
     turns: Schema.Number,
@@ -227,7 +229,7 @@ const readFigure = (held: CostFigure) => {
     max: held.count === 0 ? null : held.max,
   };
 };
-type ProducerSums = { statements: number; units: number; writerHoldMs: number; writerWaitMs: number };
+type ProducerSums = { statements: number; units: number; programs: number; writerHoldMs: number; writerWaitMs: number };
 type CostGroup = {
   readonly fields: Record<CostField, CostFigure>;
   readonly ownUnits: CostFigure | null;
@@ -236,25 +238,36 @@ type CostGroup = {
 };
 const costs = () => {
   const groups = new Map<string, CostGroup>();
-  const add = (row: CostRow) => {
-    let group = groups.get(row.name);
+  const addAs = (name: string, row: CostRow) => {
+    let group = groups.get(name);
     if (group === undefined) {
       const fields = Object.fromEntries(COST_FIELDS.map((field) => [field, figure()])) as Record<CostField, CostFigure>;
       group = { fields, ownUnits: causalDetail ? figure() : null, producers: new Map(), producerCosts: causalDetail ? new Map() : null };
-      groups.set(row.name, group);
+      groups.set(name, group);
     }
     for (const field of COST_FIELDS) addFigure(group.fields[field], row.total[field]);
     if (group.ownUnits !== null) addFigure(group.ownUnits, row.own.units);
     for (const producer of row.producers) {
       group.producers.set(producer.name, (group.producers.get(producer.name) ?? 0) + producer.counts.statements);
       if (group.producerCosts !== null) {
-        const sum = group.producerCosts.get(producer.name) ?? { statements: 0, units: 0, writerHoldMs: 0, writerWaitMs: 0 };
+        const sum = group.producerCosts.get(producer.name) ?? { statements: 0, units: 0, programs: 0, writerHoldMs: 0, writerWaitMs: 0 };
         sum.statements += producer.counts.statements;
         sum.units += producer.counts.units;
+        sum.programs += producer.counts.programs;
         sum.writerHoldMs += producer.counts.writerHoldMs;
         sum.writerWaitMs += producer.counts.writerWaitMs;
         group.producerCosts.set(producer.name, sum);
       }
+    }
+  };
+  const add = (row: CostRow) => {
+    addAs(row.name, row);
+    if (causalDetail && row.name === 'ProtocolSteps.run') {
+      const saved = row.producers.find((producer) => producer.name === 'ProtocolSteps.saved');
+      addAs(
+        saved !== undefined && saved.counts.units + saved.counts.programs > 0 ? 'ProtocolSteps.run.saved' : 'ProtocolSteps.run.no-save',
+        row,
+      );
     }
   };
   const read = () =>
@@ -270,8 +283,13 @@ const costs = () => {
             : {
                 ownUnits: readFigure(group.ownUnits),
                 producerCosts: [...group.producerCosts]
-                  .map(([name, sum]) => ({ name, ...sum, unitsPerRoot: sum.units / group.fields.units.count }))
-                  .sort((left, right) => right.units - left.units),
+                  .map(([name, sum]) => ({
+                    name,
+                    ...sum,
+                    unitsPerRoot: sum.units / group.fields.units.count,
+                    programsPerRoot: sum.programs / group.fields.programs.count,
+                  }))
+                  .sort((left, right) => right.units + right.programs - left.units - left.programs),
               }),
         },
       ]),
@@ -1323,6 +1341,7 @@ const program = Effect.gen(function* () {
     const backlog: {
       readonly elapsedMs: number;
       readonly emittedFrames: number;
+      readonly frameCounts: typeof frameCountsSchema.Type;
       readonly hostedAnnounced: number;
       readonly callsOffered: number;
       readonly submitted: number;
@@ -1414,6 +1433,8 @@ const program = Effect.gen(function* () {
             { concurrency: 16 },
           );
           lastProgress = progress;
+          if (progress.some((entry) => Object.values(entry.frameCounts).reduce((sum, count) => sum + count, 0) !== entry.emittedFrames))
+            return yield* new BenchRefused({ message: 'agent frame counts do not add up' });
           const times = progress.map((entry) => Date.parse(entry.recordedAt));
           if (times.some((time) => !Number.isFinite(time)))
             return yield* new BenchRefused({ message: 'agent progress has an invalid timestamp' });
@@ -1424,6 +1445,15 @@ const program = Effect.gen(function* () {
           backlog.push({
             elapsedMs,
             emittedFrames: progress.reduce((sum, entry) => sum + entry.emittedFrames, 0),
+            frameCounts: progress.reduce(
+              (sum, entry) => ({
+                text: sum.text + entry.frameCounts.text,
+                toolStart: sum.toolStart + entry.frameCounts.toolStart,
+                status: sum.status + entry.frameCounts.status,
+                boundary: sum.boundary + entry.frameCounts.boundary,
+              }),
+              { text: 0, toolStart: 0, status: 0, boundary: 0 },
+            ),
             hostedAnnounced: progress.reduce((sum, entry) => sum + entry.hostedAnnounced, 0),
             callsOffered: progress.reduce((sum, entry) => sum + entry.callsOffered, 0),
             submitted,
@@ -1811,8 +1841,9 @@ const program = Effect.gen(function* () {
             'probe stages describe completed samples only; outstanding-at-cut includes delayed or unsubmitted probes',
             'thread-open traces are selectively retained and match a thread and time window, not a unique client probe',
             'list COMMIT-to-frame uses writer and receiver epoch clocks with no established cross-process skew bound; the probe opens an additional transient thread-list subscription',
-            'producer progress is sampled at cycle boundaries, can be stale, and omits buffered ACP ingress between the CLI and server',
+            'producer progress, including emitted frame kinds, is sampled at cycle boundaries; samples can be stale and omit buffered ACP ingress between the CLI and server',
             'with causal-detail enabled hosted and list probes use a separate bounded causal ledger; protocol steps and selected background roots use the installation ledger; both report evictions and unfinished tails',
+            'saved and no-save protocol-step groups partition the reported ProtocolSteps.run roots; a no-save step is not necessarily a text frame',
             'unattributed SQL counts the serving pool during the measurement window, independent of the selected retained roots',
             'ledger units count Store transactions; direct activity-database transactions can contribute writer hold without incrementing units, and each activity batch is charged to its first accepted cause',
             'ledger root writer times are sums per act, not per-unit percentiles; late tails have a five-second settling window',
