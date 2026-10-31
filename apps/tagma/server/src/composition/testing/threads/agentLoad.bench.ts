@@ -1442,10 +1442,14 @@ const program = Effect.gen(function* () {
     const producersReading = [...lastProgress];
     const windowSeconds = Number(intervalEnd - intervalStart) / 1_000_000_000;
     const figures = Object.fromEntries(
-      ['sql.execute', 'Store.transaction', 'Store.permit.wait', 'Store.execute', 'Store.commit'].map((name) => [
-        name,
-        histogramDelta(name, before, after),
-      ]),
+      [
+        'sql.execute',
+        'Store.transaction',
+        'Store.permit.wait',
+        'Store.execute',
+        'Store.commit',
+        ...(causalDetail ? ['ThreadFeeds.open', 'ThreadSnapshots.snapshot', 'ThreadSnapshots.attachFrom', 'ThreadSnapshots.reading'] : []),
+      ].map((name) => [name, histogramDelta(name, before, after)]),
     );
     endingProbe = true;
     if (probeProcess.exitCode === null && probeProcess.signalCode === null) yield* Effect.sync(() => probeProcess.kill('SIGTERM'));
