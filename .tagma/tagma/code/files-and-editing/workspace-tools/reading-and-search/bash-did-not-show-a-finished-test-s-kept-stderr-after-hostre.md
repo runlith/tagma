@@ -12,4 +12,4 @@ fields:
 ---
 Filed from project `runlith`.
 
-Run 4c42550c-fbb1-4272-87b9-e055c94509c3, incarnation158. No test repeat was needed for the output: the kept bytes read through a separate door.
+Run 4c42550c-fbb1-4272-87b9-e055c94509c3, incarnation158. No test repeat was needed for the output: the kept bytes read through a separate door. Current investigation recovered the original bash and byte-read records: the HostRefused subtype is absent. The public bash regression in the related task reproduces a separate contributing defect: a failed stdout reader cancels the healthy stderr reader. Preserving that stderr does not establish or repair the original host-subscription refusal.
