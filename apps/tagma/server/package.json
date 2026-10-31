@@ -201,6 +201,12 @@
       "browser": "./src/executions/contract/wire/load.ts",
       "default": "./src/executions/contract/wire/load.ts"
     },
+    "./executions/contract/wire/viewName": {
+      "types": "./src/executions/contract/wire/viewName.ts",
+      "browser": "./src/executions/contract/wire/viewName.ts",
+      "node": "./src/executions/contract/wire/viewName.ts",
+      "default": "./src/executions/contract/wire/viewName.ts"
+    },
     "./executions/contract/wire/residuals": {
       "types": "./src/executions/contract/wire/residuals.ts",
       "browser": "./src/executions/contract/wire/residuals.ts",

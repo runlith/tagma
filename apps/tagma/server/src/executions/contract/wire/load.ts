@@ -28,9 +28,20 @@ export type LoadInterest = typeof LoadInterest.Type;
 export const LoadInterestTaken = Schema.Struct({ taken: Schema.Boolean });
 export type LoadInterestTaken = typeof LoadInterestTaken.Type;
 
+export const AppViewDocument = Schema.Struct({
+  _tag: Schema.Literal('AppView'),
+  project: Schema.Int.check(Schema.isGreaterThan(0)),
+  app: Schema.NonEmptyString,
+  view: Schema.NonEmptyString,
+});
+
+export const McpViewDocument = Schema.Struct({ _tag: Schema.Literal('McpView'), server: Schema.NonEmptyString });
+
 export const WindowDocument = Schema.Union([
   Schema.Struct({ _tag: Schema.Literal('Interface') }),
   Schema.Struct({ _tag: Schema.Literal('Page'), page: PageId }),
+  AppViewDocument,
+  McpViewDocument,
   Schema.Struct({ _tag: Schema.Literal('Origin'), origin: Schema.NonEmptyString }),
 ]).pipe(Schema.toTaggedUnion('_tag'));
 export type WindowDocument = typeof WindowDocument.Type;

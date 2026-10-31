@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { ToolActivityEntry } from '@runlith/chat-ui/activity';
   import { untrack } from 'svelte';
+  import type { ViewIdentity } from '@tagma/server/executions/contract/wire/viewName';
   import { ExternalLinks } from '$lib/shared/ExternalLinks.js';
   import { Door } from '$lib/wire/Door.js';
   import { Live } from '$lib/wire/Live.js';
@@ -20,6 +21,7 @@
     | { readonly failure: string };
 
   const server = $derived(entry.display?.app?.server ?? '');
+  const viewIdentity = $derived<ViewIdentity>({ _tag: 'McpView', server });
   const identity = $derived(entry.display?.app?.identity ?? '');
   const resource = $derived(entry.display?.app?.resource ?? '');
   const tool = $derived(entry.display?.app?.tool);
@@ -109,7 +111,14 @@
 </script>
 
 {#if loaded !== null && 'view' in loaded}
-  <ResultFrame {entry} view={loaded.view} {host} title={entry.display?.title ?? resource} bordered={loaded.bordered} />
+  <ResultFrame
+    {entry}
+    view={loaded.view}
+    {host}
+    title={entry.display?.title ?? resource}
+    identity={viewIdentity}
+    bordered={loaded.bordered}
+  />
 {:else if loaded !== null && 'failure' in loaded}
   <p class="text-small text-chat-failure/90">{loaded.failure}</p>
 {/if}

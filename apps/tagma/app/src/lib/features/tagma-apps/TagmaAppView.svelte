@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { ToolActivityEntry } from '@runlith/chat-ui/activity';
+  import type { ViewIdentity } from '@tagma/server/executions/contract/wire/viewName';
   import { ExternalLinks } from '$lib/shared/ExternalLinks.js';
   import { ThreadPresence } from '$lib/features/presence/Presence.svelte.js';
   import { ShellOps, type ShellPort } from '$lib/features/workspace/ShellOps.js';
@@ -47,6 +48,7 @@
   const host = $derived(tagmaAppHost(owners, { projectId: project, tagmaApp: appId, view: viewId, threadId: thread, key: pinned }));
   const mount = $derived({ host, page });
   const title = $derived(shown === undefined ? `${tagmaApp}/${view}` : `${shown.set.title} · ${view}`);
+  const identity = $derived<ViewIdentity>({ _tag: 'AppView', project, app: appId, view: viewId });
 </script>
 
 {#if sets.problem !== null}
@@ -58,9 +60,9 @@
 {:else if page !== null}
   {#key mount}
     {#if entry !== undefined}
-      <ResultFrame {entry} view={page} {host} {title} bordered={true} />
+      <ResultFrame {entry} view={page} {host} {title} {identity} bordered={true} />
     {:else}
-      <ViewFrame view={page} {host} {title} bordered={false} {fill} {ceiling} />
+      <ViewFrame view={page} {host} {title} {identity} bordered={false} {fill} {ceiling} />
     {/if}
   {/key}
 {/if}

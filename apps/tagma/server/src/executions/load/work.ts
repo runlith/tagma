@@ -3,7 +3,8 @@ import type { ExecutionRef } from '@runlith/executions/protocol/execution';
 import { Projects } from '../../projects/contract/service/registry.js';
 import type { ThreadId } from '../../platform/contract/wire/thread.js';
 import { ManagedCommands } from '../contract/service/commands.js';
-import { LoadOwnerFacts, type OwnerFacts } from '../contract/service/owners.js';
+import type { AppRef } from '../contract/service/load.js';
+import { LoadAppTitles, LoadOwnerFacts, type OwnerFacts } from '../contract/service/owners.js';
 import { Terminals } from '../contract/service/terminals.js';
 import type { CommandRecord } from '../contract/wire/commands.js';
 import type { TerminalRecord } from '../contract/wire/terminals.js';
@@ -21,9 +22,14 @@ export type Work = {
   readonly since: number;
 };
 
+export type AppTitles = ReadonlyMap<string, string>;
+
+export const appTitleKey = (view: AppRef): string => `${view.project}:${view.app}`;
+
 export type Named = {
   readonly work: ReadonlyMap<string, Work>;
   readonly threads: ReadonlyMap<string, OwnerFacts>;
+  readonly apps: AppTitles;
   readonly unread: string | undefined;
 };
 
@@ -45,13 +51,15 @@ export const makeWorkNames = Effect.gen(function* () {
   const terminals = yield* Terminals;
   const owners = yield* LoadOwnerFacts;
   const registry = yield* Projects;
+  const appTitles = yield* LoadAppTitles;
   const commands = new Map<string, CommandRecord | null>();
   const threads = new Map<string, OwnerFacts>();
   const projects = new Map<number, string>();
+  const apps = new Map<number, ReadonlyMap<string, string>>();
   let factsAt = 0;
 
   return {
-    read: Effect.fnUntraced(function* (refs: readonly ExecutionRef[], now: number): Effect.fn.Return<Named> {
+    read: Effect.fnUntraced(function* (refs: readonly ExecutionRef[], now: number, views: readonly AppRef[]): Effect.fn.Return<Named> {
       const problems: string[] = [];
       for (const ref of refs) {
         if (commands.has(ref.execution)) continue;
@@ -109,8 +117,19 @@ export const makeWorkNames = Effect.gen(function* () {
         if (row._tag === 'Success') projects.set(projectId, row.success.name);
         else problems.push(`projects: ${reasonOf(row.failure)}`);
       }
+      const shownApps = new Set(views.map((view) => view.project));
+      for (const projectId of shownApps) {
+        if (!stale && apps.has(projectId)) continue;
+        const titles = yield* Effect.result(appTitles.read(projectId));
+        if (titles._tag === 'Success') apps.set(projectId, titles.success);
+        else {
+          apps.delete(projectId);
+          problems.push(`apps: ${titles.failure.reason}`);
+        }
+      }
       if (stale) {
         factsAt = now;
+        for (const projectId of apps.keys()) if (!shownApps.has(projectId)) apps.delete(projectId);
         const shown = new Set<string>(shownThreads);
         const shownProjects = new Set([...work.values()].map((one) => one.projectId));
         for (const thread of threads.keys()) if (!shown.has(thread)) threads.delete(thread);
@@ -120,7 +139,12 @@ export const makeWorkNames = Effect.gen(function* () {
       for (const [execution, one] of work) named.set(execution, { ...one, project: projects.get(one.projectId) });
       const standing = new Set<string>(refs.map((ref) => ref.execution));
       for (const execution of commands.keys()) if (!standing.has(execution)) commands.delete(execution);
-      return { work: named, threads, unread: problems.length === 0 ? undefined : problems.join('; ') };
+      const appNames = new Map<string, string>();
+      for (const view of views) {
+        const title = apps.get(view.project)?.get(view.app);
+        if (title !== undefined) appNames.set(appTitleKey(view), title);
+      }
+      return { work: named, threads, apps: appNames, unread: problems.length === 0 ? undefined : problems.join('; ') };
     }),
   };
 });

@@ -17,7 +17,7 @@ import {
 } from '../contract/wire/load.js';
 import type { ThreadId } from '../../platform/contract/wire/thread.js';
 import type { BackgroundWork } from '../../platform/contract/wire/background.js';
-import type { PartNames, PartRow } from './windows.js';
+import type { PartLookup, PartNames, PartRow } from './windows.js';
 import type { Named, Work } from './work.js';
 
 const RANK_MS = 5_000;
@@ -80,7 +80,7 @@ const partTitle = (row: PartRow | undefined): string => {
   }
 };
 
-const unresolvedOf = (reading: LoadReading, parts: PartNames): readonly UnresolvedPart[] =>
+const unresolvedOf = (reading: LoadReading, parts: PartLookup): readonly UnresolvedPart[] =>
   reading.unresolvedParts.map(({ part, reason }) => ({ title: partTitle(parts(part.key)), pid: part.pid, reason }));
 
 const gpuState = (reading: LoadReading): LoadView['gpu'] => {
@@ -137,7 +137,7 @@ const installationOf = (role: InstallationGroupRole, open: Open): Building => {
 
 type OuterOwner = Exclude<LoadGroup['owner'], { readonly _tag: 'Installation' | 'Part' }>;
 
-const slicesOf = (group: LoadGroup, open: Open, parts: PartNames, other: (owner: OuterOwner) => Building): readonly Slice[] => {
+const slicesOf = (group: LoadGroup, open: Open, parts: PartLookup, other: (owner: OuterOwner) => Building): readonly Slice[] => {
   const owner = group.owner;
   switch (owner._tag) {
     case 'Installation':
@@ -168,6 +168,7 @@ export class LoadList {
     background: readonly BackgroundWork[],
   ): { readonly view: LoadView; readonly point: LoadPoint | undefined } {
     const cores = reading.cores;
+    const part: PartLookup = (key) => parts.row(key, named.apps);
     const built = new Map<string, Building>();
     const open: Open = (key, kind, title, extra = {}) => {
       const standing = built.get(key);
@@ -198,7 +199,7 @@ export class LoadList {
     };
     for (const group of reading.groups) {
       const other = (owner: OuterOwner) => this.rowOf(owner, group, named, open, reading.overMicros === 0 ? null : group.cores / cores);
-      for (const slice of slicesOf(group, open, parts, other)) this.charge(slice, group, cores);
+      for (const slice of slicesOf(group, open, part, other)) this.charge(slice, group, cores);
     }
     const share = reading.cpu === null ? null : reading.cpu / cores;
     const point: LoadPoint | undefined =
@@ -292,7 +293,7 @@ export class LoadList {
         top:
           heaviest !== undefined && heaviest.rank >= TOP ? { key: heaviest.key, title: heaviest.title, share: heaviest.rank } : undefined,
         background,
-        unresolved: unresolvedOf(reading, parts),
+        unresolved: unresolvedOf(reading, part),
         unread: unread === '' ? undefined : unread,
       },
     };

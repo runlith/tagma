@@ -13,6 +13,8 @@ export class LoadFeed extends Context.Service<
 
 export type WindowPart = { readonly host: string; readonly process: WindowProcess };
 
+export type AppRef = { readonly project: number; readonly app: string };
+
 export class WindowDeclarations extends Context.Service<
   WindowDeclarations,
   {
@@ -21,5 +23,6 @@ export class WindowDeclarations extends Context.Service<
     readonly parts: Stream.Stream<readonly DeclaredPart[]>;
     readonly declared: Effect.Effect<readonly DeclaredPart[]>;
     readonly part: (key: string) => WindowPart | undefined;
+    readonly views: () => readonly AppRef[];
   }
 >()('tagma/executions/WindowDeclarations') {}

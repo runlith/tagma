@@ -25,6 +25,7 @@
     src: string;
     title: string;
     sandbox: string;
+    name?: string;
     protocol: FrameProtocol;
     allow?: string;
     fill?: boolean;
@@ -34,7 +35,7 @@
     class?: ClassValue;
   };
 
-  let { src, title, sandbox, protocol, allow, fill = false, height = null, zoom = 1, inert = false, class: style }: Props = $props();
+  let { src, title, sandbox, name, protocol, allow, fill = false, height = null, zoom = 1, inert = false, class: style }: Props = $props();
 
   const scaled = $derived(zoom !== 1);
 
@@ -91,6 +92,7 @@
     bind:this={frame}
     {src}
     {title}
+    {name}
     {sandbox}
     {allow}
     {inert}

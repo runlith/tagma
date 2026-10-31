@@ -11,7 +11,7 @@ import type { Named } from './work.js';
 const machine = { _tag: 'Local', machine: 'fixture' } as const;
 const ref = (execution: string) => Schema.decodeUnknownSync(ExecutionRef)({ installation: 'i', execution, incarnation: 1 });
 const thread = Schema.decodeUnknownSync(ThreadId)('01a13616-e64d-7243-bac2-4d8b0e28c96e');
-const noParts: PartNames = () => undefined;
+const noParts: PartNames = { row: () => undefined, apps: () => [] };
 
 const process = (pid: number, cores: number, extra: Partial<LoadGroup['processes'][number]> = {}): LoadGroup['processes'][number] => ({
   identity: { pid, birth: `${pid}:0` },
@@ -77,6 +77,7 @@ const named: Named = {
     ],
   ]),
   threads: new Map([[thread, { title: 'release-publish', archived: false }]]),
+  apps: new Map(),
   unread: undefined,
 };
 
@@ -237,14 +238,17 @@ test("an unread population answers no Tagma figures, a partly read one counts wh
 
 test('window parts land in Interface, Graphics and one row per renderer titled by its documents and closing its pages; the server and the terminal host split by role; an unresolved part is named', () => {
   const page = Schema.decodeUnknownSync(PageId)('page-1');
-  const parts: PartNames = (key) =>
-    key === 'main'
-      ? { _tag: 'Interface' }
-      : key === 'gpu'
-        ? { _tag: 'Graphics' }
-        : key === 'pages'
-          ? { _tag: 'Renderer', titles: ['Page — Docs (example.com)', 'App — board'], close: [{ page, projectId: 5 }] }
-          : undefined;
+  const parts: PartNames = {
+    apps: () => [],
+    row: (key) =>
+      key === 'main'
+        ? { _tag: 'Interface' }
+        : key === 'gpu'
+          ? { _tag: 'Graphics' }
+          : key === 'pages'
+            ? { _tag: 'Renderer', titles: ['Page — Docs (example.com)', 'App — board'], close: [{ page, projectId: 5 }] }
+            : undefined,
+  };
   const { view } = new LoadList().compose(
     {
       ...reading([

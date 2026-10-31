@@ -5,10 +5,18 @@
   import { toolInputNotice, toolOutcomeNotice } from './toolNotices.js';
   import type { ViewBridge, ViewDocument, ViewHost } from './ViewBridge.js';
   import ViewFrame from './ViewFrame.svelte';
+  import type { ViewIdentity } from '@tagma/server/executions/contract/wire/viewName';
 
-  type Props = { entry: ToolActivityEntry; view: ViewDocument; host: ViewHost; title: string; bordered: boolean };
+  type Props = {
+    entry: ToolActivityEntry;
+    view: ViewDocument;
+    host: ViewHost;
+    title: string;
+    identity: ViewIdentity;
+    bordered: boolean;
+  };
 
-  let { entry, view, host, title, bordered }: Props = $props();
+  let { entry, view, host, title, identity, bordered }: Props = $props();
 
   const rendering = useChatRendering();
 
@@ -44,5 +52,5 @@
 </script>
 
 {#key view}
-  <ViewFrame {view} {host} {title} {bordered} {initialized} bind:bridge />
+  <ViewFrame {view} {host} {title} {identity} {bordered} {initialized} bind:bridge />
 {/key}

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { TOOL_VIEW_PX } from '@runlith/chat-ui/rowEstimate';
+  import { type ViewIdentity, viewFrameName } from '@tagma/server/executions/contract/wire/viewName';
   import { Host } from '@runlith/layer/Host';
   import { untrack } from 'svelte';
   import { Platform } from '@runlith/layer/Platform';
@@ -15,6 +16,7 @@
     view: ViewDocument;
     host: ViewHost;
     title: string;
+    identity: ViewIdentity;
     bordered: boolean;
     fill?: boolean;
     ceiling?: number | null;
@@ -22,7 +24,7 @@
     bridge?: ViewBridge | null;
   };
 
-  let { view, host, title, bordered, fill = false, ceiling = null, initialized, bridge = $bindable(null) }: Props = $props();
+  let { view, host, title, identity, bordered, fill = false, ceiling = null, initialized, bridge = $bindable(null) }: Props = $props();
 
   const shell = Host.use().kind;
 
@@ -152,6 +154,7 @@
   <Frame
     {src}
     {title}
+    name={viewFrameName(identity)}
     {protocol}
     {fill}
     {height}

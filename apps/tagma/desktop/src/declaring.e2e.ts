@@ -12,6 +12,7 @@ type Declaring = {
   readonly profile: string;
   readonly call: (call: object) => Promise<unknown>;
   readonly next: (seen: number) => Promise<readonly WindowDeclaration[]>;
+  readonly nestedPid: () => number | null;
 };
 
 const PROC_PIDTBSDINFO = 3;
@@ -43,11 +44,13 @@ beforeAll(async () => {
   await Bun.write(entry, built.outputs[0]!);
 });
 
-const hosts = (declaration: WindowDeclaration, test: (document: WindowDeclaration['processes'][number]['documents'][number]) => boolean) =>
+type Held = WindowDeclaration['processes'][number]['documents'][number];
+
+const hosts = (declaration: WindowDeclaration, test: (document: Held) => boolean) =>
   declaration.processes.filter((process) => process.kind === 'renderer' && process.documents.some(test));
 
 e2e(
-  'the window declares the renderer of a busy built-in page, the process of its foreign frame, the graphics process, and follows the page closing',
+  'the window declares a busy page whole across its renderers, a named view with its nested frame, the graphics process, and follows the page closing',
   async ({ electron, artifacts }) => {
     const main = electron!;
     const call = (body: object) =>
@@ -55,19 +58,25 @@ e2e(
     const next = (seen: number) =>
       main.evaluate((_electron, count) => (globalThis as unknown as { declaring: Declaring }).declaring.next(count), seen);
     const profile = await main.evaluate(() => (globalThis as unknown as { declaring: Declaring }).declaring.profile);
-    const standing = (declaration: WindowDeclaration) =>
-      hosts(declaration, (document) => document._tag === 'Page' && document.page === 'page-1').length > 0 &&
-      hosts(declaration, (document) => document._tag === 'Origin' && document.origin === 'https://elsewhere.invalid').length > 0 &&
-      declaration.processes.some((process) => process.kind === 'graphics');
+    const isPage = (document: Held) => document._tag === 'Page' && document.page === 'page-1';
+    const isView = (document: Held) => document._tag === 'AppView' && document.app === 'notes' && document.view === 'board';
+    const nestedPid = () => main.evaluate(() => (globalThis as unknown as { declaring: Declaring }).declaring.nestedPid());
+    const standing = async (declaration: WindowDeclaration) => {
+      const nested = await nestedPid();
+      return (
+        hosts(declaration, isPage).length === 2 &&
+        nested !== null &&
+        declaration.processes.find((process) => process.pid === nested)?.documents.some(isView) === true &&
+        declaration.processes.some((process) => process.kind === 'graphics')
+      );
+    };
 
     await call({ kind: 'open', page: 'page-1', profile, context: null, url: 'https://fixture.invalid/', history: null, policy: null });
     let all = await next(0);
-    while (!standing(all.at(-1)!)) all = await next(all.length);
+    while (!(await standing(all.at(-1)!))) all = await next(all.length);
     const opened = all.at(-1)!;
 
-    const pageRenderer = hosts(opened, (document) => document._tag === 'Page')[0]!;
-    const frameRenderer = hosts(opened, (document) => document._tag === 'Origin' && document.origin === 'https://elsewhere.invalid')[0]!;
-    expect(frameRenderer.pid).not.toBe(pageRenderer.pid);
+    expect(hosts(opened, (document) => document._tag === 'Origin')).toEqual([]);
     expect(hosts(opened, (document) => document._tag === 'Interface').length).toBe(1);
     expect(opened.processes.some((process) => process.kind === 'main')).toBe(true);
 
@@ -84,8 +93,8 @@ e2e(
 
     await call({ kind: 'close', page: 'page-1', ask: false });
     let after = await next(all.length);
-    while (hosts(after.at(-1)!, (document) => document._tag === 'Page').length > 0) after = await next(after.length);
-    expect(hosts(after.at(-1)!, (document) => document._tag === 'Origin' && document.origin === 'https://elsewhere.invalid')).toEqual([]);
+    while (hosts(after.at(-1)!, isPage).length > 0) after = await next(after.length);
+    expect(hosts(after.at(-1)!, isView).length).toBeGreaterThan(0);
   },
   {
     lanes: ['electron'],

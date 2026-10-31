@@ -12,7 +12,13 @@ const framesOf = (contents: WebContents): readonly Frame[] => {
   if (root.isDestroyed()) return [];
   return root.framesInSubtree
     .filter((frame) => !frame.isDestroyed())
-    .map((frame) => ({ pid: frame.osProcessId, origin: frame.origin, main: frame.parent === null }));
+    .map((frame) => ({
+      id: frame.frameTreeNodeId,
+      parent: frame.parent === null ? null : frame.parent.frameTreeNodeId,
+      pid: frame.osProcessId,
+      origin: frame.origin,
+      name: frame.name,
+    }));
 };
 
 export class Declaring {

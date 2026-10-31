@@ -5,7 +5,6 @@ import { NoticeTakeBack } from './contract/service/notices.js';
 import { Custody } from './contract/service/custody.js';
 import { ExecutionProcessEvidence } from './contract/service/records.js';
 import { LoadFeed, WindowDeclarations } from './contract/service/load.js';
-import { LoadOrigins } from './contract/service/owners.js';
 import { TakeBackOpening } from './commands/waiters.js';
 import { makeHostLoad, makeMachineLoad } from './load/feed.js';
 import { partNames } from './load/windows.js';
@@ -21,7 +20,7 @@ export const executionsServingLayer = Layer.effectContext(
     const evidence = yield* ExecutionProcessEvidence;
     const windows = yield* WindowDeclarations;
     const host = yield* makeHostLoad((parts) => evidence.load(process.pid, parts), windows);
-    const names = partNames(windows, yield* Pages, yield* LoadOrigins);
+    const names = partNames(windows, yield* Pages);
     return Context.make(LoadFeed, yield* makeMachineLoad(host, yield* makeWorkNames, yield* Background, names));
   }),
 );
