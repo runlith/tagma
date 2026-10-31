@@ -1,9 +1,9 @@
 import { fixtureMigrations } from '../../composition/testing/migrations.js';
 import { expect } from 'bun:test';
 import { it } from '@runlith/effect-test';
-import { eq, sql } from 'drizzle-orm';
-import { sqliteTable, text } from 'drizzle-orm/sqlite-core';
-import { Cause, Deferred, Effect, Exit, Fiber, Layer } from 'effect';
+import { and, asc, eq, sql } from 'drizzle-orm';
+import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
+import { Cause, Clock, Deferred, Effect, Exit, Fiber, Layer } from 'effect';
 import { sharedPool } from '@runlith/sqlite-process/testing/pool';
 import { MachineStore } from '../contract/service/store.js';
 import type { ReturnedRows } from '@runlith/sqlite-process/channel';
@@ -15,8 +15,13 @@ import { unitsLayer } from './units.js';
 import { readConsequences } from './writes.js';
 import { UnitInProgramRefused } from './life.js';
 import { planned, unplannable } from './programs.js';
+import { bindQuery } from './queries.js';
 
-const kept = sqliteTable('programs_kept', { id: text('id').primaryKey() });
+const kept = sqliteTable('programs_kept', {
+  id: text('id').primaryKey(),
+  details: text('details', { mode: 'json' }),
+  at: integer('at', { mode: 'timestamp_ms' }),
+});
 const keeping = writes('programs.keep', [kept]);
 
 const storage = unitsLayer(MachineUnits, MachineStore).pipe(
@@ -26,7 +31,7 @@ const storage = unitsLayer(MachineUnits, MachineStore).pipe(
 const world = Effect.gen(function* () {
   const store = yield* MachineStore;
   const units = yield* MachineUnits;
-  yield* store.db.run(sql`create table programs_kept (id text primary key)`);
+  yield* store.db.run(sql`create table programs_kept (id text primary key, details text, at integer)`);
   yield* readConsequences(store.identity, store.db);
   const counted = { reads: 0 };
   const count = store.moves.answers<string, number>([kept]).read(
@@ -43,6 +48,48 @@ const world = Effect.gen(function* () {
   const missing = store.db.select({ id: kept.id }).from(kept).where(eq(kept.id, 'missing'));
   return { units, count, counted, ids, insert, missing };
 });
+
+it.live('prepared program writes and guards bind encoded values in standalone and joined units', () =>
+  Effect.gen(function* () {
+    const { units } = yield* world;
+    const { db } = yield* MachineStore;
+    const insert = db
+      .insert(kept)
+      .values({ id: sql.placeholder('id'), details: sql.placeholder('details'), at: sql.placeholder('at') })
+      .prepare();
+    const guard = db
+      .select({ id: kept.id })
+      .from(kept)
+      .where(and(eq(kept.id, sql.placeholder('id')), eq(kept.at, sql.param(sql.placeholder('at'), kept.at))))
+      .prepare();
+    const at = new Date(yield* Clock.currentTimeMillis);
+    yield* units.program(keeping, 'test:prepared', (program) =>
+      program.write(bindQuery(insert, { id: 'a', details: { text: '漢🙂' }, at }), 1),
+    );
+    yield* units.write(keeping, () =>
+      units.program(keeping, 'test:prepared-joined', (program) =>
+        Effect.andThen(
+          program.guard(bindQuery(guard, { id: 'b', at }), 0),
+          program.write(bindQuery(insert, { id: 'b', details: null, at: null }), 1),
+        ),
+      ),
+    );
+    const refused = yield* Effect.result(
+      units.program(keeping, 'test:prepared-refused', (program) =>
+        Effect.andThen(
+          program.guard(bindQuery(guard, { id: 'a', at }), 0),
+          program.write(bindQuery(insert, { id: 'c', details: null, at: null }), 1),
+        ),
+      ),
+    );
+    expect(refused._tag).toBe('Failure');
+    if (refused._tag === 'Failure') expect(refused.failure._tag).toBe('ProgramConflict');
+    expect(yield* db.select().from(kept).orderBy(asc(kept.id))).toEqual([
+      { id: 'a', details: { text: '漢🙂' }, at },
+      { id: 'b', details: null, at: null },
+    ]);
+  }).pipe(Effect.provide(storage)),
+);
 
 it.live(
   'a returning write hands its rows to its place among the after-commit work of a program and of a joined program, and nothing when refused',
