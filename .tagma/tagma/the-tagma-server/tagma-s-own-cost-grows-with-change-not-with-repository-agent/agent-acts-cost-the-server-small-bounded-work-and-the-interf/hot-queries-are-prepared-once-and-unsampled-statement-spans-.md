@@ -17,7 +17,7 @@ sources:
 ---
 Section D of [[2afe6fec]]: a statement and a span cost the serving loop almost nothing.
 
-Measured at 5× on `815ad556`: the serving thread is the ceiling at 0.96 core. Its self time splits as Effect runtime 31.6%, Drizzle SQL building 18.8%, Effect schema 7.7%, tracer and ledger 4.5%, JSON 3.5%. Drizzle rebuilds SQL text and the row mapper on every call; each statement opens a span; rows cross the process boundary by structured clone and are decoded by schema.
+In the profiled 5× sample on `815ad556`, the serving thread used 0.96 core while backlog grew, consistent with a serving-thread CPU ceiling on that machine. Its weighted self-time shares were Effect runtime 31.6%, Drizzle SQL building 18.8%, Effect schema 7.7%, tracer and ledger 4.5%, native parse/stringify 3.5%. Drizzle rebuilds SQL text and the row mapper on every call; each statement opens a span; rows cross the process boundary by structured clone and are decoded by schema.
 
 What stands when done:
 - the hot queries are Drizzle prepared queries with placeholders. Hot means ranked by count × serving-thread cost at 5×, measured, not guessed;
