@@ -36,79 +36,87 @@ sources:
 ---
 ## Outcome
 
-Opening Load answers "what of Tagma is eating my machine, and can I stop it" down to a part a person recognizes: the window's interface, its graphics process, each built-in browser page and app view by its title, the server, the terminal host, each agent with its commands, terminals and what they left. Other programs stay a secondary, collapsed section that costs nothing while closed. The same core runs on macOS, Linux and Windows: a new OS adds a usage adapter and changes no core, contract, server or app code.
+Opening Load answers "what of Tagma is eating my machine, and can I stop it" down to a part a person recognizes: the window's interface, its graphics process, each built-in browser page and each app or MCP view by name, the server, the terminal host, each agent with its commands, terminals and what they left. Other programs stay a secondary, collapsed section that costs no per-process reading of refused processes while closed. The same core runs on macOS, Linux and Windows: a new OS adds adapters and changes no core, contract, server or app code.
 
 ## Why
 
 One reading, 2026-10-31, 12-core Mac: the machine at 57–62%, the panel's Tagma figure 3.4%. Eleven built-in browser pages, loaded but shown nowhere, took about 37% of the machine through the window's renderers and GPU process. All of it stood as the outside program "Tagma Dev" under the collapsed "Rest of the Mac", while the Tagma list showed 13 agents at 0.0–0.3%. Closing the pages dropped the machine to 17%. Causes in the code:
 
-- The window counts as Tagma only while the server is its direct child (`ProcessUsage.ts`: `rows.get(serverPid)?.parent === desktopPid`), and the window pid reaches the host from `TAGMA_DESKTOP_PID`, fixed in the server's environment by the window that spawned it. The server is spawned detached, outlives windows and hands over to successors: in the reading its parent was launchd and its variable named pid 9106, while the window was 32437.
+- The window counts as Tagma only while the server is its direct child (`ProcessUsage.ts`: `rows.get(serverPid)?.parent === desktopPid`), and the window pid reaches the host from `TAGMA_DESKTOP_PID`, fixed in the server's environment by the window that spawned it. The server is spawned detached, outlives windows and hands over to successors: in the reading its parent was launchd and its variable named pid 9106, while the window was 32437. The `Load` request takes both pids once, at open (`protocol/wire.ts`); only `interested` changes afterwards.
 - Placement follows parent links only (`ProcessAccount.place`), so OS services working for Tagma stay outside — macOS `VTDecoderXPCService` and `MTLCompilerService` had Tagma's GPU process as their responsible process — although the native reader already returns that link (`usage.rs`) and uses it only to name programs.
-- The window has no parts: its renderers read "Electron Helper (Renderer)", so no page can be blamed.
+- The window has no parts: its renderers read "Electron Helper (Renderer)", so no page or view can be blamed.
 - The list spends its height on idle agents and sorts within groups, so the heaviest Tagma consumer cannot reach the top.
-- Every pass runs a synchronous `/bin/ps` (`posix/Sampler.ts`, `Bun.spawnSync`) for each process the OS refuses — 156 root processes, about 60 ms of which 50 ms system — blocking the host's loop for processes nobody opened.
+- Every pass, the sampling worker runs one batched synchronous `/bin/ps` for all processes the OS refuses (`posix/Sampler.ts`) — 156 root processes, about 60 ms of which 50 ms system in one measurement — whether or not anyone opened other programs.
 - OS specifics stand in shared code: `.app` bundle grouping and the `ps` fallback in `posix/`, which a Linux adapter would share; "Mac" in the app's words. The host boots only on macOS (`composition/platform.ts`).
 
 ## What is Tagma's
 
 A process is Tagma's when any of these holds; every other process is outside.
 
-1. It is a declared part of Tagma: the server, the execution host and its holder, and each process of a connected Tagma window. Each part declares itself; nothing is inferred from parentage between parts.
+1. It is a declared part of Tagma: the server, the execution host and its holder, and each process of a connected Tagma window. Each part is declared by whoever knows it; nothing is inferred from parentage between parts.
 2. It descends from a Tagma process by the kernel's parent links, at any depth — including what agents' commands and terminals started and what they left behind, as executions and residuals do now.
 3. The OS records it as working on behalf of a Tagma process (macOS: the responsible process). An adapter without such a record contributes nothing here.
 
-Each Tagma process lands in exactly one row. Executions claim first, as now; then each declared part claims itself, and descent from a part stops at another part — the server a window spawned, and its children, stay the server's. A declared process is accepted only when its pid and birth match the kernel's table (rule [[62049465]]); a mismatch is a reused pid, not Tagma's.
+Each Tagma process lands in exactly one row. Executions claim first, as now; then each declared part claims itself, and descent from a part stops at another part — the server a window spawned, and its children, stay the server's.
+
+A declared process is Tagma's only once the host resolves it to the kernel's own witness (rule [[62049465]]). A window declares a pid with Electron's creation time (epoch milliseconds), while a witness's birth is the adapter's opaque OS form ([[7f126a5b]]): resolving a pid and an epoch creation time to the witness, within the declared precision, is a process-reader adapter operation answering the witness, a different process, or unknown. An unknown or different answer leaves the process outside and says so in the reading.
 
 Out of reach, and said in the panel's hint rather than hidden: compositing the OS does for the window (macOS WindowServer) cannot be split per process and stays outside; a Tagma web client opened in a person's browser is that browser's process.
 
 ## The window declares itself
 
-Desktop main sends the server its process set over a local-only connection — like the browser host, a paired device never declares, since pids mean nothing off the server's machine. For each process: pid, creation time and part — main, graphics, utility, or a renderer with the documents it serves: the interface, an app view by id, a built-in page by page id. Electron supplies all of it on every OS (`app.getAppMetrics`, `webContents.getOSProcessId`), so no OS adapter is involved. Desktop main re-declares when the set changes (a renderer starts or ends, a page moves to another renderer); the declaration ends with the connection. The server hands the current declarations to the host's load subscription in place of `desktopPid`; `TAGMA_DESKTOP_PID` and the parent check leave.
+Desktop main declares its processes: pid, Electron creation time and part — main, graphics, utility, or renderer. For a renderer it lists the documents it hosts, read from Electron on every OS: each webContents (`getOSProcessId`) is the interface, an app-view window, or a built-in page by page id; each frame inside them (`mainFrame.framesInSubtree`, `frame.osProcessId`, as the page strain code already walks) is named by its origin — an app's own origin names that app, the MCP sandbox origin names the view's server. The server turns page ids, app ids and servers into titles; desktop main sends no names it does not own.
+
+The declaration rides desktop main's existing local channel to the server — the one the browser host attaches with a host id and generation, which a paired device never gets, since pids mean nothing off the server's machine. Desktop main sends a whole replacement whenever the set changes (a renderer starts or ends, a frame or page moves to another renderer, a window opens or closes); a new generation replaces the old one and the declaration ends with its generation. Several windows each declare under their own host id; the server holds the union.
+
+`executions/load` declares in its contract a port taking the current declarations; the desktop channel's owner fills it and composition binds them (rule [[e090f46d]]); execution-host never sees browser or app types. The host's load subscription takes the declared parts as a neutral list (pid, epoch creation time with its precision, an opaque part key) and accepts replacements within a live subscription; `desktopPid`, `TAGMA_DESKTOP_PID` and the parent check leave.
 
 ## Rows
 
-Under Tagma's figure, one list of Tagma's rows, sorted as one list by CPU, memory or name:
+Under Tagma's figure, one list of Tagma's rows, sorted as one list by CPU, memory or name. CPU cannot be split inside one process, so a window row is one process, titled by what it hosts:
 
-- **Interface** — desktop main, the window's own renderers and utility processes.
+- **Interface** — desktop main and the interface's renderer with the documents it hosts; utility processes.
 - **Graphics** — the GPU process with the OS services working on its behalf.
-- **Page** — a built-in page by title and host, holding its renderer; a renderer serving several pages names them all and counts once. Its action closes the page through the browser's close.
-- **App view** — by title, holding its renderer.
+- **A renderer of pages or views** — titled by its documents: "Page — title (host)", "App — name", "MCP view — server"; a renderer hosting several lists them all and counts once. Its action closes the pages and views it hosts, each through its own close; a renderer also hosting the interface has no action.
 - **Server** — as now, with its reaped part and background work.
 - **Terminal host** — the execution host and its holder.
 - **Agent** and **thread-less work** — as now, with their stop.
 
-Sorted by CPU and not searching, rows whose CPU over the ranking window stays below 0.1% of the machine fold into one "Idle — N" row at the end of Tagma's list; sorting by memory or name, or searching, shows them in place. Search covers names, page titles and hosts, commands and pids.
+Sorted by CPU and not searching, rows whose CPU over the ranking window stays below 0.1% of the machine fold into one "Idle — N" row at the end of Tagma's list; sorting by memory or name, or searching, shows them in place. Search covers names, page titles and hosts, app and server names, commands and pids.
 
-Other programs form one collapsed section below Tagma: programs grouped by the adapter's rule, and one remainder row — the kernel plus whatever the OS did not let the adapter read. Processes the OS refuses are read one by one only while that section is open or a search runs, and the read never blocks the host loop; otherwise their CPU stands in the remainder row.
+Other programs form one collapsed section below Tagma: programs grouped by the adapter's rule, and one remainder row — the kernel plus whatever the OS did not let the adapter read. A reader states its demand for other programs separately from `interested`: while the section is open or a search runs, the adapter reads refused processes, batched once per pass; otherwise it does not, and their CPU stands in the remainder row.
 
 No interface or contract text names an OS: the machine's name ("Mac", "PC") comes from the adapter's machine facts.
 
+**GPU.** Each row shows a GPU share only where an adapter measures it for that process; elsewhere the column reads "not measured on this system" with the adapter's reason, never zero, and the Graphics row's CPU never stands for GPU. Today no per-process source is proven: on 2026-10-31 the macOS IOKit per-client GPU time listed other processes but not Tagma's GPU process. The GPU step is done when, for each OS, either a named per-process source is proven by a measurement on that OS and its adapter fills it, or a finding records that none exists without privileges and the panel says so there.
+
 ## OS adapters
 
-The core is OS-neutral: the `@runlith/executions` load protocol; the execution host's placement, accounting and grouping (`ProcessUsage`, `ProcessAccount`, `processTree`, `processSpending`); the server's `executions/load`; the app. It reads only the usage port and never branches on platform (rule [[6f758080]], enforced by the `vendor-ids` inspection).
+The core is OS-neutral: the `@runlith/executions` load protocol; the execution host's placement, accounting and grouping (`ProcessUsage`, `ProcessAccount`, `processTree`, `processSpending`); the server's `executions/load`; the app. It reads only the adapter ports and never branches on platform (rule [[6f758080]]).
 
-The usage port (`UsageReader`) answers, per process: identity (pid, birth), parent, the CPU counter with its reaped-children part where the OS keeps one, memory — the OS's non-shared figure where one exists (macOS `phys_footprint`, Linux PSS, Windows private bytes), else resident — name, command, program (key and name by the adapter's grouping rule), and the on-behalf-of pid where the OS records one; and machine counters with the machine's name. An optional measure the adapter cannot take carries a reason, never zero. How a refused process is read is the adapter's own matter, on demand.
+The usage port (`UsageReader`) answers, per process: identity witness, parent, the CPU counter and whether it includes reaped descendants, memory — the OS's non-shared figure where one exists (macOS `phys_footprint`, Linux PSS, Windows private bytes), else resident — name, command, program (key and name by the adapter's grouping rule), the on-behalf-of pid where the OS records one, and GPU where measured; per execution, a cumulative CPU counter of the OS container holding its whole tree where the OS keeps one (Windows job object); the machine counters and the machine's name. It takes the reader's demand for refused processes. An optional measure the adapter cannot take carries a reason, never zero.
 
-- **macOS** — native `proc_pid_rusage` counters with reaped children, `phys_footprint`, the responsible process as on-behalf-of, `.app` grouping, setuid `/bin/ps` for refused processes: all moved out of `posix/` into the macOS adapter.
-- **Linux** — the native `/proc` reader exists (`usage.rs`: utime and stime with cutime and cstime, PSS); grouping by executable; no on-behalf-of; `/proc` gives other users' counters, so no fallback.
-- **Windows** — the native reader exists without reaped children; reaped time comes from the execution's job object; grouping by executable.
+Accounting keeps sums whatever the adapter has: with counters that include reaped descendants, an ended execution's last fragment moves out of its reaper's growth, as now; with an execution container counter, the execution's CPU is that counter's growth, including members born and gone between passes; with neither, short members are not seen and the reading says the execution's figure is a lower bound.
 
-These readers belong to a whole host adapter, and Linux and Windows have none yet (`composition/platform.ts` refuses to boot): terminals and commands wait on it, not only Load. This spec makes Load ask nothing of those adapters beyond the usage port.
+- **macOS** — native `proc_pid_rusage` counters with reaped children, `phys_footprint`, the responsible process as on-behalf-of, `.app` grouping, setuid `/bin/ps` for refused processes on demand, birth resolution of `seconds:micros`: all in the macOS adapter, out of `posix/`.
+- **Linux** — the native `/proc` reader exists (`usage.rs`: utime and stime with cutime and cstime, PSS); grouping by executable; no on-behalf-of; `/proc` gives other users' counters, so no refused set; birth resolution of start ticks against boot time.
+- **Windows** — the native reader exists without reaped children; the execution's job object gives the container counter; grouping by executable; birth resolution of FILETIME.
 
-**GPU.** A per-row GPU share is wanted, but no per-process source is proven: on 2026-10-31 the macOS IOKit per-client GPU time listed other processes but not Tagma's GPU process. A research step reads a per-process source for each OS — candidates: macOS IOKit accelerator clients, Linux DRM `fdinfo`, Windows "GPU Engine" counters — and the port gains an optional GPU measure only for a proven source.
+These readers belong to whole host adapters, and Linux and Windows have none yet (`composition/platform.ts` refuses to boot): terminals and commands wait on them, not only Load. This spec makes Load ask nothing of those adapters beyond these ports.
 
 ## Work, in order
 
-1. Usage port and the macOS adapter boundary: `.app` grouping, the responsible link and the `ps` fallback move into the macOS adapter; the fallback becomes asynchronous and on demand; the core loses every OS name.
-2. Window declaration: desktop main declares, the server forwards, the host places; the environment variable and the parent check go.
-3. On-behalf-of placement in the core.
-4. Server rows and the app list: window parts with page and view names, one sorted Tagma list, idle folding, OS-neutral words, page close.
-5. GPU source per OS, then the optional measure.
+1. Port and macOS adapter boundary: `.app` grouping, the responsible link, the `ps` fallback and birth resolution sit in the macOS adapter; the fallback runs on demand; the core loses every OS name.
+2. Window declaration: desktop main declares documents and processes, the channel carries generations, `executions/load` takes them through its port, the host resolves and places them in a live subscription; the environment variable and the parent check go.
+3. On-behalf-of placement and the execution container counter in core accounting.
+4. Server rows and the app list: renderer rows titled by their documents with close, one sorted Tagma list, idle folding, demand for other programs, OS-neutral words.
+5. GPU source per OS, ending as the GPU paragraph says.
 
 ## Proof
 
-- Placement through the host's load reading: with a server whose parent is not the window, the declared window's processes land in window rows; a declared pid with another birth stays outside; a launchd-parented service on behalf of a Tagma process is Tagma's; an execution's claim beats a window's.
-- A usage-port double with no on-behalf-of, no reaped part and no GPU yields a consistent reading — the shape a new OS adapter starts from.
-- No OS name or path (`darwin`, `.app`, `/bin/ps`, "Mac") outside adapters, judged by the enforced inspection.
-- A desktop e2e in the testbed Electron lane: two built-in pages, one running a busy loop — its row carries the page's title and its renderer's CPU, and every window row counts inside Tagma's figure.
-- Host pass cost with the other-programs section closed and open, before and after; no synchronous child process on the host loop.
+- Placement through the host's load reading: with a server whose parent is not the window, the declared window's processes land in window rows; a declared pid whose creation time does not resolve stays outside; a launchd-parented service on behalf of a Tagma process is Tagma's; an execution's claim beats a window's; a replacement inside a live subscription moves rows and a new generation drops the old one's.
+- A usage-port double with no reaped part, no on-behalf-of and no GPU, but an execution container counter: an execution that starts and ends between two readings is charged in full and row sums stay continuous. Without the container counter the same reading marks the figure as a lower bound.
+- With other programs not demanded, no refused-process read runs in a pass; with demand, one batched read runs.
+- A desktop e2e in the testbed Electron lane: a built-in page running a busy loop and an app view frame on its own origin each appear in a row titled by their document, with their renderer's CPU; every window row counts inside Tagma's figure; the page row's close closes the page.
+- No OS name or path (`darwin`, `win32`, `linux`, `.app/`, `/bin/ps`, `/proc`, "Mac") in the core paths named above, adapters and composition excluded, judged by a check scoped to those paths; `vendor-ids` does not cover them. Enforcing that check is the operator's word.
+- Sampling-worker cost per pass, with its child processes, with other programs closed and open, before and after.
