@@ -1,4 +1,4 @@
-import { clashOf } from '@runlith/chat-ui/RegistryClash';
+import { clashOf } from '@runlith/roster/RegistryClash';
 import { Service } from '@runlith/layer/key';
 import type { Holder } from '$lib/shared/panes/holder.js';
 import { type PaneContent, type PaneKind, type PaneOffer, PaneUndeclared, type PaneRefusal } from '$lib/shared/panes/pane.js';

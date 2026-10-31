@@ -1,5 +1,5 @@
 import type { Project } from '@tagma/server/graph/contract/wire/rows';
-import { RegistryClash } from '@runlith/chat-ui/RegistryClash';
+import { RegistryClash } from '@runlith/roster/RegistryClash';
 import { makeStorage } from '@runlith/layer/testing';
 import { expect, test } from 'vitest';
 import { type SurfaceDeclaration, SurfaceRegistry } from './surface.js';

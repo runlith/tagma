@@ -13,7 +13,7 @@ import {
 } from '@runlith/chat-ui/EntryKinds.svelte';
 import type { FeedRegions } from '@runlith/chat-ui/FeedRegions.svelte';
 import type { PromptHandle } from '@runlith/chat-ui/PromptHandle.svelte';
-import { clashOf } from '@runlith/chat-ui/RegistryClash';
+import { clashOf } from '@runlith/roster/RegistryClash';
 import type { Worktrees } from '$lib/features/worktrees/BoardState.svelte.js';
 import type { ThreadBirth } from '../birth/ThreadBirth.svelte.js';
 import type { ChatHold } from '../ChatHold.svelte.js';

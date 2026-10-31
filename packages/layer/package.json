@@ -95,6 +95,12 @@
       "browser": "./src/Platform/browser.ts",
       "default": "./src/Platform/browser.ts"
     },
+    "./Point": {
+      "types": "./src/Point.ts",
+      "browser": "./src/Point.ts",
+      "node": "./src/Point.ts",
+      "default": "./src/Point.ts"
+    },
     "./Prepare": {
       "types": "./src/Prepare.ts",
       "browser": "./src/Prepare.ts",
@@ -154,6 +160,18 @@
       "svelte": "./src/svelte/App.svelte.ts",
       "default": "./src/svelte/App.svelte.ts"
     },
+    "./svelte/payload": {
+      "types": "./src/svelte/payload.ts",
+      "browser": "./src/svelte/payload.ts",
+      "svelte": "./src/svelte/payload.ts",
+      "default": "./src/svelte/payload.ts"
+    },
+    "./svelte/PointView.svelte": {
+      "types": "./src/svelte/PointView.svelte",
+      "browser": "./src/svelte/PointView.svelte",
+      "svelte": "./src/svelte/PointView.svelte",
+      "default": "./src/svelte/PointView.svelte"
+    },
     "./svelte/screen.svelte": {
       "types": "./src/svelte/screen.svelte.ts",
       "browser": "./src/svelte/screen.svelte.ts",
@@ -184,6 +202,8 @@
     "typecheck": "runlith-typecheck"
   },
   "dependencies": {
+    "@runlith/error-boundary": "workspace:*",
+    "@runlith/roster": "workspace:*",
     "esm-env": "catalog:"
   },
   "devDependencies": {

@@ -3,7 +3,7 @@ import { ComposerContributions } from '@runlith/chat-ui/ComposerContributions.sv
 import { settled } from '@runlith/chat-ui/composer';
 import { createEntryKinds } from '@runlith/chat-ui/EntryKinds.svelte';
 import { FeedRegions } from '@runlith/chat-ui/FeedRegions.svelte';
-import { RegistryClash } from '@runlith/chat-ui/RegistryClash';
+import { RegistryClash } from '@runlith/roster/RegistryClash';
 import { Effect } from 'effect';
 import { flushSync, mount, unmount } from 'svelte';
 import { afterEach, expect, test } from 'vitest';

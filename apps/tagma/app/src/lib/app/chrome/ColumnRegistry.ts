@@ -1,4 +1,4 @@
-import { RegistryClash, clashOf } from '@runlith/chat-ui/RegistryClash';
+import { RegistryClash, clashOf } from '@runlith/roster/RegistryClash';
 import { type Resolver, Service } from '@runlith/layer/key';
 import type { ColumnDeclaration, ColumnFrame } from '$lib/features/workspace/column.js';
 import type { Surface, SurfaceRegistry } from '$lib/features/workspace/surface.js';

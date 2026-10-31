@@ -12,8 +12,9 @@ import {
   settled,
 } from './composer';
 import type { ChatNotice } from './notice';
-import { clashOf } from './RegistryClash';
-import { Roster } from './Roster.svelte';
+import { reactiveCell } from '@runlith/roster/cell.svelte';
+import { clashOf } from '@runlith/roster/RegistryClash';
+import { Roster } from '@runlith/roster/Roster';
 
 const LAST = Number.MAX_SAFE_INTEGER;
 
@@ -23,12 +24,16 @@ const subject =
     `Composer ${kind} "${key}"`;
 
 export class ComposerContributions {
-  private readonly commandRoster = new Roster<ComposerSlashCommand>(subject('command'), (command) => command.name);
-  private readonly chipRoster = new Roster<ComposerChip>(subject('chip'), (chip) => chip.id);
-  private readonly panelRoster = new Roster<ComposerPanelContribution>(subject('panel'), (panel) => panel.id);
-  private readonly mentionRoster = new Roster<ComposerMentionProvider>(subject('mention provider'), (provider) => provider.id);
-  private readonly attachmentRoster = new Roster<ComposerAttachmentKind>(subject('attachment kind'), (kind) => kind.id);
-  private readonly dropRoster = new Roster<ComposerDrop>(subject('drop'), (drop) => drop.id);
+  private readonly commandRoster = new Roster<ComposerSlashCommand>(subject('command'), (command) => command.name, reactiveCell());
+  private readonly chipRoster = new Roster<ComposerChip>(subject('chip'), (chip) => chip.id, reactiveCell());
+  private readonly panelRoster = new Roster<ComposerPanelContribution>(subject('panel'), (panel) => panel.id, reactiveCell());
+  private readonly mentionRoster = new Roster<ComposerMentionProvider>(
+    subject('mention provider'),
+    (provider) => provider.id,
+    reactiveCell(),
+  );
+  private readonly attachmentRoster = new Roster<ComposerAttachmentKind>(subject('attachment kind'), (kind) => kind.id, reactiveCell());
+  private readonly dropRoster = new Roster<ComposerDrop>(subject('drop'), (drop) => drop.id, reactiveCell());
 
   commands = $derived([...this.commandRoster.items].sort((a, b) => (a.order ?? LAST) - (b.order ?? LAST)));
   mentions = $derived(this.mentionRoster.items);

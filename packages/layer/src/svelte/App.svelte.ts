@@ -2,7 +2,8 @@ import { BROWSER } from 'esm-env';
 import { getContext, onDestroy, setContext, untrack } from 'svelte';
 import { withoutReactiveContext } from './detach.js';
 
-import type { Cell } from '../Graph.js';
+import { reactiveCell } from '@runlith/roster/cell.svelte';
+
 import { bindAppResolver, type Deferred, type DeferredKeyClass, type KeyClass, type Tier } from '../key.js';
 import { Layer, type LayerLike } from '../Layer.js';
 import { currentApp, releaseApp } from '../request/holder.js';
@@ -35,18 +36,6 @@ function watchCondition(read: () => boolean, initial: boolean, react: (value: bo
       });
     });
   });
-}
-
-function reactiveCell<T>(): Cell<T> {
-  let value = $state.raw<T | undefined>(undefined);
-  return {
-    get current() {
-      return value;
-    },
-    set current(next) {
-      value = next;
-    },
-  };
 }
 
 export const worldHooks: WorldHooks = BROWSER

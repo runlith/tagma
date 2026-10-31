@@ -1,0 +1,56 @@
+{
+  "name": "@runlith/roster",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A keyed list contributors add to and leave by a disposer: a second contributor of one key is refused naming both, and the list is published through a cell whose reactivity the host chooses.",
+  "type": "module",
+  "exports": {
+    "./cell": {
+      "types": "./src/cell.ts",
+      "browser": "./src/cell.ts",
+      "node": "./src/cell.ts",
+      "default": "./src/cell.ts"
+    },
+    "./cell.svelte": {
+      "types": "./src/cell.svelte.ts",
+      "browser": "./src/cell.svelte.ts",
+      "ssr": "./src/cell.svelte.ts",
+      "svelte": "./src/cell.svelte.ts",
+      "default": "./src/cell.svelte.ts"
+    },
+    "./RegistryClash": {
+      "types": "./src/RegistryClash.ts",
+      "browser": "./src/RegistryClash.ts",
+      "node": "./src/RegistryClash.ts",
+      "default": "./src/RegistryClash.ts"
+    },
+    "./Roster": {
+      "types": "./src/Roster.ts",
+      "browser": "./src/Roster.ts",
+      "node": "./src/Roster.ts",
+      "default": "./src/Roster.ts"
+    }
+  },
+  "scripts": {
+    "test": "testbed vitest run src --project 'unit*'",
+    "typecheck": "runlith-typecheck"
+  },
+  "devDependencies": {
+    "@runlith/testbed": "workspace:*",
+    "@runlith/tsconfig": "workspace:*",
+    "@sveltejs/vite-plugin-svelte": "catalog:",
+    "@types/node": "catalog:",
+    "svelte": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vitest": "catalog:"
+  },
+  "peerDependencies": {
+    "svelte": "catalog:"
+  },
+  "peerDependenciesMeta": {
+    "svelte": {
+      "optional": true
+    }
+  }
+}

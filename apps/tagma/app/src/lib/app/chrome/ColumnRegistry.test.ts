@@ -1,4 +1,4 @@
-import { RegistryClash } from '@runlith/chat-ui/RegistryClash';
+import { RegistryClash } from '@runlith/roster/RegistryClash';
 import type { Resolver } from '@runlith/layer/key';
 import { expect, test } from 'vitest';
 import type { ColumnDeclaration, ColumnState } from '$lib/features/workspace/column.js';

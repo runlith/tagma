@@ -5,7 +5,7 @@ import type { ChatEntry, ChatEntryKind, ProductEntry, ProductId } from './entrie
 import type { ChatActivityIdentity, ChatEntryContext, ChatEntryOf, ChatMessageMetaExtra, ChatToolStatus } from './renderers';
 import type { RowSizing } from './rowEstimate';
 import { TOOL_VIEW_ROW_PX, UNDERIVED_PX } from './rowEstimate';
-import { clashOf } from './RegistryClash';
+import { clashOf } from '@runlith/roster/RegistryClash';
 
 export type EntryRenderer<E extends ChatEntry = ChatEntry> = Snippet<[E, ChatEntryContext]>;
 

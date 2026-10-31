@@ -1,5 +1,5 @@
 import type { Project } from '@tagma/server/graph/contract/wire/rows';
-import { RegistryClash, clashOf } from '@runlith/chat-ui/RegistryClash';
+import { RegistryClash, clashOf } from '@runlith/roster/RegistryClash';
 import { Service } from '@runlith/layer/key';
 import type { Component, Snippet } from 'svelte';
 import { SvelteMap } from 'svelte/reactivity';

@@ -1,6 +1,6 @@
 import type { Resolver } from '@runlith/layer/key';
 import { makeStorage } from '@runlith/layer/testing';
-import { RegistryClash } from '@runlith/chat-ui/RegistryClash';
+import { RegistryClash } from '@runlith/roster/RegistryClash';
 import { expect, test } from 'vitest';
 import type { PaneKind } from '$lib/shared/panes/pane.js';
 import { Seams } from '$lib/shared/seams/Seams.svelte.js';

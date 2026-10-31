@@ -30,6 +30,7 @@
     "@runlith/mcp": "workspace:*",
     "@runlith/primitives": "workspace:*",
     "@runlith/query": "workspace:*",
+    "@runlith/roster": "workspace:*",
     "@runlith/seam": "workspace:*",
     "@runlith/search-text": "workspace:*",
     "@runlith/tagma": "workspace:*",

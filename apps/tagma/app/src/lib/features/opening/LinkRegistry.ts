@@ -1,4 +1,4 @@
-import { clashOf } from '@runlith/chat-ui/RegistryClash';
+import { clashOf } from '@runlith/roster/RegistryClash';
 import { type Resolver, Service } from '@runlith/layer/key';
 import type { PaneContent } from '$lib/shared/panes/pane.js';
 import type { Link, LinkItems, LinkKind, LinksModule, LinkTab } from './Link.js';

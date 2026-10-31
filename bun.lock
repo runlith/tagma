@@ -41,6 +41,7 @@
         "@runlith/mcp": "workspace:*",
         "@runlith/primitives": "workspace:*",
         "@runlith/query": "workspace:*",
+        "@runlith/roster": "workspace:*",
         "@runlith/seam": "workspace:*",
         "@runlith/search-text": "workspace:*",
         "@runlith/tagma": "workspace:*",
@@ -656,6 +657,7 @@
         "@lucide/svelte": "1.16.0",
         "@runlith/agent": "workspace:*",
         "@runlith/error-boundary": "workspace:*",
+        "@runlith/roster": "workspace:*",
         "@runlith/search-text": "workspace:*",
         "@runlith/utils": "workspace:*",
         "@runlith/virtual-list": "workspace:*",
@@ -1030,6 +1032,8 @@
       "name": "@runlith/layer",
       "version": "0.1.0",
       "dependencies": {
+        "@runlith/error-boundary": "workspace:*",
+        "@runlith/roster": "workspace:*",
         "esm-env": "catalog:",
       },
       "devDependencies": {
@@ -1270,6 +1274,26 @@
         "@runlith/effect-test": "workspace:*",
         "@types/bun": "catalog:",
       },
+    },
+    "packages/roster": {
+      "name": "@runlith/roster",
+      "version": "0.1.0",
+      "devDependencies": {
+        "@runlith/testbed": "workspace:*",
+        "@runlith/tsconfig": "workspace:*",
+        "@sveltejs/vite-plugin-svelte": "catalog:",
+        "@types/node": "catalog:",
+        "svelte": "catalog:",
+        "typescript": "catalog:",
+        "vite": "catalog:",
+        "vitest": "catalog:",
+      },
+      "peerDependencies": {
+        "svelte": "catalog:",
+      },
+      "optionalPeers": [
+        "svelte",
+      ],
     },
     "packages/seam": {
       "name": "@runlith/seam",
@@ -2406,6 +2430,8 @@
     "@runlith/query": ["@runlith/query@workspace:packages/query"],
 
     "@runlith/ripgrep": ["@runlith/ripgrep@workspace:packages/ripgrep"],
+
+    "@runlith/roster": ["@runlith/roster@workspace:packages/roster"],
 
     "@runlith/seam": ["@runlith/seam@workspace:packages/seam"],
 
