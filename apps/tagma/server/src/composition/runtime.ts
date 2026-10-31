@@ -1,4 +1,5 @@
 import { endpointConnection } from '@runlith/executions/posix/endpoint';
+import { prepareSqlite } from './sqlite.js';
 import { childLedgerLayer, logicYieldLayer } from './children.js';
 import { claimHoldersLayer } from './hostClaims.js';
 import type { GrantSigner } from '../platform/contract/service/grantSigner.js';
@@ -362,6 +363,7 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
   processes: ProcessPool,
   prepared: Context.Context<never> = Context.empty(),
 ): Effect.fn.Return<ServerRuntime, RuntimeFailure, Scope.Scope> {
+  yield* prepareSqlite;
   const baseScope = yield* Scope.fork(yield* Effect.scope);
   const poolScope = yield* Scope.fork(yield* Effect.scope);
   const originPath = options.installation?.manifest.origin?.checkout;

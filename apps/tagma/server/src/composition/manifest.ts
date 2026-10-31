@@ -1,4 +1,5 @@
 import { Effect, Layer } from 'effect';
+import { prepareSqlite } from './sqlite.js';
 import type { OperationDeclaration } from '../platform/contract/wire/operation.js';
 import { type DeclaredOperations, type Manifest, operationsOf } from '../platform/contract/service/manifest.js';
 import type { Machine } from '../platform/contract/service/capacity.js';
@@ -23,7 +24,9 @@ const modules: readonly Manifest[] = MODULES;
 
 export const RETIRED_TABLES: readonly string[] = modules.flatMap((module) => module.retiredTables ?? []);
 
-export const PREPARATION = Layer.mergeAll(Layer.empty, ...modules.flatMap((module) => module.lifetimes?.preparation ?? []));
+export const PREPARATION = Layer.mergeAll(Layer.empty, ...modules.flatMap((module) => module.lifetimes?.preparation ?? [])).pipe(
+  Layer.provide(Layer.effectDiscard(prepareSqlite)),
+);
 
 export const AFTER_RECOVERY = Layer.mergeAll(Layer.empty, ...modules.flatMap((module) => module.lifetimes?.afterRecovery ?? []));
 
