@@ -140,7 +140,9 @@ Kind: a design decision — state re-derived on pull, the writer coupled to loop
 ### E. An ACP durable step costs in proportion to what it changed
 
 - **Changes, not snapshots.** The protocol owner keeps the row in memory (`link.row`) and writes what changed — normalized rows or deltas — instead of re-encoding the whole row. A step reads no journal row it already holds.
-- **Durability by reason.** Tool-call status changes are durable only where a reader of the stored row needs them. Why `moved` is durable today is established first.
+- **Durability by reason.**
+  - A vendor call's status change stays durable: its first `in_progress` is the record's `execution.started`, which the feed shows before the call ends.
+  - A Tagma-executed call's status change is live: the journal never records it, no reader of the stored row needs it, and replay from the saved cursor derives it again (`ee2f5630`).
 - **Text accumulation** is measured in bytes processed per message byte (`packages/acp/src/draft.ts`), and is made linear if it is not.
 
 ### F. Memory has budgets
@@ -287,7 +289,6 @@ List latency is writer-side COMMIT return to delivered frame across process epoc
 
 - The owner and expected conversation/history contribution of the remaining post-full-GC heap growth after the hosted-call fix; a plateau and an exclusive retainer have not been established.
 - Collection versus paging as the stall mechanism, and the off-loop runtime work seen in some stalls.
-- Why tool-call status changes are durable on ACP.
 - Whether text accumulation is quadratic.
 - What the 8.5 s and 16.5 s gaps without spans before and after a retained `read` call's execution were waiting on (trace `d4ba3a6c…`).
 - Runner, CLI and renderer cost under load.
