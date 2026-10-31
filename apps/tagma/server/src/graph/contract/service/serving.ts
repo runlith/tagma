@@ -479,7 +479,7 @@ export class FreshnessGate extends Context.Service<
     readonly copyFailures: (treeRoot: string) => Effect.Effect<readonly CopyFailure[], GateRefusal<'not-served'>>;
     readonly prepareTopology: (place: TopologyPlace) => Effect.Effect<TopologySync | null, GateRefusal<'graph-pool'>>;
     readonly siblings: (place: SiblingPlace) => Effect.Effect<SiblingReading, GateRefusal<'graph-pool'>>;
-    readonly remoteMoved: (gitDir: string) => void;
+    readonly remoteMoved: (gitDir: string) => Effect.Effect<void, GateRefusal<OpenRefusal>>;
   }
 >()('tagma/graph/FreshnessGate') {}
 

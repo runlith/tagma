@@ -621,8 +621,11 @@ export const makeFreshnessGate = Effect.fnUntraced(function* ({
       }),
     prepareTopology,
     siblings,
-    remoteMoved: (gitDir) => {
-      for (const state of entries.values()) if (state.layout.mode === 'stealth' && state.layout.gitDir === gitDir) refsMoved(state);
-    },
+    remoteMoved: (gitDir) =>
+      Effect.suspend(() => {
+        const moved = [...entries.values()].filter((state) => state.layout.mode === 'stealth' && state.layout.gitDir === gitDir);
+        for (const state of moved) refsMoved(state);
+        return Effect.forEach(moved, (state) => settled(state.treeRoot), { discard: true });
+      }),
   });
 });
