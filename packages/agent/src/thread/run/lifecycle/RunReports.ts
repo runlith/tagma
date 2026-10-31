@@ -159,7 +159,7 @@ export type AdapterReports = {
   tailDue(run: ThreadRunRef): boolean;
   readonly tailEveryMs: number;
   seed(run: ThreadRunRef, tail: ThreadTranscript): void;
-  cut<A, E, R>(threadId: string, work: Effect.Effect<A, E, R>): Effect.Effect<A, E, R>;
+  cut<A, E>(threadId: string, work: Effect.Effect<A, E>): Effect.Effect<A, E | ThreadPortFailure>;
   asked(run: ThreadRunRef, question: ThreadQuestionEntry, evidence: string): ReportPlan;
   resolved(run: ThreadRunRef, questionId: string, evidence: string, closing?: 'cleared' | 'answered', note?: string): ReportPlan;
 };
@@ -544,7 +544,7 @@ export const runReportsLayer = Layer.effect(
       tailDue: (run) => tails.due(run),
       tailEveryMs: rhythm.flushIntervalMs,
       seed: (run, tail) => tails.seed(run, tail),
-      cut: (threadId, work) => feed.atCut(threadId, work),
+      cut: (threadId, work) => kernel.lane.order(threadId, feed.atCut(threadId, work)),
       ended: (run, ending, spend = {}) => ({
         tables: ENDING_TABLES,
         run: Effect.fnUntraced(function* (tx) {

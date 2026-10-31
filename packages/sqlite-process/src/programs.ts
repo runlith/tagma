@@ -170,7 +170,6 @@ export const makePrograms = Effect.fnUntraced(function* (input: ProgramWriter) {
           bytes += Buffer.byteLength(statement.sql, 'utf8') + parameterBytes(statement.params);
         if (cost !== null) {
           cost.counts.programs += 1;
-          cost.counts.statements += submission.program.statements.length;
           cost.counts.requestBytes += bytes;
         }
         const pending: Pending = { submission, bytes, answer: Deferred.makeUnsafe(), askedAt: now(), cost, frame };

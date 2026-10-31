@@ -33,7 +33,11 @@ const opened = Effect.gen(function* () {
     store: storage.aggregate,
     log: storage.eventLog,
     transitions: storage.transitions,
-    lane: { place: () => ({ at: 0 }), enter: (_threadId, _place, work) => Effect.map(work, (ran) => ({ ran })) },
+    lane: {
+      place: () => ({ at: 0 }),
+      enter: (_threadId, _place, work) => Effect.map(work, (ran) => ({ ran })),
+      order: (_threadId, work) => work,
+    },
     kinds: storage.kinds,
   };
   const step = (decidedBy: string, moved?: () => Effect.Effect<void, unknown>) =>

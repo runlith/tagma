@@ -170,6 +170,7 @@ describe('RunLifecycle', () => {
         const lane: ThreadJournalLaneFaces = {
           place: () => ({ at: 1 }),
           enter: () => (admission === 'refused' ? Effect.fail(refused) : Effect.succeed({ stalled: admission })),
+          order: (_threadId, work) => work,
         };
         const { lifecycle, journal } = yield* lifecycleWorld(runs, { lane });
         const failure = yield* Effect.flip(lifecycle.finish(runRef, broke(new Error('opening failed'))));

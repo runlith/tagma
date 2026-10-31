@@ -128,28 +128,34 @@ export const transition = Effect.fnUntraced(function* <A, TWrite extends TTx, E 
   const place = deps.lane.place();
   const transitions = deps.transitions;
   for (let attempt = 0; ; attempt += 1) {
-    const ahead =
-      attempt === 0
-        ? yield* prepareTransition(deps, threadId, declared).pipe(
-            Effect.catchIf(
-              (failure): failure is ThreadVersionStaleError => failure instanceof ThreadVersionStaleError,
-              () => Effect.succeed(null),
-            ),
-          )
-        : null;
-    const interactive = deps.transitions.writeAt(threadId, (at) =>
-      Effect.flatMap(ahead === null ? prepareTransition(deps, threadId, declared, at.tx) : Effect.succeed(ahead), (prepared) =>
-        applyPrepared(deps, at, prepared, plan, call.key),
+    const programmed = attempt === 0 && transitions.programAt !== undefined;
+    const outside = prepareTransition(deps, threadId, declared).pipe(
+      Effect.catchIf(
+        (failure): failure is ThreadVersionStaleError => failure instanceof ThreadVersionStaleError,
+        () => Effect.succeed(null),
       ),
     );
+    const ahead = attempt === 0 && !programmed ? yield* outside : null;
+    const interactive = (held: Prepared | null) =>
+      deps.transitions.writeAt(threadId, (at) =>
+        Effect.flatMap(held === null ? prepareTransition(deps, threadId, declared, at.tx) : Effect.succeed(held), (prepared) =>
+          applyPrepared(deps, at, prepared, plan, call.key),
+        ),
+      );
     const admitted = yield* deps.lane.enter(
       threadId,
       place,
-      ahead === null || transitions.programAt === undefined
-        ? interactive
-        : Effect.flatMap(
-            transitions.programAt(threadId, ahead, evidenceKey(call.key.evidence), (at) => applyPrepared(deps, at, ahead, plan, call.key)),
-            (programmed) => (programmed === null ? interactive : Effect.succeed(programmed)),
+      !programmed || transitions.programAt === undefined
+        ? interactive(ahead)
+        : Effect.flatMap(outside, (fresh) =>
+            fresh === null
+              ? interactive(null)
+              : Effect.flatMap(
+                  transitions.programAt!(threadId, fresh, evidenceKey(call.key.evidence), (at) =>
+                    applyPrepared(deps, at, fresh, plan, call.key),
+                  ),
+                  (ran) => (ran === null ? interactive(fresh) : Effect.succeed(ran)),
+                ),
           ),
     );
     if ('stalled' in admitted) {

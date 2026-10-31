@@ -15,7 +15,7 @@ import { RunAdmission } from '@runlith/agent/thread/run/runAdmission';
 import { ThreadCallBroke } from '@runlith/agent/thread/ThreadBorder';
 import { ThreadStorageFailed } from '@runlith/agent/thread/persisted';
 import { failedAs } from '../contract/service/failure.js';
-import { journalLaneFaces, ThreadJournalLane } from '@runlith/agent/thread/transition/lane';
+import { journalLaneFaces, ordering, ThreadJournalLane, type ThreadJournalLaneFaces } from '@runlith/agent/thread/transition/lane';
 import type { WorkflowConfig } from '@runlith/agent/workflow/WorkflowConfig';
 import { ActivityLog } from '@runlith/activity/log';
 import { OPERATOR_PRINCIPAL } from '../../platform/contract/wire/actor.js';
@@ -223,7 +223,18 @@ export const threadEngineLayer = Layer.effectContext(
     const journal = yield* makeSqliteThreadJournal;
     const backfill = yield* makeConversationBackfill({ journal });
     const lifetime = yield* Effect.scope;
-    const lane = journalLaneFaces(yield* JournalOrder);
+    const ordered = yield* JournalOrder;
+    const lane = journalLaneFaces(ordered);
+    const entered: ThreadJournalLaneFaces['enter'] = (threadId, place, work) =>
+      lane.enter(
+        threadId,
+        place,
+        rollouts.owed(threadId).pipe(
+          Effect.mapError((cause) => new ThreadStorageFailed({ call: 'rollout.owed', cause })),
+          Effect.andThen(journal.open(threadId)),
+          Effect.andThen(work),
+        ),
+      );
     const binder = yield* makeThreadRebinding.pipe(Effect.provideService(ThreadJournal, journal));
     const moves = yield* makeHarnessMoves({
       releasing: (threadId) => harness.threads.handle(threadId, OPERATOR_PRINCIPAL).release(),
@@ -337,16 +348,8 @@ export const threadEngineLayer = Layer.effectContext(
       Layer.succeed(RunAdmission, yield* RunAdmission),
       Layer.succeed(ThreadJournalLane, {
         place: () => lane.place(),
-        enter: (threadId, place, work) =>
-          lane.enter(
-            threadId,
-            place,
-            rollouts.owed(threadId).pipe(
-              Effect.mapError((cause) => new ThreadStorageFailed({ call: 'rollout.owed', cause })),
-              Effect.andThen(journal.open(threadId)),
-              Effect.andThen(work),
-            ),
-          ),
+        enter: entered,
+        order: ordering(ordered.declaration.name, () => lane.place(), entered),
       }),
       Layer.succeed(ActivityLog, yield* ActivityLog),
     );

@@ -188,6 +188,7 @@ describe('kernel transition port', () => {
           places.push(place);
           return Effect.map(work, (ran) => ({ ran }));
         },
+        order: (_threadId, work) => work,
       };
       let moves = 1;
       memory.beforeUnit = Effect.sync(() => {
@@ -203,7 +204,11 @@ describe('kernel transition port', () => {
       const { memory, deps } = yield* world;
       const key = keyed({ run: 'r', seq: 1 }, 'a');
       for (const stalled of ['none', 'uncertain'] as const) {
-        const lane: ThreadJournalLaneFaces = { place: () => ({ at: 1 }), enter: () => Effect.succeed({ stalled }) };
+        const lane: ThreadJournalLaneFaces = {
+          place: () => ({ at: 1 }),
+          enter: () => Effect.succeed({ stalled }),
+          order: (_threadId, work) => work,
+        };
         expect(yield* transition({ ...deps, lane }, THREAD, plan([message('e1', 'a')]), { key, deadline: later })).toEqual({
           stalled: 'uncertain',
           key,
@@ -221,6 +226,7 @@ describe('kernel transition port', () => {
         place: () => ({ at: 1 }),
         enter: (_threadId, _place, work) =>
           entries++ === 0 ? Effect.map(work, (ran) => ({ ran })) : Effect.succeed({ stalled: 'none' as const }),
+        order: (_threadId, work) => work,
       };
       let moves = 1;
       memory.beforeUnit = Effect.sync(() => {
