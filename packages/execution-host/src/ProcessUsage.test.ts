@@ -437,6 +437,31 @@ it.effect('an on-behalf-of service does not replace an execution current child',
   }),
 );
 
+it.effect('an unchanged measured GPU counter remains a measured zero in the load reading', () =>
+  Effect.gen(function* () {
+    const measured = { ...row(50, 1, 0, 'server'), gpu: { _tag: 'Measured' as const, micros: 500 } };
+    const usage = yield* makeProcessUsage({
+      topology: { of: () => Effect.succeed(undefined), watching: Effect.succeed([]) },
+      scope,
+      policy: { periodMs: 100 },
+      native: yield* readings([
+        { ...before, processes: [measured] },
+        { ...after, processes: [measured] },
+      ]),
+      hostPid: 60,
+      cores: 4,
+      budgetBytes: 1_000_000,
+    }).pipe(Effect.provideService(Processes, reader));
+    yield* usage.subscribe('fixture', 50, []);
+    yield* usage.sample();
+    yield* TestClock.adjust(Duration.seconds(1));
+    yield* usage.sample();
+    const server = (yield* usage.load)?.groups.find((group) => group.owner._tag === 'Installation' && group.owner.role === 'server');
+    expect(server).toMatchObject({ gpuCores: 0, gpuMeasured: 1, gpuUnread: 0 });
+    expect(server?.processes[0]?.gpu).toEqual({ _tag: 'Measured', cores: 0 });
+  }),
+);
+
 it.effect('fits escaped command text inside its encoded load envelope without losing scalar usage', () =>
   Effect.gen(function* () {
     const snapshot: UsageRead = {
