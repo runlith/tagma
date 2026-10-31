@@ -53,7 +53,7 @@ export const programOf = <Brand extends StoreBrand>(unit: Unit<Brand>): ProgramU
 export const unplannable = <Brand extends StoreBrand>(program: ProgramUnit<Brand>, reason: string): Effect.Effect<never> =>
   Effect.die(new ProgramUnplannable({ store: program.store.path, reason }));
 
-const fellBack = (cause: Cause.Cause<unknown>): boolean =>
+export const fellBack = (cause: Cause.Cause<unknown>): boolean =>
   cause.reasons.length > 0 &&
   cause.reasons.every(
     (reason) =>

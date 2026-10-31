@@ -1,4 +1,4 @@
-import { Clock, Effect } from 'effect';
+import { Cause, Clock, Effect } from 'effect';
 import { and, desc, eq, inArray, isNotNull, sql } from 'drizzle-orm';
 import { among } from '../../platform/store/rows.js';
 import {
@@ -31,7 +31,7 @@ import { journalHead } from '../../threads/journal/base.js';
 import { threadInbox } from '../../threads/store/tables.js';
 import { spentCallKey, spentEpoch, threadCall } from '../../threads/store/calls.js';
 import { inProgram, inUnit, stored, type StoredFailure } from '../../platform/store/crossing.js';
-import { programOf, programWriteUnit, unplannable } from '../../platform/store/programs.js';
+import { fellBack, programOf, programWriteUnit, unplannable } from '../../platform/store/programs.js';
 import { planHead, plannedFacts } from '../../threads/journal/log.js';
 import type { ThreadMetadataRow, ThreadRow } from '@runlith/agent/thread/rows';
 import { failedAs } from '../../threads/contract/service/failure.js';
@@ -109,11 +109,16 @@ export const makeTransitions = Effect.fnUntraced(function* ({
     return mintedBefore(call.key, epoch) ? { kind: 'before-epoch' as const } : { kind: 'absent' as const };
   });
 
+  const assumed = new WeakMap<ProgramUnit<'machine'>, CallKey[]>();
+
   const unrecorded = Effect.fnUntraced(function* (
     program: ProgramUnit<'machine'>,
     key: CallKey,
   ): Effect.fn.Return<RecordReading, StoredFailure> {
     const call = callParts(key);
+    const standing = assumed.get(program);
+    if (standing === undefined) assumed.set(program, [key]);
+    else standing.push(key);
     yield* program.guard(
       db
         .select({ key: threadCall.key })
@@ -341,7 +346,19 @@ export const makeTransitions = Effect.fnUntraced(function* ({
       ),
     );
     planHead(program, threadId, version.head);
-    return yield* work({ row, version, tx });
+    return yield* Effect.catchCause(work({ row, version, tx }), (cause) => standingFirst(program, threadId, cause));
+  });
+
+  const standingFirst = Effect.fnUntraced(function* <E>(program: ProgramUnit<'machine'>, threadId: string, cause: Cause.Cause<E>) {
+    if (!Cause.hasInterrupts(cause) && !fellBack(cause))
+      for (const key of assumed.get(program) ?? []) {
+        const reading = yield* failedAs(
+          'readRecord',
+          units.read((unit) => lookup(unit, threadId, { call: key })),
+        );
+        if (reading.kind !== 'absent') return yield* unplannable(program, 'a call key that already stands');
+      }
+    return yield* Effect.failCause(cause);
   });
 
   return {

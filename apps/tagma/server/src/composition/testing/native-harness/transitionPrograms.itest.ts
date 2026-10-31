@@ -55,7 +55,7 @@ const opened = Effect.gen(function* () {
       },
       { evidence, digest: decidedBy },
     );
-  return { storage, db, thread, run: start.run, step };
+  return { storage, db, thread, run: start.run, step, deps };
 });
 
 it.live('a transition whose reads are planned commits as one program and no interactive unit', () =>
@@ -77,6 +77,24 @@ it.live('a transition repeated under its key after its program committed answers
     const repeated = yield* step('committed', undefined, evidence);
     expect({ first, repeated }).toEqual({ first: { committed: 'applied' }, repeated: { replayed: 'applied' } });
     expect((yield* storage.aggregate.historyOf(thread.id))?.map((message) => message.role)).toEqual(['assistant']);
+  }),
+);
+
+it.live('a transition repeated under its key answers the recorded outcome even when its decision would now fail', () =>
+  Effect.gen(function* () {
+    const { thread, step, deps } = yield* opened;
+    const evidence: Evidence = { call: callKey({ operation: 'test', actor: thread.id, key: 'settled' }) };
+    yield* step('settled', undefined, evidence);
+    const repeated = yield* transitionNow(
+      deps,
+      thread.id,
+      {
+        declared: sealThreadEvents([threadStepMessagesEvent([Message.assistant('settled')])!]),
+        decide: () => Effect.fail('the entry the first act settled is gone'),
+      },
+      { evidence, digest: 'settled' },
+    );
+    expect(repeated).toEqual({ replayed: 'applied' });
   }),
 );
 
