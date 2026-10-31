@@ -11,6 +11,7 @@ import { classifySqliteError, SqlError } from 'effect/sql/SqlError';
 export type WriterPermit<C> = {
   readonly statement: Effect.Effect<C, SqlError, Scope.Scope>;
   readonly transaction: Effect.Effect<C, SqlError, Scope.Scope>;
+  readonly exclusive: Effect.Effect<() => void, SqlError, Scope.Scope>;
   readonly drain: Effect.Effect<void, SqlError>;
 };
 
@@ -69,6 +70,7 @@ export const writerPermit = <C extends object, L>(
     );
   });
   return {
+    exclusive: Effect.andThen(checkConnection, lease),
     drain: Effect.scoped(Effect.asVoid(take)),
     statement: Effect.as(
       Effect.flatMap(take, (release) => Effect.suspend(() => settle(standing)).pipe(Effect.onError(() => Effect.sync(release)))),

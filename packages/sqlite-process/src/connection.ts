@@ -15,8 +15,9 @@ import * as Option from 'effect/Option';
 import * as Client from 'effect/sql/SqlClient';
 import type { Connection } from 'effect/sql/SqlConnection';
 import { classifySqliteError, SqlError } from 'effect/sql/SqlError';
-import type { SqliteAsk, SqliteSaid, ThrownShape } from './channel.js';
+import type { Committed, ProgramBatch, SqliteAsk, SqliteSaid, ThrownShape } from './channel.js';
 import { prepareEngine } from './engine.js';
+import { parameterBytes, rowBytes, scalarBytes } from './payload.js';
 
 export type StatementTiming = {
   readonly operation: string;
@@ -51,6 +52,7 @@ export type ProcessConnection = Connection & {
   readonly quietSince: () => number | null;
   readonly retire: Effect.Effect<void, SqlError>;
   readonly handover: Effect.Effect<void, SqlError>;
+  readonly programs: (batch: ProgramBatch) => Effect.Effect<Committed, SqlError>;
 };
 
 const MAX_BUSY_TIMEOUT = 2_147_483_647;
@@ -87,56 +89,6 @@ const queryOf = (sql: string): Query => {
   if (queries.size >= QUERY_TEXTS) queries.clear();
   queries.set(sql, query);
   return query;
-};
-
-const scalarBytes = (value: unknown): number => {
-  if (value === null) return 1;
-  switch (typeof value) {
-    case 'string':
-      return Buffer.byteLength(value, 'utf8');
-    case 'number':
-    case 'bigint':
-      return 8;
-    case 'boolean':
-      return 1;
-    case 'object':
-      return ArrayBuffer.isView(value) || value instanceof ArrayBuffer ? value.byteLength : 0;
-    default:
-      return 0;
-  }
-};
-
-const recordBytes = (record: object): number => {
-  let bytes = 0;
-  for (const key in record) {
-    if (Object.hasOwn(record, key)) bytes += Buffer.byteLength(key, 'utf8') + scalarBytes((record as Record<string, unknown>)[key]);
-  }
-  return bytes;
-};
-
-const parameterBytes = (params: ReadonlyArray<unknown>): number => {
-  let bytes = 0;
-  for (let index = 0; index < params.length; index++) {
-    const value = params[index];
-    bytes +=
-      value !== null && typeof value === 'object' && !ArrayBuffer.isView(value) && !(value instanceof ArrayBuffer)
-        ? recordBytes(value)
-        : scalarBytes(value);
-  }
-  return bytes;
-};
-
-const rowBytes = (rows: ReadonlyArray<unknown>): number => {
-  let bytes = 0;
-  for (let index = 0; index < rows.length; index++) {
-    const row = rows[index];
-    if (Array.isArray(row)) {
-      for (let column = 0; column < row.length; column++) bytes += scalarBytes(row[column]);
-    } else {
-      bytes += recordBytes(row as object);
-    }
-  }
-  return bytes;
 };
 
 const brokenChannel = (message: string, operation: string) =>
@@ -527,6 +479,17 @@ export const openConnection = Effect.fnUntraced(function* (processes: ProcessPoo
         ),
       ),
     ),
+    programs: (batch) =>
+      Effect.andThen(
+        options.checkConnection ?? Effect.void,
+        Effect.suspend(() =>
+          call({ _tag: 'Programs', id: (counter += 1), sentAt: Date.now(), ...batch }, 'programs').pipe(
+            Effect.flatMap((said) =>
+              said._tag === 'Committed' ? Effect.succeed(said) : Effect.fail(answeredWrong(said, 'Failed to commit programs', 'programs')),
+            ),
+          ),
+        ),
+      ),
     loadExtension: (path: string) =>
       Effect.andThen(
         options.checkConnection ?? Effect.void,

@@ -26,7 +26,8 @@ for (const signal of ['SIGHUP', 'SIGINT', 'SIGTERM'] as const) {
 
 process.on('message', (message) => {
   const request = message as SqliteRequest;
-  host.serve(request, request.ask._tag === 'Run' ? Math.max(0, Date.now() - request.ask.sentAt) : 0);
+  const { ask } = request;
+  host.serve(request, ask._tag === 'Run' || ask._tag === 'Programs' ? Math.max(0, Date.now() - ask.sentAt) : 0);
 });
 
 process.on('disconnect', leave);

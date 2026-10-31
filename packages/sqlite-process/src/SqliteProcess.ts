@@ -11,7 +11,9 @@ import * as Client from 'effect/sql/SqlClient';
 import * as Statement from 'effect/sql/Statement';
 import { classifySqliteError, SqlError } from 'effect/sql/SqlError';
 import * as Exit from 'effect/Exit';
+import type { Synchronous } from './channel.js';
 import { openConnection, type ProcessConnection, type SpawnedChild, type StatementTiming } from './connection.js';
+import { makePrograms, Programs } from './programs.js';
 import { makeReaderPool, type OpenReader, type PoolState, type ReaderPool } from './ReaderPool.js';
 import { writerPermit } from './writerPermit.js';
 
@@ -27,8 +29,6 @@ export type SqliteProcessConfig = SqliteClientConfig & {
   readonly synchronous?: Synchronous | undefined;
   readonly fullfsync?: boolean | undefined;
 };
-
-export type Synchronous = 'off' | 'normal' | 'full';
 
 export type ReaderEvent =
   | { readonly _tag: 'ReaderLost'; readonly reason: string }
@@ -80,14 +80,15 @@ export const synchronously =
 export const sqliteProcessLayer = (
   config: SqliteProcessConfig,
   processes: ProcessPool,
-): Layer.Layer<SqliteClient | Client.SqlClient | Readers | Connections> =>
+): Layer.Layer<SqliteClient | Client.SqlClient | Readers | Connections | Programs> =>
   Layer.effectContext(
     Effect.orDie(
-      Effect.map(make(processes, config), ({ client, readers, connections }) =>
+      Effect.map(make(processes, config), ({ client, readers, connections, programs }) =>
         Context.make(SqliteClient, client).pipe(
           Context.add(Client.SqlClient, client),
           Context.add(Readers, readers),
           Context.add(Connections, connections),
+          Context.add(Programs, programs),
         ),
       ),
     ),
@@ -188,6 +189,15 @@ const make = Effect.fnUntraced(function* (processes: ProcessPool, options: Sqlit
     external: { named: 'sqlite child', callsBack: false },
   });
   const permit = writerPermit(writer, writerHold, options.filename, setLevel, options.synchronous, Marked, live);
+  const programs = yield* makePrograms({
+    writer,
+    exclusive: permit.exclusive,
+    admission,
+    level: () => level,
+    settled: (wanted) => {
+      level = wanted;
+    },
+  });
   const onWriter = permit.statement;
   pool = wanted ? yield* makeReaderPool({ ceiling, open: openReader, lanes: processes.readers }) : undefined;
   const offWriter = (take: Effect.Effect<ProcessConnection, SqlError>) =>
@@ -276,5 +286,5 @@ const make = Effect.fnUntraced(function* (processes: ProcessPool, options: Sqlit
   yield* Effect.addFinalizer(() =>
     Effect.flatMap(handingOver, (requested) => (requested ? connections.handover.pipe(Effect.orDie) : Effect.void)),
   );
-  return { client, readers: Readers.of({ state: Effect.sync(() => pool?.state) }), connections };
+  return { client, readers: Readers.of({ state: Effect.sync(() => pool?.state) }), connections, programs };
 });

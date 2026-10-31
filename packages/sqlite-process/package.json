@@ -40,6 +40,11 @@
       "bun": "./src/ProcessPool.ts",
       "default": "./src/ProcessPool.ts"
     },
+    "./programs": {
+      "types": "./src/programs.ts",
+      "bun": "./src/programs.ts",
+      "default": "./src/programs.ts"
+    },
     "./SqliteProcess": {
       "types": "./src/SqliteProcess.ts",
       "bun": "./src/SqliteProcess.ts",

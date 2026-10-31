@@ -1,5 +1,13 @@
 import { Database } from 'bun:sqlite';
-import { thrownShapeOf, type SqliteAsk, type SqliteReply, type SqliteRequest, type SqliteSaid } from './channel.js';
+import {
+  thrownShapeOf,
+  type ProgramOutcome,
+  type SqliteAsk,
+  type SqliteProgram,
+  type SqliteReply,
+  type SqliteRequest,
+  type SqliteSaid,
+} from './channel.js';
 import { checkEngine } from './engine.js';
 
 const CHECKPOINT_PAGES = 1000;
@@ -20,6 +28,32 @@ export type SqliteHost = {
 
 export const busy = (said: SqliteSaid): boolean =>
   said._tag === 'Failed' && (said.thrown.code === 'SQLITE_BUSY' || said.thrown.errno === 5);
+
+const applied = (db: Database, program: SqliteProgram): ProgramOutcome => {
+  const started = performance.now();
+  db.run('SAVEPOINT program');
+  let at = 0;
+  try {
+    for (; at < program.statements.length; at += 1) {
+      const step = program.statements[at]!;
+      const statement = db.query(step.sql);
+      const params = step.params as [];
+      const count = step.counts === 'rows' ? (statement.values(...params) ?? []).length : statement.run(...params).changes;
+      if (step.expect !== null && count !== step.expect) {
+        db.run('ROLLBACK TO program');
+        db.run('RELEASE program');
+        return { _tag: 'Conflict', statement: at, expected: step.expect, actual: count, execMs: performance.now() - started };
+      }
+    }
+    db.run('RELEASE program');
+    return { _tag: 'Applied', execMs: performance.now() - started };
+  } catch (cause) {
+    if (!db.inTransaction) throw cause;
+    db.run('ROLLBACK TO program');
+    db.run('RELEASE program');
+    return { _tag: 'Refused', statement: at, thrown: thrownShapeOf(cause), execMs: performance.now() - started };
+  }
+};
 
 export const makeSqliteHost = (reply: (said: SqliteReply) => void, waits: 'engine' | 'caller' = 'engine'): SqliteHost => {
   const databases = new Map<number, Database>();
@@ -103,6 +137,26 @@ export const makeSqliteHost = (reply: (said: SqliteReply) => void, waits: 'engin
             checkpoint.close();
           }
         }
+        case 'Programs': {
+          if (ask.synchronous !== null) db!.run(`PRAGMA synchronous = ${ask.synchronous.toUpperCase()}`);
+          db!.run('BEGIN IMMEDIATE');
+          try {
+            const outcomes = ask.programs.map((program) => applied(db!, program));
+            db!.run('COMMIT');
+            const returnedAt = performance.now();
+            return {
+              _tag: 'Committed',
+              id: ask.id,
+              outcomes,
+              queueMs,
+              execMs: returnedAt - started,
+              commitReturnedAt: performance.timeOrigin + returnedAt,
+            };
+          } catch (cause) {
+            if (db!.inTransaction) db!.run('ROLLBACK');
+            throw cause;
+          }
+        }
         case 'Maintain':
           maintaining = true;
           return { _tag: 'Maintaining', id: 0 };
@@ -118,7 +172,8 @@ export const makeSqliteHost = (reply: (said: SqliteReply) => void, waits: 'engin
     reply({ connection, said });
     const filename = writers.get(connection);
     const db = databases.get(connection);
-    if (ask._tag !== 'Run' || said._tag !== 'Rows' || filename === undefined || db === undefined || db.inTransaction) return;
+    const wrote = (ask._tag === 'Run' && said._tag === 'Rows') || said._tag === 'Committed';
+    if (!wrote || filename === undefined || db === undefined || db.inTransaction) return;
     try {
       const [row] = db.query('PRAGMA wal_checkpoint(NOOP)').values() as [number, number, number][];
       if (row !== undefined && row[1] - row[2] >= CHECKPOINT_PAGES) reply({ connection, said: { _tag: 'Changed', id: 0, filename } });

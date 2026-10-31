@@ -8,7 +8,7 @@ const BUSY_RETRY_MS = 2;
 type Queued = { readonly request: SqliteRequest; readonly sentAt: number; startedAt: number | undefined };
 
 const timed = (said: SqliteSaid, queueMs: number, execMs: number): SqliteSaid =>
-  said._tag === 'Rows' || said._tag === 'Failed' ? { ...said, queueMs, execMs } : said;
+  said._tag === 'Rows' || said._tag === 'Failed' || said._tag === 'Committed' ? { ...said, queueMs, execMs } : said;
 
 export const inlineHosting: Hosting = (receive, onExit) => {
   selectEngine();
@@ -26,7 +26,11 @@ export const inlineHosting: Hosting = (receive, onExit) => {
       queued.startedAt ??= now;
       const said = sqlite.answer(queued.request, 0);
       const { ask } = queued.request;
-      if (busy(said) && (ask._tag === 'Run' || ask._tag === 'Open') && now - queued.startedAt < sqlite.busyTimeoutMs(queued.request)) {
+      if (
+        busy(said) &&
+        (ask._tag === 'Run' || ask._tag === 'Open' || ask._tag === 'Programs') &&
+        now - queued.startedAt < sqlite.busyTimeoutMs(queued.request)
+      ) {
         retry = setTimeout(drain, BUSY_RETRY_MS);
         return;
       }

@@ -17,7 +17,37 @@ export type SqliteAsk =
   | { readonly _tag: 'Close'; readonly id: number }
   | { readonly _tag: 'Ping'; readonly id: number }
   | { readonly _tag: 'Maintain'; readonly id: 0 }
-  | { readonly _tag: 'Checkpoint'; readonly id: number; readonly filename: string; readonly durable: boolean };
+  | { readonly _tag: 'Checkpoint'; readonly id: number; readonly filename: string; readonly durable: boolean }
+  | ({ readonly _tag: 'Programs'; readonly id: number; readonly sentAt: number } & ProgramBatch);
+
+export type Synchronous = 'off' | 'normal' | 'full';
+
+export type ProgramBatch = {
+  readonly programs: ReadonlyArray<SqliteProgram>;
+  readonly synchronous: Synchronous | null;
+};
+
+export type Committed = Extract<SqliteSaid, { readonly _tag: 'Committed' }>;
+
+type ProgramStatement = {
+  readonly sql: string;
+  readonly params: ReadonlyArray<unknown>;
+  readonly counts: 'rows' | 'changes';
+  readonly expect: number | null;
+};
+
+export type SqliteProgram = { readonly statements: ReadonlyArray<ProgramStatement> };
+
+export type ProgramOutcome =
+  | { readonly _tag: 'Applied'; readonly execMs: number }
+  | {
+      readonly _tag: 'Conflict';
+      readonly statement: number;
+      readonly expected: number;
+      readonly actual: number;
+      readonly execMs: number;
+    }
+  | { readonly _tag: 'Refused'; readonly statement: number; readonly thrown: ThrownShape; readonly execMs: number };
 
 export type SqliteSaid =
   | {
@@ -34,6 +64,14 @@ export type SqliteSaid =
   | { readonly _tag: 'Changed'; readonly id: 0; readonly filename: string }
   | { readonly _tag: 'CheckpointFailed'; readonly id: 0; readonly filename: string; readonly thrown: ThrownShape }
   | { readonly _tag: 'Checkpointed'; readonly id: number; readonly log: number; readonly copied: number }
+  | {
+      readonly _tag: 'Committed';
+      readonly id: number;
+      readonly outcomes: ReadonlyArray<ProgramOutcome>;
+      readonly queueMs: number;
+      readonly execMs: number;
+      readonly commitReturnedAt: number;
+    }
   | { readonly _tag: 'Failed'; readonly id: number; readonly thrown: ThrownShape; readonly queueMs: number; readonly execMs: number };
 
 export type OpenConfig = {
