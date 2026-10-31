@@ -1,7 +1,7 @@
 import * as BunRuntime from '@effect/platform-bun/BunRuntime';
 import * as BunServices from '@effect/platform-bun/BunServices';
 import { gcAndSweep, heapStats } from 'bun:jsc';
-import { monitorEventLoopDelay } from 'node:perf_hooks';
+import { monitorEventLoopDelay, performance as nodePerformance } from 'node:perf_hooks';
 import { loadavg, totalmem, cpus } from 'node:os';
 import { watch } from 'node:fs';
 import { basename, dirname, isAbsolute, join } from 'node:path';
@@ -22,6 +22,8 @@ import {
   Schema,
   Stream,
 } from 'effect';
+import { CPU_PROFILE_CAPTURE_MAX_MS, cpuProfileArtifactSchema, stallSampling } from '@runlith/performance/CpuProfile';
+import { CpuProfiles } from '@runlith/performance/CpuProfiles';
 import { HeapSnapshots } from '@runlith/performance/HeapSnapshots';
 import { PerformanceReports } from '@runlith/performance/PerformanceReports';
 import { PerformanceStore } from '@runlith/performance/PerformanceStore';
@@ -83,12 +85,16 @@ const turnMin = flag('turn-min', 0, 0);
 const turnMax = flag('turn-max', turnMin === 0 ? 0 : 50, 0);
 const warmSnapshot = flag('warm-snapshot', 0, 0) !== 0;
 const snapshotDirectory = process.argv.find((value) => value.startsWith('--snapshots='))?.slice('--snapshots='.length);
+const cpuProfilePath = process.argv.find((value) => value.startsWith('--cpu-profile='))?.slice('--cpu-profile='.length);
 if (!Number.isSafeInteger(agents)) throw new Error('--agents must be an integer');
 if (![resultBytes, messageBytes, history, repositoryFiles, projects, parentSize, turnMin, turnMax].every(Number.isSafeInteger))
   throw new Error('payload sizes and fixture counts must be integers');
 if (turnMax < turnMin || (turnMin === 0 && turnMax !== 0)) throw new Error('invalid finite-turn limits');
 if (callsPerBoundary !== 1 && callsPerBoundary !== 8) throw new Error('--calls-per-boundary must be 1 or 8');
 if (snapshotDirectory !== undefined && !isAbsolute(snapshotDirectory)) throw new Error('--snapshots must be an absolute directory');
+if (cpuProfilePath !== undefined && !isAbsolute(cpuProfilePath)) throw new Error('--cpu-profile must be an absolute path');
+if (cpuProfilePath !== undefined && (warm + seconds + 1) * 1000 > CPU_PROFILE_CAPTURE_MAX_MS)
+  throw new Error(`--cpu-profile is limited to ${CPU_PROFILE_CAPTURE_MAX_MS} ms`);
 if (warmSnapshot && snapshotDirectory === undefined) throw new Error('--warm-snapshot requires --snapshots');
 
 class BenchRefused extends Data.TaggedError('BenchRefused')<{ readonly message: string }> {}
@@ -1327,6 +1333,16 @@ const program = Effect.gen(function* () {
     const stalls: number[] = [];
     let stallCount = 0;
     const started = yield* Clock.monotonicTimeNanos;
+    const profile =
+      cpuProfilePath === undefined
+        ? null
+        : yield* Effect.forkScoped(
+            Context.get(world.runtime.measurement, CpuProfiles).capture({
+              requestedBy: 'agent-load-bench',
+              requestedDurationMs: (warm + seconds + 1) * 1000,
+            }),
+            { startImmediately: true },
+          );
     yield* files.writeFileString(go, 'go');
     yield* Effect.sleep(warm * 1000);
     const warmed = warmSnapshot ? yield* snapshot('warm', false) : null;
@@ -1335,6 +1351,8 @@ const program = Effect.gen(function* () {
     const writerUnitsBefore = writers.units({ limit: 1 });
     const requestedBefore = allocatorOf(heapStats())?.malloc_requested;
     const cpuBefore = process.cpuUsage();
+    const threadCpuBefore = process.threadCpuUsage();
+    const utilizationBefore = nodePerformance.eventLoopUtilization();
     const countsBefore = { submitted, completed, failed };
     const framesBefore = feeds.frames();
     const loadBefore = loadavg();
@@ -1426,6 +1444,8 @@ const program = Effect.gen(function* () {
     costEnd = endWall;
     const after = yield* histograms();
     const cpu = process.cpuUsage(cpuBefore);
+    const threadCpu = process.threadCpuUsage(threadCpuBefore);
+    const utilization = nodePerformance.eventLoopUtilization(utilizationBefore);
     const requestedAfter = allocatorOf(heapStats())?.malloc_requested;
     const writerAfter = writerSnapshot(writers);
     const writerUnitsAfter = writers.units({ limit: 1 });
@@ -1460,6 +1480,18 @@ const program = Effect.gen(function* () {
     yield* Effect.sleep(5000);
     const settledAt = yield* Clock.currentTimeMillis;
     yield* Effect.sync(() => collectCosts(settledAt));
+    const captured = profile === null ? null : yield* Fiber.join(profile);
+    const artifact =
+      captured === null ? null : yield* Schema.decodeUnknownEffect(cpuProfileArtifactSchema)(captured.record.payload.profile);
+    if (artifact !== null && cpuProfilePath !== undefined) yield* files.writeFileString(cpuProfilePath, JSON.stringify(artifact));
+    const profileSampling =
+      captured === null || artifact === null
+        ? null
+        : stallSampling(
+            artifact,
+            { monotonicStart: captured.record.monotonicStart, monotonicEnd: captured.record.monotonicEnd },
+            { monotonicStart: Number(intervalStart) / 1_000_000, monotonicEnd: Number(intervalEnd) / 1_000_000 },
+          );
     const ledgerReading = {
       ...globalCosts.reading(),
       probe: probeCosts?.reading() ?? null,
@@ -1509,6 +1541,7 @@ const program = Effect.gen(function* () {
     };
     const completedInWindow = countsAfter.completed - countsBefore.completed;
     const cpuMs = (cpu.user + cpu.system) / 1000;
+    const threadCpuMs = (threadCpu.user + threadCpu.system) / 1000;
     const requestedBytes = requestedBefore === undefined || requestedAfter === undefined ? null : requestedAfter - requestedBefore;
     const loaded = yield* snapshot('loaded', !warmSnapshot);
     const historiesAfterCensus =
@@ -1625,6 +1658,7 @@ const program = Effect.gen(function* () {
             turnMin,
             turnMax,
             warmSnapshot,
+            cpuProfile: cpuProfilePath !== undefined,
           },
           machine: {
             platform: process.platform,
@@ -1655,6 +1689,22 @@ const program = Effect.gen(function* () {
           churn: churnReading,
           cpuMs,
           cpuMsPerCompletedCall: completedInWindow === 0 ? null : cpuMs / completedInWindow,
+          servingThreadCpuMs: threadCpuMs,
+          otherThreadsCpuMs: cpuMs - threadCpuMs,
+          servingThreadCpuCores: threadCpuMs / (windowSeconds * 1000),
+          eventLoopUtilization: utilization.active + utilization.idle === 0 ? null : utilization,
+          cpuProfile:
+            captured === null
+              ? null
+              : {
+                  file: cpuProfilePath,
+                  windowStartMs: Number(intervalStart) / 1_000_000,
+                  windowEndMs: Number(intervalEnd) / 1_000_000,
+                  profileStartMs: captured.record.monotonicStart,
+                  profileEndMs: captured.record.monotonicEnd,
+                  cuts: captured.cuts,
+                  sampling: profileSampling ?? null,
+                },
           allocatorRequestedBytes: requestedBytes,
           allocatorRequestedBytesPerCompletedCall:
             completedInWindow === 0 || requestedBytes === null ? null : requestedBytes / completedInWindow,
@@ -1711,6 +1761,10 @@ const program = Effect.gen(function* () {
           census: { before: idle, warmed, loaded, historiesAfterCensus },
           limits: [
             'CPU includes bench driver and probes; span histogram counts are installation-wide',
+            'serving-thread CPU excludes other same-process threads; their aggregate includes workers, GC and runtime threads, not child processes',
+            'event-loop utilization is unavailable when the runtime reports zero active and idle time',
+            'CPU profiling adds sampler overhead and its raw profile can be shorter than the measurement window when a stall cuts it',
+            'profile sampled time counts adjacent samples within four periods; it is a busy-work proxy, not event-loop utilization',
             'after the last census the fixture interrupts unfinished calls and turn openings during cleanup; their HTTP 503s are outside the measured window',
             'interface offered-to-answer and offer-to-list-enqueue delays cross the producer and receiver clocks without an established skew bound; list queue delay uses receiver monotonic time',
             'probe stages describe completed samples only; outstanding-at-cut includes delayed or unsubmitted probes',
