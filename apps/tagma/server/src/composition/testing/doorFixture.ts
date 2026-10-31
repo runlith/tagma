@@ -303,6 +303,7 @@ const built = Effect.fnUntraced(
 
     return {
       runtime,
+      processes,
       routed,
       app,
       call,

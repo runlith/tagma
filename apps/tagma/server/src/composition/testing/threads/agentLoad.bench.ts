@@ -205,6 +205,8 @@ const COST_FIELDS = [
   'units',
   'programs',
   'programStatements',
+  'statementMs',
+  'statementExecMs',
   'writerHoldMs',
   'writerWaitMs',
   'requestBytes',
@@ -1402,6 +1404,7 @@ const program = Effect.gen(function* () {
     const framesBefore = feeds.frames();
     const loadBefore = loadavg();
     const unattributedBefore = ledger.read({ limit: 1 }).unattributedStatements;
+    const statementsBefore = causalDetail ? world.processes.statements.read({ limit: 2048 }) : null;
     const startWall = yield* Clock.currentTimeMillis;
     costStart = startWall;
     const cpuBefore = process.cpuUsage();
@@ -1506,6 +1509,38 @@ const program = Effect.gen(function* () {
     const threadCpu = process.threadCpuUsage(threadCpuBefore);
     const utilization = nodePerformance.eventLoopUtilization(utilizationBefore);
     const unattributedAfter = ledger.read({ limit: 1 }).unattributedStatements;
+    const statementsAfter = statementsBefore === null ? null : world.processes.statements.read({ limit: 2048 });
+    if (
+      statementsBefore !== null &&
+      statementsAfter !== null &&
+      (statementsBefore.rows.length < statementsBefore.total || statementsAfter.rows.length < statementsAfter.total)
+    )
+      return yield* new BenchRefused({ message: 'the statement fingerprint census exceeded its report limit' });
+    const priorStatements = new Map(statementsBefore?.rows.map((row) => [row.fingerprint, row] as const));
+    const statementFingerprints =
+      statementsAfter === null
+        ? null
+        : {
+            before: statementsBefore?.total,
+            after: statementsAfter.total,
+            rows: statementsAfter.rows
+              .map((row) => {
+                const prior = priorStatements.get(row.fingerprint);
+                return {
+                  fingerprint: row.fingerprint,
+                  summary: row.summary,
+                  statements: row.statements - (prior?.statements ?? 0),
+                  programStatements: row.programStatements - (prior?.programStatements ?? 0),
+                  completed: row.completed - (prior?.completed ?? 0),
+                  failed: row.failed - (prior?.failed ?? 0),
+                  totalMs: row.totalMs - (prior?.totalMs ?? 0),
+                  queueMs: row.queueMs - (prior?.queueMs ?? 0),
+                  execMs: row.execMs - (prior?.execMs ?? 0),
+                };
+              })
+              .filter((row) => row.statements + row.programStatements + row.completed > 0)
+              .sort((left, right) => right.statements + right.programStatements - left.statements - left.programStatements),
+          };
     const after = yield* histograms();
     const requestedAfter = allocatorOf(heapStats())?.malloc_requested;
     const writerAfter = writerSnapshot(writers);
@@ -1782,6 +1817,7 @@ const program = Effect.gen(function* () {
           },
           metrics: figures,
           ledger: ledgerReading,
+          statementFingerprints,
           writer: writerReading,
           churn: churnReading,
           cpuMs,
@@ -1871,6 +1907,8 @@ const program = Effect.gen(function* () {
             'with causal-detail enabled hosted and list probes use a separate bounded causal ledger; protocol steps and selected background roots use the installation ledger; both report evictions and unfinished tails',
             'saved and no-save protocol-step groups partition the reported ProtocolSteps.run roots; a no-save step is not necessarily a text frame',
             'unattributed SQL counts the serving pool during the measurement window, independent of the selected retained roots',
+            'statement fingerprint deltas cover the serving pool and can combine producers; the overflow row holds SQL beyond the bounded census',
+            'fingerprint Run timings are send-to-reply and child elapsed for acknowledged replies, not CPU; sends and replies can cross the measurement cuts',
             'ledger statements count standalone Run sends; programStatements count statements and guards carried by submitted programs, including those a conflict prevents from running',
             'ledger units count Store transactions; direct activity-database transactions can contribute writer hold without incrementing units, and each activity batch is charged to its first accepted cause',
             'ledger root writer times are sums per act, not per-unit percentiles; late tails have a five-second settling window',
