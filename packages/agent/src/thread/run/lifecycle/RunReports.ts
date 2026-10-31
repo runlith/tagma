@@ -197,10 +197,18 @@ export const runReportsLayer = Layer.effect(
     const clock = yield* Clock.Clock;
     const rhythm = yield* ThreadStreamRhythm;
     const tails = new RunTails(feed, () => clock.currentTimeMillisUnsafe(), rhythm.flushIntervalMs);
+    const landing = new WeakMap<ThreadWriteTx, Set<string>>();
+    const noted = (tx: ThreadWriteTx, written: ReadonlySet<string>): void => {
+      const standing = landing.get(tx);
+      if (standing === undefined) landing.set(tx, new Set(written));
+      else for (const id of written) standing.add(id);
+    };
     const openTail = Effect.fnUntraced(function* (run: ThreadRunRef, ending: boolean, tx: ThreadWriteTx) {
       const open: ThreadTranscriptEntry[] = [];
+      const written = landing.get(tx);
       for (const entry of tails.snapshot(run, ending)) {
-        if ((yield* store.entryById(run.threadId, entry.id, tx)) === undefined) open.push(entry);
+        if (written?.has(entry.id) === true) continue;
+        if (entry.type !== 'tool' || (yield* store.entryById(run.threadId, entry.id, tx)) === undefined) open.push(entry);
       }
       return open.length === 0 ? null : open;
     });
@@ -265,11 +273,13 @@ export const runReportsLayer = Layer.effect(
         digest: digest ?? actDigest(['step', prepared.declared.map((event) => event.body), reading ?? null]),
       });
       yield* answerOf(threadId, outcome);
+      const written: ReadonlySet<string> = new Set(
+        prepared.declared.flatMap((event) => (event.body.payload.entry === undefined ? [] : [event.body.payload.entry.id])),
+      );
+      noted(tx, written);
       return {
         replayed: 'replayed' in outcome,
-        written: new Set(
-          prepared.declared.flatMap((event) => (event.body.payload.entry === undefined ? [] : [event.body.payload.entry.id])),
-        ),
+        written,
         answered: prepared.declared.some(({ body }) => {
           const entry = body.payload.entry;
           return entry !== undefined && coreEntry(entry) && entry.type === 'tool' && toolSettled(entry.toolState);
@@ -423,15 +433,11 @@ export const runReportsLayer = Layer.effect(
           if (standing !== null && standing.status === 'running' && standing.ownerId !== ownerId) return result('unowned', run.id);
           if (standing === null || standing.status !== 'running') return result('settled', run.id);
           const landed = yield* land(run.threadId, run.id, entries, evidence, options?.reading, tx);
+          yield* tx.afterCommit(Effect.sync(() => tails.landed(run, landed.written)));
           if (landed.replayed) return result('replayed', run.id);
           yield* progress.written(run, tx);
           yield* snapshotted(run, tx, landed.generated);
-          yield* tx.afterCommit(
-            Effect.sync(() => {
-              tails.landed(run, landed.written);
-              if (options?.unconfirming !== true) gate.confirmed(run.threadId);
-            }),
-          );
+          if (options?.unconfirming !== true) yield* tx.afterCommit(Effect.sync(() => gate.confirmed(run.threadId)));
           if (landed.answered) yield* tx.afterCommit(changes.publish(run.threadId));
           return result('applied', run.id);
         }),
