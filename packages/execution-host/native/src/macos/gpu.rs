@@ -160,34 +160,76 @@ pub fn all() -> Result<Vec<[u64; ROW]>, i32> {
 }
 
 #[cfg(test)]
+#[path = "../../testing/metal.rs"]
+mod metal;
+
+#[cfg(test)]
 mod tests {
     use super::*;
 
-    #[cfg(target_arch = "aarch64")]
     #[test]
-    fn metal_client_counters_carry_the_current_kernel_birth() {
-        #[link(name = "Metal", kind = "framework")]
-        unsafe extern "C" { fn MTLCreateSystemDefaultDevice() -> *mut c_void; }
-        #[link(name = "objc")]
-        unsafe extern "C" { fn objc_release(object: *mut c_void); }
-        let device = unsafe { MTLCreateSystemDefaultDevice() };
-        let read = all();
-        let pid = std::process::id();
-        if !device.is_null() { unsafe { objc_release(device); } }
-        let rows = match read {
+    fn completed_work_on_both_metal_queues_grows_the_witnessed_gpu_counter() {
+        let work = metal::Work::open().unwrap();
+        let before = match all() {
             Ok(rows) => rows,
             Err(code) => {
                 assert!([libc::ENOTSUP, libc::EACCES].contains(&code), "unexpected registry failure: {code}");
                 return;
             }
         };
+        let pid = std::process::id() as u64;
+        let own: Vec<_> = before.iter().filter(|row| row[0] == pid).collect();
         let identity = process::identity(pid as i32).unwrap();
-        let own: Vec<_> = rows.iter().filter(|row| row[0] == pid as u64).collect();
-        if !device.is_null() { assert!(!own.is_empty(), "the Metal device must expose its AGX client"); }
-        for row in own {
+        for row in &own {
             assert_eq!((row[1], row[2]), (identity.seconds, identity.micros));
             assert_ne!(row[3], 0);
-            if !device.is_null() { assert_eq!(row[5], 0); }
         }
+        let Some(work) = work else { return; };
+        assert!(!own.is_empty(), "the Metal queues must expose an AGX client");
+        for row in &own { assert_eq!(row[5], 0); }
+        let total = |rows: &[[u64; ROW]]| rows.iter().filter(|row| row[0] == pid && row[5] == 0).map(|row| row[4]).sum::<u64>();
+        let initial = total(&before);
+        assert!(work.complete(0).unwrap() > 0.0);
+        let first = total(&all().unwrap());
+        assert!(first > initial, "the first queue's completed work was not measured: {initial} -> {first}");
+        assert!(work.complete(1).unwrap() > 0.0);
+        let final_rows = all().unwrap();
+        let second = total(&final_rows);
+        assert!(second > first, "the second queue's work was not added to the process total: {first} -> {second}");
+        #[link(name = "IOKit", kind = "framework")]
+        unsafe extern "C" {
+            fn IORegistryCreateIterator(port: u32, plane: *const c_char, options: u32, iterator: *mut u32) -> i32;
+            fn IORegistryEntryCreateCFProperty(entry: u32, key: Cf, allocator: Cf, options: u32) -> Cf;
+        }
+        let usage_key = Owned::key(c"AppUsage").unwrap();
+        let time_key = Owned::key(c"accumulatedGPUTime").unwrap();
+        let mut expected_clients: HashMap<_, _> = final_rows.iter().filter(|row| row[0] == pid && row[5] == 0).map(|row| (row[3], row[4])).collect();
+        let mut iterator = 0;
+        assert_eq!(unsafe { IORegistryCreateIterator(0, c"IOService".as_ptr(), 1, &mut iterator) }, 0);
+        let iterator = Object(iterator);
+        let mut positive_queues = 0;
+        while !expected_clients.is_empty() {
+            let client = Object(unsafe { IOIteratorNext(iterator.0) });
+            assert_ne!(client.0, 0, "the held registry clients must still exist");
+            let mut id = 0;
+            assert_eq!(unsafe { IORegistryEntryGetRegistryEntryID(client.0, &mut id) }, 0);
+            let Some(actual) = expected_clients.remove(&id) else { continue; };
+            let usage = Owned(unsafe { IORegistryEntryCreateCFProperty(client.0, usage_key.0, ptr::null(), 0) });
+            assert!(!usage.0.is_null());
+            assert_eq!(unsafe { CFGetTypeID(usage.0) }, unsafe { CFArrayGetTypeID() });
+            let mut expected = 0u64;
+            for index in 0..unsafe { CFArrayGetCount(usage.0) } {
+                let queue = unsafe { CFArrayGetValueAtIndex(usage.0, index) };
+                let counter = field(queue, &time_key).unwrap();
+                let mut nanos = 0i64;
+                assert_ne!(unsafe { CFNumberGetValue(counter, 4, (&mut nanos as *mut i64).cast()) }, 0);
+                assert!(nanos >= 0);
+                positive_queues += usize::from(nanos > 0);
+                expected += nanos as u64;
+            }
+            assert_eq!(actual, expected, "the native process counter must sum every queue's nanoseconds");
+        }
+        assert!(positive_queues >= 2, "both held queues must expose positive GPU counters");
+        eprintln!("GPU nanoseconds: {initial} -> {first} -> {second}; positive queues: {positive_queues}");
     }
 }
