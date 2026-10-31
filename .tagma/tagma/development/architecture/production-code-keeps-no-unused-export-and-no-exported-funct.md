@@ -18454,10 +18454,6 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead packages/performance/src/TraceSampler.ts#TRACE_BUFFER_BYTES",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "dead-code dead packages/performance/src/TraceSampler.ts#TraceKeep",
           "owner": "5a3bed29"
         },
