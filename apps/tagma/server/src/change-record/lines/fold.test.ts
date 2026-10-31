@@ -116,6 +116,23 @@ test('an edit inside a peer’s inserted function carries the function with its 
   expect(select(answer, value, A)).toMatchObject({ kind: 'text', text: work, carried: { holders: [B] } });
 });
 
+test('a surviving edit carries its displaced initialization without taking an independent holder', () => {
+  const base = text('fields: empty', 'middle', 'begin()', 'init: empty', 'middle', 'independent: base');
+  const field = base.replace('fields: empty', 'fields: hydration');
+  const initialized = field.replace('begin()', 'begin(hydration)').replace('init: empty', 'init: hydration');
+  const extended = initialized
+    .replace('begin(hydration)', 'begin(hydration, signal)')
+    .replace('init: hydration', 'init: hydration, signal');
+  const working = extended.replace('independent: base', 'independent: peer');
+  const value = input(base, working, [
+    row('a1', A, base, field),
+    row('a2', A, field, initialized),
+    row('b1', B, initialized, extended),
+    row('c1', 'independent', extended, working),
+  ]);
+  expect(select(folded(value), value, A)).toMatchObject({ kind: 'text', text: extended, carried: { holders: [B] } });
+});
+
 test('a replacement transfers both sides to its last writer and undo restores the displaced marks', () => {
   const base = text('L');
   const first = text("L'");

@@ -56,9 +56,17 @@ export function prepareLinks(
       pending.push(parent);
     }
   }
+  const units = new Map<string, number>();
+  for (const region of regions)
+    for (const line of region.lines) {
+      if (budget.expired(1)) return { reason: 'budget' };
+      if (line.mark !== 'external' && !units.has(line.mark.holder)) units.set(line.mark.holder, line.unit);
+    }
   const sources: LinkSource[] = [];
   for (const source of seen) {
     if (typeof source.mark === 'string') continue;
+    const unit = units.get(source.mark.holder);
+    if (unit !== undefined) addLink(links, unit, source.serial);
     const affected: TextSlice[] = [];
     for (const rope of [source.removed, source.origins])
       for (const run of runsOf(rope)) affected.push(sliceText(run.source.shared, run.offset, run.offset + run.count));
