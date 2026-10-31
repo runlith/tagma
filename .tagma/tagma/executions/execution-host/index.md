@@ -106,6 +106,8 @@ edges:
   - kind: imports-tests
     to: 01a0ca85-8b21-7009-8bcc-eddc5565be05
   - kind: imports-tests
+    to: 01a12759-8915-7d38-82d6-94c9921755ee
+  - kind: imports-tests
     to: 01a12880-2e3b-7b5b-826f-7192e9de12e3
   - kind: imports-tests
     to: 01a16b71-3a1f-7cfb-a633-2283feef9784
