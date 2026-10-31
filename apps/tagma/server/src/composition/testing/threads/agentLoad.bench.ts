@@ -23,11 +23,23 @@ import {
   Stream,
 } from 'effect';
 import { HeapSnapshots } from '@runlith/performance/HeapSnapshots';
+import { PerformanceReports } from '@runlith/performance/PerformanceReports';
+import { PerformanceStore } from '@runlith/performance/PerformanceStore';
 import { threadSpokenMessageEvent } from '@runlith/agent/thread/events';
 import type { FeedPosition } from '@runlith/agent/transcript/live';
-import { CostLedger, CurrentCost, costRootId, rootCost, type CostCursor, type CostRow } from '@runlith/performance/CostLedger';
+import {
+  CostLedger,
+  CurrentCost,
+  costLedgerLayer,
+  costRootId,
+  rootCost,
+  type CostCursor,
+  type CostRow,
+} from '@runlith/performance/CostLedger';
 import { WriterMetrics } from '@runlith/performance/WriterMetrics';
-import type { WriterMetricsReport } from '@runlith/performance/protocol/reports';
+import type { PerformanceReportMeta, WriterMetricsReport } from '@runlith/performance/protocol/reports';
+import type { SlowCursor, TraceCursor } from '@runlith/performance/protocol/queries';
+import type { StoredSpanRecord } from '@runlith/performance/protocol/records';
 import { GRANT_HEADER } from '../../../platform/contract/service/credentials.js';
 import { grantFor } from '../../../platform/testing/grants.js';
 import { SHIPPED_HARNESSES } from '../../../external-harnesses/testing/builtin.js';
@@ -58,6 +70,7 @@ const seconds = flag('seconds', 60, 1);
 const warm = flag('warm', 10, 0);
 const rate = flag('rate', 1, 0.01);
 const subscribers = flag('subscribers', 1, 0) !== 0;
+const causalDetail = flag('causal-detail', 0, 0) !== 0;
 const churn = flag('churn', 0, 0) !== 0;
 const resultBytes = flag('result-bytes', 2048, 1);
 const messageBytes = flag('message-bytes', 1024, 1);
@@ -141,7 +154,25 @@ const progressSchema = Schema.fromJsonString(
 );
 type Call = typeof callSchema.Type;
 type Probe = typeof probeSchema.Type;
-type ProbeJob = { readonly probe: Probe; readonly measured: boolean };
+type ProbeJob = { readonly probe: Probe; readonly measured: boolean; readonly enqueuedAt?: bigint; readonly enqueuedWall?: number };
+type ThreadProbeExample = {
+  readonly id: number;
+  readonly offeredAt: number;
+  readonly subscribedAt: number;
+  readonly receivedAt: number;
+  readonly type: string;
+};
+type ListProbeExample = {
+  readonly id: number;
+  readonly offerToEnqueueMs: number;
+  readonly queueMs: number;
+  readonly initialMs: number;
+  readonly titleMs: number;
+  readonly waitMs: number;
+  readonly holdMs: number;
+  readonly commitToFrameMs: number;
+  readonly receivedFromOfferMs: number;
+};
 type Turn = typeof turnSchema.Type;
 type Agent = {
   readonly threadId: string;
@@ -190,19 +221,35 @@ const readFigure = (held: CostFigure) => {
     max: held.count === 0 ? null : held.max,
   };
 };
-type CostGroup = { readonly fields: Record<CostField, CostFigure>; readonly producers: Map<string, number> };
+type ProducerSums = { statements: number; units: number; writerHoldMs: number; writerWaitMs: number };
+type CostGroup = {
+  readonly fields: Record<CostField, CostFigure>;
+  readonly ownUnits: CostFigure | null;
+  readonly producers: Map<string, number>;
+  readonly producerCosts: Map<string, ProducerSums> | null;
+};
 const costs = () => {
   const groups = new Map<string, CostGroup>();
   const add = (row: CostRow) => {
     let group = groups.get(row.name);
     if (group === undefined) {
       const fields = Object.fromEntries(COST_FIELDS.map((field) => [field, figure()])) as Record<CostField, CostFigure>;
-      group = { fields, producers: new Map() };
+      group = { fields, ownUnits: causalDetail ? figure() : null, producers: new Map(), producerCosts: causalDetail ? new Map() : null };
       groups.set(row.name, group);
     }
     for (const field of COST_FIELDS) addFigure(group.fields[field], row.total[field]);
-    for (const producer of row.producers)
+    if (group.ownUnits !== null) addFigure(group.ownUnits, row.own.units);
+    for (const producer of row.producers) {
       group.producers.set(producer.name, (group.producers.get(producer.name) ?? 0) + producer.counts.statements);
+      if (group.producerCosts !== null) {
+        const sum = group.producerCosts.get(producer.name) ?? { statements: 0, units: 0, writerHoldMs: 0, writerWaitMs: 0 };
+        sum.statements += producer.counts.statements;
+        sum.units += producer.counts.units;
+        sum.writerHoldMs += producer.counts.writerHoldMs;
+        sum.writerWaitMs += producer.counts.writerWaitMs;
+        group.producerCosts.set(producer.name, sum);
+      }
+    }
   };
   const read = () =>
     Object.fromEntries(
@@ -212,6 +259,14 @@ const costs = () => {
           roots: group.fields.statements.count,
           figures: Object.fromEntries(COST_FIELDS.map((field) => [field, readFigure(group.fields[field])])),
           statementProducers: [...group.producers].sort((left, right) => right[1] - left[1]),
+          ...(group.ownUnits === null || group.producerCosts === null
+            ? {}
+            : {
+                ownUnits: readFigure(group.ownUnits),
+                producerCosts: [...group.producerCosts]
+                  .map(([name, sum]) => ({ name, ...sum, unitsPerRoot: sum.units / group.fields.units.count }))
+                  .sort((left, right) => right.units - left.units),
+              }),
         },
       ]),
     );
@@ -663,48 +718,71 @@ const program = Effect.gen(function* () {
     const events = yield* Effect.acquireRelease(Queue.unbounded<string>(), Queue.shutdown);
     const streams = yield* FiberSet.make<void, unknown>();
     const ledger = Context.get(world.runtime.owners, CostLedger);
+    const probeCapacity = Math.max(
+      4096,
+      Math.ceil((warm + seconds + 10) * (born.filter((_agent, index) => index % 5 !== 4).length * 0.1 * rate + 0.5)),
+    );
+    const probeLedger = causalDetail ? yield* Effect.provide(CostLedger, costLedgerLayer({ capacity: probeCapacity })) : ledger;
     const writers = Context.get(world.runtime.owners, WriterMetrics);
     const aggregatedCosts = costs();
-    const following = new Map<number, { readonly row: CostRow; readonly before: CostCursor }>();
-    const initialPage = ledger.read({ limit: 4096 });
-    let cursor: CostCursor = { ledgerId: initialPage.ledgerId, sequence: initialPage.rows.at(-1)?.sequence ?? 0 };
-    const evictedBefore = initialPage.evicted;
-    let missedRoots = 0;
-    let ledgerReset = false;
     let costStart = Number.POSITIVE_INFINITY;
     let costEnd = Number.POSITIVE_INFINITY;
-    const collectCosts = (now: number) => {
-      const earliest = following.size === 0 ? undefined : Math.min(...following.keys());
-      const after = earliest === undefined ? cursor : following.get(earliest)!.before;
-      const page = ledger.read({ after, limit: 4096 });
-      ledgerReset ||= page.reset;
-      const next = page.rows.find((row) => row.sequence > cursor.sequence);
-      if (next !== undefined && next.sequence > cursor.sequence + 1) missedRoots += next.sequence - cursor.sequence - 1;
-      let before = after;
-      for (const row of page.rows) {
-        const relevant =
-          row.name.startsWith('bench.hosted.') || row.name.startsWith('bench.turn.') || row.name.startsWith('ProtocolSteps.');
-        if (
-          relevant &&
-          (row.sequence > cursor.sequence || following.has(row.sequence)) &&
-          row.startedAt >= costStart &&
-          row.startedAt < costEnd
-        ) {
-          if (row.endedAt === null || now - row.endedAt < 5000) following.set(row.sequence, { row, before });
-          else {
-            aggregatedCosts.add(row);
-            following.delete(row.sequence);
+    const costReader = (source: CostLedger['Service'], relevant: (row: CostRow) => boolean) => {
+      const following = new Map<number, { readonly row: CostRow; readonly before: CostCursor }>();
+      const initial = source.read({ limit: 4096 });
+      let cursor: CostCursor = { ledgerId: initial.ledgerId, sequence: initial.rows.at(-1)?.sequence ?? 0 };
+      let missedRoots = 0;
+      let reset = false;
+      const collect = (now: number) => {
+        const earliest = following.size === 0 ? undefined : Math.min(...following.keys());
+        const after = earliest === undefined ? cursor : following.get(earliest)!.before;
+        const page = source.read({ after, limit: 4096 });
+        reset ||= page.reset;
+        const next = page.rows.find((row) => row.sequence > cursor.sequence);
+        if (next !== undefined && next.sequence > cursor.sequence + 1) missedRoots += next.sequence - cursor.sequence - 1;
+        let before = after;
+        for (const row of page.rows) {
+          if (
+            relevant(row) &&
+            (row.sequence > cursor.sequence || following.has(row.sequence)) &&
+            row.startedAt >= costStart &&
+            row.startedAt < costEnd
+          ) {
+            if (row.endedAt === null || now - row.endedAt < 5000) following.set(row.sequence, { row, before });
+            else {
+              aggregatedCosts.add(row);
+              following.delete(row.sequence);
+            }
+          }
+          if (row.sequence > cursor.sequence) cursor = { ledgerId: page.ledgerId, sequence: row.sequence };
+          before = { ledgerId: page.ledgerId, sequence: row.sequence };
+        }
+        for (const sequence of following.keys()) {
+          if (page.rows.length > 0 && sequence < page.rows[0]!.sequence) {
+            missedRoots += 1;
+            following.delete(sequence);
           }
         }
-        if (row.sequence > cursor.sequence) cursor = { ledgerId: page.ledgerId, sequence: row.sequence };
-        before = { ledgerId: page.ledgerId, sequence: row.sequence };
-      }
-      for (const sequence of following.keys()) {
-        if (page.rows.length > 0 && sequence < page.rows[0]!.sequence) {
-          missedRoots += 1;
-          following.delete(sequence);
-        }
-      }
+      };
+      const reading = () => ({
+        evicted: source.read({ limit: 1 }).evicted - initial.evicted,
+        reset,
+        missedRoots,
+        stillFollowing: following.size,
+      });
+      return { collect, reading };
+    };
+    const globalCosts = costReader(
+      ledger,
+      (row) =>
+        row.name.startsWith('ProtocolSteps.') ||
+        row.name.startsWith('bench.turn.') ||
+        (!causalDetail && row.name.startsWith('bench.hosted.')),
+    );
+    const probeCosts = causalDetail ? costReader(probeLedger, () => true) : null;
+    const collectCosts = (now: number) => {
+      globalCosts.collect(now);
+      probeCosts?.collect(now);
     };
     const calls = new Map<string, { readonly agent: Agent; readonly file: FileSystem.File; pending: string }>();
     const turns = new Map<string, { readonly agent: Agent; readonly file: FileSystem.File; pending: string }>();
@@ -769,11 +847,12 @@ const program = Effect.gen(function* () {
     const invoke = Effect.fn('agentLoad.invoke')(function* (agent: Agent, call: Call) {
       submitted += 1;
       if (turnMin > 0) agent.inputBytes += Buffer.byteLength(JSON.stringify(call.input));
-      const answer = yield* rootCost(
+      const callRoot = rootCost(
         `bench.hosted.${call.name}`,
         world.op('call_hosted_tool', call, at, { [GRANT_HEADER]: grantFor(agent.threadId) }),
         `${agent.threadId}:${call.toolCallId}`,
       );
+      const answer = yield* causalDetail ? callRoot.pipe(Effect.provideService(CostLedger, probeLedger)) : callRoot;
       const body = answer.body as {
         readonly status?: string;
         readonly failed?: boolean;
@@ -985,6 +1064,20 @@ const program = Effect.gen(function* () {
     const threadLatency = figure();
     const listLatency = figure();
     const listOfferedLatency = figure();
+    const diagnosticStages = causalDetail
+      ? {
+          listQueueDelay: figure(),
+          offerToListEnqueue: figure(),
+          listInitialFrame: figure(),
+          listTitleRequest: figure(),
+          listWriterWait: figure(),
+          listWriterHold: figure(),
+          threadDispatchDelay: figure(),
+          threadSubscribeToFrame: figure(),
+          threadExamples: [] as ThreadProbeExample[],
+          listExamples: [] as ListProbeExample[],
+        }
+      : null;
     const listEvidence = {
       gap: 0,
       reset: 0,
@@ -1004,6 +1097,7 @@ const program = Effect.gen(function* () {
     let threadCursor: FeedPosition | undefined;
     let titleIndex = 0;
     const sampleList = Effect.fn('agentLoad.listBoundary')(function* () {
+      const startedAt = causalDetail ? yield* Clock.monotonicTimeNanos : null;
       const frames = yield* Queue.unbounded<{ readonly frame: ThreadsFeedEvent; readonly received: number }>();
       const listener = yield* Effect.forkScoped(
         Stream.runForEach(feeds.client['threads.subscribe']({ projectId }), (frame) =>
@@ -1012,9 +1106,10 @@ const program = Effect.gen(function* () {
       );
       const receive = Effect.raceFirst(Queue.take(frames), Effect.andThen(Fiber.join(listener), Effect.die('the list subscription ended')));
       yield* receive;
+      const initialAt = causalDetail ? yield* Clock.monotonicTimeNanos : null;
       const title = `load probe ${++titleIndex}`;
       const before = writers.units({ limit: 1 });
-      const changed = yield* rootCost(
+      const listRoot = rootCost(
         'bench.list',
         Effect.gen(function* () {
           const cause = yield* CurrentCost;
@@ -1024,8 +1119,10 @@ const program = Effect.gen(function* () {
           return { answer, rootId };
         }),
       );
+      const changed = yield* causalDetail ? listRoot.pipe(Effect.provideService(CostLedger, probeLedger)) : listRoot;
       if (changed.answer.status !== 200 || (changed.answer.body as { status?: string }).status !== 'loaded')
         return yield* new BenchRefused({ message: `list probe title: ${JSON.stringify(changed.answer)}` });
+      const answeredAt = causalDetail ? yield* Clock.monotonicTimeNanos : null;
       for (;;) {
         const { frame, received } = yield* receive;
         const matched =
@@ -1044,6 +1141,15 @@ const program = Effect.gen(function* () {
           outcome: row?.outcome ?? null,
           writerPid: row?.writerPid ?? null,
           elapsedMs: row?.commitReturnedAt == null ? null : received - row.commitReturnedAt,
+          ...(causalDetail
+            ? {
+                writerWaitMs: row?.waitMs ?? null,
+                writerHoldMs: row?.holdMs ?? null,
+                initialFrameMs: initialAt === null || startedAt === null ? null : Number(initialAt - startedAt) / 1_000_000,
+                titleRequestMs: answeredAt === null || initialAt === null ? null : Number(answeredAt - initialAt) / 1_000_000,
+                receivedAt: received,
+              }
+            : {}),
         };
       }
     }, Effect.scoped);
@@ -1067,8 +1173,17 @@ const program = Effect.gen(function* () {
       Effect.forever(
         Effect.gen(function* () {
           const job = yield* Queue.take(listJobs);
+          const dequeuedAt = causalDetail ? yield* Clock.monotonicTimeNanos : null;
           const observed = yield* sampleList();
           if (job.measured && (yield* Clock.currentTimeMillis) < costEnd) {
+            const queueMs = dequeuedAt === null || job.enqueuedAt === undefined ? null : Number(dequeuedAt - job.enqueuedAt) / 1_000_000;
+            const offerToEnqueueMs = job.enqueuedWall === undefined ? null : job.enqueuedWall - job.probe.offeredAt;
+            if (diagnosticStages !== null) {
+              if (queueMs !== null) addFigure(diagnosticStages.listQueueDelay, queueMs);
+              if (offerToEnqueueMs !== null && offerToEnqueueMs >= 0) addFigure(diagnosticStages.offerToListEnqueue, offerToEnqueueMs);
+              if (observed.initialFrameMs != null) addFigure(diagnosticStages.listInitialFrame, observed.initialFrameMs);
+              if (observed.titleRequestMs != null) addFigure(diagnosticStages.listTitleRequest, observed.titleRequestMs);
+            }
             if (observed.gap) listEvidence.gap += 1;
             if (observed.reset) listEvidence.reset += 1;
             if (observed.rows === 0) listEvidence.missing += 1;
@@ -1085,8 +1200,36 @@ const program = Effect.gen(function* () {
               observed.outcome === 'success' &&
               observed.elapsedMs !== null &&
               observed.elapsedMs >= 0
-            )
+            ) {
               addFigure(listLatency, observed.elapsedMs);
+              if (
+                diagnosticStages !== null &&
+                queueMs !== null &&
+                offerToEnqueueMs !== null &&
+                observed.initialFrameMs != null &&
+                observed.titleRequestMs != null &&
+                observed.receivedAt != null &&
+                observed.writerWaitMs != null &&
+                observed.writerHoldMs != null
+              ) {
+                addFigure(diagnosticStages.listWriterWait, observed.writerWaitMs);
+                addFigure(diagnosticStages.listWriterHold, observed.writerHoldMs);
+                const example = {
+                  id: job.probe.id,
+                  offerToEnqueueMs,
+                  queueMs,
+                  initialMs: observed.initialFrameMs,
+                  titleMs: observed.titleRequestMs,
+                  waitMs: observed.writerWaitMs,
+                  holdMs: observed.writerHoldMs,
+                  commitToFrameMs: observed.elapsedMs,
+                  receivedFromOfferMs: observed.receivedAt - job.probe.offeredAt,
+                };
+                diagnosticStages.listExamples.push(example);
+                diagnosticStages.listExamples.sort((left, right) => right.receivedFromOfferMs - left.receivedFromOfferMs);
+                if (diagnosticStages.listExamples.length > 10) diagnosticStages.listExamples.pop();
+              }
+            }
           }
           yield* finished('list', job, listOfferedLatency);
         }),
@@ -1120,6 +1263,8 @@ const program = Effect.gen(function* () {
           yield* FiberSet.run(
             streams,
             Effect.gen(function* () {
+              const subscribedAt = causalDetail ? yield* Clock.currentTimeMillis : null;
+              const subscribedMono = causalDetail ? yield* Clock.monotonicTimeNanos : null;
               const first = yield* Stream.runHead(
                 feeds.client['thread.subscribe']({
                   projectId,
@@ -1130,11 +1275,38 @@ const program = Effect.gen(function* () {
               if (Option.isNone(first) || (first.value.type !== 'snapshot' && first.value.type !== 'resume'))
                 return yield* new BenchRefused({ message: `thread opened without a usable frame: ${JSON.stringify(first)}` });
               if (threadCursor === undefined || first.value.at.seq > threadCursor.seq) threadCursor = first.value.at;
-              if (job.measured && (yield* Clock.currentTimeMillis) < costEnd) openings[first.value.type] += 1;
+              if (job.measured) {
+                const receivedAt = yield* Clock.currentTimeMillis;
+                if (receivedAt < costEnd) {
+                  openings[first.value.type] += 1;
+                  if (diagnosticStages !== null && subscribedAt !== null && subscribedMono !== null) {
+                    if (subscribedAt >= probe.offeredAt) addFigure(diagnosticStages.threadDispatchDelay, subscribedAt - probe.offeredAt);
+                    addFigure(
+                      diagnosticStages.threadSubscribeToFrame,
+                      Number((yield* Clock.monotonicTimeNanos) - subscribedMono) / 1_000_000,
+                    );
+                    diagnosticStages.threadExamples.push({
+                      id: probe.id,
+                      offeredAt: probe.offeredAt,
+                      subscribedAt,
+                      receivedAt,
+                      type: first.value.type,
+                    });
+                    diagnosticStages.threadExamples.sort(
+                      (left, right) => right.receivedAt - right.subscribedAt - (left.receivedAt - left.subscribedAt),
+                    );
+                    if (diagnosticStages.threadExamples.length > 10) diagnosticStages.threadExamples.pop();
+                  }
+                }
+              }
               yield* finished('thread', job, threadLatency);
             }),
           );
-          yield* Queue.offer(listJobs, job);
+          if (causalDetail) {
+            const enqueuedAt = yield* Clock.monotonicTimeNanos;
+            const enqueuedWall = yield* Clock.currentTimeMillis;
+            yield* Queue.offer(listJobs, { ...job, enqueuedAt, enqueuedWall });
+          } else yield* Queue.offer(listJobs, job);
         }),
       ),
     );
@@ -1285,10 +1457,8 @@ const program = Effect.gen(function* () {
     const settledAt = yield* Clock.currentTimeMillis;
     yield* Effect.sync(() => collectCosts(settledAt));
     const ledgerReading = {
-      evicted: ledger.read({ limit: 1 }).evicted - evictedBefore,
-      reset: ledgerReset,
-      missedRoots,
-      stillFollowing: following.size,
+      ...globalCosts.reading(),
+      probe: probeCosts?.reading() ?? null,
       byAct: aggregatedCosts.read(),
     };
     const firstScheduled = (): number | null => firstProbeAt;
@@ -1356,6 +1526,73 @@ const program = Effect.gen(function* () {
             return { startedAt, finishedAt: yield* Clock.currentTimeMillis, callsAtStart, callsAtEnd: completed, rows };
           });
     yield* FiberSet.clear(streams);
+    const threadTraces = causalDetail
+      ? yield* Effect.gen(function* () {
+          yield* Effect.forEach(born, ({ threadId }) => harness.threads.handle(threadId, 'operator').stop(), {
+            concurrency: 'unbounded',
+            discard: true,
+          });
+          yield* (yield* PerformanceStore).flush;
+          const reports = Context.get(world.runtime.measurement, PerformanceReports);
+          const meta = (report: PerformanceReportMeta) => ({
+            retainedRange: report.retainedRange,
+            inheritedDrops: report.inheritedDrops,
+            sessionDrops: report.sessionDrops,
+            inheritedDroppedKinds: report.inheritedDroppedKinds,
+            sessionDroppedKinds: report.sessionDroppedKinds,
+          });
+          const candidates: StoredSpanRecord[] = [];
+          const slowPages: {
+            readonly meta: PerformanceReportMeta;
+            readonly total: number | null;
+            readonly returned: number;
+            readonly next: SlowCursor | null;
+          }[] = [];
+          let after: SlowCursor | undefined;
+          do {
+            const slow = yield* reports.read({ type: 'slow', name: 'ThreadFeeds.open', since: startWall, limit: 100, after });
+            if (slow.type !== 'slow') return { problem: `slow query answered ${slow.type}`, slowPages, traces: [] };
+            slowPages.push({ meta: meta(slow), total: slow.total, returned: slow.spans.length, next: slow.next });
+            candidates.push(
+              ...slow.spans.filter(
+                (span) => span.wallTime <= endWall && span.payload.attributes.threadId === (born[0]?.threadId ?? observer),
+              ),
+            );
+            after = slow.next ?? undefined;
+          } while (after !== undefined && candidates.length < 3 && slowPages.length < 10);
+          const traces = yield* Effect.forEach(candidates.slice(0, 3), (span) =>
+            Effect.gen(function* () {
+              const spans: StoredSpanRecord[] = [];
+              const pages: { readonly meta: PerformanceReportMeta; readonly totalSpans: number; readonly next: TraceCursor | null }[] = [];
+              let after: TraceCursor | undefined;
+              do {
+                const trace = yield* reports.read({ type: 'trace', traceId: span.traceId, spanId: span.id, limit: 200, after });
+                if (trace.type !== 'trace') return { span, pages, problem: `trace query answered ${trace.type}`, spans: [] };
+                pages.push({ meta: meta(trace), totalSpans: trace.totalSpans, next: trace.next });
+                spans.push(...trace.segments.flatMap((segment) => segment.spans));
+                after = trace.next ?? undefined;
+              } while (after !== undefined);
+              return {
+                span,
+                pages,
+                spans: spans.filter(
+                  (item) =>
+                    item.name.startsWith('ThreadSnapshots.') ||
+                    item.name === 'ThreadFeeds.open' ||
+                    item.name === 'Store.transaction' ||
+                    item.name === 'Store.permit.wait',
+                ),
+              };
+            }),
+          );
+          return {
+            slowPages,
+            selectionCut: after !== undefined,
+            matching: 'thread and wall-time interval only; no client probe id',
+            traces,
+          };
+        }).pipe(Effect.catch((error) => Effect.succeed({ problem: String(error), traces: [] })))
+      : null;
     console.log(
       JSON.stringify(
         {
@@ -1369,6 +1606,8 @@ const program = Effect.gen(function* () {
             warm,
             rate,
             subscribers,
+            causalDetail,
+            probeLedgerCapacity: causalDetail ? probeCapacity : null,
             sqliteHosting: 'child',
             drivers: [...DRIVERS],
             fixtureBytes: resultBytes,
@@ -1418,9 +1657,32 @@ const program = Effect.gen(function* () {
           loop: loopReading,
           interfaces: {
             producerDelayMs: readFigure(producerDelay),
+            retainedThreadOpenTraces: threadTraces,
             graphOfferedToAnswer: boundary('graph', graphLatency),
-            threadOfferedToFrame: { ...boundary('thread', threadLatency), openings },
+            threadOfferedToFrame: {
+              ...boundary('thread', threadLatency),
+              openings,
+              ...(diagnosticStages === null
+                ? {}
+                : {
+                    dispatchDelayMs: readFigure(diagnosticStages.threadDispatchDelay),
+                    subscribeToFrameMs: readFigure(diagnosticStages.threadSubscribeToFrame),
+                    slowExamples: diagnosticStages.threadExamples,
+                  }),
+            },
             listOfferedToFrame: boundary('list', listOfferedLatency),
+            listStages:
+              diagnosticStages === null
+                ? null
+                : {
+                    offerToEnqueueMs: readFigure(diagnosticStages.offerToListEnqueue),
+                    queueDelayMs: readFigure(diagnosticStages.listQueueDelay),
+                    initialFrameMs: readFigure(diagnosticStages.listInitialFrame),
+                    titleRequestMs: readFigure(diagnosticStages.listTitleRequest),
+                    writerWaitMs: readFigure(diagnosticStages.listWriterWait),
+                    writerHoldMs: readFigure(diagnosticStages.listWriterHold),
+                    slowExamples: diagnosticStages.listExamples,
+                  },
             listCommitToFrame: {
               scheduled: scheduledProbes,
               completedBeforeCut: completedBeforeCut.list,
@@ -1446,9 +1708,13 @@ const program = Effect.gen(function* () {
           limits: [
             'CPU includes bench driver and probes; span histogram counts are installation-wide',
             'after the last census the fixture interrupts unfinished calls and turn openings during cleanup; their HTTP 503s are outside the measured window',
-            'interface offered-to-answer includes file delivery from an independent producer; outstanding-at-cut includes delayed or unsubmitted probes',
+            'interface offered-to-answer and offer-to-list-enqueue delays cross the producer and receiver clocks without an established skew bound; list queue delay uses receiver monotonic time',
+            'probe stages describe completed samples only; outstanding-at-cut includes delayed or unsubmitted probes',
+            'thread-open traces are selectively retained and match a thread and time window, not a unique client probe',
             'list COMMIT-to-frame uses writer and receiver epoch clocks with no established cross-process skew bound; the probe opens an additional transient thread-list subscription',
             'producer progress is sampled at cycle boundaries, can be stale, and omits buffered ACP ingress between the CLI and server',
+            'with causal-detail enabled hosted and list probes use a separate bounded causal ledger; protocol steps use the installation ledger; both report evictions and unfinished tails',
+            'ledger units count Store transactions; direct activity-database transactions can contribute writer hold without incrementing units, and each activity batch is charged to its first accepted cause',
             'ledger root writer times are sums per act, not per-unit percentiles; late tails have a five-second settling window',
             'writer histograms cover physical outer units; child time is acknowledged statement elapsed, not engine CPU, and incomplete splits are omitted',
             'allocator requested bytes are process-wide and are not total JavaScript allocation',
