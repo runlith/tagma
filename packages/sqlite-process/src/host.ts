@@ -2,6 +2,7 @@ import { Database } from 'bun:sqlite';
 import {
   thrownShapeOf,
   type ProgramOutcome,
+  type ReturnedRows,
   type SqliteAsk,
   type SqliteProgram,
   type SqliteReply,
@@ -33,12 +34,19 @@ const applied = (db: Database, program: SqliteProgram): ProgramOutcome => {
   const started = performance.now();
   db.run('SAVEPOINT program');
   let at = 0;
+  const returned: ReturnedRows[] = [];
   try {
     for (; at < program.statements.length; at += 1) {
       const step = program.statements[at]!;
       const statement = db.query(step.sql);
       const params = step.params as [];
-      const count = step.counts === 'rows' ? (statement.values(...params) ?? []).length : statement.run(...params).changes;
+      let count: number;
+      if (step.counts === 'changes') count = statement.run(...params).changes;
+      else {
+        const rows = statement.values(...params) ?? [];
+        if (step.counts === 'returned') returned.push(rows);
+        count = rows.length;
+      }
       if (step.expect !== null && count !== step.expect) {
         db.run('ROLLBACK TO program');
         db.run('RELEASE program');
@@ -46,7 +54,8 @@ const applied = (db: Database, program: SqliteProgram): ProgramOutcome => {
       }
     }
     db.run('RELEASE program');
-    return { _tag: 'Applied', execMs: performance.now() - started };
+    const execMs = performance.now() - started;
+    return returned.length === 0 ? { _tag: 'Applied', execMs } : { _tag: 'Applied', execMs, returned };
   } catch (cause) {
     if (!db.inTransaction) throw cause;
     db.run('ROLLBACK TO program');

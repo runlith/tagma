@@ -26,8 +26,11 @@ export const thrownBytes = (thrown: ThrownShape): number =>
 
 export const programOutcomeBytes = (outcome: ProgramOutcome): number => {
   switch (outcome._tag) {
-    case 'Applied':
-      return 'Applied'.length;
+    case 'Applied': {
+      let bytes = 'Applied'.length;
+      for (const rows of outcome.returned ?? []) bytes += rowBytes(rows);
+      return bytes;
+    }
     case 'Conflict':
       return 'Conflict'.length + 3 * 8;
     case 'Refused':

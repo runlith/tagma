@@ -32,14 +32,16 @@ export type Committed = Extract<SqliteSaid, { readonly _tag: 'Committed' }>;
 type ProgramStatement = {
   readonly sql: string;
   readonly params: ReadonlyArray<unknown>;
-  readonly counts: 'rows' | 'changes';
+  readonly counts: 'rows' | 'changes' | 'returned';
   readonly expect: number | null;
 };
 
 export type SqliteProgram = { readonly statements: ReadonlyArray<ProgramStatement> };
 
+export type ReturnedRows = ReadonlyArray<ReadonlyArray<unknown>>;
+
 export type ProgramOutcome =
-  | { readonly _tag: 'Applied'; readonly execMs: number }
+  | { readonly _tag: 'Applied'; readonly execMs: number; readonly returned?: ReadonlyArray<ReturnedRows> }
   | {
       readonly _tag: 'Conflict';
       readonly statement: number;
