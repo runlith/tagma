@@ -49,7 +49,8 @@ sources:
 **Behaviour.**
 - The panel tabs are all open project pages, including ones opened by agents; such a tab carries an "Opened by" label with the thread name. A new page opens in the profile picked on the blank page, otherwise in the `browser.userProfile` profile; a page in another profile names it in the address field.
 - On desktop the page shows natively; it also has find in page, zoom, and DevTools, and a context menu (open link in a new tab or in the system browser, save image, Inspect Element). In the web client the same panel shows the page by screencast, with no find, zoom, or DevTools.
-- A link with `target=_blank` becomes a new tab; a named-window popup opens in its own window with an origin strip. A page opens a window without a user gesture only within a small quota.
+- A link with `target=_blank` becomes a new tab right after the tab of the page that opened it, in every window showing that tab. A plain click switches to it when the operator was looking at the opener; ⌘-click, a middle click or "Open link in new tab" leaves it behind, and so does a click an agent made. When no window shows the opener's tab, the page goes to the thread that opened the chain. A named-window popup opens in its own window with an origin strip. A page opens a window without a user gesture only within a small quota.
+- A page no one sees, drives or captures rests like a background tab and costs almost no CPU or GPU.
 - Microphone and camera are first granted to a site by a human, per origin and only in a shown window; a background page or one under an agent is refused without asking.
 - Page downloads gather in a badge with a count; a finished file saves with a Save button. A page keeps its last 50 downloads.
 
