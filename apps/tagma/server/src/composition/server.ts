@@ -43,7 +43,7 @@ import { makeRuntime, type ServerRuntime } from './runtime.js';
 import { RECORDINGS } from '../speech/contract/service/recording.js';
 import { SHIPPED_PRESETS } from '../marketplaces/contract/wire/presets.js';
 import { assemble } from './manifest.js';
-import type { Build, ServerParts } from './build.js';
+import type { Build } from './build.js';
 import { RolloutReads } from '../threads/contract/service/rolloutReads.js';
 import {
   type DataDirectoryConflict,
@@ -114,9 +114,10 @@ const gigabytes = (bytes: number): string => `${(bytes / 1024 ** 3).toFixed(1)} 
 
 const READ_DEADLINE = 240;
 
-export const serve = async (build: Build, parts: ServerParts): Promise<void> => {
+export const serve = async (build: Build): Promise<void> => {
   const { channel } = build;
   recordConsole(console, process.pid);
+  const parts = await build.parts();
   const assembly = await assemble(parts);
 
   const { server: port, artifact: artifactPort, remote: remotePort, sandbox: sandboxPort } = portsOf(channel, process.env);

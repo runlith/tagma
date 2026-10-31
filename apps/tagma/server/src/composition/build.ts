@@ -24,8 +24,15 @@ type Extension<Modules extends readonly Manifest[]> = Exclude<Modules[number], (
 type Unserved<Modules extends readonly Manifest[], E = Extension<Modules>> =
   | Exclude<LiveDoorOf<Modules[number]>, SocketDoor | Gives<E, 'installation'> | Gives<E, 'serving'>>
   | Exclude<ControlServices<Modules[number]>, SettingControlNeeds>
-  | Exclude<Needs<E, 'installation'>, Installed | Gives<E, 'installation'>>
-  | Exclude<Needs<E, 'serving'>, Served | Installed | Gives<E, 'installation'> | Gives<E, 'serving'>>;
+  | Exclude<Needs<E, 'installation'>, Installed>
+  | Exclude<Needs<E, 'serving'>, Served | Installed | Gives<E, 'installation'>>
+  | Untiered<E>;
+
+type Untiered<E> = E extends { readonly lifetimes: infer L } ? Extract<keyof L, 'workspace' | 'run' | 'call'> : never;
+
+declare const checked: unique symbol;
+
+type CheckedParts = ServerParts & { readonly [checked]: true };
 
 export type ServerParts<Modules extends readonly Manifest[] = readonly Manifest[]> = {
   readonly modules: Modules;
@@ -35,12 +42,12 @@ export type ServerParts<Modules extends readonly Manifest[] = readonly Manifest[
 
 export const serverParts = <const Modules extends readonly Manifest[]>(
   parts: ServerParts<Modules> & ([Unserved<Modules>] extends [never] ? unknown : { readonly unserved: Unserved<Modules> }),
-): ServerParts<Modules> => parts;
+): CheckedParts => parts as unknown as CheckedParts;
 
 export type Build = {
   readonly channel: Channel;
   readonly verbs: readonly VerbModule[];
   readonly verbBindings: (core: CoreBindings) => VerbBindings;
-  readonly parts: () => Promise<ServerParts>;
+  readonly parts: () => Promise<CheckedParts>;
   readonly cut: Composition;
 };

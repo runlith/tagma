@@ -8,12 +8,13 @@ type ExtensionLayer = Layer.Layer<never, unknown, any>;
 
 type Tier = 'installation' | 'serving';
 
-export const standsIn = Effect.fnUntraced(function* <R>(
+export const standsIn = Effect.fn('composition.standsIn')(function* <R>(
   modules: readonly Manifest[],
   tier: Tier,
   over: Context.Context<R>,
   scope: Scope.Scope,
 ) {
+  yield* Effect.annotateCurrentSpan('tier', tier);
   const layers = modules.flatMap((module) => (CORE.has(module) ? [] : ((module.lifetimes?.[tier] as ExtensionLayer | undefined) ?? [])));
   const built: Context.Context<never> = yield* Scope.provide(
     Layer.build(Layer.mergeAll(Layer.empty, ...layers).pipe(Layer.provide(Layer.succeedContext(over as Context.Context<any>)))),

@@ -17,7 +17,7 @@ const verbs = {
 const verb = given[0] === 'publish' || given[0] === 'notarize' ? given[0] : null;
 const cut = given.filter((one) => one !== '--notarize');
 const out = cut.flatMap((one, at) => (one === '--json' ? [one] : one === '--out' ? [one, cut[at + 1] ?? ''] : []));
-const steps = async () => stepsOf((await RELEASE.parts()).modules);
+const steps = async () => stepsOf(await RELEASE.parts());
 const command =
   verb !== null
     ? verbs[verb]()
