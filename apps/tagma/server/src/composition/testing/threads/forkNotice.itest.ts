@@ -3,7 +3,8 @@ import { it } from '@runlith/effect-test';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import type { ModelRequestInput, ModelStreamInput } from '@runlith/agent/modelPort';
 import type { ThreadState } from '@runlith/agent/thread/state';
-import type { Message } from '@runlith/llm/schema/messages';
+import type { Message, ToolDefinition } from '@runlith/llm/schema/messages';
+import { wireToolDefinitions } from '@runlith/agent/ModelRequests';
 import { ModelID, ProviderID } from '@runlith/llm/schema/ids';
 import { ModelIdentity } from '@runlith/llm/schema/options';
 import { Usage, type LLMEvent } from '@runlith/llm/schema/events';
@@ -44,7 +45,7 @@ type Asked = {
   readonly lane: string | undefined;
   readonly stepped: boolean;
   readonly system: string | undefined;
-  readonly tools: readonly string[];
+  readonly tools: readonly ToolDefinition[];
   readonly messages: readonly Message[];
 };
 
@@ -69,7 +70,7 @@ const recording =
                 lane: selection.lane,
                 stepped: input.step !== undefined,
                 system: selection.instructions,
-                tools: Object.keys(input.tools),
+                tools: wireToolDefinitions(input.tools, input.activeTools),
                 messages: input.messages,
               });
               return Stream.fromIterable(answer);
@@ -109,9 +110,9 @@ const idle = Effect.fn('testing.forkNoticeIdle')(function* (threadId: string, ru
   return done(current) ? current.latestRun : (yield* Deferred.await(seen)).latestRun;
 }, Effect.scoped);
 
-const wire = (messages: readonly Message[]) => JSON.parse(JSON.stringify(messages.map(({ role, content }) => ({ role, content }))));
+const wire = (messages: readonly Message[]) => JSON.stringify(messages);
 
-const naming = (messages: readonly Message[], threadId: string) => JSON.stringify(wire(messages)).split(threadId).length - 1;
+const naming = (messages: readonly Message[], threadId: string) => wire(messages).split(threadId).length - 1;
 
 it.live(
   'a fork made by the operator or by spawn_agent is told once, on its first turn, whose copy it is, and that turn reads its source’s system prompt and history unchanged',
@@ -159,11 +160,11 @@ it.live(
       }
       const copied = parent.messages.length + 1;
       for (const fork of [opened, child]) {
-        expect([fork.system, fork.tools]).toEqual([again.system, again.tools]);
-        expect(wire(fork.messages.slice(0, copied))).toEqual(wire(again.messages.slice(0, copied)));
+        expect(JSON.stringify([fork.system, fork.tools])).toBe(JSON.stringify([again.system, again.tools]));
+        expect(wire(fork.messages.slice(0, copied))).toBe(wire(again.messages.slice(0, copied)));
         expect(naming(fork.messages.slice(copied), source)).toBe(1);
       }
-      expect(wire(next.messages.slice(0, opened.messages.length))).toEqual(wire(opened.messages));
+      expect(wire(next.messages.slice(0, opened.messages.length))).toBe(wire(opened.messages));
       expect(naming(next.messages.slice(opened.messages.length), source)).toBe(0);
     }).pipe(Effect.provide(BunFileSystem.layer), Effect.provide(fixture)),
 );
