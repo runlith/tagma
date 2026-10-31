@@ -393,12 +393,25 @@ fields:
       {
         "at": "src/testing.ts",
         "role": "testing"
+      },
+      {
+        "at": "src/Point.ts"
+      },
+      {
+        "at": "src/svelte/PointView.svelte"
+      },
+      {
+        "at": "src/svelte/payload.ts"
       }
     ],
     "id": "@runlith/layer",
     "kind": "substrate"
   }
 edges:
+  - kind: imports
+    to: 01a0c6fd-caf6-71b7-ae07-f6ae0e2f2094
+  - kind: imports
+    to: 01a193f8-0f6e-7d7b-ab47-f2ac80ffecb0
   - kind: imports-tests
     to: 01a0c704-a612-7c4c-9f81-5089acc2829b
 sources:

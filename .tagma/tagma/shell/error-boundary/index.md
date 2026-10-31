@@ -10,7 +10,8 @@ fields:
         "at": "src/error-boundary-config.svelte.ts",
         "for": [
           "de36c9fd",
-          "7b63e87f"
+          "7b63e87f",
+          "59cc3c49"
         ]
       },
       {
@@ -19,7 +20,8 @@ fields:
           "cb732496",
           "de36c9fd",
           "3724cd7a",
-          "7b63e87f"
+          "7b63e87f",
+          "59cc3c49"
         ]
       },
       {
