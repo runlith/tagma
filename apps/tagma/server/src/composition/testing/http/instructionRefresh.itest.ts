@@ -205,6 +205,7 @@ it.live(
       const pending = yield* store.systemPromptOf(hosted);
       expect(pending?.pendingDefinition).toMatchObject({ agentId: HARNESS_AGENT_ID, profile: { id: 'reader' } });
       expect(pending?.pendingSystemPrompt).toContain('reader-overlay');
+      expect(yield* op('refresh_thread_instructions', { threadId: hosted })).toMatchObject({ status: 200, body: { status: 'current' } });
       const own = yield* seated('devin', null);
       expect(yield* op('refresh_thread_instructions', { threadId: own })).toMatchObject({ body: { code: 'external-context' } });
     }).pipe(Effect.provide(BunFileSystem.layer)),
