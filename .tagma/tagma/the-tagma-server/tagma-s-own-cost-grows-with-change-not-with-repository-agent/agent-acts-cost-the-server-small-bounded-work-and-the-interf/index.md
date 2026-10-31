@@ -263,6 +263,19 @@ A post-fix **5× open-parent stress sample** used the same machine and source bu
 
 The stress sample had loop p99 7.016 ms and no stall over 100 ms; physical writer wait/hold p99 upper bounds were 2,000/40 ms over 9,008 units. The ledger evicted 28,369 roots, detected 1,616 missed roots, and still followed 226 tails; writer-row retention had a gap. The observed request backlog grew rather than being held at bounded ingress. GC p99 was 26.563 ms in the diagnostic sample with 127 ambiguous fragments and unverified completeness.
 
+A 5× **causal-attribution repeat** used bench `cf01bf3548` plus an uncommitted additive SQLite-program delta that was not wired into any operation and remained byte-identical throughout. Its dedicated bounded ledger and probe-stage instrumentation make it a diagnostic repeat, not the identical `9125252453` build. It submitted 1,802 calls, completed 834, and grew outstanding from 187 to 1,155 in 90 s. The physical writer held 8,990 units for 88,800 ms; 10,280 ms was acknowledged child elapsed and 78,520 ms (88.4%) was outside, including scheduling and bookkeeping as well as loop round trips. The two largest operations accounted for 95.0% of hold.
+
+| Writer operation | Units | Hold sum | Hold p50 / p99 upper bound | Child / outside sum |
+|---|---:|---:|---:|---:|
+| `HarnessSessionStore.change` | 4,211 | 61,601 ms | 15 / 50 ms | 7,300 / 54,301 ms |
+| `ThreadStore.kernel` | 3,339 | 22,745 ms | 5 / 30 ms | 2,272 / 20,474 ms |
+| `start.reserve` | 235 | 1,160 ms | 5 / 20 ms | 155 / 1,005 ms |
+| `discharge.discharge` | 264 | 1,052 ms | 4 / 20 ms | 146 / 907 ms |
+
+Of the hosted roots that began in the window, ended and had a five-second tail allowance, 647 roots carried 3,315 own Store units, 5.124 per root. The 434 `read` roots and 55 `read_block` roots each had 4 own units on average; 84 `grep` roots averaged 8.952, 19 `glob` roots 9, and 55 `bash` roots 7.927. Their `ThreadSnapshots.publish`, `ThreadList.project` and `KeepWarm.look` producers incurred no counted Store units, though publication and list projection ran SQL. The separately opened ACP stream is not a child of a hosted call: 21,792 retained `ProtocolSteps.run` roots carried 4,164 `ProtocolSteps.saved` Store units. Dividing by 834 completed calls gives 4.99 units per completion only as an installation-window ratio, not causal per-call attribution. The probe ledger had no evictions or detected gaps but still followed 1,156 roots; the 647 ended roots are a selected subset. Direct transactions in the separate activity database can incur writer hold without incrementing the Store-unit counter; shared activity batches are charged to the first accepted cause.
+
+Among 33 completed list probes, the fixture's own serial queue waited 11,802 ms on average, the title request took 2,509 ms, and its matched physical writer permit waited 811 ms with 1.45 ms hold; initial list frames averaged 17 ms. The fixture queue is not product projection latency. Twelve of 45 list probes were outstanding at the cut, so the population COMMIT-to-frame p99 is unproved; 33 observed samples had a 57 ms p99 upper bound. All 45 thread opens completed; subscribe-to-frame and server `ThreadFeeds.open` p99 upper bounds were both 2,048 ms. Thirty-six slow open spans were retained but none passed the target-thread filter, so the source of individual thread-open delays remains unproved.
+
 List latency is writer-side COMMIT return to delivered frame across process epoch clocks whose skew is not bounded. Writer percentiles cover physical outer units and child elapsed is not engine CPU. GC attribution is diagnostic and its completeness is unverified; loop delay and stalls are the gate. No resident-memory budget or reference-profile pass is established by this sample.
 
 ## Not established
