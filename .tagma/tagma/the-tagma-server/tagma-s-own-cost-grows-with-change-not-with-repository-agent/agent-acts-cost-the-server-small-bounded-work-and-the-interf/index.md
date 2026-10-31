@@ -174,7 +174,8 @@ Kind: a design decision — state re-derived on pull, the writer coupled to loop
    - The workload below.
    - Baseline and budgets recorded in this spec.
 1. **B**, first by measurement: in the 5× stress run the writer was the ceiling. Loop p99 stayed at 7 ms while writer wait p99 reached 2 s and throughput capped near 9 calls/s. 89.6% of all writer hold was outside the child. `HarnessSessionStore.change` (ACP protocol row) and `ThreadStore.kernel` (journal append) held 95% of it; they migrate first.
-2. **E** with the same owner as B's `HarnessSessionStore.change` migration, or right after it: the protocol row write shrinks to what changed.
+   First units landed (`833c4dba`…`bee2f3f5`, task [[eb690904]]): at 5× those two operations' hold equals their child time (61.6 s → 6.9 s and 22.7 s → 2.5 s), writer wait p99 fell from ≤2,000 to ≤200 ms, and no program conflicted in the measured window. Throughput rose only from 9.3 to 11.5 calls/s and the backlog still grows, so the writer no longer sets the cap. Server CPU per completed call is 112.5 ms; whether the loop is now the ceiling is the next measurement. B's remaining units, the terminal lifecycle (`start.*`, `discharge`, `stops.stop`, ~74% of remaining hold, ~97% of it outside the child), follow by rank.
+2. **E**, now ranked by measurement rather than first: at 5× the protocol row program costs 1.34 ms of child time on average, 15.7% of writer hold. Writing what changed needs a delta or normalized form that recovery reads back.
 3. **A**, producers by ledger rank; the thread list, keep-warm and graph-copy holding move to narrow events.
 4. **C and D**, by rank.
 5. **F**.
