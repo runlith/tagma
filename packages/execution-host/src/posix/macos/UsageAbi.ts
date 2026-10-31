@@ -3,10 +3,12 @@ import { constants } from 'node:os';
 import type { MachineMemory, MemoryPressure } from '@runlith/executions/protocol/evidence';
 import type { MachineCounters } from '../../UsageReader';
 import { birthOf } from './birth';
+import type { GpuClient, GpuRead } from './gpu';
 
 const USAGE_SYMBOLS = {
   execution_usage_all: { args: [FFIType.ptr, FFIType.i32], returns: FFIType.i32 },
   execution_usage_machine: { args: [FFIType.ptr], returns: FFIType.i32 },
+  execution_usage_gpu: { args: [FFIType.ptr, FFIType.i32], returns: FFIType.i32 },
 } as const;
 
 const ROW = 14;
@@ -31,11 +33,14 @@ export interface UsageAbi {
   unload(): void;
   all(): ReadonlyArray<NativeCounters> | { readonly errno: number };
   machine(): MachineCounters | { readonly errno: number };
+  gpu(): GpuRead;
 }
 
 export class NativeUsage implements UsageAbi {
   private capacity = 2048;
   private values = new BigUint64Array(this.capacity * ROW);
+  private gpuCapacity = 256;
+  private gpuValues = new BigUint64Array(this.gpuCapacity * 6);
 
   private constructor(private readonly library: ReturnType<typeof dlopen<typeof USAGE_SYMBOLS>>) {}
 
@@ -79,6 +84,43 @@ export class NativeUsage implements UsageAbi {
         };
       }
       return rows;
+    }
+  }
+
+  gpu(): GpuRead {
+    for (;;) {
+      const values = this.gpuValues;
+      const total = this.library.symbols.execution_usage_gpu(ptr(values), this.gpuCapacity);
+      if (total < 0) {
+        const errno = -total;
+        return {
+          _tag: 'Unavailable',
+          reason:
+            errno === constants.errno.ENOTSUP
+              ? 'the system exposes no AGX AppUsage GPU counters'
+              : `the IOKit GPU registry read answered errno ${errno}`,
+        };
+      }
+      if (total > this.gpuCapacity) {
+        this.gpuCapacity = total + (total >> 2) + 16;
+        this.gpuValues = new BigUint64Array(this.gpuCapacity * 6);
+        continue;
+      }
+      const clients: GpuClient[] = [];
+      for (let index = 0; index < total; index += 1) {
+        const at = index * 6;
+        const errno = Number(values[at + 5]!);
+        clients.push({
+          pid: Number(values[at]!),
+          birth: birthOf(values[at + 1]!, values[at + 2]!),
+          client: String(values[at + 3]!),
+          gpu:
+            errno === 0
+              ? { _tag: 'Measured', micros: Number(values[at + 4]! / 1000n) }
+              : { _tag: 'Unavailable', reason: `the AGX client's GPU counter answered errno ${errno}` },
+        });
+      }
+      return { _tag: 'Read', clients };
     }
   }
 

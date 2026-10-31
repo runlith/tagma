@@ -3,6 +3,27 @@ use std::panic::{AssertUnwindSafe, catch_unwind};
 
 pub const ROW: usize = 14;
 
+#[cfg(target_os = "macos")]
+#[path = "macos/gpu.rs"]
+mod gpu;
+
+#[cfg(target_os = "macos")]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn execution_usage_gpu(values: *mut u64, capacity: i32) -> i32 {
+    match catch_unwind(AssertUnwindSafe(|| {
+        if capacity < 0 || (capacity > 0 && values.is_null()) { return Err(libc::EINVAL); }
+        let rows = gpu::all()?;
+        for (at, row) in rows.iter().take(capacity as usize).enumerate() {
+            unsafe { std::ptr::copy_nonoverlapping(row.as_ptr(), values.add(at * gpu::ROW), gpu::ROW) };
+        }
+        Ok(rows.len() as i32)
+    })) {
+        Ok(Ok(count)) => count,
+        Ok(Err(code)) => -code,
+        Err(_) => -libc::EIO,
+    }
+}
+
 fn errno() -> i32 {
     io::Error::last_os_error().raw_os_error().filter(|&code| code > 0).unwrap_or(5)
 }

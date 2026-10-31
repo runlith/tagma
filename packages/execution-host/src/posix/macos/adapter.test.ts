@@ -9,6 +9,7 @@ import type { NativeCounters, UsageAbi } from './UsageAbi';
 import { Sampler } from './Sampler';
 import { processReader } from './processes';
 import type { RefusedUsage } from './ps';
+import type { GpuRead } from './gpu';
 
 const unused = (): never => {
   throw new Error('unexpected native operation');
@@ -74,7 +75,12 @@ test('usage reads refused processes only on demand and discards a replaced pid',
     counter(30, 1, 10, denied),
     counter(40, 1, 10, denied),
   ];
-  const usage: UsageAbi = { unload: unused, all: () => counters, machine: () => ({ errno: 1 }) };
+  const usage: UsageAbi = {
+    unload: unused,
+    all: () => counters,
+    machine: () => ({ errno: 1 }),
+    gpu: () => ({ _tag: 'Unavailable', reason: 'not measured' }),
+  };
   const facts = (pids: ReadonlyArray<number>): ProcessReading => ({
     processes: pids.map((pid) => ({
       pid,
@@ -129,4 +135,41 @@ test('usage reads refused processes only on demand and discards a replaced pid',
   });
   expect(open.processes.find((row) => row.pid === 40)).toMatchObject({ cpu: undefined, onBehalfOf: undefined });
   expect(open.processes.find((row) => row.pid === 40)?.memoryKind).toBeUndefined();
+});
+
+test('GPU client resets and departures preserve cumulative usage without crossing kernel witnesses', () => {
+  let row = counter(10, 1, 10);
+  let read: GpuRead = { _tag: 'Read', clients: [] };
+  const usage: UsageAbi = { unload: unused, all: () => [row], machine: () => ({ errno: 1 }), gpu: () => read };
+  const processes: ProcessAbi = { ...native(), processFacts: () => ({ processes: [], unread: [] }) };
+  const sampler = new Sampler(usage, processes, { read: unused });
+  const sample = () => {
+    const result = sampler.read({ others: false });
+    if (typeof result === 'string') throw new Error(result);
+    return result.processes[0]!.gpu;
+  };
+  const clients = (a: number, b?: number, birth = '1000:10'): GpuRead => ({
+    _tag: 'Read',
+    clients: [
+      { pid: 10, birth, client: 'a', gpu: { _tag: 'Measured', micros: a } },
+      ...(b === undefined ? [] : [{ pid: 10, birth, client: 'b', gpu: { _tag: 'Measured' as const, micros: b } }]),
+    ],
+  });
+  expect(sample()._tag).toBe('Unavailable');
+  read = clients(0);
+  expect(sample()).toEqual({ _tag: 'Measured', micros: 0 });
+  read = clients(100, 900);
+  expect(sample()).toEqual({ _tag: 'Measured', micros: 1000 });
+  read = clients(110);
+  expect(sample()).toEqual({ _tag: 'Measured', micros: 1010 });
+  read = clients(5);
+  expect(sample()).toEqual({ _tag: 'Measured', micros: 1010 });
+  read = clients(15);
+  expect(sample()).toEqual({ _tag: 'Measured', micros: 1020 });
+  read = clients(20, undefined, '1001:10');
+  expect(sample()._tag).toBe('Unavailable');
+  row = { ...row, birth: '1001:10' };
+  expect(sample()).toEqual({ _tag: 'Measured', micros: 20 });
+  read = { _tag: 'Unavailable', reason: 'the registry denied this read' };
+  expect(sample()).toEqual(read);
 });

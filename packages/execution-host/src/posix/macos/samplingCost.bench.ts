@@ -1,5 +1,6 @@
 import { dlopen, FFIType, ptr } from 'bun:ffi';
 import { resolve } from 'node:path';
+import { arch, cpus, loadavg, platform, totalmem } from 'node:os';
 import { Abi } from './ProcessAbi';
 import { Sampler } from './Sampler';
 import { NativeUsage } from './UsageAbi';
@@ -50,8 +51,42 @@ const measure = (others: boolean) => {
   return { others, processes, rounds, wallMs, cpuMs, childProcessesPerPass: calls / rounds };
 };
 
+const measureGpu = () => {
+  const system = counters.all();
+  if (!Array.isArray(system)) throw new Error('the native process population could not be read');
+  const rounds = 10;
+  const warm = counters.gpu();
+  if (warm._tag === 'Unavailable') return warm;
+  const beforeCpu = cpu(0) + cpu(-1);
+  const beforeWall = performance.now();
+  let clients = 0;
+  let measuredProcesses = 0;
+  for (let at = 0; at < rounds; at += 1) {
+    const read = counters.gpu();
+    if (read._tag === 'Unavailable') return read;
+    clients = read.clients.length;
+    measuredProcesses = new Set(read.clients.filter((client) => client.gpu._tag === 'Measured').map((client) => client.pid)).size;
+  }
+  return {
+    processes: system.length,
+    clients,
+    measuredProcesses,
+    rounds,
+    wallMs: (performance.now() - beforeWall) / rounds,
+    cpuMs: (cpu(0) + cpu(-1) - beforeCpu) / 1000 / rounds,
+    childProcessesPerPass: 0,
+  };
+};
+
 try {
-  console.log(JSON.stringify({ closed: measure(false), open: measure(true) }));
+  console.log(
+    JSON.stringify({
+      machine: { platform: platform(), arch: arch(), cores: cpus().length, memoryBytes: totalmem(), load: loadavg() },
+      closed: measure(false),
+      open: measure(true),
+      gpu: measureGpu(),
+    }),
+  );
 } finally {
   counters.unload();
   processReader.unload();

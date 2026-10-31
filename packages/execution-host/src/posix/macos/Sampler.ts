@@ -1,11 +1,12 @@
 /// <reference types="bun" />
 
 import { constants } from 'node:os';
-import type { ProcessCounters, ProcessGpu, UsageDemand, UsageRead } from '../../UsageReader';
+import type { ProcessCounters, UsageDemand, UsageRead } from '../../UsageReader';
 import type { ProcessAbi } from './ProcessAbi';
 import { baseName, programsOf } from './programs';
 import type { NativeCounters, UsageAbi } from './UsageAbi';
 import type { RefusedRead, RefusedUsage } from './ps';
+import { Gpu } from './gpu';
 
 type Described = {
   readonly executable: string | undefined;
@@ -18,11 +19,11 @@ const COMMAND_CHARS = 240;
 //! a child read between fork and exec still shows its parent's program, so its facts are kept only once it has had time to exec
 const SETTLED_MS = 2_000;
 const REFUSED = new Set([constants.errno.EPERM, constants.errno.EACCES]);
-const GPU: ProcessGpu = { _tag: 'Unavailable', reason: 'per-process GPU usage is not measured on this system' };
 
 export class Sampler {
   readonly machineName = 'Mac';
   private described = new Map<string, Described>();
+  private readonly gpu = new Gpu();
 
   constructor(
     private readonly usage: UsageAbi,
@@ -37,6 +38,8 @@ export class Sampler {
     if (!Array.isArray(counters)) return `the native process counters answered errno ${(counters as { readonly errno: number }).errno}`;
     const machine = this.usage.machine();
     const listed = counters as ReadonlyArray<NativeCounters>;
+    const gpuRead = this.usage.gpu();
+    const gpu = this.gpu.read(gpuRead);
     const refused = others ? listed.filter((row) => REFUSED.has(row.errno)) : [];
     const borrowedRead: RefusedRead = others ? this.refused.read(refused.map((row) => row.pid)) : { read: new Map() };
     const kept = new Set<number>();
@@ -89,6 +92,7 @@ export class Sampler {
     const rows = listed.map((row, index): ProcessCounters => {
       const name = placed[index]!.name;
       const one = described.get(key(row));
+      const measuredGpu = gpu.get(row.pid);
       const base = {
         pid: row.pid,
         birth: row.birth,
@@ -96,7 +100,18 @@ export class Sampler {
         onBehalfOf: placed[index]!.responsible === row.pid ? undefined : placed[index]!.responsible,
         work: row.work,
         zombie: row.zombie,
-        gpu: GPU,
+        gpu:
+          measuredGpu?.birth === row.birth
+            ? measuredGpu.gpu
+            : {
+                _tag: 'Unavailable' as const,
+                reason:
+                  gpuRead._tag === 'Unavailable'
+                    ? gpuRead.reason
+                    : measuredGpu === undefined
+                      ? 'the process has no visible AGX GPU client'
+                      : 'the GPU client does not match the sampled kernel process witness',
+              },
         name,
         command: one?.command,
         program: programs.get(row.pid)!,
