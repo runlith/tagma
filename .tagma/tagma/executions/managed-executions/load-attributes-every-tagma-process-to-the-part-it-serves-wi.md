@@ -112,6 +112,14 @@ These readers belong to whole host adapters, and Linux and Windows have none yet
 4. Server rows and the app list: renderer rows titled by their documents with close, one sorted Tagma list, idle folding, demand for other programs, OS-neutral words.
 5. GPU source per OS, ending as the GPU paragraph says.
 
+## Contracts between the parts
+
+Each contract has one owner, who lands it first; the others code against it.
+
+- **Host protocol** (`@runlith/executions`, owner: the host task). `DeclaredPart` — `{ key, pid, createdMs, precisionMs }`: `key` is opaque, chosen by the server; `createdMs` epoch milliseconds. `GroupOwner` gains `{ _tag: 'Part', key }` for what a declared part claims. The `Load` request takes `serverPid` and `parts` instead of `desktopPid`; a live subscription accepts a whole replacement of `parts` and an interest of `{ interested, others }`, `others` being the demand for refused processes. A reading carries the declared parts it could not resolve with their reason, the machine's name, and marks an execution group whose figure is a lower bound. `LoadSubscription` exposes `setParts` and the widened interest; `ExecutionEvidence.load(serverPid, parts)`.
+- **Window declarations** (`executions/load` contract, owner: the rows task; filled by the window task). A port taking `declare(host, generation, processes)` and `end(host, generation)`, where a process is `{ pid, createdMs, kind: main | graphics | utility | renderer, documents }` and a document is `Interface`, `Page { page }` (browser page id) or `Origin { origin }` (any other webContents or frame). The server keys each process as a part, resolves names (page title and host, app by origin, MCP server by the sandbox origin) and passes parts to the host subscription.
+- **Precision** of Electron's creation time against the kernel's start is measured by the window task on macOS and sent as `precisionMs`; the adapter resolves a pid only when exactly one kernel process of that pid started within it.
+
 ## Proof
 
 - Placement through the host's load reading: with a server whose parent is not the window, the declared window's processes land in window rows; a declared pid whose creation time does not resolve stays outside; a launchd-parented service on behalf of a Tagma process is Tagma's; an execution's claim beats a window's; a replacement inside a live subscription moves rows and a new generation drops the old one's.
