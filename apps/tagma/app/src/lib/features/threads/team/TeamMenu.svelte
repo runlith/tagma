@@ -45,7 +45,7 @@
   }
 
   function open(key: string): void {
-    void router.goto(settingsHref(router, 'agent', 'project', key));
+    void router.goto(settingsHref(router, 'team', 'project', key));
   }
 </script>
 
@@ -70,11 +70,9 @@
       </DropdownMenu.SubContent>
     </DropdownMenu.Sub>
     <DropdownMenu.Sub>
-      <DropdownMenu.SubTrigger icon={ScanEye} current={reviewWords(catalog.models, read.team)} data-team-go="review">
-        Reviewed by
-      </DropdownMenu.SubTrigger>
+      <DropdownMenu.SubTrigger icon={ScanEye} current={reviewWords(read.team)} data-team-go="review">Reviewed by</DropdownMenu.SubTrigger>
       <DropdownMenu.SubContent class="w-80">
-        <ReviewMenu {team} {writes} />
+        <ReviewMenu {team} {writes} onedit={() => open('agent.models')} />
       </DropdownMenu.SubContent>
     </DropdownMenu.Sub>
   {/if}

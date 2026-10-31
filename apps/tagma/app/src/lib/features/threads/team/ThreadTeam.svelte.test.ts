@@ -29,9 +29,10 @@ const ROW = {
   note: null,
   operatorOnly: false,
   on: true,
-  shipped: true,
+  reviews: true,
+  shipped: null,
 };
-const PROJECT_REVIEW: ReviewPolicy = { reviewers: 1, pool: [OPUS], split: 'same', lenses: [] };
+const PROJECT_REVIEW: ReviewPolicy = { reviewers: 1, lenses: [] };
 
 type Project = { models: readonly TeamEdit[] | null; review: ReviewPolicy | null };
 

@@ -1,15 +1,14 @@
 <script lang="ts">
   import {
+    listedModels,
     NO_REVIEW,
     type ReviewPolicy,
     type TeamEdit,
     type TeamModel,
-    type TeamModelEdit,
     type TeamModelKey,
   } from '@runlith/agent/collaboration/team';
   import Plus from '@lucide/svelte/icons/plus';
-  import RotateCcw from '@lucide/svelte/icons/rotate-ccw';
-  import X from '@lucide/svelte/icons/x';
+  import ProviderMark from '$lib/features/providers/Mark.svelte';
   import { ProviderCatalog } from '$lib/features/providers/Catalog.svelte.js';
   import { UsageAccounts } from '$lib/features/providers/usage/Accounts.svelte.js';
   import Group from '$lib/features/settings/Group.svelte';
@@ -18,36 +17,33 @@
   import { Button } from '$lib/shared/ui/button/index.js';
   import * as Command from '$lib/shared/ui/command/index.js';
   import * as Popover from '$lib/shared/ui/popover/index.js';
+  import ListRow from './ListRow.svelte';
+  import ModelCard from './ModelCard.svelte';
+  import ProviderHeading from './ProviderHeading.svelte';
   import ReviewForm from './ReviewForm.svelte';
   import RowLabel from './RowLabel.svelte';
   import { TeamRepo } from './TeamRepo.js';
-  import WorkPicker from './WorkPicker.svelte';
-  import { editsRow, providerOn, rowKey, sameRow, withEdit, withoutRow } from './edits.js';
-  import { rowName } from './words.js';
+  import Usage from './Usage.svelte';
+  import {
+    editsRow,
+    providerOn,
+    ratingEdited,
+    rowEdit,
+    rowKey,
+    type RowCheck,
+    type RowField,
+    type RowFields,
+    sameRow,
+    withEdit,
+    withoutFields,
+    withoutRow,
+  } from './edits.js';
+  import { AXES, modelLines, rowName } from './words.js';
 
   let { catalog, scope }: SectionProps = $props();
 
   const MODELS = 'agent.models';
   const REVIEW = 'agent.review';
-  const RATINGS = [
-    { field: 'open', label: 'Open', from: 1, to: 10 },
-    { field: 'depth', label: 'Depth', from: 1, to: 10 },
-    { field: 'taste', label: 'Taste', from: 1, to: 10 },
-    { field: 'ui', label: 'UI', from: 1, to: 10 },
-    { field: 'spend', label: 'Spend', from: 1, to: 10 },
-    {
-      field: 'favor',
-      label: 'Favor',
-      from: -5,
-      to: 5,
-      title: 'Subtracted from the spend agents compare: above 0 they pick this row more often',
-    },
-  ] as const;
-  const steps = (rating: (typeof RATINGS)[number]): readonly number[] =>
-    Array.from({ length: rating.to - rating.from + 1 }, (_, at) => rating.from + at);
-  const stepWords = (rating: (typeof RATINGS)[number], step: number): string => (rating.from < 0 && step > 0 ? `+${step}` : String(step));
-  type RatingField = (typeof RATINGS)[number]['field'];
-  type RowFields = Partial<Omit<TeamModelEdit, keyof TeamModelKey>>;
 
   const teams = TeamRepo.use();
   const providers = ProviderCatalog.use();
@@ -57,16 +53,10 @@
   const read = $derived(query.data);
   const rows = $derived(read?.team.models ?? []);
   const off = $derived(read?.team.off ?? []);
-  const groups = $derived(
-    [...new Set(rows.map((row) => row.provider))].map((provider) => ({
-      provider,
-      on: providerOn(edits, provider, !off.includes(provider)),
-      rows: rows.filter((row) => row.provider === provider),
-    })),
-  );
+  const listed = $derived(read === undefined ? [] : listedModels(read.team));
 
-  const modelsEntry = $derived(catalog.entriesOf('agent').find((entry) => entry.id === MODELS));
-  const reviewEntry = $derived(catalog.entriesOf('agent').find((entry) => entry.id === REVIEW));
+  const modelsEntry = $derived(catalog.entries.find((entry) => entry.id === MODELS));
+  const reviewEntry = $derived(catalog.entries.find((entry) => entry.id === REVIEW));
   const own = $derived(
     (modelsEntry === undefined ? undefined : catalog.answerOf(modelsEntry, scope).own) as readonly TeamEdit[] | undefined,
   );
@@ -77,11 +67,32 @@
   const reviewAnswer = $derived(reviewEntry === undefined ? undefined : catalog.answerOf(reviewEntry, scope));
   const policy = $derived(((reviewAnswer?.own ?? reviewAnswer?.inherited) as ReviewPolicy | undefined) ?? NO_REVIEW);
 
+  const groups = $derived(
+    [...new Set(rows.map((row) => row.provider))].map((provider) => {
+      const held = rows.filter((row) => row.provider === provider);
+      return {
+        provider,
+        on: providerOn(edits, provider, !off.includes(provider)),
+        count: held.length,
+        lines: modelLines(providers.models, held),
+      };
+    }),
+  );
+
+  const nameOf = (row: TeamModelKey): string => {
+    const named = rowName(providers.models, row);
+    return named.rung === null ? named.label : `${named.label} ${named.rung}`;
+  };
+  const marked = $derived(listed.filter((row) => row.reviews).map(nameOf));
+
+  const busy = $derived(catalog.busyKey === MODELS);
+
   const outcome = (key: string) => {
     const said = catalog.outcomes[key];
     return said?.kind === 'refused' ? said.reason : null;
   };
 
+  let opened = $state<string | null>(null);
   let picking = $state(false);
   let search = $state('');
 
@@ -107,10 +118,7 @@
     const ranked = rank(
       offered.filter((key) => !rows.some((row) => sameRow(row, key))),
       search,
-      (key) => {
-        const named = rowName(providers.models, key);
-        return { name: named.rung === null ? named.label : `${named.label} ${named.rung}`, names: [key.model] };
-      },
+      (key) => ({ name: nameOf(key), names: [key.model] }),
     );
     return byBest(connected, ranked, (provider, key) => key.provider === provider)
       .map((provider) => ({ provider, keys: ranked.filter(({ item }) => item.provider === provider).map(({ item }) => item) }))
@@ -124,175 +132,110 @@
 
   const keyOf = (row: TeamModelKey): TeamModelKey => ({ provider: row.provider, model: row.model, reasoning: row.reasoning });
 
-  function change(row: TeamModelKey, fields: RowFields): void {
-    void write(MODELS, withEdit(edits, { ...keyOf(row), ...fields }));
+  function check(row: TeamModel, field: RowCheck, value: boolean): void {
+    void write(MODELS, withEdit(edits, { ...keyOf(row), ...(field === 'on' ? { on: value } : { reviews: value }) }));
   }
 
-  function rate(row: TeamModelKey, field: RatingField, value: number): void {
-    const fields: Partial<Record<RatingField, number>> = {};
-    fields[field] = value;
-    change(row, fields);
+  function rewrite(row: TeamModel, set: RowFields, drop: readonly RowField[]): void {
+    const written = Object.keys(set).length === 0 ? edits : withEdit(edits, { ...keyOf(row), ...set });
+    void write(MODELS, withoutFields(written, row, drop));
   }
-
-  const standsBelow = (row: TeamModel): boolean => row.shipped || editsRow(below, row);
 
   function remove(row: TeamModel): void {
+    opened = null;
     const kept = withoutRow(edits, row);
-    void write(MODELS, standsBelow(row) ? [...kept, { ...keyOf(row), removed: true }] : kept);
+    void write(MODELS, row.shipped !== null || editsRow(below, row) ? [...kept, { ...keyOf(row), removed: true }] : kept);
   }
 
   function add(key: TeamModelKey): void {
     picking = false;
+    opened = rowKey(key);
     const buried = edits.some((one) => 'model' in one && sameRow(one, key) && one.removed === true);
-    void write(MODELS, withEdit(buried ? withoutRow(edits, key) : edits, { ...key, on: true }));
+    const added = withEdit(buried ? withoutRow(edits, key) : edits, { ...key, on: true });
+    const shown = providerOn(edits, key.provider, !off.includes(key.provider));
+    void write(MODELS, shown ? added : withEdit(added, { provider: key.provider, on: true }));
   }
-
-  function note(row: TeamModel, typed: string): void {
-    const text = typed.trim();
-    if (text === (row.note ?? '')) return;
-    change(row, { note: text === '' ? null : text });
-  }
-
-  const CELL = 'px-1 py-1 align-middle';
-  const SELECT = 'rounded-md border border-vein bg-background px-1 py-0.5 font-mono text-meta tabular-nums disabled:opacity-50';
 </script>
 
 <Group title="Models for sub-agents">
   {#snippet act()}
     {#if own !== undefined}
-      <Button variant="ghost" size="xs" disabled={catalog.busyKey === MODELS} onclick={() => void write(MODELS)}>Reset to default</Button>
+      <Button variant="ghost" size="xs" disabled={busy} onclick={() => void write(MODELS)}>Reset to default</Button>
     {/if}
   {/snippet}
-  <div class="grid gap-2" data-setting={MODELS}>
-    <p class="text-small text-muted-foreground">
-      Agents pick a child’s model from the rows switched on; none is on until you choose it. Rate 1–10 how much it decides itself (open),
-      how it holds on hard problems (depth), its code taste and the interface it makes (ui), and what it costs (spend). Favor tilts the
-      choice without changing the ratings: agents compare spend minus favor. Rows show while their provider has a connected account.
+  <div class="grid" data-setting={MODELS}>
+    <p class="pb-3 text-small text-muted-foreground">
+      Agents start a child on a model checked under Work and a reviewer on one checked under Review: each time the cheapest whose ratings
+      meet the task. Click a row to rate it.
     </p>
-    <div class="overflow-x-auto">
-      <table class="w-full text-small">
-        <thead class="text-left text-meta text-muted-foreground">
-          <tr>
-            <th class={CELL} title="Agents may start children on it">On</th>
-            <th class={CELL}>Model</th>
-            {#each RATINGS as rating (rating.field)}<th class={CELL} title={'title' in rating ? rating.title : undefined}>{rating.label}</th
-              >{/each}
-            <th class={CELL}>Only</th>
-            <th class={CELL}>Not</th>
-            <th class={CELL}>Note</th>
-            <th class={CELL} title="Started only on the operator’s word">Yours only</th>
-            <th class={CELL}></th>
-          </tr>
-        </thead>
-        <tbody>
-          {#each groups as group (group.provider)}
-            <tr class="border-t border-vein">
-              <td class="px-1 pt-3 pb-1 text-center">
-                <input
-                  type="checkbox"
-                  aria-label={`All of ${providers.modeName(group.provider)}`}
-                  title="Off keeps every row of this provider out, whatever its own On"
-                  checked={group.on}
-                  disabled={catalog.busyKey === MODELS}
-                  onchange={(event) => void write(MODELS, withEdit(edits, { provider: group.provider, on: event.currentTarget.checked }))}
-                />
-              </td>
-              <td class="px-1 pt-3 pb-1 text-small font-medium text-muted-foreground" colspan="12">{providers.modeName(group.provider)}</td>
-            </tr>
-            {#each group.rows as row (rowKey(row))}
-              {@const name = rowName(providers.models, row)}
-              {@const busy = catalog.busyKey === MODELS}
-              <tr class={['border-t border-vein', !group.on && 'text-muted-foreground']} data-team-matrix-row={rowKey(row)}>
-                <td class={[CELL, 'text-center']}>
-                  <input
-                    type="checkbox"
-                    aria-label={`On — ${name.label}`}
-                    checked={row.on}
-                    disabled={busy}
-                    onchange={(event) => change(row, { on: event.currentTarget.checked })}
-                  />
-                </td>
-                <td class={[CELL, 'whitespace-nowrap']}>
-                  {name.label}{#if name.rung !== null}<span class="text-muted-foreground">{` · ${name.rung}`}</span>{/if}
-                </td>
-                {#each RATINGS as rating (rating.field)}
-                  <td class={CELL}>
-                    <select
-                      class={SELECT}
-                      aria-label={`${rating.label} — ${name.label}`}
-                      value={row[rating.field]}
-                      disabled={busy}
-                      onchange={(event) => rate(row, rating.field, Number(event.currentTarget.value))}
-                    >
-                      {#each steps(rating) as step (step)}<option value={step}>{stepWords(rating, step)}</option>{/each}
-                    </select>
-                  </td>
-                {/each}
-                <td class={CELL}
-                  ><WorkPicker
-                    label={`Only — ${name.label}`}
-                    value={row.only}
-                    disabled={busy}
-                    onchange={(only) => change(row, { only })}
-                  /></td
-                >
-                <td class={CELL}
-                  ><WorkPicker label={`Not — ${name.label}`} value={row.not} disabled={busy} onchange={(not) => change(row, { not })} /></td
-                >
-                <td class={CELL}>
-                  <input
-                    class="w-36 rounded-md border border-vein bg-background px-1.5 py-0.5 text-small disabled:opacity-50"
-                    type="text"
-                    placeholder="up to six words"
-                    aria-label={`Note — ${name.label}`}
-                    value={row.note ?? ''}
-                    disabled={busy}
-                    onchange={(event) => note(row, event.currentTarget.value)}
-                  />
-                </td>
-                <td class={[CELL, 'text-center']}>
-                  <input
-                    type="checkbox"
-                    aria-label={`Only on your word — ${name.label}`}
-                    checked={row.operatorOnly}
-                    disabled={busy}
-                    onchange={(event) => change(row, { operatorOnly: event.currentTarget.checked })}
-                  />
-                </td>
-                <td class={[CELL, 'whitespace-nowrap text-right']}>
-                  {#if editsRow(edits, row) && standsBelow(row)}
-                    <button
-                      type="button"
-                      class="inline-grid size-6 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-hover hover:text-foreground disabled:opacity-50"
-                      aria-label={`Reset ${name.label} to default`}
-                      title="Reset to default"
-                      disabled={busy}
-                      onclick={() => void write(MODELS, withoutRow(edits, row))}
-                    >
-                      <RotateCcw class="size-3.5" />
-                    </button>
-                  {/if}
-                  <button
-                    type="button"
-                    class="inline-grid size-6 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-hover hover:text-foreground disabled:opacity-50"
-                    aria-label={`Remove ${name.label}`}
-                    title="Remove"
-                    disabled={busy}
-                    onclick={() => remove(row)}
-                  >
-                    <X class="size-3.5" />
-                  </button>
-                </td>
-              </tr>
-            {/each}
-          {:else}
-            <tr><td class="py-3 text-muted-foreground" colspan="13">No rows: connect a provider or add a model.</td></tr>
-          {/each}
-        </tbody>
-      </table>
+    <div class="-mx-1.5 flex h-6 items-center gap-2 px-1.5 text-meta text-muted-foreground" aria-hidden="true">
+      <span class="w-9 shrink-0 text-center">Work</span>
+      <span class="w-9 shrink-0 text-center">Review</span>
+      <span class="w-34 shrink-0">Model</span>
+      <span class="w-12 shrink-0"></span>
+      {#each AXES as axis (axis.field)}<span class="w-15 shrink-0">{axis.label}</span>{/each}
     </div>
-    {#if outcome(MODELS) !== null}<p class="text-small text-destructive">{outcome(MODELS)}</p>{/if}
-    <div>
+    {#each groups as group, index (group.provider)}
+      <div class={['flex items-center gap-2', index === 0 ? 'h-8' : 'mt-1.5 h-10 border-t border-vein pt-2']}>
+        <span class="flex w-9 shrink-0 justify-center">
+          <input
+            type="checkbox"
+            aria-label={`All of ${providers.modeName(group.provider)}`}
+            title="Off keeps every row of this provider out, whatever its own checks"
+            checked={group.on}
+            disabled={busy}
+            onchange={(event) => void write(MODELS, withEdit(edits, { provider: group.provider, on: event.currentTarget.checked }))}
+          />
+        </span>
+        <ProviderMark provider={group.provider} titled={false} class="size-3.5" />
+        <span class={['text-ui font-medium', !group.on && 'text-muted-foreground']}><ProviderHeading provider={group.provider} /></span>
+        {#if !group.on}
+          <span class="text-small text-muted-foreground">{group.count} model{group.count === 1 ? '' : 's'}, off</span>
+        {/if}
+        <span class="flex-1"></span>
+        {#if group.on}
+          <Usage provider={group.provider} part="gauge" marked={false} />
+          <Usage provider={group.provider} part="percent" />
+        {/if}
+      </div>
+      {#if group.on}
+        {#each group.lines as line (line.key)}
+          {#each line.rows as { step, row }, at (rowKey(row))}
+            {@const key = rowKey(row)}
+            {@const edit = rowEdit(edits, row)}
+            {@const under = rowEdit(below, row)}
+            <ListRow
+              {row}
+              label={at === 0 ? line.label : null}
+              rung={step?.label ?? null}
+              named={nameOf(row)}
+              work={row.on}
+              review={row.reviews}
+              edited={(field) => ratingEdited(edit, under, row, field)}
+              open={opened === key}
+              disabled={busy}
+              oncheck={(field, value) => check(row, field, value)}
+              onopen={() => (opened = opened === key ? null : key)}
+            />
+            {#if opened === key}
+              <ModelCard
+                {row}
+                {edit}
+                below={under}
+                offered={listed.some((one) => sameRow(one, row))}
+                disabled={busy}
+                onwrite={(set, drop) => rewrite(row, set, drop)}
+                onremove={() => remove(row)}
+              />
+            {/if}
+          {/each}
+        {/each}
+      {/if}
+    {:else}
+      <p class="py-3 text-small text-muted-foreground">No rows: connect a provider or add a model.</p>
+    {/each}
+    {#if outcome(MODELS) !== null}<p class="pt-2 text-small text-destructive">{outcome(MODELS)}</p>{/if}
+    <div class="pt-1.5">
       <Popover.Root
         bind:open={picking}
         onOpenChange={(next) => {
@@ -300,10 +243,10 @@
         }}
       >
         <Popover.Trigger
-          class="inline-flex h-7 items-center gap-1 rounded-md px-2 text-ui transition-colors hover:bg-hover disabled:opacity-50"
-          disabled={catalog.busyKey === MODELS}
+          class="-ml-2 inline-flex h-7 items-center gap-1 rounded-md px-2 text-ui transition-colors hover:bg-hover disabled:opacity-50"
+          disabled={busy}
         >
-          <Plus class="size-3.5" /> Add
+          <Plus class="size-3.5" /> Add model
         </Popover.Trigger>
         <Popover.Content align="start" class="w-72 p-0">
           <Command.Root>
@@ -329,14 +272,14 @@
   </div>
 </Group>
 
-<Group title="Who reviews sub-agents’ work">
+<Group title="Review of sub-agents’ work">
   {#snippet act()}
     {#if reviewAnswer?.own !== undefined}
       <Button variant="ghost" size="xs" disabled={catalog.busyKey === REVIEW} onclick={() => void write(REVIEW)}>Reset to default</Button>
     {/if}
   {/snippet}
-  <div class="grid max-w-80 gap-1" data-setting={REVIEW}>
-    <ReviewForm {policy} {rows} disabled={catalog.busyKey === REVIEW} onchange={(next) => void write(REVIEW, next)} />
+  <div class="grid" data-setting={REVIEW}>
+    <ReviewForm {policy} {marked} disabled={catalog.busyKey === REVIEW} onchange={(next) => void write(REVIEW, next)} />
     {#if outcome(REVIEW) !== null}<p class="text-small text-destructive">{outcome(REVIEW)}</p>{/if}
   </div>
 </Group>

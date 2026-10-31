@@ -6,6 +6,8 @@ export class SectionRegistry extends Service<SectionRegistry>()('SectionRegistry
 
   private readonly contributions: readonly SectionContribution[];
 
+  private readonly holders = new Map<string, string>();
+
   constructor(modules: Readonly<Record<string, SectionsModule>>) {
     super();
     const owners = new Map<string, string>();
@@ -17,6 +19,11 @@ export class SectionRegistry extends Service<SectionRegistry>()('SectionRegistry
         if (owner !== undefined) throw new Error(`The settings section ${section.id} is declared by ${owner} and again by ${path}.`);
         owners.set(section.id, path);
         sections.push(section);
+        for (const key of section.keys ?? []) {
+          const holder = this.holders.get(key);
+          if (holder !== undefined) throw new Error(`The setting ${key} is held by the section ${holder} and again by ${section.id}.`);
+          this.holders.set(key, section.id);
+        }
       }
       for (const contribution of module.contributions ?? []) contributions.push({ from: path, contribution });
     }
@@ -31,6 +38,10 @@ export class SectionRegistry extends Service<SectionRegistry>()('SectionRegistry
 
   find(id: string): SettingsSection | undefined {
     return this.sections.find((section) => section.id === id);
+  }
+
+  sectionOf(entry: { readonly id: string; readonly section: string }): string {
+    return this.holders.get(entry.id) ?? entry.section;
   }
 
   contributionsTo(section: string): readonly SectionContribution[] {

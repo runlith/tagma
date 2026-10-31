@@ -8,11 +8,13 @@
 
   let {
     query,
+    sections,
     catalog,
     scopeOf,
     project,
   }: {
     query: string;
+    sections: readonly { readonly id: string; readonly title: string }[];
     catalog: SettingsCatalog;
     scopeOf: (sectionId: string) => SettableScope;
     project: Project | null;
@@ -21,7 +23,7 @@
   const ranked = $derived(rank(catalog.entries, query, settingTarget));
 
   const found = $derived(
-    byBest(catalog.sections, ranked, (section, entry) => entry.section === section.id)
+    byBest(sections, ranked, (section, entry) => entry.section === section.id)
       .map((section) => ({ section, rows: ranked.filter(({ item }) => item.section === section.id).map(({ item }) => item) }))
       .filter((group) => group.rows.length > 0),
   );

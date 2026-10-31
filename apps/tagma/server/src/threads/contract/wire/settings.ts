@@ -111,7 +111,7 @@ export const teamModels = settingListKey({
   order: 91,
   title: 'Models sub-agents run on',
   description:
-    'Edits over the rows the providers ship, applied in order, a project’s after the machine’s; a thread with a copy of its own (set_thread_team) follows that copy instead. `{provider, model, reasoning}` names a row — a model on one rung — and sets any of `open`, `depth`, `taste`, `ui`, `spend` (1–10), `favor` (−5…5, subtracted from the spend agents compare), `only`/`not` (kinds of work), `note` (up to six English words), `operatorOnly` and `on`; `removed: true` drops it; a row no ship holds starts from middle ratings. `{provider, on}` switches every row of that provider off or back on, each keeping its own `on`. A field no edit sets follows the shipped value; a shipped row starts off until an edit sets `on: true`, a row an edit adds starts on. Rows show only while one of their provider’s accounts is connected, and the enabled ones stand in the description of `spawn_agent.model`.',
+    'Edits over the rows the providers ship, applied in order, a project’s after the machine’s; a thread with a copy of its own (set_thread_team) follows that copy instead. `{provider, model, reasoning}` names a row — a model on one rung — and sets any of `open`, `depth`, `taste`, `ui`, `spend` (1–10), `favor` (−5…5, the operator’s wish to see the row taken more or less often, shown to agents beside spend), `only`/`not` (kinds of work), `note` (up to six English words), `operatorOnly`, `on` (agents may start a child on it) and `reviews` (agents may start a reviewer on it); `removed: true` drops it; a row no ship holds starts from middle ratings, and an edit setting only `reviews` marks a standing row and adds none. `{provider, on}` switches every row of that provider off or back on, each keeping its own `on` and `reviews`. A field no edit sets follows the shipped value; a shipped row starts with `on` and `reviews` off until an edit sets them, a row an edit adds starts on. Rows show only while one of their provider’s accounts is connected, and those that work or review stand in the description of `spawn_agent.model`.',
   member: TeamEdit,
   fallback: [] as readonly TeamEdit[],
   scopes: SETTABLE_SCOPES,
@@ -121,9 +121,9 @@ export const teamModels = settingListKey({
 export const teamReview = settingKey({
   id: 'agent.review',
   order: 92,
-  title: 'Who reviews sub-agents’ work',
+  title: 'Review of sub-agents’ work',
   description:
-    '`reviewers`: 0 for no review, 1 for one, more for a ceiling the agent stays under. `pool`: rows of the sub-agent list by `{provider, model, reasoning}`, in priority order, independent of their `on`. `split`: `same` gives every reviewer the same brief; `lenses` has the first read the whole and each next one a lens of `lenses`. An empty pool means no review.',
+    '`reviewers`: 0 for no review, 1 for one, more for a ceiling the agent stays under. Each reviewer runs on a row of `agent.models` marked `reviews`, chosen for the work by its ratings as a child’s model is; no row marked means no review. `lenses`: none, and every reviewer reads the whole work; some, and the first reads the whole and each next one a lens.',
   schema: ReviewPolicy,
   fallback: NO_REVIEW,
   scopes: SETTABLE_SCOPES,

@@ -143,21 +143,15 @@ export const ANTHROPIC_SPECS = {
   },
 } satisfies ModelSpecs;
 
+const HAIKU_NOTE = 'facts, file reading, mechanical edits, research';
+
 export const ANTHROPIC_TEAM: readonly TeamRating[] = [
-  { model: 'claude-opus-5-5', reasoning: 'high', open: 8, depth: 8, taste: 9, ui: 9, spend: 8 },
-  { model: 'claude-opus-5-5', reasoning: 'xhigh', open: 9, depth: 9, taste: 9, ui: 9, spend: 10 },
-  { model: 'claude-sonnet-5-5', reasoning: 'high', open: 5, depth: 6, taste: 7, ui: 7, spend: 5 },
-  {
-    model: 'claude-haiku-5-5',
-    reasoning: 'xhigh',
-    open: 2,
-    depth: 3,
-    taste: 4,
-    ui: 3,
-    spend: 1,
-    only: ['research'],
-    note: 'facts, file reading, mechanical edits',
-  },
+  { model: 'claude-opus-5-5', reasoning: 'medium', open: 7, depth: 6, taste: 8, ui: 8, spend: 5 },
+  { model: 'claude-opus-5-5', reasoning: 'high', open: 8, depth: 8, taste: 9, ui: 9, spend: 7 },
+  { model: 'claude-opus-5-5', reasoning: 'xhigh', open: 9, depth: 9, taste: 10, ui: 10, spend: 10 },
+  { model: 'claude-sonnet-5-5', reasoning: 'high', open: 6, depth: 7, taste: 8, ui: 7, spend: 4 },
+  { model: 'claude-haiku-5-5', reasoning: 'xhigh', open: 4, depth: 5, taste: 6, ui: 6, spend: 2, note: HAIKU_NOTE },
+  { model: 'claude-haiku-5-5', reasoning: 'max', open: 4, depth: 6, taste: 6, ui: 6, spend: 3, note: HAIKU_NOTE },
   { model: 'claude-fable-5-1', reasoning: 'high', open: 10, depth: 10, taste: 10, ui: 10, spend: 10, operatorOnly: true },
 ];
 

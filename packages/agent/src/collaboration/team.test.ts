@@ -1,7 +1,8 @@
 import { describe, expect, test } from 'bun:test';
+import { DEFAULT_PROVIDER_DESCRIPTIONS } from '@runlith/builtin-catalog/descriptions';
 import { modelCatalog } from '@runlith/llm/models/catalog';
 import type { ProviderDescription, TeamRating } from '@runlith/llm/models/description';
-import { enabledModels, NO_REVIEW, reviewers, teamModelsWords, teamOf, type TeamEdit } from './team';
+import { enabledModels, listedModels, NO_REVIEW, reviewers, teamModelsWords, teamOf, type TeamEdit } from './team';
 
 const provider = (id: string, team: readonly TeamRating[]): ProviderDescription => ({
   id,
@@ -51,47 +52,83 @@ describe('teamOf', () => {
     ];
     const before = teamOf({ catalog: catalog(7), connected: new Set(['alpha']), edits, review: NO_REVIEW });
     const after = teamOf({ catalog: catalog(8), connected: new Set(['alpha']), edits, review: NO_REVIEW });
-    expect(before.models.map((row) => [row.model, row.reasoning, row.open, row.depth, row.spend, row.on, row.shipped])).toEqual([
+    expect(before.models.map((row) => [row.model, row.reasoning, row.open, row.depth, row.spend, row.on, row.shipped !== null])).toEqual([
       ['deep', 'high', 7, 4, 3, false, true],
       ['quick', null, 5, 5, 1, true, false],
     ]);
     expect(after.models[0]).toMatchObject({ open: 8, depth: 4 });
   });
 
-  test('agents compare spend minus favor, and the row keeps both as set', () => {
+  test('agents read spend as rated and a non-zero favor as its own field beside it', () => {
     const team = teamOf({
       catalog: catalog(7),
       connected: new Set(['alpha']),
       edits: [
         { provider: 'alpha', model: 'deep', reasoning: 'high', on: true, spend: 6, favor: 2 },
         { provider: 'alpha', model: 'deep', reasoning: 'xhigh', on: true, favor: -1 },
+        { provider: 'alpha', model: 'quick', reasoning: null, spend: 1 },
       ],
       review: NO_REVIEW,
     });
-    expect(team.models.map((row) => [row.spend, row.favor])).toEqual([
-      [6, 2],
-      [3, -1],
+    const read = [...teamModelsWords(team).matchAll(/alpha\/(\w+)(?: (\w+))? — [^;]*spend (\d+)(?:, favor ([+-]\d+))?/g)].map((hit) => [
+      hit[2] ?? null,
+      Number(hit[3]),
+      hit[4] ?? null,
     ]);
-    const compared = [...teamModelsWords(team).matchAll(/alpha\/deep (\w+) — [^;]*spend (-?\d+)/g)].map((hit) => [hit[1], Number(hit[2])]);
-    expect(compared).toEqual([
-      ['high', 4],
-      ['xhigh', 4],
+    expect(read).toEqual([
+      ['high', 6, '+2'],
+      ['xhigh', 3, '-1'],
+      [null, 1, null],
     ]);
   });
 
-  test('a provider switched off disables its rows, keeps their own on, and leaves them in the reviewer pool', () => {
+  test('reviewers come from rows marked for review, none at a count of 0, and a provider switched off takes its rows out of both while each keeps its own marks', () => {
+    const edits: readonly TeamEdit[] = [
+      { provider: 'alpha', model: 'deep', reasoning: 'high', on: true },
+      { provider: 'alpha', model: 'deep', reasoning: 'xhigh', reviews: true },
+    ];
+    const team = teamOf({ catalog: catalog(7), connected: new Set(['alpha']), edits, review: NO_REVIEW });
+    expect(words(enabledModels(team))).toEqual(['alpha/deep/high']);
+    expect(words(listedModels(team))).toEqual(['alpha/deep/high', 'alpha/deep/xhigh']);
+    expect(words(reviewers(team))).toEqual(['alpha/deep/xhigh']);
+    expect(reviewers({ ...team, review: { ...team.review, reviewers: 0 } })).toEqual([]);
+    const off = teamOf({
+      catalog: catalog(7),
+      connected: new Set(['alpha']),
+      edits: [...edits, { provider: 'alpha', on: false }],
+      review: NO_REVIEW,
+    });
+    expect(off.models.map((row) => [row.on, row.reviews])).toEqual([
+      [true, false],
+      [false, true],
+    ]);
+    expect([...listedModels(off), ...reviewers(off)]).toEqual([]);
+  });
+
+  test('every route to Claude and OpenAI brings Tagma’s ratings, each for a rung some route serves, none chosen for work or review', () => {
+    const routes = ['anthropic', 'claude-code', 'openai', 'openai-oauth', 'codex'];
+    const team = teamOf({ catalog: modelCatalog(DEFAULT_PROVIDER_DESCRIPTIONS), connected: new Set(routes), edits: [], review: NO_REVIEW });
+    expect(routes.filter((route) => !team.models.some((row) => row.provider === route))).toEqual([]);
+    expect(team.models.filter((row) => row.on || row.reviews || row.shipped === null)).toEqual([]);
+    const rated = new Set(team.models.map((row) => `${row.model} ${row.reasoning}`));
+    const declared = DEFAULT_PROVIDER_DESCRIPTIONS.filter((provider) => routes.includes(provider.id)).flatMap(
+      (provider) => provider.team ?? [],
+    );
+    expect(declared.map((rating) => `${rating.model} ${rating.reasoning}`).filter((rung) => !rated.has(rung))).toEqual([]);
+  });
+
+  test('a mark for review alone marks a standing row and brings back no removed or absent one', () => {
     const team = teamOf({
       catalog: catalog(7),
       connected: new Set(['alpha']),
       edits: [
-        { provider: 'alpha', model: 'deep', reasoning: 'high', on: true },
-        { provider: 'alpha', on: false },
+        { provider: 'alpha', model: 'deep', reasoning: 'xhigh', removed: true },
+        { provider: 'alpha', model: 'deep', reasoning: 'xhigh', reviews: true },
+        { provider: 'alpha', model: 'quick', reasoning: null, reviews: true },
+        { provider: 'alpha', model: 'deep', reasoning: 'high', reviews: true },
       ],
-      review: { ...NO_REVIEW, pool: [{ provider: 'alpha', model: 'deep', reasoning: 'xhigh' }] },
+      review: NO_REVIEW,
     });
-    expect(team.models.map((row) => row.on)).toEqual([true, false]);
-    expect(enabledModels(team)).toEqual([]);
-    expect(words(reviewers(team))).toEqual(['alpha/deep/xhigh']);
-    expect(reviewers({ ...team, review: { ...team.review, reviewers: 0 } })).toEqual([]);
+    expect(team.models.map((row) => [row.model, row.reasoning, row.on, row.reviews])).toEqual([['deep', 'high', false, true]]);
   });
 });

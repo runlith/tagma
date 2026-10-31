@@ -20,6 +20,7 @@ import { loadOperations } from '$lib/wire/operation.js';
 import { ServerOrigin } from '$lib/wire/ServerOrigin.svelte.js';
 import { SessionNaming } from '$lib/wire/SessionNaming.svelte.js';
 import { testDoor } from '$lib/wire/testing.js';
+import { SectionRegistry } from '../SectionRegistry.js';
 import { SettingsRepo } from '../SettingsRepo.js';
 import { SettingChips } from './SettingChips.svelte.js';
 
@@ -63,6 +64,7 @@ function world(writes: unknown[]) {
         projects: [{ ...row, storage: 'stealth', graphRemote: null, servesFrom: 'rows', createdAt: '2026-10-18T00:00:00Z' }],
       });
     }
+    if (path === '/api/op/list_groups') return json({ status: 'ok', groups: [] });
     if (path === '/api/op/read_settings') return json({ status: 'ok', project, settings: catalog(undefined) });
     if (path !== '/api/op/write_setting_layer') throw new Error(`Unexpected request: ${path}`);
     const body = (await request.json()) as { value: boolean };
@@ -77,6 +79,7 @@ function world(writes: unknown[]) {
       ServerOrigin.of('http://localhost'),
       Layer.of(Router, makeRouter({ params: { project: 'demo' }, url: new URL('http://localhost/demo') })),
       Layer.of(Opening, { knows: () => true, tip: () => ({ text: null }) } as never),
+      Layer.of(SectionRegistry, new SectionRegistry({})),
     ),
   );
 }

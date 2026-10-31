@@ -109,7 +109,7 @@
   const hits = $derived.by(() => {
     if (!searching) return null;
     const counted = new Map<string, number>();
-    for (const section of catalog.sections) {
+    for (const section of known) {
       counted.set(section.id, catalog.entriesOf(section.id).filter((entry) => match(query, settingTarget(entry)) !== null).length);
     }
     return counted;
@@ -238,7 +238,7 @@
     <div class="page-reading pb-16">
       {#if searching}
         <div class="pt-2">
-          <SearchResults {query} {catalog} {scopeOf} {project} />
+          <SearchResults {query} sections={known} {catalog} {scopeOf} {project} />
         </div>
       {:else}
         {#if activeSection?.description}

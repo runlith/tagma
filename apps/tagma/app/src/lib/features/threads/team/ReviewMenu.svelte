@@ -1,28 +1,28 @@
 <script lang="ts">
-  import { NO_REVIEW, REVIEW_LENSES, REVIEW_SPLITS, REVIEWERS_MAX, type ReviewPolicy } from '@runlith/agent/collaboration/team';
-  import Copy from '@lucide/svelte/icons/copy';
-  import Dot from '@lucide/svelte/icons/dot';
-  import ListChecks from '@lucide/svelte/icons/list-checks';
-  import ScanEye from '@lucide/svelte/icons/scan-eye';
+  import { NO_REVIEW, REVIEWERS_MAX, type ReviewPolicy, type TeamModel } from '@runlith/agent/collaboration/team';
+  import SlidersHorizontal from '@lucide/svelte/icons/sliders-horizontal';
   import Users from '@lucide/svelte/icons/users';
   import ProviderMark from '$lib/features/providers/Mark.svelte';
   import * as DropdownMenu from '$lib/shared/ui/dropdown-menu/index.js';
   import type { ThreadWrites } from '../ThreadWrites.js';
+  import Chips from '$lib/shared/ui/Chips.svelte';
   import ModelLines from './ModelLines.svelte';
   import ProviderHeading from './ProviderHeading.svelte';
-  import RowLabel from './RowLabel.svelte';
   import Stepper from './Stepper.svelte';
   import type { TeamView } from './view.js';
-  import { pooled, poolRows, rowKey, withLens, withPool, withPooled } from './edits.js';
-  import { LENS_WORDS } from './words.js';
+  import { providerOn, rowChecked, withLens } from './edits.js';
+  import { LENS_CHOICES } from './words.js';
 
-  let { team, writes }: { team: TeamView; writes: ThreadWrites } = $props();
+  let { team, writes, onedit }: { team: TeamView; writes: ThreadWrites; onedit: () => void } = $props();
 
   const rows = $derived(team.read?.team.models ?? []);
+  const off = $derived(team.read?.team.off ?? []);
+  const edits = $derived(team.layer?.models ?? []);
   const policy = $derived(team.layer?.review ?? team.read?.team.review ?? NO_REVIEW);
-  const order = $derived(poolRows(policy, rows));
   const groups = $derived(
-    [...new Set(rows.map((row) => row.provider))].map((provider) => ({ provider, rows: rows.filter((row) => row.provider === provider) })),
+    [...new Set(rows.map((row) => row.provider))]
+      .filter((provider) => providerOn(edits, provider, !off.includes(provider)))
+      .map((provider) => ({ provider, rows: rows.filter((row) => row.provider === provider) })),
   );
 
   function change(next: ReviewPolicy): void {
@@ -40,9 +40,10 @@
     count(event.key === 'ArrowRight' ? 1 : -1);
   }
 
-  function split(value: string): void {
-    const next = REVIEW_SPLITS.find((one) => one === value);
-    if (next !== undefined && next !== policy.split) change({ ...policy, split: next });
+  function turn(targets: readonly TeamModel[], reviews: boolean): void {
+    void writes.applyTeam(async () => {
+      await Promise.all(targets.map((row) => team.edit({ provider: row.provider, model: row.model, reasoning: row.reasoning, reviews })));
+    });
   }
 </script>
 
@@ -60,60 +61,28 @@
   {/snippet}
 </DropdownMenu.Item>
 
-{#if policy.reviewers > 0}
-  <DropdownMenu.Separator />
-  {#if order.length > 0}
-    <DropdownMenu.Label>In order of preference</DropdownMenu.Label>
-    {#each order as row (rowKey(row))}
-      <DropdownMenu.CheckboxItem
-        closeOnSelect={false}
-        bind:checked={() => true, () => change(withPooled(policy, row))}
-        data-team-row={rowKey(row)}
-      >
-        {#snippet lead()}<ProviderMark provider={row.provider} titled={false} class="size-3.5" />{/snippet}
-        <RowLabel {row} named />
-      </DropdownMenu.CheckboxItem>
-    {/each}
-  {:else}
-    <DropdownMenu.Note text="No model is chosen, so nobody reviews." />
-  {/if}
-  {#if groups.length > 0}
-    <DropdownMenu.Sub>
-      <DropdownMenu.SubTrigger icon={ListChecks} data-team-go="review-models">Choose models</DropdownMenu.SubTrigger>
-      <DropdownMenu.SubContent class="w-72">
-        {#each groups as group, index (group.provider)}
-          {#if index > 0}<DropdownMenu.Separator />{/if}
-          <DropdownMenu.Label>
-            {#snippet lead()}<ProviderMark provider={group.provider} titled={false} class="size-3.5" />{/snippet}
-            <ProviderHeading provider={group.provider} />
-          </DropdownMenu.Label>
-          <ModelLines
-            rows={group.rows}
-            lit={(row) => pooled(policy, row)}
-            onturn={(targets, on) => change(withPool(policy, targets, on))}
-          />
-        {/each}
-      </DropdownMenu.SubContent>
-    </DropdownMenu.Sub>
-  {/if}
+<DropdownMenu.Separator />
+{#each groups as group (group.provider)}
+  <DropdownMenu.Label>
+    {#snippet lead()}<ProviderMark provider={group.provider} titled={false} class="size-3.5" />{/snippet}
+    <ProviderHeading provider={group.provider} />
+  </DropdownMenu.Label>
+  <ModelLines rows={group.rows} lit={(row) => rowChecked(edits, row, 'reviews')} onturn={turn} />
+{:else}
+  <DropdownMenu.Note text="No connected provider lists a model for sub-agents." />
+{/each}
 
-  {#if policy.reviewers > 1}
-    <DropdownMenu.Separator />
-    <DropdownMenu.Label>Split</DropdownMenu.Label>
-    <DropdownMenu.RadioGroup bind:value={() => policy.split, split}>
-      <DropdownMenu.RadioItem value="same" icon={Copy} closeOnSelect={false}>Same brief for each</DropdownMenu.RadioItem>
-      <DropdownMenu.RadioItem value="lenses" icon={ScanEye} closeOnSelect={false}>A lens for each</DropdownMenu.RadioItem>
-    </DropdownMenu.RadioGroup>
-    {#if policy.split === 'lenses'}
-      {#each REVIEW_LENSES as lens (lens)}
-        <DropdownMenu.CheckboxItem
-          icon={Dot}
-          closeOnSelect={false}
-          bind:checked={() => policy.lenses.includes(lens), () => change(withLens(policy, lens))}
-        >
-          {LENS_WORDS[lens]}
-        </DropdownMenu.CheckboxItem>
-      {/each}
-    {/if}
-  {/if}
-{/if}
+<DropdownMenu.Separator />
+<DropdownMenu.Label>Look at</DropdownMenu.Label>
+<div class="px-2 pb-1.5">
+  <Chips
+    label="Look at"
+    inMenu
+    choices={LENS_CHOICES}
+    chosen={(lens) => policy.lenses.includes(lens)}
+    onpress={(lens) => change(withLens(policy, lens))}
+  />
+</div>
+
+<DropdownMenu.Separator />
+<DropdownMenu.Item icon={SlidersHorizontal} onSelect={onedit}>Edit list…</DropdownMenu.Item>

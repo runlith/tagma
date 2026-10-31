@@ -137,8 +137,11 @@ const OPENAI_SPECS = {
 } satisfies ModelSpecs;
 
 const OPENAI_TEAM: readonly TeamRating[] = [
-  { model: 'gpt-6.1-sol', reasoning: 'high', open: 4, depth: 7, taste: 6, ui: 5, spend: 5, not: ['design'] },
-  { model: 'gpt-6.1-sol', reasoning: 'xhigh', open: 5, depth: 8, taste: 7, ui: 5, spend: 8 },
+  { model: 'gpt-6.1-sol', reasoning: 'high', open: 7, depth: 7, taste: 6, ui: 6, spend: 4 },
+  { model: 'gpt-6.1-sol', reasoning: 'xhigh', open: 8, depth: 8, taste: 7, ui: 6, spend: 6 },
+  { model: 'gpt-6.1-sol', reasoning: 'max', open: 8, depth: 10, taste: 7, ui: 6, spend: 8 },
+  { model: 'gpt-6.1-terra', reasoning: 'xhigh', open: 6, depth: 7, taste: 6, ui: 6, spend: 3 },
+  { model: 'gpt-6.1-terra', reasoning: 'max', open: 7, depth: 8, taste: 7, ui: 6, spend: 5 },
   {
     model: 'gpt-6-luna',
     reasoning: 'medium',
@@ -274,6 +277,7 @@ export const codexDescription: ProviderDescription = {
   cacheLifetime: { promisedSeconds: null, prior: null },
   defaultTextModel: DEFAULT_CODEX_MODEL,
   lightTextModel: { model: 'gpt-6-luna', rung: 'low' },
+  team: OPENAI_TEAM,
 };
 
 export const OpenAISubscriptionCredential = Schema.Struct({ ...ROTATING_GRANT, accountId: Schema.optional(Schema.String) });

@@ -7,6 +7,7 @@
   import { labelOf } from '$lib/features/workspace/mark.js';
   import { Workspace } from '$lib/features/workspace/Selection.svelte.js';
   import { SessionNaming } from '$lib/wire/SessionNaming.svelte.js';
+  import { SectionRegistry } from '../SectionRegistry.js';
   import SettingControl from '../SettingControl.svelte';
   import SwitchControl from '../controls/SwitchControl.svelte';
   import { settingText } from '../controls/units.js';
@@ -19,6 +20,7 @@
   const UNEDITABLE = new Set(['managed', 'rows', 'colors', 'machine']);
 
   const router = Router.use();
+  const sections = SectionRegistry.use();
   const naming = SessionNaming.use();
   const workspace = Workspace.use();
   const home = $derived(workspace.find(chips.projectId));
@@ -98,7 +100,7 @@
         {/if}
         <a
           class="text-small text-muted-foreground hover:text-foreground"
-          href={settingsHref(router, entry.section, scope, entry.id, home?.name)}
+          href={settingsHref(router, sections.sectionOf(entry), scope, entry.id, home?.name)}
         >
           Open in Settings
         </a>

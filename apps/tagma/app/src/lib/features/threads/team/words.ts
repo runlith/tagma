@@ -1,4 +1,13 @@
-import { enabledModels, reviewers, type ReviewLens, type Team, type TeamModelKey } from '@runlith/agent/collaboration/team';
+import { TEAM_WORK } from '@runlith/llm/models/description';
+import {
+  enabledModels,
+  REVIEW_LENSES,
+  reviewers,
+  type ReviewLens,
+  type Team,
+  type TeamModel,
+  type TeamModelKey,
+} from '@runlith/agent/collaboration/team';
 import type { ServedModels } from '$lib/features/providers/served.js';
 import type { ModelStep } from '$lib/shared/models/choice.js';
 
@@ -10,7 +19,15 @@ export type ModelLine<Row extends TeamModelKey> = {
   readonly rows: readonly { readonly step: ModelStep | null; readonly row: Row }[];
 };
 
-export const LENS_WORDS: Record<ReviewLens, string> = {
+export const AXES = [
+  { field: 'open', label: 'Open', hint: 'How much it decides itself: 1 follows a given design, 10 invents one' },
+  { field: 'depth', label: 'Depth', hint: 'How it holds on hard problems: hidden causes, races, invariants' },
+  { field: 'taste', label: 'Taste', hint: 'Its code: structure, names, boundaries, readability' },
+  { field: 'ui', label: 'UI', hint: 'What a person sees: the interface and its words' },
+  { field: 'spend', label: 'Spend', hint: 'What one task costs you in quota or money: 1 the cheapest' },
+] as const;
+
+const LENS_WORDS: Record<ReviewLens, string> = {
   correctness: 'Correctness',
   architecture: 'Architecture',
   performance: 'Performance',
@@ -18,6 +35,10 @@ export const LENS_WORDS: Record<ReviewLens, string> = {
   security: 'Security',
   ux: 'UX',
 };
+
+export const LENS_CHOICES = REVIEW_LENSES.map((lens) => ({ value: lens, label: LENS_WORDS[lens] }));
+
+export const WORK_CHOICES = TEAM_WORK.map((work) => ({ value: work, label: work }));
 
 const NAMES_SHOWN = 3;
 
@@ -62,7 +83,19 @@ export function agentsWords(models: ServedModels, team: Team): string {
   return shown.length <= NAMES_SHOWN ? shown.join(', ') : `${shown.length} models`;
 }
 
-export function reviewWords(models: ServedModels, team: Team): string {
-  const shown = names(models, reviewers(team));
-  return shown.length === 0 ? 'Nobody' : shown.slice(0, NAMES_SHOWN).join(', ');
+export function reviewWords(team: Team): string {
+  if (reviewers(team).length === 0) return 'Nobody';
+  return team.review.reviewers === 1 ? '1 reviewer' : `Up to ${team.review.reviewers}`;
+}
+
+export const signedWords = (value: number): string => (value > 0 ? `+${value}` : value < 0 ? `−${-value}` : '0');
+
+export const favorWords = (favor: number): string => (favor > 0 ? 'more often' : favor < 0 ? 'less often' : 'as rated');
+
+export function limitWords(row: TeamModel): readonly string[] {
+  return [
+    ...(row.only.length === 0 ? [] : [`only ${row.only.join(', ')}`]),
+    ...(row.not.length === 0 ? [] : [`never ${row.not.join(', ')}`]),
+    ...(row.operatorOnly ? ['on your word'] : []),
+  ];
 }

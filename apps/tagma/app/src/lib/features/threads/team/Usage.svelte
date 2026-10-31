@@ -6,7 +6,7 @@
   import { figureTone } from '$lib/features/providers/usage/thresholds.js';
   import { tightestFigure, usageFigures, usagePercentText } from '$lib/features/providers/usage/windows.js';
 
-  let { provider, part }: { provider: string; part: 'gauge' | 'percent' } = $props();
+  let { provider, part, marked = true }: { provider: string; part: 'gauge' | 'percent'; marked?: boolean } = $props();
 
   const accounts = UsageAccounts.use();
   const clock = CountdownClock.use();
@@ -17,7 +17,7 @@
 </script>
 
 {#if part === 'gauge'}
-  <Gauge {provider} row={standing} />
+  <Gauge {provider} row={standing} {marked} />
 {:else if tightest !== null}
   <span class="shrink-0 font-mono text-meta tabular-nums {toneText(figureTone(tightest, clock.now))}" data-team-usage={provider} data-tone>
     {usagePercentText(tightest.usedPercent)}

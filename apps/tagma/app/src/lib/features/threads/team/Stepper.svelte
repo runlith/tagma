@@ -8,6 +8,8 @@
     minimum,
     maximum,
     disabled = false,
+    edited = false,
+    words = String,
     tabindex,
     onchange,
   }: {
@@ -16,6 +18,8 @@
     minimum: number;
     maximum: number;
     disabled?: boolean;
+    edited?: boolean;
+    words?: (value: number) => string;
     tabindex?: number;
     onchange: (value: number) => void;
   } = $props();
@@ -35,7 +39,9 @@
   >
     <Minus class="size-3" />
   </button>
-  <span class="min-w-5 text-center font-mono text-small font-medium tabular-nums" data-stepper={label}>{value}</span>
+  <span class={['min-w-5 text-center font-mono text-small font-medium tabular-nums', edited && 'text-mutation']} data-stepper={label}
+    >{words(value)}</span
+  >
   <button
     type="button"
     class={STEP}

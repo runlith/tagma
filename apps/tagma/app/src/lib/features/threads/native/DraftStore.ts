@@ -2,7 +2,7 @@ import type { PlatformStorage } from '@runlith/layer/Platform';
 import type { ModelSwitches } from '@runlith/llm/models/description';
 import { type DraftDocument, type DraftMention, type DraftPlace, MAIN_CHECKOUT } from '../Draft.svelte.js';
 import { Piece } from '@tagma/server/speech/contract/wire/listening';
-import { TeamLayer } from '@runlith/agent/collaboration/team';
+import { TeamLayer, TeamModelKey } from '@runlith/agent/collaboration/team';
 import { Option, Schema } from 'effect';
 
 export type StoredDraft = {
@@ -123,7 +123,9 @@ function draftOf(value: unknown): StoredDraft | null {
     switches: switchesOf(row.switches),
     approvalMode: typeof row.approvalMode === 'string' ? row.approvalMode : null,
     delegation: typeof row.delegation === 'boolean' ? row.delegation : null,
-    team: Option.getOrNull(Option.map(teamOf(row.team), (team) => (row.spendSteps === SPEND_STEPS ? team : spendOnTen(team)))),
+    team: Option.getOrNull(
+      Option.map(teamOf(row.team), (team) => reviewOnRows(row.team, row.spendSteps === SPEND_STEPS ? team : spendOnTen(team))),
+    ),
     place: placeOf(row.place),
     images: idsOf(row.images),
     files: idsOf(row.files),
@@ -153,6 +155,19 @@ const spendOnTen = (team: TeamLayer): TeamLayer => ({
     'model' in edit && edit.spend !== undefined ? { ...edit, spend: SPEND_FROM_FIVE[edit.spend] ?? edit.spend } : edit,
   ),
 });
+
+const pooled = Schema.decodeUnknownOption(
+  Schema.Struct({ review: Schema.Struct({ pool: Schema.Array(TeamModelKey), split: Schema.optional(Schema.String) }) }),
+);
+
+const reviewOnRows = (stored: unknown, team: TeamLayer): TeamLayer =>
+  Option.match(pooled(stored), {
+    onNone: () => team,
+    onSome: ({ review }) => ({
+      models: [...team.models, ...review.pool.map((key) => ({ ...key, reviews: true }))],
+      review: review.split === 'same' ? { ...team.review, lenses: [] } : team.review,
+    }),
+  });
 
 const documentOf = Schema.decodeUnknownOption(Schema.Struct({ id: Schema.String, title: Schema.String, text: Schema.String }));
 

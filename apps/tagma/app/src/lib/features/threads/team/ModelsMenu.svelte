@@ -7,7 +7,7 @@
   import ModelLines from './ModelLines.svelte';
   import ProviderHeading from './ProviderHeading.svelte';
   import type { TeamView } from './view.js';
-  import { providerOn, rowOn } from './edits.js';
+  import { providerOn, rowChecked } from './edits.js';
 
   let { team, writes, onedit }: { team: TeamView; writes: ThreadWrites; onedit: () => void } = $props();
 
@@ -46,7 +46,7 @@
     <ProviderHeading provider={group.provider} />
   </DropdownMenu.CheckboxItem>
   {#if group.on}
-    <ModelLines rows={group.rows} lit={(row) => rowOn(edits, row)} onturn={turn} />
+    <ModelLines rows={group.rows} lit={(row) => rowChecked(edits, row, 'on')} onturn={turn} />
   {/if}
 {:else}
   <DropdownMenu.Note text="No connected provider lists a model for sub-agents." />

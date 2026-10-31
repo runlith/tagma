@@ -8,20 +8,18 @@
   import KeyCard from '$lib/features/settings/KeyCard.svelte';
   import { pick, rest, type SectionProps } from '$lib/features/settings/section.js';
   import { SettingsRepo } from '$lib/features/settings/SettingsRepo.js';
-  import TeamSettings from './team/TeamSettings.svelte';
 
   let { catalog, scope, project }: SectionProps = $props();
 
-  const DELEGATION = ['agent.delegation', 'agent.subAgentDepth', 'agent.toolOutputShare', 'agent.checkout', 'agent.checkoutWorld'];
+  const CONTEXT = ['agent.toolOutputShare', 'agent.checkout', 'agent.checkoutWorld'];
   const APPROVALS = ['agent.approvalMode', 'agent.worktrees', 'agent.operatorNotice'];
   const INSTRUCTIONS = ['agent.contextFiles.enabled', 'agent.contextFiles.names'];
   const COMPACTION = ['agent.compactionStrategy', 'agent.compactionTrigger', 'agent.compactionOverrides'];
   const SUMMARIZERS = ['agent.compactionSummarizerRule', 'agent.compactionSummarizers'];
   const WARM = ['agent.keepWarm', 'agent.keepWarmPings'];
   const TYPES = ['agent.default', 'agent.offered'];
-  const MODELS = ['agent.models', 'agent.review'];
   const WEB = ['agent.web', 'agent.images'];
-  const CLAIMED = [...DELEGATION, ...APPROVALS, ...INSTRUCTIONS, ...COMPACTION, ...SUMMARIZERS, ...WARM, ...TYPES, ...MODELS, ...WEB];
+  const CLAIMED = [...CONTEXT, ...APPROVALS, ...INSTRUCTIONS, ...COMPACTION, ...SUMMARIZERS, ...WARM, ...TYPES, ...WEB];
   const CHAIN = 'agent.compactionSummarizers';
 
   const repo = SettingsRepo.use();
@@ -77,7 +75,7 @@
 </script>
 
 <div class="grid">
-  <KeyCard title="Delegation and context" entries={pick(entries, DELEGATION)} {catalog} {scope} {project} />
+  <KeyCard title="Context and checkout" entries={pick(entries, CONTEXT)} {catalog} {scope} {project} />
   <KeyCard title="Approvals" entries={pick(entries, APPROVALS)} {catalog} {scope} {project} />
   <KeyCard title="Instruction files" entries={pick(entries, INSTRUCTIONS)} {dimmed} {catalog} {scope} {project} />
   <KeyCard title="Compaction" entries={pick(entries, COMPACTION)} {catalog} {scope} {project} />
@@ -91,7 +89,6 @@
   />
   <KeyCard title="Warm cache" entries={pick(entries, WARM)} {catalog} {scope} {project} />
   <KeyCard title="Agent types" entries={pick(entries, TYPES)} {catalog} {scope} {project} />
-  <TeamSettings {catalog} {scope} {project} />
   <KeyCard title="Web and pictures" entries={pick(entries, WEB)} {catalog} {scope} {project} />
   {#if rest(entries, CLAIMED).length > 0}
     <KeyCard title="More" entries={rest(entries, CLAIMED)} {catalog} {scope} {project} />

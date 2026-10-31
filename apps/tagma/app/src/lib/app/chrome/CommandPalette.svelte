@@ -19,6 +19,7 @@
   import { PaletteRepo } from '$lib/features/palette/Repo.js';
   import Row from '$lib/features/palette/Row.svelte';
   import { landingScope } from '$lib/features/settings/scope.js';
+  import { SectionRegistry } from '$lib/features/settings/SectionRegistry.js';
   import { SettingsRepo } from '$lib/features/settings/SettingsRepo.js';
   import { Asking } from '$lib/features/threads/Asking.js';
   import { projectOpen, settingsHref } from '$lib/features/workspace/address.js';
@@ -54,6 +55,7 @@
   const shell = shellActs(ShellOps.use(), notices);
   const workspace = Workspace.use();
   const router = Router.use();
+  const sections = SectionRegistry.use();
   const addresses = Addresses.use();
   const surfaces = SurfaceRegistry.use();
 
@@ -208,7 +210,7 @@
       void shell.openThread({ projectId, threadId: row.hit.threadId }, sideways ? 'beside' : 'main');
     } else if (row.kind === 'block') void router.goto(addresses.block(row.hit.name, { project: where }));
     else if (row.kind === 'commit') void router.goto(addresses.commit(row.commit.sha, where));
-    else void router.goto(settingsHref(router, row.entry.section, landingScope(row.entry), row.entry.id));
+    else void router.goto(settingsHref(router, sections.sectionOf(row.entry), landingScope(row.entry), row.entry.id));
   }
 
   async function askAgent(): Promise<void> {

@@ -22,6 +22,7 @@ export type SettingsSection = {
   readonly view?: Component<SectionProps>;
   readonly place?: SectionPlace;
   readonly local?: { readonly title: string; readonly description: string };
+  readonly keys?: readonly string[];
   readonly standalone?: boolean;
   readonly hosts?: readonly HostKind[];
 };

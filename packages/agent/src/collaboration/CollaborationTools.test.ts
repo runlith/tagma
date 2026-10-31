@@ -373,7 +373,8 @@ describe('collaborationTools', () => {
       not: [],
       note: null,
       operatorOnly: false,
-      shipped: true,
+      reviews: false,
+      shipped: null,
     };
     const team = {
       models: [

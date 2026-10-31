@@ -6,6 +6,7 @@ import { afterEach, beforeEach, expect, test } from 'vitest';
 import { waitUntil } from '@runlith/testing/flush';
 import { testDoor } from '$lib/wire/testing.js';
 import { loadOperations } from '$lib/wire/operation.js';
+import { SectionRegistry } from './SectionRegistry.js';
 import { SettingsCatalog } from './SettingsCatalog.svelte.js';
 import { SettingsRepo } from './SettingsRepo.js';
 
@@ -99,7 +100,7 @@ afterEach(async () => {
   for (const release of close.splice(0)) await release();
 });
 
-async function read(): Promise<SettingsCatalog> {
+async function read(sections = new SectionRegistry({})): Promise<SettingsCatalog> {
   const queryClient = new QueryClient();
   const mounted = mountRepo(SettingsRepo, { door: testDoor(fetch), queryClient });
   const scope = Scope.make();
@@ -107,7 +108,7 @@ async function read(): Promise<SettingsCatalog> {
     await scope.close();
     await mounted.unmount();
   });
-  const catalog = new SettingsCatalog(mounted.repo, scope, { projectId: 1 });
+  const catalog = new SettingsCatalog(mounted.repo, sections, scope, { projectId: 1 });
   await waitUntil(() => catalog.entries.length === 3);
   return catalog;
 }
@@ -167,6 +168,14 @@ test('the page holds the keys a person SETS: a key a machine writes for itself i
   expect(catalog.entries.map((entry) => entry.id)).toEqual(['agent.toolOutputShare', 'orientation.mapBudget', 'telemetry.maxBytes']);
   expect(catalog.entriesOf('terminal')).toEqual([]);
   expect(catalog.setCount('user', 'terminal')).toBe(0);
+});
+
+test('a key an app section holds stands in that section, whatever section the catalog files it under', async () => {
+  const holding = { id: 'context', group: 'agent', order: 2, icon: {} as never, keys: ['agent.toolOutputShare'] } as const;
+  const catalog = await read(new SectionRegistry({ './threads/settings.ts': { sections: [holding] } }));
+
+  expect(catalog.entriesOf('context').map((entry) => entry.id)).toEqual(['agent.toolOutputShare']);
+  expect(catalog.entriesOf('agent')).toEqual([]);
 });
 
 test('the count a layer carries is what THAT layer decided, never what happens to be in force', async () => {

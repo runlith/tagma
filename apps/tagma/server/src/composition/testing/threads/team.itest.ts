@@ -99,13 +99,16 @@ it.live(
     yield* write('project', 'agent.models', [{ ...OPUS_HIGH, depth: 4, on: false }] satisfies TeamEdit[]);
     yield* threads.mandate
       .setTeam(root, {
-        models: [{ ...OPUS_HIGH, depth: 2, taste: 3, on: true }],
-        review: { reviewers: 1, pool: [OPUS_XHIGH], split: 'same', lenses: [] },
+        models: [
+          { ...OPUS_HIGH, depth: 2, taste: 3, on: true },
+          { ...OPUS_XHIGH, reviews: true },
+        ],
+        review: { reviewers: 1, lenses: [] },
       })
       .pipe(Effect.orDie);
     yield* write('project', 'agent.models', [{ ...OPUS_HIGH, depth: 5, on: false }] satisfies TeamEdit[]);
     const outside = yield* team(stranger);
-    expect(opusHigh(outside.models)).toMatchObject({ depth: 5, taste: 3, on: false, shipped: true });
+    expect(opusHigh(outside.models)).toMatchObject({ depth: 5, taste: 3, on: false, shipped: { depth: 8, taste: 9 } });
     expect(reviewers(outside)).toEqual([]);
     const machine = yield* teams.of({ threadId: null, projectId: undefined }).pipe(Effect.orDie);
     expect(opusHigh(machine.models)).toMatchObject({ depth: 2, taste: 3, on: true });
@@ -121,8 +124,8 @@ it.live(
     const { demo, threads, teams, root, stranger, write, team } = yield* standing();
     const machine: TeamEdit[] = [{ ...OPUS_HIGH, depth: 2 }];
     const project: TeamEdit[] = [{ ...OPUS_HIGH, taste: 3 }];
-    const change: TeamEdit = { ...OPUS_XHIGH, on: true };
-    const review = { reviewers: 1, pool: [OPUS_HIGH], split: 'same' as const, lenses: [] };
+    const change: TeamEdit = { ...OPUS_XHIGH, on: true, reviews: true };
+    const review = { reviewers: 1, lenses: [] };
     yield* write('user', 'agent.models', machine);
     yield* write('project', 'agent.models', project);
     yield* threads.mandate.setTeam(root, { models: [...machine, ...project, change], review }).pipe(Effect.orDie);
@@ -178,20 +181,23 @@ it.live(
       if (directive === null || !('type' in directive) || directive.type !== 'guide') throw new Error('expected a line');
       history.push(agentRuntimeGuidanceMessage(directive.text, directive.state));
     };
+    const reviewTold = () => (history.at(-1)?.metadata?.runtimeState as { team: { review: number } }).team.review;
     expect(yield* step()).toBeNull();
     yield* write('project', 'agent.models', [{ ...OPUS_HIGH, on: true }] satisfies TeamEdit[]);
     told(yield* step());
+    const unreviewed = reviewTold();
     expect(yield* step()).toBeNull();
-    yield* write('project', 'agent.review', { reviewers: 2, pool: [OPUS_HIGH], split: 'lenses', lenses: ['tests'] });
+    yield* write('project', 'agent.models', [{ ...OPUS_HIGH, on: true, reviews: true }] satisfies TeamEdit[]);
     told(yield* step());
-    expect(yield* step()).toBeNull();
-    const reviewTold = () => (history.at(-1)?.metadata?.runtimeState as { team: { review: number } }).team.review;
     const reviewing = reviewTold();
-    yield* write('project', 'agent.models', [{ ...OPUS_HIGH, removed: true }] satisfies TeamEdit[]);
+    expect(reviewing).not.toBe(unreviewed);
+    expect(yield* step()).toBeNull();
+    yield* write('project', 'agent.review', { reviewers: 2, lenses: ['tests'] });
     told(yield* step());
     expect(reviewTold()).not.toBe(reviewing);
-    yield* write('project', 'agent.review', { reviewers: 0, pool: [OPUS_HIGH], split: 'lenses', lenses: ['tests'] });
+    yield* write('project', 'agent.review', { reviewers: 0, lenses: ['tests'] });
     told(yield* step());
+    expect(reviewTold()).toBe(unreviewed);
     expect(yield* step()).toBeNull();
   }),
 );

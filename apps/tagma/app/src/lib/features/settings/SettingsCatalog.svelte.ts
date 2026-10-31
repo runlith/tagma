@@ -5,6 +5,7 @@ import { Process } from '@runlith/layer/process';
 import { Scope } from '@runlith/layer/Scope';
 import type { Told } from '$lib/wire/told.js';
 import { Refusal, toldOf } from '$lib/wire/refusal.js';
+import { SectionRegistry } from '$lib/features/settings/SectionRegistry.js';
 import { SettingsRepo } from '$lib/features/settings/SettingsRepo.js';
 
 export type SettingEntry = ServedEntry & {
@@ -47,7 +48,7 @@ export type SettingsCatalogOptions = { projectId: number };
 
 export class SettingsCatalog extends Process<SettingsCatalog, SettingsCatalogOptions>()('SettingsCatalog') {
   static override *make(options: SettingsCatalogOptions) {
-    return new SettingsCatalog(yield* SettingsRepo, yield* Scope, options);
+    return new SettingsCatalog(yield* SettingsRepo, yield* SectionRegistry, yield* Scope, options);
   }
 
   sections = $state<readonly SettingSection[]>([]);
@@ -63,6 +64,7 @@ export class SettingsCatalog extends Process<SettingsCatalog, SettingsCatalogOpt
 
   constructor(
     private readonly repo: Settings,
+    private readonly registry: SectionRegistry,
     private readonly scope: Scope,
     options: SettingsCatalogOptions,
   ) {
@@ -158,6 +160,7 @@ export class SettingsCatalog extends Process<SettingsCatalog, SettingsCatalogOpt
         const rejection = rejections.get(entry.id);
         return {
           ...entry,
+          section: this.registry.sectionOf(entry),
           rejection: rejection ? { scope: rejection.scope, reason: rejection.reason } : undefined,
         };
       });
