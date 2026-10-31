@@ -12,7 +12,7 @@ import { Settings } from './contract/service/values.js';
 import { catalog } from './catalog.js';
 import { liveOf } from './live.js';
 import { resolveSetting } from './resolution.js';
-import { layers, valueRows } from './store/rows.js';
+import { layers, makeValueReads } from './store/rows.js';
 import { makeWrites } from './writes.js';
 
 export const settingsLayer: Layer.Layer<
@@ -26,6 +26,7 @@ export const settingsLayer: Layer.Layer<
     const units = yield* GraphUnits;
     const sessions = yield* WriterRegister;
     const { db } = store;
+    const valueRows = yield* makeValueReads;
     const reads = <F extends (...args: never[]) => Effect.Effect<unknown, unknown, unknown>>(verb: F): F =>
       ((...args: never[]) => units.markReadOnly(verb(...args))) as F;
     const chainOf = (projectId?: number) => layers(db, sessions, projectId);
@@ -47,11 +48,11 @@ export const settingsLayer: Layer.Layer<
         Effect.map(layers(db, sessions, projectId, key.id), (chain) => resolveSetting(key, chain)),
       ),
       value: reads(<A>(key: SettingKey<A>, projectId?: number) =>
-        Effect.map(valueRows(db, projectId, key.id), (chain) => resolveSetting(key, chain).value),
+        Effect.map(valueRows(projectId, key.id), (chain) => resolveSetting(key, chain).value),
       ),
       chain: reads((projectId?: number) =>
         Effect.map(
-          valueRows(db, projectId),
+          valueRows(projectId),
           (resolved) =>
             <A>(key: SettingKey<A>): A =>
               resolveSetting(key, resolved).value,

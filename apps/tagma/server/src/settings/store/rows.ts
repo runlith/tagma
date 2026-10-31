@@ -1,6 +1,6 @@
-import { and, eq, isNull, or } from 'drizzle-orm';
+import { and, eq, isNull, or, sql } from 'drizzle-orm';
 import { Clock, Effect, Result, Schema } from 'effect';
-import type { StoreDb, StoreFailure } from '../../platform/contract/service/store.js';
+import { GraphStore, type StoreDb, type StoreFailure } from '../../platform/contract/service/store.js';
 import type { WriteUnit } from '../../platform/contract/service/units.js';
 import type { WriterRegister } from '../../platform/contract/service/writers.js';
 import type { SessionRef } from '../../platform/contract/wire/session.js';
@@ -9,9 +9,22 @@ import { GateRefusal } from '../../platform/contract/wire/refusal.js';
 import type { Resolved } from '../contract/service/values.js';
 import { resolveSetting, type SettingLayer } from '../resolution.js';
 import { setting } from './table.js';
+import { prepareFor } from '../../platform/store/queries.js';
 
 type SettingRow = typeof setting.$inferSelect;
 type SettingValueRow = Pick<SettingRow, 'scope' | 'key' | 'value' | 'declined'>;
+
+const layerReads = prepareFor((db: StoreDb<'graph'>) => {
+  const user = and(eq(setting.scope, 'user'), isNull(setting.projectId));
+  const project = and(eq(setting.scope, 'project'), eq(setting.projectId, sql.placeholder('projectId')));
+  const query = (where: ReturnType<typeof and>, keyed: boolean) =>
+    db
+      .select()
+      .from(setting)
+      .where(keyed ? and(eq(setting.key, sql.placeholder('keyId')), where) : where)
+      .prepare();
+  return { user: query(user, false), userKey: query(user, true), project: query(project, false), projectKey: query(project, true) };
+});
 
 export const layers = Effect.fn('Settings.layers')(function* (
   db: StoreDb<'graph'>,
@@ -19,18 +32,10 @@ export const layers = Effect.fn('Settings.layers')(function* (
   projectId?: number,
   keyId?: string,
 ): Effect.fn.Return<SettingLayer[], StoreFailure> {
-  const keyed = (scoped: ReturnType<typeof and>) => (keyId === undefined ? scoped : and(eq(setting.key, keyId), scoped));
-  const user = yield* db
-    .select()
-    .from(setting)
-    .where(keyed(and(eq(setting.scope, 'user'), isNull(setting.projectId))));
-  const project =
-    projectId === undefined
-      ? []
-      : yield* db
-          .select()
-          .from(setting)
-          .where(keyed(and(eq(setting.scope, 'project'), eq(setting.projectId, projectId))));
+  const queries = layerReads(db);
+  const params = { projectId, keyId };
+  const user = yield* (keyId === undefined ? queries.user : queries.userKey).all(params);
+  const project = projectId === undefined ? [] : yield* (keyId === undefined ? queries.project : queries.projectKey).all(params);
   const wrote = new Map<number, SessionRef>();
   const signed = [...user, ...project].map((row) => row.sessionId).filter((id): id is number => id !== null);
   for (const row of signed.length === 0 ? [] : yield* sessions.named(signed)) {
@@ -39,17 +44,26 @@ export const layers = Effect.fn('Settings.layers')(function* (
   return [layerOf('user', user, wrote), layerOf('project', project, wrote)];
 });
 
-export const valueRows = (db: StoreDb<'graph'>, projectId: number | undefined, keyId?: string) => {
-  const scoped =
-    projectId === undefined
-      ? and(eq(setting.scope, 'user'), isNull(setting.projectId))
-      : or(and(eq(setting.scope, 'user'), isNull(setting.projectId)), and(eq(setting.scope, 'project'), eq(setting.projectId, projectId)));
-  return db
-    .select({ scope: setting.scope, key: setting.key, value: setting.value, declined: setting.declined })
-    .from(setting)
-    .where(keyId === undefined ? scoped : and(eq(setting.key, keyId), scoped))
-    .pipe(Effect.map((rows) => [valueLayerOf('user', rows), valueLayerOf('project', rows)]));
-};
+export const makeValueReads = Effect.gen(function* () {
+  const { db } = yield* GraphStore;
+  const query = (project: boolean, keyed: boolean) => {
+    const user = and(eq(setting.scope, 'user'), isNull(setting.projectId));
+    const scoped = project ? or(user, and(eq(setting.scope, 'project'), eq(setting.projectId, sql.placeholder('projectId')))) : user;
+    return db
+      .select({ scope: setting.scope, key: setting.key, value: setting.value, declined: setting.declined })
+      .from(setting)
+      .where(keyed ? and(eq(setting.key, sql.placeholder('keyId')), scoped) : scoped)
+      .prepare();
+  };
+  const user = query(false, false);
+  const userKey = query(false, true);
+  const project = query(true, false);
+  const projectKey = query(true, true);
+  return (projectId: number | undefined, keyId?: string) => {
+    const selected = projectId === undefined ? (keyId === undefined ? user : userKey) : keyId === undefined ? project : projectKey;
+    return Effect.map(selected.all({ projectId, keyId }), (rows) => [valueLayerOf('user', rows), valueLayerOf('project', rows)]);
+  };
+});
 
 export const rowOf = (keyId: string, scope: SettableScope, projectId: number | null) =>
   and(eq(setting.scope, scope), eq(setting.key, keyId), projectId === null ? isNull(setting.projectId) : eq(setting.projectId, projectId));

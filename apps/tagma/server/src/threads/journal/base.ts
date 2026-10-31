@@ -4,6 +4,7 @@ import type { AnySQLiteColumn } from 'drizzle-orm/sqlite-core';
 import { MachineStore, type StoreDb, type StoreFailure } from '../../platform/contract/service/store.js';
 import { MachineUnits, type Unit } from '../../platform/contract/service/units.js';
 import { writes } from '../../platform/contract/service/writes.js';
+import { prepareFor } from '../../platform/store/queries.js';
 import { threadBase, threadEvent } from '../store/journal.js';
 import { threadEntry } from '../store/kernel.js';
 
@@ -41,19 +42,32 @@ export const armsOf = (threadId: string, layers: readonly BaseLayer[]): readonly
   ...layers.map((layer, at) => ({ layer, where: and(...carried(layer), shadowed(threadId, layers.slice(at + 1)))! })),
 ];
 
+const baseReads = prepareFor((db: StoreDb<'machine'>) => ({
+  layers: db
+    .select()
+    .from(threadBase)
+    .where(eq(threadBase.threadId, sql.placeholder('threadId')))
+    .orderBy(asc(threadBase.depth))
+    .prepare(),
+  referrers: db
+    .select()
+    .from(threadBase)
+    .where(eq(threadBase.sourceId, sql.placeholder('sourceId')))
+    .orderBy(asc(threadBase.threadId), asc(threadBase.depth))
+    .prepare(),
+}));
+
 export const layersOf = (
   db: StoreDb<'machine'>,
   unit: Unit<'machine'>,
   threadId: string,
-): Effect.Effect<readonly BaseLayer[], StoreFailure> =>
-  unit.run(db.select().from(threadBase).where(eq(threadBase.threadId, threadId)).orderBy(asc(threadBase.depth)));
+): Effect.Effect<readonly BaseLayer[], StoreFailure> => unit.run(baseReads(db).layers.all({ threadId }));
 
 export const referrersOf = (
   db: StoreDb<'machine'>,
   unit: Unit<'machine'>,
   sourceId: string,
-): Effect.Effect<readonly BaseLayer[], StoreFailure> =>
-  unit.run(db.select().from(threadBase).where(eq(threadBase.sourceId, sourceId)).orderBy(asc(threadBase.threadId), asc(threadBase.depth)));
+): Effect.Effect<readonly BaseLayer[], StoreFailure> => unit.run(baseReads(db).referrers.all({ sourceId }));
 
 export const sourcesOutside = (db: StoreDb<'machine'>, unit: Unit<'machine'>, threadIds: readonly string[]) =>
   Effect.map(
