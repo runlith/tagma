@@ -5095,10 +5095,6 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead apps/tagma/server/src/external-harnesses/protocol/link.ts#retainedFrom",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "dead-code dead apps/tagma/server/src/external-harnesses/protocol/links.ts#Noise",
           "owner": "5a3bed29"
         },
