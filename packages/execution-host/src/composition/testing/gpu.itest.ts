@@ -107,6 +107,7 @@ if (process.platform === 'darwin') {
         expect(ready).toBe('ready');
         const baseline = yield* Deferred.make<LoadReading, unknown>();
         const positive = yield* Deferred.make<LoadReading, unknown>();
+        let workStarted = false;
         yield* Effect.forkScoped(
           subscription.readings.pipe(
             Stream.runForEach((reading) => {
@@ -114,7 +115,9 @@ if (process.platform === 'darwin') {
               return gpu?._tag !== 'Measured'
                 ? Effect.void
                 : gpu.cores > 0
-                  ? Deferred.succeed(positive, reading)
+                  ? workStarted
+                    ? Deferred.succeed(positive, reading)
+                    : Effect.void
                   : Deferred.succeed(baseline, reading);
             }),
             Effect.tapError((error) => Effect.andThen(Deferred.fail(baseline, error), Deferred.fail(positive, error))),
@@ -123,7 +126,10 @@ if (process.platform === 'darwin') {
         yield* Deferred.await(baseline);
         const total = () => own().reduce((sum, client) => sum + (client.gpu._tag === 'Measured' ? client.gpu.micros : 0), 0);
         const initial = total();
-        yield* Effect.sync(() => child.stdin.write('first\n'));
+        yield* Effect.sync(() => {
+          workStarted = true;
+          child.stdin.write('first\n');
+        });
         const firstEvent = (yield* line()).split(' ');
         expect(firstEvent[0]).toBe('first');
         expect(Number(firstEvent[1])).toBeGreaterThan(0);
