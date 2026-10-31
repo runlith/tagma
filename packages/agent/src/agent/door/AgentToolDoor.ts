@@ -95,17 +95,23 @@ export const makeAgentToolDoor = <TCtx>({
     source: string | undefined,
     work: Effect.Effect<AgentToolOutcome, E>,
   ): Effect.Effect<AgentToolOutcome, E> =>
-    activity(TOOL_CALL, { toolName, toolCallId, executedBy }, work, {
-      ...run.attribution(),
-      bodies: source === undefined ? [] : [argumentsBody(source)],
-      ended: (exit) =>
-        Exit.isSuccess(exit)
-          ? {
-              ...toolEnding(exit.value.verdict),
-              bodies: [modelOutputBody(exit.value.modelOutput)],
-            }
-          : failedEnding(exit),
-    });
+    execution
+      .costing(
+        toolCallId,
+        toolName,
+        activity(TOOL_CALL, { toolName, toolCallId, executedBy }, work, {
+          ...run.attribution(),
+          bodies: source === undefined ? [] : [argumentsBody(source)],
+          ended: (exit) =>
+            Exit.isSuccess(exit)
+              ? {
+                  ...toolEnding(exit.value.verdict),
+                  bodies: [modelOutputBody(exit.value.modelOutput)],
+                }
+              : failedEnding(exit),
+        }),
+      )
+      .pipe(Effect.ensuring(Effect.sync(() => execution.finishCost(toolCallId))));
 
   const questionOf = (call: AgentToolInvocation): AgentPermissionQuestion => ({
     name: call.name,
@@ -121,12 +127,16 @@ export const makeAgentToolDoor = <TCtx>({
     );
 
   const claims = (call: AgentPermissionQuestion): Effect.Effect<readonly Claim[], AgentToolFailed | AgentRuleFailed> =>
-    Effect.flatMap(admission.judge(call), ({ input, denied }) =>
-      denied !== null
-        ? Effect.succeed([])
-        : toolClaims(call.tool, input, { toolCallId: call.toolCallId, caller: run.caller }).pipe(
-            Effect.mapError((cause) => new AgentToolFailed({ toolName: call.name, toolCallId: call.toolCallId, cause })),
-          ),
+    execution.costing(
+      call.toolCallId,
+      call.name,
+      Effect.flatMap(admission.judge(call), ({ input, denied }) =>
+        denied !== null
+          ? Effect.succeed([])
+          : toolClaims(call.tool, input, { toolCallId: call.toolCallId, caller: run.caller }).pipe(
+              Effect.mapError((cause) => new AgentToolFailed({ toolName: call.name, toolCallId: call.toolCallId, cause })),
+            ),
+      ),
     );
 
   const turn = (call: AgentPermissionQuestion, queued: (standing: boolean) => void): Effect.Effect<void, AgentToolFailed> =>
@@ -145,45 +155,49 @@ export const makeAgentToolDoor = <TCtx>({
       );
 
   const preflight = (call: AgentPermissionQuestion): Effect.Effect<AgentToolPreflight, AgentToolFailure> =>
-    Effect.uninterruptibleMask((restore) =>
-      Effect.suspend(() => {
-        const held = ledger.replayPreflight(call);
-        if (held) return restore(held);
-        const closed = ledger.opened(call.toolCallId);
-        if (closed) return closed;
-        const reading = activity(
-          TOOL_PREFLIGHT,
-          { toolName: call.name, toolCallId: call.toolCallId },
-          answering(call.name, call.toolCallId, () => admission.inspect(call)),
-          {
-            ...run.attribution(),
-            ended: (exit) => (Exit.isSuccess(exit) ? { result: verdictOf(exit.value.permission) } : failedEnding(exit)),
-          },
-        );
-        let queued = false;
-        const preparing = execution.preparing(
-          call,
-          Effect.andThen(
-            turn(call, (standing) => {
-              queued = standing;
-            }),
-            reading,
-          ),
-          (reason) =>
-            new AgentToolFailed({
-              toolName: call.name,
-              toolCallId: call.toolCallId,
-              cause: queued ? new CallStoppedInQueue({ reason }) : new ToolFailed({ reason }),
-            }),
-        );
-        return ledger.preflighting(
-          call,
-          restore(preparing).pipe(
-            Effect.tap((prepared) => Effect.sync(() => execution.prepared(call, prepared))),
-            Effect.tapError(() => Effect.sync(() => order.release(call.toolCallId))),
-          ),
-        );
-      }),
+    execution.costing(
+      call.toolCallId,
+      call.name,
+      Effect.uninterruptibleMask((restore) =>
+        Effect.suspend(() => {
+          const held = ledger.replayPreflight(call);
+          if (held) return restore(held);
+          const closed = ledger.opened(call.toolCallId);
+          if (closed) return closed;
+          const reading = activity(
+            TOOL_PREFLIGHT,
+            { toolName: call.name, toolCallId: call.toolCallId },
+            answering(call.name, call.toolCallId, () => admission.inspect(call)),
+            {
+              ...run.attribution(),
+              ended: (exit) => (Exit.isSuccess(exit) ? { result: verdictOf(exit.value.permission) } : failedEnding(exit)),
+            },
+          );
+          let queued = false;
+          const preparing = execution.preparing(
+            call,
+            Effect.andThen(
+              turn(call, (standing) => {
+                queued = standing;
+              }),
+              reading,
+            ),
+            (reason) =>
+              new AgentToolFailed({
+                toolName: call.name,
+                toolCallId: call.toolCallId,
+                cause: queued ? new CallStoppedInQueue({ reason }) : new ToolFailed({ reason }),
+              }),
+          );
+          return ledger.preflighting(
+            call,
+            restore(preparing).pipe(
+              Effect.tap((prepared) => Effect.sync(() => execution.prepared(call, prepared))),
+              Effect.tapError(() => Effect.sync(() => order.release(call.toolCallId))),
+            ),
+          );
+        }),
+      ),
     );
 
   return {
@@ -231,75 +245,91 @@ export const makeAgentToolDoor = <TCtx>({
     resolutionsOf: ledger.resolutionsOf,
 
     attend: (call: AgentToolInvocation): Effect.Effect<AgentToolAttended, AgentToolFailure> =>
-      Effect.suspend(() => {
-        const toolCallId = call.options.toolCallId;
-        const answered = (outcome: AgentToolOutcome): AgentToolAttended => ({ kind: 'answered', outcome });
-        const held = ledger.held(toolCallId, call.name, call.input);
-        if (held) return Effect.map(held, answered);
-        return answering(call.name, toolCallId, () => execution.attend(call, preflight(questionOf(call)))).pipe(
-          Effect.flatMap((attended) =>
-            attended.kind === 'prepared'
-              ? Effect.succeed(attended)
-              : Effect.map(
-                  ledger.once(toolCallId, call.name, call.input, () => receipted(call, attended.outcome)),
-                  answered,
-                ),
-          ),
-        );
-      }),
+      execution.costing(
+        call.options.toolCallId,
+        call.name,
+        Effect.suspend(() => {
+          const toolCallId = call.options.toolCallId;
+          const answered = (outcome: AgentToolOutcome): AgentToolAttended => ({ kind: 'answered', outcome });
+          const held = ledger.held(toolCallId, call.name, call.input);
+          if (held) return Effect.map(held, answered);
+          return answering(call.name, toolCallId, () => execution.attend(call, preflight(questionOf(call)))).pipe(
+            Effect.flatMap((attended) =>
+              attended.kind === 'prepared'
+                ? Effect.succeed(attended)
+                : Effect.map(
+                    ledger.once(toolCallId, call.name, call.input, () => receipted(call, attended.outcome)),
+                    answered,
+                  ),
+            ),
+          );
+        }),
+      ),
 
     parked: execution.parked,
 
     adopt: (call: AgentToolInvocation, prepared: AgentToolPreflight): Effect.Effect<AgentCallAdoption, AgentToolFailed | AgentRuleFailed> =>
-      Effect.flatMap(claims(questionOf(call)), (held) => execution.adopt(call, prepared, held)),
+      execution.costing(
+        call.options.toolCallId,
+        call.name,
+        Effect.flatMap(claims(questionOf(call)), (held) => execution.adopt(call, prepared, held)),
+      ),
 
     keep: (call: AgentToolInvocation): Effect.Effect<AgentToolOutcome | null, AgentToolFailure> =>
-      Effect.flatMap(execution.keep(call.options.toolCallId), (receipt) =>
-        receipt === null
-          ? Effect.succeed(null)
-          : ledger.once(call.options.toolCallId, call.name, call.input, () => receipted(call, receipt)),
+      execution.costing(
+        call.options.toolCallId,
+        call.name,
+        Effect.flatMap(execution.keep(call.options.toolCallId), (receipt) =>
+          receipt === null
+            ? Effect.succeed(null)
+            : ledger.once(call.options.toolCallId, call.name, call.input, () => receipted(call, receipt)),
+        ),
       ),
 
     settle: (call: AgentToolInvocation, prepared?: AgentToolPreflight): Effect.Effect<AgentToolOutcome, AgentToolFailure> => {
       const toolCallId = call.options.toolCallId;
-      return ledger.once(toolCallId, call.name, call.input, () =>
-        answering(call.name, toolCallId, () => {
-          if (prepared === undefined && call.confirmed === true && !ledger.resolvable(call.tool, toolCallId, call.name, call.input)) {
-            return Effect.fail(admission.lostResolution(call.name, toolCallId));
-          }
-          const entered: Effect.Effect<AgentToolAttended, AgentToolFailure> = prepared
-            ? Effect.map(admission.accepted(call, prepared), (ready) => ({ kind: 'prepared', prepared: ready }))
-            : execution.attend(call, preflight(questionOf(call)));
-          return Effect.flatMap(entered, (attended) => {
-            if (attended.kind === 'answered') return receipted(call, attended.outcome);
-            const ready = attended.prepared;
-            return agentSpan({ type: 'tool-call', runId: run.runId, toolName: call.name, toolCallId, executedBy: 'host' })(
-              called(
-                call.name,
-                toolCallId,
-                'host',
-                call.arguments,
-                execution.perform(call, ready).pipe(
-                  Effect.catchTag('AgentToolFailed', (failure) =>
-                    Clock.currentTimeMillis.pipe(
-                      Effect.flatMap((at) =>
-                        Effect.fail(
-                          new AgentToolFailed({
-                            toolName: failure.toolName,
-                            toolCallId: failure.toolCallId,
-                            cause: failure.cause,
-                            projection: failure.projection,
-                            durationMs: at - ready.openedAt,
-                          }),
+      return execution.costing(
+        toolCallId,
+        call.name,
+        ledger.once(toolCallId, call.name, call.input, () =>
+          answering(call.name, toolCallId, () => {
+            if (prepared === undefined && call.confirmed === true && !ledger.resolvable(call.tool, toolCallId, call.name, call.input)) {
+              return Effect.fail(admission.lostResolution(call.name, toolCallId));
+            }
+            const entered: Effect.Effect<AgentToolAttended, AgentToolFailure> = prepared
+              ? Effect.map(admission.accepted(call, prepared), (ready) => ({ kind: 'prepared', prepared: ready }))
+              : execution.attend(call, preflight(questionOf(call)));
+            return Effect.flatMap(entered, (attended) => {
+              if (attended.kind === 'answered') return receipted(call, attended.outcome);
+              const ready = attended.prepared;
+              return agentSpan({ type: 'tool-call', runId: run.runId, toolName: call.name, toolCallId, executedBy: 'host' })(
+                called(
+                  call.name,
+                  toolCallId,
+                  'host',
+                  call.arguments,
+                  execution.perform(call, ready).pipe(
+                    Effect.catchTag('AgentToolFailed', (failure) =>
+                      Clock.currentTimeMillis.pipe(
+                        Effect.flatMap((at) =>
+                          Effect.fail(
+                            new AgentToolFailed({
+                              toolName: failure.toolName,
+                              toolCallId: failure.toolCallId,
+                              cause: failure.cause,
+                              projection: failure.projection,
+                              durationMs: at - ready.openedAt,
+                            }),
+                          ),
                         ),
                       ),
                     ),
                   ),
                 ),
-              ),
-            );
-          });
-        }),
+              );
+            });
+          }),
+        ),
       );
     },
 

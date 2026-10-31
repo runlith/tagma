@@ -1,4 +1,5 @@
-import { Cause, type Clock, Deferred, Effect, Exit, type Fiber, Latch, Option, type Scope } from 'effect';
+import { Cause, type Clock, Context, Deferred, Effect, Exit, Fiber, Latch, Option, type Scope } from 'effect';
+import { CostLedger, CurrentCost, endCost, type CostCause } from '@runlith/performance/CostLedger';
 import { CallCancellation, type DeclaredCancellationCause } from '@runlith/executions/protocol/call';
 import {
   callEnded,
@@ -9,6 +10,7 @@ import {
   type CallProgress,
   type CallRecord,
 } from './callProgress';
+export type CallCost = { readonly cause: CostCause; readonly owned: boolean };
 export type Arrival = 'words' | 'report';
 export type CallAttended<A, B> = { readonly handed: false; readonly value: A } | { readonly handed: true; readonly receipt: B };
 export type CallTaking<B> = { readonly receipt: B } | { readonly refused: string };
@@ -53,9 +55,20 @@ export type CallSide = {
   readonly publish: (record: CallRecord) => void;
   readonly envelopeMs: number;
   readonly unread: () => Arrival | null;
+  readonly cost?: CallCost;
 };
 export type AgentCall = ReturnType<typeof makeAgentCall>;
-export const makeAgentCall = (record: CallRecord, { scope, clock, runCallback, publish, envelopeMs, unread }: CallSide) => {
+export const makeAgentCall = (
+  record: CallRecord,
+  { scope, clock, runCallback: fork, publish, envelopeMs, unread, cost: inherited }: CallSide,
+) => {
+  const context = Fiber.getCurrent()?.context;
+  const ledger = context === undefined ? undefined : Context.getOrUndefined(context, CostLedger);
+  const cost = inherited?.cause ?? ledger?.open(record.name, JSON.stringify([record.runId, record.toolCallId])) ?? null;
+  const ownsCost = inherited?.owned ?? cost !== null;
+  const withCost = <A, E, R>(work: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
+    cost === null ? work : Effect.provideService(work, CurrentCost, cost);
+  const runCallback = (work: Effect.Effect<void>) => fork(withCost(work));
   let current = record;
   let cancellation: CallCancellation | null = null;
   const halting = Deferred.makeUnsafe<CallCancellation>();
@@ -290,6 +303,7 @@ export const makeAgentCall = (record: CallRecord, { scope, clock, runCallback, p
     resources.clear();
     update({ phase, detachable: false, detail: detail ?? current.detail, endedAt: clock.currentTimeMillisUnsafe() });
     Deferred.doneUnsafe(ended, Effect.void);
+    if (ownsCost && cost !== null) endCost(cost);
   };
   const makingWay = (): Effect.Effect<never> => Effect.forever(ways.await.pipe(Effect.andThen(ways.close), Effect.andThen(makeWay())));
   const progress: CallProgress = {
@@ -344,7 +358,7 @@ export const makeAgentCall = (record: CallRecord, { scope, clock, runCallback, p
       const offered: Effect.Effect<CallControlResult> = Effect.gen(function* () {
         if (claim !== 'none' || callEnded(current)) return { status: 'ended', detail: null } satisfies CallControlResult;
         claim = 'handing';
-        const answer = yield* take;
+        const answer = yield* withCost(take);
         if (answer.status === 'changed') {
           claim = 'handed';
           if (taking === offered) taking = undefined;
@@ -405,14 +419,17 @@ export const makeAgentCall = (record: CallRecord, { scope, clock, runCallback, p
       return { status: 'changed', detail: null };
     }),
     finish,
+    withCost,
     prepare: <A, E>(work: Effect.Effect<A, E>, refuse: (reason: string) => E): Effect.Effect<A, E> => {
       const refused = Effect.suspend(() => Effect.fail(refuse(current.detail ?? 'Stopped.')));
-      return (stopped() ? refused : Effect.raceFirst(work, Effect.andThen(stops, refused))).pipe(
-        Effect.onExit((exit) =>
-          Effect.sync(() => {
-            if (Exit.isSuccess(exit)) stage('waiting');
-            else if (!started && claim === 'none') finish(stopped() ? 'stopped' : 'failed');
-          }),
+      return withCost(
+        (stopped() ? refused : Effect.raceFirst(work, Effect.andThen(stops, refused))).pipe(
+          Effect.onExit((exit) =>
+            Effect.sync(() => {
+              if (Exit.isSuccess(exit)) stage('waiting');
+              else if (!started && claim === 'none') finish(stopped() ? 'stopped' : 'failed');
+            }),
+          ),
         ),
       );
     },
@@ -420,70 +437,72 @@ export const makeAgentCall = (record: CallRecord, { scope, clock, runCallback, p
       work: Effect.Effect<A, E>,
       hand: (preparing: Effect.Effect<A, E>) => Effect.Effect<CallTaking<B>>,
     ): Effect.Effect<CallAttended<A, B>, E> =>
-      Effect.uninterruptibleMask((restore) =>
-        Effect.suspend(() => {
-          const plain = Effect.map(restore(work), (value): CallAttended<A, B> => ({ handed: false, value }));
-          if (started || callEnded(current) || taking !== undefined || current.mode === 'background') return plain;
-          const prepared = Deferred.makeUnsafe<A, E>();
-          const answer = Deferred.makeUnsafe<CallAttended<A, B>, E>();
-          let preparation: Exit.Exit<A, E> | undefined;
-          let delivered = false;
-          const deliver = (exit: Exit.Exit<A, E>): void => {
-            delivered = true;
-            Deferred.doneUnsafe(
-              answer,
-              Exit.map(exit, (value): CallAttended<A, B> => ({ handed: false, value })),
-            );
-          };
-          const leave = (): void => {
-            taking = undefined;
-            if (!callEnded(current) && current.mode === 'foreground') update({ detachable: false });
-          };
-          claim = 'none';
-          taking = Effect.gen(function* () {
-            if (claim !== 'none' || callEnded(current)) return { status: 'ended', detail: null } satisfies CallControlResult;
-            claim = 'handing';
-            const taken = yield* hand(Deferred.await(prepared));
-            if ('refused' in taken) {
-              claim = 'none';
-              const left = preparation;
-              if (left !== undefined && !delivered) {
-                if (Exit.isFailure(left)) leave();
-                deliver(left);
-                if (Exit.isFailure(left)) finish(stopped() ? 'stopped' : 'failed');
-              } else if (left !== undefined && stopped()) finish('stopped');
-              return { status: 'unavailable', detail: taken.refused } satisfies CallControlResult;
-            }
-            claim = 'handed';
-            taking = undefined;
-            Deferred.doneUnsafe(answer, Effect.succeed<CallAttended<A, B>>({ handed: true, receipt: taken.receipt }));
-            return { status: 'changed', detail: null } satisfies CallControlResult;
-          });
-          update({ detachable: !stopped() });
-          return Effect.gen(function* () {
-            const preparing = yield* Effect.forkIn(
-              restore(work).pipe(
-                Effect.onExit((exit) =>
-                  Effect.sync(() => {
-                    preparation = exit;
-                    Deferred.doneUnsafe(prepared, exit);
-                    if (claim !== 'none') return;
-                    if (Exit.isFailure(exit)) leave();
-                    deliver(exit);
-                  }),
+      withCost(
+        Effect.uninterruptibleMask((restore) =>
+          Effect.suspend(() => {
+            const plain = Effect.map(restore(work), (value): CallAttended<A, B> => ({ handed: false, value }));
+            if (started || callEnded(current) || taking !== undefined || current.mode === 'background') return plain;
+            const prepared = Deferred.makeUnsafe<A, E>();
+            const answer = Deferred.makeUnsafe<CallAttended<A, B>, E>();
+            let preparation: Exit.Exit<A, E> | undefined;
+            let delivered = false;
+            const deliver = (exit: Exit.Exit<A, E>): void => {
+              delivered = true;
+              Deferred.doneUnsafe(
+                answer,
+                Exit.map(exit, (value): CallAttended<A, B> => ({ handed: false, value })),
+              );
+            };
+            const leave = (): void => {
+              taking = undefined;
+              if (!callEnded(current) && current.mode === 'foreground') update({ detachable: false });
+            };
+            claim = 'none';
+            taking = Effect.gen(function* () {
+              if (claim !== 'none' || callEnded(current)) return { status: 'ended', detail: null } satisfies CallControlResult;
+              claim = 'handing';
+              const taken = yield* withCost(hand(Deferred.await(prepared)));
+              if ('refused' in taken) {
+                claim = 'none';
+                const left = preparation;
+                if (left !== undefined && !delivered) {
+                  if (Exit.isFailure(left)) leave();
+                  deliver(left);
+                  if (Exit.isFailure(left)) finish(stopped() ? 'stopped' : 'failed');
+                } else if (left !== undefined && stopped()) finish('stopped');
+                return { status: 'unavailable', detail: taken.refused } satisfies CallControlResult;
+              }
+              claim = 'handed';
+              taking = undefined;
+              Deferred.doneUnsafe(answer, Effect.succeed<CallAttended<A, B>>({ handed: true, receipt: taken.receipt }));
+              return { status: 'changed', detail: null } satisfies CallControlResult;
+            });
+            update({ detachable: !stopped() });
+            return Effect.gen(function* () {
+              const preparing = yield* Effect.forkIn(
+                restore(work).pipe(
+                  Effect.onExit((exit) =>
+                    Effect.sync(() => {
+                      preparation = exit;
+                      Deferred.doneUnsafe(prepared, exit);
+                      if (claim !== 'none') return;
+                      if (Exit.isFailure(exit)) leave();
+                      deliver(exit);
+                    }),
+                  ),
                 ),
-              ),
-              scope,
-              { startImmediately: true },
-            );
-            const exit = yield* Effect.exit(restore(Deferred.await(answer)));
-            if (Exit.isFailure(exit) && claim === 'none') {
-              leave();
-              preparing.interruptUnsafe();
-            }
-            return yield* exit;
-          });
-        }),
+                scope,
+                { startImmediately: true },
+              );
+              const exit = yield* Effect.exit(restore(Deferred.await(answer)));
+              if (Exit.isFailure(exit) && claim === 'none') {
+                leave();
+                preparing.interruptUnsafe();
+              }
+              return yield* exit;
+            });
+          }),
+        ),
       ),
     run: <A, E, B = A>(options: {
       work: Effect.Effect<A, E>;
@@ -500,104 +519,107 @@ export const makeAgentCall = (record: CallRecord, { scope, clock, runCallback, p
       early?: boolean;
       handed?: boolean;
     }): Effect.Effect<A | B, E> =>
-      Effect.uninterruptibleMask(
-        Effect.fnUntraced(function* (waiting) {
-          if (started || callEnded(current))
-            return yield* (options.release ?? Effect.void).pipe(
-              Effect.andThen(
-                Effect.die(
-                  new Error(
-                    `Invocation ${current.runId}/${current.toolCallId} was already admitted or ended; read its existing result instead of executing it again.`,
+      withCost(
+        Effect.uninterruptibleMask(
+          Effect.fnUntraced(function* (waiting) {
+            if (started || callEnded(current))
+              return yield* (options.release ?? Effect.void).pipe(
+                Effect.andThen(
+                  Effect.die(
+                    new Error(
+                      `Invocation ${current.runId}/${current.toolCallId} was already admitted or ended; read its existing result instead of executing it again.`,
+                    ),
                   ),
                 ),
-              ),
+              );
+            started = true;
+            taking = undefined;
+            const owing = options.owe;
+            if (owing !== undefined) owe = () => withCost(owing());
+            options.entered?.();
+            if (scope.state._tag === 'Closed') {
+              yield* Effect.exit(options.release ?? Effect.void);
+              finish('stopped', 'The runtime that owns this invocation had already closed, so it did not run.');
+              return yield* Effect.interrupt;
+            }
+            if (options.handed === true) toBackground();
+            ahead = options.before !== undefined;
+            const result = Deferred.makeUnsafe<A | B, E>();
+            const known = Deferred.makeUnsafe<A | B, E>();
+            const executing = Effect.uninterruptibleMask(
+              Effect.fnUntraced(function* (restore) {
+                const proceed = Effect.suspend(() =>
+                  stopped()
+                    ? Effect.interrupt
+                    : admit(options.started).pipe(Effect.andThen(Effect.suspend(() => (stopped() ? Effect.interrupt : options.work)))),
+                );
+                const before = options.before;
+                const body =
+                  before === undefined
+                    ? proceed
+                    : before.pipe(
+                        Effect.ensuring(
+                          Effect.sync(() => {
+                            ahead = false;
+                          }),
+                        ),
+                        Effect.flatMap((answered) => (Option.isSome(answered) ? Effect.succeed(answered.value) : proceed)),
+                      );
+                const exit = yield* Effect.exit(stopped() ? Effect.interrupt : restore(body));
+                answered = true;
+                const resolved = stopped() ? yield* Effect.exit(options.stopped(current.detail ?? 'Stopped.')) : exit;
+                yield* Deferred.done(known, resolved);
+                const released = yield* Effect.exit(options.release ?? Effect.void);
+                const settled = Exit.isFailure(released) ? Exit.failCause(released.cause) : resolved;
+                canDetach = false;
+                const pending = handing;
+                if (pending !== undefined) yield* Deferred.await(pending);
+                const detached = current.mode === 'background';
+                const delivered = yield* Effect.exit(detached ? options.completed(settled) : Effect.void);
+                const answer = Exit.isFailure(delivered) ? Exit.failCause(delivered.cause) : settled;
+                finish(
+                  Exit.isFailure(released) || Exit.isFailure(delivered)
+                    ? 'unavailable'
+                    : stopped()
+                      ? 'stopped'
+                      : Exit.isSuccess(settled)
+                        ? (options.outcome?.(settled.value) ?? 'completed')
+                        : 'failed',
+                  Exit.isFailure(answer) ? Cause.pretty(answer.cause) : null,
+                );
+                if (!detached) yield* Deferred.done(result, answer);
+              }),
             );
-          started = true;
-          taking = undefined;
-          if (options.owe !== undefined) owe = options.owe;
-          options.entered?.();
-          if (scope.state._tag === 'Closed') {
-            yield* Effect.exit(options.release ?? Effect.void);
-            finish('stopped', 'The runtime that owns this invocation had already closed, so it did not run.');
-            return yield* Effect.interrupt;
-          }
-          if (options.handed === true) toBackground();
-          ahead = options.before !== undefined;
-          const result = Deferred.makeUnsafe<A | B, E>();
-          const known = Deferred.makeUnsafe<A | B, E>();
-          const executing = Effect.uninterruptibleMask(
-            Effect.fnUntraced(function* (restore) {
-              const proceed = Effect.suspend(() =>
-                stopped()
-                  ? Effect.interrupt
-                  : admit(options.started).pipe(Effect.andThen(Effect.suspend(() => (stopped() ? Effect.interrupt : options.work)))),
-              );
-              const before = options.before;
-              const body =
-                before === undefined
-                  ? proceed
-                  : before.pipe(
-                      Effect.ensuring(
-                        Effect.sync(() => {
-                          ahead = false;
-                        }),
-                      ),
-                      Effect.flatMap((answered) => (Option.isSome(answered) ? Effect.succeed(answered.value) : proceed)),
-                    );
-              const exit = yield* Effect.exit(stopped() ? Effect.interrupt : restore(body));
-              answered = true;
-              const resolved = stopped() ? yield* Effect.exit(options.stopped(current.detail ?? 'Stopped.')) : exit;
-              yield* Deferred.done(known, resolved);
-              const released = yield* Effect.exit(options.release ?? Effect.void);
-              const settled = Exit.isFailure(released) ? Exit.failCause(released.cause) : resolved;
-              canDetach = false;
-              const pending = handing;
-              if (pending !== undefined) yield* Deferred.await(pending);
-              const detached = current.mode === 'background';
-              const delivered = yield* Effect.exit(detached ? options.completed(settled) : Effect.void);
-              const answer = Exit.isFailure(delivered) ? Exit.failCause(delivered.cause) : settled;
-              finish(
-                Exit.isFailure(released) || Exit.isFailure(delivered)
-                  ? 'unavailable'
-                  : stopped()
-                    ? 'stopped'
-                    : Exit.isSuccess(settled)
-                      ? (options.outcome?.(settled.value) ?? 'completed')
-                      : 'failed',
-                Exit.isFailure(answer) ? Cause.pretty(answer.cause) : null,
-              );
-              if (!detached) yield* Deferred.done(result, answer);
-            }),
-          );
-          detach = () => {
-            Deferred.doneUnsafe(result, Effect.succeed(options.background()));
-          };
-          if (options.early === true && options.handed !== true) {
-            canDetach = true;
-            update({ detachable: current.mode === 'foreground' && !stopped() });
-          }
-          const running = yield* Effect.forkIn(executing, scope, { startImmediately: true });
-          if (!callEnded(current)) {
-            fiber = running;
-            keeping = yield* Effect.forkIn(makingWay(), scope, { startImmediately: true });
-          }
-          if (stopped() && !ahead) running.interruptUnsafe();
-          if (options.handed === true) return options.background();
-          if (options.detached === true && !callEnded(current)) {
-            const couldDetach = canDetach;
-            canDetach = true;
-            yield* handOff('agent');
-            if (admitted === null) canDetach = couldDetach;
-          }
-          const runStopped = Effect.flatMap(Deferred.await(halting), (said) =>
-            said.reason === 'run-abort' ? Deferred.await(known) : Effect.never,
-          );
-          const answer = yield* Effect.exit(waiting(Effect.raceFirst(Deferred.await(result), runStopped)));
-          if (Exit.isFailure(answer) && Cause.hasInterruptsOnly(answer.cause) && current.mode === 'foreground') {
-            stop(RUN_STOPPED, 'run-abort');
-          }
-          return yield* answer;
-        }),
+            detach = () => {
+              Deferred.doneUnsafe(result, Effect.succeed(options.background()));
+            };
+            if (options.early === true && options.handed !== true) {
+              canDetach = true;
+              update({ detachable: current.mode === 'foreground' && !stopped() });
+            }
+            const running = yield* Effect.forkIn(executing, scope, { startImmediately: true });
+            if (!callEnded(current)) {
+              fiber = running;
+              keeping = yield* Effect.forkIn(makingWay(), scope, { startImmediately: true });
+            }
+            if (stopped() && !ahead) running.interruptUnsafe();
+            if (options.handed === true) return options.background();
+            if (options.detached === true && !callEnded(current)) {
+              const couldDetach = canDetach;
+              canDetach = true;
+              yield* handOff('agent');
+              if (admitted === null) canDetach = couldDetach;
+            }
+            const runStopped = Effect.flatMap(Deferred.await(halting), (said) =>
+              said.reason === 'run-abort' ? Deferred.await(known) : Effect.never,
+            );
+            const answer = yield* Effect.exit(waiting(Effect.raceFirst(Deferred.await(result), runStopped)));
+            if (Exit.isFailure(answer) && Cause.hasInterruptsOnly(answer.cause) && current.mode === 'foreground') {
+              stop(RUN_STOPPED, 'run-abort');
+            }
+            return yield* answer;
+          }),
+        ),
       ),
   } as const;
 };

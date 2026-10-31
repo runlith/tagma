@@ -1,11 +1,12 @@
 import { note } from '@runlith/activity/Activity';
 import { toJson } from '@runlith/utils/json';
 import type { StructuredValue } from '@runlith/utils/object';
-import { Cause, Clock, Effect, Exit, Option, Result, Stream } from 'effect';
+import { Cause, Clock, Context, Effect, Exit, Option, Result, Stream } from 'effect';
+import { CostLedger, CurrentCost, endCost } from '@runlith/performance/CostLedger';
 import { permissionRefusal } from '../../modes/ApprovalMode';
 import type { AgentNote } from '../activities';
 import type { AgentCalls, CallHooks } from '../AgentCalls';
-import { type AgentCall, type CallTaking, WAIT_UNTOUCHED } from '../AgentCall';
+import { type AgentCall, type CallCost, type CallTaking, WAIT_UNTOUCHED } from '../AgentCall';
 import { callEnded, type CallControlResult } from '../callProgress';
 import { AgentToolFailed, type AgentToolFailure } from '../AgentFailure';
 import {
@@ -96,12 +97,42 @@ export const makeToolExecution = <TCtx>({
   readonly callHooks: (() => CallHooks) | undefined;
 }) => {
   const owned = new Map<string, TrackedCall<TCtx>>();
+  const costs = new Map<string, CallCost>();
   ledger.onEnded(() => {
+    for (const toolCallId of costs.keys()) finishCost(toolCallId);
+    costs.clear();
     owned.clear();
     order.clear();
   });
 
   const callOf = (toolCallId: string): AgentCall | undefined => owned.get(toolCallId)?.call ?? calls?.get({ runId: run.runId, toolCallId });
+
+  const finishCost = (toolCallId: string): void => {
+    const cost = costs.get(toolCallId);
+    if (cost?.owned === true && callOf(toolCallId) === undefined) endCost(cost.cause);
+  };
+
+  const costing = <A, E, R>(toolCallId: string, name: string, work: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
+    Effect.withFiber((fiber) => {
+      const call = callOf(toolCallId);
+      if (call !== undefined) return call.withCost(work);
+      let cost = costs.get(toolCallId);
+      const inherited = run.mode === 'hosted' ? Context.get(fiber.context, CurrentCost) : null;
+      if (inherited !== null && cost?.cause !== inherited) cost = { cause: inherited, owned: false };
+      if (cost === undefined) {
+        const ledger = Context.getOrUndefined(fiber.context, CostLedger);
+        if (ledger === undefined) return work;
+        cost = { cause: ledger.open(name, JSON.stringify([run.runId, toolCallId])), owned: true };
+      }
+      costs.set(toolCallId, cost);
+      return Effect.provideService(work, CurrentCost, cost.cause).pipe(
+        Effect.onExit((exit) =>
+          Effect.sync(() => {
+            if (Exit.isFailure(exit)) finishCost(toolCallId);
+          }),
+        ),
+      );
+    });
 
   const track = (call: AgentPermissionQuestion): TrackedCall<TCtx> | null => {
     const held = owned.get(call.toolCallId);
@@ -115,6 +146,7 @@ export const makeToolExecution = <TCtx>({
       threadId: threadId ?? undefined,
       name: call.name,
       input: call.input,
+      cost: costs.get(call.toolCallId),
     });
     const tracked = {
       call: opened,
@@ -718,6 +750,9 @@ export const makeToolExecution = <TCtx>({
     );
 
   return {
+    costing,
+    finishCost,
+
     preparing: <A, E>(call: AgentPermissionQuestion, reading: Effect.Effect<A, E>, stopped: (reason: string) => E): Effect.Effect<A, E> => {
       const tracked = track(call);
       return tracked === null ? reading : tracked.call.prepare(reading, stopped);

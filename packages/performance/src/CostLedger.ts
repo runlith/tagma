@@ -178,6 +178,8 @@ const makeCostLedger = Effect.fnUntraced(function* (input: { readonly capacity: 
   });
 });
 
+export const endCost = (cause: CostCause): void => cause[root].close();
+
 export const costLedgerLayer = (input: { readonly capacity: number }) => Layer.effect(CostLedger, makeCostLedger(input));
 
 export const rootCost = <A, E, R>(name: string, work: Effect.Effect<A, E, R>, id?: string): Effect.Effect<A, E, R> =>
@@ -188,7 +190,7 @@ export const rootCost = <A, E, R>(name: string, work: Effect.Effect<A, E, R>, id
     return Effect.acquireUseRelease(
       Effect.sync(() => ledger.open(name, id)),
       (cause) => Effect.provideService(work, CurrentCost, cause),
-      (cause) => Effect.sync(cause[root].close),
+      (cause) => Effect.sync(() => endCost(cause)),
     );
   });
 

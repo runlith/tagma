@@ -23,6 +23,7 @@ import { AgentRunState, type AgentToolRecord } from './AgentRunState';
 import { AgentRuntimePolicy, type AgentRule } from './policy/AgentRuntimePolicy';
 import type { AgentOneStep, AgentStep, AgentStepIntent } from './AgentStep';
 import type { AgentToolDoor } from './door/AgentToolDoor';
+import type { ToolRunMode } from './door/ToolRun';
 import { declaredConfirmations } from './door/DeclaredConfirmations';
 import { openToolDoor } from './door/openToolDoor';
 import { ToolJudge } from './door/openToolDoor';
@@ -163,7 +164,7 @@ export const makeAgentRunner = Effect.fnUntraced(function* ({
       return yield* Effect.uninterruptible(
         Effect.gen(function* () {
           const held = yield* Scope.fork(runs);
-          const door = runDoor(agent, input, calls, () => scope, input.onGuides, yield* ToolSettlements);
+          const door = runDoor(agent, input, calls, () => scope, input.onGuides, yield* ToolSettlements, 'hosted');
           const unheard = input.arrivals === undefined ? () => {} : heard(calls, input.runId, input.arrivals);
           const unbound = calls.bind(input.runId, input.stop);
           yield* Scope.addFinalizer(
@@ -383,6 +384,7 @@ const runDoor = <TCtx>(
   live: () => AgentScope<TCtx>,
   onGuides: ToolGuides | undefined,
   settlements: CallSettlements | undefined,
+  mode: ToolRunMode = 'native',
 ): AgentToolDoor<TCtx> =>
   openToolDoor<TCtx>(
     input.runId,
@@ -401,6 +403,7 @@ const runDoor = <TCtx>(
     !input.approval.interactive,
     [],
     settlements,
+    mode,
   );
 function forkedAside(hook: AgentAsideHook, runs: Scope.Scope, runId: string, stop: RunStop): AgentAsideHook {
   return (aside) =>

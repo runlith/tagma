@@ -2,7 +2,7 @@ import { Clock, Effect, type Exit, FiberSet, Queue, Stream } from 'effect';
 import type { DeclaredCancellationCause } from '@runlith/executions/protocol/call';
 import type { AgentHostFailed, AgentToolFailure } from './AgentFailure';
 import type { AgentCallQuestion, AgentCallVerdict, AgentToolOutcome } from './door/types';
-import { makeAgentCall, type AgentCall, type Arrival } from './AgentCall';
+import { makeAgentCall, type AgentCall, type Arrival, type CallCost } from './AgentCall';
 import { makeThreadClaims } from './door/CallOrder';
 import {
   CALL_ENVELOPE_MS,
@@ -87,6 +87,7 @@ export const makeAgentCalls = Effect.fnUntraced(function* ({
         threadId?: string;
         name: string;
         input: unknown;
+        cost?: CallCost;
       },
     ): AgentCall => {
       const key = keyOf(input);
@@ -111,7 +112,7 @@ export const makeAgentCalls = Effect.fnUntraced(function* ({
           detail: null,
           executions: [],
         },
-        { scope, clock, runCallback, publish, envelopeMs, unread: () => arrivals.get(input.runId)?.() ?? null },
+        { scope, clock, runCallback, publish, envelopeMs, unread: () => arrivals.get(input.runId)?.() ?? null, cost: input.cost },
       );
       calls.set(key, call);
       publish(call.record);

@@ -16,7 +16,7 @@ import type { PermissionOutcome, Raised } from '../../permissions/vocabulary';
 import { makeToolAdmission } from './ToolAdmission';
 import { makeToolExecution } from './ToolExecution';
 import { type ToolGuides, makeToolRules } from './ToolRules';
-import { ToolRun } from './ToolRun';
+import { ToolRun, type ToolRunMode } from './ToolRun';
 import type { AgentCallHooks, AgentToolResolution } from './types';
 
 export function openToolDoor<TCtx>(
@@ -36,8 +36,9 @@ export function openToolDoor<TCtx>(
   unattended: boolean = false,
   resolutions: readonly AgentToolResolution[] = [],
   settlements: CallSettlements | undefined = undefined,
+  mode: ToolRunMode = 'native',
 ): AgentToolDoor<TCtx> {
-  const run = new ToolRun<TCtx>(runId, caller, ctx, runState, unattended, settlements);
+  const run = new ToolRun<TCtx>(runId, caller, ctx, runState, unattended, settlements, mode);
   const ledger = makeCallLedger({ runId, generation, resolutions });
   const order = makeCallOrder(
     calls === undefined || run.threadId === undefined ? undefined : { runId, threadId: run.threadId, claims: calls.claims },
