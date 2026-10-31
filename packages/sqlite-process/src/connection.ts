@@ -52,7 +52,7 @@ export type ProcessConnection = Connection & {
   readonly quietSince: () => number | null;
   readonly retire: Effect.Effect<void, SqlError>;
   readonly handover: Effect.Effect<void, SqlError>;
-  readonly programs: (batch: ProgramBatch) => Effect.Effect<Committed, SqlError>;
+  readonly programs: (batch: ProgramBatch) => Effect.Effect<Effect.Effect<Committed, SqlError>, SqlError>;
 };
 
 const MAX_BUSY_TIMEOUT = 2_147_483_647;
@@ -282,12 +282,12 @@ export const openConnection = Effect.fnUntraced(function* (processes: ProcessPoo
       );
     });
 
-  const call = (
+  const sent = (
     ask: SqliteAsk,
     operation: string,
     cost: CostCause | null = null,
     writer: WriterFrame | null = null,
-  ): Effect.Effect<SqliteSaid, SqlError> =>
+  ): Effect.Effect<Effect.Effect<SqliteSaid, SqlError>, SqlError> =>
     Effect.suspend(() => {
       if (gone !== null) return Effect.fail(gone);
       const cell = Deferred.makeUnsafe<SqliteSaid, SqlError>();
@@ -307,10 +307,19 @@ export const openConnection = Effect.fnUntraced(function* (processes: ProcessPoo
       }
       outstanding.openUnsafe();
       const answer = Deferred.await(cell).pipe(Effect.ensuring(Effect.sync(() => answered(ask.id))));
-      return lane !== undefined && ask._tag === 'Run'
-        ? Effect.onInterrupt(answer, () => (Deferred.isDoneUnsafe(cell) ? Effect.void : abandon()))
-        : Effect.uninterruptible(answer);
+      return Effect.succeed(
+        lane !== undefined && ask._tag === 'Run'
+          ? Effect.onInterrupt(answer, () => (Deferred.isDoneUnsafe(cell) ? Effect.void : abandon()))
+          : Effect.uninterruptible(answer),
+      );
     });
+
+  const call = (
+    ask: SqliteAsk,
+    operation: string,
+    cost: CostCause | null = null,
+    writer: WriterFrame | null = null,
+  ): Effect.Effect<SqliteSaid, SqlError> => Effect.flatten(sent(ask, operation, cost, writer));
 
   const answeredWrong = (said: SqliteSaid, message: string, operation: string) =>
     said._tag === 'Failed'
@@ -483,8 +492,8 @@ export const openConnection = Effect.fnUntraced(function* (processes: ProcessPoo
       Effect.andThen(
         options.checkConnection ?? Effect.void,
         Effect.suspend(() =>
-          call({ _tag: 'Programs', id: (counter += 1), sentAt: Date.now(), ...batch }, 'programs').pipe(
-            Effect.flatMap((said) =>
+          Effect.map(sent({ _tag: 'Programs', id: (counter += 1), sentAt: Date.now(), ...batch }, 'programs'), (answer) =>
+            Effect.flatMap(answer, (said) =>
               said._tag === 'Committed' ? Effect.succeed(said) : Effect.fail(answeredWrong(said, 'Failed to commit programs', 'programs')),
             ),
           ),

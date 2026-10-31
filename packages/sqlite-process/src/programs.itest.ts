@@ -54,6 +54,35 @@ it.live('a guard conflict rolls back only its own program, and the rest of its b
   }),
 );
 
+it.live('a transaction waiting for the writer takes it between program batches while programs stay queued', () =>
+  Effect.gen(function* () {
+    const { sql, connections, programs } = yield* opened;
+    yield* sql`CREATE TABLE t (n INTEGER)`;
+    const holding = yield* Deferred.make<void>();
+    const released = yield* Deferred.make<void>();
+    const holder = yield* Effect.forkChild(
+      sql.withTransaction(Effect.andThen(Deferred.succeed(holding, undefined), Deferred.await(released))),
+    );
+    yield* Deferred.await(holding);
+    const queued = yield* Effect.forEach(
+      Array.from({ length: 640 }, (_, n) => n),
+      (n) =>
+        Effect.forkChild(programs.submit({ operation: 'test', program: inserted('t', n), synchronous: null }), { startImmediately: true }),
+    );
+    while ((yield* connections.writer).waiting === 0) yield* Effect.yieldNow;
+    const between = yield* Effect.forkChild(sql.withTransaction(sql`INSERT INTO t VALUES (-1)`), { startImmediately: true });
+    while ((yield* connections.writer).waiting < 2) yield* Effect.yieldNow;
+    yield* Deferred.succeed(released, undefined);
+    yield* Fiber.join(holder);
+    yield* Fiber.join(between);
+    yield* Effect.forEach(queued, Fiber.join);
+    const [order] = yield* sql<{ before: number; after: number }>`SELECT
+      (SELECT count(*) FROM t WHERE rowid < (SELECT rowid FROM t WHERE n = -1)) AS before,
+      (SELECT count(*) FROM t WHERE rowid > (SELECT rowid FROM t WHERE n = -1)) AS after`;
+    expect({ before: (order?.before ?? 0) > 0, after: (order?.after ?? 0) > 0 }).toEqual({ before: true, after: true });
+  }),
+);
+
 it.live('a COMMIT that fails answers every program of its batch with the failure and keeps none of them', () =>
   Effect.gen(function* () {
     const store = yield* opened;
