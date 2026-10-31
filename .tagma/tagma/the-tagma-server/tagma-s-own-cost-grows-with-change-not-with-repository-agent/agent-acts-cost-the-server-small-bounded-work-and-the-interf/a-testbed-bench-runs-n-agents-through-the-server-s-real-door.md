@@ -21,7 +21,7 @@ Workload, open-loop arrivals:
 - subscribers as at the incident's longest stall: `thread.changes` ×8, `artifacts.thread` ×8, `worktrees` ×6, and `commands`, `threads`, `calls`, `views`, `graph`, `holdings`, `checkout`, `tree` ×4 each; also a run with none;
 - N = 0, 10 and 50, and a 5× rate stress run; payload size points as the spec's Proof lists them.
 
-Each run reports: server CPU and allocation per act, statements and write units per act (from the ledger task once it lands; until then from the total `sql.execute` and `Store.transaction` counts), writer wait and hold p50/p99, loop delay p99 and stalls over 100 ms, collection pauses (`BUN_JSC_logGC`), RSS and heap over time, and the three interface boundaries: graph block open, thread open to the first usable frame, list update from its causing commit.
+Each run reports: server CPU and allocation per act, statements and write units per act from the causal ledger, with retention gaps and unfinished tails explicit, writer wait and hold p50/p99, loop delay p99 and stalls over 100 ms, collection pauses (`BUN_JSC_logGC`), RSS and heap over time, and the three interface boundaries: graph block open, thread open to the first usable frame, list update from its causing commit.
 
 A memory census of the idle and the loaded bench server: heap after full collection by retainer (heap snapshot), native and allocator memory.
 
