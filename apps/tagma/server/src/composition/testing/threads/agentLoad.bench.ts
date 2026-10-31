@@ -1559,7 +1559,7 @@ const program = Effect.gen(function* () {
             slowPages.push({ meta: meta(slow), total: slow.total, returned: slow.spans.length, next: slow.next });
             candidates.push(
               ...slow.spans.filter(
-                (span) => span.wallTime <= endWall && span.payload.attributes.threadId === (born[0]?.threadId ?? observer),
+                (span) => span.wallTime <= endWall && span.payload.attributes['thread.id'] === (born[0]?.threadId ?? observer),
               ),
             );
             after = slow.next ?? undefined;
