@@ -30,7 +30,9 @@ import type { ThreadStore } from '../rows/threadRow.js';
 import { journalHead } from '../../threads/journal/base.js';
 import { threadInbox } from '../../threads/store/tables.js';
 import { spentCallKey, spentEpoch, threadCall } from '../../threads/store/calls.js';
-import { inUnit, stored, type StoredFailure } from '../../platform/store/crossing.js';
+import { inProgram, inUnit, stored, type StoredFailure } from '../../platform/store/crossing.js';
+import { programOf, programWriteUnit } from '../../platform/store/programs.js';
+import { planHead } from '../../threads/journal/log.js';
 import { failedAs } from '../../threads/contract/service/failure.js';
 import type { WriteSet } from '../../platform/contract/service/writes.js';
 import { kernelStorageWrites } from '../rows/storageWrites.js';
@@ -225,6 +227,31 @@ export const makeTransitions = Effect.fnUntraced(function* ({
       return;
     }
     const call = callParts(evidence.call);
+    const program = programOf(unit);
+    if (program !== null) {
+      yield* program.write(
+        db.insert(threadCall).values({
+          ...call,
+          threadId,
+          digest: write.digest,
+          result: { answer: write.result ?? null },
+          at: new Date(yield* Clock.currentTimeMillis),
+        }),
+        1,
+      );
+      if (call.operation !== REPORT_OPERATION) return;
+      const marks = and(eq(threadCall.actor, call.actor), eq(threadCall.operation, REPORT_OPERATION));
+      return yield* program.write(
+        db
+          .delete(threadCall)
+          .where(
+            and(
+              marks,
+              sql`${threadCall.key} not in (select ${threadCall.key} from ${threadCall} where ${marks} order by rowid desc limit ${REPORT_WINDOW})`,
+            ),
+          ),
+      );
+    }
     yield* unit.run(
       db.insert(threadCall).values({
         ...call,
@@ -258,19 +285,52 @@ export const makeTransitions = Effect.fnUntraced(function* ({
         : Effect.flatMap(stored('readAt')(units.read((unit) => Effect.exit(snapshot(unit, threadId, work)))), (exit) => exit),
     writeAt: (threadId, work) => inUnit(units, writes(), 'writeAt', (unit) => hold(unit, threadId, work)),
     writeAtIn: (threadId, work, tx) => hold(tx, threadId, work),
+    programAt: (threadId, prepared, identity, work) =>
+      inProgram(units, writes(), identity, 'programAt', (program) =>
+        Effect.gen(function* () {
+          const { version } = prepared;
+          const standing = versionColumns(threadId);
+          yield* stored('programAt')(
+            program.guard(
+              db
+                .select({ id: threadRow.id })
+                .from(threadRow)
+                .where(
+                  and(
+                    eq(threadRow.id, threadId),
+                    sql`${standing.foldRev} = ${version.foldRev}`,
+                    sql`${standing.inheritRev} = ${version.inheritRev}`,
+                    sql`${standing.head} = ${version.head}`,
+                    eq(threadRow.updatedAt, prepared.row.updatedAt),
+                  ),
+                ),
+              1,
+            ),
+          );
+          planHead(program, threadId, version.head);
+          return yield* work({ row: prepared.row, version, tx: programWriteUnit(program) });
+        }),
+      ),
     writeFold: (threadId, write, unit) =>
       Object.keys(write.fold).length === 0
         ? Effect.void
-        : failedAs(
-            'writeFold',
-            Effect.gen(function* () {
-              const row = yield* unit.run(db.select({ id: threadRow.id }).from(threadRow).where(eq(threadRow.id, threadId)).get());
-              if (row === undefined) return;
-              yield* threads.folds.write('transition', unit, threadId, write.fold, write.standing, new Set());
-            }),
-          ),
+        : programOf(unit) !== null
+          ? failedAs('writeFold', threads.folds.plan(programOf(unit)!, threadId, write.fold, write.standing))
+          : failedAs(
+              'writeFold',
+              Effect.gen(function* () {
+                const row = yield* unit.run(db.select({ id: threadRow.id }).from(threadRow).where(eq(threadRow.id, threadId)).get());
+                if (row === undefined) return;
+                yield* threads.folds.write('transition', unit, threadId, write.fold, write.standing, new Set());
+              }),
+            ),
     readRecord: (threadId, evidence, tx) =>
-      failedAs('readRecord', tx === undefined ? units.read((unit) => lookup(unit, threadId, evidence)) : lookup(tx, threadId, evidence)),
+      failedAs(
+        'readRecord',
+        tx === undefined || (programOf(tx) !== null && 'call' in evidence)
+          ? units.read((unit) => lookup(unit, threadId, evidence))
+          : lookup(tx, threadId, evidence),
+      ),
     writeRecord: (threadId, evidence, write, tx) => failedAs('writeRecord', record(tx, threadId, evidence, write)),
     appliedSeq: (runId) =>
       stored('appliedSeq')(

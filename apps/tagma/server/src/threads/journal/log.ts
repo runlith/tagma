@@ -10,7 +10,8 @@ import type {
 } from '@runlith/agent/thread/storage/eventLog';
 import { asc, and, desc, eq, gt, inArray, lte, sql } from 'drizzle-orm';
 import { MachineStore, type StoreFailure } from '../../platform/contract/service/store.js';
-import { MachineUnits, type Unit, type WriteUnit } from '../../platform/contract/service/units.js';
+import { MachineUnits, type ProgramUnit, type Unit, type WriteUnit } from '../../platform/contract/service/units.js';
+import { programOf, unplannable } from '../../platform/store/programs.js';
 import { thread, threadEntry } from '../store/kernel.js';
 import { recordFacts } from '../../thread-record/facts.js';
 import { journalProjectOf, threadBase, threadEvent, threadEventIdentity } from '../store/journal.js';
@@ -18,11 +19,24 @@ import { payloadField } from '../store/fields.js';
 import { foldedBody, foldedEntryId, restoredFact } from './foldedFacts.js';
 import { RolloutWriterFailed, RolloutWriting } from './rolloutWriter.js';
 import { RestedRollouts } from '../contract/service/rested.js';
-import { conversationAppended } from './conversationIndex.js';
+import { conversationAppended, conversationMarked, speaks } from './conversationIndex.js';
 import { type StoredFailure, stored } from '../../platform/store/crossing.js';
 import { byPosition, type EventArm, eventArmsOf, journalHead, layersOf, merged } from './base.js';
 
 export type JournalRange = { readonly rows: readonly ThreadEventRow[]; readonly through: number; readonly missing: boolean };
+
+export type PlannedFact = ThreadEventRow & { readonly kind: string };
+
+const planned = new WeakMap<ProgramUnit<'machine'>, Map<string, { head: number; readonly facts: PlannedFact[] }>>();
+
+export const planHead = (program: ProgramUnit<'machine'>, threadId: string, head: number): void => {
+  const heads = planned.get(program) ?? new Map();
+  planned.set(program, heads);
+  heads.set(threadId, { head, facts: [] });
+};
+
+export const plannedFacts = (program: ProgramUnit<'machine'>, threadId: string): readonly PlannedFact[] | null =>
+  planned.get(program)?.get(threadId)?.facts ?? null;
 
 export type SqliteThreadJournal = Effect.Success<typeof makeSqliteThreadJournal>;
 
@@ -227,8 +241,40 @@ export const makeSqliteThreadJournal = Effect.gen(function* () {
     return yield* opened.failure;
   });
 
+  const plannedAppend = Effect.fnUntraced(function* (program: ProgramUnit<'machine'>, event: ThreadEventInsert, tx: WriteUnit<'machine'>) {
+    const plan = planned.get(program)?.get(event.threadId);
+    if (plan === undefined || floor?.refusal(event.threadId) !== undefined)
+      return yield* unplannable(program, 'an append with no planned head');
+    if (speaks(event.payload)) return yield* unplannable(program, 'a spoken fact reindexes the conversation');
+    const position = plan.head + 1;
+    const held = floor?.held(event.threadId);
+    if (held !== undefined && position <= held) return yield* unplannable(program, 'the rollout already holds the planned position');
+    yield* program.write(
+      db
+        .insert(threadEvent)
+        .values({ threadId: event.threadId, id: event.id, kind: event.kind, payload: event.payload, position })
+        .onConflictDoNothing(),
+      1,
+    );
+    if (plan.facts.length === 0)
+      yield* program.write(
+        db
+          .update(thread)
+          .set({ updatedAt: new Date(yield* Clock.currentTimeMillis) })
+          .where(eq(thread.id, event.threadId)),
+      );
+    yield* conversationMarked(db, program, event.threadId, position);
+    const appended = { threadId: event.threadId, position, id: event.id, kind: event.kind, payload: event.payload };
+    plan.head = position;
+    plan.facts.push(appended);
+    yield* carry(appended, tx);
+    return appended;
+  });
+
   const append = Effect.fn('ThreadStorage.append')(function* (event: ThreadEventInsert, tx: WriteUnit<'machine'>) {
     yield* Effect.annotateCurrentSpan({ threadId: event.threadId, events: 1 });
+    const program = programOf(tx);
+    if (program !== null) return yield* plannedAppend(program, event, tx);
     const refusal = floor?.refusal(event.threadId);
     if (refusal !== undefined) {
       const standing = yield* standingOf(event, tx);

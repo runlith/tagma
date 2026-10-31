@@ -1,8 +1,12 @@
-import { Effect } from 'effect';
+import { Clock, Effect } from 'effect';
+import { eq } from 'drizzle-orm';
 import { ThreadStorageFailed } from '@runlith/agent/thread/persisted';
 import type { ThreadAtomicPatch } from '@runlith/agent/thread/storage/aggregate';
 import { MachineStore } from '../../platform/contract/service/store.js';
-import type { WriteUnit } from '../../platform/contract/service/units.js';
+import type { ProgramUnit, WriteUnit } from '../../platform/contract/service/units.js';
+import { unplannable } from '../../platform/store/programs.js';
+import { thread } from '../../threads/store/kernel.js';
+import { plannedFacts } from '../../threads/journal/log.js';
 import { ThreadRecords } from '../../thread-record/contract/service/records.js';
 import { applyPatch } from '../patch.js';
 import { makeCacheObservationStore } from '../models/cacheObservations.js';
@@ -56,6 +60,24 @@ export const makeFoldWriter = Effect.fnUntraced(function* (input: { readonly rea
       yield* history.project(unit, id);
       for (const observation of cacheObservations ?? []) yield* observations.append(id, observation, unit);
       yield* applyPatch(db, records, models, unit, id, columns);
+    }),
+    plan: Effect.fnUntraced(function* (program: ProgramUnit<'machine'>, id: string, fold: ThreadAtomicPatch, standing: number) {
+      const { history: next, covered, placements, cacheObservations, ...columns } = fold;
+      if ((cacheObservations?.length ?? 0) > 0) return yield* unplannable(program, 'cache observations');
+      const patched = Object.entries(columns).filter(([, value]) => value !== undefined);
+      if (patched.some(([key]) => key !== 'contextReading')) return yield* unplannable(program, 'a patch beyond the context reading');
+      if (next !== undefined && covered != null && (covered.from > standing || covered.through < standing))
+        return yield* unplannable(program, 'a history fold that covers no standing position');
+      const facts = plannedFacts(program, id) ?? [];
+      yield* history.plan(program, id, next, covered == null ? standing : covered.through, standing, facts);
+      yield* entries.plan(program, id, placements ?? [], facts, standing);
+      yield* program.write(
+        db
+          .update(thread)
+          .set({ ...Object.fromEntries(patched), updatedAt: new Date(yield* Clock.currentTimeMillis) })
+          .where(eq(thread.id, id)),
+        1,
+      );
     }),
   };
 });

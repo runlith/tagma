@@ -152,6 +152,7 @@ export const makeEntryFold = Effect.fnUntraced(function* ({ reads }: { readonly 
   return {
     layered: stored.layered,
     place: stored.place,
+    plan: stored.plan,
     seed: stored.seed,
     forget: stored.forget,
     transcript: Effect.fnUntraced(function* (unit: Unit<'machine'>, id: string) {

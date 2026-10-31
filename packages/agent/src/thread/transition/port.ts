@@ -59,6 +59,12 @@ export interface ThreadTransitionStorage<TTx, TWrite extends TTx = TTx> {
     work: (at: ThreadHold<TWrite>) => Effect.Effect<T, E>,
     tx: TWrite,
   ): Effect.Effect<T | undefined, E | ThreadPortFailure>;
+  programAt?<T, E>(
+    threadId: string,
+    prepared: Prepared,
+    identity: string,
+    work: (at: ThreadHold<TWrite>) => Effect.Effect<T, E>,
+  ): Effect.Effect<T | null | undefined, E | ThreadPortFailure>;
   writeFold(threadId: string, write: ThreadFoldWrite, tx: TWrite): Effect.Effect<void, ThreadPortFailure>;
   readRecord(threadId: string, evidence: Evidence, tx?: TTx): Effect.Effect<RecordReading, ThreadPortFailure>;
   writeRecord(threadId: string, evidence: Evidence, write: RecordWrite, tx: TWrite): Effect.Effect<void, ThreadPortFailure>;

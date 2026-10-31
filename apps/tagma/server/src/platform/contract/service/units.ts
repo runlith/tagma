@@ -12,8 +12,8 @@ export type ProgramQuery = Effect.Effect<unknown, StoreFailure> & {
 
 export type ProgramUnit<Brand extends StoreBrand> = {
   readonly store: StoreIdentity;
-  write(statement: ProgramQuery, changes?: number): Effect.Effect<void, StoreFailure | ProgramConflict>;
-  guard(statement: ProgramQuery, rows: number): Effect.Effect<void, StoreFailure | ProgramConflict>;
+  write(statement: ProgramQuery, changes?: number): Effect.Effect<void, StoreFailure>;
+  guard(statement: ProgramQuery, rows: number): Effect.Effect<void, StoreFailure>;
   afterCommit(effect: Effect.Effect<void>): Effect.Effect<void>;
   readonly [programBrand]: (brand: Brand) => Brand;
 };

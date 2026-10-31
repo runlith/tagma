@@ -10,7 +10,8 @@ import { and, asc, eq, gt, gte, sql } from 'drizzle-orm';
 import { rowsPerStatement } from '../../platform/store/binds.js';
 import type { StoredFailure } from '../../platform/store/crossing.js';
 import { MachineStore } from '../../platform/contract/service/store.js';
-import type { Unit, WriteUnit } from '../../platform/contract/service/units.js';
+import type { ProgramQuery, ProgramUnit, Unit, WriteUnit } from '../../platform/contract/service/units.js';
+import { unplannable } from '../../platform/store/programs.js';
 import { threadHistoryItem, threadLog } from '../store/thread.js';
 import { threadEvent } from '../../threads/store/journal.js';
 import { messageFieldType } from '../../threads/store/fields.js';
@@ -199,6 +200,59 @@ export const makeHistoryStore = Effect.fnUntraced(function* ({ reads }: { readon
     Effect.withSpan('ThreadStorage.checkpoint.load', (_unit, id) => ({ attributes: { threadId: id, fold: 'history' } })),
   );
 
+  const changedRows = Effect.fnUntraced(function* (id: string, stored: ThreadHistory, next: ThreadHistory) {
+    let shared = 0;
+    const common = Math.min(stored.length, next.length);
+    while (shared < common && Object.is(stored[shared], next[shared])) shared += 1;
+    const statements: ProgramQuery[] = [];
+    let written = 0;
+    if (stored.length === next.length) {
+      let last = next.length - 1;
+      while (last >= shared && Object.is(stored[last], next[last])) last -= 1;
+      const changed = next.slice(shared, last + 1);
+      const measures = yield* measured(changed);
+      for (let at = 0; at < changed.length; at += 1) {
+        statements.push(
+          db
+            .update(threadHistoryItem)
+            .set(measuredRow(changed[at]!, measures[at]!))
+            .where(and(eq(threadHistoryItem.threadId, id), eq(threadHistoryItem.ord, shared + at))),
+        );
+        written += 1;
+      }
+      return { statements, shared, written };
+    }
+    if (shared < stored.length) {
+      statements.push(db.delete(threadHistoryItem).where(and(eq(threadHistoryItem.threadId, id), gte(threadHistoryItem.ord, shared))));
+      written += stored.length - shared;
+    }
+    const added = next.slice(shared);
+    const measures = yield* measured(added);
+    for (let at = 0; at < added.length; at += ROWS) {
+      const rows = added.slice(at, at + ROWS);
+      statements.push(
+        db
+          .insert(threadHistoryItem)
+          .values(
+            rows.map((message, offset) => ({ threadId: id, ord: shared + at + offset, ...measuredRow(message, measures[at + offset]!) })),
+          ),
+      );
+    }
+    return { statements, shared, written: written + added.length };
+  });
+
+  const guided = (id: string, held: Held | null, stored: ThreadHistory, next: ThreadHistory, shared: number) => {
+    const previous = held?.history ?? EMPTY;
+    let retained = previous === stored ? shared : 0;
+    if (previous !== stored)
+      while (retained < Math.min(previous.length, next.length) && Object.is(previous[retained], next[retained])) retained += 1;
+    return Effect.try({
+      try: () =>
+        retained === previous.length && held !== null ? held.guidance.append(next.slice(retained)) : new GuidanceIndex().append(next),
+      catch: (cause) => unreadable(id, `guidance: ${String(cause)}`),
+    });
+  };
+
   const restedGuidance = new WeakMap<ThreadHistory, GuidanceIndex>();
   const toldStates = new WeakMap<object, GuidanceState>();
 
@@ -308,67 +362,65 @@ export const makeHistoryStore = Effect.fnUntraced(function* ({ reads }: { readon
         const stored = held?.stored ?? EMPTY;
         forget(unit, id);
         const claim = live.claim(id, unit);
-        let shared = 0;
-        const common = Math.min(stored.length, next.length);
-        while (shared < common && Object.is(stored[shared], next[shared])) shared += 1;
-        let written = 0;
-
-        if (stored.length === next.length) {
-          let last = next.length - 1;
-          while (last >= shared && Object.is(stored[last], next[last])) last -= 1;
-          const changed = next.slice(shared, last + 1);
-          const measures = yield* measured(changed);
-          for (let at = 0; at < changed.length; at += 1) {
-            yield* unit.run(
-              db
-                .update(threadHistoryItem)
-                .set(measuredRow(changed[at]!, measures[at]!))
-                .where(and(eq(threadHistoryItem.threadId, id), eq(threadHistoryItem.ord, shared + at))),
-            );
-            written += 1;
-          }
-        } else {
-          if (shared < stored.length) {
-            yield* unit.run(
-              db.delete(threadHistoryItem).where(and(eq(threadHistoryItem.threadId, id), gte(threadHistoryItem.ord, shared))),
-            );
-            written += stored.length - shared;
-          }
-          const added = next.slice(shared);
-          const measures = yield* measured(added);
-          for (let at = 0; at < added.length; at += ROWS) {
-            const rows = added.slice(at, at + ROWS);
-            yield* unit.run(
-              db
-                .insert(threadHistoryItem)
-                .values(
-                  rows.map((message, offset) => ({
-                    threadId: id,
-                    ord: shared + at + offset,
-                    ...measuredRow(message, measures[at + offset]!),
-                  })),
-                ),
-            );
-          }
-          written += added.length;
-        }
+        const rows = yield* changedRows(id, stored, next);
+        for (const statement of rows.statements) yield* unit.run(statement);
         yield* unit.run(db.update(threadLog).set({ historyThrough: through }).where(eq(threadLog.threadId, id)));
-        const previous = held?.history ?? EMPTY;
-        let retained = previous === stored ? shared : 0;
-        if (previous !== stored)
-          while (retained < Math.min(previous.length, next.length) && Object.is(previous[retained], next[retained])) retained += 1;
-        const guidance = yield* Effect.try({
-          try: () =>
-            retained === previous.length && held !== null ? held.guidance.append(next.slice(retained)) : new GuidanceIndex().append(next),
-          catch: (cause) => unreadable(id, `guidance: ${String(cause)}`),
-        });
-        const standing: HistoryState = { stored: next, cursor: through, through, guidance };
+        const standing: HistoryState = {
+          stored: next,
+          cursor: through,
+          through,
+          guidance: yield* guided(id, held, stored, next, rows.shared),
+        };
         heldIn(unit).set(id, { ...standing, history: next });
         yield* unit.afterCommit(Effect.sync(() => live.settle(claim, next, standing)));
-        yield* Effect.annotateCurrentSpan({ rows: written + 1, messages: next.length });
+        yield* Effect.annotateCurrentSpan({ rows: rows.written + 1, messages: next.length });
       },
       Effect.withSpan('ThreadStorage.checkpoint.write', (_unit, id) => ({ attributes: { threadId: id, fold: 'history' } })),
     ),
+    plan: Effect.fnUntraced(function* (
+      program: ProgramUnit<'machine'>,
+      id: string,
+      next: ThreadHistory | undefined,
+      through: number,
+      standing: number,
+      facts: readonly { readonly position: number; readonly kind: string; readonly payload: unknown }[],
+    ) {
+      const warm = live.held(id);
+      if (warm === null || !live.current(id, warm.entry) || warm.standing.through !== standing)
+        return yield* unplannable(program, 'the history is not held at the planned head');
+      const { stored, cursor } = warm.standing;
+      let quiet = cursor;
+      if (next === undefined) {
+        if (warm.history !== stored) return yield* unplannable(program, 'the held history moved past its stored rows');
+        quiet = standing;
+        for (const fact of facts) {
+          const payload = payloadOf(fact.payload);
+          if (payload === null) return yield* unplannable(program, `event ${fact.position} is not a shape the history fold reads`);
+          if (moveThreadHistory({ kind: fact.kind, payload }) !== null) break;
+          quiet = fact.position;
+        }
+        if (quiet === cursor) return;
+      }
+      yield* program.guard(
+        db
+          .select({ id: threadLog.threadId })
+          .from(threadLog)
+          .where(and(eq(threadLog.threadId, id), eq(threadLog.historyThrough, cursor))),
+        1,
+      );
+      const claim = live.claim(id, program);
+      if (next === undefined) {
+        yield* program.write(db.update(threadLog).set({ historyThrough: quiet }).where(eq(threadLog.threadId, id)), 1);
+        const moved: HistoryState = { ...warm.standing, cursor: quiet, through: Math.max(warm.standing.through, quiet) };
+        return yield* program.afterCommit(Effect.sync(() => live.settle(claim, warm.history, moved)));
+      }
+      const rows = yield* changedRows(id, stored, next);
+      for (const statement of rows.statements) yield* program.write(statement);
+      yield* program.write(db.update(threadLog).set({ historyThrough: through }).where(eq(threadLog.threadId, id)), 1);
+      const held = { ...warm.standing, history: warm.history };
+      const fresh: HistoryState = { stored: next, cursor: through, through, guidance: yield* guided(id, held, stored, next, rows.shared) };
+      yield* program.afterCommit(Effect.sync(() => live.settle(claim, next, fresh)));
+    }),
     seed: Effect.fnUntraced(function* (unit: Unit<'machine'>, id: string, history: ThreadHistory) {
       const measures = yield* measured(history);
       for (let at = 0; at < history.length; at += ROWS) {

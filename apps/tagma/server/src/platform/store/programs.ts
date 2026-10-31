@@ -3,10 +3,18 @@ import { CurrentWriter, type WriterMetrics } from '@runlith/performance/WriterMe
 import type { Programs } from '@runlith/sqlite-process/programs';
 import { sql } from 'drizzle-orm';
 import type { EffectSQLiteBunDatabase } from 'drizzle-orm/effect-sqlite-bun';
-import { Cause, Effect, Exit } from 'effect';
+import { Cause, Data, Effect, Exit } from 'effect';
 import { classifySqliteError, SqlError } from 'effect/sql/SqlError';
 import type { StoreBrand, StoreFailure, StoreIdentity } from '../contract/service/store.js';
-import { ProgramConflict, type ProgramQuery, type ProgramUnit, programUnitOf } from '../contract/service/units.js';
+import {
+  ProgramConflict,
+  type ProgramQuery,
+  type ProgramUnit,
+  programUnitOf,
+  type Unit,
+  type WriteUnit,
+  writeUnitOf,
+} from '../contract/service/units.js';
 import type { WriteSet } from '../contract/service/writes.js';
 import { type Building, ProgramOpen, UnitLife } from './life.js';
 import type { TableMoves } from './moves.js';
@@ -15,6 +23,42 @@ import { checkStatement, movedTables, UnitWrites } from './writes.js';
 
 const same = (left: StoreIdentity | null, right: StoreIdentity): boolean =>
   left !== null && left.path === right.path && left.generation === right.generation;
+
+class ProgramUnplannable extends Data.TaggedError('ProgramUnplannable')<{ readonly store: string; readonly reason: string }> {
+  override get message(): string {
+    return `${this.store}: this work cannot be planned as a program (${this.reason}), so its interactive unit writes it`;
+  }
+}
+
+type ProgramWrite<Brand extends StoreBrand> = WriteUnit<Brand> & { readonly program: ProgramUnit<Brand> };
+
+export const programWriteUnit = <Brand extends StoreBrand>(program: ProgramUnit<Brand>): ProgramWrite<Brand> => ({
+  ...writeUnitOf<Brand>({
+    store: program.store,
+    run: () => unplannable(program, 'a read through the program unit'),
+    afterCommit: program.afterCommit,
+  }),
+  program,
+});
+
+export const programOf = <Brand extends StoreBrand>(unit: Unit<Brand>): ProgramUnit<Brand> | null =>
+  'program' in unit ? (unit as ProgramWrite<Brand>).program : null;
+
+export const unplannable = <Brand extends StoreBrand>(program: ProgramUnit<Brand>, reason: string): Effect.Effect<never> =>
+  Effect.die(new ProgramUnplannable({ store: program.store.path, reason }));
+
+const fellBack = (cause: Cause.Cause<unknown>): boolean =>
+  cause.reasons.length > 0 &&
+  cause.reasons.every(
+    (reason) =>
+      (Cause.isDieReason(reason) && reason.defect instanceof ProgramUnplannable) ||
+      (Cause.isFailReason(reason) && reason.error instanceof ProgramConflict),
+  );
+
+export const planned = <A, E>(attempt: Effect.Effect<A, E>): Effect.Effect<A | null, E> =>
+  Effect.flatMap(Effect.exit(attempt), (exit) =>
+    Exit.isSuccess(exit) ? Effect.succeed(exit.value) : fellBack(exit.cause) ? Effect.succeed(null) : Effect.failCause(exit.cause),
+  );
 
 const UNIQUE = /^SQLITE_CONSTRAINT_(UNIQUE|PRIMARYKEY)$/;
 
@@ -42,7 +86,7 @@ const joined = <Brand extends StoreBrand>(
   const counted = (statement: number, expected: number, actual: number) =>
     expected === actual
       ? Effect.void
-      : Effect.fail(new ProgramConflict({ store: identity.path, operation: set.operation, identity: key, statement, expected, actual }));
+      : Effect.die(new ProgramConflict({ store: identity.path, operation: set.operation, identity: key, statement, expected, actual }));
   return programUnitOf<Brand>({
     store: identity,
     write: (statement, changes) =>
@@ -111,6 +155,13 @@ const submitted = Effect.fnUntraced(function* <Brand extends StoreBrand, A, E>(
             ? db.run(sql`release program`)
             : Effect.andThen(db.run(sql`rollback to program`), db.run(sql`release program`)),
         ),
+    ).pipe(
+      Effect.catchCause((cause: Cause.Cause<E | StoreFailure>): Effect.Effect<never, E | StoreFailure | ProgramConflict> => {
+        const conflict = cause.reasons.find((reason) => Cause.isDieReason(reason) && reason.defect instanceof ProgramConflict);
+        return conflict !== undefined && Cause.isDieReason(conflict)
+          ? Effect.fail(conflict.defect as ProgramConflict)
+          : Effect.failCause(cause);
+      }),
     );
   }
   return yield* rootCost(

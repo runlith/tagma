@@ -126,6 +126,7 @@ export const transition = Effect.fnUntraced(function* <A, TWrite extends TTx, E 
 ): Effect.fn.Return<TransitionOutcome<A>, E | ThreadPortFailure> {
   let declared = plan.declared;
   const place = deps.lane.place();
+  const transitions = deps.transitions;
   for (let attempt = 0; ; attempt += 1) {
     const ahead =
       attempt === 0
@@ -136,14 +137,20 @@ export const transition = Effect.fnUntraced(function* <A, TWrite extends TTx, E 
             ),
           )
         : null;
+    const interactive = deps.transitions.writeAt(threadId, (at) =>
+      Effect.flatMap(ahead === null ? prepareTransition(deps, threadId, declared, at.tx) : Effect.succeed(ahead), (prepared) =>
+        applyPrepared(deps, at, prepared, plan, call.key),
+      ),
+    );
     const admitted = yield* deps.lane.enter(
       threadId,
       place,
-      deps.transitions.writeAt(threadId, (at) =>
-        Effect.flatMap(ahead === null ? prepareTransition(deps, threadId, declared, at.tx) : Effect.succeed(ahead), (prepared) =>
-          applyPrepared(deps, at, prepared, plan, call.key),
-        ),
-      ),
+      ahead === null || transitions.programAt === undefined
+        ? interactive
+        : Effect.flatMap(
+            transitions.programAt(threadId, ahead, evidenceKey(call.key.evidence), (at) => applyPrepared(deps, at, ahead, plan, call.key)),
+            (programmed) => (programmed === null ? interactive : Effect.succeed(programmed)),
+          ),
     );
     if ('stalled' in admitted) {
       return admitted.stalled === 'none' && attempt > 0 ? { stalled: 'none' as const } : { stalled: 'uncertain' as const, key: call.key };

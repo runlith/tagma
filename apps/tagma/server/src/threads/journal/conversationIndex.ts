@@ -4,7 +4,7 @@ import { KEEP_WARM_SIGNAL_TYPE } from '@runlith/agent/transcript/keepWarm';
 import { USER_MESSAGE_SIGNAL_TYPE } from '@runlith/agent/contracts';
 import type { ThreadEventPayloadValue } from '@runlith/agent/thread/storage/eventLog';
 import type { StoreDb } from '../../platform/contract/service/store.js';
-import type { WriteUnit } from '../../platform/contract/service/units.js';
+import type { ProgramUnit, WriteUnit } from '../../platform/contract/service/units.js';
 import { MESSAGE_FTS, threadConversation, threadMessage, threadMessageGap, threadQuietRun } from '../store/conversation.js';
 import type { ConversationRole } from '../contract/wire/conversation.js';
 import { threadRecord } from '../../thread-record/store/table.js';
@@ -326,6 +326,25 @@ const place = Effect.fnUntraced(function* (db: Db, unit: Write, threadId: string
   }
   if (entry?.type === 'message' && typeof entry.id === 'string') yield* message(db, unit, threadId, event.position, entry, entry.id);
 });
+
+export const conversationMarked = (db: Db, program: ProgramUnit<'machine'>, threadId: string, at: number) =>
+  Effect.andThen(
+    program.write(
+      db
+        .update(threadConversation)
+        .set({
+          through: sql`case when ${threadConversation.through} = ${at - 1} then ${at} else ${threadConversation.through} end`,
+          seen: sql`max(${threadConversation.seen}, ${at})`,
+        })
+        .where(eq(threadConversation.threadId, threadId)),
+    ),
+    program.write(
+      db
+        .insert(threadConversation)
+        .values({ threadId, through: at === 1 ? 1 : 0, seen: at })
+        .onConflictDoNothing(),
+    ),
+  );
 
 export const conversationAppended = Effect.fnUntraced(function* (db: Db, unit: Write, threadId: string, event: IndexedEvent) {
   const at = event.position;

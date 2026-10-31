@@ -12,10 +12,12 @@ import { and, asc, desc, eq, gt, inArray, lt, lte, notInArray, sql, type SQL } f
 import { pagesOf, rowsPerStatement } from '../../platform/store/binds.js';
 import type { StoredFailure } from '../../platform/store/crossing.js';
 import { MachineStore } from '../../platform/contract/service/store.js';
-import type { Unit } from '../../platform/contract/service/units.js';
+import { MachineUnits, type ProgramUnit, type Unit } from '../../platform/contract/service/units.js';
+import { unplannable } from '../../platform/store/programs.js';
 import { runIdOf, threadLog, typeOf } from '../store/thread.js';
 import { ENTRY_OPEN_QUESTION_INDEX, threadEntry } from '../../threads/store/kernel.js';
-import { threadEvent, threadEventIdentity } from '../../threads/store/journal.js';
+import { threadBase, threadEvent, threadEventIdentity } from '../../threads/store/journal.js';
+import type { PlannedFact } from '../../threads/journal/log.js';
 import { entryField, payloadField } from '../../threads/store/fields.js';
 import { movesSaid, SAID_ENTRY_TYPES, saidOfRuns } from '../../threads/list/said.js';
 import { bodyInFold, foldedEntryId, foldedToolFact, restoredFact, toolEventIdentity } from '../../threads/journal/foldedFacts.js';
@@ -29,6 +31,7 @@ export type TranscriptRows = Effect.Success<typeof makeTranscriptRows>;
 
 export const makeTranscriptRows = Effect.gen(function* () {
   const { db } = yield* MachineStore;
+  const units = yield* MachineUnits;
   const kinds = yield* ThreadEntryKinds;
   const parsed = new WeakMap<Unit<'machine'>, Map<string, ThreadTranscript>>();
 
@@ -251,6 +254,120 @@ export const makeTranscriptRows = Effect.gen(function* () {
       }
       if (said.size > 0) yield* unit.run(saidOfRuns(db, id, [...said]));
       return written;
+    }),
+    plan: Effect.fnUntraced(function* (
+      program: ProgramUnit<'machine'>,
+      id: string,
+      placements: readonly ThreadEntryPlacement[],
+      facts: readonly PlannedFact[],
+      through: number,
+    ) {
+      if (placements.some((placement) => placement.kind === 'mark' || placement.kind === 'withdraw'))
+        return yield* unplannable(program, 'a withdrawal or a rewind mark');
+      const replaced = placements.flatMap((placement) => (placement.kind === 'replace' ? [placement.entry.id] : []));
+      const based = sql`exists (select 1 from ${threadBase} where ${threadBase.threadId} = ${id} or ${threadBase.sourceId} = ${id})`;
+      const lowest = sql<number>`coalesce((select min(${threadEntry.ord}) from ${threadEntry} where ${threadEntry.threadId} = ${id}), 0)`;
+      const highest = sql<number>`coalesce((select max(${threadEntry.ord}) from ${threadEntry} where ${threadEntry.threadId} = ${id}), -1)`;
+      const read = yield* units.read((unit) =>
+        Effect.gen(function* () {
+          const [span] = yield* unit.run(
+            db.all<{ low: number; high: number; layered: number }>(sql`select ${lowest} as low, ${highest} as high, ${based} as layered`),
+          );
+          const old = replaced.length === 0 ? [] : yield* chunkedRows(unit, id, threadEntry.entryId, replaced);
+          const held: { readonly entry: ThreadTranscriptEntry; readonly position: number; readonly payload: ThreadEventPayloadValue }[] =
+            [];
+          for (const entry of old) {
+            const identity = toolEventIdentity(entry);
+            if (identity === null) continue;
+            const event = yield* unit.run(
+              db
+                .select({ position: threadEvent.position, payload: threadEvent.payload })
+                .from(threadEvent)
+                .where(
+                  and(
+                    eq(threadEvent.threadId, id),
+                    lte(threadEvent.position, through),
+                    sql`${payloadField(threadEvent.payload, 'entry.id')} is not null`,
+                    sql`${threadEventIdentity(threadEvent.payload)} = ${identity}`,
+                    bodyInFold(threadEvent.payload),
+                  ),
+                )
+                .orderBy(desc(threadEvent.position))
+                .get(),
+            );
+            if (event !== undefined) held.push({ entry, ...event });
+          }
+          return { span, held };
+        }),
+      );
+      if (read.span === undefined || read.span.layered === 1) return yield* unplannable(program, 'a layered transcript');
+      const { low, high } = read.span;
+      yield* program.guard(
+        db
+          .select({ id: threadLog.threadId })
+          .from(threadLog)
+          .where(
+            and(
+              eq(threadLog.threadId, id),
+              eq(threadLog.entriesThrough, through),
+              sql`not ${based}`,
+              sql`${lowest} = ${low}`,
+              sql`${highest} = ${high}`,
+            ),
+          ),
+        1,
+      );
+      for (const { entry, position, payload } of read.held) {
+        if (foldedEntryId(payload) !== entry.id) return yield* unplannable(program, `folded event ${position} names another entry`);
+        yield* program.write(
+          db
+            .update(threadEvent)
+            .set({ payload: restoredFact(payload, entry) })
+            .where(and(eq(threadEvent.threadId, id), eq(threadEvent.position, position), eq(threadEvent.payload, payload))),
+          1,
+        );
+      }
+      let next = high + 1;
+      let first = low - 1;
+      const said = new Set<string>();
+      for (const placement of placements) {
+        if (placement.kind === 'mark' || placement.kind === 'withdraw') continue;
+        const appended = placement.kind === 'append';
+        const runId = runIdOf(placement.entry);
+        if (runId !== null && movesSaid(placement.entry, appended)) said.add(runId);
+        if (placement.kind === 'replace') {
+          yield* program.write(
+            db
+              .update(threadEntry)
+              .set({ entry: placement.entry, runId, type: typeOf(placement.entry) })
+              .where(and(eq(threadEntry.threadId, id), eq(threadEntry.entryId, placement.entry.id))),
+            1,
+          );
+        } else {
+          const ord = appended ? next++ : first--;
+          yield* program.write(
+            db
+              .insert(threadEntry)
+              .values({ threadId: id, ord, entryId: placement.entry.id, runId, type: typeOf(placement.entry), entry: placement.entry }),
+            1,
+          );
+        }
+        const fact = facts.findLast(
+          (each) => (each.payload as { readonly entry?: { readonly id?: unknown } }).entry?.id === placement.entry.id,
+        );
+        if (fact !== undefined && placement.entry.type === 'tool' && foldedEntryId(fact.payload) === null)
+          yield* program.write(
+            db
+              .update(threadEvent)
+              .set({ payload: foldedToolFact(fact.payload, placement.entry as ThreadToolEntry) })
+              .where(and(eq(threadEvent.threadId, id), eq(threadEvent.position, fact.position))),
+            1,
+          );
+      }
+      if (said.size > 0) yield* program.write(saidOfRuns(db, id, [...said]));
+      const last = facts.at(-1);
+      if (last !== undefined)
+        yield* program.write(db.update(threadLog).set({ entriesThrough: last.position }).where(eq(threadLog.threadId, id)), 1);
     }),
     seed: (unit: Unit<'machine'>, id: string, transcript: ThreadTranscript): Effect.Effect<void, StoredFailure> =>
       transcript.length === 0
