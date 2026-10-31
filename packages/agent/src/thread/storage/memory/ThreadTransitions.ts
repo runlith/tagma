@@ -195,10 +195,10 @@ export const inMemoryThreadTransitions = ({ memory }: MemoryStorageInput): Threa
 
     opened: () => Effect.void,
 
-    revised: (threadIds, tx, after) =>
+    revised: (_threadId, tx, after) =>
       Effect.suspend(() => {
         const from = memory.units.revision();
-        return tx.afterCommit(after(new Map(threadIds.map((threadId) => [threadId, { from, to: from + 1 }]))));
+        return tx.afterCommit(after({ from, to: from + 1 }));
       }),
   };
 };

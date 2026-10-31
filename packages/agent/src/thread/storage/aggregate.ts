@@ -145,7 +145,6 @@ export class ThreadDeleteStillSettlingError extends Data.TaggedError('ThreadDele
 
 export interface ThreadAggregateStorage<TTx, TWrite extends TTx = TTx> {
   transaction<T, E>(work: (tx: TWrite) => Effect.Effect<T, E>): Effect.Effect<T, E | ThreadPortFailure>;
-  program?<T, E>(identity: string, work: (tx: TWrite) => Effect.Effect<T, E>): Effect.Effect<T | null, E | ThreadPortFailure>;
 
   find(id: string, tx?: TTx): Effect.Effect<ThreadRow | undefined, ThreadPortFailure>;
   findOwned(id: string, ownerId: string, tx?: TTx): Effect.Effect<ThreadRow | undefined, ThreadPortFailure>;

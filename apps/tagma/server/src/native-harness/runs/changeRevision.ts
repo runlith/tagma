@@ -1,6 +1,5 @@
 import { Effect } from 'effect';
-import { eq, inArray, sql } from 'drizzle-orm';
-import { among } from '../../platform/store/rows.js';
+import { eq, sql } from 'drizzle-orm';
 import type { ThreadChangeRevision } from '@runlith/agent/thread/state';
 import type { ThreadTransitionStorage } from '@runlith/agent/thread/transition/port';
 import { MachineStore, type StoreDb } from '../../platform/contract/service/store.js';
@@ -24,36 +23,32 @@ export const makeChangeRevisions = Effect.gen(function* () {
   const read = (unit: Unit<'machine'>, threadId: string) => Effect.map(unit.run(current.get({ threadId })), (row) => row?.revision ?? 0);
   return {
     revision: (threadId, tx) => failedAs('revision', tx === undefined ? units.read((unit) => read(unit, threadId)) : read(tx, threadId)),
-    opened: (threadIds, tx) =>
-      threadIds.length === 0
-        ? Effect.void
-        : failedAs(
-            'opened',
-            Effect.asVoid(
-              tx.run(
-                db
-                  .update(threadRev)
-                  .set({ changeOpen: sql`${threadRev.changeRev}` })
-                  .where(inArray(threadRev.threadId, among([...threadIds]))),
-              ),
-            ),
+    opened: (threadId, tx) =>
+      failedAs(
+        'opened',
+        Effect.asVoid(
+          tx.run(
+            db
+              .update(threadRev)
+              .set({ changeOpen: sql`${threadRev.changeRev}` })
+              .where(eq(threadRev.threadId, threadId)),
           ),
-    revised: (threadIds, tx, after) =>
-      threadIds.length === 0
-        ? Effect.void
-        : failedAs(
-            'revised',
-            returned(
-              db,
-              tx,
-              db
-                .insert(threadRev)
-                .values(threadIds.map((threadId) => ({ threadId, changeRev: 1 })))
-                .onConflictDoUpdate({ target: threadRev.threadId, set: { changeRev: sql`${threadRev.changeRev} + 1` } })
-                .returning({ threadId: threadRev.threadId, from: threadRev.changeOpen, to: threadRev.changeRev }),
-              (rows) => after(revisionsOf(rows)),
-            ),
-          ),
+        ),
+      ),
+    revised: (threadId, tx, after) =>
+      failedAs(
+        'revised',
+        returned(
+          db,
+          tx,
+          db
+            .insert(threadRev)
+            .values({ threadId, changeRev: 1 })
+            .onConflictDoUpdate({ target: threadRev.threadId, set: { changeRev: sql`${threadRev.changeRev} + 1` } })
+            .returning({ from: threadRev.changeOpen, to: threadRev.changeRev }),
+          (rows) => after(revisionOf(rows)),
+        ),
+      ),
   } satisfies Revisions;
 });
 
@@ -68,6 +63,7 @@ function returned(
   return Effect.flatMap(unit.run(db.values(statement)), (rows) => unit.afterCommit(after(rows)));
 }
 
-function revisionsOf(rows: ReturnedRows): ReadonlyMap<string, ThreadChangeRevision> {
-  return new Map(rows.map(([threadId, from, to]) => [String(threadId), { from: Number(from), to: Number(to) }]));
+function revisionOf(rows: ReturnedRows): ThreadChangeRevision {
+  const [from, to] = rows[0] ?? [0, 0];
+  return { from: Number(from), to: Number(to) };
 }

@@ -126,8 +126,8 @@ const setup = Effect.fn('testing.commandNotices')(function* () {
       appliedSeq: (runId) => inner.appliedSeq(runId),
       spend: (threadId, at, tx) => inner.spend(threadId, at, tx),
       revision: (threadId, tx) => inner.revision(threadId, tx),
-      opened: (threadIds, tx) => inner.opened(threadIds, tx),
-      revised: (threadIds, tx, after) => inner.revised(threadIds, tx, after),
+      opened: (threadId, tx) => inner.opened(threadId, tx),
+      revised: (threadId, tx, after) => inner.revised(threadId, tx, after),
     };
   }
   type RunStore = Effect.Success<ReturnType<typeof threadRunStore>>;

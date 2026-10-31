@@ -377,7 +377,6 @@ export const externalHarnessesLayer = Layer.effectContext(
       }),
       native.threads,
       statePublished,
-      harness.threads,
       inbox,
       yield* AttachmentFiles,
       held,

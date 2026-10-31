@@ -3,7 +3,7 @@ import type * as Tracer from 'effect/Tracer';
 import type { SpanPayload } from './protocol/records.js';
 
 export const TRACE_BUFFER_MS = 2_000;
-export const TRACE_BUFFER_BYTES = 256 * 1024;
+const TRACE_BUFFER_BYTES = 256 * 1024;
 export const KEEP_ONE_TRACE_IN = 100;
 
 export type TraceKeep = 'slow' | 'failed' | 'stalled' | 'hash';
@@ -26,7 +26,6 @@ export type SampledSpan = {
   readonly unit: string | null;
   readonly slow: boolean;
   readonly byteSize: number;
-  readonly upperBytes?: number | undefined;
 };
 
 export type TraceHandover = {
@@ -52,8 +51,6 @@ export type TraceSamplerCounts = {
 type Held = {
   spans: Array<SampledSpan>;
   ends: Array<number>;
-  unweighed: Array<SampledSpan>;
-  weighed: number;
   bytes: number;
   failed: boolean;
   slow: boolean;
@@ -65,8 +62,6 @@ type Held = {
 type Parcel = {
   readonly spans: Array<SampledSpan>;
   readonly ends: Array<number>;
-  readonly unweighed: Array<SampledSpan>;
-  readonly weighed: number;
   readonly bytes: number;
   readonly lastEndedAtMs: number;
 };
@@ -212,7 +207,7 @@ export class TraceSampler {
     }
     hold(unit, span, atMs, crossed);
     if (span.spanId === unit.id) this.settle(traceId, trace, unit, atMs);
-    else if (overLimit(unit)) this.overflow(traceId, trace, unit);
+    else if (unit.bytes > TRACE_BUFFER_BYTES) this.overflow(traceId, trace, unit);
   }
 
   private placeInWindow(traceId: string, trace: Trace, span: SampledSpan, atMs: number, crossed: boolean): void {
@@ -286,7 +281,7 @@ export class TraceSampler {
     switch (into.decided) {
       case null:
         absorb(into, parcel);
-        if (overLimit(into)) this.overflow(traceId, trace, into);
+        if (into.bytes > TRACE_BUFFER_BYTES) this.overflow(traceId, trace, into);
         return;
       case 'joined':
         this.join(traceId, trace, this.enclosingOf(into), parcel, atMs);
@@ -320,7 +315,7 @@ export class TraceSampler {
   }
 
   private due(window: Held, atMs: number): boolean {
-    return atMs - window.openedAtMs > TRACE_BUFFER_MS || overLimit(window);
+    return window.bytes > TRACE_BUFFER_BYTES || atMs - window.openedAtMs > TRACE_BUFFER_MS;
   }
 
   private enclosingOf(unit: Unit): Unit | undefined {
@@ -358,8 +353,6 @@ function emptyHeld(openedAtMs: number): Held {
   return {
     spans: [],
     ends: [],
-    unweighed: [],
-    weighed: 0,
     bytes: 0,
     failed: false,
     slow: false,
@@ -372,11 +365,7 @@ function emptyHeld(openedAtMs: number): Held {
 function hold(held: Held, span: SampledSpan, atMs: number, crossed: boolean): void {
   held.spans.push(span);
   held.ends.push(atMs);
-  if (span.upperBytes === undefined) held.bytes += span.byteSize;
-  else {
-    held.bytes += span.upperBytes;
-    held.unweighed.push(span);
-  }
+  held.bytes += span.byteSize;
   held.lastEndedAtMs = Math.max(held.lastEndedAtMs, atMs);
   if (span.failed) held.failed = true;
   if (span.slow) held.slow = true;
@@ -411,41 +400,28 @@ function takeCrossing(held: Held): Array<SampledSpan> {
   const spans: Array<SampledSpan> = [];
   const ends: Array<number> = [];
   const kept: Array<SampledSpan> = [];
-  const pending = new Set(held.unweighed.slice(held.weighed));
   let bytes = 0;
   for (let index = 0; index < held.spans.length; index += 1) {
     const span = held.spans[index];
     if (span === undefined) continue;
     if (taken.has(span)) {
       kept.push(span);
-      pending.delete(span);
       continue;
     }
     spans.push(span);
     ends.push(held.ends[index] ?? held.lastEndedAtMs);
-    bytes += pending.has(span) ? span.upperBytes! : span.byteSize;
+    bytes += span.byteSize;
   }
   held.spans = spans;
   held.ends = ends;
-  held.unweighed = [...pending];
-  held.weighed = 0;
   held.bytes = bytes;
   return kept;
 }
 
 function detach(held: Held): Parcel {
-  const parcel = {
-    spans: held.spans,
-    ends: held.ends,
-    unweighed: held.unweighed,
-    weighed: held.weighed,
-    bytes: held.bytes,
-    lastEndedAtMs: held.lastEndedAtMs,
-  };
+  const parcel = { spans: held.spans, ends: held.ends, bytes: held.bytes, lastEndedAtMs: held.lastEndedAtMs };
   held.spans = [];
   held.ends = [];
-  held.unweighed = [];
-  held.weighed = 0;
   held.bytes = 0;
   held.crossing = null;
   return parcel;
@@ -455,25 +431,12 @@ function absorb(into: Held, parcel: Parcel): void {
   if (into.spans.length === 0) {
     into.spans = parcel.spans;
     into.ends = parcel.ends;
-    into.unweighed = parcel.unweighed;
-    into.weighed = parcel.weighed;
   } else {
     for (const span of parcel.spans) into.spans.push(span);
     for (const endedAtMs of parcel.ends) into.ends.push(endedAtMs);
-    for (let index = parcel.weighed; index < parcel.unweighed.length; index += 1) {
-      into.unweighed.push(parcel.unweighed[index]!);
-    }
   }
   into.bytes += parcel.bytes;
   into.lastEndedAtMs = Math.max(into.lastEndedAtMs, parcel.lastEndedAtMs);
-}
-
-function overLimit(held: Held): boolean {
-  while (held.bytes > TRACE_BUFFER_BYTES && held.weighed < held.unweighed.length) {
-    const span = held.unweighed[held.weighed++]!;
-    held.bytes += span.byteSize - span.upperBytes!;
-  }
-  return held.bytes > TRACE_BUFFER_BYTES;
 }
 
 function keepsByHash(traceId: string, keepOneTraceIn: number): boolean {

@@ -639,19 +639,7 @@ export class ProtocolSteps {
         turns: projected.turns,
         sent: stamped(base.sent, link.row.client.requests, step.state.requests, at),
       };
-      const typed =
-        written !== null &&
-        plan.within === undefined &&
-        trims.length === 0 &&
-        (plan.reports?.length ?? 0) + resolved.length === 0 &&
-        settled.length === 0 &&
-        ended.length === 0 &&
-        (plan.started?.length ?? 0) + begun.length === 0 &&
-        measurements.length + retries.length === 0 &&
-        asides.length + withdrawals.length === 0 &&
-        !compacted;
       const body = Effect.fnUntraced(function* (current: ExternalSession, unit: WriteUnit<'machine'>) {
-        if (typed) yield* journal.claim(link.threadId, unit);
         const within = plan.within === undefined ? { facet: current, row } : yield* plan.within(current, unit, row);
         const seated = settledFacet(within.facet, events, within, link.profile.reportedModel, at);
         yield* rows.write(unit, link.threadId, seated.row);
@@ -674,10 +662,6 @@ export class ProtocolSteps {
             yield* UNWRITTEN.opened(unit, [journal.fated({ id: turn.turn, threadId: link.threadId }, 'returned', released)]);
         }
         const closed = yield* journaled.closed(unit);
-        if (typed) {
-          if (seated.facet !== current) yield* journal.unseen(link.threadId, unit);
-          yield* journal.settle(link.threadId, unit);
-        }
         return { facet: seated.facet, value: { seated, closed } };
       });
       const identity = `${link.threadId}:${step.state.incarnation}:${step.state.cursor.offset}:${step.state.counter}`;
@@ -699,7 +683,7 @@ export class ProtocolSteps {
       }
       for (const ending of ended) yield* activities.end(ending);
       this.introductions.recorded(link.threadId, projected.messages ?? [], projected.closed.length > 0 && projected.turns.length === 0);
-      if (!typed && (written !== null || settled.length > 0 || (plan.reports?.length ?? 0) + resolved.length > 0))
+      if (written !== null || settled.length > 0 || (plan.reports?.length ?? 0) + resolved.length > 0)
         yield* journal.publish(link.threadId);
       return {
         begun: (plan.started ?? []).filter((started) => started.kind === 'turn').map((started) => started.turn),

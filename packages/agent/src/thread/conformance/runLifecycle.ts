@@ -5,7 +5,6 @@ import { readThreadEvents, threadUserMessageEvent, type ThreadEventPayload } fro
 import { mintThreadRunId } from '../identity';
 import { THREAD_RUN_AWAITING_QUESTION_STAGE, type ThreadRunStopIntent } from '../storage/runs';
 import type { ThreadWriteTx } from '../ThreadPorts';
-import type { ThreadStateChange } from '../state';
 import type { ThreadRunRef } from '../run/ThreadRunLedger';
 import { userMessageEntryId } from '../../transcript/entryNames';
 import { KEEP_WARM_SIGNAL_TYPE } from '../../transcript/keepWarm';
@@ -20,32 +19,6 @@ export function describeRunLifecycleActs<TTx, TWrite extends TTx = TTx, R = neve
   test: Tester<Scope.Scope | R>,
 ): void {
   describe(`${name}: run lifecycle acts over the storage`, () => {
-    test(
-      'a beat writes the going run and hands its thread one heartbeat change over the revision the beat advanced',
-      Effect.fnUntraced(function* () {
-        const world = yield* lifecycleWorld(open);
-        const { run } = started(yield* world.lifecycle.create(world.startFrom, APPROVAL, { kind: 'turn' }));
-        const handed: ThreadStateChange[] = [];
-        world.changes.project((change) => Effect.sync(() => void handed.push(change)));
-        const at = new Date((yield* Clock.currentTimeMillis) + 60_000);
-        yield* world.lifecycle.beat([{ id: run.id, threadId: run.threadId }], at);
-        const ours = handed.filter(
-          (change) => change.kind === 'ran' && change.runs.some((beat) => beat.heartbeatAt?.getTime() === at.getTime()),
-        );
-        expect(ours).toEqual([
-          {
-            kind: 'ran',
-            threadId: run.threadId,
-            revision: { from: expect.any(Number), to: expect.any(Number) },
-            runs: [{ id: run.id, heartbeatAt: at, updatedAt: at }],
-          },
-        ]);
-        const { revision } = ours[0] as Extract<ThreadStateChange, { kind: 'ran' }>;
-        expect(revision.to).toBeGreaterThan(revision.from);
-        expect(yield* world.storage.transitions.revision(run.threadId)).toBeGreaterThanOrEqual(revision.to);
-        expect(yield* world.runs.runById(run.id)).toMatchObject({ heartbeatAt: at, updatedAt: at });
-      }),
-    );
     test(
       'a refused keep-warm launch closes its refresh signal while returning unread reader work',
       Effect.fnUntraced(function* () {

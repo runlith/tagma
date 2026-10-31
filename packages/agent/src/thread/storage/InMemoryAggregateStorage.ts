@@ -211,14 +211,10 @@ export const makeAggregateStorage = ({
     appliedSeq: (runId: string) => Effect.sync(() => applied.get(runId) ?? 0),
     revision: () => Effect.sync(() => commits),
     opened: () => Effect.void,
-    revised: (
-      threadIds: readonly string[],
-      tx: ThreadWriteTx,
-      after: (revisions: ReadonlyMap<string, ThreadChangeRevision>) => Effect.Effect<void>,
-    ) =>
+    revised: (_id: string, tx: ThreadWriteTx, after: (revision: ThreadChangeRevision) => Effect.Effect<void>) =>
       Effect.suspend(() => {
         const from = commits;
-        return tx.afterCommit(after(new Map(threadIds.map((threadId) => [threadId, { from, to: from + 1 }]))));
+        return tx.afterCommit(after({ from, to: from + 1 }));
       }),
     transaction: <T, E>(body: (tx: ThreadWriteTx) => Effect.Effect<T, E>) => inUnit('', body),
     find: () => offPath('find'),

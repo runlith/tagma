@@ -1,19 +1,11 @@
-import { Context, Data, type Effect } from 'effect';
+import { Data, type Effect } from 'effect';
 import type { Evidence } from '../keyed';
 import type { ThreadContextReading, ThreadHistory, ThreadMetadataRow, ThreadRow } from '../rows';
 import type { ThreadAtomicPatch, ThreadPatch } from '../storage/aggregate';
 import type { ThreadEventInput } from '../events';
 import type { ThreadSealedEvent, ThreadLogState } from '../ThreadEventDoor';
 import type { ThreadBorderFailed, ThreadPortFailure } from '../ThreadBorder';
-import type { ThreadChangePart, ThreadChangeRevision, ThreadStateChange } from '../state';
-
-export class ThreadChangeCollector extends Context.Service<
-  ThreadChangeCollector,
-  {
-    claimed(threadId: string, unit: object): boolean;
-    note(threadId: string, unit: object, part: ThreadChangePart): void;
-  }
->()('@runlith/agent/ThreadChangeCollector') {}
+import type { ThreadChangeRevision, ThreadStateChange } from '../state';
 
 export type ThreadVersion = {
   readonly foldRev: number;
@@ -81,11 +73,11 @@ export interface ThreadTransitionStorage<TTx, TWrite extends TTx = TTx> {
   appliedSeq(runId: string): Effect.Effect<number, ThreadPortFailure>;
   spend(threadIds: readonly string[], at: Date, tx: TWrite): Effect.Effect<void, ThreadPortFailure>;
   revision(threadId: string, tx?: TTx): Effect.Effect<number, ThreadPortFailure>;
-  opened(threadIds: readonly string[], tx: TWrite): Effect.Effect<void, ThreadPortFailure>;
+  opened(threadId: string, tx: TWrite): Effect.Effect<void, ThreadPortFailure>;
   revised(
-    threadIds: readonly string[],
+    threadId: string,
     tx: TWrite,
-    after: (revisions: ReadonlyMap<string, ThreadChangeRevision>) => Effect.Effect<void>,
+    after: (revision: ThreadChangeRevision) => Effect.Effect<void>,
   ): Effect.Effect<void, ThreadPortFailure>;
 }
 

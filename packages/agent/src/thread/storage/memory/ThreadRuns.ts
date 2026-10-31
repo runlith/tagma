@@ -344,20 +344,18 @@ export function makeMemoryRuns({ memory, ownerId, scope }: MemoryRunsInput): Thr
           }),
         tx,
       ),
-    writeHeartbeats: (runIds, heartbeatAt, tx) =>
-      memory.units.commit(
-        (unit) =>
-          attempt('writeHeartbeats', () => {
-            const asked: ThreadRunStopAsked[] = [];
-            for (const runId of runIds) {
-              const run = owned(runId);
-              if (!run) continue;
-              change(unit, run, { heartbeatAt, updatedAt: heartbeatAt });
-              if (run.stopRequest !== null) asked.push({ runId, by: run.stopRequest.by });
-            }
-            return asked;
-          }),
-        tx,
+    writeHeartbeats: (runIds, heartbeatAt) =>
+      memory.units.commit((unit) =>
+        attempt('writeHeartbeats', () => {
+          const asked: ThreadRunStopAsked[] = [];
+          for (const runId of runIds) {
+            const run = owned(runId);
+            if (!run) continue;
+            change(unit, run, { heartbeatAt });
+            if (run.stopRequest !== null) asked.push({ runId, by: run.stopRequest.by });
+          }
+          return asked;
+        }),
       ),
     requestStop: (runId, intent, at, tx) =>
       memory.units.commit(
@@ -372,7 +370,7 @@ export function makeMemoryRuns({ memory, ownerId, scope }: MemoryRunsInput): Thr
         tx,
       ),
     writeStreamTail: (runId, tail, heartbeatAt, tx, durable = false) =>
-      patched(runId, { streamTail: tail, ...(durable || tail?.length ? { resumes: 0 } : {}), heartbeatAt, updatedAt: heartbeatAt }, tx),
+      patched(runId, { streamTail: tail, ...(durable || tail?.length ? { resumes: 0 } : {}), heartbeatAt }, tx),
     reapableRuns: (selector, limit) =>
       attempt('reapableRuns', () =>
         memory.read(undefined, () => {

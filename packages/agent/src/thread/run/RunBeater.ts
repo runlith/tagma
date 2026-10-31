@@ -51,7 +51,7 @@ export const runBeaterLayer: Layer.Layer<never, never, RunControl | RunLifecycle
           }
           const runs = new Map(alive.map((run) => [run.id, run]));
           return Clock.currentTimeMillis.pipe(
-            Effect.flatMap((now) => Effect.exit(lifecycle.beat([...runs.values()], new Date(now)))),
+            Effect.flatMap((now) => Effect.exit(lifecycle.beat([...runs.keys()], new Date(now)))),
             Effect.flatMap((exit) =>
               Exit.isFailure(exit)
                 ? Effect.logWarning('run heartbeats did not land', { runs: [...runs.keys()], cause: Cause.pretty(exit.cause) })

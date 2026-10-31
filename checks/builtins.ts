@@ -54,7 +54,7 @@ export const names: Builtin<'names', NamesParams> = {
             why: "One subject: a tool call's life at the door from admission through permission, order and execution to its answer, foreground or carried to the background at any of those stages; every stage shares the same tracked call, its order claim, causal cost and ledger.",
           },
           {
-            lines: 804,
+            lines: 798,
             path: 'apps/tagma/server/src/composition/testing/threads/protocolRig.ts',
             why: 'One subject: the ACP conformance rig owns its project, execution host — including replacing it with its next generation — core harness, account and scratch context, its protocol rows and vendor turn map, and each scoped driver. Thread and scripted-agent events wake observations within those same lifetimes.',
           },

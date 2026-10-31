@@ -15,7 +15,6 @@ import {
   threadHistoryItem,
   threadLog,
   threadPrunedToolCall,
-  threadRev,
   threadRunReceipt,
 } from '../store/thread.js';
 
@@ -27,7 +26,6 @@ export const kernelStorageWrites = writes(
     threadRun,
     threadRunTally,
     threadRunReceipt,
-    threadRev,
     threadEntry,
     threadHistoryItem,
     threadLog,

@@ -1,45 +1,13 @@
 import { expect } from 'bun:test';
-import { it, layer } from '@runlith/effect-test';
-import { CostLedger, costLedgerLayer, rootCost } from '@runlith/performance/CostLedger';
-import { APPROVAL, lifecycleWorld, started } from '@runlith/agent/thread/conformance/lifecycleWorld';
-import type { ThreadStateChange } from '@runlith/agent/thread/state';
-import { openThreadStore } from '../../composition/testing/storageHarness.js';
+import { layer } from '@runlith/effect-test';
 import { eq, sql } from 'drizzle-orm';
-import { Clock, Effect, Layer, Tracer } from 'effect';
+import { Clock, Effect, Tracer } from 'effect';
 import { SCOPED_RUN } from '../row.js';
 import { demoGraphLayer, withDemo } from '../../composition/testing/graphFixture.js';
 import { makeThreadRecords } from '../../thread-record/layer.js';
 import { threadStack } from '../../composition/testing/threadParts.js';
 import { CORE_KINDS, threadRunStore } from '../testing/doubles.js';
 import { threadRun } from '../../threads/store/kernel.js';
-
-it.live('a beat commits as one program and answers its owner’s stop requests and thread revision', () =>
-  Effect.gen(function* () {
-    const { storage } = yield* openThreadStore();
-    const world = yield* lifecycleWorld(() => Effect.succeed(storage));
-    const { run } = started(yield* world.lifecycle.create(world.startFrom, APPROVAL, { kind: 'turn' }));
-    const at = new Date((yield* Clock.currentTimeMillis) + 60_000);
-    yield* world.runs.requestStop(run.id, { by: 'reader', marker: false, withdraw: false }, at);
-    const before = yield* storage.transitions.revision(run.threadId);
-    const handed: ThreadStateChange[] = [];
-    world.changes.project((change) => Effect.sync(() => void handed.push(change)));
-    const asked = yield* rootCost('test.beat', world.lifecycle.beat([run], at), 'test-beat');
-    const [cost] = (yield* CostLedger).read({ rootId: 'test-beat', limit: 1 }).rows;
-    expect({ programs: cost?.total.programs, units: cost?.total.units }).toEqual({ programs: 1, units: 0 });
-    expect(asked).toEqual([{ runId: run.id, by: 'reader' }]);
-    expect(yield* world.runs.runById(run.id)).toMatchObject({ heartbeatAt: at, updatedAt: at });
-    const after = yield* storage.transitions.revision(run.threadId);
-    expect(after).toBeGreaterThan(before);
-    expect(handed).toEqual([
-      {
-        kind: 'ran',
-        threadId: run.threadId,
-        revision: { from: before, to: after },
-        runs: [{ id: run.id, heartbeatAt: at, updatedAt: at }],
-      },
-    ]);
-  }).pipe(Effect.provide(Layer.fresh(costLedgerLayer({ capacity: 16 })))),
-);
 
 const MINUTE = 60_000;
 
