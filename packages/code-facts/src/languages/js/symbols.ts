@@ -633,9 +633,24 @@ const placing =
       }
       if (missing.length === 0 || round === 6) break;
       const beyond = new Set<string>();
+      const reach = (target: string): void => {
+        const pending = [target];
+        while (pending.length > 0) {
+          const path = pending.pop()!;
+          if (beyond.has(path)) continue;
+          beyond.add(path);
+          const unit = units.get(byPath.get(path) ?? '');
+          for (const statement of unit?.file.statements ?? [])
+            if (ts.isExportDeclaration(statement) && statement.exportClause === undefined && statement.moduleSpecifier !== undefined) {
+              const found = ts.isStringLiteral(statement.moduleSpecifier) ? resolve(statement.moduleSpecifier.text, path) : null;
+              if (found !== null && 'to' in found) pending.push(tree.realpath?.(found.to) ?? found.to);
+            }
+        }
+      };
       const seen = new Set<ts.Node>();
       for (const name of missing) {
-        const pending: ts.Node[] = [...receiversOf(name)];
+        const receivers = receiversOf(name);
+        const pending: ts.Node[] = receivers.length === 0 ? [name] : [...receivers];
         while (pending.length > 0) {
           const node = pending.pop()!;
           if (seen.has(node)) continue;
@@ -650,7 +665,7 @@ const placing =
                 const owner = units.get(declaration.getSourceFile().fileName)?.path;
                 if (from === undefined || owner === undefined) continue;
                 const found = resolve(from, owner);
-                if (found !== null && 'to' in found) beyond.add(tree.realpath?.(found.to) ?? found.to);
+                if (found !== null && 'to' in found) reach(tree.realpath?.(found.to) ?? found.to);
               }
               held = (held.flags & ts.SymbolFlags.Alias) === 0 ? undefined : checker.getImmediateAliasedSymbol(held);
             }
@@ -661,6 +676,7 @@ const placing =
             pending.push(...derivations(node));
             const type = (node as { readonly type?: ts.Node }).type;
             if (type !== undefined) pending.push(type);
+            if (ts.isClassLike(node) || ts.isInterfaceDeclaration(node)) pending.push(...(node.heritageClauses ?? []));
             continue;
           }
           if (ts.isCallLikeExpression(node)) {
