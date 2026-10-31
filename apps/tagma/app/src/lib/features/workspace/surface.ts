@@ -1,5 +1,4 @@
 import type { Project } from '@tagma/server/graph/contract/wire/rows';
-import { RegistryClash } from '@runlith/roster/RegistryClash';
 import { Service } from '@runlith/layer/key';
 import { Point } from '@runlith/layer/Point';
 import type { Component, Snippet } from 'svelte';
@@ -28,6 +27,7 @@ export type SurfaceDeclaration = {
   readonly scoped?: true;
   readonly iconUrl?: string;
   readonly nested?: true;
+  readonly within?: Surface;
   readonly phone?: true;
 };
 
@@ -37,19 +37,19 @@ export type RouteParams = Readonly<Record<string, string | undefined>>;
 
 const RESERVED: readonly string[] = ['branch', 'surface'];
 
+const admitsOf = (declaration: SurfaceDeclaration): string | null => {
+  if (RESERVED.includes(declaration.surface)) return 'the visit record keeps this name for itself';
+  if (declaration.home === true && declaration.rail === undefined) return 'the home surface has no place in the rail';
+  if (
+    declaration.within !== undefined &&
+    (declaration.home === true || declaration.formerly !== undefined || declaration.place !== undefined)
+  ) {
+    return 'a view within another surface is never the home, has no former name and no place directory';
+  }
+  return null;
+};
+
 const claimsOf = (declaration: SurfaceDeclaration): readonly string[] => {
-  if (RESERVED.includes(declaration.surface)) {
-    throw new RegistryClash({
-      message: `Surface "${declaration.surface}" is a name the visit record keeps for itself.`,
-      holders: [declaration.surface],
-    });
-  }
-  if (declaration.home === true && declaration.rail === undefined) {
-    throw new RegistryClash({
-      message: `The home surface "${declaration.surface}" has no place in the rail.`,
-      holders: [declaration.surface],
-    });
-  }
   return [
     `Surface "${declaration.surface}"`,
     ...(declaration.formerly === undefined ? [] : [`Surface "${declaration.formerly}"`]),
@@ -62,6 +62,7 @@ const claimsOf = (declaration: SurfaceDeclaration): readonly string[] => {
 export const Surfaces = Point.define<SurfaceDeclaration>()('Surfaces', {
   tier: 'app',
   key: (declaration) => declaration.surface,
+  admits: admitsOf,
   claims: claimsOf,
 });
 
@@ -76,15 +77,15 @@ type SurfaceIndex = {
   readonly home: Surface;
 };
 
-const indexOf = (items: readonly SurfaceDeclaration[], members: ReadonlySet<SurfaceDeclaration>): SurfaceIndex => {
-  const declared = items.filter((one) => !members.has(one));
+const indexOf = (items: readonly SurfaceDeclaration[]): SurfaceIndex => {
+  const declared = items.filter((one) => one.within === undefined);
   const bySurface = new Map<Surface, SurfaceDeclaration>();
   const former = new Map<Surface, Surface>();
   const byRoute = new Map<string, SurfaceDeclaration>();
   const memberRoutes = new Map<string, SurfaceDeclaration>();
   for (const declaration of items) {
     bySurface.set(declaration.surface, declaration);
-    if (members.has(declaration)) {
+    if (declaration.within !== undefined) {
       memberRoutes.set(declaration.route, declaration);
       continue;
     }
@@ -100,7 +101,7 @@ const indexOf = (items: readonly SurfaceDeclaration[], members: ReadonlySet<Surf
     byRoute,
     memberRoutes,
     rail: items.filter((one) => one.rail !== undefined).toSorted((left, right) => (left.rail ?? 0) - (right.rail ?? 0)),
-    home: declared.find((one) => one.home === true)?.surface ?? '',
+    home: declared.find((one) => one.home === true)?.surface ?? declared.find((one) => one.rail !== undefined)?.surface ?? '',
   };
 };
 
@@ -123,17 +124,15 @@ export class SurfaceRegistry extends Service<SurfaceRegistry>()('SurfaceRegistry
     return new SurfaceRegistry(yield* Surfaces);
   }
 
-  private indexed: SurfaceIndex | undefined;
-  private readonly members = new Set<SurfaceDeclaration>();
+  private readonly indexed: () => SurfaceIndex;
 
-  constructor(private readonly surfaces: Point<SurfaceDeclaration>) {
+  constructor(surfaces: Point<SurfaceDeclaration>) {
     super();
+    this.indexed = surfaces.derive(indexOf);
   }
 
   private get index(): SurfaceIndex {
-    const items = this.surfaces.items;
-    if (this.indexed?.items !== items) this.indexed = indexOf(items, this.members);
-    return this.indexed;
+    return this.indexed();
   }
 
   private get bySurface(): ReadonlyMap<Surface, SurfaceDeclaration> {
@@ -164,21 +163,6 @@ export class SurfaceRegistry extends Service<SurfaceRegistry>()('SurfaceRegistry
     return this.index.rail;
   }
 
-  register(declaration: SurfaceDeclaration): () => void {
-    const standing = this.members.has(declaration);
-    this.members.add(declaration);
-    try {
-      const leave = this.surfaces.register('app sections', declaration);
-      return () => {
-        leave();
-        this.members.delete(declaration);
-      };
-    } catch (refused) {
-      if (!standing) this.members.delete(declaration);
-      throw refused;
-    }
-  }
-
   named(stored: string): Surface {
     const cut = stored.indexOf('/');
     const head = cut === -1 ? stored : stored.slice(0, cut);
@@ -188,7 +172,7 @@ export class SurfaceRegistry extends Service<SurfaceRegistry>()('SurfaceRegistry
 
   portable(surface: Surface): boolean {
     const declared = this.bySurface.get(surface);
-    return declared !== undefined && declared.nested !== true && !this.members.has(declared);
+    return declared !== undefined && declared.nested !== true && declared.within === undefined;
   }
 
   find(surface: Surface): SurfaceDeclaration | undefined {

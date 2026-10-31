@@ -68,7 +68,7 @@ test('a kind contributed after the door was built is read by its next request, a
       return thrown;
     }
   })();
-  expect(refused).toMatchObject({ _tag: 'CoreEntryKindRefused', type: 'message' });
+  expect(refused).toMatchObject({ name: 'RegistryRefusal', contributor: 'other' });
 });
 
 test('an operation input with an undefined optional reaches the server without that key', async () => {

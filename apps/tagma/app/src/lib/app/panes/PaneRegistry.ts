@@ -22,16 +22,15 @@ export class PaneRegistry extends Service<PaneRegistry>()('PaneRegistry', { tier
     return new PaneRegistry(yield* Panes);
   }
 
-  private indexed: PaneIndex | undefined;
+  private readonly indexed: () => PaneIndex;
 
-  constructor(private readonly panes: Point<PaneKind>) {
+  constructor(panes: Point<PaneKind>) {
     super();
+    this.indexed = panes.derive(indexOf);
   }
 
   private get index(): PaneIndex {
-    const items = this.panes.items;
-    if (this.indexed?.items !== items) this.indexed = indexOf(items);
-    return this.indexed;
+    return this.indexed();
   }
 
   get all(): readonly PaneKind[] {

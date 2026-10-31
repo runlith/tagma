@@ -1,13 +1,15 @@
 <script lang="ts">
   import AppWindow from '@lucide/svelte/icons/app-window';
   import { Workspace } from '$lib/features/workspace/Selection.svelte.js';
+  import { PaletteActions } from '$lib/features/workspace/action.js';
   import { launchesOf } from './launchers.js';
-  import { TagmaAppActions } from './TagmaAppActions.svelte.js';
   import { ViewSets } from './ViewSets.svelte.js';
   import { ViewWindows } from './windows/ViewWindows.js';
 
+  const LAUNCHERS = 'tagma-apps:launchers';
+
   const sets = ViewSets.use();
-  const actions = TagmaAppActions.use();
+  const actions = PaletteActions.use();
   const windows = ViewWindows.use();
   const workspace = Workspace.use();
 
@@ -17,8 +19,9 @@
   });
 
   $effect(() => {
-    const release = actions.addAll(
-      launches.map((launch) => ({
+    return actions.register(LAUNCHERS, {
+      id: LAUNCHERS,
+      actions: launches.map((launch) => ({
         id: `app.${launch.tagmaApp}.${launch.view}`,
         title: launch.title,
         keywords: ['app', 'open', 'window', launch.tagmaApp],
@@ -27,7 +30,6 @@
         available: (env) => env.project?.id === launch.projectId,
         run: () => windows.open(launch),
       })),
-    );
-    return release;
+    });
   });
 </script>

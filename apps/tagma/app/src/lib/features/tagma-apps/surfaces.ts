@@ -1,7 +1,7 @@
 import Puzzle from '@lucide/svelte/icons/puzzle';
 import type { SurfaceDeclaration } from '$lib/features/workspace/surface.js';
 
-const TAGMA_APP_SURFACE = 'app';
+export const TAGMA_APP_SURFACE = 'app';
 
 export const sectionSurface = (tagmaApp: string, view: string): string => `${TAGMA_APP_SURFACE}/${tagmaApp}/${view}`;
 

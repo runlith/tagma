@@ -15,9 +15,7 @@ const NOTHING: Stored = { pinned: [], unpinned: [] };
 export class RailPins extends Service<RailPins>()('RailPins', { tier: 'app' }) {
   static *make() {
     const platform = yield* Platform;
-    const surfaces = yield* SurfaceRegistry;
-    const daily = surfaces.rail.filter((entry) => entry.pinned === true).map((entry) => entry.surface);
-    return new RailPins(platform.storage.local, daily, surfaces);
+    return new RailPins(platform.storage.local, yield* SurfaceRegistry);
   }
 
   private stored = $state.raw<Stored>(NOTHING);
@@ -25,12 +23,15 @@ export class RailPins extends Service<RailPins>()('RailPins', { tier: 'app' }) {
 
   constructor(
     private readonly storage: PlatformStorage,
-    private readonly daily: readonly string[],
     private readonly surfaces: SurfaceRegistry,
   ) {
     super();
     this.stored = this.read();
     $effect(() => storage.watch(STORAGE_KEY, () => (this.stored = this.read())));
+  }
+
+  private get daily(): readonly string[] {
+    return this.surfaces.rail.filter((entry) => entry.pinned === true).map((entry) => entry.surface);
   }
 
   get ids(): readonly string[] {

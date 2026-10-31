@@ -31,7 +31,8 @@ import { AgentLibraryRepo } from './library/AgentLibraryRepo.js';
 import { type ThreadIdentity, ThreadList } from './List.svelte.js';
 import { ComposerFeeds } from './native/ComposerFeeds.svelte.js';
 import { DraftShelf } from './native/DraftShelf.svelte.js';
-import { ProductRecords, recordOf } from './native/records.js';
+import { type ProductRecord, ProductRecords, recordOf } from './native/records.js';
+import type { Point } from '@runlith/layer/Point';
 import { pickedSummarizer } from './native/compactionWords.js';
 import { PromptStore } from './native/PromptStore.js';
 import { CallPieces } from './native/CallPieces.js';
@@ -149,7 +150,7 @@ export class ThreadSlot extends Process<ThreadSlot, SlotArgs>()('ThreadSlot') im
     notices: Notices,
     readonly skills: SkillCatalog,
     door: Door,
-    records: ReturnType<typeof ProductRecords.use>,
+    records: Point<ProductRecord>,
     storage: ConstructorParameters<typeof PromptStore>[0],
     private readonly scope: Scope,
     private readonly app: MountedApp,

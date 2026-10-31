@@ -3,31 +3,26 @@ import type { Point } from '@runlith/layer/Point';
 import type { PaneContent } from '$lib/shared/panes/pane.js';
 import { type Link, type LinkItems, type LinkKind, LinkKinds, LinkMenuItems, type LinkTab } from './Link.js';
 
-type TabIndex = { readonly items: readonly LinkKind<never>[]; readonly tabs: ReadonlyMap<string, LinkTab<never>> };
+const tabsOf = (kinds: readonly LinkKind<never>[]): ReadonlyMap<string, LinkTab<never>> =>
+  new Map(kinds.flatMap((kind) => (kind.tab === undefined ? [] : [[kind.tab.kind, kind.tab] as const])));
 
 export class LinkRegistry extends Service<LinkRegistry>()('LinkRegistry', { tier: 'app' }) {
   static *make() {
     return new LinkRegistry(yield* LinkKinds, yield* LinkMenuItems);
   }
 
-  private indexed: TabIndex | undefined;
+  private readonly tabbing: () => ReadonlyMap<string, LinkTab<never>>;
 
   constructor(
     private readonly kinds: Point<LinkKind<never>>,
     private readonly items: Point<LinkItems<never>>,
   ) {
     super();
+    this.tabbing = kinds.derive(tabsOf);
   }
 
   private get tabs(): ReadonlyMap<string, LinkTab<never>> {
-    const items = this.kinds.items;
-    if (this.indexed?.items !== items) {
-      this.indexed = {
-        items,
-        tabs: new Map(items.flatMap((kind) => (kind.tab === undefined ? [] : [[kind.tab.kind, kind.tab] as const]))),
-      };
-    }
-    return this.indexed.tabs;
+    return this.tabbing();
   }
 
   find(kind: string): LinkKind<never> | undefined {

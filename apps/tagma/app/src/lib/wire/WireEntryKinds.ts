@@ -1,24 +1,10 @@
 import { coreKind, makeThreadEntryReader, type ThreadEntryKind, type ThreadEntryReader } from '@runlith/agent/transcript/kinds';
 import { Point } from '@runlith/layer/Point';
-import { Data } from 'effect';
-
-class CoreEntryKindRefused extends Data.TaggedError('CoreEntryKindRefused')<{
-  readonly message: string;
-  readonly type: string;
-}> {}
 
 export const WireEntryKinds = Point.define<ThreadEntryKind>()('WireEntryKinds', {
   tier: 'app',
   key: (kind) => kind.type,
-  claims: (kind) => {
-    if (coreKind(kind.type)) {
-      throw new CoreEntryKindRefused({
-        message: `Wire entry kind "${kind.type}" is read by the agent core and cannot be contributed.`,
-        type: kind.type,
-      });
-    }
-    return [];
-  },
+  admits: (kind) => (coreKind(kind.type) ? 'the agent core reads this kind itself' : null),
 });
 
 const NONE: readonly ThreadEntryKind[] = [];

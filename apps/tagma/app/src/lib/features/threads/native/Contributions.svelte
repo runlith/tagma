@@ -45,9 +45,9 @@
 
   $effect.pre(() => {
     const disposers = [
-      ...commands.items.map((one) => composer.command(one.name, one.make(owners))),
-      ...tools.items.map((one) => kinds.registerTool(one.name, one)),
-      ...declarations.items.map((one) => one.register(kinds, one.key)),
+      ...commands.items.map((one) => composer.command(commands.contributorOf(one) ?? one.name, one.make(owners))),
+      ...tools.items.map((one) => kinds.registerTool(tools.contributorOf(one) ?? one.name, one)),
+      ...declarations.items.map((one) => one.register(kinds, declarations.contributorOf(one) ?? one.key)),
     ];
     return () => {
       for (const dispose of disposers) dispose();

@@ -1,5 +1,5 @@
 import type { Project } from '@tagma/server/graph/contract/wire/rows';
-import { RegistryClash } from '@runlith/roster/RegistryClash';
+import { RegistryRefusal } from '@runlith/roster/RegistryClash';
 import { makePoint, makeStorage } from '@runlith/layer/testing';
 import { expect, test } from 'vitest';
 import { type SurfaceDeclaration, SurfaceRegistry, Surfaces } from './surface.js';
@@ -68,55 +68,42 @@ test('a place of a surface lives under its place directory, the root surface und
   expect(surfaces.pathOf('runlith', 'home')).toBe('/runlith');
 });
 
-test('a doubled route or former name, a second home, a home off the rail and the visit record’s own name refuse', () => {
+test('a doubled route or former name and a second home clash, and a home off the rail and the visit record’s own name are refused', () => {
   const home = declared('home', { home: true, rail: 1 });
 
-  expect(() => of(home, declared('a', { route: 'x' }), declared('b', { route: 'x' }))).toThrow(RegistryClash);
-  expect(() => of(home, declared('a'), declared('b', { formerly: 'a' }))).toThrow(RegistryClash);
-  expect(() => of(home, declared('b', { home: true, rail: 2 }))).toThrow(RegistryClash);
-  expect(() => of(declared('a', { home: true }))).toThrow(RegistryClash);
-  expect(() => of(home, declared('branch'))).toThrow(RegistryClash);
+  expect(() => of(home, declared('a', { route: 'x' }), declared('b', { route: 'x' }))).toThrow('Route "x" is contributed by both');
+  expect(() => of(home, declared('a'), declared('b', { formerly: 'a' }))).toThrow('Surface "a" is contributed by both');
+  expect(() => of(home, declared('b', { home: true, rail: 2 }))).toThrow('The home surface is contributed by both');
+  expect(() => of(declared('a', { home: true }))).toThrow(RegistryRefusal);
+  expect(() => of(home, declared('branch'))).toThrow(RegistryRefusal);
 });
 
-test('a section registered on the fly joins the rail and answers its route until its disposer runs', () => {
-  const surfaces = of(declared('mail', { rail: 10, home: true }), declared('app', { route: 'p', nested: true, remembers: false }));
-  const params = { project: 'runlith', app: 'crm', view: 'deals' };
-  const section = declared('app/crm/deals', { route: 'p/crm/deals', rail: 100, remembers: false });
-
-  expect(surfaces.of('/[project]/p/[app]/[view]', params)).toBe('app');
-  const release = surfaces.register(section);
-  expect(surfaces.of('/[project]/p/[app]/[view]', params)).toBe('app/crm/deals');
-  expect(surfaces.of('/[project]/p/[app]/[view]', { ...params, view: 'other' })).toBe('app');
-  expect(surfaces.rail.map((one) => one.surface)).toEqual(['mail', 'app/crm/deals']);
-  expect(surfaces.pathOf('runlith', 'app/crm/deals')).toBe('/runlith/p/crm/deals');
-  expect(surfaces.portable('app/crm/deals')).toBe(false);
-  expect(() => surfaces.register(section)).toThrow(RegistryClash);
-
-  release();
-  expect(surfaces.of('/[project]/p/[app]/[view]', params)).toBe('app');
-  expect(surfaces.rail.map((one) => one.surface)).toEqual(['mail']);
-  expect(surfaces.find('app/crm/deals')).toBeUndefined();
-});
-
-test('an app section and a contributed surface share one ledger of names and routes, whichever arrives first', () => {
+test('a view within a nested surface joins the rail and answers its route until its disposer runs, and shares the ledger of routes', () => {
   const point = makePoint(
     Surfaces,
     declared('mail', { rail: 10, home: true }),
     declared('app', { route: 'p', nested: true, remembers: false }),
   );
   const surfaces = new SurfaceRegistry(point);
-  const section = declared('app/crm/deals', { route: 'p/crm/deals', remembers: false });
+  const params = { project: 'runlith', app: 'crm', view: 'deals' };
+  const section = declared('app/crm/deals', { route: 'p/crm/deals', rail: 100, remembers: false, within: 'app' });
 
-  const release = surfaces.register(section);
-  expect(() => point.register('features/late', declared('deals', { route: 'p/crm/deals' }))).toThrow(RegistryClash);
-  expect(() => point.register('features/late', declared('app/crm/deals', { route: 'elsewhere' }))).toThrow(RegistryClash);
+  expect(surfaces.of('/[project]/p/[app]/[view]', params)).toBe('app');
+  const release = point.register('features/apps', section);
+  expect(surfaces.of('/[project]/p/[app]/[view]', params)).toBe('app/crm/deals');
+  expect(surfaces.of('/[project]/p/[app]/[view]', { ...params, view: 'other' })).toBe('app');
+  expect(surfaces.rail.map((one) => one.surface)).toEqual(['mail', 'app/crm/deals']);
+  expect(surfaces.declared.map((one) => one.surface)).toEqual(['mail', 'app']);
+  expect(surfaces.pathOf('runlith', 'app/crm/deals')).toBe('/runlith/p/crm/deals');
+  expect(surfaces.portable('app/crm/deals')).toBe(false);
+  expect(() => point.register('features/late', declared('deals', { route: 'p/crm/deals' }))).toThrow(
+    'Route "p/crm/deals" is contributed by both',
+  );
 
   release();
-  const leave = point.register('features/late', declared('deals', { route: 'p/crm/deals' }));
-  expect(() => surfaces.register(section)).toThrow(RegistryClash);
-  leave();
-  surfaces.register(section);
-  expect(surfaces.owner('p/crm/deals')).toBe('app/crm/deals');
+  expect(surfaces.of('/[project]/p/[app]/[view]', params)).toBe('app');
+  expect(surfaces.rail.map((one) => one.surface)).toEqual(['mail']);
+  expect(surfaces.find('app/crm/deals')).toBeUndefined();
 });
 
 test('a visit remembers a place only on the surfaces that declared it', () => {

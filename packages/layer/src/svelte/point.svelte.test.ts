@@ -1,5 +1,4 @@
 import { reactiveCell } from '@runlith/roster/cell.svelte';
-import { RegistryClash } from '@runlith/roster/RegistryClash';
 import { Roster } from '@runlith/roster/Roster';
 import { flush } from '@runlith/testing/flush';
 import { flushSync, mount, unmount } from 'svelte';
@@ -69,8 +68,7 @@ describe('Point', () => {
 
     expect(failures).toHaveLength(1);
     const clash = (failures[0] as ServiceStartError).cause;
-    expect(clash).toBeInstanceOf(RegistryClash);
-    expect((clash as RegistryClash).holders).toEqual(['features/a', 'features/b']);
+    expect(clash).toMatchObject({ name: 'RegistryClash', holders: ['features/a', 'features/b'] });
     expect(rt.get(Menu).items).toEqual([{ id: 'x', order: 0 }]);
     await rt.unmount();
   });

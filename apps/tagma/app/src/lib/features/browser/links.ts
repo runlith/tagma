@@ -3,7 +3,7 @@ import Globe from '@lucide/svelte/icons/globe';
 import SquareArrowOutUpRight from '@lucide/svelte/icons/square-arrow-out-up-right';
 import SquarePlus from '@lucide/svelte/icons/square-plus';
 import { Router } from '@runlith/layer/Router';
-import { type Link, type LinkFrom, type LinkItems, type LinkKind, linkKinds } from '$lib/features/opening/Link.js';
+import { type Link, type LinkFrom, type LinkItems, type LinkKind, linkKindsOf } from '$lib/features/opening/Link.js';
 import { Links } from './Links.svelte.js';
 import { OpenPages } from './OpenPages.svelte.js';
 import { BROWSER_PANE, shownOf } from './panes.js';
@@ -40,6 +40,7 @@ const sites: LinkKind<SiteRef> = {
 };
 
 const tabs: LinkItems<SiteRef> = {
+  id: 'site.tabs',
   kind: SITE_LINK,
   order: 10,
   group: 'places',
@@ -59,12 +60,13 @@ const tabs: LinkItems<SiteRef> = {
 };
 
 const copies: LinkItems<SiteRef> = {
+  id: 'site.copies',
   kind: SITE_LINK,
   order: 100,
   group: 'copies',
   acts: (_app, link) => [{ id: 'copy-link', words: 'Copy link', icon: Copy, run: () => navigator.clipboard.writeText(link.target.url) }],
 };
 
-export const links = linkKinds(sites);
+export const links = linkKindsOf(sites);
 
 export const items = [tabs, copies];
