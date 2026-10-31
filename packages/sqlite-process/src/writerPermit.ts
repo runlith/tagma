@@ -1,5 +1,6 @@
 import type { Held } from '@runlith/held/Held';
 import { CurrentCost } from '@runlith/performance/CostLedger';
+import { CurrentWriter } from '@runlith/performance/WriterMetrics';
 import * as Clock from 'effect/Clock';
 import * as Context from 'effect/Context';
 import * as Effect from 'effect/Effect';
@@ -32,20 +33,24 @@ export const writerPermit = <C, L>(
   );
   const take = Effect.withFiber<() => void, SqlError, Scope.Scope>((fiber) => {
     const cost = Context.get(fiber.context, CurrentCost);
-    if (cost === null) return lease;
+    const frame = Context.get(fiber.context, CurrentWriter);
+    if (cost === null && frame === null) return lease;
     const askedAt = now();
     let acquiredAt: number | undefined;
     let ended = false;
     const finish = () => {
       if (acquiredAt === undefined || ended) return;
       ended = true;
-      cost.counts.writerHoldMs += now() - acquiredAt;
+      const heldMs = now() - acquiredAt;
+      if (cost !== null) cost.counts.writerHoldMs += heldMs;
+      if (frame !== null) frame.holdMs += heldMs;
     };
     return Effect.andThen(
       Effect.addFinalizer(() => Effect.sync(finish)),
       lease.pipe(
         Effect.map((release) => {
           acquiredAt = now();
+          if (frame !== null) frame.acquired = true;
           return () => {
             release();
             finish();
@@ -53,7 +58,9 @@ export const writerPermit = <C, L>(
         }),
         Effect.ensuring(
           Effect.sync(() => {
-            cost.counts.writerWaitMs += (acquiredAt ?? now()) - askedAt;
+            const waitedMs = (acquiredAt ?? now()) - askedAt;
+            if (cost !== null) cost.counts.writerWaitMs += waitedMs;
+            if (frame !== null) frame.waitMs += waitedMs;
           }),
         ),
       ),

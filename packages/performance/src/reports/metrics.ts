@@ -2,15 +2,15 @@ import * as Effect from 'effect/Effect';
 import { and, asc, desc, eq, gte, lt, sql } from 'drizzle-orm';
 import type { StoredMetricRecord } from '../protocol/records.js';
 import type { PerformanceQuery } from '../protocol/queries.js';
-import type { MetricHour, MetricPercentile, PerformanceReportMeta } from '../protocol/reports.js';
+import type { MetricHour, PerformanceReportMeta } from '../protocol/reports.js';
+import { metricPercentile, type HistogramCounts } from '../Histogram.js';
 import { performanceRecord } from '../schema.js';
 import { PerformanceRecordUnreadable, type Readers, type ReportAnswer, type Row } from './answer.js';
 import { compareText, fan, firstOf, HOUR_MS } from './page.js';
 import { readRecord } from './record.js';
 
-export type HistogramTotal = {
+export type HistogramTotal = HistogramCounts & {
   readonly boundaryKey: string;
-  readonly boundariesMs: ReadonlyArray<number>;
   readonly bucketCounts: number[];
   count: number;
   failures: number;
@@ -238,15 +238,4 @@ export function compatibleMetrics(previous: StoredMetricRecord, current: StoredM
     current.payload.failures - previous.payload.failures <= current.payload.count - previous.payload.count &&
     current.payload.sumMs >= previous.payload.sumMs
   );
-}
-
-export function metricPercentile(total: HistogramTotal, quantile: number): MetricPercentile {
-  const rank = Math.ceil(total.count * quantile);
-  let accumulated = 0;
-  for (let index = 0; index < total.boundariesMs.length; index += 1) {
-    accumulated += total.bucketCounts[index]!;
-    if (accumulated < rank) continue;
-    return { upperBoundMs: total.boundariesMs[index]! };
-  }
-  return { aboveMs: total.boundariesMs[total.boundariesMs.length - 1]! };
 }

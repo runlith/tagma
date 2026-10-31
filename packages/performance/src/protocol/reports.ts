@@ -1,4 +1,9 @@
 import * as Schema from 'effect/Schema';
+export const metricPercentileSchema = Schema.Union([
+  Schema.Struct({ upperBoundMs: Schema.Number }),
+  Schema.Struct({ aboveMs: Schema.Number }),
+]);
+export type MetricPercentile = typeof metricPercentileSchema.Type;
 import { CommandClass } from '@runlith/executions/protocol/command';
 import { cpuProfileFrameSchema, stallSamplingSchema } from '../CpuProfile.js';
 import { costPageSchema, type CostPage } from '../CostLedger.js';
@@ -57,11 +62,7 @@ export const profileSummarySchema = Schema.Struct({
   requestedDurationMs: Schema.Number.check(Schema.isGreaterThan(0)),
 });
 export type ProfileSummary = typeof profileSummarySchema.Type;
-export const metricPercentileSchema = Schema.Union([
-  Schema.Struct({ upperBoundMs: Schema.Number }),
-  Schema.Struct({ aboveMs: Schema.Number }),
-]);
-export type MetricPercentile = typeof metricPercentileSchema.Type;
+
 export const metricHourSchema = Schema.Struct({
   hourStart: nonNegativeInt,
   boundaryKey: nonEmptyString,
@@ -375,8 +376,72 @@ export interface LedgerReport extends CostPage {
   readonly type: 'ledger';
 }
 
+const writerCursorSchema = Schema.Struct({ writerId: nonEmptyString, sequence: nonNegativeInt });
+const writerUnitSchema = Schema.Struct({
+  sequence: nonNegativeInt,
+  rootId: Schema.NullOr(nonEmptyString),
+  operation: nonEmptyString,
+  store: Schema.String,
+  outcome: Schema.Literals(['success', 'failure', 'interrupted']),
+  acquired: Schema.Boolean,
+  waitMs: Schema.Number,
+  holdMs: Schema.Number,
+  childMs: Schema.NullOr(Schema.Number),
+  outsideMs: Schema.NullOr(Schema.Number),
+  commitReturnedAt: Schema.NullOr(Schema.Number),
+  writerPid: Schema.NullOr(nonNegativeInt),
+});
+const writerHistogramSchema = Schema.Struct({
+  count: nonNegativeInt,
+  sumMs: Schema.Number,
+  bucketCounts: Schema.Array(nonNegativeInt),
+  p50: Schema.NullOr(metricPercentileSchema),
+  p99: Schema.NullOr(metricPercentileSchema),
+});
+const writerOperationSchema = Schema.Struct({
+  operation: nonEmptyString,
+  series: nonNegativeInt,
+  sinceSequence: nonNegativeInt,
+  latestSequence: nonNegativeInt,
+  count: nonNegativeInt,
+  failures: nonNegativeInt,
+  interruptions: nonNegativeInt,
+  incomplete: nonNegativeInt,
+  wait: writerHistogramSchema,
+  hold: writerHistogramSchema,
+  child: writerHistogramSchema,
+  outside: writerHistogramSchema,
+});
+const writerUnitsReportSchema = Schema.Struct({
+  type: Schema.tag('writer-units'),
+  writerId: nonEmptyString,
+  reset: Schema.Boolean,
+  gap: Schema.Boolean,
+  oldestSequence: nonNegativeInt,
+  cursor: writerCursorSchema,
+  total: nonNegativeInt,
+  evicted: nonNegativeInt,
+  rows: Schema.Array(writerUnitSchema),
+  next: Schema.NullOr(writerCursorSchema),
+});
+export type WriterUnitsReport = typeof writerUnitsReportSchema.Type;
+const writerMetricsReportSchema = Schema.Struct({
+  type: Schema.tag('writer-metrics'),
+  writerId: nonEmptyString,
+  reset: Schema.Boolean,
+  cursor: writerCursorSchema,
+  evictedOperations: nonNegativeInt,
+  total: nonNegativeInt,
+  boundariesMs: Schema.Array(Schema.Number),
+  rows: Schema.Array(writerOperationSchema),
+  next: Schema.NullOr(Schema.Struct({ writerId: nonEmptyString, series: nonNegativeInt })),
+});
+export type WriterMetricsReport = typeof writerMetricsReportSchema.Type;
+
 export const PERFORMANCE_REPORT_SCHEMAS = [
   ledgerReportSchema,
+  writerUnitsReportSchema,
+  writerMetricsReportSchema,
   memoryReportSchema,
   capturesReportSchema,
   growthReportSchema,

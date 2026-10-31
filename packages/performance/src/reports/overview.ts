@@ -10,7 +10,8 @@ import { performanceRecord } from '../schema.js';
 import { PerformanceRecordUnreadable, type Readers, type ReportAnswer } from './answer.js';
 import { compareText, firstOf } from './page.js';
 import type { HistogramTotal } from './metrics.js';
-import { addHistogramDelta, compatibleMetrics, metricDelta, metricPercentile } from './metrics.js';
+import { addHistogramDelta, compatibleMetrics, metricDelta } from './metrics.js';
+import { metricPercentile } from '../Histogram.js';
 import { readRecord } from './record.js';
 
 export const OVERVIEW_SAMPLE_PAGE = 200;

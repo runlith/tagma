@@ -63,7 +63,15 @@ export const makeSqliteHost = (reply: (said: SqliteReply) => void, waits: 'engin
             statement.safeIntegers(ask.safeIntegers);
             const rows =
               ask.shape === 'values' ? (statement.values(...(ask.params as [])) ?? []) : (statement.all(...(ask.params as [])) ?? []);
-            return { _tag: 'Rows', id: ask.id, rows, queueMs, execMs: performance.now() - started };
+            const returnedAt = performance.now();
+            return {
+              _tag: 'Rows',
+              id: ask.id,
+              rows,
+              queueMs,
+              execMs: returnedAt - started,
+              commitReturnedAt: ask.sql === 'COMMIT' ? performance.timeOrigin + returnedAt : undefined,
+            };
           } finally {
             if (explained) statement.finalize();
           }

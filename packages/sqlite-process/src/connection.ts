@@ -1,5 +1,6 @@
 import type { ProcessPool } from './ProcessPool.js';
 import { CurrentCost, type CostCause } from '@runlith/performance/CostLedger';
+import { CurrentWriter, type WriterFrame } from '@runlith/performance/WriterMetrics';
 import * as Clock from 'effect/Clock';
 import * as Context from 'effect/Context';
 import * as Deferred from 'effect/Deferred';
@@ -150,6 +151,7 @@ type Outstanding = {
   readonly ask: SqliteAsk;
   readonly sentAt: number;
   readonly cost: CostCause | null;
+  readonly writer: WriterFrame | null;
   due: number;
 };
 
@@ -182,6 +184,7 @@ export const openConnection = Effect.fnUntraced(function* (processes: ProcessPoo
     if (gone !== null) return null;
     gone = brokenChannel(message, 'execute');
     const stranded = [...pending.values()];
+    for (const waiting of stranded) if (waiting.writer !== null) waiting.writer.repliesComplete = false;
     pending.clear();
     quietSince ??= nowMs();
     probes.clear();
@@ -246,6 +249,13 @@ export const openConnection = Effect.fnUntraced(function* (processes: ProcessPoo
     const waiting = pending.get(said.id);
     if (waiting === undefined) return;
     answered(said.id);
+    if (waiting.writer !== null) {
+      if (said._tag === 'Rows' || said._tag === 'Failed') {
+        waiting.writer.childMs += said.execMs;
+        waiting.writer.writerPid = connected.pid;
+        if (said._tag === 'Rows' && said.commitReturnedAt !== undefined) waiting.writer.commitReturnedAt = said.commitReturnedAt;
+      } else waiting.writer.repliesComplete = false;
+    }
     if (waiting.cost !== null && waiting.ask._tag === 'Run') {
       if (said._tag === 'Rows') waiting.cost.counts.responseBytes += rowBytes(said.rows);
       else if (said._tag === 'Failed') {
@@ -320,17 +330,23 @@ export const openConnection = Effect.fnUntraced(function* (processes: ProcessPoo
       );
     });
 
-  const call = (ask: SqliteAsk, operation: string, cost: CostCause | null = null): Effect.Effect<SqliteSaid, SqlError> =>
+  const call = (
+    ask: SqliteAsk,
+    operation: string,
+    cost: CostCause | null = null,
+    writer: WriterFrame | null = null,
+  ): Effect.Effect<SqliteSaid, SqlError> =>
     Effect.suspend(() => {
       if (gone !== null) return Effect.fail(gone);
       const cell = Deferred.makeUnsafe<SqliteSaid, SqlError>();
       const sentAt = nowMs();
-      pending.set(ask.id, { cell, operation, ask, sentAt, cost, due: sentAt + SLOW_STATEMENT_MS });
+      pending.set(ask.id, { cell, operation, ask, sentAt, cost, writer, due: sentAt + SLOW_STATEMENT_MS });
       quietSince = null;
       try {
         connected.send(ask);
       } catch (cause) {
         answered(ask.id);
+        if (writer !== null) writer.repliesComplete = false;
         return Effect.fail(brokenChannel(`the sqlite process would not take a statement: ${String(cause)}`, operation));
       }
       if (cost !== null && ask._tag === 'Run') {
@@ -361,6 +377,7 @@ export const openConnection = Effect.fnUntraced(function* (processes: ProcessPoo
         options.checkStatement?.(sql) ?? Effect.void,
         Effect.withFiber<Array<any>, SqlError>((fiber) => {
           const cost = Context.get(fiber.context, CurrentCost);
+          const writer = lane === undefined ? Context.get(fiber.context, CurrentWriter) : null;
           const measured = (span: Tracer.Span): Effect.Effect<Array<any>, SqlError> => {
             if (span.sampled) {
               const query = queryOf(sql);
@@ -379,6 +396,7 @@ export const openConnection = Effect.fnUntraced(function* (processes: ProcessPoo
               },
               operation,
               cost,
+              writer,
             ).pipe(
               Effect.flatMap((said) => {
                 if (span.sampled && (said._tag === 'Rows' || said._tag === 'Failed')) {

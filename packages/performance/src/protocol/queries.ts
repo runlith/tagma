@@ -12,6 +12,8 @@ const reportLimit = (rowBytes: number, rowLines: number) =>
 
 export const PERFORMANCE_QUERY_TYPES = [
   'ledger',
+  'writer-units',
+  'writer-metrics',
   'memory',
   'captures',
   'growth',
@@ -195,9 +197,27 @@ export type PerformancePointQuery = typeof performancePointQuerySchema.Type;
 
 const ledgerQuerySchema = Schema.Struct({ type: Schema.tag('ledger'), ...costReadSchema.fields });
 type LedgerQuery = typeof ledgerQuerySchema.Type;
+const writerCursorSchema = Schema.Struct({ writerId: nonEmptyString, sequence: nonNegativeInt });
+const writerUnitsQuerySchema = Schema.Struct({
+  type: Schema.tag('writer-units'),
+  rootId: Schema.optional(nonEmptyString),
+  operation: Schema.optional(nonEmptyString),
+  after: Schema.optional(writerCursorSchema),
+  limit: positiveLimit.check(Schema.isLessThanOrEqualTo(64)),
+});
+const writerMetricsQuerySchema = Schema.Struct({
+  type: Schema.tag('writer-metrics'),
+  operation: Schema.optional(nonEmptyString),
+  after: Schema.optional(Schema.Struct({ writerId: nonEmptyString, series: nonNegativeInt })),
+  limit: positiveLimit.check(Schema.isLessThanOrEqualTo(8)),
+});
+export type WriterUnitsQuery = typeof writerUnitsQuerySchema.Type;
+export type WriterMetricsQuery = typeof writerMetricsQuerySchema.Type;
 
 export const performanceQuerySchema = Schema.Union([
   ledgerQuerySchema,
+  writerUnitsQuerySchema,
+  writerMetricsQuerySchema,
   memoryQuerySchema,
   capturesQuerySchema,
   growthQuerySchema,
@@ -217,4 +237,4 @@ export const performanceQuerySchema = Schema.Union([
   loadQuerySchema,
 ]).pipe(Schema.toTaggedUnion('type'));
 export type PerformanceQuery = typeof performanceQuerySchema.Type;
-export type PerformanceStoreQuery = Exclude<PerformanceQuery, LedgerQuery>;
+export type PerformanceStoreQuery = Exclude<PerformanceQuery, LedgerQuery | WriterUnitsQuery | WriterMetricsQuery>;

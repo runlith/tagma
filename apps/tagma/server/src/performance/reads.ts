@@ -44,8 +44,11 @@ export function readPerformance(
 }
 
 export function readHostPerformance(state: string, query: PerformanceQuery): Effect.Effect<PerformanceReadValue> {
-  if (query.type === 'ledger') {
-    return Effect.succeed({ type: 'unavailable', message: 'the cost ledger is process-local; the execution host ring retains no ledger' });
+  if (query.type === 'ledger' || query.type === 'writer-units' || query.type === 'writer-metrics') {
+    return Effect.succeed({
+      type: 'unavailable',
+      message: 'causal costs and writer metrics are process-local; the execution host ring retains neither',
+    });
   }
   return PerformanceReports.use((reports) => readPerformance(reports, query)).pipe(
     Effect.provide(performanceReportsLayer.pipe(Layer.provide(performanceStoreWatchLayer({ path: join(state, PERFORMANCE_FILE) }))), {

@@ -5,6 +5,12 @@
   "description": "The local performance backend: bounded worker persistence and typed process reports shared by server products.",
   "type": "module",
   "exports": {
+    "./WriterMetrics": {
+      "types": "./src/WriterMetrics.ts",
+      "browser": "./src/WriterMetrics.ts",
+      "node": "./src/WriterMetrics.ts",
+      "default": "./src/WriterMetrics.ts"
+    },
     "./CostLedger": {
       "types": "./src/CostLedger.ts",
       "browser": "./src/CostLedger.ts",

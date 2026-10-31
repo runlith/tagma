@@ -1,5 +1,6 @@
 import type { StatementTiming } from '@runlith/sqlite-process/connection';
 import { carryCost, CurrentCost, rootCost } from '@runlith/performance/CostLedger';
+import { CurrentWriter, WriterMetrics } from '@runlith/performance/WriterMetrics';
 import { Cause, Clock, Context, Effect, Exit, Fiber, Tracer } from 'effect';
 import type { EffectSQLiteBunDatabase } from 'drizzle-orm/effect-sqlite-bun';
 import {
@@ -116,6 +117,8 @@ export const storeTransaction =
             const durabilities = yield* UnitDurability;
             const physical = durabilities.get(identity);
             const nested = physical !== undefined;
+            const metrics = yield* Effect.serviceOption(WriterMetrics);
+            const writer = nested ? yield* CurrentWriter : metrics._tag === 'Some' ? metrics.value.begin(operation, identity.path) : null;
             const writing = new Map(enclosing).set(identity, set);
             const lasting = nested ? durabilities : new Map(durabilities).set(identity, durability);
             if (nested && durability === 'durable' && physical === 'relaxed') {
@@ -196,6 +199,17 @@ export const storeTransaction =
                 Effect.onExit(() => reportIfOverBudget(operation, identity.path, heldFrom, bodyWindow, settleWindow)),
                 (settled) => (classed ? synchronously(durability === 'relaxed' ? 'normal' : 'full')(settled) : settled),
                 Effect.provideService(HeldFor, operation),
+                Effect.provideService(CurrentWriter, writer),
+                Effect.onExit((exit) =>
+                  Effect.sync(() => {
+                    if (!nested && writer !== null && metrics._tag === 'Some') {
+                      metrics.value.end(
+                        writer,
+                        Exit.isSuccess(exit) ? 'success' : Cause.hasInterruptsOnly(exit.cause) ? 'interrupted' : 'failure',
+                      );
+                    }
+                  }),
+                ),
               );
             const onCommit = options.onCommit;
             const publication = onCommit === undefined ? undefined : Effect.suspend(() => onCommit(value));

@@ -69,6 +69,8 @@ export interface CostCause {
 
 export const CurrentCost = Context.Reference<CostCause | null>('@runlith/performance/CurrentCost', { defaultValue: () => null });
 
+export const costRootId = (cause: CostCause): string => cause[root].id;
+
 export class CostLedger extends Context.Service<
   CostLedger,
   {

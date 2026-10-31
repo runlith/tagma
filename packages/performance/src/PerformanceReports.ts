@@ -3,6 +3,7 @@ import * as Data from 'effect/Data';
 import * as Effect from 'effect/Effect';
 import * as Layer from 'effect/Layer';
 import { CostLedger } from './CostLedger.js';
+import { WriterMetrics } from './WriterMetrics.js';
 import type { LossKindCounts } from './protocol/records.js';
 import type { PerformancePointQuery, PerformanceQuery } from './protocol/queries.js';
 import type { LedgerReport, PerformanceReport, RetainedRange } from './protocol/reports.js';
@@ -40,6 +41,7 @@ export const performanceReportsLayer = Layer.effect(
   Effect.gen(function* () {
     const reader = yield* PerformanceStoreReader;
     const ledger = yield* Effect.serviceOption(CostLedger);
+    const writers = yield* Effect.serviceOption(WriterMetrics);
     return PerformanceReports.of({
       read: (query) => {
         if (query.type === 'ledger') {
@@ -48,6 +50,15 @@ export const performanceReportsLayer = Layer.effect(
                 new PerformanceStoreUnavailable({ message: 'the process cost ledger is unavailable; it retains no durable history' }),
               )
             : Effect.sync((): LedgerReport => ({ type: 'ledger', ...ledger.value.read(query) }));
+        }
+        if (query.type === 'writer-units' || query.type === 'writer-metrics') {
+          if (writers._tag === 'None')
+            return Effect.fail(
+              new PerformanceStoreUnavailable({ message: 'the process writer metrics are unavailable; they retain no durable history' }),
+            );
+          return query.type === 'writer-units'
+            ? Effect.sync(() => ({ type: 'writer-units' as const, ...writers.value.units(query) }))
+            : Effect.sync(() => ({ type: 'writer-metrics' as const, ...writers.value.metrics(query) }));
         }
         return reader.read(query).pipe(
           Effect.flatMap((result) =>

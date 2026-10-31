@@ -20,7 +20,14 @@ export type SqliteAsk =
   | { readonly _tag: 'Checkpoint'; readonly id: number; readonly filename: string; readonly durable: boolean };
 
 export type SqliteSaid =
-  | { readonly _tag: 'Rows'; readonly id: number; readonly rows: ReadonlyArray<unknown>; readonly queueMs: number; readonly execMs: number }
+  | {
+      readonly _tag: 'Rows';
+      readonly id: number;
+      readonly rows: ReadonlyArray<unknown>;
+      readonly queueMs: number;
+      readonly execMs: number;
+      readonly commitReturnedAt?: number;
+    }
   | { readonly _tag: 'Exported'; readonly id: number; readonly bytes: Uint8Array }
   | { readonly _tag: 'Did'; readonly id: number }
   | { readonly _tag: 'Maintaining'; readonly id: 0 }

@@ -11,6 +11,7 @@ import { Clock, Context, Deferred, Effect, Exit, Layer, ManagedRuntime, Scope, T
 import { HostRegistration } from '@runlith/executions/HostRegistration';
 import type { HostLifetime } from '@runlith/executions/protocol/boot';
 import type { CostLedger } from '@runlith/performance/CostLedger';
+import type { WriterMetrics } from '@runlith/performance/WriterMetrics';
 import { CpuProfiles } from '@runlith/performance/CpuProfiles';
 import { HeapSnapshots } from '@runlith/performance/HeapSnapshots';
 import { MemoryCaptures } from '@runlith/performance/MemoryCaptures';
@@ -232,6 +233,7 @@ export type ServerRuntime = {
     | MachineUnits
     | ActivityStore
     | CostLedger
+    | WriterMetrics
     | PerformanceStore
     | PerformanceReports
     | CpuProfiles
@@ -265,6 +267,7 @@ export type ServerRuntime = {
   owners: Context.Context<
     | ActivityStore
     | CostLedger
+    | WriterMetrics
     | Layer.Success<typeof serving>
     | Layer.Services<typeof serving>
     | Layer.Success<typeof providers.lifetimes.installation>

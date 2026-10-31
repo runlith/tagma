@@ -2,6 +2,7 @@ import { expect } from 'bun:test';
 import { it } from '@runlith/effect-test';
 import { declare } from '@runlith/held/Held';
 import { CostLedger, costLedgerLayer, CurrentCost } from '@runlith/performance/CostLedger';
+import { CurrentWriter, WriterMetrics, writerMetricsLayer } from '@runlith/performance/WriterMetrics';
 import { Clock, Deferred, Effect, Exit, Fiber, Scope } from 'effect';
 import { classifySqliteError, SqlError } from 'effect/sql/SqlError';
 import { writerPermit } from './writerPermit.js';
@@ -141,5 +142,46 @@ it.live('an early release records its hold once even when its owning scope close
     expect(yield* Effect.scoped(permit.statement)).toBe('writer');
     yield* Scope.close(scope, Exit.void);
     expect(cause.counts.writerHoldMs).toBe(heldMs);
+  }),
+);
+
+it.live('an interrupted physical waiter records wait without a causal ledger or a phantom hold', () =>
+  Effect.gen(function* () {
+    const held = declare<string>({
+      name: 'writer-interruption',
+      owner: 'sqlite-process',
+      rank: 500,
+      key: (key) => key,
+      concurrency: 1,
+      threshold: 200,
+      ceilings: 'none',
+      external: 'none',
+    });
+    const permit = writerPermit('writer', held, 'file', () => Effect.void, undefined, Effect.succeed(null), Effect.void);
+    const writers = yield* WriterMetrics.pipe(Effect.provide(writerMetricsLayer({ units: 1, operations: 1 })));
+    const frame = writers.begin('waiter', 'file');
+    const entered = yield* Deferred.make<void>();
+    const holder = yield* Effect.forkChild(
+      Effect.scoped(Effect.andThen(permit.statement, Effect.andThen(Deferred.succeed(entered, undefined), Effect.never))),
+    );
+    yield* Deferred.await(entered);
+    const waiting = yield* Effect.forkChild(Effect.scoped(permit.statement).pipe(Effect.provideService(CurrentWriter, frame)), {
+      startImmediately: true,
+    });
+    expect(held.standing('file')[0]!.waiters).toBe(1);
+    yield* Fiber.interrupt(waiting);
+    writers.end(frame, 'interrupted');
+    const row = writers.units({ limit: 1 }).rows[0]!;
+    expect(row).toMatchObject({
+      rootId: null,
+      operation: 'waiter',
+      outcome: 'interrupted',
+      acquired: false,
+      holdMs: 0,
+      childMs: 0,
+      outsideMs: 0,
+    });
+    expect(row.waitMs).toBeGreaterThan(0);
+    yield* Fiber.interrupt(holder);
   }),
 );
