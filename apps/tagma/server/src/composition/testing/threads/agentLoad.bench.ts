@@ -25,8 +25,9 @@ import {
 import { HeapSnapshots } from '@runlith/performance/HeapSnapshots';
 import { threadSpokenMessageEvent } from '@runlith/agent/thread/events';
 import type { FeedPosition } from '@runlith/agent/transcript/live';
-import { CostLedger, CurrentCost, rootCost, type CostCause, type CostCursor, type CostRow } from '@runlith/performance/CostLedger';
-import { MachineStore } from '../../../platform/contract/service/store.js';
+import { CostLedger, CurrentCost, costRootId, rootCost, type CostCursor, type CostRow } from '@runlith/performance/CostLedger';
+import { WriterMetrics } from '@runlith/performance/WriterMetrics';
+import type { WriterMetricsReport } from '@runlith/performance/protocol/reports';
 import { GRANT_HEADER } from '../../../platform/contract/service/credentials.js';
 import { grantFor } from '../../../platform/testing/grants.js';
 import { SHIPPED_HARNESSES } from '../../../external-harnesses/testing/builtin.js';
@@ -177,6 +178,131 @@ const costs = () => {
     );
   return { add, read };
 };
+
+type WriterReader = WriterMetrics['Service'];
+type WriterOperation = WriterMetricsReport['rows'][number];
+type WriterHistogram = WriterOperation['wait'];
+const WRITER_FIELDS = ['wait', 'hold', 'child', 'outside'] as const;
+type WriterField = (typeof WRITER_FIELDS)[number];
+
+const writerSnapshot = (writers: WriterReader) => {
+  const first = writers.metrics({ limit: 8 });
+  const rows = [...first.rows];
+  let next = first.next;
+  let reset = first.reset;
+  while (next !== null) {
+    const page = writers.metrics({ after: next, limit: 8 });
+    reset ||= page.reset || page.writerId !== first.writerId || page.cursor.sequence !== first.cursor.sequence;
+    rows.push(...page.rows);
+    next = page.next;
+  }
+  return { ...first, rows, reset };
+};
+type WriterSnapshot = ReturnType<typeof writerSnapshot>;
+
+const writerFigure = (held: CostFigure, boundaries: readonly number[]) => {
+  if (held.count === 0) return { count: 0, meanMs: null, p50: null, p99: null };
+  const result = readFigure(held);
+  const bound = (value: number | null) =>
+    value === null ? null : Number.isFinite(value) ? { upperBoundMs: value } : { aboveMs: boundaries.at(-1) };
+  return { count: held.count, meanMs: result.mean, p50: bound(result.p50Upper), p99: bound(result.p99Upper) };
+};
+
+const writerDelta = (before: WriterSnapshot, after: WriterSnapshot) => {
+  const issues: string[] = [];
+  if (before.reset || after.reset || before.writerId !== after.writerId) issues.push('writer-reset');
+  if (before.boundariesMs.join(',') !== after.boundariesMs.join(',')) issues.push('boundaries-changed');
+  if (after.evictedOperations !== before.evictedOperations) issues.push('operation-eviction');
+  if (issues.includes('writer-reset') || issues.includes('boundaries-changed'))
+    return {
+      writerId: after.writerId,
+      from: before.cursor,
+      through: after.cursor,
+      evictedOperations: null,
+      partial: true,
+      issues,
+      totals: null,
+      operations: [],
+    };
+  const previous = new Map(before.rows.map((row) => [row.operation, row]));
+  const current = new Map(after.rows.map((row) => [row.operation, row]));
+  const totals = Object.fromEntries(WRITER_FIELDS.map((field) => [field, figure()])) as Record<WriterField, CostFigure>;
+  const rows: {
+    readonly operation: string;
+    readonly units: number;
+    readonly failures: number;
+    readonly interruptions: number;
+    readonly incomplete: number;
+    readonly figures: Record<WriterField, ReturnType<typeof writerFigure>>;
+  }[] = [];
+  for (const row of before.rows) if (!current.has(row.operation)) issues.push(`missing:${row.operation}`);
+  for (const row of after.rows) {
+    const prior = previous.get(row.operation);
+    if (prior !== undefined && prior.series !== row.series) {
+      issues.push(`series-changed:${row.operation}`);
+      continue;
+    }
+    if (prior === undefined && row.sinceSequence <= before.cursor.sequence) {
+      issues.push(`missing-origin:${row.operation}`);
+      continue;
+    }
+    const delta = (name: WriterField) => {
+      const now: WriterHistogram = row[name];
+      const old = prior?.[name];
+      const held = figure();
+      held.count = now.count - (old?.count ?? 0);
+      held.sum = now.sumMs - (old?.sumMs ?? 0);
+      now.bucketCounts.forEach((count, index) =>
+        held.buckets.set(after.boundariesMs[index] ?? Number.POSITIVE_INFINITY, count - (old?.bucketCounts[index] ?? 0)),
+      );
+      return held;
+    };
+    const figures = Object.fromEntries(WRITER_FIELDS.map((name) => [name, delta(name)])) as Record<WriterField, CostFigure>;
+    if (
+      row.count < (prior?.count ?? 0) ||
+      row.failures < (prior?.failures ?? 0) ||
+      row.interruptions < (prior?.interruptions ?? 0) ||
+      row.incomplete < (prior?.incomplete ?? 0) ||
+      WRITER_FIELDS.some(
+        (name) =>
+          figures[name].count < 0 ||
+          [...figures[name].buckets.values()].some((count) => count < 0) ||
+          [...figures[name].buckets.values()].reduce((sum, count) => sum + count, 0) !== figures[name].count,
+      )
+    ) {
+      issues.push(`negative-delta:${row.operation}`);
+      continue;
+    }
+    if (row.count === (prior?.count ?? 0)) continue;
+    for (const name of WRITER_FIELDS) {
+      totals[name].count += figures[name].count;
+      totals[name].sum += figures[name].sum;
+      for (const [bound, count] of figures[name].buckets) totals[name].buckets.set(bound, (totals[name].buckets.get(bound) ?? 0) + count);
+    }
+    rows.push({
+      operation: row.operation,
+      units: row.count - (prior?.count ?? 0),
+      failures: row.failures - (prior?.failures ?? 0),
+      interruptions: row.interruptions - (prior?.interruptions ?? 0),
+      incomplete: row.incomplete - (prior?.incomplete ?? 0),
+      figures: Object.fromEntries(WRITER_FIELDS.map((name) => [name, writerFigure(figures[name], after.boundariesMs)])) as Record<
+        WriterField,
+        ReturnType<typeof writerFigure>
+      >,
+    });
+  }
+  return {
+    writerId: after.writerId,
+    from: before.cursor,
+    through: after.cursor,
+    evictedOperations: after.evictedOperations - before.evictedOperations,
+    partial: issues.length > 0,
+    issues,
+    totals: Object.fromEntries(WRITER_FIELDS.map((name) => [name, writerFigure(totals[name], after.boundariesMs)])),
+    operations: rows.sort((left, right) => right.units - left.units),
+  };
+};
+
 type Allocator = {
   readonly malloc_requested?: number;
   readonly committed?: { readonly current: number; readonly peak: number };
@@ -360,29 +486,7 @@ const program = Effect.gen(function* () {
     const events = yield* Effect.acquireRelease(Queue.unbounded<string>(), Queue.shutdown);
     const streams = yield* FiberSet.make<void, unknown>();
     const ledger = Context.get(world.runtime.owners, CostLedger);
-    const moves = Context.get(world.runtime.graph, MachineStore).moves;
-    const committed = moves.committed;
-    let titleCommit: { readonly cause: CostCause; at: number | null } | null = null;
-    yield* Effect.acquireRelease(
-      Effect.sync(() =>
-        Object.defineProperty(moves, 'committed', {
-          configurable: true,
-          writable: true,
-          value: (tables: ReadonlySet<string> | null) => {
-            const fiber = Fiber.getCurrent();
-            if (
-              titleCommit !== null &&
-              fiber !== undefined &&
-              Context.get(fiber.context, CurrentCost) === titleCommit.cause &&
-              tables?.has('thread')
-            )
-              titleCommit.at = performance.now();
-            committed(tables);
-          },
-        }),
-      ),
-      () => Effect.sync(() => Object.defineProperty(moves, 'committed', { configurable: true, writable: true, value: committed })),
-    );
+    const writers = Context.get(world.runtime.owners, WriterMetrics);
     const aggregatedCosts = costs();
     const following = new Map<number, { readonly row: CostRow; readonly before: CostCursor }>();
     const initialPage = ledger.read({ limit: 4096 });
@@ -574,6 +678,16 @@ const program = Effect.gen(function* () {
     const threadLatency = figure();
     const listLatency = figure();
     const listOfferedLatency = figure();
+    const listEvidence = {
+      gap: 0,
+      reset: 0,
+      missing: 0,
+      ambiguous: 0,
+      noCommit: 0,
+      negative: 0,
+      evictedDuringProbe: 0,
+      writerPids: new Set<number>(),
+    };
     const producerDelay = figure();
     let probesOffered = 0;
     let firstProbeAt: number | null = null;
@@ -586,21 +700,21 @@ const program = Effect.gen(function* () {
       const frames = yield* Queue.unbounded<{ readonly frame: ThreadsFeedEvent; readonly received: number }>();
       const listener = yield* Effect.forkScoped(
         Stream.runForEach(feeds.client['threads.subscribe']({ projectId }), (frame) =>
-          Queue.offer(frames, { frame, received: performance.now() }).pipe(Effect.asVoid),
+          Queue.offer(frames, { frame, received: performance.timeOrigin + performance.now() }).pipe(Effect.asVoid),
         ),
       );
       const receive = Effect.raceFirst(Queue.take(frames), Effect.andThen(Fiber.join(listener), Effect.die('the list subscription ended')));
       yield* receive;
       const title = `load probe ${++titleIndex}`;
+      const before = writers.units({ limit: 1 });
       const changed = yield* rootCost(
         'bench.list',
         Effect.gen(function* () {
           const cause = yield* CurrentCost;
           if (cause === null) return yield* new BenchRefused({ message: 'the list probe has no ledger cause' });
-          const marker = { cause, at: null as number | null };
-          titleCommit = marker;
+          const rootId = costRootId(cause);
           const answer = yield* world.op('set_thread_title', { threadId: observer, title }, at);
-          return { answer, marker };
+          return { answer, rootId };
         }),
       );
       if (changed.answer.status !== 200 || (changed.answer.body as { status?: string }).status !== 'loaded')
@@ -612,10 +726,18 @@ const program = Effect.gen(function* () {
             ? frame.row.id === observer && frame.row.title === title
             : frame.type === 'list' && frame.rows.some((row) => row.id === observer && row.title === title);
         if (!matched) continue;
-        titleCommit = null;
-        if (changed.marker.at === null || received < changed.marker.at)
-          return yield* new BenchRefused({ message: 'the list probe did not observe its causing commit before the frame' });
-        return received - changed.marker.at;
+        const page = writers.units({ rootId: changed.rootId, operation: 'ThreadAdjustments.setTitle', after: before.cursor, limit: 64 });
+        const row = page.rows.length === 1 && page.next === null ? page.rows[0]! : null;
+        return {
+          gap: page.gap,
+          reset: page.reset,
+          evicted: page.evicted - before.evicted,
+          rows: page.rows.length,
+          more: page.next !== null,
+          outcome: row?.outcome ?? null,
+          writerPid: row?.writerPid ?? null,
+          elapsedMs: row?.commitReturnedAt == null ? null : received - row.commitReturnedAt,
+        };
       }
     }, Effect.scoped);
     const listJobs = yield* Effect.acquireRelease(Queue.unbounded<ProbeJob>(), Queue.shutdown);
@@ -638,8 +760,27 @@ const program = Effect.gen(function* () {
       Effect.forever(
         Effect.gen(function* () {
           const job = yield* Queue.take(listJobs);
-          const acknowledged = yield* sampleList();
-          if (job.measured && (yield* Clock.currentTimeMillis) < costEnd) addFigure(listLatency, acknowledged);
+          const observed = yield* sampleList();
+          if (job.measured && (yield* Clock.currentTimeMillis) < costEnd) {
+            if (observed.gap) listEvidence.gap += 1;
+            if (observed.reset) listEvidence.reset += 1;
+            if (observed.rows === 0) listEvidence.missing += 1;
+            if (observed.rows > 1 || observed.more) listEvidence.ambiguous += 1;
+            if (observed.rows === 1 && (observed.elapsedMs === null || observed.outcome !== 'success')) listEvidence.noCommit += 1;
+            if (observed.elapsedMs !== null && observed.elapsedMs < 0) listEvidence.negative += 1;
+            listEvidence.evictedDuringProbe += observed.evicted;
+            if (observed.writerPid !== null) listEvidence.writerPids.add(observed.writerPid);
+            if (
+              !observed.gap &&
+              !observed.reset &&
+              observed.rows === 1 &&
+              !observed.more &&
+              observed.outcome === 'success' &&
+              observed.elapsedMs !== null &&
+              observed.elapsedMs >= 0
+            )
+              addFigure(listLatency, observed.elapsedMs);
+          }
           yield* finished('list', job, listOfferedLatency);
         }),
       ),
@@ -707,6 +848,8 @@ const program = Effect.gen(function* () {
     yield* files.writeFileString(go, 'go');
     yield* Effect.sleep(warm * 1000);
     const before = yield* histograms();
+    const writerBefore = writerSnapshot(writers);
+    const writerUnitsBefore = writers.units({ limit: 1 });
     const requestedBefore = allocatorOf(heapStats())?.malloc_requested;
     const cpuBefore = process.cpuUsage();
     const countsBefore = { submitted, completed, failed };
@@ -798,6 +941,8 @@ const program = Effect.gen(function* () {
     const after = yield* histograms();
     const cpu = process.cpuUsage(cpuBefore);
     const requestedAfter = allocatorOf(heapStats())?.malloc_requested;
+    const writerAfter = writerSnapshot(writers);
+    const writerUnitsAfter = writers.units({ limit: 1 });
     const frameTotals = feeds.frames();
     const countsAfter = { submitted, completed, failed, failures: [...failures], deliveredSizes: Object.fromEntries(deliveredSizes) };
     const loopReading = {
@@ -861,6 +1006,18 @@ const program = Effect.gen(function* () {
       completedAt: churnAt,
       result: churnResult,
     };
+    const listSample = readFigure(listLatency);
+    const listComplete = scheduledProbes !== null && completedBeforeCut.list === scheduledProbes && listSample.count === scheduledProbes;
+    const writerReading = {
+      ...writerDelta(writerBefore, writerAfter),
+      unitRetention: {
+        writerId: writerUnitsAfter.writerId,
+        reset: writerUnitsBefore.writerId !== writerUnitsAfter.writerId,
+        evicted: writerUnitsAfter.evicted - writerUnitsBefore.evicted,
+        oldestSequence: writerUnitsAfter.oldestSequence,
+        gap: writerUnitsAfter.oldestSequence > writerUnitsBefore.cursor.sequence + 1,
+      },
+    };
     const completedInWindow = countsAfter.completed - countsBefore.completed;
     const cpuMs = (cpu.user + cpu.system) / 1000;
     const requestedBytes = requestedBefore === undefined || requestedAfter === undefined ? null : requestedAfter - requestedBefore;
@@ -910,6 +1067,7 @@ const program = Effect.gen(function* () {
           },
           metrics: figures,
           ledger: ledgerReading,
+          writer: writerReading,
           churn: churnReading,
           cpuMs,
           cpuMsPerCompletedCall: completedInWindow === 0 ? null : cpuMs / completedInWindow,
@@ -922,8 +1080,15 @@ const program = Effect.gen(function* () {
             graphOfferedToAnswer: boundary('graph', graphLatency),
             threadOfferedToFrame: { ...boundary('thread', threadLatency), openings },
             listOfferedToFrame: boundary('list', listOfferedLatency),
-            listPostCommitAcknowledgementToFrame: readFigure(listLatency),
-            listCommitToFrame: null,
+            listCommitToFrame: {
+              scheduled: scheduledProbes,
+              completedBeforeCut: completedBeforeCut.list,
+              observed: listSample.count,
+              sampleP50UpperMs: listSample.p50Upper,
+              sampleP99UpperMs: listSample.p99Upper,
+              p99UpperMs: listComplete ? listSample.p99Upper : null,
+              evidence: { ...listEvidence, writerPids: [...listEvidence.writerPids] },
+            },
           },
           frames: Object.fromEntries(Object.entries(frameTotals).map(([name, count]) => [name, count - (framesBefore[name] ?? 0)])),
           memory: memoryReading,
@@ -932,13 +1097,14 @@ const program = Effect.gen(function* () {
           limits: [
             'CPU includes bench driver and probes; span histogram counts are installation-wide',
             'interface offered-to-answer includes file delivery from an independent producer; outstanding-at-cut includes delayed or unsubmitted probes',
-            'the list post-acknowledgement timestamp is not the commit; the probe opens an additional transient thread-list subscription',
+            'list COMMIT-to-frame uses writer and receiver epoch clocks with no established cross-process skew bound; the probe opens an additional transient thread-list subscription',
             'producer progress is sampled at cycle boundaries, can be stale, and omits buffered ACP ingress between the CLI and server',
             'ledger root writer times are sums per act, not per-unit percentiles; late tails have a five-second settling window',
-            'allocator requested bytes are not total JavaScript allocation',
+            'writer histograms cover physical outer units; child time is acknowledged statement elapsed, not engine CPU, and incomplete splits are omitted',
+            'allocator requested bytes are process-wide and are not total JavaScript allocation',
             'history is synthetic alternating spoken messages without historical tool calls; extra projects have no code',
             'idle agents hold an open prompt without frames; genuine keep-warm pings are not forced',
-            'per-unit writer hold and JavaScript allocation are not measured by this report; loadGc.bench.ts reports a sample of GC phases with completeness unverified, and GC logging adds overhead',
+            'loadGc.bench.ts reports a sample of GC phases with completeness unverified, and GC logging adds overhead',
           ],
         },
         null,
