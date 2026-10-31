@@ -173,7 +173,7 @@ Return-to-native-component thresholds are set by the step-0 stand across all axe
 - Window profile.
 - SQLite-child CPU split into engine and transport.
 - The writer-wait cause.
-- Statement attribution by producer — step 0 gives it.
+- Statement attribution by producer in the original sample; the later causal ledger cannot attribute it retrospectively.
 - Cost on a weak machine, in a codeless project, under long history and many subscribers.
 
 All of the above is one machine, one repository, one load. A user with a smaller repository and a couple of agents pays less but by the same formulas: a full status per index change, ahead/behind per call, hundreds of statements per act, a frame per subscriber.
