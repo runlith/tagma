@@ -2,11 +2,12 @@ import { expect } from 'bun:test';
 import { layer } from '@runlith/effect-test';
 import { CostLedger } from '@runlith/performance/CostLedger';
 import { ActivityStore } from '@runlith/activity/store';
-import { Context, Effect, Fiber, FileSystem, Queue, Schema, Stream } from 'effect';
+import { Context, Effect, Fiber, FileSystem, Layer, Queue, Schema, Stream } from 'effect';
 import { THREAD_TOOL_CONFIRM_VALUE, USER_QUESTION_TOOL_NAME } from '@runlith/agent/transcript/parts';
 import { coreEntry } from '@runlith/agent/transcript/kinds';
 import type { CallEvent } from '@runlith/agent/callProgress';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { watch } from 'node:fs';
 import { GRANT_HEADER } from '../../../platform/contract/service/credentials.js';
 import { grantFor } from '../../../platform/testing/grants.js';
 import { CallActivity } from '../../../native-harness/contract/service/calls.js';
@@ -147,7 +148,7 @@ layer(protocolWorld({ name: 'hosted-costs', prepare: (world) => Effect.andThen(c
       forget(threadId);
       yield* Effect.provide(activity.log.settled, world.runtime.owners);
       {
-        const { world, projectId, checkout, agent, birth, forget } = yield* ProtocolWorld;
+        const { world, projectId, checkout, agent, birth, forget, rest } = yield* ProtocolWorld;
         const files = yield* FileSystem.FileSystem;
         const report = yield* agent('ordered');
         const threadId = yield* birth();
@@ -212,9 +213,72 @@ layer(protocolWorld({ name: 'hosted-costs', prepare: (world) => Effect.andThen(c
           finished = calls.some((call) => call.toolCallId === earlier.toolCallId && call.endedAt !== null);
         }
         yield* files.writeFileString(`${report}.release`, 'release');
-        yield* Effect.andThen(harness.threads.handle(threadId, 'operator').stop(), harness.threads.handle(threadId, 'operator').release());
+        yield* rest(threadId);
         forget(threadId);
       }
+    }),
+  );
+
+  it.effect('a forgotten thread rests after its stopped turn admits a follow-up', () =>
+    Effect.gen(function* () {
+      const result = yield* Effect.scoped(
+        Effect.gen(function* () {
+          const context = yield* Layer.build(
+            protocolWorld({ name: 'hosted-costs-teardown', prepare: (world) => Effect.andThen(claudeLogin(world), hostedDefaults(world)) }),
+          );
+          const fixture = Context.get(context, ProtocolWorld);
+          const { world, projectId, agent, birth } = fixture;
+          const report = yield* agent('teardown');
+          const threadId = yield* birth();
+          const kernel = Context.get(world.runtime.owners, ThreadHarness);
+          const changed = yield* Queue.sliding<void>(1);
+          yield* Effect.acquireRelease(
+            Effect.sync(() => {
+              const wake = () => {
+                Queue.offerUnsafe(changed, undefined);
+              };
+              const watcher = watch(dirname(report), wake);
+              const unsubscribe = kernel.reads.subscribe(threadId, wake);
+              return () => {
+                watcher.close();
+                unsubscribe();
+              };
+            }),
+            (close) => Effect.sync(close),
+          );
+          const changes = Effect.succeed(Queue.take(changed));
+          yield* turnsOf(world.runtime.owners).send(threadId, projectId, 'HOLD the turn');
+          yield* until(
+            Effect.map(heard(report), (lines) => (lines.some((line) => line.method === 'session/prompt') ? true : null)),
+            'the initial turn reached the agent',
+            report,
+            changes,
+          );
+          const first = (yield* kernel.reads.snapshot(threadId)).activeRun;
+          if (first === null) return yield* Effect.die('the initial turn has already ended');
+          yield* turnsOf(world.runtime.owners).send(threadId, projectId, 'WAIT for teardown');
+          yield* kernel.threads.handle(threadId, 'operator').stop();
+          const follow = yield* until(
+            Effect.map(kernel.reads.snapshot(threadId), (state) =>
+              state.activeRun !== null && state.activeRun.id !== first.id ? state.activeRun.id : null,
+            ),
+            'the follow-up turn opened',
+            report,
+            changes,
+          );
+          fixture.forget(threadId);
+          return { world, threadId, follow };
+        }),
+      );
+      const kernel = Context.get(result.world.runtime.owners, ThreadHarness);
+      const state = yield* kernel.reads.snapshot(result.threadId);
+      const follow = yield* kernel.runs.ledger().runById(result.follow);
+      expect(state.activeRun).toBeNull();
+      expect(state.pendingInput.queued).toEqual([]);
+      expect(state.pendingInput.steers).toEqual([]);
+      expect(follow).not.toBeNull();
+      expect(follow?.status).not.toBe('running');
+      expect(follow?.settledNotifiedAt).not.toBeNull();
     }),
   );
 });
