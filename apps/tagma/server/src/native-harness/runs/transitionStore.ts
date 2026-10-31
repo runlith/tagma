@@ -58,6 +58,7 @@ export const makeTransitions = Effect.fnUntraced(function* ({
     unit: Unit<'machine'>,
     threadId: string,
     work: (at: ThreadAt<Unit<'machine'>>) => Effect.Effect<T, E>,
+    guarded = false,
   ) {
     for (let attempt = 1; ; attempt += 1) {
       const before = yield* stored('version')(version(unit, threadId));
@@ -65,6 +66,7 @@ export const makeTransitions = Effect.fnUntraced(function* ({
       const row = yield* threads.find(threadId, unit);
       if (row === undefined) return undefined;
       const made = yield* work({ row, version: before, tx: unit });
+      if (guarded) return made;
       const after = yield* stored('version')(version(unit, threadId));
       if (after !== undefined && sameVersion(before, after)) return made;
       if (attempt === SNAPSHOT_ATTEMPTS) return yield* new ThreadVersionStaleError({ threadId });
@@ -102,6 +104,34 @@ export const makeTransitions = Effect.fnUntraced(function* ({
     if (spent) return { kind: 'spent' as const, digest: spent.digest, at: spent.at };
     if (epoch === undefined) {
       const stamped = yield* unit.run(db.select({ at: spentEpoch.at }).from(spentEpoch).where(eq(spentEpoch.id, 1)).get());
+      epoch = stamped?.at ?? null;
+    }
+    return mintedBefore(call.key, epoch) ? { kind: 'before-epoch' as const } : { kind: 'absent' as const };
+  });
+
+  const unrecorded = Effect.fnUntraced(function* (
+    program: ProgramUnit<'machine'>,
+    key: CallKey,
+  ): Effect.fn.Return<RecordReading, StoredFailure> {
+    const call = callParts(key);
+    yield* program.guard(
+      db
+        .select({ key: threadCall.key })
+        .from(threadCall)
+        .where(and(eq(threadCall.actor, call.actor), eq(threadCall.operation, call.operation), eq(threadCall.key, call.key))),
+      0,
+    );
+    yield* program.guard(
+      db
+        .select({ key: spentCallKey.key })
+        .from(spentCallKey)
+        .where(and(eq(spentCallKey.actor, call.actor), eq(spentCallKey.operation, call.operation), eq(spentCallKey.key, call.key))),
+      0,
+    );
+    if (epoch === undefined) {
+      const stamped = yield* units.read((unit) =>
+        unit.run(db.select({ at: spentEpoch.at }).from(spentEpoch).where(eq(spentEpoch.id, 1)).get()),
+      );
       epoch = stamped?.at ?? null;
     }
     return mintedBefore(call.key, epoch) ? { kind: 'before-epoch' as const } : { kind: 'absent' as const };
@@ -323,7 +353,12 @@ export const makeTransitions = Effect.fnUntraced(function* ({
           stored('readAt')(
             units.read((unit) =>
               Effect.exit(
-                snapshot(unit, threadId, (at) => Effect.tap(work(at), () => Effect.sync(() => settled.set(program, { threadId, ...at })))),
+                snapshot(
+                  unit,
+                  threadId,
+                  (at) => Effect.tap(work(at), () => Effect.sync(() => settled.set(program, { threadId, ...at }))),
+                  true,
+                ),
               ),
             ),
           ),
@@ -360,13 +395,14 @@ export const makeTransitions = Effect.fnUntraced(function* ({
                 yield* threads.folds.write('transition', unit, threadId, write.fold, write.standing, new Set());
               }),
             ),
-    readRecord: (threadId, evidence, tx) =>
-      failedAs(
+    readRecord: (threadId, evidence, tx) => {
+      const program = tx === undefined ? null : programOf(tx);
+      if (program !== null && 'call' in evidence) return failedAs('readRecord', unrecorded(program, evidence.call));
+      return failedAs(
         'readRecord',
-        tx === undefined || (programOf(tx) !== null && 'call' in evidence)
-          ? units.read((unit) => lookup(unit, threadId, evidence))
-          : lookup(tx, threadId, evidence),
-      ),
+        tx === undefined ? units.read((unit) => lookup(unit, threadId, evidence)) : lookup(tx, threadId, evidence),
+      );
+    },
     writeRecord: (threadId, evidence, write, tx) => failedAs('writeRecord', record(tx, threadId, evidence, write)),
     appliedSeq: (runId) =>
       stored('appliedSeq')(
