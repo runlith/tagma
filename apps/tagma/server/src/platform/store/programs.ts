@@ -34,15 +34,24 @@ class ProgramUnplannable extends Data.TaggedError('ProgramUnplannable')<{ readon
 
 type ProgramWrite<Brand extends StoreBrand> = WriteUnit<Brand> & { readonly program: ProgramUnit<Brand> };
 
-const plainWrite = (query: unknown): query is ProgramQuery =>
-  (is(query, SQLiteInsertBase) || is(query, SQLiteUpdateBase) || is(query, SQLiteDeleteBase)) &&
-  !/\breturning\b/i.test((query as unknown as { toSQL(): { readonly sql: string } }).toSQL().sql);
+const plainWrite = (query: Effect.Effect<unknown, StoreFailure>): ProgramQuery | null => {
+  if (!is(query, SQLiteInsertBase) && !is(query, SQLiteUpdateBase) && !is(query, SQLiteDeleteBase)) return null;
+  const text = query.toSQL();
+  return /\breturning\b/i.test(text.sql)
+    ? null
+    : Object.assign(
+        Effect.suspend(() => query),
+        { getQuery: () => text },
+      );
+};
 
 export const programWriteUnit = <Brand extends StoreBrand>(program: ProgramUnit<Brand>): ProgramWrite<Brand> => ({
   ...writeUnitOf<Brand>({
     store: program.store,
-    run: <A>(query: Effect.Effect<A, StoreFailure>): Effect.Effect<A, StoreFailure> =>
-      plainWrite(query) ? Effect.as(program.write(query), [] as A) : unplannable(program, 'a read through the program unit'),
+    run: <A>(query: Effect.Effect<A, StoreFailure>): Effect.Effect<A, StoreFailure> => {
+      const statement = plainWrite(query);
+      return statement === null ? unplannable(program, 'a read through the program unit') : Effect.as(program.write(statement), [] as A);
+    },
     afterCommit: program.afterCommit,
   }),
   program,
