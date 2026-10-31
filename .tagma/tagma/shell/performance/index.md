@@ -159,6 +159,9 @@ fields:
       },
       {
         "at": "src/CostLedger.ts"
+      },
+      {
+        "at": "src/WriterMetrics.ts"
       }
     ],
     "id": "@runlith/performance",
