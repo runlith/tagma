@@ -7,6 +7,13 @@ import { agentDefinitionSchema, agentPreviewSchema } from '../../../threads/cont
 import { ThreadHarness } from '../../../threads/contract/service/engine.js';
 import { OPERATOR_PRINCIPAL } from '../../../platform/contract/wire/actor.js';
 import { makeDoorWorld, projectLeaving } from '../doorFixture.js';
+import { MachineStore } from '../../../platform/contract/service/store.js';
+import { MachineUnits } from '../../../platform/contract/service/units.js';
+import { makeThreadRecords } from '../../../thread-record/layer.js';
+import { acpTestSeat } from '../../../external-harnesses/testing/seats.js';
+import { HARNESS_AGENT_ID, type HarnessName } from '../../../threads/contract/wire/harness/names.js';
+import { ENTRY_KINDS } from '../../manifest.js';
+import { threadStack } from '../threadParts.js';
 
 type Request = { readonly runId: string | undefined; readonly instructions: string; readonly tools: readonly string[] };
 
@@ -150,4 +157,55 @@ it.live('refresh adopts the current definition for the next run and preserves it
     expect(next.tools).toContain('ls');
     yield* finished(nextRun);
   }).pipe(Effect.provide(BunFileSystem.layer)),
+);
+
+it.live(
+  'a harness thread serving a Tagma agent refreshes as that agent and stays a harness thread; one running its own agent refuses',
+  () =>
+    Effect.gen(function* () {
+      const world = yield* makeDoorWorld();
+      const projectId = yield* world.stealthProject(yield* world.directory('hosted-refresh'));
+      yield* projectLeaving(world, projectId);
+      const op = (id: string, input: unknown) => world.op(id, input, `project=${projectId}`);
+      const saved = yield* op('save_agent', {
+        name: 'reader',
+        scope: 'project',
+        revision: null,
+        source: '---\nextends: tagma\n---\nreader-overlay\n',
+      });
+      expect(saved.status).toBe(200);
+      const records = yield* Effect.provide(makeThreadRecords, world.runtime.owners);
+      const { store, threads } = yield* Effect.provide(
+        threadStack({
+          db: Context.get(world.runtime.owners, MachineStore).db,
+          units: Context.get(world.runtime.owners, MachineUnits),
+          records,
+          kinds: ENTRY_KINDS,
+        }),
+        world.runtime.owners,
+      );
+      const seated = (harness: HarnessName, agent: string | null) =>
+        store.transaction((tx) =>
+          Effect.gen(function* () {
+            const row = yield* store.insert(
+              {
+                ownerId: 'operator',
+                agentId: HARNESS_AGENT_ID,
+                provider: 'claude-code',
+                profile: { id: 'reader', overlay: { id: 'reader', baseAgentId: 'tagma', description: '' } },
+              },
+              tx,
+            );
+            yield* threads.rows.attachFacet({ threadId: row.id, projectId, harness: acpTestSeat(harness, agent, undefined) }, tx);
+            return row.id;
+          }),
+        );
+      const hosted = yield* seated('claude-code', 'tagma');
+      expect(yield* op('refresh_thread_instructions', { threadId: hosted })).toMatchObject({ status: 200, body: { status: 'updated' } });
+      const pending = yield* store.systemPromptOf(hosted);
+      expect(pending?.pendingDefinition).toMatchObject({ agentId: HARNESS_AGENT_ID, profile: { id: 'reader' } });
+      expect(pending?.pendingSystemPrompt).toContain('reader-overlay');
+      const own = yield* seated('devin', null);
+      expect(yield* op('refresh_thread_instructions', { threadId: own })).toMatchObject({ body: { code: 'external-context' } });
+    }).pipe(Effect.provide(BunFileSystem.layer)),
 );

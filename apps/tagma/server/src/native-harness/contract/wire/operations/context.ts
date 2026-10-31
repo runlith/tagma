@@ -32,7 +32,7 @@ export const CONTEXT_OPERATIONS = {
     meaning:
       "Rebuild one thread from its current agent definition — overlay, section edits, capabilities and tools — for its next run; reread the checkout's skills and instruction files, and report where it stands against the project's instructions.",
     grammar:
-      'The next run takes the refreshed composition; a run already going keeps its instructions and sources without interruption. A missing definition refuses `agent-not-found`; one that cannot compose refuses `agent-invalid`; either preserves the saved prompt and profile. Unchanged prompt, capabilities and tools answer `current` without writing. Project instructions resolve on every model step: the answer names the delivered snapshot, the entries the next step carries (`pending`) and those withdrawn; `current` describes the saved agent composition. Conversation, agent type, model and authority stay unchanged. Loading a skill remains the run’s explicit act.',
+      'The next run takes the refreshed composition; a run already going keeps its instructions and sources without interruption. A missing definition refuses `agent-not-found`; one that cannot compose, or that no longer extends the agent a harness thread is served as, refuses `agent-invalid`; either preserves the saved prompt and profile. A thread whose harness runs its own agent refuses `external-context`. Unchanged prompt, capabilities and tools answer `current` without writing. Project instructions resolve on every model step: the answer names the delivered snapshot, the entries the next step carries (`pending`) and those withdrawn; `current` describes the saved agent composition. Conversation, agent type, model and authority stay unchanged. Loading a skill remains the run’s explicit act.',
     place: 'project',
     input: Schema.Struct({ threadId: ThreadId }),
     refusals: [
@@ -43,6 +43,7 @@ export const CONTEXT_OPERATIONS = {
       'target-placement-unreadable',
       'agent-invalid',
       'agent-not-found',
+      'external-context',
     ],
     subjects: (input, _prepared, actor) => threadSubject('write', input.threadId, actor),
     confirmation: (input) => ({ summary: `Refresh the instructions of ${input.threadId}?` }),

@@ -51,6 +51,7 @@ export const REFUSAL_WORDS = {
   'delete-conflict': 'Thread still has work going',
   denied: 'Not allowed for this caller',
   'executions-held': 'Thread still runs work here',
+  'external-context': 'Harness keeps its own instructions',
   'folder-cycle': 'Folder cannot go inside itself',
   'folder-not-found': 'Folder not found',
   'guest-mobility': 'Thread stays in its host',

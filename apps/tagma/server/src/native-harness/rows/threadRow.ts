@@ -12,11 +12,9 @@ import {
 import { and, asc, desc, eq, inArray, lt, or, sql, type SQL } from 'drizzle-orm';
 import { uuidv7 } from 'uuidv7';
 import { MachineStore } from '../../platform/contract/service/store.js';
-import { NATIVE_HARNESS } from '../../platform/contract/wire/session.js';
 import { type Unit, MachineUnits, type WriteUnit } from '../../platform/contract/service/units.js';
 import { thread, threadRun } from '../../threads/store/kernel.js';
 import { ThreadRecords } from '../../thread-record/contract/service/records.js';
-import { threadRecord } from '../../thread-record/store/table.js';
 import { subtreeOf } from '../../thread-record/lineage.js';
 import { metadataColumns, rowColumns, threadRow } from '../row.js';
 import { makeFoldWriter } from '../transcript/foldWrite.js';
@@ -90,13 +88,6 @@ export const makeThreadStore = Effect.fnUntraced(function* (input: { readonly re
             ),
           ),
     capabilities: (id: string) => work.read('capabilities', undefined, (unit) => capabilitiesOf(db, unit, id)),
-    foreign: (id: string) =>
-      work.read('foreign', undefined, (unit) =>
-        Effect.map(
-          unit.run(db.select({ harness: threadRecord.harness }).from(threadRecord).where(eq(threadRecord.id, id)).get()),
-          (row) => row !== undefined && row.harness !== NATIVE_HARNESS,
-        ),
-      ),
     systemPromptOf: (id: string, tx?: Unit<'machine'>) =>
       work.read('systemPromptOf', tx, (unit) =>
         unit.run(

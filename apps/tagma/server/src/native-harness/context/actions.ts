@@ -18,21 +18,13 @@ import type { ThreadInstructionsRefreshed } from '../contract/wire/instructions.
 import { CONTEXT_OPERATIONS } from '../contract/wire/operations/context.js';
 import type { ThreadStore } from '../rows/threadRow.js';
 import type { DeclaredAgents } from '../../threads/library/declared.js';
-import { agentOf } from '@runlith/agent/thread/rows';
+import { servedAgentOf } from '@runlith/agent/thread/rows';
 import { basename } from 'node:path';
 import type { ArtifactStore } from '../../artifacts/contract/service/shelf.js';
 import { skillInventory } from '../skills/pool.js';
 import { ThreadNotFoundError } from '@runlith/agent/thread/storage/aggregate';
 
 type NativeHarness = AgentHarness<NativeThreadState, Unit<'machine'>, WriteUnit<'machine'>>;
-const modelOnly = (store: ThreadStore, threadId: string) =>
-  Effect.flatMap(store.foreign(threadId), (owned) =>
-    owned
-      ? new GateRefusal('external-context', 'The external harness owns its model and context.', [
-          'use the harness terminal for its own context operations',
-        ])
-      : Effect.void,
-  );
 
 export const nativeCompaction = (
   harness: NativeHarness,
@@ -69,10 +61,17 @@ export const nativeInstructions = (
       admitThreadFailures(
         gated(records, threadId, projectId, () =>
           Effect.gen(function* () {
-            yield* modelOnly(store, threadId);
             const row = yield* store.metadata(threadId);
             if (row === undefined) return yield* new ThreadNotFoundError(threadId);
-            const typeId = row.profile?.id ?? agentOf(row);
+            const served = servedAgentOf(row);
+            if (served === null) {
+              return yield* new GateRefusal(
+                'external-context',
+                'This thread runs its harness’s own agent, which keeps its instructions itself.',
+                ['change its instructions through the harness itself'],
+              );
+            }
+            const typeId = row.profile?.id ?? served;
             const definition = yield* types.resolveIn({ projectId, caller: 'operator', typeId });
             if (definition === null || 'withheld' in definition) {
               const rejected = (yield* types.rejectedIn(projectId)).find((entry) => basename(entry.path) === `${typeId}.md`);
@@ -82,13 +81,21 @@ export const nativeInstructions = (
                 ['Restore or correct the definition, then refresh this thread again.'],
               );
             }
+            const hosts = row.transport.agent;
+            if (hosts !== null && definition.baseAgentId !== hosts) {
+              return yield* new GateRefusal(
+                'agent-invalid',
+                `${typeId} now builds on ${definition.baseAgentId}, and this thread's harness serves ${hosts}.`,
+                [`Make ${typeId} extend ${hosts} again, or start a new thread of it.`],
+              );
+            }
             const profile = definition.profile === undefined ? null : { id: typeId, overlay: definition.profile };
             const next = yield* targets.standing({ id: threadId, projectId, root: yield* projectRoot(projectId) });
             yield* sources.invalidate({ threadId });
             const walked = yield* sources.preview({ threadId, projectId, root: next.root });
             const checked = yield* harness.threads
               .handle(threadId, OPERATOR_PRINCIPAL)
-              .checkInstructions({ agentId: definition.baseAgentId, profile });
+              .checkInstructions({ agentId: hosts === null ? definition.baseAgentId : row.agentId, profile });
             const standing = yield* instructions(projectId, threadId, next.graph);
             const changes = instructionChanges(standing.current, standing.delivered ?? undefined);
             const ref = ({ kind, source, scope, revision }: (typeof changes.pending)[number]) => ({ kind, source, scope, revision });

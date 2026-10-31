@@ -23,7 +23,7 @@ import { ThreadAgents } from '../../agents/ThreadAgents';
 import { compositionEntry } from '../../composition/entry';
 import { threadCompositionEvent, threadContextEvent } from '../../events';
 import { ModeLaw } from '../../../modes/ModeLaw';
-import type { ThreadRow, ThreadRunRow } from '../../rows';
+import { agentOf, type ThreadRow, type ThreadRunRow } from '../../rows';
 import { ThreadCallBroke, type ThreadBorderFailed } from '../../ThreadBorder';
 import { sealThreadEvents } from '../../ThreadEventDoor';
 import {
@@ -378,8 +378,9 @@ export const runAssemblyLayer = Layer.effect(
 
       instructions: (thread, definition) => {
         const current = definition === undefined ? thread : { ...thread, ...definition };
-        return Effect.flatMap(admittedToolSources(agents, toolSources, { thread: current }), (sources) =>
-          prompt.check(current, sources, definition !== undefined),
+        const served = agentOf(current);
+        return Effect.flatMap(admittedToolSources(agents, toolSources, { thread: { ...current, agentId: served } }), (sources) =>
+          prompt.check(current, served, sources, definition !== undefined),
         );
       },
     });

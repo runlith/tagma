@@ -110,12 +110,13 @@ export const makePromptFreeze = Effect.fnUntraced(function* ({ kernel }: { reado
 
     check: Effect.fnUntraced(function* (
       thread: ThreadRow,
+      served: string,
       sources: ThreadSources,
       refreshDefinition = false,
     ): Effect.fn.Return<ThreadInstructionsChecked, ThreadBorderFailed> {
       if (thread.systemPrompt === null && !refreshDefinition) return { status: 'current' } as const;
-      const candidate = (yield* (yield* agents.get(thread.agentId)).instructions({
-        thread: { ...thread, transcript: [] },
+      const candidate = (yield* (yield* agents.get(served)).instructions({
+        thread: { ...thread, agentId: served, transcript: [] },
         sources,
       })).trim();
       if (!candidate) return { status: 'current' } as const;
