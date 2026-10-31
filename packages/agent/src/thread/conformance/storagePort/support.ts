@@ -34,7 +34,11 @@ export function folding<TTx, E, TWrite extends TTx = TTx>(
       const fold = yield* work(at);
       if (fold === null) return;
       const head = yield* harness.eventLog.headPosition(threadId, at.tx);
-      yield* harness.transitions.writeFold(threadId, { fold, standing: at.version.head, head }, at.tx);
+      yield* harness.transitions.writeFold(
+        threadId,
+        { fold, standing: at.version.head, head, at: new Date(yield* Clock.currentTimeMillis) },
+        at.tx,
+      );
     }),
   );
 }

@@ -386,13 +386,13 @@ export const makeTransitions = Effect.fnUntraced(function* ({
       Object.keys(write.fold).length === 0
         ? Effect.void
         : programOf(unit) !== null
-          ? failedAs('writeFold', threads.folds.plan(programOf(unit)!, threadId, write.fold, write.standing))
+          ? failedAs('writeFold', threads.folds.plan(programOf(unit)!, threadId, write.fold, write.standing, write.at))
           : failedAs(
               'writeFold',
               Effect.gen(function* () {
                 const row = yield* unit.run(db.select({ id: threadRow.id }).from(threadRow).where(eq(threadRow.id, threadId)).get());
                 if (row === undefined) return;
-                yield* threads.folds.write('transition', unit, threadId, write.fold, write.standing, new Set());
+                yield* threads.folds.write('transition', unit, threadId, write.fold, write.standing, new Set(), write.at);
               }),
             ),
     readRecord: (threadId, evidence, tx) => {

@@ -137,7 +137,7 @@ export const inMemoryThreadTransitions = ({ memory }: MemoryStorageInput): Threa
           ];
         }
         if (cacheObservations !== undefined) held.observations.push(...cacheObservations);
-        applyColumns(held, columns, tx.now());
+        applyColumns(held, columns, write.at);
       }),
 
     readRecord: (threadId, evidence, tx) => attempt('readRecord', () => memory.read(tx, () => reading(threadId, evidence))),

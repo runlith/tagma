@@ -1,8 +1,9 @@
 import { Clock, Effect } from 'effect';
-import { actDigest, evidenceKey, type Evidence, type Keyed, type TransitionOutcome } from '../keyed';
+import { actDigest, callParts, evidenceKey, INPUT_OPERATION, type Evidence, type Keyed, type TransitionOutcome } from '../keyed';
 import type { ThreadMetadataRow, ThreadRow } from '../rows';
+import type { ThreadMetadataChange } from '../state';
 import { ThreadNotFoundError, type ThreadAtomicPatch } from '../storage/aggregate';
-import { decodeThreadEventPayload } from '../events';
+import { decodeThreadEventPayload, type ThreadEventRecord } from '../events';
 import { foldThreadEvents, sealThreadEvents, threadPlacementSeed, type ThreadLogState, type ThreadSealedEvent } from '../ThreadEventDoor';
 import { ThreadEventJournal, ThreadStore, ThreadTransitions, type ThreadTx, type ThreadWriteTx } from '../ThreadPorts';
 import type { ThreadAggregateStorage } from '../storage/aggregate';
@@ -139,7 +140,7 @@ export const transition = Effect.fnUntraced(function* <A, TWrite extends TTx, E 
     const interactive = (held: Prepared | null) =>
       deps.transitions.writeAt(threadId, (at) =>
         Effect.flatMap(held === null ? prepareTransition(deps, threadId, declared, at.tx) : Effect.succeed(held), (prepared) =>
-          applyPrepared(deps, at, prepared, plan, call.key),
+          applyPrepared(deps, at, prepared, plan, call.key, true),
         ),
       );
     const admitted = yield* deps.lane.enter(
@@ -152,7 +153,7 @@ export const transition = Effect.fnUntraced(function* <A, TWrite extends TTx, E 
               ? interactive(null)
               : Effect.flatMap(
                   transitions.programAt!(threadId, fresh, evidenceKey(call.key.evidence), (at) =>
-                    applyPrepared(deps, at, fresh, plan, call.key),
+                    applyPrepared(deps, at, fresh, plan, call.key, true),
                   ),
                   (ran) => (ran === null ? interactive(fresh) : Effect.succeed(ran)),
                 ),
@@ -177,7 +178,7 @@ export const transitionIn = Effect.fnUntraced(function* <A, TWrite extends TTx, 
   plan: TransitionPlan<A, TWrite, E>,
   key: Keyed,
 ): Effect.fn.Return<TransitionOutcome<A>, E | ThreadPortFailure> {
-  const step = yield* deps.transitions.writeAtIn(prepared.threadId, (at) => applyPrepared(deps, at, prepared, plan, key), tx);
+  const step = yield* deps.transitions.writeAtIn(prepared.threadId, (at) => applyPrepared(deps, at, prepared, plan, key, false), tx);
   if (step === undefined) return yield* Effect.fail(new ThreadNotFoundError(prepared.threadId));
   if ('outcome' in step) return step.outcome;
   return yield* Effect.fail(new ThreadVersionStaleError({ threadId: prepared.threadId }));
@@ -230,6 +231,7 @@ const applyPrepared = Effect.fnUntraced(function* <A, TTx, TWrite extends TTx, E
   prepared: Prepared,
   plan: TransitionPlan<A, TWrite, E>,
   key: Keyed,
+  own: boolean,
 ): Effect.fn.Return<Step<A>, E | ThreadPortFailure> {
   const looked = yield* lookup<A, TTx, TWrite, E>(deps, at, plan.owned, key);
   if ('outcome' in looked) return { outcome: looked.outcome } as Step<A>;
@@ -269,16 +271,66 @@ const applyPrepared = Effect.fnUntraced(function* <A, TTx, TWrite extends TTx, E
     }
   }
   const fold: ThreadAtomicPatch = { ...foldPatch(prepared.row, state), ...(decision.patch ?? {}) };
+  const stamped = new Date(yield* Clock.currentTimeMillis);
   if (Object.keys(fold).length > 0 || declared.length > 0) {
-    yield* deps.transitions.writeFold(threadId, { fold, standing: head, head: head + declared.length, base: prepared.row.history }, at.tx);
+    yield* deps.transitions.writeFold(
+      threadId,
+      { fold, standing: head, head: head + declared.length, base: prepared.row.history, at: stamped },
+      at.tx,
+    );
   }
   if (decision.participants) yield* decision.participants(at.tx);
   yield* record(deps, at, plan.owned, key, {
     digest: key.digest,
     result: decision.result,
   });
+  if (own && plan.published !== undefined) {
+    const shown = decision.participants === undefined || decision.participantsUnseen === true ? shownFold(fold, stamped) : null;
+    yield* plan.published(
+      shown === null || !recordsUnseen(key.evidence)
+        ? { kind: 'moved', threadId }
+        : { kind: 'appended', threadId, from: head, records: yield* journalForm(deps.kinds, threadId, head, declared), thread: shown },
+      at.tx,
+    );
+  }
   return { outcome: { committed: decision.result } } as Step<A>;
 });
+const SHOWN_COLUMNS: ReadonlySet<string> = new Set(['contextReading', 'pendingInteraction']);
+const FOLDED_ONLY: ReadonlySet<string> = new Set(['history', 'covered', 'placements', 'cacheObservations']);
+function shownFold(fold: ThreadAtomicPatch, stamped: Date): ThreadMetadataChange | null {
+  const keys = Object.keys(fold);
+  if (keys.length === 0) return {};
+  const shown: Record<string, unknown> = { updatedAt: stamped };
+  for (const key of keys) {
+    const value = (fold as Readonly<Record<string, unknown>>)[key];
+    if (value === undefined || FOLDED_ONLY.has(key)) continue;
+    if (!SHOWN_COLUMNS.has(key)) return null;
+    shown[key] = value === null ? null : JSON.parse(JSON.stringify(value));
+  }
+  return shown as ThreadMetadataChange;
+}
+function recordsUnseen(evidence: Evidence): boolean {
+  if ('call' in evidence) return callParts(evidence.call).operation !== INPUT_OPERATION;
+  return !('envelope' in evidence) && !('owned' in evidence);
+}
+function journalForm(
+  kinds: ThreadEntryReader,
+  threadId: string,
+  head: number,
+  declared: readonly ThreadSealedEvent[],
+): Effect.Effect<readonly ThreadEventRecord[], ThreadStorageFailed> {
+  return Effect.try({
+    try: () =>
+      declared.map(({ id, body }, index) => ({
+        threadId,
+        position: head + index + 1,
+        id,
+        kind: body.kind,
+        payload: decodeThreadEventPayload(kinds, JSON.parse(JSON.stringify(body.payload))),
+      })),
+    catch: (cause) => new ThreadStorageFailed({ call: 'transition', cause }),
+  });
+}
 const lookup = Effect.fnUntraced(function* <A, TTx, TWrite extends TTx, E>(
   deps: TransitionDeps<TTx, TWrite>,
   at: ThreadHold<TWrite>,

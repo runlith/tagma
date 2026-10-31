@@ -1,6 +1,7 @@
 import { expect } from 'bun:test';
 import { it } from '@runlith/effect-test';
-import { Clock, Context, Deferred, Effect, Fiber, Layer } from 'effect';
+import { Clock, Context, Deferred, Effect, Fiber, Layer, Queue } from 'effect';
+import { Usage } from '@runlith/llm/schema/events';
 import { TestClock } from 'effect/testing';
 import { ThreadEntryKinds, makeThreadEntryReader } from '../../transcript/kinds';
 import type { ThreadMessageEntry, ThreadQuestionEntry } from '../../transcript/entries';
@@ -8,12 +9,22 @@ import type { ThreadTranscriptEntry } from '../../transcript/rows';
 import { FeedView } from '../../transcript/testing/feedView';
 import { STALL_FLOOR_MS } from '../../agent/callProgress';
 import type { ThreadBorderFailed, ThreadPortFailure } from '../ThreadBorder';
-import type { ThreadMetadataRow, ThreadRunRow } from '../rows';
-import type { ThreadState } from '../state';
-import { ThreadLeaseRhythm, ThreadResidence, ThreadResting, type ThreadRunLeaseRhythm } from '../ThreadPorts';
+import type { ThreadContextReading, ThreadMetadataRow, ThreadRunRow } from '../rows';
+import type { ThreadState, ThreadStateFrame } from '../state';
+import {
+  ThreadLeaseRhythm,
+  ThreadResidence,
+  ThreadResting,
+  type ThreadRunLeaseRhythm,
+  type ThreadTx,
+  type ThreadWriteTx,
+} from '../ThreadPorts';
 import { threadStorageLayer } from '../kernelPorts';
 import { inboxSignalValues, inboxSteerValues, inboxTurnValues } from '../inboxItems';
-import { threadSignalEvent } from '../events';
+import { threadEntryEvent, threadSignalEvent } from '../events';
+import { sealThreadEvents } from '../ThreadEventDoor';
+import { actDigest } from '../keyed';
+import { answerOf, transition, transitionDeps } from '../transition/kernel';
 import type { StoredThreadAttachment } from '../attachmentStorage';
 import type { ThreadSignal } from '../../transcript/parts';
 import { makeMemoryRows } from '../storage/memory/ThreadRows';
@@ -321,6 +332,60 @@ it.effect(
     ]);
   }),
 );
+it.effect(
+  'a transition that publishes its own change lands in the projection without reading storage, as a fresh read would',
+  Effect.fnUntraced(function* () {
+    const world = yield* snapshotsOver();
+    world.active.set('t', runRow('run-1', { threadId: 't' }));
+    const frames = yield* world.frames;
+    yield* world.snapshots.publish('t');
+    const reads = world.reads.latest;
+    yield* world.transit([words('a', 'one', 'run-1')], { contextReading: reading(7) });
+    const frame = yield* frames.at(1);
+    expect(world.reads.latest).toBe(reads);
+    expect(frame.deltas.map((delta) => delta.entry?.id)).toEqual(['a']);
+    expect(stripped(frame.state)).toEqual(stripped(yield* world.snapshots.state('t')));
+  }),
+);
+it.effect(
+  'a change that does not follow the published position reads the thread again and publishes every fact once',
+  Effect.fnUntraced(function* () {
+    const world = yield* snapshotsOver();
+    world.active.set('t', runRow('run-1', { threadId: 't' }));
+    const frames = yield* world.frames;
+    yield* world.snapshots.publish('t');
+    const reads = world.reads.latest;
+    yield* world.append(words('unannounced', 'between', 'run-1'));
+    yield* world.transit([words('b', 'two', 'run-1')]);
+    const frame = yield* frames.at(1);
+    expect(world.reads.latest).toBe(reads + 1);
+    expect(frame.deltas.map((delta) => delta.entry?.id)).toEqual(['unannounced', 'b']);
+    expect(stripped(frame.state)).toEqual(stripped(yield* world.snapshots.state('t')));
+  }),
+);
+it.effect(
+  'under any order of published, read and unannounced changes the projection equals a fresh read and carries each fact once',
+  Effect.fnUntraced(function* () {
+    const world = yield* snapshotsOver();
+    world.active.set('t', runRow('run-1', { threadId: 't' }));
+    const frames = yield* world.frames;
+    yield* world.snapshots.publish('t');
+    let seed = 7;
+    const next = () => (seed = (seed * 48_271) % 2_147_483_647) % 4;
+    for (let step = 0; step < 48; step += 1) {
+      const entry = words(`e${step}`, `step ${step}`, 'run-1');
+      const choice = next();
+      if (choice === 0) yield* world.transit([entry], step % 3 === 0 ? { contextReading: reading(step) } : {});
+      else if (choice === 1) yield* world.transit([entry, words(`f${step}`, 'paired', 'run-1')]);
+      else if (choice === 2) yield* Effect.andThen(world.append(entry), world.snapshots.publish('t'));
+      else yield* world.transit([entry], {}, 'moved');
+      const frame = yield* frames.reaching(yield* world.head());
+      expect(stripped(frame.state)).toEqual(stripped(yield* world.snapshots.state('t')));
+    }
+    const carried = frames.all().flatMap((frame) => frame.deltas.map((delta) => delta.position));
+    expect(carried).toEqual(Array.from({ length: yield* world.head() }, (_, index) => index + 1));
+  }),
+);
 type SnapshotRowState = {
   beforeWindow: Effect.Effect<void, ThreadPortFailure>;
   readonly metadataReads: (readonly string[])[];
@@ -463,8 +528,55 @@ const snapshotsOver = Effect.fnUntraced(function* (
     ),
   );
   const context = yield* Layer.build(threadSnapshotsLayer.pipe(Layer.provideMerge(dependencies)));
+  const snapshots = Context.get(context, ThreadSnapshots);
+  const deps = yield* Effect.provide(transitionDeps, context);
   const append = (entry: ThreadTranscriptEntry) =>
     rows.transaction((tx) => rawLog.append({ threadId: 't', id: `event:${entry.id}`, kind: entry.type, payload: { entry } }, tx));
+  const transit = (
+    entries: readonly ThreadTranscriptEntry[],
+    patch: { readonly contextReading?: ThreadContextReading } = {},
+    landing: 'appended' | 'moved' = 'appended',
+  ) =>
+    Effect.flatMap(
+      transition<undefined, ThreadWriteTx, ThreadPortFailure, ThreadTx>(
+        deps,
+        't',
+        {
+          declared: sealThreadEvents(entries.map(threadEntryEvent)),
+          published: snapshots.committed,
+          decide: () =>
+            Effect.succeed({ apply: true, result: undefined, patch, participants: landing === 'moved' ? () => Effect.void : undefined }),
+        },
+        {
+          key: { evidence: { decidedBy: `test:${entries[0]?.id}` }, digest: actDigest(entries.map((entry) => entry.id)) },
+          deadline: LATER,
+        },
+      ),
+      (outcome) => answerOf('t', outcome),
+    );
+  const frames = Effect.gen(function* () {
+    const seen: ThreadStateFrame<ThreadState>[] = [];
+    const arrived = yield* Queue.unbounded<ThreadStateFrame<ThreadState>>();
+    const unsubscribe = live.subscribe('t', (event) => {
+      if (event.type === 'state') Queue.offerUnsafe(arrived, event.frame);
+    });
+    yield* Effect.addFinalizer(() => Effect.sync(unsubscribe));
+    const take = Effect.tap(Queue.take(arrived), (frame) => Effect.sync(() => void seen.push(frame)));
+    return {
+      at: Effect.fnUntraced(function* (index: number) {
+        while (seen.length <= index) yield* take;
+        return seen[index]!;
+      }),
+      reaching: Effect.fnUntraced(function* (position: number) {
+        for (;;) {
+          const last = seen.at(-1);
+          if (last !== undefined && last.state.position >= position) return last;
+          yield* take;
+        }
+      }),
+      all: () => seen,
+    };
+  });
   return {
     memory,
     rows,
@@ -477,11 +589,39 @@ const snapshotsOver = Effect.fnUntraced(function* (
     observed,
     inbox,
     append,
+    transit,
+    frames,
+    head: () => rawLog.headPosition('t'),
     capabilities,
-    snapshots: Context.get(context, ThreadSnapshots),
+    snapshots,
     gate: Context.get(context, LaunchGate),
   };
 });
+const LATER = new Date('2100-01-01T00:00:00.000Z');
+function reading(stepNumber: number): ThreadContextReading {
+  return {
+    usage: new Usage({
+      inputTokens: stepNumber,
+      outputTokens: 1,
+      totalTokens: stepNumber + 1,
+      reasoningTokens: 0,
+      cacheReadInputTokens: 0,
+      cacheWriteInputTokens: 0,
+      nonCachedInputTokens: stepNumber,
+    }),
+    contextWindow: 200_000,
+    runId: 'run-1',
+    stepNumber,
+    provider: 'test',
+    model: 'test-model',
+    measuredAt: '2026-10-31T00:00:00.000Z',
+    stale: false,
+  };
+}
+function stripped(state: ThreadState): Omit<ThreadState, 'now'> {
+  const { now: _now, ...standing } = state;
+  return JSON.parse(JSON.stringify(standing));
+}
 function words(id: string, text: string, runId = 'r'): ThreadMessageEntry {
   return { type: 'message', id, role: 'assistant', runId, text };
 }

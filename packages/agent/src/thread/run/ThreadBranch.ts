@@ -2,7 +2,7 @@ import { ThreadJournalLane } from '../transition/lane';
 import { ThreadEntryKinds, coreEntry } from '../../transcript/kinds';
 import type { ModelSwitches } from '@runlith/llm/models/description';
 import { Message, ToolResultPart } from '@runlith/llm/schema/messages';
-import { Context, Effect, Layer } from 'effect';
+import { Clock, Context, Effect, Layer } from 'effect';
 import { toolEntryId } from '../../transcript/entryNames';
 import { settleTool, toolSettled } from '../../transcript/entries';
 import { attributionDisagrees, type HistoryAttribution } from '../HistoryAttribution';
@@ -234,7 +234,11 @@ export const makeThreadBranch = Effect.gen(function* () {
     }
     const head = base.through + declared.length;
     const fold = { history, covered: { from: base.through, through: head } };
-    yield* kernel.transitions.writeFold(childId, { fold, standing: base.through, head, base: [] }, tx);
+    yield* kernel.transitions.writeFold(
+      childId,
+      { fold, standing: base.through, head, base: [], at: new Date(yield* Clock.currentTimeMillis) },
+      tx,
+    );
     return history;
   });
   const bear = (input: ThreadDuplicateInput, childId: string, ahead: Prepared | null) =>

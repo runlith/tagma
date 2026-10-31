@@ -220,6 +220,7 @@ export const threadHostingLayer = Layer.effect(
           threadId,
           {
             declared: sealThreadEvents(events),
+            published: snapshots.committed,
             decide: (_view, tx) =>
               Effect.map(running ? ledger.activeRunIn(threadId, tx) : Effect.succeed(null), (run) =>
                 running && (run?.id !== runId || !ours(run))
@@ -230,7 +231,7 @@ export const threadHostingLayer = Layer.effect(
           { evidence: { decidedBy: `hosted:${runId}:${decidedBy}` }, digest: decidedBy },
         ),
         (outcome) => answerOf(threadId, outcome),
-      ).pipe(Effect.tap(() => snapshots.publish(threadId)));
+      );
 
     const released = Effect.fnUntraced(function* (
       threadId: string,
@@ -415,6 +416,7 @@ export const threadHostingLayer = Layer.effect(
                 ? {}
                 : {
                     participants: (unit: ThreadWriteTx) => hosted.handle.toolOutputs.commitReferenced([message], [], unit),
+                    participantsUnseen: true,
                   },
               [
                 threadEntryEvent(entryOf(hosted.runId, call, settled, hosted.started.get(call.toolCallId))),

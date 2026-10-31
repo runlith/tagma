@@ -508,6 +508,7 @@ const spawnWorld = Effect.fnUntraced(function* (
         attachFrom: unused,
         page: unused,
         statuses: unused,
+        committed: unused,
         forget: unused,
       }),
     ),

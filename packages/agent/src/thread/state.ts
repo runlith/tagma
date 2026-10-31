@@ -5,6 +5,7 @@ import { THREAD_RUN_AWAITING_QUESTION_STAGE, THREAD_RUN_RESUMING_STAGE } from '.
 import type { CurrentRun, TransportCapabilities } from './record';
 import type { ThreadRunLeaseRhythm } from './ThreadPorts';
 import type { ThreadMetadataRow, ThreadRunRow, ThreadRunStatus } from './rows';
+import type { ThreadEventRecord } from './events';
 
 export type ThreadState = {
   readonly thread: ThreadMetadataRow;
@@ -30,6 +31,18 @@ export type ThreadStateFrame<TState> = {
   readonly from: number;
   readonly deltas: readonly ThreadEventDelta[];
 };
+
+export type ThreadMetadataChange = Partial<Pick<ThreadMetadataRow, 'updatedAt' | 'contextReading' | 'pendingInteraction'>>;
+
+export type ThreadStateChange =
+  | {
+      readonly kind: 'appended';
+      readonly threadId: string;
+      readonly from: number;
+      readonly records: readonly ThreadEventRecord[];
+      readonly thread: ThreadMetadataChange;
+    }
+  | { readonly kind: 'moved'; readonly threadId: string };
 
 export type ActiveLife = 'working' | 'awaiting' | 'stalled';
 

@@ -909,6 +909,7 @@ const spawnWorld = Effect.fnUntraced(function* (menu?: typeof shipped) {
         attachFrom: unused,
         page: unused,
         statuses: unused,
+        committed: unused,
         forget: unused,
       }),
     ),

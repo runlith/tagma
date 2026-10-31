@@ -1,4 +1,4 @@
-import { Clock, Effect } from 'effect';
+import { Effect } from 'effect';
 import { eq } from 'drizzle-orm';
 import { ThreadStorageFailed } from '@runlith/agent/thread/persisted';
 import type { ThreadAtomicPatch } from '@runlith/agent/thread/storage/aggregate';
@@ -34,6 +34,7 @@ export const makeFoldWriter = Effect.fnUntraced(function* (input: { readonly rea
       fold: ThreadAtomicPatch,
       standing: number,
       materialized: Set<string>,
+      at: Date,
     ) {
       const { history: next, covered, placements, cacheObservations, ...columns } = fold;
       if (next !== undefined) {
@@ -59,9 +60,9 @@ export const makeFoldWriter = Effect.fnUntraced(function* (input: { readonly rea
       }
       yield* history.project(unit, id);
       for (const observation of cacheObservations ?? []) yield* observations.append(id, observation, unit);
-      yield* applyPatch(db, records, models, unit, id, columns);
+      yield* applyPatch(db, records, models, unit, id, columns, at);
     }),
-    plan: Effect.fnUntraced(function* (program: ProgramUnit<'machine'>, id: string, fold: ThreadAtomicPatch, standing: number) {
+    plan: Effect.fnUntraced(function* (program: ProgramUnit<'machine'>, id: string, fold: ThreadAtomicPatch, standing: number, at: Date) {
       const { history: next, covered, placements, cacheObservations, ...columns } = fold;
       if ((cacheObservations?.length ?? 0) > 0) return yield* unplannable(program, 'cache observations');
       const patched = Object.entries(columns).filter(([, value]) => value !== undefined);
@@ -74,7 +75,7 @@ export const makeFoldWriter = Effect.fnUntraced(function* (input: { readonly rea
       yield* program.write(
         db
           .update(thread)
-          .set({ ...Object.fromEntries(patched), updatedAt: new Date(yield* Clock.currentTimeMillis) })
+          .set({ ...Object.fromEntries(patched), updatedAt: at })
           .where(eq(thread.id, id)),
         1,
       );

@@ -72,14 +72,16 @@ export function callerActor(caller: AdmitCaller): string {
   }
 }
 
-const INPUT_PREFIX = 'input:';
+export const INPUT_OPERATION = 'input';
+
+const INPUT_PREFIX = `${INPUT_OPERATION}:`;
 
 export function inputItemId(caller: AdmitCaller, key: string): string {
   return `${INPUT_PREFIX}${encodeURIComponent(callerActor(caller))}:${encodeURIComponent(key)}`;
 }
 
 export function inputEvidence(caller: AdmitCaller, key: string): Evidence {
-  return { call: callKey({ operation: 'input', actor: callerActor(caller), key }) };
+  return { call: callKey({ operation: INPUT_OPERATION, actor: callerActor(caller), key }) };
 }
 
 export type InputAddress = { readonly key: string; readonly evidence: Evidence };
@@ -90,7 +92,7 @@ export function inputAddressOf(itemId: string): InputAddress | null {
   if (cut < 0) return null;
   const actor = decodeURIComponent(itemId.slice(INPUT_PREFIX.length, cut));
   const key = decodeURIComponent(itemId.slice(cut + 1));
-  return { key, evidence: { call: callKey({ operation: 'input', actor, key }) } };
+  return { key, evidence: { call: callKey({ operation: INPUT_OPERATION, actor, key }) } };
 }
 
 export function callParts(key: CallKey): CallParts {

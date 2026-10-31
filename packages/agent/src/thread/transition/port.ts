@@ -5,6 +5,7 @@ import type { ThreadAtomicPatch, ThreadPatch } from '../storage/aggregate';
 import type { ThreadEventInput } from '../events';
 import type { ThreadSealedEvent, ThreadLogState } from '../ThreadEventDoor';
 import type { ThreadBorderFailed, ThreadPortFailure } from '../ThreadBorder';
+import type { ThreadStateChange } from '../state';
 
 export type ThreadVersion = {
   readonly foldRev: number;
@@ -42,6 +43,7 @@ export type ThreadFoldWrite = {
   readonly standing: number;
   readonly head: number;
   readonly base?: ThreadHistory;
+  readonly at: Date;
 };
 
 export interface ThreadTransitionStorage<TTx, TWrite extends TTx = TTx> {
@@ -85,6 +87,7 @@ export type Decision<A, TWrite, E = ThreadBorderFailed> =
       readonly events?: readonly ThreadEventInput[];
       readonly patch?: ThreadPatch & { readonly contextReading?: ThreadContextReading | null };
       readonly participants?: (tx: TWrite) => Effect.Effect<void, E>;
+      readonly participantsUnseen?: true;
     }
   | { readonly redeclare: readonly ThreadSealedEvent[] }
   | { readonly refuse: A }
@@ -98,6 +101,7 @@ export type OwnedRecord<TWrite, E = ThreadBorderFailed> = {
 export type TransitionPlan<A, TWrite, E = ThreadBorderFailed> = {
   readonly declared: readonly ThreadSealedEvent[];
   readonly owned?: OwnedRecord<TWrite, E>;
+  readonly published?: (change: ThreadStateChange, tx: TWrite) => Effect.Effect<void>;
   decide(view: TransitionView, tx: TWrite): Effect.Effect<Decision<A, TWrite, E>, E>;
 };
 

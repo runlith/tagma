@@ -433,5 +433,6 @@ export class ThreadFeed extends Context.Service<
     progress(threadId: string, runId: string, progress: ThreadLiveProgress): void;
     view(threadId: string): ThreadOpenView;
     publish(frame: ThreadStateFrame<ThreadState>): Effect.Effect<void, ThreadBorderFailed>;
+    carry(frame: ThreadStateFrame<ThreadState>): Effect.Effect<void, ThreadBorderFailed>;
   }
 >()('@runlith/agent/ThreadFeed') {}

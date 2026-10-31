@@ -1183,6 +1183,7 @@ const recorderWorld = Effect.fnUntraced(function* ({ transcript: initialTranscri
           page: unused,
           statuses: unused,
           publish: () => published,
+          committed: unused,
           forget: unused,
         }),
       ),

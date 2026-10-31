@@ -17,6 +17,7 @@ export const applyPatch = (
   unit: WriteUnit<'machine'>,
   id: string,
   patch: ThreadPatch,
+  at?: Date,
 ): Effect.Effect<void, StoredFailure> => {
   const { status, authority, budgetTokens, hostKind, hostId, parentThreadId, spawnedByRunId, createdBy, agentId, ...native } = patch;
   const fixed = Object.entries({ parentThreadId, spawnedByRunId, createdBy })
@@ -30,7 +31,7 @@ export const applyPatch = (
     if (status !== undefined) yield* records.publishStatus(unit, id, { status });
     if (agentId !== undefined) yield* records.harnessed(unit, id, { harness: NATIVE_HARNESS, agentId });
     if (Object.keys(mandate).length > 0) yield* writeMandate(db, unit, id, mandate);
-    const updatedAt = new Date(yield* Clock.currentTimeMillis);
+    const updatedAt = at ?? new Date(yield* Clock.currentTimeMillis);
     const moved = yield* models.record(
       unit,
       id,

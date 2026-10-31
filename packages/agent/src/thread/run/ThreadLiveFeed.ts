@@ -13,7 +13,7 @@ export type ThreadLiveEvent<TState> =
   | { readonly type: 'state'; readonly at: FeedPosition; readonly frame: ThreadStateFrame<TState>; readonly weight: number }
   | { readonly type: 'open'; readonly at: FeedPosition; readonly change: ThreadOpenChange; readonly weight: number };
 
-type Lane = {
+type Lane<TState> = {
   seq: number;
   position: number;
   runId: string | null;
@@ -21,6 +21,7 @@ type Lane = {
   readonly open: Map<string, ThreadTranscriptEntry>;
   readonly landing: Set<string>;
   progress: ThreadLiveProgress | null;
+  state: TState | null;
 };
 
 const STILL: ThreadLiveProgress = { phase: null, estimate: null };
@@ -34,7 +35,7 @@ export const makeThreadLiveFeed = Effect.fnUntraced(function* <TState extends Th
   };
   const events = createKeyedEventEmitter<string, [ThreadLiveEvent<TState>]>(listenerFailed);
   const stateListeners = createEventEmitter<[TState]>(listenerFailed);
-  const lanes = new Map<string, Lane>();
+  const lanes = new Map<string, Lane<TState>>();
   const cuts = new Map<string, { gate: Semaphore.Semaphore; readers: number }>();
 
   const atCut = <A, E, R>(threadId: string, work: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
@@ -109,6 +110,7 @@ export const makeThreadLiveFeed = Effect.fnUntraced(function* <TState extends Th
       }
     }
     lane.position = Math.max(lane.position, frame.state.position, frame.deltas.at(-1)?.position ?? 0);
+    lane.state = state;
     lane.seq += 1;
     events.emit(threadId, {
       type: 'state',
@@ -128,6 +130,8 @@ export const makeThreadLiveFeed = Effect.fnUntraced(function* <TState extends Th
     for (const [id, entry] of lane.open) if (!lane.landing.has(id)) open.push(entry);
     return { at: { position: lane.position, seq: lane.seq }, open, progress: lane.progress };
   };
+
+  const stateOf = (threadId: string): TState | null => lanes.get(threadId)?.state ?? null;
 
   const watchedAtRest = (): readonly string[] => {
     const resting: string[] = [];
@@ -150,13 +154,13 @@ export const makeThreadLiveFeed = Effect.fnUntraced(function* <TState extends Th
   };
   const subscribeStates = (listener: (state: TState) => void): (() => void) => stateListeners.subscribe(listener);
 
-  function running(threadId: string, runId: string): Lane {
+  function running(threadId: string, runId: string): Lane<TState> {
     const lane = laneOf(threadId);
     if (lane.runId !== runId) close(threadId, lane);
     lane.runId = runId;
     return lane;
   }
-  function close(threadId: string, lane: Lane): void {
+  function close(threadId: string, lane: Lane<TState>): void {
     for (const id of [...lane.open.keys()]) {
       lane.open.delete(id);
       lane.landing.delete(id);
@@ -168,7 +172,7 @@ export const makeThreadLiveFeed = Effect.fnUntraced(function* <TState extends Th
     }
     lane.runId = null;
   }
-  function emitOpen(threadId: string, lane: Lane, change: ThreadOpenChange): void {
+  function emitOpen(threadId: string, lane: Lane<TState>, change: ThreadOpenChange): void {
     lane.seq += 1;
     events.emit(threadId, {
       type: 'open',
@@ -177,18 +181,27 @@ export const makeThreadLiveFeed = Effect.fnUntraced(function* <TState extends Th
       weight: lane.watchers === 0 ? 0 : changeWeight(change),
     });
   }
-  function laneOf(threadId: string): Lane {
+  function laneOf(threadId: string): Lane<TState> {
     const held = lanes.get(threadId);
     if (held !== undefined) return held;
-    const lane: Lane = { seq: 0, position: 0, runId: null, watchers: 0, open: new Map(), landing: new Set(), progress: null };
+    const lane: Lane<TState> = {
+      seq: 0,
+      position: 0,
+      runId: null,
+      watchers: 0,
+      open: new Map(),
+      landing: new Set(),
+      progress: null,
+      state: null,
+    };
     lanes.set(threadId, lane);
     return lane;
   }
-  function release(threadId: string, lane: Lane): void {
+  function release(threadId: string, lane: Lane<TState>): void {
     if (lane.watchers > 0 || lane.runId !== null || lane.open.size > 0) return;
     if (lanes.get(threadId) === lane) lanes.delete(threadId);
   }
-  return { atCut, tail, append, progress, publishState, view, watchedAtRest, subscribe, subscribeStates };
+  return { atCut, tail, append, progress, publishState, stateOf, view, watchedAtRest, subscribe, subscribeStates };
 });
 
 function growth(held: ThreadTranscriptEntry, next: ThreadTranscriptEntry): string | null {
@@ -243,15 +256,21 @@ export function threadFeedLayer<TState extends ThreadStateShape>(
   live: ThreadLiveFeed<TState>,
   toState: (state: ThreadState) => Effect.Effect<TState, ThreadBorderFailed>,
 ): Layer.Layer<ThreadFeed> {
+  const publish = (frame: ThreadStateFrame<ThreadState>): Effect.Effect<void, ThreadBorderFailed> =>
+    Effect.map(toState(frame.state), (projected) => {
+      live.publishState({ ...frame, state: projected });
+    });
   return Layer.succeed(ThreadFeed, {
     atCut: (threadId, work) => live.atCut(threadId, work),
     tail: (threadId, runId, entries, landed) => live.tail(threadId, runId, entries, landed),
     append: (threadId, runId, id, text) => live.append(threadId, runId, id, text),
     progress: (threadId, runId, progress) => live.progress(threadId, runId, progress),
     view: (threadId) => live.view(threadId),
-    publish: (frame) =>
-      Effect.map(toState(frame.state), (projected) => {
-        live.publishState({ ...frame, state: projected });
-      }),
+    publish: (frame) => publish(frame),
+    carry: (frame) => {
+      const last = live.stateOf(frame.state.thread.id);
+      if (last === null) return publish(frame);
+      return Effect.sync(() => live.publishState({ ...frame, state: { ...last, ...frame.state } }));
+    },
   });
 }

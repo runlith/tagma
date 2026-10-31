@@ -1,14 +1,17 @@
-import { Cause, Clock, Context, Duration, Effect, FiberMap, Layer, References, Tracer } from 'effect';
-import { producerCost } from '@runlith/performance/CostLedger';
+import { Cause, Clock, Context, Duration, Effect, FiberMap, FiberSet, Layer, References, Tracer } from 'effect';
+import { CurrentCost, producerCost, type CostCause } from '@runlith/performance/CostLedger';
 import { declare, type Held } from '@runlith/held/Held';
 import type { ThreadPendingInput, ThreadQueuedTurn, ThreadResumeOf, ThreadWaitingTurn, WordsWait } from '../../transcript/live';
-import type { ThreadSnapshot, ThreadState } from '../state';
+import type { ThreadSnapshot, ThreadState, ThreadStateChange } from '../state';
 import { WIRE_PAGE_MAX_BYTES, WIRE_PAGE_MAX_ENTRIES } from '../../transcript/cap';
 import { extendPageToTurnRoot } from '../../transcript/page';
+import { coreEntry } from '../../transcript/kinds';
 import { threadWireDeltas } from '../ThreadWireDeltas';
 import type { ThreadInboxItem } from '../storage/inbox';
 import type { ThreadMetadataRow, ThreadRunRow } from '../rows';
 import type { ThreadTranscriptPage } from '../../transcript/rows';
+import type { ThreadEventRecord } from '../events';
+import { threadEventFact } from '../ThreadEventDoor';
 import {
   carriesWords,
   isEndBarrier,
@@ -31,12 +34,13 @@ import {
   ThreadResting,
   ThreadStore,
   ThreadTransitions,
+  type ThreadWriteTx,
 } from '../ThreadPorts';
 import type { RunStatus, StatusRow } from '../../transcript/live';
 import { inputAddressOf } from '../keyed';
 import { recordedReceiptOf, runStatusOf, type RecordedReceipt } from './runStatusOf';
 import { ThreadCallBroke, isThreadBorderFailure, type ThreadBorderFailed } from '../ThreadBorder';
-import { RunEndings } from './lifecycle/endings';
+import { RunEndings, type RunEnding } from './lifecycle/endings';
 import { LaunchGate } from './LaunchGate';
 import { openQuestionsOf } from './openQuestions';
 import { decodeRecord } from './scheduler/answers';
@@ -45,6 +49,7 @@ import { WordsInFlight } from './WordsInFlight';
 import { Transports } from '../transport/Transports';
 import { wordsWaitOf, type WordsWaitOwners } from './wordsWait';
 import { ThreadEntryKinds } from '../../transcript/kinds';
+import { awaitsAnswer } from '../state';
 export class ThreadSnapshots extends Context.Service<
   ThreadSnapshots,
   {
@@ -53,11 +58,22 @@ export class ThreadSnapshots extends Context.Service<
     attachFrom(threadId: string, sincePosition: number): Effect.Effect<ThreadResumeOf<ThreadState> | null, ThreadBorderFailed>;
     page(threadId: string, before: number): Effect.Effect<ThreadTranscriptPage, ThreadBorderFailed>;
     publish(threadId: string): Effect.Effect<void, ThreadBorderFailed>;
+    committed(change: ThreadStateChange, tx: ThreadWriteTx): Effect.Effect<void>;
     statuses(ownerId: string, threadIds: readonly string[]): Effect.Effect<readonly StatusRow[], ThreadBorderFailed>;
     forget(threadIds: readonly string[]): Effect.Effect<void>;
   }
 >()('@runlith/agent/ThreadSnapshots') {}
-type SnapshotReading = { readonly state: ThreadState; readonly changesAt: Date | null };
+type StatusInputs = {
+  readonly recorded: ReadonlyMap<string, RecordedReceipt>;
+  readonly openQuestions: readonly string[];
+  readonly ended: RunEnding | null;
+};
+type SnapshotReading = { readonly state: ThreadState; readonly changesAt: Date | null; readonly inputs: StatusInputs };
+type Projection = { readonly state: ThreadState; readonly inputs: StatusInputs };
+type Appended = Extract<ThreadStateChange, { readonly kind: 'appended' }>;
+type Asked = { readonly cause: CostCause | null; readonly parent: Tracer.AnySpan | null };
+type Work = Asked & { readonly change: ThreadStateChange };
+const HELD_PROJECTIONS = 256;
 
 export const makeThreadSnapshots = Effect.gen(function* () {
   const journal = yield* ThreadEventJournal;
@@ -84,6 +100,10 @@ export const makeThreadSnapshots = Effect.gen(function* () {
       ? wordsWaitOf(owners, transports, thread, { active: activeRun !== null, after: latestRun?.id ?? null })
       : Effect.succeed(null);
   const published = new Map<string, number>();
+  const projections = new Map<string, Projection>();
+  const queues = new Map<string, Work[]>();
+  const draining = yield* FiberSet.make<void>();
+  const lifetime = yield* Effect.context<never>();
   const deadlines = yield* FiberMap.make<string>();
   const reconsiderations = yield* FiberMap.make<string, void, ThreadBorderFailed>();
   const shown = new Map<string, string>();
@@ -136,7 +156,11 @@ export const makeThreadSnapshots = Effect.gen(function* () {
       lease,
       ended,
     );
-    return { state: { thread, position, activeRun, latestRun, pendingInput, status, now: now.toISOString() }, changesAt };
+    return {
+      state: { thread, position, activeRun, latestRun, pendingInput, status, now: now.toISOString() },
+      changesAt,
+      inputs: { recorded, openQuestions, ended },
+    };
   });
   const state = (threadId: string): Effect.Effect<ThreadState, ThreadBorderFailed> => Effect.map(reading(threadId), (read) => read.state);
   const statuses = Effect.fn('ThreadSnapshots.statuses')(function* (
@@ -244,10 +268,6 @@ export const makeThreadSnapshots = Effect.gen(function* () {
       ({ value, live }) => (value ? { ...value, live } : null),
     ).pipe(Effect.withSpan('ThreadSnapshots.attachFrom'));
   const page = (threadId: string, before: number): Effect.Effect<ThreadTranscriptPage, ThreadBorderFailed> => window(threadId, before);
-  const inLane = (threadId: string, work: Effect.Effect<void, ThreadBorderFailed>): Effect.Effect<void, ThreadBorderFailed> =>
-    lanes
-      .hold(threadId, work)
-      .pipe(Effect.mapError((failure) => (isThreadBorderFailure(failure) ? failure : new ThreadCallBroke({ cause: failure }))));
   const standing = (status: RunStatus): string => `${status.life}|${status.ownership ?? ''}`;
   const arm = (threadId: string, status: RunStatus, changesAt: Date | null): Effect.Effect<void> =>
     changesAt === null
@@ -292,12 +312,22 @@ export const makeThreadSnapshots = Effect.gen(function* () {
           Effect.sync(() => {
             shown.delete(threadId);
             published.delete(threadId);
+            projections.delete(threadId);
           }),
         ),
       { discard: true },
     );
-  const publish = (threadId: string): Effect.Effect<void, ThreadBorderFailed> =>
-    producerCost(PUBLISHING, residence === null ? framed(threadId) : residence.reading(threadId, framed(threadId)));
+  const hold = (threadId: string, projection: Projection): void => {
+    projections.delete(threadId);
+    projections.set(threadId, projection);
+    if (projections.size <= HELD_PROJECTIONS) return;
+    const oldest = projections.keys().next().value;
+    if (oldest !== undefined) projections.delete(oldest);
+  };
+  const inLane = <A>(threadId: string, work: Effect.Effect<A, ThreadBorderFailed>): Effect.Effect<A, ThreadBorderFailed> =>
+    lanes
+      .hold(threadId, work)
+      .pipe(Effect.mapError((failure) => (isThreadBorderFailure(failure) ? failure : new ThreadCallBroke({ cause: failure }))));
   const framed = (threadId: string): Effect.Effect<void, ThreadBorderFailed> =>
     inLane(
       threadId,
@@ -314,16 +344,116 @@ export const makeThreadSnapshots = Effect.gen(function* () {
             return read;
           }),
         );
+        hold(threadId, { state: read.state, inputs: read.inputs });
         yield* arm(threadId, read.state.status, read.changesAt);
-      }).pipe(Effect.withSpan(PUBLISHING, { attributes: { threadId } })),
+      }).pipe(
+        Effect.onError(() => Effect.sync(() => projections.delete(threadId))),
+        Effect.withSpan(PUBLISHING, { attributes: { threadId } }),
+      ),
     );
-  return ThreadSnapshots.of({ state, snapshot, attachFrom, page, publish, statuses, forget });
+  const publish = (threadId: string): Effect.Effect<void, ThreadBorderFailed> =>
+    producerCost(PUBLISHING, residence === null ? framed(threadId) : residence.reading(threadId, framed(threadId)));
+  const applying = (threadId: string, change: Appended): Effect.Effect<boolean, ThreadBorderFailed> =>
+    inLane(
+      threadId,
+      Effect.gen(function* () {
+        const held = projections.get(threadId);
+        const activeRun = held?.state.activeRun ?? null;
+        if (held === undefined || activeRun === null || published.get(threadId) !== change.from) return false;
+        if (awaitsAnswer(activeRun.progress.stage) || !change.records.every(plainEntry)) return false;
+        const now = new Date(yield* Clock.currentTimeMillis);
+        const thread = { ...held.state.thread, ...change.thread };
+        const position = change.from + change.records.length;
+        const wordsWait = yield* wordsWaitOf(owners, transports, thread, { active: true, after: held.state.latestRun?.id ?? null });
+        const { status, changesAt } = runStatusOf(
+          {
+            thread,
+            activeRun,
+            pendingInput: held.state.pendingInput,
+            openQuestions: held.inputs.openQuestions,
+            recorded: held.inputs.recorded,
+            launchBlocked: gate.blocked(threadId),
+            wordsWait,
+          },
+          now,
+          lease,
+          held.inputs.ended,
+        );
+        const next: ThreadState = { ...held.state, thread, position, status, now: now.toISOString() };
+        yield* feed.atCut(
+          threadId,
+          Effect.suspend(() => {
+            published.set(threadId, position);
+            return feed.carry({
+              state: next,
+              from: change.from,
+              deltas: change.records.map((record) => ({ position: record.position, ...threadEventFact(record) })),
+            });
+          }),
+        );
+        hold(threadId, { state: next, inputs: held.inputs });
+        yield* arm(threadId, status, changesAt);
+        return true;
+      }),
+    );
+  const asked = <A, E>(work: Effect.Effect<A, E>, by: Asked): Effect.Effect<A, E> =>
+    Effect.provideService(by.parent === null ? work : Effect.withParentSpan(work, by.parent), CurrentCost, by.cause);
+  const drain = Effect.fnUntraced(function* (threadId: string) {
+    for (;;) {
+      const queue = queues.get(threadId);
+      const next = queue?.shift();
+      if (queue === undefined || next === undefined) {
+        queues.delete(threadId);
+        return;
+      }
+      const applied =
+        next.change.kind === 'appended' ? yield* asked(Effect.exit(producerCost(PUBLISHING, applying(threadId, next.change))), next) : null;
+      if (applied !== null && applied._tag === 'Success' && applied.value) continue;
+      if (applied !== null && applied._tag === 'Failure' && !Cause.hasInterruptsOnly(applied.cause))
+        yield* Effect.logWarning('a committed change could not be applied, so the thread is read again', {
+          threadId,
+          cause: applied.cause,
+        });
+      queue.splice(0);
+      const read = yield* asked(Effect.exit(publish(threadId)), next);
+      if (read._tag === 'Failure' && !Cause.hasInterruptsOnly(read.cause))
+        yield* Effect.logWarning('a thread state could not be published', { threadId, cause: read.cause });
+    }
+  });
+  const asking: Effect.Effect<Asked> = Effect.withFiber((fiber) =>
+    Effect.succeed({
+      cause: Context.get(fiber.context, CurrentCost),
+      parent: Context.getOrUndefined(fiber.context, Tracer.ParentSpan) ?? null,
+    }),
+  );
+  const committed = (change: ThreadStateChange, tx: ThreadWriteTx): Effect.Effect<void> =>
+    tx.afterCommit(
+      Effect.flatMap(asking, (by) =>
+        Effect.suspend(() => {
+          const queue = queues.get(change.threadId);
+          if (queue !== undefined) {
+            queue.push({ ...by, change });
+            return Effect.void;
+          }
+          queues.set(change.threadId, [{ ...by, change }]);
+          return Effect.asVoid(
+            FiberSet.run(draining, Effect.provideContext(drain(change.threadId), lifetime), { startImmediately: false }),
+          );
+        }),
+      ),
+    );
+  return ThreadSnapshots.of({ state, snapshot, attachFrom, page, publish, committed, statuses, forget });
 });
 
 export const threadSnapshotsLayer = Layer.effect(ThreadSnapshots, makeThreadSnapshots);
 
 export const PUBLISHING = 'ThreadSnapshots.publish';
 export const READING = 'ThreadSnapshots.reading';
+function plainEntry(record: ThreadEventRecord): boolean {
+  const { entry, withdrawn, rewound, restored, branched } = record.payload;
+  if (withdrawn !== undefined || rewound !== undefined || restored !== undefined || branched !== undefined) return false;
+  return entry === undefined || !coreEntry(entry) || entry.type !== 'question';
+}
 function holdingOf(
   activeRun: ThreadRunRow | null,
   latestRun: ThreadRunRow | null,

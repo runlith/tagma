@@ -1,4 +1,4 @@
-import { Effect } from 'effect';
+import { Clock, Effect } from 'effect';
 import type { ThreadRow } from '@runlith/agent/thread/rows';
 import type { ThreadPortFailure } from '@runlith/agent/thread/ThreadBorder';
 import type { ThreadAtomicPatch } from '@runlith/agent/thread/storage/aggregate';
@@ -20,7 +20,13 @@ export const threadFolder = Effect.fnUntraced(function* (threads: ThreadStore) {
       const row = yield* threads.find(id, unit);
       if (row === undefined) return undefined;
       const fold = yield* work(row, unit);
-      if (fold !== null) yield* transitions.writeFold(id, { fold, standing: version.head, head: version.head }, unit);
+      if (fold !== null) {
+        yield* transitions.writeFold(
+          id,
+          { fold, standing: version.head, head: version.head, at: new Date(yield* Clock.currentTimeMillis) },
+          unit,
+        );
+      }
       return yield* threads.find(id, unit);
     });
     return tx === undefined ? transitions.writeAt(id, held) : transitions.writeAtIn(id, held, tx);
