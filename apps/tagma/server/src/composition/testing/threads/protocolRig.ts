@@ -330,7 +330,7 @@ export const protocolRig = Effect.fn('testing.protocolRig')(function* (fixture: 
     const address = yield* hostAddress(world.canonical, fixture);
     const connectionScope = yield* Scope.fork(yield* Effect.scope);
     const connection = yield* executionHost(address).pipe(Scope.provide(connectionScope));
-    const port = connection.port;
+    const port = options.hostStop === undefined ? connection.port : { ...connection.port, stop: options.hostStop(connection.port.stop) };
     const registration = yield* HostRegistration;
     const context = world.context;
     const units = Context.get(context, MachineUnits);
@@ -400,7 +400,11 @@ export const protocolRig = Effect.fn('testing.protocolRig')(function* (fixture: 
       records,
       yield* Effect.provideContext(modelChanges(), context),
       (_threadId, facet) => {
-        if (facet.session?.state !== 'starting' || opening === undefined || (opening.armed !== undefined && !Deferred.isDoneUnsafe(opening.armed)))
+        if (
+          facet.session?.state !== 'starting' ||
+          opening === undefined ||
+          (opening.armed !== undefined && !Deferred.isDoneUnsafe(opening.armed))
+        )
           return Effect.void;
         const paused = opening;
         opening = undefined;
@@ -417,14 +421,15 @@ export const protocolRig = Effect.fn('testing.protocolRig')(function* (fixture: 
     const protocolStore = new Proxy(sessionStore, {
       get(target, key) {
         if (key === 'read')
-          return (threadId: string) => Effect.flatMap(target.read(threadId), (facet) =>
-            Effect.flatMap(SessionStartRead, (marked) => {
-              const paused = startRead;
-              if (!marked || paused === undefined) return Effect.succeed(facet);
-              startRead = undefined;
-              return Effect.andThen(Deferred.succeed(paused.entered, undefined), Effect.as(Deferred.await(paused.released), facet));
-            }),
-          );
+          return (threadId: string) =>
+            Effect.flatMap(target.read(threadId), (facet) =>
+              Effect.flatMap(SessionStartRead, (marked) => {
+                const paused = startRead;
+                if (!marked || paused === undefined) return Effect.succeed(facet);
+                startRead = undefined;
+                return Effect.andThen(Deferred.succeed(paused.entered, undefined), Effect.as(Deferred.await(paused.released), facet));
+              }),
+            );
         const value: unknown = Reflect.get(target, key, target);
         return typeof value === 'function' ? value.bind(target) : value;
       },
@@ -535,7 +540,10 @@ export const protocolRig = Effect.fn('testing.protocolRig')(function* (fixture: 
               storage: kernel,
               eventLog: log,
               transitions: yield* Effect.provideContext(nativeTransitions(kernel), context),
-              createRuns: (ownerId) => runsOf({ ownerId, scope: sql`1 = 1` }),
+              createRuns: (ownerId) => {
+                const runs = runsOf({ ownerId, scope: sql`1 = 1` });
+                return options.runs?.(runs) ?? runs;
+              },
               attachments: pictures,
               inbox,
               toolOutputs: threadToolOutputStore(join(world.checkout, '.results')),
@@ -675,29 +683,12 @@ export const protocolRig = Effect.fn('testing.protocolRig')(function* (fixture: 
             options.answers !== undefined
           ? yield* disrupted(options).pipe(Effect.provideService(TerminalWriting, terminals))
           : terminals;
-    const visible = options.missing
-      ? new Proxy(terminals, { get: (target, key) => (key === 'record' ? () => Effect.succeed(null) : Reflect.get(target, key, target)) })
-      : terminals;
-    let reads = 0;
-    const output: ExecutionRecords['Service'] =
-      options.output !== undefined
-        ? {
-            bytes: (...args) => terminals.bytes(...args),
-            records: (cursor) =>
-              Stream.merge(
-                terminals.records(cursor),
-                Stream.fromEffect(Deferred.await(options.output!)).pipe(Stream.map((ending) => ({ _tag: 'Ended' as const, ending }))),
-              ),
-          }
-        : options.rereads !== undefined
-          ? {
-              bytes: (...args) => terminals.bytes(...args),
-              records: (cursor) =>
-                (reads += 1) === 1
-                  ? terminals.records(cursor)
-                  : Stream.unwrap(Effect.as(Deferred.await(options.rereads!), terminals.records(cursor))),
-            }
-          : terminals;
+    const visible =
+      options.terminals?.(terminals) ??
+      (options.missing
+        ? new Proxy(terminals, { get: (target, key) => (key === 'record' ? () => Effect.succeed(null) : Reflect.get(target, key, target)) })
+        : terminals);
+    const output: ExecutionRecords['Service'] = options.records?.(terminals) ?? terminals;
     const runStore = (ownerId: string) => runsOf({ ownerId, scope: sql`1 = 1` });
     const touched = new Set<string>();
     let stopper: ((threadId: string) => Effect.Effect<unknown, unknown>) | null = null;

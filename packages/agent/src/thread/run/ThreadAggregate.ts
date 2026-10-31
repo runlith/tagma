@@ -498,6 +498,7 @@ export const threadAggregateLayer = Layer.effect(
       append: (threadId, ownerId, events, toolOutputs, call) => appended(threadId, ownerId, events, toolOutputs, call),
       restart: Effect.fnUntraced(function* (threadId, ownerId, byThreadId) {
         const thread = yield* ownedMetadata(threadId, ownerId);
+        const operation = `restart:${mintThreadEventId()}`;
         const openCallsOf = (run: ThreadRunRow) =>
           Effect.map(store.entriesOfRun(thread.id, run.id), (entries) => [
             ...new Map(unsettledEffects([...entries, ...(run.streamTail ?? [])], run.id).map((call) => [call.toolCallId, call])).values(),
@@ -519,7 +520,7 @@ export const threadAggregateLayer = Layer.effect(
                 stop: stopped._tag === 'Failure' ? stopped.failure : (settled ?? 'no answer within the restart patience'),
               });
           }
-          yield* stopping.release(thread);
+          yield* stopping.release(thread, operation);
           const finished =
             going === null
               ? new Set<string>()
@@ -532,7 +533,7 @@ export const threadAggregateLayer = Layer.effect(
           const continued = ((going !== null && going.kind !== 'compaction') || limited) && thread.capabilities.continue;
           const entry: ThreadRestartEntry = {
             type: 'restart',
-            id: `restart:${mintThreadEventId()}`,
+            id: operation,
             stoppedRunId: going?.id,
             continued,
             byThreadId,

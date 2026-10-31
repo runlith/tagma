@@ -517,6 +517,8 @@ const handle = (message: Message): void => {
         return;
       }
       if (mode === 'tagma' && text.includes('SCRIBBLE')) {
+        if (text.includes('STREAM'))
+          update(sessionId, { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'Partial' } });
         phase('tools');
         held.push(() => {
           for (const delta of ['', '{"path":"fix', 'ture.ts"', ',"offset":1}'])

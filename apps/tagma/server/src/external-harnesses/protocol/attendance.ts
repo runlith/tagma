@@ -19,6 +19,7 @@ import { facetOf, type ProtocolLinks } from './links.js';
 import type { ProtocolProcess } from './process.js';
 import type { ProtocolLaunches } from './launches.js';
 import { freshRow, type ProtocolRow } from './row.js';
+import { hostUnavailable } from './link.js';
 
 const unreadable = (failure: unknown): failure is GateRefusal => failure instanceof GateRefusal && failure.code === 'session-unreadable';
 
@@ -137,14 +138,18 @@ export class ProtocolAttendance {
       }
       const demand: AttendanceDemand = { runId };
       entry.pending.add(demand);
-      const work = watching ? this.open(threadId, (opened) => this.opened(entry, runId, opened)) : this.enter(threadId, (opened) => this.opened(entry, runId, opened));
+      const work = watching
+        ? this.open(threadId, (opened) => this.opened(entry, runId, opened))
+        : this.enter(threadId, (opened) => this.opened(entry, runId, opened));
       return work.pipe(
-        Effect.onExit((exit) => Effect.sync(() => {
-          if (Exit.isSuccess(exit) && exit.value !== null) this.used(entry, exit.value, runId);
-          entry.pending.delete(demand);
-          if (runId !== null) this.launches.leaveOpening(runId);
-          this.changed(threadId, entry);
-        })),
+        Effect.onExit((exit) =>
+          Effect.sync(() => {
+            if (Exit.isSuccess(exit) && exit.value !== null) this.used(entry, exit.value, runId);
+            entry.pending.delete(demand);
+            if (runId !== null) this.launches.leaveOpening(runId);
+            this.changed(threadId, entry);
+          }),
+        ),
         Effect.asVoid,
       );
     });
@@ -165,7 +170,11 @@ export class ProtocolAttendance {
       const cleanup = Deferred.makeUnsafe<void, HarnessFailure>();
       claim.cleanup = cleanup;
       return this.retireOpening(threadId, entry, claim).pipe(
-        Effect.onExit((exit) => Effect.sync(() => { Deferred.doneUnsafe(cleanup, exit); })),
+        Effect.onExit((exit) =>
+          Effect.sync(() => {
+            Deferred.doneUnsafe(cleanup, exit);
+          }),
+        ),
       );
     });
   }
@@ -190,15 +199,21 @@ export class ProtocolAttendance {
     entry.retiring = retiring;
     yield* this.stop(threadId, claim.sessionId).pipe(
       Effect.asVoid,
-      Effect.onExit((exit) => Effect.sync(() => {
-        if (entry.retiring === retiring) entry.retiring = null;
-        Deferred.doneUnsafe(retiring, exit);
-        this.changed(threadId, entry);
-      })),
+      Effect.onExit((exit) =>
+        Effect.sync(() => {
+          if (entry.retiring === retiring) entry.retiring = null;
+          Deferred.doneUnsafe(retiring, exit);
+          this.changed(threadId, entry);
+        }),
+      ),
     );
   });
 
-  private readonly enter = Effect.fnUntraced(function* (this: ProtocolAttendance, threadId: string, record: (opening: SessionOpening) => void): Effect.fn.Return<string, HarnessFailure> {
+  private readonly enter = Effect.fnUntraced(function* (
+    this: ProtocolAttendance,
+    threadId: string,
+    record: (opening: SessionOpening) => void,
+  ): Effect.fn.Return<string, HarnessFailure> {
     const { watchers, store, fibers } = this;
     yield* FiberMap.remove(watchers, threadId);
     const facet = yield* facetOf(store, threadId);
@@ -214,22 +229,33 @@ export class ProtocolAttendance {
     return yield* this.open(threadId, record);
   });
 
-  private readonly open = Effect.fn('ProtocolAttendance.open')(function* (this: ProtocolAttendance, threadId: string, record: (opening: SessionOpening) => void) {
+  private readonly open = Effect.fn('ProtocolAttendance.open')(function* (
+    this: ProtocolAttendance,
+    threadId: string,
+    record: (opening: SessionOpening) => void,
+  ) {
     const { store, ownerId, rows } = this;
     yield* Effect.uninterruptible(
-      Effect.tap(store.opening(threadId, '', ownerId, () => Effect.succeed(null), {
-        writes: rows.writes,
-        run: (session, unit) =>
-          Effect.flatMap(rows.read(unit, threadId), (carried) =>
-            rows.write(unit, threadId, { ...freshRow(session.id, carried, null), rejections: 0 }),
+      Effect.tap(
+        store.opening(threadId, '', ownerId, () => Effect.succeed(null), {
+          writes: rows.writes,
+          run: (session, unit) =>
+            Effect.flatMap(rows.read(unit, threadId), (carried) =>
+              rows.write(unit, threadId, { ...freshRow(session.id, carried, null), rejections: 0 }),
+            ),
+        }),
+        (opened) =>
+          Effect.andThen(
+            Effect.sync(() => record(opened)),
+            opened.announce,
           ),
-      }), (opened) => Effect.andThen(Effect.sync(() => record(opened)), opened.announce)),
+      ),
     );
     const attended = yield* this.attended(threadId);
     return attended === null ? yield* this.enter(threadId, record) : attended;
   });
 
-  readonly stop = Effect.fnUntraced(function* (this: ProtocolAttendance, threadId: string, expectedId?: string) {
+  readonly stop = Effect.fnUntraced(function* (this: ProtocolAttendance, threadId: string, expectedId?: string, operation?: string) {
     const { rows, store, links, fibers, process } = this;
     const row = yield* rows.load(threadId);
     const marked = yield* store.change(threadId, (facet) => {
@@ -239,11 +265,15 @@ export class ProtocolAttendance {
       if (!harnessSessionActive(session) || !expected) return Effect.succeed({ facet, value: null });
       return Effect.succeed({ facet: { ...facet, session: { ...session, state: 'stopping' as const } }, value: facet });
     });
+    if (operation !== undefined) {
+      yield* process.replace(threadId, operation);
+      yield* FiberMap.remove(fibers, threadId);
+    }
     if (marked === null) return 'not-running' as const;
     yield* this.attend(threadId);
     const link = links.get(threadId);
     const watching = yield* FiberMap.get(fibers, threadId).pipe(Effect.option);
-    if (link !== undefined) yield* process.ending(link);
+    if (link !== undefined && operation === undefined) yield* process.ending(link);
     if (Option.isSome(watching) && Option.isSome(watching.value)) yield* Fiber.await(watching.value.value);
     const standing = (yield* facetOf(store, threadId)).session;
     if (standing === undefined || standing.state === 'ended' || standing.id !== marked.session?.id) return 'stopped' as const;
@@ -417,9 +447,19 @@ export class ProtocolAttendance {
     const attended = Effect.flatMap(ownership.resumeParked(threadId), ({ release }) =>
       process.drive(threadId, release).pipe(Effect.ensuring(Effect.sync(release))),
     ).pipe(
-      Effect.catchIf(unreadable, (failure) => endings.unreadable(threadId, session.id, failure)),
       Effect.ensuring(lanes.close(session.id)),
+      Effect.tapError((failure) =>
+        hostUnavailable(failure)
+          ? Effect.andThen(
+              process.forsaken(threadId),
+              Effect.sync(() => links.pause(threadId)),
+            )
+          : Effect.void,
+      ),
+      Effect.retry({ schedule: Schedule.spaced(250), while: hostUnavailable }),
+      Effect.catchIf(unreadable, (failure) => endings.unreadable(threadId, session.id, failure)),
       Effect.catchCause((cause) => (Cause.hasInterruptsOnly(cause) ? Effect.void : this.uncertain(threadId, session.id, cause))),
+      Effect.ensuring(process.forsaken(threadId)),
       Effect.ensuring(
         store
           .owned(threadId, session.id, ownerId, (current, held) => ({ ...current, session: { ...held, ownerId: null } }))

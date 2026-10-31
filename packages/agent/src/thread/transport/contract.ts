@@ -127,7 +127,7 @@ export type TransportCompaction = {
 };
 
 export type TransportResource = {
-  release(threadId: string): Effect.Effect<'stopped' | 'not-running', ThreadBorderFailed>;
+  release(threadId: string, operation?: string): Effect.Effect<'stopped' | 'not-running', ThreadBorderFailed>;
   seated(threadId: string): Effect.Effect<void, ThreadBorderFailed>;
   watch(): Effect.Effect<void, ThreadBorderFailed>;
 };

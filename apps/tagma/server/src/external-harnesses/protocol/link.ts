@@ -1,4 +1,6 @@
-import { Deferred, Effect, Stream } from 'effect';
+import { Deferred, Effect, Schedule, Stream } from 'effect';
+import { threadCauseOf } from '@runlith/agent/thread/ThreadBorder';
+import { WireLost, WireUnavailable } from '@runlith/executions/Executions';
 import { HostRequestKey, type ExecutionRef } from '@runlith/executions/protocol/execution';
 import { ByteOffset } from '@runlith/executions/protocol/record';
 import { frame, type Envelope } from '@runlith/ndjson-rpc/envelope';
@@ -18,6 +20,12 @@ const PRESSURE_BEAT_MS = 100;
 const PRESSURE_BEATS = 300;
 const STDERR_TAIL_BYTES = 2 * 1024;
 const SEAL = new Uint8Array([10]);
+const RESUBSCRIBE_MS = 250;
+
+export const hostUnavailable = (failure: unknown): boolean => {
+  const cause = threadCauseOf(failure);
+  return cause instanceof WireLost || (cause instanceof WireUnavailable && (cause.kind === 'absent' || cause.kind === 'unreachable'));
+};
 
 export type Written =
   | { readonly _tag: 'Admitted' }
@@ -37,7 +45,7 @@ export type Read =
   | { readonly _tag: 'Frame'; readonly inbound: Inbound }
   | { readonly _tag: 'Oversized'; readonly start: bigint; readonly ceiling: number };
 
-export type Ending = { reason: 'completed' | 'gap' | 'lost' | null; retainedFrom: bigint };
+export type Ending = { reason: 'completed' | 'gap' | 'lost' | null; retainedFrom: bigint | null };
 
 export const launchAgent = (
   terminals: Terminals['Service'],
@@ -171,28 +179,43 @@ export const writeFrame = (
     );
 
 const stdout = (records: ExecutionRecords['Service'], execution: ExecutionRef, ending: Ending) => (offset: bigint) =>
-  records.records({ ref: execution, stream: 'stdout', offset: ByteOffset.make(String(offset)) }).pipe(
-    Stream.tap((chunk) =>
-      Effect.sync(() => {
-        if (chunk._tag === 'Ended') ending.reason = chunk.ending === 'completed' ? 'completed' : chunk.ending === 'gap' ? 'gap' : 'lost';
-        else if (chunk.range.gap) {
-          ending.reason = 'gap';
-          ending.retainedFrom = BigInt(chunk.range.retainedFrom);
-        }
-      }),
-    ),
-    Stream.takeWhile((chunk) => chunk._tag === 'Bytes' && !chunk.range.gap),
-    Stream.map((chunk) => (chunk._tag === 'Bytes' ? chunk.bytes : new Uint8Array())),
-    Stream.mapError((failure) => new ExchangeFailed({ detail: `the agent output could not be read: ${failure._tag}` })),
-  );
+  Stream.suspend(() => {
+    let next = offset;
+    return Stream.suspend(() => records.records({ ref: execution, stream: 'stdout', offset: ByteOffset.make(String(next)) })).pipe(
+      Stream.tap((chunk) =>
+        Effect.sync(() => {
+          if (chunk._tag === 'Bytes' && !chunk.range.gap) next = BigInt(chunk.range.next);
+        }),
+      ),
+      Stream.retry(Schedule.spaced(RESUBSCRIBE_MS).pipe(Schedule.while(({ input }) => hostUnavailable(input)))),
+      Stream.catchIf(
+        (failure) => failure._tag === 'TerminalRefused' && failure.reason === 'record-lost',
+        () => Stream.succeed({ _tag: 'Ended' as const, ending: 'unavailable' as const }),
+      ),
+      Stream.tap((chunk) =>
+        Effect.sync(() => {
+          if (chunk._tag === 'Ended')
+            ending.reason =
+              chunk.ending === 'completed' ? 'completed' : chunk.ending === 'gap' ? 'gap' : chunk.ending === 'unavailable' ? 'lost' : null;
+          else if (chunk.range.gap) {
+            ending.reason = 'gap';
+            ending.retainedFrom = BigInt(chunk.range.retainedFrom);
+          }
+        }),
+      ),
+      Stream.takeWhile((chunk) => chunk._tag === 'Bytes' && !chunk.range.gap),
+      Stream.map((chunk) => (chunk._tag === 'Bytes' ? chunk.bytes : new Uint8Array())),
+      Stream.mapError((failure) => new ExchangeFailed({ detail: `the agent output could not be read: ${failure._tag}` })),
+    );
+  });
 
 export const retainedFrom = (
   records: ExecutionRecords['Service'],
   execution: ExecutionRef,
   offset: bigint,
-): Effect.Effect<bigint | null, HarnessFailure> =>
+): Effect.Effect<bigint, HarnessFailure> =>
   records.bytes({ ref: execution, stream: 'stdout', offset: ByteOffset.make(String(offset)) }, 0).pipe(
-    Effect.map((read) => (read.range.gap ? BigInt(read.range.retainedFrom) : null)),
+    Effect.map((read) => BigInt(read.range.retainedFrom)),
     Effect.mapError((cause) => threadCallFailed(cause)),
   );
 

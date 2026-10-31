@@ -16,12 +16,13 @@ import { exitLine, LOST_LINE } from '../sessions/lifecycle.js';
 import type { ProtocolRows } from '../store/protocol.js';
 import type { HarnessSessionStore } from '../store/sessions.js';
 import { unfinished, type ProtocolEndings } from './endings.js';
-import { halt, type ProtocolHalts } from './halts.js';
+import type { ProtocolHalts } from './halts.js';
 import { harnessNotInstalled } from '../../threads/contract/service/harness.js';
 import { due, idling, resting, restingRow, touch } from './idle.js';
 import type { ProtocolLauncher } from './launcher.js';
 import type { ProtocolLaunches } from './launches.js';
-import { reading, stderrTail, type Ending } from './link.js';
+import { reading, retainedFrom, stderrTail, type Ending } from './link.js';
+import type { ProtocolJournal } from './journal.js';
 import { facetOf, type Link, type Linked, type ProtocolLinks } from './links.js';
 import type { HarnessAdapters } from '../contract/service/adapters.js';
 import type { HarnessName } from '../../threads/contract/wire/harness/names.js';
@@ -42,6 +43,7 @@ export class ProtocolProcess {
   constructor(
     private readonly links: ProtocolLinks,
     private readonly steps: ProtocolSteps,
+    private readonly journal: ProtocolJournal,
     private readonly reactor: ProtocolReactor,
     private readonly asides: ProtocolAsides,
     private readonly halts: ProtocolHalts,
@@ -83,16 +85,13 @@ export class ProtocolProcess {
       const stored = yield* rows.load(threadId);
       if (session.state === 'stopping' && facet.execution === null) return yield* endings.finish(threadId, session.id, 'aborted', null);
       if (facet.execution !== null && this.adapters.last(facet.name) === null) {
-        yield* halt(terminals, threadId, facet);
+        yield* this.halts.end(threadId, facet);
         return yield* endings.finish(threadId, session.id, 'failed', harnessNotInstalled(facet.name, facet.presentation.install).reason);
       }
       const launch = facet.execution === null ? yield* launcher.launch(threadId, facet, session, stored) : null;
       const execution = facet.execution ?? launch?.execution ?? null;
       if (execution === null) return;
       const launched = launch?.fresh === true;
-      const record = yield* terminals.record(execution.execution, execution.incarnation).pipe(Effect.mapError(threadCallFailed));
-      if (record === null) return yield* endings.finish(threadId, session.id, 'failed', LOST_LINE);
-      const lost = (yield* terminals.lost(record)) !== null;
       const same = stored?.execution?.execution === execution.execution && stored.execution.incarnation === execution.incarnation;
       if (!same && stored !== null && unfinished(stored)) yield* endings.retired(threadId, facet, session.id, stored);
       const carried = same ? null : yield* rows.load(threadId);
@@ -102,11 +101,19 @@ export class ProtocolProcess {
             ...freshRow(`${session.id}.${carried?.launches ?? 0}.${execution.incarnation}`, carried, execution),
             build: launched ? this.build : undefined,
           };
+      if (same) {
+        for (const turn of row.turns)
+          this.journal.seed({ id: turn.id, threadId }, (yield* this.runs(this.ownerId).runById(turn.id))?.streamTail ?? []);
+      }
       const link = yield* steps.link(facet, session.id, yield* this.linked(facet), threadId, row);
       link.stale = this.stale(row, facet.name);
       links.set(link);
       linked();
       yield* touch(link);
+      if (!same) yield* reactor.locked(link, steps.persist(link, {}));
+      const record = yield* terminals.record(execution.execution, execution.incarnation).pipe(Effect.mapError(threadCallFailed));
+      if (record === null) return yield* endings.finish(threadId, session.id, 'failed', LOST_LINE);
+      const lost = (yield* terminals.lost(record)) !== null || (same && (yield* terminals.state(record.execution)) === undefined);
       if (!lost) yield* lanes.open(session.id, record.projectId, record.execution, record.holder);
       if (same) {
         const recalled = yield* this.recalled(link.row);
@@ -118,7 +125,7 @@ export class ProtocolProcess {
             link.row.turns.map((turn) => turn.id),
             null,
           );
-      } else yield* reactor.locked(link, steps.persist(link, {}));
+      }
       if (!lost) yield* this.attended(link, record.execution);
       yield* reactor.locked(link, Effect.succeed(null));
       for (const landing of link.writer.unsettled()) yield* reactor.locked(link, steps.landed(link, landing));
@@ -195,7 +202,7 @@ export class ProtocolProcess {
     if (execution === null || row === null) return 'exited' as const;
     const record = yield* terminals.record(execution.execution, execution.incarnation).pipe(Effect.mapError(threadCallFailed));
     if (record === null || (yield* terminals.lost(record)) !== null) return 'exited' as const;
-    const ending: Ending = { reason: null, retainedFrom: 0n };
+    const ending: Ending = { reason: null, retainedFrom: null };
     return yield* Effect.raceFirst(
       Effect.as(executionEndings.decided({ projectId: record.projectId, execution: record.execution }), 'exited' as const),
       Effect.as(
@@ -214,6 +221,10 @@ export class ProtocolProcess {
     yield* executionEndings.decided({ projectId: record.projectId, execution: record.execution });
   });
 
+  readonly replace = Effect.fnUntraced(function* (this: ProtocolProcess, threadId: string, operation: string) {
+    yield* this.halts.end(threadId, yield* facetOf(this.store, threadId), operation);
+  });
+
   readonly ending = Effect.fnUntraced(function* (this: ProtocolProcess, link: Link) {
     const { stopping } = this;
     if (stopping.has(link.threadId)) return;
@@ -222,7 +233,7 @@ export class ProtocolProcess {
   });
 
   private readonly winding = Effect.fnUntraced(function* (this: ProtocolProcess, link: Link) {
-    const { store, reactor, steps, terminals } = this;
+    const { store, reactor, steps } = this;
     const until = link.row.client.stopping ?? (yield* Clock.currentTimeMillis) + link.profile.graceMs;
     const key = link.facet.sessionKey;
     yield* reactor.locked(
@@ -238,7 +249,7 @@ export class ProtocolProcess {
       yield* reactor.locked(link, steps.intend(link, { _tag: 'Close', params: { sessionId: key } }));
       yield* this.settles(link, (row) => !row.client.requests.some((request) => request.meaning === 'close'), until);
     }
-    yield* halt(terminals, link.threadId, yield* facetOf(store, link.threadId));
+    yield* this.halts.end(link.threadId, yield* facetOf(store, link.threadId));
   });
 
   readonly idle = Effect.fnUntraced(function* (this: ProtocolProcess, threadId: string) {
@@ -436,7 +447,7 @@ export class ProtocolProcess {
   private readonly read = Effect.fnUntraced(function* (this: ProtocolProcess, link: Link, execution: ExecutionRef) {
     const { records, reactor, steps } = this;
     while (true) {
-      const ending: Ending = { reason: null, retainedFrom: 0n };
+      const ending: Ending = { reason: null, retainedFrom: null };
       yield* Stream.runForEachArray(reading(records, execution, link.row.client.cursor, ending), (reads) =>
         Effect.gen(function* () {
           yield* touch(link);
@@ -466,7 +477,7 @@ export class ProtocolProcess {
           }
         }),
       ).pipe(Effect.mapError(threadCallFailed));
-      if (ending.reason === 'completed') return yield* halt(this.terminals, link.threadId, yield* facetOf(this.store, link.threadId));
+      if (ending.reason === 'completed') return yield* this.halts.end(link.threadId, yield* facetOf(this.store, link.threadId));
       if (ending.reason === 'lost') {
         yield* reactor.locked(
           link,
@@ -477,7 +488,7 @@ export class ProtocolProcess {
         return;
       }
       if (ending.reason === 'gap') {
-        const resume = ending.retainedFrom;
+        const resume = ending.retainedFrom ?? (yield* retainedFrom(records, execution, link.row.client.cursor.offset));
         yield* reactor.locked(
           link,
           Effect.suspend(() => steps.observe(link, { _tag: 'Gap', resume })),

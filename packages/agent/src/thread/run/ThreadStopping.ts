@@ -21,7 +21,7 @@ export class ThreadStopping extends Context.Service<
       expectedRunId: string | undefined,
       options: ThreadStopOptions,
     ): Effect.Effect<ThreadStop, ThreadBorderFailed>;
-    release(thread: ThreadMetadataRow): Effect.Effect<'stopped' | 'not-running', ThreadBorderFailed>;
+    release(thread: ThreadMetadataRow, operation?: string): Effect.Effect<'stopped' | 'not-running', ThreadBorderFailed>;
   }
 >()('@runlith/agent/ThreadStopping') {}
 
@@ -99,9 +99,9 @@ export const threadStoppingLayer = Layer.effect(
     });
 
     return ThreadStopping.of({
-      release: Effect.fnUntraced(function* (thread) {
+      release: Effect.fnUntraced(function* (thread, operation) {
         const transport = yield* Effect.mapError(transports.of(thread.transport), (cause) => new ThreadCallBroke({ cause }));
-        return transport.resource === undefined ? ('not-running' as const) : yield* transport.resource.release(thread.id);
+        return transport.resource === undefined ? ('not-running' as const) : yield* transport.resource.release(thread.id, operation);
       }),
       stop,
       byReader: Effect.fnUntraced(function* (thread, expectedRunId, options) {

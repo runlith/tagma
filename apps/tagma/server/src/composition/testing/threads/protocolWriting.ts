@@ -5,6 +5,11 @@ import type { RunLaunch, TransportRuns } from '@runlith/agent/thread/transport/c
 import type { ThreadRunSettledSubscriber } from '@runlith/agent/thread/run/ThreadRunSettlements';
 import { TerminalWriting } from '../../../executions/contract/service/writing.js';
 import type { HarnessAdapters } from '../../../external-harnesses/contract/service/adapters.js';
+import type { ExecutionRecords } from '../../../executions/contract/service/records.js';
+import type { Terminals } from '../../../executions/contract/service/terminals.js';
+import type { Executions } from '@runlith/executions/Executions';
+import type { ThreadRunStorage } from '@runlith/agent/thread/storage/runs';
+import type { Unit, WriteUnit } from '../../../platform/contract/service/units.js';
 
 export type LaunchPause = { readonly entered: Deferred.Deferred<RunLaunch>; readonly released: Deferred.Deferred<void> };
 
@@ -24,7 +29,9 @@ export const observedLaunches = (runs: TransportRuns, pause: OpeningPause): Tran
   interrupt: (runId, by) =>
     Effect.andThen(
       Deferred.succeed(pause.stopping, undefined).pipe(
-        Effect.flatMap((first) => (first || pause.secondStopping === undefined ? Effect.void : Deferred.succeed(pause.secondStopping, undefined))),
+        Effect.flatMap((first) =>
+          first || pause.secondStopping === undefined ? Effect.void : Deferred.succeed(pause.secondStopping, undefined),
+        ),
       ),
       runs.interrupt(runId, by),
     ),
@@ -54,8 +61,12 @@ export type Floor = {
   readonly startRead?: { readonly entered: Deferred.Deferred<void>; readonly released: Deferred.Deferred<void> };
   readonly answers?: 'refused' | 'lost';
   readonly missing?: boolean;
-  readonly output?: Deferred.Deferred<'closed' | 'unavailable' | 'completed'>;
-  readonly rereads?: Deferred.Deferred<void>;
+  readonly records?: (records: ExecutionRecords['Service']) => ExecutionRecords['Service'];
+  readonly runs?: (
+    runs: ThreadRunStorage<Unit<'machine'>, WriteUnit<'machine'>>,
+  ) => ThreadRunStorage<Unit<'machine'>, WriteUnit<'machine'>>;
+  readonly terminals?: (terminals: Terminals['Service']) => Terminals['Service'];
+  readonly hostStop?: (stop: Executions['Service']['stop']) => Executions['Service']['stop'];
   readonly threshold?: number;
   readonly dropsLaunch?: boolean;
   readonly launching?: LaunchPause;

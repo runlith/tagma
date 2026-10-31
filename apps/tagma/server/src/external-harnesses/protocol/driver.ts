@@ -179,7 +179,7 @@ export class ProtocolDriver implements ProtocolSessions {
       tails,
       introductions,
     );
-    const halts = new ProtocolHalts(links, store, terminals);
+    const halts = new ProtocolHalts(links, store, terminals, requests);
     const asks = new ProtocolAsks(steps, permissions, journal, landings, routed);
     const alignment = new ProtocolAlignment(steps, halts, turns, launches, standing, guidance, providers, files, place);
     const preparing = yield* FiberMap.make<string, void, never>();
@@ -209,7 +209,7 @@ export class ProtocolDriver implements ProtocolSessions {
       store,
       rows,
       inbox,
-      terminals,
+      halts,
       ended,
       launches,
       nativeRuns,
@@ -237,6 +237,7 @@ export class ProtocolDriver implements ProtocolSessions {
     const process = new ProtocolProcess(
       links,
       steps,
+      journal,
       reactor,
       asides,
       halts,
@@ -311,7 +312,7 @@ export class ProtocolDriver implements ProtocolSessions {
   });
 
   readonly resource: TransportResource = {
-    release: (threadId) => failedAs('acp.release', this.attendance.stop(threadId)),
+    release: (threadId, operation) => failedAs('acp.release', this.attendance.stop(threadId, undefined, operation)),
     seated: () => Effect.void,
     watch: () => failedAs('acp.watch', this.attendance.watch()),
   };

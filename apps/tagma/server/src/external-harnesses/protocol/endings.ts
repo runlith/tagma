@@ -5,12 +5,11 @@ import type { HarnessFailure } from '../../threads/contract/service/failure.js';
 import type { ExternalSession } from '../../threads/contract/wire/harness/externalSession.js';
 import type { HarnessProcessOutcome, HarnessSession } from '../../threads/contract/wire/harness/session.js';
 import type { ThreadInbox } from '../../threads/store/inbox.js';
-import type { Terminals } from '../../executions/contract/service/terminals.js';
+import type { ProtocolHalts } from './halts.js';
 import type { ProtocolRows } from '../store/protocol.js';
 import type { HarnessSessionStore } from '../store/sessions.js';
 import type { RunActivities } from './activities.js';
 import type { ProtocolLaunches } from './launches.js';
-import { halt } from './halts.js';
 import { facetOf, type Linked } from './links.js';
 import type { ProtocolReactor } from './reactor.js';
 import { freshRow, type ProtocolRow } from './row.js';
@@ -35,7 +34,7 @@ export class ProtocolEndings {
     private readonly store: HarnessSessionStore,
     private readonly rows: ProtocolRows,
     private readonly inbox: ThreadInbox['Service'],
-    private readonly terminals: Terminals['Service'],
+    private readonly halts: ProtocolHalts,
     private readonly ended: SessionEnded,
     private readonly launches: ProtocolLaunches,
     private readonly runs: NativeStorage['Service']['runs'],
@@ -107,10 +106,10 @@ export class ProtocolEndings {
   });
 
   readonly unreadable = Effect.fnUntraced(function* (this: ProtocolEndings, threadId: string, sessionId: string, failure: GateRefusal) {
-    const { store, ownerId, terminals, runs, steps } = this;
+    const { store, ownerId, halts, runs, steps } = this;
     const facet = yield* facetOf(store, threadId);
     if (facet.session?.id !== sessionId || facet.session.ownerId !== ownerId) return;
-    yield* halt(terminals, threadId, facet);
+    yield* halts.end(threadId, facet);
     const at = new Date(yield* Clock.currentTimeMillis).toISOString();
     const said = `${failure.code}: ${failure.reason}`;
     const turn = (yield* runs(ownerId).runningOf([threadId])).at(-1)?.id ?? null;

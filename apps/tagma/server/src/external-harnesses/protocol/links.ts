@@ -66,6 +66,7 @@ export const facetOf = (store: HarnessSessionStore, threadId: string): Effect.Ef
 
 export class ProtocolLinks {
   private readonly links = new Map<string, Link>();
+  private readonly paused = new Map<string, Link>();
   private readonly pulses = new Map<string, Deferred.Deferred<void>>();
   private readonly byRun = new Map<string, string>();
   private readonly inputRuns = new Map<string, string>();
@@ -84,8 +85,9 @@ export class ProtocolLinks {
   }
 
   set(link: Link): void {
-    const standing = this.links.get(link.threadId);
+    const standing = this.links.get(link.threadId) ?? this.paused.get(link.threadId);
     if (standing !== undefined) this.unindex(standing);
+    this.paused.delete(link.threadId);
     this.links.set(link.threadId, link);
     this.index(link);
   }
@@ -108,10 +110,19 @@ export class ProtocolLinks {
     return this.inputRuns.has(runId);
   }
 
-  drop(threadId: string): void {
+  pause(threadId: string): void {
     const standing = this.links.get(threadId);
+    if (standing === undefined) return;
+    this.links.delete(threadId);
+    this.paused.set(threadId, standing);
+    this.raise(threadId);
+  }
+
+  drop(threadId: string): void {
+    const standing = this.links.get(threadId) ?? this.paused.get(threadId);
     if (standing !== undefined) this.unindex(standing);
     this.links.delete(threadId);
+    this.paused.delete(threadId);
     this.raise(threadId);
   }
 
