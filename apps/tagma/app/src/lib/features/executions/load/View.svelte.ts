@@ -107,12 +107,14 @@ export class View extends Service<View>()('LoadView', { tier: 'app' }) {
     return shown === undefined || now - shown.at > SHOWN_MS ? null : shown;
   }
 
-  departed(standing: ReadonlySet<string>, now: number): readonly Departed[] {
+  departed(standing: ReadonlySet<string>): readonly Departed[] {
     return [...this.endings].flatMap(([key, shown]) =>
-      standing.has(key) || now - shown.at > SHOWN_MS
-        ? []
-        : [{ key, title: shown.title, text: shown.text, hint: shown.hint, failed: shown.failed }],
+      standing.has(key) ? [] : [{ key, title: shown.title, text: shown.text, hint: shown.hint, failed: shown.failed }],
     );
+  }
+
+  dismiss(key: string): void {
+    this.endings.delete(key);
   }
 
   working(key: string): boolean {

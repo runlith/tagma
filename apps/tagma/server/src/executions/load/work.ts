@@ -54,7 +54,7 @@ export const makeWorkNames = Effect.gen(function* () {
   const appTitles = yield* LoadAppTitles;
   const commands = new Map<string, CommandRecord | null>();
   const threads = new Map<string, OwnerFacts>();
-  const projects = new Map<number, string>();
+  const projects = new Map<number, string | undefined>();
   const apps = new Map<number, ReadonlyMap<string, string>>();
   let factsAt = 0;
 
@@ -111,11 +111,13 @@ export const makeWorkNames = Effect.gen(function* () {
         if (facts._tag === 'Success') for (const thread of wanted) threads.set(thread, facts.success.get(thread) ?? { archived: false });
         else problems.push(`threads: ${facts.failure.reason}`);
       }
-      for (const projectId of new Set([...work.values()].map((one) => one.projectId))) {
-        if (!stale && projects.has(projectId)) continue;
-        const row = yield* Effect.result(registry.byId(projectId));
-        if (row._tag === 'Success') projects.set(projectId, row.success.name);
-        else problems.push(`projects: ${reasonOf(row.failure)}`);
+      const unnamed = [...new Set([...work.values()].map((one) => one.projectId))].filter((id) => stale || !projects.has(id));
+      if (unnamed.length > 0) {
+        const listed = yield* Effect.result(registry.list());
+        if (listed._tag === 'Success') {
+          const names = new Map(listed.success.map((row) => [row.id, row.name]));
+          for (const projectId of unnamed) projects.set(projectId, names.get(projectId));
+        } else problems.push(`projects: ${reasonOf(listed.failure)}`);
       }
       const shownApps = new Set(views.map((view) => view.project));
       for (const projectId of shownApps) {

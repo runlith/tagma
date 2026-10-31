@@ -18,19 +18,17 @@
     return SCALES.find((one) => one >= peak * 1.05) ?? 1;
   });
   const collecting = $derived(history.length < 2);
+  const CORNER = 'pointer-events-none absolute font-mono text-meta text-muted-foreground';
 </script>
 
-<div class="grid gap-1" data-load-chart>
-  <div class="relative h-14 overflow-hidden rounded-md bg-sunken">
-    <LoadPlot class="absolute inset-0 size-full" {history} {layers} {lit} {top} />
-    {#if collecting}
-      <span class="absolute inset-0 grid place-items-center text-small text-muted-foreground">Collecting the first readings…</span>
-    {/if}
-  </div>
-  {#if !collecting}
-    <span class="flex justify-between font-mono text-meta text-muted-foreground">
-      <span>−{HISTORY_MS / 60_000} min</span>
-      <span>{scale === 'machine' ? 'now' : `${Math.round(top * 100)} % at top`}</span>
-    </span>
+<div class="relative h-14 overflow-hidden rounded-md bg-sunken" data-load-chart>
+  <LoadPlot class="absolute inset-0 size-full" {history} {layers} {lit} {top} />
+  {#if collecting}
+    <span class="absolute inset-0 grid place-items-center text-small text-muted-foreground">Collecting the first readings…</span>
+  {:else}
+    <span class={[CORNER, 'bottom-0.5 left-1']}>−{HISTORY_MS / 60_000} min</span>
+    <span class={[CORNER, scale === 'machine' ? 'right-1 bottom-0.5' : 'top-0.5 right-1']}
+      >{scale === 'machine' ? 'now' : `${Math.round(top * 100)} % at top`}</span
+    >
   {/if}
 </div>

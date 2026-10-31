@@ -2,13 +2,13 @@
   import ArrowDown from '@lucide/svelte/icons/arrow-down';
   import ChevronRight from '@lucide/svelte/icons/chevron-right';
   import Search from '@lucide/svelte/icons/search';
+  import X from '@lucide/svelte/icons/x';
   import { Popover } from '@runlith/primitives/popover.svelte';
   import { tick, untrack } from 'svelte';
   import { SvelteSet } from 'svelte/reactivity';
   import { Readings, silentWords } from '$lib/features/executions/load/Readings.svelte.js';
   import {
     gpuMeasured,
-    gpuWords,
     heldListing,
     idleTotal,
     layersOf,
@@ -17,7 +17,6 @@
     totalMemory,
     totalShare,
     totalUnread,
-    unresolvedWords,
     type Listing,
     type Order,
     type Shown,
@@ -26,6 +25,7 @@
   import { onLinkOpened } from '$lib/features/opening/linkTarget.js';
   import { WallClock } from '$lib/features/workspace/WallClock.svelte.js';
   import FadeText from '$lib/shared/FadeText.svelte';
+  import Tooltip from '$lib/shared/ui/tooltip/Tooltip.svelte';
   import LoadBackground from './LoadBackground.svelte';
   import LoadChart from './LoadChart.svelte';
   import LoadFigures from './LoadFigures.svelte';
@@ -70,12 +70,10 @@
   const standing = $derived(
     new Set(loaded === null ? [] : loaded.rows.flatMap((row) => [row.key, ...row.processes.map((one) => `${row.key}/${one.pid}`)])),
   );
-  const departed = $derived(view.departed(standing, now));
+  const departed = $derived(view.departed(standing));
   const nothing = $derived(listed !== null && listed.own.length + listed.idle.length + listed.outside.length === 0);
   const idle = $derived(listed === null ? null : idleTotal(listed.idle));
-  const unresolved = $derived(loaded === null ? undefined : unresolvedWords(loaded));
   const gpu = $derived(loaded !== null && gpuMeasured(loaded));
-  const gpuMissing = $derived(loaded === null ? undefined : gpuWords(loaded));
 
   $effect(() => readings.demandOthers(outsideShown));
   $effect(() => () => untrack(() => readings.demandOthers(false)));
@@ -186,23 +184,24 @@
     <LoadChart {history} {layers} lit={lighted} />
     {#if silent !== null}
       <p class="text-meta text-status-in-work" role="status" data-load-banner={silent._tag}>{silentWords(silent, now)}</p>
-    {:else if loaded?.unread !== undefined}
-      <FadeText class="text-meta text-muted-foreground" title={loaded.unread} text="Part of this reading was not read: {loaded.unread}" />
-    {/if}
-    {#if silent === null && unresolved !== undefined}
-      <FadeText class="text-meta text-muted-foreground" title={unresolved} text={unresolved.split('\n')[0]} data-load-unresolved />
-    {/if}
-    {#if silent === null && gpuMissing !== undefined}
-      <FadeText class="text-meta text-muted-foreground" title={gpuMissing} text={gpuMissing} data-load-gpu />
     {/if}
     {#each departed as one (one.key)}
-      <FadeText
-        class={['text-meta', one.failed ? 'text-destructive' : 'text-muted-foreground']}
-        role="status"
-        title={one.hint}
-        data-load-departed={one.key}
-        text="{one.title}: {one.text}"
-      />
+      <span class="flex items-center gap-1" data-load-departed={one.key}>
+        <FadeText
+          class={['flex-1 text-meta', one.failed ? 'text-destructive' : 'text-muted-foreground']}
+          role="status"
+          title={one.hint}
+          text="{one.title}: {one.text}"
+        />
+        <Tooltip text="Dismiss">
+          <button
+            type="button"
+            class="grid size-4 shrink-0 place-items-center rounded-sm text-muted-foreground hover:bg-hover hover:text-foreground"
+            aria-label="Dismiss"
+            onclick={() => view.dismiss(one.key)}><X class="size-3" /></button
+          >
+        </Tooltip>
+      </span>
     {/each}
   </header>
 

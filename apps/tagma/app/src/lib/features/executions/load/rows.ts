@@ -201,7 +201,7 @@ export const shareWords = (row: LoadRow): string | undefined =>
 
 export const gpuMeasured = (view: LoadView): boolean => view.gpu._tag === 'Measured';
 
-export const gpuWords = (view: LoadView): string | undefined =>
+const gpuWords = (view: LoadView): string | undefined =>
   view.gpu._tag === 'Unavailable' ? `GPU is not measured on this system: ${view.gpu.reason}` : undefined;
 
 export const rowGpu = (row: LoadRow): { readonly text: string; readonly hint: string | undefined } => ({
@@ -212,7 +212,7 @@ export const rowGpu = (row: LoadRow): { readonly text: string; readonly hint: st
       : `${row.gpuUnread} of its ${row.processes.length} processes have no GPU measurement; the figure counts the rest.`,
 });
 
-export const unresolvedWords = (view: LoadView): string | undefined => {
+const unresolvedWords = (view: LoadView): string | undefined => {
   if (view.unresolved.length === 0) return undefined;
   const lines = view.unresolved.map(
     (one) =>
@@ -222,6 +222,41 @@ export const unresolvedWords = (view: LoadView): string | undefined => {
 };
 
 export const totalMemory = (total: LoadTotal): string => (total.memoryBytes === null ? '—' : formatBytes(total.memoryBytes));
+
+export const usedOf = (used: number, total: number): string => {
+  const whole = formatBytes(total);
+  const part = formatBytes(used);
+  const unit = whole.slice(whole.lastIndexOf(' '));
+  return `${part.endsWith(unit) ? part.slice(0, -unit.length) : part} of ${whole}`;
+};
+
+const joined = (...parts: readonly (string | undefined)[]): string => parts.filter((one) => one !== undefined).join('\n');
+
+export const figureHints = (view: LoadView, pressed: 'warning' | 'critical' | null): { readonly cpu: string; readonly memory: string } => {
+  const bar = `In the bar, gold is Tagma, grey the rest of the ${view.machine}, empty what is free.`;
+  const unread = view.unread === undefined ? undefined : `Part of this reading was not read: ${view.unread}`;
+  const unresolved = unresolvedWords(view);
+  const memory = view.memory._tag === 'Measured' ? view.memory : null;
+  return {
+    cpu: joined(
+      `Tagma and its agents use ${totalShare(view.totals.own)} of the ${view.machine}; the ${view.machine} uses ${percent(view.share)} of its ${view.cores} cores${view.saturated ? ' and is saturated' : ''}.`,
+      bar,
+      totalUnread(view.totals.own),
+      unread,
+      unresolved,
+      gpuWords(view),
+    ),
+    memory: joined(
+      memory === null
+        ? `Tagma and its agents hold ${totalMemory(view.totals.own)}; the ${view.machine}'s memory is not read.`
+        : `Tagma and its agents hold ${totalMemory(view.totals.own)}; the ${view.machine} uses ${formatBytes(memory.usedBytes)} of ${formatBytes(memory.totalBytes)}.`,
+      pressed === null ? undefined : `The system reports ${pressed} memory pressure.`,
+      memory === null ? undefined : bar,
+      unread,
+      unresolved,
+    ),
+  };
+};
 
 export const totalUnread = (total: LoadTotal): string | undefined =>
   total.unread === 0

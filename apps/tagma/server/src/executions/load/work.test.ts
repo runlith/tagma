@@ -33,7 +33,7 @@ it.effect(
               recordsOf: () => Effect.succeed(new Map([[ref.execution, server]])),
             } as unknown as Terminals['Service']),
             Context.add(LoadOwnerFacts, { read: () => Effect.succeed(new Map()) } as unknown as LoadOwnerFacts['Service']),
-            Context.add(Projects, { byId: () => Effect.succeed({ id: 5, name: 'runlith' }) } as unknown as Projects['Service']),
+            Context.add(Projects, { list: () => Effect.succeed([{ id: 5, name: 'runlith' }]) } as unknown as Projects['Service']),
             Context.add(LoadAppTitles, {
               read: () =>
                 listing ? Effect.succeed(new Map([['notes', 'Notes']])) : Effect.fail(new OwnerFactsUnread({ reason: 'unreadable' })),
@@ -55,4 +55,24 @@ it.effect(
         expect(failed.unread).toContain('unreadable');
       }
     }),
+);
+
+it.effect('held work of a removed project stands without a project name and is no unread reading', () =>
+  Effect.gen(function* () {
+    const names = yield* makeWorkNames.pipe(
+      Effect.provide(
+        Context.make(ManagedCommands, { record: () => Effect.succeed(null) } as unknown as ManagedCommands['Service']).pipe(
+          Context.add(Terminals, {
+            recordsOf: () => Effect.succeed(new Map([[ref.execution, server]])),
+          } as unknown as Terminals['Service']),
+          Context.add(LoadOwnerFacts, { read: () => Effect.succeed(new Map()) } as unknown as LoadOwnerFacts['Service']),
+          Context.add(Projects, { list: () => Effect.succeed([{ id: 8, name: 'global' }]) } as unknown as Projects['Service']),
+          Context.add(LoadAppTitles, { read: () => Effect.succeed(new Map()) }),
+        ),
+      ),
+    );
+    const named = yield* names.read([ref], 0, []);
+    expect(named.work.get(ref.execution)).toMatchObject({ projectId: 5, project: undefined, label: 'Tagma site dev server (5194)' });
+    expect(named.unread).toBeUndefined();
+  }),
 );

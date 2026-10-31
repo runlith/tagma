@@ -12,6 +12,8 @@ const AGENT_WORK = 'power.agentWork';
 
 export const PACE_LABEL: Record<PaceLevel, string> = { full: 'Full', low: 'Low', lowest: 'Lowest' };
 
+type PaceTrouble = { readonly key: string; readonly title: string; readonly note: string | undefined };
+
 export class Pace extends Service<Pace>()('Pace', { tier: 'app' }) {
   static *make() {
     return new Pace(yield* Live, yield* SettingsRepo, yield* Workspace, yield* Scope, yield* Failure);
@@ -20,6 +22,7 @@ export class Pace extends Service<Pace>()('Pace', { tier: 'app' }) {
   standing = $state.raw<PaceState | null>(null);
   choosing = $state<PaceLevel | null>(null);
   problem = $state<string | null>(null);
+  private dismissed = $state<string | null>(null);
 
   constructor(
     live: LiveConnection,
@@ -56,7 +59,32 @@ export class Pace extends Service<Pace>()('Pace', { tier: 'app' }) {
     }
   }
 
+  private get trouble(): PaceTrouble | null {
+    if (this.problem !== null) return { key: 'unsaved', title: "Agents' share was not saved", note: this.problem };
+    const standing = this.standing;
+    if (standing === null) return null;
+    const level = PACE_LABEL[standing.pace];
+    const state = standing.state;
+    if (state._tag === 'unavailable')
+      return {
+        key: `${standing.pace}:unavailable:${state.reason}`,
+        title: `${level} is not applied to agents' commands`,
+        note: state.reason,
+      };
+    if (state._tag === 'applied' && state.failed > 0) {
+      const whom = state.failed === 1 ? '1 running process' : `${state.failed} running processes`;
+      return { key: `${standing.pace}:failed:${state.failed}`, title: `${whom} could not be moved to ${level}`, note: undefined };
+    }
+    return null;
+  }
+
+  get shown(): PaceTrouble | null {
+    const trouble = this.trouble;
+    return trouble === null || trouble.key === this.dismissed ? null : trouble;
+  }
+
   dismiss(): void {
-    this.problem = null;
+    if (this.problem !== null) this.problem = null;
+    else this.dismissed = this.trouble?.key ?? null;
   }
 }

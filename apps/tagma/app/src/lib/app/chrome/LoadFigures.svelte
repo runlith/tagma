@@ -1,65 +1,42 @@
 <script lang="ts">
   import { Readings } from '$lib/features/executions/load/Readings.svelte.js';
-  import { percent, totalMemory, totalShare, totalUnread } from '$lib/features/executions/load/rows.js';
-  import { formatBytes } from '$lib/shared/figures.js';
+  import { figureHints, percent, totalMemory, totalShare, usedOf } from '$lib/features/executions/load/rows.js';
+  import FadeText from '$lib/shared/FadeText.svelte';
   import LoadBar from './LoadBar.svelte';
 
   const readings = Readings.use();
 
   const loaded = $derived(readings.view);
   const memory = $derived(loaded?.memory._tag === 'Measured' ? loaded.memory : null);
+  const hints = $derived(loaded === null ? null : figureHints(loaded, readings.pressed));
 </script>
 
-<div class="grid gap-2">
-  <div class="grid grid-cols-2 gap-4">
-    <div class="grid min-w-0 content-start gap-1.5" data-load-cpu>
-      <span class="flex items-baseline gap-1.5">
-        <span class="text-muted-foreground">CPU</span>
-        <b class="text-page font-semibold tabular-nums" title={loaded === null ? undefined : totalUnread(loaded.totals.own)}
-          >{loaded === null ? '—' : totalShare(loaded.totals.own)}</b
-        >
-      </span>
-      {#if loaded !== null && loaded.share !== null && loaded.totals.own.share !== null && loaded.totals.outside.share !== null}
-        <LoadBar taken={loaded.totals.own.share} beside={loaded.totals.outside.share} />
-      {/if}
-      <span class="text-meta text-muted-foreground">
-        {#if loaded !== null}
-          {loaded.machine}
-          <span class={['font-medium tabular-nums', loaded.saturated ? 'text-status-in-work' : 'text-foreground']}
-            >{percent(loaded.share)}</span
-          >
-          of {loaded.cores} cores
-        {:else}
-          The machine is not read yet
-        {/if}
-      </span>
-    </div>
-    <div class="grid min-w-0 content-start gap-1.5" data-load-memory>
-      <span class="flex items-baseline gap-1.5">
-        <span class="text-muted-foreground">Memory</span>
-        <b class="text-page font-semibold tabular-nums">{loaded === null ? '—' : totalMemory(loaded.totals.own)}</b>
-      </span>
-      {#if memory !== null && loaded !== null && loaded.totals.own.memoryBytes !== null && loaded.totals.outside.memoryBytes !== null}
-        <LoadBar taken={loaded.totals.own.memoryBytes / memory.totalBytes} beside={loaded.totals.outside.memoryBytes / memory.totalBytes} />
-      {/if}
-      <span class="text-meta text-muted-foreground">
-        {#if memory !== null && loaded !== null}
-          {loaded.machine}
-          <span class={['font-medium tabular-nums', readings.pressed === null ? 'text-foreground' : 'text-status-in-work']}
-            >{formatBytes(memory.usedBytes)}</span
-          >
-          of {formatBytes(memory.totalBytes)}{#if readings.pressed !== null}<span class="font-medium text-status-in-work" data-load-pressure
-              >, pressure {readings.pressed}</span
-            >{/if}
-        {:else}
-          {loaded?.machine ?? 'Machine'} memory is not read
-        {/if}
-      </span>
-    </div>
+<div class="grid grid-cols-2 gap-4">
+  <div class="grid min-w-0 content-start gap-1" title={hints?.cpu ?? 'The machine is not read yet'} data-load-cpu>
+    <FadeText class="text-muted-foreground"
+      >CPU <b class="text-page font-semibold text-foreground tabular-nums">{loaded === null ? '—' : totalShare(loaded.totals.own)}</b
+      >{#if loaded !== null}<span class="ml-1 text-meta"
+          >{loaded.machine}
+          <span class={['tabular-nums', loaded.saturated ? 'text-status-in-work' : '']}>{percent(loaded.share)}</span></span
+        >{/if}</FadeText
+    >
+    {#if loaded !== null && loaded.share !== null && loaded.totals.own.share !== null && loaded.totals.outside.share !== null}
+      <LoadBar taken={loaded.totals.own.share} beside={loaded.totals.outside.share} />
+    {/if}
   </div>
-  <span class="flex gap-3 text-meta text-muted-foreground" data-load-legend>
-    <span class="flex items-center gap-1"><i class="size-2 bg-brand"></i>Tagma</span>
-    <span class="flex items-center gap-1"><i class="size-2 bg-muted-foreground/35"></i>Rest of the {loaded?.machine ?? 'machine'}</span>
-    <span class="flex items-center gap-1"><i class="size-2 border border-vein-strong bg-sunken"></i>Free</span>
-  </span>
+  <div class="grid min-w-0 content-start gap-1" title={hints?.memory ?? 'The machine is not read yet'} data-load-memory>
+    <FadeText class="text-muted-foreground"
+      >Memory <b class="text-page font-semibold text-foreground tabular-nums">{loaded === null ? '—' : totalMemory(loaded.totals.own)}</b
+      >{#if loaded !== null && memory !== null}<span class="ml-1 text-meta"
+          >{loaded.machine}
+          <span
+            class={['tabular-nums', readings.pressed === null ? '' : 'text-status-in-work']}
+            data-load-pressure={readings.pressed ?? undefined}>{usedOf(memory.usedBytes, memory.totalBytes)}</span
+          ></span
+        >{/if}</FadeText
+    >
+    {#if memory !== null && loaded !== null && loaded.totals.own.memoryBytes !== null && loaded.totals.outside.memoryBytes !== null}
+      <LoadBar taken={loaded.totals.own.memoryBytes / memory.totalBytes} beside={loaded.totals.outside.memoryBytes / memory.totalBytes} />
+    {/if}
+  </div>
 </div>
