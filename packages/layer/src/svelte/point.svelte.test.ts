@@ -5,13 +5,14 @@ import { flush } from '@runlith/testing/flush';
 import { flushSync, mount, unmount } from 'svelte';
 import { describe, expect, it } from 'vitest';
 
-import { ServiceStartError } from '../Graph.js';
+import { KeyIdCollisionError, ServiceStartError } from '../Graph.js';
 import { Service } from '../key.js';
 import { Layer } from '../Layer.js';
 import { Point } from '../Point.js';
 import type { Shown } from './payload.js';
 import { test as mountApp } from './test.svelte.js';
 import Broken from './test-utils/point/Broken.svelte';
+import ComponentsHost from './test-utils/point/ComponentsHost.svelte';
 import Labelled from './test-utils/point/Labelled.svelte';
 import PanelsHost from './test-utils/point/PanelsHost.svelte';
 
@@ -73,40 +74,71 @@ describe('Point', () => {
     expect(rt.get(Menu).items).toEqual([{ id: 'x', order: 0 }]);
     await rt.unmount();
   });
+
+  it('refuses two contributions under one name even when one condition admits both', () => {
+    expect(() =>
+      mountApp(
+        Layer.mergeAll(
+          Menu,
+          Layer.when(
+            () => true,
+            Layer.mergeAll(Menu.contribute('same', { id: 'a', order: 0 }), Menu.contribute('same', { id: 'b', order: 1 })),
+          ),
+        ),
+        Layer.mergeAll(),
+      ),
+    ).toThrow(KeyIdCollisionError);
+  });
 });
 
-type Panel = Shown<{ label: string }, string> & { readonly id: string };
+function pointOf<Item extends { readonly id: string }>(): Point<Item> {
+  return new Point<Item>(
+    'PointTest.Panels',
+    (item) => item.id,
+    new Roster<Item>(
+      (key) => key,
+      (item) => item.id,
+      reactiveCell(),
+    ),
+  );
+}
+
+function show(render: (target: HTMLElement) => object) {
+  const target = document.createElement('div');
+  document.body.appendChild(target);
+  const mounted = render(target);
+  return {
+    target,
+    remove: () => {
+      void unmount(mounted);
+      target.remove();
+    },
+  };
+}
 
 describe('PointView', () => {
   it('renders nothing for an empty point, then each item under its own boundary: a component, a view by the owner’s renderer, a failure contained', () => {
-    const point = new Point<Panel>(
-      'PointTest.Panels',
-      (panel) => panel.id,
-      new Roster<Panel>(
-        (key) => key,
-        (panel) => panel.id,
-        reactiveCell(),
-      ),
-    );
-    const target = document.createElement('div');
-    document.body.appendChild(target);
-    const host = mount(PanelsHost, { target, props: { point } });
+    const components = pointOf<Shown<{ label: string }> & { readonly id: string }>();
+    const shown = show((target) => mount(ComponentsHost, { target, props: { point: components } }));
     flushSync();
-    expect(target.innerHTML.replace(/<!---->/g, '')).toBe('');
+    expect(shown.target.innerHTML.replace(/<!---->/g, '')).toBe('');
 
-    point.register('core', { id: 'plain', payload: { component: Labelled } }, { id: 'broken', payload: { component: Broken } });
-    const leave = point.register('apps', { id: 'app', payload: { view: 'board/main' } });
+    components.register('core', { id: 'plain', payload: { component: Labelled } }, { id: 'broken', payload: { component: Broken } });
     flushSync();
+    expect(shown.target.querySelector('[data-item]')?.textContent).toBe('owner');
+    expect(shown.target.querySelectorAll('[data-testid="error-boundary-fallback"]')).toHaveLength(1);
+    shown.remove();
 
-    expect(target.querySelectorAll('[data-frame]')).toHaveLength(1);
-    expect(target.querySelector('[data-item]')?.textContent).toBe('owner');
-    expect(target.querySelector('[data-view]')?.textContent).toBe('board/main for owner');
-    expect(target.querySelectorAll('[data-testid="error-boundary-fallback"]')).toHaveLength(1);
+    const views = pointOf<Shown<{ label: string }, string> & { readonly id: string }>();
+    const framed = show((target) => mount(PanelsHost, { target, props: { point: views } }));
+    const leave = views.register('apps', { id: 'app', payload: { view: 'board/main' } });
+    flushSync();
+    expect(framed.target.querySelectorAll('[data-frame]')).toHaveLength(1);
+    expect(framed.target.querySelector('[data-view]')?.textContent).toBe('board/main for owner');
 
     leave();
     flushSync();
-    expect(target.querySelector('[data-view]')).toBeNull();
-    void unmount(host);
-    target.remove();
+    expect(framed.target.querySelector('[data-frame]')).toBeNull();
+    framed.remove();
   });
 });

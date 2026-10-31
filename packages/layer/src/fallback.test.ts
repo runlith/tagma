@@ -4,6 +4,7 @@ import { DuplicateProviderError, Graph } from './Graph.js';
 import { Service } from './key.js';
 import { Layer, type AnyLayer } from './Layer.js';
 import { Scope } from './Scope.js';
+import { Visitor } from './testing.js';
 
 function inlineRoot(build: () => void): () => void {
   build();
@@ -32,6 +33,8 @@ class Pace extends Service<PaceShape>()('Fallback.Pace', { tier: 'app' }) {
 
 class Theme extends Service<{ readonly name: string }>()('Fallback.Theme', { tier: 'app' }) {}
 
+class Seat extends Service<{ readonly name: string }>()('Fallback.Seat', { tier: 'visitor' }) {}
+
 const quick: PaceShape = { beat: 120 };
 
 describe('Layer.fallback', () => {
@@ -57,6 +60,29 @@ describe('Layer.fallback', () => {
         ) as AnyLayer,
       ),
     ).toThrow(DuplicateProviderError);
+    expect(() =>
+      open(
+        Layer.mergeAll(
+          Layer.fallback(Theme, () => ({ name: 'a' })),
+          Layer.of(Theme, { name: 'replacement' }),
+          Layer.fallback(Theme, () => ({ name: 'b' })),
+        ) as AnyLayer,
+      ),
+    ).toThrow(DuplicateProviderError);
+  });
+
+  it('refuses a replacement a scope admits below the scope an entry filed the fallback at', async () => {
+    const seats = Layer.entry('Fallback.seats', async () => ({ default: Layer.fallback(Seat, () => ({ name: 'fallback' })) }));
+    const graph = new Graph(Layer.mergeAll(seats, Layer.when(Visitor.present(), Layer.of(Seat, { name: 'replacement' }))) as AnyLayer, {
+      effectRoot: inlineRoot,
+      ladder: [Visitor],
+    });
+    const app = Scope.make();
+    await graph.open(app);
+    await seats.prepare(app);
+    seats.enter(app);
+
+    expect(() => graph.openRung(app, Visitor, Visitor.guest())).toThrow(DuplicateProviderError);
   });
 
   it('yields to a replacement that stands before or with it, and refuses one admitted after it under a condition or from a chunk', async () => {

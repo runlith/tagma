@@ -36,12 +36,8 @@ export class Roster<T> {
       if (clash !== undefined) throw clashOf(this.subject(key), clash.contributor, contributor);
       entries.set(key, { contributor, item });
     }
-    const next = [...this.list];
-    for (const [key, held] of entries) {
-      this.ledger.set(key, held);
-      next.splice(this.placeOf(next, held.item), 0, held.item);
-    }
-    this.settle(next);
+    for (const [key, held] of entries) this.ledger.set(key, held);
+    this.settle(this.merged([...entries.values()].map((held) => held.item)));
     return () => {
       const gone = new Set<T>();
       for (const [key, held] of entries) {
@@ -58,18 +54,19 @@ export class Roster<T> {
     return undefined;
   }
 
-  private placeOf(list: readonly T[], item: T): number {
+  private merged(arriving: readonly T[]): readonly T[] {
     const order = this.options.order;
-    if (order === undefined) return list.length;
-    const rank = order(item);
-    let low = 0;
-    let high = list.length;
-    while (low < high) {
-      const middle = (low + high) >> 1;
-      if (order(list[middle] as T) <= rank) low = middle + 1;
-      else high = middle;
+    if (order === undefined) return [...this.list, ...arriving];
+    const incoming = [...arriving].sort((left, right) => order(left) - order(right));
+    const next: T[] = [];
+    let at = 0;
+    for (const item of incoming) {
+      const rank = order(item);
+      while (at < this.list.length && order(this.list[at] as T) <= rank) next.push(this.list[at++] as T);
+      next.push(item);
     }
-    return low;
+    while (at < this.list.length) next.push(this.list[at++] as T);
+    return next;
   }
 
   private settle(list: readonly T[]): void {
