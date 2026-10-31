@@ -6,6 +6,7 @@ import { sqliteTable, text } from 'drizzle-orm/sqlite-core';
 import { Cause, Deferred, Effect, Exit, Fiber, Layer } from 'effect';
 import { sharedPool } from '@runlith/sqlite-process/testing/pool';
 import { MachineStore } from '../contract/service/store.js';
+import type { ReturnedRows } from '@runlith/sqlite-process/channel';
 import { MachineUnits, ProgramConflict } from '../contract/service/units.js';
 import { writes } from '../contract/service/writes.js';
 import { seededStoreLayer } from './open.js';
@@ -41,6 +42,38 @@ const world = Effect.gen(function* () {
   const missing = store.db.select({ id: kept.id }).from(kept).where(eq(kept.id, 'missing'));
   return { units, count, counted, ids, insert, missing };
 });
+
+it.live(
+  'a returning write hands its rows to its place among the after-commit work of a program and of a joined program, and nothing when refused',
+  () =>
+    Effect.gen(function* () {
+      const { units, insert, missing } = yield* world;
+      const seen: unknown[] = [];
+      const note = (name: string) => (rows: ReturnedRows) => Effect.sync(() => void seen.push([name, rows]));
+      const inserted = (id: string) => insert(id).returning({ id: kept.id });
+      yield* units.program(keeping, 'test:returning', (program) =>
+        Effect.gen(function* () {
+          yield* program.afterCommit(Effect.sync(() => void seen.push('before')));
+          yield* program.returning(inserted('a'), note('program'));
+          yield* program.afterCommit(Effect.sync(() => void seen.push('after')));
+          expect(seen).toEqual([]);
+        }),
+      );
+      yield* units.write(writes('programs.outer', []), () =>
+        Effect.andThen(
+          units.program(keeping, 'test:joined', (program) => program.returning(inserted('b'), note('joined'))),
+          Effect.sync(() => expect(seen).toHaveLength(3)),
+        ),
+      );
+      const refused = yield* Effect.exit(
+        units.program(keeping, 'test:refused', (program) =>
+          Effect.andThen(program.returning(inserted('c'), note('refused')), program.guard(missing, 1)),
+        ),
+      );
+      expect(Exit.isFailure(refused)).toBe(true);
+      expect(seen).toEqual(['before', ['program', [['a']]], 'after', ['joined', [['b']]]]);
+    }).pipe(Effect.provide(storage)),
+);
 
 it.live('a program and the programs nested in it commit together, then its after-commit work runs and its tables shift', () =>
   Effect.gen(function* () {

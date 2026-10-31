@@ -1,4 +1,4 @@
-import type { SqliteProgram } from '@runlith/sqlite-process/channel';
+import type { ReturnedRows, SqliteProgram } from '@runlith/sqlite-process/channel';
 import { Context, Data, type Effect } from 'effect';
 import type { StoreIdentity } from '../contract/service/store.js';
 import type { WriteSet } from '../contract/service/writes.js';
@@ -7,11 +7,14 @@ export type UnitLife = { readonly identity: StoreIdentity; readonly operation: s
 
 export const UnitLife = Context.Reference<UnitLife | null>('tagma/platform/UnitLife', { defaultValue: () => null });
 
+export type Returning = { rows: ReturnedRows | null };
+
 export type Building = {
   readonly store: StoreIdentity;
   readonly statements: (SqliteProgram['statements'][number] & { readonly set: WriteSet })[];
   readonly tails: Effect.Effect<void>[];
   readonly sets: WriteSet[];
+  readonly returning: Returning[];
 };
 
 export const ProgramOpen = Context.Reference<Building | null>('tagma/platform/ProgramOpen', { defaultValue: () => null });

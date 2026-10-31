@@ -17,7 +17,7 @@ import {
   writeUnitOf,
 } from '../contract/service/units.js';
 import { UnitWriteRefused, type WriteSet } from '../contract/service/writes.js';
-import { type Building, ProgramOpen, UnitLife } from './life.js';
+import { type Building, ProgramOpen, type Returning, UnitLife } from './life.js';
 import type { TableMoves } from './moves.js';
 import { intoOuterCommit } from './transaction.js';
 import { breach, checkStatement, movedTables, UnitDurability, UnitWrites } from './writes.js';
@@ -73,15 +73,29 @@ export const planned = <A, E>(attempt: Effect.Effect<A, E>): Effect.Effect<A | n
 const UNIQUE = /^SQLITE_CONSTRAINT_(UNIQUE|PRIMARYKEY)$/;
 
 const built = <Brand extends StoreBrand>(building: Building, set: WriteSet): ProgramUnit<Brand> => {
-  const add = (statement: ProgramQuery, counts: 'rows' | 'changes', expect: number | null) =>
-    Effect.sync(() => {
-      const { sql, params } = 'toSQL' in statement ? statement.toSQL() : statement.getQuery();
-      building.statements.push({ sql, params, counts, expect, set });
-    });
+  const added = (statement: ProgramQuery, counts: 'rows' | 'changes' | 'returned', expect: number | null) => {
+    const { sql, params } = 'toSQL' in statement ? statement.toSQL() : statement.getQuery();
+    building.statements.push({ sql, params, counts, expect, set });
+  };
   return programUnitOf<Brand>({
     store: building.store,
-    write: (statement, changes) => add(statement, 'changes', changes ?? null),
-    guard: (statement, rows) => add(statement, 'rows', rows),
+    write: (statement, changes) => Effect.sync(() => added(statement, 'changes', changes ?? null)),
+    guard: (statement, rows) => Effect.sync(() => added(statement, 'rows', rows)),
+    returning: (statement, after) =>
+      Effect.sync(() => {
+        added(statement, 'returned', null);
+        const cell: Returning = { rows: null };
+        building.returning.push(cell);
+        building.tails.push(
+          carryCost(
+            Effect.suspend(() =>
+              cell.rows === null
+                ? Effect.die(new Error('a committed program carried no rows for one of its returning statements'))
+                : after(cell.rows),
+            ),
+          ),
+        );
+      }),
     afterCommit: (effect) => Effect.sync(() => void building.tails.push(carryCost(effect))),
   });
 };
@@ -114,6 +128,11 @@ const joined = <Brand extends StoreBrand>(
       Effect.suspend(() => {
         const at = next++;
         return Effect.flatMap(statement, (found) => counted(at, rows, Array.isArray(found) ? found.length : found === undefined ? 0 : 1));
+      }),
+    returning: (statement, after) =>
+      Effect.suspend(() => {
+        next++;
+        return Effect.flatMap(db.values(statement), (rows) => Effect.sync(() => void tails.push(carryCost(after(rows)))));
       }),
     afterCommit: (effect) => Effect.sync(() => void tails.push(carryCost(effect))),
   });
@@ -188,10 +207,10 @@ const submitted = Effect.fnUntraced(function* <Brand extends StoreBrand, A, E>(
     Effect.uninterruptibleMask((restore) =>
       Effect.useSpan('Store.program', { attributes: { opKind: set.operation, 'db.program.key': key } }, () =>
         Effect.gen(function* () {
-          const building: Building = { store: identity, statements: [], tails: [], sets: [set] };
+          const building: Building = { store: identity, statements: [], tails: [], sets: [set], returning: [] };
           const value = yield* restore(Effect.provideService(work(built<Brand>(building, set)), ProgramOpen, building));
           for (const statement of building.statements) {
-            if (statement.counts === 'changes')
+            if (statement.counts !== 'rows')
               yield* Effect.provideService(checkStatement(identity)(statement.sql), UnitWrites, new Map([[identity, statement.set]]));
           }
           if (building.statements.length > 0) {
@@ -234,6 +253,7 @@ const submitted = Effect.fnUntraced(function* <Brand extends StoreBrand, A, E>(
                 });
               return yield* refusedBy(outcome.thrown);
             }
+            for (const [index, cell] of building.returning.entries()) cell.rows = outcome.returned?.[index] ?? null;
             for (const each of building.sets) moves.committed(movedTables(identity, each));
           }
           let lost = Cause.empty as Cause.Cause<never>;

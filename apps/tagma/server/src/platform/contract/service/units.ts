@@ -1,3 +1,5 @@
+import type { ReturnedRows } from '@runlith/sqlite-process/channel';
+import type { SQLWrapper } from 'drizzle-orm';
 import { Context, Data, type Effect } from 'effect';
 import type { StoreBrand, StoreFailure, StoreIdentity } from './store.js';
 import type { WriteSet } from './writes.js';
@@ -10,10 +12,13 @@ type ProgramText = { readonly sql: string; readonly params: ReadonlyArray<unknow
 
 export type ProgramQuery = Effect.Effect<unknown, StoreFailure> & ({ toSQL(): ProgramText } | { getQuery(): ProgramText });
 
+type ReturningQuery = ProgramQuery & SQLWrapper;
+
 export type ProgramUnit<Brand extends StoreBrand> = {
   readonly store: StoreIdentity;
   write(statement: ProgramQuery, changes?: number): Effect.Effect<void, StoreFailure>;
   guard(statement: ProgramQuery, rows: number): Effect.Effect<void, StoreFailure>;
+  returning(statement: ReturningQuery, after: (rows: ReturnedRows) => Effect.Effect<void>): Effect.Effect<void, StoreFailure>;
   afterCommit(effect: Effect.Effect<void>): Effect.Effect<void>;
   readonly [programBrand]: (brand: Brand) => Brand;
 };
