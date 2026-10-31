@@ -59,6 +59,7 @@ const seconds = flag('seconds', 60, 1);
 const warm = flag('warm', 10, 0);
 const rate = flag('rate', 1, 0.01);
 const subscribers = flag('subscribers', 1, 0) !== 0;
+const churn = flag('churn', 0, 0) !== 0;
 const resultBytes = flag('result-bytes', 2048, 1);
 const messageBytes = flag('message-bytes', 1024, 1);
 const callsPerBoundary = flag('calls-per-boundary', 1, 1);
@@ -350,6 +351,12 @@ const program = Effect.gen(function* () {
     }
     const followed = born.length === 0 ? [observer] : born.map(({ threadId }) => threadId);
     const feeds = yield* loadFeeds(world.runtime, yield* world.directory('socket'), projectId, followed, subscribers);
+    const scenario = churn
+      ? yield* Effect.flatMap(
+          Effect.promise(() => import('./loadChurn.js')),
+          ({ loadChurn }) => loadChurn(world, feeds.client, projectId, checkout, installation),
+        )
+      : null;
     const events = yield* Effect.acquireRelease(Queue.unbounded<string>(), Queue.shutdown);
     const streams = yield* FiberSet.make<void, unknown>();
     const ledger = Context.get(world.runtime.owners, CostLedger);
@@ -711,6 +718,19 @@ const program = Effect.gen(function* () {
     if (gcMonitored) yield* Effect.sync(() => process.stderr.write('AGENT_LOAD_WINDOW_BEGIN\n'));
     const loop = monitorEventLoopDelay({ resolution: 10 });
     loop.enable();
+    let churnStarted = false;
+    let churnCompletedAt: number | null = null;
+    let churnResult: unknown = null;
+    if (scenario !== null)
+      yield* FiberSet.run(
+        streams,
+        Effect.gen(function* () {
+          yield* Effect.sleep(5000);
+          churnStarted = true;
+          churnResult = yield* scenario.run();
+          churnCompletedAt = yield* Clock.currentTimeMillis;
+        }),
+      );
     yield* FiberSet.run(
       streams,
       Effect.forever(
@@ -832,6 +852,15 @@ const program = Effect.gen(function* () {
         maxMs: sample.max,
       };
     };
+    const churnEnd = (): number | null => churnCompletedAt;
+    const churnAt = churnEnd();
+    const churnReading = {
+      enabled: churn,
+      started: churnStarted,
+      completedBeforeCut: churnAt !== null && churnAt < endWall,
+      completedAt: churnAt,
+      result: churnResult,
+    };
     const completedInWindow = countsAfter.completed - countsBefore.completed;
     const cpuMs = (cpu.user + cpu.system) / 1000;
     const requestedBytes = requestedBefore === undefined || requestedAfter === undefined ? null : requestedAfter - requestedBefore;
@@ -844,6 +873,7 @@ const program = Effect.gen(function* () {
             agents,
             activeAgents: born.filter((_agent, index) => index % 5 !== 4).length,
             idleAgents: born.filter((_agent, index) => index % 5 === 4).length,
+            auxiliaryAgents: churn ? 1 : 0,
             seconds,
             warm,
             rate,
@@ -880,6 +910,7 @@ const program = Effect.gen(function* () {
           },
           metrics: figures,
           ledger: ledgerReading,
+          churn: churnReading,
           cpuMs,
           cpuMsPerCompletedCall: completedInWindow === 0 ? null : cpuMs / completedInWindow,
           allocatorRequestedBytes: requestedBytes,

@@ -31,6 +31,7 @@ let window: 'before' | 'open' | 'closed' = 'before';
 let beganAt: string | undefined;
 let endedAt: string | undefined;
 let ambiguousFragments = 0;
+let markerAmbiguousSegments = 0;
 let suppressedFragments = 0;
 let windowSuppressedFragments = 0;
 let tail = '';
@@ -50,59 +51,83 @@ const refuse = (reason: string): void => {
   problem ??= reason;
 };
 
+const marker = (value: string): void => {
+  if (value === identifyBegin) {
+    if (identifying || identified || window !== 'before') refuse('invalid GC identification begin marker');
+    identifying = true;
+  } else if (value === identifyEnd) {
+    if (!identifying || identified) refuse('invalid GC identification end marker');
+    identifying = false;
+    identified = true;
+    if (heaps.size !== 1) refuse(`main heap identification found ${heaps.size} distinct full-sweep heaps`);
+    else heap = heaps.values().next().value;
+  } else if (value === windowBegin) {
+    if (!identified || heap === undefined || window !== 'before') refuse('invalid GC observation window begin marker');
+    window = 'open';
+    beganAt = new Date().toISOString();
+  } else if (value === windowEnd) {
+    if (window !== 'open') refuse('invalid GC observation window end marker');
+    window = 'closed';
+    endedAt = new Date().toISOString();
+  }
+  process.stderr.write(`${value}\n`);
+};
+
+const segment = (line: string, affected: boolean): void => {
+  if (line === '') return;
+  const ids = [...line.matchAll(/GC<([^>]+)>:/g)];
+  const pauses = [...line.matchAll(/\bp\s*=\s*([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?)ms\b/g)];
+  const pauseFields = [...line.matchAll(/\bp\s*=/g)];
+  if (identifying && /Full sweep:/.test(line)) {
+    for (const id of ids) heaps.add(id[1]!);
+  }
+  if (affected) {
+    markerAmbiguousSegments += 1;
+    if (window === 'open') ambiguousFragments += pauseFields.length;
+    if (/\b(?:error|warning|warn|fatal|exception|failed)\b|^\s*at\s/i.test(line)) process.stderr.write(`${line}\n`);
+    else retain(line);
+    return;
+  }
+  if (ids.length === 0) {
+    if (window === 'open') ambiguousFragments += pauseFields.length;
+    if (/\b(?:error|warning|warn|fatal|exception|failed)\b|^\s*at\s/i.test(line)) process.stderr.write(`${line}\n`);
+    else if (!/^\s*(?:GC END!|Requesting GC\b)/.test(line)) retain(line);
+    return;
+  }
+  if (ids.length !== 1 || pauses.length > 1 || (pauses[0]?.index ?? Infinity) < ids[0]!.index!) {
+    if (window === 'open') ambiguousFragments += pauseFields.length;
+    retain(line);
+    return;
+  }
+  const id = ids[0]![1]!;
+  if (heap !== undefined && id === heap) {
+    if (pauseFields.length !== pauses.length) refuse('the main heap reported an unparseable GC pause');
+    const pause = pauses[0];
+    if (pause !== undefined) {
+      const value = Number(pause[1]);
+      if (!Number.isFinite(value) || value < 0) refuse('the main heap reported an invalid GC pause');
+      else if (window === 'open') samples.push(value);
+    }
+  }
+};
+
 const stderr = async (): Promise<void> => {
   const lines = createInterface({ input: child.stderr, crlfDelay: Infinity });
+  const markers = /AGENT_LOAD_GC_IDENTIFY_BEGIN|AGENT_LOAD_GC_IDENTIFY_END|AGENT_LOAD_WINDOW_BEGIN|AGENT_LOAD_WINDOW_END/g;
   for await (const line of lines) {
-    if (line === identifyBegin) {
-      if (identifying || identified || window !== 'before') refuse('invalid GC identification begin marker');
-      identifying = true;
-    } else if (line === identifyEnd) {
-      if (!identifying || identified) refuse('invalid GC identification end marker');
-      identifying = false;
-      identified = true;
-      if (heaps.size !== 1) refuse(`main heap identification found ${heaps.size} distinct full-sweep heaps`);
-      else heap = heaps.values().next().value;
-    } else if (line === windowBegin) {
-      if (!identified || heap === undefined || window !== 'before') refuse('invalid GC observation window begin marker');
-      window = 'open';
-      beganAt = new Date().toISOString();
-    } else if (line === windowEnd) {
-      if (window !== 'open') refuse('invalid GC observation window end marker');
-      window = 'closed';
-      endedAt = new Date().toISOString();
-    }
-    if (line === identifyBegin || line === identifyEnd || line === windowBegin || line === windowEnd) {
-      process.stderr.write(`${line}\n`);
+    const found = [...line.matchAll(markers)];
+    if (found.length === 0) {
+      segment(line, false);
       continue;
     }
-
-    const ids = [...line.matchAll(/GC<([^>]+)>:/g)];
-    const pauses = [...line.matchAll(/\bp\s*=\s*([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?)ms\b/g)];
-    const pauseFields = [...line.matchAll(/\bp\s*=/g)];
-    if (ids.length === 0) {
-      if (window === 'open') ambiguousFragments += pauseFields.length;
-      if (/\b(?:error|warning|warn|fatal|exception|failed)\b|^\s*at\s/i.test(line)) process.stderr.write(`${line}\n`);
-      else if (!/^\s*(?:GC END!|Requesting GC\b)/.test(line)) retain(line);
-      continue;
+    const affected = found.length !== 1 || line !== found[0]![0];
+    let position = 0;
+    for (const hit of found) {
+      segment(line.slice(position, hit.index), affected);
+      marker(hit[0]);
+      position = hit.index! + hit[0].length;
     }
-    if (identifying && /Full sweep:/.test(line)) {
-      for (const id of ids) heaps.add(id[1]!);
-    }
-    if (ids.length !== 1 || pauses.length > 1 || (pauses[0]?.index ?? Infinity) < ids[0]!.index!) {
-      if (window === 'open') ambiguousFragments += pauseFields.length;
-      retain(line);
-      continue;
-    }
-    const id = ids[0]![1]!;
-    if (heap !== undefined && id === heap) {
-      if (pauseFields.length !== pauses.length) refuse('the main heap reported an unparseable GC pause');
-      const pause = pauses[0];
-      if (pause !== undefined) {
-        const value = Number(pause[1]);
-        if (!Number.isFinite(value) || value < 0) refuse('the main heap reported an invalid GC pause');
-        else if (window === 'open') samples.push(value);
-      }
-    }
+    segment(line.slice(position), affected);
   }
 };
 
@@ -137,6 +162,7 @@ if (code !== 0 || signal !== null) {
         window: { beganAt, endedAt },
         completeness: 'unverified',
         ambiguousFragments,
+        markerAmbiguousSegments,
         suppressedFragments,
         windowSuppressedFragments,
         samples: samples.length,
