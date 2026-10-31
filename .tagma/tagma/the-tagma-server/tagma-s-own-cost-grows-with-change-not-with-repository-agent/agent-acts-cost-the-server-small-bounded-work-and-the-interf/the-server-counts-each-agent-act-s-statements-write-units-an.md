@@ -23,7 +23,7 @@ Today's telemetry counts `sql.execute` spans and `Store.permit.wait`, but only i
 
 What stands when done:
 - a root act (hosted tool call, ACP step, operation through a door, background driver) carries a cause that travels into the write units it opens, their after-commit effects, the publications and projections those wake, and the ACP steps they write;
-- per root act and per producer: statements, write units (later: programs), writer hold and writer wait, encoded bytes across the SQLite process boundary, spans opened;
+- per root act and per producer: statements, write units (later: programs), writer hold and writer wait, logical SQLite payload bytes across the process boundary, spans opened;
 - counted at the execution boundary for every statement, sampled or not — never derived from a retained span;
 - readable by a bench in-process and by `read_performance` (overview or a ledger query) so producers can be ranked.
 
