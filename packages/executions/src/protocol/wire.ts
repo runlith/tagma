@@ -330,12 +330,43 @@ const CallHeading = Schema.Struct({
 });
 const readCallHeading = Schema.decodeUnknownOption(CallHeading);
 
+const LegacyLoadCall = Schema.Struct({
+  _tag: Schema.Literal('Call'),
+  request: RequestId,
+  body: Schema.Union([
+    Schema.Struct({
+      _tag: Schema.Literal('Subscribe'),
+      source: Schema.Struct({
+        _tag: Schema.Literal('Load'),
+        serverPid: Positive,
+        desktopPid: Schema.optional(Positive),
+        parts: Schema.optionalKey(Schema.Never),
+      }),
+      credits: Positive,
+    }),
+    Schema.Struct({
+      _tag: Schema.Literal('LoadInterest'),
+      subscription: SubscriptionId,
+      interested: Schema.Boolean,
+      others: Schema.optionalKey(Schema.Never),
+    }),
+  ]),
+});
+const readLegacyLoadCall = Schema.decodeUnknownOption(LegacyLoadCall);
+
 export type UnsupportedCall = {
   readonly request: RequestId;
   readonly refusal: Refusal;
 };
 
 export const unsupportedCall = (message: unknown): UnsupportedCall | undefined => {
+  const legacy = readLegacyLoadCall(message);
+  if (legacy._tag === 'Some') {
+    return {
+      request: legacy.value.request,
+      refusal: { _tag: 'UnsupportedCapability', capability: 'machine-load', reason: 'this host requires the revised load subscription' },
+    };
+  }
   const heading = readCallHeading(message);
   if (heading._tag === 'None' || Object.hasOwn(Request.cases, heading.value.body._tag)) return undefined;
   return {

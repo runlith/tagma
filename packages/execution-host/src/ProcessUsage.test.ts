@@ -201,12 +201,16 @@ it.effect('declared parts and processes working on their behalf are placed by re
       processes: [
         process(10, 1),
         process(11, 10, { gpu: { _tag: 'Measured', micros: 100_000 } }),
+        process(12, 11),
         process(50, 1),
         process(51, 50),
         process(60, 1),
         process(90, 50, { onBehalfOf: 11 }),
         process(91, 90),
         process(92, 1, { onBehalfOf: 11 }),
+        process(93, 10, { onBehalfOf: 11 }),
+        process(94, 93),
+        process(95, 10, { onBehalfOf: 12 }),
         process(100, 11),
         process(101, 100),
         process(200, 1),
@@ -250,9 +254,9 @@ it.effect('declared parts and processes working on their behalf are placed by re
       owned('renderer')
         ?.processes.map((one) => one.identity.pid)
         .toSorted(),
-    ).toEqual([11, 90, 91, 92]);
+    ).toEqual([11, 12, 90, 91, 92, 93, 94, 95]);
     expect(owned('renderer')?.gpuCores).toBeCloseTo(0.3, 6);
-    expect(owned('renderer')?.gpuUnread).toBe(3);
+    expect(owned('renderer')?.gpuUnread).toBe(7);
     expect(owned('renderer')?.processes.find((one) => one.identity.pid === 11)?.gpu).toEqual({ _tag: 'Measured', cores: 0.3 });
     expect(owned('renderer')?.processes.find((one) => one.identity.pid === 90)?.gpu).toEqual({
       _tag: 'Unavailable',
@@ -274,6 +278,15 @@ it.effect('declared parts and processes working on their behalf are placed by re
       ['reused', 'different'],
       ['unreadable', 'unknown'],
     ]);
+    yield* usage.parts('fixture', [...parts].reverse());
+    yield* usage.sample();
+    const reordered = yield* usage.load;
+    expect(
+      reordered?.groups
+        .find((group) => group.owner._tag === 'Part' && group.owner.key === 'renderer')
+        ?.processes.map((one) => one.identity.pid)
+        .toSorted(),
+    ).toEqual([11, 12, 90, 91, 92, 93, 94, 95]);
     yield* usage.parts('fixture', [parts[1]!]);
     yield* usage.sample();
     const replacement = yield* usage.load;
@@ -323,6 +336,69 @@ it.effect('a completed execution uses its container counter or marks the process
     expect(measured?.groups.reduce((sum, group) => sum + group.cores, 0)).toBeCloseTo(1, 6);
     expect(execution(lower)).toMatchObject({ cores: 0, lowerBound: true });
     expect(lower?.groups.reduce((sum, group) => sum + group.cores, 0)).toBeCloseTo(1, 6);
+  }),
+);
+
+it.effect('a container stays attributed when its leader leaves after the execution census', () =>
+  Effect.gen(function* () {
+    const initial: UsageRead = {
+      ...before,
+      processes: [row(60, 1, 0, 'host'), row(100, 1, 100_000, 'command')],
+      containers: [{ execution: ref, cpuMicros: 100_000 }],
+      machine: { busy: 0, total: 0, cores: 4, memory },
+    };
+    const final: UsageRead = {
+      ...after,
+      processes: [row(60, 1, 100_000, 'host')],
+      containers: [{ execution: ref, cpuMicros: 700_000 }],
+      machine: { busy: 100, total: 400, cores: 4, memory },
+    };
+    const usage = yield* makeProcessUsage({
+      topology: { of: () => Effect.succeed(observed), watching: Effect.succeed([observed]) },
+      scope,
+      policy: { periodMs: 100 },
+      native: yield* readings([initial, final]),
+      hostPid: 60,
+      cores: 4,
+      budgetBytes: 1_000_000,
+    }).pipe(Effect.provideService(Processes, reader));
+    yield* usage.subscribe('fixture', 50, []);
+    yield* usage.sample();
+    yield* TestClock.adjust(Duration.seconds(1));
+    yield* usage.sample();
+    const reading = yield* usage.load;
+    const execution = reading?.groups.find((group) => group.owner._tag === 'Execution');
+    expect(execution?.owner).toMatchObject({ _tag: 'Execution', ended: false });
+    expect(execution?.cores).toBeCloseTo(0.6, 6);
+    expect(reading?.groups.reduce((sum, group) => sum + group.cores, 0)).toBeCloseTo(1, 6);
+  }),
+);
+
+it.effect('an on-behalf-of service does not replace an execution current child', () =>
+  Effect.gen(function* () {
+    const usage = yield* makeProcessUsage({
+      topology: { of: () => Effect.succeed(observed), watching: Effect.succeed([observed]) },
+      scope,
+      policy: { periodMs: 100 },
+      native: yield* readings([
+        {
+          ...before,
+          processes: [row(100, 1, 0, 'command'), row(101, 100, 0, 'child'), { ...row(110, 1, 0, 'service'), onBehalfOf: 100 }],
+        },
+      ]),
+      hostPid: 60,
+      cores: 4,
+      budgetBytes: 1_000_000,
+    }).pipe(Effect.provideService(Processes, reader));
+    yield* usage.subscribe('fixture', 50, []);
+    yield* usage.sample();
+    expect((yield* usage.latest(ref.execution))?.current).toEqual({ pid: 101, birth: '101' });
+    expect(
+      (yield* usage.load)?.groups
+        .find((group) => group.owner._tag === 'Execution')
+        ?.processes.map((one) => one.identity.pid)
+        .toSorted(),
+    ).toEqual([100, 101, 110]);
   }),
 );
 

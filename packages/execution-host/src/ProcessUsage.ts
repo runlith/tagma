@@ -35,6 +35,7 @@ export class UsageUnreadable extends Data.TaggedError('UsageUnreadable')<{ reado
 
 type Subscriber = { readonly serverPid: number; readonly parts: ReadonlyArray<DeclaredPart>; readonly interest: LoadInterest };
 type MachineSample = { readonly counters: MachineCounters; readonly takenAtMicros: number };
+type CountedExecution = { readonly ref: ExecutionRef; readonly ended: boolean };
 
 export type ProcessUsage = {
   readonly scope: EvidenceScope;
@@ -234,7 +235,10 @@ export const makeProcessUsage = Effect.fnUntraced(function* ({
           }
           parts.set(witness.pid, part.key);
         }
-        const endedRefs = new Map(ended.map((one) => [executionKey(one.ref), one.ref]));
+        const executionRefs = new Map<string, CountedExecution>([
+          ...watching.map((one) => [executionKey(one.ref), { ref: one.ref, ended: false }] as const),
+          ...ended.map((one) => [executionKey(one.ref), { ref: one.ref, ended: true }] as const),
+        ]);
         const leaders = new Map(
           [...watching, ...ended].flatMap((one) => (one.leader === undefined ? [] : [[executionKey(one.ref), one.leader] as const])),
         );
@@ -288,7 +292,7 @@ export const makeProcessUsage = Effect.fnUntraced(function* ({
         yield* Ref.set(heldRef, latest);
         if (subscribers.size > 0) {
           const machine = machineOf(native.machine, takenAtMicros);
-          const groups = withExecutions(grouped(rows, placement.owners, spent, installation), spent, endedRefs, rows);
+          const groups = withExecutions(grouped(rows, placement.owners, spent, installation), spent, executionRefs, rows);
           const measured = groups.reduce((sum, group) => sum + group.cores, 0);
           const kernel: ReadonlyArray<LoadGroup> =
             machine.cpu === null || machine.cpu <= measured
@@ -386,7 +390,7 @@ export const makeProcessUsage = Effect.fnUntraced(function* ({
                 identity: relation === 'leader' ? identityMatch(leader, { pid, birth: row.birth }) : 'unknown',
               },
       });
-      if (relation === 'leader') continue;
+      if (relation === undefined || relation === 'leader') continue;
       const order = reader.compareBirth(row.birth, current?.birth ?? row.birth);
       if (typeof order === 'number' && (current === undefined || order >= 0)) current = { pid, birth: row.birth };
     }
@@ -459,7 +463,7 @@ export const makeProcessUsage = Effect.fnUntraced(function* ({
 const withExecutions = (
   groups: ReadonlyArray<LoadGroup>,
   spent: Spent,
-  refs: ReadonlyMap<string, ExecutionRef>,
+  refs: ReadonlyMap<string, CountedExecution>,
   rows: ReadonlyMap<number, ProcessCounters>,
 ): ReadonlyArray<LoadGroup> => {
   const merged = [...groups];
@@ -467,10 +471,10 @@ const withExecutions = (
   const extra = new Set([...spent.ended, ...spent.reaped.keys()]);
   for (const [key, cores] of spent.containers) if (cores !== undefined && cores > 0) extra.add(key);
   for (const key of extra) {
-    const ref = refs.get(key);
-    if (ref === undefined || present.has(key)) continue;
+    const known = refs.get(key);
+    if (known === undefined || present.has(key)) continue;
     merged.push({
-      owner: { _tag: 'Execution', execution: ref, ended: true },
+      owner: { _tag: 'Execution', execution: known.ref, ended: known.ended },
       cores: 0,
       gpuCores: 0,
       gpuUnread: 1,

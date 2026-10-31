@@ -40,35 +40,85 @@ export class ProcessTree {
   }
 
   assign<T>(roots: ReadonlyMap<number, T>, groups = true, behalf = false): ReadonlyMap<number, T> {
-    const found = new Map(roots);
-    const frontier = [...roots.keys()];
-    let at = 0;
-    const drain = () => {
-      for (; at < frontier.length; at += 1) {
-        const pid = frontier[at]!;
-        const owner = found.get(pid)!;
-        const add = (child: number) => {
-          if (found.has(child)) return;
-          found.set(child, owner);
-          frontier.push(child);
-        };
-        if (behalf) for (const child of this.delegated.get(pid) ?? []) add(child);
-        for (const child of this.children.get(pid) ?? []) add(child);
-      }
-    };
-    drain();
+    const found = behalf ? this.assignDelegated(roots) : this.assignParents(roots);
+    if (!groups) return found;
+    const augmented = new Map(roots);
     const visited = new Set<number>();
-    for (const [pid, owner] of groups ? roots : []) {
+    for (const [pid, owner] of roots) {
       const work = this.rows.get(pid)?.work;
       if (work === undefined || visited.has(work)) continue;
       visited.add(work);
       for (const member of this.groups.get(work) ?? []) {
         if (found.has(member)) continue;
         found.set(member, owner);
-        if (behalf) frontier.push(member);
+        augmented.set(member, owner);
       }
     }
-    if (behalf) drain();
+    return behalf && augmented.size > roots.size ? this.assignDelegated(augmented) : found;
+  }
+
+  private assignParents<T>(roots: ReadonlyMap<number, T>): Map<number, T> {
+    const found = new Map(roots);
+    const frontier = [...roots.keys()];
+    for (let at = 0; at < frontier.length; at += 1) {
+      const pid = frontier[at]!;
+      const owner = found.get(pid)!;
+      for (const child of this.children.get(pid) ?? []) {
+        if (found.has(child)) continue;
+        found.set(child, owner);
+        frontier.push(child);
+      }
+    }
+    return found;
+  }
+
+  private assignDelegated<T>(roots: ReadonlyMap<number, T>): Map<number, T> {
+    const found = new Map(roots);
+    const reachable = new Set(roots.keys());
+    const frontier = [...roots.keys()];
+    for (let at = 0; at < frontier.length; at += 1) {
+      const pid = frontier[at]!;
+      for (const next of [...(this.children.get(pid) ?? []), ...(this.delegated.get(pid) ?? [])]) {
+        if (reachable.has(next)) continue;
+        reachable.add(next);
+        frontier.push(next);
+      }
+    }
+    for (const pid of this.rows.keys()) {
+      if (!reachable.has(pid) || found.has(pid)) continue;
+      const active = new Set<number>([pid]);
+      const stack: Array<{ readonly pid: number; next: number; pending?: number }> = [{ pid, next: 0 }];
+      while (stack.length > 0) {
+        const frame = stack[stack.length - 1]!;
+        if (frame.pending !== undefined) {
+          const owner = found.get(frame.pending);
+          frame.pending = undefined;
+          if (owner !== undefined) {
+            found.set(frame.pid, owner);
+            active.delete(frame.pid);
+            stack.pop();
+            continue;
+          }
+        }
+        if (frame.next >= 2) {
+          active.delete(frame.pid);
+          stack.pop();
+          continue;
+        }
+        const row = this.rows.get(frame.pid);
+        const dependency = frame.next++ === 0 ? row?.onBehalfOf : row?.parent;
+        if (dependency === undefined || !reachable.has(dependency)) continue;
+        if (found.has(dependency)) {
+          found.set(frame.pid, found.get(dependency)!);
+          active.delete(frame.pid);
+          stack.pop();
+        } else if (!active.has(dependency)) {
+          frame.pending = dependency;
+          active.add(dependency);
+          stack.push({ pid: dependency, next: 0 });
+        }
+      }
+    }
     return found;
   }
 

@@ -81,7 +81,7 @@ const endpoint = Effect.fnUntraced(function* (directory: string, wire: WireLimit
     Layer.provide(endpointLayer),
     Layer.provideMerge(state),
   );
-  return { registration, connections } as const;
+  return { registration, connections, incarnation: entered.incarnation } as const;
 });
 
 const answering = (connections: HostConnections['Service'], answer: (admitted: Admitted) => Effect.Effect<void, never, Scope.Scope>) =>
@@ -95,12 +95,15 @@ const over = Effect.fnUntraced(function* <A, E>(
   work: (
     registration: Registration,
     connections: HostConnections['Service'],
+    incarnation: number,
   ) => Effect.Effect<A, E, HostRegistration | EndpointConnection | FileSystem.FileSystem | Scope.Scope | Custodian>,
   wire: WireLimits = limits,
 ) {
   const built = yield* endpoint(directory, wire);
   return yield* Effect.provide(
-    Effect.flatMap(HostConnections, (connections) => Effect.andThen(connections.open, work(built.registration, connections))),
+    Effect.flatMap(HostConnections, (connections) =>
+      Effect.andThen(connections.open, work(built.registration, connections, built.incarnation)),
+    ),
     built.connections,
   );
 }, Effect.scoped);
@@ -526,6 +529,55 @@ const converse = (path: string, sent: ReadonlyArray<string>, expected: number) =
   });
 
 layer(platform, { excludeTestServices: true })('the execution wire', (it) => {
+  it.effect('an older load request is refused without closing the connection or interrupting other calls', () =>
+    Effect.gen(function* () {
+      const frames = yield* over(directories.open(), (registration, connections, incarnation) =>
+        Effect.gen(function* () {
+          yield* answering(connections, (admitted) => admitted.reply({ _tag: 'Status', status: status(registration) }));
+          const files = yield* FileSystem.FileSystem;
+          const secret = (yield* files.readFileString(registration.credentials.custodian)).trimEnd();
+          const preface = JSON.stringify({ magic: WIRE_MAGIC, wire: WIRE_RANGE });
+          const frame = (message: unknown) => JSON.stringify({ v: WIRE_VERSION, body: 'bytes', message });
+          const hello = frame({
+            _tag: 'Hello',
+            request: 0,
+            installation: registration.installation,
+            protocol: registration.protocol,
+            role: 'custodian',
+            secret,
+            client: { name: 'previous', version: '41' },
+          });
+          const call = (request: number, body: unknown) =>
+            frame({ _tag: 'Call', request, installation: registration.installation, incarnation, epoch: 0, body });
+          const sent = [
+            preface,
+            hello,
+            call(1, { _tag: 'Subscribe', source: { _tag: 'Load', serverPid: 42, desktopPid: 43 }, credits: 4096 }),
+            call(2, { _tag: 'LoadInterest', subscription: 1, interested: true }),
+            call(3, { _tag: 'Status' }),
+          ];
+          const received = yield* converse(registration.endpoint.path, sent, 5);
+          return yield* Effect.forEach(received.slice(2), (header) =>
+            Schema.decodeUnknownEffect(Schema.fromJsonString(HostFrame))(heard.decode(header)),
+          );
+        }),
+      );
+      expect(frames.map((frame) => (frame.body === 'bytes' ? frame.message : undefined))).toEqual([
+        {
+          _tag: 'Reply',
+          request: 1,
+          body: { _tag: 'Refused', refusal: { _tag: 'UnsupportedCapability', capability: 'machine-load', reason: expect.any(String) } },
+        },
+        {
+          _tag: 'Reply',
+          request: 2,
+          body: { _tag: 'Refused', refusal: { _tag: 'UnsupportedCapability', capability: 'machine-load', reason: expect.any(String) } },
+        },
+        expect.objectContaining({ _tag: 'Reply', request: 3, body: expect.objectContaining({ _tag: 'Status' }) }),
+      ]);
+    }),
+  );
+
   it.effect('a client of this release is welcomed in this wire with the capabilities the host serves', () =>
     Effect.gen(function* () {
       const directory = directories.open();
