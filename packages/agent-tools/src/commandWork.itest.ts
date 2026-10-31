@@ -238,7 +238,7 @@ const builtOwner = Effect.fnUntraced(function* (options: FakeOptions) {
           result,
           stdout:
             options.failStream === 'stdout'
-              ? Stream.fail(new CommandUnreadable({ reason: 'the record evicted bytes this reader had not reached' }))
+              ? Stream.fail(new CommandUnreadable({ reason: 'stdout stopped answering: HostRefused' }))
               : handle.stdout.pipe(Stream.mapError(() => new CommandUnreadable({ reason: 'stdout' }))),
           stderr:
             options.failStream === 'stderr'
@@ -858,15 +858,19 @@ it.live('a command accepted before its process starts answers so, with its clock
   }),
 );
 
-it.live('a failed output stream discloses that the printed output may be incomplete', () =>
+it.live('bash retains stderr and a nonzero exit when its stdout subscription fails', () =>
   Effect.gen(function* () {
     const root = yield* createTempDir();
     const owner = yield* fakeOwner({ failStream: 'stdout' });
     const bash = shellOf(createTools(options({ cwd: root, world: worldWith(owner.work) })));
 
-    const answer = yield* run(bash, { command: 'printf hello', description: 'Print a word' });
-    expect(answer.text).toContain('may not be everything the command wrote');
-    expect(answer.text).toContain('the record evicted bytes');
+    const answer = yield* run(bash, {
+      command: "printf 'retained-test-diagnostic\\n' >&2; exit 1",
+      description: 'Run a failing check',
+    });
+    expect(answer.text).toContain('retained-test-diagnostic');
+    expect(answer.display?.facts).toContainEqual({ label: 'exit', value: '1' });
+    expect(answer.verdict?.kind).toBe('failed');
   }),
 );
 
