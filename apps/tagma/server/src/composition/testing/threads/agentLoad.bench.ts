@@ -43,7 +43,6 @@ import { suiteGit } from '../suiteGit.js';
 import { until } from './protocolRig.js';
 import { hostedChild } from './hostedChild.js';
 import { loadFeeds } from './loadFeeds.js';
-import { loadRetainers } from './loadRetainers.js';
 
 const gcMonitored = process.env.AGENT_LOAD_CHILD === '1';
 if (gcMonitored) delete process.env.BUN_JSC_logGC;
@@ -68,12 +67,14 @@ const history = flag('history', 100, 0);
 const repositoryFiles = flag('repository-files', 1, 1);
 const projects = flag('projects', 1, 1);
 const parentSize = flag('parent-size', 25, 1);
+const warmSnapshot = flag('warm-snapshot', 0, 0) !== 0;
 const snapshotDirectory = process.argv.find((value) => value.startsWith('--snapshots='))?.slice('--snapshots='.length);
 if (!Number.isSafeInteger(agents)) throw new Error('--agents must be an integer');
 if (![resultBytes, messageBytes, history, repositoryFiles, projects, parentSize].every(Number.isSafeInteger))
   throw new Error('payload sizes and fixture counts must be integers');
 if (callsPerBoundary !== 1 && callsPerBoundary !== 8) throw new Error('--calls-per-boundary must be 1 or 8');
 if (snapshotDirectory !== undefined && !isAbsolute(snapshotDirectory)) throw new Error('--snapshots must be an absolute directory');
+if (warmSnapshot && snapshotDirectory === undefined) throw new Error('--warm-snapshot requires --snapshots');
 
 class BenchRefused extends Data.TaggedError('BenchRefused')<{ readonly message: string }> {}
 
@@ -644,26 +645,34 @@ const program = Effect.gen(function* () {
         }),
       ),
     );
-    const snapshot = Effect.fn('agentLoad.snapshot')(function* (label: string) {
+    const snapshot = Effect.fn('agentLoad.snapshot')(function* (label: string, analyze = true) {
       yield* Effect.sync(() => {
         if (gcMonitored && label === 'before') process.stderr.write('AGENT_LOAD_GC_IDENTIFY_BEGIN\n');
         gcAndSweep();
         if (gcMonitored && label === 'before') process.stderr.write('AGENT_LOAD_GC_IDENTIFY_END\n');
       });
+      const at = yield* Clock.currentTimeMillis;
+      const callsAt = { submitted, completed };
       const memory = process.memoryUsage();
       const jsc = jscReading(heapStats());
-      if (snapshotDirectory === undefined) return { memory, jsc, retainers: null, file: null };
+      if (snapshotDirectory === undefined) return { at, callsAt, memory, jsc, retainers: null, file: null };
       yield* files.makeDirectory(snapshotDirectory, { recursive: true });
       const captured = yield* Context.get(world.runtime.measurement, HeapSnapshots).capture({ requestedBy: 'agent-load-bench' });
       const destination = join(snapshotDirectory, `${label}-${agents}.heapsnapshot`);
       yield* files.copy(captured.file, destination);
-      const retainers = yield* Effect.tryPromise({
-        try: (signal) => loadRetainers(destination, 20, signal),
-        catch: (cause) => new BenchRefused({ message: `heap retainer analysis failed: ${String(cause)}` }),
-      });
-      return { memory, jsc, retainers, file: destination };
+      const retainers = analyze
+        ? yield* Effect.flatMap(
+            Effect.promise(() => import('./loadRetainers.js')),
+            ({ loadRetainers }) =>
+              Effect.tryPromise({
+                try: (signal) => loadRetainers(destination, 20, signal),
+                catch: (cause) => new BenchRefused({ message: `heap retainer analysis failed: ${String(cause)}` }),
+              }),
+          )
+        : null;
+      return { at, callsAt, memory, jsc, retainers, file: destination };
     });
-    const idle = yield* snapshot('before');
+    const idle = yield* snapshot('before', !warmSnapshot);
     yield* FiberSet.run(
       streams,
       Effect.forever(
@@ -847,6 +856,7 @@ const program = Effect.gen(function* () {
     const started = yield* Clock.monotonicTimeNanos;
     yield* files.writeFileString(go, 'go');
     yield* Effect.sleep(warm * 1000);
+    const warmed = warmSnapshot ? yield* snapshot('warm', false) : null;
     const before = yield* histograms();
     const writerBefore = writerSnapshot(writers);
     const writerUnitsBefore = writers.units({ limit: 1 });
@@ -1021,7 +1031,7 @@ const program = Effect.gen(function* () {
     const completedInWindow = countsAfter.completed - countsBefore.completed;
     const cpuMs = (cpu.user + cpu.system) / 1000;
     const requestedBytes = requestedBefore === undefined || requestedAfter === undefined ? null : requestedAfter - requestedBefore;
-    const loaded = yield* snapshot('loaded');
+    const loaded = yield* snapshot('loaded', !warmSnapshot);
     console.log(
       JSON.stringify(
         {
@@ -1045,6 +1055,7 @@ const program = Effect.gen(function* () {
             historyEntriesPerThread: history,
             parents: parents.length,
             parentSize,
+            warmSnapshot,
           },
           machine: {
             platform: process.platform,
@@ -1093,7 +1104,7 @@ const program = Effect.gen(function* () {
           frames: Object.fromEntries(Object.entries(frameTotals).map(([name, count]) => [name, count - (framesBefore[name] ?? 0)])),
           memory: memoryReading,
           producerProgress: backlogReading,
-          census: { before: idle, loaded },
+          census: { before: idle, warmed, loaded },
           limits: [
             'CPU includes bench driver and probes; span histogram counts are installation-wide',
             'interface offered-to-answer includes file delivery from an independent producer; outstanding-at-cut includes delayed or unsubmitted probes',
