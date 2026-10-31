@@ -2,6 +2,7 @@ import { fixtureMigrations } from '../migrations.js';
 import { sharedPool } from '@runlith/sqlite-process/testing/pool';
 import { expect } from 'bun:test';
 import { layer } from '@runlith/effect-test';
+import { CostLedger, costLedgerLayer, CurrentCost } from '@runlith/performance/CostLedger';
 import { Clock, Context, Deferred, Duration, Effect, Fiber, Layer, Option, Queue, Stream } from 'effect';
 import { TestClock } from 'effect/testing';
 import { ByteOffset, type ByteCursor } from '@runlith/executions/protocol/record';
@@ -348,6 +349,8 @@ layer(Layer.effect(World, setup).pipe(Layer.provideMerge(storage)))('command end
   it.effect('a discharge drives an unreachable send again itself, instead of leaving it for the next boot', () =>
     Effect.gen(function* () {
       const { waiters } = yield* World;
+      const ledger = yield* CostLedger.pipe(Effect.provide(costLedgerLayer({ capacity: 8 })));
+      const caller = ledger.open('registration');
       const ref = execution('exec-redriven');
       yield* owe(ref, 'call-8');
       const road = yield* deliveryOver(
@@ -356,7 +359,9 @@ layer(Layer.effect(World, setup).pipe(Layer.provideMerge(storage)))('command end
       );
 
       yield* Effect.gen(function* () {
-        const attending = yield* Effect.forkChild(road.delivery.attend());
+        const attending = yield* Effect.forkChild(
+          road.delivery.attend().pipe(Effect.provideService(CostLedger, ledger), Effect.provideService(CurrentCost, caller)),
+        );
         yield* waiters.due(ref);
         yield* untilSent(road, 1);
         yield* TestClock.adjust(Duration.millis(executionHandshakeMs));
@@ -366,6 +371,8 @@ layer(Layer.effect(World, setup).pipe(Layer.provideMerge(storage)))('command end
       });
       expect(road.sent()).toHaveLength(2);
       expect(yield* waiters.owed(ref).pipe(Effect.orDie)).toBeNull();
+      expect(ledger.read({ limit: 8 }).rows.find((row) => row.name === 'CommandDelivery.drive')?.total.statements).toBeGreaterThan(0);
+      expect(caller.counts.statements).toBe(0);
     }),
   );
 

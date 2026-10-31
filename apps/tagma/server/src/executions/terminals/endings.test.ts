@@ -1,6 +1,9 @@
 import { expect } from 'bun:test';
 import { it } from '@runlith/effect-test';
-import { Context, Duration, Effect, Fiber, Queue } from 'effect';
+import { CostLedger, costLedgerLayer, CurrentCost } from '@runlith/performance/CostLedger';
+import * as PerformanceTracer from '@runlith/performance/PerformanceTracer';
+import { PerformanceStore } from '@runlith/performance/PerformanceStore';
+import { Context, Duration, Effect, Fiber, Layer, Queue } from 'effect';
 import { TestClock } from 'effect/testing';
 import { WireUnavailable } from '@runlith/executions/Executions';
 import { ByteOffset } from '@runlith/executions/protocol/record';
@@ -102,6 +105,55 @@ it.effect('an execution the host decided is discharged once, and every caller re
     expect(answers.map((answer) => answer._tag)).toEqual(['Decided', 'Decided']);
     expect(answers[0]?._tag === 'Decided' ? answers[0].summary.state.phase : '').toBe('ended');
     expect(road.counts).toEqual({ waits: 1, ended: 1 });
+  }),
+);
+
+it.effect('a background ending attributes each host and discharge pass to its own root', () =>
+  Effect.gen(function* () {
+    const ledger = yield* CostLedger.pipe(Effect.provide(costLedgerLayer({ capacity: 8 })));
+    const caller = ledger.open('registration');
+    const tracer = yield* PerformanceTracer.make({ instanceId: 'test', recordFloorMicros: 0 }).pipe(
+      Effect.provide(
+        Layer.mock(PerformanceStore, {
+          openGroup: () => {},
+          closeGroup: () => {},
+          submit: () => {},
+          pressure: () => {
+            throw new Error('unexpected pressure read');
+          },
+          diagnostics: () => {
+            throw new Error('unexpected diagnostics read');
+          },
+        }),
+      ),
+    );
+    const road = yield* roadOver(() =>
+      Effect.gen(function* () {
+        const cause = yield* CurrentCost;
+        if (cause !== null) cause.counts.statements++;
+        return decided;
+      }),
+    );
+    const terminals = {
+      ...road.terminals,
+      ended: Effect.fnUntraced(function* () {
+        const cause = yield* CurrentCost;
+        if (cause !== null) cause.counts.statements++;
+        return { _tag: 'Discharged' } as const;
+      }),
+    };
+    const { endings, ended } = yield* endingsOver(terminals);
+    yield* endings
+      .watch(watched)
+      .pipe(Effect.provideService(CurrentCost, caller), Effect.provideService(CostLedger, ledger), Effect.withTracer(tracer));
+    expect(yield* Queue.take(ended)).toEqual(ref);
+    const rows = ledger.read({ limit: 8 }).rows;
+    expect(rows.find((row) => row.name === 'TerminalEndings.follow')?.own.spans).toBeGreaterThan(0);
+    expect(rows.find((row) => row.name === 'TerminalEndings.settle')?.own.spans).toBeGreaterThan(0);
+    expect(rows.find((row) => row.name === 'TerminalEndings.wait')?.total.statements).toBe(1);
+    expect(rows.find((row) => row.name === 'TerminalEndings.discharge')?.total.statements).toBe(1);
+    expect(caller.counts.statements).toBe(0);
+    expect(caller.counts.spans).toBe(1);
   }),
 );
 

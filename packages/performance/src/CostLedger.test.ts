@@ -161,6 +161,7 @@ it.effect('pages keep an ordered retained suffix, report eviction and do not rei
       total: 0,
       next: null,
       evicted: 1,
+      unattributedStatements: null,
     });
     expect(ledger.read({ limit: 1, rootId: 'third' }).rows[0]!.id).toBe('third');
   }),

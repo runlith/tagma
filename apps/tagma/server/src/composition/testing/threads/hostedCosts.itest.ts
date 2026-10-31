@@ -2,7 +2,7 @@ import { expect } from 'bun:test';
 import { layer } from '@runlith/effect-test';
 import { CostLedger } from '@runlith/performance/CostLedger';
 import { ActivityStore } from '@runlith/activity/store';
-import { Context, Effect, Fiber, FileSystem, Metric, Queue, Schema, Stream } from 'effect';
+import { Context, Effect, Fiber, FileSystem, Queue, Schema, Stream } from 'effect';
 import { THREAD_TOOL_CONFIRM_VALUE, USER_QUESTION_TOOL_NAME } from '@runlith/agent/transcript/parts';
 import { coreEntry } from '@runlith/agent/transcript/kinds';
 import type { CallEvent } from '@runlith/agent/callProgress';
@@ -60,17 +60,17 @@ layer(protocolWorld({ name: 'hosted-costs', prepare: (world) => Effect.andThen(c
       yield* Queue.take(threads);
 
       const ledger = Context.get(world.runtime.owners, CostLedger);
-      const sqlCount = Effect.map(Effect.provide(Metric.snapshot, world.runtime.owners), (snapshots) =>
-        snapshots.reduce(
-          (total, row) =>
-            row.type === 'Histogram' && row.id === 'sql.execute' && row.attributes?.source === 'span' ? total + row.state.count : total,
-          0,
-        ),
-      );
+      const served = yield* world.runtime.pool.resolve({ projectId });
+      const beforeRefresh = ledger.read({ limit: 4096 });
+      yield* served.settled(true);
+      const afterRefresh = ledger.read({ limit: 4096 });
+      const refresh = afterRefresh.rows.findLast((row) => row.name === 'FreshnessGate.refresh');
+      expect(refresh?.sequence).toBeGreaterThan(beforeRefresh.rows.at(-1)?.sequence ?? 0);
+      expect(refresh!.total.statements).toBeGreaterThan(0);
+      expect(afterRefresh.unattributedStatements).toBe(beforeRefresh.unattributedStatements);
       const activity = Context.get(world.runtime.owners, ActivityStore);
       yield* Effect.provide(activity.log.settled, world.runtime.owners);
       const before = ledger.read({ limit: 4096 });
-      const sqlBefore = yield* sqlCount;
       const answer = yield* asThread('call_hosted_tool', { toolCallId: 'cost-read', name: 'read', input: { path } });
       expect((yield* Schema.decodeUnknownEffect(called)(answer.body)).failed).toBe(false);
       const cut = live.view(threadId).at.seq;
@@ -78,20 +78,20 @@ layer(protocolWorld({ name: 'hosted-costs', prepare: (world) => Effect.andThen(c
       while (delivered < cut) delivered = (yield* Queue.take(threads)).at.seq;
       yield* Queue.take(lists);
       yield* Effect.provide(activity.log.settled, world.runtime.owners);
-      const sqlAfter = yield* sqlCount;
       const after = ledger.read({ limit: 4096 });
       const root = after.rows.findLast((row) => row.name === 'call_hosted_tool');
-      console.info('hosted read cost', JSON.stringify({ root, sqlStatements: sqlAfter - sqlBefore }));
+      console.info('hosted read cost', JSON.stringify({ root }));
       expect(root).toBeDefined();
       expect(root!.own.statements).toBeGreaterThan(0);
-      expect(root!.own.units).toBeGreaterThan(0);
+      expect(root!.own.programs).toBeGreaterThan(0);
       expect(root!.own.writerHoldMs).toBeGreaterThan(0);
       expect(root!.producers.find((row) => row.name === 'ThreadSnapshots.publish')?.counts.statements).toBeGreaterThan(0);
       expect(root!.producers.find((row) => row.name === 'ThreadList.project')?.counts.statements).toBeGreaterThan(0);
       expect(root!.producers.find((row) => row.name === 'ThreadFeeds.project')).toBeDefined();
       expect(root!.own.statements + root!.producers.reduce((sum, row) => sum + row.counts.statements, 0)).toBe(root!.total.statements);
       expect(after.evicted).toBe(before.evicted);
-      expect(root!.total.statements).toBe(sqlAfter - sqlBefore);
+      expect(before.unattributedStatements).not.toBeNull();
+      expect(after.unattributedStatements).toBe(before.unattributedStatements);
       const first = answer.body as { readonly content: unknown };
       expect(JSON.stringify(first.content)).toContain('the hosted read reaches this file');
       yield* files.writeFileString(path, 'the file changed after the original call\n');

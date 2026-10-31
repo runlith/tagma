@@ -46,6 +46,7 @@ export const costPageSchema = Schema.Struct({
   total: Schema.Int,
   next: Schema.NullOr(costCursorSchema),
   evicted: Schema.Int,
+  unattributedStatements: Schema.NullOr(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
 });
 export type CostPage = typeof costPageSchema.Type;
 
@@ -130,7 +131,9 @@ const readRoot = (owner: Root): CostRow => {
   };
 };
 
-const makeCostLedger = Effect.fnUntraced(function* (input: { readonly capacity: number }) {
+type CostLedgerOptions = { readonly capacity: number; readonly unattributedStatements?: () => number };
+
+const makeCostLedger = Effect.fnUntraced(function* (input: CostLedgerOptions) {
   const clock = yield* Clock.Clock;
   const ledgerId = globalThis.crypto.randomUUID();
   const roots = new Map<number, Root>();
@@ -175,14 +178,22 @@ const makeCostLedger = Effect.fnUntraced(function* (input: { readonly capacity: 
           if (query.rootId === undefined) break;
         }
       }
-      return { ledgerId, reset, rows, total, next: more ? { ledgerId, sequence: rows.at(-1)!.sequence } : null, evicted };
+      return {
+        ledgerId,
+        reset,
+        rows,
+        total,
+        next: more ? { ledgerId, sequence: rows.at(-1)!.sequence } : null,
+        evicted,
+        unattributedStatements: input.unattributedStatements?.() ?? null,
+      };
     },
   });
 });
 
 export const endCost = (cause: CostCause): void => cause[root].close();
 
-export const costLedgerLayer = (input: { readonly capacity: number }) => Layer.effect(CostLedger, makeCostLedger(input));
+export const costLedgerLayer = (input: CostLedgerOptions) => Layer.effect(CostLedger, makeCostLedger(input));
 
 export const rootCost = <A, E, R>(name: string, work: Effect.Effect<A, E, R>, id?: string): Effect.Effect<A, E, R> =>
   Effect.withFiber((fiber) => {

@@ -1,6 +1,7 @@
 import { TerminalEndings, type TerminalWatched, type TerminalEnding } from '../contract/service/endings.js';
 import { waiters } from '@runlith/held/Waiters';
 import { Duration, Effect, Exit, Queue } from 'effect';
+import { CurrentCost, producerCost } from '@runlith/performance/CostLedger';
 import type { ExecutionRef } from '@runlith/executions/protocol/execution';
 import type { ExecutionSummary } from '@runlith/executions/protocol/runtime';
 import { MachineUnits } from '../../platform/contract/service/units.js';
@@ -47,7 +48,10 @@ export const makeTerminalEndings = Effect.fnUntraced(function* ({
     let said = false;
     let remeasured = 0;
     while (true) {
-      const discharged = yield* Effect.result(discharge.ended(watched.projectId, watched.execution, remeasured > 0));
+      const discharged = yield* producerCost(
+        'TerminalEndings.discharge',
+        discharge.ended(watched.projectId, watched.execution, remeasured > 0),
+      ).pipe(Effect.provideService(CurrentCost, null), Effect.result);
       if (discharged._tag === 'Failure') {
         const unreached = { execution: watched.execution.execution, reason: discharged.failure._tag };
         yield* said
@@ -91,7 +95,10 @@ export const makeTerminalEndings = Effect.fnUntraced(function* ({
   const follow = Effect.fn('TerminalEndings.follow')(function* (watched: TerminalWatched) {
     let said = false;
     while (true) {
-      const answer = yield* Effect.result(terminals.wait(watched.execution, WATCH_MS));
+      const answer = yield* producerCost('TerminalEndings.wait', terminals.wait(watched.execution, WATCH_MS)).pipe(
+        Effect.provideService(CurrentCost, null),
+        Effect.result,
+      );
       if (answer._tag === 'Failure') {
         const unreached = { execution: watched.execution.execution, reason: answer.failure._tag };
         yield* said
@@ -106,7 +113,10 @@ export const makeTerminalEndings = Effect.fnUntraced(function* ({
       if (seen._tag === 'Undecided') continue;
       if (seen._tag === 'Unwatchable') {
         decide(watched, { _tag: 'Unwatchable' });
-        const lost = yield* Effect.result(discharge.dischargeReplaced(watched.projectId, watched.execution));
+        const lost = yield* producerCost(
+          'TerminalEndings.dischargeReplaced',
+          discharge.dischargeReplaced(watched.projectId, watched.execution),
+        ).pipe(Effect.provideService(CurrentCost, null), Effect.result);
         if (lost._tag === 'Failure') {
           yield* Effect.logWarning('an unwatchable execution of a replaced generation was not discharged; the boot sweep discharges it', {
             execution: watched.execution.execution,
@@ -117,7 +127,7 @@ export const makeTerminalEndings = Effect.fnUntraced(function* ({
         return;
       }
       decide(watched, { _tag: 'Decided', summary: seen.summary });
-      return yield* settle(watched);
+      return yield* producerCost('TerminalEndings.settle', settle(watched)).pipe(Effect.provideService(CurrentCost, null));
     }
   });
 
@@ -130,7 +140,7 @@ export const makeTerminalEndings = Effect.fnUntraced(function* ({
     }
     if (started.has(key)) return;
     started.add(key);
-    yield* Effect.forkIn(follow(watched), scope);
+    yield* Effect.forkIn(producerCost('TerminalEndings.follow', follow(watched)).pipe(Effect.provideService(CurrentCost, null)), scope);
   });
 
   return TerminalEndings.of({

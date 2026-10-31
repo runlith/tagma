@@ -1,4 +1,5 @@
 import { Duration, Effect, Queue, Schedule } from 'effect';
+import { CurrentCost, producerCost } from '@runlith/performance/CostLedger';
 import type { AgentCommandEnding, AgentSignalNotice } from '@runlith/agent/contracts';
 import { type ThreadPortFailure } from '@runlith/agent/thread/ThreadBorder';
 import { ThreadStorageFailed } from '@runlith/agent/thread/persisted';
@@ -46,7 +47,12 @@ export const makeCommandDelivery = Effect.fnUntraced(function* ({ send }: { read
   const commands = yield* ManagedCommands;
   const records = yield* ExecutionRecords;
   const ended = waiters.ended;
-  const attend: () => Effect.Effect<never> = () => Effect.forever(Effect.flatMap(Queue.take(ended), (execution) => drive(execution)));
+  const attend: () => Effect.Effect<never> = () =>
+    Effect.forever(
+      Effect.flatMap(Queue.take(ended), (execution) =>
+        producerCost('CommandDelivery.drive', drive(execution)).pipe(Effect.provideService(CurrentCost, null)),
+      ),
+    );
 
   const drive = Effect.fn('CommandDelivery.drive')(function* (execution: ExecutionRef): Effect.fn.Return<void, never> {
     const left = yield* deliver(execution).pipe(

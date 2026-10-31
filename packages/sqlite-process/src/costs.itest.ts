@@ -9,7 +9,10 @@ import { sharedPool } from './testing/pool.js';
 
 it.live('unsampled Run costs count logical UTF-8, scalar and blob payloads before row transforms', () =>
   Effect.gen(function* () {
-    const ledger = yield* CostLedger.pipe(Effect.provide(costLedgerLayer({ capacity: 1 })));
+    const pool = yield* sharedPool;
+    const ledger = yield* CostLedger.pipe(
+      Effect.provide(costLedgerLayer({ capacity: 1, unattributedStatements: () => pool.unattributedStatements })),
+    );
     const cause = ledger.open('read');
     const spans: Tracer.NativeSpan[] = [];
     const tracer = Tracer.make({
@@ -28,7 +31,7 @@ it.live('unsampled Run costs count logical UTF-8, scalar and blob payloads befor
           transformResultNames: (name) => (name === 'row_name' ? 'rowName' : name),
           checkStatement: (sql) => (sql === 'rejected' ? Effect.fail(rejected) : Effect.void),
         },
-        yield* sharedPool,
+        pool,
       ),
     );
     const sql = Context.get(context, SqlClient);
@@ -58,8 +61,12 @@ it.live('unsampled Run costs count logical UTF-8, scalar and blob payloads befor
       expect(rejectedResult._tag).toBe('Failure');
       expect(cause.counts.statements).toBe(3);
       const beforeUnattributed = { ...cause.counts };
+      const beforeUnattributedStatements = ledger.read({ limit: 1 }).unattributedStatements!;
+      expect((yield* Effect.result(sql.unsafe('rejected').pipe(Effect.provideService(CurrentCost, null))))._tag).toBe('Failure');
+      expect(ledger.read({ limit: 1 }).unattributedStatements).toBe(beforeUnattributedStatements);
       expect(yield* sql.unsafe('SELECT 1 AS value').pipe(Effect.provideService(CurrentCost, null))).toEqual([{ value: 1n }]);
       expect(cause.counts).toEqual(beforeUnattributed);
+      expect(ledger.read({ limit: 1 }).unattributedStatements).toBe(beforeUnattributedStatements + 1);
     }).pipe(Effect.provideService(CurrentCost, cause), Effect.provideService(SafeIntegers, true), Effect.withTracer(tracer));
     expect(spans.some((span) => span.name === 'sql.execute' && !span.sampled)).toBe(true);
   }),

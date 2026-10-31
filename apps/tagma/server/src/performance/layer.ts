@@ -39,6 +39,7 @@ const measuring = Layer.unwrap(
     const standing = yield* settings.live(cpuSampler);
     const metricsInterval = yield* settings.live(metricsIntervalMs);
     const { instanceId } = place;
+    const store = yield* MachineStore;
     const storeLayer = performanceStoreLayer({
       path: place.databasePath === ':memory:' ? ':memory:' : join(dirname(place.databasePath), PERFORMANCE_DATABASE),
       instanceId,
@@ -75,7 +76,7 @@ const measuring = Layer.unwrap(
     ).pipe(
       Layer.provideMerge(profiler),
       Layer.provideMerge(storeLayer),
-      Layer.provideMerge(costLedgerLayer({ capacity: 4096 })),
+      Layer.provideMerge(costLedgerLayer({ capacity: 4096, unattributedStatements: () => store.processes.unattributedStatements })),
       Layer.provideMerge(
         Layer.effect(
           WriterMetrics,

@@ -42,6 +42,7 @@ export type IdleChildren = 'stop' | 'keep';
 
 export class ProcessPool {
   readonly readers: ReaderLanes;
+  unattributedStatements = 0;
   private readonly children = new Map<number, Child>();
   private readonly checkpoints = new Checkpoints(this, () => this.idle === 'keep');
   private readonly prepared: Record<'writer' | 'checkpoint', Child[]> = { writer: [], checkpoint: [] };

@@ -24,6 +24,7 @@ import { watchingCheckout } from '../../workspace/watch/tree.js';
 import type { TreeRescan, TreeShift, TreeWatch } from '../../platform/watch/tree.js';
 import { Git } from '@runlith/git/Git';
 import { WaitUnderHold } from '@runlith/held/failures';
+import { CurrentCost, producerCost } from '@runlith/performance/CostLedger';
 import { UnitWrites } from '../../platform/store/writes.js';
 import { refused } from './refusal.js';
 import {
@@ -360,7 +361,8 @@ export const makeFreshnessGate = Effect.fnUntraced(function* ({
     state.running = refreshing;
     state.again = false;
     state.fork(
-      refresh(state).pipe(
+      producerCost('FreshnessGate.refresh', refresh(state)).pipe(
+        Effect.provideService(CurrentCost, null),
         Effect.onExit((exit) =>
           Effect.gen(function* () {
             state.running = null;

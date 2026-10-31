@@ -303,9 +303,12 @@ export const openConnection = Effect.fnUntraced(function* (processes: ProcessPoo
         if (writer !== null) writer.repliesComplete = false;
         return Effect.fail(brokenChannel(`the sqlite process would not take a statement: ${String(cause)}`, operation));
       }
-      if (cost !== null && ask._tag === 'Run') {
-        cost.counts.statements += 1;
-        cost.counts.requestBytes += Buffer.byteLength(ask.sql, 'utf8') + parameterBytes(ask.params);
+      if (ask._tag === 'Run') {
+        if (cost === null) processes.unattributedStatements++;
+        else {
+          cost.counts.statements += 1;
+          cost.counts.requestBytes += Buffer.byteLength(ask.sql, 'utf8') + parameterBytes(ask.params);
+        }
       }
       outstanding.openUnsafe();
       const answer = Deferred.await(cell).pipe(Effect.ensuring(Effect.sync(() => answered(ask.id))));
