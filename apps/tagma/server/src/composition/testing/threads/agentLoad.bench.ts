@@ -1353,15 +1353,15 @@ const program = Effect.gen(function* () {
     const writerBefore = writerSnapshot(writers);
     const writerUnitsBefore = writers.units({ limit: 1 });
     const requestedBefore = allocatorOf(heapStats())?.malloc_requested;
-    const cpuBefore = process.cpuUsage();
-    const threadCpuBefore = process.threadCpuUsage();
-    const utilizationBefore = nodePerformance.eventLoopUtilization();
     const countsBefore = { submitted, completed, failed };
     const framesBefore = feeds.frames();
     const loadBefore = loadavg();
     const unattributedBefore = ledger.read({ limit: 1 }).unattributedStatements;
     const startWall = yield* Clock.currentTimeMillis;
     costStart = startWall;
+    const cpuBefore = process.cpuUsage();
+    const threadCpuBefore = process.threadCpuUsage();
+    const utilizationBefore = nodePerformance.eventLoopUtilization();
     const intervalStart = yield* Clock.monotonicTimeNanos;
     if (gcMonitored) yield* Effect.sync(() => process.stderr.write('AGENT_LOAD_WINDOW_BEGIN\n'));
     const loop = monitorEventLoopDelay({ resolution: 10 });
@@ -1446,11 +1446,11 @@ const program = Effect.gen(function* () {
     const intervalEnd = yield* Clock.monotonicTimeNanos;
     const endWall = yield* Clock.currentTimeMillis;
     costEnd = endWall;
-    const unattributedAfter = ledger.read({ limit: 1 }).unattributedStatements;
-    const after = yield* histograms();
     const cpu = process.cpuUsage(cpuBefore);
     const threadCpu = process.threadCpuUsage(threadCpuBefore);
     const utilization = nodePerformance.eventLoopUtilization(utilizationBefore);
+    const unattributedAfter = ledger.read({ limit: 1 }).unattributedStatements;
+    const after = yield* histograms();
     const requestedAfter = allocatorOf(heapStats())?.malloc_requested;
     const writerAfter = writerSnapshot(writers);
     const writerUnitsAfter = writers.units({ limit: 1 });
@@ -1489,13 +1489,44 @@ const program = Effect.gen(function* () {
     const artifact =
       captured === null ? null : yield* Schema.decodeUnknownEffect(cpuProfileArtifactSchema)(captured.record.payload.profile);
     if (artifact !== null && cpuProfilePath !== undefined) yield* files.writeFileString(cpuProfilePath, JSON.stringify(artifact));
+    const profileWindow = { monotonicStart: Number(intervalStart) / 1_000_000, monotonicEnd: Number(intervalEnd) / 1_000_000 };
     const profileSampling =
       captured === null || artifact === null
         ? null
         : stallSampling(
             artifact,
             { monotonicStart: captured.record.monotonicStart, monotonicEnd: captured.record.monotonicEnd },
-            { monotonicStart: Number(intervalStart) / 1_000_000, monotonicEnd: Number(intervalEnd) / 1_000_000 },
+            profileWindow,
+          );
+    const profileCuts =
+      captured === null || cpuProfilePath === undefined
+        ? []
+        : yield* Effect.forEach(captured.cuts, (cut) =>
+            Effect.gen(function* () {
+              const report = yield* Context.get(world.runtime.measurement, PerformanceReports).read({
+                type: 'profile',
+                id: cut.id,
+                raw: true,
+                limit: 1,
+              });
+              if (report.type !== 'profile' || report.profile.payload.profile === undefined)
+                return yield* new BenchRefused({ message: `profile cut ${cut.id} has no raw profile` });
+              const cutArtifact = yield* Schema.decodeUnknownEffect(cpuProfileArtifactSchema)(report.profile.payload.profile);
+              const file = `${cpuProfilePath}.${cut.id}.cpuprofile`;
+              yield* files.writeFileString(file, JSON.stringify(cutArtifact));
+              return {
+                ...cut,
+                file,
+                profileStartMs: report.profile.monotonicStart,
+                profileEndMs: report.profile.monotonicEnd,
+                sampling:
+                  stallSampling(
+                    cutArtifact,
+                    { monotonicStart: report.profile.monotonicStart, monotonicEnd: report.profile.monotonicEnd },
+                    profileWindow,
+                  ) ?? null,
+              };
+            }).pipe(Effect.catch((error) => Effect.succeed({ ...cut, file: null, problem: String(error) }))),
           );
     const ledgerReading = {
       ...globalCosts.reading(),
@@ -1712,7 +1743,7 @@ const program = Effect.gen(function* () {
                   windowEndMs: Number(intervalEnd) / 1_000_000,
                   profileStartMs: captured.record.monotonicStart,
                   profileEndMs: captured.record.monotonicEnd,
-                  cuts: captured.cuts,
+                  cuts: profileCuts,
                   sampling: profileSampling ?? null,
                 },
           allocatorRequestedBytes: requestedBytes,
