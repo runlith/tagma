@@ -4,7 +4,7 @@ import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { Effect, FileSystem } from 'effect';
 import { join } from 'node:path';
 import { makeDoorWorld } from '../doorFixture.js';
-import { doctrine } from '../../doctrine.js';
+import { doctrine } from '../composed.js';
 import { installSkill } from '../../../external-harnesses/installs/skillInstall.js';
 
 it.live('the installation status door reads a user skill still installed at its declared vendor alias', () =>

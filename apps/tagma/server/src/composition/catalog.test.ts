@@ -2,7 +2,7 @@ import { it } from '@runlith/effect-test';
 import { expect } from 'bun:test';
 import { Effect } from 'effect';
 import { OPERATION_IDS, OPERATIONS } from './catalog.js';
-import { collectedOperations, ownerOf } from './manifest.js';
+import { collectedOperations, ownerOf } from './testing/composed.js';
 import type { Operation } from '../platform/contract/wire/operation.js';
 
 it.effect('the browser catalog carries the same declarations as the serving modules', () =>

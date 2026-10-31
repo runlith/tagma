@@ -18,7 +18,7 @@ import { threadFolder } from '../../../native-harness/testing/fold.js';
 import { restFor } from '../../../threads/testing/rest.js';
 import { journalSteps, rolloutForms, sqliteThreadJournal } from '../../../threads/testing/doubles.js';
 import { makeThreadEntryReader } from '@runlith/agent/transcript/kinds';
-import { ENTRY_KINDS } from '../../manifest.js';
+import { ENTRY_KINDS } from '../composed.js';
 
 const storage = unitsLayer(MachineUnits, MachineStore).pipe(
   Layer.provideMerge(seededStoreLayer(MachineStore, fixtureMigrations, {}, sharedPool)),

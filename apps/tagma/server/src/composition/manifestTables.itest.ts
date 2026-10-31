@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { getTableName } from 'drizzle-orm';
-import { MODULES as DECLARED } from '@tagma/server/composition/modules';
+import { MODULES as DECLARED } from './developer/modules.js';
 import type { Manifest } from '../platform/contract/service/manifest.js';
 
 const MODULES: readonly Manifest[] = DECLARED;

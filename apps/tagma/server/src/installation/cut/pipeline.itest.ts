@@ -88,7 +88,12 @@ it.live(
       const cut = (asked: string | null) =>
         Effect.flip(
           cutRelease(source, {
-            composition: { conditions: [], channel: CHANNELS.stable, applications },
+            composition: {
+              conditions: [],
+              channel: CHANNELS.stable,
+              applications,
+              entries: { cli: 'composition/release/cli.ts', server: 'composition/release/server.ts' },
+            },
             asked,
             out: join(scratch, 'release'),
             cache: { runtimes: join(scratch, 'runtimes'), packages: join(scratch, 'packages') },

@@ -10,6 +10,7 @@ import { PerformanceStore } from '@runlith/performance/PerformanceStore';
 import type { TraceCursor } from '@runlith/performance/protocol/queries';
 import type { StoredSpanRecord } from '@runlith/performance/protocol/records';
 import { makeRuntime } from '../../runtime.js';
+import { COMPOSED } from '../composed.js';
 import { ProjectLifecycle } from '../../../graph/contract/service/serving.js';
 import { MachineStore } from '../../../platform/contract/service/store.js';
 import { MachineUnits } from '../../../platform/contract/service/units.js';
@@ -20,7 +21,7 @@ import { rootFixture, tempRepoEffect } from '../graphFixture.js';
 import { birthsOf, listOf, turnsOf } from '../../../threads/testing/doubles.js';
 import { makeThreadRecords } from '../../../thread-record/layer.js';
 import { threadStack } from '../threadParts.js';
-import { ENTRY_KINDS } from '../../manifest.js';
+import { ENTRY_KINDS } from '../composed.js';
 import { OPERATOR_PRINCIPAL } from '../../../platform/contract/wire/actor.js';
 import { ThreadRollouts } from '../../../threads/contract/service/rollouts.js';
 
@@ -43,6 +44,7 @@ const main = Effect.gen(function* () {
   yield* files.makeDirectory(join(home, 'home'));
   const runtime = yield* makeRuntime(
     {
+      ...COMPOSED,
       grants: testGrantSigner,
       databasePath: join(home, 'home', 'tagma.sqlite'),
       tokensPath: join(home, 'home', 'tokens.json'),

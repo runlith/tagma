@@ -9,7 +9,7 @@ import { shelveRecord } from '../../../thread-record/testing/records.js';
 import { makeThreadRecords } from '../../../thread-record/layer.js';
 import { demoGraphLayer, withDemo } from '../graphFixture.js';
 import { threadStack } from '../threadParts.js';
-import { ENTRY_KINDS } from '../../manifest.js';
+import { ENTRY_KINDS } from '../composed.js';
 
 const argument = (name: string, fallback: number): number => {
   const raw = Bun.argv.find((value) => value.startsWith(`--${name}=`));

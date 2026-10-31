@@ -70,7 +70,7 @@ const { CurrentStackFrame } = await import('effect/References');
 const { makeRuntime } = await import('../src/composition/runtime.js');
 const { TESTING_ADAPTERS } = await import('../src/composition/testing/adapters.js');
 const { testGrantSigner } = await import('../src/platform/testing/grants.js');
-const { DRIVERS } = await import('../src/composition/manifest.js');
+const { COMPOSED, DRIVERS } = await import('../src/composition/testing/composed.js');
 type DriverId = import('../src/composition/manifest.js').DriverId;
 const importCpu = cpu();
 const importWall = wall();
@@ -150,6 +150,7 @@ const runtime =
         Scope.provide(
           makeRuntime(
             {
+              ...COMPOSED,
               adapters: TESTING_ADAPTERS,
               grants: testGrantSigner,
               profileWindowMs: () => 0,

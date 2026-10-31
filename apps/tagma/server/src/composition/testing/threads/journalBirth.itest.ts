@@ -4,7 +4,7 @@ import { it } from '@runlith/effect-test';
 import { join } from 'node:path';
 import { Context, Clock, Effect, FileSystem, Layer, Schema } from 'effect';
 import { ThreadEntryKinds } from '@runlith/agent/transcript/kinds';
-import { ENTRY_KINDS } from '../../manifest.js';
+import { ENTRY_KINDS } from '../composed.js';
 import { eq } from 'drizzle-orm';
 import { THREAD_AUTHORITY_DEFAULT } from '@runlith/agent/thread/rows';
 import { threadStoreFixture } from '../threadStoreFixture.js';

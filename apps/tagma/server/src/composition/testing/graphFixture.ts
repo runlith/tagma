@@ -398,8 +398,8 @@ export function graphFixture(settings: GraphFixtureOptions = {}) {
     }
     const sourcePath = settings.source === undefined ? demoRoot : roots.get(settings.source);
     if (sourcePath === undefined) return yield* Effect.die(`source ${settings.source} names no fixture project`);
-    const [{ fixtureMigrations }, { SHIPPED_CATALOGS }, { doctrine }, { POOLS }] = yield* Effect.promise(() =>
-      Promise.all([import('./migrations.js'), import('../settings.js'), import('../doctrine.js'), import('../manifest.js')]),
+    const [{ fixtureMigrations }, { SHIPPED_CATALOGS }, { doctrine, ASSEMBLY }] = yield* Effect.promise(() =>
+      Promise.all([import('./migrations.js'), import('../settings.js'), import('./composed.js')]),
     );
     const scope = yield* Scope.fork(yield* Effect.scope);
     yield* fixture.producer('runtime', Scope.close(scope, Exit.void));
@@ -430,7 +430,7 @@ export function graphFixture(settings: GraphFixtureOptions = {}) {
         .pipe(
           Layer.provideMerge(sessionIdentityLayer),
           Layer.provideMerge(Layer.effect(Doctrine, doctrine)),
-          Layer.provideMerge(Layer.sync(Capacity, () => serverCapacity(POOLS(thisMachine())))),
+          Layer.provideMerge(Layer.sync(Capacity, () => serverCapacity(ASSEMBLY.pools(thisMachine())))),
         ),
       scope,
     ).pipe(Effect.updateContext((_context: Context.Context<never>) => Context.empty()));

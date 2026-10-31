@@ -23,7 +23,7 @@ import { project } from '../../../projects/testing/doubles.js';
 import { scopeRecord } from '../../../thread-record/testing/records.js';
 import { nativeOnlyParts } from '../../../native-harness/testing/rollout.js';
 import { fixtureHome } from '../../../platform/testing/roots.js';
-import { ENTRY_KINDS } from '../../manifest.js';
+import { ENTRY_KINDS } from '../composed.js';
 import { makeThreadEntryReader } from '@runlith/agent/transcript/kinds';
 import { StorageFixture, freshStorage, storageFixture } from './storage.fixture.js';
 

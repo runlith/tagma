@@ -7,7 +7,7 @@ import { invoke } from '../../../cli/invoke.js';
 import { upgrade } from '../../../installation/cli/setup.js';
 import { SetupSteps } from '../../../installation/contract/service/steps.js';
 import type { UpgradeEntry } from '../../../external-harnesses/installs/upgrade.js';
-import { installationCli } from '../../cli/installation.js';
+import { INSTALLATION_CLI as installationCli } from '../composed.js';
 
 it.effect('upgrade reports a failed place at exit 1 and succeeds when no place failed', () =>
   Effect.gen(function* () {

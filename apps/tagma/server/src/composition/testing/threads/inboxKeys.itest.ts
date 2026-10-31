@@ -1,6 +1,6 @@
 import { fixtureMigrations } from '../migrations.js';
 import { sharedPool } from '@runlith/sqlite-process/testing/pool';
-import { ENTRY_KINDS } from '../../manifest.js';
+import { ENTRY_KINDS } from '../composed.js';
 import { expect } from 'bun:test';
 import { it } from '@runlith/effect-test';
 import { Context, Clock, Effect, Layer } from 'effect';

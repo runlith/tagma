@@ -16,6 +16,7 @@ import { doorServing } from './doorServices.js';
 import { frozenBuildsLayer } from '../../installation/testing/doubles.js';
 import { routedContext } from '../../graph/testing/doubles.js';
 import { makeRuntime } from '../runtime.js';
+import { COMPOSED } from './composed.js';
 import { chosenModel } from './chosenModel.js';
 import { liveDoorLayer } from './socketDoor.js';
 import { capturedEffect, type Stdin } from './captured.js';
@@ -45,6 +46,7 @@ export type TerminalRuntime = Effect.Success<ReturnType<typeof makeRuntime>>;
 export const terminalRuntime = (dataHome: string, host: RuntimeHost, processes: ProcessPool) =>
   makeRuntime(
     {
+      ...COMPOSED,
       adapters: TESTING_ADAPTERS,
       grants: testGrantSigner,
       databasePath: join(dataHome, 'tagma.sqlite'),
@@ -130,7 +132,7 @@ const makeWorld = Effect.fnUntraced(
         Effect.acquireUseRelease(
           Effect.try({
             try: () =>
-              Bun.spawn(['bun', join(import.meta.dir, '../entries/cli.ts'), ...argv], {
+              Bun.spawn(['bun', join(import.meta.dir, '../developer/cli.ts'), ...argv], {
                 cwd: call.cwd ?? process.cwd(),
                 env: environment(call),
                 stdin: call.stdin === undefined ? 'ignore' : (new Response(call.stdin).body ?? 'ignore'),

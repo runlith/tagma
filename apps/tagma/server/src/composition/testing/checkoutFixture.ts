@@ -46,7 +46,8 @@ import { claimPreparedInstance, preparedBase } from '../../change-record/testing
 import { judgingFns } from '../../change-record/testing/doubles.js';
 import { eligiblePaths, pathChunks } from '../../change-record/testing/doubles.js';
 import { CHECKOUT_DIRECTORY } from '../../graph/contract/wire/storage.js';
-import { doctrine } from '../doctrine.js';
+import { doctrineText } from '../doctrine.js';
+import { ASSEMBLY } from './composed.js';
 import { Doctrine } from '../../platform/contract/service/sections.js';
 
 export const MINE = 'mirror-git';
@@ -158,7 +159,7 @@ export const makeCheckout = Effect.fnUntraced(
       ).pipe(
         Layer.provideMerge(Layer.orDie(machineFileLayer(join(home, 'db.sqlite'), fixtureMigrations, { durable: false }, pool))),
         Layer.provideMerge(sessionIdentityLayer),
-        Layer.provideMerge(Layer.effect(Doctrine, doctrine)),
+        Layer.provideMerge(Layer.succeed(Doctrine, doctrineText(ASSEMBLY))),
       ),
     );
     const git = Context.get(context, Git);

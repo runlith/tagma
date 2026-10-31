@@ -6,9 +6,11 @@ import { Clock, Console, Effect, Sink, Stdio, Stream } from 'effect';
 import { CurrentInvocation, type Environment, Invocation } from '../../platform/cli/verb.js';
 import { invoke } from '../../cli/invoke.js';
 import { PROGRAM_RELEASE } from '../../platform/contract/wire/program.js';
-import { TAGMA_VERBS } from '../cli/verbs.js';
+import { verbsOf } from '../cli/verbs.js';
 import { InstalledChannel } from '../../installation/contract/service/channel.js';
-import { CHANNEL } from '@tagma/server/composition/channel';
+import { DEVELOPER } from '../developer/build.js';
+
+const verbs = verbsOf(DEVELOPER, () => import('../developer/server.js'));
 
 export type Answer = { readonly code: number; readonly out: string; readonly err: string };
 
@@ -37,8 +39,8 @@ export const capturedEffect = Effect.fnUntraced(function* (
   const out = collecting();
   const err = collecting();
   const input = () => (typeof stdin === 'string' || stdin === undefined ? new Blob([stdin ?? '']).stream() : stdin);
-  const at = new Invocation(env, cwd, input, join(import.meta.dir, '../entries/cli.ts'));
-  const invocation = Effect.provideService(invoke(argv, TAGMA_VERBS, PROGRAM_RELEASE), InstalledChannel, CHANNEL);
+  const at = new Invocation(env, cwd, input, join(import.meta.dir, '../developer/cli.ts'));
+  const invocation = Effect.provideService(invoke(argv, verbs, PROGRAM_RELEASE), InstalledChannel, DEVELOPER.channel);
   const run = clock === undefined ? invocation : Effect.provideService(invocation, Clock.Clock, clock);
   const code = yield* run.pipe(
     Effect.provideService(

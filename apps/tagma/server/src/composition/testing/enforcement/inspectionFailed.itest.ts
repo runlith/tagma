@@ -15,7 +15,7 @@ import { MINE } from '../checkoutFixture.js';
 import { landingFixture, withLanding, type LandingFixture } from '../landingFixture.js';
 import { CurrentProject } from '../../../projects/contract/service/caller.js';
 import { enforcementBodies } from '../../../enforcement/testing/bodies.js';
-import { checkSubjectOf } from '../../catalog.js';
+import { checkSubjectOf } from '../composed.js';
 import { perform } from '../../../invocation/testing/performing.js';
 import { OperationChecks } from '../../../invocation/contract/service/operationChecks.js';
 import { OperationCatalog } from '../../../invocation/contract/service/catalog.js';

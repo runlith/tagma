@@ -11,7 +11,7 @@ import { MachineStore } from '../../../platform/contract/service/store.js';
 import { MachineUnits } from '../../../platform/contract/service/units.js';
 import { threadStore } from '../../../native-harness/testing/doubles.js';
 import { threadParts } from '../threadParts.js';
-import { ENTRY_KINDS } from '../../manifest.js';
+import { ENTRY_KINDS } from '../composed.js';
 import { makeThreadRecords } from '../../../thread-record/layer.js';
 import { sessionStoreOver } from '../../../external-harnesses/testing/floor.js';
 import { birthsOf, inboxOf, threadEvent as eventTable, threadRun as runTable } from '../../../threads/testing/doubles.js';

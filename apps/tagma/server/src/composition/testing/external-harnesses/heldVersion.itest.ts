@@ -56,7 +56,7 @@ if (args[0] === '--version') {
 }
 writeFileSync(${JSON.stringify(input.launched)}, String(process.pid));
 const hook = (verb, event) =>
-  Bun.spawnSync([${JSON.stringify(process.execPath)}, '--no-install', ${JSON.stringify(join(import.meta.dir, '../../entries/cli.ts'))}, 'hook', verb, '--harness', '${QUILL.harness}'], {
+  Bun.spawnSync([${JSON.stringify(process.execPath)}, '--no-install', ${JSON.stringify(join(import.meta.dir, '../../developer/cli.ts'))}, 'hook', verb, '--harness', '${QUILL.harness}'], {
     cwd: process.cwd(),
     env: { ...process.env, TAGMA_SERVER_URL: readFileSync(${JSON.stringify(input.served)}, 'utf8'), TAGMA_DATABASE_PATH: ${JSON.stringify(input.database)} },
     stdin: Buffer.from(JSON.stringify({ quill_session: 'quill-run', cwd: process.cwd(), ...event })),

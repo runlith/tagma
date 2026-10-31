@@ -11,7 +11,7 @@ import { shippedAdapters } from '../external-harnesses/shipped.js';
 import { SCOPED_RUN, threadRunStore } from '../../../native-harness/testing/doubles.js';
 import { thread, threadDirectoryStore, modelChanges } from '../../../threads/testing/doubles.js';
 import { threadStoreFixture } from '../threadStoreFixture.js';
-import { ENTRY_KINDS } from '../../manifest.js';
+import { ENTRY_KINDS } from '../composed.js';
 
 layer(builtinRegistry, { excludeTestServices: true })('thread lifecycle readings', (it) => {
   it.effect('a native and an acp run stall by one rule, and the stalled filter selects both', () =>

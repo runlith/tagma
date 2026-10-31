@@ -15,7 +15,7 @@ import { principalOf } from '../../../executions/terminals/principals.js';
 import { makeDoorWorld } from '../doorFixture.js';
 import { targetIdentity, targetKeyOf } from '../../../executions/terminals/subjectPolicy.js';
 
-const CLI = join(import.meta.dir, '..', '..', 'entries', 'cli.ts');
+const CLI = join(import.meta.dir, '..', '..', 'developer', 'cli.ts');
 
 describe('the adopt door over HTTP', () => {
   it.live(

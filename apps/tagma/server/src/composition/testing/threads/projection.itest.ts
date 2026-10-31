@@ -10,7 +10,7 @@ import { MachineStore } from '../../../platform/contract/service/store.js';
 import { bornThread } from '../../../native-harness/testing/born.js';
 import { threadEvent, threadRolloutCursor, threadRolloutRefusal } from '../../../threads/testing/doubles.js';
 import { threadProjection } from '../../../threads/testing/doubles.js';
-import { ENTRY_KINDS } from '../../manifest.js';
+import { ENTRY_KINDS } from '../composed.js';
 
 const stand = Effect.fnUntraced(function* () {
   const fixture = yield* threadStoreFixture;

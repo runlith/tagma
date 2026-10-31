@@ -3,7 +3,7 @@ import { it } from '@runlith/effect-test';
 import { Effect } from 'effect';
 import { AgentRuleRegistry, AgentRuntimePolicy, agentRule, orderedRules } from '@runlith/agent/AgentRuntimePolicy';
 import { AgentRunState } from '@runlith/agent/AgentRunState';
-import { CAPABILITIES, NATIVE_AGENT_RULES } from '../../manifest.js';
+import { CAPABILITIES, NATIVE_AGENT_RULES } from '../composed.js';
 import { capabilityDefinitionsOf, DECLARATIONS } from '../../../native-harness/testing/doubles.js';
 import type { RuleSetup } from '../../../native-harness/contract/service/rules.js';
 import { ThreadMandate } from '../../../threads/contract/service/mandate.js';

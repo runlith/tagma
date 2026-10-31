@@ -16,6 +16,7 @@ import { testGrantSigner } from '../../../platform/testing/grants.js';
 import { spawnedEffect } from '../../../platform/testing/spawn.js';
 import { doorLayer } from '../../http/door.js';
 import { makeRuntime } from '../../runtime.js';
+import { COMPOSED } from '../composed.js';
 import { TESTING_ADAPTERS } from '../adapters.js';
 import { chosenModel } from '../chosenModel.js';
 import { doorServing } from '../doorServices.js';
@@ -67,6 +68,7 @@ const booted = Effect.fnUntraced(function* (home: string, presets: readonly Mark
   const scope = yield* Scope.make();
   const runtime = yield* makeRuntime(
     {
+      ...COMPOSED,
       adapters: TESTING_ADAPTERS,
       grants: testGrantSigner,
       databasePath: join(home, 'tagma.sqlite'),

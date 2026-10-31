@@ -8,14 +8,12 @@ import { SessionIdentity } from '../platform/contract/wire/session.js';
 import { Maintenance } from '../platform/contract/service/maintenance.js';
 import { Background } from '../platform/contract/service/background.js';
 import { makeBackground } from '../platform/background.js';
-import type { SettingKey } from '../platform/contract/wire/setting.js';
 import { CHECKOUT_DIRECTORY } from '../graph/contract/wire/storage.js';
 import { GraphDirectory } from '../workspace/contract/service/checkouts.js';
 import { OperationCatalog } from '../invocation/contract/service/catalog.js';
 import { operationCatalog } from './operationCatalog.js';
 import { OperationSubjects } from '../enforcement/contract/service/operationSubjects.js';
-import { checkSubjectOf } from './catalog.js';
-import { ownerOf } from './manifest.js';
+import type { Assembly } from './manifest.js';
 import { OperationOwners } from '../platform/contract/service/operationOwners.js';
 
 export class AssemblyInvalid extends Data.TaggedError('AssemblyInvalid')<{
@@ -53,16 +51,15 @@ export type Started = {
 };
 
 export const start = Effect.fn('composition.start')(function* (
+  assembly: Assembly,
   folder: string,
   seeds: string,
   identity: SessionIdentity['Service'],
   grants: GrantSigner['Service'],
-  settings: readonly SettingKey<unknown>[],
-  operations: readonly string[],
   snapshots: StoreSnapshots['Service'],
 ): Effect.fn.Return<Started, AssemblyInvalid> {
-  const registered = new Set(operations);
-  const unregistered = settings.flatMap(({ id, control }) =>
+  const registered = new Set<string>(assembly.ids);
+  const unregistered = assembly.settings.keys.flatMap(({ id, control }) =>
     control?.kind === 'managed' && !registered.has(control.by) ? [{ key: id, by: control.by }] : [],
   );
   if (unregistered.length > 0) return yield* new AssemblyInvalid({ unregistered, ports: [] });
@@ -75,9 +72,9 @@ export const start = Effect.fn('composition.start')(function* (
       Context.add(GrantSigner, grants),
       Context.add(StoreSnapshots, snapshots),
       Context.add(GraphDirectory, CHECKOUT_DIRECTORY),
-      Context.add(OperationCatalog, yield* Effect.provide(operationCatalog, approvalModesLayer)),
-      Context.add(OperationSubjects, { of: checkSubjectOf }),
-      Context.add(OperationOwners, { of: ownerOf }),
+      Context.add(OperationCatalog, yield* Effect.provide(operationCatalog(assembly), approvalModesLayer)),
+      Context.add(OperationSubjects, { of: assembly.subjectOf }),
+      Context.add(OperationOwners, { of: assembly.ownerOf }),
       Context.add(Maintenance, { opened: Deferred.await(maintenance), isOpen: Deferred.isDone(maintenance) }),
       Context.add(Background, yield* makeBackground),
     ),

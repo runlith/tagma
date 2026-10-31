@@ -46,7 +46,8 @@ import { GRANT_HEADER } from '../../../platform/contract/service/credentials.js'
 import { grantFor } from '../../../platform/testing/grants.js';
 import { SHIPPED_HARNESSES } from '../../../external-harnesses/testing/builtin.js';
 import { WORLD_COMMAND } from '../../../installation/contract/wire/layout.js';
-import { DRIVERS, type DriverId } from '../../manifest.js';
+import { DRIVERS } from '../composed.js';
+import type { DriverId } from '../../manifest.js';
 import { NativeStorage, ThreadHarness, ThreadLive } from '../../../threads/contract/service/engine.js';
 import type { ThreadsFeedEvent } from '../../../threads/contract/wire/list.js';
 import { birthsOf } from '../../../threads/testing/doubles.js';

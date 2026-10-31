@@ -4,28 +4,22 @@ import type { ServerProcess, Succession } from '../installation/contract/service
 import type { RpcGroup } from 'effect/rpc';
 import { type LiveHandlers, liveLayer } from '../socket/live.js';
 import type { Connections } from '../socket/connections.js';
-import { LiveRpc } from './rpc.js';
+import type { LiveGroup } from './rpc.js';
 import type { FeedDeclaration } from '../platform/contract/wire/operation.js';
 import { bindFeed, SocketOperations } from '../invocation/contract/service/socketOperations.js';
 import type { FeedBody } from '../platform/contract/wire/live.js';
 import { OperationId } from '../platform/contract/wire/ids.js';
-import { COLLECTED_FEEDS } from './manifest.js';
-import { MODULES } from '@tagma/server/composition/modules';
+import type { Assembly } from './manifest.js';
+import type { CORE_MODULES } from './core.js';
 import { sendingRoute } from './http/sending.js';
 import { doorStep } from './http/answering.js';
 import { Listenings } from '../speech/contract/service/listenings.js';
 import { DesktopChannel } from '../desktop-browser/contract/service/channel.js';
 import { desktopReportRoute } from '../desktop-browser/door.js';
 
-const FEEDS: readonly FeedDeclaration[] = COLLECTED_FEEDS;
+export type LiveDoorOf<M> = M extends { readonly live: { readonly handlers: (door: Context.Context<infer R>) => unknown } } ? R : never;
 
-export const SOCKET_VERBS: Readonly<Record<string, OperationId>> = Object.fromEntries(
-  FEEDS.flatMap((declared) => (declared.performs === undefined ? [] : [[declared.id, OperationId.make(declared.performs)] as const])),
-);
-
-type LiveDoorOf<M> = M extends { readonly live: { readonly handlers: (door: Context.Context<infer R>) => unknown } } ? R : never;
-
-export type SocketDoor = LiveDoorOf<(typeof MODULES)[number]>;
+export type SocketDoor = LiveDoorOf<(typeof CORE_MODULES)[number]>;
 export type RuntimeSocketDoor = Exclude<SocketDoor, NextInstallation | Succession | ServerProcess>;
 
 const performing = (declared: FeedDeclaration) => {
@@ -56,14 +50,17 @@ export class LiveHandlersUnmatched extends Data.TaggedError('LiveHandlersUnmatch
   }
 }
 
-const liveHandlers = (door: Context.Context<SocketDoor>): Effect.Effect<LiveHandlers<RpcGroup.Rpcs<typeof LiveRpc>>> =>
+const liveHandlers = (
+  { modules, feeds }: Assembly,
+  door: Context.Context<SocketDoor>,
+): Effect.Effect<LiveHandlers<RpcGroup.Rpcs<LiveGroup>>> =>
   Effect.map(
-    Effect.forEach(MODULES, (module) => ('live' in module ? module.live.handlers(door) : Effect.succeed({}))),
+    Effect.forEach(modules, (module) => (module.live === undefined ? Effect.succeed({}) : module.live.handlers(door))),
     (declared) => {
       const own: Record<string, unknown> = Object.assign({}, ...declared);
       const handlers: Record<string, unknown> = {};
       const unhandled: string[] = [];
-      for (const feed of FEEDS) {
+      for (const feed of feeds) {
         if (feed.performs !== undefined) {
           handlers[feed.id] = performing(feed);
           continue;
@@ -74,16 +71,16 @@ const liveHandlers = (door: Context.Context<SocketDoor>): Effect.Effect<LiveHand
       }
       const undeclared = Object.keys(own).filter((verb) => !(verb in handlers));
       if (unhandled.length > 0 || undeclared.length > 0) throw new LiveHandlersUnmatched({ unhandled, undeclared });
-      return handlers as LiveHandlers<RpcGroup.Rpcs<typeof LiveRpc>>;
+      return handlers as LiveHandlers<RpcGroup.Rpcs<LiveGroup>>;
     },
   );
 
-export const liveServing = (connections: Connections | null) =>
+export const liveServing = (assembly: Assembly, connections: Connections | null) =>
   Layer.unwrap(
     Effect.flatMap(Effect.context<SocketDoor>(), (door) =>
-      Effect.map(liveHandlers(door), (handlers) =>
+      Effect.map(liveHandlers(assembly, door), (handlers) =>
         Layer.mergeAll(
-          liveLayer(LiveRpc, handlers, SOCKET_VERBS, connections, FEEDS),
+          liveLayer(assembly.live, handlers, assembly.socketVerbs, connections, assembly.feeds),
           sendingRoute(Context.get(door, Listenings), connections),
           desktopReportRoute(Context.get(door, DesktopChannel)),
         ),

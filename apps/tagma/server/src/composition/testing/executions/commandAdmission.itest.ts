@@ -115,7 +115,7 @@ import { TerminalWriting } from '../../../executions/contract/service/writing.js
 import { sweepKeyOf } from '../../../executions/testing/doubles.js';
 import { terminalThreads } from '../../../executions/testing/doubles.js';
 import { storesOver } from '../../../executions/testing/stores.js';
-import { BEHAVIOUR_REGISTRY } from '../../manifest.js';
+import { BEHAVIOUR_REGISTRY } from '../composed.js';
 
 const installation = InstallationId.make('command-admission');
 const holder = ThreadId.make('thread-command-holder');

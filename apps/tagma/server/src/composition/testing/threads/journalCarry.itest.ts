@@ -20,7 +20,7 @@ import {
   threadEvent,
   threadProjection,
 } from '../../../threads/testing/doubles.js';
-import { ENTRY_KINDS } from '../../manifest.js';
+import { ENTRY_KINDS } from '../composed.js';
 import { ThreadEntryKinds } from '@runlith/agent/transcript/kinds';
 
 const fact = (threadId: string, id: string) => ({

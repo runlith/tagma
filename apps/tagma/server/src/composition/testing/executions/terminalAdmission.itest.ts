@@ -73,7 +73,7 @@ import { hostConnection } from '../../../executions/testing/doubles.js';
 import { terminalExecutions } from '../../../executions/testing/doubles.js';
 import { holdsOf, storesOver } from '../../../executions/testing/stores.js';
 import type { TerminalGrants } from '../../../executions/contract/service/grants.js';
-import { ENTRY_KINDS } from '../../manifest.js';
+import { ENTRY_KINDS } from '../composed.js';
 
 const installation = InstallationId.make('terminal-admission');
 const targetKey = TargetKey.make('target-under-test');

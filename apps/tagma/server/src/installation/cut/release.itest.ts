@@ -60,12 +60,12 @@ const checkout = (
   wrote(join(source, 'drizzle/0001_first/migration.sql'), 'select 1;\n');
   wrote(join(source, 'src/native-harness/skills/rules/SKILL.md'), '---\nname: rules\n---\n');
   wrote(
-    join(source, 'src/composition/entries/cli.ts'),
+    join(source, 'src/composition/developer/cli.ts'),
     options.cliImportsServer
-      ? `const started = await import('../server.js');\nconsole.log(started);\n`
+      ? `const started = await import('./server.js');\nconsole.log(started);\n`
       : `console.log('a CLI that never starts a server');\n`,
   );
-  wrote(join(source, 'src/composition/server.ts'), `export const port = 4100;\n`);
+  wrote(join(source, 'src/composition/developer/server.ts'), `export const port = 4100;\n`);
   wrote(join(root, 'apps/tagma/app/package.json'), `{"name":"@tagma/app","scripts":{"build":"${options.appBuild}"}}\n`);
   wrote(join(root, 'apps/tagma/desktop/package.json'), '{"name":"@tagma/desktop"}\n');
   wrote(join(root, 'packages/execution-host/package.json'), '{"name":"@runlith/execution-host"}\n');
@@ -93,6 +93,7 @@ const refusalOf = (where: ReturnType<typeof checkout>) =>
       conditions: [],
       channel: CHANNELS.dev,
       applications: inert,
+      entries: { cli: 'composition/developer/cli.ts', server: 'composition/developer/server.ts' },
     }),
   ).pipe(Effect.provide(machine));
 

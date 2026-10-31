@@ -8,7 +8,7 @@ import { Context, Data, Effect, FileSystem, Latch, Layer, Option, Schedule, Sche
 import { HttpPlatform, HttpRouter, HttpServer } from 'effect/http';
 import { RpcClient } from 'effect/rpc';
 import { Socket } from 'effect/socket';
-import { LiveRpc } from '../../rpc.js';
+import { ASSEMBLY, LiveRpc } from '../composed.js';
 import { liveSerialization } from '../../../platform/contract/wire/live.js';
 import { websocketHttpTracing } from '../../../socket/live.js';
 import { TAGMA_SOCKET_PATH } from '../../../socket/rpc.js';
@@ -110,7 +110,14 @@ const setup = Effect.gen(function* () {
   const connections = new Connections();
   const door = yield* doorServicesOf(world.runtime, home);
   const serving = (listening: number) =>
-    remoteServing({ door, status: world.runtime.status, appDist: shell, artifacts: world.runtime.artifacts, connections }).pipe(
+    remoteServing({
+      assembly: ASSEMBLY,
+      door,
+      status: world.runtime.status,
+      appDist: shell,
+      artifacts: world.runtime.artifacts,
+      connections,
+    }).pipe(
       Layer.provide(websocketHttpTracing),
       Layer.provideMerge(BunHttpServer.layer({ hostname: '127.0.0.1', port: listening, gracefulShutdownTimeout: '20 millis' })),
       Layer.provide(frozenBuildsLayer({ dataPath: home })),

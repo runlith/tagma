@@ -61,6 +61,7 @@ export type Composition = {
   readonly conditions: readonly string[];
   readonly channel: Channel;
   readonly applications: Applications;
+  readonly entries: { readonly cli: string; readonly server: string };
 };
 
 export type ReleaseCut = {
@@ -130,6 +131,12 @@ const decodeRefusal = Schema.decodeUnknownResult(Schema.fromJsonString(HostRefus
 const unrunnable = (failure: CommandUnavailable): HostRefusal => ({ detail: failure.detail, unblock: failure.unblock });
 
 type Written = { readonly written: readonly string[]; readonly inputs: readonly string[] };
+
+const importOf = (from: string, to: string): RegExp => {
+  const path = relativePath(dirname(from), to).replace(/\.ts$/, '.js');
+  const specifier = path.startsWith('.') ? path : `./${path}`;
+  return new RegExp(`^${specifier.replaceAll(/[.*+?^${}()|[\]\\/]/g, '\\$&')}$`);
+};
 
 const bundled = Effect.fnUntraced(function* (
   entry: string,
@@ -309,7 +316,7 @@ const releasing = Effect.fnUntraced(function* <Launcher>(
   );
   const targeted = release === null ? null : release.target.arch;
   for (const [what, where] of [
-    ['the CLI entry', `${sourcePath}/src/composition/entries/cli.ts`],
+    ['the CLI entry', `${sourcePath}/src/${composition.entries.cli}`],
     ['the app package', `${app}/package.json`],
     ['the desktop package', `${desktop}/package.json`],
     ['the execution host', `${host}/package.json`],
@@ -445,11 +452,11 @@ const releasing = Effect.fnUntraced(function* <Launcher>(
         assets.push(['server', watchEngine]);
         const mapped = release === null ? null : { cut: release, root };
         const cli = yield* bundled(
-          `${sourcePath}/src/composition/entries/cli.ts`,
+          `${sourcePath}/src/${composition.entries.cli}`,
           at(CLI_ENTRY),
           checkout,
           {
-            from: /^\.\.\/server\.js$/,
+            from: importOf(composition.entries.cli, composition.entries.server),
             to: relativePath(dirname(`/${CLI_ENTRY}`), `/${SERVER_ENTRY}`),
           },
           conditions,
@@ -457,7 +464,7 @@ const releasing = Effect.fnUntraced(function* <Launcher>(
           mapped,
         );
         const server = yield* bundled(
-          `${sourcePath}/src/composition/server.ts`,
+          `${sourcePath}/src/${composition.entries.server}`,
           at(SERVER_ENTRY),
           checkout,
           null,

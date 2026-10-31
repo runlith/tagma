@@ -23,7 +23,7 @@ import {
 } from '../../native-harness/testing/doubles.js';
 import { project } from '../../projects/testing/doubles.js';
 import { sqliteThreadJournal, threadInboxStore, threadResourceStore, approvalPreferences } from '../../threads/testing/doubles.js';
-import { ENTRY_KINDS } from '../manifest.js';
+import { ENTRY_KINDS } from './composed.js';
 import type { Unit, WriteUnit } from '../../platform/contract/service/units.js';
 
 const SCOPES: Record<string, { faceted: boolean }> = {

@@ -35,6 +35,7 @@ import {
   PairingInput,
 } from '../../remote/contract/wire/access.js';
 import { liveServing } from '../socketBinding.js';
+import type { Assembly } from '../manifest.js';
 import { API_PREFIX, ARTIFACT_PREFIX } from '../../http/contract/wire/served.js';
 import { artifactRoutes } from './artifacts.js';
 import { admissionOf, doorLayer, socketOperationsLayer } from './door.js';
@@ -180,6 +181,7 @@ export const remoteGate = (admission: Admission['Service'], shell: Shell | null)
   );
 
 export type RemoteDoor = {
+  readonly assembly: Assembly;
   readonly door: Context.Context<DoorServices>;
   readonly status: RuntimeStatus;
   readonly appDist?: string;
@@ -201,7 +203,7 @@ export const remoteServing = (remote: RemoteDoor) =>
       const shell = remote.appDist === undefined ? null : yield* HttpStaticServer.make({ root: remote.appDist, spa: true });
       const app = Layer.mergeAll(
         doorLayer({ status }),
-        liveServing(remote.connections).pipe(Layer.provide(socketOperationsLayer)),
+        liveServing(remote.assembly, remote.connections).pipe(Layer.provide(socketOperationsLayer)),
         artifactRoutes(remote.artifacts, { index: ARTIFACT_PREFIX, sandboxed: true }),
       ).pipe(
         Layer.provide(doorCompositionLayer),

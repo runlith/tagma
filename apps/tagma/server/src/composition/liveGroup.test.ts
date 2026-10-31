@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import type { Schema } from 'effect';
 import { RpcSchema } from 'effect/rpc';
-import { LiveRpc } from './rpc.js';
+import { LiveRpc } from './testing/composed.js';
 
 const APP_GROUP = new URL('../../../app/src/lib/wire/liveGroup.ts', import.meta.url).href;
 

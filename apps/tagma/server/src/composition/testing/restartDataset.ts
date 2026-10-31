@@ -11,9 +11,10 @@ import { ProjectLifecycle } from '../../graph/contract/service/serving.js';
 import { ThreadJournal } from '../../threads/contract/service/engine.js';
 import { ThreadRollouts } from '../../threads/contract/service/rollouts.js';
 import { birthsOf, exportThreadRollout, threadEntry, threadProjection } from '../../threads/testing/doubles.js';
-import { ENTRY_KINDS } from '../manifest.js';
+import { ENTRY_KINDS } from './composed.js';
 import { testGrantSigner } from '../../platform/testing/grants.js';
 import { makeRuntime } from '../runtime.js';
+import { COMPOSED } from './composed.js';
 import { TESTING_ADAPTERS } from './adapters.js';
 import { chosenModel } from './chosenModel.js';
 
@@ -33,6 +34,7 @@ export const restartDataset = Effect.fn('restart.dataset')(
     const data = join(root, 'data');
     const runtime = yield* makeRuntime(
       {
+        ...COMPOSED,
         grants: testGrantSigner,
         databasePath: join(data, 'tagma.sqlite'),
         seedPath: join(root, 'seeds'),

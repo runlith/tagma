@@ -7,7 +7,7 @@ import { eq, sql } from 'drizzle-orm';
 import { MachineStore } from '../../../platform/contract/service/store.js';
 import { birthsOf, rolloutsOf, threadEntry, threadEvent, threadRolloutForm, threadRun } from '../../../threads/testing/doubles.js';
 import { makeDoorWorld } from '../doorFixture.js';
-import { ENTRY_KINDS } from '../../manifest.js';
+import { ENTRY_KINDS } from '../composed.js';
 
 const setup = Effect.gen(function* () {
   const files = yield* FileSystem.FileSystem;

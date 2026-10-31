@@ -11,7 +11,7 @@ import { installInto, installForUser, installForAccount } from '../../../externa
 import { skillStatus } from '../../../external-harnesses/testing/doubles.js';
 import { skillDirectories, userSkillTarget } from '../../../external-harnesses/installs/targets.js';
 import { standing } from '../../../external-harnesses/installs/upgrade.js';
-import { doctrine } from '../../doctrine.js';
+import { doctrine } from '../composed.js';
 
 const base = SHIPPED_PROVIDERS[0]!;
 const provider: HarnessProvider = {

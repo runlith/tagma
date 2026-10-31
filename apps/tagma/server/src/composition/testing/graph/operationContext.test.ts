@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { Result } from 'effect';
 import { decodeThreadEventPayloadResult } from '@runlith/agent/thread/persisted';
-import { ENTRY_KINDS } from '../../manifest.js';
+import { ENTRY_KINDS } from '../composed.js';
 
 const before = [
   'claim_task',

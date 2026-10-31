@@ -56,7 +56,7 @@ import { nativeDoor, nativeOffers } from '../../../invocation/testing/native.js'
 import { fixtureOperationCatalog as operationCatalog } from '../nativeCatalog.js';
 import { callLifetimes } from '../../callLifetimes.js';
 import { tagIndex } from '../../../graph/testing/doubles.js';
-import { BEHAVIOUR_REGISTRY } from '../../manifest.js';
+import { BEHAVIOUR_REGISTRY } from '../composed.js';
 import { theSandboxTree } from '../../../sandbox/doctrine/theSandboxTree.js';
 import { unruledTimes } from '@runlith/agent-tools/CommandWork';
 import { testGrantSigner } from '../../../platform/testing/grants.js';
@@ -76,7 +76,7 @@ import { commentPolicy } from '../../../graph/testing/doubles.js';
 import { threadStack, type ThreadParts } from '../threadParts.js';
 import type { Worlds } from '../../../executions/contract/service/worlds.js';
 import { leasedWorlds } from '../../../executions/testing/doubles.js';
-import { ENTRY_KINDS, NATIVE_AGENT_RULES } from '../../manifest.js';
+import { ENTRY_KINDS, NATIVE_AGENT_RULES } from '../composed.js';
 import { AgentRuleRegistry } from '@runlith/agent/AgentRuntimePolicy';
 const ruleRegistry = new AgentRuleRegistry(NATIVE_AGENT_RULES);
 const tree = asAgentDeclaration({

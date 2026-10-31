@@ -28,7 +28,7 @@ import { restedReads } from '../../../threads/testing/doubles.js';
 
 import { sqliteThreadJournal } from '../../../threads/testing/doubles.js';
 import { compressRollout, evictThreadProjection, threadProjection } from '../../../threads/testing/doubles.js';
-import { ENTRY_KINDS } from '../../manifest.js';
+import { ENTRY_KINDS } from '../composed.js';
 import { ThreadEntryKinds } from '@runlith/agent/transcript/kinds';
 import { RolloutReads } from '../../../threads/contract/service/rolloutReads.js';
 

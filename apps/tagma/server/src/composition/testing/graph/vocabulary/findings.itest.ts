@@ -8,7 +8,7 @@ import { releaseFindingsLeave } from '../../../../graph/steps/releaseFindingsLea
 import { catalogAgentLeaves } from '../../../../graph/steps/catalogAgentLeaves.js';
 import { briefsLeave } from '../../../../graph/steps/briefsLeave.js';
 import { SHIPPED_CATALOGS } from '../../settings.js';
-import { BEHAVIOUR_REGISTRY } from '../../../manifest.js';
+import { BEHAVIOUR_REGISTRY } from '../../composed.js';
 import { softwareDevelopment } from '../../../../catalogs/contract/wire/softwareDevelopment.js';
 import { ensureVocabulary } from '../../../../graph/serving/birth.js';
 import { catalogFindings } from '../../../../graph/vocabulary/candidate.js';

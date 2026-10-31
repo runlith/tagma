@@ -12,7 +12,7 @@ import { MachineUnits } from '../../../platform/contract/service/units.js';
 import { makeThreadRecords } from '../../../thread-record/layer.js';
 import { acpTestSeat } from '../../../external-harnesses/testing/seats.js';
 import { HARNESS_AGENT_ID, type HarnessName } from '../../../threads/contract/wire/harness/names.js';
-import { ENTRY_KINDS } from '../../manifest.js';
+import { ENTRY_KINDS } from '../composed.js';
 import { threadStack } from '../threadParts.js';
 
 type Request = { readonly runId: string | undefined; readonly instructions: string; readonly tools: readonly string[] };

@@ -21,7 +21,7 @@ import { makeThreadRecords } from '../../../thread-record/layer.js';
 import type { COMMAND_RULE_OPERATIONS } from '../../../executions/contract/wire/operations/commandRules.js';
 import { currentRules } from '../../../executions/store/standingRules.js';
 import { forProject } from '../../../invocation/testing/call.js';
-import { BEHAVIOUR_REGISTRY, ENTRY_KINDS } from '../../manifest.js';
+import { BEHAVIOUR_REGISTRY, ENTRY_KINDS } from '../composed.js';
 
 const DEFAULT_LIFE_MS = 3_600_000;
 const fixture = demoGraphLayer().pipe(Layer.provide(BunFileSystem.layer));

@@ -9,7 +9,7 @@ import { WORLD_COMMAND } from '../../../installation/contract/wire/layout.js';
 import { whoSpeaks } from './terminalDeliveryRig.js';
 import { settledOn, terminalHistoryWorld } from './terminalHistoryRig.js';
 
-const CLI = join(import.meta.dir, '..', '..', 'entries', 'cli.ts');
+const CLI = join(import.meta.dir, '..', '..', 'developer', 'cli.ts');
 
 const realCuts = Effect.gen(function* () {
   const files = yield* FileSystem.FileSystem;

@@ -2,7 +2,7 @@ import { watch } from 'node:fs';
 import { join } from 'node:path';
 import { Context, Data, Effect, FileSystem, Queue } from 'effect';
 import type { RpcClient, RpcClientError, RpcGroup } from 'effect/rpc';
-import type { LiveRpc } from '../../rpc.js';
+import type { LiveGroup } from '../../rpc.js';
 import type { DoorFixture } from '../doorFixture.js';
 import { WORLD_COMMAND } from '../../../installation/contract/wire/layout.js';
 import { ThreadHarness, NativeStorage } from '../../../threads/contract/service/engine.js';
@@ -13,7 +13,7 @@ import { SERVER_SRC } from '../repoRoot.js';
 import { suiteGit, suiteGitText } from '../suiteGit.js';
 import { spawnedEffect } from '../../../platform/testing/spawn.js';
 
-type LiveClient = RpcClient.RpcClient<RpcGroup.Rpcs<typeof LiveRpc>, RpcClientError.RpcClientError>;
+type LiveClient = RpcClient.RpcClient<RpcGroup.Rpcs<LiveGroup>, RpcClientError.RpcClientError>;
 class ChurnRefused extends Data.TaggedError('ChurnRefused')<{ readonly message: string }> {}
 const quote = (text: string) => `'${text.replaceAll("'", "'\\''")}'`;
 

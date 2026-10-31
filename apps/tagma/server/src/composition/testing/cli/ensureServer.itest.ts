@@ -18,7 +18,7 @@ import { spawnedEffect } from '../../../platform/testing/spawn.js';
 import { dataDirectoryLocked } from '../../../platform/lock/holder.js';
 import { capturedEffect } from '../captured.js';
 
-const ENTRY = join(import.meta.dir, '../../entries/cli.ts');
+const ENTRY = join(import.meta.dir, '../../developer/cli.ts');
 
 class StillStanding extends Data.TaggedError('StillStanding')<{ readonly pid: number }> {}
 

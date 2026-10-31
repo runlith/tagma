@@ -84,7 +84,7 @@ import { externalHarnesses } from '../external-harnesses/external-harnesses.js';
 import { Git } from '@runlith/git/Git';
 import { DoctrineFacts } from '../platform/contract/service/facts.js';
 import type { FactCheckout } from '../platform/contract/wire/section.js';
-import { BUILTIN_NOTE_ENTRIES, CAPABILITIES, FACTS, HOME_FOLLOWER_ENTRIES } from './manifest.js';
+import type { Assembly } from './manifest.js';
 import { BuiltinNotes } from '../threads/contract/service/notes.js';
 import { HomeFollowers } from '../thread-record/contract/service/homes.js';
 import { DeclaredCapabilities } from '../native-harness/contract/service/capabilities.js';
@@ -207,87 +207,85 @@ const asking = Layer.merge(compactionAsksLayer, askSettingsLayer).pipe(
   Layer.provideMerge(modelAsksLayer.pipe(Layer.provide(defaultSelectionLayer))),
 );
 
-const stores = threads.lifetimes.installation.pipe(
-  Layer.provideMerge(
-    Layer.mergeAll(
-      asking,
-      worldPreferences,
-      assignments,
-      targetSnapshots,
-      heldPathCounts,
-      Layer.succeed(BuiltinNotes, { notes: BUILTIN_NOTE_ENTRIES }),
-      Layer.effect(
-        HomeFollowers,
+const stores = (assembly: Assembly) =>
+  threads.lifetimes.installation.pipe(
+    Layer.provideMerge(
+      Layer.mergeAll(
+        asking,
+        worldPreferences,
+        assignments,
+        targetSnapshots,
+        heldPathCounts,
+        Layer.succeed(BuiltinNotes, { notes: assembly.notes }),
+        Layer.effect(
+          HomeFollowers,
+          Effect.map(
+            Effect.promise(() => Promise.all(assembly.homeFollowers.map((follower) => follower.load()))),
+            (all) => ({ all }),
+          ),
+        ),
+      ),
+    ),
+    Layer.provideMerge(machineServed),
+  );
+
+const worktreeOwners = (assembly: Assembly) =>
+  worktrees.lifetimes.workspace.pipe(
+    Layer.provideMerge(
+      Layer.mergeAll(setupCommands, rootEndings, setupStateLayer, BunPath.layer, Layer.succeed(CheckDriver, graphDriver)).pipe(
+        Layer.provideMerge(stores(assembly)),
+      ),
+    ),
+  );
+
+const doctrineFacts = (facts: Assembly['facts']) =>
+  Layer.effect(
+    DoctrineFacts,
+    Effect.map(Git, (git) => ({
+      read: (ids: readonly string[], checkout: FactCheckout) =>
         Effect.map(
-          Effect.promise(() => Promise.all(HOME_FOLLOWER_ENTRIES.map((follower) => follower.load()))),
-          (all) => ({ all }),
+          Effect.forEach(
+            facts.filter((fact) => ids.includes(fact.id)),
+            (fact) => Effect.map(Effect.provideService(fact.read(checkout), Git, git), (value) => [fact.id, value] as const),
+          ),
+          Object.fromEntries,
         ),
+    })),
+  );
+
+const capabilityOffers = (capabilities: Assembly['capabilities']) =>
+  Layer.merge(
+    Layer.effect(CapabilityOffers, Effect.map(OperationCatalog, invocationAssembly.nativeOffers)),
+    Layer.succeed(DeclaredCapabilities, capabilities),
+  );
+
+const nativeKernel = (assembly: Assembly) =>
+  nativeHarness.lifetimes.workspace.pipe(
+    Layer.provideMerge(
+      Layer.mergeAll(setupReadings, doctrineFacts(assembly.facts), capabilityOffers(assembly.capabilities)).pipe(
+        Layer.provideMerge(worktreeOwners(assembly)),
       ),
     ),
-  ),
-  Layer.provideMerge(machineServed),
-);
+  );
 
-const worktreeOwners = worktrees.lifetimes.workspace.pipe(
-  Layer.provideMerge(
-    Layer.mergeAll(setupCommands, rootEndings, setupStateLayer, BunPath.layer, Layer.succeed(CheckDriver, graphDriver)).pipe(
-      Layer.provideMerge(stores),
-    ),
-  ),
-);
-
-const doctrineFacts = Layer.effect(
-  DoctrineFacts,
-  Effect.map(Git, (git) => ({
-    read: (ids: readonly string[], checkout: FactCheckout) =>
-      Effect.map(
-        Effect.forEach(
-          FACTS.filter((fact) => ids.includes(fact.id)),
-          (fact) => Effect.map(Effect.provideService(fact.read(checkout), Git, git), (value) => [fact.id, value] as const),
-        ),
-        Object.fromEntries,
-      ),
-  })),
-);
-
-const capabilityOffers = Layer.merge(
-  Layer.effect(CapabilityOffers, Effect.map(OperationCatalog, invocationAssembly.nativeOffers)),
-  Layer.succeed(DeclaredCapabilities, CAPABILITIES),
-);
-
-const nativeKernel = nativeHarness.lifetimes.workspace.pipe(
-  Layer.provideMerge(Layer.mergeAll(setupReadings, doctrineFacts, capabilityOffers).pipe(Layer.provideMerge(worktreeOwners))),
-);
-
-const teardown = threadTeardownLayer.pipe(Layer.provideMerge(nativeKernel));
-
-const engine = threads.lifetimes.workspace.pipe(Layer.provideMerge(sandboxes.pipe(Layer.provideMerge(teardown))));
-
-const nativeServing = nativeHarness.lifetimes.serving.pipe(Layer.provideMerge(engine));
-
-const threadFeeds = threadFeedsLayer.pipe(Layer.provideMerge(nativeServing));
-
-const threadsServing = threadCopiesLayer.pipe(
-  Layer.provideMerge(threads.lifetimes.serving.pipe(Layer.provideMerge(branchTitling.pipe(Layer.provideMerge(threadFeeds))))),
-);
-
-const externals = externalHarnesses.lifetimes.workspace.pipe(Layer.provideMerge(threadsServing));
-
-const externalServing = externalHarnesses.lifetimes.serving.pipe(Layer.provideMerge(externals));
-
-const takeBack = executions.lifetimes.serving.pipe(Layer.provideMerge(externalServing));
-
-const landed = landing.lifetimes.serving.pipe(Layer.provideMerge(takeBack));
-
-const notified = notify.lifetimes.serving.pipe(Layer.provideMerge(outcomes), Layer.provideMerge(landed));
-
-const waited = mcp.lifetimes.serving.pipe(Layer.provideMerge(notified));
-
-const pushed = push.lifetimes.serving.pipe(Layer.provideMerge(waited));
-
-const scheduled = schedule.lifetimes.serving.pipe(Layer.provideMerge(ticks), Layer.provideMerge(pushed));
-
-const translated = translations.lifetimes.serving.pipe(Layer.provideMerge(scheduled));
+const translatedOf = (assembly: Assembly) => {
+  const teardown = threadTeardownLayer.pipe(Layer.provideMerge(nativeKernel(assembly)));
+  const engine = threads.lifetimes.workspace.pipe(Layer.provideMerge(sandboxes.pipe(Layer.provideMerge(teardown))));
+  const nativeServing = nativeHarness.lifetimes.serving.pipe(Layer.provideMerge(engine));
+  const threadFeeds = threadFeedsLayer.pipe(Layer.provideMerge(nativeServing));
+  const threadsServing = threadCopiesLayer.pipe(
+    Layer.provideMerge(threads.lifetimes.serving.pipe(Layer.provideMerge(branchTitling.pipe(Layer.provideMerge(threadFeeds))))),
+  );
+  const externals = externalHarnesses.lifetimes.workspace.pipe(Layer.provideMerge(threadsServing));
+  const externalServing = externalHarnesses.lifetimes.serving.pipe(Layer.provideMerge(externals));
+  const takeBack = executions.lifetimes.serving.pipe(Layer.provideMerge(externalServing));
+  const landed = landing.lifetimes.serving.pipe(Layer.provideMerge(takeBack));
+  const notified = notify.lifetimes.serving.pipe(Layer.provideMerge(outcomes), Layer.provideMerge(landed));
+  const waited = mcp.lifetimes.serving.pipe(Layer.provideMerge(notified));
+  const pushed = push.lifetimes.serving.pipe(Layer.provideMerge(waited));
+  const scheduled = schedule.lifetimes.serving.pipe(Layer.provideMerge(ticks), Layer.provideMerge(pushed));
+  return translations.lifetimes.serving.pipe(Layer.provideMerge(scheduled));
+};
 
 const renames = Layer.effect(
   Renames,
@@ -305,12 +303,14 @@ const scratchFolders = Layer.effect(
   })),
 );
 
-const filed = checkoutFiles.lifetimes.serving.pipe(
-  Layer.provide(Layer.mergeAll(Layer.succeed(RipgrepBinary, ripgrepBinary), renames)),
-  Layer.provideMerge(scratchFolders),
-  Layer.provideMerge(translated),
-);
+export const servingOf = (assembly: Assembly) => {
+  const filed = checkoutFiles.lifetimes.serving.pipe(
+    Layer.provide(Layer.mergeAll(Layer.succeed(RipgrepBinary, ripgrepBinary), renames)),
+    Layer.provideMerge(scratchFolders),
+    Layer.provideMerge(translatedOf(assembly)),
+  );
+  const navigated = navigationServing.pipe(Layer.provideMerge(filed));
+  return nativeDoor.pipe(Layer.provideMerge(navigated));
+};
 
-const navigated = navigationServing.pipe(Layer.provideMerge(filed));
-
-export const serving = nativeDoor.pipe(Layer.provideMerge(navigated));
+export type Serving = ReturnType<typeof servingOf>;

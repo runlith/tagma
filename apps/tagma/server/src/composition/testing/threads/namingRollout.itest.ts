@@ -8,7 +8,7 @@ import { it } from '@runlith/effect-test';
 import { sql } from 'drizzle-orm';
 import { Context, Effect, FileSystem, Layer } from 'effect';
 import { ThreadEntryKinds } from '@runlith/agent/transcript/kinds';
-import { ENTRY_KINDS } from '../../manifest.js';
+import { ENTRY_KINDS } from '../composed.js';
 import { MachineStore } from '../../../platform/contract/service/store.js';
 import { unitsLayer } from '../../../platform/store/units.js';
 import { seededStoreLayer } from '../../../platform/store/open.js';

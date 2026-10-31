@@ -132,7 +132,7 @@
       "name": "@tagma/server",
       "version": "0.1.0",
       "bin": {
-        "tagma": "./src/composition/entries/cli.ts",
+        "tagma": "./src/composition/developer/cli.ts",
       },
       "dependencies": {
         "@effect/platform-bun": "catalog:",

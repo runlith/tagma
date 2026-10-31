@@ -303,7 +303,8 @@ export const platforms: Builtin<'platforms', PlatformsParams> = {
     programs: [
       { at: 'apps/tagma/desktop/src/main.ts', platform: 'node', replaces: 'apps/tagma/desktop/dist/app/main.mjs' },
       { at: 'apps/tagma/desktop/src/preload.ts', platform: 'node' },
-      { at: 'apps/tagma/server/src/composition/server.ts', platform: 'bun' },
+      { at: 'apps/tagma/server/src/composition/developer/server.ts', platform: 'bun' },
+      { at: 'apps/tagma/server/src/composition/release/server.ts', platform: 'bun' },
       { at: 'apps/tagma/server/src/enforcement/workers/judge.worker.ts', platform: 'bun' },
       { at: 'apps/tagma/server/src/enforcement/workers/reach.worker.ts', platform: 'bun' },
       { at: 'apps/tagma/server/src/platform/durable/flush.worker.ts', platform: 'bun' },

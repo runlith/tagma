@@ -1,9 +1,11 @@
 import { Effect } from 'effect';
-import { door } from '../cli/door.js';
+import { doorOf } from '../cli/door.js';
 import { CurrentInvocation } from '../../platform/cli/verb.js';
 import { build } from '../../installation/cut/build.js';
-import { CUT } from '../developer/cut.js';
+import { DEVELOPER } from '../developer/build.js';
 import { readRemoteStartup } from '../../installation/process/serverStart.js';
+
+const door = doorOf(DEVELOPER.channel);
 
 const cut = build(
   {
@@ -14,7 +16,7 @@ const cut = build(
     startup: () => Effect.flatMap(CurrentInvocation, (at) => readRemoteStartup(door.baseUrl(at))),
   },
   process.argv.slice(2),
-  CUT,
+  DEVELOPER.cut,
 );
 
 const halted = new AbortController();

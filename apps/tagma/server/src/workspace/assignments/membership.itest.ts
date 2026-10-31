@@ -39,7 +39,7 @@ import { ThreadLineage } from '../contract/service/assignments.js';
 import { makeRootUseStore } from '../store/uses.js';
 import { type RootUseLedger, makeRootUseLedger } from '../roots/uses.js';
 import { lineageOver } from '../testing/lineage.js';
-import { ENTRY_KINDS } from '../../composition/manifest.js';
+import { ENTRY_KINDS } from '../../composition/testing/composed.js';
 
 const provenance = { kind: 'adoption', id: 'operator' };
 const namespaceId = NamespaceId.make('test-assignments');

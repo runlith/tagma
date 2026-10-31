@@ -31,7 +31,7 @@ import { threadParts, type ThreadParts } from '../threadParts.js';
 import { writes } from '../../../platform/contract/service/writes.js';
 import type { ThreadRecords } from '../../../thread-record/contract/service/records.js';
 import { threadRecord } from '../../../thread-record/testing/doubles.js';
-import { ENTRY_KINDS } from '../../manifest.js';
+import { ENTRY_KINDS } from '../composed.js';
 
 const titleIdentity = (records: ThreadRecords['Service'], id: string) =>
   Effect.map(records.facts(id), (facts) =>

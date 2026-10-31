@@ -4,7 +4,7 @@
   "private": true,
   "description": "Tagma server: block graph, lifecycle gates, doctor, prime, HTTP and the tagma CLI.",
   "bin": {
-    "tagma": "./src/composition/entries/cli.ts"
+    "tagma": "./src/composition/developer/cli.ts"
   },
   "type": "module",
   "exports": {
@@ -227,37 +227,12 @@
       "bun": "./src/composition/shipped.ts",
       "default": null
     },
-    "./composition/catalogModules": {
-      "types": "./src/composition/developer/catalog.ts",
-      "release": "./src/composition/release/catalog.ts",
-      "browser": "./src/composition/developer/catalog.ts",
-      "bun": "./src/composition/developer/catalog.ts",
-      "default": "./src/composition/developer/catalog.ts"
-    },
-    "./composition/modules": {
-      "types": "./src/composition/developer/modules.ts",
-      "release": "./src/composition/release/modules.ts",
-      "bun": "./src/composition/developer/modules.ts",
-      "default": "./src/composition/developer/modules.ts"
-    },
     "./composition/channel": {
       "types": "./src/composition/developer/channel.ts",
       "release": "./src/composition/release/channel.ts",
       "node": "./src/composition/developer/channel.ts",
       "bun": "./src/composition/developer/channel.ts",
       "default": "./src/composition/developer/channel.ts"
-    },
-    "./composition/bindings": {
-      "types": "./src/composition/developer/bindings.ts",
-      "release": "./src/composition/release/bindings.ts",
-      "bun": "./src/composition/developer/bindings.ts",
-      "default": "./src/composition/developer/bindings.ts"
-    },
-    "./composition/verbBindings": {
-      "types": "./src/composition/developer/verbs.ts",
-      "release": "./src/composition/release/verbs.ts",
-      "bun": "./src/composition/developer/verbs.ts",
-      "default": "./src/composition/developer/verbs.ts"
     },
     "./threads/contract/wire/operations/catalog": {
       "types": "./src/threads/contract/wire/operations/catalog.ts",
@@ -1307,7 +1282,7 @@
     "try": "bun src/composition/cut/try.ts",
     "transition": "bun src/composition/cut/transition.ts",
     "db:generate": "bun --bun drizzle-kit generate",
-    "start": "bun src/composition/server.ts",
+    "start": "bun src/composition/developer/server.ts",
     "test": "testbed bun test src --no-isolate",
     "test:integration": "testbed bun test --no-isolate $(find src -name '*.itest.ts' | sed 's|^|./|')",
     "test:e2e": "testbed e2e --no-isolate",

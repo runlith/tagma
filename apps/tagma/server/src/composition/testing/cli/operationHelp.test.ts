@@ -5,7 +5,7 @@ import { TestConsole } from 'effect/testing';
 import * as BunServices from '@effect/platform-bun/BunServices';
 import { invoke } from '../../../cli/invoke.js';
 import { cliVerbs } from '../../../cli/verbs.js';
-import { operationsCli } from '../../cli/operations.js';
+import { OPERATIONS_CLI as operationsCli } from '../composed.js';
 
 it.effect('operation help exposes the input accepted by the server, including non-tool operations', () =>
   Effect.gen(function* () {

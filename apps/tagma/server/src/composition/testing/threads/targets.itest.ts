@@ -39,7 +39,7 @@ import { FileRoots, type RootReservations } from '../../../workspace/contract/se
 import { Assignments } from '../../../workspace/contract/service/assignments.js';
 
 import { lineageOver } from '../../../workspace/testing/lineage.js';
-import { ENTRY_KINDS } from '../../manifest.js';
+import { ENTRY_KINDS } from '../composed.js';
 
 const namespaceId = NamespaceId.make('test-target-moves');
 const unreserved: RootReservations['Service'] = { holding: () => Effect.succeed(new Map()) };

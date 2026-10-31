@@ -14,7 +14,7 @@ import { RESTART_RECORD, restartRecordSchema, type RestartRecord } from '../../i
 import { machineStateSchema } from '../../installation/contract/wire/machine.js';
 import { liveSerialization, RESTARTING_CLOSE } from '../../platform/contract/wire/live.js';
 import { TAGMA_SOCKET_PATH } from '../../socket/rpc.js';
-import { LiveRpc } from '../rpc.js';
+import { LiveRpc } from './composed.js';
 import { rolloutReadSchema } from '../../threads/contract/service/rolloutReads.js';
 import { restartDataset, type RestartDataset, type RestartPlace } from './restartDataset.js';
 import { RESTART_STEP_ENV } from './restartStep.js';

@@ -15,6 +15,7 @@ import { spawnedEffect } from '../../platform/testing/spawn.js';
 import { SETTINGS_OPERATIONS } from '../../settings/contract/wire/operations.js';
 import { doorLayer } from '../http/door.js';
 import { makeRuntime } from '../runtime.js';
+import { COMPOSED } from './composed.js';
 import { TESTING_ADAPTERS } from './adapters.js';
 import { doorServing } from './doorServices.js';
 import { hostBundleRoot } from './hostBundle.js';
@@ -28,6 +29,7 @@ const booted = Effect.fnUntraced(function* (home: string) {
   const scope = yield* Scope.make();
   const runtime = yield* makeRuntime(
     {
+      ...COMPOSED,
       adapters: TESTING_ADAPTERS,
       grants: testGrantSigner,
       databasePath: join(home, 'tagma.sqlite'),

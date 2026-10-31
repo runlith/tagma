@@ -19,6 +19,7 @@ import { SHIPPED_HARNESSES } from '../../../external-harnesses/testing/builtin.j
 import { TESTING_ADAPTERS } from '../adapters.js';
 import { makeDoorWorld, WORLD_SOURCE, type DoorFixture } from '../doorFixture.js';
 import { makeRuntime } from '../../runtime.js';
+import { COMPOSED } from '../composed.js';
 import { testGrantSigner } from '../../../platform/testing/grants.js';
 import { SERVER_SRC } from '../repoRoot.js';
 import { hostBundleRoot } from '../hostBundle.js';
@@ -313,6 +314,7 @@ export const parityWorld = Effect.fn('testing.parityWorld')(function* (
       currentScope = scope;
       const next = yield* makeRuntime(
         {
+          ...COMPOSED,
           adapters: TESTING_ADAPTERS,
           grants: testGrantSigner,
           profileWindowMs: () => 0,

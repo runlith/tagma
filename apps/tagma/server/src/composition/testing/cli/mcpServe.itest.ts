@@ -206,7 +206,7 @@ layer(Layer.effect(Bridges, setup), { excludeTestServices: true })('MCP CLI', (i
   it.effect('the bridge ends when its client closes stdio, leaving no process behind', () =>
     Effect.gen(function* () {
       const { project, environment } = yield* Bridges;
-      const command = ['bun', join(import.meta.dir, '../../entries/cli.ts'), 'mcp-serve', '--harness', 'claude-code'];
+      const command = ['bun', join(import.meta.dir, '../../developer/cli.ts'), 'mcp-serve', '--harness', 'claude-code'];
       const child = yield* Effect.acquireRelease(
         Effect.try({
           try: () =>

@@ -42,7 +42,7 @@ import { spawnedEffect } from '../../platform/testing/spawn.js';
 import type { WorkingOrigin } from '../../workspace/contract/wire/place.js';
 import { TEST_CHECKOUT, testPlace } from '../../workspace/testing/doubles.js';
 import { operationChecks } from '../operationChecks.js';
-import { checkSubjectOf } from '../catalog.js';
+import { checkSubjectOf } from './composed.js';
 import { MINE, PLACE } from './checkoutFixture.js';
 import {
   DemoGraphs,

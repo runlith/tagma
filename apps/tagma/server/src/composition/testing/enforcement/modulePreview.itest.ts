@@ -6,7 +6,7 @@ import { Context, Effect } from 'effect';
 import { RoutedGraphs } from '../../../graph/contract/service/serving.js';
 import { OperationSubjects } from '../../../enforcement/contract/service/operationSubjects.js';
 import { LAYERED_KEY } from '../../../enforcement/testing/layered.js';
-import { checkSubjectOf } from '../../catalog.js';
+import { checkSubjectOf } from '../composed.js';
 import { quiet } from '../../../enforcement/testing/wiring.js';
 import { CheckoutPaths } from '../../../workspace/contract/service/checkoutPaths.js';
 import { fixedCheckoutPaths } from '../../../workspace/testing/doubles.js';

@@ -11,7 +11,7 @@ import { catalogProfileSchema, resolveTypes, storedProfile } from '../../../../g
 import { Schema } from 'effect';
 import { Identities, NO_NAMING } from '../../../../graph/vocabulary/identity.js';
 import { TagIndex } from '../../../../graph/vocabulary/tagIndex.js';
-import { BEHAVIOUR_REGISTRY } from '../../../manifest.js';
+import { BEHAVIOUR_REGISTRY } from '../../composed.js';
 
 const decoded = Schema.decodeUnknownResult(catalogProfileSchema);
 

@@ -67,7 +67,7 @@ import { OperationId } from '../../../platform/contract/wire/ids.js';
 import { commentPolicy } from '../../../graph/testing/doubles.js';
 import { nativeOffers } from '../../../invocation/testing/native.js';
 import { fixtureOperationCatalog } from '../nativeCatalog.js';
-import { ENTRY_KINDS, NATIVE_AGENT_RULES } from '../../manifest.js';
+import { ENTRY_KINDS, NATIVE_AGENT_RULES } from '../composed.js';
 import { AgentRuleRegistry } from '@runlith/agent/AgentRuntimePolicy';
 import { builtinRegistry } from '../providerCatalog.js';
 import { skillTarget } from '../../../external-harnesses/testing/doubles.js';

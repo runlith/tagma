@@ -33,7 +33,7 @@ import { PreparedTrees } from '../../sandbox/contract/service/preparedTrees.js';
 import { SandboxHolds } from '../../sandbox/contract/service/holds.js';
 import { preparedTreeStore, preparedTreesService, sandboxStore, sandboxServices } from '../../sandbox/testing/doubles.js';
 import { sandboxHolds } from '../../threads/testing/doubles.js';
-import { ENTRY_KINDS } from '../manifest.js';
+import { ENTRY_KINDS } from './composed.js';
 import { rootFixture } from './graphFixture.js';
 
 const host = Layer.mergeAll(BunFileSystem.layer, BunPath.layer);

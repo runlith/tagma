@@ -5,7 +5,7 @@ import { initialStatus, statusTargets, statusWords, terminalStatuses } from '../
 import { TagIndex } from '../../../../graph/vocabulary/tagIndex.js';
 import { deliveryOf, isEnabled } from '../../../../graph/contract/wire/tags/law.js';
 import { VOCABULARY_FORMAT } from '../../../../graph/contract/wire/tags/revision.js';
-import { BEHAVIOUR_REGISTRY } from '../../../manifest.js';
+import { BEHAVIOUR_REGISTRY } from '../../composed.js';
 import { LIFECYCLE } from '../../../../graph/contract/wire/tags/lifecycle.js';
 import { WORK } from '../../../../graph/contract/wire/tags/work.js';
 import type { ContractId } from '../../../../graph/contract/wire/tags/behaviour.js';

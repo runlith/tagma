@@ -11,9 +11,11 @@ import { MachineStore } from '../../platform/contract/service/store.js';
 import { storeLayer } from '../../platform/store/open.js';
 import { DATABASE_FILE, dataDirectory } from '../../installation/contract/wire/layout.js';
 import { migrationsFolder } from '../../installation/closure/read.js';
-import { CHANNEL } from '@tagma/server/composition/channel';
+import type { Build } from '../build.js';
+import { participantsOf } from '../manifest.js';
 
 const inStore = Effect.fnUntraced(function* <A, E>(
+  build: Build,
   selected: Option.Option<string>,
   scope: 'machine' | 'installation',
   run: (
@@ -25,7 +27,7 @@ const inStore = Effect.fnUntraced(function* <A, E>(
   ) => Effect.Effect<A, E>,
 ) {
   const invocation = yield* CurrentInvocation;
-  const data = dataDirectory(CHANNEL, invocation.env);
+  const data = dataDirectory(build.channel, invocation.env);
   if (data === null) return yield* new SnapshotFailed({ path: '', reason: 'TAGMA_DATABASE_PATH is required when HOME is unavailable' });
   const machine = resolve(invocation.cwd, invocation.env.TAGMA_DATABASE_PATH?.trim() || join(data, DATABASE_FILE));
   const path = resolve(
@@ -45,7 +47,8 @@ const inStore = Effect.fnUntraced(function* <A, E>(
     return yield* new SnapshotFailed({ path, reason: 'the store must belong to this installation data directory' });
   }
   const processes = new ProcessPool(undefined, 'stop', undefined, childHosting);
-  const snapshots = yield* snapshotAssembly(machine, root, processes);
+  const { modules } = yield* Effect.promise(build.parts);
+  const snapshots = yield* snapshotAssembly(participantsOf(modules), machine, root, processes);
   return yield* Effect.acquireUseRelease(
     lockDataDirectory(root).pipe(Effect.mapError((cause) => new SnapshotFailed({ path, reason: cause.message }))),
     (lock) => run(path, snapshots, invocation.env.TAGMA_SEED_DIRECTORY?.trim() || invocation.temporary, lock, processes),
@@ -53,53 +56,58 @@ const inStore = Effect.fnUntraced(function* <A, E>(
   ).pipe(Effect.ensuring(Effect.promise(() => processes.close())));
 });
 
-const restoreSnapshot = Command.make(
-  'restore-snapshot',
-  {
-    store: Flag.String('store').pipe(Flag.optional),
-    acceptLoss: Flag.String('accept-loss').pipe(
-      Flag.atLeast(0),
-      Flag.withDescription('accept a named missing rollout, threads:project/thread; repeat for each loss'),
-    ),
-  },
-  ({ store, acceptLoss }) =>
-    inStore(store, 'installation', (path, snapshots) => snapshots.restore(path, { acceptLoss })).pipe(
-      Effect.flatMap((answer) => print(answer, true)),
-    ),
-).pipe(Command.withDescription('restore the pre-migration store and rollout cut with the server stopped'));
+const restoreSnapshot = (build: Build) =>
+  Command.make(
+    'restore-snapshot',
+    {
+      store: Flag.String('store').pipe(Flag.optional),
+      acceptLoss: Flag.String('accept-loss').pipe(
+        Flag.atLeast(0),
+        Flag.withDescription('accept a named missing rollout, threads:project/thread; repeat for each loss'),
+      ),
+    },
+    ({ store, acceptLoss }) =>
+      inStore(build, store, 'installation', (path, snapshots) => snapshots.restore(path, { acceptLoss })).pipe(
+        Effect.flatMap((answer) => print(answer, true)),
+      ),
+  ).pipe(Command.withDescription('restore the pre-migration store and rollout cut with the server stopped'));
 
-const migrate = Command.make(
-  'migrate',
-  {
-    store: Flag.String('store').pipe(Flag.optional),
-    withoutSnapshot: Flag.Boolean('without-snapshot').pipe(Flag.withDefault(false)),
-    confirm: Flag.Boolean('confirm').pipe(Flag.withDefault(false)),
-  },
-  ({ store, withoutSnapshot, confirm }) =>
-    Effect.gen(function* () {
-      if (withoutSnapshot && !confirm)
-        refuse('confirmation-required', 'migration without a snapshot has no rollback guarantee', [
-          'repeat with --without-snapshot --confirm to record and accept this loss of protection',
-        ]);
-      const files = yield* FileSystem.FileSystem;
-      const schema = yield* inStore(store, 'machine', (path, snapshots, seeds, _lock, processes) =>
-        Effect.gen(function* () {
-          const existing = yield* files
-            .stat(path)
-            .pipe(
-              Effect.mapError((cause) => new SnapshotFailed({ path, reason: `migration requires an existing store: ${cause.message}` })),
+const migrate = (build: Build) =>
+  Command.make(
+    'migrate',
+    {
+      store: Flag.String('store').pipe(Flag.optional),
+      withoutSnapshot: Flag.Boolean('without-snapshot').pipe(Flag.withDefault(false)),
+      confirm: Flag.Boolean('confirm').pipe(Flag.withDefault(false)),
+    },
+    ({ store, withoutSnapshot, confirm }) =>
+      Effect.gen(function* () {
+        if (withoutSnapshot && !confirm)
+          refuse('confirmation-required', 'migration without a snapshot has no rollback guarantee', [
+            'repeat with --without-snapshot --confirm to record and accept this loss of protection',
+          ]);
+        const files = yield* FileSystem.FileSystem;
+        const schema = yield* inStore(build, store, 'machine', (path, snapshots, seeds, _lock, processes) =>
+          Effect.gen(function* () {
+            const existing = yield* files
+              .stat(path)
+              .pipe(
+                Effect.mapError((cause) => new SnapshotFailed({ path, reason: `migration requires an existing store: ${cause.message}` })),
+              );
+            if (existing.type !== 'File') return yield* new SnapshotFailed({ path, reason: 'migration requires an existing store file' });
+            return yield* Effect.map(MachineStore, (store) => store.schema).pipe(
+              Effect.provide(
+                storeLayer(MachineStore, path, { folder: migrationsFolder, seeds, snapshots }, { withoutSnapshot }, processes),
+              ),
             );
-          if (existing.type !== 'File') return yield* new SnapshotFailed({ path, reason: 'migration requires an existing store file' });
-          return yield* Effect.map(MachineStore, (store) => store.schema).pipe(
-            Effect.provide(storeLayer(MachineStore, path, { folder: migrationsFolder, seeds, snapshots }, { withoutSnapshot }, processes)),
-          );
-        }),
-      );
-      yield* print({ schema, withoutSnapshot }, true);
-    }),
-).pipe(Command.withDescription('apply pending machine-store migrations offline; bypassing the snapshot requires --confirm'));
+          }),
+        );
+        yield* print({ schema, withoutSnapshot }, true);
+      }),
+  ).pipe(Command.withDescription('apply pending machine-store migrations offline; bypassing the snapshot requires --confirm'));
 
-export const database = Command.make('db').pipe(
-  Command.withDescription('offline store migration and recovery'),
-  Command.withSubcommands([restoreSnapshot, migrate]),
-);
+export const databaseCommand = (build: Build) =>
+  Command.make('db').pipe(
+    Command.withDescription('offline store migration and recovery'),
+    Command.withSubcommands([restoreSnapshot(build), migrate(build)]),
+  );

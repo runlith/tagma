@@ -12,7 +12,7 @@ import { threadRecord } from '../../../thread-record/testing/doubles.js';
 import { sqliteThreadJournal } from '../../../threads/testing/doubles.js';
 import { project } from '../../../projects/testing/doubles.js';
 import { ThreadEntryKinds } from '@runlith/agent/transcript/kinds';
-import { ENTRY_KINDS } from '../../manifest.js';
+import { ENTRY_KINDS } from '../composed.js';
 import { fixtureMigrations } from '../migrations.js';
 
 const makeStorage = Effect.gen(function* () {

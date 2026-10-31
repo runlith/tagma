@@ -10,6 +10,7 @@ import { capturedEffect } from './testing/captured.js';
 import { lockDataDirectory } from '../platform/lock/dataDirectory.js';
 import { inDatabase } from '../platform/testing/connection.js';
 import { snapshotAssembly } from './snapshots.js';
+import { ASSEMBLY } from './testing/composed.js';
 
 layer(BunFileSystem.layer, { excludeTestServices: true })('offline snapshots', (it) => {
   it.effect('offline recovery selects a store inside the installation and shares its exclusive lock', () =>
@@ -19,7 +20,7 @@ layer(BunFileSystem.layer, { excludeTestServices: true })('offline snapshots', (
       const graph = join(root, 'graphs', 'one.sqlite');
       const env = { TAGMA_DATABASE_PATH: machine };
       yield* FileSystem.FileSystem.use((files) => files.makeDirectory(join(root, 'graphs')));
-      const snapshots = yield* snapshotAssembly(machine, root, yield* sharedPool);
+      const snapshots = yield* snapshotAssembly(ASSEMBLY.snapshotParticipants, machine, root, yield* sharedPool);
       yield* inDatabase(graph, (db) =>
         Effect.gen(function* () {
           yield* db.run(sql`create table fact(value text)`);

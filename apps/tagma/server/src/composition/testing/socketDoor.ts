@@ -7,6 +7,7 @@ import { routedContext } from '../../graph/testing/doubles.js';
 import { frozenBuildsLayer } from '../../installation/testing/doubles.js';
 import { doorServing, doorServicesOf } from './doorServices.js';
 import { liveServing } from '../socketBinding.js';
+import { ASSEMBLY } from './composed.js';
 
 export const socketDoorLayer = (runtime: ServerRuntime, data: string) =>
   doorServing(socketOperationsLayer, runtime, data).pipe(
@@ -18,4 +19,7 @@ export const socketDoorLayer = (runtime: ServerRuntime, data: string) =>
   );
 
 export const liveDoorLayer = (runtime: ServerRuntime, data: string) =>
-  liveServing(null).pipe(Layer.provide(socketDoorLayer(runtime, data)), Layer.provide(Layer.effectContext(doorServicesOf(runtime, data))));
+  liveServing(ASSEMBLY, null).pipe(
+    Layer.provide(socketDoorLayer(runtime, data)),
+    Layer.provide(Layer.effectContext(doorServicesOf(runtime, data))),
+  );

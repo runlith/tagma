@@ -65,7 +65,7 @@ import { SandboxFiles } from '../../../sandbox/contract/service/files.js';
 import { Sandboxes } from '../../../sandbox/contract/service/sandboxes.js';
 import { PreparedTrees } from '../../../sandbox/contract/service/preparedTrees.js';
 import { SandboxHolds } from '../../../sandbox/contract/service/holds.js';
-import { BEHAVIOUR_REGISTRY, ENTRY_KINDS } from '../../manifest.js';
+import { BEHAVIOUR_REGISTRY, ENTRY_KINDS } from '../composed.js';
 import { holdingsOver } from '../../../change-record/testing/holdings.js';
 import { rootFixture } from '../graphFixture.js';
 import type { InputOf } from '../../../platform/contract/service/body.js';

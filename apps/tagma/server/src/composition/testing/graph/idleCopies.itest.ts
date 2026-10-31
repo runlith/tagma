@@ -41,8 +41,9 @@ import { GraphDelivering } from '../../../worktrees/contract/service/retirement.
 import type { WorktreeRow } from '../../../worktrees/contract/wire/rows.js';
 import { bootServer } from '../../boot.js';
 import { doorLayer } from '../../http/door.js';
-import { LiveRpc } from '../../rpc.js';
+import { LiveRpc } from '../composed.js';
 import { makeRuntime, type ServerRuntime } from '../../runtime.js';
+import { COMPOSED } from '../composed.js';
 import { SHIPPED_CATALOGS } from '../../settings.js';
 import { TESTING_ADAPTERS } from '../adapters.js';
 import { doorServing } from '../doorServices.js';
@@ -79,6 +80,7 @@ const booted = Effect.fnUntraced(function* (place: Place) {
   const data = join(place.database, '..');
   const runtime = yield* makeRuntime(
     {
+      ...COMPOSED,
       adapters: TESTING_ADAPTERS,
       grants: testGrantSigner,
       profileWindowMs: () => 0,

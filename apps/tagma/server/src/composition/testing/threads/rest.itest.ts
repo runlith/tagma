@@ -23,7 +23,7 @@ import { bornThread } from '../../../native-harness/testing/born.js';
 import { recordOf } from '../../../thread-record/testing/records.js';
 import { restOf } from '../../../threads/testing/rest.js';
 import { nativeOnlyParts } from '../../../native-harness/testing/rollout.js';
-import { ENTRY_KINDS } from '../../manifest.js';
+import { ENTRY_KINDS } from '../composed.js';
 import { ThreadEntryKinds } from '@runlith/agent/transcript/kinds';
 
 const rested = new Date('2026-08-25T10:00:00.000Z');

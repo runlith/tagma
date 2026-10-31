@@ -14,7 +14,7 @@ import { threadHistoryItem, threadLog, threadStore } from '../../../native-harne
 import { sqliteThreadJournal } from '../../../threads/testing/doubles.js';
 import { makeThreadRecords } from '../../../thread-record/layer.js';
 import { threadFolder } from '../../../native-harness/testing/fold.js';
-import { ENTRY_KINDS } from '../../manifest.js';
+import { ENTRY_KINDS } from '../composed.js';
 
 const storage = unitsLayer(MachineUnits, MachineStore).pipe(
   Layer.provideMerge(seededStoreLayer(MachineStore, fixtureMigrations, {}, sharedPool)),

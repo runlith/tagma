@@ -77,7 +77,7 @@ import type { ConsoleKeyStore } from '../providers/credentials/consoleKeys.js';
 import { consoleKeyRollback, snapshotAssembly } from './snapshots.js';
 import { ConsoleKeyRollback, DowngradeSteps, SuccessionSteps } from '../installation/contract/service/steps.js';
 import { StoreSnapshots } from '../platform/contract/service/snapshots.js';
-import { serving } from './serving.js';
+import { type Serving, servingOf } from './serving.js';
 import type { HandlerOwners, RuntimeDoor } from './http/handlers.js';
 import type { RuntimeSocketDoor } from './socketBinding.js';
 import { ToolOutputsPlace } from '../native-harness/contract/service/toolOutputs.js';
@@ -126,9 +126,8 @@ import { CommitGateCli, type HookCli } from '../enforcement/commits/hooks.js';
 import { CommitQueue } from '../enforcement/commits/queue.js';
 import type { SharedPrepared } from '../change-record/contract/service/prepared.js';
 import { changeRecord } from '../change-record/change-record.js';
-import { doctrine } from './doctrine.js';
+import { doctrineText } from './doctrine.js';
 import { Doctrine } from '../platform/contract/service/sections.js';
-import { OPERATION_IDS } from './catalog.js';
 import { commandLedger, hostBackend, machineWorld } from '../executions/ports.js';
 import { AwakePolicy } from '../power/contract/service/awake.js';
 import { AgentPace } from '../power/contract/service/pace.js';
@@ -143,15 +142,16 @@ import { nativeHarness } from '../native-harness/native-harness.js';
 import { skillDirectories } from '../external-harnesses/installs/targets.js';
 import { databasePath, seedDirectory } from '../installation/paths.js';
 import { InstalledChannel } from '../installation/contract/service/channel.js';
-import { CHANNEL } from '@tagma/server/composition/channel';
-import { AFTER_RECOVERY, BEHAVIOUR_REGISTRY, DRIVERS, type DriverId, ENTRY_KINDS, NATIVE_AGENT_RULES, POOLS } from './manifest.js';
+import type { Channel } from '../installation/contract/wire/channel.js';
+import type { Assembly, DriverId } from './manifest.js';
+import { standsIn } from './extensions.js';
 import { makeDrives } from './drives.js';
 import { Drives } from '../platform/contract/service/drives.js';
 import { Capacity, serverCapacity, thisMachine } from '../platform/contract/service/capacity.js';
 import { DeclaredNativeRules } from '../native-harness/contract/service/rules.js';
 import { ThreadEntryKinds } from '@runlith/agent/transcript/kinds';
 import { approvalModesLayer } from '@runlith/agent/modes/ApprovalModes';
-import { LiveRpc } from './rpc.js';
+import type { LiveGroup } from './rpc.js';
 import { projects } from '../projects/projects.js';
 import { workspace } from '../workspace/workspace.js';
 import type { WorkspaceServices } from '../workspace/layer.js';
@@ -214,7 +214,7 @@ import { AGENT_SPAN_NAMES } from '@runlith/agent/spans';
 import { EXECUTIONS, type Installation } from '../installation/contract/wire/manifest.js';
 import { labelRevision } from '../installation/contract/wire/layout.js';
 import { Settings } from '../settings/contract/service/values.js';
-import { declaredSettings, SETTING_DECLARATIONS, SHIPPED_CATALOGS } from './settings.js';
+import { declaredSettings, SHIPPED_CATALOGS } from './settings.js';
 import { threadRecord } from '../thread-record/thread-record.js';
 import { ThreadRecords } from '../thread-record/contract/service/records.js';
 import { sessionResolution } from '../external-harnesses/sessionResolution.js';
@@ -224,7 +224,7 @@ import { threadLineageLayer } from '../workspace/assignments/lineage.js';
 import { ThreadLineage } from '../workspace/contract/service/assignments.js';
 
 export type ServerRuntime = {
-  liveGroup: typeof LiveRpc;
+  liveGroup: LiveGroup;
   runtime: ManagedRuntime.ManagedRuntime<
     | GraphServices
     | GraphSteps
@@ -269,8 +269,8 @@ export type ServerRuntime = {
     | ActivityStore
     | CostLedger
     | WriterMetrics
-    | Layer.Success<typeof serving>
-    | Layer.Services<typeof serving>
+    | Layer.Success<Serving>
+    | Layer.Services<Serving>
     | Layer.Success<typeof providers.lifetimes.installation>
     | HandlerOwners
     | RuntimeSocketDoor
@@ -298,7 +298,7 @@ export type ServerRuntime = {
   steps: Context.Context<ConsoleKeyRollback | DowngradeSteps>;
 };
 
-export type RuntimeFailure = AssemblyInvalid | Layer.Error<typeof serving>;
+export type RuntimeFailure = AssemblyInvalid | Layer.Error<Serving>;
 
 const PROGRAM_SHELL = '/bin/sh';
 
@@ -317,6 +317,8 @@ const exposureOf = <E, R>(
 
 export const makeRuntime = Effect.fn('composition.runtime')(function* (
   options: {
+    assembly: Assembly;
+    channel: Channel;
     grants: GrantSigner['Service'];
     databasePath?: string;
     seedPath?: string;
@@ -364,6 +366,7 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
   prepared: Context.Context<never> = Context.empty(),
 ): Effect.fn.Return<ServerRuntime, RuntimeFailure, Scope.Scope> {
   yield* prepareSqlite;
+  const { assembly, channel } = options;
   const baseScope = yield* Scope.fork(yield* Effect.scope);
   const poolScope = yield* Scope.fork(yield* Effect.scope);
   const originPath = options.installation?.manifest.origin?.checkout;
@@ -375,7 +378,7 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
           startedAt: new Date(yield* Clock.currentTimeMillis).toISOString(),
           revision: labelRevision(options.installation.manifest.identity.build),
         });
-  const ports = portBlock(CHANNEL.port);
+  const ports = portBlock(channel.port);
   const artifactOrigin = options.artifactOrigin ?? `http://localhost:${ports.artifact}`;
   const sandboxPort = options.sandboxPort ?? ports.sandbox;
   const sandboxOrigin = new URL(`http://127.0.0.1:${sandboxPort}`).origin;
@@ -388,8 +391,8 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
     Layer.provide(
       Layer.mergeAll(
         Layer.succeed(Catalogs, SHIPPED_CATALOGS),
-        Layer.succeed(Behaviours, BEHAVIOUR_REGISTRY),
-        Layer.effect(DeclaredSettings, declaredSettings),
+        Layer.succeed(Behaviours, assembly.behaviours),
+        Layer.effect(DeclaredSettings, declaredSettings(assembly)),
         Layer.succeed(GraphSource, {
           sourcePath: options.sourcePath,
           originPath,
@@ -400,7 +403,7 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
   );
   const [foundation] = manifests(platform);
   const adapters = yield* makeHarnessAdapters;
-  const storePath = options.databasePath ?? databasePath(CHANNEL);
+  const storePath = options.databasePath ?? databasePath(channel);
   const dataPath = dataPathOf(storePath);
   const {
     migrations,
@@ -410,18 +413,17 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
     scope: stackScope,
   } = yield* Effect.acquireRelease(
     start(
+      assembly,
       migrationsFolder,
       options.seedPath ?? seedDirectory(),
       harnessIdentity(adapters),
       options.grants,
-      SETTING_DECLARATIONS.keys,
-      OPERATION_IDS,
-      yield* snapshotAssembly(storePath, dirname(options.tokensPath), processes),
+      yield* snapshotAssembly(assembly.snapshotParticipants, storePath, dirname(options.tokensPath), processes),
     ),
     (started) => Scope.close(started.scope, Exit.void),
   );
   const instanceId = randomUUID();
-  const driving = makeDrives(DRIVERS, options.drivers === undefined ? undefined : new Set(options.drivers));
+  const driving = makeDrives(assembly.drivers, options.drivers === undefined ? undefined : new Set(options.drivers));
   const measured = performance.lifetimes.installation.pipe(
     Layer.provide(
       Layer.mergeAll(
@@ -432,7 +434,7 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
         Layer.succeed(PerformancePlace, {
           instanceId,
           databasePath: storePath,
-          units: new Set<string>([...OPERATION_IDS, ...AGENT_SPAN_NAMES]),
+          units: new Set<string>([...assembly.ids, ...AGENT_SPAN_NAMES]),
           profileWindowMs: options.profileWindowMs,
           spanFloorMicros: options.spanFloorMicros,
           memoryCeiling: options.memoryCeiling,
@@ -574,7 +576,7 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
         ),
       ),
       Layer.provideMerge(browser.lifetimes.installation.pipe(Layer.provide(executionsLayerWithDeps))),
-      Layer.provide(browserBindings({ data: storeDirectory(storePath), runs: browserThreads.port })),
+      Layer.provide(browserBindings({ modules: assembly.modules, data: storeDirectory(storePath), runs: browserThreads.port })),
     ),
   );
   const runtime = yield* Scope.provide(
@@ -654,7 +656,7 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
               'speech',
               speech.lifetimes.installation.pipe(
                 Layer.provideMerge(
-                  speechBindings(speechPlace(options.sourcePath, options.installation, storeDirectory(storePath)), {
+                  speechBindings(speechPlace(channel, options.sourcePath, options.installation, storeDirectory(storePath)), {
                     leaving: options.leaving ?? Effect.succeed(false),
                     opened: options.opened ?? Effect.void,
                   }).pipe(Layer.provide(credentialsLayer)),
@@ -718,7 +720,7 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
               closing('projects', projects.lifetimes.installation.pipe(Layer.provide(Layer.succeed(ReservedNames, reservedNames)))),
             ),
             Layer.provideMerge(foundation.lifetimes.installation),
-            Layer.provideMerge(Layer.sync(Capacity, () => serverCapacity(POOLS(thisMachine())))),
+            Layer.provideMerge(Layer.sync(Capacity, () => serverCapacity(assembly.pools(thisMachine())))),
             Layer.provideMerge(
               closing(
                 'file watcher',
@@ -733,10 +735,10 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
             ),
             Layer.provideMerge(closing('machine store', machineStoreLayer(storePath, migrations, processes))),
             Layer.provideMerge(Layer.succeedContext(bindings)),
-            Layer.provideMerge(Layer.effect(Doctrine, doctrine)),
-            Layer.provideMerge(Layer.succeed(InstalledChannel, CHANNEL)),
-            Layer.provideMerge(Layer.succeed(ThreadEntryKinds, ENTRY_KINDS)),
-            Layer.provideMerge(Layer.succeed(DeclaredNativeRules, NATIVE_AGENT_RULES)),
+            Layer.provideMerge(Layer.succeed(Doctrine, doctrineText(assembly))),
+            Layer.provideMerge(Layer.succeed(InstalledChannel, channel)),
+            Layer.provideMerge(Layer.succeed(ThreadEntryKinds, assembly.entryKinds)),
+            Layer.provideMerge(Layer.succeed(DeclaredNativeRules, assembly.nativeRules)),
 
             Layer.provideMerge(approvalModesLayer),
             Layer.provideMerge(Layer.succeed(Handover, options.leaving ?? Effect.succeed(false))),
@@ -751,7 +753,8 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
     ),
     baseScope,
   );
-  const built = yield* runtime.contextEffect;
+  const installed = yield* runtime.contextEffect;
+  const built = Context.merge(installed, yield* standsIn(assembly.modules, 'installation', installed, baseScope));
   const store = Context.get(built, MachineStore);
   const sourceCache = Context.get(built, WorkspaceInputs);
   const machineGraph = machineGraphOf(built);
@@ -804,10 +807,11 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
     Context.make(McpSignInDoor, localSignInDoor(options.localOrigin)),
   );
   const stack = yield* Scope.provide(
-    Layer.build(serving.pipe(Layer.provide(Layer.merge(Layer.succeedContext(servingInputs), BunFileSystem.layer)))),
+    Layer.build(servingOf(assembly).pipe(Layer.provide(Layer.merge(Layer.succeedContext(servingInputs), BunFileSystem.layer)))),
     stackScope,
   ).pipe(Effect.updateContext((context: Context.Context<never>) => Context.omit(Tracer.ParentSpan)(context)));
-  const owners = Context.merge(servingInputs, stack);
+  const served = Context.merge(servingInputs, stack);
+  const owners = Context.merge(served, yield* standsIn(assembly.modules, 'serving', served, stackScope));
   const scratch = Context.get(owners, ScratchAreas);
   const judging = owners;
   const pool = Context.get(owners, ServingPool);
@@ -866,7 +870,7 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
     door,
     graph: machineGraph,
     enforcement: judging,
-    liveGroup: LiveRpc,
+    liveGroup: assembly.live,
     pool,
     tokens,
     consoleKeys,
@@ -890,7 +894,7 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
       yield* Context.get(bindings, StoreSnapshots).ready.pipe(Effect.orDie);
       yield* Deferred.succeed(maintenance, undefined);
       const recoveryOwners: Context.Context<any> = owners;
-      yield* Scope.provide(Layer.build(AFTER_RECOVERY.pipe(Layer.provide(Layer.succeedContext(recoveryOwners)))), stackScope).pipe(
+      yield* Scope.provide(Layer.build(assembly.afterRecovery.pipe(Layer.provide(Layer.succeedContext(recoveryOwners)))), stackScope).pipe(
         Effect.orDie,
       );
     }),

@@ -4,14 +4,15 @@ import { vocabularyOf } from '../graph/vocabulary/served.js';
 import { TagIndex } from '../graph/vocabulary/tagIndex.js';
 import type { SettingDeclarationsAnswer } from '../settings/contract/wire/declarations.js';
 import { resolveCatalog } from '../settings/resolution.js';
-import { BEHAVIOUR_REGISTRY } from './manifest.js';
+import { type Assembly, assemble } from './manifest.js';
 import { SHIPPED_CATALOGS, settingDeclarations } from './settings.js';
+import type { ServerParts } from './build.js';
 
-export const shippedVocabulary = (catalogs: readonly string[]): Vocabulary =>
+const shippedVocabulary = (assembly: Assembly, catalogs: readonly string[]): Vocabulary =>
   vocabularyOf(
     new TagIndex(
       catalogs.flatMap((id) => SHIPPED_CATALOGS.byId(id)?.tags ?? []),
-      BEHAVIOUR_REGISTRY,
+      assembly.behaviours,
       [],
       undefined,
       null,
@@ -22,10 +23,17 @@ export const shippedVocabulary = (catalogs: readonly string[]): Vocabulary =>
     [],
   );
 
-export const shippedSettings = (): SettingDeclarationsAnswer => {
-  const declared = settingDeclarations();
+const shippedSettings = (assembly: Assembly): SettingDeclarationsAnswer => {
+  const declared = settingDeclarations(assembly.settings);
   return { sections: declared.sections, ...resolveCatalog(declared.keys, []) };
 };
 
-if (import.meta.main)
-  process.stdout.write(JSON.stringify({ vocabulary: shippedVocabulary(DEFAULT_CATALOGS), settings: shippedSettings() }));
+const shipped = async (parts: ServerParts) => {
+  const assembly = await assemble(parts);
+  return { vocabulary: shippedVocabulary(assembly, DEFAULT_CATALOGS), settings: shippedSettings(assembly) };
+};
+
+if (import.meta.main) {
+  const { DEVELOPER } = await import('./developer/build.js');
+  process.stdout.write(JSON.stringify(await shipped(await DEVELOPER.parts())));
+}
