@@ -1,4 +1,5 @@
 import { GraphUnits, MachineUnits } from '../../platform/contract/service/units.js';
+import { CurrentCost } from '@runlith/performance/CostLedger';
 import { Handover } from '@runlith/sqlite-process/SqliteProcess';
 import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -499,7 +500,11 @@ export const makeMirrorBuilder = Effect.fnUntraced(function* ({ gates }: { reado
                     ),
                 ),
               );
-              const servedOpen = Context.addOrOmit(served, Tracer.ParentSpan, yield* Effect.serviceOption(Tracer.ParentSpan));
+              const servedOpen = Context.add(
+                Context.addOrOmit(served, Tracer.ParentSpan, yield* Effect.serviceOption(Tracer.ParentSpan)),
+                CurrentCost,
+                yield* CurrentCost,
+              );
               if (format.holds()) {
                 yield* Effect.logWarning(
                   'a graph whose format marker this server cannot write over opens for reads: no catalog is installed and every write refuses',

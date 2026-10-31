@@ -2,7 +2,7 @@ import { expect } from 'bun:test';
 import { it } from '@runlith/effect-test';
 import { declare } from '@runlith/held/Held';
 import { CostLedger, costLedgerLayer, CurrentCost } from '@runlith/performance/CostLedger';
-import { CurrentWriter, WriterMetrics, writerMetricsLayer } from '@runlith/performance/WriterMetrics';
+import { CurrentWriter, makeWriterMetrics } from '@runlith/performance/WriterMetrics';
 import { Clock, Deferred, Effect, Exit, Fiber, Scope } from 'effect';
 import { classifySqliteError, SqlError } from 'effect/sql/SqlError';
 import { writerPermit } from './writerPermit.js';
@@ -19,7 +19,7 @@ const permitOver = (journal: string[], settle?: (level: string | undefined) => E
     external: 'none',
   });
   return writerPermit(
-    'writer',
+    { writer: true },
     held,
     'file',
     settle ?? ((level: string | undefined) => Effect.sync(() => void journal.push(`level ${level}`))),
@@ -139,7 +139,7 @@ it.live('an early release records its hold once even when its owning scope close
     expect(result._tag).toBe('Failure');
     const heldMs = cause.counts.writerHoldMs;
     expect(heldMs).toBeGreaterThan(0);
-    expect(yield* Effect.scoped(permit.statement)).toBe('writer');
+    expect(yield* Effect.scoped(permit.statement)).toEqual({ writer: true });
     yield* Scope.close(scope, Exit.void);
     expect(cause.counts.writerHoldMs).toBe(heldMs);
   }),
@@ -157,8 +157,8 @@ it.live('an interrupted physical waiter records wait without a causal ledger or 
       ceilings: 'none',
       external: 'none',
     });
-    const permit = writerPermit('writer', held, 'file', () => Effect.void, undefined, Effect.succeed(null), Effect.void);
-    const writers = yield* WriterMetrics.pipe(Effect.provide(writerMetricsLayer({ units: 1, operations: 1 })));
+    const permit = writerPermit({}, held, 'file', () => Effect.void, undefined, Effect.succeed(null), Effect.void);
+    const writers = makeWriterMetrics({ units: 1, operations: 1 });
     const frame = writers.begin('waiter', 'file');
     const entered = yield* Deferred.make<void>();
     const holder = yield* Effect.forkChild(

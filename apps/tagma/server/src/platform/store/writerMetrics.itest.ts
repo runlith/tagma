@@ -1,7 +1,6 @@
 import { expect } from 'bun:test';
 import { layer } from '@runlith/effect-test';
 import { CostLedger, costLedgerLayer, rootCost } from '@runlith/performance/CostLedger';
-import { WriterMetrics, writerMetricsLayer } from '@runlith/performance/WriterMetrics';
 import { sharedPool } from '@runlith/sqlite-process/testing/pool';
 import { sql } from 'drizzle-orm';
 import { Deferred, Effect, Fiber, Layer } from 'effect';
@@ -17,7 +16,9 @@ layer(Layer.orDie(seededStoreLayer(MachineStore, fixtureMigrations, {}, sharedPo
       () =>
         Effect.gen(function* () {
           const store = yield* MachineStore;
-          const writers = yield* WriterMetrics.pipe(Effect.provide(writerMetricsLayer({ units: 8, operations: 8 })));
+          const writers = store.processes.writerMetrics;
+          const outerBefore = writers.metrics({ operation: 'outer', limit: 1 }).rows[0]?.count ?? 0;
+          const nestedBefore = writers.metrics({ operation: 'nested', limit: 1 }).rows[0]?.count ?? 0;
           const ledger = yield* CostLedger.pipe(Effect.provide(costLedgerLayer({ capacity: 1 })));
           yield* rootCost(
             'probe',
@@ -65,11 +66,11 @@ layer(Layer.orDie(seededStoreLayer(MachineStore, fixtureMigrations, {}, sharedPo
                 expect(row.holdMs).toBeGreaterThan(0);
                 expect(row.childMs).toBeGreaterThanOrEqual(0);
               }
-              expect(writers.metrics({ operation: 'outer', limit: 1 }).rows[0]!.count).toBe(1);
-              expect(writers.metrics({ operation: 'nested', limit: 1 }).rows).toEqual([]);
+              expect(writers.metrics({ operation: 'outer', limit: 1 }).rows[0]!.count).toBe(outerBefore + 1);
+              expect(writers.metrics({ operation: 'nested', limit: 1 }).rows[0]?.count ?? 0).toBe(nestedBefore);
             }),
             'unit-root',
-          ).pipe(Effect.provideService(CostLedger, ledger), Effect.provideService(WriterMetrics, writers), Effect.withTracerEnabled(false));
+          ).pipe(Effect.provideService(CostLedger, ledger), Effect.withTracerEnabled(false));
         }),
     );
   },

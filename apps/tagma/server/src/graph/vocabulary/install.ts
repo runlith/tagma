@@ -1,4 +1,5 @@
 import { Context, Effect, Exit, Layer, Semaphore, Tracer } from 'effect';
+import { CurrentCost } from '@runlith/performance/CostLedger';
 import { GraphStore, type StoreFailure } from '../../platform/contract/service/store.js';
 import { writes } from '../../platform/contract/service/writes.js';
 import { session } from '../../platform/store/writers.js';
@@ -33,10 +34,14 @@ export const catalogWriter = Effect.fn('Catalog.writer')(function* (
   context: Context.Context<InstallServices>,
   projectId: number,
 ): Effect.fn.Return<CatalogWriter> {
-  const call = Context.addOrOmit(
-    Context.add(Context.add(context, SignedSession, yield* SignedSession), SignedCall, yield* SignedCall),
-    Tracer.ParentSpan,
-    yield* Effect.serviceOption(Tracer.ParentSpan),
+  const call = Context.add(
+    Context.addOrOmit(
+      Context.add(Context.add(context, SignedSession, yield* SignedSession), SignedCall, yield* SignedCall),
+      Tracer.ParentSpan,
+      yield* Effect.serviceOption(Tracer.ParentSpan),
+    ),
+    CurrentCost,
+    yield* CurrentCost,
   );
   return (catalogIds) =>
     Effect.setContext(

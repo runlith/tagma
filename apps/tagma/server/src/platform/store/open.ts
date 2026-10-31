@@ -259,7 +259,7 @@ const storeOf = <Brand extends StoreBrand>({
   path: identity.path,
   identity,
   schema,
-  transaction: storeTransaction<Brand>(db, timings, identity, moves, classed),
+  transaction: storeTransaction<Brand>(db, timings, identity, moves, classed, processes.writerMetrics),
   readOnly: (work) =>
     Effect.scoped(
       Effect.flatMap(makeWithDefaults(), (reader) => work(storeDb<Brand>(reader))).pipe(
@@ -301,7 +301,7 @@ const open = <Brand extends StoreBrand>(
     ({ db, schema }) => {
       const moves = new TableMoves();
       return Effect.zipWith(
-        reclaiming(db, storeTransaction<'machine'>(db, timings, identity, moves, classed)),
+        reclaiming(db, storeTransaction<'machine'>(db, timings, identity, moves, classed, processes.writerMetrics)),
         Connections,
         (freeing, connections) => ({
           db,

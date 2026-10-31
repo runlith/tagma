@@ -1,4 +1,4 @@
-import { Context, Effect, Fiber, Layer } from 'effect';
+import { Context, Fiber } from 'effect';
 import { costRootId, CurrentCost } from './CostLedger.js';
 import { metricPercentile } from './Histogram.js';
 import type { WriterUnitsReport, WriterMetricsReport } from './protocol/reports.js';
@@ -17,6 +17,7 @@ export type WriterFrame = {
   readonly operation: string;
   readonly store: string;
   readonly rootId: string | null;
+  owner: object | null;
   acquired: boolean;
   waitMs: number;
   holdMs: number;
@@ -82,152 +83,149 @@ const reading = (histogram: Histogram): HistogramReading => {
   };
 };
 
-const make = (input: { readonly units: number; readonly operations: number }) =>
-  Effect.sync(() => {
-    const writerId = crypto.randomUUID();
-    const units = new Map<number, WriterUnit>();
-    const operations = new Map<string, Operation>();
-    const unitCapacity = Math.max(1, Math.floor(input.units));
-    const operationCapacity = Math.max(1, Math.floor(input.operations));
-    let sequence = 0;
-    let series = 0;
-    let evicted = 0;
-    let evictedOperations = 0;
-    const cursor = () => ({ writerId, sequence });
-    return WriterMetrics.of({
-      begin: (operation, store) => {
-        const cause = Fiber.getCurrent()?.getRef(CurrentCost) ?? null;
-        return {
-          operation,
-          store,
-          rootId: cause === null ? null : costRootId(cause),
-          acquired: false,
-          waitMs: 0,
-          holdMs: 0,
-          childMs: 0,
-          repliesComplete: true,
-          commitReturnedAt: null,
-          writerPid: null,
-        };
-      },
-      end: (frame, outcome) => {
-        const complete = frame.repliesComplete && frame.childMs <= frame.holdMs;
-        const row: WriterUnit = {
-          sequence: ++sequence,
-          rootId: frame.rootId,
+export const makeWriterMetrics = (input: { readonly units: number; readonly operations: number }) => {
+  const writerId = crypto.randomUUID();
+  const units = new Map<number, WriterUnit>();
+  const operations = new Map<string, Operation>();
+  const unitCapacity = Math.max(1, Math.floor(input.units));
+  const operationCapacity = Math.max(1, Math.floor(input.operations));
+  let sequence = 0;
+  let series = 0;
+  let evicted = 0;
+  let evictedOperations = 0;
+  const cursor = () => ({ writerId, sequence });
+  return WriterMetrics.of({
+    begin: (operation, store) => {
+      const cause = Fiber.getCurrent()?.getRef(CurrentCost) ?? null;
+      return {
+        operation,
+        store,
+        rootId: cause === null ? null : costRootId(cause),
+        owner: null,
+        acquired: false,
+        waitMs: 0,
+        holdMs: 0,
+        childMs: 0,
+        repliesComplete: true,
+        commitReturnedAt: null,
+        writerPid: null,
+      };
+    },
+    end: (frame, outcome) => {
+      const complete = frame.repliesComplete && frame.childMs <= frame.holdMs;
+      const row: WriterUnit = {
+        sequence: ++sequence,
+        rootId: frame.rootId,
+        operation: frame.operation,
+        store: frame.store,
+        outcome,
+        acquired: frame.acquired,
+        waitMs: frame.waitMs,
+        holdMs: frame.holdMs,
+        childMs: complete ? frame.childMs : null,
+        outsideMs: complete ? frame.holdMs - frame.childMs : null,
+        commitReturnedAt: frame.commitReturnedAt,
+        writerPid: frame.writerPid,
+      };
+      units.set(sequence, row);
+      if (units.size > unitCapacity) {
+        units.delete(units.keys().next().value!);
+        evicted++;
+      }
+      let held = operations.get(frame.operation);
+      if (held === undefined) {
+        held = {
           operation: frame.operation,
-          store: frame.store,
-          outcome,
-          acquired: frame.acquired,
-          waitMs: frame.waitMs,
-          holdMs: frame.holdMs,
-          childMs: complete ? frame.childMs : null,
-          outsideMs: complete ? frame.holdMs - frame.childMs : null,
-          commitReturnedAt: frame.commitReturnedAt,
-          writerPid: frame.writerPid,
+          series: ++series,
+          sinceSequence: sequence,
+          latestSequence: sequence,
+          count: 0,
+          failures: 0,
+          interruptions: 0,
+          incomplete: 0,
+          wait: histogram(),
+          hold: histogram(),
+          child: histogram(),
+          outside: histogram(),
         };
-        units.set(sequence, row);
-        if (units.size > unitCapacity) {
-          units.delete(units.keys().next().value!);
-          evicted++;
+        operations.set(frame.operation, held);
+        if (operations.size > operationCapacity) {
+          operations.delete(operations.keys().next().value!);
+          evictedOperations++;
         }
-        let held = operations.get(frame.operation);
-        if (held === undefined) {
-          held = {
-            operation: frame.operation,
-            series: ++series,
-            sinceSequence: sequence,
-            latestSequence: sequence,
-            count: 0,
-            failures: 0,
-            interruptions: 0,
-            incomplete: 0,
-            wait: histogram(),
-            hold: histogram(),
-            child: histogram(),
-            outside: histogram(),
-          };
-          operations.set(frame.operation, held);
-          if (operations.size > operationCapacity) {
-            operations.delete(operations.keys().next().value!);
-            evictedOperations++;
-          }
-        }
-        held.latestSequence = sequence;
-        held.count++;
-        if (outcome === 'failure') held.failures++;
-        if (outcome === 'interrupted') held.interruptions++;
-        observe(held.wait, frame.waitMs);
-        observe(held.hold, frame.holdMs);
-        if (row.childMs === null || row.outsideMs === null) held.incomplete++;
-        else {
-          observe(held.child, row.childMs);
-          observe(held.outside, row.outsideMs);
-        }
-      },
-      units: (query) => {
-        const reset = query.after !== undefined && query.after.writerId !== writerId;
-        const after = reset ? 0 : (query.after?.sequence ?? 0);
-        const oldestSequence = units.keys().next().value ?? sequence + 1;
-        const rows: WriterUnit[] = [];
-        let total = 0;
-        let more = false;
-        for (const row of units.values()) {
-          if (
-            (query.rootId !== undefined && row.rootId !== query.rootId) ||
-            (query.operation !== undefined && row.operation !== query.operation)
-          )
-            continue;
-          total++;
-          if (row.sequence <= after) continue;
-          if (rows.length < query.limit) rows.push({ ...row });
-          else more = true;
-        }
-        return {
-          writerId,
-          reset,
-          gap: !reset && query.after !== undefined && after < oldestSequence - 1,
-          oldestSequence,
-          cursor: cursor(),
-          total,
-          evicted,
-          rows,
-          next: more ? { writerId, sequence: rows.at(-1)!.sequence } : null,
-        };
-      },
-      metrics: (query) => {
-        const reset = query.after !== undefined && query.after.writerId !== writerId;
-        const after = reset ? 0 : (query.after?.series ?? 0);
-        const rows: OperationReading[] = [];
-        let total = 0;
-        let more = false;
-        for (const held of operations.values()) {
-          if (query.operation !== undefined && held.operation !== query.operation) continue;
-          total++;
-          if (held.series <= after) continue;
-          if (rows.length < query.limit)
-            rows.push({
-              ...held,
-              wait: reading(held.wait),
-              hold: reading(held.hold),
-              child: reading(held.child),
-              outside: reading(held.outside),
-            });
-          else more = true;
-        }
-        return {
-          writerId,
-          reset,
-          cursor: cursor(),
-          evictedOperations,
-          total,
-          boundariesMs: [...BOUNDARIES],
-          rows,
-          next: more ? { writerId, series: rows.at(-1)!.series } : null,
-        };
-      },
-    });
+      }
+      held.latestSequence = sequence;
+      held.count++;
+      if (outcome === 'failure') held.failures++;
+      if (outcome === 'interrupted') held.interruptions++;
+      observe(held.wait, frame.waitMs);
+      observe(held.hold, frame.holdMs);
+      if (row.childMs === null || row.outsideMs === null) held.incomplete++;
+      else {
+        observe(held.child, row.childMs);
+        observe(held.outside, row.outsideMs);
+      }
+    },
+    units: (query) => {
+      const reset = query.after !== undefined && query.after.writerId !== writerId;
+      const after = reset ? 0 : (query.after?.sequence ?? 0);
+      const oldestSequence = units.keys().next().value ?? sequence + 1;
+      const rows: WriterUnit[] = [];
+      let total = 0;
+      let more = false;
+      for (const row of units.values()) {
+        if (
+          (query.rootId !== undefined && row.rootId !== query.rootId) ||
+          (query.operation !== undefined && row.operation !== query.operation)
+        )
+          continue;
+        total++;
+        if (row.sequence <= after) continue;
+        if (rows.length < query.limit) rows.push({ ...row });
+        else more = true;
+      }
+      return {
+        writerId,
+        reset,
+        gap: !reset && query.after !== undefined && after < oldestSequence - 1,
+        oldestSequence,
+        cursor: cursor(),
+        total,
+        evicted,
+        rows,
+        next: more ? { writerId, sequence: rows.at(-1)!.sequence } : null,
+      };
+    },
+    metrics: (query) => {
+      const reset = query.after !== undefined && query.after.writerId !== writerId;
+      const after = reset ? 0 : (query.after?.series ?? 0);
+      const rows: OperationReading[] = [];
+      let total = 0;
+      let more = false;
+      for (const held of operations.values()) {
+        if (query.operation !== undefined && held.operation !== query.operation) continue;
+        total++;
+        if (held.series <= after) continue;
+        if (rows.length < query.limit)
+          rows.push({
+            ...held,
+            wait: reading(held.wait),
+            hold: reading(held.hold),
+            child: reading(held.child),
+            outside: reading(held.outside),
+          });
+        else more = true;
+      }
+      return {
+        writerId,
+        reset,
+        cursor: cursor(),
+        evictedOperations,
+        total,
+        boundariesMs: [...BOUNDARIES],
+        rows,
+        next: more ? { writerId, series: rows.at(-1)!.series } : null,
+      };
+    },
   });
-
-export const writerMetricsLayer = (input: { readonly units: number; readonly operations: number }) =>
-  Layer.effect(WriterMetrics, make(input));
+};

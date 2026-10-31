@@ -377,7 +377,8 @@ export const openConnection = Effect.fnUntraced(function* (processes: ProcessPoo
         options.checkStatement?.(sql) ?? Effect.void,
         Effect.withFiber<Array<any>, SqlError>((fiber) => {
           const cost = Context.get(fiber.context, CurrentCost);
-          const writer = lane === undefined ? Context.get(fiber.context, CurrentWriter) : null;
+          const observed = Context.get(fiber.context, CurrentWriter);
+          const writer = lane === undefined && observed?.owner === connection ? observed : null;
           const measured = (span: Tracer.Span): Effect.Effect<Array<any>, SqlError> => {
             if (span.sampled) {
               const query = queryOf(sql);

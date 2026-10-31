@@ -1,6 +1,6 @@
 import type { StatementTiming } from '@runlith/sqlite-process/connection';
 import { carryCost, CurrentCost, rootCost } from '@runlith/performance/CostLedger';
-import { CurrentWriter, WriterMetrics } from '@runlith/performance/WriterMetrics';
+import { CurrentWriter, type WriterMetrics } from '@runlith/performance/WriterMetrics';
 import { Cause, Clock, Context, Effect, Exit, Fiber, Tracer } from 'effect';
 import type { EffectSQLiteBunDatabase } from 'drizzle-orm/effect-sqlite-bun';
 import {
@@ -96,6 +96,7 @@ export const storeTransaction =
     identity: StoreIdentity,
     moves: TableMoves,
     classed = false,
+    metrics?: WriterMetrics['Service'],
   ) =>
   <A, E, R, RCommit = never>(
     declared: WriteSet | string,
@@ -117,8 +118,7 @@ export const storeTransaction =
             const durabilities = yield* UnitDurability;
             const physical = durabilities.get(identity);
             const nested = physical !== undefined;
-            const metrics = yield* Effect.serviceOption(WriterMetrics);
-            const writer = nested ? yield* CurrentWriter : metrics._tag === 'Some' ? metrics.value.begin(operation, identity.path) : null;
+            const writer = nested ? yield* CurrentWriter : (metrics?.begin(operation, identity.path) ?? null);
             const writing = new Map(enclosing).set(identity, set);
             const lasting = nested ? durabilities : new Map(durabilities).set(identity, durability);
             if (nested && durability === 'durable' && physical === 'relaxed') {
@@ -202,8 +202,8 @@ export const storeTransaction =
                 Effect.provideService(CurrentWriter, writer),
                 Effect.onExit((exit) =>
                   Effect.sync(() => {
-                    if (!nested && writer !== null && metrics._tag === 'Some') {
-                      metrics.value.end(
+                    if (!nested && writer !== null && metrics !== undefined) {
+                      metrics.end(
                         writer,
                         Exit.isSuccess(exit) ? 'success' : Cause.hasInterruptsOnly(exit.cause) ? 'interrupted' : 'failure',
                       );

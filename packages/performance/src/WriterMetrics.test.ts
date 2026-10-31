@@ -4,12 +4,12 @@ import { Effect, Layer } from 'effect';
 import { CostLedger, costLedgerLayer, CurrentCost, producerCost } from './CostLedger.js';
 import { PerformanceReports, performanceReportsLayer } from './PerformanceReports.js';
 import { PerformanceStoreReader } from './store/store.js';
-import { WriterMetrics, writerMetricsLayer } from './WriterMetrics.js';
+import { WriterMetrics, makeWriterMetrics } from './WriterMetrics.js';
 
 it.effect('physical unit history retains cause identity while operation histograms keep every observation beyond row eviction', () =>
   Effect.gen(function* () {
     const ledger = yield* CostLedger.pipe(Effect.provide(costLedgerLayer({ capacity: 1 })));
-    const writers = yield* WriterMetrics.pipe(Effect.provide(writerMetricsLayer({ units: 2, operations: 2 })));
+    const writers = makeWriterMetrics({ units: 2, operations: 2 });
     const cause = ledger.open('act', 'root');
     const origin = writers.units({ limit: 2 }).cursor;
     const first = yield* producerCost(
@@ -67,7 +67,7 @@ it.effect('physical unit history retains cause identity while operation histogra
 
 it.effect('operation eviction starts a new histogram series and foreign cursors reset instead of skipping new-process observations', () =>
   Effect.gen(function* () {
-    const writers = yield* WriterMetrics.pipe(Effect.provide(writerMetricsLayer({ units: 2, operations: 1 })));
+    const writers = makeWriterMetrics({ units: 2, operations: 1 });
     writers.end(writers.begin('one', 'db'), 'success');
     const old = writers.metrics({ limit: 1 });
     writers.end(writers.begin('two', 'db'), 'success');
@@ -76,7 +76,7 @@ it.effect('operation eviction starts a new histogram series and foreign cursors 
     expect(measured.evictedOperations).toBe(2);
     expect(measured.rows[0]!.count).toBe(1);
     expect(measured.rows[0]!.series).toBeGreaterThan(old.rows[0]!.series);
-    const replacement = yield* WriterMetrics.pipe(Effect.provide(writerMetricsLayer({ units: 2, operations: 1 })));
+    const replacement = makeWriterMetrics({ units: 2, operations: 1 });
     replacement.end(replacement.begin('fresh', 'db'), 'success');
     const page = replacement.units({ after: writers.units({ limit: 2 }).cursor, limit: 1 });
     expect(page.reset).toBe(true);
@@ -90,7 +90,7 @@ it.effect('operation eviction starts a new histogram series and foreign cursors 
 
 it.effect('public performance reports expose in-process unit rows and histogram precision without reading the durable store', () =>
   Effect.gen(function* () {
-    const writers = yield* WriterMetrics.pipe(Effect.provide(writerMetricsLayer({ units: 2, operations: 1 })));
+    const writers = makeWriterMetrics({ units: 2, operations: 1 });
     const frame = writers.begin('write', 'db');
     frame.acquired = true;
     frame.holdMs = 5;

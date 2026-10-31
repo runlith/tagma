@@ -1,4 +1,5 @@
 import { availableParallelism, totalmem } from 'node:os';
+import { makeWriterMetrics, type WriterMetrics } from '@runlith/performance/WriterMetrics';
 import type { SpawnedChild } from './connection.js';
 import type { SqliteAsk, SqliteReply, SqliteRequest, SqliteSaid } from './channel.js';
 import { ReaderLanes } from './ReaderLanes.js';
@@ -51,6 +52,7 @@ export class ProcessPool {
     private idle: IdleChildren = 'stop',
     private readonly adopt: ((pid: number) => () => void) | undefined,
     private readonly hosting: Hosting,
+    readonly writerMetrics: WriterMetrics['Service'] = makeWriterMetrics({ units: 4096, operations: 512 }),
   ) {
     this.readers = new ReaderLanes(ceiling);
   }

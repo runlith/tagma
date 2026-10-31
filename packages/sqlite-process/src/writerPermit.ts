@@ -14,7 +14,7 @@ export type WriterPermit<C> = {
   readonly drain: Effect.Effect<void, SqlError>;
 };
 
-export const writerPermit = <C, L>(
+export const writerPermit = <C extends object, L>(
   writer: C,
   held: Held<string>,
   key: string,
@@ -33,7 +33,9 @@ export const writerPermit = <C, L>(
   );
   const take = Effect.withFiber<() => void, SqlError, Scope.Scope>((fiber) => {
     const cost = Context.get(fiber.context, CurrentCost);
-    const frame = Context.get(fiber.context, CurrentWriter);
+    const observed = Context.get(fiber.context, CurrentWriter);
+    const frame = observed !== null && (observed.owner === null || observed.owner === writer) ? observed : null;
+    if (frame !== null) frame.owner = writer;
     if (cost === null && frame === null) return lease;
     const askedAt = now();
     let acquiredAt: number | undefined;

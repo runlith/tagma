@@ -4,6 +4,8 @@ import { it } from '@runlith/effect-test';
 import { sql } from 'drizzle-orm';
 import { Cause, Context, Deferred, Effect, Exit, Fiber, Layer } from 'effect';
 import { sharedPool } from '@runlith/sqlite-process/testing/pool';
+import { CostLedger, costLedgerLayer, rootCost } from '@runlith/performance/CostLedger';
+import { CurrentWriter } from '@runlith/performance/WriterMetrics';
 import { GraphStore, MachineStore, StoreIdentityConflict } from '../contract/service/store.js';
 import { type Unit, GraphUnits, MachineUnits } from '../contract/service/units.js';
 import { seededStoreLayer } from './open.js';
@@ -95,7 +97,30 @@ it.live('a unit refuses statements from another graph instance before they write
     const reading = yield* Effect.exit(units.read((unit) => unit.run(other.db.all(sql`select * from instance_probe`))));
     expect(Exit.isFailure(reading) && Cause.squash(reading.cause)).toBeInstanceOf(StoreIdentityConflict);
     expect(yield* other.db.all(sql`select * from instance_probe`)).toEqual([]);
-    const independent = yield* units.write('instance.independent', () => other.db.all(sql`select * from instance_probe`));
+    const writers = Context.get(first, GraphStore).processes.writerMetrics;
+    const ledger = yield* CostLedger.pipe(Effect.provide(costLedgerLayer({ capacity: 1 })));
+    const independent = yield* rootCost(
+      'independent',
+      units.write('instance.independent', () =>
+        Effect.gen(function* () {
+          const frame = yield* CurrentWriter;
+          if (frame === null) return yield* Effect.die('the physical unit has no measurement frame');
+          const childMs = frame.childMs;
+          const waitMs = frame.waitMs;
+          const rows = yield* other.db.all(sql`select * from instance_probe`);
+          expect(frame.childMs).toBe(childMs);
+          expect(frame.waitMs).toBe(waitMs);
+          expect(frame.holdMs).toBe(0);
+          return rows;
+        }),
+      ),
+      'independent-root',
+    ).pipe(Effect.provideService(CostLedger, ledger));
     expect(independent).toEqual([]);
+    const physical = writers.units({ rootId: 'independent-root', operation: 'instance.independent', limit: 1 }).rows[0]!;
+    const total = ledger.read({ rootId: 'independent-root', limit: 1 }).rows[0]!.total;
+    expect(total.statements).toBe(3);
+    expect(total.writerHoldMs).toBeGreaterThan(physical.holdMs);
+    expect(total.writerWaitMs).toBeGreaterThan(physical.waitMs);
   }),
 );

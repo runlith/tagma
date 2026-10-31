@@ -2,7 +2,8 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { Effect, Layer } from 'effect';
 import { costLedgerLayer } from '@runlith/performance/CostLedger';
-import { writerMetricsLayer } from '@runlith/performance/WriterMetrics';
+import { WriterMetrics } from '@runlith/performance/WriterMetrics';
+import { MachineStore } from '../platform/contract/service/store.js';
 import { cpuProfilesLayer } from '@runlith/performance/CpuProfiles';
 import { cpuProfilerLayer } from '@runlith/performance/CpuProfiler';
 import { heapSnapshotsLayer } from '@runlith/performance/HeapSnapshots';
@@ -75,7 +76,12 @@ const measuring = Layer.unwrap(
       Layer.provideMerge(profiler),
       Layer.provideMerge(storeLayer),
       Layer.provideMerge(costLedgerLayer({ capacity: 4096 })),
-      Layer.provideMerge(writerMetricsLayer({ units: 4096, operations: 512 })),
+      Layer.provideMerge(
+        Layer.effect(
+          WriterMetrics,
+          Effect.map(MachineStore, (store) => store.processes.writerMetrics),
+        ),
+      ),
     );
   }),
 );
