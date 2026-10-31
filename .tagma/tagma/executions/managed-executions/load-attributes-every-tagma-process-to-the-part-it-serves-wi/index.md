@@ -26,9 +26,9 @@ sources:
   - kind: file
     ref: packages/execution-host/src/UsageReader.ts
   - kind: file
-    ref: packages/execution-host/src/posix/Sampler.ts
+    ref: packages/execution-host/src/posix/macos/Sampler.ts
   - kind: file
-    ref: packages/execution-host/src/posix/programs.ts
+    ref: packages/execution-host/src/posix/macos/programs.ts
   - kind: file
     ref: apps/tagma/server/src/executions/load/list.ts
   - kind: file
