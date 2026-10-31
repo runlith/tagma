@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 import { Effect, Schema } from 'effect';
 import { threadRecord } from '../../thread-record/store/table.js';
@@ -61,7 +61,7 @@ export class ProtocolRows {
         this.db
           .insert(protocolSession)
           .values({ id: threadId, row: encoded })
-          .onConflictDoUpdate({ target: protocolSession.id, set: { row: encoded, updatedAt: new Date() } }),
+          .onConflictDoUpdate({ target: protocolSession.id, set: { row: sql`excluded.row`, updatedAt: sql`excluded.updated_at` } }),
       ),
     );
   }
