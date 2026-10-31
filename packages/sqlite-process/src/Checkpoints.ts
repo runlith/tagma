@@ -6,6 +6,8 @@ type Loss = { readonly announce: () => void; readonly wake: () => void };
 type Owner = { readonly filename: string; readonly durable: boolean; readonly lost: (reason: string) => Loss };
 
 const RETRY_MS = 1000;
+const PROBE = 'The WAL probe PRAGMA wal_checkpoint(NOOP) after a write';
+const PASS = 'The WAL checkpoint pass PRAGMA wal_checkpoint(PASSIVE)';
 
 export class Checkpoints {
   private readonly owners = new Map<number, Owner>();
@@ -90,12 +92,17 @@ export class Checkpoints {
   }
 
   failed(filename: string, thrown: ThrownShape): void {
+    this.refused(filename, PROBE, thrown);
+  }
+
+  private refused(filename: string, act: string, thrown: ThrownShape): void {
     const code = thrown.errno === undefined ? thrown.code : thrown.errno & 0xff;
     if (code === 5 || code === 6 || code === 'SQLITE_BUSY' || code === 'SQLITE_LOCKED') {
       this.defer(filename);
       return;
     }
-    const reason = thrown.message;
+    const errno = thrown.errno === undefined ? '' : ` (errno ${thrown.errno})`;
+    const reason = `${act} failed with ${thrown.code ?? 'no SQLite code'}${errno}: ${thrown.message}`;
     const losses = [...(this.files.get(filename) ?? [])].map((id) => this.owners.get(id)!.lost(reason));
     for (const loss of losses) loss.announce();
     for (const loss of losses) loss.wake();
@@ -124,7 +131,7 @@ export class Checkpoints {
       this.driver.send({ _tag: 'Checkpoint', id, filename, durable });
     } catch (cause) {
       this.running = undefined;
-      this.failed(filename, thrownShapeOf(new Error(`The WAL checkpoint could not be sent: ${String(cause)}`)));
+      this.refused(filename, 'Sending the WAL checkpoint pass', thrownShapeOf(cause));
     }
   }
 
@@ -133,8 +140,8 @@ export class Checkpoints {
     if (this.running === undefined || said.id !== this.running.id) return;
     const { filename } = this.running;
     this.running = undefined;
-    if (said._tag === 'Failed') this.failed(filename, { ...said.thrown, message: `The WAL checkpoint failed: ${said.thrown.message}` });
-    else if (said._tag !== 'Checkpointed') this.failed(filename, thrownShapeOf(new Error(`The WAL checkpoint answered ${said._tag}.`)));
+    if (said._tag === 'Failed') this.refused(filename, PASS, said.thrown);
+    else if (said._tag !== 'Checkpointed') this.refused(filename, PASS, thrownShapeOf(new Error(`it answered ${said._tag}`)));
     else if (said.log > said.copied) this.defer(filename);
     this.drive();
   }

@@ -114,6 +114,6 @@ it.live('an implicit read cursor blocks the writer probe without losing the stor
       errno: 10,
       constraint: undefined,
     });
-    expect(losses).toEqual(['disk I/O error']);
+    expect(losses).toEqual(['The WAL probe PRAGMA wal_checkpoint(NOOP) after a write failed with SQLITE_IOERR (errno 10): disk I/O error']);
   }),
 );
