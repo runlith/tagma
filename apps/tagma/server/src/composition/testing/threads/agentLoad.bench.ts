@@ -1404,6 +1404,7 @@ const program = Effect.gen(function* () {
     const framesBefore = feeds.frames();
     const loadBefore = loadavg();
     const unattributedBefore = ledger.read({ limit: 1 }).unattributedStatements;
+    if (causalDetail) world.processes.statements.reset();
     const statementsBefore = causalDetail ? world.processes.statements.read({ limit: 2048 }) : null;
     const startWall = yield* Clock.currentTimeMillis;
     costStart = startWall;
@@ -1510,6 +1511,8 @@ const program = Effect.gen(function* () {
     const utilization = nodePerformance.eventLoopUtilization(utilizationBefore);
     const unattributedAfter = ledger.read({ limit: 1 }).unattributedStatements;
     const statementsAfter = statementsBefore === null ? null : world.processes.statements.read({ limit: 2048 });
+    if (statementsBefore !== null && statementsAfter !== null && statementsBefore.censusId !== statementsAfter.censusId)
+      return yield* new BenchRefused({ message: 'the statement fingerprint census changed during the measurement window' });
     if (
       statementsBefore !== null &&
       statementsAfter !== null &&
@@ -1521,6 +1524,7 @@ const program = Effect.gen(function* () {
       statementsAfter === null
         ? null
         : {
+            censusId: statementsAfter.censusId,
             before: statementsBefore?.total,
             after: statementsAfter.total,
             rows: statementsAfter.rows
@@ -1907,8 +1911,8 @@ const program = Effect.gen(function* () {
             'with causal-detail enabled hosted and list probes use a separate bounded causal ledger; protocol steps and selected background roots use the installation ledger; both report evictions and unfinished tails',
             'saved and no-save protocol-step groups partition the reported ProtocolSteps.run roots; a no-save step is not necessarily a text frame',
             'unattributed SQL counts the serving pool during the measurement window, independent of the selected retained roots',
-            'statement fingerprint deltas cover the serving pool and can combine producers; the overflow row holds SQL beyond the bounded census',
-            'fingerprint Run timings are send-to-reply and child elapsed for acknowledged replies, not CPU; sends and replies can cross the measurement cuts',
+            'the serving-pool fingerprint census resets at the warm cut; first admissions add measured work, pre-reset replies stay in the old census, and fingerprints can combine producers',
+            'the fingerprint overflow row holds SQL beyond the bounded census; Run timings are send-to-reply and child elapsed, not CPU, and sends and replies can cross the measurement cuts',
             'ledger statements count standalone Run sends; programStatements count statements and guards carried by submitted programs, including those a conflict prevents from running',
             'ledger units count Store transactions; direct activity-database transactions can contribute writer hold without incrementing units, and each activity batch is charged to its first accepted cause',
             'ledger root writer times are sums per act, not per-unit percentiles; late tails have a five-second settling window',
