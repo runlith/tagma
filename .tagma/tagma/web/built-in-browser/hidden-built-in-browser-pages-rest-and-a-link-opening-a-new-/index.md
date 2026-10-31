@@ -34,9 +34,9 @@ sources:
 - **Named popups.** A named popup keeps its own window, which main shows.
 
 How each layer carries it:
-- **Desktop host.** Its `opened` event carries `opening`: `tab`, `background-tab` or `window`, taken from the open disposition.
+- **Desktop host.** Its `opened` event carries `disposition`: `tab`, `background-tab` or `window`, taken from Electron's open disposition. The field is optional on the wire, so a desktop host of an older build that outlives a server update keeps its channel; its pages simply get no beside-placement.
 - **Managed host.** It reports `tab`, because CDP's `Target.targetCreated` carries no disposition.
-- **Server.** The `put` that announces a page adopted from an `opened` event carries the same `opening`. A page adopted while reconciling a returning host carries none.
+- **Server.** The `put` that announces a page adopted from an `opened` event carries the same `disposition`. A page adopted while reconciling a returning host carries none.
 - **Client.** `OpenPages` places the page beside its opener in this window's `SidePanes` when that window shows the opener's tab. Otherwise it calls `ThreadPlaces.openFor` with the opening thread, as now.
 
 *A page nobody sees rests.*
@@ -59,12 +59,13 @@ How each layer carries it:
 - **Freezing through CDP `Page.setWebLifecycleState`.** It needs a debugger on every human page, and the browser keeps human pages without one: an attached debugger is a bot signal to Cloudflare.
 
 **Limits.**
+- The Electron e2e lane cannot observe rest: under its Playwright attachment every `webContents` reports `isBeingCaptured()`, even with trace screenshots off, and Chromium keeps a captured page visible. Which Playwright call does it was not established. The rest test is therefore an integration test.
 - A page shown in a Tagma window that is on screen but covered by other windows stays awake. The process switch keeps occluded windows unbackgrounded, and Electron reports no occlusion.
 - The managed host cannot tell a background tab from a foreground one, so it opens every new tab in the foreground.
 - The managed host's pages are outside this spec: they unload 15 minutes after their last engine session ([[088225c2]]).
 
 **Acceptance.**
-1. A desktop e2e test on the Electron lane, driving `BrowserHost` through its calls, passes all of these:
+1. A desktop Electron integration test, driving `BrowserHost` through its calls and waiting on the page's own visibility events, passes all of these:
    - a page on the stand with no hold and no session reports `hidden`, which in Chromium means no animation frames;
    - a paint hold makes it visible, and an animation frame arrives;
    - releasing the hold returns it to rest;
@@ -77,6 +78,6 @@ How each layer carries it:
    - an opener that this window does not show, with an opening thread, puts it in that thread's layout;
    - an operator opener that this window does not show gives no tab;
    - an opener standing on another project's screen gets its child beside it there.
-3. The server's `put` for a page adopted from a host `opened` event carries its `opening`.
+3. The server's `put` for a page adopted from a host `opened` event carries its `disposition`.
 4. The desktop engine scenarios in `apps/tagma/server/src/desktop-browser/*.itest.ts` pass.
 5. [[761cf71f]] and [[886d0b63]] state the new behaviour.
