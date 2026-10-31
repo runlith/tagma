@@ -32,7 +32,7 @@ type Untiered<E> = E extends { readonly lifetimes: infer L } ? Extract<keyof L, 
 
 declare const checked: unique symbol;
 
-type CheckedParts = ServerParts & { readonly [checked]: true };
+export type CheckedParts = ServerParts & { readonly [checked]: true };
 
 export type ServerParts<Modules extends readonly Manifest[] = readonly Manifest[]> = {
   readonly modules: Modules;

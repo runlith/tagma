@@ -16,6 +16,7 @@ import { testGrantSigner } from '../../platform/testing/grants.js';
 import { MachineStore } from '../../platform/contract/service/store.js';
 import { serverParts } from '../build.js';
 import { DEVELOPER } from '../developer/build.js';
+import { MODULES } from '../developer/modules.js';
 import { PARTS } from '../developer/parts.js';
 import { doorLayer } from '../http/door.js';
 import { assemble } from '../manifest.js';
@@ -80,7 +81,7 @@ const greeting = manifest({
   },
 });
 
-const extended = serverParts({ ...PARTS, modules: [...PARTS.modules, greeting] });
+const extended = serverParts({ ...PARTS, modules: [...MODULES, greeting] });
 
 it.live('a root composing the core with a module of its own serves its operation through the serving lifetime it declares', () =>
   Effect.gen(function* () {
