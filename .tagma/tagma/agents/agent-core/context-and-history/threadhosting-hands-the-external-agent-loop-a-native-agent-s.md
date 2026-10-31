@@ -15,6 +15,8 @@ sources:
     ref: packages/agent/src/thread/run/hostedParts.ts
   - kind: file
     ref: packages/agent/src/thread/run/ThreadHosting.ts
+  - kind: file
+    ref: packages/agent/src/thread/run/hostedOrder.ts
 ---
 `ThreadHosting` hands a flow whose agent loop runs outside Tagma (a Claude or Cursor runner) a native agent's run without its loop: `RunAssembly.hosted` prepares it with the same `ThreadAgent.prepare` as a native run (admitted runtime sources, output scope with call holding, profile, `modeOf` by the thread's law, prompt freeze and applying the deferred prompt at the run boundary), and holds the preparation together with the handle: every turn opening orients by its context; a catalog-revision change before a step re-resolves the tools with the same preparation, without rebuilding the whole run, and `AgentRunner.host` is the same door as `run` (agent rules plus the deferred-tool rule and `AgentCalls`). No tool, rule, or policy exists in a second copy.
 
