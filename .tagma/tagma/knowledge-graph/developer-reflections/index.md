@@ -38,4 +38,4 @@ sources:
   - kind: dir
     ref: apps/tagma/server/src/reflections
 ---
-A Tagma developer collects agents' friction with Tagma itself into the graph of its sources: the module provides the `file_reflection` and `read_reflections` operations, finds the Tagma graph and carries the prompt section about friction. A release has no Tagma graph, so release composition does not connect the module; the `#reflection` type, the reflection answer and the `tagma` alias stay with the graph.
+A Tagma developer collects agents' friction with Tagma itself into the graph of its sources: the module provides the `file_reflection` and `read_reflections` operations, finds the Tagma graph and carries the prompt section about friction. A caller can keep private evidence stealth from birth, without first publishing a team version; an omitted storage choice inherits the entry's parent. A release has no Tagma graph, so release composition does not connect the module; the `#reflection` type, the reflection answer and the `tagma` alias stay with the graph.
