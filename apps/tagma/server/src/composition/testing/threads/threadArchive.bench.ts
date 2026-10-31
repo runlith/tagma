@@ -17,7 +17,7 @@ import { testGrantSigner } from '../../../platform/testing/grants.js';
 import { Settings } from '../../../settings/contract/service/values.js';
 import { performanceKeepOneTraceIn } from '../../../performance/contract/wire/settings.js';
 import { rootFixture, tempRepoEffect } from '../graphFixture.js';
-import { birthsOf, listOf, turnsOf } from '../../../threads/testing/doubles.js';
+import { listOf, turnsOf } from '../../../threads/testing/doubles.js';
 import { makeThreadRecords } from '../../../thread-record/layer.js';
 import { threadStack } from '../threadParts.js';
 import { ENTRY_KINDS } from '../../manifest.js';
@@ -63,8 +63,13 @@ const main = Effect.gen(function* () {
     const units = Context.get(runtime.graph, MachineUnits);
     const records = yield* makeThreadRecords;
     const { store, threads: parts } = yield* threadStack({ db, units, records, kinds: ENTRY_KINDS });
-    const root = (yield* birthsOf(runtime.owners).create({ projectId: project.id, createdBySessionId: null, title: 'archive bench' }))
-      .thread.id;
+    const root = yield* units.write('archive.bench.root', (unit) =>
+      Effect.gen(function* () {
+        const row = yield* store.insert({ ownerId: OPERATOR_PRINCIPAL, agentId: 'tagma' }, unit);
+        yield* parts.rows.attachFacet({ threadId: row.id, projectId: project.id, title: 'archive bench' }, unit);
+        return row.id;
+      }),
+    );
     const ids = [root];
     for (let index = 1; index < members; index += 1) {
       ids.push(
