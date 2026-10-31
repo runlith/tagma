@@ -88,7 +88,7 @@ Other programs form one collapsed section below Tagma: programs grouped by the a
 
 No interface or contract text names an OS: the machine's name ("Mac", "PC") comes from the adapter's machine facts.
 
-**GPU.** Each row shows a GPU share only where an adapter measures it for that process; elsewhere the column reads "not measured on this system" with the adapter's reason, never zero, and the Graphics row's CPU never stands for GPU. Today no per-process source is proven: on 2026-10-31 the macOS IOKit per-client GPU time listed other processes but not Tagma's GPU process. The GPU step is done when, for each OS, either a named per-process source is proven by a measurement on that OS and its adapter fills it, or a finding records that none exists without privileges and the panel says so there.
+**GPU.** The host reading carries each process's GPU as measured or unavailable with the adapter's reason; rows sum the measured part. The panel shows a GPU column only while the reading measures GPU for some process, and a row with an unmeasured member marks it as it marks unread CPU; with nothing measured, the panel says once that GPU is not measured on this system and why — never zero, and the Graphics row's CPU never stands for GPU. Today no per-process source is proven: on 2026-10-31 the macOS IOKit per-client GPU time listed other processes but not Tagma's GPU process. The GPU step is done when, for each OS, either a named per-process source is proven by a measurement on that OS and its adapter fills it, or a finding records that none exists without privileges and the panel says so there.
 
 ## OS adapters
 
