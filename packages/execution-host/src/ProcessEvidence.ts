@@ -17,7 +17,7 @@ import type {
 } from '@runlith/executions/protocol/evidence';
 import { identityMatch, sameProcess, sameScope } from '@runlith/executions/protocol/evidence';
 import type { EvidenceScans, Scan } from './EvidenceScans';
-import { relationsOf } from './processTree';
+import { ProcessTree } from './processTree';
 import type { ResidualProcess } from './Residuals';
 
 export type ObservedLeader = ProcessIdentity & {
@@ -158,15 +158,69 @@ export const makeProcessEvidence = Effect.fnUntraced(function* ({ topology, scan
       return { ...beyond(scope, subject, observedAt), listeners: [] };
     }
     const sockets = taken ?? (yield* scans.listeners({ _tag: 'Inventory' }));
+    const led = (yield* topology.watching).flatMap((observed) =>
+      observed.leader !== undefined && sameScope(observed.scope, scans.scope) ? [{ ref: observed.ref, leader: observed.leader }] : [],
+    );
+    if (sockets.found.length === 0 || led.length === 0) {
+      return {
+        scope,
+        source: sourceOf(sockets.found, OWN),
+        observedAt: sockets.observedAt,
+        completeness: sockets.completeness,
+        unmeasured: sockets.unmeasured,
+        revision: sockets.revision,
+        subject,
+        listeners: sockets.found,
+      };
+    }
+    const table = yield* scans.processes({ _tag: 'Table' });
+    const tree = new ProcessTree(table.found);
+    const holders = new Map<number, ProcessSnapshot>();
+    const contested = new Set<number>();
+    const limits: UnmeasuredRegion[] = [];
+    for (const { ref, leader } of led) {
+      limits.push(...identityGap(table, leader, ref), ...identityDoubt(table, leader, ref));
+      for (const row of associated(table.found, leader, ref, tree)) {
+        if (row.association === undefined) continue;
+        const pid = row.identity.pid;
+        const prior = holders.get(pid);
+        if (prior === undefined) holders.set(pid, row);
+        else if (prior.association?.execution.execution !== ref.execution) contested.add(pid);
+      }
+    }
+    for (const pid of contested) holders.delete(pid);
+    const unproved = sockets.found.filter((socket) => {
+      const holder = holders.get(socket.holder.pid);
+      return holder !== undefined && !sameProcess(socket.holder, holder.identity);
+    });
+    const shared = sockets.found.filter((socket) => contested.has(socket.holder.pid));
     return {
       scope,
       source: sourceOf(sockets.found, OWN),
-      observedAt: sockets.observedAt,
-      completeness: sockets.completeness,
-      unmeasured: sockets.unmeasured,
+      observedAt: Math.min(sockets.observedAt, table.observedAt),
+      completeness: weakest([
+        sockets.completeness,
+        table.completeness === 'complete' ? 'complete' : 'partial',
+        unproved.length === 0 && shared.length === 0 && limits.length === 0 ? 'complete' : 'partial',
+      ]),
+      unmeasured: [
+        ...sockets.unmeasured,
+        ...table.unmeasured.map(inProcesses),
+        ...limits,
+        ...unproved.map((socket) => ({
+          region: `the holder of port ${socket.port}`,
+          reason: 'unknown' as const,
+          detail: 'the socket holder is not the process related to an execution',
+        })),
+        ...shared.map((socket) => ({
+          region: `the holder of port ${socket.port}`,
+          reason: 'unknown' as const,
+          detail: 'the socket holder is related to more than one execution, so none is claimed',
+        })),
+      ],
       revision: sockets.revision,
       subject,
-      listeners: sockets.found,
+      listeners: sockets.found.map((listener) => held(listener, holders)[0] ?? listener),
     };
   });
 
@@ -288,10 +342,11 @@ const associated = (
   rows: ReadonlyArray<ProcessSnapshot>,
   leader: ObservedLeader,
   execution: ExecutionRef,
+  tree: ProcessTree = new ProcessTree(rows),
 ): ReadonlyArray<ProcessSnapshot> => {
   const identity = leaderIdentity(rows, leader);
   if (identity === 'different') return rows;
-  const relations = relationsOf(rows, { pid: leader.pid, terminal: named(leader.terminal) });
+  const relations = tree.relations({ pid: leader.pid, terminal: named(leader.terminal) });
   return rows.map((row) => {
     const relation = relations.get(row.identity.pid);
     if (relation === undefined) return row;

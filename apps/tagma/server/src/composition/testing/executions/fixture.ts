@@ -1,20 +1,24 @@
-import { Clock, Context, Effect, FileSystem, Layer, Schema } from 'effect';
+import { Clock, Context, Effect, FileSystem, Layer, Ref, Schema } from 'effect';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { kind, shared } from '@runlith/testbed/worlds';
 import { join } from 'node:path';
+import { hostAddress } from '@runlith/executions/hostAddress';
 import { digestOf, holderEntryOf, identityOf, readArtifact } from '@runlith/executions/hostArtifacts';
 import { ARTIFACT_FILE, ArtifactManifest, HOLDER_ENTRY_FILE } from '@runlith/executions/protocol/artifact';
 import type { ExecutionPolicy } from '@runlith/executions/protocol/capacity';
 import type { InstallationId } from '@runlith/executions/protocol/execution';
 import { THREAD_AUTHORITY_DEFAULT } from '@runlith/agent/thread/rows';
 import { prepareHostFixture, startHostFixture } from '../../../executions/testing/hostFixture.js';
-import { makeMachineWorld } from '../../../executions/testing/doubles.js';
+import { executionHost, executionPolicy, makeMachineWorld, terminalHostCustody } from '../../../executions/testing/doubles.js';
+import { guardedFloor } from '../../../executions/testing/guardedFloor.js';
 import { MachineStore } from '../../../platform/contract/service/store.js';
 import { MachineUnits } from '../../../platform/contract/service/units.js';
+import { SessionIdentity } from '../../../platform/contract/wire/session.js';
+import { shippedChain } from '../../../platform/store/chain.js';
 import { unitsLayer } from '../../../platform/store/units.js';
 import { machineFileLayer } from '../../../platform/store/open.js';
 import { spawnedEffect } from '../../../platform/testing/spawn.js';
-import { sessionIdentityLayer } from '../../../external-harnesses/testing/builtin.js';
+import { sessionIdentity, sessionIdentityLayer } from '../../../external-harnesses/testing/builtin.js';
 import { bornThread } from '../../../native-harness/testing/born.js';
 import { projectsLayer, project } from '../../../projects/testing/doubles.js';
 import { Coverage } from '../../../workspace/contract/service/roots.js';
@@ -173,3 +177,28 @@ export const makeHostCase = Effect.fn('ExecutionFixture.case')(function* ({ name
 });
 
 export type HostCase = Effect.Success<ReturnType<typeof makeHostCase>>;
+
+export const makeTerminalFloor = Effect.fn('ExecutionFixture.floor')(function* ({ name, installation, threads, policy }: HostCaseInput) {
+  const raised = yield* makeHostCase({ name, installation, threads, policy });
+  const connection = yield* executionHost(yield* hostAddress(raised.canonical, installation));
+  const store = Context.get(raised.context, MachineStore);
+  const custody = yield* terminalHostCustody({
+    executions: connection.port,
+    welcome: connection.welcome,
+    installation,
+    state: raised.canonical,
+    offered: {
+      bundle: raised.bundle.root,
+      digest: raised.bundle.manifest.identity.digest,
+      database: store.schema,
+      application: shippedChain(fixtureMigrations),
+      policy: executionPolicy(),
+      lifetime: 'with-parent',
+    },
+  });
+  yield* Ref.set(connection.opened, custody.opened);
+  const floor = yield* guardedFloor({ port: connection.port, guarded: custody.guarded(), db: store.db, installation }).pipe(
+    Effect.provide(Context.add(raised.context, SessionIdentity, sessionIdentity)),
+  );
+  return { ...raised, terminals: floor.terminals };
+});

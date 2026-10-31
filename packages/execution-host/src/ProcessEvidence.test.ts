@@ -227,20 +227,41 @@ describe('ProcessEvidence', () => {
     }),
   );
 
-  it.effect('answers a namespace inventory as an inventory: every listening socket, and nobody named as its owner', () =>
+  it.effect('answers a namespace inventory with every listening socket, naming an execution only for sockets its processes hold', () =>
     Effect.gen(function* () {
       const report = yield* Effect.scoped(
         Effect.gen(function* () {
           const owner = yield* evidence(
             holding(local()),
-            answering(measured(FAMILY), measured([listener(3000, 100), listener(5173, 101)])),
+            answering(measured(FAMILY), measured([listener(3000, 100), listener(5173, 101), listener(9999, 103)])),
           );
           return yield* owner.inventory(scope);
         }),
       );
       expect(report.subject).toEqual({ _tag: 'Namespace' });
-      expect(report.listeners.map((socket) => socket.port)).toEqual([3000, 5173]);
-      expect(report.listeners.every((socket) => socket.association === undefined)).toBe(true);
+      expect(report.listeners.map((socket) => [socket.port, socket.association])).toEqual([
+        [3000, { execution: ref, relation: 'leader', identity: 'same' }],
+        [5173, { execution: ref, relation: 'ancestry', identity: 'unknown' }],
+        [9999, undefined],
+      ]);
+      expect(report.completeness).toBe('complete');
+    }),
+  );
+
+  it.effect('leaves the namespace sockets unassociated and says so when the pid an execution started is held by another process', () =>
+    Effect.gen(function* () {
+      const report = yield* Effect.scoped(
+        Effect.gen(function* () {
+          const reused = FAMILY.map((row) =>
+            row.identity.pid === 100 ? process(100, { work: 100, terminal: 'ttys7', witness: 'birth-2' }) : row,
+          );
+          const owner = yield* evidence(holding(local()), answering(measured(reused), measured([listener(5173, 101)])));
+          return yield* owner.inventory(scope);
+        }),
+      );
+      expect(report.listeners.map((socket) => socket.association)).toEqual([undefined]);
+      expect(report.completeness).toBe('partial');
+      expect(report.unmeasured.map((region) => region.reason)).toContain('unknown');
     }),
   );
 

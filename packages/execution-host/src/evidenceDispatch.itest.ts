@@ -69,12 +69,15 @@ it.live('wire evidence identifies the child and its socket, names incomplete pro
 
     const namespace = yield* client.hostListeners();
     expect(namespace.subject).toEqual({ _tag: 'Namespace' });
-    expect(namespace.listeners.every((listener) => listener.association === undefined)).toBe(true);
     expect(namespace.scope.network).toEqual({ _tag: 'Local', machine: hostname() });
     expect(
       namespace.unmeasured.some((region) => region.reason === 'truncated') ||
         namespace.listeners.some((listener) => listener.port === port),
     ).toBe(true);
+    const inventoried = namespace.listeners.find((listener) => listener.port === port);
+    if (inventoried !== undefined) {
+      expect(inventoried.association).toEqual({ execution: launched.execution, relation: 'leader', identity: 'same' });
+    }
     const summary = yield* client.state(launched.execution);
     expect(summary?.state.nativeExit).toBeUndefined();
     expect(summary?.state.phase).toBe('running');

@@ -145,6 +145,3 @@ export class ProcessTree {
     return found;
   }
 }
-
-export const relationsOf = (rows: ReadonlyArray<ListedProcess>, leader: ListedLeader): ReadonlyMap<number, NativeRelation> =>
-  new ProcessTree(rows).relations(leader);
