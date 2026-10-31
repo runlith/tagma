@@ -12,7 +12,7 @@ const NOTHING = 'nothing';
 const unlisted = (actions: readonly ModeAction[], own: readonly string[]): readonly ModeAction[] =>
   actions.filter((action) => !own.includes(action.id));
 
-export function approvesCommand(views: ThreadViews, writes: ThreadWrites): ComposerSlashCommand {
+function approvesCommand(views: ThreadViews, writes: ThreadWrites): ComposerSlashCommand {
   return {
     name: 'approves',
     order: 32,

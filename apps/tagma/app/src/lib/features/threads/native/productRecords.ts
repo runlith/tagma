@@ -4,10 +4,10 @@ import { productEntry, productId } from '@runlith/chat-ui/entries';
 import { productKind } from '@runlith/chat-ui/EntryKinds.svelte';
 import { productRecord } from './records.js';
 
-export const COMPOSITION = 'composition';
+const COMPOSITION = 'composition';
 export const compositionId = productId<ThreadCompositionEntry>(COMPOSITION);
 export const compositionKind = productKind(compositionId, { classify: () => ({ hidden: true }) });
-export const startId = productId<StartEntry>(START_ENTRY);
+const startId = productId<StartEntry>(START_ENTRY);
 export const startKind = productKind(startId);
 export const entryKinds = [{ type: START_ENTRY, schema: StartEntry }];
 

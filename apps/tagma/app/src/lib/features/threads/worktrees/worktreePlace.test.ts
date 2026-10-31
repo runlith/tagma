@@ -1,5 +1,10 @@
 import { expect, test } from 'vitest';
-import { feedRecord } from '../native/feedRecords.js';
+import type { ThreadTranscriptEntry } from '@runlith/agent/transcript/rows';
+import { recordOf } from '../native/records.js';
+import { testRecords } from '../native/testing.js';
+
+const records = testRecords();
+const feedRecord = <E extends ThreadTranscriptEntry>(entry: E) => recordOf(records, entry);
 
 const at = '2026-09-24T00:00:00.000Z';
 

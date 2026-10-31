@@ -3,7 +3,7 @@ import type { ShownThread } from '../../ShownThread.js';
 import type { ThreadWrites } from '../../ThreadWrites.js';
 import type { CommandDeclaration } from '../contribution.js';
 
-export function refreshInstructionsCommand(shown: ShownThread, writes: ThreadWrites): ComposerSlashCommand {
+function refreshInstructionsCommand(shown: ShownThread, writes: ThreadWrites): ComposerSlashCommand {
   return {
     name: 'refresh-instructions',
     order: 80,

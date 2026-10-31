@@ -31,7 +31,7 @@ import { AgentLibraryRepo } from './library/AgentLibraryRepo.js';
 import { type ThreadIdentity, ThreadList } from './List.svelte.js';
 import { ComposerFeeds } from './native/ComposerFeeds.svelte.js';
 import { DraftShelf } from './native/DraftShelf.svelte.js';
-import { feedRecord } from './native/feedRecords.js';
+import { ProductRecords, recordOf } from './native/records.js';
 import { pickedSummarizer } from './native/compactionWords.js';
 import { PromptStore } from './native/PromptStore.js';
 import { CallPieces } from './native/CallPieces.js';
@@ -118,6 +118,7 @@ export class ThreadSlot extends Process<ThreadSlot, SlotArgs>()('ThreadSlot') im
       yield* Notices,
       new SkillCatalog(library.skills, projectId, scope),
       yield* Door,
+      yield* ProductRecords,
       (yield* Platform).storage.local,
       scope,
       app,
@@ -148,6 +149,7 @@ export class ThreadSlot extends Process<ThreadSlot, SlotArgs>()('ThreadSlot') im
     notices: Notices,
     readonly skills: SkillCatalog,
     door: Door,
+    records: ReturnType<typeof ProductRecords.use>,
     storage: ConstructorParameters<typeof PromptStore>[0],
     private readonly scope: Scope,
     private readonly app: MountedApp,
@@ -196,7 +198,7 @@ export class ThreadSlot extends Process<ThreadSlot, SlotArgs>()('ThreadSlot') im
         ),
       (failure) => this.noticeOf(failure),
       this.history,
-      { ...attachmentHandlers(door, projectId), transcriptEntry: feedRecord },
+      { ...attachmentHandlers(door, projectId), transcriptEntry: (raw) => recordOf(records, raw) },
     );
     this.birth = this.chat.birth;
     this.shown = new ShownThread(

@@ -1,5 +1,4 @@
 import type { Snippet } from 'svelte';
-import { coreKind, makeThreadEntryReader, type ThreadEntryKind, type ThreadEntryReader } from '@runlith/agent/transcript/kinds';
 import type { ActivityEntry, ChatStepFact } from './activity';
 import type { ChatEntry, ChatEntryKind, ProductEntry, ProductId } from './entries';
 import type { ChatActivityIdentity, ChatEntryContext, ChatEntryOf, ChatMessageMetaExtra, ChatToolStatus } from './renderers';
@@ -78,8 +77,6 @@ export const facetsOf = (kind: object): readonly string[] =>
     .map(([name]) => name);
 
 export type EntryKinds = {
-  registerWire(contributor: string, kind: ThreadEntryKind): () => void;
-  wire(): ThreadEntryReader;
   register<K extends BuiltinKindName>(contributor: string, kind: BuiltinKind<K>): () => void;
   register<P>(contributor: string, kind: ProductKind<P>): () => void;
   registerDefault<K extends BuiltinKindName>(contributor: string, kind: BuiltinDefault<K>): () => void;
@@ -106,8 +103,6 @@ export type EntryKinds = {
 export function createEntryKinds(): EntryKinds {
   let revision = $state(0);
   let bumps = 0;
-  const wireKinds = new Map<string, { readonly contributor: string; readonly kind: ThreadEntryKind }>();
-  let wire: ThreadEntryReader | null = null;
   const held = new Map<string, Map<string, Facet>>();
   const defaults = new Map<string, Map<string, Facet>>();
   const tools = new Map<string, { readonly contributor: string; readonly tool: ToolKind }>();
@@ -164,20 +159,6 @@ export function createEntryKinds(): EntryKinds {
   };
 
   return {
-    registerWire(contributor, kind) {
-      const standing = wireKinds.get(kind.type);
-      if (standing !== undefined) throw clashOf(`Wire entry kind "${kind.type}"`, standing.contributor, contributor);
-      if (coreKind(kind.type)) throw clashOf(`Wire entry kind "${kind.type}"`, 'agent core', contributor);
-      const entry = { contributor, kind };
-      wireKinds.set(kind.type, entry);
-      wire = null;
-      return () => {
-        if (wireKinds.get(kind.type) !== entry) return;
-        wireKinds.delete(kind.type);
-        wire = null;
-      };
-    },
-    wire: () => (wire ??= makeThreadEntryReader({ products: Array.from(wireKinds.values(), (held) => held.kind) })),
     register: (contributor: string, kind: BuiltinKind<BuiltinKindName> | ProductKind<unknown>) =>
       add(held, contributor, keyOfKind(kind), kind),
     registerDefault: <K extends BuiltinKindName>(contributor: string, kind: BuiltinDefault<K>) =>

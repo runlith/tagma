@@ -9,7 +9,7 @@ function chosenType(shown: ShownThread, birth: ThreadBirth): string | null {
   return shown.identity?.bornAs ?? birth.nextType;
 }
 
-export function agentCommand(shown: ShownThread, birth: ThreadBirth, writes: ThreadWrites): ComposerSlashCommand {
+function agentCommand(shown: ShownThread, birth: ThreadBirth, writes: ThreadWrites): ComposerSlashCommand {
   return {
     name: 'agent',
     order: 60,

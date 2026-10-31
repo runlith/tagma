@@ -4,9 +4,10 @@ import type { ThreadWireFeedEvent } from '@tagma/server/threads/contract/wire/sn
 import empty from '@tagma/server/threads/contract/wire/feedPairs/empty.json';
 import { Effect } from 'effect';
 import { expect } from 'vitest';
-import { createFeedKinds } from '$lib/features/threads/native/feedRecords.js';
+import { testWireKinds } from '$lib/features/threads/native/testing.js';
 import { LiveConnection } from './Live.js';
 import { ServerOrigin } from './ServerOrigin.svelte.js';
+import { readingOf } from './WireEntryKinds.js';
 
 class FeedSocket extends EventTarget {
   readyState = 0;
@@ -42,7 +43,7 @@ it.live('a live subscription decodes with its window kinds and keeps an unknown 
     const live = yield* LiveConnection.make(
       () => socket as unknown as WebSocket,
       new ServerOrigin('http://localhost'),
-      createFeedKinds().wire(),
+      readingOf(testWireKinds()),
     );
     const received = Promise.withResolvers<ThreadWireFeedEvent>();
     const held = live.hold(

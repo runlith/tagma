@@ -17,7 +17,7 @@ function cache(shown: ShownThread): string | undefined {
   return state === 'cold' ? 'Cache cold' : state === 'unknown' ? 'Cache state unknown' : undefined;
 }
 
-export function recapCommand(shown: ShownThread, chat: ChatHold, writes: ThreadWrites): ComposerSlashCommand {
+function recapCommand(shown: ShownThread, chat: ChatHold, writes: ThreadWrites): ComposerSlashCommand {
   return {
     name: 'recap',
     order: 90,

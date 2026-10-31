@@ -7,7 +7,7 @@ import type { ThreadWrites } from '../../ThreadWrites.js';
 import { ThreadCompaction } from '../../thread/ThreadCompaction.svelte.js';
 import type { CommandDeclaration } from '../contribution.js';
 
-export function compactCommand(shown: ShownThread, chat: ChatHold, writes: ThreadWrites, panel: ModelPanelState): ComposerSlashCommand {
+function compactCommand(shown: ShownThread, chat: ChatHold, writes: ThreadWrites, panel: ModelPanelState): ComposerSlashCommand {
   return {
     name: 'compact',
     order: 70,

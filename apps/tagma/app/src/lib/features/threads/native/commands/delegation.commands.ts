@@ -13,7 +13,7 @@ const WORDS = {
 
 const LABELS = { on: 'On', off: 'Off', inherit: 'Inherit' } as const;
 
-export function delegationCommand(views: ThreadViews, writes: ThreadWrites): ComposerSlashCommand {
+function delegationCommand(views: ThreadViews, writes: ThreadWrites): ComposerSlashCommand {
   return {
     name: 'delegation',
     order: 30,

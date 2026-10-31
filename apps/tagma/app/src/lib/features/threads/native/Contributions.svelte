@@ -2,7 +2,7 @@
   import type { ComposerContributions } from '@runlith/chat-ui/ComposerContributions.svelte';
   import type { EntryKinds } from '@runlith/chat-ui/EntryKinds.svelte';
   import type { FeedRegions } from '@runlith/chat-ui/FeedRegions.svelte';
-  import type { Declarations, SlotOwners, SlotSurface } from './contribution.js';
+  import { ComposerParts, FeedParts, type SlotOwners, type SlotSurface, ThreadCommands, ThreadKinds, ThreadTools } from './contribution.js';
   import type { RenderingPorts } from './RenderingPorts.svelte.js';
   import type { TranscriptReading } from './TranscriptReading.svelte.js';
 
@@ -14,7 +14,6 @@
     regions,
     rendering,
     transcript,
-    declared,
   }: {
     owners: SlotOwners;
     surface: SlotSurface;
@@ -23,14 +22,19 @@
     regions: FeedRegions;
     rendering: RenderingPorts;
     transcript: TranscriptReading;
-    declared: Declarations;
   } = $props();
+
+  const commands = ThreadCommands.use();
+  const tools = ThreadTools.use();
+  const declarations = ThreadKinds.use();
+  const composerParts = ComposerParts.use();
+  const feedParts = FeedParts.use();
 
   $effect.pre(() => {
     const disposers = [
-      ...declared.commands.map((one) => composer.command(one.contributor, one.item.make(owners))),
-      ...declared.tools.map((one) => kinds.registerTool(one.contributor, one.item)),
-      ...declared.kinds.map((one) => one.item.register(kinds, one.contributor)),
+      ...commands.items.map((one) => composer.command(one.name, one.make(owners))),
+      ...tools.items.map((one) => kinds.registerTool(one.name, one)),
+      ...declarations.items.map((one) => one.register(kinds, one.key)),
     ];
     return () => {
       for (const dispose of disposers) dispose();
@@ -38,9 +42,9 @@
   });
 </script>
 
-{#each declared.composer as part (part.contributor)}
-  <part.item {...owners} contributor={part.contributor} {composer} {surface} {rendering} />
+{#each composerParts.items as one (one.id)}
+  <one.part {...owners} contributor={one.id} {composer} {surface} {rendering} />
 {/each}
-{#each declared.feed as part (part.contributor)}
-  <part.item {...owners} contributor={part.contributor} {kinds} {regions} {transcript} />
+{#each feedParts.items as one (one.id)}
+  <one.part {...owners} contributor={one.id} {kinds} {regions} {transcript} />
 {/each}

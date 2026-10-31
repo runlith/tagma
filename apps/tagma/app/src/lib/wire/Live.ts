@@ -4,8 +4,8 @@ import type { Words } from '@tagma/server/platform/contract/wire/refusal';
 import { DEVICE_REVOKED_CLOSE } from '@tagma/server/remote/contract/wire/access';
 import { TAGMA_SOCKET_PATH } from '@tagma/server/socket/rpc';
 import { LiveRpc } from './liveGroup.js';
-import { makeThreadEntryReader, ThreadEntryKinds, type ThreadEntryReader } from '@runlith/agent/transcript/kinds';
-import { EntryReading } from './EntryReading.js';
+import { ThreadEntryKinds } from '@runlith/agent/transcript/kinds';
+import { type EntryReading, readingOf, WireEntryKinds } from './WireEntryKinds.js';
 import { Platform, type PlatformSocket } from '@runlith/layer/Platform';
 import { Scope as AppScope } from '@runlith/layer/Scope';
 import { Service } from '@runlith/layer/key';
@@ -113,13 +113,13 @@ export class LiveConnection {
     private readonly fork: LiveFork,
     private readonly socket: PlatformSocket,
     private readonly origin: ServerOrigin,
-    private readonly entries: ThreadEntryReader,
+    private readonly entries: EntryReading,
   ) {}
 
   static make(
     socket: PlatformSocket,
     origin: ServerOrigin,
-    entries = makeThreadEntryReader({ products: [] }),
+    entries: EntryReading = readingOf(undefined),
   ): Effect.Effect<LiveConnection, never, Scope.Scope> {
     return Effect.flatMap(Scope.Scope, (life) =>
       Effect.map(FiberSet.makeRuntime<never, unknown, LiveGone>(), (fork) => new LiveConnection(life, fork, socket, origin, entries)),
@@ -329,7 +329,7 @@ export class LiveConnection {
       const dropped = Deferred.makeUnsafe<never, LiveConnectionLost>();
       this.inflight.add(dropped);
       return work(client).pipe(
-        Effect.provideService(ThreadEntryKinds, this.entries),
+        Effect.provideService(ThreadEntryKinds, this.entries()),
         Effect.tapCause((cause) =>
           Effect.sync(() => {
             const failure = failureFromCause(cause);
@@ -367,7 +367,7 @@ export class LiveConnection {
             return settled === undefined ? Effect.void : Effect.promise(() => settled);
           }),
         ).pipe(
-          Effect.provideService(ThreadEntryKinds, this.entries),
+          Effect.provideService(ThreadEntryKinds, this.entries()),
           Effect.exit,
           Effect.flatMap((exit) =>
             Effect.suspend(() => {
@@ -613,8 +613,8 @@ export class Live extends Service<LiveConnection>()('Live', { tier: 'app' }) {
     const platform = yield* Platform;
     const origin = yield* ServerOrigin;
     const fibers = Scope.makeUnsafe();
-    const entries = yield* EntryReading.optional();
-    const live = Effect.runSync(Scope.provide(LiveConnection.make(platform.socket, origin, entries?.wire()), fibers));
+    const kinds = yield* WireEntryKinds.optional();
+    const live = Effect.runSync(Scope.provide(LiveConnection.make(platform.socket, origin, readingOf(kinds)), fibers));
     app.defer(live.attach());
     app.defer(() => Effect.runPromise(Scope.close(fibers, Exit.void)));
     return live;

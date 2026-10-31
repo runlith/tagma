@@ -3,80 +3,94 @@ import { ComposerContributions } from '@runlith/chat-ui/ComposerContributions.sv
 import { settled } from '@runlith/chat-ui/composer';
 import { createEntryKinds } from '@runlith/chat-ui/EntryKinds.svelte';
 import { FeedRegions } from '@runlith/chat-ui/FeedRegions.svelte';
+import { Layer } from '@runlith/layer/Layer';
+import { makePoint } from '@runlith/layer/testing';
 import { RegistryClash } from '@runlith/roster/RegistryClash';
 import { Effect } from 'effect';
-import { flushSync, mount, unmount } from 'svelte';
+import { flushSync } from 'svelte';
 import { afterEach, expect, test } from 'vitest';
 import { it } from '@runlith/effect-test/vitest';
-import { DeclarationMissing, declare, type DeclarationSources } from './contribution.js';
+import { mountShell, type TestApp } from '$lib/app/testing.js';
+import {
+  type CommandDeclaration,
+  ComposerParts,
+  FeedParts,
+  ThreadCommands,
+  ThreadKinds,
+  ThreadTools,
+  productKindDeclaration,
+} from './contribution.js';
 import Contributions from './Contributions.svelte';
-import Probe, { probeEntry } from './Probe.fixture.svelte';
+import Probe, { probeEntry, probeKind } from './Probe.fixture.svelte';
 import * as probeStatic from './ProbeStatic.fixture.svelte';
 import { RenderingPorts } from './RenderingPorts.svelte.js';
-import { collectRecords } from './records.js';
 
-const mounted: Array<ReturnType<typeof mount>> = [];
+let shell: TestApp | undefined;
 
-afterEach(() => {
-  for (const one of mounted.splice(0)) unmount(one);
+afterEach(async () => {
+  await shell?.unmount();
+  shell = undefined;
 });
 
-const probeCommand = {
-  name: 'probe',
-  make: () => ({ name: 'probe', run: () => Effect.succeed({ tone: 'success' as const, message: 'probed' }) }),
-};
-
-const sources = (over: Partial<DeclarationSources> = {}): DeclarationSources => ({
-  commands: { 'features/probe/probe.commands.ts': { commands: [probeCommand] } },
-  tools: { 'features/probe/probe.tools.ts': { tools: [{ name: 'probe_static_tool', modelText: () => 'static text' }] } },
-  kinds: { 'features/probe/probe.kinds.svelte': probeStatic },
-  composer: {},
-  feed: { 'features/probe/probe.feed.svelte': { default: Probe } },
-  ...over,
+const command = (name: string, message: string): CommandDeclaration => ({
+  name,
+  make: () => ({ name, run: () => Effect.succeed({ tone: 'success' as const, message }) }),
 });
 
-function assemble(over: Partial<DeclarationSources> = {}) {
+function assemble() {
   const composer = new ComposerContributions();
   const kinds = createEntryKinds();
   const regions = new FeedRegions();
-  const props = {
-    owners: {} as never,
-    surface: {} as never,
+  shell = mountShell(
+    Layer.mergeAll(
+      ThreadCommands,
+      ThreadTools,
+      ThreadKinds,
+      ComposerParts,
+      FeedParts,
+      ThreadCommands.contribute('probe', command('probe', 'probed')),
+      ThreadTools.contribute('probe', { name: 'probe_static_tool', modelText: () => 'static text' }),
+      ThreadKinds.contribute('probe', ...probeStatic.kinds),
+      FeedParts.contribute('probe', { id: 'probe.feed', part: Probe }),
+    ),
+  );
+  shell.draw(Contributions, {
+    owners: {},
+    surface: {},
     composer,
     kinds,
     regions,
     rendering: new RenderingPorts(),
-    transcript: {} as never,
-    declared: declare(sources(over)),
-  };
-  const open = () => {
-    const one = mount(Contributions, { target: document.body, props });
-    mounted.push(one);
-    flushSync();
-    return one;
-  };
-  return { composer, kinds, regions, open };
+    transcript: {},
+  });
+  flushSync();
+  return { composer, kinds, regions, app: shell };
 }
 
 it.effect(
-  'a feature declared only by its own files contributes a command, an entry kind, tools and a pinned mount, and takes them away when it leaves',
+  'a feature declared only by a layer outside the threads feature contributes a command, an entry kind, tools and a pinned mount where the owner renders them, and takes them away when it leaves',
   () =>
     Effect.gen(function* () {
-      const { composer, kinds, regions, open } = assemble();
-      const one = open();
+      const { composer, kinds, regions, app } = assemble();
 
-      const [command] = composer.commands;
-      expect(command?.name).toBe('probe');
-      expect(yield* settled(command!.run({ gesture: 'send' }))).toEqual({ tone: 'success', message: 'probed' });
+      const [probe] = composer.commands;
+      expect(probe?.name).toBe('probe');
+      expect(yield* settled(probe!.run({ gesture: 'send' }))).toEqual({ tone: 'success', message: 'probed' });
       expect(kinds.renderer(probeEntry('a'))).toBeDefined();
       expect(kinds.keepsAlive(probeEntry('a'))).toBe(true);
       expect(kinds.tool('probe_tool')?.render).toBeDefined();
       expect(kinds.toolModelText('probe_static_tool', {})).toBe('static text');
       expect(regions.pins.map((pin) => pin.id)).toEqual(['probe']);
 
-      mounted.splice(mounted.indexOf(one), 1);
-      unmount(one);
+      const leave = app.get(ThreadCommands).register('late', command('late', 'joined'));
       flushSync();
+      expect(composer.commands.map((one) => one.name).sort()).toEqual(['late', 'probe']);
+      leave();
+      flushSync();
+      expect(composer.commands.map((one) => one.name)).toEqual(['probe']);
+
+      yield* Effect.promise(() => app.unmount());
+      shell = undefined;
       expect(composer.commands).toEqual([]);
       expect(kinds.renderer(probeEntry('a'))).toBeUndefined();
       expect(kinds.keepsAlive(probeEntry('a'))).toBe(false);
@@ -86,55 +100,19 @@ it.effect(
     }),
 );
 
-test('two declarations of one command refuse the collection at load and name both files', () => {
+test('two features giving one entry kind the same facet refuse the second and name both', () => {
+  const kinds = makePoint(ThreadKinds);
+  kinds.register('a', productKindDeclaration({ ...probeKind, keepAlive: true }));
+
   const error = (() => {
     try {
-      declare(
-        sources({
-          commands: {
-            'features/a/probe.commands.ts': { commands: [probeCommand] },
-            'features/b/probe.commands.ts': { commands: [probeCommand] },
-          },
-        }),
-      );
+      kinds.register('b', productKindDeclaration({ ...probeKind, keepAlive: true, classify: () => ({}) }));
     } catch (thrown) {
       return thrown;
     }
   })();
 
   expect(error).toBeInstanceOf(RegistryClash);
-  expect((error as RegistryClash).holders).toEqual(['features/a/probe.commands.ts', 'features/b/probe.commands.ts']);
-  expect((error as RegistryClash).message).toMatch(/features\/a\/probe.*features\/b\/probe/);
-});
-
-test('two feed parts contributing the same entry kind facet refuse the assembly and name both files', () => {
-  const { open } = assemble({
-    feed: { 'features/a/probe.feed.svelte': { default: Probe }, 'features/b/probe.feed.svelte': { default: Probe } },
-  });
-
-  const error = (() => {
-    try {
-      open();
-    } catch (thrown) {
-      return thrown;
-    }
-  })();
-
-  expect(error).toBeInstanceOf(RegistryClash);
-  expect((error as RegistryClash).holders).toEqual(['features/a/probe.feed.svelte', 'features/b/probe.feed.svelte']);
-});
-
-test('a declaring file without its list or its component is a typed error naming the file', () => {
-  expect(() => declare(sources({ commands: { 'features/x/x.commands.ts': {} } }))).toThrow(DeclarationMissing);
-  expect(() => declare(sources({ feed: { 'features/x/x.feed.svelte': {} } }))).toThrow(/features\/x\/x\.feed\.svelte/);
-});
-
-test('two declarations of one product record refuse the collection and name both files', () => {
-  const record = { id: 'probe', project: () => null };
-  expect(() =>
-    collectRecords({
-      'features/a/productRecords.ts': { productRecords: [record] },
-      'features/b/productRecords.ts': { productRecords: [record] },
-    }),
-  ).toThrow(/features\/a\/productRecords.*features\/b\/productRecords/);
+  expect((error as RegistryClash).holders).toEqual(['a', 'b']);
+  expect(() => kinds.register('c', productKindDeclaration({ ...probeKind, estimate: () => 1 }))).not.toThrow();
 });

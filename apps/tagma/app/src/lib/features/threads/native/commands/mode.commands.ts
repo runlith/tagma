@@ -9,7 +9,7 @@ function activeMode(writes: ThreadWrites): ThreadMode | undefined {
   return modes?.declared.find((mode) => mode.id === modes.active);
 }
 
-export function modeCommand(writes: ThreadWrites): ComposerSlashCommand {
+function modeCommand(writes: ThreadWrites): ComposerSlashCommand {
   return {
     name: 'mode',
     order: 20,

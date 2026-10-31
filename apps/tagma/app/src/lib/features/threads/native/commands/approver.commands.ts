@@ -9,7 +9,7 @@ const WORDS = {
   default: 'Its parent answers its questions, as far as the parent’s /approves reaches.',
 } as const;
 
-export function approverCommand(views: ThreadViews, writes: ThreadWrites): ComposerSlashCommand {
+function approverCommand(views: ThreadViews, writes: ThreadWrites): ComposerSlashCommand {
   return {
     name: 'approver',
     order: 31,

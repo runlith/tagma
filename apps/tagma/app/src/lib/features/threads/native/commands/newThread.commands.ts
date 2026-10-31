@@ -3,7 +3,7 @@ import type { ComposerSlashCommand } from '@runlith/chat-ui/composer';
 import type { ThreadWrites } from '../../ThreadWrites.js';
 import type { CommandDeclaration } from '../contribution.js';
 
-export function newThreadCommand(writes: ThreadWrites): ComposerSlashCommand {
+function newThreadCommand(writes: ThreadWrites): ComposerSlashCommand {
   return {
     name: 'new',
     order: 10,

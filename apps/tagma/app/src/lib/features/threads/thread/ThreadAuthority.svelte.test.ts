@@ -12,7 +12,8 @@ import { feedSnapshot, testLive, testThreadChat, testThreadSlot, commitRoute } f
 import { builtinModeRegistry } from '@runlith/agent/modes/ApprovalModes';
 const DECLARED_MODES = builtinModeRegistry().declared();
 import { approvalModes as declaredModes } from '../modeWords.js';
-import { modeCommand, modeCycle } from '../native/commands/mode.commands.js';
+import { commands as modeDeclarations, modeCycle } from '../native/commands/mode.commands.js';
+import { declaredCommand } from '../native/testing.js';
 import type { ThreadSlot } from '../ThreadSlot.svelte.js';
 
 let life: Scope | null = null;
@@ -80,7 +81,7 @@ test('the modes of the open thread are the ones its producer declared, and cycli
   });
   await shows(slot, thread('bypass'), fourModes('bypass'));
 
-  const mode = modeCommand(slot.writes);
+  const mode = declaredCommand(modeDeclarations, 'mode', slot);
   expect(mode.options?.map((option) => option.id)).toEqual(['trust', 'review', 'bypass', 'plan']);
   expect(mode).toMatchObject({ value: 'Bypass', valueActive: true });
 

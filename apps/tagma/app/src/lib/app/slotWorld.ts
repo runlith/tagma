@@ -34,9 +34,10 @@ import { ThreadSlot, type SlotOptions } from '$lib/features/threads/ThreadSlot.s
 import { type ThreadChat, ThreadChats } from '$lib/features/threads/ThreadChats.js';
 import type { SkillCatalogKey } from '$lib/features/threads/library/AgentLibraryRepo.js';
 import type { DraftShelf } from '$lib/features/threads/native/DraftShelf.svelte.js';
+import { ProductRecords } from '$lib/features/threads/native/records.js';
 import { SkillCatalog } from '$lib/features/threads/native/SkillCatalog.svelte.js';
 import { SurfaceChoices } from '$lib/features/threads/external/Surface.svelte.js';
-import { testShelf } from '$lib/features/threads/native/testing.js';
+import { testRecords, testShelf } from '$lib/features/threads/native/testing.js';
 import { TeamRepo } from '$lib/features/threads/team/TeamRepo.js';
 import { ThreadAuthority } from '$lib/features/threads/thread/ThreadAuthority.svelte.js';
 import { ThreadCompaction } from '$lib/features/threads/thread/ThreadCompaction.svelte.js';
@@ -130,6 +131,7 @@ export function testThreadSlots(over: Partial<SlotParts>, options: readonly Test
       new Notices(scope),
       over.skills ?? emptySkills(projectId, scope),
       testDoor(),
+      testRecords(),
       over.storage ?? makeStorage(),
       scope,
       world.app,
@@ -203,6 +205,7 @@ export function slotWorld(over: Partial<SlotParts>, scope: Scope) {
     Layer.of(ThreadChats, (over.chats ?? { of: () => chat }) as never),
     Layer.of(Live, live as never),
     Layer.of(Door, testDoor()),
+    Layer.of(ProductRecords, testRecords()),
     Layer.of(ThreadsRepo, threads),
     Layer.of(TeamRepo, teams),
     Layer.of(UsageAccounts, accounts),

@@ -9,7 +9,7 @@ import { Scope } from '@runlith/layer/Scope';
 import { ProjectRung } from '$lib/features/workspace/ProjectRung.js';
 import { Door } from '$lib/wire/Door.js';
 import { attachmentHandlers } from '../native/ThreadUploads.js';
-import { feedRecord } from '../native/feedRecords.js';
+import { ProductRecords, recordOf } from '../native/records.js';
 import { SurfaceChoices, surfaceOf } from '../external/Surface.svelte.js';
 import { ThreadRung } from '$lib/features/workspace/ThreadRung.js';
 import { type ThreadChat, ThreadChats } from '../ThreadChats.js';
@@ -20,7 +20,11 @@ export class ThreadFeed extends Service<ThreadFeed>()('ThreadFeed', { tier: 'thr
     const aim = yield* ProjectRung.Current;
     const thread = yield* ThreadRung.Current;
     const chat = (yield* ThreadChats).of(aim.projectId);
-    const handlers: ChatEntryHandlers = { ...attachmentHandlers(yield* Door, aim.projectId), transcriptEntry: feedRecord };
+    const records = yield* ProductRecords;
+    const handlers: ChatEntryHandlers = {
+      ...attachmentHandlers(yield* Door, aim.projectId),
+      transcriptEntry: (raw) => recordOf(records, raw),
+    };
     return new ThreadFeed(thread.id, chat, handlers, yield* ThreadEffects, yield* Scope, yield* SurfaceChoices, aim.projectId);
   }
 

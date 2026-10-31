@@ -59,8 +59,6 @@ import { WorkspaceLayer } from '$lib/features/workspace/layer.js';
 import { WorktreesLayer } from '$lib/features/worktrees/layer.js';
 import { RETRIES, retriable } from '$lib/wire/refusal.js';
 import { WireLayer } from '$lib/wire/wire.layer.js';
-import { EntryReading } from '$lib/wire/EntryReading.js';
-import { createFeedKinds } from '$lib/features/threads/native/feedRecords.js';
 import { PickScreen, type PickDraft } from '$lib/features/browser/pick/PickScreen.js';
 import { CheckoutScreen } from '$lib/features/checkout/CheckoutScreen.js';
 import { CallScreen, type CallDraft } from '$lib/features/speech/calls/CallScreen.js';
@@ -150,7 +148,6 @@ export function appLayers(desktop: DesktopApi | undefined) {
 
   return Layer.mergeAll(
     WireLayer,
-    Layer.provide(EntryReading, createFeedKinds),
     WorkspaceLayer,
     Layer.provide(SurfaceRegistry, () => new SurfaceRegistry(DECLARED_SURFACES)),
     ProjectsLayer,
