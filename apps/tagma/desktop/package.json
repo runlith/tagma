@@ -19,6 +19,7 @@
     "icon": "bun ./scripts/icon.ts",
     "test": "testbed bun test --no-isolate --pass-with-no-tests src",
     "test:integration": "bun -e \"require('electron')\" && testbed bun test --no-isolate $(find src -name '*.itest.ts' | sed 's|^|./|')",
+    "test:e2e": "testbed e2e",
     "typecheck": "runlith-typecheck"
   },
   "dependencies": {
@@ -33,6 +34,7 @@
     "@runlith/bundle": "workspace:*",
     "@runlith/codesign": "workspace:*",
     "@runlith/dev-runner": "workspace:*",
+    "@runlith/e2e": "workspace:*",
     "@types/bun": "catalog:",
     "@types/node": "catalog:",
     "effect": "catalog:",

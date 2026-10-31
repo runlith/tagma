@@ -88,6 +88,7 @@ export class BrowserHost implements Executor {
   private readonly chords = new Map<WebContents, readonly Chord[]>();
   private readonly framed = new Map<WebContents, readonly FramedChord[]>();
   private readonly reported = new WeakMap<HeldPage, number>();
+  private readonly observers: (() => void)[] = [];
   private locals = 0;
   private revisions = 0;
   private readonly events: PageEvents;
@@ -119,6 +120,14 @@ export class BrowserHost implements Executor {
 
   page(id: string): HeldPage | undefined {
     return this.byId.get(id as PageId);
+  }
+
+  pageOf(contents: WebContents): PageId | null {
+    return this.byContents.get(contents)?.id ?? null;
+  }
+
+  observe(listener: () => void): void {
+    this.observers.push(listener);
   }
 
   keys(owner: WebContents, chords: readonly Chord[], framed: readonly FramedChord[]): void {
@@ -221,6 +230,7 @@ export class BrowserHost implements Executor {
         if (page === undefined || page.id !== null) return missing(call.local);
         page.id = call.page;
         this.byId.set(call.page, page);
+        this.pagesMoved();
         answer(page.restrictions.state);
         return reporter.event({ kind: 'changed', page: call.page, change: page.state() });
       }
@@ -531,7 +541,12 @@ export class BrowserHost implements Executor {
     this.placement.add(page.placed);
     this.police(page);
     this.trim(page);
+    this.pagesMoved();
     return page;
+  }
+
+  private pagesMoved(): void {
+    for (const listener of this.observers) listener();
   }
 
   private closed(page: HeldPage): void {
@@ -549,6 +564,7 @@ export class BrowserHost implements Executor {
       lease.release();
     }
     if (!page.unloading && page.id !== null) this.reporter?.event({ kind: 'closed', page: page.id });
+    this.pagesMoved();
   }
 
   private opened(page: HeldPage, opener: HeldPage, url: string, disposition: Disposition): void {

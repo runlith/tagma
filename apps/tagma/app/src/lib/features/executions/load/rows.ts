@@ -4,7 +4,6 @@ import {
   type LoadPoint,
   type LoadProcess,
   type LoadRow,
-  type LoadRowKind,
   type LoadTotal,
   type LoadView,
 } from '@tagma/server/executions/contract/wire/load';
@@ -15,13 +14,14 @@ export type Order = 'cpu' | 'memory' | 'name';
 export type Shown = { readonly row: LoadRow; readonly processes: readonly LoadProcess[] | null };
 
 export type Listing = {
-  readonly installation: readonly Shown[];
-  readonly agents: readonly Shown[];
-  readonly work: readonly Shown[];
+  readonly own: readonly Shown[];
+  readonly idle: readonly Shown[];
   readonly outside: readonly Shown[];
   readonly minor: readonly Shown[];
   readonly others: LoadTotal | null;
 };
+
+const IDLE = 0.001;
 
 const byOrder =
   (order: Order) =>
@@ -50,18 +50,25 @@ export const listing = (view: LoadView, order: Order, query: string): Listing =>
           const processes = row.processes.filter((one) => found(`${processTitle(one)} ${one.name} ${one.command ?? ''} ${one.pid}`, words));
           return processes.length === 0 ? [] : [{ row, processes }];
         });
-  const of = (kind: LoadRowKind) => shown.filter((one) => one.row.kind === kind);
+  const own = shown.filter((one) => OWN_KINDS.has(one.row.kind));
   const outside = shown.filter((one) => !OWN_KINDS.has(one.row.kind));
   const folding = words.length === 0 && order !== 'name';
+  const idling = words.length === 0 && order === 'cpu';
   return {
-    installation: of('installation'),
-    agents: of('agent'),
-    work: of('work'),
+    own: idling ? own.filter((one) => one.row.rank >= IDLE) : own,
+    idle: idling ? own.filter((one) => one.row.rank < IDLE) : [],
     outside: folding ? outside.filter((one) => !one.row.minor) : outside,
     minor: folding ? outside.filter((one) => one.row.minor) : [],
     others: folding && view.totals.others.count > 0 ? view.totals.others : null,
   };
 };
+
+export const idleTotal = (rows: readonly Shown[]): LoadTotal => ({
+  count: rows.length,
+  share: rows.reduce((sum, one) => sum + one.row.share, 0),
+  memoryBytes: rows.reduce((sum, one) => sum + one.row.memoryBytes, 0),
+  unread: rows.reduce((sum, one) => sum + one.row.unread, 0),
+});
 
 const NO_WORK: readonly LoadExecution[] = [];
 
@@ -148,16 +155,39 @@ export const detailOf = (row: LoadRow): string =>
 
 export const heaviest = (view: LoadView, order: Order, count: number): readonly LoadRow[] =>
   view.rows
-    .filter((row) => row.kind === 'agent' || row.kind === 'work')
+    .filter((row) => OWN_KINDS.has(row.kind))
     .toSorted(byOrder(order))
     .slice(0, count);
 
 export const stopWords = (row: LoadRow): string =>
   row.kind === 'agent'
     ? "Stop all of this agent's commands and terminals and what they left running; the agent keeps its turn and gets their outcome"
-    : row.work !== undefined
-      ? 'Stop this work'
-      : `End ${row.title}: terminate, then kill what remains`;
+    : row.close !== undefined
+      ? row.close.length === 1
+        ? 'Close the page this process draws'
+        : `Close the ${row.close.length} pages this process draws`
+      : row.work !== undefined
+        ? 'Stop this work'
+        : `End ${row.title}: terminate, then kill what remains`;
+
+export const shareWords = (row: LoadRow): string | undefined =>
+  [
+    row.unread === 0
+      ? undefined
+      : `${row.unread} of its ${row.processes.length} processes were not read this step; the figure counts the rest.`,
+    row.lowerBound === true ? 'Processes born and gone between readings are not counted, so the figure is at least this much.' : undefined,
+  ]
+    .filter((one) => one !== undefined)
+    .join('\n') || undefined;
+
+export const unresolvedWords = (view: LoadView): string | undefined => {
+  if (view.unresolved.length === 0) return undefined;
+  const lines = view.unresolved.map(
+    (one) =>
+      `${one.title} (pid ${one.pid}): ${one.reason === 'different' ? 'that pid now names another process' : 'its start could not be read'}`,
+  );
+  return `${view.unresolved.length === 1 ? 'A window process' : `${view.unresolved.length} window processes`} could not be matched on this ${view.machine}, so ${view.unresolved.length === 1 ? 'its' : 'their'} load counts outside Tagma.\n${lines.join('\n')}`;
+};
 
 export const totalMemory = (total: LoadTotal): string => (total.memoryBytes === null ? '—' : formatBytes(total.memoryBytes));
 

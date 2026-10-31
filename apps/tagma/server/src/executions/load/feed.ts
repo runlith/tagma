@@ -1,15 +1,20 @@
 import type { LoadSubscription } from '@runlith/executions/ExecutionEvidence';
 import type { ExecutionsFailure } from '@runlith/executions/Executions';
-import type { LoadReading } from '@runlith/executions/protocol/evidence';
+import type { DeclaredPart, LoadInterest, LoadReading } from '@runlith/executions/protocol/evidence';
 import { Cause, Clock, Context, Duration, Effect, Fiber, Option, Queue, type Scope, Stream, SubscriptionRef, Tracer } from 'effect';
 import { LoadReader, type LoadPoint, type MachineLoadDelta, type MachineLoadFrame, type MachineState } from '../contract/wire/load.js';
-import { LoadFeed } from '../contract/service/load.js';
+import { LoadFeed, type WindowDeclarations } from '../contract/service/load.js';
 import type { TerminalFailure } from '../contract/service/terminals.js';
 import { LoadList } from './list.js';
+import type { PartNames } from './windows.js';
 import type { WorkNames } from './work.js';
 import type { Background } from '../../platform/contract/service/background.js';
 
-export type HostLoadOpening = Effect.Effect<LoadSubscription, ExecutionsFailure, Scope.Scope>;
+export type HostLoadOpening = (parts: readonly DeclaredPart[]) => Effect.Effect<LoadSubscription, ExecutionsFailure, Scope.Scope>;
+
+const NO_INTEREST: LoadInterest = { interested: false, others: false };
+
+const sameInterest = (left: LoadInterest, right: LoadInterest) => left.interested === right.interested && left.others === right.others;
 
 export type HostReading =
   | { readonly _tag: 'Waiting' }
@@ -23,22 +28,23 @@ const WAITING: HostReading = { _tag: 'Waiting' };
 
 export type HostLoad = Effect.Success<ReturnType<typeof makeHostLoad>>;
 
-export const makeHostLoad = Effect.fnUntraced(function* (opening: HostLoadOpening) {
+export const makeHostLoad = Effect.fnUntraced(function* (opening: HostLoadOpening, windows: WindowDeclarations['Service']) {
   const latest = yield* SubscriptionRef.make<HostReading>(WAITING);
-  const wanted = yield* SubscriptionRef.make(false);
+  const wanted = yield* SubscriptionRef.make(NO_INTEREST);
   const scope = yield* Effect.scope;
   let holders = 0;
   let fiber: Fiber.Fiber<unknown, never> | undefined;
 
   const once = Effect.scoped(
     Effect.gen(function* () {
-      const subscription = yield* opening;
+      const subscription = yield* opening(yield* windows.declared);
       yield* Effect.raceFirst(
         Stream.runForEach(subscription.readings, (reading) =>
           Effect.flatMap(Clock.currentTimeMillis, (readAt) => SubscriptionRef.set(latest, { _tag: 'Read', reading, readAt })),
         ),
-        Stream.runForEach(Stream.changes(SubscriptionRef.changes(wanted)), (interested) =>
-          subscription.setInterest({ interested, others: false }),
+        Effect.raceFirst(
+          Stream.runForEach(Stream.changesWith(SubscriptionRef.changes(wanted), sameInterest), subscription.setInterest),
+          Stream.runForEach(Stream.changes(windows.parts), subscription.setParts),
         ),
       );
     }),
@@ -85,26 +91,36 @@ export const makeHostLoad = Effect.fnUntraced(function* (opening: HostLoadOpenin
           return Effect.andThen(held === undefined ? Effect.void : Fiber.interrupt(held), SubscriptionRef.set(latest, WAITING));
         }),
     ),
-    interest: (interested: boolean): Effect.Effect<void> => SubscriptionRef.set(wanted, interested),
+    interest: (interest: LoadInterest): Effect.Effect<void> => SubscriptionRef.set(wanted, interest),
   };
 });
 
 type Seat = {
   base: number | undefined;
   readonly id: LoadReader;
-  interested: boolean;
+  demand: LoadInterest;
   readonly queue: Queue.Queue<MachineLoadFrame, TerminalFailure | Cause.Done>;
 };
 
-export const makeMachineLoad = Effect.fnUntraced(function* (host: HostLoad, names: WorkNames, background: Background['Service']) {
+export const makeMachineLoad = Effect.fnUntraced(function* (
+  host: HostLoad,
+  names: WorkNames,
+  background: Background['Service'],
+  parts: PartNames,
+) {
   const scope = yield* Effect.scope;
   const seats = new Map<Queue.Queue<MachineLoadFrame, TerminalFailure | Cause.Done>, Seat>();
   let wake: (() => void) | undefined;
   let fiber: Fiber.Fiber<void> | undefined;
 
-  const anyInterested = () => {
-    for (const seat of seats.values()) if (seat.interested) return true;
-    return false;
+  const demanded = (): LoadInterest => {
+    let interested = false;
+    let others = false;
+    for (const seat of seats.values()) {
+      interested ||= seat.demand.interested;
+      others ||= seat.demand.others;
+    }
+    return { interested, others };
   };
 
   const composed = Effect.suspend(() => {
@@ -136,7 +152,7 @@ export const makeMachineLoad = Effect.fnUntraced(function* (host: HostLoad, name
             if (pulse._tag === 'Read') {
               const refs = pulse.reading.groups.flatMap((group) => (group.owner._tag === 'Execution' ? [group.owner.execution] : []));
               const named = yield* names.read(refs, composedAt);
-              const read = list.compose(pulse.reading, named, pulse.readAt, yield* background.standing);
+              const read = list.compose(pulse.reading, named, parts, pulse.readAt, yield* background.standing);
               state = { _tag: 'Read', view: read.view };
               point = read.point;
             } else {
@@ -168,7 +184,7 @@ export const makeMachineLoad = Effect.fnUntraced(function* (host: HostLoad, name
 
   const join = (queue: Queue.Queue<MachineLoadFrame, TerminalFailure | Cause.Done>) =>
     Effect.suspend(() => {
-      seats.set(queue, { base: undefined, id: LoadReader.make(crypto.randomUUID()), interested: false, queue });
+      seats.set(queue, { base: undefined, id: LoadReader.make(crypto.randomUUID()), demand: NO_INTEREST, queue });
       if (fiber !== undefined) {
         wake?.();
         return Effect.void;
@@ -185,7 +201,7 @@ export const makeMachineLoad = Effect.fnUntraced(function* (host: HostLoad, name
     Effect.suspend(() => {
       const seat = seats.get(queue);
       seats.delete(queue);
-      const release = seat?.interested === true ? host.interest(anyInterested()) : Effect.void;
+      const release = seat !== undefined && (seat.demand.interested || seat.demand.others) ? host.interest(demanded()) : Effect.void;
       if (seats.size > 0) return release;
       const held = fiber;
       fiber = undefined;
@@ -198,12 +214,12 @@ export const makeMachineLoad = Effect.fnUntraced(function* (host: HostLoad, name
         bufferSize: 1,
         strategy: 'sliding',
       }),
-    interest: (reader, interested) =>
+    interest: (reader, demand) =>
       Effect.suspend(() => {
         const seat = [...seats.values()].find((one) => one.id === reader);
         if (seat === undefined) return Effect.succeed(false);
-        seat.interested = interested;
-        return Effect.as(host.interest(anyInterested()), true);
+        seat.demand = demand;
+        return Effect.as(host.interest(demanded()), true);
       }),
   });
 });

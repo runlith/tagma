@@ -6,7 +6,7 @@ import { dirname, join, resolve } from 'node:path';
 import { Effect, Schema } from 'effect';
 import { type Handover, RESTART_RECORD, type Startup } from '@tagma/server/installation/contract/wire/restart';
 import { readHandover, readStartup } from '@tagma/server/installation/process/record';
-import { CLI_ENTRY, DESKTOP_PID_ENV, RUNTIME_PART, SERVE_FLAGS } from '@tagma/server/installation/contract/wire/layout';
+import { CLI_ENTRY, RUNTIME_PART, SERVE_FLAGS } from '@tagma/server/installation/contract/wire/layout';
 import { stalledSchema, unreadyHealthSchema } from '@tagma/server/http/contract/wire/health';
 import { LOCK_FILE } from '@tagma/server/platform/contract/wire/lock';
 import type { Bearing } from './release.js';
@@ -150,7 +150,7 @@ export async function startServer(closure: Closure, log: string, env: NodeJS.Pro
   try {
     const child = spawn(closure.runtime, [...SERVE_FLAGS, closure.entry, 'serve'], {
       cwd: closure.root,
-      env: { ...env, [DESKTOP_PID_ENV]: String(process.pid) },
+      env,
       detached: true,
       stdio: ['ignore', file.fd, file.fd],
     });

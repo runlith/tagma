@@ -1,6 +1,39 @@
 import { expect, test } from 'vitest';
-import type { LoadProcess, LoadRow } from '@tagma/server/executions/contract/wire/load';
-import { executionProcesses } from './rows.js';
+import type { LoadProcess, LoadRow, LoadRowKind, LoadView } from '@tagma/server/executions/contract/wire/load';
+import { executionProcesses, listing } from './rows.js';
+
+const loadRow = (key: string, kind: LoadRowKind, rank: number, memoryBytes: number, title = key): LoadRow => ({
+  key,
+  kind,
+  title,
+  share: rank,
+  rank,
+  memoryBytes,
+  unread: 0,
+  minor: false,
+  processes: [],
+});
+
+test('Tagma rows stand in one list by the chosen order, and idle ones fold to its end only under CPU without a search', () => {
+  const view = {
+    rows: [
+      loadRow('agent', 'agent', 0.0002, 900, 'release'),
+      loadRow('pages', 'renderer', 0.3, 100, 'Page — Docs (example.com)'),
+      loadRow('server', 'server', 0.02, 500),
+      loadRow('chrome', 'program', 0.5, 50),
+    ],
+    totals: { others: { count: 0, share: 0, memoryBytes: 0, unread: 0 } },
+  } as unknown as LoadView;
+  const keys = (shown: readonly { readonly row: LoadRow }[]) => shown.map((one) => one.row.key);
+  const byCpu = listing(view, 'cpu', '');
+  expect(keys(byCpu.own)).toEqual(['pages', 'server']);
+  expect(keys(byCpu.idle)).toEqual(['agent']);
+  expect(keys(byCpu.outside)).toEqual(['chrome']);
+  const byMemory = listing(view, 'memory', '');
+  expect(keys(byMemory.own)).toEqual(['agent', 'server', 'pages']);
+  expect(byMemory.idle).toEqual([]);
+  expect(keys(listing(view, 'cpu', 'example').own)).toEqual(['pages']);
+});
 
 const process = (pid: number, parent: number | undefined, execution: string | undefined): LoadProcess => ({
   pid,

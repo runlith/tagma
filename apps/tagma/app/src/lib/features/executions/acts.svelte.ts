@@ -1,11 +1,14 @@
 import type { CommandRevisionAnswer, RevisionRefusal } from '@runlith/executions/protocol/command';
 import type { ResidualResource, StopReceipt, UnverifiableResource, ProcessTarget, ProcessEnding } from '@runlith/executions/protocol/stop';
 import { Service } from '@runlith/layer/key';
+import type { LoadPage } from '@tagma/server/executions/contract/wire/load';
 import { SvelteMap } from 'svelte/reactivity';
 import { Door } from '$lib/wire/Door.js';
 import { refusalOf } from '$lib/wire/refusal.js';
 
 export type ProcessOutcome = ProcessEnding | { readonly _tag: 'Unreached'; readonly detail: string };
+
+export type PageClosing = { readonly _tag: 'Closed' } | { readonly _tag: 'Refused'; readonly code: string; readonly reason: string };
 
 export type ExecutionTarget = {
   readonly kind: 'command' | 'terminal';
@@ -118,6 +121,20 @@ export class ExecutionActs extends Service<ExecutionActs>()('ExecutionActs', { t
       const refusal = refusalOf(error);
       return [{ _tag: 'Unreached', detail: `${refusal.code}: ${refusal.reason}` }];
     }
+  }
+
+  async closePages(pages: readonly LoadPage[]): Promise<readonly PageClosing[]> {
+    return await Promise.all(
+      pages.map(async ({ page, projectId }): Promise<PageClosing> => {
+        try {
+          await this.door.perform('close_page', { page }, { project: String(projectId) });
+          return { _tag: 'Closed' };
+        } catch (error) {
+          const refusal = refusalOf(error);
+          return { _tag: 'Refused', code: refusal.code, reason: refusal.reason };
+        }
+      }),
+    );
   }
 
   private async failed(

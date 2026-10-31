@@ -64,6 +64,7 @@ export const MachineReport = Schema.Union([
   Schema.Struct({
     _tag: Schema.Literal('Read'),
     cores: Schema.Int,
+    machine: LoadView.fields.machine,
     share: Schema.NullOr(Schema.Number),
     memory: MachineMemory,
     saturated: Schema.Boolean,
@@ -72,6 +73,7 @@ export const MachineReport = Schema.Union([
     totals: LoadTotals,
     top: Schema.optional(LoadTop),
     background: LoadView.fields.background,
+    unresolved: LoadView.fields.unresolved,
     unread: Schema.optional(Schema.String),
   }),
   MachineState.cases.Waiting,
@@ -85,7 +87,7 @@ export const MACHINE_OPERATIONS = {
     approval: ASKS_NEVER,
     ...executionShapes({ capability: 'terminals', needs: ['shared'] }).read,
     meaning: 'Read what takes the machine CPU and memory now: every process charged to one row, an agent with all its work or a program.',
-    grammar: `Shares are fractions of the whole machine, and the rows add up to the machine CPU. An agent row is all the processes of one thread's commands and terminals, short-lived children and what they left running included; a work row is a Tagma command or terminal no thread owns; a program row is one application with all its helpers; the installation row is Tagma itself: the server with its own agents, its execution host and its window; the kernel row is what the kernel spent outside every listed process. Totals sum Tagma's own rows (installation, agents and work), each of agents and work, everything outside Tagma, and the small outside rows a panel folds; once the machine memory is read, the outside memory is the machine's used memory beyond Tagma's, since process footprints overlap and their sum overstates it. A total's share is null before the first interval, its memory null when no process was read, and unread counts the processes whose CPU it misses. Rows come heaviest first by their average over the last seconds, and top names Tagma's heaviest own row once it takes a tenth of the machine; background lists work the server does on its own, with its progress, inside the installation row's share; each carries its ${ROW_PROCESSES} heaviest processes and counts the rest in more. A process's share includes the short-lived children it ran and reaped between readings, and reapedShare is that part of it; a process of a live command or terminal names its key in execution, and parent is its parent pid; a process of the installation row names its role: window, server, host or holder. A pid answers the row holding that process. This read starts sampling only for the reading and never starts or ends work.`,
+    grammar: `Shares are fractions of the whole machine, and the rows add up to the machine CPU; machine is what the system calls this kind of computer. Tagma's own rows: server (with the work it runs itself and the short-lived children it reaps), host (the terminal host: the execution host and its process holder), interface (the window's main and utility processes and the renderer drawing Tagma), graphics (the window's graphics process), renderer (one window process drawing built-in browser pages or app and MCP views, titled by what it draws; close names the pages it hosts), agent (all the processes of one thread's commands and terminals, short-lived children and what they left running included) and work (a Tagma command or terminal no thread owns). Outside rows: a program row is one application with all its helpers; the kernel row is what the kernel spent outside every listed process. unresolved lists window processes that could not be matched to a process of the machine, whose load stands outside Tagma. Totals sum Tagma's own rows, each of agents and work, everything outside Tagma, and the small outside rows a panel folds; once the machine memory is read, the outside memory is the machine's used memory beyond Tagma's, since process footprints overlap and their sum overstates it. A total's share is null before the first interval, its memory null when no process was read, and unread counts the processes whose CPU it misses; lowerBound on a row means its share misses processes born and gone between readings. Rows come heaviest first by their average over the last seconds, and top names Tagma's heaviest own row once it takes a tenth of the machine; background lists work the server does on its own, with its progress, inside the server row's share; each carries its ${ROW_PROCESSES} heaviest processes and counts the rest in more. A process's share includes the short-lived children it ran and reaped between readings, and reapedShare is that part of it; a process of a live command or terminal names its key in execution, and parent is its parent pid; a process of the server or host row names its role. A pid answers the row holding that process. This read starts sampling only for the reading, includes processes the system hides from this user, and never starts or ends work.`,
     input: Schema.Struct({
       limit: Schema.optional(
         Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: ceilingOf(MACHINE_ROWS) })).annotate({
@@ -114,7 +116,7 @@ export const MACHINE_OPERATIONS = {
     identity: { key: 'call' },
     meaning: 'End measured processes — one, or every process of a program — rechecking each native start identity before each signal.',
     grammar:
-      "Each target carries its machine scope and start witness, as the machine load listed it. Tagma's own server, execution host and window, and processes this user may not signal, are refused. A changed identity, unreadable process or refused signal remains an explicit refusal. Ended means the selected identity was observed gone; Survived means it remained after terminate and kill.",
+      "Each target carries its machine scope and start witness, as the machine load listed it. Tagma's own server, execution host and window processes, and processes this user may not signal, are refused. A changed identity, unreadable process or refused signal remains an explicit refusal. Ended means the selected identity was observed gone; Survived means it remained after terminate and kill.",
     input: Schema.Struct({ targets: Schema.Array(ProcessTarget).check(Schema.isMinLength(1)) }),
     answer: arms({ ok: { outcomes: Schema.Array(ProcessEnding) } }),
     refusals: TERMINAL_REFUSALS,

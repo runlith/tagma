@@ -30,12 +30,14 @@ const view = (share: number | null): LoadView => ({
   scope: { host: { _tag: 'Local', machine: 'fixture' }, network: { _tag: 'Local', machine: 'fixture' } },
   readAt: 2000,
   cores: 4,
+  machine: 'Computer',
   share,
   memory: { _tag: 'Unknown', reason: 'unknown', detail: 'fixture' },
   saturated: false,
   rows: [row('chrome', 0.5, 12), row('yes', 0.25, 1)],
   totals: { own: none, agent: none, work: none, outside: none, others: none },
   background: [],
+  unresolved: [],
 });
 
 it.live('the read waits for an interval, answers the heaviest rows with their heaviest processes and releases its subscription', () =>

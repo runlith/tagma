@@ -106,6 +106,7 @@
         "@runlith/bundle": "workspace:*",
         "@runlith/codesign": "workspace:*",
         "@runlith/dev-runner": "workspace:*",
+        "@runlith/e2e": "workspace:*",
         "@types/bun": "catalog:",
         "@types/node": "catalog:",
         "effect": "catalog:",

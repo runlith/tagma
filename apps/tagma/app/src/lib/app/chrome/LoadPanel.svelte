@@ -3,17 +3,18 @@
   import ChevronRight from '@lucide/svelte/icons/chevron-right';
   import Search from '@lucide/svelte/icons/search';
   import { Popover } from '@runlith/primitives/popover.svelte';
-  import type { LoadRow as Row, LoadTotal } from '@tagma/server/executions/contract/wire/load';
   import { tick, untrack } from 'svelte';
   import { SvelteSet } from 'svelte/reactivity';
   import { Readings, silentWords } from '$lib/features/executions/load/Readings.svelte.js';
   import {
+    idleTotal,
     layersOf,
     listing,
     litOf,
     totalMemory,
     totalShare,
     totalUnread,
+    unresolvedWords,
     type Order,
     type Shown,
   } from '$lib/features/executions/load/rows.js';
@@ -42,6 +43,7 @@
   let lit = $state<string | null>(null);
   let outsideOpen = $state(false);
   let othersOpen = $state(false);
+  let idleOpen = $state(false);
   let flashed = $state<string | null>(null);
   let body = $state<HTMLDivElement | null>(null);
   const opened = new SvelteSet<string>();
@@ -63,9 +65,12 @@
     new Set(loaded === null ? [] : loaded.rows.flatMap((row) => [row.key, ...row.processes.map((one) => `${row.key}/${one.pid}`)])),
   );
   const departed = $derived(view.departed(standing, now));
-  const nothing = $derived(
-    listed !== null && listed.installation.length + listed.agents.length + listed.work.length + listed.outside.length === 0,
-  );
+  const nothing = $derived(listed !== null && listed.own.length + listed.idle.length + listed.outside.length === 0);
+  const idle = $derived(listed === null ? null : idleTotal(listed.idle));
+  const unresolved = $derived(loaded === null ? undefined : unresolvedWords(loaded));
+
+  $effect(() => readings.demandOthers(outsideShown));
+  $effect(() => () => untrack(() => readings.demandOthers(false)));
 
   $effect(() => {
     const aimed = view.aimed;
@@ -138,20 +143,19 @@
   />
 {/snippet}
 
-{#snippet group(label: string, shown: readonly Shown[], total: LoadTotal, key: string)}
-  {#if shown.length > 0}
+{#snippet background()}
+  {#if loaded !== null && loaded.background.length > 0}
     <div
       class="flex h-6 items-center gap-2 border-t border-border bg-sunken pr-2 pl-8 text-meta text-muted-foreground"
-      data-load-group={key}
+      data-load-group="background"
     >
-      <FadeText class="flex-1"><span class="font-medium text-foreground">{label}</span> <span class="stamp">{total.count}</span></FadeText>
-      <span class="w-14 shrink-0"></span>
-      <span class={FIGURE} title={totalUnread(total)}>{totalShare(total)}</span>
-      <span class={MEMORY}>{totalMemory(total)}</span>
-      <span class="w-5 shrink-0"></span>
+      <FadeText class="flex-1"
+        ><span class="font-medium text-foreground">Background work</span>
+        <span class="stamp">{loaded.background.length}</span></FadeText
+      >
     </div>
-    {#each shown as one (one.row.key)}
-      {@render row(one)}
+    {#each loaded.background as work (work.id)}
+      <LoadBackground {work} class="border-t border-vein py-2 pr-3 pl-8" />
     {/each}
   {/if}
 {/snippet}
@@ -176,6 +180,9 @@
     {:else if loaded?.unread !== undefined}
       <FadeText class="text-meta text-muted-foreground" title={loaded.unread} text="Part of this reading was not read: {loaded.unread}" />
     {/if}
+    {#if silent === null && unresolved !== undefined}
+      <FadeText class="text-meta text-muted-foreground" title={unresolved} text={unresolved.split('\n')[0]} data-load-unresolved />
+    {/if}
     {#each departed as one (one.key)}
       <FadeText
         class={['text-meta', one.failed ? 'text-destructive' : 'text-muted-foreground']}
@@ -192,8 +199,8 @@
       <Search class="size-3.5 shrink-0 text-muted-foreground" />
       <input
         class="min-w-0 flex-1 bg-transparent text-small outline-none"
-        placeholder="Name, command or PID"
-        aria-label="Find an agent, command, program or process"
+        placeholder="Name, page, command or PID"
+        aria-label="Find an agent, page, view, command, program or process"
         bind:value={query}
       />
     </label>
@@ -218,25 +225,36 @@
     {:else if nothing}
       <p class="px-3 py-4 text-center text-muted-foreground" data-load-nothing>Nothing matches.</p>
     {:else}
-      {#each listed.installation as one (one.row.key)}
+      {#each listed.own as one (one.row.key)}
         {@render row(one)}
+        {#if !searching && one.row.kind === 'server'}{@render background()}{/if}
       {/each}
-      {#if !searching && loaded.background.length > 0}
-        <div
-          class="flex h-6 items-center gap-2 border-t border-border bg-sunken pr-2 pl-8 text-meta text-muted-foreground"
-          data-load-group="background"
-        >
-          <FadeText class="flex-1"
-            ><span class="font-medium text-foreground">Background work</span>
-            <span class="stamp">{loaded.background.length}</span></FadeText
+      {#if idle !== null && idle.count > 0}
+        <div class="border-t border-vein" data-load-idle>
+          <button
+            type="button"
+            class="flex min-h-8 w-full items-center gap-2 pr-2 pl-2 text-left text-muted-foreground hover:bg-hover"
+            aria-expanded={idleOpen}
+            data-load-option
+            onclick={() => (idleOpen = !idleOpen)}
           >
+            <span class="grid size-4 shrink-0 place-items-center"
+              ><ChevronRight class={['size-3 transition-transform', idleOpen ? 'rotate-90' : '']} /></span
+            >
+            <FadeText class="flex-1" text="Idle — {idle.count}" />
+            <span class="w-14 shrink-0"></span>
+            <span class={FIGURE} title={totalUnread(idle)}>{totalShare(idle)}</span>
+            <span class={MEMORY}>{totalMemory(idle)}</span>
+            <span class="w-5 shrink-0"></span>
+          </button>
+          {#if idleOpen}
+            {#each listed.idle as one (one.row.key)}
+              {@render row(one)}
+              {#if one.row.kind === 'server'}{@render background()}{/if}
+            {/each}
+          {/if}
         </div>
-        {#each loaded.background as work (work.id)}
-          <LoadBackground {work} class="border-t border-vein py-2 pr-3 pl-8" />
-        {/each}
       {/if}
-      {@render group('Agents', listed.agents, loaded.totals.agent, 'agent')}
-      {@render group('Terminals and commands', listed.work, loaded.totals.work, 'work')}
       {#if !searching || listed.outside.length > 0}
         <div class="border-t border-border" data-load-outside>
           <button
@@ -250,8 +268,8 @@
               ><ChevronRight class={['size-3 transition-transform', outsideShown ? 'rotate-90' : '']} /></span
             >
             <span class="flex min-w-0 flex-1 flex-col py-1">
-              <FadeText class="font-medium" text="Rest of the Mac" />
-              <FadeText class="text-meta text-muted-foreground" text="Other programs and the kernel" />
+              <FadeText class="font-medium" text="Rest of the {loaded.machine}" />
+              <FadeText class="text-meta text-muted-foreground" text="Other programs and the system" />
             </span>
             <span class="w-14 shrink-0"></span>
             <span class={FIGURE} title={totalUnread(loaded.totals.outside)}>{totalShare(loaded.totals.outside)}</span>

@@ -1,6 +1,7 @@
 import { KeyUnavailable, SafeStorageKey } from '@runlith/browser-cookies/source';
 import { Context, Effect, Exit, Layer, Scope, Stream } from 'effect';
 import { Hosts } from '../browser/contract/service/hosts.js';
+import { WindowDeclarations } from '../executions/contract/service/load.js';
 import { GateRefusal } from '../platform/contract/wire/refusal.js';
 import { type Attachment, makeAttachment } from './attachment.js';
 import { DesktopChannel } from './contract/service/channel.js';
@@ -10,6 +11,7 @@ type Held = { readonly attachment: Attachment; readonly scope: Scope.Closeable; 
 
 export const makeDesktopChannel = Effect.gen(function* () {
   const hosts = yield* Hosts;
+  const windows = yield* WindowDeclarations;
   const scope = yield* Effect.scope;
   const attachments = new Map<string, Held>();
   let generations = 0;
@@ -19,6 +21,7 @@ export const makeDesktopChannel = Effect.gen(function* () {
     if (held.attachment.done()) return;
     yield* Effect.logInfo(`desktop browser: host ${held.attachment.host.id} generation ${held.attachment.generation} ends: ${reason}`);
     yield* held.attachment.end(reason);
+    yield* windows.end(held.attachment.host.id, held.attachment.generation);
     yield* Scope.close(held.scope, Exit.void);
   });
 
@@ -28,7 +31,12 @@ export const makeDesktopChannel = Effect.gen(function* () {
         const generation = ++generations;
         const stale = attachments.get(host);
         if (stale !== undefined) yield* end(stale, `the host attached again as generation ${generation}`);
-        const attachment = yield* makeAttachment({ id: host, generation, pid });
+        const attachment = yield* makeAttachment({
+          id: host,
+          generation,
+          pid,
+          declare: (declaration) => windows.declare(host, generation, declaration),
+        });
         const held: Held = { attachment, scope: yield* Scope.fork(scope), claimed: false };
         attachments.set(host, held);
         yield* Effect.addFinalizer(() => end(held, 'its attach feed ended'));

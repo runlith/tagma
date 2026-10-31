@@ -1,9 +1,10 @@
-import type { LoadGroup, LoadReading } from '@runlith/executions/protocol/evidence';
+import type { LoadGroup, LoadProcess as HostProcess, LoadReading } from '@runlith/executions/protocol/evidence';
 import { commandKey } from '../commands/feedDelta.js';
 import {
   keptHistory,
   OWN_KINDS,
   type LoadExecution,
+  type LoadPage,
   type LoadPoint,
   type LoadProcess,
   type LoadProject,
@@ -12,9 +13,11 @@ import {
   type LoadRowKind,
   type LoadTotal,
   type LoadView,
+  type UnresolvedPart,
 } from '../contract/wire/load.js';
 import type { ThreadId } from '../../platform/contract/wire/thread.js';
 import type { BackgroundWork } from '../../platform/contract/wire/background.js';
+import type { PartNames, PartRow } from './windows.js';
 import type { Named, Work } from './work.js';
 
 const RANK_MS = 5_000;
@@ -46,6 +49,107 @@ type Building = {
   readonly executions: LoadExecution[];
   readonly residuals: LoadResidual[];
   newest: { readonly work: Work; readonly ended: boolean } | undefined;
+  close: readonly LoadPage[] | undefined;
+  lowerBound: boolean;
+};
+
+type Open = (key: string, kind: LoadRowKind, title: string, extra?: Partial<Building>) => Building;
+
+type Slice = {
+  readonly row: Building;
+  readonly cores: number;
+  readonly memoryBytes: number;
+  readonly unread: number;
+  readonly processes: readonly HostProcess[];
+};
+
+const HOST_ROLES = new Set(['host', 'holder']);
+
+const partTitle = (row: PartRow | undefined): string => {
+  switch (row?._tag) {
+    case undefined:
+      return 'Window process';
+    case 'Interface':
+      return 'Interface';
+    case 'Graphics':
+      return 'Graphics';
+    case 'Renderer':
+      return row.titles.join(', ');
+  }
+};
+
+const unresolvedOf = (reading: LoadReading, parts: PartNames): readonly UnresolvedPart[] =>
+  reading.unresolvedParts.map(({ part, reason }) => ({ title: partTitle(parts(part.key)), pid: part.pid, reason }));
+
+const SIGNALLED: ReadonlySet<LoadRowKind> = new Set(['agent', 'work', 'program']);
+
+const whole = (row: Building, group: LoadGroup): Slice => ({
+  row,
+  cores: group.cores,
+  memoryBytes: group.memoryBytes,
+  unread: group.unread,
+  processes: group.processes,
+});
+
+const partOf = (row: PartRow | undefined, key: string, open: Open): Building => {
+  switch (row?._tag) {
+    case undefined:
+    case 'Interface':
+      return open('interface', 'interface', 'Interface', { detail: 'the window and what it draws' });
+    case 'Graphics':
+      return open('graphics', 'graphics', 'Graphics', { detail: "the window's graphics process" });
+    case 'Renderer':
+      return open(`renderer:${key}`, 'renderer', partTitle(row), { close: row.close });
+  }
+};
+
+const installationSlices = (group: LoadGroup, open: Open): readonly Slice[] => {
+  const byPid = new Map(group.processes.map((one) => [one.identity.pid, one]));
+  const roleOf = (one: HostProcess): string | undefined => {
+    let at: HostProcess | undefined = one;
+    for (let hops = 0; at !== undefined && hops <= byPid.size; hops += 1) {
+      if (at.role !== undefined) return at.role;
+      at = at.parent === undefined ? undefined : byPid.get(at.parent);
+    }
+    return undefined;
+  };
+  const host = group.processes.filter((one) => HOST_ROLES.has(roleOf(one) ?? ''));
+  const server = group.processes.filter((one) => !HOST_ROLES.has(roleOf(one) ?? ''));
+  const hostCores = host.reduce((sum, one) => sum + (one.cores ?? 0), 0);
+  const hostMemory = host.reduce((sum, one) => sum + (one.memoryBytes ?? 0), 0);
+  const hostUnread = host.filter((one) => one.unread !== undefined).length;
+  const serverSlice: Slice = {
+    row: open('server', 'server', 'Server'),
+    cores: Math.max(0, group.cores - hostCores),
+    memoryBytes: Math.max(0, group.memoryBytes - hostMemory),
+    unread: Math.max(0, group.unread - hostUnread),
+    processes: server,
+  };
+  if (host.length === 0) return [serverSlice];
+  return [
+    serverSlice,
+    {
+      row: open('host', 'host', 'Terminal host', { detail: 'the execution host and its process holder' }),
+      cores: hostCores,
+      memoryBytes: hostMemory,
+      unread: Math.min(group.unread, hostUnread),
+      processes: host,
+    },
+  ];
+};
+
+type OuterOwner = Exclude<LoadGroup['owner'], { readonly _tag: 'Installation' | 'Part' }>;
+
+const slicesOf = (group: LoadGroup, open: Open, parts: PartNames, other: (owner: OuterOwner) => Building): readonly Slice[] => {
+  const owner = group.owner;
+  switch (owner._tag) {
+    case 'Installation':
+      return installationSlices(group, open);
+    case 'Part':
+      return [whole(partOf(parts(owner.key), owner.key, open), group)];
+    default:
+      return [whole(other(owner), group)];
+  }
 };
 
 export class LoadList {
@@ -62,12 +166,13 @@ export class LoadList {
   compose(
     reading: LoadReading,
     named: Named,
+    parts: PartNames,
     readAt: number,
     background: readonly BackgroundWork[],
   ): { readonly view: LoadView; readonly point: LoadPoint | undefined } {
     const cores = reading.cores;
     const built = new Map<string, Building>();
-    const open = (key: string, kind: LoadRowKind, title: string, extra: Partial<Building> = {}): Building => {
+    const open: Open = (key, kind, title, extra = {}) => {
       const standing = built.get(key);
       if (standing !== undefined) return standing;
       const fresh: Building = {
@@ -85,34 +190,16 @@ export class LoadList {
         executions: [],
         residuals: [],
         newest: undefined,
+        close: undefined,
+        lowerBound: false,
         ...extra,
       };
       built.set(key, fresh);
       return fresh;
     };
     for (const group of reading.groups) {
-      const row = this.rowOf(group, named, open, reading.overMicros === 0 ? null : group.cores / cores);
-      row.cores += group.cores;
-      row.memoryBytes += group.memoryBytes;
-      row.unread += group.unread;
-      const execution = group.owner._tag === 'Execution' && !group.owner.ended ? commandKey(group.owner.execution) : undefined;
-      for (const one of group.processes)
-        row.processes.push({
-          pid: one.identity.pid,
-          birth: one.identity.birth,
-          parent: one.parent,
-          execution,
-          name: one.name,
-          command: one.command,
-          role: one.role,
-          share: one.cores === null ? null : one.cores / cores,
-          reapedShare: one.reapedCores === undefined ? undefined : one.reapedCores / cores,
-          memoryBytes: one.memoryBytes,
-          killable: one.signal && row.kind !== 'installation' && row.kind !== 'kernel',
-          unread: one.unread,
-        });
-      if (group.owner._tag === 'Execution' && group.owner.ended)
-        for (const one of group.processes) row.residuals.push({ origin: group.owner.execution, pid: one.identity.pid });
+      const other = (owner: OuterOwner) => this.rowOf(owner, group, named, open, reading.overMicros === 0 ? null : group.cores / cores);
+      for (const slice of slicesOf(group, open, parts, other)) this.charge(slice, group, cores);
     }
     const share = reading.cpu === null ? null : reading.cpu / cores;
     const point: LoadPoint | undefined =
@@ -156,6 +243,8 @@ export class LoadList {
         minor: !OWN_KINDS.has(row.kind) && rank < MINOR && (totalMemory === undefined || row.memoryBytes < totalMemory * MINOR),
         processes: row.processes.sort((left, right) => (right.share ?? 0) - (left.share ?? 0)),
         work: row.executions.length + row.residuals.length === 0 ? undefined : { executions: row.executions, residuals: row.residuals },
+        close: row.close === undefined || row.close.length === 0 ? undefined : row.close,
+        lowerBound: row.lowerBound ? true : undefined,
       };
     });
     rows.sort((left, right) => right.rank - left.rank || right.memoryBytes - left.memoryBytes);
@@ -174,6 +263,7 @@ export class LoadList {
         scope: reading.scope,
         readAt,
         cores,
+        machine: reading.machineName,
         share,
         memory: reading.memory,
         saturated: saturation.length >= 2 && saturation.reduce((sum, one) => sum + (one.machine ?? 0), 0) / saturation.length >= SATURATED,
@@ -200,21 +290,41 @@ export class LoadList {
         top:
           heaviest !== undefined && heaviest.rank >= TOP ? { key: heaviest.key, title: heaviest.title, share: heaviest.rank } : undefined,
         background,
+        unresolved: unresolvedOf(reading, parts),
         unread: unread === '' ? undefined : unread,
       },
     };
   }
 
-  private rowOf(
-    group: LoadGroup,
-    named: Named,
-    open: (key: string, kind: LoadRowKind, title: string, extra?: Partial<Building>) => Building,
-    share: number | null,
-  ) {
+  private charge(slice: Slice, group: LoadGroup, cores: number): void {
+    const row = slice.row;
+    row.cores += slice.cores;
+    row.memoryBytes += slice.memoryBytes;
+    row.unread += slice.unread;
+    if (group.lowerBound === true) row.lowerBound = true;
     const owner = group.owner;
+    const execution = owner._tag === 'Execution' && !owner.ended ? commandKey(owner.execution) : undefined;
+    for (const one of slice.processes)
+      row.processes.push({
+        pid: one.identity.pid,
+        birth: one.identity.birth,
+        parent: one.parent,
+        execution,
+        name: one.name,
+        command: one.command,
+        role: one.role,
+        share: one.cores === null ? null : one.cores / cores,
+        reapedShare: one.reapedCores === undefined ? undefined : one.reapedCores / cores,
+        memoryBytes: one.memoryBytes,
+        killable: one.signal && SIGNALLED.has(row.kind),
+        unread: one.unread,
+      });
+    if (owner._tag === 'Execution' && owner.ended)
+      for (const one of slice.processes) row.residuals.push({ origin: owner.execution, pid: one.identity.pid });
+  }
+
+  private rowOf(owner: OuterOwner, group: LoadGroup, named: Named, open: Open, share: number | null) {
     switch (owner._tag) {
-      case 'Installation':
-        return open('tagma', 'installation', 'Tagma', { detail: 'server, agents, host, window' });
       case 'Kernel':
         return open('system', 'kernel', 'System', {
           detail: 'the kernel and interrupts: machine CPU no listed process accounts for',

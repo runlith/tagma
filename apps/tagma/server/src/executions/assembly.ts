@@ -111,6 +111,8 @@ import { makeTerminalTargets } from './terminals/targets.js';
 import { makeTerminalThreads } from './terminals/threads.js';
 import { ServedRoots } from '../browser/contract/service/sources.js';
 import { makeServedRoots } from './servedRoots.js';
+import { WindowDeclarations } from './contract/service/load.js';
+import { makeWindowDeclarations } from './load/windows.js';
 
 export type ExecutionsUnavailable = HostAddressInvalid | TerminalUnavailable;
 
@@ -200,7 +202,8 @@ export type ExecutionServices =
   | ViewLanes
   | TerminalGrids
   | ExecutionHistory
-  | ServedRoots;
+  | ServedRoots
+  | WindowDeclarations;
 
 export const executionsLayer: Layer.Layer<
   ExecutionServices,
@@ -637,6 +640,7 @@ export const executionsLayer: Layer.Layer<
         Context.add(SuccessionSteps, succession),
         Context.add(ExecutionHistory, yield* makeExecutionHistory),
         Context.add(ServedRoots, yield* makeServedRoots.pipe(Effect.provide(owners))),
+        Context.add(WindowDeclarations, yield* makeWindowDeclarations),
       );
   }),
 );

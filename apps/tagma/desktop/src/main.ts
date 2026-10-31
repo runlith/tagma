@@ -8,6 +8,7 @@ import { behaviorWindowOptions } from '@runlith/window-behavior/host-electron/bo
 import { BrowserWindow, type MessageBoxOptions, type WebContents, app, dialog, screen, session } from 'electron';
 import { PILL_PATH, type Stroke } from './bridge.js';
 import { DICTATION } from './channels.js';
+import { Declaring } from './declaring.js';
 import { Dictation, type Pill } from './Dictation.js';
 import { type LoaderWindow, SurfaceLoader } from './SurfaceLoader.js';
 import { namedSurfaceUrl, resolveSurfaceUrl } from './config.js';
@@ -351,8 +352,10 @@ function serveBrowser(fronts: Fronts, data: string, projects: ProjectWindows): v
     reveal: (popup) => popup.show(),
   });
   new Panels(fronts, host, hostId, userData, identity).install();
+  const declarer = new Declaring(host, (url) => fronts.trusts(url));
+  declarer.install();
   const ours = async () => (await reach(surfaceUrl, data)).at === 'ours';
-  browserServing = Effect.runFork(serveHost({ surface: surfaceUrl, ours, host: hostId, executor: host }));
+  browserServing = Effect.runFork(serveHost({ surface: surfaceUrl, ours, host: hostId, executor: host, declarer }));
 }
 
 app.on('second-instance', (_event, _argv, _directory, additional) => {

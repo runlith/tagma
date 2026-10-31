@@ -76,7 +76,7 @@
         <span class="grid min-w-0 flex-1 gap-1">
           <b class="text-ui font-semibold text-status-in-work">The CPU is saturated</b>
           <span class="text-muted-foreground"
-            >Everything on the Mac runs slower, Tagma included. Agents' commands can be given less of it.</span
+            >Everything on the {loaded.machine} runs slower, Tagma included. Agents' commands can be given less of it.</span
           >
           <PaceControl />
           <PaceProblem class="bg-background" />

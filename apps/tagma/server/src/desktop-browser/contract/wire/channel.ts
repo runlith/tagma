@@ -2,6 +2,7 @@ import { Schema } from 'effect';
 import { DomainBlock, DomainPolicy, Restriction, RestrictionState } from '../../../browser/contract/wire/domains.js';
 import { HostEvent, LivePage, Navigation, PageChange, Strain } from '../../../browser/contract/wire/host.js';
 import { PageId, ProfileId } from '../../../browser/contract/wire/ids.js';
+import { WindowDeclaration } from '../../../executions/contract/wire/load.js';
 import { History } from '../../../browser/contract/wire/page.js';
 import { feed } from '../../../platform/contract/wire/operation.js';
 
@@ -89,6 +90,7 @@ export const Report = Schema.Union([
   at('blocked', { seq, watch: Schema.Int, block: DomainBlock }),
   at('cdp', { seq, session: Schema.Int }),
   at('ended', { seq, session: Schema.Int, end: Schema.Literals(SESSION_ENDS) }),
+  at('declaration', { seq, declaration: WindowDeclaration }),
 ]);
 export type Report = typeof Report.Type;
 

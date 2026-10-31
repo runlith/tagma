@@ -18,5 +18,5 @@ const refused = <A>(stream: Stream.Stream<A, TerminalFailure>): Stream.Stream<A,
 export const loadChannel = (feed: LoadFeed['Service']) => ({
   'load.machine': (): Stream.Stream<MachineLoadFrame, RefusalBody> => refused(feed.machine()),
   'load.interest': (params: LoadInterest): Effect.Effect<LoadInterestTaken> =>
-    Effect.map(feed.interest(params.reader, params.interested), (taken) => ({ taken })),
+    Effect.map(feed.interest(params.reader, { interested: params.interested, others: params.others ?? false }), (taken) => ({ taken })),
 });

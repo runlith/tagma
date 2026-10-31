@@ -25,7 +25,9 @@ export const MACHINE_PAIRS = {
         const feed = yield* LoadFeed;
         let held: MachineLoadSnapshot | undefined;
         const state = yield* feed.machine().pipe(
-          Stream.tap((frame) => (frame._tag === 'Snapshot' ? feed.interest(frame.snapshot.reader, true) : Effect.void)),
+          Stream.tap((frame) =>
+            frame._tag === 'Snapshot' ? feed.interest(frame.snapshot.reader, { interested: true, others: true }) : Effect.void,
+          ),
           Stream.map((frame) => {
             held = frame._tag === 'Snapshot' ? frame.snapshot : held === undefined ? undefined : appliedMachineLoad(held, frame.delta);
             return held?.state;
@@ -54,6 +56,7 @@ export const MACHINE_PAIRS = {
         const report: MachineReport = {
           _tag: 'Read',
           cores: view.cores,
+          machine: view.machine,
           share: view.share,
           memory: view.memory,
           saturated: view.saturated,
@@ -62,6 +65,7 @@ export const MACHINE_PAIRS = {
           totals: view.totals,
           top: view.top,
           background: view.background,
+          unresolved: view.unresolved,
           unread: view.unread,
         };
         return { state: report, shown: rows.length };

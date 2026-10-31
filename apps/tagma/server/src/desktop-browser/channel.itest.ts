@@ -140,6 +140,31 @@ layer(browserWorld({ host: Layer.empty, adapters: [desktopAdapter], home }), { e
     }),
   );
 
+  it.effect('a window declaration reaches the port under its host and generation, and the declaration ends with the generation', () =>
+    Effect.gen(function* () {
+      const { url, windows } = Context.get(yield* built, ServedChannel);
+      const fake = yield* fakeHost(url);
+      const live = yield* fake.called;
+      fake.answer(live.id, []);
+      yield* standing;
+      const declaration = {
+        precisionMs: 10,
+        processes: [
+          {
+            pid: 4242,
+            createdMs: 1_700_000_000_000,
+            kind: 'renderer' as const,
+            documents: [{ _tag: 'Origin' as const, origin: 'https://example.test' }],
+          },
+        ],
+      };
+      fake.sent({ kind: 'declaration', seq: fake.next(), declaration });
+      expect(yield* Queue.take(windows)).toEqual({ kind: 'declare', host: HOST, generation: fake.generation, declaration });
+      fake.close();
+      expect(yield* Queue.take(windows)).toEqual({ kind: 'end', host: HOST, generation: fake.generation });
+    }),
+  );
+
   it.effect(
     'a lost host leaves its call outcome-unknown and its pages away, is waited for while its process lives, and is reconciled on return',
     () =>

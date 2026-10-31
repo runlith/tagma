@@ -3,6 +3,7 @@ import { EvidenceScope, InstallationRole, MachineMemory } from '@runlith/executi
 import { ExecutionRef } from '@runlith/executions/protocol/execution';
 import { ThreadId } from '../../../platform/contract/wire/thread.js';
 import { BackgroundWork } from '../../../platform/contract/wire/background.js';
+import { PageId } from '../../../browser/contract/wire/ids.js';
 
 const Count = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
 const Pid = Schema.Int.check(Schema.isGreaterThan(0));
@@ -18,11 +19,40 @@ export type LoadReader = typeof LoadReader.Type;
 export const LoadInterest = Schema.Struct({
   reader: LoadReader,
   interested: Schema.Boolean,
+  others: Schema.optional(Schema.Boolean).annotate({
+    description: 'Whether the reader shows other programs now, so processes the OS refuses to this user are read too.',
+  }),
 });
 export type LoadInterest = typeof LoadInterest.Type;
 
 export const LoadInterestTaken = Schema.Struct({ taken: Schema.Boolean });
 export type LoadInterestTaken = typeof LoadInterestTaken.Type;
+
+export const WindowDocument = Schema.Union([
+  Schema.Struct({ _tag: Schema.Literal('Interface') }),
+  Schema.Struct({ _tag: Schema.Literal('Page'), page: PageId }),
+  Schema.Struct({ _tag: Schema.Literal('Origin'), origin: Schema.NonEmptyString }),
+]).pipe(Schema.toTaggedUnion('_tag'));
+export type WindowDocument = typeof WindowDocument.Type;
+
+export const WindowProcessKind = Schema.Literals(['main', 'graphics', 'utility', 'renderer']);
+export type WindowProcessKind = typeof WindowProcessKind.Type;
+
+export const WindowProcess = Schema.Struct({
+  pid: Pid,
+  createdMs: Schema.Number.check(Schema.isGreaterThan(0)).annotate({ description: 'When the process started, in epoch milliseconds.' }),
+  kind: WindowProcessKind,
+  documents: Schema.Array(WindowDocument),
+});
+export type WindowProcess = typeof WindowProcess.Type;
+
+export const WindowDeclaration = Schema.Struct({
+  precisionMs: Schema.Number.check(Schema.isGreaterThanOrEqualTo(0)).annotate({
+    description: 'How far a createdMs may stand from the kernel’s own start of its process.',
+  }),
+  processes: Schema.Array(WindowProcess),
+});
+export type WindowDeclaration = typeof WindowDeclaration.Type;
 
 export const LoadProcess = Schema.Struct({
   pid: Pid,
@@ -70,10 +100,22 @@ export type LoadWork = typeof LoadWork.Type;
 export const LoadProject = Schema.Struct({ id: Schema.Int, name: Schema.NonEmptyString });
 export type LoadProject = typeof LoadProject.Type;
 
-export const LoadRowKind = Schema.Literals(['installation', 'agent', 'work', 'program', 'kernel']);
+export const LoadRowKind = Schema.Literals(['server', 'host', 'interface', 'graphics', 'renderer', 'agent', 'work', 'program', 'kernel']);
 export type LoadRowKind = typeof LoadRowKind.Type;
 
-export const OWN_KINDS: ReadonlySet<LoadRowKind> = new Set(['installation', 'agent', 'work']);
+export const OWN_KINDS: ReadonlySet<LoadRowKind> = new Set(['server', 'host', 'interface', 'graphics', 'renderer', 'agent', 'work']);
+
+export const LoadPage = Schema.Struct({ page: PageId, projectId: Schema.Int });
+export type LoadPage = typeof LoadPage.Type;
+
+export const UnresolvedPart = Schema.Struct({
+  title: Schema.NonEmptyString,
+  pid: Pid,
+  reason: Schema.Literals(['different', 'unknown']).annotate({
+    description: 'different: the pid now names another process; unknown: the start of the process could not be read.',
+  }),
+});
+export type UnresolvedPart = typeof UnresolvedPart.Type;
 
 export const LoadRow = Schema.Struct({
   key: Schema.NonEmptyString,
@@ -89,6 +131,10 @@ export const LoadRow = Schema.Struct({
   minor: Schema.Boolean,
   processes: Schema.Array(LoadProcess),
   work: Schema.optional(LoadWork),
+  close: Schema.optional(Schema.Array(LoadPage)).annotate({ description: 'The built-in browser pages this window process hosts.' }),
+  lowerBound: Schema.optional(Schema.Boolean).annotate({
+    description: 'The share misses processes born and gone between readings, so it is at least this much.',
+  }),
 });
 export type LoadRow = typeof LoadRow.Type;
 
@@ -116,6 +162,7 @@ export const LoadView = Schema.Struct({
   scope: EvidenceScope,
   readAt: Schema.Number,
   cores: Schema.Int.check(Schema.isGreaterThan(0)),
+  machine: Schema.NonEmptyString.annotate({ description: 'What this kind of machine is called, in the words of its system.' }),
   share: Schema.NullOr(Share),
   memory: MachineMemory,
   saturated: Schema.Boolean,
@@ -123,7 +170,10 @@ export const LoadView = Schema.Struct({
   totals: LoadTotals,
   top: Schema.optional(LoadTop),
   background: Schema.Array(BackgroundWork).annotate({
-    description: "Work the server does on its own, inside the installation row's share.",
+    description: "Work the server does on its own, inside the server row's share.",
+  }),
+  unresolved: Schema.Array(UnresolvedPart).annotate({
+    description: 'Window processes that could not be matched to a process of the machine, so their load stands outside Tagma.',
   }),
   unread: Schema.optional(Schema.String),
 });

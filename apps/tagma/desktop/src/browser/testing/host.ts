@@ -2,6 +2,7 @@ import './guard.js';
 import { createInterface } from 'node:readline';
 import { app, BrowserWindow } from 'electron';
 import { Effect } from 'effect';
+import { Declaring } from '../../declaring.js';
 import { serveHost } from '../connection.js';
 import { BrowserHost } from '../host.js';
 import { cleanedAgent, hostIdIn } from '../identity.js';
@@ -41,5 +42,7 @@ void app.whenReady().then(() => {
     if (command.reload === true) surface.webContents.reload();
     process.stdout.write(`${JSON.stringify({ done: command.id })}\n`);
   });
-  Effect.runFork(serveHost({ surface: new URL(server), ours: async () => true, host: hostIdIn(data), executor: served }));
+  const declarer = new Declaring(served, (url) => url === surface.webContents.getURL());
+  declarer.install();
+  Effect.runFork(serveHost({ surface: new URL(server), ours: async () => true, host: hostIdIn(data), executor: served, declarer }));
 });

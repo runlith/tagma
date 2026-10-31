@@ -10,3 +10,12 @@ export class LoadOwnerFacts extends Context.Service<
     readonly read: (threads: readonly string[]) => Effect.Effect<ReadonlyMap<string, OwnerFacts>, OwnerFactsUnread>;
   }
 >()('tagma/executions/LoadOwnerFacts') {}
+
+type OriginOwner = { readonly _tag: 'App'; readonly name: string } | { readonly _tag: 'McpView' };
+
+export class LoadOrigins extends Context.Service<
+  LoadOrigins,
+  {
+    readonly owner: (origin: string) => OriginOwner | undefined;
+  }
+>()('tagma/executions/LoadOrigins') {}

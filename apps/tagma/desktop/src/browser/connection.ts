@@ -8,6 +8,7 @@ import {
 } from '@tagma/server/desktop-browser/contract/wire/channel';
 import type { DomainBlock } from '@tagma/server/browser/contract/wire/domains';
 import type { HostEvent } from '@tagma/server/browser/contract/wire/host';
+import type { WindowDeclaration } from '@tagma/server/executions/contract/wire/load';
 import { liveSerialization, rpcOf } from '@tagma/server/platform/contract/wire/live';
 import { TAGMA_SOCKET_PATH } from '@tagma/server/socket/rpc';
 import { Data, Deferred, Effect, Layer, Stream } from 'effect';
@@ -32,10 +33,19 @@ export type Reporter = {
   ended(session: number, end: SessionEnd): void;
 };
 
+export type Declarations = {
+  declare(declaration: WindowDeclaration): void;
+};
+
 export type Executor = {
   attach(reporter: Reporter): void;
   call(id: number, call: Call): void;
   cdp(session: number, text: string): void;
+  detach(): void;
+};
+
+export type Declarer = {
+  attach(declarations: Declarations): void;
   detach(): void;
 };
 
@@ -44,6 +54,7 @@ export type Served = {
   readonly ours: () => Promise<boolean>;
   readonly host: string;
   readonly executor: Executor;
+  readonly declarer: Declarer;
 };
 
 class ReportsClosed extends Data.TaggedError('ReportsClosed')<{ readonly message: string }> {}
@@ -78,7 +89,7 @@ const reports = (url: URL) =>
     ({ socket }) => Effect.sync(() => socket.close()),
   );
 
-const reporterOn = (socket: WebSocket): Reporter => {
+const reporterOn = (socket: WebSocket): Reporter & Declarations => {
   let seq = 0;
   const send = (report: Report, tail?: string) => {
     if (socket.readyState !== WebSocket.OPEN) return;
@@ -96,6 +107,7 @@ const reporterOn = (socket: WebSocket): Reporter => {
     blocked: (watch, block) => send({ kind: 'blocked', seq: ++seq, watch, block }),
     cdp: (session, text) => send({ kind: 'cdp', seq: ++seq, session }, text),
     ended: (session, end) => send({ kind: 'ended', seq: ++seq, session, end }),
+    declare: (declaration) => send({ kind: 'declaration', seq: ++seq, declaration }),
   };
 };
 
@@ -110,7 +122,12 @@ const generation = (served: Served) =>
       );
       const client = yield* Effect.provide(RpcClient.make(GROUP), protocol);
       const lost = yield* Deferred.make<void, ReportsClosed>();
-      yield* Effect.addFinalizer(() => Effect.sync(() => served.executor.detach()));
+      yield* Effect.addFinalizer(() =>
+        Effect.sync(() => {
+          served.declarer.detach();
+          served.executor.detach();
+        }),
+      );
       const orders = client.attach_browser_host({ host: served.host, pid: process.pid }).pipe(
         Stream.runForEach((order) => {
           switch (order.kind) {
@@ -121,7 +138,9 @@ const generation = (served: Served) =>
                 url.searchParams.set('generation', String(order.generation));
                 const { socket, closed } = yield* reports(url);
                 yield* Effect.forkScoped(Deferred.into(Deferred.await(closed), lost));
-                served.executor.attach(reporterOn(socket));
+                const reporter = reporterOn(socket);
+                served.executor.attach(reporter);
+                served.declarer.attach(reporter);
               });
             case 'call':
               return Effect.sync(() => served.executor.call(order.id, order.call));

@@ -24,12 +24,13 @@
       {/if}
       <span class="text-meta text-muted-foreground">
         {#if loaded !== null}
-          Mac <span class={['font-medium tabular-nums', loaded.saturated ? 'text-status-in-work' : 'text-foreground']}
+          {loaded.machine}
+          <span class={['font-medium tabular-nums', loaded.saturated ? 'text-status-in-work' : 'text-foreground']}
             >{percent(loaded.share)}</span
           >
           of {loaded.cores} cores
         {:else}
-          The Mac is not read yet
+          The machine is not read yet
         {/if}
       </span>
     </div>
@@ -42,22 +43,23 @@
         <LoadBar taken={loaded.totals.own.memoryBytes / memory.totalBytes} beside={loaded.totals.outside.memoryBytes / memory.totalBytes} />
       {/if}
       <span class="text-meta text-muted-foreground">
-        {#if memory !== null}
-          Mac <span class={['font-medium tabular-nums', readings.pressed === null ? 'text-foreground' : 'text-status-in-work']}
+        {#if memory !== null && loaded !== null}
+          {loaded.machine}
+          <span class={['font-medium tabular-nums', readings.pressed === null ? 'text-foreground' : 'text-status-in-work']}
             >{formatBytes(memory.usedBytes)}</span
           >
           of {formatBytes(memory.totalBytes)}{#if readings.pressed !== null}<span class="font-medium text-status-in-work" data-load-pressure
               >, pressure {readings.pressed}</span
             >{/if}
         {:else}
-          Mac memory is not read
+          {loaded?.machine ?? 'Machine'} memory is not read
         {/if}
       </span>
     </div>
   </div>
   <span class="flex gap-3 text-meta text-muted-foreground" data-load-legend>
     <span class="flex items-center gap-1"><i class="size-2 bg-brand"></i>Tagma</span>
-    <span class="flex items-center gap-1"><i class="size-2 bg-muted-foreground/35"></i>Rest of the Mac</span>
+    <span class="flex items-center gap-1"><i class="size-2 bg-muted-foreground/35"></i>Rest of the {loaded?.machine ?? 'machine'}</span>
     <span class="flex items-center gap-1"><i class="size-2 border border-vein-strong bg-sunken"></i>Free</span>
   </span>
 </div>

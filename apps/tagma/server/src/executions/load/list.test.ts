@@ -3,19 +3,32 @@ import { Schema } from 'effect';
 import type { LoadGroup, LoadReading } from '@runlith/executions/protocol/evidence';
 import { ExecutionRef } from '@runlith/executions/protocol/execution';
 import { ThreadId } from '../../platform/contract/wire/thread.js';
+import { PageId } from '../../browser/contract/wire/ids.js';
 import { LoadList } from './list.js';
+import type { PartNames } from './windows.js';
 import type { Named } from './work.js';
 
 const machine = { _tag: 'Local', machine: 'fixture' } as const;
 const ref = (execution: string) => Schema.decodeUnknownSync(ExecutionRef)({ installation: 'i', execution, incarnation: 1 });
 const thread = Schema.decodeUnknownSync(ThreadId)('01a13616-e64d-7243-bac2-4d8b0e28c96e');
+const noParts: PartNames = () => undefined;
+
+const process = (pid: number, cores: number, extra: Partial<LoadGroup['processes'][number]> = {}): LoadGroup['processes'][number] => ({
+  identity: { pid, birth: `${pid}:0` },
+  parent: 1,
+  name: `p${pid}`,
+  cores,
+  memoryBytes: 100,
+  signal: true,
+  ...extra,
+});
 
 const group = (owner: LoadGroup['owner'], cores: number, pid: number): LoadGroup => ({
   owner,
   cores,
   memoryBytes: 100,
   unread: 0,
-  processes: [{ identity: { pid, birth: `${pid}:0` }, parent: 1, name: `p${pid}`, cores, memoryBytes: 100, signal: true }],
+  processes: [process(pid, cores)],
 });
 
 const reading = (groups: readonly LoadGroup[], usedBytes = 1): LoadReading => ({
@@ -25,6 +38,8 @@ const reading = (groups: readonly LoadGroup[], usedBytes = 1): LoadReading => ({
   takenAtMicros: 1,
   overMicros: 1_000_000,
   cores: 10,
+  machineName: 'Computer',
+  unresolvedParts: [],
   cpu: groups.reduce((sum, one) => sum + one.cores, 0),
   memory: {
     _tag: 'Measured',
@@ -71,6 +86,7 @@ test('an agent row holds every execution of its thread with its own label, CPU, 
       group({ _tag: 'Kernel' }, 0.5, 15),
     ]),
     named,
+    noParts,
     1_000,
     [],
   );
@@ -117,7 +133,7 @@ test("an agent's own harness session is never named as its work, and still gives
     ]),
   };
   const agentOf = (groups: readonly LoadGroup[]) =>
-    new LoadList().compose(reading(groups), harnessed, 1_000, []).view.rows.find((row) => row.kind === 'agent');
+    new LoadList().compose(reading(groups), harnessed, noParts, 1_000, []).view.rows.find((row) => row.kind === 'agent');
   const session = group({ _tag: 'Execution', execution: ref('session'), ended: false }, 1, 31);
 
   const idle = agentOf([session]);
@@ -134,17 +150,7 @@ test("Tagma's own rows add up to its total and its history point, never fold, al
       [
         {
           ...group({ _tag: 'Installation' }, 1, 21),
-          processes: [
-            {
-              identity: { pid: 21, birth: '21:0' },
-              name: 'bun',
-              role: 'server',
-              cores: 1,
-              reapedCores: 0.75,
-              memoryBytes: 100,
-              signal: true,
-            },
-          ],
+          processes: [process(21, 1, { parent: undefined, name: 'bun', role: 'server', reapedCores: 0.75 })],
         },
         group({ _tag: 'Execution', execution: ref('typecheck'), ended: false }, 2, 22),
         group({ _tag: 'Execution', execution: ref('loose'), ended: false }, 0.01, 23),
@@ -172,11 +178,12 @@ test("Tagma's own rows add up to its total and its history point, never fold, al
         ],
       ]),
     },
+    noParts,
     1_000,
     [],
   );
   expect(view.rows.find((row) => row.kind === 'work')).toMatchObject({ title: 'bun run dev', minor: false });
-  expect(view.rows.find((row) => row.kind === 'installation')?.processes).toMatchObject([
+  expect(view.rows.find((row) => row.kind === 'server')?.processes).toMatchObject([
     { role: 'server', share: 0.1, reapedShare: 0.075, killable: false },
   ]);
   expect(view.totals.own.count).toBe(3);
@@ -197,6 +204,7 @@ test("an unread population answers no Tagma figures, a partly read one counts wh
       unread: 'the process table could not be read',
     },
     named,
+    noParts,
     1_000,
     [],
   );
@@ -204,9 +212,60 @@ test("an unread population answers no Tagma figures, a partly read one counts wh
   const partial = new LoadList().compose(
     { ...reading([{ ...group({ _tag: 'Installation' }, 1, 21), unread: 1 }]), cpu: null },
     named,
+    noParts,
     1_000,
     [],
   );
   expect(partial.view.totals.own).toMatchObject({ share: 0.1, unread: 1 });
   expect(partial.point).toMatchObject({ machine: null, own: 0.1 });
+});
+
+test('window parts land in Interface, Graphics and one row per renderer titled by its documents and closing its pages; the server and the terminal host split by role; an unresolved part is named', () => {
+  const page = Schema.decodeUnknownSync(PageId)('page-1');
+  const parts: PartNames = (key) =>
+    key === 'main'
+      ? { _tag: 'Interface' }
+      : key === 'gpu'
+        ? { _tag: 'Graphics' }
+        : key === 'pages'
+          ? { _tag: 'Renderer', titles: ['Page — Docs (example.com)', 'App — board'], close: [{ page, projectId: 5 }] }
+          : undefined;
+  const { view } = new LoadList().compose(
+    {
+      ...reading([
+        {
+          ...group({ _tag: 'Installation' }, 1.5, 21),
+          memoryBytes: 400,
+          processes: [
+            process(21, 0.5, { parent: undefined, role: 'server' }),
+            process(22, 0.2, { parent: 21 }),
+            process(23, 0.3, { parent: undefined, role: 'host' }),
+            process(24, 0.1, { parent: 23, role: 'holder' }),
+          ],
+        },
+        group({ _tag: 'Part', key: 'main' }, 0.2, 31),
+        group({ _tag: 'Part', key: 'gone' }, 0.1, 32),
+        group({ _tag: 'Part', key: 'gpu' }, 2, 33),
+        group({ _tag: 'Part', key: 'pages' }, 3, 34),
+      ]),
+      unresolvedParts: [{ part: { key: 'pages', pid: 99, createdMs: 1, precisionMs: 1 }, reason: 'different' }],
+    },
+    named,
+    parts,
+    1_000,
+    [],
+  );
+  const row = (kind: string) => view.rows.find((one) => one.kind === kind);
+  expect(row('server')).toMatchObject({ title: 'Server', memoryBytes: 200 });
+  expect(row('server')?.share).toBeCloseTo(0.11, 9);
+  expect(row('server')?.processes.map((one) => one.pid)).toEqual([21, 22]);
+  expect(row('host')).toMatchObject({ title: 'Terminal host', memoryBytes: 200 });
+  expect(row('host')?.share).toBeCloseTo(0.04, 9);
+  expect(row('interface')?.share).toBeCloseTo(0.03, 9);
+  expect(row('graphics')).toMatchObject({ title: 'Graphics', share: 0.2 });
+  expect(row('renderer')).toMatchObject({ title: 'Page — Docs (example.com), App — board', close: [{ page, projectId: 5 }], share: 0.3 });
+  expect(row('renderer')?.processes[0]?.killable).toBe(false);
+  expect(view.totals.own.count).toBe(5);
+  expect(view.totals.own.share).toBeCloseTo(0.68, 9);
+  expect(view.unresolved).toEqual([{ title: 'Page — Docs (example.com), App — board', pid: 99, reason: 'different' }]);
 });

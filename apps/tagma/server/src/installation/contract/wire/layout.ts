@@ -38,7 +38,6 @@ export const WORLD_COMMAND = HOST_COMMAND;
 export const BUILD_COMMAND = 'bun run tagma:build';
 export const BUILD_SWAPPED_ENV = 'TAGMA_BUILD_SWAPPED';
 export const BUILD_HOME_ENV = 'TAGMA_BUILD_HOME';
-export const DESKTOP_PID_ENV = 'TAGMA_DESKTOP_PID';
 export const SIGNING_IDENTITY_ENV = 'TAGMA_SIGNING_IDENTITY';
 export const BUILD_CONDITIONS_ENV = 'TAGMA_BUILD_CONDITIONS';
 export const BUILD_MAPS_ENV = 'TAGMA_BUILD_MAPS';
@@ -51,11 +50,6 @@ export const buildConditionsIn = (env: NodeJS.ProcessEnv): readonly string[] =>
     .split(',')
     .map((condition) => condition.trim())
     .filter((condition) => condition !== '');
-
-export const desktopPidIn = (env: NodeJS.ProcessEnv): number | undefined => {
-  const pid = Number(env[DESKTOP_PID_ENV]?.trim());
-  return Number.isInteger(pid) && pid > 0 ? pid : undefined;
-};
 
 export const DATABASE_FILE = 'tagma.sqlite';
 export const TRANSFER_FILE = 'transfer.json';

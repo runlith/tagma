@@ -2,7 +2,7 @@ import type { LoadProcess, LoadRow } from '@tagma/server/executions/contract/wir
 import type { ProcessTarget } from '@runlith/executions/protocol/stop';
 import { Service } from '@runlith/layer/key';
 import { SvelteMap } from 'svelte/reactivity';
-import { ExecutionActs, type ProcessOutcome, type StopOutcome } from '../acts.svelte.js';
+import { ExecutionActs, type PageClosing, type ProcessOutcome, type StopOutcome } from '../acts.svelte.js';
 import { Readings } from './Readings.svelte.js';
 
 export type Ending = { readonly text: string; readonly hint: string; readonly failed: boolean };
@@ -54,6 +54,16 @@ const workEnding = (stops: readonly StopOutcome[], residuals: Ending | null): En
     ...(residuals === null ? [] : [residuals.hint]),
   ];
   return { text, hint: lines.join('\n'), failed };
+};
+
+const pagesClosing = (closings: readonly PageClosing[]): Ending => {
+  const refused = closings.flatMap((one) => (one._tag === 'Refused' ? [`${one.code}: ${one.reason}`] : []));
+  const closed = closings.length - refused.length;
+  return {
+    text: refused.length === 0 ? 'closed' : closed === 0 ? 'not closed' : `${refused.length} not closed`,
+    hint: [...(closed > 0 ? [`${closed} ${closed === 1 ? 'page' : 'pages'} closed`] : []), ...refused].join('\n'),
+    failed: refused.length > 0,
+  };
 };
 
 type Shown = Ending & { readonly at: number; readonly title: string };
@@ -110,11 +120,12 @@ export class View extends Service<View>()('LoadView', { tier: 'app' }) {
   }
 
   stoppable(row: LoadRow): boolean {
-    return row.work !== undefined || row.processes.some((one) => one.killable);
+    return row.close !== undefined || row.work !== undefined || row.processes.some((one) => one.killable);
   }
 
   async stop(row: LoadRow): Promise<void> {
     await this.acting(row.key, row.title, async () => {
+      if (row.close !== undefined) return pagesClosing(await this.acts.closePages(row.close));
       const work = row.work;
       if (work === undefined || work.executions.length + work.residuals.length === 0) {
         const targets = row.processes.flatMap((one) => (one.killable ? this.target(one) : []));

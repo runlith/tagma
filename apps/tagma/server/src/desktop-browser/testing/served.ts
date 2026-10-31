@@ -1,7 +1,9 @@
 import * as BunHttpServer from '@effect/platform-bun/BunHttpServer';
-import { Context, Effect, Layer } from 'effect';
+import { Context, Effect, Layer, Queue, Stream } from 'effect';
 import { HttpRouter, HttpServer } from 'effect/http';
 import { RpcGroup } from 'effect/rpc';
+import { WindowDeclarations } from '../../executions/contract/service/load.js';
+import type { WindowDeclaration } from '../../executions/contract/wire/load.js';
 import { bindFeed, SocketOperations } from '../../invocation/contract/service/socketOperations.js';
 import { type FeedBody, rpcOf } from '../../platform/contract/wire/live.js';
 import { type LiveHandlers, liveLayer } from '../../socket/live.js';
@@ -12,7 +14,13 @@ import { ATTACH_FEED } from '../contract/wire/channel.js';
 import { desktopBrowser } from '../desktop-browser.js';
 import { desktopReportRoute } from '../door.js';
 
-export class ServedChannel extends Context.Service<ServedChannel, { readonly url: URL }>()('tagma/desktop-browser/ServedChannel') {}
+export type WindowAct =
+  | { readonly kind: 'declare'; readonly host: string; readonly generation: number; readonly declaration: WindowDeclaration }
+  | { readonly kind: 'end'; readonly host: string; readonly generation: number };
+
+export class ServedChannel extends Context.Service<ServedChannel, { readonly url: URL; readonly windows: Queue.Queue<WindowAct> }>()(
+  'tagma/desktop-browser/ServedChannel',
+) {}
 
 const group = RpcGroup.make(rpcOf(ATTACH_FEED)).middleware(CallLog);
 
@@ -27,7 +35,20 @@ const admitted = Layer.succeed(
 export const servedChannelOn = (port: number) =>
   Layer.effectContext(
     Effect.gen(function* () {
-      const made = yield* makeDesktopChannel;
+      const windows = yield* Queue.unbounded<WindowAct>();
+      const made = yield* makeDesktopChannel.pipe(
+        Effect.provideService(
+          WindowDeclarations,
+          WindowDeclarations.of({
+            declare: (host, generation, declaration) =>
+              Effect.asVoid(Queue.offer(windows, { kind: 'declare', host, generation, declaration })),
+            end: (host, generation) => Effect.asVoid(Queue.offer(windows, { kind: 'end', host, generation })),
+            parts: Stream.never,
+            declared: Effect.succeed([]),
+            part: () => undefined,
+          }),
+        ),
+      );
       const channel = Context.get(made, DesktopChannel);
       const declared = yield* desktopBrowser.live.handlers(Context.make(DesktopChannel, channel));
       const handlers = {
@@ -42,7 +63,7 @@ export const servedChannelOn = (port: number) =>
       );
       const built = yield* Effect.orDie(Layer.build(served));
       const url = new URL(HttpServer.formatAddress(Context.get(built, HttpServer.HttpServer).address));
-      return Context.make(ServedChannel, ServedChannel.of({ url })).pipe(Context.merge(made));
+      return Context.make(ServedChannel, ServedChannel.of({ url, windows })).pipe(Context.merge(made));
     }),
   );
 

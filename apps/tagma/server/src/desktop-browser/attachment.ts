@@ -13,6 +13,7 @@ import {
   PageStayed,
 } from '../browser/contract/service/hosts.js';
 import type { HostEvent } from '../browser/contract/wire/host.js';
+import type { WindowDeclaration } from '../executions/contract/wire/load.js';
 import type { PageId } from '../browser/contract/wire/ids.js';
 import { GateRefusal } from '../platform/contract/wire/refusal.js';
 import { ANSWERS, type Call, DESKTOP, type Failure, type Order, Parts, Report, split } from './contract/wire/channel.js';
@@ -56,6 +57,7 @@ export const makeAttachment = Effect.fnUntraced(function* (input: {
   readonly id: string;
   readonly generation: number;
   readonly pid: number;
+  readonly declare: (declaration: WindowDeclaration) => Effect.Effect<void>;
 }) {
   const { id, generation } = input;
   const orders = yield* Queue.unbounded<Order, Broken | Cause.Done>();
@@ -211,6 +213,9 @@ export const makeAttachment = Effect.fnUntraced(function* (input: {
         yield* Queue.end(link.incoming);
         return;
       }
+      case 'declaration':
+        if (!done()) yield* input.declare(report.declaration);
+        return;
     }
   });
 

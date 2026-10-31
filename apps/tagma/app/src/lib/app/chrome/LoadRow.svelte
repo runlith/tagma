@@ -16,6 +16,7 @@
     processTitle,
     reapedOf,
     reapedWords,
+    shareWords,
     sparkOf,
     stopWords,
     type Layer,
@@ -56,9 +57,7 @@
   const stopping = $derived(view.working(row.key));
   const agent = $derived(row.kind === 'agent');
   const detail = $derived(detailOf(row));
-  const unread = $derived(
-    row.unread === 0 ? null : `${row.unread} of its ${row.processes.length} processes were not read this step; the figure counts the rest.`,
-  );
+  const partial = $derived(shareWords(row));
 
   const CELLS = 'flex shrink-0 items-center gap-2 tabular-nums';
   const FIGURE = 'stamp w-12 text-right whitespace-nowrap';
@@ -153,7 +152,7 @@
     </span>
     <span class={CELLS}>
       <LoadSpark points={sparkOf(history, row.key)} {end} />
-      <span class={FIGURE} title={unread ?? undefined}>{unread === null ? '' : '≥'}{percent(row.share)}</span>
+      <span class={FIGURE} title={partial}>{partial === undefined ? '' : '≥'}{percent(row.share)}</span>
       <span class={MEMORY}>{formatBytes(row.memoryBytes)}</span>
     </span>
     {@render gutter(view.stoppable(row) ? () => void view.stop(row) : null, stopWords(row), stopping, !agent)}

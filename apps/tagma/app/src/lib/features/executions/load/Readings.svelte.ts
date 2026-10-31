@@ -42,6 +42,7 @@ export class Readings extends Service<Readings>()('LoadReadings', { tier: 'app' 
   private held = $state.raw<MachineLoadSnapshot | null>(null);
   private droppedAt = $state<number | null>(null);
   private interested = false;
+  private others = false;
   private holders = 0;
 
   readonly state: MachineState;
@@ -111,10 +112,22 @@ export class Readings extends Service<Readings>()('LoadReadings', { tier: 'app' 
 
   declare(interested: boolean): void {
     this.interested = interested;
+    if (!interested) this.others = false;
+    this.send();
+  }
+
+  demandOthers(others: boolean): void {
+    if (this.others === others) return;
+    this.others = others;
+    this.send();
+  }
+
+  private send(): void {
     const reader = this.held?.reader;
     if (reader === undefined) return;
+    const { interested, others } = this;
     void this.live
-      .call((client) => client['load.interest']({ reader, interested }))
+      .call((client) => client['load.interest']({ reader, interested, others }))
       .catch((error: unknown) => console.warn('[tagma] the load step could not be changed:', error));
   }
 
@@ -133,7 +146,7 @@ export class Readings extends Service<Readings>()('LoadReadings', { tier: 'app' 
     this.droppedAt = null;
     if (frame._tag === 'Snapshot') {
       this.held = frame.snapshot;
-      if (this.interested) this.declare(true);
+      if (this.interested || this.others) this.send();
     } else {
       if (this.held === null || this.sequence !== frame.base) {
         this.feed?.unsubscribe();

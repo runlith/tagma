@@ -187,7 +187,8 @@ import type { RuntimeStatus } from './http/status.js';
 import { ReservedNames } from '../projects/contract/service/names.js';
 import { Api } from '../http/contract/wire/Api.js';
 import { ARTIFACT_PREFIX } from '../http/contract/wire/served.js';
-import { type LocalSites, makeLocalSites } from './http/sites.js';
+import { type LocalSites, makeLocalSites, originOwners } from './http/sites.js';
+import { LoadOrigins } from '../executions/contract/service/owners.js';
 import { localEndpoint } from './http/endpoint.js';
 import { LaneEndpoint } from '../executions/contract/service/views.js';
 import { localSignInDoor } from './http/signInDoor.js';
@@ -567,7 +568,12 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
   const browsers = closing(
     'browser',
     Layer.merge(cookieSourcesLayer, pageRender.lifetimes.installation).pipe(
-      Layer.provideMerge(Layer.merge(managedBrowser.lifetimes.installation, desktopBrowser.lifetimes.installation)),
+      Layer.provideMerge(
+        Layer.merge(
+          managedBrowser.lifetimes.installation,
+          desktopBrowser.lifetimes.installation.pipe(Layer.provide(executionsLayerWithDeps)),
+        ),
+      ),
       Layer.provideMerge(browser.lifetimes.installation.pipe(Layer.provide(executionsLayerWithDeps))),
       Layer.provide(browserBindings({ data: storeDirectory(storePath), runs: browserThreads.port })),
     ),
@@ -795,6 +801,7 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
     Context.make(WorktreeHome, { path: join(installationAnchor(store.path), WORKTREE_HOME) }),
     Context.make(HarnessOwner, { id: owner, build: options.installation?.manifest.identity.digest ?? owner }),
     Context.make(ViewSites, options.sites ?? (yield* Scope.provide(makeLocalSites(sandboxPort), stackScope))),
+    Context.make(LoadOrigins, originOwners(sandboxOrigin)),
     Context.make(LaneEndpoint, localEndpoint),
     Context.make(McpSignInDoor, localSignInDoor(options.localOrigin)),
   );

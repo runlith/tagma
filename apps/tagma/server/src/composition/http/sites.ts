@@ -2,6 +2,7 @@ import { Cause, Effect, Exit, Layer, PubSub, Stream } from 'effect';
 import { HttpRouter, HttpServerResponse } from 'effect/http';
 import { requestLine } from '../../http/door.js';
 import { proxyPage } from '../../mcp/sandbox.js';
+import type { LoadOrigins } from '../../executions/contract/service/owners.js';
 import type { Access } from '../../remote/contract/service/access.js';
 import type { PlacedSites } from '../../remote/contract/service/sites.js';
 import type { AccessState } from '../../remote/contract/wire/access.js';
@@ -23,6 +24,15 @@ export const localSiteOf = (host: string | undefined): string | null => {
   const label = name.endsWith(LOCAL_SUFFIX) ? name.slice(0, -LOCAL_SUFFIX.length) : '';
   return TAGMA_APP_ID_PATTERN.test(label) ? label : null;
 };
+
+export const originOwners = (sandbox: string): LoadOrigins['Service'] => ({
+  owner: (origin) => {
+    if (origin === sandbox) return { _tag: 'McpView' };
+    if (!URL.canParse(origin)) return undefined;
+    const app = localSiteOf(new URL(origin).host);
+    return app === null ? undefined : { _tag: 'App', name: app };
+  },
+});
 
 export type LocalSites = ViewSites['Service'] & { refuse(reason: string): void };
 
