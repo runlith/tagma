@@ -1920,10 +1920,6 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead apps/tagma/app/src/lib/features/threads/native/records.ts#ProductRecord",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "dead-code dead apps/tagma/app/src/lib/features/threads/native/runEndingLine.ts#RunEndingLine",
           "owner": "5a3bed29"
         },
