@@ -61,30 +61,6 @@ fields:
         ]
       },
       {
-        "at": "voice/graphDisplay.ts",
-        "for": [
-          "be68a750"
-        ]
-      },
-      {
-        "at": "voice/graphTools.ts",
-        "for": [
-          "be68a750"
-        ]
-      },
-      {
-        "at": "voice/sessionDisplay.ts",
-        "for": [
-          "be68a750"
-        ]
-      },
-      {
-        "at": "voice/sessionTools.ts",
-        "for": [
-          "be68a750"
-        ]
-      },
-      {
         "at": "testing/",
         "role": "testing"
       },
