@@ -11,7 +11,7 @@ import * as Latch from 'effect/Latch';
 import type * as Scope from 'effect/Scope';
 import { classifySqliteError, SqlError } from 'effect/sql/SqlError';
 import type { Committed, ProgramOutcome, SqliteProgram, Synchronous } from './channel.js';
-import type { ProcessConnection } from './connection.js';
+import type { ProcessConnection, Unapplied } from './connection.js';
 import { parameterBytes } from './payload.js';
 
 type ProgramSubmission = {
@@ -50,7 +50,7 @@ type ProgramWriter = {
   readonly settled: (level: Synchronous | undefined) => void;
 };
 
-type Flying = { readonly batch: readonly Pending[]; said: Committed | SqlError | undefined };
+type Flying = { readonly batch: readonly Pending[]; said: Committed | Unapplied | SqlError | undefined };
 
 const broken = (message: string) => new SqlError({ reason: classifySqliteError(new Error(message), { message, operation: 'programs' }) });
 
@@ -121,10 +121,25 @@ export const makePrograms = Effect.fnUntraced(function* (input: ProgramWriter) {
   let sending: readonly Pending[] = [];
   const quiet = Latch.makeUnsafe(true);
 
-  const landed = (batch: readonly Pending[], said: Committed | SqlError): void => {
+  const landed = (batch: readonly Pending[], said: Committed | Unapplied | SqlError): void => {
     if (said instanceof SqlError) {
       input.settled(undefined);
       return failed(batch, said);
+    }
+    if (said._tag === 'Unapplied') {
+      input.settled(undefined);
+      for (const member of batch) {
+        if (member.cost !== null) {
+          member.cost.counts.writerWaitMs += said.queueMs;
+          member.cost.counts.writerHoldMs += said.execMs / batch.length;
+        }
+        if (member.frame !== null) {
+          member.frame.waitMs += said.queueMs;
+          member.frame.holdMs += said.execMs / batch.length;
+          member.frame.childMs += said.execMs / batch.length;
+        }
+      }
+      return failed(batch, said.failure);
     }
     if (said.outcomes.length !== batch.length)
       return failed(batch, broken(`the sqlite process answered ${said.outcomes.length} of ${batch.length} programs`));

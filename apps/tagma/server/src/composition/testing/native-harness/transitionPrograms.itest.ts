@@ -5,6 +5,7 @@ import { Effect, Layer } from 'effect';
 import { Message } from '@runlith/llm/schema/messages';
 import { CostLedger, costLedgerLayer, rootCost } from '@runlith/performance/CostLedger';
 import { threadStepMessagesEvent } from '@runlith/agent/thread/events';
+import { callKey, type Evidence } from '@runlith/agent/thread/keyed';
 import { sealThreadEvents } from '@runlith/agent/thread/ThreadEventDoor';
 import { type TransitionDeps, transitionNow } from '@runlith/agent/thread/transition/kernel';
 import type { Unit, WriteUnit } from '../../../platform/contract/service/units.js';
@@ -40,7 +41,7 @@ const opened = Effect.gen(function* () {
     },
     kinds: storage.kinds,
   };
-  const step = (decidedBy: string, moved?: () => Effect.Effect<void, unknown>) =>
+  const step = (decidedBy: string, moved?: () => Effect.Effect<void, unknown>, evidence: Evidence = { decidedBy: `test:${decidedBy}` }) =>
     transitionNow(
       deps,
       thread.id,
@@ -52,7 +53,7 @@ const opened = Effect.gen(function* () {
           return standing?.ownerId === OWNER ? { apply: true as const, result: 'applied' } : { refuse: 'refused' };
         }),
       },
-      { evidence: { decidedBy: `test:${decidedBy}` }, digest: decidedBy },
+      { evidence, digest: decidedBy },
     );
   return { storage, db, thread, run: start.run, step };
 });
@@ -66,6 +67,17 @@ it.live('a transition whose reads are planned commits as one program and no inte
     expect({ programs: row?.total.programs, units: row?.total.units }).toEqual({ programs: 1, units: 0 });
     expect((yield* storage.aggregate.historyOf(thread.id))?.map((message) => message.role)).toEqual(['assistant']);
   }).pipe(Effect.provide(Layer.fresh(costLedgerLayer({ capacity: 16 })))),
+);
+
+it.live('a transition repeated under its key after its program committed answers the recorded outcome and applies nothing again', () =>
+  Effect.gen(function* () {
+    const { storage, thread, step } = yield* opened;
+    const evidence: Evidence = { call: callKey({ operation: 'test', actor: thread.id, key: 'once' }) };
+    const first = yield* step('committed', undefined, evidence);
+    const repeated = yield* step('committed', undefined, evidence);
+    expect({ first, repeated }).toEqual({ first: { committed: 'applied' }, repeated: { replayed: 'applied' } });
+    expect((yield* storage.aggregate.historyOf(thread.id))?.map((message) => message.role)).toEqual(['assistant']);
+  }),
 );
 
 it.live('a decision whose dependency moved while its thread did not is refused at commit and decided again', () =>

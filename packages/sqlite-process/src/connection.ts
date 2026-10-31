@@ -52,8 +52,10 @@ export type ProcessConnection = Connection & {
   readonly quietSince: () => number | null;
   readonly retire: Effect.Effect<void, SqlError>;
   readonly handover: Effect.Effect<void, SqlError>;
-  readonly programs: (batch: ProgramBatch) => Effect.Effect<Effect.Effect<Committed, SqlError>, SqlError>;
+  readonly programs: (batch: ProgramBatch) => Effect.Effect<Effect.Effect<Committed | Unapplied, SqlError>, SqlError>;
 };
+
+export type Unapplied = { readonly _tag: 'Unapplied'; readonly failure: SqlError; readonly queueMs: number; readonly execMs: number };
 
 const MAX_BUSY_TIMEOUT = 2_147_483_647;
 const DEFAULT_BUSY_TIMEOUT = Duration.seconds(5);
@@ -493,8 +495,17 @@ export const openConnection = Effect.fnUntraced(function* (processes: ProcessPoo
         options.checkConnection ?? Effect.void,
         Effect.suspend(() =>
           Effect.map(sent({ _tag: 'Programs', id: (counter += 1), sentAt: Date.now(), ...batch }, 'programs'), (answer) =>
-            Effect.flatMap(answer, (said) =>
-              said._tag === 'Committed' ? Effect.succeed(said) : Effect.fail(answeredWrong(said, 'Failed to commit programs', 'programs')),
+            Effect.flatMap(answer, (said): Effect.Effect<Committed | Unapplied, SqlError> =>
+              said._tag === 'Committed'
+                ? Effect.succeed(said)
+                : said._tag === 'Failed'
+                  ? Effect.succeed({
+                      _tag: 'Unapplied',
+                      failure: answeredWrong(said, 'Failed to commit programs', 'programs'),
+                      queueMs: said.queueMs,
+                      execMs: said.execMs,
+                    })
+                  : Effect.fail(answeredWrong(said, 'Failed to commit programs', 'programs')),
             ),
           ),
         ),

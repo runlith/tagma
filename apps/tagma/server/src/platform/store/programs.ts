@@ -16,11 +16,11 @@ import {
   type WriteUnit,
   writeUnitOf,
 } from '../contract/service/units.js';
-import type { WriteSet } from '../contract/service/writes.js';
+import { UnitWriteRefused, type WriteSet } from '../contract/service/writes.js';
 import { type Building, ProgramOpen, UnitLife } from './life.js';
 import type { TableMoves } from './moves.js';
-import { afterOuterCommit } from './transaction.js';
-import { checkStatement, movedTables, UnitWrites } from './writes.js';
+import { intoOuterCommit } from './transaction.js';
+import { breach, checkStatement, movedTables, UnitDurability, UnitWrites } from './writes.js';
 
 const same = (left: StoreIdentity | null, right: StoreIdentity): boolean =>
   left !== null && left.path === right.path && left.generation === right.generation;
@@ -62,8 +62,12 @@ const fellBack = (cause: Cause.Cause<unknown>): boolean =>
   );
 
 export const planned = <A, E>(attempt: Effect.Effect<A, E>): Effect.Effect<A | null, E> =>
-  Effect.flatMap(Effect.exit(attempt), (exit) =>
-    Exit.isSuccess(exit) ? Effect.succeed(exit.value) : fellBack(exit.cause) ? Effect.succeed(null) : Effect.failCause(exit.cause),
+  Effect.flatMap(ProgramOpen, (open) =>
+    open !== null
+      ? attempt
+      : Effect.flatMap(Effect.exit(attempt), (exit) =>
+          Exit.isSuccess(exit) ? Effect.succeed(exit.value) : fellBack(exit.cause) ? Effect.succeed(null) : Effect.failCause(exit.cause),
+        ),
   );
 
 const UNIQUE = /^SQLITE_CONSTRAINT_(UNIQUE|PRIMARYKEY)$/;
@@ -87,6 +91,7 @@ const joined = <Brand extends StoreBrand>(
   identity: StoreIdentity,
   set: WriteSet,
   key: string,
+  tails: Effect.Effect<void>[],
 ): ProgramUnit<Brand> => {
   let next = 0;
   const counted = (statement: number, expected: number, actual: number) =>
@@ -110,7 +115,7 @@ const joined = <Brand extends StoreBrand>(
         const at = next++;
         return Effect.flatMap(statement, (found) => counted(at, rows, Array.isArray(found) ? found.length : found === undefined ? 0 : 1));
       }),
-    afterCommit: afterOuterCommit,
+    afterCommit: (effect) => Effect.sync(() => void tails.push(carryCost(effect))),
   });
 };
 
@@ -151,10 +156,16 @@ const submitted = Effect.fnUntraced(function* <Brand extends StoreBrand, A, E>(
   }
   const life = yield* UnitLife;
   if (life !== null && life.open && same(life.identity, identity)) {
+    if (set.durability === 'durable' && (yield* UnitDurability).get(identity) === 'relaxed')
+      yield* breach(
+        identity,
+        new UnitWriteRefused({ store: identity.path, operation: set.operation, table: null, reason: 'durable-in-relaxed' }),
+      );
     const writing = new Map(yield* UnitWrites).set(identity, set);
-    return yield* Effect.acquireUseRelease(
+    const tails: Effect.Effect<void>[] = [];
+    const value = yield* Effect.acquireUseRelease(
       db.run(sql`savepoint program`),
-      () => Effect.provideService(work(joined<Brand>(db, identity, set, key)), UnitWrites, writing),
+      () => Effect.provideService(work(joined<Brand>(db, identity, set, key, tails)), UnitWrites, writing),
       (_, exit) =>
         Effect.orDie(
           Exit.isSuccess(exit)
@@ -169,67 +180,71 @@ const submitted = Effect.fnUntraced(function* <Brand extends StoreBrand, A, E>(
           : Effect.failCause(cause);
       }),
     );
+    yield* intoOuterCommit(tails, movedTables(identity, set));
+    return value;
   }
   return yield* rootCost(
     set.operation,
-    Effect.useSpan('Store.program', { attributes: { opKind: set.operation, 'db.program.key': key } }, () =>
-      Effect.gen(function* () {
-        const building: Building = { store: identity, statements: [], tails: [], sets: [set] };
-        const value = yield* Effect.provideService(work(built<Brand>(building, set)), ProgramOpen, building);
-        for (const statement of building.statements) {
-          if (statement.counts === 'changes')
-            yield* Effect.provideService(checkStatement(identity)(statement.sql), UnitWrites, new Map([[identity, statement.set]]));
-        }
-        if (building.statements.length > 0) {
-          const frame = metrics?.begin(set.operation, identity.path) ?? null;
-          const answered = yield* Effect.exit(
-            Effect.provideService(
-              programs.submit({
-                operation: set.operation,
-                program: { statements: building.statements.map(({ set: _set, ...statement }) => statement) },
-                synchronous: classed ? (set.durability === 'relaxed' ? 'normal' : 'full') : null,
-              }),
-              CurrentWriter,
-              frame,
-            ),
-          );
-          if (frame !== null && metrics !== undefined) {
-            const outcome = Exit.isSuccess(answered) ? answered.value.outcome._tag : null;
-            metrics.end(frame, outcome === 'Applied' ? 'success' : 'failure');
+    Effect.uninterruptibleMask((restore) =>
+      Effect.useSpan('Store.program', { attributes: { opKind: set.operation, 'db.program.key': key } }, () =>
+        Effect.gen(function* () {
+          const building: Building = { store: identity, statements: [], tails: [], sets: [set] };
+          const value = yield* restore(Effect.provideService(work(built<Brand>(building, set)), ProgramOpen, building));
+          for (const statement of building.statements) {
+            if (statement.counts === 'changes')
+              yield* Effect.provideService(checkStatement(identity)(statement.sql), UnitWrites, new Map([[identity, statement.set]]));
           }
-          if (Exit.isFailure(answered)) return yield* Effect.failCause(answered.cause);
-          const { outcome } = answered.value;
-          if (outcome._tag === 'Conflict')
-            return yield* new ProgramConflict({
-              store: identity.path,
-              operation: set.operation,
-              identity: key,
-              statement: outcome.statement,
-              expected: outcome.expected,
-              actual: outcome.actual,
-            });
-          if (outcome._tag === 'Refused') {
-            if (typeof outcome.thrown.code === 'string' && UNIQUE.test(outcome.thrown.code))
+          if (building.statements.length > 0) {
+            const frame = metrics?.begin(set.operation, identity.path) ?? null;
+            const answered = yield* Effect.exit(
+              Effect.provideService(
+                programs.submit({
+                  operation: set.operation,
+                  program: { statements: building.statements.map(({ set: _set, ...statement }) => statement) },
+                  synchronous: classed ? (building.sets.every((each) => each.durability === 'relaxed') ? 'normal' : 'full') : null,
+                }),
+                CurrentWriter,
+                frame,
+              ),
+            );
+            if (frame !== null && metrics !== undefined) {
+              const outcome = Exit.isSuccess(answered) ? answered.value.outcome._tag : null;
+              metrics.end(frame, outcome === 'Applied' ? 'success' : 'failure');
+            }
+            if (Exit.isFailure(answered)) return yield* Effect.failCause(answered.cause);
+            const { outcome } = answered.value;
+            if (outcome._tag === 'Conflict')
               return yield* new ProgramConflict({
                 store: identity.path,
                 operation: set.operation,
                 identity: key,
                 statement: outcome.statement,
-                expected: null,
-                actual: null,
+                expected: outcome.expected,
+                actual: outcome.actual,
               });
-            return yield* refusedBy(outcome.thrown);
+            if (outcome._tag === 'Refused') {
+              if (typeof outcome.thrown.code === 'string' && UNIQUE.test(outcome.thrown.code))
+                return yield* new ProgramConflict({
+                  store: identity.path,
+                  operation: set.operation,
+                  identity: key,
+                  statement: outcome.statement,
+                  expected: null,
+                  actual: null,
+                });
+              return yield* refusedBy(outcome.thrown);
+            }
+            for (const each of building.sets) moves.committed(movedTables(identity, each));
           }
-          for (const each of building.sets) moves.committed(movedTables(identity, each));
-        }
-        let lost = Cause.empty as Cause.Cause<never>;
-        for (const tail of building.tails) {
-          const ended = yield* Effect.exit(tail);
-          if (Exit.isFailure(ended)) lost = Cause.combine(lost, ended.cause);
-        }
-        if (lost.reasons.length > 0) return yield* Effect.failCause(lost);
-        return value;
-      }),
+          let lost = Cause.empty as Cause.Cause<never>;
+          for (const tail of building.tails) {
+            const ended = yield* Effect.exit(tail);
+            if (Exit.isFailure(ended)) lost = Cause.combine(lost, ended.cause);
+          }
+          if (lost.reasons.length > 0) return yield* Effect.failCause(lost);
+          return value;
+        }),
+      ),
     ),
   );
 });

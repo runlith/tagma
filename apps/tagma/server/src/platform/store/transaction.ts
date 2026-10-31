@@ -240,10 +240,13 @@ export const storeTransaction =
     );
   };
 
-export const afterOuterCommit = (effect: Effect.Effect<void>): Effect.Effect<void> =>
+export const intoOuterCommit = (tails: readonly Effect.Effect<void>[], moved: ReadonlySet<string> | null): Effect.Effect<void> =>
   Effect.flatMap(Effect.all([CommitQueue, UnitLife]), ([commits, life]) =>
     commits !== null && life !== null && life.open
-      ? Effect.sync(() => void commits.queued.push(carryCost(effect)))
+      ? Effect.sync(() => {
+          commits.queued.push(...tails);
+          commits.moved.push(moved);
+        })
       : Effect.die(new LateStatementRefused({ store: life?.identity.path ?? commits?.store.path ?? '', operation: life?.operation ?? '' })),
   );
 
