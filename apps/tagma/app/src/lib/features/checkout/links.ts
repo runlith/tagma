@@ -9,7 +9,7 @@ import type { RootId } from '@tagma/server/workspace/contract/wire/ids';
 import type { Resolver } from '@runlith/layer/key';
 import { Router } from '@runlith/layer/Router';
 import { Beside } from '$lib/features/opening/Beside.js';
-import { type Link, type LinkFrom, type LinkItems, type LinkKind, linkKinds } from '$lib/features/opening/Link.js';
+import { type Link, type LinkFrom, type LinkItems, type LinkKind, linkKindsOf } from '$lib/features/opening/Link.js';
 import { FileOpener, type OpenAsk, type PathTarget, type Picture } from './files/FileOpener.svelte.js';
 import { Outside } from './files/Outside.svelte.js';
 import { Workspace } from '$lib/features/workspace/Selection.svelte.js';
@@ -153,9 +153,9 @@ const pathActs = (app: Resolver, link: Link<FileRef>) => [
   },
 ];
 
-const outsides: LinkItems<FileRef> = { kind: FILE_LINK, order: 10, group: 'places', acts: outsideActs };
+const outsides: LinkItems<FileRef> = { id: 'file.outside', kind: FILE_LINK, order: 10, group: 'places', acts: outsideActs };
 
-const paths: LinkItems<FileRef> = { kind: FILE_LINK, order: 100, group: 'copies', acts: pathActs };
+const paths: LinkItems<FileRef> = { id: 'file.paths', kind: FILE_LINK, order: 100, group: 'copies', acts: pathActs };
 
 const projectIdOf = (app: Resolver, name: string): number | undefined =>
   app.resolve(Workspace).projects.find((project) => project.name === name)?.id;
@@ -190,6 +190,7 @@ const commits: LinkKind<CommitRef> = {
 };
 
 const shas: LinkItems<CommitRef> = {
+  id: 'commit.shas',
   kind: COMMIT_LINK,
   order: 100,
   group: 'copies',
@@ -267,6 +268,7 @@ const changeLists: LinkKind<ChangesRef> = {
 };
 
 const changePlaces: LinkItems<ChangeRef> = {
+  id: 'change.places',
   kind: CHANGE_LINK,
   order: 10,
   group: 'places',
@@ -274,6 +276,7 @@ const changePlaces: LinkItems<ChangeRef> = {
 };
 
 const changePaths: LinkItems<ChangeRef> = {
+  id: 'change.paths',
   kind: CHANGE_LINK,
   order: 100,
   group: 'copies',
@@ -309,6 +312,7 @@ const directories: LinkKind<DirectoryRef> = {
 };
 
 const directoryPlaces: LinkItems<DirectoryRef> = {
+  id: 'directory.places',
   kind: DIRECTORY_LINK,
   order: 10,
   group: 'places',
@@ -321,6 +325,7 @@ const directoryPlaces: LinkItems<DirectoryRef> = {
 };
 
 const directoryPaths: LinkItems<DirectoryRef> = {
+  id: 'directory.paths',
   kind: DIRECTORY_LINK,
   order: 100,
   group: 'copies',
@@ -329,6 +334,6 @@ const directoryPaths: LinkItems<DirectoryRef> = {
   ],
 };
 
-export const links = linkKinds(files, commits, changes, changeLists, directories);
+export const links = linkKindsOf(files, commits, changes, changeLists, directories);
 
 export const items = [outsides, paths, shas, changePlaces, changePaths, directoryPlaces, directoryPaths];

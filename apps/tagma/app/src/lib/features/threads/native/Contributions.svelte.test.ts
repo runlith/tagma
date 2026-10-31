@@ -5,7 +5,6 @@ import { createEntryKinds } from '@runlith/chat-ui/EntryKinds.svelte';
 import { FeedRegions } from '@runlith/chat-ui/FeedRegions.svelte';
 import { Layer } from '@runlith/layer/Layer';
 import { makePoint } from '@runlith/layer/testing';
-import { RegistryClash } from '@runlith/roster/RegistryClash';
 import { Effect } from 'effect';
 import { flushSync } from 'svelte';
 import { afterEach, expect, test } from 'vitest';
@@ -114,7 +113,6 @@ test('two features giving one entry kind the same facet refuse the second and na
     }
   })();
 
-  expect(error).toBeInstanceOf(RegistryClash);
-  expect((error as RegistryClash).holders).toEqual(['a', 'b']);
+  expect(error).toMatchObject({ name: 'RegistryClash', holders: ['a', 'b'] });
   expect(() => kinds.register('c', productKindDeclaration({ ...probeKind, estimate: () => 1 }))).not.toThrow();
 });

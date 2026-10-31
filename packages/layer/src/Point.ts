@@ -10,6 +10,7 @@ interface PointDefinition<Item, Tr extends Tier = Tier> {
   readonly key: (item: Item) => string;
   readonly order?: (item: Item) => number;
   readonly claims?: (item: Item) => readonly string[];
+  readonly admits?: (item: Item) => string | null;
 }
 
 type Contribution<Id extends string, From extends string, Item, Tr extends Tier> = Layer<
@@ -40,6 +41,19 @@ export class Point<Item> {
 
   register(from: string, ...items: readonly Item[]): () => void {
     return this.roster.add(from, ...items);
+  }
+
+  contributorOf(item: Item): string | undefined {
+    return this.roster.holderOf(this.key(item));
+  }
+
+  derive<Index>(build: (items: readonly Item[]) => Index): () => Index {
+    let standing: { readonly items: readonly Item[]; readonly index: Index } | undefined;
+    return () => {
+      const items = this.items;
+      if (standing?.items !== items) standing = { items, index: build(items) };
+      return standing.index;
+    };
   }
 
   static over<Item>(id: string, definition: PointDefinition<Item>, cell: Cell<readonly Item[]>): Point<Item> {

@@ -343,11 +343,11 @@ test('a shell an agent starts lands as a background tab in its thread’s layout
   owned.stop();
 });
 
-test('a terminal a thread holds outside every checkout opens as a tab of that thread and stands in no panel', async () => {
-  const unplaced = listingFor('far:0', { rootId: null, holder: 'thread:t-1', heldBy: 't-1' });
-  const owned = await stand([]);
+test('a terminal a thread holds outside every checkout opens as a tab of that thread, stands in no panel, and a new terminal from it starts in its directory beside it', async () => {
+  const unplaced = listingFor('far:0', { rootId: null, cwd: '/elsewhere/app', holder: 'thread:t-1', heldBy: 't-1' });
+  const owned = await stand([], { threads: (thread) => (thread === 't-1' ? ({ label: 't-1', archived: false } as never) : undefined) });
   owned.feed([unplaced]);
-  await until(() => owned.terminals.rootOf('far:0') !== null, 'the unplaced terminal adopted');
+  await until(() => owned.terminals.worktreeOf('far:0') !== null, 'the unplaced terminal adopted');
 
   await owned.terminals.reveal('far:0');
 
@@ -355,6 +355,14 @@ test('a terminal a thread holds outside every checkout opens as a tab of that th
   expect(owned.layouts.layout(threadHolder('t-1')).tabs).toMatchObject([{ kind: 'terminal', id: 'far:0' }]);
   expect(owned.worktree(MAIN).tabs).toEqual([]);
   expect(owned.terminals.home?.panel).toEqual([]);
+
+  const bucket = owned.terminals.worktreeOf('far:0');
+  if (bucket === null) throw new Error('the unplaced terminal stands nowhere');
+  expect(owned.terminals.perform({ _tag: 'new-tab' }, bucket, 'far:0')).toBe(true);
+  await until(() => owned.layouts.layout(threadHolder('t-1')).tabs.length === 2, 'the new terminal laid beside');
+  expect(owned.starts.map((start) => start.cwd)).toEqual(['/elsewhere/app']);
+  const written = owned.writes.at(-1) as unknown as Written | undefined;
+  expect(Object.keys(written?.value.places ?? {}).every((root) => root === MAIN || root === FEATURE)).toBe(true);
   owned.stop();
 });
 

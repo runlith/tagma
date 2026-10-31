@@ -1,4 +1,3 @@
-import { RegistryClash } from '@runlith/roster/RegistryClash';
 import type { Resolver } from '@runlith/layer/key';
 import { makePoint } from '@runlith/layer/testing';
 import { expect, test } from 'vitest';
@@ -82,6 +81,6 @@ test('a column whose contribution left and came back under the same id answers t
 
 test('a surface naming a column this build lacks opens none, and two columns sharing an id or a route refuse', () => {
   expect(registry(preferences).of('mail', app)).toBeNull();
-  expect(() => registry(inbox, inbox)).toThrow(RegistryClash);
-  expect(() => registry(inbox, preferences, { ...preferences, id: 'other' })).toThrow(RegistryClash);
+  expect(() => registry(inbox, inbox)).toThrow('is contributed by both');
+  expect(() => registry(inbox, preferences, { ...preferences, id: 'other' })).toThrow('is contributed by both');
 });

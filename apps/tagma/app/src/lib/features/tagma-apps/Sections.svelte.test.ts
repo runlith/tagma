@@ -3,10 +3,13 @@ import type { TagmaAppViewSet, TagmaAppViewState } from '@tagma/server/views/con
 import { Layer } from '@runlith/layer/Layer';
 import { flush } from '@runlith/testing/flush';
 import { afterEach, expect, test } from 'vitest';
-import { mountShell, type TestApp, testSurfaces } from '$lib/app/testing.js';
+import type { Point } from '@runlith/layer/Point';
+import { makePoint } from '@runlith/layer/testing';
+import { mountShell, type TestApp } from '$lib/app/testing.js';
+import { type ActionSet, PaletteActions } from '$lib/features/workspace/action.js';
 import { ProjectFocus } from '$lib/features/workspace/Focus.svelte.js';
 import { ProjectRung } from '$lib/features/workspace/ProjectRung.js';
-import { SurfaceRegistry } from '$lib/features/workspace/surface.js';
+import { SurfaceRegistry, Surfaces } from '$lib/features/workspace/surface.js';
 import { Live } from '$lib/wire/Live.js';
 import { Sections } from './Sections.svelte.js';
 import { sectionActions, sectionDeclarations } from './sections.js';
@@ -27,6 +30,11 @@ const board = (projectId: number): TagmaAppViewSet => ({
 const railOf = (surfaces: SurfaceRegistry): string[] =>
   surfaces.rail.filter((entry) => entry.surface.startsWith('app/')).map((entry) => entry.label);
 
+const titlesOf = (actions: Point<ActionSet>): string[] => {
+  const shown = actions.find('tagma-apps:sections')?.actions ?? [];
+  return (typeof shown === 'function' ? [] : shown).map((action) => action.title);
+};
+
 let app: TestApp | undefined;
 
 afterEach(async () => {
@@ -42,9 +50,13 @@ function stand() {
       return { unsubscribe: () => undefined };
     },
   };
-  const mounted = mountShell(Layer.mergeAll(Sections, ViewSets, TagmaAppActions, ProjectFocus), Layer.of(Live, live as never), {
-    at: { projectId: 1, branch: null },
-  });
+  const mounted = mountShell(
+    Layer.mergeAll(Sections, ViewSets, TagmaAppActions, PaletteActions, ProjectFocus),
+    Layer.of(Live, live as never),
+    {
+      at: { projectId: 1, branch: null },
+    },
+  );
   app = mounted;
   return {
     app: mounted.app,
@@ -52,7 +64,7 @@ function stand() {
       mounted.place({ projectId, branch: null });
       await flush();
     },
-    actions: () => mounted.app.resolve(TagmaAppActions).actions.map((action) => action.title),
+    actions: () => titlesOf(mounted.app.resolve(PaletteActions)),
     rail: () => railOf(mounted.app.resolve(SurfaceRegistry)),
   };
 }
@@ -80,15 +92,17 @@ test('two warm projects with one app hand the window its sections in turn: only 
 });
 
 test('a publication another one replaced is gone, and releasing it late leaves the window to the one standing', () => {
-  const surfaces = testSurfaces();
-  const actions = new TagmaAppActions(surfaces);
-  const shown = (projectId: number) => actions.show(sectionDeclarations([board(projectId)]), sectionActions([board(projectId)]));
+  const point = makePoint(Surfaces);
+  const surfaces = new SurfaceRegistry(point);
+  const actions = makePoint(PaletteActions);
+  const publisher = new TagmaAppActions(point, actions);
+  const shown = (projectId: number) => publisher.show(sectionDeclarations([board(projectId)]), sectionActions([board(projectId)]));
   const stale = shown(1);
   shown(2);
 
   stale();
   expect(railOf(surfaces)).toEqual(['Board of 2']);
-  expect(actions.actions.map((action) => action.title)).toEqual(['Go to Board of 2']);
+  expect(titlesOf(actions)).toEqual(['Go to Board of 2']);
 
   const last = shown(3);
   expect(railOf(surfaces)).toEqual(['Board of 3']);

@@ -33,6 +33,7 @@ export type LinkAct = {
 export type LinkGroup = 'places' | 'copies';
 
 export type LinkItems<T> = {
+  readonly id: string;
   readonly kind: string;
   readonly order: number;
   readonly group: LinkGroup;
@@ -54,7 +55,7 @@ export type LinkKind<T> = {
   readonly tab?: LinkTab<T>;
 };
 
-export function linkKinds<const T extends readonly unknown[]>(
+export function linkKindsOf<const T extends readonly unknown[]>(
   ...kinds: { readonly [I in keyof T]: LinkKind<T[I]> }
 ): readonly LinkKind<never>[] {
   return kinds as unknown as readonly LinkKind<never>[];
@@ -68,6 +69,6 @@ export const LinkKinds = Point.define<LinkKind<never>>()('LinkKinds', {
 
 export const LinkMenuItems = Point.define<LinkItems<never>>()('LinkMenuItems', {
   tier: 'app',
-  key: (items) => `${items.kind} ${items.group} ${items.order}`,
+  key: (items) => items.id,
   order: (items) => items.order,
 });

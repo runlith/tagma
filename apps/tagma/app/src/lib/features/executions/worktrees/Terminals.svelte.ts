@@ -25,7 +25,7 @@ import { STANDING_INVENTORY, ExecutionsRepo, terminalAddress, terminalKey } from
 import type { FitGrid } from '../terminal/Fit.js';
 import type { TerminalAct } from '../terminal/Keymap.js';
 import { storedLeafTabs, type StoredLayout, type StoredWorktrees } from './layout.js';
-import { terminalPlace, UNPLACED } from './opens.js';
+import { terminalPlace, type TerminalPlace } from './opens.js';
 import { standing } from './standing.js';
 import { TerminalSettings } from './TerminalSettings.svelte.js';
 import { WorktreeTerminals } from './WorktreeTerminals.svelte.js';
@@ -59,6 +59,7 @@ export class Terminals extends Service<Terminals>()('Terminals', { tier: 'projec
   }
 
   readonly worktrees = new SvelteMap<string, WorktreeTerminals>();
+  private atHolders = $state.raw<WorktreeTerminals | null>(null);
   inventory = $state<Inventory>({ _tag: 'reading' });
   floorNotice = $state<string | null>(null);
   ceiling = $state.raw<FitGrid | null>(null);
@@ -95,7 +96,9 @@ export class Terminals extends Service<Terminals>()('Terminals', { tier: 'projec
   ) {
     super();
     this.store = new TerminalSettings(projectId, settings, notices, scope);
-    this.running = $derived(new Set(commands.roster.flatMap((row) => (rootOf(row) === null ? [] : [terminalKey(row.record.execution)]))));
+    this.running = $derived(
+      new Set(commands.roster.flatMap((row) => (placeOf(row)?.kind !== 'checkout' ? [] : [terminalKey(row.record.execution)]))),
+    );
     $effect(() => {
       const entries = this.store.catalog();
       if (entries !== null) untrack(() => this.learn(entries));
@@ -167,10 +170,24 @@ export class Terminals extends Service<Terminals>()('Terminals', { tier: 'projec
   }
 
   worktreeOf(key: string): WorktreeTerminals | null {
-    for (const worktree of this.worktrees.values()) {
+    for (const worktree of this.all) {
       if (worktree.holds(key)) return worktree;
     }
     return null;
+  }
+
+  get all(): readonly WorktreeTerminals[] {
+    const places = [...this.worktrees.values()];
+    return this.atHolders === null ? places : [...places, this.atHolders];
+  }
+
+  private bucket(rootId: string | null): WorktreeTerminals {
+    if (rootId !== null) return this.worktree(rootId);
+    if (this.atHolders === null) {
+      this.atHolders = WorktreeTerminals.start(this.scope.child('WorktreeTerminals:holders'), { rootId: null, terminals: this });
+      this.atHolders.adopt(new Map(), null);
+    }
+    return this.atHolders;
   }
 
   worktree(rootId: string): WorktreeTerminals {
@@ -293,8 +310,8 @@ export class Terminals extends Service<Terminals>()('Terminals', { tier: 'projec
         return;
       }
       await this.read();
-      let rootId = this.rootOf(key);
-      if (rootId === null) {
+      let worktree = this.worktreeOf(key);
+      if (worktree === null) {
         let listing;
         try {
           listing = await this.repo.record.key(address).refresh({ throwOnError: true });
@@ -314,18 +331,17 @@ export class Terminals extends Service<Terminals>()('Terminals', { tier: 'projec
           await this.readdress(null);
           return;
         }
-        rootId = place;
-        this.worktree(rootId).bear(record);
-        if (rootId === UNPLACED) this.layAgent(key, record);
+        worktree = this.bucket(rootIdOf(place));
+        worktree.bear(record);
+        if (place.kind === 'holder') this.layAgent(key, record);
       }
-      const worktree = this.worktree(rootId);
       const owner = worktree.holderOf(key);
-      if (owner === null && rootId === UNPLACED) {
+      if (owner === null && worktree.rootId === null) {
         this.notices.error('Terminal', `Terminal ${key} stands in no checkout, and the thread holding it is gone.`);
         return;
       }
       const thread = owner === null ? null : holderThread(owner);
-      await this.readdress(rootId, thread);
+      await this.readdress(worktree.rootId, thread);
       const revealed = worktree.reveal(key);
       if (owner !== null) {
         this.lay(worktree, revealed, owner);
@@ -385,7 +401,7 @@ export class Terminals extends Service<Terminals>()('Terminals', { tier: 'projec
   private performBeside(act: TerminalAct, worktree: WorktreeTerminals, key: string, holder: Holder): boolean {
     switch (act._tag) {
       case 'new-tab':
-        void worktree.open(holder).then((made) => this.lay(worktree, made, holder));
+        void worktree.open(holder, key).then((made) => this.lay(worktree, made, holder));
         return true;
       case 'rename-tab':
         worktree.beginRename(worktree.tabOf(key)?.key ?? null);
@@ -427,7 +443,7 @@ export class Terminals extends Service<Terminals>()('Terminals', { tier: 'projec
   }
 
   private carry(from: Holder, to: Holder): void {
-    for (const worktree of this.worktrees.values()) worktree.carry(from, to);
+    for (const worktree of this.all) worktree.carry(from, to);
   }
 
   private async homeReady(): Promise<WorktreePlace | null> {
@@ -461,20 +477,26 @@ export class Terminals extends Service<Terminals>()('Terminals', { tier: 'projec
       if (this.scope.closed) return;
       this.stored = stored;
       const live = new Map<string, Map<string, TerminalRow>>();
+      const atHolders = new Map<string, TerminalRow>();
       for (const listing of answer.terminals) {
         const key = terminalKey(listing.record.execution);
-        const rootId = rootOf(listing);
-        if (rootId === null) continue;
+        const place = placeOf(listing);
+        if (place === null) continue;
         this.seen.add(key);
-        const held = live.get(rootId) ?? new Map<string, TerminalRow>();
+        if (place.kind === 'holder') {
+          atHolders.set(key, listing);
+          continue;
+        }
+        const held = live.get(place.rootId) ?? new Map<string, TerminalRow>();
         held.set(key, listing);
-        live.set(rootId, held);
+        live.set(place.rootId, held);
       }
       for (const rootId of new Set([...live.keys(), ...this.worktrees.keys()])) {
         this.worktree(rootId).adopt(live.get(rootId) ?? new Map(), this.stored.get(rootId) ?? null);
       }
+      for (const listing of atHolders.values()) this.bucket(null).bear(listing.record);
       const known = new Set([...this.stored.values()].flatMap((layout) => [...storedLeafTabs(layout).keys()]));
-      for (const held of live.values()) {
+      for (const held of [...live.values(), atHolders]) {
         for (const [key, listing] of held) if (!known.has(key)) this.layAgent(key, listing.record);
       }
       if (!this.edited) this.store.standsAs(this.snapshot());
@@ -488,7 +510,7 @@ export class Terminals extends Service<Terminals>()('Terminals', { tier: 'projec
   }
 
   private settle(): void {
-    for (const worktree of this.worktrees.values()) {
+    for (const worktree of this.all) {
       for (const [key, holder] of worktree.holders) {
         if (worktree.owned(key)) this.layouts.open(holder, terminalPane(key), { activate: false });
       }
@@ -500,14 +522,15 @@ export class Terminals extends Service<Terminals>()('Terminals', { tier: 'projec
     for (const listing of roster) {
       const key = terminalKey(listing.record.execution);
       live.add(key);
-      const rootId = rootOf(listing);
-      const worktree = rootId === null ? undefined : this.worktrees.get(rootId);
+      const place = placeOf(listing);
+      const rootId = place === null ? null : rootIdOf(place);
+      const worktree = place === null ? null : rootId === null ? this.atHolders : (this.worktrees.get(rootId) ?? null);
       worktree?.note(listing.record);
       if (!standing(listing)) this.worktreeOf(key)?.heard(listing);
-      if (rootId === null || this.seen.has(key)) continue;
+      if (place === null || this.seen.has(key)) continue;
       this.seen.add(key);
-      if (this.rootOf(key) !== null) continue;
-      this.worktree(rootId).bear(listing.record);
+      if (this.worktreeOf(key) !== null) continue;
+      this.bucket(rootId).bear(listing.record);
       this.layAgent(key, listing.record);
     }
     for (const key of this.seen) {
@@ -578,7 +601,8 @@ export class Terminals extends Service<Terminals>()('Terminals', { tier: 'projec
   }
 }
 
-function rootOf(listing: TerminalRow): string | null {
-  const place = terminalPlace(listing.record);
-  return place !== null && standing(listing) ? place : null;
+function placeOf(listing: TerminalRow): TerminalPlace | null {
+  return standing(listing) ? terminalPlace(listing.record) : null;
 }
+
+const rootIdOf = (place: TerminalPlace): string | null => (place.kind === 'checkout' ? place.rootId : null);

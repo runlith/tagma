@@ -274,7 +274,7 @@
         {:else if activeId !== null}
           <KeyCard entries={catalog.entriesOf(activeId)} {catalog} scope={effective} {project} />
         {/if}
-        {#if activeId !== null && !unread && !reading}
+        {#if activeId !== null && (declared?.standalone || (!unread && !reading))}
           <PointView
             point={registry.contributions}
             only={(contribution) => contribution.section === activeId}

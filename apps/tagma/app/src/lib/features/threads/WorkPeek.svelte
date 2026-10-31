@@ -13,6 +13,7 @@
   import { View } from '$lib/features/executions/load/View.svelte.js';
   import { onLinkOpened } from '$lib/features/opening/linkTarget.js';
   import { threadPeeks } from './threadPeek.svelte.js';
+  import WorkHome from './WorkHome.svelte';
   import WorkLine from './WorkLine.svelte';
 
   let {
@@ -125,14 +126,17 @@
       </div>
       <div class="flex max-h-96 flex-col gap-px overflow-y-auto p-1">
         {#each work as execution (execution.key)}
-          <WorkLine
-            {execution}
-            line={processes.line(execution.key)}
-            view={processes}
-            open={expanded === execution.key}
-            onToggle={() => (expanded = expanded === execution.key ? null : execution.key)}
-            onLeave={close}
-          />
+          <WorkHome projectId={execution.projectId} {threadId} view={processes}>
+            {#snippet children(view)}
+              <WorkLine
+                {execution}
+                {view}
+                open={expanded === execution.key}
+                onToggle={() => (expanded = expanded === execution.key ? null : execution.key)}
+                onLeave={close}
+              />
+            {/snippet}
+          </WorkHome>
         {/each}
       </div>
       {#if left.length > 0}

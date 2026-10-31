@@ -5,7 +5,7 @@ import { blockAddress } from '@tagma/server/graph/contract/wire/references';
 import type { Resolver } from '@runlith/layer/key';
 import { Router } from '@runlith/layer/Router';
 import { Beside } from '$lib/features/opening/Beside.js';
-import { type Link, type LinkItems, type LinkKind, type LinkFrom, linkKinds } from '$lib/features/opening/Link.js';
+import { type Link, type LinkItems, type LinkKind, type LinkFrom, linkKindsOf } from '$lib/features/opening/Link.js';
 import { type BlockLens, languageTag } from '$lib/features/workspace/address.js';
 import { Addresses } from '$lib/features/workspace/Addresses.js';
 import type { GraphAim } from '$lib/features/workspace/GraphRung.js';
@@ -95,6 +95,7 @@ const blocks: LinkKind<BlockTarget> = {
 };
 
 const copies: LinkItems<BlockTarget> = {
+  id: 'block.copies',
   kind: BLOCK_LINK,
   order: 100,
   group: 'copies',
@@ -119,6 +120,7 @@ const copies: LinkItems<BlockTarget> = {
 };
 
 const starts: LinkItems<BlockTarget> = {
+  id: 'block.starts',
   kind: BLOCK_LINK,
   order: 50,
   group: 'places',
@@ -133,6 +135,6 @@ const starts: LinkItems<BlockTarget> = {
   },
 };
 
-export const links = linkKinds(blocks);
+export const links = linkKindsOf(blocks);
 
 export const items = [starts, copies];

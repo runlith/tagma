@@ -1,46 +1,27 @@
 import { Service } from '@runlith/layer/key';
-import { untrack } from 'svelte';
-import type { PaletteAction } from '$lib/features/workspace/action.js';
-import { type SurfaceDeclaration, SurfaceRegistry } from '$lib/features/workspace/surface.js';
+import type { Point } from '@runlith/layer/Point';
+import { type ActionSet, type PaletteAction, PaletteActions } from '$lib/features/workspace/action.js';
+import { type SurfaceDeclaration, Surfaces } from '$lib/features/workspace/surface.js';
+
+const SECTIONS = 'tagma-apps:sections';
 
 export class TagmaAppActions extends Service<TagmaAppActions>()('TagmaAppActions', { tier: 'app' }) {
   static *make() {
-    return new TagmaAppActions(yield* SurfaceRegistry);
+    return new TagmaAppActions(yield* Surfaces, yield* PaletteActions);
   }
 
-  actions = $state.raw<readonly PaletteAction[]>([]);
   private shown: (() => void) | null = null;
 
-  constructor(private readonly surfaces: SurfaceRegistry) {
+  constructor(
+    private readonly surfaces: Point<SurfaceDeclaration>,
+    private readonly actions: Point<ActionSet>,
+  ) {
     super();
-  }
-
-  addAll(added: readonly PaletteAction[]): () => void {
-    untrack(() => {
-      this.actions = [...this.actions, ...added];
-    });
-    const own = new Set(added);
-    return () => {
-      untrack(() => {
-        this.actions = this.actions.filter((held) => !own.has(held));
-      });
-    };
-  }
-
-  add(action: PaletteAction): () => void {
-    untrack(() => {
-      this.actions = [...this.actions, action];
-    });
-    return () => {
-      untrack(() => {
-        this.actions = this.actions.filter((held) => held !== action);
-      });
-    };
   }
 
   show(sections: readonly SurfaceDeclaration[], actions: readonly PaletteAction[]): () => void {
     this.shown?.();
-    const releases = [...sections.map((section) => this.surfaces.register(section)), this.addAll(actions)];
+    const releases = [this.surfaces.register(SECTIONS, ...sections), this.actions.register(SECTIONS, { id: SECTIONS, actions })];
     const release = (): void => {
       if (this.shown !== release) return;
       this.shown = null;

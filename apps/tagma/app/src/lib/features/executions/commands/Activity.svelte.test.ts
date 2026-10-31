@@ -419,6 +419,10 @@ test('a held terminal is drawn by its label and command line, with the listeners
 
   const bare = viewOver([], thread, undefined, [listing({ program: '/bin/zsh' })]).activity.lines[0];
   expect(bare).toMatchObject({ label: null, command: '/bin/zsh', ports: [] });
+
+  const shared = { listeners: [socket(3000, '*', true), socket(3000, '*', true)] } as unknown as TerminalRow['listeners'];
+  const workers = viewOver([], thread, undefined, [listing({ program: 'node' }, shared)]).activity.lines[0];
+  expect(workers?.ports).toEqual([{ port: 3000, address: '*', url: 'http://localhost:3000/' }]);
 });
 
 test('a held terminal is a line to find by its key whatever its transport, so a wait on it can name its target; a call-bound one is not', () => {

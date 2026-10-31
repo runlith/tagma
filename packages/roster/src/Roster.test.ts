@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
 import type { Cell } from './cell.js';
-import { RegistryClash } from './RegistryClash.js';
 import { Roster } from './Roster.js';
 
 type Item = { readonly id: string; readonly order: number };
@@ -43,8 +42,7 @@ describe('Roster', () => {
       return undefined;
     })();
 
-    expect(refused).toBeInstanceOf(RegistryClash);
-    expect((refused as RegistryClash).holders).toEqual(['features/a', 'features/b']);
+    expect(refused).toMatchObject({ name: 'RegistryClash', holders: ['features/a', 'features/b'] });
     expect(list.items.map((item) => item.id)).toEqual(['x']);
   });
 
@@ -58,10 +56,28 @@ describe('Roster', () => {
     );
     const leave = list.add('features/a', { id: 'x', order: 1 });
 
-    expect(() => list.add('features/b', { id: 'y', order: 1 })).toThrow(RegistryClash);
+    expect(() => list.add('features/b', { id: 'y', order: 1 })).toThrow('is contributed by both');
 
     leave();
     list.add('features/b', { id: 'y', order: 1 });
     expect(list.items.map((item) => item.id)).toEqual(['y']);
+    expect(list.holderOf('y')).toBe('features/b');
+  });
+
+  it('refuses an item its admission rejects, naming the contributor and the reason, and adds none of its batch', () => {
+    const cell: Cell<readonly Item[]> = { current: undefined };
+    const list = new Roster<Item>(
+      (key) => `Item "${key}"`,
+      (item) => item.id,
+      cell,
+      {
+        admits: (item) => (item.order < 0 ? 'its order is negative' : null),
+      },
+    );
+
+    expect(() => list.add('features/a', { id: 'x', order: 1 }, { id: 'y', order: -1 })).toThrow(
+      'Item "y" from "features/a" is refused: its order is negative',
+    );
+    expect(list.items).toEqual([]);
   });
 });

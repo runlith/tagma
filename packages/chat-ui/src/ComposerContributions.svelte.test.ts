@@ -4,7 +4,6 @@ import { describe, expect, test } from 'vitest';
 import { ComposerRefused, type ComposerSlashCommand, settled } from './composer';
 import { ComposerContributions } from './ComposerContributions.svelte';
 import { ComposerMenu } from './ComposerMenu.svelte';
-import { RegistryClash } from '@runlith/roster/RegistryClash';
 const command = (name: string, rest: Partial<ComposerSlashCommand> = {}): ComposerSlashCommand => ({
   name,
   run: () => Effect.void,
@@ -34,7 +33,7 @@ describe('commands contributed to the composer', () => {
   test('a name contributed twice refuses the assembly and names both contributors', () => {
     const composer = new ComposerContributions();
     composer.command('threads', command('mode'));
-    expect(() => composer.command('plugins', command('mode'))).toThrow(RegistryClash);
+    expect(() => composer.command('plugins', command('mode'))).toThrow('is contributed by both');
     expect(() => composer.command('plugins', command('mode'))).toThrow(/threads.*plugins/);
     expect(composer.commands).toHaveLength(1);
   });

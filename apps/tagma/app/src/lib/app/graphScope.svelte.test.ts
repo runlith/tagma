@@ -168,7 +168,7 @@ test('the branch the address moves to is a new scope: the old one is finalized, 
   await flush();
 
   const after = world.app.app.scopeOf('graph');
-  expect([before.scope.name, after.name]).toEqual(['project:1/graph:1:main', 'project:1/graph:1:next']);
+  expect([before.scope.name, after.name]).toEqual(['tile:1/project:1/graph:1:main', 'tile:1/project:1/graph:1:next']);
   expect(before.scope.closed).toBe(true);
   expect(world.subscriptions.map((standing) => [standing.branch, standing.open])).toEqual([
     ['main', false],

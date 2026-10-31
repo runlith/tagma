@@ -1,11 +1,12 @@
 import type { Cell } from './cell.js';
-import { clashOf } from './RegistryClash.js';
+import { clashOf, RegistryRefusal } from './RegistryClash.js';
 
 type Held<T> = { readonly contributor: string; readonly item: T };
 
 interface RosterOptions<T> {
   readonly order?: (item: T) => number;
   readonly claims?: (item: T) => readonly string[];
+  readonly admits?: (item: T) => string | null;
 }
 
 const NONE: readonly never[] = [];
@@ -36,6 +37,10 @@ export class Roster<T> {
     for (const item of items) {
       const key = this.keyOf(item);
       const held = { contributor, item };
+      const refused = this.options.admits?.(item) ?? null;
+      if (refused !== null) {
+        throw new RegistryRefusal({ message: `${this.subject(key)} from "${contributor}" is refused: ${refused}`, contributor });
+      }
       const clash = this.ledger.get(key) ?? entries.get(key);
       if (clash !== undefined) throw clashOf(this.subject(key), clash.contributor, contributor);
       for (const claim of this.options.claims?.(item) ?? NONE) {
@@ -58,6 +63,10 @@ export class Roster<T> {
       for (const [claim, held] of claims) if (this.claimed.get(claim) === held) this.claimed.delete(claim);
       if (gone.size > 0) this.settle(this.list.filter((item) => !gone.has(item)));
     };
+  }
+
+  holderOf(key: string): string | undefined {
+    return this.ledger.get(key)?.contributor;
   }
 
   contributorOf(match: (item: T) => boolean): string | undefined {

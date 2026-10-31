@@ -14,13 +14,11 @@ export type SectionColumn = {
 };
 
 type ColumnIndex = {
-  readonly items: readonly ColumnDeclaration[];
   readonly byId: ReadonlyMap<string, ColumnDeclaration>;
   readonly byRoute: ReadonlyMap<string, ColumnDeclaration>;
 };
 
 const indexOf = (items: readonly ColumnDeclaration[]): ColumnIndex => ({
-  items,
   byId: new Map(items.map((declaration) => [declaration.id, declaration])),
   byRoute: new Map(items.flatMap((declaration) => (declaration.routes ?? []).map((route) => [route, declaration] as const))),
 });
@@ -30,21 +28,20 @@ export class ColumnRegistry extends Service<ColumnRegistry>()('ColumnRegistry', 
     return new ColumnRegistry(yield* SurfaceRegistry, yield* Columns);
   }
 
-  private indexed: ColumnIndex | undefined;
+  private readonly indexed: () => ColumnIndex;
 
   private readonly standing = new WeakMap<Resolver, WeakMap<ColumnDeclaration, SectionColumn>>();
 
   constructor(
     private readonly surfaces: SurfaceRegistry,
-    private readonly columns: Point<ColumnDeclaration>,
+    columns: Point<ColumnDeclaration>,
   ) {
     super();
+    this.indexed = columns.derive(indexOf);
   }
 
   private get index(): ColumnIndex {
-    const items = this.columns.items;
-    if (this.indexed?.items !== items) this.indexed = indexOf(items);
-    return this.indexed;
+    return this.indexed();
   }
 
   of(surface: Surface, app: Resolver): SectionColumn | null {

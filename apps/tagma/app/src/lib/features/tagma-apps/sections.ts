@@ -5,7 +5,7 @@ import { Notices } from '$lib/features/notices/Service.svelte.js';
 import type { PaletteAction } from '$lib/features/workspace/action.js';
 import { ShellOps, shellActs } from '$lib/features/workspace/ShellOps.js';
 import { paneId, TAGMA_APP_PANE } from './panes.js';
-import { sectionSurface } from './surfaces.js';
+import { sectionSurface, TAGMA_APP_SURFACE } from './surfaces.js';
 
 const RAIL_FROM = 100;
 
@@ -36,6 +36,7 @@ export const sectionDeclarations = (sets: readonly TagmaAppViewSet[]): readonly 
     .flatMap((set) => set.surfaces.map((section) => ({ set, section })))
     .map(({ set, section }, place): SurfaceDeclaration => ({
       surface: sectionSurface(set.app, section.view),
+      within: TAGMA_APP_SURFACE,
       route: `p/${set.app}/${section.view}`,
       label: section.title,
       icon: Puzzle,

@@ -28,4 +28,8 @@ export type PaletteActionList = readonly PaletteAction[] | ((app: Resolver) => r
 
 export type ActionSet = { readonly id: string; readonly actions: PaletteActionList };
 
-export const PaletteActions = Point.define<ActionSet>()('PaletteActions', { tier: 'app', key: (set) => set.id });
+export const PaletteActions = Point.define<ActionSet>()('PaletteActions', {
+  tier: 'app',
+  key: (set) => set.id,
+  claims: (set) => (typeof set.actions === 'function' ? [] : set.actions.map((action) => `Palette action "${action.id}"`)),
+});

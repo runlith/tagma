@@ -4,7 +4,12 @@
   import Waiting from '@runlith/chat-ui/Waiting.svelte';
   import SquareTerminal from '@lucide/svelte/icons/square-terminal';
   import Terminal from '@lucide/svelte/icons/terminal';
+  import { Router } from '@runlith/layer/Router';
   import type { LoadExecution } from '@tagma/server/executions/contract/wire/load';
+  import { untrack } from 'svelte';
+  import { Addresses } from '$lib/features/workspace/Addresses.js';
+  import { ProjectFocus } from '$lib/features/workspace/Focus.svelte.js';
+  import { Workspace } from '$lib/features/workspace/Selection.svelte.js';
   import FadeText from '$lib/shared/FadeText.svelte';
   import PathText from '$lib/shared/PathText.svelte';
   import Tooltip from '$lib/shared/ui/tooltip/Tooltip.svelte';
@@ -27,14 +32,12 @@
 
   let {
     execution,
-    line,
     view,
     open,
     onToggle,
     onLeave,
   }: {
     execution: LoadExecution;
-    line: ProcessLine | null;
     view: CommandView;
     open: boolean;
     onToggle: () => void;
@@ -44,8 +47,13 @@
   const acts = ExecutionActs.use();
   const notices = Notices.use();
   const opening = Opening.use();
-  const terminals = Terminals.use();
+  const workspace = Workspace.use();
+  const addresses = Addresses.use();
+  const router = Router.use();
+  const focus = ProjectFocus.use();
+  const terminals = untrack(() => focus.current) ? Terminals.use() : null;
 
+  const line = $derived<ProcessLine | null>(view.line(execution.key));
   const terminal = $derived((line?.transport ?? execution.transport) === 'pty');
   const printed = $derived(line?.transport === 'pipes' ? line.printed : null);
   const title = $derived(line?.label ?? line?.command ?? execution.label);
@@ -54,14 +62,36 @@
   const reveals = $derived(terminal && opens);
   const ports = $derived(line?.ports ?? []);
   const stopping = $derived(acts.busy(execution.projectId, execution.key) === 'stop');
+  const live = $derived(line !== null && isLive(line));
+  const slots = $derived(
+    line === null
+      ? 1
+      : (opens ? 1 : 0) +
+          (line.kind === 'command' ? 1 : 0) +
+          (live ? 1 : 0) +
+          (live && line.kind === 'command' && line.limit !== null ? 1 : 0),
+  );
+
+  function reveal(key: string): void {
+    onLeave();
+    if (terminals !== null) {
+      void terminals.reveal(key);
+      return;
+    }
+    const project = workspace.find(view.projectId);
+    if (project === null) {
+      notices.error('Terminal', `Project ${view.projectId} is not known to this window, so its terminal cannot open here.`);
+      return;
+    }
+    void router.goto(addresses.terminal(key, project.name));
+  }
 
   function activate(): void {
     if (line === null || !reveals) {
       onToggle();
       return;
     }
-    onLeave();
-    void terminals.reveal(line.key);
+    reveal(line.key);
   }
 
   async function stopUnlisted(): Promise<void> {
@@ -86,38 +116,20 @@
       {#if terminal}<SquareTerminal class="size-3" />{:else}<Terminal class="size-3" />{/if}
     </span>
     <div class="flex min-w-0 flex-1 flex-col gap-0.5">
-      <div class="flex h-4.5 min-w-0 items-center gap-2">
+      <div
+        class="flex h-4.5 min-w-0 items-center gap-2 group-focus-within/line:fade-under group-hover/line:fade-under group-has-data-[state=open]/line:fade-under"
+        style={`--under: calc(var(--spacing) * ${slots * 7})`}
+      >
         <FadeText class={['flex-1 text-small leading-4.5', command && 'font-mono']} text={title} />
-        <span class="flex h-4.5 shrink-0 items-center">
-          {#if line !== null}
-            <span class="flex items-center group-focus-within/line:hidden group-hover/line:hidden group-has-data-[state=open]/line:hidden">
-              <CommandStatus {line} {view} held={line.wait === 'foreground'} foreground={false} />
-            </span>
-          {/if}
+        {#if line !== null}
           <span
-            class="pointer-events-auto hidden items-center group-focus-within/line:flex group-hover/line:flex has-data-[state=open]:flex"
+            class="flex h-4.5 shrink-0 items-center group-focus-within/line:invisible group-hover/line:invisible group-has-data-[state=open]/line:invisible"
           >
-            {#if line !== null}
-              {#if opens}<TerminalOpen terminalKey={line.key} onOpen={onLeave} />{/if}
-              <CommandActs {line} {view} onOpen={onLeave} />
-            {:else}
-              <Tooltip text={terminal ? 'Stop this terminal — the agent keeps running' : 'Stop this command — the agent keeps running'}>
-                <Button
-                  variant="ghost"
-                  size="icon-xs"
-                  class="size-6 hover:bg-hover-danger hover:text-destructive"
-                  disabled={stopping}
-                  aria-label={terminal ? 'Stop terminal' : 'Stop command'}
-                  onclick={() => void stopUnlisted()}
-                >
-                  {#if stopping}<Waiting class="size-3" />{:else}<CircleStop class="size-3" />{/if}
-                </Button>
-              </Tooltip>
-            {/if}
+            <CommandStatus {line} {view} held={line.wait === 'foreground'} foreground={false} />
           </span>
-        </span>
+        {/if}
       </div>
-      <div class="flex h-4 min-w-0 items-center gap-3 overflow-hidden text-meta whitespace-nowrap text-muted-foreground" data-work-figures>
+      <FadeText class="flex h-4 items-center gap-3 text-meta whitespace-nowrap text-muted-foreground" data-work-figures>
         {#each ports as port (`${port.address}:${port.port}`)}
           {#if port.url !== null}
             {@const url = port.url}
@@ -133,13 +145,35 @@
           {/if}
         {/each}
         {#if line?.cwd}<PathText class="min-w-0 shrink font-mono" path={line.cwd} />{/if}
-        {#if line?.current}<span class="shrink-0 font-mono">{line.current}</span>{/if}
+        {#if line?.current}<FadeText class="shrink font-mono" text={line.current} />{/if}
         {#if execution.share !== null}<span class="shrink-0 tabular">{percent(execution.share)}</span>{/if}
         {#if execution.memoryBytes > 0}<span class="shrink-0 tabular">{formatBytes(execution.memoryBytes)}</span>{/if}
         {#if line?.wait === 'background'}<span class="shrink-0 opacity-70">background</span>{/if}
-      </div>
+      </FadeText>
     </div>
   </div>
+  <span
+    class="absolute top-0.5 right-1.5 hidden items-center gap-1 group-focus-within/line:flex group-hover/line:flex has-data-[state=open]:flex"
+    data-work-acts
+  >
+    {#if line !== null}
+      {#if opens}<TerminalOpen onOpen={() => reveal(line.key)} />{/if}
+      <CommandActs {line} {view} onOpen={onLeave} />
+    {:else}
+      <Tooltip text={terminal ? 'Stop this terminal — the agent keeps running' : 'Stop this command — the agent keeps running'}>
+        <Button
+          variant="ghost"
+          size="icon-xs"
+          class="size-6 hover:bg-hover-danger hover:text-destructive"
+          disabled={stopping}
+          aria-label={terminal ? 'Stop terminal' : 'Stop command'}
+          onclick={() => void stopUnlisted()}
+        >
+          {#if stopping}<Waiting class="size-3" />{:else}<CircleStop class="size-3" />{/if}
+        </Button>
+      </Tooltip>
+    {/if}
+  </span>
   {#if open}
     <div class="relative flex min-w-0 flex-col gap-1.5 pt-1.5 select-text">
       <p class="pr-1 pl-5 font-mono text-meta break-all text-foreground/85" data-work-command>
