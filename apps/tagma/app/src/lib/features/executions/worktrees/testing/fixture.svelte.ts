@@ -49,6 +49,7 @@ export const addressOf = (key: string): ExecutionAddress => {
 type ListingShape = {
   readonly program?: string;
   readonly rootId?: string | null;
+  readonly cwd?: string;
   readonly holder?: string;
   readonly heldBy?: string;
   readonly label?: string;
@@ -65,7 +66,7 @@ export const listingFor = (key: string, shape: ListingShape = {}) =>
       execution: addressOf(key),
       revision: 7,
       program: shape.program ?? '/bin/zsh',
-      cwd: shape.rootId === FEATURE ? FEATURE_FOLDER : MAIN_FOLDER,
+      cwd: shape.cwd ?? (shape.rootId === FEATURE ? FEATURE_FOLDER : MAIN_FOLDER),
       transport: shape.transport ?? 'pty',
       lifetime: 'held',
       holder: shape.holder ?? 'operator',

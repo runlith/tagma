@@ -24,7 +24,7 @@ type Repo = ReturnType<typeof ExecutionsRepo.use>;
 
 const REOPEN_STACK = 32;
 
-export type WorktreeBirth = { readonly rootId: string; readonly terminals: Terminals };
+export type WorktreeBirth = { readonly rootId: string | null; readonly terminals: Terminals };
 
 type Adopter = AdoptedWords | null | 'unknown';
 
@@ -70,7 +70,7 @@ export class WorktreeTerminals extends Process<WorktreeTerminals, WorktreeBirth>
   private sweeping = false;
 
   constructor(
-    readonly rootId: string,
+    readonly rootId: string | null,
     private readonly terminals: Terminals,
     readonly projectId: number,
     private readonly worktrees: Worktrees,
@@ -84,7 +84,7 @@ export class WorktreeTerminals extends Process<WorktreeTerminals, WorktreeBirth>
   }
 
   get folder(): string | null {
-    return this.worktrees.folderOf(this.worktrees.byRoot(this.rootId));
+    return this.rootId === null ? null : this.worktrees.folderOf(this.worktrees.byRoot(this.rootId));
   }
 
   tabOf(key: string): TerminalTab | null {
@@ -250,9 +250,9 @@ export class WorktreeTerminals extends Process<WorktreeTerminals, WorktreeBirth>
     this.renaming = null;
   }
 
-  async open(holder: Holder | null = null): Promise<string | null> {
-    const folder = this.folder;
-    if (this.opening || folder === null) return null;
+  async open(holder: Holder | null = null, beside?: string): Promise<string | null> {
+    const folder = this.folder ?? (beside === undefined ? null : (this.tabOf(beside)?.root ?? null));
+    if (this.opening || folder === null || folder === '') return null;
     this.opening = true;
     try {
       const started = await this.startShell(folder);

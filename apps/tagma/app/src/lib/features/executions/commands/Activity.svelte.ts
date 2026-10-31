@@ -469,7 +469,7 @@ export class CommandView extends Process<CommandView, ViewBirth>()('CommandView'
   constructor(
     private readonly commands: CommandActivity,
     private readonly scope: CommandScope,
-    private readonly words: OwnerWords | null,
+    readonly words: OwnerWords | null,
   ) {
     super();
     this.lines = $derived(this.commands.linesOf(this.scope.thread, this.words));
@@ -610,9 +610,16 @@ function terminalLine(listing: TerminalRow, owner: ProcessOwner, outer: boolean,
     command: record.commandLine ?? record.program ?? 'shell',
     cwd: record.cwd ?? null,
     note: outer ? 'foreign CLI · outer process only' : cwd,
-    ports: (listing.listeners?.listeners ?? [])
-      .filter((socket) => socket.association !== undefined)
-      .map((socket) => ({ port: socket.port, address: socket.address, url: portUrl(socket.address, socket.port) })),
+    ports: [
+      ...new Map(
+        (listing.listeners?.listeners ?? [])
+          .filter((socket) => socket.association !== undefined)
+          .map((socket) => [
+            `${socket.address}:${socket.port}`,
+            { port: socket.port, address: socket.address, url: portUrl(socket.address, socket.port) },
+          ]),
+      ).values(),
+    ],
     startedAt: record.acceptedAt,
     endedAt: null,
     ranMs: null,

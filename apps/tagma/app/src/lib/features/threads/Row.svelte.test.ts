@@ -9,7 +9,9 @@ import { afterEach, expect, test } from 'vitest';
 import { mountShell, liveFeed, screen, soloWorkspace, type TestApp } from '$lib/app/testing.js';
 import { testProviders } from '$lib/features/providers/testing.js';
 import { NOT_INSTALLED } from '$lib/features/providers/served.js';
-import { makeStorage } from '@runlith/layer/testing';
+import type { Router } from '@runlith/layer/Router';
+import { makeRouterWithLog, makeStorage } from '@runlith/layer/testing';
+import { ProjectFocus } from '$lib/features/workspace/Focus.svelte.js';
 import { Notices } from '$lib/features/notices/Service.svelte.js';
 import { ReaderMarks } from '$lib/shared/reading/ReaderMarks.svelte.js';
 import { CommandActivity } from '$lib/features/executions/commands/Activity.svelte.js';
@@ -90,6 +92,7 @@ function draw(
   parent: ThreadListRow | null = null,
   feed = liveFeed(),
   readings: Readings | null = null,
+  router?: Router,
 ): HTMLElement {
   const node: ThreadTreeNode = { row, children, life: row.life, lifeBelow: 'idle', liveSince: null, lastEventAt, team: QUIET_TEAM };
   app = mountShell(
@@ -107,17 +110,22 @@ function draw(
       screen(),
       View,
       ExecutionActs,
+      ProjectFocus,
       ...(readings === null ? [Readings] : []),
     ),
     Layer.mergeAll(
       ...(readings === null ? [] : [Layer.of(Readings, readings)]),
       Layer.of(ExecutionsRepo, { inventory: stubFamily(), commands: stubFamily() } as never),
-      Layer.of(Workspace, soloWorkspace({ contextProject: { rootPath: '/repo' }, find: () => ({ rootPath: '/repo' }) })),
+      Layer.of(
+        Workspace,
+        soloWorkspace({ contextProject: { rootPath: '/repo' }, find: (id: number) => ({ id, name: `p${id}`, rootPath: '/repo' }) }),
+      ),
       Layer.of(Live, feed.live),
       Layer.of(Opening, {} as never),
       Layer.of(Terminals, {} as never),
       Layer.of(Door, { ask: () => Promise.reject(new Error('this suite makes no call')) } as never),
     ),
+    router === undefined ? {} : { router },
   );
   const host = app.draw(ThreadRow as never, {
     node,
@@ -360,4 +368,121 @@ test("a thread wears the load badge while its agent row carries live work, with 
   flushSync();
   expect(badge()).toBeNull();
   expect(document.querySelector('[data-work-peek]')).toBeNull();
+});
+
+test("a terminal the thread holds in another project's checkout shows its address in the popover, and opening it goes to that project's terminal", async () => {
+  const feed = liveFeed();
+  const readings = new Readings(feed.live, Scope.make());
+  const { router, visited } = makeRouterWithLog();
+  const host = draw(entry(), [], undefined, null, feed, readings, router);
+  readings.hold();
+  const machine = feed.routes.get('load.machine');
+  if (machine === undefined) throw new Error('The machine feed was not subscribed.');
+  const execution = { installation: 'inst', execution: 'far', incarnation: 3 };
+  const none = { count: 0, share: 0, memoryBytes: 0, unread: 0 };
+  machine({
+    _tag: 'Snapshot',
+    sequence: 0,
+    snapshot: {
+      composedAt: 1,
+      reader: 'reader-1',
+      state: {
+        _tag: 'Read',
+        view: {
+          scope: { host: { _tag: 'Local', machine: 'm' }, network: { _tag: 'Local', machine: 'm' } },
+          readAt: 1,
+          cores: 12,
+          share: 0.1,
+          memory: { _tag: 'Unknown', reason: 'unknown', detail: '' },
+          saturated: false,
+          rows: [
+            {
+              key: 'agent:thread-1',
+              kind: 'agent',
+              title: 'thread-1',
+              thread: 'thread-1',
+              share: 0.1,
+              rank: 0.1,
+              memoryBytes: 1024,
+              unread: 0,
+              minor: false,
+              processes: [],
+              work: {
+                executions: [
+                  {
+                    projectId: 2,
+                    key: 'far:3',
+                    kind: 'terminal',
+                    transport: 'pty',
+                    execution,
+                    session: false,
+                    label: 'site',
+                    share: 0.1,
+                    memoryBytes: 1024,
+                  },
+                ],
+                residuals: [],
+              },
+            },
+          ],
+          totals: { own: none, agent: none, work: none, outside: none, others: none },
+        },
+      },
+      history: [],
+    },
+  });
+  flushSync();
+
+  host.querySelector<HTMLElement>('[data-thread-load]')?.click();
+  flushSync();
+  const commands = feed.routes.get('commands.subscribe');
+  expect(feed.asked).toContainEqual(expect.objectContaining({ projectId: 2 }));
+  commands?.({
+    _tag: 'Snapshot',
+    sequence: 0,
+    snapshot: {
+      projectId: 2,
+      composedAt: 1,
+      active: [],
+      ended: [],
+      terminals: [
+        {
+          record: {
+            projectId: 2,
+            execution,
+            transport: 'pty',
+            lifetime: 'held',
+            holder: 'thread:thread-1',
+            heldBy: 'thread-1',
+            rootId: 'root-b',
+            label: 'tagma.dev site dev server',
+            cwd: '/b/apps/site',
+            revision: 0,
+            acceptedAt: Date.now() - 1000,
+          },
+          state: { phase: 'running' },
+          listeners: {
+            listeners: [
+              {
+                protocol: 'tcp',
+                address: '::1',
+                port: 5173,
+                holder: { pid: 1 },
+                association: { relation: 'ancestry', identity: 'unknown' },
+              },
+            ],
+          },
+        },
+      ],
+      host: { _tag: 'Answered', unmeasured: [] },
+      stale: false,
+      operationKeys: {},
+    },
+  });
+  flushSync();
+
+  const line = document.querySelector<HTMLElement>('[data-work-peek="thread-1"] [data-work-line="far:3"]');
+  expect(line?.querySelector('[data-work-port="5173"]')).not.toBeNull();
+  line?.querySelector<HTMLButtonElement>('button')?.click();
+  expect(visited.at(-1)?.href).toContain('terminal=far%3A3');
 });

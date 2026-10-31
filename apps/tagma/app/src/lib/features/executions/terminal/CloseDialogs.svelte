@@ -5,6 +5,6 @@
   const terminals = Terminals.use();
 </script>
 
-{#each [...terminals.worktrees.values()] as worktree (worktree.rootId)}
+{#each terminals.all as worktree (worktree)}
   <CloseDialog {worktree} />
 {/each}
