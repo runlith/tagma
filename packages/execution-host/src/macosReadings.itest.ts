@@ -179,7 +179,8 @@ layer(readings, { excludeTestServices: true })('macOS readings', (it) => {
         expect(measured.found.some((held) => held.port === port)).toBe(true);
         expect(measured.completeness).toBe('partial');
         expect(measured.unmeasured.some((region) => region.region === 'udp sockets')).toBe(true);
-        expect(process.getuid?.() === 0 || measured.unmeasured.some((region) => region.reason === 'refused')).toBe(true);
+        const refused = measured.unmeasured.filter((region) => region.reason === 'refused');
+        expect(refused.every((region) => region.port !== undefined && region.port !== port)).toBe(true);
       }),
     );
 

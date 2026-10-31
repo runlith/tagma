@@ -67,3 +67,92 @@ it.live(
       expect(yield* read('costs.ts')).toBe(changed);
     }).pipe(Effect.provide(BunFileSystem.layer)),
 );
+
+const KIT = 'node_modules/kit';
+const KIT_FILES: Readonly<Record<string, string>> = {
+  'package.json': JSON.stringify({ name: 'kit', exports: { '.': { types: './dist/index.d.ts', default: './dist/index.js' } } }),
+  'dist/index.d.ts': "export * from './core/index.js';\n",
+  'dist/index.js': "export * from './core/index.js';\n",
+  'dist/core/index.d.ts': "import type { Row } from './row.js';\nexport declare const select: () => Row;\n",
+  'dist/core/index.js': 'export const select = () => Object.create(null);\n',
+  'dist/core/row.d.ts': 'export interface Row {\n  readonly at: number;\n}\n',
+  'dist/core/row.js': 'export {};\n',
+};
+const SHARED = 'export const base = 1;\n';
+const READER = [
+  "import { select } from 'kit';",
+  "import type { Inbox } from './inbox.ts';",
+  "import { base } from './shared.ts';",
+  "export const read = (inbox: Inbox['Service']) => inbox.writes + select().at + base;",
+  '',
+].join('\n');
+
+it.live('native landing places an inherited member and a library type behind a star export and a declaration file', () =>
+  Effect.gen(function* () {
+    const { born, doors, write, read, files, root } = yield* nativeLanding(
+      {
+        '.gitignore': 'node_modules/\n',
+        'service.ts': 'export const Service = <Shape>() => class {\n  declare readonly Service: Shape;\n};\n',
+        'inbox.ts': "import { Service } from './service.ts';\nexport class Inbox extends Service<{ readonly writes: number }>() {}\n",
+        'shared.ts': SHARED,
+      },
+      { tools: ['submit_work'] },
+    );
+    for (const [path, text] of Object.entries(KIT_FILES)) {
+      yield* files.makeDirectory(join(root, KIT, path, '..'), { recursive: true });
+      yield* files.writeFileString(join(root, KIT, path), text);
+    }
+    const peer = yield* born();
+    const caller = yield* born();
+    yield* write(peer.threadId, 'shared.ts', SHARED + 'export const writes = 2;\nexport const at = 3;\n');
+    yield* write(caller.threadId, 'reader.ts', READER);
+
+    expect(yield* doors.atNative('submit_work', { subject: 'read the inbox', paths: ['reader.ts'] }, caller)).toMatchObject({
+      class: 'answer',
+      value: { submitted: { status: 'landed', committed: ['reader.ts'] } },
+    });
+    expect(yield* read('reader.ts')).toBe(READER);
+    expect(yield* read('shared.ts')).toBe(SHARED);
+  }).pipe(Effect.provide(BunFileSystem.layer)),
+);
+
+const LIBRARY = JSON.stringify({ name: 'lib', exports: { '.': './src/server.ts', './compiler': './src/compiler.ts' } });
+const SERVER = 'export type Component = () => void;\n';
+const CLIENT = [
+  "import type { Component } from 'lib';",
+  "import type { Format } from 'lib/compiler';",
+  'export interface Boot {',
+  '  readonly root: Component;',
+  '  readonly format: Format;',
+  '}',
+  '',
+].join('\n');
+
+it.live('native landing places a type re-exported by another published entry than the one a peer extends', () =>
+  Effect.gen(function* () {
+    const { born, doors, write, read, files, root } = yield* nativeLanding(
+      {
+        '.gitignore': 'node_modules/\n',
+        'package.json': JSON.stringify({ workspaces: ['packages/*'] }),
+        'packages/lib/package.json': LIBRARY,
+        'packages/lib/src/shared/format.ts': 'export type Format = { readonly prefix: string };\n',
+        'packages/lib/src/compiler.ts': "export type { Format } from './shared/format.ts';\n",
+        'packages/lib/src/server.ts': SERVER,
+        'packages/app/package.json': JSON.stringify({ name: 'app', dependencies: { lib: 'workspace:*' } }),
+      },
+      { tools: ['submit_work'] },
+    );
+    yield* files.makeDirectory(join(root, 'packages/app/node_modules'), { recursive: true });
+    yield* files.symlink('../../lib', join(root, 'packages/app/node_modules/lib'));
+    const peer = yield* born();
+    const caller = yield* born();
+    yield* write(peer.threadId, 'packages/lib/src/server.ts', SERVER + "export type { Format } from './shared/format.ts';\n");
+    yield* write(caller.threadId, 'packages/app/client.ts', CLIENT);
+
+    expect(
+      yield* doors.atNative('submit_work', { subject: 'define the client contract', paths: ['packages/app/client.ts'] }, caller),
+    ).toMatchObject({ class: 'answer', value: { submitted: { status: 'landed', committed: ['packages/app/client.ts'] } } });
+    expect(yield* read('packages/app/client.ts')).toBe(CLIENT);
+    expect(yield* read('packages/lib/src/server.ts')).toBe(SERVER);
+  }).pipe(Effect.provide(BunFileSystem.layer)),
+);

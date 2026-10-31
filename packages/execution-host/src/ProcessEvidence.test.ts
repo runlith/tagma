@@ -248,6 +248,39 @@ describe('ProcessEvidence', () => {
     }),
   );
 
+  it.effect('claims a namespace socket for one execution only, and names the port whose holder two executions both relate to', () =>
+    Effect.gen(function* () {
+      const other = readRef({ installation: 'installation-1', execution: 'execution-2', incarnation: 1 });
+      const alone = readRef({ installation: 'installation-1', execution: 'execution-3', incarnation: 1 });
+      const executions: ReadonlyArray<ObservedExecution> = [
+        local(),
+        { ref: other, scope, leader: { pid: 200, birth: BIRTH, terminal: 'ttys7' } },
+        { ref: alone, scope, leader: { pid: 300, birth: BIRTH, terminal: 'ttys9' } },
+      ];
+      const table = [
+        ...FAMILY,
+        process(200, { work: 200, terminal: 'ttys7', witness: STARTED }),
+        process(300, { work: 300, terminal: 'ttys9', witness: STARTED }),
+        process(301, { parent: 300, work: 300, terminal: 'ttys9', witness: STARTED }),
+      ];
+      const report = yield* Effect.scoped(
+        Effect.gen(function* () {
+          const owner = yield* evidence(
+            { of: () => Effect.succeed(undefined), watching: Effect.succeed(executions) },
+            answering(measured(table), measured([listener(5173, 101), listener(8080, 301)])),
+          );
+          return yield* owner.inventory(scope);
+        }),
+      );
+      expect(report.listeners.map((socket) => [socket.port, socket.association])).toEqual([
+        [5173, undefined],
+        [8080, { execution: alone, relation: 'ancestry', identity: 'unknown' }],
+      ]);
+      expect(report.completeness).toBe('partial');
+      expect(report.unmeasured.filter((region) => region.port !== undefined).map((region) => region.port)).toEqual([5173]);
+    }),
+  );
+
   it.effect('leaves the namespace sockets unassociated and says so when the pid an execution started is held by another process', () =>
     Effect.gen(function* () {
       const report = yield* Effect.scoped(

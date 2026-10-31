@@ -1,4 +1,5 @@
 import { Clock, Effect } from 'effect';
+import type { NativeRelation } from '@runlith/executions/protocol/capacity';
 import type { ExecutionId, ExecutionRef } from '@runlith/executions/protocol/execution';
 import type {
   EvidenceCompleteness,
@@ -82,9 +83,10 @@ export const makeProcessEvidence = Effect.fnUntraced(function* ({ topology, scan
     if (reach._tag === 'Beyond') return { ...reach.answered, processes: [] };
     const leader = reach.leader;
     const scan = yield* scanned(leader);
-    const gap = identityGap(scan, leader, observed.ref);
-    const claimed = gap.length === 0 ? associated(scan.found, leader, observed.ref) : [];
-    const limits = [...unenumerated(leader), ...identityDoubt(scan, leader, observed.ref)];
+    const identity = leaderIdentity(scan.found, leader);
+    const gap = identityGap(identity, leader, observed.ref);
+    const claimed = gap.length === 0 ? associated(scan.found, leader, observed.ref, identity) : [];
+    const limits = [...unenumerated(leader), ...identityDoubt(identity, leader, observed.ref)];
     return {
       scope: observed.scope,
       source: sourceOf(claimed, OWN),
@@ -105,9 +107,10 @@ export const makeProcessEvidence = Effect.fnUntraced(function* ({ topology, scan
     if (reach._tag === 'Beyond') return { ...reach.answered, listeners: [] };
     const leader = reach.leader;
     const processes = yield* scanned(leader);
-    const gap = identityGap(processes, leader, observed.ref);
-    const limits = [...unenumerated(leader), ...identityDoubt(processes, leader, observed.ref)];
-    const related = associated(processes.found, leader, observed.ref).filter((row) => row.association !== undefined);
+    const identity = leaderIdentity(processes.found, leader);
+    const gap = identityGap(identity, leader, observed.ref);
+    const limits = [...unenumerated(leader), ...identityDoubt(identity, leader, observed.ref)];
+    const related = associated(processes.found, leader, observed.ref, identity).filter((row) => row.association !== undefined);
     if (gap.length > 0 || related.length === 0) {
       return {
         scope: observed.scope,
@@ -175,16 +178,20 @@ export const makeProcessEvidence = Effect.fnUntraced(function* ({ topology, scan
     }
     const table = yield* scans.processes({ _tag: 'Table' });
     const tree = new ProcessTree(table.found);
+    const rows = new Map(table.found.map((row) => [row.identity.pid, row]));
+    const asked = new Set(sockets.found.map((socket) => socket.holder.pid));
     const holders = new Map<number, ProcessSnapshot>();
     const contested = new Set<number>();
     const limits: UnmeasuredRegion[] = [];
     for (const { ref, leader } of led) {
-      limits.push(...identityGap(table, leader, ref), ...identityDoubt(table, leader, ref));
-      for (const row of associated(table.found, leader, ref, tree)) {
-        if (row.association === undefined) continue;
-        const pid = row.identity.pid;
+      const identity = identityMatch(leader, rows.get(leader.pid)?.identity);
+      limits.push(...identityGap(identity, leader, ref), ...identityDoubt(identity, leader, ref));
+      if (identity === 'different') continue;
+      for (const [pid, relation] of tree.relations({ pid: leader.pid, terminal: named(leader.terminal) })) {
+        const row = asked.has(pid) ? rows.get(pid) : undefined;
+        if (row === undefined) continue;
         const prior = holders.get(pid);
-        if (prior === undefined) holders.set(pid, row);
+        if (prior === undefined) holders.set(pid, { ...row, association: associationOf(ref, relation, identity) });
         else if (prior.association?.execution.execution !== ref.execution) contested.add(pid);
       }
     }
@@ -211,11 +218,13 @@ export const makeProcessEvidence = Effect.fnUntraced(function* ({ topology, scan
           region: `the holder of port ${socket.port}`,
           reason: 'unknown' as const,
           detail: 'the socket holder is not the process related to an execution',
+          port: socket.port,
         })),
         ...shared.map((socket) => ({
           region: `the holder of port ${socket.port}`,
           reason: 'unknown' as const,
           detail: 'the socket holder is related to more than one execution, so none is claimed',
+          port: socket.port,
         })),
       ],
       revision: sockets.revision,
@@ -305,8 +314,8 @@ const inProcesses = (region: UnmeasuredRegion): UnmeasuredRegion => ({
 const leaderIdentity = (rows: ReadonlyArray<ProcessSnapshot>, leader: ObservedLeader): IdentityMatch =>
   identityMatch(leader, rows.find((row) => row.identity.pid === leader.pid)?.identity);
 
-const identityGap = (scan: Scan<ProcessSnapshot>, leader: ObservedLeader, execution: ExecutionRef): ReadonlyArray<UnmeasuredRegion> =>
-  leaderIdentity(scan.found, leader) === 'different'
+const identityGap = (identity: IdentityMatch, leader: ObservedLeader, execution: ExecutionRef): ReadonlyArray<UnmeasuredRegion> =>
+  identity === 'different'
     ? [
         {
           region: `the processes of execution ${execution.execution}`,
@@ -316,8 +325,8 @@ const identityGap = (scan: Scan<ProcessSnapshot>, leader: ObservedLeader, execut
       ]
     : [];
 
-const identityDoubt = (scan: Scan<ProcessSnapshot>, leader: ObservedLeader, execution: ExecutionRef): ReadonlyArray<UnmeasuredRegion> =>
-  leaderIdentity(scan.found, leader) === 'unknown'
+const identityDoubt = (identity: IdentityMatch, leader: ObservedLeader, execution: ExecutionRef): ReadonlyArray<UnmeasuredRegion> =>
+  identity === 'unknown'
     ? [
         {
           region: `the identity of execution ${execution.execution}`,
@@ -338,24 +347,23 @@ const unenumerated = (leader: ObservedLeader): ReadonlyArray<UnmeasuredRegion> =
       ]
     : [];
 
+const associationOf = (execution: ExecutionRef, relation: NativeRelation, identity: IdentityMatch): ProcessAssociation => ({
+  execution,
+  relation,
+  identity: relation === 'leader' ? identity : 'unknown',
+});
+
 const associated = (
   rows: ReadonlyArray<ProcessSnapshot>,
   leader: ObservedLeader,
   execution: ExecutionRef,
-  tree: ProcessTree = new ProcessTree(rows),
+  identity: IdentityMatch,
 ): ReadonlyArray<ProcessSnapshot> => {
-  const identity = leaderIdentity(rows, leader);
   if (identity === 'different') return rows;
-  const relations = tree.relations({ pid: leader.pid, terminal: named(leader.terminal) });
+  const relations = new ProcessTree(rows).relations({ pid: leader.pid, terminal: named(leader.terminal) });
   return rows.map((row) => {
     const relation = relations.get(row.identity.pid);
-    if (relation === undefined) return row;
-    const association: ProcessAssociation = {
-      execution,
-      relation,
-      identity: relation === 'leader' ? identity : 'unknown',
-    };
-    return { ...row, association };
+    return relation === undefined ? row : { ...row, association: associationOf(execution, relation, identity) };
   });
 };
 

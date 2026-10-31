@@ -13,4 +13,4 @@ edges:
   - kind: waits-on
     to: 01a193d9-9a1f-79e8-9f71-7a97bd02efd7
 ---
-Item 9 of [[d4b30c0c]]: a browser-safe `CATALOG_MODULES` replaces the `USED` list in `lib/wire/liveGroup.ts`, and operation types widen through an augmentable `interface Operations`.
+Item 9 of [[d4b30c0c]]: a browser-safe `CATALOG_MODULES` replaces the `USED` list in `lib/wire/liveGroup.ts`, and operation types widen through an augmentable `interface Operations`. Since the build descriptor landed (186df10a6), `Build` has no browser-safe catalog of its own and the release app carries developer-only wire declarations; the descriptor's catalog ends that.

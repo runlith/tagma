@@ -154,14 +154,20 @@ it.effect('serving roots use retained local listener ownership and targeted term
     retainedOnly = true;
     expect(yield* root()).toBe('/checkout/app');
     retainedOnly = false;
-    report = {
-      ...report,
-      unmeasured: [udp, { region: 'rows past the answer bound', reason: 'truncated', detail: '2 measured, 1 answered' }],
-    };
-    yield* inventory.refresh();
-    retainedOnly = true;
-    expect(yield* root()).toBeNull();
-    retainedOnly = false;
+    const gaps = [
+      [{ region: 'rows past the answer bound', reason: 'truncated', detail: '2 measured, 1 answered' }, null],
+      [{ region: 'sockets held by other users', reason: 'refused', detail: 'the full socket table was unreadable' }, null],
+      [{ region: 'listening sockets of other users on port 5173', reason: 'refused', detail: 'tcp6 ::1', port: 5173 }, null],
+      [{ region: 'the holder of port 5173', reason: 'unknown', detail: 'left while read', port: 5173 }, null],
+      [{ region: 'listening sockets of other users on port 631', reason: 'refused', detail: 'tcp4 *', port: 631 }, '/checkout/app'],
+    ] as const;
+    for (const [gap, answer] of gaps) {
+      report = { ...report, unmeasured: [udp, gap] };
+      yield* inventory.refresh();
+      retainedOnly = true;
+      expect(yield* root()).toBe(answer);
+      retainedOnly = false;
+    }
     report = {
       ...report,
       listeners: [socket],

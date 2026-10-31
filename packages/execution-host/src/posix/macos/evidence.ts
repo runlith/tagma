@@ -164,16 +164,6 @@ export const evidenceProbe = Effect.fnUntraced(function* (limits: ProbeLimits) {
                   detail: `this kernel numbers processes up to ${PID_CEILING}`,
                 },
               ];
-        const unprivileged: ReadonlyArray<UnmeasuredRegion> =
-          request._tag === 'Inventory' && !privileged
-            ? [
-                {
-                  region: 'sockets held by other users',
-                  reason: 'refused',
-                  detail: 'the socket table answers this user its own processes alone',
-                },
-              ]
-            : [];
         const datagrams: ReadonlyArray<UnmeasuredRegion> = [
           { region: 'udp sockets', reason: 'unsupported', detail: 'this reading asks the socket table for listening TCP sockets alone' },
         ];
@@ -185,7 +175,7 @@ export const evidenceProbe = Effect.fnUntraced(function* (limits: ProbeLimits) {
           );
         }
         const question: ProcessProbe = request._tag === 'Held' ? { _tag: 'Pids', pids: usable } : { _tag: 'Table' };
-        const standing = [...unreachable, ...unprivileged, ...datagrams];
+        const standing = [...unreachable, ...datagrams];
         const before = yield* identities(question).pipe(
           Effect.mapError((failure) => unavailable([...standing, { region, reason: 'failed', detail: failure.detail }])),
         );
@@ -208,13 +198,39 @@ export const evidenceProbe = Effect.fnUntraced(function* (limits: ProbeLimits) {
               region: `the holder of port ${socket.port}`,
               reason: 'unknown',
               detail: 'the process changed or left while its sockets were being read',
+              port: socket.port,
             });
             return [];
           }
           return [{ ...socket, holder: { pid, birth: current.birth } }];
         });
+        const others =
+          request._tag === 'Inventory' && !privileged
+            ? yield* read(NETSTAT, NETSTAT_ARGS).pipe(
+                Effect.match({
+                  onFailure: (failure) => [OTHER_USERS, broke(OTHER_USERS.region, failure, limits)],
+                  onSuccess: (listing) => {
+                    const gaps = around(OTHER_USERS.region, listing, limits);
+                    if (gaps.length > 0) return [OTHER_USERS, ...gaps];
+                    const { hidden, unreadable } = hiddenListeners(listing.text, table.endpoints);
+                    return [
+                      ...(unreadable === 0
+                        ? []
+                        : [{ ...OTHER_USERS, detail: `${unreadable} listening entries of the full socket table could not be read` }]),
+                      ...[...hidden].map(([port, addresses]) => ({
+                        region: `listening sockets of other users on port ${port}`,
+                        reason: 'refused' as const,
+                        detail: `the full socket table lists ${addresses.join(', ')}; the process table answers this user its own processes alone`,
+                        port,
+                      })),
+                    ];
+                  },
+                }),
+              )
+            : [];
         const unmeasured = [
           ...standing,
+          ...others,
           ...changed,
           ...around(region, output, limits),
           ...(table.unreadable === 0
@@ -240,7 +256,15 @@ export const evidenceProbe = Effect.fnUntraced(function* (limits: ProbeLimits) {
 });
 
 const PS_FIELDS = 'pid=,ppid=,pgid=,tty=,stat=,command=';
-const LSOF_FIELDS = ['-nP', '-w', '-FpcnPT', '-iTCP', '-sTCP:LISTEN'];
+const LSOF_FIELDS = ['-nP', '-w', '-FpcnPTt', '-iTCP', '-sTCP:LISTEN'];
+const NETSTAT = '/usr/sbin/netstat';
+const NETSTAT_ARGS = ['-anp', 'tcp'];
+
+const OTHER_USERS: UnmeasuredRegion = {
+  region: 'sockets held by other users',
+  reason: 'refused',
+  detail: 'the socket table answers this user its own processes alone, and the full socket table could not be read',
+};
 
 const addressable = (pid: number): boolean => Number.isInteger(pid) && pid > 0 && pid <= PID_CEILING;
 
@@ -317,13 +341,19 @@ const sockets = (
   scope: EvidenceScope,
   source: EvidenceSource,
   observedAt: number,
-): { readonly found: ReadonlyArray<ListenerSnapshot>; readonly unreadable: number } => {
+): {
+  readonly found: ReadonlyArray<ListenerSnapshot>;
+  readonly unreadable: number;
+  readonly endpoints: ReadonlySet<string>;
+} => {
   const found: ListenerSnapshot[] = [];
+  const endpoints = new Set<string>();
   let unreadable = 0;
   let holder: number | undefined;
   let open = false;
   let address: string | undefined;
   let protocol: string | undefined;
+  let family: string | undefined;
   let listening = false;
 
   const close = () => {
@@ -334,6 +364,7 @@ const sockets = (
       unreadable += 1;
       return;
     }
+    endpoints.add(endpointKey(family === 'IPv4' ? '4' : '6', bound.address, bound.port));
     found.push({
       scope,
       source,
@@ -361,15 +392,42 @@ const sockets = (
       open = true;
       address = undefined;
       protocol = undefined;
+      family = undefined;
       listening = false;
       continue;
     }
     if (field === 'n') address = value;
     if (field === 'P') protocol = value;
+    if (field === 't') family = value;
     if (field === 'T' && value === 'ST=LISTEN') listening = true;
   }
   close();
-  return { found, unreadable };
+  return { found, unreadable, endpoints };
+};
+
+const endpointKey = (family: '4' | '6', address: string, port: number): string => `${family}|${address}|${port}`;
+
+const hiddenListeners = (
+  text: string,
+  seen: ReadonlySet<string>,
+): { readonly hidden: ReadonlyMap<number, ReadonlyArray<string>>; readonly unreadable: number } => {
+  const hidden = new Map<number, string[]>();
+  let unreadable = 0;
+  for (const line of text.split('\n')) {
+    const fields = line.trim().split(/\s+/);
+    const [kind, , , local, , state] = fields;
+    if (kind === undefined || !kind.startsWith('tcp') || state !== 'LISTEN') continue;
+    const cut = local === undefined ? -1 : local.lastIndexOf('.');
+    const port = local === undefined ? NaN : Number(local.slice(cut + 1));
+    const address = local === undefined ? '' : local.slice(0, cut);
+    if (cut <= 0 || !Number.isInteger(port) || port < 1 || port > 65535 || address === '') {
+      unreadable += 1;
+      continue;
+    }
+    if (seen.has(endpointKey(kind === 'tcp4' ? '4' : '6', address, port))) continue;
+    hidden.set(port, [...(hidden.get(port) ?? []), address]);
+  }
+  return { hidden, unreadable };
 };
 
 const endpoint = (name: string): { readonly address: string; readonly port: number } | undefined => {

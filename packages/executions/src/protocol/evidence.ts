@@ -37,6 +37,7 @@ export const UnmeasuredRegion = Schema.Struct({
   region: Schema.NonEmptyString,
   reason: UnmeasuredReason,
   detail: Schema.String,
+  port: Schema.optional(Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 65535 }))),
 });
 export type UnmeasuredRegion = typeof UnmeasuredRegion.Type;
 
