@@ -76,6 +76,12 @@ fields:
           "f37a2606",
           "d2a60527"
         ]
+      },
+      {
+        "at": "src/programs.ts",
+        "for": [
+          "edf810fe"
+        ]
       }
     ],
     "id": "@runlith/sqlite-process",
