@@ -23,6 +23,8 @@ edges:
   - kind: imports
     to: 01a0fd8b-befe-744b-876f-36f2f3b6b585
   - kind: imports
+    to: 01a0fd8b-bf01-77d4-950b-191990491249
+  - kind: imports
     to: 01a174f2-3d3c-7aba-98fd-93f206137f5a
   - kind: imports
     to: 01a174f2-3d42-7971-98e6-d64d57643bc7

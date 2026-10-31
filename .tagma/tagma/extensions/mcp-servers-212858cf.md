@@ -31,6 +31,8 @@ edges:
   - kind: imports
     to: 01a0fd8b-befe-744b-876f-36f2f3b6b585
   - kind: imports
+    to: 01a0fd8b-bf01-77d4-950b-191990491249
+  - kind: imports
     to: 01a1239f-2e01-7962-8ca3-25a8af373f07
   - kind: imports
     to: 01a174f2-3d3c-7aba-98fd-93f206137f5a
@@ -42,8 +44,6 @@ edges:
     to: 01a174f2-3d65-7e23-bb0f-9d871e061782
   - kind: imports
     to: 01a174f2-3d66-76d1-9288-c921d7074a11
-  - kind: imports
-    to: 01a18895-c4d0-788c-9b73-3b1f94035751
 sources:
   - kind: dir
     ref: apps/tagma/app/src/lib/features/mcp
