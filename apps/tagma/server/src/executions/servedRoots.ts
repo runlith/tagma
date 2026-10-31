@@ -7,10 +7,11 @@ import { MachineUnits } from '../platform/contract/service/units.js';
 import { TerminalRows } from './store/terminalRows.js';
 import { TerminalInventory } from './terminals/inventory.js';
 
-const LOST_ROWS: ReadonlyArray<UnmeasuredReason> = ['truncated', 'failed', 'timeout'];
+const HIDING: ReadonlyArray<UnmeasuredReason> = ['refused', 'failed', 'timeout', 'truncated'];
 
-const socketsRead = (report: ListenerReport): boolean =>
-  report.completeness !== 'unavailable' && !report.unmeasured.some((region) => LOST_ROWS.includes(region.reason));
+const portRead = (report: ListenerReport, port: number): boolean =>
+  report.completeness !== 'unavailable' &&
+  !report.unmeasured.some((region) => (region.port === undefined ? HIDING.includes(region.reason) : region.port === port));
 
 export const makeServedRoots = Effect.gen(function* () {
   const inventory = yield* TerminalInventory;
@@ -26,7 +27,7 @@ export const makeServedRoots = Effect.gen(function* () {
       const port = Number(url.port || (url.protocol === 'https:' ? 443 : 80));
       const retained = inventory.retained(projectId);
       const report = retained?.listeners;
-      if (retained === undefined || retained.stale || report === undefined || !socketsRead(report)) return null;
+      if (retained === undefined || retained.stale || report === undefined || !portRead(report, port)) return null;
       if (report.scope.host._tag !== 'Local' || !sameNamespace(report.scope.host, report.scope.network)) return null;
       let owner: ExecutionRef | undefined;
       for (const socket of report.listeners) {

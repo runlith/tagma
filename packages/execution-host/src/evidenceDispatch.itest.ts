@@ -12,7 +12,7 @@ import { hostPolicy, hostShare, hostWireLimits } from './hostFixture';
 import { makeWorld } from './composition/testing/servedWorld';
 
 const policy = hostPolicy({ executions: 2, transports: ['pipes'], custodyReceipts: 8 });
-const limits = hostWireLimits(policy, 2, { envelopeBytes: 16384, connections: 4, requests: 8 });
+const limits = hostWireLimits(policy, 2, { envelopeBytes: 1_048_576, connections: 4, requests: 8 });
 const Port = Schema.NumberFromString.check(Schema.isInt(), Schema.isBetween({ minimum: 1, maximum: 65535 }));
 const LISTENER = `const server = Bun.listen({ hostname: '127.0.0.1', port: 0, socket: { data() {} } }); console.log('PORT ' + server.port);`;
 
@@ -70,14 +70,11 @@ it.live('wire evidence identifies the child and its socket, names incomplete pro
     const namespace = yield* client.hostListeners();
     expect(namespace.subject).toEqual({ _tag: 'Namespace' });
     expect(namespace.scope.network).toEqual({ _tag: 'Local', machine: hostname() });
-    expect(
-      namespace.unmeasured.some((region) => region.reason === 'truncated') ||
-        namespace.listeners.some((listener) => listener.port === port),
-    ).toBe(true);
-    const inventoried = namespace.listeners.find((listener) => listener.port === port);
-    if (inventoried !== undefined) {
-      expect(inventoried.association).toEqual({ execution: launched.execution, relation: 'leader', identity: 'same' });
-    }
+    expect(namespace.listeners.find((listener) => listener.port === port)?.association).toEqual({
+      execution: launched.execution,
+      relation: 'leader',
+      identity: 'same',
+    });
     const summary = yield* client.state(launched.execution);
     expect(summary?.state.nativeExit).toBeUndefined();
     expect(summary?.state.phase).toBe('running');
