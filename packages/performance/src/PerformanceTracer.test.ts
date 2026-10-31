@@ -122,6 +122,39 @@ it.effect('the sampling boundary holds only exit reasons and projected primitive
   }),
 );
 
+it.effect("a span's buffer weight is the exact serialized size of its projected attributes, repeated strings and overwrites included", () =>
+  Effect.gen(function* () {
+    const retained: SampledSpan[] = [];
+    class ReadingSampler extends TraceSampler {
+      override end(span: SampledSpan): void {
+        retained.push(span);
+        super.end(span);
+      }
+    }
+    const tracer = yield* PerformanceTracer.make({ instanceId: 'process', recordFloorMicros: 0 }).pipe(
+      Effect.provideService(PerformanceStore, capturing([])),
+      Effect.provideService(CurrentTraceSampler, new ReadingSampler()),
+      Effect.provideService(Metric.MetricRegistry, new Map()),
+    );
+    const root = open(tracer, 'run', 0n);
+    const summary = 'select "id", "né" from "t" where a = \\ ?';
+    for (let round = 0; round < 2; round += 1) {
+      const bare = open(tracer, 's', 0n, root);
+      bare.end(MS, Exit.void);
+      const full = open(tracer, 's', 0n, root);
+      full.attribute('db.query.summary', summary);
+      full.attribute('db.exec.ms', 1);
+      full.attribute('db.exec.ms', 0.125);
+      full.attribute('db.queue.ms', 3);
+      full.end(MS, Exit.void);
+    }
+    const attributes = { 'db.query.summary': summary, 'db.exec.ms': 0.125, 'db.queue.ms': 3 };
+    const added = Buffer.byteLength(JSON.stringify(attributes)) - 2;
+    expect(retained.map((span) => span.byteSize - (retained[0]?.byteSize ?? 0))).toEqual([0, added, 0, added]);
+    root.end(MS, Exit.void);
+  }),
+);
+
 it.effect('an ended span keeps its outcome, not the value its work answered, so a span still referenced holds no result alive', () =>
   Effect.gen(function* () {
     const tracer = yield* PerformanceTracer.make({ instanceId: 'process', recordFloorMicros: 0 }).pipe(

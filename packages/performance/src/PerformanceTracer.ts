@@ -174,6 +174,7 @@ const ATTRIBUTE_ALLOWLIST = new Map<string, string>([
 
 const SPAN_DURATION_BOUNDARIES = Metric.exponentialBoundaries({ start: 0.5, factor: 2, count: 35 });
 
+type Primitive = string | number | boolean | null;
 type SpanOptions = Parameters<Tracer.Tracer['span']>[0];
 type SpanMetrics = {
   readonly timer: Metric.Histogram<Duration.Duration>;
@@ -188,7 +189,9 @@ class PerformanceSpan implements Tracer.Span {
   readonly name: string;
   readonly parent: Option.Option<Tracer.AnySpan>;
   readonly annotations: Context.Context<never>;
-  readonly attributes = new Map<string, unknown>();
+  readonly projected: Record<string, Primitive> = {};
+  attributeBytes = 0;
+  private attributeCount = 0;
   readonly links: Array<Tracer.SpanLink>;
   readonly sampled: boolean;
   readonly kind: Tracer.SpanKind;
@@ -222,8 +225,24 @@ class PerformanceSpan implements Tracer.Span {
     this.onEnd(this, endTime, exit);
   }
 
+  get attributes(): ReadonlyMap<string, unknown> {
+    return new Map(Object.entries(this.projected));
+  }
+
   attribute(key: string, value: unknown): void {
-    this.attributes.set(key, value);
+    if (!this.sampled || this.status._tag === 'Ended') return;
+    const target = ATTRIBUTE_ALLOWLIST.get(key);
+    if (target === undefined) return;
+    const encoded = projectAttribute(value);
+    if (encoded === undefined) return;
+    const previous = this.projected[target];
+    this.projected[target] = encoded;
+    if (previous !== undefined) {
+      this.attributeBytes += jsonBytes(encoded) - jsonBytes(previous);
+      return;
+    }
+    this.attributeBytes += (this.attributeCount === 0 ? 0 : 1) + (TARGET_BYTES.get(target) ?? 0) + 1 + jsonBytes(encoded);
+    this.attributeCount += 1;
   }
 
   event(_name: string, _startTime: bigint, _attributes?: Record<string, unknown>): void {}
@@ -305,9 +324,9 @@ export const make = Effect.fnUntraced(function* (options: Options) {
         const durationMs = Duration.toMillis(duration);
         const parent = Option.getOrUndefined(ended.parent);
         const heads = ended.unit !== null && ended.unit === ended.spanId;
-        const attributes = projectAttributes(ended.attributes);
+        const attributes = ended.projected;
         const outcome: SpanPayload['exit'] =
-          exit._tag === 'Success' ? { _tag: 'Success' } : { _tag: 'Failure', reasons: exit.cause.reasons.map((reason) => reason._tag) };
+          exit._tag === 'Success' ? SUCCESS_EXIT : { _tag: 'Failure', reasons: exit.cause.reasons.map((reason) => reason._tag) };
         sampler.end({
           traceId: ended.traceId,
           spanId: ended.spanId,
@@ -326,7 +345,7 @@ export const make = Effect.fnUntraced(function* (options: Options) {
           slow: ended.traceRoot
             ? isSlow(metrics, durationMs, SLOW_ROOT_MS)
             : heads && isSlow(metrics, durationMs, Number.POSITIVE_INFINITY),
-          byteSize: spanByteSize(metrics.nameBytes, attributes, outcome),
+          byteSize: spanByteSize(metrics.nameBytes, ended.attributeBytes, outcome),
         });
       });
       if (!span.sampled) return span;
@@ -367,23 +386,38 @@ const TARGET_BYTES = new Map(
 
 const UNESCAPED_ASCII = /^[\x20\x21\x23-\x5b\x5d-\x7f]*$/u;
 
-const jsonBytes = (value: JsonValue): number => {
+const SUCCESS_EXIT: SpanPayload['exit'] = Object.freeze({ _tag: 'Success' });
+
+const STRING_WEIGHTS = 1024;
+const STRING_WEIGHT_CHARS = 1024;
+
+const stringWeights = new Map<string, number>();
+
+const stringBytes = (value: string): number => {
+  if (value.length > STRING_WEIGHT_CHARS) return Buffer.byteLength(JSON.stringify(value));
+  const known = stringWeights.get(value);
+  if (known !== undefined) return known;
+  const bytes = UNESCAPED_ASCII.test(value) ? value.length + 2 : Buffer.byteLength(JSON.stringify(value));
+  if (stringWeights.size >= STRING_WEIGHTS) stringWeights.clear();
+  stringWeights.set(value, bytes);
+  return bytes;
+};
+
+const jsonBytes = (value: Primitive): number => {
   if (value === null) return 4;
   if (typeof value === 'boolean') return value ? 4 : 5;
   if (typeof value === 'number') return String(value).length;
-  if (typeof value === 'string' && UNESCAPED_ASCII.test(value)) return value.length + 2;
-  return Buffer.byteLength(JSON.stringify(value));
+  return stringBytes(value);
 };
 
-function spanByteSize(nameBytes: number, attributes: SpanPayload['attributes'], exit: SpanPayload['exit']): number {
-  let bytes =
-    SPAN_RECORD_ENVELOPE_BYTES + 6 + nameBytes + (exit._tag === 'Success' ? SUCCESS_BYTES : Buffer.byteLength(JSON.stringify(exit)));
-  let separator = 0;
-  for (const key in attributes) {
-    bytes += separator + (TARGET_BYTES.get(key) ?? Buffer.byteLength(JSON.stringify(key))) + 1 + jsonBytes(attributes[key] ?? null);
-    separator = 1;
-  }
-  return bytes;
+function spanByteSize(nameBytes: number, attributeBytes: number, exit: SpanPayload['exit']): number {
+  return (
+    SPAN_RECORD_ENVELOPE_BYTES +
+    6 +
+    nameBytes +
+    (exit._tag === 'Success' ? SUCCESS_BYTES : Buffer.byteLength(JSON.stringify(exit))) +
+    attributeBytes
+  );
 }
 
 function spanRecord(span: SampledSpan, instanceId: string): SpanRecord {
@@ -404,17 +438,6 @@ function spanRecord(span: SampledSpan, instanceId: string): SpanRecord {
     name: span.name,
     payload,
   };
-}
-
-function projectAttributes(attributes: ReadonlyMap<string, unknown>): Record<string, JsonValue> {
-  const projected: Record<string, JsonValue> = {};
-  for (const [key, value] of attributes) {
-    const target = ATTRIBUTE_ALLOWLIST.get(key);
-    if (target === undefined) continue;
-    const encoded = projectAttribute(value);
-    if (encoded !== undefined) projected[target] = encoded;
-  }
-  return projected;
 }
 
 function projectAttribute(value: unknown): string | number | boolean | null | undefined {
