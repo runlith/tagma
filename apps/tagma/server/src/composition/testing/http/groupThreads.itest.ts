@@ -7,6 +7,10 @@ import { FOLDER_OPERATIONS } from '../../../threads/contract/wire/operations/fol
 import { DoorFixture, doorFixture, projectLeaving } from '../doorFixture.js';
 import { nativeLeads, subscriptionLogin } from '../claudeLogin.js';
 import { holdThreads } from '../threadScope.js';
+import { GRANT_HEADER, GRANT_VARIABLE } from '../../../platform/contract/service/credentials.js';
+import { grantEnvironment } from '../../../platform/testing/grants.js';
+import { testSessionIdentity } from '../../../platform/testing/identity.js';
+import { turnsOf } from '../../../threads/testing/doubles.js';
 
 const created = Schema.decodeUnknownEffect(knownAnswer(ROUTE_OPERATIONS.create_thread.answer));
 const folderCreated = Schema.decodeUnknownEffect(knownAnswer(FOLDER_OPERATIONS.create_thread_folder.answer));
@@ -44,7 +48,7 @@ layer(fixture, { excludeTestServices: true })('the thread list and folders of a 
         });
         const rows = Effect.fnUntraced(function* (projectId: number) {
           const answer = yield* listed((yield* world.op('list_thread_window', {}, at(projectId))).body);
-          return new Map(answer.rows.map((row) => [row.id, row.folderId ?? null] as const));
+          return new Map(answer.rows.filter((row) => row.parentThreadId === null).map((row) => [row.id, row.folderId ?? null] as const));
         });
 
         const ours = yield* birth(alpha, 'alpha work');
@@ -67,9 +71,20 @@ layer(fixture, { excludeTestServices: true })('the thread list and folders of a 
           ]),
         );
         expect([...(yield* rows(alpha)).keys()]).toEqual([ours]);
-        expect((yield* world.op('file_threads', { threadIds: [ours, theirs], folderId: site.id }, at(groupId))).body).toMatchObject({
+        const child = yield* created((yield* world.op('create_thread', { parent: ours, name: 'worker', task: '' }, at(alpha))).body);
+        yield* turnsOf(world.runtime.owners).stop(child.snapshot.thread.id, alpha);
+        const grant = grantEnvironment(ours, testSessionIdentity)[GRANT_VARIABLE] as string;
+        const asAgent = (id: string, input: unknown) => world.op(id, input, '', { [GRANT_HEADER]: grant });
+        const named = yield* asAgent('create_thread_folder', { project: String(alpha), name: 'Named', threadIds: ['worker'] });
+        expect(named).toMatchObject({ status: 200, body: { status: 'created', moved: [ours] } });
+        const temporary = (yield* folderCreated(named.body)).folder;
+        expect(
+          (yield* asAgent('file_threads', { project: String(alpha), threadIds: ['worker', theirs], folderId: site.id })).body,
+        ).toMatchObject({
           status: 'filed',
+          roots: [ours, theirs],
         });
+        expect((yield* world.op('delete_thread_folder', { folderId: temporary.id }, at(groupId))).status).toBe(200);
 
         expect((yield* world.op('leave_group', { project: String(beta) })).body).toMatchObject({ group: null });
         expect((yield* folders(alpha)).map((one) => [one.id, one.name])).toEqual([[site.id, 'Site']]);

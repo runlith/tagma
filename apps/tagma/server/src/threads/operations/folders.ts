@@ -1,8 +1,11 @@
 import { Effect } from 'effect';
+import type { Caller } from '../../platform/contract/wire/caller.js';
+import { addressed } from '../addresses.js';
 import { body, type OperationPair, pair } from '../../platform/contract/service/body.js';
 import { GateRefusal } from '../../platform/contract/wire/refusal.js';
 import { CurrentProject } from '../../projects/contract/service/caller.js';
 import { ThreadFolders } from '../../thread-record/contract/service/folders.js';
+import { ThreadRecords } from '../../thread-record/contract/service/records.js';
 import { folderNameOf } from '../../thread-record/contract/wire/folder.js';
 import { ThreadList } from '../contract/service/list.js';
 import { FOLDER_OPERATIONS as OPS, type FolderOperationId } from '../contract/wire/operations/folders.js';
@@ -32,6 +35,9 @@ const cycle = (folderId: string, parentId: string) =>
 const missingThreads = (missing: readonly string[]) =>
   new GateRefusal('not-found', `No thread ${missing.join(', ')} stands in this project.`, ["read the project's thread list"]);
 
+const filingIds = (addresses: readonly string[], caller: Caller) =>
+  Effect.forEach(addresses, (address) => Effect.map(addressed(address, caller), (found) => found?.threadId ?? address));
+
 const announced = Effect.fnUntraced(function* (projectId: number, moved: readonly string[]) {
   const list = yield* ThreadList;
   for (const id of moved) yield* list.announceThread(id);
@@ -51,18 +57,22 @@ export const FOLDER_PAIRS: { readonly [K in FolderOperationId]: OperationPair<(t
 
   create_thread_folder: pair(
     OPS.create_thread_folder,
-    body(OPS.create_thread_folder, {
-      execute: Effect.fnUntraced(function* (input) {
-        const call = yield* yield* CurrentProject;
-        const name = folderNameOf(input.name);
-        if (name === null) return yield* unnamed();
-        const made = yield* (yield* ThreadFolders).create(call.project.id, name, input.parentId ?? null, input.threadIds ?? []);
-        if (made.status === 'no-parent') return yield* noParent(input.parentId ?? '');
-        if (made.status === 'missing') return yield* missingThreads(made.missing);
-        yield* announced(call.project.id, made.moved);
-        return { status: 'created' as const, folder: made.folder, moved: made.moved };
-      }),
-    }),
+    body<typeof OPS.create_thread_folder, readonly string[], ThreadRecords | CurrentProject | ThreadFolders | ThreadList>(
+      OPS.create_thread_folder,
+      {
+        prepare: (input, caller) => filingIds(input.threadIds ?? [], caller),
+        execute: Effect.fnUntraced(function* (input, threadIds) {
+          const call = yield* yield* CurrentProject;
+          const name = folderNameOf(input.name);
+          if (name === null) return yield* unnamed();
+          const made = yield* (yield* ThreadFolders).create(call.project.id, name, input.parentId ?? null, threadIds);
+          if (made.status === 'no-parent') return yield* noParent(input.parentId ?? '');
+          if (made.status === 'missing') return yield* missingThreads(made.missing);
+          yield* announced(call.project.id, made.moved);
+          return { status: 'created' as const, folder: made.folder, moved: made.moved };
+        }),
+      },
+    ),
   ),
 
   rename_thread_folder: pair(
@@ -113,10 +123,11 @@ export const FOLDER_PAIRS: { readonly [K in FolderOperationId]: OperationPair<(t
 
   file_threads: pair(
     OPS.file_threads,
-    body(OPS.file_threads, {
-      execute: Effect.fnUntraced(function* (input) {
+    body<typeof OPS.file_threads, readonly string[], ThreadRecords | CurrentProject | ThreadFolders | ThreadList>(OPS.file_threads, {
+      prepare: (input, caller) => filingIds(input.threadIds, caller),
+      execute: Effect.fnUntraced(function* (input, threadIds) {
         const call = yield* yield* CurrentProject;
-        const filed = yield* (yield* ThreadFolders).file(call.project.id, input.threadIds, input.folderId);
+        const filed = yield* (yield* ThreadFolders).file(call.project.id, threadIds, input.folderId);
         if (filed.status === 'no-folder') return yield* noFolder(input.folderId ?? '');
         if (filed.status === 'missing') return yield* missingThreads(filed.missing);
         const list = yield* ThreadList;

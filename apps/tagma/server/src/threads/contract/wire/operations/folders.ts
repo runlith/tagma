@@ -141,7 +141,7 @@ export const FOLDER_OPERATIONS = {
     }),
     meaning: 'Put spawn trees into a folder, or take them out of whichever folder holds them.',
     grammar: `${FOLDER_GRAMMAR} \`folderId: null\` takes the trees out. Filing releases a tree's pin; a pinned tree keeps its folder and returns to it when unpinned. \`roots\` names the trees the ids resolved to, \`moved\` the ones whose place changed. A thread of another project refuses \`not-found\` and nothing moves.`,
-    input: Schema.Struct({ threadIds: filedIds.check(Schema.isMinLength(1)), folderId: Schema.NullOr(folderId) }),
+    input: Schema.Struct({ project: projectField, threadIds: filedIds.check(Schema.isMinLength(1)), folderId: Schema.NullOr(folderId) }),
     refusals: ['not-found', 'folder-not-found'],
     subjects: (input, _prepared, actor) => input.threadIds.flatMap((id) => subject(id, actor)),
     confirmation: (input) => ({
