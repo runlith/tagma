@@ -47,4 +47,21 @@ describe('Roster', () => {
     expect((refused as RegistryClash).holders).toEqual(['features/a', 'features/b']);
     expect(list.items.map((item) => item.id)).toEqual(['x']);
   });
+
+  it('refuses a second claimant of one claim under another key, and a disposer frees the claim', () => {
+    const cell: Cell<readonly Item[]> = { current: undefined };
+    const list = new Roster<Item>(
+      (key) => `Item "${key}"`,
+      (item) => item.id,
+      cell,
+      { claims: (item) => [`Rank ${item.order}`] },
+    );
+    const leave = list.add('features/a', { id: 'x', order: 1 });
+
+    expect(() => list.add('features/b', { id: 'y', order: 1 })).toThrow(RegistryClash);
+
+    leave();
+    list.add('features/b', { id: 'y', order: 1 });
+    expect(list.items.map((item) => item.id)).toEqual(['y']);
+  });
 });

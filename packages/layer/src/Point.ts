@@ -5,10 +5,11 @@ import { Service, type Key, type ServiceClass, type Tier } from './key.js';
 import { Layer } from './Layer.js';
 import { Scope, type ScopeKey } from './Scope.js';
 
-interface PointDefinition<Item, Tr extends Tier> {
+interface PointDefinition<Item, Tr extends Tier = Tier> {
   readonly tier: Tr;
   readonly key: (item: Item) => string;
   readonly order?: (item: Item) => number;
+  readonly claims?: (item: Item) => readonly string[];
 }
 
 type Contribution<Id extends string, From extends string, Item, Tr extends Tier> = Layer<
@@ -17,6 +18,7 @@ type Contribution<Id extends string, From extends string, Item, Tr extends Tier>
 >;
 
 type PointKeyClass<Id extends string, Item, Tr extends Tier> = ServiceClass<Id, Point<Item>, Tr> & {
+  readonly definition: PointDefinition<Item, Tr>;
   make(): Generator<ScopeKey, Point<Item>, unknown>;
   contribute<const From extends string>(from: From, ...items: readonly Item[]): Contribution<Id, From, Item, Tr>;
 };
@@ -40,14 +42,18 @@ export class Point<Item> {
     return this.roster.add(from, ...items);
   }
 
+  static over<Item>(id: string, definition: PointDefinition<Item>, cell: Cell<readonly Item[]>): Point<Item> {
+    const subject = (key: string): string => `Point "${id}" item "${key}"`;
+    return new Point<Item>(id, definition.key, new Roster(subject, definition.key, cell, definition));
+  }
+
   static define<Item>() {
     return <const Id extends string, const Tr extends Tier>(id: Id, definition: PointDefinition<Item, Tr>): PointKeyClass<Id, Item, Tr> => {
-      const subject = (key: string): string => `Point "${id}" item "${key}"`;
-
       class PointKey extends Service<Point<Item>>()(id, { tier: definition.tier }) {
+        static readonly definition = definition;
+
         static *make() {
-          const cell = cellOf<readonly Item[]>(yield* Scope);
-          return new Point<Item>(id, definition.key, new Roster(subject, definition.key, cell, { order: definition.order }));
+          return Point.over<Item>(id, definition, cellOf<readonly Item[]>(yield* Scope));
         }
 
         static contribute<const From extends string>(from: From, ...items: readonly Item[]): Contribution<Id, From, Item, Tr> {

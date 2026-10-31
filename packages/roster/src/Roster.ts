@@ -5,12 +5,14 @@ type Held<T> = { readonly contributor: string; readonly item: T };
 
 interface RosterOptions<T> {
   readonly order?: (item: T) => number;
+  readonly claims?: (item: T) => readonly string[];
 }
 
 const NONE: readonly never[] = [];
 
 export class Roster<T> {
   private readonly ledger = new Map<string, Held<T>>();
+  private readonly claimed = new Map<string, Held<T>>();
   private list: readonly T[] = NONE;
 
   constructor(
@@ -30,13 +32,21 @@ export class Roster<T> {
 
   add(contributor: string, ...items: readonly T[]): () => void {
     const entries = new Map<string, Held<T>>();
+    const claims = new Map<string, Held<T>>();
     for (const item of items) {
       const key = this.keyOf(item);
+      const held = { contributor, item };
       const clash = this.ledger.get(key) ?? entries.get(key);
       if (clash !== undefined) throw clashOf(this.subject(key), clash.contributor, contributor);
-      entries.set(key, { contributor, item });
+      for (const claim of this.options.claims?.(item) ?? NONE) {
+        const holder = this.claimed.get(claim) ?? claims.get(claim);
+        if (holder !== undefined) throw clashOf(claim, holder.contributor, contributor);
+        claims.set(claim, held);
+      }
+      entries.set(key, held);
     }
     for (const [key, held] of entries) this.ledger.set(key, held);
+    for (const [claim, held] of claims) this.claimed.set(claim, held);
     this.settle(this.merged([...entries.values()].map((held) => held.item)));
     return () => {
       const gone = new Set<T>();
@@ -45,6 +55,7 @@ export class Roster<T> {
         this.ledger.delete(key);
         gone.add(held.item);
       }
+      for (const [claim, held] of claims) if (this.claimed.get(claim) === held) this.claimed.delete(claim);
       if (gone.size > 0) this.settle(this.list.filter((item) => !gone.has(item)));
     };
   }
