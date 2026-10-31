@@ -113,9 +113,11 @@ it.effect('the sampling boundary holds only exit reasons and projected primitive
     success.attribute('db.query.fingerprint', 'cafe');
     success.attribute('db.queue.ms', 3);
     success.attribute('db.exec.ms', 7);
+    expect(success.attributes.get('db.exec.ms')).toBe(7);
     success.end(MS, Exit.succeed(payload));
     open(tracer, 'failed', 0n, root).end(MS, Exit.fail(payload));
     success.attribute('db.exec.ms', 100);
+    expect(success.attributes.get('db.exec.ms')).toBe(7);
     expect(retained.map((span) => span.exit)).toEqual([{ _tag: 'Success' }, { _tag: 'Failure', reasons: ['Fail'] }]);
     expect(retained[0]?.attributes).toEqual({ 'db.query.fingerprint': 'cafe', 'db.queue.ms': 3, 'db.exec.ms': 7 });
     root.end(MS, Exit.void);
