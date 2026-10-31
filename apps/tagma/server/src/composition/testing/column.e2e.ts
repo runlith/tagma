@@ -10,23 +10,13 @@ type Box = { readonly title: string; readonly top: number; readonly bottom: numb
 const titles = ['Idle first', 'Answered second', 'Idle third', 'Answered fourth', 'Answered fifth', 'Idle sixth'];
 
 const rows = (page: Page) =>
-  page.locator('aside[aria-label="Agents"]').evaluate(
-    (aside) =>
-      new Promise<Box[]>((resolve) =>
-        requestAnimationFrame(() =>
-          requestAnimationFrame(() =>
-            resolve(
-              [...aside.querySelectorAll<HTMLElement>('[data-line]')]
-                .map((row) => {
-                  const rect = row.getBoundingClientRect();
-                  return { title: row.innerText.split('\n')[0] ?? '', top: rect.top, bottom: rect.bottom };
-                })
-                .sort((left, right) => left.top - right.top),
-            ),
-          ),
-        ),
-      ),
-  );
+  page.evaluate<Box[]>(`new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => {
+    const rows = [...document.querySelectorAll('aside[aria-label="Agents"] [data-line]')];
+    resolve(rows.map((row) => {
+      const rect = row.getBoundingClientRect();
+      return { title: row.innerText.split('\\n')[0] ?? '', top: rect.top, bottom: rect.bottom };
+    }).sort((left, right) => left.top - right.top));
+  })))`);
 
 const contiguous = (stage: string, boxes: readonly Box[]) => {
   const gaps = boxes.slice(1).map((box, index) => ({ row: box.title, gap: Math.round((box.top - boxes[index]!.bottom) * 10) / 10 }));
@@ -34,15 +24,12 @@ const contiguous = (stage: string, boxes: readonly Box[]) => {
 };
 
 const working = (page: Page, title: string, running: boolean) =>
-  page.waitForFunction(
-    ({ title, running }) => {
-      const lines = [...document.querySelectorAll<HTMLElement>('aside[aria-label="Agents"] [data-line]')];
-      const grown = lines.some((row) => row.innerText.startsWith(title) && row.offsetHeight > 30);
-      const separated = lines.some((row) => row.dataset.line === 'line:quiet');
-      return grown && separated === running;
-    },
-    { title, running },
-  );
+  page.waitForFunction(`(() => {
+    const lines = [...document.querySelectorAll('aside[aria-label="Agents"] [data-line]')];
+    const grown = lines.some((row) => row.innerText.startsWith(${JSON.stringify(title)}) && row.offsetHeight > 30);
+    const separated = lines.some((row) => row.dataset.line === 'line:quiet');
+    return grown && separated === ${running};
+  })()`);
 
 e2e.effect(
   'the thread column lays its rows one after another at their measured heights while a thread starts and ends working',

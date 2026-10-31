@@ -92,6 +92,7 @@ export const REFLECTION_FILING_OPERATIONS = {
       'stealth-dependency',
       'source-required',
       'source-outside',
+      'group-source',
       'duplicate-source',
       'not-measurable',
       'symbol-shape',
