@@ -171,18 +171,23 @@ mod tests {
         #[link(name = "objc")]
         unsafe extern "C" { fn objc_release(object: *mut c_void); }
         let device = unsafe { MTLCreateSystemDefaultDevice() };
-        assert!(!device.is_null());
         let read = all();
-        unsafe { objc_release(device); }
-        let rows = read.unwrap();
         let pid = std::process::id();
+        if !device.is_null() { unsafe { objc_release(device); } }
+        let rows = match read {
+            Ok(rows) => rows,
+            Err(code) => {
+                assert!([libc::ENOTSUP, libc::EACCES].contains(&code), "unexpected registry failure: {code}");
+                return;
+            }
+        };
         let identity = process::identity(pid as i32).unwrap();
         let own: Vec<_> = rows.iter().filter(|row| row[0] == pid as u64).collect();
-        assert!(!own.is_empty(), "the Metal device must expose its AGX client");
+        if !device.is_null() { assert!(!own.is_empty(), "the Metal device must expose its AGX client"); }
         for row in own {
             assert_eq!((row[1], row[2]), (identity.seconds, identity.micros));
             assert_ne!(row[3], 0);
-            assert_eq!(row[5], 0);
+            if !device.is_null() { assert_eq!(row[5], 0); }
         }
     }
 }

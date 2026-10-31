@@ -97,7 +97,7 @@ export class NativeUsage implements UsageAbi {
           _tag: 'Unavailable',
           reason:
             errno === constants.errno.ENOTSUP
-              ? 'the system exposes no AGX AppUsage GPU counters'
+              ? 'no AGX AppUsage GPU counters are visible in this registry read'
               : `the IOKit GPU registry read answered errno ${errno}`,
         };
       }
