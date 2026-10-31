@@ -1,4 +1,4 @@
-import type { LoadGroup, LoadProcess as HostProcess, LoadReading } from '@runlith/executions/protocol/evidence';
+import type { InstallationGroupRole, LoadGroup, LoadProcess as HostProcess, LoadReading } from '@runlith/executions/protocol/evidence';
 import { commandKey } from '../commands/feedDelta.js';
 import {
   keptHistory,
@@ -67,13 +67,6 @@ type Slice = {
   readonly processes: readonly HostProcess[];
 };
 
-const gpuOf = (processes: readonly HostProcess[]) => ({
-  gpuCores: processes.reduce((sum, one) => sum + (one.gpu._tag === 'Measured' ? one.gpu.cores : 0), 0),
-  gpuUnread: processes.filter((one) => one.gpu._tag === 'Unavailable').length,
-});
-
-const HOST_ROLES = new Set(['host', 'holder']);
-
 const partTitle = (row: PartRow | undefined): string => {
   switch (row?._tag) {
     case undefined:
@@ -93,7 +86,7 @@ const unresolvedOf = (reading: LoadReading, parts: PartNames): readonly Unresolv
 const gpuState = (reading: LoadReading): LoadView['gpu'] => {
   let reason: string | undefined;
   for (const group of reading.groups) {
-    if (group.gpuCores > 0) return { _tag: 'Measured' };
+    if (group.gpuMeasured > 0) return { _tag: 'Measured' };
     for (const one of group.processes) {
       if (one.gpu._tag === 'Measured') return { _tag: 'Measured' };
       reason ??= one.gpu.reason;
@@ -126,57 +119,20 @@ const partOf = (row: PartRow | undefined, key: string, open: Open): Building => 
   }
 };
 
-const installationSlices = (group: LoadGroup, open: Open): readonly Slice[] => {
-  const byPid = new Map(group.processes.map((one) => [one.identity.pid, one]));
-  const roles = new Map<number, string | undefined>();
-  const roleOf = (one: HostProcess): string | undefined => {
-    const walked = new Set<number>();
-    let at: HostProcess | undefined = one;
-    let role: string | undefined;
-    while (at !== undefined && !walked.has(at.identity.pid)) {
-      if (roles.has(at.identity.pid)) {
-        role = roles.get(at.identity.pid);
-        break;
-      }
-      walked.add(at.identity.pid);
-      if (at.role !== undefined) {
-        role = at.role;
-        break;
-      }
-      at = at.parent === undefined ? undefined : byPid.get(at.parent);
-    }
-    for (const pid of walked) roles.set(pid, role);
-    return role;
-  };
-  const hosted = (one: HostProcess) => HOST_ROLES.has(roleOf(one) ?? '');
-  const host = group.processes.filter(hosted);
-  const server = group.processes.filter((one) => !hosted(one));
-  const hostCores = host.reduce((sum, one) => sum + (one.cores ?? 0), 0);
-  const hostMemory = host.reduce((sum, one) => sum + (one.memoryBytes ?? 0), 0);
-  const hostUnread = host.filter((one) => one.unread !== undefined).length;
-  const hostGpu = gpuOf(host);
-  const serverSlice: Slice = {
-    row: open('server', 'server', 'Server'),
-    cores: Math.max(0, group.cores - hostCores),
-    memoryBytes: Math.max(0, group.memoryBytes - hostMemory),
-    unread: Math.max(0, group.unread - hostUnread),
-    gpuCores: Math.max(0, group.gpuCores - hostGpu.gpuCores),
-    gpuUnread: Math.max(0, group.gpuUnread - hostGpu.gpuUnread),
-    processes: server,
-  };
-  if (host.length === 0) return [serverSlice];
-  return [
-    serverSlice,
-    {
-      row: open('host', 'host', 'Terminal host', { detail: 'the execution host and its process holder' }),
-      cores: hostCores,
-      memoryBytes: hostMemory,
-      unread: Math.min(group.unread, hostUnread),
-      gpuCores: Math.min(group.gpuCores, hostGpu.gpuCores),
-      gpuUnread: Math.min(group.gpuUnread, hostGpu.gpuUnread),
-      processes: host,
-    },
-  ];
+const installationOf = (role: InstallationGroupRole, open: Open): Building => {
+  switch (role) {
+    case 'server':
+      return open('server', 'server', 'Server');
+    case 'host':
+    case 'holder':
+      return open('host', 'host', 'Terminal host', { detail: 'the execution host and its process holder' });
+    case 'window':
+      return open('interface', 'interface', 'Interface', { detail: 'the window and what it draws' });
+    case 'overflow':
+      return open('installation-overflow', 'overflow', 'Other Tagma processes', {
+        detail: 'the reading had no room to list these processes apart',
+      });
+  }
 };
 
 type OuterOwner = Exclude<LoadGroup['owner'], { readonly _tag: 'Installation' | 'Part' }>;
@@ -185,7 +141,7 @@ const slicesOf = (group: LoadGroup, open: Open, parts: PartNames, other: (owner:
   const owner = group.owner;
   switch (owner._tag) {
     case 'Installation':
-      return installationSlices(group, open);
+      return [whole(installationOf(owner.role, open), group)];
     case 'Part':
       return [whole(partOf(parts(owner.key), owner.key, open), group)];
     default:

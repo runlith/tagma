@@ -104,10 +104,30 @@ export type LoadWork = typeof LoadWork.Type;
 export const LoadProject = Schema.Struct({ id: Schema.Int, name: Schema.NonEmptyString });
 export type LoadProject = typeof LoadProject.Type;
 
-export const LoadRowKind = Schema.Literals(['server', 'host', 'interface', 'graphics', 'renderer', 'agent', 'work', 'program', 'kernel']);
+export const LoadRowKind = Schema.Literals([
+  'server',
+  'host',
+  'interface',
+  'graphics',
+  'renderer',
+  'agent',
+  'work',
+  'overflow',
+  'program',
+  'kernel',
+]);
 export type LoadRowKind = typeof LoadRowKind.Type;
 
-export const OWN_KINDS: ReadonlySet<LoadRowKind> = new Set(['server', 'host', 'interface', 'graphics', 'renderer', 'agent', 'work']);
+export const OWN_KINDS: ReadonlySet<LoadRowKind> = new Set([
+  'server',
+  'host',
+  'interface',
+  'graphics',
+  'renderer',
+  'agent',
+  'work',
+  'overflow',
+]);
 
 export const LoadPage = Schema.Struct({ page: PageId, projectId: Schema.Int });
 export type LoadPage = typeof LoadPage.Type;

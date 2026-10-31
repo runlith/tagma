@@ -93,7 +93,14 @@ it.effect("a reading too large for its envelope keeps Tagma's own CPU on Tagma's
       topology: { of: () => Effect.succeed(observed), watching: Effect.succeed([observed]) },
       scope,
       policy: { periodMs: 100 },
-      native: yield* readings([before, after]),
+      native: yield* readings(
+        [before, after].map((read, index) => ({
+          ...read,
+          processes: read.processes.map((one) =>
+            one.pid === 60 ? { ...one, gpu: { _tag: 'Measured' as const, micros: index * 200_000 } } : one,
+          ),
+        })),
+      ),
       hostPid: 60,
       cores: 4,
       budgetBytes: 1,
@@ -106,6 +113,11 @@ it.effect("a reading too large for its envelope keeps Tagma's own CPU on Tagma's
     const own = (group: LoadGroup) =>
       group.owner._tag === 'Installation' || group.owner._tag === 'Execution' || group.owner._tag === 'Part';
     expect(groups.filter(own).reduce((sum, group) => sum + group.cores, 0)).toBeCloseTo(1.7, 6);
+    const role = (name: string) => groups.find((group) => group.owner._tag === 'Installation' && group.owner.role === name);
+    expect(role('server')?.cores).toBeCloseTo(0.2, 6);
+    expect(role('host')?.cores).toBeCloseTo(0.1, 6);
+    expect(role('host')).toMatchObject({ gpuCores: 0.2, gpuMeasured: 1, processes: [] });
+    expect(role('overflow')?.cores).toBeCloseTo(1.4, 6);
     expect(groups.filter((group) => !own(group)).map((group) => group.owner)).toEqual([
       { _tag: 'Program', key: 'overflow', name: 'Other programs' },
     ]);
@@ -144,12 +156,9 @@ it.effect('every process is charged to one row, a reaped child to its execution,
     expect(result.load?.cpu).toBeCloseTo(3, 6);
     expect(byOwner('Execution')?.cores).toBeCloseTo(1, 6);
     expect(byOwner('Execution')?.processes.map((one) => one.identity.pid)).toEqual([100]);
-    expect(
-      byOwner('Installation')
-        ?.processes.map((one) => one.identity.pid)
-        .toSorted(),
-    ).toEqual([50, 60]);
-    expect(byOwner('Installation')?.processes.every((one) => !one.signal)).toBe(true);
+    const installation = groups.filter((group) => group.owner._tag === 'Installation');
+    expect(installation.flatMap((group) => group.processes.map((one) => one.identity.pid)).toSorted()).toEqual([50, 60]);
+    expect(installation.every((group) => group.processes.every((one) => !one.signal))).toBe(true);
     expect(byOwner('Program', 'Google Chrome')?.cores).toBeCloseTo(0.8, 6);
     expect(byOwner('Program', 'yes')?.cores).toBeCloseTo(0.4, 6);
     expect(byOwner('Kernel')?.cores).toBeCloseTo(0.5, 6);
@@ -167,11 +176,23 @@ it.effect("Tagma's processes carry their role, and the server's own CPU stands a
       scope,
       policy: { periodMs: 100 },
       native: yield* readings([
-        { ...before, processes: [row(50, 1, 0, 'bun'), row(51, 50, 0.3 * SECOND, 'git'), row(60, 1, 0, 'bun')] },
+        {
+          ...before,
+          processes: [
+            row(50, 1, 0, 'bun'),
+            row(51, 50, 0.3 * SECOND, 'git'),
+            row(60, 1, 0, 'bun'),
+            { ...row(61, 1, 0, 'service'), onBehalfOf: 60 },
+          ],
+        },
         {
           ...after,
-          machine: { busy: 100, total: 400, cores: 4, memory },
-          processes: [row(50, 1, 1.2 * SECOND, 'bun', SECOND), row(60, 1, 0.1 * SECOND, 'bun')],
+          machine: { busy: 120, total: 400, cores: 4, memory },
+          processes: [
+            row(50, 1, 1.2 * SECOND, 'bun', SECOND),
+            row(60, 1, 0.1 * SECOND, 'bun'),
+            { ...row(61, 1, 0.2 * SECOND, 'service'), onBehalfOf: 60 },
+          ],
         },
       ]),
       hostPid: 60,
@@ -182,11 +203,25 @@ it.effect("Tagma's processes carry their role, and the server's own CPU stands a
     yield* usage.sample();
     yield* TestClock.adjust(Duration.seconds(1));
     yield* usage.sample();
-    const installation = (yield* usage.load)?.groups.find((group) => group.owner._tag === 'Installation');
-    const of = (pid: number) => installation?.processes.find((one) => one.identity.pid === pid);
-    expect(of(50)).toMatchObject({ role: 'server', cores: expect.closeTo(0.9, 6), reapedCores: expect.closeTo(0.7, 6) });
-    expect(of(60)).toMatchObject({ role: 'host', cores: expect.closeTo(0.1, 6), reapedCores: 0 });
-    expect(installation?.cores).toBeCloseTo(1, 6);
+    const groups = (yield* usage.load)?.groups ?? [];
+    const role = (name: string) => groups.find((group) => group.owner._tag === 'Installation' && group.owner.role === name);
+    expect(role('server')?.processes.find((one) => one.identity.pid === 50)).toMatchObject({
+      role: 'server',
+      cores: expect.closeTo(0.9, 6),
+      reapedCores: expect.closeTo(0.7, 6),
+    });
+    expect(role('host')?.processes.find((one) => one.identity.pid === 60)).toMatchObject({
+      role: 'host',
+      cores: expect.closeTo(0.1, 6),
+      reapedCores: 0,
+    });
+    expect(
+      role('host')
+        ?.processes.map((one) => one.identity.pid)
+        .toSorted(),
+    ).toEqual([60, 61]);
+    expect(role('server')?.cores).toBeCloseTo(0.9, 6);
+    expect(role('host')?.cores).toBeCloseTo(0.3, 6);
   }),
 );
 
@@ -270,8 +305,8 @@ it.effect('declared parts and processes working on their behalf are placed by re
     ).toEqual([100, 101]);
     expect(
       first?.groups
-        .find((group) => group.owner._tag === 'Installation')
-        ?.processes.map((one) => one.identity.pid)
+        .filter((group) => group.owner._tag === 'Installation')
+        .flatMap((group) => group.processes.map((one) => one.identity.pid))
         .toSorted(),
     ).toEqual([50, 51, 60]);
     expect(first?.unresolvedParts.map(({ part, reason }) => [part.key, reason])).toEqual([

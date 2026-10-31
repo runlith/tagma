@@ -230,7 +230,13 @@ const servedBy = (profile: CapabilityProfile, measured: Measuring, platform: Rea
     'screen-point',
     'screen-settled',
     ...(profile.usage !== undefined && measured?.native !== undefined
-      ? ['machine-load' as const, 'machine-load-parts' as const, 'machine-load-gpu' as const, 'end-process' as const]
+      ? [
+          'machine-load' as const,
+          'machine-load-parts' as const,
+          'machine-load-gpu' as const,
+          'machine-load-roles' as const,
+          'end-process' as const,
+        ]
       : []),
   ]);
 

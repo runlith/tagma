@@ -19,14 +19,12 @@ export type Placement = {
   readonly gone: ReadonlyArray<ResidualProcess>;
 };
 
-const INSTALLATION: GroupOwner = { _tag: 'Installation' };
-
 export const keyOf = (owner: GroupOwner): string => {
   switch (owner._tag) {
     case 'Execution':
       return `execution:${owner.execution.installation}/${owner.execution.incarnation}/${owner.execution.execution}`;
     case 'Installation':
-      return 'installation';
+      return `installation:${owner.role}`;
     case 'Part':
       return `part:${owner.key}`;
     case 'Program':
@@ -85,7 +83,7 @@ export const place = (
   }
   const rootsOfParts = new Map<number, GroupOwner>();
   for (const [pid, key] of parts) if (!installation.has(pid)) rootsOfParts.set(pid, { _tag: 'Part', key });
-  for (const root of installation.keys()) rootsOfParts.set(root, INSTALLATION);
+  for (const [pid, role] of installation) rootsOfParts.set(pid, { _tag: 'Installation', role });
   for (const [pid, owner] of tree.assign(rootsOfParts, false, true)) if (!owners.has(pid)) owners.set(pid, owner);
   for (const row of rows.values())
     if (!owners.has(row.pid))
@@ -103,7 +101,16 @@ export const grouped = (
 ): ReadonlyArray<LoadGroup> => {
   const groups = new Map<
     string,
-    { owner: GroupOwner; cores: number; gpuCores: number; gpuUnread: number; memoryBytes: number; unread: number; processes: LoadProcess[] }
+    {
+      owner: GroupOwner;
+      cores: number;
+      gpuCores: number;
+      gpuMeasured: number;
+      gpuUnread: number;
+      memoryBytes: number;
+      unread: number;
+      processes: LoadProcess[];
+    }
   >();
   for (const row of rows.values()) {
     const owner = owners.get(row.pid);
@@ -111,15 +118,17 @@ export const grouped = (
     const key = keyOf(owner);
     let group = groups.get(key);
     if (group === undefined) {
-      group = { owner, cores: 0, gpuCores: 0, gpuUnread: 0, memoryBytes: 0, unread: 0, processes: [] };
+      group = { owner, cores: 0, gpuCores: 0, gpuMeasured: 0, gpuUnread: 0, memoryBytes: 0, unread: 0, processes: [] };
       groups.set(key, group);
     }
     const cores = spent.cores.get(row.pid) ?? null;
     const gpu = spent.gpu.get(row.pid) ?? { _tag: 'Unavailable' as const, reason: 'the GPU counter was not read' };
     const memoryBytes = memoryOf(row);
     group.cores += cores ?? 0;
-    if (gpu._tag === 'Measured') group.gpuCores += gpu.cores;
-    else group.gpuUnread += 1;
+    if (gpu._tag === 'Measured') {
+      group.gpuCores += gpu.cores;
+      group.gpuMeasured += 1;
+    } else group.gpuUnread += 1;
     group.memoryBytes += memoryBytes ?? 0;
     if (cores === null) group.unread += 1;
     group.processes.push({

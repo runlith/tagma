@@ -26,13 +26,16 @@ export const machineLoadContract = Effect.fnUntraced(function* (host: Host['Serv
     expect(latest.memory.totalBytes).toBeGreaterThan(0);
     expect(latest.memory.usedBytes + latest.memory.availableBytes).toBe(latest.memory.totalBytes);
   }
-  const own = latest.groups.find((group) => group.owner._tag === 'Installation');
-  const server = own?.processes.find((row) => row.identity.pid === process.pid);
-  expect(server?.memoryBytes, JSON.stringify(own)).toBeGreaterThan(0);
-  expect(server?.signal).toBe(false);
-  const holder = own?.processes.find((row) => row.role === 'holder');
-  expect(holder?.parent).toBe(process.pid);
-  expect(own?.processes.some((row) => row.role === 'host' && row.parent === holder?.identity.pid)).toBe(true);
+  const own = latest.groups.filter((group) => group.owner._tag === 'Installation');
+  const server = own.find((group) => group.owner._tag === 'Installation' && group.owner.role === 'server');
+  const holder = own.find((group) => group.owner._tag === 'Installation' && group.owner.role === 'holder');
+  const terminalHost = own.find((group) => group.owner._tag === 'Installation' && group.owner.role === 'host');
+  const serverProcess = server?.processes.find((row) => row.identity.pid === process.pid);
+  const holderProcess = holder?.processes.find((row) => row.role === 'holder');
+  expect(serverProcess?.memoryBytes, JSON.stringify(own)).toBeGreaterThan(0);
+  expect(serverProcess?.signal).toBe(false);
+  expect(holderProcess?.parent).toBe(process.pid);
+  expect(terminalHost?.processes.some((row) => row.role === 'host' && row.parent === holderProcess?.identity.pid)).toBe(true);
   yield* opened.success.setInterest({ interested: true, others: false });
   yield* opened.success.setParts([{ key: 'mismatched', pid: process.pid, createdMs: 0, precisionMs: 0 }]);
   const changed = yield* opened.success.readings.pipe(

@@ -28,6 +28,7 @@ const group = (owner: LoadGroup['owner'], cores: number, pid: number): LoadGroup
   owner,
   cores,
   gpuCores: 0,
+  gpuMeasured: 0,
   gpuUnread: 1,
   memoryBytes: 100,
   unread: 0,
@@ -115,7 +116,9 @@ test('an agent row holds every execution of its thread with its own label, CPU, 
   expect(view.totals.others).toMatchObject({ count: 1, share: 0.001 });
   expect(view.gpu).toEqual({ _tag: 'Unavailable', reason: 'not measured' });
   const trimmed = new LoadList().compose(
-    reading([{ ...group({ _tag: 'Program', key: 'game', name: 'Game' }, 1, 16), gpuCores: 0.5, gpuUnread: 0, processes: [] }]),
+    reading([
+      { ...group({ _tag: 'Program', key: 'game', name: 'Game' }, 1, 16), gpuCores: 0.5, gpuMeasured: 1, gpuUnread: 0, processes: [] },
+    ]),
     named,
     noParts,
     1_000,
@@ -161,7 +164,7 @@ test("Tagma's own rows add up to its total and its history point, never fold, al
     reading(
       [
         {
-          ...group({ _tag: 'Installation' }, 1, 21),
+          ...group({ _tag: 'Installation', role: 'server' }, 1, 21),
           processes: [process(21, 1, { parent: undefined, name: 'bun', role: 'server', reapedCores: 0.75 })],
         },
         group({ _tag: 'Execution', execution: ref('typecheck'), ended: false }, 2, 22),
@@ -222,7 +225,7 @@ test("an unread population answers no Tagma figures, a partly read one counts wh
   );
   expect(unread.view.totals.own).toMatchObject({ share: null, memoryBytes: null });
   const partial = new LoadList().compose(
-    { ...reading([{ ...group({ _tag: 'Installation' }, 1, 21), unread: 1 }]), cpu: null },
+    { ...reading([{ ...group({ _tag: 'Installation', role: 'server' }, 1, 21), unread: 1 }]), cpu: null },
     named,
     noParts,
     1_000,
@@ -246,20 +249,18 @@ test('window parts land in Interface, Graphics and one row per renderer titled b
     {
       ...reading([
         {
-          ...group({ _tag: 'Installation' }, 1.5, 21),
-          memoryBytes: 400,
-          processes: [
-            process(21, 0.5, { parent: undefined, role: 'server' }),
-            process(22, 0.2, { parent: 21 }),
-            process(23, 0.3, { parent: undefined, role: 'host' }),
-            process(24, 0.1, { parent: 23, role: 'holder' }),
-          ],
+          ...group({ _tag: 'Installation', role: 'server' }, 1.1, 21),
+          memoryBytes: 200,
+          processes: [process(21, 0.5, { parent: undefined, role: 'server' }), process(22, 0.2, { parent: 21 })],
         },
+        group({ _tag: 'Installation', role: 'host' }, 0.3, 23),
+        group({ _tag: 'Installation', role: 'holder' }, 0.1, 24),
         group({ _tag: 'Part', key: 'main' }, 0.2, 31),
         group({ _tag: 'Part', key: 'gone' }, 0.1, 32),
         {
           ...group({ _tag: 'Part', key: 'gpu' }, 2, 33),
           gpuCores: 0.4,
+          gpuMeasured: 1,
           gpuUnread: 0,
           processes: [process(33, 2, { gpu: { _tag: 'Measured', cores: 0.4 } })],
         },
@@ -289,4 +290,29 @@ test('window parts land in Interface, Graphics and one row per renderer titled b
   expect(view.totals.own.count).toBe(5);
   expect(view.totals.own.share).toBeCloseTo(0.68, 9);
   expect(view.unresolved).toEqual([{ title: 'Page — Docs (example.com), App — board', pid: 99, reason: 'different' }]);
+});
+
+test('installation groups retain their role when their processes do not fit the reading', () => {
+  const withoutProcesses = (owner: LoadGroup['owner'], cores: number) => ({ ...group(owner, cores, 1), processes: [] });
+  const { view } = new LoadList().compose(
+    reading([
+      withoutProcesses({ _tag: 'Installation', role: 'server' }, 0.2),
+      { ...withoutProcesses({ _tag: 'Installation', role: 'host' }, 0.4), gpuMeasured: 1, gpuUnread: 0 },
+      withoutProcesses({ _tag: 'Installation', role: 'holder' }, 0.1),
+      withoutProcesses({ _tag: 'Installation', role: 'overflow' }, 0.3),
+    ]),
+    named,
+    noParts,
+    1_000,
+    [],
+  );
+  expect(view.rows.find((row) => row.kind === 'server')).toMatchObject({ title: 'Server', share: 0.02 });
+  expect(view.rows.find((row) => row.kind === 'host')).toMatchObject({ title: 'Terminal host', share: 0.05 });
+  expect(view.rows.find((row) => row.kind === 'overflow')).toMatchObject({
+    title: 'Other Tagma processes',
+    detail: 'the reading had no room to list these processes apart',
+    share: 0.03,
+  });
+  expect(view.totals.own.share).toBeCloseTo(0.1, 9);
+  expect(view.gpu).toEqual({ _tag: 'Measured' });
 });

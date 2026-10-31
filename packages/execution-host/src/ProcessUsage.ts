@@ -302,6 +302,7 @@ export const makeProcessUsage = Effect.fnUntraced(function* ({
                     owner: { _tag: 'Kernel' },
                     cores: machine.cpu - measured,
                     gpuCores: 0,
+                    gpuMeasured: 0,
                     gpuUnread: 1,
                     memoryBytes: 0,
                     unread: 0,
@@ -477,6 +478,7 @@ const withExecutions = (
       owner: { _tag: 'Execution', execution: known.ref, ended: known.ended },
       cores: 0,
       gpuCores: 0,
+      gpuMeasured: 0,
       gpuUnread: 1,
       memoryBytes: 0,
       unread: 0,
@@ -522,6 +524,7 @@ const bounded = (reading: LoadReading, budget: number): LoadReading => {
     owner,
     cores: 0,
     gpuCores: 0,
+    gpuMeasured: 0,
     gpuUnread: 0,
     memoryBytes: 0,
     unread: 0,
@@ -529,12 +532,17 @@ const bounded = (reading: LoadReading, budget: number): LoadReading => {
     took: 0,
   });
   const others = spill({ _tag: 'Program', key: 'overflow', name: 'Other programs' });
-  const installation = spill({ _tag: 'Installation' });
-  if (plain.unresolvedParts.length > 0 && sizeOf({ ...plain, groups: [others, installation] }) > budget) {
+  const installation = new Map<string, ReturnType<typeof spill>>();
+  installation.set('overflow', spill({ _tag: 'Installation', role: 'overflow' }));
+  for (const group of plain.groups) {
+    if (group.owner._tag === 'Installation' && !installation.has(group.owner.role)) installation.set(group.owner.role, spill(group.owner));
+  }
+  const reserved = () => [others, ...installation.values()];
+  if (plain.unresolvedParts.length > 0 && sizeOf({ ...plain, groups: reserved() }) > budget) {
     const omitted = `${plain.unresolvedParts.length} declared process resolutions did not fit the reading`;
     plain = { ...plain, unresolvedParts: [], unread: plain.unread === undefined ? omitted : `${plain.unread}; ${omitted}` };
   }
-  let used = sizeOf({ ...plain, groups: [others, installation] });
+  let used = sizeOf({ ...plain, groups: reserved() });
   const kept: LoadGroup[] = [];
   for (const group of plain.groups.toSorted((left, right) => Number(owned(right)) - Number(owned(left)))) {
     const shell = { ...group, processes: [] };
@@ -547,16 +555,17 @@ const bounded = (reading: LoadReading, budget: number): LoadReading => {
       kept.push(shell);
       used += bare;
     } else {
-      const into = owned(group) ? installation : others;
+      const into = !owned(group) ? others : installation.get(group.owner._tag === 'Installation' ? group.owner.role : 'overflow')!;
       into.cores += group.cores;
       into.gpuCores += group.gpuCores;
+      into.gpuMeasured += group.gpuMeasured;
       into.gpuUnread += group.gpuUnread;
       into.memoryBytes += group.memoryBytes;
       into.unread += group.unread;
       into.took += 1;
     }
   }
-  const spilled = [installation, others].flatMap(({ took, ...group }) => (took === 0 ? [] : [group]));
+  const spilled = [...installation.values(), others].flatMap(({ took, ...group }) => (took === 0 ? [] : [group]));
   return { ...plain, groups: [...kept, ...spilled].sort((left, right) => right.cores - left.cores) };
 };
 

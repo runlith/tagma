@@ -237,6 +237,9 @@ const Cores = Schema.Number.check(Schema.isGreaterThanOrEqualTo(0));
 export const InstallationRole = Schema.Literals(['window', 'server', 'host', 'holder']);
 export type InstallationRole = typeof InstallationRole.Type;
 
+export const InstallationGroupRole = Schema.Union([InstallationRole, Schema.Literal('overflow')]);
+export type InstallationGroupRole = typeof InstallationGroupRole.Type;
+
 const LoadGpu = Schema.Union([
   Schema.Struct({ _tag: Schema.Literal('Measured'), cores: Cores }),
   Schema.Struct({ _tag: Schema.Literal('Unavailable'), reason: Schema.String }),
@@ -275,7 +278,7 @@ export type LoadInterest = typeof LoadInterest.Type;
 export const GroupOwner = Schema.Union([
   Schema.Struct({ _tag: Schema.Literal('Execution'), execution: ExecutionRef, ended: Schema.Boolean }),
   Schema.Struct({ _tag: Schema.Literal('Part'), key: Schema.NonEmptyString }),
-  Schema.Struct({ _tag: Schema.Literal('Installation') }),
+  Schema.Struct({ _tag: Schema.Literal('Installation'), role: InstallationGroupRole }),
   Schema.Struct({
     _tag: Schema.Literal('Program'),
     key: Schema.NonEmptyString,
@@ -290,6 +293,7 @@ export const LoadGroup = Schema.Struct({
   owner: GroupOwner,
   cores: Cores,
   gpuCores: Cores,
+  gpuMeasured: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
   gpuUnread: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
   memoryBytes: Bytes,
   unread: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),

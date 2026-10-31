@@ -4,6 +4,7 @@ export const Capability = Schema.Literals([
   'machine-load',
   'machine-load-parts',
   'machine-load-gpu',
+  'machine-load-roles',
   'end-residual',
   'end-process',
   'named-signals',

@@ -94,18 +94,24 @@ export const makeLoadRecorder = Effect.gen(function* () {
               completeness: 'complete',
               gaps: [],
             };
-      const installation = reading.groups.find((group) => group.owner._tag === 'Installation');
-      if (installation !== undefined) {
-        const completeness = installation.unread > 0 ? 'partial' : 'complete';
-        const cpu = rateOf(installation.cores);
-        const memory: UsageMemory = { _tag: 'ResidentSum', bytes: installation.memoryBytes, processes: installation.processes.length };
+      const installation = reading.groups.filter((group) => group.owner._tag === 'Installation' || group.owner._tag === 'Part');
+      if (installation.length > 0) {
+        const unread = installation.reduce((sum, group) => sum + group.unread, 0);
+        const processes = installation.reduce((sum, group) => sum + group.processes.length, 0);
+        const completeness = unread > 0 ? 'partial' : 'complete';
+        const cpu = rateOf(installation.reduce((sum, group) => sum + group.cores, 0));
+        const memory: UsageMemory = {
+          _tag: 'ResidentSum',
+          bytes: installation.reduce((sum, group) => sum + group.memoryBytes, 0),
+          processes,
+        };
         submit(
           'installation',
           reading.observedAt,
           {
             takenAtMicros: reading.takenAtMicros,
             completeness,
-            processes: installation.processes.length,
+            processes,
             cores: cores(cpu),
             bytes: bytes(memory),
           },
@@ -116,7 +122,7 @@ export const makeLoadRecorder = Effect.gen(function* () {
             cpuMicros: 0,
             cpu,
             memory,
-            processes: installation.processes.length,
+            processes,
           },
         );
       }

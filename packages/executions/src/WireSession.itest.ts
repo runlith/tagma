@@ -422,7 +422,11 @@ layer(services, { excludeTestServices: true })('wire sessions', (it) => {
 
     it.effect('an older host announcing machine load is refused before the revised request is sent', () =>
       Effect.gen(function* () {
-        for (const capabilities of [['machine-load'], ['machine-load', 'machine-load-parts']]) {
+        for (const capabilities of [
+          ['machine-load'],
+          ['machine-load', 'machine-load-parts'],
+          ['machine-load', 'machine-load-parts', 'machine-load-gpu'],
+        ]) {
           const welcome = JSON.parse(currentWelcome);
           welcome.message.capabilities = capabilities;
           const { registration, address } = yield* registered;
@@ -438,7 +442,7 @@ layer(services, { excludeTestServices: true })('wire sessions', (it) => {
     it.effect('a host that announces one capability is sent what needs it and refused locally the one it did not announce', () =>
       Effect.gen(function* () {
         const welcome = JSON.parse(currentWelcome);
-        welcome.message.capabilities = ['machine-load', 'machine-load-parts', 'machine-load-gpu'];
+        welcome.message.capabilities = ['machine-load', 'machine-load-parts', 'machine-load-gpu', 'machine-load-roles'];
         const announced = JSON.stringify(welcome);
         const { registration, address } = yield* registered;
         const seen = serving(registration.endpoint.path, WIRE_RANGE, announced, answering);
