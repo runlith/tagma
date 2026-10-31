@@ -24,6 +24,7 @@ import {
 } from 'effect';
 import { HeapSnapshots } from '@runlith/performance/HeapSnapshots';
 import { threadSpokenMessageEvent } from '@runlith/agent/thread/events';
+import type { FeedPosition } from '@runlith/agent/transcript/live';
 import { CostLedger, CurrentCost, rootCost, type CostCause, type CostCursor, type CostRow } from '@runlith/performance/CostLedger';
 import { MachineStore } from '../../../platform/contract/service/store.js';
 import { GRANT_HEADER } from '../../../platform/contract/service/credentials.js';
@@ -229,8 +230,7 @@ const program = Effect.gen(function* () {
     yield* claudeLogin(world, { restore: false });
     yield* hostedDefaults(world);
     const checkout = yield* world.directory('load-project');
-    const projectId = yield* world.stealthProject(checkout);
-    for (let index = 1; index < projects; index += 1) yield* world.plainProject();
+    yield* suiteGit(checkout, 'init', '-q', '-b', 'main');
     yield* files.makeDirectory(join(checkout, 'src'), { recursive: true });
     const fixtureLine = `fixture ${'x'.repeat(1000)}\n`;
     yield* files.writeFileString(
@@ -249,6 +249,8 @@ const program = Effect.gen(function* () {
     }
     yield* suiteGit(checkout, 'add', 'src');
     yield* suiteGit(checkout, 'commit', '-qm', 'bench fixture');
+    const projectId = yield* world.stealthProject(checkout);
+    for (let index = 1; index < projects; index += 1) yield* world.plainProject();
     yield* Context.get(world.runtime.workspace, Coverage).cover(projectId);
     const at = `project=${projectId}`;
     const roots = yield* world.op('list_root_blocks', {}, at);
@@ -569,6 +571,8 @@ const program = Effect.gen(function* () {
     let firstProbeAt: number | null = null;
     const completedBeforeCut = { graph: 0, thread: 0, list: 0 };
     const completedAfterCut = { graph: 0, thread: 0, list: 0 };
+    const openings = { snapshot: 0, resume: 0 };
+    let threadCursor: FeedPosition | undefined;
     let titleIndex = 0;
     const sampleList = Effect.fn('agentLoad.listBoundary')(function* () {
       const frames = yield* Queue.unbounded<{ readonly frame: ThreadsFeedEvent; readonly received: number }>();
@@ -651,9 +655,17 @@ const program = Effect.gen(function* () {
           yield* FiberSet.run(
             streams,
             Effect.gen(function* () {
-              const first = yield* Stream.runHead(feeds.client['thread.subscribe']({ projectId, threadId: born[0]?.threadId ?? observer }));
-              if (Option.isNone(first) || !['snapshot', 'resume'].includes(first.value.type))
+              const first = yield* Stream.runHead(
+                feeds.client['thread.subscribe']({
+                  projectId,
+                  threadId: born[0]?.threadId ?? observer,
+                  since: probe.id % 2 === 0 ? undefined : threadCursor,
+                }),
+              );
+              if (Option.isNone(first) || (first.value.type !== 'snapshot' && first.value.type !== 'resume'))
                 return yield* new BenchRefused({ message: `thread opened without a usable frame: ${JSON.stringify(first)}` });
+              if (threadCursor === undefined || first.value.at.seq > threadCursor.seq) threadCursor = first.value.at;
+              if ((yield* Clock.currentTimeMillis) < costEnd) openings[first.value.type] += 1;
               yield* finished('thread', probe, threadLatency);
             }),
           );
@@ -867,7 +879,7 @@ const program = Effect.gen(function* () {
           interfaces: {
             producerDelayMs: readFigure(producerDelay),
             graphOfferedToAnswer: boundary('graph', graphLatency),
-            threadOfferedToFrame: boundary('thread', threadLatency),
+            threadOfferedToFrame: { ...boundary('thread', threadLatency), openings },
             listOfferedToFrame: boundary('list', listOfferedLatency),
             listPostCommitAcknowledgementToFrame: readFigure(listLatency),
             listCommitToFrame: null,
