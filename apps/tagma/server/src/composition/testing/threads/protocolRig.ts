@@ -400,7 +400,11 @@ export const protocolRig = Effect.fn('testing.protocolRig')(function* (fixture: 
       records,
       yield* Effect.provideContext(modelChanges(), context),
       (_threadId, facet) => {
-        if (facet.session?.state !== 'starting' || opening === undefined || (opening.armed !== undefined && !Deferred.isDoneUnsafe(opening.armed)))
+        if (
+          facet.session?.state !== 'starting' ||
+          opening === undefined ||
+          (opening.armed !== undefined && !Deferred.isDoneUnsafe(opening.armed))
+        )
           return Effect.void;
         const paused = opening;
         opening = undefined;
@@ -417,14 +421,15 @@ export const protocolRig = Effect.fn('testing.protocolRig')(function* (fixture: 
     const protocolStore = new Proxy(sessionStore, {
       get(target, key) {
         if (key === 'read')
-          return (threadId: string) => Effect.flatMap(target.read(threadId), (facet) =>
-            Effect.flatMap(SessionStartRead, (marked) => {
-              const paused = startRead;
-              if (!marked || paused === undefined) return Effect.succeed(facet);
-              startRead = undefined;
-              return Effect.andThen(Deferred.succeed(paused.entered, undefined), Effect.as(Deferred.await(paused.released), facet));
-            }),
-          );
+          return (threadId: string) =>
+            Effect.flatMap(target.read(threadId), (facet) =>
+              Effect.flatMap(SessionStartRead, (marked) => {
+                const paused = startRead;
+                if (!marked || paused === undefined) return Effect.succeed(facet);
+                startRead = undefined;
+                return Effect.andThen(Deferred.succeed(paused.entered, undefined), Effect.as(Deferred.await(paused.released), facet));
+              }),
+            );
         const value: unknown = Reflect.get(target, key, target);
         return typeof value === 'function' ? value.bind(target) : value;
       },
@@ -619,6 +624,7 @@ export const protocolRig = Effect.fn('testing.protocolRig')(function* (fixture: 
         reports,
         kernel,
         (threadId) => harness.threads.publish(threadId),
+        harness.threads,
         inbox,
         pictures,
         held,

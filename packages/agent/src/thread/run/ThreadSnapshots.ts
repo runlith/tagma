@@ -2,7 +2,7 @@ import { Cause, Clock, Context, Duration, Effect, FiberMap, FiberSet, Layer, Ref
 import { CurrentCost, producerCost, type CostCause } from '@runlith/performance/CostLedger';
 import { declare, type Held } from '@runlith/held/Held';
 import type { ThreadPendingInput, ThreadQueuedTurn, ThreadResumeOf, ThreadWaitingTurn, WordsWait } from '../../transcript/live';
-import type { ThreadSnapshot, ThreadState, ThreadStateChange } from '../state';
+import type { ThreadRunChange, ThreadSnapshot, ThreadState, ThreadStateChange } from '../state';
 import { WIRE_PAGE_MAX_BYTES, WIRE_PAGE_MAX_ENTRIES } from '../../transcript/cap';
 import { extendPageToTurnRoot } from '../../transcript/page';
 import { coreEntry } from '../../transcript/kinds';
@@ -378,13 +378,14 @@ export const makeThreadSnapshots = Effect.gen(function* () {
         if (revision.to <= (framedAt.get(threadId) ?? -1)) return true;
         const position = change.from + change.records.length;
         const held = projections.get(threadId);
-        const activeRun = held?.state.activeRun ?? null;
+        const activeRun = patchedRun(held?.state.activeRun ?? null, change.runs);
         if (held === undefined || activeRun === null || held.revision !== revision.from || published.get(threadId) !== change.from)
           return false;
         if (awaitsAnswer(activeRun.progress.stage) || !change.records.every(plainEntry)) return false;
+        const latestRun = patchedRun(held.state.latestRun, change.runs);
         const now = new Date(yield* Clock.currentTimeMillis);
         const thread = { ...held.state.thread, ...change.thread };
-        const wordsWait = yield* wordsWaitOf(owners, transports, thread, { active: true, after: held.state.latestRun?.id ?? null });
+        const wordsWait = yield* wordsWaitOf(owners, transports, thread, { active: true, after: latestRun?.id ?? null });
         const { status, changesAt } = runStatusOf(
           {
             thread,
@@ -399,7 +400,7 @@ export const makeThreadSnapshots = Effect.gen(function* () {
           lease,
           held.inputs.ended,
         );
-        const next: ThreadState = { ...held.state, thread, position, status, now: now.toISOString() };
+        const next: ThreadState = { ...held.state, thread, position, activeRun, latestRun, status, now: now.toISOString() };
         const carried = yield* feed.atCut(
           threadId,
           Effect.suspend(() => {
@@ -432,11 +433,10 @@ export const makeThreadSnapshots = Effect.gen(function* () {
         const held = projections.get(threadId);
         if (held === undefined || revision.to <= held.revision) return;
         if (held.revision !== revision.from) return void projections.delete(threadId);
-        const running = held.state.activeRun;
-        const beat = running === null ? undefined : change.runs.find((one) => one.id === running.id);
-        if (running === null || beat === undefined) return hold(threadId, { ...held, revision: revision.to });
-        const activeRun: ThreadRunRow = { ...running, heartbeatAt: beat.heartbeatAt, updatedAt: beat.updatedAt };
-        const latestRun = held.state.latestRun?.id === activeRun.id ? activeRun : held.state.latestRun;
+        const activeRun = patchedRun(held.state.activeRun, change.runs);
+        const latestRun = patchedRun(held.state.latestRun, change.runs);
+        if (activeRun === null || (activeRun === held.state.activeRun && latestRun === held.state.latestRun))
+          return hold(threadId, { ...held, state: { ...held.state, latestRun }, revision: revision.to });
         const now = new Date(yield* Clock.currentTimeMillis);
         const wordsWait = yield* wordsWaitOf(owners, transports, held.state.thread, { active: true, after: latestRun?.id ?? null });
         const { status, changesAt } = runStatusOf(
@@ -534,6 +534,12 @@ export const makeThreadSnapshots = Effect.gen(function* () {
 
 export const threadSnapshotsLayer = Layer.effect(ThreadSnapshots, makeThreadSnapshots);
 
+function patchedRun(run: ThreadRunRow | null, changes: readonly ThreadRunChange[] | undefined): ThreadRunRow | null {
+  const patch = run === null ? undefined : changes?.find((change) => change.id === run.id);
+  if (run === null || patch === undefined) return run;
+  const { id: _id, ...fields } = patch;
+  return { ...run, ...fields };
+}
 export const PUBLISHING = 'ThreadSnapshots.publish';
 export const READING = 'ThreadSnapshots.reading';
 function plainEntry(record: ThreadEventRecord): boolean {

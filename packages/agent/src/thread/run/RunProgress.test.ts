@@ -8,6 +8,7 @@ import type { ThreadState } from '../state';
 import { ThreadOwner, ThreadRunStoreFactory, ThreadStreamRhythm } from '../ThreadPorts';
 import { RunProgress, runProgressLayer } from './RunProgress';
 import { makeThreadLiveFeed, threadFeedLayer } from './ThreadLiveFeed';
+import { threadChangesLayer } from './ThreadChanges';
 const RUN = { id: 'run-1', threadId: 'thread-1' };
 const progressed = Effect.gen(function* () {
   const live = yield* makeThreadLiveFeed<ThreadState>();
@@ -20,6 +21,7 @@ const progressed = Effect.gen(function* () {
     runProgressLayer.pipe(
       Layer.provide(
         Layer.mergeAll(
+          threadChangesLayer,
           threadFeedLayer(live, (state) => Effect.succeed(state)),
           Layer.succeed(ThreadStreamRhythm, { flushIntervalMs: 250 }),
           Layer.succeed(ThreadOwner, ThreadOwner.of({ id: 'owner' })),

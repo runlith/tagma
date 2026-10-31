@@ -1,11 +1,19 @@
-import { Data, type Effect } from 'effect';
+import { Context, Data, type Effect } from 'effect';
 import type { Evidence } from '../keyed';
 import type { ThreadContextReading, ThreadHistory, ThreadMetadataRow, ThreadRow } from '../rows';
 import type { ThreadAtomicPatch, ThreadPatch } from '../storage/aggregate';
 import type { ThreadEventInput } from '../events';
 import type { ThreadSealedEvent, ThreadLogState } from '../ThreadEventDoor';
 import type { ThreadBorderFailed, ThreadPortFailure } from '../ThreadBorder';
-import type { ThreadChangeRevision, ThreadStateChange } from '../state';
+import type { ThreadChangePart, ThreadChangeRevision, ThreadStateChange } from '../state';
+
+export class ThreadChangeCollector extends Context.Service<
+  ThreadChangeCollector,
+  {
+    claimed(threadId: string, unit: object): boolean;
+    note(threadId: string, unit: object, part: ThreadChangePart): void;
+  }
+>()('@runlith/agent/ThreadChangeCollector') {}
 
 export type ThreadVersion = {
   readonly foldRev: number;

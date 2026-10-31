@@ -44,14 +44,27 @@ export type ThreadStateChange =
       readonly from: number;
       readonly records: readonly ThreadEventRecord[];
       readonly thread: ThreadMetadataChange;
+      readonly runs?: readonly ThreadRunChange[];
     }
   | {
       readonly kind: 'ran';
       readonly threadId: string;
       readonly revision: ThreadChangeRevision;
-      readonly runs: readonly { readonly id: string; readonly heartbeatAt: Date; readonly updatedAt: Date }[];
+      readonly runs: readonly ThreadRunChange[];
     }
   | { readonly kind: 'moved'; readonly threadId: string };
+
+export type ThreadRunChange = { readonly id: string } & Partial<Pick<ThreadRunRow, 'heartbeatAt' | 'updatedAt' | 'streamTail' | 'resumes'>>;
+
+export type ThreadChangePart =
+  | {
+      readonly kind: 'appended';
+      readonly from: number;
+      readonly records: readonly ThreadEventRecord[];
+      readonly thread: ThreadMetadataChange;
+    }
+  | { readonly kind: 'run'; readonly run: ThreadRunChange }
+  | { readonly kind: 'unseen' };
 
 export type ActiveLife = 'working' | 'awaiting' | 'stalled';
 
