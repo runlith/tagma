@@ -12,6 +12,7 @@ import { asc, and, desc, eq, gt, inArray, lte, sql } from 'drizzle-orm';
 import { MachineStore, type StoreFailure } from '../../platform/contract/service/store.js';
 import { MachineUnits, type ProgramUnit, type Unit, type WriteUnit } from '../../platform/contract/service/units.js';
 import { programOf, unplannable } from '../../platform/store/programs.js';
+import { bindQuery } from '../../platform/store/queries.js';
 import { thread, threadEntry } from '../store/kernel.js';
 import { recordFacts } from '../../thread-record/facts.js';
 import { journalProjectOf, threadBase, threadEvent, threadEventIdentity } from '../store/journal.js';
@@ -74,6 +75,22 @@ export const makeSqliteThreadJournal = Effect.gen(function* () {
   const reads = Option.getOrUndefined(yield* Effect.serviceOption(RestedRollouts));
   const carrying = new WeakMap<WriteUnit<'machine'>, Map<string, ThreadEventRow[]>>();
   const headById = db.get<{ head: number }>(sql`select ${journalHead(sql`${sql.placeholder('threadId')}`)} as head`);
+  const insertEvent = db
+    .insert(threadEvent)
+    .values({
+      threadId: sql.placeholder('threadId'),
+      position: sql.placeholder('position'),
+      id: sql.placeholder('id'),
+      kind: sql.placeholder('kind'),
+      payload: sql.placeholder('payload'),
+    })
+    .onConflictDoNothing()
+    .prepare();
+  const touchThread = db
+    .update(thread)
+    .set({ updatedAt: sql.placeholder('updatedAt') })
+    .where(eq(thread.id, sql.placeholder('threadId')))
+    .prepare();
 
   const facts = () =>
     db
@@ -249,20 +266,9 @@ export const makeSqliteThreadJournal = Effect.gen(function* () {
     const position = plan.head + 1;
     const held = floor?.held(event.threadId);
     if (held !== undefined && position <= held) return yield* unplannable(program, 'the rollout already holds the planned position');
-    yield* program.write(
-      db
-        .insert(threadEvent)
-        .values({ threadId: event.threadId, id: event.id, kind: event.kind, payload: event.payload, position })
-        .onConflictDoNothing(),
-      1,
-    );
+    yield* program.write(bindQuery(insertEvent, { ...event, position }), 1);
     if (plan.facts.length === 0)
-      yield* program.write(
-        db
-          .update(thread)
-          .set({ updatedAt: new Date(yield* Clock.currentTimeMillis) })
-          .where(eq(thread.id, event.threadId)),
-      );
+      yield* program.write(bindQuery(touchThread, { threadId: event.threadId, updatedAt: new Date(yield* Clock.currentTimeMillis) }));
     yield* conversationPlanned(db, program, (work) => units.read(work), event.threadId, { position, payload: event.payload });
     const appended = { threadId: event.threadId, position, id: event.id, kind: event.kind, payload: event.payload };
     plan.head = position;
@@ -310,12 +316,7 @@ export const makeSqliteThreadJournal = Effect.gen(function* () {
       });
     }
     const appended = { threadId: event.threadId, position: row.position, id: event.id, kind: event.kind, payload: event.payload };
-    yield* tx.run(
-      db
-        .update(thread)
-        .set({ updatedAt: new Date(yield* Clock.currentTimeMillis) })
-        .where(eq(thread.id, event.threadId)),
-    );
+    yield* tx.run(touchThread.run({ threadId: event.threadId, updatedAt: new Date(yield* Clock.currentTimeMillis) }));
     yield* conversationAppended(db, tx, event.threadId, appended);
     yield* carry(appended, tx);
     return appended;
