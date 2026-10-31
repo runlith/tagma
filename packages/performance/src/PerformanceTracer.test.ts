@@ -340,12 +340,14 @@ it.effect('kept SQL spans preserve attributes and ancestry for failed, slow and 
       const query = open(tracer, 'sql.execute', 0n, root);
       query.attribute('db.system.name', 'sqlite');
       query.attribute('db.operation.name', 'execute');
+      const summary = kind === 'failed' ? 'x'.repeat(45_000) : 'SELECT "é"';
+      const runId = kind === 'slow' ? 10n ** 257n : 42n;
       query.attribute('db.query.fingerprint', 'cafe');
-      query.attribute('db.query.summary', 'SELECT "é"');
+      query.attribute('db.query.summary', summary);
       query.attribute('db.queue.ms', 0.125);
       query.attribute('db.exec.ms', 2.5);
       query.attribute('runId', 'old');
-      query.attribute('run.id', 42n);
+      query.attribute('run.id', runId);
       query.attribute('rows', { secret: 'not retained' });
       query.end(MS, kind === 'failed' ? Exit.fail('refused') : Exit.void);
       query.attribute('db.exec.ms', 999);
@@ -361,15 +363,52 @@ it.effect('kept SQL spans preserve attributes and ancestry for failed, slow and 
           'db.system.name': 'sqlite',
           'db.operation.name': 'execute',
           'db.query.fingerprint': 'cafe',
-          'db.query.summary': 'SELECT "é"',
+          'db.query.summary': summary,
           'db.queue.ms': 0.125,
           'db.exec.ms': 2.5,
-          'run.id': '42',
+          'run.id': String(runId),
         },
       });
       expect(JSON.stringify(sql?.payload)).not.toContain('not retained');
       records.length = 0;
     }
+  }),
+);
+
+it.effect('SQL attributes preserve alias overwrite and deletion order through the span lifetime', () =>
+  Effect.gen(function* () {
+    const records: PerformanceRecord[] = [];
+    const tracer = yield* PerformanceTracer.make({ instanceId: 'process', recordFloorMicros: 0, keepOneTraceIn: () => 1 }).pipe(
+      Effect.provideService(PerformanceStore, capturing([], records)),
+      Effect.provideService(CurrentTraceSampler, new TraceSampler()),
+      Effect.provideService(Metric.MetricRegistry, new Map()),
+    );
+    const root = open(tracer, 'request', 0n);
+    const query = open(tracer, 'sql.execute', 0n, root);
+    query.attribute('runId', 'first');
+    query.attribute('project', 'project');
+    query.attribute('run.id', 'second');
+    query.attribute('runId', { rows: 1 });
+    query.attribute('threadId', 'thread');
+    query.attribute('run.id', 'last');
+    for (let index = 0; index < 30; index += 1) query.attribute('db.query.summary', 'x'.repeat(20_000));
+    query.attribute('db.query.summary', 'SELECT ?');
+    query.attribute('rows', 1);
+    query.attribute('rows', Number.NaN);
+    query.attribute('rows', 2);
+    const expected: Array<[string, string | number]> = [
+      ['project', 'project'],
+      ['thread.id', 'thread'],
+      ['run.id', 'last'],
+      ['db.query.summary', 'SELECT ?'],
+      ['rows', 2],
+    ];
+    expect([...query.attributes]).toEqual(expected);
+    query.end(MS, Exit.void);
+    expect([...query.attributes]).toEqual(expected);
+    root.end(2n * MS, Exit.void);
+    const sql = records.find((record) => record.name === 'sql.execute');
+    expect(sql?.payload).toMatchObject({ attributes: Object.fromEntries(expected) });
   }),
 );
 
