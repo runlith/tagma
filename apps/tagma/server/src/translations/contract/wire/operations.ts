@@ -1,6 +1,7 @@
 import { Schema } from 'effect';
 import { ASKS_NEVER } from '../../../platform/contract/wire/conditions.js';
 import { arms, operation } from '../../../platform/contract/wire/operation.js';
+import { projectField } from '../../../platform/contract/wire/place.js';
 import { blockRef } from '../../../graph/contract/wire/fields.js';
 import { LANGUAGE_TAG } from './language.js';
 import { languageStandingSchema, projectionSchema } from './projection.js';
@@ -28,6 +29,7 @@ export const TRANSLATION_OPERATIONS = {
     grammar:
       'Only parts with no translation of their current text are sent; `again` sends every part. `model` names a catalog model for this act, `reasoning` its rung; without them `translation.model` chooses, then the default text model. A projection that matches the block whole answers `current` with no model call.',
     input: Schema.Struct({
+      project: projectField,
       block,
       language: LANGUAGE_TAG,
       model: Schema.optional(Schema.String.check(Schema.isMinLength(1))).annotate({
@@ -60,7 +62,7 @@ export const TRANSLATION_OPERATIONS = {
     meaning:
       'Read a block’s projection in a language against its current text: each part translated, changed since, or pending, with counts, and the block’s languages with their states.',
     grammar: 'Without `language`, only the languages and `preferred` answer.',
-    input: Schema.Struct({ block, language: Schema.optional(LANGUAGE_TAG) }),
+    input: Schema.Struct({ project: projectField, block, language: Schema.optional(LANGUAGE_TAG) }),
     answer: arms({
       read: {
         block: Schema.String,
@@ -82,7 +84,7 @@ export const TRANSLATION_OPERATIONS = {
     effect: 'write',
     identity: { key: 'call' },
     meaning: 'Stop the running translation of a block into a language; the batches it landed stay.',
-    input: Schema.Struct({ block, language: LANGUAGE_TAG }),
+    input: Schema.Struct({ project: projectField, block, language: LANGUAGE_TAG }),
     answer: arms({
       stopped: { block: Schema.String, language: Schema.String },
       idle: { block: Schema.String, language: Schema.String },
