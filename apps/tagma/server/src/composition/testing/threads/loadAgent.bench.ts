@@ -1,4 +1,4 @@
-import { appendFileSync, existsSync, readFileSync, renameSync, watch, writeFileSync, type FSWatcher } from 'node:fs';
+import { appendFileSync, existsSync, readFileSync, renameSync, rmSync, watch, writeFileSync, type FSWatcher } from 'node:fs';
 import { basename, dirname, isAbsolute, join } from 'node:path';
 
 if (process.argv.includes('--version')) {
@@ -29,9 +29,20 @@ const optionalNumber = (name: string, fallback: number): number => (process.argv
 const messageBytes = optionalNumber('--message-bytes', 1024);
 const callsPerBoundary = optionalNumber('--calls-per-boundary', 1);
 const phase = optionalNumber('--phase', 0);
+const agentIndex = optionalNumber('--agent-index', 0);
+const turnMin = optionalNumber('--turn-min', 0);
+const turnMax = optionalNumber('--turn-max', turnMin === 0 ? 0 : 50);
 if (!Number.isSafeInteger(messageBytes) || messageBytes < 0) throw new Error('--message-bytes must be a nonnegative safe integer');
 if (callsPerBoundary !== 1 && callsPerBoundary !== 8) throw new Error('--calls-per-boundary must be 1 or 8');
 if (!Number.isFinite(phase) || phase < 0) throw new Error('--phase must be nonnegative and finite');
+if (
+  ![agentIndex, turnMin, turnMax].every(Number.isSafeInteger) ||
+  agentIndex < 0 ||
+  turnMin < 0 ||
+  turnMax < turnMin ||
+  (turnMin === 0 && turnMax !== 0)
+)
+  throw new Error('invalid finite-turn limits');
 const idle = process.argv.includes('--idle');
 type Call = { readonly name: string; readonly input: Record<string, unknown> };
 const decoded: unknown = JSON.parse(readFileSync(planPath, 'utf8'));
@@ -106,7 +117,13 @@ let chunks = 0;
 let emittedFrames = 0;
 let hostedAnnounced = 0;
 let callsOffered = 0;
-const textChunks = 22 * callsPerBoundary - 1;
+let turns = 0;
+let turnsEnded = 0;
+let callsInTurn = 0;
+let turnTarget = 0;
+let waitingForEnd = false;
+let textBytesInTurn = 0;
+let turnBeganAt = 0;
 const period = 1000 / rate;
 const progress = (): void => {
   if (progressDirectory === undefined) return;
@@ -121,12 +138,17 @@ const progress = (): void => {
       emittedFrames,
       hostedAnnounced,
       callsOffered,
+      turns,
+      turnsEnded,
+      callsInTurn,
+      turnTarget,
       stdoutBufferedBytes: process.stdout.writableLength,
     }),
   );
   renameSync(staged, path);
 };
 progress();
+const turnEvent = (value: object): void => appendFileSync(`${report}.turns`, `${JSON.stringify(value)}\n`);
 
 const stop = (): void => {
   if (timer !== undefined) clearTimeout(timer);
@@ -142,6 +164,8 @@ const tick = (): void => {
   const slot = frame % 26;
   const messageId = `message-${messageNumber}`;
   const vendor = `vendor-${cycle}`;
+  const boundaryCalls = turnTarget === 0 ? callsPerBoundary : Math.min(callsPerBoundary, turnTarget - callsInTurn);
+  const textChunks = 22 * boundaryCalls - 1;
   if (slot === 0) {
     const call = plan[cycle % plan.length]!;
     const announced = { toolCallId: `hosted-${cycle}`, name: call.name, input: call.input };
@@ -176,10 +200,11 @@ const tick = (): void => {
       status: 'completed',
       content: [{ type: 'content', content: { type: 'text', text: 'fixture' } }],
     });
-  } else if (slot === 25 && hosted.length === callsPerBoundary) {
+  } else if (slot === 25 && hosted.length === boundaryCalls) {
     send({ method: '_tagma/said', params: { sessionId, messageId, toolCallIds: [...hosted.map((call) => call.toolCallId), ...vendors] } });
     appendFileSync(`${report}.calls`, hosted.map((call) => `${JSON.stringify(call)}\n`).join(''));
     callsOffered += hosted.length;
+    callsInTurn += hosted.length;
     hosted = [];
     vendors = [];
     messageNumber += 1;
@@ -187,6 +212,7 @@ const tick = (): void => {
   } else {
     const size = Math.floor(messageBytes / textChunks) + (chunks < messageBytes % textChunks ? 1 : 0);
     chunks += 1;
+    textBytesInTurn += size;
     update(sessionId, { sessionUpdate: 'agent_message_chunk', messageId, content: { type: 'text', text: 'x'.repeat(size) } });
   }
   frame += 1;
@@ -195,16 +221,47 @@ const tick = (): void => {
     cycle += 1;
     progress();
   }
+  if (turnTarget > 0 && callsInTurn >= turnTarget) {
+    waitingForEnd = true;
+    const ending = () => {
+      const path = `${report}.end-turn`;
+      if (!waitingForEnd || !existsSync(path)) return;
+      rmSync(path);
+      waitingForEnd = false;
+      turnsEnded += 1;
+      progress();
+      finish('end_turn');
+    };
+    watcher = watch(dirname(report), ending);
+    turnEvent({
+      type: 'sealed',
+      turn: turns,
+      calls: callsInTurn,
+      offered: callsOffered,
+      textBytes: textBytesInTurn,
+      beganAt: turnBeganAt,
+      at: Date.now(),
+    });
+    ending();
+    return;
+  }
   nextAt += period;
   timer = setTimeout(tick, Math.max(0, nextAt - performance.now()));
 };
 
 const start = (): void => {
-  if (prompt === null || idle || timer !== undefined || !existsSync(go)) return;
+  if (prompt === null || idle || timer !== undefined || waitingForEnd || !existsSync(go)) return;
+  if (turnMin > 0 && turns > 1) {
+    const path = `${report}.continue`;
+    if (!existsSync(path)) return;
+    rmSync(path);
+  }
   watcher?.close();
   watcher = undefined;
-  nextAt = performance.now() + phase;
-  timer = setTimeout(tick, phase);
+  const delay = turns === 1 ? phase : 0;
+  turnBeganAt = Date.now() + delay;
+  nextAt = performance.now() + delay;
+  timer = setTimeout(tick, delay);
 };
 
 const finish = (stopReason: string): void => {
@@ -271,14 +328,26 @@ const handle = (message: Message): void => {
       }
       const meta = params._meta as Record<string, unknown> | undefined;
       prompt = { id: message.id, sessionId: String(params.sessionId), turn: meta?.['tagma/turn'] };
+      if (process.argv.includes('--prime') && !existsSync(`${report}.primed`)) {
+        writeFileSync(`${report}.primed`, 'ready\n');
+        update(prompt.sessionId, { sessionUpdate: 'agent_message_chunk', messageId: 'prime', content: { type: 'text', text: 'ready' } });
+        finish('end_turn');
+        return;
+      }
       if (frame % 26 !== 0) cycle += 1;
       if (hosted.length > 0) messageNumber += 1;
       hosted = [];
       vendors = [];
       chunks = 0;
       frame = 0;
+      turns += 1;
+      callsInTurn = 0;
+      textBytesInTurn = 0;
+      turnTarget = idle || turnMin === 0 ? 0 : turnMin + ((agentIndex * 17 + (turns - 1) * 23) % (turnMax - turnMin + 1));
       if (!idle) watcher = watch(dirname(go), start);
       writeFileSync(`${report}.ready`, 'ready\n');
+      if (turnMin > 0 && !idle) turnEvent({ type: 'prompt', turn: turns, run: prompt.turn, target: turnTarget, at: Date.now() });
+      progress();
       start();
       return;
     }

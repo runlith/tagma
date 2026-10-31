@@ -4,7 +4,7 @@ import { gcAndSweep, heapStats } from 'bun:jsc';
 import { monitorEventLoopDelay } from 'node:perf_hooks';
 import { loadavg, totalmem, cpus } from 'node:os';
 import { watch } from 'node:fs';
-import { basename, isAbsolute, join } from 'node:path';
+import { basename, dirname, isAbsolute, join } from 'node:path';
 import {
   ByteSize,
   Clock,
@@ -33,14 +33,13 @@ import { grantFor } from '../../../platform/testing/grants.js';
 import { SHIPPED_HARNESSES } from '../../../external-harnesses/testing/builtin.js';
 import { WORLD_COMMAND } from '../../../installation/contract/wire/layout.js';
 import { DRIVERS, type DriverId } from '../../manifest.js';
-import { ThreadHarness } from '../../../threads/contract/service/engine.js';
+import { NativeStorage, ThreadHarness, ThreadLive } from '../../../threads/contract/service/engine.js';
 import type { ThreadsFeedEvent } from '../../../threads/contract/wire/list.js';
 import { birthsOf } from '../../../threads/testing/doubles.js';
 import { Coverage } from '../../../workspace/contract/service/roots.js';
 import { claudeLogin, hostedDefaults } from '../claudeLogin.js';
 import { makeDoorWorld } from '../doorFixture.js';
 import { suiteGit } from '../suiteGit.js';
-import { until } from './protocolRig.js';
 import { hostedChild } from './hostedChild.js';
 import { loadFeeds } from './loadFeeds.js';
 
@@ -67,11 +66,14 @@ const history = flag('history', 100, 0);
 const repositoryFiles = flag('repository-files', 1, 1);
 const projects = flag('projects', 1, 1);
 const parentSize = flag('parent-size', 25, 1);
+const turnMin = flag('turn-min', 0, 0);
+const turnMax = flag('turn-max', turnMin === 0 ? 0 : 50, 0);
 const warmSnapshot = flag('warm-snapshot', 0, 0) !== 0;
 const snapshotDirectory = process.argv.find((value) => value.startsWith('--snapshots='))?.slice('--snapshots='.length);
 if (!Number.isSafeInteger(agents)) throw new Error('--agents must be an integer');
-if (![resultBytes, messageBytes, history, repositoryFiles, projects, parentSize].every(Number.isSafeInteger))
+if (![resultBytes, messageBytes, history, repositoryFiles, projects, parentSize, turnMin, turnMax].every(Number.isSafeInteger))
   throw new Error('payload sizes and fixture counts must be integers');
+if (turnMax < turnMin || (turnMin === 0 && turnMax !== 0)) throw new Error('invalid finite-turn limits');
 if (callsPerBoundary !== 1 && callsPerBoundary !== 8) throw new Error('--calls-per-boundary must be 1 or 8');
 if (snapshotDirectory !== undefined && !isAbsolute(snapshotDirectory)) throw new Error('--snapshots must be an absolute directory');
 if (warmSnapshot && snapshotDirectory === undefined) throw new Error('--warm-snapshot requires --snapshots');
@@ -109,6 +111,20 @@ const histogramDelta = (name: string, before: Map<string, Histogram>, after: Map
 const shellQuote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;
 const callSchema = Schema.fromJsonString(Schema.Struct({ toolCallId: Schema.String, name: Schema.String, input: Schema.Unknown }));
 const probeSchema = Schema.fromJsonString(Schema.Struct({ id: Schema.Int, scheduledAt: Schema.Number, offeredAt: Schema.Number }));
+const turnSchema = Schema.fromJsonString(
+  Schema.Union([
+    Schema.Struct({ type: Schema.Literal('prompt'), turn: Schema.Int, run: Schema.String, target: Schema.Int, at: Schema.Number }),
+    Schema.Struct({
+      type: Schema.Literal('sealed'),
+      turn: Schema.Int,
+      calls: Schema.Int,
+      offered: Schema.Int,
+      textBytes: Schema.Int,
+      beganAt: Schema.Number,
+      at: Schema.Number,
+    }),
+  ]),
+);
 const progressSchema = Schema.fromJsonString(
   Schema.Struct({
     agent: Schema.String,
@@ -116,13 +132,35 @@ const progressSchema = Schema.fromJsonString(
     emittedFrames: Schema.Number,
     hostedAnnounced: Schema.Number,
     callsOffered: Schema.Number,
+    turns: Schema.Number,
+    turnsEnded: Schema.Number,
+    callsInTurn: Schema.Number,
+    turnTarget: Schema.Number,
     stdoutBufferedBytes: Schema.Number,
   }),
 );
 type Call = typeof callSchema.Type;
 type Probe = typeof probeSchema.Type;
 type ProbeJob = { readonly probe: Probe; readonly measured: boolean };
-type Agent = { readonly threadId: string; readonly report: string };
+type Turn = typeof turnSchema.Type;
+type Agent = {
+  readonly threadId: string;
+  readonly report: string;
+  completed: number;
+  changed: Deferred.Deferred<void>;
+  runId: string | null;
+  expectedRunId: string | null;
+  nextRun: Deferred.Deferred<void>;
+  turnNumber: number;
+  turnTarget: number;
+  turnStartCompleted: number;
+  inputBytes: number;
+  outputBytes: number;
+  turnStartInputBytes: number;
+  turnStartOutputBytes: number;
+  pendingTurn: { readonly sealedAt: number; readonly measured: boolean } | null;
+  phase: 'priming' | 'starting' | 'active' | 'settling';
+};
 const COST_FIELDS = ['statements', 'units', 'programs', 'writerHoldMs', 'writerWaitMs', 'requestBytes', 'responseBytes', 'spans'] as const;
 type CostField = (typeof COST_FIELDS)[number];
 type CostFigure = { count: number; sum: number; max: number; readonly buckets: Map<number, number> };
@@ -411,6 +449,28 @@ const program = Effect.gen(function* () {
       parents.push(parent);
     }
     const born: Agent[] = [];
+    const agentsByThread = new Map<string, Agent>();
+    const producerFailure = yield* Effect.acquireRelease(Queue.unbounded<BenchRefused>(), Queue.shutdown);
+    yield* Effect.acquireRelease(
+      Effect.sync(() =>
+        Context.get(world.runtime.owners, ThreadLive).subscribeStates((state) => {
+          const agent = agentsByThread.get(state.thread.id);
+          if (agent === undefined || state.activeRun !== null || state.status.ending == null) return;
+          const ending = state.status.ending;
+          if (
+            (agent.phase === 'priming' && ending.status !== 'completed') ||
+            ((agent.phase === 'starting' || agent.phase === 'active') &&
+              (agent.expectedRunId === null || ending.runId === agent.expectedRunId))
+          )
+            Queue.offerUnsafe(
+              producerFailure,
+              new BenchRefused({ message: `producer ${agent.threadId} ended unexpectedly: ${JSON.stringify(ending)}` }),
+            );
+        }),
+      ),
+      (detach) => Effect.sync(detach),
+    );
+    const failOnProducer = Effect.flatMap(Queue.take(producerFailure), Effect.fail);
     yield* Effect.addFinalizer(() =>
       Effect.forEach(
         born,
@@ -425,6 +485,81 @@ const program = Effect.gen(function* () {
     const progressDirectory = join(installation, 'progress');
     yield* files.makeDirectory(progressDirectory);
     const cli = join(import.meta.dir, 'loadAgent.bench.ts');
+    const waitFile = (path: string, agent: Agent) =>
+      Effect.scoped(
+        Effect.gen(function* () {
+          const changed = yield* Queue.unbounded<void>();
+          yield* Effect.acquireRelease(
+            Effect.sync(() =>
+              watch(
+                dirname(path),
+                (_event, name) =>
+                  void (name === null || String(name) === basename(path) ? Queue.offerUnsafe(changed, undefined) : undefined),
+              ),
+            ),
+            (watcher) => Effect.sync(() => watcher.close()),
+          );
+          while (!(yield* files.exists(path))) {
+            const state = yield* harness.reads.snapshot(agent.threadId);
+            const ending = state.status.ending;
+            if (
+              state.activeRun === null &&
+              ending != null &&
+              (agent.phase === 'priming' || agent.expectedRunId === null || ending.runId === agent.expectedRunId) &&
+              !(yield* files.exists(path))
+            )
+              return yield* new BenchRefused({
+                message: `producer ${agent.threadId} ended before ${basename(path)}: ${JSON.stringify(ending)}`,
+              });
+            yield* Effect.raceFirst(Queue.take(changed), failOnProducer);
+          }
+        }),
+      );
+    const waitSettled = (threadId: string, runId?: string) =>
+      Effect.scoped(
+        Effect.gen(function* () {
+          const changed = yield* Queue.unbounded<void>();
+          yield* Effect.acquireRelease(
+            Effect.sync(() =>
+              Context.get(world.runtime.owners, ThreadLive).subscribeStates((state) => {
+                if (state.thread.id === threadId) Queue.offerUnsafe(changed, undefined);
+              }),
+            ),
+            (detach) => Effect.sync(detach),
+          );
+          for (;;) {
+            const snapshot = yield* harness.reads.snapshot(threadId);
+            const ending = snapshot.status.ending;
+            if (snapshot.status.life === 'idle' && ending != null && (runId === undefined || ending.runId === runId)) {
+              if (ending.status !== 'completed') return yield* new BenchRefused({ message: `run ${ending.runId} ended ${ending.status}` });
+              if (ending.notification === 'confirmed') return;
+            }
+            yield* Effect.raceFirst(Queue.take(changed), failOnProducer);
+          }
+        }),
+      );
+    const primeChild = Effect.fn('agentLoad.primeChild')(function* (parent: string, index: number) {
+      const id = `load-prime-${crypto.randomUUID()}`;
+      const step = `load-agent-${index}`;
+      const plan = {
+        name: 'load-prime',
+        description: 'Prime a finite-turn load agent.',
+        input: {},
+        revision: 'load-prime',
+        steps: [{ kind: 'agent' as const, id: step, agentType: 'tagma', task: 'Prepare the load fixture.' }],
+        transitions: [],
+        entry: step,
+      };
+      const opened = yield* harness.workflows.start({ id, workflow: plan.name, plan, thread: parent, input: {} });
+      if (!('status' in opened) || opened.status !== 'running')
+        return yield* new BenchRefused({ message: `priming workflow did not open: ${JSON.stringify(opened)}` });
+      const finished = yield* harness.workflows.advance(id);
+      if (finished?.status !== 'completed')
+        return yield* new BenchRefused({ message: `priming workflow did not complete: ${JSON.stringify(finished)}` });
+      const child = yield* Context.get(world.runtime.owners, NativeStorage).threads.findNamed(parent, 'operator', step);
+      if (child === undefined) return yield* new BenchRefused({ message: `primed child ${step} was not found` });
+      return child.id;
+    });
     const inputs = [
       ...Array.from({ length: 64 }, () => ({ name: 'read', input: { path: join(checkout, 'src/fixture.ts') } })),
       ...Array.from({ length: 15 }, () => ({ name: 'grep', input: { path: checkout, pattern: 'fixture', output_mode: 'content' } })),
@@ -440,6 +575,7 @@ const program = Effect.gen(function* () {
       const plan = join(installation, `plan-${index}.json`);
       yield* files.writeFileString(plan, JSON.stringify(Array.from({ length: 100 }, (_, step) => inputs[(step * 37 + index * 13) % 100])));
       yield* files.writeFileString(`${report}.calls`, '');
+      yield* files.writeFileString(`${report}.turns`, '');
       const command = [
         process.execPath,
         cli,
@@ -457,24 +593,64 @@ const program = Effect.gen(function* () {
         String(messageBytes),
         '--calls-per-boundary',
         String(callsPerBoundary),
+        '--agent-index',
+        String(index),
+        '--turn-min',
+        String(turnMin),
+        '--turn-max',
+        String(turnMax),
         '--phase',
         String((index * 10000) / agents / rate),
       ];
+      if (turnMin > 0) command.push('--prime');
       if (index % 5 === 4) command.push('--idle');
       yield* files.writeFileString(join(installation, WORLD_COMMAND), `#!/bin/sh\nexec ${command.map(shellQuote).join(' ')}\n`, {
         mode: 0o755,
       });
-      const child = yield* hostedChild(world, parents[Math.floor(index / parentSize)]!, 'HOLD the turn');
-      const threadId = child.threadId;
-      born.push({ threadId, report });
+      const parent = parents[Math.floor(index / parentSize)]!;
+      const threadId = turnMin > 0 ? yield* primeChild(parent, index) : (yield* hostedChild(world, parent, 'HOLD the turn')).threadId;
+      const agent: Agent = {
+        threadId,
+        report,
+        completed: 0,
+        changed: Deferred.makeUnsafe<void>(),
+        runId: null,
+        expectedRunId: null,
+        nextRun: Deferred.makeUnsafe<void>(),
+        turnNumber: 0,
+        turnTarget: 0,
+        turnStartCompleted: 0,
+        inputBytes: 0,
+        outputBytes: 0,
+        turnStartInputBytes: 0,
+        turnStartOutputBytes: 0,
+        pendingTurn: null,
+        phase: turnMin > 0 ? 'priming' : 'starting',
+      };
+      born.push(agent);
+      agentsByThread.set(threadId, agent);
+      if (turnMin > 0) {
+        yield* waitFile(`${report}.primed`, agent);
+        yield* waitSettled(threadId);
+      }
       yield* seedHistory(threadId);
-      yield* until(
-        Effect.map(files.exists(`${report}.ready`), (ready) => (ready ? true : null)),
-        `agent ${index} reached the prompt`,
-      );
+      if (turnMin > 0) {
+        const started = yield* harness.threads.handle(threadId, 'operator').send('HOLD the turn');
+        if (started.status !== 'started')
+          return yield* new BenchRefused({ message: `operator turn did not start: ${JSON.stringify(started)}` });
+        agent.expectedRunId = started.runId;
+        agent.phase = 'starting';
+      }
+      yield* waitFile(`${report}.ready`, agent);
       const opened = yield* world.op('open_hosted_turn', {}, at, { [GRANT_HEADER]: grantFor(threadId) });
-      if (opened.status !== 200 || (opened.body as { status?: string }).status !== 'opened')
+      const initial = opened.body as { readonly status?: string; readonly prompt?: string | null };
+      if (opened.status !== 200 || initial.status !== 'opened' || (turnMin > 0 && initial.prompt == null))
         return yield* new BenchRefused({ message: `opening agent ${index}: ${JSON.stringify(opened)}` });
+      const state = yield* harness.reads.snapshot(threadId);
+      if (state.activeRun === null || (agent.expectedRunId !== null && state.activeRun.id !== agent.expectedRunId))
+        return yield* new BenchRefused({ message: `producer ${threadId} is not running its opened turn` });
+      agent.expectedRunId = state.activeRun.id;
+      agent.phase = 'active';
     }
     const followed = born.length === 0 ? [observer] : born.map(({ threadId }) => threadId);
     const feeds = yield* loadFeeds(world.runtime, yield* world.directory('socket'), projectId, followed, subscribers);
@@ -506,7 +682,8 @@ const program = Effect.gen(function* () {
       if (next !== undefined && next.sequence > cursor.sequence + 1) missedRoots += next.sequence - cursor.sequence - 1;
       let before = after;
       for (const row of page.rows) {
-        const relevant = row.name.startsWith('bench.hosted.') || row.name.startsWith('ProtocolSteps.');
+        const relevant =
+          row.name.startsWith('bench.hosted.') || row.name.startsWith('bench.turn.') || row.name.startsWith('ProtocolSteps.');
         if (
           relevant &&
           (row.sequence > cursor.sequence || following.has(row.sequence)) &&
@@ -530,8 +707,16 @@ const program = Effect.gen(function* () {
       }
     };
     const calls = new Map<string, { readonly agent: Agent; readonly file: FileSystem.File; pending: string }>();
-    for (const agent of born)
+    const turns = new Map<string, { readonly agent: Agent; readonly file: FileSystem.File; pending: string }>();
+    for (const agent of born) {
       calls.set(`${basename(agent.report)}.calls`, { agent, file: yield* files.open(`${agent.report}.calls`, { flag: 'r' }), pending: '' });
+      if (turnMin > 0)
+        turns.set(`${basename(agent.report)}.turns`, {
+          agent,
+          file: yield* files.open(`${agent.report}.turns`, { flag: 'r' }),
+          pending: '',
+        });
+    }
     const probePath = join(installation, 'interface.events');
     yield* files.writeFileString(probePath, '');
     const probeFile = yield* files.open(probePath, { flag: 'r' });
@@ -544,8 +729,10 @@ const program = Effect.gen(function* () {
         watch(installation, (_event, name) => {
           if (name === null) {
             for (const entry of calls.keys()) Queue.offerUnsafe(events, entry);
+            for (const entry of turns.keys()) Queue.offerUnsafe(events, entry);
             Queue.offerUnsafe(events, 'interface.events');
-          } else if (String(name) === 'interface.events' || calls.has(String(name))) Queue.offerUnsafe(events, String(name));
+          } else if (String(name) === 'interface.events' || calls.has(String(name)) || turns.has(String(name)))
+            Queue.offerUnsafe(events, String(name));
         }),
       ),
       (watcher) => Effect.sync(() => watcher.close()),
@@ -581,6 +768,7 @@ const program = Effect.gen(function* () {
     const deliveredSizes = new Map<string, number>();
     const invoke = Effect.fn('agentLoad.invoke')(function* (agent: Agent, call: Call) {
       submitted += 1;
+      if (turnMin > 0) agent.inputBytes += Buffer.byteLength(JSON.stringify(call.input));
       const answer = yield* rootCost(
         `bench.hosted.${call.name}`,
         world.op('call_hosted_tool', call, at, { [GRANT_HEADER]: grantFor(agent.threadId) }),
@@ -592,17 +780,109 @@ const program = Effect.gen(function* () {
         readonly code?: string;
         readonly content?: readonly { readonly type: string; readonly text?: string }[];
       };
-      if (body.status === 'called' && body.failed !== true && !deliveredSizes.has(call.name)) {
-        deliveredSizes.set(
-          call.name,
-          (body.content ?? []).reduce((sum, part) => sum + (part.type === 'text' ? Buffer.byteLength(part.text ?? '') : 0), 0),
+      if (turnMin > 0 || (body.status === 'called' && body.failed !== true && !deliveredSizes.has(call.name))) {
+        const outputBytes = (body.content ?? []).reduce(
+          (sum, part) => sum + (part.type === 'text' ? Buffer.byteLength(part.text ?? '') : 0),
+          0,
         );
+        if (turnMin > 0) agent.outputBytes += outputBytes;
+        if (body.status === 'called' && body.failed !== true && !deliveredSizes.has(call.name)) deliveredSizes.set(call.name, outputBytes);
       }
       if (answer.status !== 200 || body.status !== 'called' || body.failed === true) {
         failed += 1;
         if (failures.length < 10) failures.push(JSON.stringify({ name: call.name, status: answer.status, body: answer.body }));
       }
       completed += 1;
+      agent.completed += 1;
+      const changed = agent.changed;
+      agent.changed = Deferred.makeUnsafe<void>();
+      yield* Deferred.succeed(changed, undefined);
+    });
+    const turnFigures = () => ({
+      calls: figure(),
+      textBytes: figure(),
+      inputBytes: figure(),
+      outputBytes: figure(),
+      durationMs: figure(),
+      pauseMs: figure(),
+    });
+    const allTurns = turnFigures();
+    const measuredTurns = turnFigures();
+    let openedTurns = 0;
+    let settledTurns = 0;
+    const handlingTurn = Effect.fn('agentLoad.turn')(function* (agent: Agent, event: Turn) {
+      if (event.type === 'prompt') {
+        if (event.turn > 1) {
+          yield* Deferred.await(agent.nextRun);
+          agent.nextRun = Deferred.makeUnsafe<void>();
+        }
+        if (event.turn !== agent.turnNumber + 1 || event.run === agent.runId || event.run !== agent.expectedRunId)
+          return yield* new BenchRefused({ message: `agent opened an unexpected run: ${JSON.stringify(event)}` });
+        if (event.turn > 1) {
+          const prior = agent.pendingTurn;
+          if (prior === null)
+            return yield* new BenchRefused({ message: `agent opened a turn before its previous run settled: ${event.turn}` });
+          const snapshot = yield* harness.reads.snapshot(agent.threadId);
+          if (snapshot.activeRun?.id !== event.run)
+            return yield* new BenchRefused({ message: `agent's active run differs from the prompt: ${JSON.stringify(event)}` });
+          const opened = yield* rootCost(
+            'bench.turn.open',
+            world.op('open_hosted_turn', {}, at, { [GRANT_HEADER]: grantFor(agent.threadId) }),
+          );
+          const body = opened.body as { readonly status?: string; readonly prompt?: string | null };
+          if (opened.status !== 200 || body.status !== 'opened' || body.prompt == null)
+            return yield* new BenchRefused({ message: `opening a later turn: ${JSON.stringify(opened)}` });
+          const pause = (yield* Clock.currentTimeMillis) - prior.sealedAt;
+          addFigure(allTurns.pauseMs, pause);
+          if (prior.measured) addFigure(measuredTurns.pauseMs, pause);
+          agent.pendingTurn = null;
+          yield* files.writeFileString(`${agent.report}.continue`, String(event.turn));
+        }
+        agent.runId = event.run;
+        agent.turnNumber = event.turn;
+        agent.turnTarget = event.target;
+        agent.turnStartCompleted = agent.completed;
+        agent.turnStartInputBytes = agent.inputBytes;
+        agent.turnStartOutputBytes = agent.outputBytes;
+        agent.phase = 'active';
+        openedTurns += 1;
+        return;
+      }
+      if (
+        event.turn !== agent.turnNumber ||
+        agent.runId === null ||
+        agent.pendingTurn !== null ||
+        event.calls !== agent.turnTarget ||
+        event.offered !== agent.turnStartCompleted + event.calls
+      )
+        return yield* new BenchRefused({ message: `agent sealed an unexpected turn: ${JSON.stringify(event)}` });
+      while (agent.completed < event.offered) {
+        const changed = agent.changed;
+        if (agent.completed < event.offered) yield* Deferred.await(changed);
+      }
+      agent.phase = 'settling';
+      yield* files.writeFileString(`${agent.report}.end-turn`, String(event.turn));
+      yield* waitSettled(agent.threadId, agent.runId);
+      const endedAt = yield* Clock.currentTimeMillis;
+      const measured = endedAt >= costStart && endedAt < costEnd;
+      for (const target of measured ? [allTurns, measuredTurns] : [allTurns]) {
+        addFigure(target.calls, event.calls);
+        addFigure(target.textBytes, event.textBytes);
+        addFigure(target.inputBytes, agent.inputBytes - agent.turnStartInputBytes);
+        addFigure(target.outputBytes, agent.outputBytes - agent.turnStartOutputBytes);
+        addFigure(target.durationMs, endedAt - event.beganAt);
+      }
+      settledTurns += 1;
+      agent.pendingTurn = { sealedAt: event.at, measured };
+      const started = yield* rootCost(
+        'bench.turn.input',
+        harness.threads.handle(agent.threadId, 'operator').send('Continue the load fixture.'),
+      );
+      if (started.status !== 'started')
+        return yield* new BenchRefused({ message: `the next turn did not start: ${JSON.stringify(started)}` });
+      agent.expectedRunId = started.runId;
+      agent.phase = 'starting';
+      yield* Deferred.succeed(agent.nextRun, undefined);
     });
     yield* FiberSet.run(
       streams,
@@ -628,6 +908,23 @@ const program = Effect.gen(function* () {
             }
             return;
           }
+          const turn = turns.get(name);
+          if (turn !== undefined) {
+            for (;;) {
+              const bytes = yield* turn.file.readAlloc(65536);
+              if (Option.isNone(bytes)) break;
+              turn.pending += new TextDecoder().decode(bytes.value);
+              let newline = turn.pending.indexOf('\n');
+              while (newline >= 0) {
+                const line = turn.pending.slice(0, newline);
+                turn.pending = turn.pending.slice(newline + 1);
+                if (line !== '')
+                  yield* FiberSet.run(streams, handlingTurn(turn.agent, yield* Schema.decodeUnknownEffect(turnSchema)(line)));
+                newline = turn.pending.indexOf('\n');
+              }
+            }
+            return;
+          }
           const held = calls.get(name);
           if (held === undefined) return;
           for (;;) {
@@ -645,6 +942,7 @@ const program = Effect.gen(function* () {
         }),
       ),
     );
+    for (const name of turns.keys()) yield* Queue.offer(events, name);
     const snapshot = Effect.fn('agentLoad.snapshot')(function* (label: string, analyze = true) {
       yield* Effect.sync(() => {
         if (gcMonitored && label === 'before') process.stderr.write('AGENT_LOAD_GC_IDENTIFY_BEGIN\n');
@@ -848,9 +1146,12 @@ const program = Effect.gen(function* () {
       readonly callsOffered: number;
       readonly submitted: number;
       readonly completed: number;
+      readonly turns: number;
+      readonly turnsEnded: number;
       readonly stdoutBufferedBytes: number;
       readonly oldestProgressMs: number | null;
     }[] = [];
+    let lastProgress: (typeof progressSchema.Type)[] = [];
     const stalls: number[] = [];
     let stallCount = 0;
     const started = yield* Clock.monotonicTimeNanos;
@@ -918,6 +1219,7 @@ const program = Effect.gen(function* () {
               ),
             { concurrency: 16 },
           );
+          lastProgress = progress;
           const times = progress.map((entry) => Date.parse(entry.recordedAt));
           if (times.some((time) => !Number.isFinite(time)))
             return yield* new BenchRefused({ message: 'agent progress has an invalid timestamp' });
@@ -932,6 +1234,8 @@ const program = Effect.gen(function* () {
             callsOffered: progress.reduce((sum, entry) => sum + entry.callsOffered, 0),
             submitted,
             completed,
+            turns: progress.reduce((sum, entry) => sum + entry.turns, 0),
+            turnsEnded: progress.reduce((sum, entry) => sum + entry.turnsEnded, 0),
             stdoutBufferedBytes: progress.reduce((sum, entry) => sum + entry.stdoutBufferedBytes, 0),
             oldestProgressMs: times.length === 0 ? null : wall - Math.min(...times),
           });
@@ -941,7 +1245,7 @@ const program = Effect.gen(function* () {
     );
     yield* Effect.raceFirst(
       Effect.sleep(seconds * 1000),
-      Effect.raceFirst(feeds.failure, Effect.andThen(FiberSet.join(streams), Effect.never)),
+      Effect.raceFirst(failOnProducer, Effect.raceFirst(feeds.failure, Effect.andThen(FiberSet.join(streams), Effect.never))),
     );
     if (gcMonitored) yield* Effect.sync(() => process.stderr.write('AGENT_LOAD_WINDOW_END\n'));
     loop.disable();
@@ -963,6 +1267,7 @@ const program = Effect.gen(function* () {
     };
     const memoryReading = [...memory];
     const backlogReading = [...backlog];
+    const producersReading = [...lastProgress];
     const windowSeconds = Number(intervalEnd - intervalStart) / 1_000_000_000;
     const figures = Object.fromEntries(
       ['sql.execute', 'Store.transaction', 'Store.permit.wait', 'Store.execute', 'Store.commit'].map((name) => [
@@ -1032,6 +1337,25 @@ const program = Effect.gen(function* () {
     const cpuMs = (cpu.user + cpu.system) / 1000;
     const requestedBytes = requestedBefore === undefined || requestedAfter === undefined ? null : requestedAfter - requestedBefore;
     const loaded = yield* snapshot('loaded', !warmSnapshot);
+    const historiesAfterCensus =
+      turnMin === 0
+        ? null
+        : yield* Effect.gen(function* () {
+            const startedAt = yield* Clock.currentTimeMillis;
+            const callsAtStart = completed;
+            const rows = yield* Effect.forEach(
+              born,
+              (agent) =>
+                Effect.map(harness.runs.hosting().history(agent.threadId, 'referenced'), (history) => ({
+                  threadId: agent.threadId,
+                  bytes: Buffer.byteLength(JSON.stringify(history)),
+                  messages: history.length,
+                })),
+              { concurrency: 8 },
+            );
+            return { startedAt, finishedAt: yield* Clock.currentTimeMillis, callsAtStart, callsAtEnd: completed, rows };
+          });
+    yield* FiberSet.clear(streams);
     console.log(
       JSON.stringify(
         {
@@ -1055,6 +1379,8 @@ const program = Effect.gen(function* () {
             historyEntriesPerThread: history,
             parents: parents.length,
             parentSize,
+            turnMin,
+            turnMax,
             warmSnapshot,
           },
           machine: {
@@ -1072,7 +1398,11 @@ const program = Effect.gen(function* () {
             submitted: countsAfter.submitted - countsBefore.submitted,
             completed: countsAfter.completed - countsBefore.completed,
             failed: countsAfter.failed - countsBefore.failed,
-            submittedNotCompleted: countsAfter.submitted - countsAfter.completed,
+            outstandingAtStart: countsBefore.submitted - countsBefore.completed,
+            outstandingAtEnd: countsAfter.submitted - countsAfter.completed,
+            submittedPerSecond: (countsAfter.submitted - countsBefore.submitted) / windowSeconds,
+            completedPerSecond: completedInWindow / windowSeconds,
+            nominalWithoutTurnPauses: born.filter((_agent, index) => index % 5 !== 4).length * 0.1 * rate * windowSeconds,
             failures: countsAfter.failures,
             firstDeliveredTextBytesByTool: countsAfter.deliveredSizes,
           },
@@ -1104,15 +1434,27 @@ const program = Effect.gen(function* () {
           frames: Object.fromEntries(Object.entries(frameTotals).map(([name, count]) => [name, count - (framesBefore[name] ?? 0)])),
           memory: memoryReading,
           producerProgress: backlogReading,
-          census: { before: idle, warmed, loaded },
+          producersAtLastSample: producersReading.map((entry, index) => ({ ...entry, idle: index % 5 === 4 })),
+          turns: {
+            openedThroughCensus: openedTurns,
+            settledThroughCensus: settledTurns,
+            pendingThroughCensus: born.filter((agent) => agent.pendingTurn !== null).length,
+            lifetime: Object.fromEntries(Object.entries(allTurns).map(([name, held]) => [name, readFigure(held)])),
+            settledInWindow: Object.fromEntries(Object.entries(measuredTurns).map(([name, held]) => [name, readFigure(held)])),
+          },
+          census: { before: idle, warmed, loaded, historiesAfterCensus },
           limits: [
             'CPU includes bench driver and probes; span histogram counts are installation-wide',
+            'after the last census the fixture interrupts unfinished calls and turn openings during cleanup; their HTTP 503s are outside the measured window',
             'interface offered-to-answer includes file delivery from an independent producer; outstanding-at-cut includes delayed or unsubmitted probes',
             'list COMMIT-to-frame uses writer and receiver epoch clocks with no established cross-process skew bound; the probe opens an additional transient thread-list subscription',
             'producer progress is sampled at cycle boundaries, can be stale, and omits buffered ACP ingress between the CLI and server',
             'ledger root writer times are sums per act, not per-unit percentiles; late tails have a five-second settling window',
             'writer histograms cover physical outer units; child time is acknowledged statement elapsed, not engine CPU, and incomplete splits are omitted',
             'allocator requested bytes are process-wide and are not total JavaScript allocation',
+            'finite turns pause while calls settle and the next hosted turn opens; turn figures count turns settled in the window, while pause can end after it',
+            'turn payload figures cover emitted assistant text and hosted input/output text, not the full serialized or resident history',
+            'histories are provider-paired logical JSON sampled after the last census; their reads warm HeldHistories and calls may continue during sampling',
             'history is synthetic alternating spoken messages without historical tool calls; extra projects have no code',
             'idle agents hold an open prompt without frames; genuine keep-warm pings are not forced',
             'loadGc.bench.ts reports GC phases only where heap identification permits it; completeness is unverified, and GC logging adds overhead',
