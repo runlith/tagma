@@ -24,11 +24,11 @@ Paths under `apps/tagma/app/src/` unless stated.
 
 ## What will stand
 
-1. **`Point` in `@runlith/layer`.** `Point.define<Item>()('id', { tier, key })` declares a key whose instance is an ordered, clash-refusing, reactive list (`items`, `find`) with `register(item) → dispose` for run-time sources; `X.contribute(...items)` is a `Layer.member` any feature layer from any package merges. The list is a `cell` from the graph's reactivity hooks, so points stay framework-neutral. The clash-by-key ledger of `packages/chat-ui/src/Roster.svelte.ts` becomes the point's core in a kit both layer and chat-ui import.
+1. **`Point` in `@runlith/layer`.** `Point.define<Item>()('id', { tier, key, order? })` declares a key whose instance is an ordered, clash-refusing, reactive list (`items`, `find`) with `register(from, ...items) → dispose` for run-time sources; `X.contribute(from, ...items)` is a `Layer.member` any feature layer from any package merges, and `from` names the contributor a clash reports. The list is a `Roster` of the `@runlith/roster` kit published through the graph's `cell` hook, so points stay framework-neutral; chat-ui's rosters and `RegistryClash` live in that kit too.
 2. **Owners declare their points; features contribute from their own `layer.ts`.** The registries above become points at their owners; the `declared*.ts` globs and `feedRecords.ts` go; `composition.ts` keeps merging feature layers, and another root merges its own beside them. New points are added at their owner when a feature needs one.
-3. **One render helper** for component-carrying points: each item under its own error boundary (explanation `d83d0722`), nothing when empty, the capability gate applied.
-4. **Tiers of payload on one point.** A point declares which payloads it admits: a compiled component, and — where it makes sense — a Tagma App view reference registered at run time from `views.subscribe`, as `features/tagma-apps/Sections.svelte.ts` does today.
-5. **`Layer.fallback(Key, make)`** — a filler that stands only when no other layer provides the key. An owner marks a service replaceable by declaring it a port with a fallback; every other key stays sealed by `DuplicateProviderError`. Semantics under `Layer.when` and deferred chunks to be designed.
+3. **One render helper** for component-carrying points, `@runlith/layer/svelte/PointView.svelte`: each item under its own error boundary (explanation `d83d0722`), nothing — no `frame` either — when empty; the capability gate joins it with item 10.
+4. **Tiers of payload on one point.** An item carries `payload: { component } | { view }` (`Shown<Props, View>` in `@runlith/layer/svelte/payload`); the item type decides which it admits, and `PointView` renders a view payload through the owner's `view` snippet — for the app, a Tagma App view reference registered at run time from `views.subscribe`, as `features/tagma-apps/Sections.svelte.ts` does today. Layer names no Tagma App.
+5. **`Layer.fallback(Key, make?)`** — a filler that stands only when no other layer provides the key; without `make` it takes the key's own. A fallback yields to a provider admitted with it or before it — the manifest itself, or the same condition or chunk — and a provider admitted after it stands (under `Layer.when`, from a chunk or an entry) refuses `DuplicateProviderError`, so a port never swaps under readers that already took it. Every key without a fallback, and two fallbacks of one key, stay sealed by `DuplicateProviderError`.
 6. **Contracts as interface-shaped keys.** A service other modules or another root consume is keyed by a named interface of its shape — `class Pace extends Service<PaceShape>()(…)` whose `make` builds the implementation class — so doubles and replacements are plain objects. Readers keep today's syntax.
 7. **One route umbrella** generalised from `p/[app]/[view]`: a contributed surface carries its view, and the one route renders whatever the registry holds — a component or an app view. Core surfaces keep their own route files.
 8. **The root is the one overlay.** `surfaceConfig({ runtime, sources })` replaces each root's plugins; `@tagma/app` gains an `exports` map of points, contribution types, the composition entry and the UI kit.
@@ -50,6 +50,5 @@ The design must carry unchanged to another reactivity backend under `@runlith/la
 
 ## Open
 
-- `Layer.fallback` with conditions and chunks.
 - Whether eager members join before stored layouts are restored.
 - What a build shows for a visit or tab naming a surface it does not have.
