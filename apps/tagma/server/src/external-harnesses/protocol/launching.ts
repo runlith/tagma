@@ -1,4 +1,4 @@
-import { Cause, Clock, Effect } from 'effect';
+import { Cause, Clock, Deferred, Effect, Exit } from 'effect';
 import type { RunOwnership } from '@runlith/agent/thread/run/ThreadRunLedger';
 import type { HostedResume, ThreadAbandonedRun } from '@runlith/agent/thread/storage/runs';
 import { isCompactionRequest } from '@runlith/agent/thread/inboxItems';
@@ -53,14 +53,19 @@ export class ProtocolLaunching {
   ): Effect.Effect<void, HarnessFailure> {
     return Effect.suspend(() => {
       if (!this.launches.oweCompaction({ run, keep, mode })) return Effect.void;
+      const flight = this.launches.pending(run.id)!;
       const opening = Effect.flatMap(this.threads.find(run.threadId), (thread) => this.opened(run, thread, []));
-      return Effect.andThen(opening, this.started(run.threadId)).pipe(
+      return Effect.flatMap(
+        Effect.raceFirst(Effect.as(opening, true), Effect.as(Deferred.await(flight.cancelled), false)),
+        (ready) => ready ? this.started(run.threadId, run.id) : this.abandoned(run, Cause.interrupt()),
+      ).pipe(
         Effect.tapCause((cause) =>
           Effect.andThen(
             Effect.sync(() => void this.launches.finish(run.id)),
-            this.abandoned(run, cause),
-          ),
+            Effect.andThen(this.attendance.cancelOpening(run.threadId, run.id), this.abandoned(run, cause)),
+          ).pipe(Effect.uninterruptible),
         ),
+        Effect.ensuring(Effect.sync(() => this.launches.completed(run.id))),
       );
     });
   }
@@ -104,27 +109,33 @@ export class ProtocolLaunching {
   launch(launch: RunLaunch): Effect.Effect<void, LaunchFailed> {
     return Effect.suspend(() => {
       if (!this.launches.owe(launch)) return Effect.void;
-      return Effect.andThen(
-        this.starting(
-          launch.run,
-          launch.thread,
-          launch.seed.map((item) => item.id),
-        ),
-        this.started(launch.thread.id),
+      const flight = this.launches.pending(launch.run.id)!;
+      const opening = this.starting(
+        launch.run,
+        launch.thread,
+        launch.seed.map((item) => item.id),
+      );
+      return Effect.flatMap(
+        Effect.raceFirst(Effect.as(opening, true), Effect.as(Deferred.await(flight.cancelled), false)),
+        (ready) => ready ? this.started(launch.thread.id, launch.run.id) : this.abandoned(launch.run, Cause.interrupt()),
       ).pipe(
         Effect.catchCause((cause) => {
           this.launches.finish(launch.run.id);
-          return Effect.andThen(
-            this.abandoned(launch.run, cause),
-            Cause.hasInterruptsOnly(cause) ? Effect.interrupt : Effect.fail(new LaunchFailed({ reason: Cause.pretty(cause) })),
-          );
+          return Effect.flatMap(Effect.exit(this.attendance.cancelOpening(launch.thread.id, launch.run.id)), (cleanup) => {
+            const failure = Exit.isFailure(cleanup) ? Cause.combine(cause, cleanup.cause) : cause;
+            return Effect.andThen(
+              this.abandoned(launch.run, failure),
+              Cause.hasInterruptsOnly(failure) ? Effect.interrupt : Effect.fail(new LaunchFailed({ reason: Cause.pretty(failure) })),
+            );
+          }).pipe(Effect.uninterruptible);
         }),
+        Effect.ensuring(Effect.sync(() => this.launches.completed(launch.run.id))),
       );
     });
   }
 
-  private started(threadId: string): Effect.Effect<void, HarnessFailure> {
-    return Effect.andThen(this.attendance.ensure(threadId), this.delivery.pump(threadId));
+  private started(threadId: string, runId: string): Effect.Effect<void, HarnessFailure> {
+    return Effect.andThen(this.attendance.launch(threadId, runId), this.delivery.pump(threadId));
   }
 
   private readonly opened = Effect.fnUntraced(function* (

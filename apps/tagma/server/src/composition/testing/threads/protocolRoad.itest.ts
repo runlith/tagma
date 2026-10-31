@@ -1,7 +1,7 @@
 import { describe, expect } from 'bun:test';
 import { layer } from '@runlith/effect-test';
 import { join } from 'node:path';
-import { Deferred, Effect, Exit, Fiber, Schema, Scope } from 'effect';
+import { Cause, Deferred, Effect, Exit, Fiber, Schema, Scope } from 'effect';
 import { Message } from '@runlith/llm/schema/messages';
 import { ActivityLog } from '@runlith/activity/log';
 import { activityRecording } from '@runlith/activity/testing';
@@ -79,6 +79,354 @@ describe('ACP adapter boundaries over one execution host', () => {
       'acp (scripted agent)',
       () => Effect.map(ProtocolRig, (rig) => protocolWordRig(rig, scriptedAgent(rig), 'endings')),
       it.effect,
+    );
+
+    it.effect('stopping an opening ACP turn drains the session it started', () =>
+      Effect.gen(function* () {
+        const rig = yield* ProtocolRig;
+        const threadId = 'thread-stopped-opening';
+        const report = yield* agent('stopped-opening');
+        yield* rig.openThread(threadId, CLAUDE);
+        yield* scenario(
+          Effect.gen(function* () {
+            const pause = {
+              entered: yield* Deferred.make<void>(),
+              released: yield* Deferred.make<void>(),
+              stopping: yield* Deferred.make<void>(),
+              finished: yield* Deferred.make<void>(),
+            };
+            const said: Said[] = [];
+            const floor = yield* rig.floor(said, { fails: 0, refuses: false, opening: pause });
+            const driver = yield* floor.driver('opening-owner');
+            const sent = yield* driver.send(threadId, 'HOLD the turn');
+            if (sent.status !== 'started') return yield* Effect.die(`the opening turn answered ${sent.status}`);
+            yield* Deferred.await(pause.entered);
+            const stopping = yield* Effect.forkChild(floor.harness.threads.handle(threadId, 'operator').stop());
+            yield* Deferred.await(pause.stopping);
+            yield* Deferred.succeed(pause.released, undefined);
+            expect((yield* Fiber.join(stopping)).status).toBe('stopped');
+            yield* Deferred.await(pause.finished);
+            const facet = yield* floor.sessionStore.read(threadId);
+            expect(facet?.session?.state ?? 'ended').toBe('ended');
+            expect((yield* asked(report, 'session/prompt')).length).toBe(0);
+            yield* driver.send(threadId, 'Answer the next turn');
+            yield* waiting(threadId)(
+              Effect.sync(() => own(said, threadId).find((one) => one.run !== sent.runId) ?? null),
+              'answered the next turn',
+              report,
+            );
+            expect(yield* runEnd(rig.world.context, threadId)).toMatchObject({ status: 'completed' });
+            expect(yield* asked(report, 'session/prompt')).toHaveLength(1);
+          }),
+        );
+      }),
+    );
+
+    it.effect('concurrent stops both drain the same opening before the session ends', () =>
+      Effect.gen(function* () {
+        const rig = yield* ProtocolRig;
+        const threadId = 'thread-opening-two-stops';
+        const report = yield* agent('opening-two-stops');
+        yield* rig.openThread(threadId, CLAUDE);
+        yield* scenario(
+          Effect.gen(function* () {
+            const pause = {
+              entered: yield* Deferred.make<void>(),
+              released: yield* Deferred.make<void>(),
+              stopping: yield* Deferred.make<void>(),
+              secondStopping: yield* Deferred.make<void>(),
+              finished: yield* Deferred.make<void>(),
+            };
+            const floor = yield* rig.floor([], { fails: 0, refuses: false, opening: pause });
+            const driver = yield* floor.driver('opening-two-stops-owner');
+            const sent = yield* driver.send(threadId, 'HOLD the stopped turn');
+            if (sent.status !== 'started') return yield* Effect.die(`the opening turn answered ${sent.status}`);
+            yield* Deferred.await(pause.entered);
+            const handle = floor.harness.threads.handle(threadId, 'operator');
+            let firstReturned = false;
+            let secondReturned = false;
+            const first = yield* Effect.forkChild(Effect.tap(handle.stop(), () => Effect.sync(() => { firstReturned = true; })));
+            yield* Deferred.await(pause.stopping);
+            const second = yield* Effect.forkChild(Effect.tap(handle.stop(), () => Effect.sync(() => { secondReturned = true; })));
+            yield* Deferred.await(pause.secondStopping);
+            expect(firstReturned).toBe(false);
+            expect(secondReturned).toBe(false);
+            yield* Deferred.succeed(pause.released, undefined);
+            expect((yield* Fiber.join(first)).status).toBe('stopped');
+            expect((yield* Fiber.join(second)).status).toBe('stopped');
+            yield* Deferred.await(pause.finished);
+            const facet = yield* floor.sessionStore.read(threadId);
+            expect(facet?.session?.state ?? 'ended').toBe('ended');
+            expect(facet?.execution).toBeNull();
+            expect(yield* asked(report, 'initialize')).toHaveLength(0);
+            expect(yield* asked(report, 'session/prompt')).toHaveLength(0);
+          }),
+        );
+      }),
+    );
+
+    it.effect('stopping during activity preparation opens no session', () =>
+      Effect.gen(function* () {
+        const rig = yield* ProtocolRig;
+        const threadId = 'thread-stopped-preparing';
+        const report = yield* agent('stopped-preparing');
+        yield* rig.openThread(threadId, CLAUDE);
+        yield* scenario(
+          Effect.gen(function* () {
+            const pause = {
+              entered: yield* Deferred.make<void>(),
+              released: yield* Deferred.make<void>(),
+              stopping: yield* Deferred.make<void>(),
+              finished: yield* Deferred.make<void>(),
+            };
+            const floor = yield* rig.floor([], { fails: 0, refuses: false, preparing: pause });
+            const driver = yield* floor.driver('preparing-owner');
+            const sent = yield* driver.send(threadId, 'HOLD the stopped turn');
+            if (sent.status !== 'started') return yield* Effect.die(`the opening turn answered ${sent.status}`);
+            yield* Deferred.await(pause.entered);
+            const stopping = yield* Effect.forkChild(floor.harness.threads.handle(threadId, 'operator').stop());
+            yield* Deferred.await(pause.stopping);
+            expect((yield* Fiber.join(stopping)).status).toBe('stopped');
+            yield* Deferred.await(pause.finished);
+            yield* Deferred.succeed(pause.released, undefined);
+            const facet = yield* floor.sessionStore.read(threadId);
+            expect(facet?.session).toBeUndefined();
+            expect(facet?.execution).toBeNull();
+            expect(yield* runEnd(rig.world.context, threadId)).toMatchObject({ status: 'aborted' });
+            expect(yield* asked(report, 'initialize')).toHaveLength(0);
+          }),
+        );
+      }),
+    );
+
+    it.effect('a session start concurrent with a stopped opening keeps the session available', () =>
+      Effect.gen(function* () {
+        const rig = yield* ProtocolRig;
+        const threadId = 'thread-opening-shared';
+        const report = yield* agent('opening-shared');
+        yield* rig.openThread(threadId, CLAUDE);
+        yield* scenario(
+          Effect.gen(function* () {
+            const pause = {
+              entered: yield* Deferred.make<void>(),
+              released: yield* Deferred.make<void>(),
+              stopping: yield* Deferred.make<void>(),
+              finished: yield* Deferred.make<void>(),
+            };
+            const floor = yield* rig.floor([], { fails: 0, refuses: false, opening: pause });
+            const driver = yield* floor.driver('opening-shared-owner');
+            const sent = yield* driver.send(threadId, 'HOLD the stopped turn');
+            if (sent.status !== 'started') return yield* Effect.die(`the opening turn answered ${sent.status}`);
+            yield* Deferred.await(pause.entered);
+            const stopping = yield* Effect.forkChild(floor.harness.threads.handle(threadId, 'operator').stop());
+            yield* Deferred.await(pause.stopping);
+            const starting = yield* Effect.forkChild(driver.sessions.start(threadId), { startImmediately: true });
+            yield* Deferred.succeed(pause.released, undefined);
+            expect((yield* Fiber.join(stopping)).status).toBe('stopped');
+            yield* Fiber.join(starting);
+            yield* Deferred.await(pause.finished);
+            expect((yield* floor.sessionStore.read(threadId))?.session?.state).toBe('running');
+            expect(yield* asked(report, 'session/prompt')).toHaveLength(0);
+          }),
+        );
+      }),
+    );
+
+    it.effect('a session start adopts the new session when its earlier read rolls over', () =>
+      Effect.gen(function* () {
+        const rig = yield* ProtocolRig;
+        const threadId = 'thread-session-rollover';
+        const report = yield* agent('session-rollover');
+        yield* rig.openThread(threadId, CLAUDE);
+        yield* scenario(
+          Effect.gen(function* () {
+            const opening = {
+              entered: yield* Deferred.make<void>(),
+              released: yield* Deferred.make<void>(),
+              stopping: yield* Deferred.make<void>(),
+              finished: yield* Deferred.make<void>(),
+              armed: yield* Deferred.make<void>(),
+            };
+            const startRead = { entered: yield* Deferred.make<void>(), released: yield* Deferred.make<void>() };
+            const stalls = { entered: yield* Deferred.make<void>(), released: yield* Deferred.make<void>(), first: true };
+            const floor = yield* rig.floor([], { fails: 0, refuses: false, opening, startRead, stalls });
+            const driver = yield* floor.driver('rollover-owner');
+            yield* driver.start(threadId);
+            const old = (yield* floor.sessionStore.read(threadId))?.session?.id;
+            if (old === undefined) return yield* Effect.die('the original session did not open');
+            const adopter = yield* Effect.forkChild(driver.sessions.start(threadId), { startImmediately: true });
+            yield* Deferred.await(startRead.entered);
+            expect(yield* driver.stop(threadId)).toBe('stopped');
+            yield* Deferred.succeed(opening.armed, undefined);
+            const sent = yield* driver.send(threadId, 'HOLD the stopped turn');
+            if (sent.status !== 'started') return yield* Effect.die(`the opening turn answered ${sent.status}`);
+            yield* Deferred.await(opening.entered);
+            const current = (yield* floor.sessionStore.read(threadId))?.session?.id;
+            if (current === undefined || current === old) return yield* Effect.die('the new session did not replace the old one');
+            yield* Deferred.succeed(startRead.released, undefined);
+            yield* Fiber.join(adopter);
+            yield* Deferred.await(stalls.entered);
+            const stopping = yield* Effect.forkChild(floor.harness.threads.handle(threadId, 'operator').stop());
+            yield* Deferred.await(opening.stopping);
+            yield* Deferred.succeed(opening.released, undefined);
+            expect((yield* Fiber.join(stopping)).status).toBe('stopped');
+            yield* Deferred.await(opening.finished);
+            const after = yield* floor.sessionStore.read(threadId);
+            expect(after?.session?.id).toBe(current);
+            expect(after?.session?.state).toBe('running');
+            expect(after?.execution).not.toBeNull();
+            expect(yield* asked(report, 'session/prompt')).toHaveLength(0);
+            yield* Deferred.succeed(stalls.released, undefined);
+          }),
+        );
+      }),
+    );
+
+    it.effect('words queued while a stopped opening drains reach a later turn', () =>
+      Effect.gen(function* () {
+        const rig = yield* ProtocolRig;
+        const threadId = 'thread-opening-queued';
+        const report = yield* agent('opening-queued');
+        yield* rig.openThread(threadId, CLAUDE);
+        yield* scenario(
+          Effect.gen(function* () {
+            const pause = {
+              entered: yield* Deferred.make<void>(),
+              released: yield* Deferred.make<void>(),
+              stopping: yield* Deferred.make<void>(),
+              finished: yield* Deferred.make<void>(),
+            };
+            const said: Said[] = [];
+            const floor = yield* rig.floor(said, { fails: 0, refuses: false, opening: pause });
+            const driver = yield* floor.driver('opening-queued-owner');
+            const sent = yield* driver.send(threadId, 'HOLD the stopped turn');
+            if (sent.status !== 'started') return yield* Effect.die(`the opening turn answered ${sent.status}`);
+            yield* Deferred.await(pause.entered);
+            const stopping = yield* Effect.forkChild(floor.harness.threads.handle(threadId, 'operator').stop());
+            yield* Deferred.await(pause.stopping);
+            yield* driver.send(threadId, 'Answer the queued turn');
+            yield* Deferred.succeed(pause.released, undefined);
+            expect((yield* Fiber.join(stopping)).status).toBe('stopped');
+            yield* Deferred.await(pause.finished);
+            yield* waiting(threadId)(
+              Effect.sync(() => own(said, threadId).find((one) => one.run !== sent.runId) ?? null),
+              'answered the queued turn',
+              report,
+            );
+            expect(yield* runEnd(rig.world.context, threadId)).toMatchObject({ status: 'completed' });
+            expect(yield* asked(report, 'session/prompt')).toHaveLength(1);
+          }),
+        );
+      }),
+    );
+
+    it.effect('an opening failure settles a concurrent stop without leaving a session running', () =>
+      Effect.gen(function* () {
+        const rig = yield* ProtocolRig;
+        const threadId = 'thread-opening-failed';
+        const report = yield* agent('opening-failed');
+        const recorded = activityRecording();
+        yield* rig.openThread(threadId, CLAUDE);
+        yield* scenario(
+          Effect.gen(function* () {
+            const pause = {
+              entered: yield* Deferred.make<void>(),
+              released: yield* Deferred.make<void>(),
+              stopping: yield* Deferred.make<void>(),
+              finished: yield* Deferred.make<void>(),
+              failure: 'session publication failed',
+            };
+            const floor = yield* rig.floor([], { fails: 0, refuses: false, opening: pause });
+            const driver = yield* floor.driver('opening-failed-owner');
+            const sent = yield* driver.send(threadId, 'HOLD the stopped turn');
+            if (sent.status !== 'started') return yield* Effect.die(`the opening turn answered ${sent.status}`);
+            yield* Deferred.await(pause.entered);
+            const stopping = yield* Effect.forkChild(Effect.exit(floor.harness.threads.handle(threadId, 'operator').stop()));
+            yield* Deferred.await(pause.stopping);
+            yield* Deferred.succeed(pause.released, undefined);
+            const stopped = yield* Fiber.join(stopping);
+            yield* Deferred.await(pause.finished);
+            if (Exit.isSuccess(stopped)) expect(stopped.value.status).toBe('stopped');
+            else expect(Cause.pretty(stopped.cause)).toContain('session publication failed');
+            expect((yield* floor.sessionStore.read(threadId))?.session?.state ?? 'ended').toBe('ended');
+            expect(yield* asked(report, 'session/prompt')).toHaveLength(0);
+            const activity = recorded.activities().find((row) => row.opened.kind === 'run' && row.opened.run === sent.runId);
+            expect(activity?.ended).toMatchObject({ outcome: 'failed', message: expect.stringContaining('session publication failed') });
+          }).pipe(Effect.provideService(ActivityLog, recorded.log)),
+        );
+      }),
+    );
+
+    it.effect('stopping an unsent turn after launch returns retires its session', () =>
+      Effect.gen(function* () {
+        const rig = yield* ProtocolRig;
+        const threadId = 'thread-opened-unsent';
+        const report = yield* agent('opened-unsent');
+        yield* rig.openThread(threadId, CLAUDE);
+        yield* scenario(
+          Effect.gen(function* () {
+            const hold = join(report, '..', 'opening.hold');
+            yield* Effect.acquireRelease(rig.files.writeFileString(hold, ''), () => rig.files.remove(hold, { force: true }).pipe(Effect.orDie));
+            const pause = {
+              entered: yield* Deferred.make<void>(),
+              released: yield* Deferred.make<void>(),
+              stopping: yield* Deferred.make<void>(),
+              finished: yield* Deferred.make<void>(),
+            };
+            const floor = yield* rig.floor([], { fails: 0, refuses: false, opening: pause });
+            const driver = yield* floor.driver('opened-unsent-owner');
+            const sent = yield* driver.send(threadId, 'HOLD the stopped turn');
+            if (sent.status !== 'started') return yield* Effect.die(`the opening turn answered ${sent.status}`);
+            yield* Deferred.await(pause.entered);
+            yield* Deferred.succeed(pause.released, undefined);
+            yield* Deferred.await(pause.finished);
+            yield* waiting(threadId)(
+              Effect.map(asked(report, 'initialize'), (lines) => (lines.length > 0 ? true : null)),
+              'started the agent before its handshake',
+              report,
+            );
+            expect((yield* floor.harness.threads.handle(threadId, 'operator').stop()).status).toBe('stopped');
+            expect((yield* floor.sessionStore.read(threadId))?.session?.state).toBe('ended');
+            expect(yield* asked(report, 'session/prompt')).toHaveLength(0);
+          }),
+        );
+      }),
+    );
+
+    it.effect('stopping during preparation leaves the existing ACP session running', () =>
+      Effect.gen(function* () {
+        const rig = yield* ProtocolRig;
+        const threadId = 'thread-existing-session';
+        const report = yield* agent('existing-session');
+        yield* rig.openThread(threadId, CLAUDE);
+        yield* scenario(
+          Effect.gen(function* () {
+            const pause = {
+              entered: yield* Deferred.make<void>(),
+              released: yield* Deferred.make<void>(),
+              stopping: yield* Deferred.make<void>(),
+              finished: yield* Deferred.make<void>(),
+            };
+            const floor = yield* rig.floor([], { fails: 0, refuses: false, preparing: pause });
+            const driver = yield* floor.driver('existing-session-owner');
+            yield* driver.start(threadId);
+            const before = yield* floor.sessionStore.read(threadId);
+            const sent = yield* driver.send(threadId, 'HOLD the stopped turn');
+            if (sent.status !== 'started') return yield* Effect.die(`the opening turn answered ${sent.status}`);
+            yield* Deferred.await(pause.entered);
+            const stopping = yield* Effect.forkChild(floor.harness.threads.handle(threadId, 'operator').stop());
+            yield* Deferred.await(pause.stopping);
+            expect((yield* Fiber.join(stopping)).status).toBe('stopped');
+            yield* Deferred.await(pause.finished);
+            yield* Deferred.succeed(pause.released, undefined);
+            const after = yield* floor.sessionStore.read(threadId);
+            expect(after?.session?.id).toBe(before?.session?.id);
+            expect(after?.session?.state).toBe('running');
+            expect(after?.execution).toEqual(before?.execution);
+            expect(yield* asked(report, 'session/prompt')).toHaveLength(0);
+          }),
+        );
+      }),
     );
 
     it.effect('a vendor-run profile claiming an unnegotiated capability refuses launch before opening a session', () =>

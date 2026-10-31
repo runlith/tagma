@@ -26,6 +26,17 @@ export function describeSessionStore<R>(
         expect(yield* store.asked(id)).toBeUndefined();
         expect((yield* store.binding(id))?.adapter).toBe('terminal');
       }));
+    test('an opening reports whether it created or joined the committed session', () =>
+      Effect.gen(function* () {
+        const { store, id } = yield* make();
+        const first = yield* store.opening(id, '', 'first', () => Effect.succeed(null));
+        yield* first.announce;
+        const joined = yield* store.opening(id, '', 'second', () => Effect.succeed(null));
+        yield* joined.announce;
+        expect(first.created).toBe(true);
+        expect(joined.created).toBe(false);
+        expect(joined.session.id).toBe(first.session.id);
+      }));
     test('a rolled-back facet never reaches a reader or waiter, and a committed change releases the waiter', () =>
       Effect.gen(function* () {
         const { store, rows, id } = yield* make();

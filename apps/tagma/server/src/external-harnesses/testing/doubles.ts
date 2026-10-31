@@ -1,4 +1,9 @@
+import { Context, Effect, Layer } from 'effect';
 import type { StoreDb } from '../../platform/contract/service/store.js';
+import { ThreadHarness } from '../../threads/contract/service/engine.js';
+import { SessionRead } from '../../threads/contract/service/harness.js';
+import { sessionReadLayer } from '../sessions/sessionRead.js';
+import { makeProtocolWords } from '../protocol/words.js';
 import { HarnessObservations as HarnessObservationsImpl } from '../observations/admission.js';
 import { HarnessSessionStore as HarnessSessionStoreImpl } from '../store/sessions.js';
 import { harnessPlace as harnessPlaceImpl, terminalArgv as terminalArgvImpl } from '../sessions/launch.js';
@@ -46,6 +51,9 @@ export const TerminalAsks = TerminalAsksImpl;
 export type TerminalAsks = InstanceType<typeof TerminalAsksImpl>;
 export type AskLedger = AskLedgerShape;
 export const ProtocolDriver = ProtocolDriverImpl;
+export const sessionRead = Effect.map(Layer.build(sessionReadLayer), (services) => Context.get(services, SessionRead));
+export const protocolSessions = (input: { readonly driver: ProtocolDriverImpl; readonly harness: ThreadHarness['Service'] }) =>
+  Effect.provideService(makeProtocolWords({ driver: input.driver }), ThreadHarness, input.harness);
 export const acpTransport = acpTransportImpl;
 export type ProtocolDriver = InstanceType<typeof ProtocolDriverImpl>;
 export const ProtocolJournal = ProtocolJournalImpl;

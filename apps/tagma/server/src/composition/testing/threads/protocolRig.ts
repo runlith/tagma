@@ -37,6 +37,11 @@ import { acpTestSeat as acpSeat } from '../../../external-harnesses/testing/seat
 import { shippedAdapters } from '../external-harnesses/shipped.js';
 import { HarnessAdapters } from '../../../external-harnesses/contract/service/adapters.js';
 import { makeThreadRecords } from '../../../thread-record/layer.js';
+import { ThreadRecords } from '../../../thread-record/contract/service/records.js';
+import { SessionRead } from '../../../threads/contract/service/harness.js';
+import { ThreadLookup } from '../../../threads/contract/service/reads.js';
+import { ThreadMandate } from '../../../threads/contract/service/mandate.js';
+import type { NativeThreadState } from '../../../threads/contract/service/state.js';
 import { testGrantSigner } from '../../../platform/testing/grants.js';
 import type { GraphServices } from '../../../graph/contract/service/services.js';
 import { projectsLayer } from '../../../projects/testing/doubles.js';
@@ -44,6 +49,7 @@ import { Settings } from '../../../settings/contract/service/values.js';
 import { hostWorkspace } from '../hostWorkspace.js';
 import type { WorkspaceServices } from '../../../workspace/layer.js';
 import { worktreeRecordsLayer } from '../../../worktrees/layer.js';
+import { WorktreeRecords } from '../../../worktrees/contract/service/worktrees.js';
 import { Coverage } from '../../../workspace/contract/service/roots.js';
 import {
   makeMachineWorld,
@@ -61,6 +67,7 @@ import {
   sqliteThreadJournal,
   threadAttachmentStore,
   approvalPreferences,
+  engineStates,
   LEASE_RHYTHM,
   REAPER_RHYTHM,
   SETTLEMENT_RHYTHM,
@@ -70,7 +77,7 @@ import type { GuidanceSources } from '@runlith/agent/thread/transport/contract';
 import { Agent } from '@runlith/agent/Agent';
 import { makeAgentRunner } from '@runlith/agent/AgentRunner';
 import { threadAgent } from '@runlith/agent/thread/agents/ThreadAgent';
-import { approvalModesLayer } from '@runlith/agent/modes/ApprovalModes';
+import { ApprovalModes, approvalModesLayer } from '@runlith/agent/modes/ApprovalModes';
 import { AgentHarness } from '@runlith/agent/thread/AgentHarness';
 import { threadAgentsLayer, threadCompactorLayer, threadStorageLayer } from '@runlith/agent/thread/kernelPorts';
 import { threadHostLayer } from '@runlith/agent/thread/ThreadPorts';
@@ -79,7 +86,6 @@ import { makeThreadDigestStrategy } from '@runlith/agent/thread/compaction/diges
 import { makeThreadSummaryStrategy } from '@runlith/agent/thread/compaction/summaryStrategy';
 import { makeThreadLiveFeed } from '@runlith/agent/thread/run/ThreadLiveFeed';
 import { registeredAgents } from '@runlith/agent/thread/conformance/agents';
-import type { ThreadState } from '@runlith/agent/thread/state';
 import { ThreadEntryKinds } from '@runlith/agent/transcript/kinds';
 import type { ThreadRuns } from '@runlith/agent/collaboration/runs';
 import type { ThreadInboxItemValues } from '@runlith/agent/thread/storage/inbox';
@@ -110,9 +116,11 @@ import {
   ProtocolJournal,
   ProtocolRows,
   VendorTurns,
+  protocolSessions,
+  sessionRead,
 } from '../../../external-harnesses/testing/doubles.js';
 import { sessionStoreOver } from '../../../external-harnesses/testing/floor.js';
-import { backpressured, delayedLaunches, disrupted, type Floor } from './protocolWriting.js';
+import { backpressured, delayedLaunches, disrupted, observedLaunches, type Floor } from './protocolWriting.js';
 import { ThreadStorageFailed } from '@runlith/agent/thread/persisted';
 import type { RunOwnership } from '@runlith/agent/thread/run/ThreadRunLedger';
 import type { Unit, WriteUnit } from '../../../platform/contract/service/units.js';
@@ -121,6 +129,7 @@ import { ENTRY_KINDS } from '../../manifest.js';
 import { builtinRegistry } from '../providerCatalog.js';
 import { ProviderRegistry } from '../../../providers/contract/service/registry.js';
 import { HarnessAccounts } from '../../../providers/contract/service/harness.js';
+const SessionStartRead = Context.Reference<boolean>('testing/SessionStartRead', { defaultValue: () => false });
 const ENDING_KINDS: ReadonlySet<string> = new Set(['failure', 'run-end']);
 const machineWorld = makeMachineWorld(() => null);
 const AGENT = join(SERVER_SRC, 'external-harnesses', 'testing', 'acpAgent.ts');
@@ -128,12 +137,12 @@ export const platform = Layer.mergeAll(BunFileSystem.layer, BunPath.layer);
 type World = {
   readonly checkout: string;
   readonly canonical: string;
-  readonly context: Context.Context<MachineStore | MachineUnits | WorkspaceServices | GraphServices>;
+  readonly context: Context.Context<MachineStore | MachineUnits | WorkspaceServices | GraphServices | WorktreeRecords>;
   readonly projectId: number;
   readonly settings: Context.Service.Shape<typeof Settings>;
 };
 type Served = {
-  readonly harness: AgentHarness<ThreadState, Unit<'machine'>, WriteUnit<'machine'>>;
+  readonly harness: AgentHarness<NativeThreadState, Unit<'machine'>, WriteUnit<'machine'>>;
   readonly journal: InstanceType<typeof ProtocolJournal>;
   readonly ownership: RunOwnership;
   readonly runs: () => Context.Service.Shape<typeof ThreadRuns>;
@@ -217,7 +226,7 @@ export const protocolRig = Effect.fn('testing.protocolRig')(function* (fixture: 
     );
   });
   yield* agentBinary(join(stage, 'boot.report'));
-  const harnesses = new Set<AgentHarness<ThreadState, Unit<'machine'>, WriteUnit<'machine'>>>();
+  const harnesses = new Set<AgentHarness<NativeThreadState, Unit<'machine'>, WriteUnit<'machine'>>>();
   const changes = Effect.fnUntraced(function* (threadId?: string): Effect.fn.Return<Effect.Effect<unknown>, never, Scope.Scope> {
     const moved = yield* Effect.acquireRelease(Queue.sliding<void>(1), Queue.shutdown);
     const wake = () => {
@@ -264,7 +273,7 @@ export const protocolRig = Effect.fn('testing.protocolRig')(function* (fixture: 
   });
   const context = yield* Layer.build(
     hostWorkspace(machineWorld).pipe(
-      Layer.provide(worktreeRecordsLayer),
+      Layer.provideMerge(worktreeRecordsLayer),
       Layer.provideMerge(unitsLayer(MachineUnits, MachineStore)),
       Layer.provideMerge(fixtureGraph({ sourcePath: checkout }).pipe(Layer.provideMerge(projectsLayer()))),
       Layer.provideMerge(Layer.orDie(machineFileLayer(join(home, 'db.sqlite'), fixtureMigrations, { durable: false }, processes))),
@@ -383,15 +392,58 @@ export const protocolRig = Effect.fn('testing.protocolRig')(function* (fixture: 
       }),
       connection,
     });
+    let opening = options.opening;
     const sessionStore = yield* sessionStoreOver(
       store.db,
       units,
       threads.spells,
       records,
       yield* Effect.provideContext(modelChanges(), context),
-      () => Effect.void,
+      (_threadId, facet) => {
+        if (facet.session?.state !== 'starting' || opening === undefined || (opening.armed !== undefined && !Deferred.isDoneUnsafe(opening.armed)))
+          return Effect.void;
+        const paused = opening;
+        opening = undefined;
+        return Effect.andThen(
+          Deferred.succeed(paused.entered, undefined),
+          Effect.andThen(
+            Deferred.await(paused.released),
+            paused.failure === undefined ? Effect.void : Effect.fail(threadCallFailed(new Error(paused.failure))),
+          ),
+        );
+      },
     );
+    let startRead = options.startRead;
+    const protocolStore = new Proxy(sessionStore, {
+      get(target, key) {
+        if (key === 'read')
+          return (threadId: string) => Effect.flatMap(target.read(threadId), (facet) =>
+            Effect.flatMap(SessionStartRead, (marked) => {
+              const paused = startRead;
+              if (!marked || paused === undefined) return Effect.succeed(facet);
+              startRead = undefined;
+              return Effect.andThen(Deferred.succeed(paused.entered, undefined), Effect.as(Deferred.await(paused.released), facet));
+            }),
+          );
+        const value: unknown = Reflect.get(target, key, target);
+        return typeof value === 'function' ? value.bind(target) : value;
+      },
+    });
     const inbox = yield* Effect.provideContext(threadInboxStore(ENTRY_KINDS), context);
+    let preparing = options.preparing;
+    const protocolInbox = {
+      ...inbox,
+      delivered: (...input: Parameters<typeof inbox.delivered>) =>
+        Effect.suspend(() => {
+          const paused = preparing;
+          if (paused === undefined) return inbox.delivered(...input);
+          preparing = undefined;
+          return Effect.andThen(
+            Deferred.succeed(paused.entered, undefined),
+            Effect.andThen(Deferred.await(paused.released), inbox.delivered(...input)),
+          );
+        }),
+    };
     const pictures = yield* threadAttachmentStore(join(world.checkout, '.pictures'));
     const kernel = yield* Effect.provideContext(threadStore(records, ENTRY_KINDS), context);
     const log = yield* Effect.provideContext(sqliteThreadJournal(), context);
@@ -460,12 +512,24 @@ export const protocolRig = Effect.fn('testing.protocolRig')(function* (fixture: 
     });
     const coreRecords = yield* Effect.provideContext(makeThreadRecords, context);
     const runsOf = yield* Effect.provideContext(threadRunStores(coreRecords, ENTRY_KINDS), context);
+    const sessionReading = yield* Effect.provideContext(sessionRead, context);
+    const modes = Context.get(yield* Layer.build(approvalModesLayer), ApprovalModes);
+    const states = yield* Effect.provideContext(
+      engineStates,
+      context.pipe(
+        Context.add(ThreadRecords, coreRecords),
+        Context.add(SessionRead, sessionReading),
+        Context.add(ThreadLookup, threads.list),
+        Context.add(ThreadMandate, threads.mandate),
+        Context.add(ApprovalModes, modes),
+      ),
+    );
     const serve = Effect.gen(function* () {
       let nativeRuns: Context.Service.Shape<typeof ThreadRuns> | null = null;
       const harness = yield* Effect.acquireRelease(
-        AgentHarness.make<ThreadState, Unit<'machine'>, WriteUnit<'machine'>>(
+        AgentHarness.make<NativeThreadState, Unit<'machine'>, WriteUnit<'machine'>>(
           Layer.mergeAll(
-            approvalModesLayer,
+            Layer.succeed(ApprovalModes, modes),
             Layer.succeed(ThreadEntryKinds, ENTRY_KINDS),
             threadStorageLayer<Unit<'machine'>, WriteUnit<'machine'>>({
               storage: kernel,
@@ -494,8 +558,9 @@ export const protocolRig = Effect.fn('testing.protocolRig')(function* (fixture: 
             }),
             threadAgentsLayer(yield* registeredAgents([harnessAgent], 'protocol-rig').pipe(Effect.orDie)),
           ),
-          yield* makeThreadLiveFeed<ThreadState>(),
+          yield* makeThreadLiveFeed<NativeThreadState>(),
           {
+            toState: states.of,
             subscribers: options.settled === undefined ? undefined : [options.settled],
             fillers: {
               runs: (given) => {
@@ -580,7 +645,7 @@ export const protocolRig = Effect.fn('testing.protocolRig')(function* (fixture: 
       recap: () => Effect.succeed(null),
       tail: (_threadId, { inputs }) =>
         Effect.andThen(
-          options.stalls === undefined || (tails += 1) === 1 ? Effect.void : stalled(options.stalls),
+          options.stalls === undefined || ((tails += 1) === 1 && options.stalls.first !== true) ? Effect.void : stalled(options.stalls),
           Effect.succeed(options.notes === undefined ? null : { text: options.notes, ruleId: 'operator-notes', state: { inputs } }),
         ),
     };
@@ -650,7 +715,7 @@ export const protocolRig = Effect.fn('testing.protocolRig')(function* (fixture: 
       const { harness, journal, ownership, runs } = yield* serve;
       latest = { harness, journal, ownership, runs };
       const made = yield* ProtocolDriver.make(
-        sessionStore,
+        protocolStore,
         rows,
         turns,
         journal,
@@ -658,7 +723,7 @@ export const protocolRig = Effect.fn('testing.protocolRig')(function* (fixture: 
         kernel,
         runStore,
         held,
-        inbox,
+        protocolInbox,
         output,
         visible,
         terminals,
@@ -714,17 +779,19 @@ export const protocolRig = Effect.fn('testing.protocolRig')(function* (fixture: 
       );
       const lost = dropping;
       dropping = false;
+      const runsForTransport = lost
+        ? { ...made.runs, launch: () => Effect.void }
+        : options.launching === undefined
+          ? made.runs
+          : delayedLaunches(made.runs, options.launching);
+      const observed = options.opening ?? options.preparing;
       yield* Effect.orDie(
         harness.runs
           .transports()
           .register(
             acpTransport(
               made.asks,
-              lost
-                ? { ...made.runs, launch: () => Effect.void }
-                : options.launching === undefined
-                  ? made.runs
-                  : delayedLaunches(made.runs, options.launching),
+              observed === undefined ? runsForTransport : observedLaunches(runsForTransport, observed),
               made.resource,
               made.history.transport,
               lost ? { compact: () => Effect.void } : made.compaction,
@@ -745,7 +812,13 @@ export const protocolRig = Effect.fn('testing.protocolRig')(function* (fixture: 
           ),
         ),
       );
+      const sessions = yield* protocolSessions({ driver: made, harness });
       const said = {
+        sessions: {
+          ...sessions,
+          start: (threadId: string, prompt?: string, inputId?: string) =>
+            Effect.provideService(sessions.start(threadId, prompt, inputId), SessionStartRead, true),
+        },
         stop: (threadId: string) => made.resource.release(threadId),
         restart: (threadId: string) => (touched.add(threadId), handle(threadId).restart()),
         cancel: (threadId: string) =>

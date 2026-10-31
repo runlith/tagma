@@ -12,9 +12,30 @@ import { makeThreadRebinding } from '../harness/rebinding.js';
 import { JournalOrder } from '../journal/lane.js';
 import { makeHarnessMoves } from '../harness/moves.js';
 import { ThreadHomes } from '../contract/service/homes.js';
+import { ThreadLookup } from '../contract/service/reads.js';
+import { ThreadMandate } from '../contract/service/mandate.js';
+import { ThreadRecaps } from '../contract/service/recaps.js';
+import { ThreadPins } from '../contract/service/pins.js';
+import { makeThreadRecaps } from '../recap/readings.js';
+import { makeThreadPins } from '../store/pins.js';
+import { makeEngineStates, makeSubAgentDepths } from '../harness/state.js';
+import { approverStanding } from '../approvers.js';
 import { writes } from '../../platform/contract/service/writes.js';
 
 export const harnessMoves = makeHarnessMoves;
+
+export const engineStates = Effect.gen(function* () {
+  const lookup = yield* ThreadLookup;
+  const mandate = yield* ThreadMandate;
+  const settings = yield* Settings;
+  const depths = yield* makeSubAgentDepths;
+  const recaps = yield* makeThreadRecaps;
+  const pins = yield* makeThreadPins;
+  return yield* makeEngineStates({ depths, standingOf: approverStanding(lookup, mandate, settings) }).pipe(
+    Effect.provideService(ThreadRecaps, recaps),
+    Effect.provideService(ThreadPins, pins),
+  );
+});
 
 import { makeConversationBackfill } from '../journal/conversationBackfill.js';
 import {

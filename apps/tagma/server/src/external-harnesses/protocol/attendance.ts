@@ -1,4 +1,4 @@
-import { Cause, Clock, Duration, Effect, Fiber, FiberMap, Option, Schedule } from 'effect';
+import { Cause, Clock, Deferred, Duration, Effect, Exit, Fiber, FiberMap, Option, Schedule } from 'effect';
 import { CurrentActivity, defected } from '@runlith/activity/Activity';
 import { ActivityLog } from '@runlith/activity/log';
 import { describeError } from '@runlith/utils/error';
@@ -11,7 +11,7 @@ import { LEASE_RHYTHM } from '../../threads/contract/wire/rhythm.js';
 import type { ThreadInbox } from '../../threads/store/inbox.js';
 import type { HarnessLanes } from '../sessions/lanes.js';
 import type { ProtocolRows } from '../store/protocol.js';
-import type { HarnessSessionStore } from '../store/sessions.js';
+import type { HarnessSessionStore, SessionOpening } from '../store/sessions.js';
 import type { ProtocolEndings } from './endings.js';
 import { ProtocolBeat } from './beat.js';
 import { idleResource } from './idle.js';
@@ -22,10 +22,27 @@ import { freshRow, type ProtocolRow } from './row.js';
 
 const unreadable = (failure: unknown): failure is GateRefusal => failure instanceof GateRefusal && failure.code === 'session-unreadable';
 
+type OpeningClaim = {
+  readonly runId: string;
+  sessionId: string | null;
+  created: boolean;
+  adopted: boolean;
+  cleanup: Deferred.Deferred<void, HarnessFailure> | null;
+};
+type AttendanceDemand = { readonly runId: string | null };
+type AttendanceEntry = {
+  readonly claims: Map<string, OpeningClaim>;
+  readonly pending: Set<AttendanceDemand>;
+  readonly used: Map<string, Set<string | null>>;
+  changed: Deferred.Deferred<void>;
+  retiring: Deferred.Deferred<void, HarnessFailure> | null;
+};
+
 export class ProtocolAttendance {
   private readonly beat: ProtocolBeat;
   private readonly failures = new Map<string, string>();
   private readonly deaths = new Map<string, { readonly failure: string; readonly at: string }>();
+  private readonly demands = new Map<string, AttendanceEntry>();
 
   constructor(
     private readonly links: ProtocolLinks,
@@ -69,28 +86,147 @@ export class ProtocolAttendance {
     for (const threadId of lost.success) yield* FiberMap.remove(this.fibers, threadId);
   });
 
-  readonly ensure = Effect.fnUntraced(function* (this: ProtocolAttendance, threadId: string) {
+  private entry(threadId: string): AttendanceEntry {
+    let entry = this.demands.get(threadId);
+    if (entry === undefined) {
+      entry = { claims: new Map(), pending: new Set(), used: new Map(), changed: Deferred.makeUnsafe(), retiring: null };
+      this.demands.set(threadId, entry);
+    }
+    return entry;
+  }
+
+  private changed(threadId: string, entry: AttendanceEntry): void {
+    Deferred.doneUnsafe(entry.changed, Effect.void);
+    entry.changed = Deferred.makeUnsafe();
+    if (entry.claims.size === 0 && entry.pending.size === 0 && entry.retiring === null && this.demands.get(threadId) === entry)
+      this.demands.delete(threadId);
+  }
+
+  private used(entry: AttendanceEntry, sessionId: string, runId: string | null): void {
+    const users = entry.used.get(sessionId) ?? new Set<string | null>();
+    users.add(runId);
+    entry.used.set(sessionId, users);
+    for (const claim of entry.claims.values()) if (claim.sessionId === sessionId && claim.runId !== runId) claim.adopted = true;
+  }
+
+  private opened(entry: AttendanceEntry, runId: string | null, opening: SessionOpening): void {
+    if (runId === null) return;
+    const claim = entry.claims.get(runId);
+    if (claim === undefined) return;
+    if (opening.created) {
+      claim.sessionId = opening.session.id;
+      claim.created = true;
+      claim.adopted = [...(entry.used.get(opening.session.id) ?? [])].some((user) => user !== runId);
+    }
+  }
+
+  private demand(threadId: string, runId: string | null, watching: boolean): Effect.Effect<void, HarnessFailure> {
+    return Effect.suspend(() => {
+      const entry = this.entry(threadId);
+      if (entry.retiring !== null) return Effect.andThen(Deferred.await(entry.retiring), this.demand(threadId, runId, watching));
+      if (runId !== null && !this.launches.enterOpening(runId)) {
+        this.changed(threadId, entry);
+        return Effect.void;
+      }
+      if (runId !== null && !entry.claims.has(runId)) {
+        entry.claims.set(runId, { runId, sessionId: null, created: false, adopted: false, cleanup: null });
+        this.launches.track(runId, () => {
+          entry.claims.delete(runId);
+          this.changed(threadId, entry);
+        });
+      }
+      const demand: AttendanceDemand = { runId };
+      entry.pending.add(demand);
+      const work = watching ? this.open(threadId, (opened) => this.opened(entry, runId, opened)) : this.enter(threadId, (opened) => this.opened(entry, runId, opened));
+      return work.pipe(
+        Effect.onExit((exit) => Effect.sync(() => {
+          if (Exit.isSuccess(exit) && exit.value !== null) this.used(entry, exit.value, runId);
+          entry.pending.delete(demand);
+          if (runId !== null) this.launches.leaveOpening(runId);
+          this.changed(threadId, entry);
+        })),
+        Effect.asVoid,
+      );
+    });
+  }
+
+  readonly ensure = (threadId: string): Effect.Effect<void, HarnessFailure> => this.demand(threadId, null, false);
+
+  launch(threadId: string, runId: string, watching = false): Effect.Effect<void, HarnessFailure> {
+    return this.demand(threadId, runId, watching);
+  }
+
+  cancelOpening(threadId: string, runId: string): Effect.Effect<void, HarnessFailure> {
+    return Effect.suspend(() => {
+      const entry = this.demands.get(threadId);
+      const claim = entry?.claims.get(runId);
+      if (entry === undefined || claim === undefined) return Effect.void;
+      if (claim.cleanup !== null) return Deferred.await(claim.cleanup);
+      const cleanup = Deferred.makeUnsafe<void, HarnessFailure>();
+      claim.cleanup = cleanup;
+      return this.retireOpening(threadId, entry, claim).pipe(
+        Effect.onExit((exit) => Effect.sync(() => { Deferred.doneUnsafe(cleanup, exit); })),
+      );
+    });
+  }
+
+  private readonly retireOpening = Effect.fnUntraced(function* (
+    this: ProtocolAttendance,
+    threadId: string,
+    entry: AttendanceEntry,
+    claim: OpeningClaim,
+  ) {
+    for (;;) {
+      if (claim.adopted) return;
+      if (entry.retiring !== null) {
+        yield* Deferred.await(entry.retiring);
+        continue;
+      }
+      if (entry.pending.size === 0) break;
+      yield* Deferred.await(entry.changed);
+    }
+    if (!claim.created || claim.sessionId === null) return;
+    const retiring = Deferred.makeUnsafe<void, HarnessFailure>();
+    entry.retiring = retiring;
+    yield* this.stop(threadId, claim.sessionId).pipe(
+      Effect.asVoid,
+      Effect.onExit((exit) => Effect.sync(() => {
+        if (entry.retiring === retiring) entry.retiring = null;
+        Deferred.doneUnsafe(retiring, exit);
+        this.changed(threadId, entry);
+      })),
+    );
+  });
+
+  private readonly enter = Effect.fnUntraced(function* (this: ProtocolAttendance, threadId: string, record: (opening: SessionOpening) => void): Effect.fn.Return<string, HarnessFailure> {
     const { watchers, store, fibers } = this;
     yield* FiberMap.remove(watchers, threadId);
     const facet = yield* facetOf(store, threadId);
-    if (harnessSessionActive(facet.session)) return yield* this.attend(threadId);
+    if (harnessSessionActive(facet.session)) {
+      const attended = yield* this.attended(threadId);
+      return attended === null ? yield* this.enter(threadId, record) : attended;
+    }
     const ending = yield* FiberMap.get(fibers, threadId).pipe(Effect.option);
-    if (Option.isSome(ending) && Option.isSome(ending.value)) return yield* this.observe(threadId);
-    yield* this.open(threadId);
+    if (Option.isSome(ending) && Option.isSome(ending.value)) {
+      yield* Fiber.await(ending.value.value);
+      return yield* this.enter(threadId, record);
+    }
+    return yield* this.open(threadId, record);
   });
 
-  private readonly open = Effect.fn('ProtocolAttendance.open')(function* (this: ProtocolAttendance, threadId: string) {
+  private readonly open = Effect.fn('ProtocolAttendance.open')(function* (this: ProtocolAttendance, threadId: string, record: (opening: SessionOpening) => void) {
     const { store, ownerId, rows } = this;
     yield* Effect.uninterruptible(
-      store.open(threadId, '', ownerId, () => Effect.succeed(null), {
+      Effect.tap(store.opening(threadId, '', ownerId, () => Effect.succeed(null), {
         writes: rows.writes,
         run: (session, unit) =>
           Effect.flatMap(rows.read(unit, threadId), (carried) =>
             rows.write(unit, threadId, { ...freshRow(session.id, carried, null), rejections: 0 }),
           ),
-      }),
+      }), (opened) => Effect.andThen(Effect.sync(() => record(opened)), opened.announce)),
     );
-    yield* this.attend(threadId);
+    const attended = yield* this.attended(threadId);
+    return attended === null ? yield* this.enter(threadId, record) : attended;
   });
 
   readonly stop = Effect.fnUntraced(function* (this: ProtocolAttendance, threadId: string, expectedId?: string) {
@@ -152,6 +288,11 @@ export class ProtocolAttendance {
     return yield* links.until(threadId, (link) => link ?? null).pipe(Effect.catchTag('LinkEnded', () => Effect.succeed(null)));
   });
 
+  private resumeOpening(threadId: string): Effect.Effect<void, HarnessFailure> {
+    const run = this.launches.owing(threadId)?.run ?? this.launches.compactionOwed(threadId)?.run;
+    return run === undefined ? Effect.void : this.launch(threadId, run.id, true);
+  }
+
   private observe(threadId: string): Effect.Effect<void> {
     const retrying = this.observed(threadId).pipe(
       Effect.tapError((failure) =>
@@ -202,7 +343,7 @@ export class ProtocolAttendance {
           failures.delete(threadId);
           this.deaths.delete(threadId);
           if (this.launches.owing(threadId) === undefined && this.launches.compactionOwed(threadId) === undefined) return;
-          yield* this.open(threadId);
+          yield* this.resumeOpening(threadId);
           continue;
         }
         if (!failures.has(threadId)) yield* Effect.sleep(LEASE_RHYTHM.takeoverAfterMs);
@@ -217,7 +358,7 @@ export class ProtocolAttendance {
       if (!harnessSessionActive(session)) {
         this.deaths.delete(threadId);
         if (this.launches.owing(threadId) === undefined && this.launches.compactionOwed(threadId) === undefined) return;
-        yield* this.open(threadId);
+        yield* this.resumeOpening(threadId);
         continue;
       }
       const loaded = yield* Effect.result(rows.load(threadId));
@@ -260,12 +401,18 @@ export class ProtocolAttendance {
     return 'adopted' as HostedResume;
   });
 
-  readonly attend = Effect.fnUntraced(function* (this: ProtocolAttendance, threadId: string) {
+  readonly attend = (threadId: string): Effect.Effect<void, HarnessFailure> => Effect.asVoid(this.attended(threadId, false));
+
+  private readonly attended = Effect.fnUntraced(function* (this: ProtocolAttendance, threadId: string, identify = true) {
     const { fibers, store, ownerId, ownership, process, endings, lanes, links, clock } = this;
-    if (yield* FiberMap.has(fibers, threadId)) return;
+    if (yield* FiberMap.has(fibers, threadId)) {
+      if (!identify) return null;
+      const facet = yield* facetOf(store, threadId);
+      return harnessSessionActive(facet.session) ? facet.session.id : null;
+    }
     const now = yield* Clock.currentTimeMillis;
     const facet = yield* store.claim(threadId, ownerId, new Date(now - LEASE_RHYTHM.takeoverAfterMs));
-    if (!harnessSessionActive(facet.session)) return;
+    if (!harnessSessionActive(facet.session)) return null;
     const session = facet.session;
     const attended = Effect.flatMap(ownership.resumeParked(threadId), ({ release }) =>
       process.drive(threadId, release).pipe(Effect.ensuring(Effect.sync(release))),
@@ -284,6 +431,7 @@ export class ProtocolAttendance {
       Effect.ensuring(Effect.suspend(() => this.observe(threadId))),
     );
     yield* FiberMap.run(fibers, threadId, Effect.provideService(attended, Clock.Clock, clock), { onlyIfMissing: true });
+    return session.id;
   });
 
   private uncertain(threadId: string, sessionId: string, cause: Cause.Cause<unknown>): Effect.Effect<void> {

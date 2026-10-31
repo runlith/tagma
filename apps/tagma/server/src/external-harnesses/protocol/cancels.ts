@@ -1,4 +1,4 @@
-import { Clock, Effect } from 'effect';
+import { Clock, Deferred, Effect } from 'effect';
 import type { ThreadRunStoppedBy } from '@runlith/agent/thread/ending';
 import type { InterruptReceipt } from '@runlith/agent/thread/transport/contract';
 import type { NativeStorage } from '../../threads/contract/service/engine.js';
@@ -26,7 +26,20 @@ export class ProtocolCancels {
     const { links, launches, attendance } = this;
     const threadId = links.threadOf(runId) ?? launches.threadOf(runId) ?? (yield* this.standing(runId));
     if (threadId === undefined) return 'no-turn' as InterruptReceipt;
-    if (launches.unsend(runId)) return yield* this.unsent(threadId, runId, by);
+    const fenced = launches.fence(runId);
+    if (fenced !== null) {
+      if (!fenced.first) return yield* Deferred.await(fenced.flight.receipt);
+      return yield* Effect.andThen(
+        Deferred.await(fenced.flight.drained),
+        Effect.andThen(attendance.cancelOpening(threadId, runId), this.unsent(threadId, runId, by)),
+      ).pipe(
+        Effect.onExit((exit) => Effect.sync(() => {
+          Deferred.doneUnsafe(fenced.flight.receipt, exit);
+          launches.closed(runId);
+        })),
+        Effect.uninterruptible,
+      );
+    }
     if (launches.issuing(runId))
       yield* links
         .until(threadId, (current) => (current === undefined || !launches.issuing(runId) ? true : null))

@@ -8,6 +8,28 @@ import type { HarnessAdapters } from '../../../external-harnesses/contract/servi
 
 export type LaunchPause = { readonly entered: Deferred.Deferred<RunLaunch>; readonly released: Deferred.Deferred<void> };
 
+export type OpeningPause = {
+  readonly entered: Deferred.Deferred<void>;
+  readonly released: Deferred.Deferred<void>;
+  readonly stopping: Deferred.Deferred<void>;
+  readonly finished: Deferred.Deferred<void>;
+  readonly secondStopping?: Deferred.Deferred<void>;
+  readonly armed?: Deferred.Deferred<void>;
+  readonly failure?: string;
+};
+
+export const observedLaunches = (runs: TransportRuns, pause: OpeningPause): TransportRuns => ({
+  ...runs,
+  launch: (launch) => runs.launch(launch).pipe(Effect.ensuring(Effect.asVoid(Deferred.succeed(pause.finished, undefined)))),
+  interrupt: (runId, by) =>
+    Effect.andThen(
+      Deferred.succeed(pause.stopping, undefined).pipe(
+        Effect.flatMap((first) => (first || pause.secondStopping === undefined ? Effect.void : Deferred.succeed(pause.secondStopping, undefined))),
+      ),
+      runs.interrupt(runId, by),
+    ),
+});
+
 export const delayedLaunches = (runs: TransportRuns, pause: LaunchPause): TransportRuns => ({
   ...runs,
   launch: (launch) =>
@@ -28,7 +50,8 @@ export type Floor = {
   readonly pressureAfter?: string;
   readonly relief?: Deferred.Deferred<void>;
   readonly pressing?: { readonly text: string; readonly met: Deferred.Deferred<void> };
-  readonly stalls?: { readonly entered: Deferred.Deferred<void>; readonly released: Deferred.Deferred<void> };
+  readonly stalls?: { readonly entered: Deferred.Deferred<void>; readonly released: Deferred.Deferred<void>; readonly first?: boolean };
+  readonly startRead?: { readonly entered: Deferred.Deferred<void>; readonly released: Deferred.Deferred<void> };
   readonly answers?: 'refused' | 'lost';
   readonly missing?: boolean;
   readonly output?: Deferred.Deferred<'closed' | 'unavailable' | 'completed'>;
@@ -36,6 +59,8 @@ export type Floor = {
   readonly threshold?: number;
   readonly dropsLaunch?: boolean;
   readonly launching?: LaunchPause;
+  readonly opening?: OpeningPause;
+  readonly preparing?: OpeningPause;
   readonly settled?: ThreadRunSettledSubscriber;
   readonly notes?: string;
   readonly place?: { current: string };
