@@ -178,6 +178,7 @@ export class ProtocolDriver implements ProtocolSessions {
       display,
       tails,
       introductions,
+      guidance,
     );
     const halts = new ProtocolHalts(links, store, terminals, requests);
     const asks = new ProtocolAsks(steps, permissions, journal, landings, routed);

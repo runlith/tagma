@@ -749,6 +749,63 @@ describe('ACP adapter boundaries over one execution host', () => {
     );
 
     it.effect(
+      'after a compaction whose retelling the agent keeps to itself, the next turn hears its orientation again and the history stays whole',
+      () =>
+        Effect.gen(function* () {
+          const { openThread, floor } = yield* ProtocolRig;
+          const report = yield* agent('silent-compact');
+          const threadId = 'thread-silent-compact';
+          const until = waiting(threadId);
+          yield* openThread(threadId, CLAUDE);
+          const said: Said[] = [];
+          yield* scenario(
+            Effect.gen(function* () {
+              const raised = yield* floor(said);
+              const driver = yield* raised.driver('owner-silent-compact');
+              const answered = Effect.fn('testing.answeredSilentWords')(function* (text: string) {
+                const count = own(said, threadId).length + 1;
+                yield* driver.send(threadId, text);
+                yield* until(
+                  Effect.sync(() => (own(said, threadId).length >= count ? true : null)),
+                  `answered ${text}`,
+                  report,
+                );
+              });
+              const history = raised.harness.runs.hosting().history(threadId, 'referenced');
+              const oriented = Effect.map(
+                history,
+                (messages) =>
+                  messages.filter((message) => message.content.some((part) => part.type === 'text' && part.text.includes('ORIENTATION')))
+                    .length,
+              );
+              yield* answered('remember this');
+              yield* answered('and this');
+              expect(yield* oriented).toBe(1);
+              const retained = (yield* history).length;
+              yield* raised.harness.threads.handle(threadId, 'operator').compact({ at: 'end', keep: 'SILENT' });
+              yield* until(
+                Effect.map(raised.entries(threadId), (entries) =>
+                  compactions(entries).some((entry) => entry.status === 'completed') ? true : null,
+                ),
+                'ended the silent compaction',
+                report,
+              );
+              yield* answered('after the compaction');
+              const answers = Effect.map(history, (messages) => messages.filter((message) => message.role === 'assistant').length);
+              yield* until(
+                Effect.map(answers, (count) => (count === 3 ? true : null)),
+                'journaled the answer after the compaction',
+                report,
+              );
+              expect(yield* oriented).toBe(2);
+              expect((yield* history).length).toBe(retained + 3);
+              yield* driver.stop(threadId);
+            }),
+          );
+        }),
+    );
+
+    it.effect(
       'a move mid-turn answers at once, the turn ends on its model, the next prompt reconfigures the same session, and a restart keeps what it applied',
       () =>
         Effect.gen(function* () {

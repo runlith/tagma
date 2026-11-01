@@ -20,6 +20,21 @@ export function agentOriginOf(message: Message): AgentMessageOrigin | undefined 
   return AGENT_MESSAGE_ORIGINS.find((origin) => origin === marked);
 }
 
+const BOUNDARY_KEY = 'vendorFolded';
+
+export function vendorBoundaryMessage(): Message {
+  return Message.make({ role: 'user', content: [], metadata: { [BOUNDARY_KEY]: true } });
+}
+
+export function isVendorBoundary(message: Message): boolean {
+  return message.metadata?.[BOUNDARY_KEY] === true;
+}
+
+export function vendorVisible(messages: readonly Message[]): readonly Message[] {
+  const at = messages.findLastIndex(isVendorBoundary);
+  return at < 0 ? messages : messages.slice(at + 1);
+}
+
 const INPUT_KEY = 'readerInput';
 
 export function withAgentReaderInput(message: Message, id: string, position?: number): Message {

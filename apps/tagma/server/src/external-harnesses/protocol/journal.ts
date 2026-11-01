@@ -1,5 +1,6 @@
 import { Effect } from 'effect';
 import { foldedReferences } from '@runlith/agent/AgentDeferredTools';
+import { vendorBoundaryMessage } from '@runlith/agent/AgentSignal';
 import { requestDeployment } from '@runlith/agent/thread/cache/ThreadCacheWarmth';
 import { Message } from '@runlith/llm/schema/messages';
 import { Usage } from '@runlith/llm/schema/events';
@@ -111,6 +112,10 @@ const eventsOf = (
         length = 1;
         const head = Message.make({ role: 'user', content: entry.summary, metadata: foldedReferences(history) });
         return threadCompactionEvent(entry, { keepFrom, messages: [head] });
+      }
+      if (entry.type === 'compaction' && entry.status === 'completed' && entry.summary === '') {
+        length += 1;
+        return { kind: entry.type, payload: { entry, messages: [vendorBoundaryMessage()] } };
       }
       return { kind: entry.type, payload: { entry } };
     }),

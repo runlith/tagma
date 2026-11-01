@@ -1,8 +1,10 @@
 import { type ContentPart, Message, ToolResultPart } from '@runlith/llm/schema/messages';
+import { isVendorBoundary } from '../../agent/AgentSignal';
 
 const NEVER_ANSWERED = 'The tool call did not finish: the run that made it ended first.';
 
-export function pairedForProvider(messages: readonly Message[]): readonly Message[] {
+export function pairedForProvider(history: readonly Message[]): readonly Message[] {
+  const messages = history.some(isVendorBoundary) ? history.filter((message) => !isVendorBoundary(message)) : history;
   const calls = new Map<string, string>();
   const results = new Map<string, ContentPart>();
   for (const message of messages) {

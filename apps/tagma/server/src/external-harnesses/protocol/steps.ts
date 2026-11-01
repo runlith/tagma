@@ -9,6 +9,7 @@ import type { ThreadEntry, ThreadToolEntry } from '@runlith/agent/transcript/ent
 import { entryOf } from '@runlith/agent/transcript/kinds';
 import type { ThreadRunStoppedBy } from '@runlith/agent/thread/ending';
 import type { ThreadRunRow } from '@runlith/agent/thread/rows';
+import type { LaunchGuidance } from '@runlith/agent/thread/transport/contract';
 import type { AdapterDisplay, ReportPlan, ReportResult } from '@runlith/agent/thread/run/lifecycle/RunReports';
 import { completeJsonState } from '@runlith/utils/json';
 import type { WriteUnit } from '../../platform/contract/service/units.js';
@@ -165,6 +166,7 @@ export class ProtocolSteps {
     private readonly display: AdapterDisplay,
     private readonly tails: FiberMap.FiberMap<string, void, never>,
     private readonly introductions: HostedIntroductions,
+    private readonly guidance: LaunchGuidance,
   ) {
     this.joined = writes('ProtocolSteps.persist', [], rows.writes, turns.writes, journal.writes, inbox.writes);
     this.held = writes('ProtocolSteps.stored', [], rows.writes, turns.writes);
@@ -618,13 +620,14 @@ export class ProtocolSteps {
         ...fates.map(fateOf),
         ...fatesOf(events).map((fate) => ({ ...fateOf(unsaidNotes(base.turns, fate)), recorded: true as const })),
       ];
+      const boundaries = [...(plan.boundaries ?? []), ...answered, ...projected.boundaries];
       const written = yield* journal.prepare(link.threadId, {
         name: link.name,
         evidence: `${step.state.incarnation}:${step.state.cursor.offset}:${step.state.counter}`,
         started: plan.started ?? [],
         begun,
         messages: projected.messages,
-        boundaries: [...(plan.boundaries ?? []), ...answered, ...projected.boundaries],
+        boundaries,
         fates: settled,
         ended,
         contexts,
@@ -698,6 +701,8 @@ export class ProtocolSteps {
         this.introductions.opening(link.threadId, started.turn, false);
       }
       for (const ending of ended) yield* activities.end(ending);
+      if (boundaries.some((entry) => entry.type === 'compaction' && entry.status === 'completed'))
+        this.guidance.reset(link.threadId, false);
       this.introductions.recorded(
         link.threadId,
         (projected.messages ?? []).map((said) => said.message),
