@@ -54,3 +54,5 @@ Desktop main-process IPC channels are fixed today; extending them is out of this
 ## Open
 
 - The order of extracting woven capabilities after the first, [[e41dca93]]; each is measured on its own.
+- A creation step runs only when its id is in `contributed`. Should a step also be decoded when its entry is absent, so a step can apply a default or refuse a missing value? Then a creation that sends nothing (an agent's `add_project`, the folder-pick path) would still pass through it.
+- A creation step's requirement channel is `unknown`, so `add_project`'s body type is `unknown` too and its machine-place guard in `pair` passes vacuously. Judging step needs the way `serverParts` judges lifetimes needs the item type to survive `ContributionPoint.of`.
