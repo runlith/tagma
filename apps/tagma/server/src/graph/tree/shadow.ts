@@ -1,4 +1,4 @@
-import { access, mkdir, readFile, realpath, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { access, mkdir, readFile, readdir, realpath, rename, rm, rmdir, stat, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { Effect } from 'effect';
 import type { Git } from '@runlith/git/Git';
@@ -141,8 +141,11 @@ const shadowAt = (gitDir: string, git: Git['Service'], tracking: string | null) 
         yield* run('worktree-prune', ['--git-dir', gitDir, 'worktree', 'prune']);
       }
       if (yield* present(treeRoot)) {
-        yield* heal(treeRoot, branch, marker, options?.createFrom);
-        return;
+        if ((yield* fsDone(() => readdir(treeRoot))).length > 0) {
+          yield* heal(treeRoot, branch, marker, options?.createFrom);
+          return;
+        }
+        yield* fsDone(() => rmdir(treeRoot));
       }
       const args = options?.createFrom
         ? ['--git-dir', gitDir, 'worktree', 'add', '-b', branch, treeRoot, options.createFrom]

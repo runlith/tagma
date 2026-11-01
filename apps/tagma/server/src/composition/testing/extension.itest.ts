@@ -5,20 +5,31 @@ import { fileURLToPath } from 'node:url';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { it, layer } from '@runlith/effect-test';
 import { sql } from 'drizzle-orm';
-import { Context, Effect, Exit, FileSystem, Layer, Schema, Scope } from 'effect';
+import * as BunHttpServer from '@effect/platform-bun/BunHttpServer';
+import { Context, Effect, Exit, FileSystem, Layer, Schema, Scope, Stream } from 'effect';
+import { HttpRouter, HttpServer } from 'effect/http';
+import { RpcClient, RpcGroup } from 'effect/rpc';
+import { Socket } from 'effect/socket';
+import { liveSerialization, rpcOf } from '../../platform/contract/wire/live.js';
+import { TAGMA_SOCKET_PATH } from '../../socket/rpc.js';
+import { liveDoorLayer } from './socketDoor.js';
 import { endHosts } from '../../executions/testing/doubles.js';
 import { type CreationStep, PROJECT_CREATION } from '../../graph/contract/service/creation.js';
 import { ServedGraphs } from '../../graph/contract/service/serving.js';
 import { body, pair } from '../../platform/contract/service/body.js';
-import { manifest } from '../../platform/contract/service/manifest.js';
+import { liveOf, manifest } from '../../platform/contract/service/manifest.js';
 import { ownStorePath } from '../../platform/contract/service/ownStore.js';
 import { ASKS_NEVER } from '../../platform/contract/wire/conditions.js';
-import { arms, operation } from '../../platform/contract/wire/operation.js';
+import { arms, feed, operation } from '../../platform/contract/wire/operation.js';
 import { GateRefusal } from '../../platform/contract/wire/refusal.js';
 import type { Right } from '../../platform/contract/wire/right.js';
 import { Access } from '../../platform/contract/service/access.js';
 import type { Store } from '../../platform/contract/service/store.js';
+import { settingKey } from '../../platform/contract/wire/setting.js';
+import { runGit } from '../../platform/git/ownGit.js';
+import { Git } from '@runlith/git/Git';
 import { serverParts } from '../build.js';
+import { CORE_MODULES } from '../core.js';
 import { MODULES } from '../developer/modules.js';
 import { PARTS } from '../developer/parts.js';
 import { assemble } from '../manifest.js';
@@ -98,9 +109,34 @@ const GREETING_OPERATIONS = {
   }),
 };
 
+const greetingWord = settingKey({
+  id: 'greeting.word',
+  order: 1,
+  title: 'Greeting word',
+  description: 'The word a greeting opens with.',
+  schema: Schema.String,
+  fallback: 'Hello',
+  scopes: ['user'],
+  merge: 'replace',
+});
+
+const GREETING_FEED = feed('greeting.said', {
+  input: Schema.Struct({ name: Schema.String }),
+  event: Schema.Struct({ text: Schema.String }),
+  refusals: [],
+  callers: 'any',
+});
+
 const greeting = manifest({
   id: 'greeting',
   title: 'Greeting',
+  settings: [greetingWord],
+  feeds: [GREETING_FEED],
+  live: liveOf([GREETING_FEED], (door: Context.Context<Greeting>) => ({
+    'greeting.said': ({ name }: { readonly name: string }) =>
+      Stream.fromEffect(Effect.map(Context.get(door, Greeting).of(name), (text) => ({ text }))),
+  })),
+  settingSections: [{ id: 'greeting', order: 1, title: 'Greeting', description: 'How greetings read.' }],
   operations: async () => ({ declarations: GREETING_OPERATIONS }),
   bodies: async () => [
     pair(
@@ -179,6 +215,7 @@ class Root extends Context.Service<
   Root,
   {
     readonly op: (id: string, input: unknown) => Effect.Effect<{ readonly status: number; readonly body: unknown }>;
+    readonly said: (name: string) => Effect.Effect<string>;
     readonly folder: (label: string) => Effect.Effect<string>;
     readonly marks: Map<number, Mark>;
     readonly grants: Grants['Service'];
@@ -191,9 +228,27 @@ const root = Layer.effect(
     const files = yield* FileSystem.FileSystem;
     const home = yield* files.makeTempDirectoryScoped({ prefix: 'extension-root-' });
     yield* Effect.addFinalizer(() => Effect.orDie(endHosts(home)));
-    const { runtime, request } = yield* served(home, yield* Effect.promise(() => assemble(extended)));
+    const assembly = yield* Effect.promise(() => assemble(extended));
+    const { runtime, request } = yield* served(home, assembly);
+    const socket = Layer.unwrap(
+      Effect.map(HttpServer.HttpServer, (server) =>
+        Socket.layerWebSocket(`ws://127.0.0.1:${(server.address as { port: number }).port}${TAGMA_SOCKET_PATH}`),
+      ),
+    );
+    const protocol = yield* Layer.build(
+      RpcClient.layerProtocolSocket().pipe(
+        Layer.provide(socket),
+        Layer.provideMerge(HttpRouter.serve(liveDoorLayer(runtime, home, assembly), { disableListenLog: true, disableLogger: true })),
+        Layer.provideMerge(BunHttpServer.layer({ port: 0, gracefulShutdownTimeout: '20 millis' })),
+        Layer.provide(liveSerialization),
+        Layer.provide(Socket.layerWebSocketConstructorGlobal),
+      ),
+    );
+    const live = yield* Effect.provide(RpcClient.make(RpcGroup.make(rpcOf(GREETING_FEED))), protocol);
     return Root.of({
       op: (id, input) => request(`/api/op/${id}`, input),
+      said: (name) =>
+        Effect.orDie(Effect.map(Stream.runHead(live['greeting.said']({ name })), (head) => (head._tag === 'Some' ? head.value.text : ''))),
       folder: (label) => Effect.orDie(files.makeTempDirectory({ directory: home, prefix: `${label}-` })),
       marks: Context.getUnsafe(runtime.owners, Marks),
       grants: Context.getUnsafe(runtime.owners, Grants),
@@ -208,6 +263,12 @@ layer(root, { excludeTestServices: true })('a root composing the core with a mod
         body: { status: 'greeted', text: 'Hello Ada, greeted 1 time in greeting.sqlite' },
       });
       expect(ASSEMBLY.registry.named('greet')).toBeNull();
+    }),
+  );
+
+  it.effect('serves its feed over the live socket from what its serving lifetime provides', () =>
+    Effect.gen(function* () {
+      expect(yield* (yield* Root).said('Feed')).toBe('Hello Feed, greeted 1 time in greeting.sqlite');
     }),
   );
 
@@ -282,19 +343,43 @@ layer(root, { excludeTestServices: true })('a root composing the core with a mod
   );
 });
 
-it.live('the core alone opens a data directory holding the store of a module it lacks, and serves', () =>
+it.live('the core alone opens a data directory written by modules it lacks, and serves its own operations over it', () =>
   Effect.gen(function* () {
     const files = yield* FileSystem.FileSystem;
-    const home = yield* files.makeTempDirectoryScoped({ prefix: 'extension-core-' });
+    const home = yield* files.realPath(yield* files.makeTempDirectoryScoped({ prefix: 'extension-core-' }));
     yield* Effect.addFinalizer(() => Effect.orDie(endHosts(home)));
+    const bare = join(home, 'shared.git');
     const first = yield* Scope.make();
-    const { request } = yield* Scope.provide(served(home, yield* Effect.promise(() => assemble(extended))), first);
+    const { runtime, request } = yield* Scope.provide(served(home, yield* Effect.promise(() => assemble(extended))), first);
+    const git = Context.get(runtime.owners, Git);
+    yield* Effect.orDie(runGit(git, 'test', ['init', '-q', '--bare', bare]));
+    const rootPath = join(home, 'kept');
+    yield* Effect.orDie(runGit(git, 'test', ['init', '-q', '-b', 'main', rootPath]));
     expect((yield* request('/api/op/greet', { name: 'Ada' })).status).toBe(200);
+    const added = yield* request('/api/op/add_project', {
+      name: 'kept',
+      rootPath,
+      storage: 'stealth',
+      contributed: { 'graph-remote': bare },
+    });
+    expect(added.status).toBe(200);
+    const project = (added.body as { project: { id: number } }).project.id;
+    expect((yield* request('/api/op/write_setting', { project, key: greetingWord.id, value: 'Hi' })).status).toBe(200);
     yield* Scope.close(first, Exit.void);
     expect(existsSync(ownStorePath(join(home, 'tagma.sqlite'), 'greeting'))).toBe(true);
+    expect(existsSync(ownStorePath(join(home, 'tagma.sqlite'), 'graph-remote'))).toBe(true);
+
     const second = yield* Scope.make();
     yield* Effect.addFinalizer(() => Scope.close(second, Exit.void));
-    const { request: core } = yield* Scope.provide(served(home, ASSEMBLY), second);
-    expect((yield* core('/health')).status).toBe(200);
+    const core = yield* Effect.promise(() => assemble(serverParts({ ...PARTS, modules: CORE_MODULES })));
+    const { request: alone } = yield* Scope.provide(served(home, core), second);
+    expect((yield* alone('/health')).status).toBe(200);
+    expect((yield* alone('/api/op/greet', { name: 'Ada' })).body).toMatchObject({ code: 'unknown-operation' });
+    const settings = yield* alone('/api/op/read_settings', { project });
+    expect(settings.status).toBe(200);
+    expect(JSON.stringify(settings.body)).not.toContain(greetingWord.id);
+    const parentId = ((yield* alone('/api/op/list_root_blocks', { project })).body as { blocks: { name: string }[] }).blocks[0]!.name;
+    expect((yield* alone('/api/op/create_block', { project, parentId, title: 'Kept apart' })).status).toBe(200);
+    expect(((yield* alone('/api/op/search_blocks', { project, query: 'Kept apart' })).body as { total: number }).total).toBe(1);
   }).pipe(Effect.provide(BunFileSystem.layer)),
 );

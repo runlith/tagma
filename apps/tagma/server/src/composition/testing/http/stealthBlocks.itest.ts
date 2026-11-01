@@ -257,6 +257,7 @@ layer(doorFixture().pipe(Layer.provideMerge(BunFileSystem.layer)), {
       expect((yield* world.op('set_graph_remote', { ref: String(alone), remote: bare })).body).toMatchObject({
         remote: { remote: bare, holds: 'this-graph', branches: [{ branch: 'main', state: 'synced' }] },
       });
+      expect(yield* seen(alone, terms)).toBe(1);
     }),
   );
 
