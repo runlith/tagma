@@ -1,9 +1,9 @@
 import type { HarnessProvider } from '@runlith/tagma/adapter/provider';
-import type { AcpProfile, TerminalSurface } from '@runlith/tagma/adapter/harness';
+import { LEGACY_TOOLS, type AcpProfile, type TerminalSurface } from '@runlith/tagma/adapter/harness';
 import type { HarnessAdapter } from '../contract/service/adapter.js';
 
 const ACP_ONLY: Omit<TerminalSurface, 'launch' | 'binary' | 'prefix'> = {
-  tools: { names: 'vendor', byName: {} },
+  tools: LEGACY_TOOLS,
   hooks: null,
   mcpTools: 'catalog',
   mcp: null,
