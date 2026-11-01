@@ -41,7 +41,7 @@ import {
   threadContextEvent,
   threadEntryEvent,
   threadGuidanceEvent,
-  threadStepMessagesEvent,
+  threadRunMessagesEvent,
   type ThreadEventBody,
 } from '../events';
 import type { ThreadRow, ThreadRunRow } from '../rows';
@@ -408,7 +408,7 @@ export const threadHostingLayer = Layer.effect(
             const message = Message.tool(
               ToolResultPart.from({ ...result, metadata: { [HOSTED_RESULT]: { failed, offered: step.moved } } }),
             );
-            const event = threadStepMessagesEvent([message]);
+            const event = threadRunMessagesEvent(hosted.runId, [message]);
             const written = yield* committed(
               threadId,
               hosted.runId,
@@ -421,7 +421,7 @@ export const threadHostingLayer = Layer.effect(
               [
                 threadEntryEvent(entryOf(hosted.runId, call, settled, hosted.started.get(call.toolCallId))),
                 ...readyEvents,
-                ...(event === null ? [] : [event]),
+                event,
                 ...told.events,
                 ...step.events,
               ],

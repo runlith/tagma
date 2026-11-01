@@ -145,9 +145,21 @@ describe('ACP adapter boundaries over one execution host', () => {
             const handle = floor.harness.threads.handle(threadId, 'operator');
             let firstReturned = false;
             let secondReturned = false;
-            const first = yield* Effect.forkChild(Effect.tap(handle.stop(), () => Effect.sync(() => { firstReturned = true; })));
+            const first = yield* Effect.forkChild(
+              Effect.tap(handle.stop(), () =>
+                Effect.sync(() => {
+                  firstReturned = true;
+                }),
+              ),
+            );
             yield* Deferred.await(pause.stopping);
-            const second = yield* Effect.forkChild(Effect.tap(handle.stop(), () => Effect.sync(() => { secondReturned = true; })));
+            const second = yield* Effect.forkChild(
+              Effect.tap(handle.stop(), () =>
+                Effect.sync(() => {
+                  secondReturned = true;
+                }),
+              ),
+            );
             yield* Deferred.await(pause.secondStopping);
             expect(firstReturned).toBe(false);
             expect(secondReturned).toBe(false);
@@ -366,7 +378,9 @@ describe('ACP adapter boundaries over one execution host', () => {
         yield* scenario(
           Effect.gen(function* () {
             const hold = join(report, '..', 'opening.hold');
-            yield* Effect.acquireRelease(rig.files.writeFileString(hold, ''), () => rig.files.remove(hold, { force: true }).pipe(Effect.orDie));
+            yield* Effect.acquireRelease(rig.files.writeFileString(hold, ''), () =>
+              rig.files.remove(hold, { force: true }).pipe(Effect.orDie),
+            );
             const pause = {
               entered: yield* Deferred.make<void>(),
               released: yield* Deferred.make<void>(),
@@ -1054,6 +1068,40 @@ describe('ACP adapter boundaries over one execution host', () => {
             }),
           );
         }),
+    );
+
+    it.effect('a rewound hosted turn leaves neither its words nor its answer in the history a new session is built from', () =>
+      Effect.gen(function* () {
+        const { openThread, floor } = yield* ProtocolRig;
+        const report = yield* agent('rewound-answer');
+        const threadId = 'thread-rewound-answer';
+        const until = waiting(threadId);
+        yield* openThread(threadId, CLAUDE);
+        const said: Said[] = [];
+        yield* scenario(
+          Effect.gen(function* () {
+            const raised = yield* floor(said);
+            const driver = yield* raised.driver('owner-rewound-answer');
+            const answered = Effect.fn('testing.answeredRewoundWords')(function* (text: string) {
+              const count = own(said, threadId).length + 1;
+              yield* driver.send(threadId, text);
+              yield* until(
+                Effect.sync(() => (own(said, threadId).length >= count ? true : null)),
+                `answered ${text}`,
+                report,
+              );
+              return own(said, threadId).at(-1)!.run;
+            });
+            yield* answered('remember this');
+            const second = yield* answered('and this');
+            yield* driver.stop(threadId);
+            yield* raised.harness.threads.handle(threadId, 'operator').rewind({ at: second, scope: 'turn' });
+            const history = yield* raised.harness.runs.hosting().history(threadId, 'referenced');
+            const answers = history.filter((message) => message.role === 'assistant');
+            expect(answers).toHaveLength(1);
+          }),
+        );
+      }),
     );
   });
 });

@@ -94,6 +94,7 @@ export const threadEventPayloadSchema = Schema.Struct({
   bodyInFold: facet(Schema.Boolean),
   entry: facet(entryShape),
   messages: facet(Schema.Array(Message)),
+  runId: facet(Schema.String),
   usage: facet(Usage),
   context: facet(threadStepContextSchema),
   measurement: facet(threadCallMeasurementSchema),

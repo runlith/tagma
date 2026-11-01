@@ -64,6 +64,7 @@ export type ThreadEventPayload = {
   readonly bodyInFold?: boolean;
   readonly entry?: ThreadTranscriptEntry;
   readonly messages?: readonly Message[];
+  readonly runId?: string;
   readonly usage?: Usage;
   readonly context?: ThreadStepContext;
   readonly measurement?: ThreadCallMeasurement;
@@ -381,6 +382,10 @@ export function threadStepMessagesEvent(
       usage: step?.usage,
     },
   };
+}
+
+export function threadRunMessagesEvent(runId: string, messages: readonly Message[]): ThreadEventBody {
+  return { kind: 'message', payload: { runId, messages: [...messages] } };
 }
 
 export function threadStepFinishedEvent(context: ThreadStepContext, usage?: Usage): ThreadEventBody {

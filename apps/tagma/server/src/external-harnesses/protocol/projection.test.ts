@@ -101,16 +101,19 @@ test('a hosted assistant message keeps reasoning, text and all tool calls togeth
   const closed = project([{ _tag: 'Sealed', said: { sessionId: 's', messageId: 'm', toolCallIds: ['a', 'b'] } }], first.turns, AT, true);
   expect(closed.messages).toMatchObject([
     {
-      role: 'assistant',
-      id: 'm',
-      content: [
-        { type: 'reasoning', text: 'thinking' },
-        { type: 'text', text: 'Checking both' },
-        { type: 'tool-call', id: 'a', name: 'read', input: { path: 'a' } },
-        { type: 'tool-call', id: 'b', name: 'read', input: { path: 'b' } },
-      ],
+      turn: 'turn-1',
+      message: {
+        role: 'assistant',
+        id: 'm',
+        content: [
+          { type: 'reasoning', text: 'thinking' },
+          { type: 'text', text: 'Checking both' },
+          { type: 'tool-call', id: 'a', name: 'read', input: { path: 'a' } },
+          { type: 'tool-call', id: 'b', name: 'read', input: { path: 'b' } },
+        ],
+      },
     },
-    { role: 'tool', content: [{ type: 'tool-result', id: 'a', name: 'read' }] },
+    { turn: 'turn-1', message: { role: 'tool', content: [{ type: 'tool-result', id: 'a', name: 'read' }] } },
   ]);
   const final = project(
     [
@@ -127,7 +130,7 @@ test('a hosted assistant message keeps reasoning, text and all tool calls togeth
     AT,
     true,
   );
-  expect(final.messages).toMatchObject([{ role: 'assistant', content: [{ type: 'text', text: 'Done' }] }]);
+  expect(final.messages).toMatchObject([{ turn: 'turn-1', message: { role: 'assistant', content: [{ type: 'text', text: 'Done' }] } }]);
   expect(final.messages).toHaveLength(1);
 });
 
@@ -246,10 +249,12 @@ test('a hosted call Tagma executes writes only its opening entry, while its inpu
   expect(projected.boundaries).toHaveLength(2);
   expect(projected.messages).toMatchObject([
     {
-      content: [
-        { type: 'tool-call', id: 'own', input: { path: 'a' } },
-        { type: 'tool-call', id: 'other' },
-      ],
+      message: {
+        content: [
+          { type: 'tool-call', id: 'own', input: { path: 'a' } },
+          { type: 'tool-call', id: 'other' },
+        ],
+      },
     },
   ]);
 });
@@ -314,8 +319,8 @@ test('a Tagma call Claude Code refused before handing it over ends at once with 
   expect(projected.boundaries).toHaveLength(3);
   expect(projected.boundaries[0]?.type === 'tool' ? projected.boundaries[0].toolDisplay : null).toBeUndefined();
   expect(projected.messages).toMatchObject([
-    { role: 'assistant', content: [{ id: 'handed' }, { id: 'refused' }] },
-    { role: 'tool', content: [{ type: 'tool-result', id: 'refused', result: { type: 'error', value: refusal } }] },
+    { message: { role: 'assistant', content: [{ id: 'handed' }, { id: 'refused' }] } },
+    { message: { role: 'tool', content: [{ type: 'tool-result', id: 'refused', result: { type: 'error', value: refusal } }] } },
   ]);
   expect(projected.messages).toHaveLength(2);
 });

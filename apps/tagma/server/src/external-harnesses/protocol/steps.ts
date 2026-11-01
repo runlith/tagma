@@ -698,7 +698,11 @@ export class ProtocolSteps {
         this.introductions.opening(link.threadId, started.turn, false);
       }
       for (const ending of ended) yield* activities.end(ending);
-      this.introductions.recorded(link.threadId, projected.messages ?? [], projected.closed.length > 0 && projected.turns.length === 0);
+      this.introductions.recorded(
+        link.threadId,
+        (projected.messages ?? []).map((said) => said.message),
+        projected.closed.length > 0 && projected.turns.length === 0,
+      );
       if (!typed && (written !== null || settled.length > 0 || (plan.reports?.length ?? 0) + resolved.length > 0))
         yield* journal.publish(link.threadId);
       return {

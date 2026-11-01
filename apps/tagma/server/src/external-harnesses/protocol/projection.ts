@@ -15,7 +15,7 @@ import { amendedEntry, callEntry, openedEntry, resultOf } from './calls.js';
 import { textOf } from './content.js';
 import type { OpenedTurn } from './row.js';
 import type { VendorAddress } from '../store/turns.js';
-import type { HarnessTurnEnded } from './turns.js';
+import type { HarnessTurnEnded, HarnessTurnMessage } from './turns.js';
 import { EXECUTES, FAILURE, OPENED, type Said } from '@runlith/hosted-runner/wire/extensions';
 
 export type Sealed = { readonly _tag: 'Sealed'; readonly said: (typeof Said)['Type'] | null };
@@ -29,7 +29,7 @@ export type Projection = {
   readonly closed: readonly OpenedTurn[];
   readonly vendor: readonly VendorAddress[];
   readonly heard: boolean;
-  readonly messages: readonly Message[] | undefined;
+  readonly messages: readonly HarnessTurnMessage[] | undefined;
   readonly failure: string | null;
 };
 
@@ -140,7 +140,7 @@ export const project = (
   const vendor: VendorAddress[] = [];
   let heard = false;
   let turns = [...opened];
-  const messages: Message[] | undefined = hosted ? [] : undefined;
+  const messages: HarnessTurnMessage[] | undefined = hosted ? [] : undefined;
   let failure: string | null = null;
   const broken = new Set(
     events.flatMap((event) =>
@@ -157,8 +157,9 @@ export const project = (
     const index = turns.findIndex((turn) => turn.id === turnId);
     if (index < 0) return;
     const { answered = [], ...turn } = turns[index]!;
-    if (turn.assistant.length > 0) messages!.push(Message.make({ role: 'assistant', content: turn.assistant, id }));
-    for (const result of answered) messages!.push(Message.make({ role: 'tool', content: [result] }));
+    if (turn.assistant.length > 0)
+      messages!.push({ turn: turnId, message: Message.make({ role: 'assistant', content: turn.assistant, id }) });
+    for (const result of answered) messages!.push({ turn: turnId, message: Message.make({ role: 'tool', content: [result] }) });
     turns[index] = { ...turn, assistant: [] };
   };
   const answered = (turnId: string, call: ToolCall) => {
@@ -167,7 +168,7 @@ export const project = (
     const index = turns.findIndex((turn) => turn.id === turnId);
     const turn = index < 0 ? undefined : turns[index]!;
     if (turn === undefined || !turn.assistant.some((part) => part.type === 'tool-call' && part.id === call.toolCallId)) {
-      messages!.push(Message.make({ role: 'tool', content: [result] }));
+      messages!.push({ turn: turnId, message: Message.make({ role: 'tool', content: [result] }) });
       return;
     }
     turns[index] = { ...turn, answered: [...(turn.answered ?? []), result] };

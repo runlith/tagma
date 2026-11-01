@@ -438,6 +438,7 @@ export function threadEntryIdentity(payload: ThreadEventPayload): string | null 
 export function threadRecordOrigin(payload: ThreadEventPayload, ownRuns: ReadonlySet<string>): 'own' | 'inherited' | 'unknown' {
   const named =
     payload.context?.runId ??
+    payload.runId ??
     payload.measurement?.runId ??
     payload.withdrawn?.runId ??
     (payload.entry as { runId?: unknown } | undefined)?.runId;

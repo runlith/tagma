@@ -79,13 +79,15 @@ export type HarnessTurnFate = {
   readonly noted?: AgentRuntimeGuidance | undefined;
 };
 
+export type HarnessTurnMessage = { readonly turn: string; readonly message: Message };
+
 export type HarnessTurnStep = {
   readonly name: HarnessName;
   readonly evidence: string;
   readonly started: readonly HarnessTurnStarted[];
   readonly begun: readonly HarnessTurnBegun[];
   readonly boundaries: readonly ThreadEntry[];
-  readonly messages: readonly Message[] | undefined;
+  readonly messages: readonly HarnessTurnMessage[] | undefined;
   readonly fates: readonly HarnessTurnFate[];
   readonly ended: readonly HarnessTurnEnded[];
   readonly contexts: readonly HarnessTurnContext[];

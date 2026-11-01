@@ -405,6 +405,7 @@ export const evidenceReading = Effect.fnUntraced(function* ({ runs, gate }: Evid
       const originOf = (threadId: string, payload: ThreadEventRecord['payload']) => {
         const named = [
           payload.context?.runId,
+          payload.runId,
           payload.measurement?.runId,
           payload.withdrawn?.runId,
           (payload.entry as { runId?: unknown } | undefined)?.runId,
