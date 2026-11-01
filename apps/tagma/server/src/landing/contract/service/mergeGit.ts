@@ -1,6 +1,5 @@
 import { Context, Data, type Effect } from 'effect';
 import type { HoldCut, HoldStalled } from '@runlith/held/failures';
-import type { JudgedPlacing } from '../../../enforcement/contract/wire/checks.js';
 import type { FinishFailure } from '../../../worktrees/contract/wire/failures.js';
 import type { RefusedEdits } from '../../land/reshaping.js';
 
@@ -62,7 +61,6 @@ export class MergeGit extends Context.Service<
       tree: string,
       message: string,
     ) => Effect.Effect<MergePrepared, Failed | MergeHookRefused | Held>;
-    readonly within: (checkout: string, tree: string) => JudgedPlacing;
     readonly create: (checkout: string, commit: MergeCommit) => Effect.Effect<string, Failed>;
     readonly replay: (checkout: string, onto: string, tip: string, sign: boolean) => Effect.Effect<MergeReplay, Failed>;
     readonly posted: (checkout: string, commit: string) => Effect.Effect<void>;

@@ -43,7 +43,7 @@ const committed = Effect.fnUntraced(function* (dir: string, message: string) {
   yield* shEffect(dir, ['commit', '-q', '-m', message]);
 });
 
-it.live('a gated program that reads the working tree judges a merge over the merged files, so the merge lands', () =>
+it.live('a gated program that reads the working tree judges a merge in the worktree holding the merged files, so the merge lands', () =>
   Effect.gen(function* () {
     const world = graphFixture();
     const base = (yield* Effect.acquireRelease(world.openEffect(), () => Effect.orDie(world.releaseEffect))).effects;
@@ -83,7 +83,7 @@ it.live('a gated program that reads the working tree judges a merge over the mer
       yield* committed(side.path, 'another marker');
       launches.length = 0;
       const merged = yield* finishing.merge(projectId, side.rootId, { caller });
-      expect(launches.map((launch) => launch.cwd).filter((cwd) => cwd !== project)).not.toEqual([]);
+      expect(new Set(launches.map((launch) => launch.cwd))).toEqual(new Set([side.path]));
       expect(merged.base.head).toBe(yield* shEffect(project, ['rev-parse', 'HEAD']));
       expect(yield* shEffect(project, ['show', 'HEAD:marker'])).toBe('two');
     }).pipe(Effect.provide(base.context));

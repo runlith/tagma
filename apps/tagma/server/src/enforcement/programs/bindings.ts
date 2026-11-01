@@ -3,7 +3,6 @@ import type { Footprint } from '@tagma/inspection/node/reading';
 import type { Unjudged } from '@tagma/inspection/verdict';
 import { Clock, Effect, Result } from 'effect';
 import type { TerminalActor } from '../../executions/contract/wire/terminals.js';
-import type { JudgedPlacing } from '../contract/wire/checks.js';
 import type { CountedDebt, Programmed } from '../contract/wire/document.js';
 import type { InspectionCoverage, RuleViolation } from '../contract/wire/enforcement.js';
 import type { JudgeLane } from '../workers/asks.js';
@@ -28,7 +27,7 @@ export type BindingSubject = {
   readonly caller: TerminalActor | null;
   readonly lane: JudgeLane;
   readonly priority?: 'foreground' | 'background';
-  readonly within?: JudgedPlacing;
+  readonly workdir?: string;
 };
 
 export type BoundReading = {
@@ -47,12 +46,13 @@ export const judgeBindings = Effect.fn('enforcement.bindings.judge')(function* (
   const answers = new Map<string, ProgramRun<BoundReading>>();
   if (rules.length === 0) return answers;
   const started = yield* Clock.monotonicTimeNanos;
+  const at = subject.workdir ?? subject.root;
   const programs: ProgramBinding[] = rules.map((rule) => ({
     rule: rule.rule,
     check: rule.inspection,
     places: rule.places,
     debt: rule.debt,
-    checker: checkerFor(subject.root, rule.inspection),
+    checker: checkerFor(at, rule.inspection),
   }));
   const reaches = programs.map((program) => reachOf(program));
   const paths = subject.paths?.filter((path) => reaches.some((reach) => inProgramReach(reach, path))) ?? null;
@@ -71,7 +71,7 @@ export const judgeBindings = Effect.fn('enforcement.bindings.judge')(function* (
     for (const program of programs) answers.set(program.rule, { answer: Result.fail(sides.failure), ms: readyMs });
     return answers;
   }
-  const groups = yield* judgePrograms({ ...subject, tree: subject.built, sides: sides.success }, programs);
+  const groups = yield* judgePrograms({ ...subject, root: at, tree: subject.built, sides: sides.success }, programs);
   for (const program of programs) {
     const run = groups.get(program.checker.id)!;
     const ms = readyMs + run.ms;

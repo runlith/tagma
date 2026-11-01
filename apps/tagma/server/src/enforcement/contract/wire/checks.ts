@@ -1,4 +1,4 @@
-import { Data, Effect } from 'effect';
+import { Effect } from 'effect';
 import type { PreparedHolds, PreparedRemoval } from '../../../change-record/contract/service/prepared.js';
 import type { CarriedViolation, JudgeRefusalReport, LandingUnjudged, RuleBodies, RuleCrossing, RuleRun, Watched } from './enforcement.js';
 import { type Trigger, type TriggerPhase, triggersSaid } from '../../../graph/contract/wire/enforcement.js';
@@ -43,12 +43,6 @@ export type LineHolders = (lines: readonly JudgedLine[]) => Effect.Effect<readon
 
 export type LineRemovers = (lines: readonly JudgedLine[]) => Effect.Effect<readonly PreparedRemoval[], GateRefusal<'walk-cut'>>;
 
-export type JudgedPlace = { readonly dir: string; readonly env: Readonly<Record<string, string>> };
-
-export class PlaceUnavailable extends Data.TaggedError('PlaceUnavailable')<{ readonly message: string }> {}
-
-export type JudgedPlacing = <A, E, R>(use: (place: JudgedPlace) => Effect.Effect<A, E, R>) => Effect.Effect<A, E | PlaceUnavailable, R>;
-
 export type TreeSubject = {
   readonly kind: 'tree';
   readonly projectId: number;
@@ -67,7 +61,7 @@ export type TreeSubject = {
   readonly caller?: TerminalActor;
   readonly job?: string;
   readonly branch?: string | null;
-  readonly within?: JudgedPlacing;
+  readonly workdir?: string;
 };
 
 export type FileSubject = {

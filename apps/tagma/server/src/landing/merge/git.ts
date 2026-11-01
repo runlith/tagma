@@ -13,8 +13,7 @@ import { headRef } from '../../platform/git/publish.js';
 import { openOperation, placesOf, standingOf } from '../../platform/git/places.js';
 import { ChangeRecord } from '../../change-record/contract/service/record.js';
 import { LineWrites } from '../../change-record/contract/service/lineWrites.js';
-import { CommitTrees, WHOLE_TREE } from '../../workspace/contract/service/commitTrees.js';
-import { PlaceUnavailable } from '../../enforcement/contract/wire/checks.js';
+import { CommitTrees } from '../../workspace/contract/service/commitTrees.js';
 import { WorkingOrigins } from '../../workspace/contract/service/places.js';
 import { keptUpstream } from '../../workspace/repositories/pushName.js';
 import { WorktreeFinishRefused, WorktreeUnavailable } from '../../worktrees/contract/wire/failures.js';
@@ -250,20 +249,6 @@ export const makeMergeGit = Effect.gen(function* () {
             }),
           ),
         ),
-      ),
-    within: (checkout, tree) => (use) =>
-      Effect.flatMap(
-        placesOf(git, checkout).pipe(
-          Effect.flatMap((places) => trees.within(git, checkout, places.gitDir, tree, WHOLE_TREE, (place) => Effect.result(use(place)))),
-          Effect.catchTags({
-            OwnGitFailed: (failure) => Effect.fail(new PlaceUnavailable({ message: `${failure.op}: ${failure.message}` })),
-            HoldStalled: (failure) =>
-              Effect.fail(new PlaceUnavailable({ message: `the commit tree of ${checkout} stayed held by its ${failure.resource}` })),
-            HoldCut: (failure) =>
-              Effect.fail(new PlaceUnavailable({ message: `the commit tree of ${checkout} was cut: ${failure.leaves}` })),
-          }),
-        ),
-        Effect.fromResult,
       ),
     create,
     replay: Effect.fnUntraced(function* (checkout, onto, tip, sign) {

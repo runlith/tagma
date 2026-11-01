@@ -58,10 +58,11 @@ export const measureRules = Effect.fn('enforcement.measureRules')(function* (
   rules: readonly ReachRule[],
   caller: TerminalActor | null,
   lane: JudgeLane = 'landing',
+  workdir?: string,
 ) {
   const readings = new Map<string, ReachReading>();
   const bound = yield* judgeBindings(
-    { ...version, built: version.tree, caller, base: null, paths: null, lane },
+    { ...version, built: version.tree, caller, base: null, paths: null, lane, workdir },
     rules.flatMap((rule): BoundRule[] =>
       isProgrammed(rule.inspection) ? [{ rule: rule.norm.rule, inspection: rule.inspection, places: rule.places, debt: rule.debt }] : [],
     ),
