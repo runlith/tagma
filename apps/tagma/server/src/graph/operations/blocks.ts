@@ -23,7 +23,7 @@ import { pricedBlockResult, pricedResult } from './answers.js';
 import { birthPricing, lawPricing, nodePricing } from './start.js';
 import { priced, type Priced } from '../../platform/contract/service/start.js';
 import type { BlockWrite } from '../contract/service/acts.js';
-import type { Crowded, Moved } from '../contract/wire/answers.js';
+import type { Crowded, GraphCopy, Moved } from '../contract/wire/answers.js';
 import { crowdedPages } from '../blocks/crowding.js';
 import { Tags } from '../contract/service/vocabulary.js';
 import { cross, link, linkTarget, localId, scoped, targeted, unlink } from './crossing.js';
@@ -182,8 +182,8 @@ const BLOCK_WRITE_ROUTED = {
               [`update_block ${input.blockId} with parentId alone, then update_block with ${changing.join(', ')} in its new graph`],
             );
           }
-          const { write, moved } = yield* relocate(input.blockId, across);
-          return { value: { ...write, moved }, start: undefined, crowded: undefined };
+          const { write, moved, graphCopy } = yield* relocate(input.blockId, across);
+          return { value: { ...write, moved }, start: undefined, crowded: undefined, graphCopy };
         }
         const parentId = input.parentId === undefined ? undefined : across === null ? null : yield* localId(across);
         const pricing = yield* nodePricing(row.projectId, { tags: [...row.tags, ...(input.tags ?? [])] });
@@ -207,10 +207,13 @@ const BLOCK_WRITE_ROUTED = {
         return { ...written, crowded };
       }),
     ),
-    answer: (raw: Priced<BlockWrite & { readonly moved?: Moved }> & { readonly crowded: Crowded | undefined }) => ({
+    answer: (
+      raw: Priced<BlockWrite & { readonly moved?: Moved }> & { readonly crowded: Crowded | undefined; readonly graphCopy?: GraphCopy },
+    ) => ({
       ...pricedResult(raw),
       moved: raw.value.moved,
       crowded: raw.crowded,
+      ...('graphCopy' in raw ? { graphCopy: raw.graphCopy } : {}),
     }),
   }),
 

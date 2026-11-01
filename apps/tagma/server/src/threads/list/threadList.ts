@@ -1,6 +1,7 @@
 import { Clock, Cause, Context, Effect, Exit, FiberSet, Scope } from 'effect';
 import { carryCost } from '@runlith/performance/CostLedger';
 import { ThreadNotFoundError } from '@runlith/agent/thread/storage/aggregate';
+import type { LaunchBlock } from '@runlith/agent/transcript/live';
 import type { ThreadLiveFeed } from '@runlith/agent/thread/run/ThreadLiveFeed';
 import { ThreadLaunchGate, ThreadLive } from '../contract/service/engine.js';
 import type { NativeThreadState } from '../contract/service/state.js';
@@ -448,11 +449,13 @@ export const makeThreadList = Effect.gen(function* () {
     );
   });
   const detachRegroups = folders.regrouped(regrouped);
+  const detachGate = gate.subscribe((change: LaunchBlock) => runFork(announceThread(change.threadId)));
   yield* Effect.addFinalizer(() =>
     Effect.sync(() => {
       detachBirths();
       detachRemovals();
       detachRegroups();
+      detachGate();
       detach();
       phases.dispose();
     }),

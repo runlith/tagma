@@ -1,4 +1,4 @@
-import type { FeedPosition, ThreadLiveProgress, ThreadOpenChange, ThreadOpenView } from '../../transcript/live';
+import type { ThreadLivePosition, ThreadLiveProgress, ThreadLiveView, ThreadOpenChange } from '../../transcript/live';
 import type { ThreadTranscriptEntry } from '../../transcript/rows';
 import { coreEntry } from '../../transcript/kinds';
 import { appendedEntry } from '../../transcript/feedFold';
@@ -9,11 +9,14 @@ import { ThreadFeed } from '../ThreadPorts';
 import type { ThreadState, ThreadStateFrame, ThreadStateShape } from '../state';
 import { createEventEmitter, createKeyedEventEmitter } from '@runlith/utils/event';
 
-export type ThreadLiveEvent<TState> =
-  | { readonly type: 'state'; readonly at: FeedPosition; readonly frame: ThreadStateFrame<TState>; readonly weight: number }
-  | { readonly type: 'open'; readonly at: FeedPosition; readonly change: ThreadOpenChange; readonly weight: number };
+export type ThreadLiveEvent<TState> = ThreadLivePosition &
+  (
+    | { readonly type: 'state'; readonly frame: ThreadStateFrame<TState>; readonly weight: number }
+    | { readonly type: 'open'; readonly change: ThreadOpenChange; readonly weight: number }
+  );
 
 type Lane<TState> = {
+  readonly incarnation: string;
   seq: number;
   position: number;
   runId: string | null;
@@ -36,6 +39,7 @@ export const makeThreadLiveFeed = Effect.fnUntraced(function* <TState extends Th
   const events = createKeyedEventEmitter<string, [ThreadLiveEvent<TState>]>(listenerFailed);
   const stateListeners = createEventEmitter<[TState]>(listenerFailed);
   const lanes = new Map<string, Lane<TState>>();
+  const emptyIncarnation = crypto.randomUUID();
   const cuts = new Map<string, { gate: Semaphore.Semaphore; readers: number }>();
 
   const atCut = <A, E, R>(threadId: string, work: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
@@ -114,6 +118,8 @@ export const makeThreadLiveFeed = Effect.fnUntraced(function* <TState extends Th
     lane.seq += 1;
     events.emit(threadId, {
       type: 'state',
+      incarnation: lane.incarnation,
+      runId: state.activeRun?.id ?? state.latestRun?.id ?? null,
       at: { position: lane.position, seq: lane.seq },
       frame,
       weight: lane.watchers === 0 ? 0 : frame.deltas.reduce((sum, delta) => sum + weigh(delta.entry), 0),
@@ -123,12 +129,18 @@ export const makeThreadLiveFeed = Effect.fnUntraced(function* <TState extends Th
     stateListeners.emit(state);
   };
 
-  const view = (threadId: string): ThreadOpenView => {
+  const view = (threadId: string): ThreadLiveView => {
     const lane = lanes.get(threadId);
-    if (lane === undefined) return { at: { position: 0, seq: 0 }, open: [], progress: null };
+    if (lane === undefined) return { incarnation: emptyIncarnation, runId: null, at: { position: 0, seq: 0 }, open: [], progress: null };
     const open: ThreadTranscriptEntry[] = [];
     for (const [id, entry] of lane.open) if (!lane.landing.has(id)) open.push(entry);
-    return { at: { position: lane.position, seq: lane.seq }, open, progress: lane.progress };
+    return {
+      incarnation: lane.incarnation,
+      runId: lane.runId,
+      at: { position: lane.position, seq: lane.seq },
+      open,
+      progress: lane.progress,
+    };
   };
 
   const stateOf = (threadId: string): TState | null => lanes.get(threadId)?.state ?? null;
@@ -176,6 +188,8 @@ export const makeThreadLiveFeed = Effect.fnUntraced(function* <TState extends Th
     lane.seq += 1;
     events.emit(threadId, {
       type: 'open',
+      incarnation: lane.incarnation,
+      runId: lane.runId,
       at: { position: lane.position, seq: lane.seq },
       change,
       weight: lane.watchers === 0 ? 0 : changeWeight(change),
@@ -185,6 +199,7 @@ export const makeThreadLiveFeed = Effect.fnUntraced(function* <TState extends Th
     const held = lanes.get(threadId);
     if (held !== undefined) return held;
     const lane: Lane<TState> = {
+      incarnation: crypto.randomUUID(),
       seq: 0,
       position: 0,
       runId: null,
@@ -265,7 +280,11 @@ export function threadFeedLayer<TState extends ThreadStateShape>(
     tail: (threadId, runId, entries, landed) => live.tail(threadId, runId, entries, landed),
     append: (threadId, runId, id, text) => live.append(threadId, runId, id, text),
     progress: (threadId, runId, progress) => live.progress(threadId, runId, progress),
-    view: (threadId) => live.view(threadId),
+    view: (threadId) => {
+      const { at, open, progress } = live.view(threadId);
+      return { at, open, progress };
+    },
+    liveView: live.view,
     publish: (frame) => publish(frame),
     carry: (frame) => {
       const last = live.stateOf(frame.state.thread.id);

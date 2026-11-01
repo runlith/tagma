@@ -7,7 +7,7 @@ import type { CallRecord } from '../agent/callProgress';
 import type { AgentRuleRegistry } from '../agent/policy/AgentRuntimePolicy';
 import type { ThreadView } from './agents/ThreadAgent';
 import type { ThreadInterruptedInput } from '../transcript/entries';
-import type { ThreadLiveProgress, ThreadOpenView } from '../transcript/live';
+import type { ThreadLiveProgress, ThreadLiveView, ThreadOpenView } from '../transcript/live';
 import type { ThreadTranscriptEntry } from '../transcript/rows';
 import type { ToolCatalog } from '../agent/ToolCatalog';
 import { makeToolSourceRegistry, type ToolSourceRegistry } from '../catalog/toolSources';
@@ -432,6 +432,7 @@ export class ThreadFeed extends Context.Service<
     append(threadId: string, runId: string, id: string, text: string): void;
     progress(threadId: string, runId: string, progress: ThreadLiveProgress): void;
     view(threadId: string): ThreadOpenView;
+    liveView(threadId: string): ThreadLiveView;
     publish(frame: ThreadStateFrame<ThreadState>): Effect.Effect<void, ThreadBorderFailed>;
     carry(frame: ThreadStateFrame<ThreadState>): Effect.Effect<void, ThreadBorderFailed>;
   }

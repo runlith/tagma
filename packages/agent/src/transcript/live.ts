@@ -19,6 +19,8 @@ export type ThreadContextEstimate = {
   readonly contextWindow: number | null;
 };
 
+export type LaunchBlock = { readonly threadId: string; readonly blocked: boolean };
+
 export type ThreadLiveProgress = {
   readonly phase: AgentPhase | null;
   readonly estimate: ThreadContextEstimate | null;
@@ -35,6 +37,14 @@ export type ThreadOpenView = {
   readonly open: readonly ThreadTranscriptEntry[];
   readonly progress: ThreadLiveProgress | null;
 };
+
+export type ThreadLivePosition = {
+  readonly incarnation: string;
+  readonly runId: string | null;
+  readonly at: FeedPosition;
+};
+
+export type ThreadLiveView = ThreadOpenView & ThreadLivePosition;
 
 export type ThreadFeedSnapshot<TState> = TState & {
   readonly transcript: readonly ThreadTranscriptEntry[];

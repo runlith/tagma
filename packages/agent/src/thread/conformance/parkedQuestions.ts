@@ -106,6 +106,7 @@ export const parkedQuestions = Effect.fnUntraced(function* (
         append: () => {},
         progress: () => {},
         view: () => ({ at: { position: 0, seq: 0 }, open: [], progress: null }),
+        liveView: () => ({ incarnation: 'no-live-run', runId: null, at: { position: 0, seq: 0 }, open: [], progress: null }),
         publish: () => Effect.void,
         carry: () => Effect.void,
       }),

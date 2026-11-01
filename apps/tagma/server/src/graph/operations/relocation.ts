@@ -17,7 +17,7 @@ import { blockName } from '../contract/wire/references.js';
 import { BlockRows } from '../acts/rows.js';
 import { farPointers } from '../acts/far.js';
 import { OtherGraphs } from '../serving/policy.js';
-import { atTarget, type GraphTarget, locate } from './crossing.js';
+import { atTarget, copyOf, type GraphTarget, locate } from './crossing.js';
 import {
   arrivingLaw,
   assertIncoming,
@@ -310,5 +310,5 @@ export const relocate = Effect.fn('update_block.relocate')(function* (blockId: s
     dropped: leaving.dropped.length === 0 ? undefined : leaving.dropped,
     left: left.length === 0 ? undefined : left,
   };
-  return { write, moved };
+  return { write, moved, graphCopy: copyOf(to) ?? undefined };
 });
