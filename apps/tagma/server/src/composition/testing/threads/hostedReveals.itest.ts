@@ -97,21 +97,33 @@ describe('the tools Tagma serves a Claude Code thread over its MCP door', () => 
       return { world, projectId, threadId, report, runStatus, answered, served };
     });
 
+    const ownFold = Effect.fnUntraced(function* (label: string, keep?: string) {
+      const { world, projectId, threadId, report, runStatus, served } = yield* revealed(label);
+      const choices = yield* Schema.decodeUnknownEffect(compactionChoicesSchema)(
+        (yield* world.op('read_compaction_choices', { threadId }, `project=${projectId}`)).body,
+      );
+      if (choices.own === null) return yield* Effect.die('a Claude Code thread folds its own session');
+      const folded = yield* Context.get(world.runtime.owners, Compaction).compact(threadId, projectId, {
+        summarizer: { provider: choices.own.provider, model: choices.own.model, reasoning: choices.own.reasoning },
+        keep,
+      });
+      if (folded.status !== 'started') return yield* Effect.die(new Error(`the compaction answered ${folded.status}`));
+      yield* until(runStatus(folded.runId), 'Claude Code compacted its session', report);
+      return yield* served();
+    });
+
     it.effect('a deferred tool revealed before Claude Code compacts its session is still served on the next turn', () =>
       Effect.gen(function* () {
-        const { world, projectId, threadId, report, runStatus, served } = yield* revealed('own');
-        const choices = yield* Schema.decodeUnknownEffect(compactionChoicesSchema)(
-          (yield* world.op('read_compaction_choices', { threadId }, `project=${projectId}`)).body,
-        );
-        if (choices.own === null) return yield* Effect.die('a Claude Code thread folds its own session');
-        const folded = yield* Context.get(world.runtime.owners, Compaction).compact(threadId, projectId, {
-          summarizer: { provider: choices.own.provider, model: choices.own.model, reasoning: choices.own.reasoning },
-        });
-        if (folded.status !== 'started') return yield* Effect.die(new Error(`the compaction answered ${folded.status}`));
-        yield* until(runStatus(folded.runId), 'Claude Code compacted its session', report);
-
-        expect(yield* served()).toContain(DEFERRED);
+        expect(yield* ownFold('own')).toContain(DEFERRED);
       }),
+    );
+
+    it.effect(
+      'a deferred tool revealed before a compaction whose retelling the agent keeps to itself is still served on the next turn',
+      () =>
+        Effect.gen(function* () {
+          expect(yield* ownFold('silent', 'SILENT')).toContain(DEFERRED);
+        }),
     );
 
     it.effect('a deferred tool revealed before a foreign model compacts the thread is still served on the next turn', () =>

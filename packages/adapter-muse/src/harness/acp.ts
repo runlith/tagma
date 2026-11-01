@@ -17,5 +17,6 @@ export const museCodeAcp = clientProfile({
   midTurn: 'steer',
   web: 'vendor',
   aside: 'session',
+  toolCatalog: 'dispatch',
   extensions: MUSE_CODE_EXTENSIONS,
 });

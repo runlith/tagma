@@ -448,7 +448,7 @@ export type AcpProfile = {
   readonly web: TransportWeb;
   readonly mode: string;
   readonly proves: AcpProves;
-  readonly toolCatalog?: 'turn';
+  readonly toolCatalog?: TransportCapabilities['toolCatalog'];
   readonly storage?: { readonly environment: string; readonly folder: string };
   readonly graceMs: number;
   readonly callEnvelopeMs: number | null;

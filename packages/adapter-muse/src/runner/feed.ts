@@ -3,7 +3,7 @@ import type { ToolCall } from '@runlith/acp/toolCalls';
 import type { AgentPhase } from '@runlith/agent/AgentPhase';
 import type { TransportFailure } from '@runlith/agent/transcript/entries';
 import { familyRetries, type WireFailureFamily } from '@runlith/llm/schema/errors';
-import { SERVED } from '@runlith/hosted-runner/bridge';
+import { SERVED, type Dispatched } from '@runlith/hosted-runner/bridge';
 import type { ClientOutcome } from '@runlith/hosted-runner/client';
 import type { Output } from '@runlith/hosted-runner/output';
 import { MEASURED, RETRYING } from '@runlith/hosted-runner/wire/extensions';
@@ -109,6 +109,7 @@ type FeedPorts = {
   readonly window: () => number | null;
   readonly measured: (window: number) => void;
   readonly permitted: (call: ToolCall) => Effect.Effect<string | null>;
+  readonly callOf: (tool: string, input: unknown) => Dispatched;
   readonly stderr: (text: string) => void;
   readonly began: Effect.Effect<void>;
   readonly abandon: Effect.Effect<void>;
@@ -531,7 +532,7 @@ export class Feed {
     const { output } = this.ports;
     const hosted = tool.startsWith(SERVED);
     const web = tool === 'web_search' || tool === 'web_fetch' ? WEB[tool] : undefined;
-    const name = hosted ? tool.slice(SERVED.length) : (web ?? tool);
+    const call = hosted ? this.ports.callOf(tool.slice(SERVED.length), inputOf(args)) : { name: web ?? tool, input: inputOf(args) };
     this.modelStarted = true;
     yield* this.phase('tools');
     yield* output.event({
@@ -539,11 +540,11 @@ export class Feed {
       hosted,
       call: {
         toolCallId: id,
-        title: name,
-        name,
+        title: call.name,
+        name: call.name,
         kind: web === undefined ? undefined : 'fetch',
         status: hosted || tool === 'web_fetch' ? 'pending' : 'in_progress',
-        rawInput: inputOf(args),
+        rawInput: call.input,
       },
     });
     yield* output.event({ type: 'said', said: { messageId: this.message(), toolCallIds: [id] } });

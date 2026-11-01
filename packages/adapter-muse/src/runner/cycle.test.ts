@@ -4,6 +4,7 @@ import { Deferred, Effect, FileSystem, Fiber, Scope } from 'effect';
 import type { Outlet } from '@runlith/acp/agent';
 import { hostedAgent } from '@runlith/hosted-runner/agent';
 import type { HostedDoor } from '@runlith/hosted-runner/door';
+import type { McpServerInput } from '@runlith/mcp/server';
 import { MuseRefused, MuseSdk, type Frame } from './channel.js';
 import { makeMuseCycle } from './cycle.js';
 
@@ -23,7 +24,9 @@ const world = Effect.fnUntraced(function* (script: Script, prompt: () => string 
   const settings: string[] = [];
   const seen: { readonly kind: string; readonly body: unknown }[] = [];
   let minted = 0;
-  const catalog = { description: 'echo' };
+  let mcp: McpServerInput | null = null;
+  const called: string[] = [];
+  const catalog = { description: 'echo', dispatch: false, names: ['echo'] };
   const sdk = MuseSdk.of({
     open: (launch) =>
       Effect.sync(() => {
@@ -64,11 +67,22 @@ const world = Effect.fnUntraced(function* (script: Script, prompt: () => string 
     turn: () => Effect.sync(() => ({ prompt: prompt(), context: 'turn context', web: 'none' as const })),
     tools: () =>
       Effect.sync(() => ({
-        names: ['echo'],
+        names: catalog.names,
         tools: [{ name: 'echo', description: catalog.description, inputSchema: {}, mutates: false }],
+        dispatch: catalog.dispatch,
       })),
     history: () => Effect.succeed([]),
-    call: () => Effect.succeed({ status: 'called', content: [{ type: 'text', text: 'echoed' }], failed: false, offered: false, words: [] }),
+    call: (toolCallId, name, input) =>
+      Effect.sync(() => {
+        called.push(`${toolCallId}:${name}:${JSON.stringify(input)}`);
+        return {
+          status: 'called' as const,
+          content: [{ type: 'text' as const, text: 'echoed' }],
+          failed: false,
+          offered: false,
+          words: [],
+        };
+      }),
   };
   const outlet: Outlet = {
     update: (update) => Effect.sync(() => void seen.push({ kind: 'update', body: update })),
@@ -91,12 +105,20 @@ const world = Effect.fnUntraced(function* (script: Script, prompt: () => string 
       env: {},
       program: 'muse',
       mint: () => `00000000-0000-7000-8000-${String(++minted).padStart(12, '0')}`,
-      serve: () => Effect.succeed({ url: 'http://127.0.0.1:1/mcp' }),
+      serve: (input) =>
+        Effect.sync(() => {
+          mcp = input;
+          return { url: 'http://127.0.0.1:1/mcp' };
+        }),
     },
     { model: 'muse-spark-1.2', effort: 'minimal', parameters: {}, version: 'test' },
   ).pipe(Effect.provideService(MuseSdk, sdk), Effect.provideService(FileSystem.FileSystem, files), Scope.provide(scope));
   const agent = hostedAgent(cycle, door)(outlet);
-  return { agent, sent, launches, settings, seen, catalog };
+  const served = () => {
+    if (mcp === null) throw new Error('the cycle served no MCP door');
+    return mcp;
+  };
+  return { agent, sent, launches, settings, seen, catalog, served, called };
 });
 
 const ok = (sent: Sent, extra: Record<string, unknown> = {}) => Effect.succeed({ commandId: sent.id ?? 'c', status: 'accepted', ...extra });
@@ -614,6 +636,72 @@ it.effect('a tool whose definition changed under the same name restarts the host
     expect(launches).toHaveLength(2);
     expect(sent.filter((one) => one.method === 'session/resume').map((one) => one.params.sessionId)).toEqual([session.sessionId]);
   }),
+);
+
+it.effect(
+  'a deferred tool called through the dispatcher is announced and run under its own name, and a disclosure keeps the host and its list',
+  () =>
+    Effect.gen(function* () {
+      const turns = ['01a19573-1cea-7c2e-90b4-000000000021', '01a19573-1cea-7c2e-90b4-000000000022'];
+      const dispatched = { name: 'read_secret', input: { id: 7 } };
+      const { agent, launches, settings, seen, catalog, served, called } = yield* world((one, emit) => {
+        if (one.method === 'session/start' || one.method === 'session/resume')
+          return ok(one, { session: { sessionId: one.params.sessionId, approvalMode: { mode: 'promptUnmatched' } } });
+        if (one.method === 'turn/start')
+          return Effect.as(
+            Effect.forkDetach(
+              Effect.gen(function* () {
+                const sessionId = one.params.sessionId;
+                yield* emit({ method: 'turn/started', params: { sessionId, turnId: one.id } });
+                if (one.id === turns[0])
+                  yield* emit({
+                    method: 'approval/request',
+                    request: true,
+                    params: {
+                      sessionId,
+                      approvalId: 'a1',
+                      turnId: one.id,
+                      toolCallId: 'call_1',
+                      toolName: 'mcp__tagma__call_tool',
+                      rawArgs: JSON.stringify(dispatched),
+                      currentRequirementId: { approvalId: 'a1', sourceIndex: 0 },
+                      availableChoices: [{ choiceId: 'allow_once', decision: 'approved', scope: 'once' }],
+                      subject: { kind: 'tool', toolName: 'mcp__tagma__call_tool' },
+                    },
+                  });
+                yield* emit({ method: 'turn/completed', params: { sessionId, turnId: one.id, terminal: 'completed' } });
+              }),
+            ),
+            { commandId: one.id, status: 'accepted', turnId: one.id, disposition: 'started' },
+          );
+        return ok(one);
+      });
+      catalog.dispatch = true;
+      const session = yield* agent.newSession({ cwd: '/work', mcpServers: [] });
+      yield* agent.prompt({ sessionId: session.sessionId, prompt: [{ type: 'text', text: 'one' }], _meta: { 'tagma/turn': turns[0] } });
+      expect(
+        seen.find(
+          (one) => one.kind === 'update' && (one.body as { update: { sessionUpdate: string } }).update.sessionUpdate === 'tool_call',
+        )?.body,
+      ).toMatchObject({ update: { toolCallId: 'call_1', title: 'read_secret', rawInput: dispatched.input } });
+      const answer = yield* Effect.promise(() =>
+        served().call('call_tool', dispatched, { callId: 'call_1' }, 1, new AbortController().signal),
+      );
+      expect([answer.isError, called]).toEqual([false, ['call_1:read_secret:{"id":7}']]);
+      expect(JSON.parse(settings.at(-1)!).run.system_prompt).toContain('mcp__tagma__call_tool');
+      const listed = served()
+        .tools()
+        .map((tool) => tool.name);
+      catalog.names = ['echo', 'read_secret'];
+      yield* agent.prompt({ sessionId: session.sessionId, prompt: [{ type: 'text', text: 'two' }], _meta: { 'tagma/turn': turns[1] } });
+      expect([
+        launches.length,
+        listed,
+        served()
+          .tools()
+          .map((tool) => tool.name),
+      ]).toEqual([1, ['echo', 'call_tool'], ['echo', 'call_tool']]);
+    }),
 );
 
 it.effect('a signed-out CLI ends the turn with an auth refusal that names muse login', () =>

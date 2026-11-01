@@ -13,6 +13,7 @@ export type ClientProfile = {
   readonly web?: AcpProfile['web'];
   readonly program?: string;
   readonly aside?: AcpProfile['proves']['aside'];
+  readonly toolCatalog?: AcpProfile['toolCatalog'];
 };
 
 export const clientProfile = ({
@@ -26,6 +27,7 @@ export const clientProfile = ({
   web = 'none',
   program,
   aside = 'none',
+  toolCatalog = 'turn',
 }: ClientProfile): AcpProfile => ({
   ...(program === undefined ? {} : { program }),
   argv: (choice) => [
@@ -59,7 +61,7 @@ export const clientProfile = ({
     usage,
     aside,
   },
-  toolCatalog: 'turn',
+  toolCatalog,
   storage,
   graceMs: 5_000,
   callEnvelopeMs: CALL_ENVELOPE_MS,

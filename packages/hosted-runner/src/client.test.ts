@@ -13,7 +13,7 @@ const open = Effect.fnUntraced(function* (send: ClientDriver['send']) {
   const door: HostedDoor = {
     agent: () => Effect.succeed({ prompt: '', web: 'none' }),
     turn: () => Effect.succeed({ prompt: '', context: null, web: 'none' }),
-    tools: () => Effect.succeed({ names: [], tools: [] }),
+    tools: () => Effect.succeed({ names: [], tools: [], dispatch: false }),
     history: () => Effect.succeed([]),
     call: () => Effect.die('no calls'),
   };

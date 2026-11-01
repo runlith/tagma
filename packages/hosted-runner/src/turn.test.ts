@@ -25,7 +25,7 @@ const openedOf = (result: PromptResult): unknown => (Predicate.isObject(result._
 const openingDoor: HostedDoor = {
   agent: () => Effect.die('the session is already open'),
   history: () => Effect.die('the session has no history to seed'),
-  tools: () => Effect.succeed({ tools: [], names: [] }),
+  tools: () => Effect.succeed({ tools: [], names: [], dispatch: false }),
   call: () => Effect.die('this prompt calls no tool'),
   turn: () => Effect.succeed({ context: 'the workspace moved', prompt: null, web: 'none' }),
 };
@@ -79,7 +79,7 @@ it.effect('closing a session settles a prompt still waiting for the hosted turn 
     const door: HostedDoor = {
       agent: () => Effect.die('the session is already open'),
       history: () => Effect.die('the session has no history to seed'),
-      tools: () => Effect.succeed({ tools: [], names: [] }),
+      tools: () => Effect.succeed({ tools: [], names: [], dispatch: false }),
       call: () => Effect.die('this prompt calls no tool'),
       turn: () => Effect.andThen(Deferred.succeed(reached, undefined), Effect.never),
     };

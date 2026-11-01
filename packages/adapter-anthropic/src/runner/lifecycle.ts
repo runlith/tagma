@@ -5,8 +5,7 @@ import { Bridge, TAGMA_SERVER, servedPrompt } from '@runlith/hosted-runner/bridg
 import { claudeConfig, claudeVendor } from './bridge.js';
 import { failed, said } from './calls.js';
 import type { Channel, ClaudeSdk, Said } from './channel.js';
-import type { HostedToolWire } from '@runlith/hosted-runner/wire/messages';
-import type { HostedAgent, HostedDoor, HostedOpened } from '@runlith/hosted-runner/door';
+import type { HostedAgent, HostedDoor, HostedListed, HostedOpened } from '@runlith/hosted-runner/door';
 import type { Fetching } from './fetching.js';
 import type { Handed } from '@runlith/hosted-runner/handed';
 import type { Names } from './names.js';
@@ -104,8 +103,8 @@ export class Lifecycle {
     yield* driving.channel.send(message);
   });
 
-  listed(tools: readonly HostedToolWire[]): Effect.Effect<void, AgentFault> {
-    return Effect.flatMap(this.driven(), (driving) => driving.bridge.serve(tools));
+  listed(listed: HostedListed): Effect.Effect<void, AgentFault> {
+    return Effect.flatMap(this.driven(), (driving) => driving.bridge.serve(listed));
   }
 
   readonly interrupt = Effect.fnUntraced(function* (this: Lifecycle) {
@@ -239,7 +238,7 @@ export class Lifecycle {
       cwd,
       additionalDirectories: [...directories],
       pathToClaudeCodeExecutable: this.runner.claude,
-      systemPrompt: { type: 'custom', prompt: servedPrompt(this.prompted), snapshot: false },
+      systemPrompt: { type: 'custom', prompt: servedPrompt(this.prompted, false), snapshot: false },
       tools: this.webbed === 'vendor' ? VENDOR_TOOLS.map((tool) => tool.wire) : [],
       toolAliases: this.names.aliases,
       strictMcpConfig: true,

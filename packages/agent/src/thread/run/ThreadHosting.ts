@@ -25,7 +25,7 @@ import {
 } from '../../agent/ToolOutput';
 import { type Tool, documentAsked, toolExecute, toolPartialDisplay } from '../../agent/tool';
 import { unknownToolName } from '../../agent/turn/tools';
-import { unrevealedDefinition, type UnrevealedDefinition } from '../../agent/AgentDeferredTools';
+import { TOOL_SEARCH_TOOL, dispatchedSearch, unrevealedDefinition, type UnrevealedDefinition } from '../../agent/AgentDeferredTools';
 import { toolArguments } from '../../agent/ToolArguments';
 import type { ToolDisplay } from '../../tool/display';
 import { USER_QUESTION_TOOL_NAME } from '../../transcript/parts';
@@ -491,6 +491,12 @@ export const threadHostingLayer = Layer.effect(
         entry !== undefined && coreEntry(entry) && entry.type === 'tool' ? entry : undefined,
       );
 
+    const searched = (hosted: Hosted, call: HostedCall, settled: Settled): Settled => {
+      if (hosted.toolCatalog !== 'dispatch' || call.name !== TOOL_SEARCH_TOOL || settled.output.type !== 'json') return settled;
+      const value = dispatchedSearch(settled.output.value, hosted.handle.catalog());
+      return value === null ? settled : { ...settled, output: { type: 'json', value } };
+    };
+
     const unadmitted = (hosted: Hosted, call: HostedCall): Settled | null => {
       if (hosted.keepWarm) return refused(KEEP_WARM_REFUSAL);
       if (hosted.handle.catalog()[call.name] !== undefined) return null;
@@ -605,7 +611,7 @@ export const threadHostingLayer = Layer.effect(
           AgentHostFailed: (failed) => Effect.fail(broke(failed)),
         }),
       );
-      return yield* recorded(hosted, call, settled);
+      return yield* recorded(hosted, call, searched(hosted, call, settled));
     });
 
     const admittedCall = (hosted: Hosted, call: HostedCall): Effect.Effect<Fiber.Fiber<HostedAnswer, ThreadBorderFailed> | null> =>

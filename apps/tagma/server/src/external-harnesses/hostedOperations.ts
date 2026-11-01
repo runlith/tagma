@@ -62,6 +62,7 @@ export const hostedTools = pair(
         status: 'ok' as const,
         tools: offered.tools.map((tool) => ({ ...tool, inputSchema: { ...tool.inputSchema } })),
         names: offered.names,
+        dispatch: offered.dispatch,
       };
     }),
   }),

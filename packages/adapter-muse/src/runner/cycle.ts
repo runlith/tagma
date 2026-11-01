@@ -5,13 +5,12 @@ import { QuotaObservation, QuotaWindow } from '@runlith/llm/schema/quota';
 import { Bridge, servedPrompt, type BridgeVendor } from '@runlith/hosted-runner/bridge';
 import { clientSession, type ClientCompaction, type ClientOutcome, type ClientRun } from '@runlith/hosted-runner/client';
 import type { Cycle, Process, Steered, Withdrawn } from '@runlith/hosted-runner/cycle';
-import type { HostedDoor } from '@runlith/hosted-runner/door';
+import type { HostedDoor, HostedListed } from '@runlith/hosted-runner/door';
 import { Handed } from '@runlith/hosted-runner/handed';
 import { historyBlocks } from '@runlith/hosted-runner/history';
 import { Options, type ClientLaunch } from '@runlith/hosted-runner/options';
 import type { Output } from '@runlith/hosted-runner/output';
 import { COST, QUOTA } from '@runlith/hosted-runner/wire/extensions';
-import type { HostedToolWire } from '@runlith/hosted-runner/wire/messages';
 import { MUSE_CODE_EXTENSIONS } from '../harness/acp.js';
 import type { McpServerInput } from '@runlith/mcp/server';
 import { MuseSdk, type Frame, type Host, type MuseRefused } from './channel.js';
@@ -41,7 +40,7 @@ export type MuseRunner = {
   readonly serve: (input: McpServerInput & { readonly bearer: string }) => Effect.Effect<{ readonly url: string }, AgentFault, Scope.Scope>;
 };
 
-type Want = { readonly prompt: string; readonly web: 'vendor' | 'none'; readonly tools: readonly HostedToolWire[] };
+type Want = { readonly prompt: string; readonly web: 'vendor' | 'none'; readonly listed: HostedListed };
 type Seat = { readonly id: string; readonly cwd: string; fresh: boolean };
 type Live = {
   readonly host: Host;
@@ -112,7 +111,8 @@ const said = (parts: readonly Part[]): readonly Part[] => {
 const keyOf = (want: Want): string =>
   JSON.stringify([
     want.web,
-    want.tools.toSorted((left, right) => (left.name < right.name ? -1 : left.name > right.name ? 1 : 0)),
+    want.listed.dispatch,
+    want.listed.tools.toSorted((left, right) => (left.name < right.name ? -1 : left.name > right.name ? 1 : 0)),
     want.prompt,
   ]);
 
@@ -306,7 +306,7 @@ export const makeMuseCycle = Effect.fnUntraced(function* (door: HostedDoor, proc
 
   const ensureHost = Effect.fnUntraced(function* (want: Want, cwd: string) {
     const key = keyOf(want);
-    yield* bridge.serve(want.tools);
+    yield* bridge.serve(want.listed);
     const standing = live;
     if (standing !== null && standing.key === key) return standing;
     yield* drop();
@@ -375,7 +375,7 @@ export const makeMuseCycle = Effect.fnUntraced(function* (door: HostedDoor, proc
 
   const wanted = Effect.fnUntraced(function* () {
     const [agent, listed] = yield* Effect.zip(door.agent(), door.tools());
-    return { prompt: servedPrompt(agent.prompt), web: agent.web, tools: listed.tools } satisfies Want;
+    return { prompt: servedPrompt(agent.prompt, listed.dispatch), web: agent.web, listed } satisfies Want;
   });
 
   const windowOf = () => window ?? (applied === null ? null : (live?.windows.get(applied.model) ?? null));
@@ -394,7 +394,11 @@ export const makeMuseCycle = Effect.fnUntraced(function* (door: HostedDoor, proc
           output = out;
           yield* report();
           const prompt = prepared.opened.prompt ?? (yield* door.agent()).prompt;
-          const standing = yield* attach(seat, { prompt: servedPrompt(prompt), web: prepared.opened.web, tools: prepared.listed.tools });
+          const standing = yield* attach(seat, {
+            prompt: servedPrompt(prompt, prepared.listed.dispatch),
+            web: prepared.opened.web,
+            listed: prepared.listed,
+          });
           const blocks: ContentBlock[] = [...history];
           if (input.context !== null) blocks.push({ type: 'text', text: input.context });
           blocks.push(...input.prompt);
@@ -416,6 +420,7 @@ export const makeMuseCycle = Effect.fnUntraced(function* (door: HostedDoor, proc
                 window = size;
               },
               permitted,
+              callOf: (tool, input) => bridge.callOf(tool, input),
               stderr: process.stderr,
               began: Effect.andThen(
                 input.taken,

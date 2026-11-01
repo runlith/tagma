@@ -11,7 +11,7 @@ type Input = { readonly report: string; readonly server?: ServerCli };
 
 const unattended: HostedDoor = {
   agent: () => Effect.succeed({ prompt: 'The scripted Claude Code fixture.', web: 'vendor' }),
-  tools: () => Effect.succeed({ tools: [], names: [] }),
+  tools: () => Effect.succeed({ tools: [], names: [], dispatch: false }),
   history: () => Effect.succeed([]),
   turn: () => Effect.succeed({ context: null, prompt: null, web: 'vendor' }),
   call: () => Effect.never,

@@ -20,6 +20,8 @@ export function visibleOutputToolNames(catalog: ToolCatalog): ReadonlySet<string
   return new Set(Object.entries(catalog).flatMap(([name, tool]) => (tool.userVisible || tool.mutates ? [name] : [])));
 }
 
+export const DISPATCH_TOOL = 'call_tool';
+
 export function deferredToolNames(catalog: ToolCatalog): ReadonlySet<string> {
   return new Set(Object.entries(catalog).flatMap(([name, tool]) => (tool.exposure === 'deferred' ? [name] : [])));
 }

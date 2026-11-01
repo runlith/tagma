@@ -30,7 +30,7 @@ it.effect('a bridge runs a call under the vendor-read call id and refuses one th
       agent: () => Effect.die('no agent'),
       history: () => Effect.die('no history'),
       turn: () => Effect.die('no turn'),
-      tools: () => Effect.succeed({ tools: [read], names: ['read'] }),
+      tools: () => Effect.succeed({ tools: [read], names: ['read'], dispatch: false }),
       call: (toolCallId, name) => {
         ran.push(`${toolCallId}:${name}`);
         return Effect.succeed({
@@ -67,7 +67,39 @@ it.effect('a bridge for a vendor that never relists serves a changed list at onc
       muse,
     );
     expect(bridge.input.tools()).toEqual([]);
-    yield* bridge.serve([read]);
+    yield* bridge.serve({ tools: [read], names: ['read'], dispatch: false });
     expect(bridge.input.tools().map((tool) => tool.name)).toEqual(['read']);
+  }),
+);
+
+it.effect('a dispatching bridge serves its direct tools and call_tool, and runs a dispatched call as the named tool', () =>
+  Effect.gen(function* () {
+    const ran: string[] = [];
+    const door: HostedDoor = {
+      agent: () => Effect.die('no agent'),
+      history: () => Effect.die('no history'),
+      turn: () => Effect.die('no turn'),
+      tools: () => Effect.die('no list read'),
+      call: (toolCallId, name, input) => {
+        ran.push(`${toolCallId}:${name}:${JSON.stringify(input)}`);
+        return Effect.succeed({ status: 'called' as const, content: [], failed: false, offered: false, words: [] });
+      },
+    };
+    const bridge = bridgeOf(door, new Handed(), muse);
+    const signal = new AbortController().signal;
+    yield* bridge.serve({ tools: [read], names: ['read', 'send'], dispatch: false });
+    yield* Effect.promise(() => bridge.input.call('call_tool', { name: 'send', input: { to: 'lead' } }, { callId: 'plain' }, 1, signal));
+    yield* bridge.serve({ tools: [read], names: ['read', 'send'], dispatch: true });
+    const listed = bridge.input.tools();
+    yield* Effect.promise(() => bridge.input.call('call_tool', { name: 'send', input: { to: 'lead' } }, { callId: 'sent' }, 2, signal));
+    yield* Effect.promise(() => bridge.input.call('call_tool', { name: 'read' }, { callId: 'read' }, 3, signal));
+    const nested = yield* Effect.promise(() =>
+      bridge.input.call('call_tool', { input: { name: 'send', input: {} } }, { callId: 'nested' }, 4, signal),
+    );
+    expect([listed.map((tool) => tool.name), ran, nested.isError]).toEqual([
+      ['read', 'call_tool'],
+      ['plain:call_tool:{"name":"send","input":{"to":"lead"}}', 'sent:send:{"to":"lead"}', 'read:read:{}'],
+      true,
+    ]);
   }),
 );

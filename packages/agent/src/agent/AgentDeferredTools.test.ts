@@ -13,9 +13,12 @@ import {
   agentDeferredToolRule,
   agentDeferredTools,
   deferredToolsSection,
+  foldedReferences,
+  revealedDefinitionsSection,
   revealedDeferredToolNames,
   unrevealedDefinition,
 } from './AgentDeferredTools';
+import { vendorBoundaryMessage, vendorVisible } from './AgentSignal';
 import { makeAgentRunner } from './AgentRunner';
 import { RunStop } from './RunStop';
 import { AgentRunState } from './AgentRunState';
@@ -25,7 +28,7 @@ import type { ToolGrant } from '../catalog/resolveCatalog';
 import { stepLimit } from './AgentStep';
 import type { ModelRequest, ModelStreamInput } from './modelPort';
 import type { ToolCatalog } from './ToolCatalog';
-import { Tool, ToolAnswer, toolExecute } from './tool';
+import { Tool, ToolAnswer, describedTool, toolExecute } from './tool';
 import { renderWorldState } from './WorldState';
 import { ASKS_NEVER } from '../permissions/vocabulary';
 const deferredTool = (description: string) =>
@@ -344,6 +347,24 @@ describe('the deferred-tools section', () => {
         kind: 'unchanged',
         snapshot: {},
       });
+    }),
+  );
+});
+describe('a vendor compaction without a retelling', () => {
+  it.effect(
+    'keeps what a search revealed before it, and the first context after it carries those definitions',
+    Effect.fnUntraced(function* () {
+      const before = revealing('mcp__tagma__read_block');
+      const visible = vendorVisible([...before, vendorBoundaryMessage(foldedReferences(before)), Message.user('after')]);
+      expect(revealedDeferredToolNames(catalog, visible)).toEqual(new Set(['mcp__tagma__read_block']));
+      const told = yield* renderWorldState([revealedDefinitionsSection(catalog, visible)], {});
+      expect(told.kind).toBe('changed');
+      if (told.kind !== 'changed') return;
+      const tool = catalog.mcp__tagma__read_block!;
+      expect(told.text).toContain(
+        JSON.stringify({ name: 'mcp__tagma__read_block', description: describedTool(tool), inputSchema: tool.inputSchema }),
+      );
+      expect(yield* renderWorldState([revealedDefinitionsSection(catalog, before)], {})).toEqual({ kind: 'unchanged', snapshot: {} });
     }),
   );
 });

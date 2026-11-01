@@ -100,7 +100,7 @@ export class ClaudeSession implements Listener {
     const prompt = opened.prompt ?? lifecycle.prompt;
     const names = opened.prompt === null || this.names.holds(listed.names) ? null : listed.names;
     if (prompt !== lifecycle.prompt || opened.web !== lifecycle.web || names !== null) yield* lifecycle.reopen(prompt, opened.web, names);
-    yield* lifecycle.listed(listed.tools);
+    yield* lifecycle.listed(listed);
   });
 
   start(input: Input) {
