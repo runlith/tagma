@@ -17276,10 +17276,6 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead packages/layer/src/key.ts#Optional",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "dead-code dead packages/layer/src/key.ts#KeyDoors",
           "owner": "5a3bed29"
         },
