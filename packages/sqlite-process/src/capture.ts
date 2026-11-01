@@ -186,6 +186,7 @@ export const makeRowCapture = (
       ...projections.map((projection) => db.query(`PRAGMA main.table_xinfo(${identifier(projection.table)})`).values()),
     ]);
   const shape = shapeOf();
+  const authorized = db.query(`SELECT id FROM ${AUTH}`);
   const clearing = db.query(`DELETE FROM ${AUTH}`);
   const authorizing = db.query(`INSERT INTO ${AUTH} VALUES (?)`);
   const resetting = db.query(`UPDATE ${STATE} SET touched = 0, bytes = 0, gap = 0, budget = ?`);
@@ -213,11 +214,12 @@ export const makeRowCapture = (
   };
   return {
     authorize: (projections) => {
+      const wanted = new Set(projections === 'effects' ? ids : projections);
+      for (const id of wanted) if (!ids.has(id)) throw new Error(`Unknown row projection: ${id}`);
+      const held = authorized.values();
+      if (held.length === wanted.size && held.every((row) => wanted.has(String(row[0])))) return;
       clearing.run();
-      for (const id of projections === 'effects' ? ids : projections) {
-        if (!ids.has(id)) throw new Error(`Unknown row projection: ${id}`);
-        authorizing.run(id);
-      }
+      for (const id of wanted) authorizing.run(id);
     },
     begin: (budget = PROJECTION_BYTES) => {
       work = [];
