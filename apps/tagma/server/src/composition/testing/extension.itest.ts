@@ -3,12 +3,14 @@ import { existsSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
-import { it } from '@runlith/effect-test';
+import { it, layer } from '@runlith/effect-test';
 import { sharedPool } from '@runlith/sqlite-process/testing/pool';
 import { sql } from 'drizzle-orm';
 import { Context, Effect, Exit, FileSystem, Layer, Schema, Scope } from 'effect';
 import { HttpPlatform, HttpRouter, HttpServer } from 'effect/http';
 import { endHosts } from '../../executions/testing/doubles.js';
+import { type CreationStep, PROJECT_CREATION } from '../../graph/contract/service/creation.js';
+import { ServedGraphs } from '../../graph/contract/service/serving.js';
 import { routedContext } from '../../graph/testing/doubles.js';
 import { frozenBuildsLayer } from '../../installation/testing/doubles.js';
 import { body, pair } from '../../platform/contract/service/body.js';
@@ -16,6 +18,7 @@ import { manifest } from '../../platform/contract/service/manifest.js';
 import { ownStorePath } from '../../platform/contract/service/ownStore.js';
 import { ASKS_NEVER } from '../../platform/contract/wire/conditions.js';
 import { arms, operation } from '../../platform/contract/wire/operation.js';
+import { GateRefusal } from '../../platform/contract/wire/refusal.js';
 import { testGrantSigner } from '../../platform/testing/grants.js';
 import type { Store } from '../../platform/contract/service/store.js';
 import { serverParts } from '../build.js';
@@ -38,6 +41,10 @@ class Greeting extends Context.Service<Greeting, { readonly of: (name: string) =
 class Salutation extends Context.Service<Salutation, { readonly word: string }>()('testing/Salutation') {}
 
 class GreetingStore extends Context.Service<GreetingStore, Store<'greeting'>>()('testing/GreetingStore') {}
+
+type Mark = { readonly mark: string; readonly opened: boolean };
+
+class Marks extends Context.Service<Marks, Map<number, Mark>>()('testing/Marks') {}
 
 const GREETING_OPERATIONS = {
   greet: operation('greet', {
@@ -77,8 +84,30 @@ const greeting = manifest({
     ),
   ],
   stores: [{ id: 'greeting', key: GreetingStore, migrations: fileURLToPath(new URL('./greetingStore', import.meta.url)) }],
+  contributions: PROJECT_CREATION.of(
+    {
+      id: 'greeting-mark',
+      value: Schema.String,
+      step: Effect.fnUntraced(function* (projectId: number, mark: string) {
+        if (mark === 'refused') return yield* new GateRefusal('field-invalid', 'this mark is refused', ['choose another mark']);
+        const opened = (yield* ServedGraphs).held().some((copy) => copy.projectId === projectId);
+        const marks = yield* Marks;
+        marks.set(projectId, { mark, opened });
+        yield* Effect.addFinalizer((exit) => (Exit.isFailure(exit) ? Effect.sync(() => marks.delete(projectId)) : Effect.void));
+      }),
+    } satisfies CreationStep<string>,
+    {
+      id: 'greeting-gate',
+      value: Schema.Literals(['open', 'shut']),
+      step: (_projectId: number, gate: 'open' | 'shut') =>
+        gate === 'shut' ? Effect.fail(new GateRefusal('field-invalid', 'the gate is shut', ['open the gate'])) : Effect.void,
+    } satisfies CreationStep<'open' | 'shut'>,
+  ),
   lifetimes: {
-    installation: Layer.succeed(Salutation, { word: 'Hello' }),
+    installation: Layer.mergeAll(
+      Layer.succeed(Salutation, { word: 'Hello' }),
+      Layer.sync(Marks, () => new Map<number, Mark>()),
+    ),
     serving: Layer.effect(
       Greeting,
       Effect.map(Effect.all([Salutation, GreetingStore]), ([salutation, store]) => ({
@@ -104,7 +133,7 @@ const greeting = manifest({
 
 const extended = serverParts({ ...PARTS, modules: [...MODULES, greeting] });
 
-const served = Effect.fnUntraced(function* (home: string, assembly: Assembly, scope: Scope.Scope) {
+const served = Effect.fnUntraced(function* (home: string, assembly: Assembly) {
   const files = yield* FileSystem.FileSystem;
   const runtime = yield* makeRuntime(
     {
@@ -122,7 +151,7 @@ const served = Effect.fnUntraced(function* (home: string, assembly: Assembly, sc
     },
     Layer.empty,
     yield* sharedPool,
-  ).pipe(Scope.provide(scope), Effect.orDie);
+  ).pipe(Effect.orDie);
   const routed = routedContext(runtime.graph, runtime.pool);
   const handler = yield* HttpRouter.toHttpEffect(
     doorServing(doorLayer({ status: runtime.status }), runtime, home).pipe(
@@ -133,8 +162,8 @@ const served = Effect.fnUntraced(function* (home: string, assembly: Assembly, sc
       Layer.provideMerge(HttpPlatform.layer),
       Layer.provideMerge(BunFileSystem.layer),
     ),
-  ).pipe(Scope.provide(scope));
-  return (path: string, sent?: unknown) =>
+  );
+  const request = (path: string, sent?: unknown) =>
     Effect.provide(
       requestEffect(
         Effect.provideService(handler, FileSystem.FileSystem, files),
@@ -145,26 +174,94 @@ const served = Effect.fnUntraced(function* (home: string, assembly: Assembly, sc
       ),
       routed,
     );
+  return { runtime, request };
 });
 
-it.live('a root composing the core with a module of its own serves it from its own store, and the core alone still opens that data', () =>
+class Root extends Context.Service<
+  Root,
+  {
+    readonly op: (id: string, input: unknown) => Effect.Effect<{ readonly status: number; readonly body: unknown }>;
+    readonly folder: (label: string) => Effect.Effect<string>;
+    readonly marks: Map<number, Mark>;
+  }
+>()('testing/Root') {}
+
+const root = Layer.effect(
+  Root,
   Effect.gen(function* () {
     const files = yield* FileSystem.FileSystem;
     const home = yield* files.makeTempDirectoryScoped({ prefix: 'extension-root-' });
     yield* Effect.addFinalizer(() => Effect.orDie(endHosts(home)));
-    const first = yield* Scope.make();
-    const request = yield* served(home, yield* Effect.promise(() => assemble(extended)), first);
-    yield* request('/api/op/greet', { name: 'Ada' });
-    expect((yield* request('/api/op/greet', { name: 'Ada' })).body).toEqual({
-      status: 'greeted',
-      text: 'Hello Ada, greeted 2 time in greeting.sqlite',
+    const { runtime, request } = yield* served(home, yield* Effect.promise(() => assemble(extended)));
+    return Root.of({
+      op: (id, input) => request(`/api/op/${id}`, input),
+      folder: (label) => Effect.orDie(files.makeTempDirectory({ directory: home, prefix: `${label}-` })),
+      marks: Context.getUnsafe(runtime.owners, Marks),
     });
+  }),
+).pipe(Layer.provide(BunFileSystem.layer));
+
+layer(root, { excludeTestServices: true })('a root composing the core with a module of its own', (it) => {
+  it.effect('serves its operation through the serving lifetime it declares, from a store of its own', () =>
+    Effect.gen(function* () {
+      expect(yield* (yield* Root).op('greet', { name: 'Ada' })).toMatchObject({
+        body: { status: 'greeted', text: 'Hello Ada, greeted 1 time in greeting.sqlite' },
+      });
+      expect(ASSEMBLY.registry.named('greet')).toBeNull();
+    }),
+  );
+
+  it.effect("runs its creation step on a project it registers before the graph first opens, and a step's refusal names its entry", () =>
+    Effect.gen(function* () {
+      const world = yield* Root;
+      const add = (name: string, contributed: Readonly<Record<string, unknown>>) =>
+        Effect.flatMap(world.folder(name), (rootPath) => world.op('add_project', { name, rootPath, storage: 'stealth', contributed }));
+      const projects = () =>
+        Effect.map(world.op('list_projects', {}), (listed) =>
+          (listed.body as { projects: { name: string }[] }).projects.map((one) => one.name),
+        );
+
+      const born = yield* add('marked', { 'greeting-mark': 'oak' });
+      expect(born.status).toBe(200);
+      expect(world.marks.get((born.body as { project: { id: number } }).project.id)).toEqual({ mark: 'oak', opened: false });
+      expect(yield* projects()).toContain('marked');
+
+      const refused = yield* add('refused', { 'greeting-mark': 'refused' });
+      expect(refused).toMatchObject({
+        status: 409,
+        body: { code: 'field-invalid', reason: 'this mark is refused', field: 'greeting-mark' },
+      });
+      const malformed = yield* add('malformed', { 'greeting-mark': 7 });
+      expect(malformed).toMatchObject({ status: 409, body: { code: 'field-invalid', field: 'greeting-mark' } });
+      const stranger = yield* add('stranger', { 'nobody-takes': true });
+      expect(stranger).toMatchObject({ status: 409, body: { code: 'field-invalid', field: 'nobody-takes' } });
+      const gated = yield* add('gated', { 'greeting-mark': 'elm', 'greeting-gate': 'shut' });
+      expect(gated).toMatchObject({ status: 409, body: { code: 'field-invalid', reason: 'the gate is shut', field: 'greeting-gate' } });
+      expect([...world.marks.values()].map((one) => one.mark)).toEqual(['oak']);
+      expect(yield* projects()).toContain('marked');
+      expect(yield* projects()).not.toContain('refused');
+      expect(yield* projects()).not.toContain('gated');
+
+      const after = yield* add('after', {});
+      const id = (answer: { readonly body: unknown }) => (answer.body as { project: { id: number } }).project.id;
+      expect(id(after)).toBe(id(born) + 3);
+    }),
+  );
+});
+
+it.live('the core alone opens a data directory holding the store of a module it lacks, and serves', () =>
+  Effect.gen(function* () {
+    const files = yield* FileSystem.FileSystem;
+    const home = yield* files.makeTempDirectoryScoped({ prefix: 'extension-core-' });
+    yield* Effect.addFinalizer(() => Effect.orDie(endHosts(home)));
+    const first = yield* Scope.make();
+    const { request } = yield* Scope.provide(served(home, yield* Effect.promise(() => assemble(extended))), first);
+    expect((yield* request('/api/op/greet', { name: 'Ada' })).status).toBe(200);
     yield* Scope.close(first, Exit.void);
     expect(existsSync(ownStorePath(join(home, 'tagma.sqlite'), 'greeting'))).toBe(true);
     const second = yield* Scope.make();
     yield* Effect.addFinalizer(() => Scope.close(second, Exit.void));
-    const core = yield* served(home, ASSEMBLY, second);
+    const { request: core } = yield* Scope.provide(served(home, ASSEMBLY), second);
     expect((yield* core('/health')).status).toBe(200);
-    expect(ASSEMBLY.registry.named('greet')).toBeNull();
   }).pipe(Effect.provide(BunFileSystem.layer)),
 );

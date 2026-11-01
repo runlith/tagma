@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { operationsOwnedBy } from '@tagma/server/composition/catalog';
+  import { operationsOwnedBy } from '@tagma/server/composition/operations';
   import type { GraphToolAnswer } from '@tagma/server/graph/contract/wire/toolAnswers';
   import { graphText } from '@tagma/server/graph/voice/answers';
   import { settingsText } from '@tagma/server/settings/voice';

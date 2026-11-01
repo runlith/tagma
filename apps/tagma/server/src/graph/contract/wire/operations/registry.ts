@@ -65,7 +65,7 @@ export const REGISTRY_OPERATIONS = {
     ...act('Register this project?', 'Register', 'Registered a project'),
     meaning: 'Register a checkout as a project: its graph is born and the commit gate is installed in it.',
     grammar:
-      'A folder that is a removed project — the same folder, or its repository moved elsewhere — brings that project back with its id, name, policy, storage, graph and threads and answers `returned`, as does a registered repository added at the place it moved to; a removed project whose name another project took comes back under the name asked for. Otherwise the name, storage, policy and catalogs asked for apply only to a project born here. Another clone or a copy of a registered repository is a project of its own, and a worktree belongs to its repository’s project.',
+      'A folder that is a removed project — the same folder, or its repository moved elsewhere — brings that project back with its id, name, policy, storage, graph and threads and answers `returned`, as does a registered repository added at the place it moved to; a removed project whose name another project took comes back under the name asked for. Otherwise the name, storage, policy, catalogs and contributed values asked for apply only to a project born here. Another clone or a copy of a registered repository is a project of its own, and a worktree belongs to its repository’s project.',
     input: Schema.Struct({
       name: Schema.String.check(Schema.isMinLength(1)),
       rootPath: root,
@@ -80,9 +80,21 @@ export const REGISTRY_OPERATIONS = {
         description:
           'The private git remote of the stealth graph — a stealth project’s whole graph, a team project’s stealth blocks: a graph it holds is restored here, an empty one receives this graph. A remote git cannot read refuses the registration.',
       }),
+      contributed: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)).annotate({
+        description:
+          'Values for the creation steps this server’s modules contribute, keyed by step id. Each step takes its value after registration and before the graph first opens; a value it refuses, or an id no step takes, refuses the registration whole, naming the entry in `field`.',
+      }),
     }),
     answer: arms({ ok: { project: projectSchema, returned: Schema.Boolean } }),
-    refusals: [...ROOT_REFUSALS, 'reserved-project', 'project-name', 'duplicate-name', 'unknown-catalog', 'remote-invalid'],
+    refusals: [
+      ...ROOT_REFUSALS,
+      'reserved-project',
+      'project-name',
+      'duplicate-name',
+      'unknown-catalog',
+      'remote-invalid',
+      'field-invalid',
+    ],
   }),
 
   set_project_root: operation('set_project_root', {

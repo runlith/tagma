@@ -32,6 +32,7 @@ export type Manifest = {
   readonly presentation?: () => Promise<ModulePresentation<any>>;
   readonly subjects?: () => Promise<readonly SubjectPlace[]>;
   readonly verbs?: (...bindings: never[]) => Readonly<Record<string, () => Promise<Record<string, unknown>>>>;
+  readonly feeds?: readonly FeedDeclaration[];
   readonly live?: {
     readonly feeds: readonly FeedDeclaration[];
     readonly handlers: (door: Context.Context<any>) => Effect.Effect<object>;
@@ -166,6 +167,7 @@ function checkManifests(modules: readonly Manifest[]): void {
     }
     if (names.has(module.id)) throw new ManifestConflict({ collection: 'modules', id: module.id, owners: [module.id, module.id] });
     names.add(module.id);
+    if (module.feeds !== undefined) servesDeclared(module.id, module.feeds, module.live?.feeds ?? []);
     for (const collection of COLLECTIONS) {
       const owners = entries.get(collection)!;
       for (const entry of (collection === 'feeds' ? module.live?.feeds : module[collection]) ?? []) {
@@ -175,6 +177,24 @@ function checkManifests(modules: readonly Manifest[]): void {
       }
     }
   }
+}
+
+class LiveFeedsUnmatched extends Data.TaggedError('LiveFeedsUnmatched')<{
+  readonly module: string;
+  readonly unserved: readonly string[];
+  readonly undeclared: readonly string[];
+}> {
+  override get message(): string {
+    return `${this.module}: feeds its wire declares and its live does not serve (${this.unserved.join(', ')}), feeds its live serves and its wire does not declare (${this.undeclared.join(', ')})`;
+  }
+}
+
+function servesDeclared(module: string, declared: readonly FeedDeclaration[], served: readonly FeedDeclaration[]): void {
+  const servedIds = new Set(served.map((feed) => feed.id));
+  const declaredIds = new Set(declared.map((feed) => feed.id));
+  const unserved = [...declaredIds].filter((id) => !servedIds.has(id));
+  const undeclared = [...servedIds].filter((id) => !declaredIds.has(id));
+  if (unserved.length > 0 || undeclared.length > 0) throw new LiveFeedsUnmatched({ module, unserved, undeclared });
 }
 
 type Kept = 'id' | 'title' | 'journaled' | 'verbs' | 'live' | 'lifetimes' | Exclude<Collection, 'feeds'>;

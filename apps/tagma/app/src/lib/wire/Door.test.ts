@@ -5,18 +5,21 @@ import { Effect, Schema } from 'effect';
 import { PAIRING_ENDPOINT, PairedAnswer } from '@tagma/server/remote/contract/wire/access';
 import { expect, test } from 'vitest';
 import { THREADS_ENTRY_KINDS } from '@tagma/server/threads/contract/wire/entryKinds';
+import { CATALOG_MODULES } from '@tagma/server/composition/catalog';
 import { makePoint, makeRouter } from '@runlith/layer/testing';
 import { Refusal } from './refusal.js';
 import { Door } from './Door.js';
-import { loadOperations } from './operation.js';
+import { OperationCodecs } from './operation.js';
 import { ServerOrigin } from './ServerOrigin.svelte.js';
-import { readingOf, WireEntryKinds } from './WireEntryKinds.js';
+import { loadCatalog, testOperations } from './testing.js';
+import { WireCatalog } from './WireCatalog.js';
+import { wireEntries, WireEntryKinds } from './WireEntryKinds.js';
 
-await loadOperations();
+await loadCatalog();
 
 let answer: (input: RequestInfo | URL, init?: RequestInit) => Response | Promise<Response>;
 const fetch = async (input: RequestInfo | URL, init?: RequestInit) => answer(input, init);
-const doorOf = () => new Door(fetch, new ServerOrigin('http://tagma.test'), makeRouter());
+const doorOf = () => new Door(fetch, new ServerOrigin('http://tagma.test'), makeRouter(), testOperations());
 
 test.each([
   { status: 409, code: 'no-source', gate: true },
@@ -33,7 +36,7 @@ test.each([
 });
 
 test('evidence decodes installed product entries and retains a typed diagnostic for an unknown kind', async () => {
-  const door = new Door(fetch, new ServerOrigin('http://tagma.test'), makeRouter(), readingOf(testWireKinds()));
+  const door = new Door(fetch, new ServerOrigin('http://tagma.test'), makeRouter(), testOperations(), wireEntries(testWireKinds()));
   const entry = { type: 'transport', id: 'transport:1', from: 'terminal', to: 'acp', occurredAt: '' };
   answer = () => Response.json({ status: 'found', entry });
   expect(await door.perform('read_thread_entry', { threadId: ThreadId.make('t1'), entryId: entry.id }, {})).toEqual({
@@ -50,7 +53,7 @@ test('evidence decodes installed product entries and retains a typed diagnostic 
 
 test('a kind contributed after the door was built is read by its next request, and a kind the agent core reads is refused', async () => {
   const kinds = makePoint(WireEntryKinds);
-  const door = new Door(fetch, new ServerOrigin('http://tagma.test'), makeRouter(), readingOf(kinds));
+  const door = new Door(fetch, new ServerOrigin('http://tagma.test'), makeRouter(), testOperations(), wireEntries(kinds));
   const entry = { type: 'transport', id: 'transport:1', from: 'terminal', to: 'acp', occurredAt: '' };
   answer = () => Response.json({ status: 'found', entry });
   const before = await door.perform('read_thread_entry', { threadId: ThreadId.make('t1'), entryId: entry.id }, {});
@@ -69,6 +72,21 @@ test('a kind contributed after the door was built is read by its next request, a
     }
   })();
   expect(refused).toMatchObject({ name: 'RegistryRefusal', contributor: 'other' });
+});
+
+test('an operation of a catalog entry contributed after the door was built is performed, and one no entry declares is refused unsent', async () => {
+  const catalog = makePoint(WireCatalog);
+  const door = new Door(fetch, new ServerOrigin('http://tagma.test'), makeRouter(), new OperationCodecs(catalog));
+  let sent = 0;
+  answer = () => {
+    sent += 1;
+    return Response.json({ status: 'ok', sessions: [] });
+  };
+  await expect(door.perform('list_sessions', {}, {})).rejects.toBeInstanceOf(Refusal);
+  expect(sent).toBe(0);
+  catalog.register('late', ...CATALOG_MODULES);
+  await door.perform('list_sessions', {}, {}).catch(() => undefined);
+  expect(sent).toBe(1);
 });
 
 test('an operation input with an undefined optional reaches the server without that key', async () => {

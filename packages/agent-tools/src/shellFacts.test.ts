@@ -61,6 +61,8 @@ test('shell operands preserve glob syntax and quoting, find names its roots, and
 test('git names the working files its pathspecs change, and nothing for an index-only change', () => {
   expect(shape('git -C src checkout HEAD -- a.ts b')[0]?.named).toEqual(['/repo/src/a.ts', '/repo/src/b']);
   expect(shape('git mv -k old.ts lib/new.ts')[0]?.named).toEqual(['/repo/old.ts', '/repo/lib/new.ts']);
+  expect(shape('git mv "[app]" \'[...path]\'')[0]?.named).toEqual(['/repo/[app]', '/repo/[...path]']);
+  expect(shape("mv '[app]' x")[0]?.named).toEqual(['/repo/[app]', '/repo/x']);
   expect(shape('git restore --source HEAD~1 a.ts')[0]?.named).toEqual(['/repo/a.ts']);
   expect(shape('git rm --cached a.ts')[0]?.named).toEqual([]);
   expect(shape('git restore --staged a.ts')[0]?.named).toEqual([]);

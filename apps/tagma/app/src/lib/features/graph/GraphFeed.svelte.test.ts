@@ -26,9 +26,9 @@ import { GraphFeed } from './Feed.js';
 import { JournalRepo } from './JournalRepo.js';
 import { SessionsRepo } from './SessionsRepo.js';
 import { TagCatalog } from './TagCatalog.svelte.js';
-import { loadOperations } from '$lib/wire/operation.js';
+import { loadCatalog, TestCatalog } from '$lib/wire/testing.js';
 
-await loadOperations();
+await loadCatalog();
 
 function json(body: unknown, init: ResponseInit = {}): Response {
   return new Response(JSON.stringify(body), { ...init, headers: { 'content-type': 'application/json' } });
@@ -52,6 +52,7 @@ function open(answer: (url: URL) => Promise<Response>, readTags?: () => Promise<
     Layer.mergeAll(
       Layer.of(Cache, new QueryClient({ defaultOptions: { queries: { retry: false } } })),
       Layer.of(Platform, makePlatform({ fetch })),
+      TestCatalog,
       ServerOrigin.of('http://localhost'),
       Layer.of(Router, makeRouter()),
       Layer.of(TagCatalog, tags),

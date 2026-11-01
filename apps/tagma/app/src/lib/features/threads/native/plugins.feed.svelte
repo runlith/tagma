@@ -1,7 +1,7 @@
 <script lang="ts">
   import Blocks from '@lucide/svelte/icons/blocks';
   import { Schema } from 'effect';
-  import type { CatalogOperationId } from '@tagma/server/composition/catalog';
+  import type { CatalogOperationId } from '$lib/wire/operation.js';
   import { PLUGIN_LINK, type PluginLinkTarget } from '@tagma/server/plugins/contract/wire/link';
   import { type PluginRow, pluginRowSchema } from '@tagma/server/plugins/contract/wire/rows';
   import type { EntryKinds } from '@runlith/chat-ui/EntryKinds.svelte';

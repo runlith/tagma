@@ -12,6 +12,7 @@ import type { UiTokensParams } from './ui-tokens/declaration';
 import type { DeadParams, RepeatedParams } from './declarations/declaration';
 import type { VendorParams } from './architecture/inspections';
 import type { CallParams } from './architecture/calls/params';
+import { withReader } from './store';
 
 const root = process.cwd();
 const parses: ParseMemo = new Map();
@@ -40,39 +41,40 @@ const supplied = async (name: Named, side: Side): Promise<ProgramSide> => {
 
 const checked =
   (id: string) =>
-  async (input: InspectionInput<object>): Promise<Answer> => {
-    await (engine ??= prepared());
-    const check = await checkOf(id, input.params);
-    const reading = async (name: Named, side: Side): Promise<Reading> => {
-      const reach = new Set(side.paths);
-      const tree = sideTree(
-        root,
-        side.commit,
-        await supplied(name, side),
-        [''],
-        (path) => reach.has(path) && check.selects(path),
-        parses,
-        blobs,
-      );
-      const paths = side.whole ? [...tree.paths!()] : side.paths.filter((path) => tree.has(path));
-      const read = check.read(tree, paths, ADAPTERS, memo, side.whole ? 'reach' : 'change');
-      if (read.unjudged.length > 0) throw new Error(`${id} left ${read.unjudged.length} sources of the ${name} side unjudged`);
-      return {
-        covered: 'paths',
-        findings: read.violations.map((one) => ({
-          fingerprint: one.fingerprint,
-          path: one.file,
-          line: one.line,
-          message: one.message ?? '',
-          fix: one.fix,
-          value: one.value,
-          sites: one.sites,
-        })),
+  async (input: InspectionInput<object>): Promise<Answer> =>
+    withReader(root, input.tree.commit, async () => {
+      await (engine ??= prepared());
+      const check = await checkOf(id, input.params);
+      const reading = async (name: Named, side: Side): Promise<Reading> => {
+        const reach = new Set(side.paths);
+        const tree = sideTree(
+          root,
+          side.commit,
+          await supplied(name, side),
+          [''],
+          (path) => reach.has(path) && check.selects(path),
+          parses,
+          blobs,
+        );
+        const paths = side.whole ? [...tree.paths!()] : side.paths.filter((path) => tree.has(path));
+        const read = check.read(tree, paths, ADAPTERS, memo, side.whole ? 'reach' : 'change');
+        if (read.unjudged.length > 0) throw new Error(`${id} left ${read.unjudged.length} sources of the ${name} side unjudged`);
+        return {
+          covered: 'paths',
+          findings: read.violations.map((one) => ({
+            fingerprint: one.fingerprint,
+            path: one.file,
+            line: one.line,
+            message: one.message ?? '',
+            fix: one.fix,
+            value: one.value,
+            sites: one.sites,
+          })),
+        };
       };
-    };
-    const tree = await reading('tree', input.tree);
-    return input.base === null ? { tree } : { tree, base: await reading('base', input.base) };
-  };
+      const tree = await reading('tree', input.tree);
+      return input.base === null ? { tree } : { tree, base: await reading('base', input.base) };
+    });
 
 let engine: Promise<void> | undefined;
 
@@ -84,26 +86,28 @@ const prepared = async (): Promise<void> => {
 
 const stored =
   (id: 'migrations' | 'step-places') =>
-  async (input: InspectionInput<object>): Promise<Answer> => {
-    await (engine ??= prepared());
-    const judge = storedJudge(root, input.tree.commit, input.base?.commit ?? null);
-    const readings = await judge.judge({ key: id, id, params: input.params });
-    judge.save();
-    const side = (name: Named): Reading => ({
-      covered: 'reach',
-      findings: readings.find((one) => one.side === name)?.findings ?? [],
+  async (input: InspectionInput<object>): Promise<Answer> =>
+    withReader(root, input.tree.commit, async () => {
+      await (engine ??= prepared());
+      const judge = storedJudge(root, input.tree.commit, input.base?.commit ?? null);
+      const readings = await judge.judge({ key: id, id, params: input.params });
+      judge.save();
+      const side = (name: Named): Reading => ({
+        covered: 'reach',
+        findings: readings.find((one) => one.side === name)?.findings ?? [],
+      });
+      return input.base === null ? { tree: side('tree') } : { tree: side('tree'), base: side('base') };
     });
-    return input.base === null ? { tree: side('tree') } : { tree: side('tree'), base: side('base') };
-  };
 
 const lazily =
   <Params extends object>(load: () => Promise<{ readonly default: { readonly [key: string]: Program<never> } }>, key: string) =>
-  async (input: InspectionInput<Params>): Promise<Answer> => {
-    await (engine ??= prepared());
-    const handler = (await load()).default[key] as Program<Params> | undefined;
-    if (handler === undefined) throw new Error(`the law programs hold no handler for ${key}`);
-    return handler(input);
-  };
+  async (input: InspectionInput<Params>): Promise<Answer> =>
+    withReader(root, input.tree.commit, async () => {
+      await (engine ??= prepared());
+      const handler = (await load()).default[key] as Program<Params> | undefined;
+      if (handler === undefined) throw new Error(`the law programs hold no handler for ${key}`);
+      return handler(input);
+    });
 
 export default defineProgram<{
   'effect-style': EffectStyleParams;

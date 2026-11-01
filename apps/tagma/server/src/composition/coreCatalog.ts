@@ -34,6 +34,9 @@ import { notify } from '../notify/contract/wire/module.js';
 import { push } from '../push/contract/wire/module.js';
 import { schedule } from '../schedule/contract/wire/module.js';
 import { invocation } from '../invocation/contract/wire/module.js';
+import { projects } from '../projects/contract/wire/module.js';
+import { power } from '../power/contract/wire/module.js';
+import { desktopBrowser } from '../desktop-browser/contract/wire/module.js';
 
 export const CORE_CATALOG: readonly [
   typeof settings,
@@ -72,6 +75,9 @@ export const CORE_CATALOG: readonly [
   typeof push,
   typeof schedule,
   typeof invocation,
+  typeof projects,
+  typeof power,
+  typeof desktopBrowser,
 ] = [
   settings,
   providers,
@@ -109,4 +115,7 @@ export const CORE_CATALOG: readonly [
   push,
   schedule,
   invocation,
+  projects,
+  power,
+  desktopBrowser,
 ] as const;

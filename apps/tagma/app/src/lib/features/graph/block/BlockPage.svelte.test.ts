@@ -37,13 +37,12 @@ import { ReaderMarks } from '$lib/shared/reading/ReaderMarks.svelte.js';
 import { ThreadNames } from '$lib/shared/threads/Names.svelte.js';
 import { Door } from '$lib/wire/Door.js';
 import { Live, type GraphFrame } from '$lib/wire/Live.js';
-import { loadOperations } from '$lib/wire/operation.js';
-import { testDoor } from '$lib/wire/testing.js';
+import { loadCatalog, testDoor } from '$lib/wire/testing.js';
 import { TranslationLayer } from '$lib/features/graph/translation/layer.js';
 import { LinksPlacement } from './LinksPlacement.svelte.js';
 import BlockPage from './BlockPage.svelte';
 
-await loadOperations();
+await loadCatalog();
 
 const AT = '2026-10-28T10:00:00Z';
 const LATER = '2026-10-28T11:00:00Z';

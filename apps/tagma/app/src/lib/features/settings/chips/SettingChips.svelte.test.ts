@@ -16,16 +16,15 @@ import { Opening } from '$lib/features/opening/Opening.svelte.js';
 import { ProjectsRepo } from '$lib/features/workspace/ProjectsRepo.js';
 import { Workspace } from '$lib/features/workspace/Selection.svelte.js';
 import { Door } from '$lib/wire/Door.js';
-import { loadOperations } from '$lib/wire/operation.js';
 import { ServerOrigin } from '$lib/wire/ServerOrigin.svelte.js';
 import { SessionNaming } from '$lib/wire/SessionNaming.svelte.js';
-import { testDoor } from '$lib/wire/testing.js';
+import { loadCatalog, testDoor } from '$lib/wire/testing.js';
 import { SectionContributions, SettingSections } from '../section.js';
 import { SectionRegistry } from '../SectionRegistry.js';
 import { SettingsRepo } from '../SettingsRepo.js';
 import { SettingChips } from './SettingChips.svelte.js';
 
-await loadOperations();
+await loadCatalog();
 
 function json(body: unknown): Response {
   return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } });

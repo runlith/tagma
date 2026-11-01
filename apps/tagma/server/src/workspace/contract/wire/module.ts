@@ -1,4 +1,5 @@
-import { mergeOperations, type OperationManifest } from '../../../platform/contract/wire/manifest.js';
+import { mergeOperations, type WireModule } from '../../../platform/contract/wire/manifest.js';
+import { CHECKOUT_FEED } from './checkout.js';
 
 export const workspace = {
   id: 'workspace',
@@ -15,4 +16,5 @@ export const workspace = {
       refusals: REFUSAL_WORDS,
     } as const;
   },
-} as const satisfies OperationManifest;
+  feeds: [CHECKOUT_FEED],
+} as const satisfies WireModule;

@@ -1,4 +1,5 @@
-import { OPERATIONS, type CatalogOperationId } from '@tagma/server/composition/catalog';
+import { OPERATIONS } from '@tagma/server/composition/operations';
+import type { CatalogOperationId } from '$lib/wire/operation.js';
 import { toolPresentation as presentationOf } from '@tagma/server/native-harness/tools/presentation';
 import type { ToolWords } from '@runlith/agent/tool/words';
 import { mcpToolNamed } from '@runlith/mcp/identity';

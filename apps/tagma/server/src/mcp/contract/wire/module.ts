@@ -1,4 +1,5 @@
-import { mergeOperations, type OperationManifest } from '../../../platform/contract/wire/manifest.js';
+import { mergeOperations, type WireModule } from '../../../platform/contract/wire/manifest.js';
+import { MCP_FEEDS } from './feeds.js';
 
 export const mcp = {
   id: 'mcp',
@@ -13,4 +14,5 @@ export const mcp = {
       refusals: REFUSAL_WORDS,
     } as const;
   },
-} as const satisfies OperationManifest;
+  feeds: MCP_FEEDS,
+} as const satisfies WireModule;

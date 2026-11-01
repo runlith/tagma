@@ -15,14 +15,13 @@ import { ProjectsRepo } from '$lib/features/workspace/ProjectsRepo.js';
 import { Workspace } from '$lib/features/workspace/Selection.svelte.js';
 import { Door } from '$lib/wire/Door.js';
 import { Live } from '$lib/wire/Live.js';
-import { loadOperations } from '$lib/wire/operation.js';
 import { Refusal, RETRIES, retriable } from '$lib/wire/refusal.js';
 import { ServerOrigin } from '$lib/wire/ServerOrigin.svelte.js';
 import { SoundChannel } from '$lib/wire/SoundChannel.js';
-import { testDoor } from '$lib/wire/testing.js';
+import { loadCatalog, TestCatalog, testDoor } from '$lib/wire/testing.js';
 import { SettingsRepo } from './SettingsRepo.js';
 
-await loadOperations();
+await loadCatalog();
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
@@ -77,6 +76,7 @@ test.each([
     ),
     Layer.mergeAll(
       Layer.of(Door, door),
+      TestCatalog,
       Layer.of(Platform, makePlatform()),
       Layer.of(Router, makeRouter()),
       ServerOrigin.of('http://localhost'),

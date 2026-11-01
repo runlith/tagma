@@ -144,7 +144,7 @@ export type ProjectPolicyChanged = { readonly projectId: number; readonly field:
 export class ProjectLifecycle extends Context.Service<
   ProjectLifecycle,
   {
-    create(
+    create<E = never, R = never>(
       input: {
         name: string;
         rootPath: string;
@@ -154,14 +154,15 @@ export class ProjectLifecycle extends Context.Service<
         catalogs?: readonly string[];
         graphRemote?: string;
       },
-      birth?: (row: ProjectPolicyRow) => Effect.Effect<void, GateRefusal<OpenRefusal>>,
+      birth?: (row: ProjectPolicyRow) => Effect.Effect<void, E, R>,
     ): Effect.Effect<
       AdmittedProject,
       | StoreFailure
       | GateRefusal<
           ProjectRootFailure | VocabularyRefusal | OpenRefusal | 'reserved-project' | 'project-name' | 'duplicate-name' | 'duplicate-root'
-        >,
-      ProjectIdentification
+        >
+      | E,
+      ProjectIdentification | R
     >;
     move(
       projectId: number,
@@ -445,7 +446,7 @@ export class ServedGraphs extends Context.Service<
       readonly settle?: boolean;
     }): Effect.Effect<IndexedTitles, GateRefusal<'graph-pool'>>;
     releaseProject(projectId: number): Effect.Effect<void>;
-    birth(projectId: number): Effect.Effect<void, GateRefusal<OpenRefusal>>;
+    birth<E = never, R = never>(projectId: number, first?: Effect.Effect<void, E, R>): Effect.Effect<void, GateRefusal<OpenRefusal> | E, R>;
     branches(projectId: number): Effect.Effect<readonly ProjectBranch[], GateRefusal<'not-found' | 'graph-pool'>>;
     dispose(): Effect.Effect<void>;
     moveProjectStorage(

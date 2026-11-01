@@ -12,24 +12,27 @@ import { defineConfig, defaultClientConditions, defaultServerConditions, type Pl
 import { BUILD_INPUTS_ENV, BUILD_MAPS_ENV, buildConditionsIn } from '@tagma/server/installation/contract/wire/layout';
 
 export type SurfaceOptions = {
-  readonly plugins?: readonly Plugin[];
+  readonly runtime?: string;
+  readonly sources?: readonly string[];
   readonly version?: string;
   readonly clientInputsOnly?: boolean;
 };
 
 const APP = resolve(import.meta.dirname, '..');
 
-export const SURFACE_RUNTIME = resolve(APP, 'src/lib/app/runtime.ts');
-export const SURFACE_STYLES = resolve(APP, 'src/app.css');
+const RUNTIME = resolve(APP, 'src/lib/app/runtime.ts');
+const STYLES = resolve(APP, 'src/app.css');
 
 export function surfaceConfig(options: SurfaceOptions = {}): UserConfig {
   const backendPort = serverPort(CHANNEL, process.env);
   const built = buildConditionsIn(process.env);
   const maps = process.env[BUILD_MAPS_ENV]?.trim() || null;
   const inputs = process.env[BUILD_INPUTS_ENV]?.trim() || null;
+  const sources = options.sources ?? [];
   return defineConfig({
     plugins: [
-      ...(options.plugins ?? []),
+      ...(options.runtime === undefined ? [] : [rootRuntime(resolve(options.runtime))]),
+      ...(sources.length === 0 ? [] : [rootSources(sources.map((source) => resolve(source)))]),
       browserGuard(),
       tailwindcss(),
       sveltekit(),
@@ -42,7 +45,7 @@ export function surfaceConfig(options: SurfaceOptions = {}): UserConfig {
       port: surfaceDevPort(backendPort),
       strictPort: true,
       proxy: serverProxy(backendPort),
-      fs: { allow: [resolve(APP, '../../..')] },
+      fs: { allow: [resolve(APP, '../../..'), ...(options.runtime === undefined ? [] : [dirname(resolve(options.runtime))]), ...sources] },
     },
     preview: {
       proxy: serverProxy(backendPort),
@@ -50,6 +53,37 @@ export function surfaceConfig(options: SurfaceOptions = {}): UserConfig {
     resolve: built.length === 0 ? undefined : { conditions: [...built, ...defaultClientConditions] },
     ssr: built.length === 0 ? undefined : { resolve: { conditions: [...built, ...defaultServerConditions] } },
   });
+}
+
+function rootRuntime(runtime: string): Plugin {
+  return {
+    name: 'tagma-root-runtime',
+    enforce: 'pre',
+    resolveId: {
+      filter: { id: /(?:^|\/)runtime(?:\.[jt]s)?$/u },
+      async handler(source, importer, options) {
+        const resolved = await this.resolve(source, importer, { ...options, skipSelf: true });
+        return resolved?.id === RUNTIME ? runtime : null;
+      },
+    },
+  };
+}
+
+function rootSources(sources: readonly string[]): Plugin {
+  const scanned = sources.flatMap((source) => {
+    const path = relative(dirname(STYLES), source);
+    return [`@source "${path}/**/*.svelte";`, `@source "${path}/**/*.ts";`];
+  });
+  return {
+    name: 'tagma-root-sources',
+    enforce: 'pre',
+    transform: {
+      filter: { id: /\.css(?:\?|$)/u },
+      handler(code, id) {
+        return id.split('?')[0] === STYLES ? `${code}\n${scanned.join('\n')}\n` : null;
+      },
+    },
+  };
 }
 
 function surfaceVersion(version = gitVersion()): Plugin {

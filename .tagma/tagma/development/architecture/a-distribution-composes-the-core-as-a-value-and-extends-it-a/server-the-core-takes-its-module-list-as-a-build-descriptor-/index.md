@@ -24,14 +24,15 @@ Paths under `apps/tagma/server/src/` unless stated.
 - A module keeps its tables in a store of its own: a manifest declares `stores`, composition opens each at `<data>/stores/<id>.sqlite` before the extension installation tier, the transition attempt copies every file there, and the cut carries each chain at `bin/stores/<id>` (explanation [[55501889]]). A module store's migrations are not among the feed's store marks, so the cut's eternal-chain and irreversibility checks do not see them.
 - The package exports the in-process surface the server module cards declare (explanation [[e7b72e96]]); nothing yet checks the map against the cards.
 - The core's own extension-like modules (release-channel, checkout-builds) still stand their long-lived layers through the two `Bindings` slots, which have no core default; folding them into ports with defaults is item 6.
+- Project creation is the first flow step. `add_project` takes `contributed?: Record<entryId, unknown>`; a module contributes `CreationStep<A> = { id, value: Schema.Decoder<A>, step(projectId, value) }` to the `graph/project-creation` point (`graph/contract/service/creation.ts`), and the assembly hands them to the `CreationSteps` reference, empty by default. Every entry is decoded with its step's own schema before registration; `ProjectLifecycle.create` runs the decoded steps in its birth hook, after the registration commits, as the first part of `ServedGraphs.birth`, under the project's exclusive mark and before the first opening. The hook runs in one scope, so a step's undo finalizer sees a later failure, and a failing step takes the registration back. An unknown id or a value the schema refuses answers `field-invalid`. Every step refusal reaches every door with the core refusal wire's `field` naming the entry (`GateRefusal.about`). A step's requirement channel is `unknown` and goes unjudged, like operation bodies. A returned project runs no step. `composition/testing/extension.itest.ts` proves the seam through the HTTP door with a module of the test root.
 
 ## What will stand
 
 1. **Composition as a value.** The core's entries — server, CLI, cut — take one build descriptor: module list, bindings, verbs, channel, cut settings. Developer and release become two descriptors; the five export-condition slots go. The client's typing is kept (see What stands).
 2. **Every manifest collection joins generically**, as operations, feeds and settings already do: no collection is listed by module name in composition.
 3. **A generic lifetime tier for extension modules.** The core's own lifetimes may stay hand-wired; a module from another root declares which lifetime its long-lived layers stand in.
-4. **Points with a typed face and an optional app face.** An owner declares a point; compiled modules contribute through the typed face, Tagma Apps through the app face where the owner admits it.
-5. **Flow steps.** A core flow a module joins offers a point at its owner and never takes the module's value through its own input schema. First flow: `create_project` takes `contributed?: Record<entryId, unknown>`; the `project-creation` point's server items are `{ id, step(projectId, value) }`, run after registration and before the first graph open, each decoding its value with its own schema and refusing with a `FieldRefusal` naming its entry id.
+4. **Points with a typed face and an optional app face.** An owner declares a point; compiled modules contribute through the typed face (`ContributionPoint`, which stands), Tagma Apps through the app face where the owner admits it.
+5. **Flow steps.** A core flow a module joins offers a point at its owner and never takes the module's value through its own input schema. The first flow, project creation, stands (What stands).
 6. **Replaceable ports with core defaults.** A lower module declares a port and composition fills it (rule `e090f46d`); where the core must work alone, the owner provides a default filler, so no call site checks for absence.
 7. **An owner's own store and migration chain** for a module that keeps tables, on the `packages/activity` precedent.
 8. **The in-process surface is exported** from module cards' `entries`, so another root imports only declared entries.
@@ -45,7 +46,7 @@ Desktop main-process IPC channels are fixed today; extending them is out of this
 - A test root composes `[...core modules, extra module]` through the same entries the core uses and serves the extra module's operation, feed, setting, point item, flow step and replaced port; the core alone passes its own tests unchanged.
 - No core source imports, lists or branches on a module it does not own; composition contains no per-module list besides the descriptor.
 - An operation declared with a `right` is refused `right-missing` at every door when the `Access` filler answers `none`, and served when it answers `full`; assembly fails for a declared right with no filler.
-- `create_project` with a contributed entry runs its step, and a step's refusal comes back as a `FieldRefusal` naming the entry.
+- `add_project` with a contributed entry runs its step, and a step's refusal comes back with `field` naming the entry.
 - A server opening a data directory with settings keys, rows or entry kinds of a module it lacks starts and serves its own operations.
 - A release cut from a descriptor naming no feed carries no feed address, and its channel reads only `release.feed`; a descriptor's publisher receives the notarized files and the feed record.
 - Typecheck and the affected packages' tests pass.
@@ -53,3 +54,5 @@ Desktop main-process IPC channels are fixed today; extending them is out of this
 ## Open
 
 - The order of extracting woven capabilities after the first, [[e41dca93]]; each is measured on its own.
+- A creation step runs only when its id is in `contributed`. Should a step also be decoded when its entry is absent, so a step can apply a default or refuse a missing value? Then a creation that sends nothing (an agent's `add_project`, the folder-pick path) would still pass through it.
+- A creation step's requirement channel is `unknown`, so `add_project`'s body type is `unknown` too and its machine-place guard in `pair` passes vacuously. Judging step needs the way `serverParts` judges lifetimes needs the item type to survive `ContributionPoint.of`.

@@ -7,8 +7,12 @@ import { SectionContributions, SettingSections } from '$lib/features/settings/se
 import { SectionRegistry } from '$lib/features/settings/SectionRegistry.js';
 import SettingsPage from '$lib/features/settings/SettingsPage.svelte';
 import { Workspace } from '$lib/features/workspace/Selection.svelte.js';
+import { SurfaceRegistry, Surfaces } from '$lib/features/workspace/surface.js';
+import { makeRouter } from '@runlith/layer/testing';
 import ExtensionNote from './ExtensionNote.fixture.svelte';
+import ExtensionPage from './ExtensionPage.fixture.svelte';
 import ExtensionSection from './ExtensionSection.fixture.svelte';
+import SurfacePage from './SurfacePage.svelte';
 import { mountShell, soloWorkspace, type TestApp } from './testing.js';
 
 const Extension = Layer.mergeAll(
@@ -59,4 +63,28 @@ test('a layer merged from outside the features declares a settings section and c
 
   expect(page.querySelectorAll('[data-testid="extension-section"]')).toHaveLength(1);
   expect(page.querySelectorAll('[data-testid="extension-note"]')).toHaveLength(1);
+});
+
+test('a surface merged from outside the features renders through the one contributed route, and a build without it renders nothing there', async () => {
+  const at = makeRouter({ routeId: '/[project]/p/[...path]', params: { project: 'runlith', path: 'notes' } });
+  const notes = Surfaces.contribute('extension', {
+    surface: 'notes',
+    route: 'p/notes',
+    label: 'Notes',
+    icon: Puzzle,
+    stands: 'project',
+    remembers: false,
+    payload: { component: ExtensionPage },
+  });
+
+  app = mountShell(Layer.mergeAll(Surfaces, SurfaceRegistry, notes), Layer.mergeAll(), { router: at });
+  const page = app.draw(SurfacePage as never, {});
+  flushSync();
+  expect(page.querySelector('[data-testid="extension-page"]')?.getAttribute('data-path')).toBe('notes');
+
+  await app.unmount();
+  app = mountShell(Layer.mergeAll(Surfaces, SurfaceRegistry), Layer.mergeAll(), { router: at });
+  const bare = app.draw(SurfacePage as never, {});
+  flushSync();
+  expect(bare.textContent?.trim()).toBe('');
 });

@@ -147,8 +147,10 @@ const refusable = (form: () => unknown): Result.Result<unknown, ThreadFormRefuse
   }
 };
 
+type ThreadEntryProducts = readonly ThreadEntryKind[] | (() => readonly ThreadEntryKind[]);
+
 export type ThreadReaderInput = {
-  readonly products: readonly ThreadEntryKind[];
+  readonly products: ThreadEntryProducts;
   readonly steps?: readonly ThreadFormStep[];
   readonly base?: ThreadFormBase | null;
   readonly worker?: ThreadReaderWorker;
@@ -158,8 +160,12 @@ export type ThreadReaderWorker = () => Worker;
 
 export type ThreadEntryReader = ReturnType<typeof makeThreadEntryReader>;
 
-export const makeThreadEntryReader = ({ products, steps = [], base = null, worker: start }: ThreadReaderInput) => {
-  const worker: ThreadReaderWorker | null = start ?? null;
+type KindTable = {
+  readonly reader: (type: string) => Reader | undefined;
+  readonly wire: (type: string) => Wire | undefined;
+};
+
+const tableOf = (products: readonly ThreadEntryKind[]): KindTable => {
   const readers = new Map<string, Reader>();
   const schemas = new Map<string, ThreadEntryKind['schema']>();
   for (const kind of [...CORE_KINDS, ...products]) {
@@ -169,22 +175,43 @@ export const makeThreadEntryReader = ({ products, steps = [], base = null, worke
     schemas.set(kind.type, kind.schema);
   }
   const wires = new Map<string, Wire>();
-  const wireOf = (type: string | null): Wire | undefined => {
-    if (type === null) return undefined;
-    const held = wires.get(type);
-    if (held !== undefined) return held;
-    const schema = schemas.get(type);
-    if (schema === undefined) return undefined;
-    const json = Schema.toCodecJson(schema);
-    const decode = Schema.decodeUnknownResult(json);
-    const encode = Schema.encodeUnknownResult(json);
-    const wire: Wire = {
-      read: (value) => decode(value, { onExcessProperty: 'error' }),
-      write: (entry) => encode(entry, { onExcessProperty: 'error' }),
-    };
-    wires.set(type, wire);
-    return wire;
+  return {
+    reader: (type) => readers.get(type),
+    wire: (type) => {
+      const held = wires.get(type);
+      if (held !== undefined) return held;
+      const schema = schemas.get(type);
+      if (schema === undefined) return undefined;
+      const json = Schema.toCodecJson(schema);
+      const decode = Schema.decodeUnknownResult(json);
+      const encode = Schema.encodeUnknownResult(json);
+      const wire: Wire = {
+        read: (value) => decode(value, { onExcessProperty: 'error' }),
+        write: (entry) => encode(entry, { onExcessProperty: 'error' }),
+      };
+      wires.set(type, wire);
+      return wire;
+    },
   };
+};
+
+const tablesOf = (products: ThreadEntryProducts): (() => KindTable) => {
+  if (typeof products !== 'function') {
+    const fixed = tableOf(products);
+    return () => fixed;
+  }
+  let standing: { readonly products: readonly ThreadEntryKind[]; readonly table: KindTable } | undefined;
+  return () => {
+    const current = products();
+    if (standing?.products !== current) standing = { products: current, table: tableOf(current) };
+    return standing.table;
+  };
+};
+
+export const makeThreadEntryReader = ({ products, steps = [], base = null, worker: start }: ThreadReaderInput) => {
+  const worker: ThreadReaderWorker | null = start ?? null;
+  const table = tablesOf(products);
+  const wireOf = (type: string | null): Wire | undefined => (type === null ? undefined : table().wire(type));
   const last = steps.at(-1)?.name ?? base?.step ?? null;
   const after = (mark: string | null): readonly ThreadFormStep[] => (mark === null ? steps : steps.filter((step) => step.name > mark));
   const lags = (mark: string | null): boolean => last !== null && (mark === null || mark < last);
@@ -210,7 +237,7 @@ export const makeThreadEntryReader = ({ products, steps = [], base = null, worke
   };
   const read = (formed: unknown): Result.Result<ThreadTranscriptEntry, ThreadEntryUndecodable> => {
     const { type, id } = identified(formed);
-    const reader = type === null ? undefined : readers.get(type);
+    const reader = type === null ? undefined : table().reader(type);
     if (reader === undefined) return Result.fail(new ThreadEntryUndecodable({ type, id, issue: 'no installed kind reads it' }));
     const result = reader(formed);
     return Result.isSuccess(result)

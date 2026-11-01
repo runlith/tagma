@@ -25,7 +25,7 @@ import { Settings } from '../../settings/contract/service/values.js';
 import { automaticInstall, installCatalogs, installRoad } from '../vocabulary/activation.js';
 import { Catalogs } from '../contract/wire/catalogs.js';
 import { Behaviours } from '../contract/service/behaviours.js';
-import { GateRefusal, type OpenRefusal } from '../../platform/contract/wire/refusal.js';
+import { GateRefusal } from '../../platform/contract/wire/refusal.js';
 import { readsOf } from '../acts/reads.js';
 import { GraphUnits } from '../../platform/contract/service/units.js';
 import { writes } from '../../platform/contract/service/writes.js';
@@ -228,7 +228,7 @@ export const projectsLayer = (
       const policy = servedPolicy({ db, reads, act, servesFrom, resolveRef: rows.resolveRef, changed, policyChanged, subscribe });
 
       const lifecycle = ProjectLifecycle.of({
-        create: Effect.fn('ProjectLifecycle.create')(function* (
+        create: Effect.fn('ProjectLifecycle.create')(function* <E, R>(
           input: {
             name: string;
             rootPath: string;
@@ -238,7 +238,7 @@ export const projectsLayer = (
             catalogs?: readonly string[];
             graphRemote?: string;
           },
-          birth?: (row: ProjectPolicyRow) => Effect.Effect<void, GateRefusal<OpenRefusal>>,
+          birth?: (row: ProjectPolicyRow) => Effect.Effect<void, E, R>,
         ) {
           yield* rootChecked(input.rootPath);
           const identity = yield* Effect.mapError((yield* ProjectIdentification).identify(input.rootPath), gitRefusal);

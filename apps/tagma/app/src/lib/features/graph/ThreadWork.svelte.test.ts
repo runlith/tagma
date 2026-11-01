@@ -15,12 +15,12 @@ import { Notices } from '$lib/features/notices/Service.svelte.js';
 import { ShellOps } from '$lib/features/workspace/ShellOps.js';
 import { Door } from '$lib/wire/Door.js';
 import { Live } from '$lib/wire/Live.js';
-import { loadOperations } from '$lib/wire/operation.js';
 import { ServerOrigin } from '$lib/wire/ServerOrigin.svelte.js';
+import { loadCatalog, TestCatalog } from '$lib/wire/testing.js';
 import { ThreadWork } from './ThreadWork.svelte.js';
 import { ThreadWorkRepo } from './ThreadWorkRepo.js';
 
-await loadOperations();
+await loadCatalog();
 
 const THREAD = 'thread-1';
 
@@ -54,6 +54,7 @@ test('a thread’s work, followed by one feed however many surfaces show it, is 
     Layer.mergeAll(
       Layer.of(Cache, new QueryClient({ defaultOptions: { queries: { retry: false } } })),
       Layer.of(Platform, makePlatform({ fetch: async () => json({ status: 'ok', ...answer }) })),
+      TestCatalog,
       ServerOrigin.of('http://localhost'),
       Layer.of(Router, makeRouter()),
       Layer.of(Notices, {} as never),

@@ -8,6 +8,7 @@ export class Refusal extends Error {
   readonly unblock: string[];
   readonly inputFile?: string;
   readonly words?: Words;
+  readonly field?: string;
   readonly note?: string;
   readonly act?: Act;
 
@@ -18,6 +19,7 @@ export class Refusal extends Error {
     unblock: readonly string[];
     inputFile?: string;
     words?: Words;
+    field?: string;
     note?: string;
     act?: Act;
     cause?: unknown;
@@ -30,6 +32,7 @@ export class Refusal extends Error {
     this.unblock = [...input.unblock];
     this.inputFile = input.inputFile;
     this.words = input.words;
+    this.field = input.field;
     this.note = input.note;
     this.act = input.act;
   }
@@ -60,7 +63,7 @@ export const retriable = (error: unknown): boolean => !(error instanceof Refusal
 export function refusalOf(value: unknown): Refusal {
   if (value instanceof Refusal) return value;
   if (typeof value === 'object' && value !== null && 'code' in value && 'reason' in value) {
-    const body = value as { code: string; reason: string; unblock?: readonly string[]; inputFile?: string; words?: Words };
+    const body = value as { code: string; reason: string; unblock?: readonly string[]; inputFile?: string; words?: Words; field?: string };
     return new Refusal({
       gate: body.code !== 'not-found',
       code: body.code,
@@ -68,6 +71,7 @@ export function refusalOf(value: unknown): Refusal {
       unblock: body.unblock ?? [],
       inputFile: body.inputFile,
       words: body.words,
+      field: body.field,
     });
   }
   return new Refusal({

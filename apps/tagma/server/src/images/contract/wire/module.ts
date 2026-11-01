@@ -1,4 +1,4 @@
-import type { OperationManifest } from '../../../platform/contract/wire/manifest.js';
+import type { WireModule } from '../../../platform/contract/wire/manifest.js';
 
 export const images = {
   id: 'images',
@@ -7,4 +7,4 @@ export const images = {
     const [{ IMAGE_OPERATIONS }, { REFUSAL_WORDS }] = await Promise.all([import('./operations.js'), import('./refusalWords.js')]);
     return { declarations: IMAGE_OPERATIONS, refusals: REFUSAL_WORDS };
   },
-} as const satisfies OperationManifest;
+} as const satisfies WireModule;

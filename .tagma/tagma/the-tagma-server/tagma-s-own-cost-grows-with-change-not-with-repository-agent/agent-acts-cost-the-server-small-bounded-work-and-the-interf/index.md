@@ -149,7 +149,7 @@ Kind: a design decision — state re-derived on pull, the writer coupled to loop
 
 - **Census.** The census names what holds the idle and the loaded server: JS heap after a full collection, by retainer through heap snapshots, plus native and allocator memory.
 - **Every in-memory owner declares its bound** and evicts past it. That includes the projections of A and the caches of C, which add to the heap whose pauses froze the loop. Uncommitted programs, live facts owed to a follower and pending notifications cannot be evicted; they are bounded by B's batch bounds and G's backpressure.
-- **Budgets recorded here** before the work they gate: idle server memory after full collection, and server-resident memory per active agent. Target: ≤ 10 MB per active agent.
+- **Budgets recorded here** before the work they gate: idle server memory after full collection, and server-resident memory per active agent. Target: ≤ 10 MB per active agent. Holdings' optional compact-verdict cache shares one ceiling across all checkout judges: min(32 MiB, machine RAM / 256), accounting for encoded buffers, pooled text, row metadata and cache keys. The fraction allocates at most 0.4% of physical RAM to this optional process-wide reuse; the ceiling is that fraction on the 8 GiB reference profile, so a larger machine does not scale retained detail with its RAM or its checkout count. Exact path summaries and standing-record annotation metadata remain live facts; replay folds retain their separate existing budget.
 - **Lingering sessions.** Stopped ACP threads kept their runner and CLI: 31 runners and 39 CLIs held 5.8 GB at 11:50Z. Their lifetime gets a stated rule from their owner.
 
 ### G. The interface keeps its latency within a stated envelope
@@ -180,7 +180,7 @@ Kind: a design decision — state re-derived on pull, the writer coupled to loop
 2. **E**, now ranked by measurement rather than first. Landed (`cf6f077b`…`e1d11b4c`): the row is bound once per write, open calls come from the link, Tagma-executed calls' status changes stay live, and call keys are guarded instead of read. A saved step's own standalone statements fell from 19.4 to 14.4, its request bytes from 82.8 to 73.6 KB. The row averages 4.7 KB, at most 8.6 KB, at bench sizes. The delta form — `json_set` of changed fields under a `protocol_session.revision` guard, with the stored JSON unchanged for recovery — waits for the 200 KB assistant-message axis: it pays only where a long message is rewritten at every durable step inside it.
 3. **A**, producers by ledger rank; the thread list, keep-warm and graph-copy holding move to narrow events.
 4. **C and D**, by rank.
-5. **F**.
+5. **F**, taken ahead of A, C and D from 2026-11-01: on the live server, retained memory and the collections over it caused the longest stalls (the live sample in the Baseline). Its owners are worked by [[92fd4cda]], [[a990be94]] and [[44a8862f]].
 6. **The G gate.**
 
 ## Proof
@@ -285,9 +285,22 @@ A separate profiled 5× run on `815ad556fd` measured 86,329 ms of serving-thread
 
 List latency is writer-side COMMIT return to delivered frame across process epoch clocks whose skew is not bounded. Writer percentiles cover physical outer units and child elapsed is not engine CPU. GC attribution is diagnostic and its completeness is unverified; loop delay and stalls are the gate. No resident-memory budget or reference-profile pass is established by this sample.
 
+A **live sample** on the operator's machine (12 cores, 32 GB, macOS arm64, Bun 1.4.4), build `head-20261031T174937279Z`, about 20 agents, 2026-10-31 to 11-01 UTC. One machine, one sample each:
+- **Instance `d7e70846`, 18:00–23:11Z.**
+  - RSS 1.8 → 10.7 GB; allocator committed 3.3 → 16.7 GB; JS heap in unforced vitals 0.33 → 2.6 GB; external 0.16 → 1.56 GB. Swap reached 17.5 of 18.4 GB.
+  - Loop p99 rose from 1.4 ms to 943 ms. Stalls of 100 ms and more went from about 0.5 to about 24 a minute.
+  - The longest stall, 12.2 s, ran inside `OpenAIResponses.lowerToolResultOutput`, whose p99 is ≤ 0.5 ms over 337k calls an hour, with 6.3 s of loop CPU. In 5.3 s and 1.9 s stalls the process's other threads spent 3.4 s and 1.15 s while the loop stood. Read as collection over a large, partly swapped heap: an inference, with no GC log.
+  - Hosted tool-call p50 rose from ≤ 64 ms at 3,138 calls an hour to ≤ 256 ms at 6,421 calls an hour, then to ≤ 4 s.
+- **Instance `1e33b7f0` after a restart.**
+  - Post-full-GC heap was 1.11 GB 17 minutes after start and 1.29 GB 20.6 minutes later.
+  - Heap snapshots `600ef19b` and `8039e995`, 18 minutes apart: strong-root-reachable 525 → 612 MB, and 278 → 349 MB more in objects the snapshot reaches by no edge. Bun's V8-format snapshot records no edge from Map, Set or WeakMap storage to its entries. That part was attributed by grouping the edge-less objects by property shape.
+  - Grown in those 18 minutes: folded histories `{stored, history, guidance}` 11 → 39 MB (43 → 85), `HeldHistories` entries 27 → 32 MB, `HistoryIndex` 0.6 → 9.4 MB, `FiberImpl` 17 → 35 MB (878 → 1,127), tracked tool calls 817 → 1,570, Holdings verdicts 63 → 69 MB, and strings with no named owner +58 MB. In-flight model request bodies, each held as a string and as bytes, up to 9.6 MB, held about 45 MB throughout.
+  - A 23 s CPU profile (`48e77d12`) had the loop busy about half the window, 44% of busy samples under the SQLite reply handler, with drizzle SQL building, Schema decoding and the tracer visible.
+  - The census attributes dominated self bytes, not exclusive retention of shared data.
+
 ## Not established
 
-- The owner and expected conversation/history contribution of the remaining post-full-GC heap growth after the hosted-call fix; a plateau and an exclusive retainer have not been established.
+- A plateau and exclusive retainers for the post-full-GC heap growth after the hosted-call fix. The live sample names owners of growth outside the strong-root walk by shape; their exclusive shares, and the owner of the growing fibers and ownerless strings, are not established.
 - Collection versus paging as the stall mechanism, and the off-loop runtime work seen in some stalls.
 - Whether text accumulation is quadratic.
 - What the 8.5 s and 16.5 s gaps without spans before and after a retained `read` call's execution were waiting on (trace `d4ba3a6c…`).

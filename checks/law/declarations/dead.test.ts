@@ -148,6 +148,22 @@ test('import-type expressions consume only their named export, never a runtime c
   ).toEqual(['dead src/types.ts#factory', 'dead src/types.ts#unrelated']);
 });
 
+test('a module augmentation keeps the interface it widens live and consumes what it names, never the module’s other exports', () => {
+  expect(
+    judge({
+      'src/wire.ts': 'export interface Operations {}\nexport interface Unwidened {}\nexport type Ids = keyof Operations;\n',
+      'src/catalog.ts': 'export type Declared = { readonly id: string };\nexport const unused = 1;\n',
+      'src/entry.ts': [
+        "import type { Declared } from './catalog';",
+        "declare module './wire' {",
+        '  interface Operations extends Declared {}',
+        '}',
+        'export {};',
+      ].join('\n'),
+    }),
+  ).toEqual(['dead src/catalog.ts#unused', 'dead src/wire.ts#Unwidened', 'dead src/wire.ts#Ids']);
+});
+
 test('a class heritage expression is a runtime use and an implements or interface heritage is a type position', () => {
   expect(
     judge({

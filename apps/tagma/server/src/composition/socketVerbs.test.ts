@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { OPERATION_IDS } from './catalog.js';
+import { OPERATION_IDS } from './testing/catalog.js';
 import type { FeedDeclaration } from '../platform/contract/wire/operation.js';
 import { COLLECTED_FEEDS, SOCKET_VERBS } from './testing/composed.js';
 

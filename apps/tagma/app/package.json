@@ -4,6 +4,79 @@
   "private": true,
   "description": "Tagma reading surface: the project outline, block cards and the mindmap.",
   "type": "module",
+  "exports": {
+    "./surfaceConfig": {
+      "types": "./scripts/surfaceConfig.ts",
+      "default": "./scripts/surfaceConfig.ts"
+    },
+    "./composition": {
+      "types": "./src/lib/app/composition.ts",
+      "browser": "./src/lib/app/composition.ts",
+      "default": "./src/lib/app/composition.ts"
+    },
+    "./points/surfaces": {
+      "types": "./src/lib/features/workspace/surface.ts",
+      "browser": "./src/lib/features/workspace/surface.ts",
+      "default": "./src/lib/features/workspace/surface.ts"
+    },
+    "./points/columns": {
+      "types": "./src/lib/features/workspace/column.ts",
+      "browser": "./src/lib/features/workspace/column.ts",
+      "default": "./src/lib/features/workspace/column.ts"
+    },
+    "./points/actions": {
+      "types": "./src/lib/features/workspace/action.ts",
+      "browser": "./src/lib/features/workspace/action.ts",
+      "default": "./src/lib/features/workspace/action.ts"
+    },
+    "./points/panes": {
+      "types": "./src/lib/shared/panes/pane.ts",
+      "browser": "./src/lib/shared/panes/pane.ts",
+      "default": "./src/lib/shared/panes/pane.ts"
+    },
+    "./points/links": {
+      "types": "./src/lib/features/opening/Link.ts",
+      "browser": "./src/lib/features/opening/Link.ts",
+      "default": "./src/lib/features/opening/Link.ts"
+    },
+    "./points/settings": {
+      "types": "./src/lib/features/settings/section.ts",
+      "browser": "./src/lib/features/settings/section.ts",
+      "default": "./src/lib/features/settings/section.ts"
+    },
+    "./points/threads": {
+      "types": "./src/lib/features/threads/native/contribution.ts",
+      "browser": "./src/lib/features/threads/native/contribution.ts",
+      "default": "./src/lib/features/threads/native/contribution.ts"
+    },
+    "./points/records": {
+      "types": "./src/lib/features/threads/native/records.ts",
+      "browser": "./src/lib/features/threads/native/records.ts",
+      "default": "./src/lib/features/threads/native/records.ts"
+    },
+    "./points/creation": {
+      "types": "./src/lib/app/chrome/creation.ts",
+      "browser": "./src/lib/app/chrome/creation.ts",
+      "default": "./src/lib/app/chrome/creation.ts"
+    },
+    "./points/wire": {
+      "types": "./src/lib/wire/WireEntryKinds.ts",
+      "browser": "./src/lib/wire/WireEntryKinds.ts",
+      "default": "./src/lib/wire/WireEntryKinds.ts"
+    },
+    "./ui/*.svelte": {
+      "types": "./src/lib/shared/ui/*.svelte",
+      "browser": "./src/lib/shared/ui/*.svelte",
+      "svelte": "./src/lib/shared/ui/*.svelte",
+      "default": null
+    },
+    "./ui/*": {
+      "types": "./src/lib/shared/ui/*/index.ts",
+      "browser": "./src/lib/shared/ui/*/index.ts",
+      "svelte": "./src/lib/shared/ui/*/index.ts",
+      "default": null
+    }
+  },
   "scripts": {
     "build": "bun run --bun vite build",
     "dev": "bun scripts/dev.ts",
@@ -17,6 +90,7 @@
   "dependencies": {
     "@runlith/agent": "workspace:*",
     "@runlith/builtin-catalog": "workspace:*",
+    "@runlith/bundle": "workspace:*",
     "@runlith/chat-ui": "workspace:*",
     "@runlith/code-editor": "workspace:*",
     "@runlith/dev-runner": "workspace:*",
@@ -60,7 +134,6 @@
     "@fontsource-variable/geist": "5.3.0",
     "@fontsource-variable/geist-mono": "5.3.0",
     "@lucide/svelte": "1.16.0",
-    "@runlith/bundle": "workspace:*",
     "@runlith/effect-test": "workspace:*",
     "@runlith/testbed": "workspace:*",
     "@sveltejs/adapter-static": "catalog:",

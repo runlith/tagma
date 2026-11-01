@@ -6,12 +6,13 @@ import type { FeedPosition } from '@runlith/agent/transcript/live';
 import { CallFailed, LiveConnection } from '$lib/wire/Live.js';
 import { Refusal } from '$lib/wire/refusal.js';
 import { ServerOrigin } from '$lib/wire/ServerOrigin.svelte.js';
+import { testCatalog } from '$lib/wire/testing.js';
 import { ThreadPort } from './ThreadPort.js';
 
 const unopened = (): WebSocket => {
   throw new Error('This test opens no socket.');
 };
-const connection = LiveConnection.make(unopened, new ServerOrigin('http://localhost'));
+const connection = LiveConnection.make(unopened, new ServerOrigin('http://localhost'), testCatalog());
 const restart = { watch: () => () => undefined, placeReturned: () => undefined } as never;
 
 type HeldOpen = Parameters<LiveConnection['hold']>[0];

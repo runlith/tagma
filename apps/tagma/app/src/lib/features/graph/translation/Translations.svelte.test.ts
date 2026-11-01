@@ -9,13 +9,12 @@ import { GraphDoor } from '$lib/features/workspace/GraphDoor.js';
 import { GraphRung } from '$lib/features/workspace/GraphRung.js';
 import { ProjectRung } from '$lib/features/workspace/ProjectRung.js';
 import { TileRung } from '$lib/features/workspace/TileRung.js';
-import { loadOperations } from '$lib/wire/operation.js';
-import { testDoor } from '$lib/wire/testing.js';
+import { loadCatalog, testDoor } from '$lib/wire/testing.js';
 import { TranslationLens } from './Lens.svelte.js';
 import { TranslationsRepo } from './Repo.js';
 import { Translations } from './Translations.svelte.js';
 
-await loadOperations();
+await loadCatalog();
 
 const close: (() => unknown)[] = [];
 afterEach(async () => {

@@ -1,5 +1,6 @@
 import { cpus, loadavg } from 'node:os';
-import { Clock, Deferred, Effect, Fiber } from 'effect';
+import * as BunRuntime from '@effect/platform-bun/BunRuntime';
+import { Clock, Deferred, Effect, Fiber, Runtime } from 'effect';
 import { costLedgerLayer, rootCost } from '@runlith/performance/CostLedger';
 import { GraphStore } from '../../../platform/contract/service/store.js';
 import { GraphTools, graphToolsFixture } from './graphTools.fixture.js';
@@ -110,6 +111,6 @@ const program = Effect.gen(function* () {
   yield* report({ peersDone: peersEnded, peerActs, loadMs: Number((now() - loadStarted).toFixed(1)) });
 });
 
-await Effect.runPromise(
-  program.pipe(Effect.provide(graphToolsFixture), Effect.provide(costLedgerLayer({ capacity: 1024 })), Effect.scoped),
-);
+BunRuntime.runMain(program.pipe(Effect.provide(graphToolsFixture), Effect.provide(costLedgerLayer({ capacity: 1024 })), Effect.scoped), {
+  teardown: (exit) => Runtime.defaultTeardown(exit, (code) => process.exit(code)),
+});

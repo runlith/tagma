@@ -869,6 +869,7 @@ it.live('bash retains stderr and a nonzero exit when its stdout subscription fai
       description: 'Run a failing check',
     });
     expect(answer.text).toContain('retained-test-diagnostic');
+    expect(answer.text).toContain('stdout stopped answering: HostRefused');
     expect(answer.display?.facts).toContainEqual({ label: 'exit', value: '1' });
     expect(answer.verdict?.kind).toBe('failed');
   }),

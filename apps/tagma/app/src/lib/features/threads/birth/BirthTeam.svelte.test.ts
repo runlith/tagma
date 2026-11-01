@@ -9,13 +9,12 @@ import { testShelf } from '../native/testing.js';
 import { Notices } from '$lib/features/notices/Service.svelte.js';
 import { SettingsRepo } from '$lib/features/settings/SettingsRepo.js';
 import { Door } from '$lib/wire/Door.js';
-import { loadOperations } from '$lib/wire/operation.js';
-import { testDoor } from '$lib/wire/testing.js';
+import { loadCatalog, testDoor } from '$lib/wire/testing.js';
 import { ThreadDraft } from '../Draft.svelte.js';
 import { TeamRepo } from '../team/TeamRepo.js';
 import { BirthTeam } from './BirthTeam.svelte.js';
 
-await loadOperations();
+await loadCatalog();
 
 const OPUS = { provider: 'anthropic', model: 'claude-opus', reasoning: 'high' };
 const ROW = {

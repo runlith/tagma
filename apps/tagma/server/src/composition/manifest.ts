@@ -21,6 +21,7 @@ import { entryKinds } from './entryKinds.js';
 import { BUILTIN_NOTES, type BuiltinNote } from '../threads/contract/service/notes.js';
 import { NATIVE_RULES } from '../native-harness/contract/service/rules.js';
 import { HOME_FOLLOWERS, type HomeFollower } from '../thread-record/contract/service/homes.js';
+import { PROJECT_CREATION, type CreationStep } from '../graph/contract/service/creation.js';
 import type { ServerParts } from './build.js';
 import { type LiveGroup, liveRpc } from './rpc.js';
 import type { CORE_MODULES } from './core.js';
@@ -60,6 +61,7 @@ export type Assembly = {
   readonly notes: readonly BuiltinNote[];
   readonly nativeRules: ReturnType<typeof NATIVE_RULES.collect>;
   readonly homeFollowers: readonly HomeFollower[];
+  readonly creationSteps: readonly CreationStep[];
   readonly entryKinds: ThreadEntryReader;
   readonly settings: { readonly sections: readonly SettingSectionDeclaration[]; readonly keys: readonly SettingKey<unknown>[] };
   readonly snapshotParticipants: (home: SnapshotHome) => Effect.Effect<Readonly<Record<string, SnapshotParticipant>>>;
@@ -164,6 +166,7 @@ export const assemble = async ({ modules, rested }: ServerParts): Promise<Assemb
     notes: BUILTIN_NOTES.collect(modules).map(({ entry }) => entry),
     nativeRules: NATIVE_RULES.collect(modules),
     homeFollowers: HOME_FOLLOWERS.collect(modules).map(({ entry }) => entry),
+    creationSteps: PROJECT_CREATION.collect(modules).map(({ entry }) => entry),
     entryKinds: entryKinds(modules, rested),
     settings: {
       sections: modules.flatMap((module) => module.settingSections ?? []),

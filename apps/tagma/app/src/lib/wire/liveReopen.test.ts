@@ -4,6 +4,7 @@ import { expect } from 'vitest';
 import { waitFor, waitUntil } from '@runlith/testing/flush';
 import { LiveConnection, type LiveFailure } from './Live.js';
 import { ServerOrigin } from './ServerOrigin.svelte.js';
+import { testCatalog } from './testing.js';
 
 class FailingSocket extends EventTarget {
   readonly readyState = 0;
@@ -20,7 +21,11 @@ class FailingSocket extends EventTarget {
   close(): void {}
 }
 
-const connection = LiveConnection.make(() => new FailingSocket() as unknown as WebSocket, new ServerOrigin('http://localhost'));
+const connection = LiveConnection.make(
+  () => new FailingSocket() as unknown as WebSocket,
+  new ServerOrigin('http://localhost'),
+  testCatalog(),
+);
 
 it.live('a paused page attempts nothing: the loop ends where it started', () =>
   Effect.gen(function* () {

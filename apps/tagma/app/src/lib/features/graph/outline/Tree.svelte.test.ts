@@ -32,11 +32,10 @@ import { GraphDoor } from '$lib/features/workspace/GraphDoor.js';
 import { Workspace } from '$lib/features/workspace/Selection.svelte.js';
 import { Door } from '$lib/wire/Door.js';
 import { Live } from '$lib/wire/Live.js';
-import { loadOperations } from '$lib/wire/operation.js';
-import { testDoor } from '$lib/wire/testing.js';
+import { loadCatalog, testDoor } from '$lib/wire/testing.js';
 import Tree from './Tree.svelte';
 
-await loadOperations();
+await loadCatalog();
 
 const AT = '2026-09-05T00:00:00Z';
 

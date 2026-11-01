@@ -311,6 +311,18 @@ const read = (path: string, text: string): Facts => {
       } else if (ts.isImportEqualsDeclaration(statement) && ts.isExternalModuleReference(statement.moduleReference)) {
         const specifier = literalText(statement.moduleReference.expression);
         if (specifier !== undefined) loads.push({ specifier, pattern: false });
+      } else if (
+        ts.isModuleDeclaration(statement) &&
+        ts.isStringLiteral(statement.name) &&
+        statement.body !== undefined &&
+        ts.isModuleBlock(statement.body)
+      ) {
+        for (const inner of statement.body.statements) {
+          if (!ts.isInterfaceDeclaration(inner)) continue;
+          const local = `@augments:${imports.length}`;
+          imports.push({ specifier: statement.name.text, bindings: [{ local, imported: inner.name.text }] });
+          uses.add(`${local}\0*\0t`);
+        }
       } else if (ts.isExportDeclaration(statement)) {
         const specifier = statement.moduleSpecifier !== undefined ? literalText(statement.moduleSpecifier) : undefined;
         const clause = statement.exportClause;

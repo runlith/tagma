@@ -1,4 +1,4 @@
-import { mergeOperations, type OperationManifest } from '../../../platform/contract/wire/manifest.js';
+import { mergeOperations, type WireModule } from '../../../platform/contract/wire/manifest.js';
 
 export const landing = {
   id: 'landing',
@@ -11,4 +11,4 @@ export const landing = {
     ]);
     return { declarations: mergeOperations(LANDING_OPERATIONS, CHECKOUT_COMMIT_OPERATIONS), refusals: REFUSAL_WORDS } as const;
   },
-} as const satisfies OperationManifest;
+} as const satisfies WireModule;

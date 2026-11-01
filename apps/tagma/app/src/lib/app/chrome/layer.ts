@@ -15,6 +15,7 @@ import { View } from '../../features/executions/load/View.svelte.js';
 import { Switcher } from '../../features/projects/Cycle.svelte.js';
 import ProjectSwitcher from '../../features/projects/Switcher.svelte';
 import { ProjectCreation } from './ProjectCreation.svelte.js';
+import { CreationFields } from './creation.js';
 import { RailPins } from './RailPins.svelte.js';
 import { ServerFaults } from './ServerFaults.svelte.js';
 import { Standing } from './Standing.svelte.js';
@@ -41,6 +42,7 @@ export const FrameLayer = Layer.mergeAll(
   Readings,
   View,
   ProjectCreation,
+  CreationFields,
   RailPins,
   Palette.present(CommandPalette),
   Switcher.present(ProjectSwitcher, () => ({ priority: 1, disallowCoexistWith: [{ id: Palette.id }] })),

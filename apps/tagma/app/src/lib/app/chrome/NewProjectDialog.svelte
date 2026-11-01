@@ -1,26 +1,39 @@
 <script lang="ts">
   import Folder from '@lucide/svelte/icons/folder';
+  import PointView from '@runlith/layer/svelte/PointView.svelte';
   import { STORAGE_MODES, type StorageMode } from '@tagma/server/projects/contract/wire/project';
   import { Button } from '$lib/shared/ui/button/index.js';
   import * as Dialog from '$lib/shared/ui/dialog/index.js';
   import { Input } from '$lib/shared/ui/input/index.js';
   import Told from '$lib/shared/Told.svelte';
-  import type { Told as Telling } from '$lib/wire/told.js';
-  import { toldOf } from '$lib/wire/refusal.js';
+  import { CreationFields, type CreationDraft, type CreationField, type CreationFieldProps } from './creation.js';
   import NewProjectCatalogs from './NewProjectCatalogs.svelte';
-  import { folderName, ProjectCreation } from './ProjectCreation.svelte.js';
+  import { folderName, ProjectCreation, refusedOf, type Refused } from './ProjectCreation.svelte.js';
   import { STORAGE } from './projectStorage.js';
 
   let { open = $bindable(false) }: { open?: boolean } = $props();
 
   const creation = ProjectCreation.use();
+  const fields = CreationFields.use();
 
   let draftName = $state('');
   let draftPath = $state('');
   let draftStorage = $state<StorageMode>('stealth');
   let draftCatalogs = $state<readonly string[] | undefined>();
   let draftRemote = $state('');
-  let refused = $state<Telling | null>(null);
+  let contributed = $state.raw<Readonly<Record<string, unknown>>>({});
+  let refused = $state.raw<Refused | null>(null);
+
+  const draft: CreationDraft = $derived({ name: draftName.trim(), rootPath: draftPath.trim(), storage: draftStorage });
+  const underField = $derived(refused?.field !== undefined && fields.find(refused.field) !== undefined ? refused.field : undefined);
+
+  function put(id: string, value: unknown): void {
+    if (value !== undefined) {
+      if (contributed[id] !== value) contributed = { ...contributed, [id]: value };
+    } else if (Object.hasOwn(contributed, id)) {
+      contributed = Object.fromEntries(Object.entries(contributed).filter(([key]) => key !== id));
+    }
+  }
 
   $effect(() => {
     const offered = creation.offered;
@@ -44,9 +57,10 @@
     refused = null;
     const graphRemote = draftStorage === 'stealth' && draftRemote.trim() !== '' ? draftRemote.trim() : undefined;
     try {
-      await creation.create({ name: draftName.trim(), rootPath: draftPath.trim(), storage: draftStorage, catalogs, graphRemote });
+      const drawn = Object.fromEntries(Object.entries(contributed).filter(([id]) => fields.find(id) !== undefined));
+      await creation.create({ ...draft, catalogs, graphRemote, contributed: drawn });
     } catch (error) {
-      refused = toldOf(error);
+      refused = refusedOf(error);
       return;
     }
     open = false;
@@ -55,6 +69,7 @@
     draftStorage = 'stealth';
     draftCatalogs = undefined;
     draftRemote = '';
+    contributed = {};
   }
 </script>
 
@@ -106,8 +121,17 @@
         </label>
       {/if}
       <NewProjectCatalogs bind:value={draftCatalogs} />
-      {#if refused !== null}
-        <div class="text-destructive" role="alert"><Told told={refused} /></div>
+      <PointView
+        point={fields}
+        propsOf={(field: CreationField): CreationFieldProps => ({
+          draft,
+          value: contributed[field.id],
+          put: (value: unknown) => put(field.id, value),
+          refused: underField === field.id ? (refused?.told ?? null) : null,
+        })}
+      />
+      {#if refused !== null && underField === undefined}
+        <div class="text-destructive" role="alert"><Told told={refused.told} /></div>
       {/if}
     </div>
     <Dialog.Footer>

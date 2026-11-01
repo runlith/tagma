@@ -2,7 +2,7 @@ import { expect } from 'bun:test';
 import { it } from '@runlith/effect-test';
 import { Effect, Schema } from 'effect';
 import { batchSchema } from '../../graph/contract/wire/batch.js';
-import { OPERATION_IDS, OPERATIONS } from '../catalog.js';
+import { OPERATION_IDS, OPERATIONS } from './catalog.js';
 import { blockQuerySchema } from '../../graph/contract/wire/query.js';
 import { edgeSchema } from '../../graph/contract/wire/rows.js';
 import { LONGEST_ACT_MS } from '@runlith/agent/callProgress';

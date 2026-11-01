@@ -99,7 +99,7 @@ export const entryRowSchema = Schema.Struct({
 });
 export type EntryRow = typeof entryRowSchema.Type;
 
-export const MARKETPLACES_FEED = feed('marketplaces.subscribe', {
+const MARKETPLACES_FEED = feed('marketplaces.subscribe', {
   input: Schema.Struct({}),
   event: Schema.Struct({ marketplaces: Schema.Array(marketplaceRowSchema), entries: Schema.Array(entryRowSchema) }),
   refusals: [],

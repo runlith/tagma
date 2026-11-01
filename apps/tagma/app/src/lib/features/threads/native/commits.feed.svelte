@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { CatalogOperationId } from '@tagma/server/composition/catalog';
+  import type { CatalogOperationId } from '$lib/wire/operation.js';
   import { RootId } from '@tagma/server/workspace/contract/wire/ids';
   import type { EntryKinds } from '@runlith/chat-ui/EntryKinds.svelte';
   import type { ChatEntryOf } from '@runlith/chat-ui/renderers';

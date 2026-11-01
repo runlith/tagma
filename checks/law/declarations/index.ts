@@ -239,7 +239,7 @@ const ensure = (root: string, tree: string, hint: string | null, populate: boole
   if (best === undefined || best.changes.length > FAR) {
     if (!populate)
       throw new Error(
-        `the declaration index holds no revision within ${FAR} changed files of ${tree}; build it with check_rules over "all" for a rule of the declaration inspections, then judge the change again`,
+        `the declaration index holds no revision within ${FAR} changed files of ${tree}; run check_rules with inspection "dead-code" over "change", using the same paths, whole and taking selection as the refused landing, to prepare the candidate before judging it again`,
       );
     populated(root, tree);
     mark(root, tree);

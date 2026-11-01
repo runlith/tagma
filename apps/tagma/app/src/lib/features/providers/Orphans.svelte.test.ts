@@ -10,8 +10,7 @@ import { liveFeed, mountShell } from '$lib/app/testing.js';
 import { Notices } from '$lib/features/notices/Service.svelte.js';
 import { Door } from '$lib/wire/Door.js';
 import { Live } from '$lib/wire/Live.js';
-import { loadOperations } from '$lib/wire/operation.js';
-import { testDoor } from '$lib/wire/testing.js';
+import { loadCatalog, testDoor } from '$lib/wire/testing.js';
 import { AccountsRepo } from './AccountsRepo.js';
 import { AdaptersRepo } from './adapters/AdaptersRepo.js';
 import { CountdownClock } from './accounts/CountdownClock.svelte.js';
@@ -19,7 +18,7 @@ import { UsageAccounts } from './usage/Accounts.svelte.js';
 import { testProviders } from './testing.js';
 import AuthPanel from './AuthPanel.svelte';
 
-await loadOperations();
+await loadCatalog();
 
 test('accounts outside the catalog remain visible for removal, without installed-provider actions', async () => {
   const feed = liveFeed();

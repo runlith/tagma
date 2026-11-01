@@ -1,7 +1,7 @@
 import type { KeyedLoaderContext } from '@runlith/query/types';
 import { Repo } from '@runlith/query/repo';
 import { GraphDoor } from '$lib/features/workspace/GraphDoor.js';
-import type { OperationInput } from '@tagma/server/composition/catalog';
+import type { OperationInput } from '$lib/wire/operation.js';
 
 export type EngineKey = { readonly rule: string; readonly focus: string | null };
 

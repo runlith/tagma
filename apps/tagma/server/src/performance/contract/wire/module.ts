@@ -1,4 +1,4 @@
-import type { OperationManifest } from '../../../platform/contract/wire/manifest.js';
+import type { WireModule } from '../../../platform/contract/wire/manifest.js';
 
 export const performance = {
   id: 'performance',
@@ -7,4 +7,4 @@ export const performance = {
     const [{ PERFORMANCE_OPERATIONS }] = await Promise.all([import('./operations.js')]);
     return { declarations: PERFORMANCE_OPERATIONS };
   },
-} as const satisfies OperationManifest;
+} as const satisfies WireModule;

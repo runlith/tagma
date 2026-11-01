@@ -7,7 +7,7 @@ import { OperationChecks } from '../invocation/contract/service/operationChecks.
 import { performIn, triggered } from '../invocation/testing/performing.js';
 import { CallerWorkspace } from '../workspace/contract/service/places.js';
 import { OperationCatalog } from '../invocation/contract/service/catalog.js';
-import { OPERATIONS } from './catalog.js';
+import { OPERATIONS } from './testing/catalog.js';
 import { operationBodies } from './bodies.js';
 import { catalogWorld } from './testing/catalogWorld.js';
 import { ASSEMBLY } from './testing/composed.js';

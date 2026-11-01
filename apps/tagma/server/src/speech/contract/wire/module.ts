@@ -1,4 +1,5 @@
-import type { OperationManifest } from '../../../platform/contract/wire/manifest.js';
+import type { WireModule } from '../../../platform/contract/wire/manifest.js';
+import { SPEECH_FEEDS } from './feeds.js';
 
 export const speech = {
   id: 'speech',
@@ -7,4 +8,5 @@ export const speech = {
     const [{ SPEECH_OPERATIONS }, { REFUSAL_WORDS }] = await Promise.all([import('./operations.js'), import('./refusalWords.js')]);
     return { declarations: SPEECH_OPERATIONS, refusals: REFUSAL_WORDS };
   },
-} as const satisfies OperationManifest;
+  feeds: SPEECH_FEEDS,
+} as const satisfies WireModule;

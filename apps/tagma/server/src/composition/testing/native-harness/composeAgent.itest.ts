@@ -70,7 +70,7 @@ import { DEFAULT_CATALOGS, tagsOfCatalogs } from '../../../catalogs/contract/wir
 import { tagIndex } from '../../../graph/testing/doubles.js';
 const shippedVocabulary = tagIndex(tagsOfCatalogs(DEFAULT_CATALOGS), BEHAVIOUR_REGISTRY);
 import { COMMENT_POLICIES, type CommentPolicy } from '@runlith/source-comments';
-import { OPERATION_IDS, OPERATIONS, type CatalogOperationId } from '../../catalog.js';
+import { OPERATION_IDS, OPERATIONS, type CatalogOperationId } from '../catalog.js';
 import { collectedOperations } from '../composed.js';
 
 const SUBMIT_OPERATION: CatalogOperationId = 'submit_work';

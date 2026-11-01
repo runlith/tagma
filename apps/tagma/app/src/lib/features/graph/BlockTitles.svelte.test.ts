@@ -8,7 +8,7 @@ import { QueryClient } from '@tanstack/query-core';
 import { waitUntil } from '@runlith/testing/flush';
 import { afterEach, expect, test } from 'vitest';
 import { flushSync } from 'svelte';
-import type { OperationAnswer } from '@tagma/server/composition/catalog';
+import type { OperationAnswer } from '$lib/wire/operation.js';
 import type { GraphFrame } from '$lib/wire/Live.js';
 import type { Project, TreeBlock } from '@tagma/server/graph/contract/wire/rows';
 import { Workspace } from '$lib/features/workspace/Selection.svelte.js';

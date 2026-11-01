@@ -1,8 +1,9 @@
 import { createHash } from 'node:crypto';
 import { mkdirSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { AsyncLocalStorage } from 'node:async_hooks';
+import { isAbsolute, join, relative, sep } from 'node:path';
 import { Database } from 'bun:sqlite';
-import { git } from './git';
+import { blobTexts, entriesAt, type Entry, git } from './git';
 
 const SCHEMA = [
   'CREATE TABLE IF NOT EXISTS facts (blob TEXT NOT NULL, class TEXT NOT NULL, data TEXT NOT NULL, PRIMARY KEY (blob, class)) WITHOUT ROWID',
@@ -17,9 +18,20 @@ const SCHEMA = [
   'CREATE TABLE IF NOT EXISTS catalogue.roots (revision TEXT PRIMARY KEY, tree TEXT NOT NULL, at INTEGER NOT NULL) WITHOUT ROWID',
 ] as const;
 
-const version = (): string => {
-  const hash = createHash('sha256').update(readFileSync(Bun.resolveSync('typescript/package.json', import.meta.dir)));
-  for (const name of [
+type Reader = { readonly root: string; readonly revision: string };
+
+const readers = new AsyncLocalStorage<Reader>();
+const versions = new Map<string, string>();
+
+export const withReader = <A>(root: string, revision: string, use: () => A): A => readers.run({ root, revision }, use);
+
+const version = (root: string): string => {
+  const reader = readers.getStore();
+  const revision = reader?.root === root ? reader.revision : undefined;
+  const key = `${root}\0${revision ?? ''}`;
+  const held = versions.get(key);
+  if (held !== undefined) return held;
+  const sources = [
     'declarations/facts.ts',
     'declarations/read.ts',
     'declarations/compact.ts',
@@ -36,19 +48,36 @@ const version = (): string => {
     'declarations/glob.ts',
     'architecture/boundaries.ts',
     'architecture/snapshot.ts',
-  ])
-    hash.update(readFileSync(join(import.meta.dir, name)));
-  return hash.digest('hex');
+  ].map((name) => {
+    const file = join(import.meta.dir, name);
+    return { file, path: relative(root, file).split(sep).join('/') };
+  });
+  const paths = sources.map((one) => one.path).filter((path) => !isAbsolute(path) && path !== '..' && !path.startsWith('../'));
+  const tracked = revision === undefined || paths.length === 0 ? new Map<string, Entry>() : entriesAt(root, revision, paths, false);
+  const texts = blobTexts(
+    root,
+    [...tracked.values()].filter((one) => one.kind === 'blob').map((one) => one.object),
+  );
+  const hash = createHash('sha256').update(readFileSync(Bun.resolveSync('typescript/package.json', import.meta.dir)));
+  for (const source of sources) {
+    const entry = tracked.get(source.path);
+    hash.update(entry?.kind === 'blob' ? texts.get(entry.object)! : readFileSync(source.file));
+  }
+  const found = hash.digest('hex');
+  versions.set(key, found);
+  return found;
 };
 
 const handles = new Map<string, Database>();
 
 export const databaseAt = (root: string): Database => {
-  const held = handles.get(root);
+  const reader = version(root);
+  const key = `${root}\0${reader}`;
+  const held = handles.get(key);
   if (held !== undefined) return held;
   const directory = join(git(root, ['rev-parse', '--path-format=absolute', '--git-common-dir']).toString().trim(), 'runlith-law');
   mkdirSync(directory, { recursive: true });
-  const database = new Database(join(directory, `declarations-${version()}.sqlite`));
+  const database = new Database(join(directory, `declarations-${reader}.sqlite`));
   database.exec('PRAGMA busy_timeout = 20000');
   database.exec('PRAGMA journal_mode = WAL');
   database.exec('PRAGMA synchronous = NORMAL');
@@ -58,6 +87,6 @@ export const databaseAt = (root: string): Database => {
   database.exec('BEGIN IMMEDIATE');
   for (const statement of SCHEMA) database.exec(statement);
   database.exec('COMMIT');
-  handles.set(root, database);
+  handles.set(key, database);
   return database;
 };

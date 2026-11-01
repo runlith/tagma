@@ -3,14 +3,17 @@ import { liveSerialization } from '@tagma/server/platform/contract/wire/live';
 import type { Words } from '@tagma/server/platform/contract/wire/refusal';
 import { DEVICE_REVOKED_CLOSE } from '@tagma/server/remote/contract/wire/access';
 import { TAGMA_SOCKET_PATH } from '@tagma/server/socket/rpc';
-import { LiveRpc } from './liveGroup.js';
+import type { WireModule } from '@tagma/server/platform/contract/wire/manifest';
+import { liveGroupFrom, type LiveGroup, type LiveRpcs } from './liveGroup.js';
 import { ThreadEntryKinds, type ThreadEntryReader } from '@runlith/agent/transcript/kinds';
-import { readingOf, WireEntryKinds } from './WireEntryKinds.js';
+import { wireEntries, WireEntryKinds } from './WireEntryKinds.js';
+import { WireCatalog } from './WireCatalog.js';
 import { Platform, type PlatformSocket } from '@runlith/layer/Platform';
+import type { Point } from '@runlith/layer/Point';
 import { Scope as AppScope } from '@runlith/layer/Scope';
 import { Service } from '@runlith/layer/key';
 import { Cause, Context, Data, Deferred, Effect, Exit, type Fiber, FiberSet, Layer, Scope, Stream } from 'effect';
-import { RpcClient, RpcClientError, type RpcGroup } from 'effect/rpc';
+import { RpcClient, RpcClientError } from 'effect/rpc';
 import { Socket } from 'effect/socket';
 import { Refusal, refusalOf } from './refusal.js';
 import { causeText, closeFailure, failureFromCause, failureOf, type LiveError } from './liveFailure.js';
@@ -74,7 +77,7 @@ type Ahead = {
 export type GraphFrame = typeof graphFrameSchema.Type;
 export type GraphChange = typeof graphChangeSchema.Type;
 
-export type ServerClient = RpcClient.RpcClient<RpcGroup.Rpcs<typeof LiveRpc>, RpcClientError.RpcClientError>;
+export type ServerClient = RpcClient.RpcClient<LiveRpcs, RpcClientError.RpcClientError>;
 
 class LiveClient extends Context.Service<LiveClient, ServerClient>()('tagma/app/LiveClient') {}
 
@@ -107,22 +110,30 @@ export class LiveConnection {
   private socketOpen: Deferred.Deferred<void, LiveConnectionLost> | null = null;
   private paused = false;
   private refused = false;
+  private readonly group: () => LiveGroup;
 
   private constructor(
     private readonly life: Scope.Scope,
     private readonly fork: LiveFork,
     private readonly socket: PlatformSocket,
     private readonly origin: ServerOrigin,
+    private readonly catalog: Point<WireModule>,
     private readonly entries: ThreadEntryReader,
-  ) {}
+  ) {
+    this.group = liveGroupFrom(catalog);
+  }
 
   static make(
     socket: PlatformSocket,
     origin: ServerOrigin,
-    entries: ThreadEntryReader = readingOf(undefined),
+    catalog: Point<WireModule>,
+    entries: ThreadEntryReader = wireEntries(undefined),
   ): Effect.Effect<LiveConnection, never, Scope.Scope> {
     return Effect.flatMap(Scope.Scope, (life) =>
-      Effect.map(FiberSet.makeRuntime<never, unknown, LiveGone>(), (fork) => new LiveConnection(life, fork, socket, origin, entries)),
+      Effect.map(
+        FiberSet.makeRuntime<never, unknown, LiveGone>(),
+        (fork) => new LiveConnection(life, fork, socket, origin, catalog, entries),
+      ),
     );
   }
 
@@ -437,7 +448,7 @@ export class LiveConnection {
     ending: LiveEnding,
   ): { unsubscribe: () => void } {
     const scope = Scope.forkUnsafe(this.life);
-    const connection = new LiveConnection(scope, this.fork, this.socket, this.origin, this.entries);
+    const connection = new LiveConnection(scope, this.fork, this.socket, this.origin, this.catalog, this.entries);
     const detach = connection.attach();
     Effect.runSync(Scope.addFinalizer(scope, Effect.sync(detach)));
     const held = connection.hold(open, onItem, onFailure, resume, ending);
@@ -482,7 +493,7 @@ export class LiveConnection {
         Effect.flatMap((scope) => {
           this.scope = scope;
           return Scope.provide(
-            Layer.build(Layer.effect(LiveClient)(RpcClient.make(LiveRpc)).pipe(Layer.provide(this.wire(generation, opened)))),
+            Layer.build(Layer.effect(LiveClient)(RpcClient.make(this.group())).pipe(Layer.provide(this.wire(generation, opened)))),
             scope,
           );
         }),
@@ -613,8 +624,9 @@ export class Live extends Service<LiveConnection>()('Live', { tier: 'app' }) {
     const platform = yield* Platform;
     const origin = yield* ServerOrigin;
     const fibers = Scope.makeUnsafe();
+    const catalog = yield* WireCatalog;
     const kinds = yield* WireEntryKinds.optional();
-    const live = Effect.runSync(Scope.provide(LiveConnection.make(platform.socket, origin, readingOf(kinds)), fibers));
+    const live = Effect.runSync(Scope.provide(LiveConnection.make(platform.socket, origin, catalog, wireEntries(kinds)), fibers));
     app.defer(live.attach());
     app.defer(() => Effect.runPromise(Scope.close(fibers, Exit.void)));
     return live;

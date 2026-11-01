@@ -18,10 +18,9 @@ import { GraphDoor } from '$lib/features/workspace/GraphDoor.js';
 import { TagCatalog } from '$lib/features/graph/TagCatalog.svelte.js';
 import { Live, type GraphFrame } from '$lib/wire/Live.js';
 import { Door } from '$lib/wire/Door.js';
-import { testDoor } from '$lib/wire/testing.js';
-import { loadOperations } from '$lib/wire/operation.js';
+import { loadCatalog, testDoor } from '$lib/wire/testing.js';
 
-await loadOperations();
+await loadCatalog();
 
 function json(body: unknown): Response {
   return new Response(JSON.stringify(body), { headers: { 'content-type': 'application/json' } });

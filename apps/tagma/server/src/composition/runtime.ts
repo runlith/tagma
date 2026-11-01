@@ -149,6 +149,7 @@ import { makeDrives } from './drives.js';
 import { Drives } from '../platform/contract/service/drives.js';
 import { Capacity, serverCapacity, thisMachine } from '../platform/contract/service/capacity.js';
 import { DeclaredNativeRules } from '../native-harness/contract/service/rules.js';
+import { CreationSteps, creationSteps } from '../graph/contract/service/creation.js';
 import { ThreadEntryKinds } from '@runlith/agent/transcript/kinds';
 import { approvalModesLayer } from '@runlith/agent/modes/ApprovalModes';
 import type { LiveGroup } from './rpc.js';
@@ -738,7 +739,12 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
             Layer.provideMerge(Layer.succeed(Doctrine, doctrineText(assembly))),
             Layer.provideMerge(Layer.succeed(InstalledChannel, channel)),
             Layer.provideMerge(Layer.succeed(ThreadEntryKinds, assembly.entryKinds)),
-            Layer.provideMerge(Layer.succeed(DeclaredNativeRules, assembly.nativeRules)),
+            Layer.provideMerge(
+              Layer.merge(
+                Layer.succeed(DeclaredNativeRules, assembly.nativeRules),
+                Layer.succeed(CreationSteps, creationSteps(assembly.creationSteps)),
+              ),
+            ),
 
             Layer.provideMerge(approvalModesLayer),
             Layer.provideMerge(Layer.succeed(Handover, options.leaving ?? Effect.succeed(false))),

@@ -14,7 +14,7 @@
   import Users from '@lucide/svelte/icons/users';
   import X from '@lucide/svelte/icons/x';
   import type { CheckoutEntry, ComparedPath } from '@tagma/server/workspace/contract/wire/checkout';
-  import { OPERATIONS } from '@tagma/server/composition/catalog';
+  import { OPERATIONS } from '@tagma/server/composition/operations';
   import SeamHandle from '@runlith/seam/SeamHandle.svelte';
   import { Seam } from '@runlith/seam/Seam.svelte';
   import Button from '$lib/shared/ui/button/button.svelte';

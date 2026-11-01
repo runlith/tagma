@@ -1,6 +1,6 @@
 import Puzzle from '@lucide/svelte/icons/puzzle';
 import type { TagmaAppViewSet } from '@tagma/server/views/contract/wire/sets';
-import type { SurfaceDeclaration } from '$lib/features/workspace/surface.js';
+import { CONTRIBUTED_ROUTE, type SurfaceDeclaration } from '$lib/features/workspace/surface.js';
 import { Notices } from '$lib/features/notices/Service.svelte.js';
 import type { PaletteAction } from '$lib/features/workspace/action.js';
 import { ShellOps, shellActs } from '$lib/features/workspace/ShellOps.js';
@@ -37,7 +37,8 @@ export const sectionDeclarations = (sets: readonly TagmaAppViewSet[]): readonly 
     .map(({ set, section }, place): SurfaceDeclaration => ({
       surface: sectionSurface(set.app, section.view),
       within: TAGMA_APP_SURFACE,
-      route: `p/${set.app}/${section.view}`,
+      route: `${CONTRIBUTED_ROUTE}/${set.app}/${section.view}`,
+      payload: { view: { tagmaApp: set.app, view: section.view } },
       label: section.title,
       icon: Puzzle,
       iconUrl: section.icon === undefined || set.site._tag !== 'served' ? undefined : new URL(section.icon, `${set.site.origin}/`).href,
