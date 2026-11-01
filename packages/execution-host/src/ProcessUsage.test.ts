@@ -125,6 +125,112 @@ it.effect("a reading too large for its envelope keeps Tagma's own CPU on Tagma's
   }),
 );
 
+it.effect('unread CPU counters rebase before rates resume without carrying old reaped-child deductions forward', () =>
+  Effect.gen(function* () {
+    const outside = (micros: number): ProcessCounters => ({ ...row(300, 1, micros, 'outside'), cpu: { micros, reapedMicros: undefined } });
+    const seconds = [0, 1, 11, 12, 13];
+    const snapshots = [
+      [row(50, 1, 0, 'bun'), row(51, 50, 300_000, 'child'), outside(0)],
+      [
+        { ...row(50, 1, 0, 'bun'), cpu: undefined },
+        { ...outside(0), cpu: undefined },
+      ],
+      [
+        { ...row(50, 1, 0, 'bun'), cpu: undefined },
+        { ...outside(0), cpu: undefined },
+      ],
+      [row(50, 1, 350_000, 'bun', 350_000), outside(4 * SECOND)],
+      [row(50, 1, 450_000, 'bun', 350_000), outside(4 * SECOND + 200_000)],
+    ];
+    const usage = yield* makeProcessUsage({
+      topology: { of: () => Effect.succeed(undefined), watching: Effect.succeed([]) },
+      scope,
+      policy: { periodMs: 100 },
+      native: yield* readings(
+        snapshots.map((processes, index) => ({
+          observedAt: (seconds[index]! + 1) * 1_000,
+          takenAtMicros: seconds[index]! * SECOND,
+          machine: { busy: seconds[index]! * 50, total: seconds[index]! * 400, cores: 4, memory },
+          processes,
+        })),
+      ),
+      hostPid: 60,
+      cores: 4,
+      budgetBytes: 1_000_000,
+    }).pipe(Effect.provideService(Processes, reader));
+    yield* usage.subscribe('fixture', 50, []);
+    yield* usage.sample();
+    yield* TestClock.adjust(Duration.seconds(1));
+    yield* usage.sample();
+    yield* TestClock.adjust(Duration.seconds(10));
+    yield* usage.sample();
+    yield* TestClock.adjust(Duration.seconds(1));
+    yield* usage.sample();
+    const restored = (yield* usage.load)?.groups ?? [];
+    expect(restored.flatMap((group) => group.processes.map((process) => process.cores))).toEqual([null, null]);
+    expect(restored.reduce((sum, group) => sum + group.unread, 0)).toBe(2);
+    yield* TestClock.adjust(Duration.seconds(1));
+    yield* usage.sample();
+    const fresh = (yield* usage.load)?.groups ?? [];
+    const processes = fresh.flatMap((group) => group.processes);
+    expect(processes.find((process) => process.identity.pid === 300)?.cores).toBeCloseTo(0.2, 6);
+    expect(processes.find((process) => process.identity.pid === 50)).toMatchObject({ cores: expect.closeTo(0.1, 6), reapedCores: 0 });
+    expect(fresh.reduce((sum, group) => sum + group.cores, 0)).toBeCloseTo(0.5, 6);
+  }),
+);
+
+it.effect('a watched execution rebases unread rates and cannot hand its unread lifetime gap to its reaper when it ends', () =>
+  Effect.gen(function* () {
+    const watching = yield* Ref.make<ReadonlyArray<ObservedExecution>>([observed]);
+    const endings = yield* Ref.make<ReadonlyArray<EndedExecution>>([]);
+    const snapshots = [
+      [row(50, 1, 0, 'holder'), row(100, 50, SECOND, 'command')],
+      [row(50, 1, 0, 'holder'), { ...row(100, 50, 0, 'command'), cpu: undefined }],
+      [row(50, 1, 0, 'holder'), row(100, 50, 2 * SECOND, 'command')],
+      [row(50, 1, 0, 'holder'), { ...row(100, 50, 0, 'command'), cpu: undefined }],
+      [row(50, 1, 3 * SECOND, 'holder', 3 * SECOND)],
+    ];
+    const usage = yield* makeProcessUsage({
+      topology: { of: () => Effect.succeed(observed), watching: Ref.get(watching), ended: Ref.get(endings) },
+      scope,
+      policy: { periodMs: 100 },
+      native: yield* readings(
+        snapshots.map((processes, index) => ({
+          observedAt: (index + 1) * 1_000,
+          takenAtMicros: index * SECOND,
+          machine: { busy: index * 400, total: index * 400, cores: 4, memory },
+          processes,
+        })),
+      ),
+      hostPid: 60,
+      holderPid: 50,
+      cores: 4,
+      budgetBytes: 1_000_000,
+    }).pipe(Effect.provideService(Processes, reader));
+    yield* usage.subscribe('fixture', 50, []);
+    yield* usage.sample();
+    yield* TestClock.adjust(Duration.seconds(1));
+    yield* usage.sample();
+    yield* TestClock.adjust(Duration.seconds(1));
+    yield* usage.sample();
+    const restored = yield* usage.latest(ref.execution);
+    yield* TestClock.adjust(Duration.seconds(1));
+    yield* usage.sample();
+    yield* Ref.set(watching, []);
+    yield* Ref.set(endings, [{ ref, leader: observed.leader!, cpuMicros: 3 * SECOND }]);
+    yield* TestClock.adjust(Duration.seconds(1));
+    yield* usage.sample();
+    const groups = (yield* usage.load)?.groups ?? [];
+    expect(groups.flatMap((group) => group.processes).find((process) => process.identity.pid === 50)?.cores).toBeNull();
+    expect(groups.filter((group) => group.owner._tag === 'Execution').reduce((sum, group) => sum + group.cores, 0)).toBe(0);
+    expect(restored).toMatchObject({
+      completeness: 'partial',
+      cpu: { _tag: 'Measured', cores: 0, population: { matched: 0 }, completeness: 'partial' },
+      unmeasured: [{ reason: 'unknown' }],
+    });
+  }),
+);
+
 it.effect('every process is charged to one row, a reaped child to its execution, and the rows add up to the machine', () =>
   Effect.gen(function* () {
     const result = yield* Effect.gen(function* () {

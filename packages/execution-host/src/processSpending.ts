@@ -9,6 +9,7 @@ type Held = {
   readonly birth: string;
   readonly micros: number | undefined;
   readonly reapedMicros: number | undefined;
+  readonly read: boolean;
   readonly parent: number;
   readonly parentBirth: string | undefined;
 };
@@ -29,8 +30,6 @@ export type Spent = {
   readonly ended: ReadonlySet<string>;
 };
 
-type Uncharged = { readonly birth: string; readonly micros: number };
-
 const ownOf = (counter: { readonly micros: number; readonly reapedMicros: number | undefined }): number =>
   counter.micros - (counter.reapedMicros ?? 0);
 
@@ -39,7 +38,6 @@ export class Spending {
   private takenAtMicros: number | undefined;
   private observedAt = 0;
   private settled: ReadonlySet<string> | undefined;
-  private uncharged = new Map<number, Uncharged>();
   private containers = new Map<string, number>();
   private gpu = new Map<number, { readonly birth: string; readonly micros: number }>();
 
@@ -49,7 +47,6 @@ export class Spending {
     this.held = new Map();
     this.takenAtMicros = undefined;
     this.settled = undefined;
-    this.uncharged = new Map();
     this.containers = new Map();
     this.gpu = new Map();
   }
@@ -79,15 +76,23 @@ export class Spending {
           birth: row.birth,
           micros: same?.micros,
           reapedMicros: same?.reapedMicros,
+          read: false,
           parent: row.parent,
           parentBirth,
         });
         deltas.set(row.pid, undefined);
         continue;
       }
-      held.set(row.pid, { birth: row.birth, micros: row.cpu.micros, reapedMicros: row.cpu.reapedMicros, parent: row.parent, parentBirth });
+      held.set(row.pid, {
+        birth: row.birth,
+        micros: row.cpu.micros,
+        reapedMicros: row.cpu.reapedMicros,
+        read: true,
+        parent: row.parent,
+        parentBirth,
+      });
       const counting = row.cpu.reapedMicros !== undefined;
-      if (overMicros === 0) deltas.set(row.pid, undefined);
+      if (overMicros === 0 || same?.read === false) deltas.set(row.pid, undefined);
       else if (same?.micros !== undefined) {
         const own = ownOf(row.cpu) - ownOf({ micros: same.micros, reapedMicros: same.reapedMicros });
         if (counting !== (same.reapedMicros !== undefined)) deltas.set(row.pid, own);
@@ -106,19 +111,12 @@ export class Spending {
         }
       } else deltas.set(row.pid, undefined);
     }
-    const uncharged = new Map<number, Uncharged>();
-    for (const [pid, owed] of this.uncharged) {
-      if (listed.get(pid)?.birth !== owed.birth) continue;
-      const delta = deltas.get(pid);
-      if (delta === undefined) uncharged.set(pid, owed);
-      else if (whole.has(pid)) deltas.set(pid, delta - owed.micros);
-    }
     const departed = (pid: number, birth: string | undefined): boolean => {
       const standing = listed.get(pid);
       return standing === undefined || standing.birth !== birth;
     };
     for (const [pid, gone] of before) {
-      if (!departed(pid, gone.birth) || gone.micros === undefined) continue;
+      if (!departed(pid, gone.birth)) continue;
       let up = gone;
       for (let hops = 0; hops < 64; hops += 1) {
         const above = before.get(up.parent);
@@ -127,10 +125,13 @@ export class Spending {
       }
       const reaper = listed.get(up.parent);
       if (reaper === undefined || reaper.birth !== up.parentBirth) continue;
+      if (!gone.read && whole.has(up.parent)) {
+        deltas.set(up.parent, undefined);
+        whole.delete(up.parent);
+        continue;
+      }
       const reaped = deltas.get(up.parent);
-      if (reaped !== undefined && whole.has(up.parent)) deltas.set(up.parent, reaped - gone.micros);
-      else if (reaper.cpu === undefined && before.get(up.parent)?.reapedMicros !== undefined)
-        uncharged.set(up.parent, { birth: reaper.birth, micros: (uncharged.get(up.parent)?.micros ?? 0) + gone.micros });
+      if (reaped !== undefined && gone.micros !== undefined && whole.has(up.parent)) deltas.set(up.parent, reaped - gone.micros);
     }
     const newlyEnded = new Set(ended.filter((one) => this.settled !== undefined && !this.settled.has(one.key)).map((one) => one.key));
     const reapedMicros = this.reap(ended, before, listed, deltas, owns, whole, departed, reaper, observedAt);
@@ -166,7 +167,6 @@ export class Spending {
       nextGpu.set(row.pid, { birth: row.birth, micros: row.gpu.micros });
     }
     this.gpu = nextGpu;
-    this.uncharged = uncharged;
     this.held = held;
     this.takenAtMicros = takenAtMicros;
     this.observedAt = observedAt;
@@ -211,7 +211,7 @@ export class Spending {
       settled.add(one.key);
       const seen = before.get(one.leader.pid);
       const known = seen !== undefined && seen.birth === one.leader.birth ? seen : undefined;
-      if (known !== undefined && known.micros === undefined) continue;
+      if (known !== undefined && !known.read) continue;
       if (known === undefined && this.reader.bornBetween(one.leader.birth, this.observedAt, observedAt) !== true) continue;
       const parent = known?.parent ?? reaper;
       const holder = parent === undefined ? undefined : listed.get(parent);

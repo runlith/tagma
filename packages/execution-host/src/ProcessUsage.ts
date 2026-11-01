@@ -372,7 +372,7 @@ export const makeProcessUsage = Effect.fnUntraced(function* ({
       if (row === undefined) continue;
       const relation = relations.get(pid);
       const spentCores = spent.cores.get(pid);
-      if (row.cpu === undefined) unread += 1;
+      if (spentCores === undefined) unread += 1;
       cores += spentCores ?? 0;
       processes.push({
         identity: { pid, birth: row.birth },
@@ -413,7 +413,13 @@ export const makeProcessUsage = Effect.fnUntraced(function* ({
           ? [{ region: 'execution processes', reason: 'unknown', detail: 'the container was measured without listed processes' }]
           : unread === 0
             ? []
-            : [{ region: `${unread} processes of this execution`, reason: 'refused', detail: 'their counters were not read this step' }],
+            : [
+                {
+                  region: `${unread} processes of this execution`,
+                  reason: 'unknown',
+                  detail: 'their CPU rates have no comparable readings for this interval',
+                },
+              ],
       coverage: processes.length === 0 ? [] : COVERAGE,
       processes,
       current,

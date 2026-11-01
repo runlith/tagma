@@ -71,18 +71,6 @@ test('a command reaped by the holder between two readings is charged to its exec
   expect(second.cores.get(5)).toBeCloseTo(0.01, 6);
 });
 
-test('a member whose counter is missing for one reading is never charged below zero nor twice', () => {
-  const [, second, third] = steps([
-    [row(10, 1, 0), row(11, 10, 300_000)],
-    [row(10, 1, 10_000), row(11, 10, undefined)],
-    [row(10, 1, 20_000), row(11, 10, 400_000)],
-  ]);
-  expect(second!.get(11)).toBeUndefined();
-  expect(second!.get(10)).toBeCloseTo(0.01, 6);
-  expect(third!.get(11)).toBeCloseTo(0.1, 6);
-  expect(third!.get(10)).toBeCloseTo(0.01, 6);
-});
-
 const counted = (pid: number, parent: number, own: number | undefined, reapedMicros?: number): ProcessCounters => ({
   ...row(pid, parent, own === undefined ? undefined : own + (reapedMicros ?? 0)),
   cpu: own === undefined ? undefined : { micros: own + (reapedMicros ?? 0), reapedMicros },
@@ -102,18 +90,6 @@ test('a counter read once without its reaped children compares only own time, ne
   expect(ps!.cores.get(10)).toBeCloseTo(0.1, 6);
   expect(back!.cores.get(10)).toBeCloseTo(0.1, 6);
   expect([ps!.fromChildren.has(10), back!.fromChildren.has(10)]).toEqual([false, false]);
-});
-
-test('a child that leaves while its parent is unread is taken off the parent once the parent reads again', () => {
-  const [, charged, , recovered] = spentOf([
-    [counted(10, 1, 0, 0), counted(11, 10, 0)],
-    [counted(10, 1, 0, 0), counted(11, 10, 300_000)],
-    [counted(10, 1, undefined)],
-    [counted(10, 1, 0, 350_000)],
-  ]);
-  expect(charged!.cores.get(11)).toBeCloseTo(0.3, 6);
-  expect(recovered!.cores.get(10)).toBeCloseTo(0.05, 6);
-  expect(recovered!.fromChildren.get(10)).toBeCloseTo(0.05, 6);
 });
 
 test('a process that stood before the first reading charges nothing of its history', () => {
