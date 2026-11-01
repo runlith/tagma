@@ -268,7 +268,7 @@ export const absorbMirror = Effect.fn('Mirror.absorb')(function* (scan: TreeScan
         edges.push(row);
       }
       for (const page of pagesOf(sources, SOURCE_COLUMNS, (row) => row.ref.length + (row.symbol?.length ?? 0))) {
-        yield* db.insert(source).values(page).onConflictDoNothing();
+        yield* db.insert(source).values(page);
       }
       for (const page of pagesOf(edges, EDGE_COLUMNS, (row) => row.kind.length)) yield* db.insert(edge).values(page);
       yield* insertFarRows(db, farRows);
@@ -600,16 +600,13 @@ export const repairMirror = Effect.fnUntraced(function* (
         }
         yield* db.delete(source).where(eq(source.blockId, blockId));
         for (const sourceRow of front.sources ?? []) {
-          yield* db
-            .insert(source)
-            .values({
-              blockId,
-              kind: sourceRow.kind,
-              ref: sourceRow.ref,
-              symbol: sourceRow.symbol ?? null,
-              createdAt: EPOCH,
-            })
-            .onConflictDoNothing();
+          yield* db.insert(source).values({
+            blockId,
+            kind: sourceRow.kind,
+            ref: sourceRow.ref,
+            symbol: sourceRow.symbol ?? null,
+            createdAt: EPOCH,
+          });
         }
         const orphaned = displaced.get(path);
         if (orphaned !== undefined) {

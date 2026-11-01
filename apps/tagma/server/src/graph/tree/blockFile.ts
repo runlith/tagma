@@ -48,7 +48,14 @@ const isSourceKind = (kind: string): kind is BlockSource['kind'] => (SOURCE_KIND
 
 function currentFrontmatter(written: typeof writtenFrontmatterSchema.Type): BlockFrontmatter {
   const { verifiedAt: _verifiedAt, sources, ...front } = written;
-  const kept = sources?.flatMap((item) => (isSourceKind(item.kind) ? [{ kind: item.kind, ref: item.ref, symbol: item.symbol }] : []));
+  const seen = new Set<string>();
+  const kept = sources?.flatMap((item) => {
+    if (!isSourceKind(item.kind)) return [];
+    const identity = JSON.stringify([item.kind, item.ref, item.symbol ?? '']);
+    if (seen.has(identity)) return [];
+    seen.add(identity);
+    return [{ kind: item.kind, ref: item.ref, symbol: item.symbol }];
+  });
   return { ...front, sources: kept === undefined || kept.length === 0 ? undefined : kept };
 }
 

@@ -9,7 +9,7 @@ import { DoorFixture, doorFixture, projectLeaving } from '../doorFixture.js';
 import { suiteGit, suiteGitRan } from '../suiteGit.js';
 
 layer(Layer.merge(doorFixture(), BunFileSystem.layer), { excludeTestServices: true })('team graph merge', (it) => {
-  it.effect('a resolved merge opens a graph with repeated sources as one source each', () =>
+  it.effect('a resolved merge preserves source identities and reports mirror failures', () =>
     Effect.gen(function* () {
       const world = yield* DoorFixture;
       const files = yield* FileSystem.FileSystem;
@@ -77,6 +77,16 @@ layer(Layer.merge(doorFixture(), BunFileSystem.layer), { excludeTestServices: tr
       });
       const refreshed = yield* world.op('read_block', { blockIds: [sourceName], depth: 0 }, `${query}&branch=side`);
       expect(refreshed).toMatchObject({ status: 200, body: { reads: [{ body: 'after repair\n', sources: expected }] } });
+      const target = original.match(/^id: (.+)$/m)?.[1];
+      if (target === undefined) return yield* Effect.die('the conflict file has no identity');
+      const edge = `edges:\n  - kind: supersedes\n    to: ${target}\n`;
+      yield* files.writeFileString(join(side, relativeConflict), original.replace('\n---\n', `\n${edge}---\n`).replace('base', 'combined'));
+      yield* files.writeFileString(sourceFile, sourceText.replace('\n---\n', `\n${edge}${sources}---\n`));
+      const refused = yield* world.op('resolve_graph_conflict', { branch: 'side' }, query);
+      expect(refused).toMatchObject({
+        status: 409,
+        body: { code: 'graph-pool', reason: expect.stringContaining('UNIQUE constraint failed') },
+      });
     }),
   );
 });
