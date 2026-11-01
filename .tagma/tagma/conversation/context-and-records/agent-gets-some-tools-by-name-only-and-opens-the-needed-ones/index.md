@@ -21,7 +21,8 @@ sources:
 - A deferred tool's schema leaves for the model only after the search names it; it can be called from the next step.
 - Search takes exact names or words; together with the tool its companions open — tools whose calls its answers print.
 - An opened tool survives compaction. When the deferred set changes, the agent gets a new list.
+- On a CLI that reads its tool list once per process (Muse Code), opening a tool never changes that list: the search answer itself carries the opened tool's schema, the agent calls it through `call_tool` with its name and input, and the first turn after the CLI compacts its own session hands those schemas over again.
 
-**Limits.** Search answers with names and descriptions; it carries no schema.
+**Limits.** Search answers with names and descriptions and carries no schema, except on a CLI that reads its tool list once.
 
 Which tools are deferred is decided by the [[cad90fdf|agent definitions]]; their count is visible in the [[a267ca10|context ring]] and the [[905b4121|expensive-start card]].
