@@ -1916,10 +1916,6 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead apps/tagma/app/src/lib/features/threads/native/strings.ts#activityWords",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "dead-code dead apps/tagma/app/src/lib/features/threads/notices.ts#birthFailed",
           "owner": "5a3bed29"
         },
@@ -2125,10 +2121,6 @@ fields:
         },
         {
           "fingerprint": "dead-code dead apps/tagma/app/src/lib/features/workspace/address.ts#DiffRange",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/app/src/lib/features/workspace/surface.ts#RouteParams",
           "owner": "5a3bed29"
         },
         {
@@ -2830,10 +2822,6 @@ fields:
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/change-record/holdings/inputs.ts#Sided",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/change-record/holdings/judge.ts#Ruling",
           "owner": "5a3bed29"
         },
         {
@@ -10750,10 +10738,6 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead apps/tagma/server/src/views/sections.ts#SectionPointName",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "dead-code dead apps/tagma/server/src/workspace/assignments/lineage.ts#lineageOf",
           "owner": "5a3bed29"
         },
@@ -11925,10 +11909,6 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead packages/agent/src/agent/AgentRunState.ts#AgentStepCommit",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "dead-code dead packages/agent/src/agent/AgentRunner.ts#AgentSignals",
           "owner": "5a3bed29"
         },
@@ -12664,10 +12644,6 @@ fields:
         },
         {
           "fingerprint": "dead-code dead packages/agent/src/thread/HistoryFold.ts#ThreadHistorySplice",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead packages/agent/src/thread/HistoryFold.ts#ThreadHistoryMove",
           "owner": "5a3bed29"
         },
         {
@@ -14013,10 +13989,6 @@ fields:
         },
         {
           "fingerprint": "dead-code dead packages/agent/src/tool/display.ts#ToolDisplayForm",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead packages/agent/src/tool/refusal.ts#ToldRefusal",
           "owner": "5a3bed29"
         },
         {
@@ -17277,10 +17249,6 @@ fields:
         },
         {
           "fingerprint": "dead-code dead packages/layer/src/key.ts#ServiceDefinition",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead packages/layer/src/key.ts#Optional",
           "owner": "5a3bed29"
         },
         {

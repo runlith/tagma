@@ -1,8 +1,11 @@
 import { declarationsOf, type WireModule } from '@tagma/server/platform/contract/wire/manifest';
 import { knownAnswer, type DeclaredAnswer, type OperationDeclaration } from '@tagma/server/platform/contract/wire/operation';
+import { Service } from '@runlith/layer/key';
 import type { Point } from '@runlith/layer/Point';
 import { toJson } from '@runlith/utils/json';
 import { Data, Effect, Schema } from 'effect';
+import { createSubscriber } from 'svelte/reactivity';
+import { WireCatalog } from './WireCatalog.js';
 
 export interface Operations {}
 
@@ -26,7 +29,11 @@ class OperationUndeclared extends Data.TaggedError('OperationUndeclared')<{ read
   }
 }
 
-type Declared = ReadonlyMap<string, OperationDeclaration>;
+type Table = {
+  readonly modules: readonly WireModule[];
+  readonly declared: ReadonlyMap<string, OperationDeclaration>;
+  readonly ownedBy: (module: string) => readonly string[];
+};
 
 type Decode = (answered: unknown) => Effect.Effect<unknown, Schema.SchemaError>;
 
@@ -35,37 +42,64 @@ type OperationCodec<Id extends CatalogOperationId> = {
   readonly answer: (answered: unknown) => Effect.Effect<OperationAnswer<Id>, Schema.SchemaError>;
 };
 
-export class OperationCodecs {
-  private loading: { readonly modules: readonly WireModule[]; readonly declared: Promise<Declared> } | null = null;
-  private loaded: { readonly modules: readonly WireModule[]; readonly declared: Declared } | null = null;
+export class OperationTable extends Service<OperationTable>()('OperationTable', { tier: 'app' }) {
+  static *make() {
+    return new OperationTable(yield* WireCatalog);
+  }
+
+  private loading: { readonly modules: readonly WireModule[]; readonly table: Promise<Table> } | null = null;
+  private loaded: Table | null = null;
+  private loadedNotice: (() => void) | null = null;
   private readonly answers = new Map<OperationDeclaration, Decode>();
+  private readonly subscribe = createSubscriber((update) => {
+    this.loadedNotice = update;
+    void this.load().then(update, update);
+    return () => {
+      this.loadedNotice = null;
+    };
+  });
 
-  constructor(private readonly catalog: Point<WireModule>) {}
+  constructor(private readonly catalog: Point<WireModule>) {
+    super();
+  }
 
-  load(): Promise<Declared> {
+  load(): Promise<Table> {
     const modules = this.catalog.items;
-    if (this.loading?.modules === modules) return this.loading.declared;
-    const declared = declarationsOf(modules).then(
-      (catalog) => {
-        const read: Declared = new Map(Object.entries(catalog.declarations));
-        if (this.catalog.items === modules) this.loaded = { modules, declared: read };
+    if (this.loading?.modules === modules) return this.loading.table;
+    const table = declarationsOf(modules).then(
+      (catalog): Table => {
+        const declared: ReadonlyMap<string, OperationDeclaration> = new Map(Object.entries(catalog.declarations));
+        const read = { modules, declared, ownedBy: catalog.ownedBy };
+        if (this.catalog.items === modules) {
+          this.loaded = read;
+          this.loadedNotice?.();
+        }
         return read;
       },
       (failure: unknown) => {
-        if (this.loading?.declared === declared) this.loading = null;
+        if (this.loading?.table === table) this.loading = null;
         throw failure;
       },
     );
-    this.loading = { modules, declared };
-    return declared;
+    this.loading = { modules, table };
+    return table;
+  }
+
+  declared(id: string): OperationDeclaration | undefined {
+    this.subscribe();
+    return this.loaded?.declared.get(id);
+  }
+
+  ownedBy(module: string): readonly string[] {
+    this.subscribe();
+    return this.loaded?.ownedBy(module) ?? [];
   }
 
   of<Id extends CatalogOperationId>(id: Id): Effect.Effect<OperationCodec<Id>, OperationUndeclared> {
     const loaded = this.loaded;
-    const declared =
-      loaded !== null && loaded.modules === this.catalog.items ? Effect.succeed(loaded.declared) : Effect.promise(() => this.load());
-    return Effect.flatMap(declared, (table) => {
-      const declaration = table.get(id);
+    const table = loaded !== null && loaded.modules === this.catalog.items ? Effect.succeed(loaded) : Effect.promise(() => this.load());
+    return Effect.flatMap(table, ({ declared }) => {
+      const declaration = declared.get(id);
       if (declaration === undefined) return Effect.fail(new OperationUndeclared({ id }));
       const decode = this.decodeOf(declaration);
       return Effect.succeed({

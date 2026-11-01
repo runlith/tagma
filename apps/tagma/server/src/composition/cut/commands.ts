@@ -4,6 +4,7 @@ import { ClaimHolders } from '../../executions/contract/service/host.js';
 import { hostsStaying } from '../../executions/host/staying.js';
 import { GRAPH_STEPS } from '../../graph/steps/sequence.js';
 import { build } from '../../installation/cut/build.js';
+import { runCut } from '../../installation/cut/command.js';
 import type { Composition } from '../../installation/cut/descriptor.js';
 import { releaseCommand } from '../../installation/cut/pipeline.js';
 import type { InstanceHosts } from '../../installation/cut/port.js';
@@ -17,6 +18,7 @@ import type { Build } from '../build.js';
 import { doorOf } from '../cli/door.js';
 import { SIGNERS } from '../cli/signers.js';
 import { entryKinds } from '../entryKinds.js';
+import { readBuildAttribution } from './attribution.js';
 import { claimHoldersLayer } from '../hostClaims.js';
 
 const cutOf = async (of: Build): Promise<Composition> => {
@@ -32,21 +34,11 @@ const cutOf = async (of: Build): Promise<Composition> => {
   };
 };
 
-const cutting = async (command: Effect.Effect<void>, signals: readonly NodeJS.Signals[] = ['SIGTERM', 'SIGINT']) => {
-  const halted = new AbortController();
-  for (const signal of signals) process.once(signal, () => halted.abort());
-  await Effect.runPromise(command, { signal: halted.signal }).catch((cause: unknown) => {
-    if (!halted.signal.aborted) throw cause;
-    console.error('[tagma] stopped');
-    process.exit(143);
-  });
-};
-
 export const releaseCut = async (of: Build, given: readonly string[]): Promise<void> => {
   const composition = await cutOf(of);
   const cut = given.filter((one) => one !== '--notarize');
   const out = cut.flatMap((one, at) => (one === '--json' ? [one] : one === '--out' ? [one, cut[at + 1] ?? ''] : []));
-  await cutting(
+  await runCut(
     given[0] === 'publish'
       ? publishCommand(given.slice(1), composition)
       : given[0] === 'notarize'
@@ -58,7 +50,7 @@ export const releaseCut = async (of: Build, given: readonly string[]): Promise<v
 };
 
 export const transitionCut = async (of: Build, given: readonly string[]): Promise<void> =>
-  cutting(transitionCommand(given, await cutOf(of)));
+  runCut(transitionCommand(given, await cutOf(of)));
 
 const serverAt = (channel: Channel) => {
   const door = doorOf(channel);
@@ -70,11 +62,12 @@ const serverAt = (channel: Channel) => {
 
 export const buildCut = async (of: Build, given: readonly string[]): Promise<void> => {
   const { door, startup } = serverAt(of.channel);
-  await cutting(
+  await runCut(
     build(
       { ask: door.ask, baseUrl: door.baseUrl, boundHere: door.boundHere, healthOrNone: door.healthOrNone, startup },
       given,
-      await cutOf(of),
+      { channel: of.channel, checkout: of.cut.roots.checkout, composition: Effect.promise(() => cutOf(of)) },
+      readBuildAttribution(door),
     ),
   );
 };
@@ -95,7 +88,7 @@ const hosts: InstanceHosts = {
 
 export const tryCut = async (of: Build, working: Channel, given: readonly string[]): Promise<void> => {
   const { door, startup } = serverAt(working);
-  await cutting(
+  await runCut(
     tryout(
       { baseUrl: door.baseUrl, healthOrNone: door.healthOrNone, startup },
       hosts,

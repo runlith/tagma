@@ -1,7 +1,6 @@
 <script lang="ts">
-  import ErrorBoundary from '@runlith/error-boundary/ErrorBoundary.svelte';
   import { Router } from '@runlith/layer/Router';
-  import SectionPage from '$lib/features/tagma-apps/SectionPage.svelte';
+  import ShownPayload from '@runlith/layer/svelte/ShownPayload.svelte';
   import { SurfaceRegistry } from '$lib/features/workspace/surface.js';
 
   const router = Router.use();
@@ -11,15 +10,7 @@
 </script>
 
 {#if shown?.payload !== undefined}
-  {@const payload = shown.payload}
-  {#key shown.surface}
-    <ErrorBoundary id={`Surfaces/${shown.surface}`}>
-      {#if 'component' in payload}
-        {@const Contributed = payload.component}
-        <Contributed {path} />
-      {:else}
-        <SectionPage tagmaApp={payload.view.tagmaApp} view={payload.view.view} />
-      {/if}
-    </ErrorBoundary>
+  {#key shown.payload.component}
+    <ShownPayload id={`Surfaces/${shown.surface}`} payload={shown.payload} props={{ path }} />
   {/key}
 {/if}

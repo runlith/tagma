@@ -14,7 +14,7 @@ import { HeldFor } from '@runlith/held/holding';
 import { synchronously } from '@runlith/sqlite-process/SqliteProcess';
 import { type WriteUnit, writeUnitOf } from '../contract/service/units.js';
 import { UnitWriteRefused, type WriteSet } from '../contract/service/writes.js';
-import { LateStatementRefused, ProgramOpen, UnitInProgramRefused, UnitLife } from './life.js';
+import { LateStatementRefused, ProgramOpen, UnitEnd, UnitInProgramRefused, UnitLife } from './life.js';
 import type { DurabilityClass } from '../contract/service/durability.js';
 import { breach, movedTables, UnitDurability, UnitWrites } from './writes.js';
 import type { TableMoves } from './moves.js';
@@ -36,6 +36,7 @@ type CommitQueue = {
   readonly store: StoreIdentity;
   readonly queued: Effect.Effect<void>[];
   readonly moved: (ReadonlySet<string> | null)[];
+  readonly end: UnitEnd;
   body: Context.Context<never>;
 };
 const CommitQueue = Context.Reference<CommitQueue | null>('tagma/platform/CommitQueue', { defaultValue: () => null });
@@ -109,8 +110,9 @@ export const storeTransaction =
     return rootCost(
       operation,
       Effect.uninterruptibleMask((restore) =>
-        Effect.useSpan('Store.transaction', { attributes: { opKind: operation } }, (parent) =>
-          Effect.gen(function* () {
+        Effect.useSpan('Store.transaction', { attributes: { opKind: operation } }, (parent) => {
+          let owned: UnitEnd | null = null;
+          return Effect.gen(function* () {
             const building = yield* ProgramOpen;
             if (building !== null && building.store.path === identity.path && building.store.generation === identity.generation)
               return yield* Effect.die(new UnitInProgramRefused({ store: identity.path, operation }));
@@ -134,7 +136,10 @@ export const storeTransaction =
             let settleWindow: TimingWindow | undefined;
             let settling: TimingFrame | undefined;
             const outer = yield* CommitQueue;
-            const commits: CommitQueue = { store: identity, queued: [], moved: [], body: Context.empty() };
+            const joined = outer !== null && outer.store.path === identity.path && outer.store.generation === identity.generation;
+            const end = joined ? outer.end : (owned = new UnitEnd());
+            const commits: CommitQueue = { store: identity, queued: [], moved: [], end, body: Context.empty() };
+            end.release(() => void commits.queued.splice(0));
             const life: UnitLife = { identity, operation, open: true };
             const value = yield* db
               .transaction(() =>
@@ -217,7 +222,7 @@ export const storeTransaction =
             const onCommit = options.onCommit;
             const publication = onCommit === undefined ? undefined : Effect.suspend(() => onCommit(value));
             const moved = [movedTables(identity, set), ...commits.moved];
-            if (outer !== null && outer.store.path === identity.path && outer.store.generation === identity.generation) {
+            if (joined) {
               const own = callerOwn(yield* Effect.context<RCommit>(), outer.body);
               outer.moved.push(...moved);
               outer.queued.push(...commits.queued.map((queued) => Effect.provideContext(queued, own)));
@@ -234,23 +239,24 @@ export const storeTransaction =
             }
             if (lost.reasons.length > 0) return yield* Effect.failCause(lost);
             return value;
-          }).pipe(Effect.withParentSpan(parent)),
-        ),
+          }).pipe(Effect.withParentSpan(parent), Effect.ensuring(Effect.sync(() => owned?.close())));
+        }),
       ),
     );
   };
 
 export const withinCommit = <A, E, R>(
   moved: ReadonlySet<string> | null,
-  work: (tails: Effect.Effect<void>[]) => Effect.Effect<A, E, R>,
+  work: (tails: Effect.Effect<void>[], end: UnitEnd) => Effect.Effect<A, E, R>,
 ): Effect.Effect<A, E, R> =>
   Effect.flatMap(Effect.all([CommitQueue, UnitLife]), ([outer, life]) => {
     if (outer === null || life === null || !life.open)
       return Effect.die(
         new LateStatementRefused({ store: life?.identity.path ?? outer?.store.path ?? '', operation: life?.operation ?? '' }),
       );
-    const inner: CommitQueue = { store: outer.store, queued: [], moved: [], body: outer.body };
-    return Effect.tap(Effect.provideService(work(inner.queued), CommitQueue, inner), () =>
+    const inner: CommitQueue = { store: outer.store, queued: [], moved: [], end: outer.end, body: outer.body };
+    outer.end.release(() => void inner.queued.splice(0));
+    return Effect.tap(Effect.provideService(work(inner.queued, outer.end), CommitQueue, inner), () =>
       life.open
         ? Effect.sync(() => {
             outer.queued.push(...inner.queued);
@@ -278,16 +284,18 @@ const heldUnit = <Brand extends StoreBrand>(
     life,
   );
   const services = Context.omit(CurrentCost)(context);
-  return writeUnitOf<Brand>({
-    store: identity,
-    run: <A>(query: Effect.Effect<A, StoreFailure>) => Effect.provide(query, services),
-    afterCommit: (effect: Effect.Effect<void>) =>
-      Effect.suspend(() =>
-        life.open
-          ? Effect.sync(() => void commits.queued.push(carryCost(effect)))
-          : Effect.die(new LateStatementRefused({ store: identity.path, operation: life.operation })),
-      ),
-  });
+  return commits.end.bind(
+    writeUnitOf<Brand>({
+      store: identity,
+      run: <A>(query: Effect.Effect<A, StoreFailure>) => Effect.provide(query, services),
+      afterCommit: (effect: Effect.Effect<void>) =>
+        Effect.suspend(() =>
+          life.open
+            ? Effect.sync(() => void commits.queued.push(carryCost(effect)))
+            : Effect.die(new LateStatementRefused({ store: identity.path, operation: life.operation })),
+        ),
+    }),
+  );
 };
 
 const reportIfOverBudget = (

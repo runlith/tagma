@@ -1,7 +1,23 @@
 import { describe, expect, test } from 'bun:test';
-import { seededPick, seededShuffle, unique, uniqueBy } from './collection.js';
+import { arrayView, seededPick, seededShuffle, unique, uniqueBy } from './collection.js';
 
 describe('@runlith/utils collection helpers', () => {
+  test('a lazy indexed view supports array iteration, slicing and sparse-aware methods', () => {
+    const view = arrayView(3, (at) => `line ${at}`);
+    expect(view.length).toBe(3);
+    expect(view[0]).toBe('line 0');
+    expect(view[3]).toBeUndefined();
+    expect([...view]).toEqual(['line 0', 'line 1', 'line 2']);
+    expect([...view.entries()]).toEqual([
+      [0, 'line 0'],
+      [1, 'line 1'],
+      [2, 'line 2'],
+    ]);
+    expect(view.slice(1)).toEqual(['line 1', 'line 2']);
+    expect(view.flatMap((line) => [line])).toEqual([...view]);
+    expect(view.filter((line) => line !== 'line 1')).toEqual(['line 0', 'line 2']);
+  });
+
   test('keeps unique values in first-seen order', () => {
     expect(unique(['b', 'a', 'b', 'c', 'a'])).toEqual(['b', 'a', 'c']);
   });

@@ -9,7 +9,7 @@ import {
   type UnprovenReason,
 } from '../contract/wire/holdings.js';
 import * as Schema from 'effect/Schema';
-import type { Digests, HoldingsChange, Judged } from '../contract/service/holdings.js';
+import type { Digests, HoldingsChange } from '../contract/service/holdings.js';
 import type { FoldInput, Folded } from '../lines/fold.js';
 import { digestOf, type CachedFold, type FoldRow, type TextContent } from '../lines/folding.js';
 import type { FoldMemory } from '../lines/memory.js';
@@ -42,6 +42,8 @@ import type { Landed } from '../lines/landed.js';
 import type { GitMetadata } from '../record/metadata.js';
 import { Descendants } from './paths.js';
 import { Requests } from './requests.js';
+import type { Details } from './details.js';
+import { unpackVerdict } from '../lines/packed.js';
 
 export type Folder = (
   input: FoldInput,
@@ -50,10 +52,10 @@ export type Folder = (
   lane: Lane,
 ) => Effect.Effect<Folded, WalkUnfinished>;
 
-export type Ruling = { readonly holding: Holding; readonly verdict: Verdict };
+type Ruling = { readonly holding: Holding; readonly verdict: Verdict };
 
 export type Entry = {
-  readonly judged: Ruling;
+  readonly holding: Holding;
   readonly probe: string;
   readonly stable: string;
   readonly prepared: string | null;
@@ -68,6 +70,7 @@ export type JudgeParts = {
   readonly readers: InputReaders;
   readonly folder: Folder;
   readonly memory: FoldMemory;
+  readonly details: Details;
   readonly totals: Totals;
   readonly metadata: GitMetadata;
   readonly graphDirectory: string;
@@ -102,7 +105,7 @@ export const makeJudge = ({
   readonly scope: Scope.Closeable;
   readonly idle: () => Effect.Effect<void>;
 }) => {
-  const { readers, memory, totals } = parts;
+  const { readers, memory, totals, details } = parts;
   const entries = new Map<string, Entry>();
   const descendants = new Descendants();
   const dirty = new Set<string>();
@@ -283,19 +286,32 @@ export const makeJudge = ({
     ready: Inputs,
     witnesses: Witnesses,
     conversions: Known | undefined,
+    verdicts: Map<string, Verdict>,
   ): Effect.fn.Return<Entry> {
     const known = entries.get(probe.path);
-    const git = probe.git === undefined ? (known?.judged.holding.git ?? null) : probe.git;
-    const base = { probe: probe.print, stable: probe.stable, rows: standingOf(probe.rows), domain: true, digests: null };
-    if ('cause' in ready)
-      return { ...base, prepared: null, judged: unread(probe, git, { kind: 'unread', side: 'record', cause: ready.cause }) };
+    const git = probe.git === undefined ? (known?.holding.git ?? null) : probe.git;
+    const rows = standingOf(probe.rows).map(({ holder, runId, state }) => ({ holder, runId, state }));
+    const base = { probe: probe.print, stable: probe.stable, rows, domain: true, digests: null };
+    const unproven = (reason: UnprovenReason): Entry => {
+      details.forget(keyOf(probe.path));
+      const ruling = unread(probe, git, reason);
+      if (requests.owes(probe.path)) verdicts.set(probe.path, ruling.verdict);
+      return { ...base, prepared: null, holding: ruling.holding };
+    };
+    if ('cause' in ready) return unproven({ kind: 'unread', side: 'record', cause: ready.cause });
     const one = ready.ready.get(probe.path);
-    if (one === undefined)
-      return { ...base, prepared: null, judged: unread(probe, git, { kind: 'worker', cause: 'the inputs answered nothing for the path' }) };
+    if (one === undefined) return unproven({ kind: 'worker', cause: 'the inputs answered nothing for the path' });
     const print = `${probe.print}\n${one.print}`;
     const digests = { head: digestOf(one.input.head), working: digestOf(one.input.working) };
-    if (known !== undefined && known.prepared === print && known.judged.holding.git === git)
-      return { ...known, ...base, prepared: print, digests };
+    const lane: Lane = urgent.has(probe.path) ? 'now' : 'later';
+    if (known !== undefined && known.prepared === print && known.holding.git === git) {
+      if (!requests.owes(probe.path)) return { ...known, ...base, prepared: print, digests };
+      const packed = details.read(keyOf(probe.path), print);
+      if (packed !== undefined) {
+        verdicts.set(probe.path, unpackVerdict(packed));
+        return { ...known, ...base, prepared: print, digests };
+      }
+    }
     const { answer, used } = yield* foldOf(
       probe.path,
       one,
@@ -310,23 +326,28 @@ export const makeJudge = ({
         },
       }),
     );
-    if (typeof answer === 'string') return { ...base, prepared: null, judged: unread(probe, git, { kind: 'worker', cause: answer }) };
+    if (typeof answer === 'string') return unproven({ kind: 'worker', cause: answer });
     const verdict = answer.result;
+    const prepared = `${probe.print}\n${used.print}`;
+    const packed = yield* Effect.result(readers.walks.pack(verdict, details.limit, lane));
+    if (packed._tag === 'Failure') return unproven({ kind: 'worker', cause: packed.failure.reason });
+    details.keep(keyOf(probe.path), prepared, packed.success);
+    if (requests.owes(probe.path)) verdicts.set(probe.path, verdict);
     const holding = holdingOf(probe, git, verdict, witnesses);
     if (holding.verdict.verdict === 'unknown') noteUnknown(probe.path, holding.verdict.reason);
     else logged.delete(`path:${probe.path}`);
     return {
       ...base,
-      prepared: `${probe.print}\n${used.print}`,
+      prepared,
       digests: { head: digestOf(used.input.head), working: digestOf(used.input.working) },
-      judged: { holding, verdict },
+      holding,
     };
   });
 
   const store = Effect.fnUntraced(function* (results: ReadonlyMap<string, Entry>, batch: readonly string[]) {
     const holders = batch.flatMap((path) => {
       const after = results.get(path);
-      return after?.domain === true ? holdersOf(after.judged.holding) : [];
+      return after?.domain === true ? holdersOf(after.holding) : [];
     });
     const marks = yield* annotationsAt(readers, holders);
     const changed: Holding[] = [];
@@ -335,41 +356,46 @@ export const makeJudge = ({
     for (const path of batch) {
       const before = entries.get(path);
       const after = results.get(path);
-      const kept =
-        after !== undefined && after.domain
-          ? { ...after, judged: { ...after.judged, holding: annotated(after.judged.holding, after.rows, marks) } }
-          : undefined;
+      const kept = after !== undefined && after.domain ? { ...after, holding: annotated(after.holding, after.rows, marks) } : undefined;
       if (kept === undefined) {
+        details.forget(keyOf(path));
         if (before === undefined) continue;
         entries.delete(path);
         if (before.domain) {
           gone.push(path);
-          for (const holder of totals.apply(checkout.rootId, before.judged.holding, undefined)) touched.add(holder);
+          for (const holder of totals.apply(checkout.rootId, before.holding, undefined)) touched.add(holder);
         }
         continue;
       }
-      if (before?.domain === true && sameHolding(before.judged.holding, kept.judged.holding)) {
-        entries.set(path, { ...kept, judged: { ...kept.judged, holding: before.judged.holding } });
+      if (before?.domain === true && sameHolding(before.holding, kept.holding)) {
+        entries.set(path, { ...kept, holding: before.holding });
         continue;
       }
       entries.set(path, kept);
-      changed.push(kept.judged.holding);
-      const previous = before?.domain === true ? before.judged.holding : undefined;
-      for (const holder of totals.apply(checkout.rootId, previous, kept.judged.holding)) touched.add(holder);
+      changed.push(kept.holding);
+      const previous = before?.domain === true ? before.holding : undefined;
+      for (const holder of totals.apply(checkout.rootId, previous, kept.holding)) touched.add(holder);
     }
     if (changed.length + gone.length === 0) return;
     revision += changed.length + gone.length;
     yield* parts.publish({ checkout: checkout.rootId, revision, changed, gone, holders: touched });
   });
 
-  const answer = (batch: readonly string[], results: ReadonlyMap<string, Entry>): Effect.Effect<void> =>
+  const answer = (
+    batch: readonly string[],
+    results: ReadonlyMap<string, Entry>,
+    verdicts?: ReadonlyMap<string, Verdict>,
+  ): Effect.Effect<void> =>
     Effect.forEach(
       batch,
       (path) =>
         Effect.gen(function* () {
           const entry = results.has(path) ? (entries.get(path) ?? results.get(path)) : undefined;
+          const verdict = verdicts?.get(path);
           const judged =
-            entry === undefined ? null : { ...entry.judged, print: entry.prepared ?? entry.probe, head, digests: entry.digests };
+            entry === undefined || verdict === undefined
+              ? null
+              : { holding: entry.holding, verdict, print: entry.prepared ?? entry.probe, head, digests: entry.digests };
           yield* requests.answer(path, judged);
           if (!entries.has(path) && !dirty.has(path) && !now.has(path) && !later.has(path)) descendants.remove(path);
         }),
@@ -413,22 +439,34 @@ export const makeJudge = ({
     } else failed('status', probed.success.status.cause);
     const asked: Probe[] = [];
     const touched: Probe[] = [];
+    const results = new Map<string, Entry>();
+    const verdicts = new Map<string, Verdict>();
+    const recall = (probe: Probe, entry: Entry): boolean => {
+      if (!requests.owes(probe.path)) return true;
+      if (entry.prepared === null) return false;
+      const packed = details.read(keyOf(probe.path), entry.prepared);
+      if (packed === undefined) return false;
+      verdicts.set(probe.path, unpackVerdict(packed));
+      return true;
+    };
     for (const probe of probes.values()) {
       const entry = entries.get(probe.path);
       if (entry === undefined || entry.stable !== probe.stable) asked.push(probe);
-      else if (entry.probe === probe.print && !young(probe)) continue;
-      else if (entry.digests === null) asked.push(probe);
+      else if (entry.probe === probe.print && !young(probe)) {
+        if (!recall(probe, entry)) asked.push(probe);
+      } else if (entry.digests === null) asked.push(probe);
       else touched.push(probe);
     }
     yield* Effect.forEach(
       touched,
       (probe) =>
         Effect.map(workingDigestAt(readers, checkout, probe, lane), (digest) => {
-          if (Result.isFailure(digest) || digest.success !== entries.get(probe.path)?.digests?.working) asked.push(probe);
+          const entry = entries.get(probe.path);
+          if (Result.isFailure(digest) || entry === undefined || digest.success !== entry.digests?.working || !recall(probe, entry))
+            asked.push(probe);
         }),
       { concurrency: READS_AT_ONCE, discard: true },
     );
-    const results = new Map<string, Entry>();
     const known =
       asked.length === 0
         ? undefined
@@ -444,7 +482,7 @@ export const makeJudge = ({
         part,
         (probe) =>
           Effect.map(
-            verdictOf(probe, ready, witnesses.get(probe.path) ?? NO_WITNESSES, known),
+            verdictOf(probe, ready, witnesses.get(probe.path) ?? NO_WITNESSES, known, verdicts),
             (entry) => void results.set(probe.path, entry),
           ),
         {
@@ -464,7 +502,7 @@ export const makeJudge = ({
       if (probe === undefined) continue;
       const entry = results.get(path) ?? entries.get(path);
       if (entry === undefined) continue;
-      const rows = standingOf(probe.rows);
+      const rows = standingOf(probe.rows).map(({ holder, runId, state }) => ({ holder, runId, state }));
       results.set(path, { ...entry, probe: probe.print, stable: probe.stable, rows, domain: rows.length > 0 || dirty.has(path) });
     }
     const stored = yield* Effect.result(store(results, done));
@@ -478,8 +516,10 @@ export const makeJudge = ({
       'holdings.yielded': rest.size,
       'fold.cache.bytes': memory.retained,
       'fold.cache.budget': memory.limit,
+      'verdict.cache.bytes': details.retained,
+      'verdict.cache.budget': details.limit,
     });
-    yield* answer(done, results);
+    yield* answer(done, results, verdicts);
     if (moves !== seen && probed.success.head !== head) yield* shift(done);
     yield* announce();
   });
@@ -604,7 +644,10 @@ export const makeJudge = ({
     settledOnce: Deferred.await(first),
     close: Effect.andThen(
       Effect.sync(() => {
-        for (const entry of entries.values()) if (entry.domain) totals.apply(checkout.rootId, entry.judged.holding, undefined);
+        for (const [path, entry] of entries) {
+          details.forget(keyOf(path));
+          if (entry.domain) totals.apply(checkout.rootId, entry.holding, undefined);
+        }
         entries.clear();
         descendants.clear();
       }),

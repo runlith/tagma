@@ -4,6 +4,7 @@ import type { OperationCallers } from '../../platform/contract/wire/operation.js
 import { GateRefusal } from '../../platform/contract/wire/refusal.js';
 import { OperationCatalog } from '../contract/service/catalog.js';
 import { externalRefusal } from '../contract/service/refusals.js';
+import { admitRight } from '../../platform/contract/service/access.js';
 
 export const admitCallers = (
   id: string,
@@ -31,10 +32,17 @@ export const admitCallers = (
       );
 };
 
-export const admitOperation = (named: string, caller: Caller, input: unknown): Effect.Effect<void, GateRefusal, OperationCatalog> =>
+const admitted = (named: string, caller: Caller, right: boolean): Effect.Effect<void, GateRefusal, OperationCatalog> =>
   Effect.flatMap(OperationCatalog, (catalog) => {
     const id = catalog.registry.named(named);
     if (id === null) return Effect.die(new Error(`No operation is registered as ${named}.`));
     const entry = catalog.registry.entry(id);
-    return admitCallers(id, entry.callers, entry.meaning, caller, entry.external === true);
+    const callers = admitCallers(id, entry.callers, entry.meaning, caller, entry.external === true);
+    return right ? Effect.andThen(callers, admitRight(id, entry.right, entry.effect === 'read' ? 'read' : 'write')) : callers;
   });
+
+export const admitOperation = (named: string, caller: Caller): Effect.Effect<void, GateRefusal, OperationCatalog> =>
+  admitted(named, caller, true);
+
+export const admitCaller = (named: string, caller: Caller): Effect.Effect<void, GateRefusal, OperationCatalog> =>
+  admitted(named, caller, false);

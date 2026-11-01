@@ -34,7 +34,9 @@ export function boundedToolOutputPreview(text: string, marker?: string, keep: To
 
   const lineLimit = TOOL_OUTPUT_MAX_LINES - reservedLines;
   const byteLimit = TOOL_OUTPUT_MAX_BYTES - reservedBytes;
-  const preview = keep === 'tail' ? takeSuffix(text, byteLimit, lineLimit) : takePrefix(text, byteLimit, lineLimit);
+  const preview = decoder.decode(
+    encoder.encode(keep === 'tail' ? takeSuffix(text, byteLimit, lineLimit) : takePrefix(text, byteLimit, lineLimit)),
+  );
   if (!marker) return preview;
   if (keep === 'tail') return preview ? `${marker}\n\n${preview}` : markerOnly;
   return preview ? `${preview}\n\n${marker}` : markerOnly;

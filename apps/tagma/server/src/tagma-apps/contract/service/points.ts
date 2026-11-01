@@ -1,6 +1,7 @@
 import type { McpToolDescriptor } from '@runlith/mcp/McpSession';
 import type { McpToolCaller } from '@runlith/mcp/mcpToolCatalog';
-import { Context, Data, type Effect, type Schema } from 'effect';
+import { Context, Data, type Effect } from 'effect';
+import type { AppFaced } from '../../../platform/contract/service/contribution.js';
 
 export type TagmaAppRef = {
   readonly id: string;
@@ -9,10 +10,10 @@ export type TagmaAppRef = {
   readonly data: string | null;
 };
 
-export type TagmaAppContribution<A> = {
+export type TagmaAppContribution<W> = {
   readonly app: TagmaAppRef;
-  readonly value: A;
-  readonly sibling: <B>(name: string, schema: Schema.Codec<B, unknown>) => B | undefined;
+  readonly value: W;
+  readonly sibling: <B>(point: AppFaced<B>) => B | undefined;
   readonly tools: readonly McpToolDescriptor[] | null;
   readonly caller: McpToolCaller;
 };
@@ -26,18 +27,12 @@ export class TagmaAppPointRefused extends Data.TaggedError('TagmaAppPointRefused
   }
 }
 
-export type TagmaAppPoint<A> = {
-  readonly name: string;
-  readonly owner: string;
-  readonly schema: Schema.Codec<A, unknown>;
-  readonly claims?: (value: A) => readonly string[];
-  readonly register: (contribution: TagmaAppContribution<A>) => Effect.Effect<() => void, TagmaAppPointRefused>;
-};
+export type TagmaAppRegister<W> = (contribution: TagmaAppContribution<W>) => Effect.Effect<() => void, TagmaAppPointRefused>;
 
 export class TagmaAppPoints extends Context.Service<
   TagmaAppPoints,
   {
-    declare<A>(point: TagmaAppPoint<A>): Effect.Effect<() => void>;
+    declare<W>(point: AppFaced<W>, register: TagmaAppRegister<W>): Effect.Effect<() => void>;
     schema(): unknown;
   }
 >()('tagma/tagma-apps/TagmaAppPoints') {}

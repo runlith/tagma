@@ -12,6 +12,7 @@ import type { Devices } from '../../remote/contract/service/devices.js';
 import { Admission, type AdmittedCall, CallDevice, ConnectionHeaders } from '../contract/service/admission.js';
 import { CallAuthority } from '../../platform/contract/service/authority.js';
 import { admitCallers } from './callers.js';
+import { admitRight } from '../../platform/contract/service/access.js';
 import { operationCaller } from './actor.js';
 import { admitProject, unopenedGraph } from './project.js';
 import type { OperationCatalog } from '../contract/service/catalog.js';
@@ -87,6 +88,9 @@ export const admission = (options: {
   const protocol: Admission['Service']['admitProtocol'] = (call, declaration, meaning) =>
     admitCallers(declaration.performs ?? declaration.id, declaration.callers, meaning, call.caller, declaration.external === true).pipe(
       Effect.provideService(CallAuthority, call.authority),
+      Effect.andThen(
+        Effect.provide(admitRight(declaration.id, declaration.right, declaration.stream === false ? 'write' : 'read'), options.machine),
+      ),
     );
   return Admission.of({
     admit,

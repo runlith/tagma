@@ -4,12 +4,8 @@ import type { ThreadBorderFailed } from '@runlith/agent/thread/ThreadBorder';
 import type { ThreadToolSourceRegistry } from '@runlith/agent/thread/ThreadPorts';
 import { Effect, FileSystem } from 'effect';
 import { stored } from '../../../platform/store/crossing.js';
-import {
-  type TagmaAppContribution,
-  type TagmaAppPoint,
-  TagmaAppPointRefused,
-  type TagmaAppRef,
-} from '../../../tagma-apps/contract/service/points.js';
+import { ContributionPoint } from '../../../platform/contract/service/contribution.js';
+import { type TagmaAppContribution, TagmaAppPointRefused, type TagmaAppRef } from '../../../tagma-apps/contract/service/points.js';
 import { tagmaAppsEnabled } from '../../../tagma-apps/contract/wire/settings.js';
 import { Settings } from '../../../settings/contract/service/values.js';
 import type { AgentPackages } from '../../../threads/contract/service/library.js';
@@ -23,7 +19,12 @@ import { parseAgentFile } from './files.js';
 
 const OWNER = 'native-harness';
 
-const refused = (reason: string) => new TagmaAppPointRefused({ point: 'agents', reason });
+export const TAGMA_APP_AGENTS = new ContributionPoint<never, TagmaAppAgentEntries>('native-harness/tagma-app-agents', {
+  name: 'agents',
+  schema: TagmaAppAgentEntries,
+});
+
+const refused = (reason: string) => new TagmaAppPointRefused({ point: TAGMA_APP_AGENTS.app.name, reason });
 
 export type TagmaAppAgentsInput = { readonly capabilities: CapabilityDefinitions; readonly sources: ThreadToolSourceRegistry };
 
@@ -64,8 +65,6 @@ export const makeTagmaAppAgents = Effect.fnUntraced(function* ({ capabilities, s
     };
   });
 
-  const point: TagmaAppPoint<TagmaAppAgentEntries> = { name: 'agents', owner: OWNER, schema: TagmaAppAgentEntries, register };
-
   const packages: AgentPackages = {
     agentsIn: (projectId) => Effect.map(enabledIn(projectId), (enabled) => enabled.flatMap((app) => held.get(app) ?? [])),
     agentIn: (projectId, typeId) => {
@@ -75,7 +74,7 @@ export const makeTagmaAppAgents = Effect.fnUntraced(function* ({ capabilities, s
     },
   };
 
-  return { point, packages };
+  return { register, packages };
 });
 
 function read(

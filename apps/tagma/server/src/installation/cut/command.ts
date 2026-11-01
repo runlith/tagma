@@ -9,6 +9,16 @@ export class CommandUnavailable extends Data.TaggedError('CommandUnavailable')<{
 
 export type CommandAnswer = { readonly status: number; readonly text: string };
 
+export const runCut = async (command: Effect.Effect<void>, signals: readonly NodeJS.Signals[] = ['SIGTERM', 'SIGINT']): Promise<void> => {
+  const halted = new AbortController();
+  for (const signal of signals) process.once(signal, () => halted.abort());
+  await Effect.runPromise(command, { signal: halted.signal }).catch((cause: unknown) => {
+    if (!halted.signal.aborted) throw cause;
+    console.error('[tagma] stopped');
+    process.exit(143);
+  });
+};
+
 const CHILD_KILL_AFTER_MS = 4_000;
 
 export const output = (

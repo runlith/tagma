@@ -58,7 +58,7 @@
   });
 
   const scope = $derived(addresses.scope);
-  const graphShown = $derived(surfaces.of(router.routeId) === 'graph');
+  const graphShown = $derived(surfaces.of(router.routeId, router.params) === 'graph');
   const viewLinks = $derived.by(() => {
     if (!project) return [];
     const name = project.name;

@@ -205,7 +205,7 @@ import { TagmaAppPlace, TagmaApps } from '../tagma-apps/contract/service/supervi
 import { machineStoreLayer } from '../installation/registry/restore.js';
 import { installation } from '../installation/installation.js';
 import { portBlock } from '../installation/contract/wire/ports.js';
-import { admitAssembled } from './ports.js';
+import { admitAssembled, admitRights } from './ports.js';
 import { landing } from '../landing/landing.js';
 import { externalHarnesses } from '../external-harnesses/external-harnesses.js';
 import { activityMigrations, migrationsFolder } from '../installation/closure/read.js';
@@ -761,6 +761,7 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
   );
   const installed = yield* runtime.contextEffect;
   const built = Context.merge(installed, yield* installedIn(assembly.modules, installed, migrations.seeds, baseScope));
+  yield* admitRights(assembly.rights, built);
   const store = Context.get(built, MachineStore);
   const sourceCache = Context.get(built, WorkspaceInputs);
   const machineGraph = machineGraphOf(built);

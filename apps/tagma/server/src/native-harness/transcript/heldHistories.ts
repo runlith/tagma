@@ -1,5 +1,6 @@
 import type { ThreadHistory } from '@runlith/agent/thread/rows';
 
+import { atUnitEnd } from '../../platform/store/life.js';
 import type { GuidanceIndex } from './guidanceIndex.js';
 
 export type HistoryState = {
@@ -13,19 +14,43 @@ export type HistoryClaim = { readonly id: string; readonly entry: Entry };
 
 export type Glimpse = { readonly entry: Entry };
 
-type Entry = { readonly history: ThreadHistory | null | undefined; readonly standing?: HistoryState; readonly bytes: number };
+type Weight = { readonly bytes: number; readonly messages: number };
 
-const HELD_CEILING_BYTES = 128 * 1024 * 1024;
+type Weighed = { readonly history: ThreadHistory; readonly weight: Weight };
+
+type Entry = {
+  readonly history: ThreadHistory | null | undefined;
+  readonly standing?: HistoryState;
+  readonly weight?: Weight;
+  readonly claimed?: true;
+  readonly bytes: number;
+};
+
+type Message = ThreadHistory[number];
+
+const HELD_RESIDENT_BYTES = 128 * 1024 * 1024;
+const RESIDENT_PER_BYTE = 1.2;
+const RESIDENT_PER_MESSAGE = 160;
 
 export class HeldHistories {
   private readonly entries = new Map<string, Entry>();
-  private readonly sizes = new WeakMap<object, number>();
+  private readonly sizes = new WeakMap<Message, number>();
   private total = 0;
-  private readonly released = new FinalizationRegistry<HistoryClaim>((claim) => {
-    if (this.entries.get(claim.id) === claim.entry) this.drop(claim.id);
-  });
+  private driven: () => ReadonlySet<string> = () => NONE;
 
-  constructor(private readonly ceilingBytes = HELD_CEILING_BYTES) {}
+  constructor(private readonly residentBytes = HELD_RESIDENT_BYTES) {}
+
+  serveDriven(driven: () => ReadonlySet<string>): () => void {
+    this.driven = driven;
+    return () => {
+      if (this.driven === driven) this.driven = () => NONE;
+      this.reconsider();
+    };
+  }
+
+  reconsider(): void {
+    if (this.total > this.residentBytes) this.evict(this.driven());
+  }
 
   held(id: string): { readonly history: ThreadHistory; readonly standing: HistoryState; readonly entry: Entry } | null {
     const entry = this.entries.get(id);
@@ -41,19 +66,29 @@ export class HeldHistories {
     return this.entries.get(id) === entry;
   }
 
-  glimpse(id: string): Glimpse {
-    const entry = this.entries.get(id) ?? { history: undefined, bytes: 0 };
+  glimpse(id: string, reader: object): Glimpse {
+    const standing = this.entries.get(id);
+    if (standing !== undefined) return { entry: standing };
+    const entry: Entry = { history: undefined, bytes: 0 };
     this.entries.set(id, entry);
-    const seen = { entry };
-    if (entry.history === undefined) this.released.register(seen, { id, entry });
-    return seen;
+    atUnitEnd(reader, () => {
+      if (this.entries.get(id) === entry) this.entries.delete(id);
+    });
+    return { entry };
   }
 
   claim(id: string, writer: object): HistoryClaim {
-    const claim: HistoryClaim = { id, entry: { history: null, bytes: 0 } };
-    this.drop(id);
+    const standing = this.entries.get(id);
+    const prior = committedOf(standing);
+    const restorable = prior !== undefined && standing?.claimed !== true;
+    const claim: HistoryClaim = { id, entry: prior === undefined ? { history: null, bytes: 0 } : { ...prior, claimed: true } };
+    if (prior === undefined) this.drop(id);
     this.entries.set(id, claim.entry);
-    this.released.register(writer, claim);
+    atUnitEnd(writer, () => {
+      if (this.entries.get(id) !== claim.entry) return;
+      if (restorable) this.entries.set(id, prior);
+      else this.drop(id);
+    });
     return claim;
   }
 
@@ -63,13 +98,13 @@ export class HeldHistories {
   }
 
   offer(id: string, seen: Glimpse, history: ThreadHistory, standing: HistoryState): void {
-    if (seen.entry.history === null) return;
+    if (seen.entry.history === null || seen.entry.claimed === true) return;
     if (this.entries.get(id) !== seen.entry) return;
     this.publish(id, history, standing);
   }
 
-  weigh(message: ThreadHistory[number], bytes: number): void {
-    this.sizes.set(message, bytes);
+  weigh(message: Message, bytes: number): void {
+    if (!this.sizes.has(message)) this.sizes.set(message, bytes);
   }
 
   private publish(id: string, history: ThreadHistory, standing: HistoryState): void {
@@ -81,29 +116,60 @@ export class HeldHistories {
       held.standing.through === standing.through
     )
       return;
-    let bytes = held?.history === history && held.standing?.stored === standing.stored ? held.bytes : undefined;
-    if (bytes === undefined) {
-      bytes = 0;
-      for (const message of new Set([...history, ...standing.stored])) {
-        let size = this.sizes.get(message);
-        if (size === undefined) {
-          size = JSON.stringify(message).length * 2;
-          this.sizes.set(message, size);
-        }
-        bytes += size;
-      }
-    }
+    const weight = this.weighed(weighedOf(held), history);
+    const kept = weight === null ? null : this.beside(weight, history, standing.stored);
     this.drop(id);
-    if (bytes > this.ceilingBytes) return;
-    this.entries.set(id, { history, standing, bytes });
+    if (weight === null || kept === null) return;
+    const bytes = Math.ceil(kept.bytes * RESIDENT_PER_BYTE) + kept.messages * RESIDENT_PER_MESSAGE;
+    const driven = bytes > this.residentBytes || this.total + bytes > this.residentBytes ? this.driven() : NONE;
+    if (bytes > this.residentBytes && !driven.has(id)) return;
+    this.entries.set(id, { history, standing, weight, bytes });
     this.total += bytes;
-    while (this.total > this.ceilingBytes) {
-      for (const [oldest, entry] of this.entries) {
-        if (entry.history == null) continue;
-        this.drop(oldest);
-        break;
-      }
+    if (this.total > this.residentBytes) this.evict(driven);
+  }
+
+  private evict(driven: ReadonlySet<string>): void {
+    let idle = this.total;
+    const evictable: string[] = [];
+    for (const [id, entry] of this.entries) {
+      if (entry.history == null) continue;
+      if (driven.has(id)) idle -= entry.bytes;
+      else evictable.push(id);
     }
+    for (const id of evictable) {
+      if (idle <= this.residentBytes) return;
+      idle -= this.entries.get(id)?.bytes ?? 0;
+      this.drop(id);
+    }
+  }
+
+  private weighed(prior: Weighed | undefined, history: ThreadHistory): Weight | null {
+    const before = prior?.history ?? EMPTY;
+    let shared = 0;
+    const common = Math.min(before.length, history.length);
+    while (shared < common && before[shared] === history[shared]) shared += 1;
+    let bytes = prior?.weight.bytes ?? 0;
+    for (let at = shared; at < before.length; at += 1) bytes -= this.sizes.get(before[at]!) ?? 0;
+    for (let at = shared; at < history.length; at += 1) {
+      const size = this.sizes.get(history[at]!);
+      if (size === undefined) return null;
+      bytes += size;
+    }
+    return { bytes, messages: history.length };
+  }
+
+  private beside(weight: Weight, history: ThreadHistory, stored: ThreadHistory): Weight | null {
+    if (stored === history) return weight;
+    let shared = 0;
+    const common = Math.min(stored.length, history.length);
+    while (shared < common && stored[shared] === history[shared]) shared += 1;
+    let bytes = weight.bytes;
+    for (let at = shared; at < stored.length; at += 1) {
+      const size = this.sizes.get(stored[at]!);
+      if (size === undefined) return null;
+      bytes += size;
+    }
+    return { bytes, messages: weight.messages + stored.length - shared };
   }
 
   private drop(id: string): void {
@@ -113,3 +179,17 @@ export class HeldHistories {
     this.entries.delete(id);
   }
 }
+
+const EMPTY: ThreadHistory = [];
+
+const NONE: ReadonlySet<string> = new Set();
+
+type Committed = { readonly history: ThreadHistory; readonly standing: HistoryState; readonly weight: Weight; readonly bytes: number };
+
+const committedOf = (entry: Entry | undefined): Committed | undefined =>
+  entry?.history == null || entry.standing === undefined || entry.weight === undefined
+    ? undefined
+    : { history: entry.history, standing: entry.standing, weight: entry.weight, bytes: entry.bytes };
+
+const weighedOf = (entry: Entry | undefined): Weighed | undefined =>
+  entry?.history != null && entry.weight !== undefined ? { history: entry.history, weight: entry.weight } : undefined;

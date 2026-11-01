@@ -8,7 +8,7 @@ import type { PartialJsonState } from '@runlith/utils/json';
 import type { Approval, AskedReason, PermissionOutcome, PermissionSubject, Raised } from '../permissions/vocabulary';
 import { approvalLine } from '../modes/ApprovalMode';
 import type { ToolDisplay } from '../tool/display';
-import { refusalLines, refusalTail } from '../tool/refusal';
+import { refusalLines, refusalTail, type ToldRefusal } from '../tool/refusal';
 import type { CallProgress } from './callProgress';
 
 export const DOOR_FIELDS = ['background', 'json'] as const;
@@ -234,11 +234,14 @@ export class ToolFailed extends Data.TaggedError('Tool.Failed')<{
   readonly code?: string | undefined;
   readonly unblock?: readonly string[] | undefined;
   readonly words?: string | undefined;
+  readonly right?: ToldRefusal['right'];
 }> {
   override get message(): string {
     const unblock = this.unblock ?? [];
     return (
-      this.code === undefined ? [this.reason, ...refusalTail({ unblock })] : refusalLines({ code: this.code, reason: this.reason, unblock })
+      this.code === undefined
+        ? [this.reason, ...refusalTail({ unblock })]
+        : refusalLines({ code: this.code, reason: this.reason, unblock, right: this.right })
     ).join('\n');
   }
 
@@ -248,7 +251,13 @@ export class ToolFailed extends Data.TaggedError('Tool.Failed')<{
 
   get output(): StructuredValue | null {
     if (this.code === undefined) return null;
-    return { status: 'refused', code: this.code, reason: this.reason, unblock: [...(this.unblock ?? [])] };
+    return {
+      status: 'refused',
+      code: this.code,
+      reason: this.reason,
+      unblock: [...(this.unblock ?? [])],
+      ...(this.right === undefined ? {} : { right: { ...this.right } }),
+    };
   }
 }
 

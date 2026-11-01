@@ -20,6 +20,10 @@ export class Requests {
     });
   }
 
+  owes(path: string): boolean {
+    return (this.answering.get(path)?.length ?? 0) > 0;
+  }
+
   begin(paths: readonly string[]): void {
     for (const path of paths) {
       this.answering.set(path, this.pending.get(path) ?? []);

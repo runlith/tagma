@@ -8,18 +8,14 @@ import type { McpResourceEvent } from '../mcp/contract/wire/feeds.js';
 import { GateRefusal } from '../platform/contract/wire/refusal.js';
 import { SettingChanges } from '../settings/contract/service/changes.js';
 import { Settings } from '../settings/contract/service/values.js';
-import {
-  type TagmaAppContribution,
-  type TagmaAppPoint,
-  TagmaAppPointRefused,
-  type TagmaAppRef,
-} from '../tagma-apps/contract/service/points.js';
+import { type TagmaAppContribution, TagmaAppPointRefused, type TagmaAppRef } from '../tagma-apps/contract/service/points.js';
 import { TagmaApps } from '../tagma-apps/contract/service/supervision.js';
-import { TagmaAppTools } from '../tagma-apps/contract/service/tools.js';
-import { tagmaAppToolName, ToolEntries } from '../tagma-apps/contract/wire/audience.js';
+import { TagmaAppTools, TOOLS } from '../tagma-apps/contract/service/tools.js';
+import { tagmaAppToolName } from '../tagma-apps/contract/wire/audience.js';
 import { tagmaAppsEnabled } from '../tagma-apps/contract/wire/settings.js';
+import { PANES, RESULTS, SURFACES, VIEWS } from './contract/service/points.js';
 import { TagmaAppViews, type ViewFailure, type ViewMount, type ViewSites } from './contract/service/views.js';
-import { ResultEntries, ViewEntries } from './contract/wire/points.js';
+import type { ResultEntries, ViewEntries } from './contract/wire/points.js';
 import type { TagmaAppViewSet, TagmaAppViewState, ViewRefusalCode } from './contract/wire/sets.js';
 import { makeLaunchers } from './launchers.js';
 import { makeSections } from './sections.js';
@@ -29,7 +25,7 @@ const RECOVERY = Schedule.min([Schedule.exponential('500 millis'), Schedule.spac
 const RETURNING: ReadonlySet<string> = new Set(['app-unavailable', 'app-view-unknown']);
 const READ_APPS = 'read_apps answers each app’s state and why it stopped';
 const viewer = (mount: ViewMount): McpCaller => ({ kind: 'operator', projectId: mount.projectId, view: mount.view });
-const refusedResults = (reason: string) => new TagmaAppPointRefused({ point: 'results', reason });
+const refusedResults = (reason: string) => new TagmaAppPointRefused({ point: RESULTS.app.name, reason });
 const refusal = (code: ViewRefusalCode, reason: string) =>
   new GateRefusal<ViewRefusalCode>(code, reason, code === 'app-unavailable' ? [READ_APPS] : ['try again', READ_APPS]);
 const resourceRefusal = (failure: { readonly _tag: string; readonly message: string }) =>
@@ -46,52 +42,42 @@ export const makeShelf = Effect.gen(function* () {
   const bump = () => {
     PubSub.publishUnsafe(moved, null);
   };
-  const surfaces = makeSections({ name: 'surfaces', changed: bump });
-  const panes = makeSections({ name: 'panes', changed: bump });
+  const surfaces = makeSections({ point: SURFACES, changed: bump });
+  const panes = makeSections({ point: PANES, changed: bump });
   const launchers = makeLaunchers({ changed: bump });
 
-  const viewsPoint: TagmaAppPoint<ViewEntries> = {
-    name: 'views',
-    owner: 'views',
-    schema: ViewEntries,
-    register: ({ app, value }) =>
-      Effect.sync(() => {
-        if (value.length === 0) return () => undefined;
-        const standing: Shown = { app, views: value };
-        shown.set(app.id, standing);
-        bump();
-        return () => {
-          if (shown.get(app.id) !== standing) return;
-          shown.delete(app.id);
-          bump();
-        };
-      }),
-  };
-
-  const resultsPoint: TagmaAppPoint<ResultEntries> = {
-    name: 'results',
-    owner: 'views',
-    schema: ResultEntries,
-    register: Effect.fnUntraced(function* ({ app, value, sibling }: TagmaAppContribution<ResultEntries>) {
+  const registerViews = ({ app, value }: TagmaAppContribution<ViewEntries>) =>
+    Effect.sync(() => {
       if (value.length === 0) return () => undefined;
-      const views = new Set((sibling(viewsPoint.name, ViewEntries) ?? []).map((view) => view.id));
-      const unseen = value.filter((result) => !views.has(result.view)).map((result) => result.view);
-      if (unseen.length > 0) return yield* refusedResults(`contributes.views declares no view ${unseen.join(', ')}`);
-      const called = new Map((sibling('tools', ToolEntries) ?? []).map((tool) => [tool.name, tool.audience]));
-      const silent = value.filter((result) => called.get(result.tool) === undefined || called.get(result.tool) === 'view');
-      if (silent.length > 0)
-        return yield* refusedResults(
-          `no agent calls ${silent.map((result) => result.tool).join(', ')}; name it in contributes.tools for agents or own`,
-        );
-      results.set(app.id, value);
+      const standing: Shown = { app, views: value };
+      shown.set(app.id, standing);
       bump();
       return () => {
-        if (results.get(app.id) !== value) return;
-        results.delete(app.id);
+        if (shown.get(app.id) !== standing) return;
+        shown.delete(app.id);
         bump();
       };
-    }),
-  };
+    });
+
+  const registerResults = Effect.fnUntraced(function* ({ app, value, sibling }: TagmaAppContribution<ResultEntries>) {
+    if (value.length === 0) return () => undefined;
+    const views = new Set((sibling(VIEWS) ?? []).map((view) => view.id));
+    const unseen = value.filter((result) => !views.has(result.view)).map((result) => result.view);
+    if (unseen.length > 0) return yield* refusedResults(`contributes.views declares no view ${unseen.join(', ')}`);
+    const called = new Map((sibling(TOOLS) ?? []).map((tool) => [tool.name, tool.audience]));
+    const silent = value.filter((result) => called.get(result.tool) === undefined || called.get(result.tool) === 'view');
+    if (silent.length > 0)
+      return yield* refusedResults(
+        `no agent calls ${silent.map((result) => result.tool).join(', ')}; name it in contributes.tools for agents or own`,
+      );
+    results.set(app.id, value);
+    bump();
+    return () => {
+      if (results.get(app.id) !== value) return;
+      results.delete(app.id);
+      bump();
+    };
+  });
 
   const setsOf = (enabled: readonly string[], sites: ViewSites['Service']): readonly TagmaAppViewSet[] =>
     enabled.flatMap((id) => {
@@ -217,11 +203,13 @@ export const makeShelf = Effect.gen(function* () {
       },
     }),
     mounted,
-    viewsPoint,
-    resultsPoint,
-    surfaces,
-    panes,
-    launchers,
+    contributions: {
+      views: { point: VIEWS, register: registerViews },
+      results: { point: RESULTS, register: registerResults },
+      surfaces,
+      panes,
+      launchers,
+    },
   };
 });
 

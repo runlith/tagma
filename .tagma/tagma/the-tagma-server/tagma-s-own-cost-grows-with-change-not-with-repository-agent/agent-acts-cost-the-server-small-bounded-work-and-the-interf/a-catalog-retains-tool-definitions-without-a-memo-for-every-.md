@@ -5,7 +5,8 @@ ord: 13
 tags: ["task"]
 fields:
   {
-    "status": "open"
+    "holder": "tagma:01a19472-941a-74d3-8eef-408e0480f0ac",
+    "status": "done"
   }
 edges:
   - kind: discovered-from
@@ -16,4 +17,4 @@ sources:
   - kind: file
     ref: packages/agent/src/agent/ModelRequests.ts
 ---
-`wireToolDefinitions` in `ModelRequests.ts` creates fresh `ToolDefinition` objects for each active-tool selection and stores every array in `wireFootprints.narrowed` until its catalog is collected. Keep the definitions owned by the catalog and only the selection state the current request needs, without a growing per-selection memo. In the two-agent hosted-call census, all four warm/loaded cuts contained 564 definitions; that static-catalog workload does not reproduce or attribute the live growth from 6,832 to 9,377. Prove the fix by a full-collection owner census across many selections of one live catalog, keeping request schemas and selection behavior intact; name the part of the live growth that remains unproven.
+`wireToolDefinitions` in `ModelRequests.ts` creates fresh `ToolDefinition` objects for each active-tool selection and stores every array in `wireFootprints.narrowed` until its catalog is collected. Keep the definitions owned by the catalog and only the selection state the current request needs, without a growing per-selection memo. In the two-agent hosted-call census, all four warm/loaded cuts contained 564 definitions; that static-catalog workload does not reproduce or attribute the live growth from 6,832 to 9,377. Prove the fix by a full-collection owner census across many selections of one live catalog, keeping request schemas and selection behavior intact; name the part of the live growth that remains unproven. `apps/tagma/server/src/composition/testing/modelSelections.bench.ts` sends 64 distinct selections of one six-tool catalog through `modelRequester.request().stream`, the real StepFun lowering and a scripted HTTP executor. Full-GC V8 snapshots after 16 and 64 selections contained 32→192 ToolDefinition instances before the fix and 6→6 after it; nonempty arrays of ToolDefinition nodes were 17→63 versus 2→2, and distinct nonempty serialized selection keys were 15→63 versus 1→1. These populations include any caller-held arrays and exclude empty selections, whose empty key is not attributable by its text. Fibers stayed 5→5 in each arm. The final repeat from the composition-owned bench had definitions 6→6, nonempty candidate arrays 4→2 and distinct serialized keys 1→1; the array population is not exclusive cache ownership. Each benchmark run creates its own fresh directory under the requested parent, so the snapshot service's retention cannot prune another run's evidence. The census counts all nodes, including entries Bun omits from its Map/WeakMap root edges. This establishes this owner's growth and bounded replacement, not its exclusive share of the live server's 6,832→9,377 growth.

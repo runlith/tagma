@@ -14,6 +14,7 @@ import type { FeedRegions } from '@runlith/chat-ui/FeedRegions.svelte';
 import type { PromptHandle } from '@runlith/chat-ui/PromptHandle.svelte';
 import { Point } from '@runlith/layer/Point';
 import type { Shown } from '@runlith/layer/svelte/payload';
+import { type Gated, gatedBy } from '$lib/wire/access.js';
 import type { Worktrees } from '$lib/features/worktrees/BoardState.svelte.js';
 import type { ThreadBirth } from '../birth/ThreadBirth.svelte.js';
 import type { ChatHold } from '../ChatHold.svelte.js';
@@ -81,11 +82,11 @@ export type FeedPart = SlotOwners & {
   readonly transcript: TranscriptReading;
 };
 
-export interface ComposerPartDeclaration extends Shown<ComposerPart> {
+export interface ComposerPartDeclaration extends Shown<ComposerPart>, Gated<Shown<ComposerPart>['payload']> {
   readonly id: string;
 }
 
-export interface FeedPartDeclaration extends Shown<FeedPart> {
+export interface FeedPartDeclaration extends Shown<FeedPart>, Gated<Shown<FeedPart>['payload']> {
   readonly id: string;
 }
 
@@ -99,6 +100,10 @@ export const ThreadKinds = Point.define<KindDeclaration>()('ThreadKinds', {
   claims: (kind) => kind.facets.map((facet) => `Entry kind "${kind.key}" facet "${facet}"`),
 });
 
-export const ComposerParts = Point.define<ComposerPartDeclaration>()('ComposerParts', { tier: 'app', key: (part) => part.id });
+export const ComposerParts = Point.define<ComposerPartDeclaration>()('ComposerParts', {
+  tier: 'app',
+  key: (part) => part.id,
+  draws: gatedBy('write'),
+});
 
-export const FeedParts = Point.define<FeedPartDeclaration>()('FeedParts', { tier: 'app', key: (part) => part.id });
+export const FeedParts = Point.define<FeedPartDeclaration>()('FeedParts', { tier: 'app', key: (part) => part.id, draws: gatedBy('read') });

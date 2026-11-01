@@ -1,8 +1,8 @@
 import { modelCatalog } from '@runlith/llm/models/catalog';
 import { pickerOrder } from '@runlith/llm/models/description';
 import type { AdapterHost, HarnessProvider, Provider, SettingInstance, WireProvider } from '@runlith/tagma/adapter/provider';
-import { ASK_KINDS, type AskKind, type ModelCapability } from '@runlith/llm/models/description';
-import type { AskPath } from './contract/wire/asks.js';
+import type { AskKind } from '@runlith/llm/models/description';
+import { askKinds } from './contract/wire/asks.js';
 import { claimSections, type SectionClaim } from '@runlith/tagma/adapter/declaration';
 import { Effect, FileSystem, Layer, Result, Semaphore, Stream, SubscriptionRef } from 'effect';
 import { GateRefusal } from '../platform/contract/wire/refusal.js';
@@ -31,11 +31,6 @@ import type { AccountSection } from './contract/wire/catalog.js';
 import { CredentialFiles } from './contract/service/credentials.js';
 import { AccountCli } from './contract/service/cli.js';
 
-const kindsOf = (path: AskPath, capabilities: readonly ModelCapability[]): readonly AskKind[] => {
-  if (capabilities.includes('text')) return ASK_KINDS;
-  return path === 'request' && capabilities.includes('decision') ? ['decision'] : [];
-};
-
 const askOffers = (
   providers: readonly Provider[],
   borrowers: ReadonlyMap<string, string>,
@@ -56,7 +51,7 @@ const askOffers = (
   const kinds = (provider: string, model: string): readonly AskKind[] => {
     const routed = route(provider, model);
     const spec = routed === null ? undefined : byId.get(routed.provider)?.models[model];
-    return routed === null || spec === undefined ? [] : kindsOf(routed.path, spec.capabilities);
+    return routed === null || spec === undefined ? [] : askKinds(routed.path, spec.capabilities);
   };
   return { route, kinds, answers: (provider, model, kind) => kinds(provider, model).includes(kind) };
 };

@@ -11,8 +11,10 @@ sources:
     ref: apps/tagma/server/src/tagma-apps/contract/service/points.ts
   - kind: file
     ref: apps/tagma/server/src/tagma-apps/registry.ts
+  - kind: file
+    ref: apps/tagma/server/src/platform/contract/service/contribution.ts
 ---
-A contribution point belongs to the owner of what the app writes into, not to the `tagma-apps` module: the next capability is added as a new point at its own owner, with no edits to the envelope or the supervisor. The owner declares the point through `TagmaAppPoints.declare` when assembling its layer: the schema, the keys the contribution occupies (`claims` — two apps on one key give a refusal naming the holder), and the `register` returning a disposer. Keys are taken in one synchronous step before the first `register`, so two apps checked at once do not take one key.
+A contribution point belongs to the owner of what the app writes into, not to the `tagma-apps` module: the next capability is added as a new point at its own owner, with no edits to the envelope or the supervisor. The point is the owner's one `ContributionPoint` (`platform/contract/service/contribution.ts`), the same declaration compiled modules contribute to; the owner opens it to apps by giving it an app face: the `contributes` name, the schema, and the keys the contribution occupies (`claims` — two apps on one key give a refusal naming the holder). An app-only point's typed face is `never`. When assembling its layer the owner binds the face to its `register`, returning a disposer, through `TagmaAppPoints.declare(point, register)`; `sibling(point)` reads another point of the same manifest by that point. Keys are taken in one synchronous step before the first `register`, so two apps checked at once do not take one key.
 
 Declarations must stand before the first manifest read: composition calls `TagmaApps.start` after assembling the whole runtime, when the HTTP door already listens. A point nobody declared is a refusal with its name; nothing is silently lost.
 

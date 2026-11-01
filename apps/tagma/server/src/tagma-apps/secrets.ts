@@ -3,13 +3,15 @@ import type { StoreFailure } from '../platform/contract/service/store.js';
 import type { GateRefusal } from '../platform/contract/wire/refusal.js';
 import { type SecretOwner, SecretOwnerFailed, SecretOwners } from '../secrets/contract/service/secrets.js';
 import { type TagmaAppLaunchEnvironment, TagmaAppLaunchRefused, type TagmaAppLaunchRequest } from './contract/service/launch.js';
-import type { TagmaAppPoint } from './contract/service/points.js';
+import { ContributionPoint } from '../platform/contract/service/contribution.js';
 import type { TagmaApps } from './contract/service/supervision.js';
 import { tagmaApps as declaration } from './contract/wire/module.js';
 import { SECRETS_POINT, SecretEntries } from './contract/wire/secrets.js';
 import type { Supervisor } from './supervisor.js';
 
 export const SECRET_KIND = declaration.id;
+
+export const SECRETS = new ContributionPoint<never, SecretEntries>('tagma-apps/secrets', { name: SECRETS_POINT, schema: SecretEntries });
 
 const isEntries = Schema.is(SecretEntries);
 const NOTHING: TagmaAppLaunchEnvironment = { env: {}, redact: [] };
@@ -39,12 +41,7 @@ export const makeShelf = Effect.fnUntraced(function* (input: { readonly apps: Ta
 
   return {
     owner,
-    point: {
-      name: SECRETS_POINT,
-      owner: SECRET_KIND,
-      schema: SecretEntries,
-      register: () => Effect.succeed(() => undefined),
-    } satisfies TagmaAppPoint<SecretEntries>,
+    register: () => Effect.succeed(() => undefined),
     provide: Effect.fn('Shelf.provide')(function* (request: TagmaAppLaunchRequest) {
       const entries = request.contributes[SECRETS_POINT];
       if (entries === undefined) {

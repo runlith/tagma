@@ -167,7 +167,7 @@ function checkManifests(modules: readonly Manifest[]): void {
     }
     if (names.has(module.id)) throw new ManifestConflict({ collection: 'modules', id: module.id, owners: [module.id, module.id] });
     names.add(module.id);
-    if (module.feeds !== undefined) servesDeclared(module.id, module.feeds, module.live?.feeds ?? []);
+    if (module.feeds !== undefined || module.live !== undefined) servesDeclared(module.id, module.feeds ?? [], module.live?.feeds ?? []);
     for (const collection of COLLECTIONS) {
       const owners = entries.get(collection)!;
       for (const entry of (collection === 'feeds' ? module.live?.feeds : module[collection]) ?? []) {

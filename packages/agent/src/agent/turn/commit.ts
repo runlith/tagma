@@ -9,7 +9,7 @@ export type AgentStepCommitInput = {
 };
 
 export function commitStep(input: AgentStepCommitInput): void {
-  input.runState.commitStep(input.step);
+  input.runState.commitStep();
   input.steps.push(input.step);
 }
 

@@ -28,8 +28,12 @@ const checkoutOf = Effect.fnUntraced(function* (script: string) {
   );
   const checkout = join(dir, 'checkout');
   mkdirSync(checkout);
-  const writeScript = (command: string) =>
-    writeFileSync(join(checkout, 'package.json'), JSON.stringify({ name: 'mini', scripts: { 'tagma:build': `sh -c '${command}'` } }));
+  writeFileSync(join(checkout, 'package.json'), JSON.stringify({ name: 'mini', scripts: { 'tagma:build': 'bun build.ts' } }));
+  writeFileSync(
+    join(checkout, 'build.ts'),
+    `import { runSourceBuild } from ${JSON.stringify(join(import.meta.dir, '../installation/testing/sourceBuild.ts'))};\nawait runSourceBuild(import.meta.dir, process.argv.slice(2));\n`,
+  );
+  const writeScript = (command: string) => writeFileSync(join(checkout, 'build.command'), command);
   writeScript(script);
   yield* git(checkout, 'init', '-q');
   yield* git(checkout, 'add', '.');
@@ -80,9 +84,10 @@ it.live('HEAD builds use a disposable worktree, tree builds use the checkout, an
     expect(readFileSync(log, 'utf8')).toContain(join(dir, 'data', 'build', 'head-'));
     expect((yield* git(checkout, 'worktree', 'list')).split('\n')).toHaveLength(1);
 
+    writeScript('echo working-tree');
     const tree = yield* running.install('tree', null, null);
     expect(yield* settled(running, tree.installing.since)).toMatchObject({ outcome: 'landed', build: 'v9' });
-    expect(readFileSync(log, 'utf8')).toContain(`${checkout}\n`);
+    expect(readFileSync(log, 'utf8')).toContain('working-tree\n');
     const successor = yield* builds();
     expect((yield* successor.reading).installed).toMatchObject({ since: tree.installing.since, outcome: 'landed', build: 'v9' });
     expect((yield* Effect.flip(successor.stop())).code).toBe('nothing-installing');

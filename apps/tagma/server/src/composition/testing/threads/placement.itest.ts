@@ -147,6 +147,7 @@ const composed = Effect.fn('testing.rootPlacement')(function* (demo: EffectDemo)
             hosting: unexpected,
             questions: unexpected,
             onDriving: unexpected,
+            driven: unexpected,
             redeliver: unexpected,
             parked: unexpected,
             transports: unexpected,

@@ -30,12 +30,6 @@ fields:
       },
       {
         "at": "release/catalog.ts"
-      },
-      {
-        "at": "developer/operations.ts"
-      },
-      {
-        "at": "release/operations.ts"
       }
     ],
     "id": "composition",

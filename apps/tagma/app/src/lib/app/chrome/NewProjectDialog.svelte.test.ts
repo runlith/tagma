@@ -7,9 +7,12 @@ import { flushSync } from 'svelte';
 import { afterEach, expect, test, vi } from 'vitest';
 import { SettingsRepo } from '$lib/features/settings/SettingsRepo.js';
 import { Workspace } from '$lib/features/workspace/Selection.svelte.js';
+import type { Right } from '@tagma/server/platform/contract/wire/right';
+import { Access } from '$lib/wire/access.js';
 import { Refusal } from '$lib/wire/refusal.js';
 import { mountShell, soloWorkspace, type TestApp } from '../testing.js';
 import CreationField from './CreationField.fixture.svelte';
+import CreationOffer from './CreationOffer.fixture.svelte';
 import { CreationFields } from './creation.js';
 import NewProjectDialog from './NewProjectDialog.svelte';
 import { ProjectCreation, type ProjectDraft } from './ProjectCreation.svelte.js';
@@ -92,6 +95,32 @@ test('a contributed field draws after the core fields, its value rides the creat
   await submitted(() => alert() !== null);
   expect(underField()).toBeNull();
   expect(alert()?.textContent).toContain('this mark is refused');
+});
+
+test('a field whose right the access grants only for reading draws its offer in its place, and a refusal naming it goes to the alert', async () => {
+  const lacking: Right = { key: 'warmth', state: 'trial', access: 'read', unblock: ['renew warmth'] };
+  app = mountShell(
+    Layer.mergeAll(
+      CreationFields,
+      CreationFields.contribute('extension', {
+        id: 'sealed-mark',
+        order: 1,
+        right: 'warmth',
+        payload: { component: CreationField },
+        offer: { component: CreationOffer },
+      }),
+    ),
+    Layer.mergeAll(boot, Layer.of(Access, { right: () => lacking })),
+  );
+  app.draw(NewProjectDialog as never, { open: true });
+  await waitUntil(() => document.body.querySelector('[data-testid="creation-offer"]') !== null);
+  expect(document.body.querySelector('[data-testid="creation-field"]')).toBeNull();
+
+  typed(document.body.querySelector('input[placeholder="runlith"]'), 'book');
+  typed(document.body.querySelector('input[placeholder="/absolute/path/to/repo"]'), '/work/book');
+  create.mockRejectedValueOnce(refusal('sealed-mark'));
+  await submitted(() => document.body.querySelector('[role="alert"]') !== null);
+  expect(document.body.querySelector('[role="alert"]')?.textContent).toContain('this mark is refused');
 });
 
 test('a field that leaves before the creation takes its value with it', async () => {

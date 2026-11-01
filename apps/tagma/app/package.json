@@ -14,6 +14,8 @@
       "browser": "./src/lib/app/composition.ts",
       "default": "./src/lib/app/composition.ts"
     },
+    "./tsconfig.json": "./root.tsconfig.json",
+    "./package.json": "./package.json",
     "./points/surfaces": {
       "types": "./src/lib/features/workspace/surface.ts",
       "browser": "./src/lib/features/workspace/surface.ts",
@@ -63,6 +65,26 @@
       "types": "./src/lib/wire/WireEntryKinds.ts",
       "browser": "./src/lib/wire/WireEntryKinds.ts",
       "default": "./src/lib/wire/WireEntryKinds.ts"
+    },
+    "./points/catalog": {
+      "types": "./src/lib/wire/WireCatalog.ts",
+      "browser": "./src/lib/wire/WireCatalog.ts",
+      "default": "./src/lib/wire/WireCatalog.ts"
+    },
+    "./wire/operations": {
+      "types": "./src/lib/wire/operation.ts",
+      "browser": "./src/lib/wire/operation.ts",
+      "default": "./src/lib/wire/operation.ts"
+    },
+    "./wire/feeds": {
+      "types": "./src/lib/wire/liveGroup.ts",
+      "browser": "./src/lib/wire/liveGroup.ts",
+      "default": "./src/lib/wire/liveGroup.ts"
+    },
+    "./wire/access": {
+      "types": "./src/lib/wire/access.ts",
+      "browser": "./src/lib/wire/access.ts",
+      "default": "./src/lib/wire/access.ts"
     },
     "./ui/*.svelte": {
       "types": "./src/lib/shared/ui/*.svelte",

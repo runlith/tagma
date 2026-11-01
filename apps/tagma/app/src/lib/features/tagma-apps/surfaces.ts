@@ -1,6 +1,6 @@
 import Puzzle from '@lucide/svelte/icons/puzzle';
 import { CONTRIBUTED_ROUTE, type SurfaceDeclaration } from '$lib/features/workspace/surface.js';
-import SectionPending from './SectionPending.svelte';
+import SectionPath from './SectionPath.svelte';
 
 export const TAGMA_APP_SURFACE = 'app';
 
@@ -16,6 +16,6 @@ export const surfaces: readonly SurfaceDeclaration[] = [
     stands: 'project',
     remembers: false,
     nested: true,
-    payload: { component: SectionPending },
+    payload: { component: SectionPath },
   },
 ];

@@ -50,7 +50,7 @@ export class Addresses extends Service<Addresses>()('Addresses', { tier: 'app' }
   terminal(key: string, project: string = currentProject(this.router)): string {
     const params = new URLSearchParams(carriedQuery(this.router, project).slice(1));
     params.set('terminal', key);
-    const agents = project === currentProject(this.router) && this.surfaces.of(this.router.routeId) === CHAT;
+    const agents = project === currentProject(this.router) && this.surfaces.of(this.router.routeId, this.router.params) === CHAT;
     return `${agents ? this.router.pathname : this.surfaces.pathOf(project, CHAT)}?${params.toString()}`;
   }
 
@@ -76,7 +76,7 @@ export class Addresses extends Service<Addresses>()('Addresses', { tier: 'app' }
     const id = this.router.params.id;
     const name = typeof id === 'string' ? id.toLowerCase() : undefined;
     const route = this.router.routeId;
-    const scoped = route !== undefined && this.surfaces.get(this.surfaces.of(route)).scoped === true;
+    const scoped = route !== undefined && this.surfaces.get(this.surfaces.of(route, this.router.params)).scoped === true;
     return scoped && name !== undefined && isBlockName(name) ? name : null;
   }
 }

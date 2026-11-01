@@ -192,6 +192,7 @@ export class Graph {
   private readonly chunks = new Map<LayerItem, Promise<AnyLayer>>();
   private readonly loaded = new Map<LayerItem, AnyLayer>();
   private readonly started = new Set<Scope>();
+  private readonly opening = new Set<Scope>();
   private readonly conditioned = new WeakMap<Scope, Map<WhenItem, Reading>>();
   private readonly requires = new WeakMap<Scope, Map<string, Set<string>>>();
   private readonly lasting = new WeakMap<Scope, Definition[]>();
@@ -386,10 +387,15 @@ export class Graph {
     return { scope, ready: this.open(scope, [{ kind: 'value', key: rung.Current, instance: input }], start) };
   }
 
+  starting(scope: Scope): boolean {
+    return this.opening.has(scope);
+  }
+
   start(scope: Scope): Promise<void> {
     if (this.started.has(scope)) return Promise.resolve();
     this.started.add(scope);
     scope.defer(() => void this.started.delete(scope));
+    this.opening.add(scope);
     try {
       const pending: Promise<void>[] = [];
       for (const item of this.conditional) this.startCondition(item, scope, pending);
@@ -407,6 +413,8 @@ export class Graph {
     } catch (error) {
       void scope.close();
       throw error;
+    } finally {
+      this.opening.delete(scope);
     }
   }
 

@@ -1,0 +1,24 @@
+{
+  "compilerOptions": {
+    "paths": {
+      "$lib": ["./src/lib"],
+      "$lib/*": ["./src/lib/*"]
+    },
+    "types": ["@sveltejs/kit", "svelte"],
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+    "lib": ["esnext", "DOM", "DOM.Iterable"],
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "target": "esnext",
+    "noEmit": true,
+    "rewriteRelativeImportExtensions": true,
+    "allowJs": true,
+    "checkJs": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "skipLibCheck": true,
+    "strict": true
+  }
+}

@@ -88,7 +88,7 @@ import { WorktreeUpdates } from './contract/service/worktreeUpdates.js';
 import { worktreeUpdates } from './worktreeUpdates.js';
 import { SessionBirthWriting } from './contract/service/sessionBirths.js';
 import { PinOffers, ThreadPins } from './contract/service/pins.js';
-import { makePinnableViews } from './pinOffers.js';
+import { makePinnableViews, PINS } from './pinOffers.js';
 import { makeThreadPins } from './store/pins.js';
 import { ThreadSubscriptions } from './contract/service/subscriptions.js';
 import { ThreadEvents, type ThreadFact } from './contract/service/events.js';
@@ -114,7 +114,7 @@ export const threadStoresLayer = Layer.effectContext(
     const places = yield* makeWorkingPlaces;
     const notes = yield* makeOperatorNotes;
     const pinnable = makePinnableViews();
-    yield* Effect.acquireRelease((yield* TagmaAppPoints).declare(pinnable.point), (withdraw) => Effect.sync(withdraw));
+    yield* Effect.acquireRelease((yield* TagmaAppPoints).declare(PINS, pinnable.register), (withdraw) => Effect.sync(withdraw));
     return Context.make(ThreadInbox, yield* makeThreadInbox).pipe(
       Context.add(WorkPlaces, places),
       Context.add(PinOffers, pinnable),

@@ -4,9 +4,9 @@ import type { McpToolDescriptor } from '@runlith/mcp/McpSession';
 import { type McpToolCaller, mcpToolCatalog } from '@runlith/mcp/mcpToolCatalog';
 import { Effect } from 'effect';
 import { Settings } from '../settings/contract/service/values.js';
-import { type TagmaAppContribution, type TagmaAppPoint, TagmaAppPointRefused } from './contract/service/points.js';
-import { TagmaAppTools } from './contract/service/tools.js';
-import { tagmaAppToolName, ToolEntries, type ToolAudience } from './contract/wire/audience.js';
+import { type TagmaAppContribution, TagmaAppPointRefused } from './contract/service/points.js';
+import { TagmaAppTools, TOOLS } from './contract/service/tools.js';
+import { tagmaAppToolName, type ToolEntries, type ToolAudience } from './contract/wire/audience.js';
 import { tagmaAppsEnabled } from './contract/wire/settings.js';
 
 const MODEL_NAME_MAX = 64;
@@ -21,7 +21,7 @@ type Offered = {
 
 type Assembled = { readonly revision: number; readonly enabled: readonly string[]; readonly catalog: ToolCatalog };
 
-const refused = (reason: string) => new TagmaAppPointRefused({ point: 'tools', reason });
+const refused = (reason: string) => new TagmaAppPointRefused({ point: TOOLS.app.name, reason });
 
 const declarationOf = (app: string, descriptors: readonly McpToolDescriptor[]): McpServerDeclaration => ({
   name: app,
@@ -128,6 +128,6 @@ export const makeOffers = Effect.gen(function* () {
           view: (app: string) => (enabled().includes(app) ? (offers.get(app)?.audiences.get('view') ?? []) : []),
         })),
     }),
-    point: { name: 'tools', owner: 'tagma-apps', schema: ToolEntries, register } satisfies TagmaAppPoint<ToolEntries>,
+    register,
   };
 });

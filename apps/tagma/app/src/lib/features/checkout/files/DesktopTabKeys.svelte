@@ -17,7 +17,7 @@
     if (desktop === undefined) return;
     return desktop.onCommand((command) => {
       if (keymap.press(command === 'reopen' ? keymap.mod('KeyT', { shift: true }) : keymap.mod('KeyW'), null)) return;
-      const here = surfaces.of(router.routeId) === CHECKOUT;
+      const here = surfaces.of(router.routeId, router.params) === CHECKOUT;
       if (command === 'reopen') {
         if (here) tabs.reopen();
         return;

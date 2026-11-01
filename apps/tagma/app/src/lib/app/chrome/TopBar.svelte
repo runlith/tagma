@@ -75,7 +75,7 @@
   const creation = ProjectCreation.use();
 
   const app = App.current();
-  const column = $derived(columnRegistry.at(router.routeId, inProject, app));
+  const column = $derived(columnRegistry.at(router.routeId, router.params, inProject, app));
 
   let width = $state(0);
   const left = $derived(Math.max(0, width - frame.stage));

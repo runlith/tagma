@@ -79,6 +79,7 @@ export type Status = {
 };
 
 const SCOPED_PATHSPEC = 16_384;
+const PATH_BATCH = 200;
 
 export const pathspecFits = (paths: Iterable<string>): boolean => {
   let weight = 0;
@@ -87,6 +88,24 @@ export const pathspecFits = (paths: Iterable<string>): boolean => {
     if (weight > SCOPED_PATHSPEC) return false;
   }
   return true;
+};
+
+export const pathspecBatches = (paths: readonly string[]): readonly (readonly string[])[] => {
+  const batches: string[][] = [];
+  let batch: string[] = [];
+  let weight = 0;
+  for (const path of paths) {
+    const size = literal(path).length + 1;
+    if (batch.length > 0 && (batch.length === PATH_BATCH || weight + size > SCOPED_PATHSPEC)) {
+      batches.push(batch);
+      batch = [];
+      weight = 0;
+    }
+    batch.push(path);
+    weight += size;
+  }
+  if (batch.length > 0) batches.push(batch);
+  return batches;
 };
 
 const touches = (path: string, scopes: ReadonlySet<string>): boolean => {

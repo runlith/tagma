@@ -9,6 +9,7 @@ import type { Actor } from './actor.js';
 import type { AgentTool } from './capability.js';
 import { OperationId } from './ids.js';
 import type { OperationPlace } from './place.js';
+import type { RightKey } from './right.js';
 
 export type OperationConfirmation = {
   readonly summary: string;
@@ -92,6 +93,7 @@ type OperationShape = GraphUse & {
   readonly place: OperationPlace;
   readonly filePlace?: ChangeTarget;
   readonly doors?: OperationDoors;
+  readonly right?: RightKey;
 };
 
 type OperationOffer =
@@ -203,6 +205,7 @@ export type FeedDeclaration = GraphUse & {
   readonly admission?: 'project';
   readonly place?: typeof feedPlaceSchema;
   readonly window?: number;
+  readonly right?: RightKey;
 };
 
 export const feed = <const Id extends string, const Declaration extends Omit<FeedDeclaration, 'id'>>(id: Id, declaration: Declaration) => ({

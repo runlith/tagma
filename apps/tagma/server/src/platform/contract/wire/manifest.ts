@@ -67,14 +67,14 @@ export type CollectedFeeds<Modules extends readonly WireModule[]> = {
   readonly [Feed in FeedOf<Modules> as Feed['id']]: Feed;
 };
 
-export type DeclaredCatalog<Modules extends readonly WireModule[]> = {
-  readonly declarations: CollectedDeclarations<Modules>;
-  readonly ownedBy: (module: Modules[number]['id']) => readonly string[];
-};
-
 const NO_OPERATIONS: OperationSet = { declarations: {} };
 
-export const declarationsOf = <const Modules extends readonly WireModule[]>(modules: Modules): Promise<DeclaredCatalog<Modules>> =>
+export const declarationsOf = <const Modules extends readonly WireModule[]>(
+  modules: Modules,
+): Promise<{
+  readonly declarations: CollectedDeclarations<Modules>;
+  readonly ownedBy: (module: Modules[number]['id']) => readonly string[];
+}> =>
   Promise.all(
     modules.map(async (module) => ({ module, set: module.operations === undefined ? NO_OPERATIONS : await module.operations() })),
   ).then((loaded) => {

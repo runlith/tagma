@@ -13,6 +13,7 @@ import { test as mountApp } from './test.svelte.js';
 import Broken from './test-utils/point/Broken.svelte';
 import ComponentsHost from './test-utils/point/ComponentsHost.svelte';
 import Labelled from './test-utils/point/Labelled.svelte';
+import Offered from './test-utils/point/Offered.svelte';
 import PanelsHost from './test-utils/point/PanelsHost.svelte';
 
 type Entry = { readonly id: string; readonly order: number };
@@ -70,6 +71,41 @@ describe('Point', () => {
     const clash = (failures[0] as ServiceStartError).cause;
     expect(clash).toMatchObject({ name: 'RegistryClash', holders: ['features/a', 'features/b'] });
     expect(rt.get(Menu).items).toEqual([{ id: 'x', order: 0 }]);
+    await rt.unmount();
+  });
+
+  it('takes members only during its scope’s synchronous start when it joins at start: a chunk, a later condition or a run-time source is refused', async () => {
+    const Fixed = Point.define<Entry>()('PointTest.Fixed', { tier: 'app', key: (entry) => entry.id, joins: 'start' });
+    const Unused = Point.define<Entry>()('PointTest.Unused', { tier: 'app', key: (entry) => entry.id, joins: 'start' });
+    const gate = new Gate();
+    const failures: unknown[] = [];
+    const rt = mountApp(
+      Layer.mergeAll(
+        Fixed,
+        Unused,
+        Fixed.contribute('core', { id: 'core', order: 0 }),
+        Layer.when(
+          () => true,
+          () => Promise.resolve({ default: Fixed.contribute('chunk', { id: 'chunk', order: 1 }) }),
+        ),
+        Layer.when(Gate, (open) => open.on, Fixed.contribute('late', { id: 'late', order: 2 })),
+      ),
+      Layer.of(Gate, gate),
+      { onFailure: (error) => failures.push(error) },
+    );
+    await flush();
+    const fixed = rt.get(Fixed);
+
+    gate.on = true;
+    flushSync();
+    await flush();
+    expect(fixed.items.map((entry) => entry.id)).toEqual(['core']);
+    expect(failures.map((failure) => (failure as ServiceStartError).cause)).toEqual([
+      expect.objectContaining({ name: 'RegistryRefusal', contributor: 'chunk' }),
+      expect.objectContaining({ name: 'RegistryRefusal', contributor: 'late' }),
+    ]);
+    expect(() => fixed.register('views', { id: 'view', order: 3 })).toThrow(/only while its scope starts/);
+    expect(() => rt.get(Unused).register('views', { id: 'view', order: 0 })).toThrow(/only while its scope starts/);
     await rt.unmount();
   });
 
@@ -138,5 +174,42 @@ describe('PointView', () => {
     flushSync();
     expect(framed.target.querySelector('[data-frame]')).toBeNull();
     framed.remove();
+  });
+
+  it('draws each item as its point’s definition answers from a service it reads: the item, another payload, or nothing', async () => {
+    type Panel = Shown<{ label: string }> & { readonly id: string };
+    const Drawn = Point.define<Panel>()('PointTest.Drawn', {
+      tier: 'app',
+      key: (panel) => panel.id,
+      *draws() {
+        const gate = yield* Gate.optional();
+        return (panel) =>
+          panel.id === 'offered' ? { ...panel, payload: { component: Offered } } : panel.id === 'closed' && gate?.on ? null : panel;
+      },
+    });
+    const gate = new Gate();
+    const rt = mountApp(
+      Layer.mergeAll(
+        Drawn,
+        Drawn.contribute(
+          'core',
+          { id: 'open', payload: { component: Labelled } },
+          { id: 'offered', payload: { component: Labelled } },
+          { id: 'closed', payload: { component: Labelled } },
+        ),
+      ),
+      Layer.of(Gate, gate),
+    );
+    await flush();
+    const shown = show((target) => mount(ComponentsHost, { target, props: { point: rt.get(Drawn) } }));
+    flushSync();
+    expect(shown.target.querySelectorAll('[data-item]')).toHaveLength(2);
+    expect(shown.target.querySelectorAll('[data-offer]')).toHaveLength(1);
+
+    gate.on = true;
+    flushSync();
+    expect(shown.target.querySelectorAll('[data-item]')).toHaveLength(1);
+    shown.remove();
+    await rt.unmount();
   });
 });

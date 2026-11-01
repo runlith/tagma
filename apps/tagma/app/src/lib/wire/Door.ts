@@ -1,7 +1,6 @@
 import { Api } from '@tagma/server/api';
 import { ThreadEntryKinds, type ThreadEntryReader } from '@runlith/agent/transcript/kinds';
 import { wireEntries, WireEntryKinds } from './WireEntryKinds.js';
-import { WireCatalog } from './WireCatalog.js';
 import { CONTRACT_HEADER } from '@tagma/server/invocation/contract/wire/headers';
 import type { EndpointDeclaration } from '@tagma/server/platform/contract/wire/operation';
 import { faultBody } from '@tagma/server/platform/contract/wire/refusal';
@@ -11,7 +10,8 @@ import { Service } from '@runlith/layer/key';
 import { Effect, Result, Schema, SchemaIssue } from 'effect';
 import { FetchHttpClient, HttpClient, HttpClientError } from 'effect/http';
 import { HttpApiClient } from 'effect/http-api';
-import { OperationCodecs, type HttpOperationId, type OperationAnswer, type OperationInput } from './operation.js';
+import { OperationTable, type HttpOperationId, type OperationAnswer, type OperationInput } from './operation.js';
+import { AccessHint, type AccessHintShape, hinted } from './access.js';
 import { Refusal, refusalOf } from './refusal.js';
 import { ServerOrigin } from './ServerOrigin.svelte.js';
 
@@ -95,9 +95,10 @@ const serverFault = Effect.fn(function* <E>(failure: E) {
 export class Door extends Service<Door>()('Door', { tier: 'app' }) {
   static *make() {
     const platform = yield* Platform;
-    const operations = new OperationCodecs(yield* WireCatalog);
+    const operations = yield* OperationTable;
     const kinds = yield* WireEntryKinds.optional();
-    return new Door(platform.fetch, yield* ServerOrigin, yield* Router, operations, wireEntries(kinds));
+    const hints = yield* AccessHint.optional();
+    return new Door(platform.fetch, yield* ServerOrigin, yield* Router, operations, wireEntries(kinds), hints);
   }
 
   private client: ApiClient | null = null;
@@ -111,8 +112,9 @@ export class Door extends Service<Door>()('Door', { tier: 'app' }) {
     private readonly fetch: PlatformFetch,
     private readonly origin: ServerOrigin,
     private readonly router: Router,
-    private readonly operations: OperationCodecs,
+    private readonly operations: OperationTable,
     private readonly entries: ThreadEntryReader = wireEntries(undefined),
+    private readonly hints: AccessHintShape | undefined = undefined,
   ) {
     super();
   }
@@ -220,7 +222,7 @@ export class Door extends Service<Door>()('Door', { tier: 'app' }) {
           })
         : call(this.client),
     ).pipe(
-      Effect.catch((error) => Effect.flatMap(serverFault(error), Effect.fail)),
+      Effect.catch((error) => Effect.flatMap(serverFault(error), (refusal) => Effect.fail(hinted(refusal, this.hints)))),
       Effect.catchDefect((defect) => Effect.fail(refusalOf(readableDefect(defect)))),
       Effect.provideService(FetchHttpClient.Fetch, this.fetch),
       Effect.provideService(ThreadEntryKinds, this.entries),

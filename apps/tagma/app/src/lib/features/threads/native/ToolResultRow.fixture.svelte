@@ -17,7 +17,7 @@
     copy: () => undefined,
   };
 
-  provideChatStrings(nativeStrings());
+  provideChatStrings(nativeStrings(() => undefined));
   provideChatRendering({
     context: view,
     touch: false,

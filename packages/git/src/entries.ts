@@ -1,5 +1,8 @@
-import { Effect, Result } from 'effect';
+import { lstat } from 'node:fs/promises';
+import { basename, dirname, join, resolve } from 'node:path';
+import { Effect, FileSystem, Result } from 'effect';
 import type { Git } from './Git.js';
+import { pathspecBatches } from './status.js';
 import {
   run,
   runBytes,
@@ -14,17 +17,9 @@ import {
   type GitRefused,
 } from './repository.js';
 
-const PATH_BATCH = 200;
-
 const RETRY_AT_ONCE = 4;
 
 const SAID_CAP = 200;
-
-function inBatches(paths: readonly string[]): readonly (readonly string[])[] {
-  const batches: string[][] = [];
-  for (let at = 0; at < paths.length; at += PATH_BATCH) batches.push([...paths.slice(at, at + PATH_BATCH)]);
-  return batches;
-}
 
 const saidBy = (failure: GitUnreadable | GitRefused | GitAnswerInvalid): string => {
   const whole = troubleOf(failure);
@@ -72,7 +67,7 @@ const readPaths = Effect.fn('Git.readPaths')(function* (
     if (failed.length === tried.length) yield* alone(wider.flat());
     else for (const half of wider) yield* split(half);
   });
-  const batches = yield* Effect.forEach(inBatches(askable), ask);
+  const batches = yield* Effect.forEach(pathspecBatches(askable), ask);
   for (const { batch, answer } of batches) {
     if (answer._tag === 'Success') answered.push({ batch, text: answer.success });
     else if (batch.length === 1) unread.set(batch[0] as string, saidBy(answer.failure));
@@ -430,20 +425,100 @@ export const filesUnder = Effect.fn('Git.filesUnder')(function* (
   options: { readonly others?: boolean; readonly capture?: number } = {},
 ): Effect.fn.Return<readonly string[], GitUnreadable | GitRefused | GitAnswerInvalid> {
   const places = typeof place === 'string' ? [place] : place;
-  const listing = yield* run(
-    git,
-    dir,
-    [
-      'ls-files',
-      '-z',
-      '--cached',
-      ...(options.others === true ? ['--others', '--exclude-standard'] : []),
-      '--',
-      ...places.map((one) => literal(one === '' ? '.' : one)),
-    ],
-    options.capture,
-  );
-  return [...new Set(listing.split('\0').filter((name) => name !== ''))];
+  const files = new Set<string>();
+  for (const batch of pathspecBatches(places)) {
+    const listing = yield* run(
+      git,
+      dir,
+      [
+        ...(options.others === true ? ['-c', 'core.fsmonitor=false'] : []),
+        'ls-files',
+        '-z',
+        '--cached',
+        ...(options.others === true ? ['--others', '--exclude-standard'] : []),
+        '--',
+        ...batch.map((one) => literal(one === '' ? '.' : one)),
+      ],
+      options.capture,
+    );
+    for (const name of listing.split('\0')) if (name !== '') files.add(name);
+  }
+  return [...files];
+});
+
+type DirectoryNames = { readonly path: string; readonly exact: ReadonlySet<string>; readonly normal: ReadonlyMap<string, string> };
+
+const physicalPath = Effect.fn('Git.physicalPath')(
+  function* (files: FileSystem.FileSystem, dir: string, path: string, directories: Map<string, DirectoryNames>) {
+    const absolute = resolve(dir, path);
+    const parent = dirname(absolute);
+    let names = directories.get(parent);
+    if (names === undefined) {
+      const directory = yield* files.realPath(parent);
+      const entries = yield* files.readDirectory(directory);
+      names = { path: directory, exact: new Set(entries), normal: new Map(entries.map((name) => [name.normalize('NFC'), name])) };
+      directories.set(parent, names);
+    }
+    const name = basename(absolute);
+    if (names.exact.has(name)) return join(names.path, name);
+    const equivalent = names.normal.get(name.normalize('NFC'));
+    if (equivalent === undefined) return null;
+    const physical = join(names.path, equivalent);
+    return yield* Effect.tryPromise({ try: () => lstat(absolute), catch: (cause) => cause as NodeJS.ErrnoException }).pipe(
+      Effect.as(physical),
+      Effect.catch((cause) =>
+        cause.code === 'ENOENT' || cause.code === 'ENOTDIR'
+          ? Effect.succeed(null)
+          : Effect.fail(new GitUnreadable({ command: commandFor(dir, ['ls-files']), reason: `cannot resolve ${path}: ${cause.message}` })),
+      ),
+    );
+  },
+  (effect, _files, dir, path) =>
+    effect.pipe(
+      Effect.catchReason('PlatformError', 'NotFound', () => Effect.succeed(null)),
+      Effect.mapError((failure) =>
+        failure._tag === 'GitUnreadable'
+          ? failure
+          : new GitUnreadable({ command: commandFor(dir, ['ls-files']), reason: `cannot resolve ${path}: ${failure.message}` }),
+      ),
+    ),
+);
+
+export const visibleAmong = Effect.fn('Git.visibleAmong')(function* (
+  git: Git['Service'],
+  dir: string,
+  paths: readonly string[],
+): Effect.fn.Return<ReadonlySet<string>, GitUnreadable | GitRefused | GitAnswerInvalid, FileSystem.FileSystem> {
+  const files = yield* FileSystem.FileSystem;
+  const listed = new Set(yield* filesUnder(git, dir, paths, { others: true }));
+  const visible = new Set<string>();
+  const directories = new Map<string, DirectoryNames>();
+  let normal: Map<string, string[]> | undefined;
+  for (const path of paths) {
+    if (listed.has(path)) {
+      visible.add(path);
+      continue;
+    }
+    if (normal === undefined) {
+      normal = new Map();
+      for (const name of listed) {
+        const key = name.normalize('NFC');
+        const group = normal.get(key);
+        if (group === undefined) normal.set(key, [name]);
+        else group.push(name);
+      }
+    }
+    const equivalents = normal.get(path.normalize('NFC'));
+    if (equivalents === undefined) continue;
+    const physical = yield* physicalPath(files, dir, path, directories);
+    if (physical === null) continue;
+    for (const name of equivalents)
+      if ((yield* physicalPath(files, dir, name, directories)) === physical) {
+        visible.add(path);
+        break;
+      }
+  }
+  return visible;
 });
 
 export const changedBetween = Effect.fn('Git.changedBetween')(function* (

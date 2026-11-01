@@ -9,7 +9,13 @@ import { gitLayer } from '@runlith/git/Git';
 import { makeCheckoutReading, type RunningRevision } from './reading.js';
 import { OWN_GIT_VARIABLE } from '../platform/contract/service/credentials.js';
 import { ownGitLayer } from '../platform/git/ownGit.js';
-import { BUILD_COMMAND, BUILD_HOME_ENV, BUILD_SWAPPED_ENV, revisionLabel } from '../installation/contract/wire/layout.js';
+import {
+  BUILD_COMMAND,
+  BUILD_HOME_ENV,
+  BUILD_SWAPPED_ENV,
+  BUILD_WORKTREE_ENV,
+  revisionLabel,
+} from '../installation/contract/wire/layout.js';
 import { currentVersion, releasesNewestFirst } from '../installation/closure/versions.js';
 import { type InstallRefused, NextInstallation, type StopRefused } from '../installation/contract/service/next.js';
 import type { NextFrame } from '../installation/contract/wire/next.js';
@@ -331,26 +337,8 @@ export const makeCheckoutBuilds = Effect.fnUntraced(function* (options: Checkout
         group = null;
       }
     };
-    const tidy = async (title: string, command: readonly string[]): Promise<void> => {
-      await say(`\n--- ${title}: ${command.join(' ')} (in ${checkout}) ---`);
-      await Bun.spawn([...command], {
-        cwd: checkout,
-        env: { ...env, [OWN_GIT_VARIABLE]: '1' },
-        stdin: 'ignore',
-        stdout: sink.fd,
-        stderr: sink.fd,
-      }).exited;
-    };
     const standing = (): Promise<string | null> =>
       options.landed === undefined ? Promise.resolve(null) : options.landed().catch(() => null);
-    const leave = async (): Promise<void> => {
-      const worktree = cut;
-      if (worktree === null) return;
-      await tidy('worktree remove', ['git', '-C', checkout, 'worktree', 'remove', '--force', '--force', worktree]);
-      await rm(worktree, { recursive: true, force: true });
-      await tidy('worktree prune', ['git', '-C', checkout, 'worktree', 'prune']);
-      cut = null;
-    };
     const decided = async (): Promise<readonly [BuildEnded['outcome'], string | null, string]> => {
       if (started.from === 'back') {
         const code = await step('back', [runtime, 'run', 'tagma:build', '--back', '--no-restart'], checkout);
@@ -358,30 +346,19 @@ export const makeCheckoutBuilds = Effect.fnUntraced(function* (options: Checkout
         const build = await standing();
         return ['landed', build, build === null ? 'the previous installation stands' : `installation ${build} stands again`];
       }
-      let at = checkout;
-      if (started.from === 'head') {
-        stepped('worktree');
-        const worktree = join(options.worktrees, `head-${started.since.replace(/[-:.]/g, '')}`);
-        await mkdir(options.worktrees, { recursive: true });
-        cut = worktree;
-        const added = await step(
-          'worktree',
-          ['git', '-C', checkout, 'worktree', 'add', '--detach', '--end-of-options', worktree, 'HEAD'],
-          checkout,
-          { [OWN_GIT_VARIABLE]: '1' },
-        );
-        if (added !== 0) return ['failed', null, `git worktree add ended with code ${added}`];
-        at = worktree;
-        if (existsSync(join(checkout, 'bun.lock'))) {
-          stepped('install');
-          const installed = await step('install', [runtime, 'install', '--frozen-lockfile'], worktree);
-          if (installed !== 0) return ['failed', null, `bun install ended with code ${installed}`];
-        }
-      }
+      cut = started.from === 'head' ? join(options.worktrees, `head-${started.since.replace(/[-:.]/g, '')}`) : null;
       stepped('build');
       const origin = cut === null ? [] : ['--origin', checkout];
       await rm(note, { force: true });
-      const code = await step('build', [runtime, 'run', 'tagma:build', '--no-restart', ...origin], at, { [BUILD_SWAPPED_ENV]: note });
+      const code = await step(
+        'build',
+        [runtime, 'run', 'tagma:build', '--no-restart', ...(started.from === 'tree' ? ['--tree'] : []), ...origin],
+        checkout,
+        {
+          [BUILD_SWAPPED_ENV]: note,
+          ...(cut === null ? {} : { [BUILD_WORKTREE_ENV]: cut }),
+        },
+      );
       if (code !== 0) return ['failed', null, `${BUILD_COMMAND} ended with code ${code}`];
       const build = await standing();
       return ['landed', build, build === null ? 'the build landed' : `installation ${build} stands; tagma restart brings it up`];
@@ -409,11 +386,9 @@ export const makeCheckoutBuilds = Effect.fnUntraced(function* (options: Checkout
       await say(`=== tagma build ${started.from} ${started.revision} ${outcome} ${last.endedAt}: ${detail} ===`);
       return last;
     } finally {
-      try {
-        await leave();
-      } finally {
-        await sink.close();
-      }
+      if (cut !== null && existsSync(cut)) await reap(null, cut);
+      cut = null;
+      await sink.close();
     }
   };
 

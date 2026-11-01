@@ -1,9 +1,11 @@
 import type { Cell } from '@runlith/roster/cell';
 import { Roster } from '@runlith/roster/Roster';
 
-import { Service, type Key, type ServiceClass, type Tier } from './key.js';
+import { Service, type Key, type Optional, type ServiceClass, type Tier } from './key.js';
 import { Layer } from './Layer.js';
 import { Scope, type ScopeKey } from './Scope.js';
+
+type Drawing<Item> = (item: Item) => Item | null;
 
 interface PointDefinition<Item, Tr extends Tier = Tier> {
   readonly tier: Tr;
@@ -11,6 +13,8 @@ interface PointDefinition<Item, Tr extends Tier = Tier> {
   readonly order?: (item: Item) => number;
   readonly claims?: (item: Item) => readonly string[];
   readonly admits?: (item: Item) => string | null;
+  readonly joins?: 'start';
+  readonly draws?: () => Generator<Optional, Drawing<Item>, unknown>;
 }
 
 type Contribution<Id extends string, From extends string, Item, Tr extends Tier> = Layer<
@@ -20,7 +24,7 @@ type Contribution<Id extends string, From extends string, Item, Tr extends Tier>
 
 type PointKeyClass<Id extends string, Item, Tr extends Tier> = ServiceClass<Id, Point<Item>, Tr> & {
   readonly definition: PointDefinition<Item, Tr>;
-  make(): Generator<ScopeKey, Point<Item>, unknown>;
+  make(): Generator<ScopeKey | Optional, Point<Item>, unknown>;
   contribute<const From extends string>(from: From, ...items: readonly Item[]): Contribution<Id, From, Item, Tr>;
 };
 
@@ -29,10 +33,15 @@ export class Point<Item> {
     readonly id: string,
     readonly key: (item: Item) => string,
     private readonly roster: Roster<Item>,
+    private readonly drawing?: Drawing<Item>,
   ) {}
 
   get items(): readonly Item[] {
     return this.roster.items;
+  }
+
+  drawn(item: Item): Item | null {
+    return this.drawing === undefined ? item : this.drawing(item);
   }
 
   find(key: string): Item | undefined {
@@ -56,9 +65,20 @@ export class Point<Item> {
     };
   }
 
-  static over<Item>(id: string, definition: PointDefinition<Item>, cell: Cell<readonly Item[]>): Point<Item> {
+  static over<Item>(
+    id: string,
+    definition: PointDefinition<Item>,
+    cell: Cell<readonly Item[]>,
+    starting?: () => boolean,
+    drawing?: Drawing<Item>,
+  ): Point<Item> {
     const subject = (key: string): string => `Point "${id}" item "${key}"`;
-    return new Point<Item>(id, definition.key, new Roster(subject, definition.key, cell, definition));
+    const admits =
+      starting === undefined
+        ? definition.admits
+        : (item: Item): string | null =>
+            starting() ? (definition.admits?.(item) ?? null) : 'this point takes members only while its scope starts';
+    return new Point<Item>(id, definition.key, new Roster(subject, definition.key, cell, { ...definition, admits }), drawing);
   }
 
   static define<Item>() {
@@ -67,7 +87,15 @@ export class Point<Item> {
         static readonly definition = definition;
 
         static *make() {
-          return Point.over<Item>(id, definition, cellOf<readonly Item[]>(yield* Scope));
+          const scope = yield* Scope;
+          const drawing = definition.draws === undefined ? undefined : yield* definition.draws();
+          return Point.over<Item>(
+            id,
+            definition,
+            cellOf<readonly Item[]>(scope),
+            definition.joins === 'start' ? startingOf(scope) : undefined,
+            drawing,
+          );
         }
 
         static contribute<const From extends string>(from: From, ...items: readonly Item[]): Contribution<Id, From, Item, Tr> {
@@ -85,8 +113,18 @@ export class Point<Item> {
   }
 }
 
-function cellOf<T>(scope: Scope): Cell<T> {
+function graphOf(scope: Scope) {
   const graph = scope.graph;
   if (!graph) throw new Error('A point needs a scope the graph opened');
-  return graph.cell<T>();
+  return graph;
+}
+
+function cellOf<T>(scope: Scope): Cell<T> {
+  return graphOf(scope).cell<T>();
+}
+
+function startingOf(scope: Scope): () => boolean {
+  const graph = graphOf(scope);
+  const home = scope.home;
+  return () => graph.starting(home);
 }

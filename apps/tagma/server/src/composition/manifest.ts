@@ -22,6 +22,7 @@ import { BUILTIN_NOTES, type BuiltinNote } from '../threads/contract/service/not
 import { NATIVE_RULES } from '../native-harness/contract/service/rules.js';
 import { HOME_FOLLOWERS, type HomeFollower } from '../thread-record/contract/service/homes.js';
 import { PROJECT_CREATION, type CreationStep } from '../graph/contract/service/creation.js';
+import type { NamedRight } from '../platform/contract/service/access.js';
 import type { ServerParts } from './build.js';
 import { type LiveGroup, liveRpc } from './rpc.js';
 import type { CORE_MODULES } from './core.js';
@@ -62,6 +63,7 @@ export type Assembly = {
   readonly nativeRules: ReturnType<typeof NATIVE_RULES.collect>;
   readonly homeFollowers: readonly HomeFollower[];
   readonly creationSteps: readonly CreationStep[];
+  readonly rights: readonly NamedRight[];
   readonly entryKinds: ThreadEntryReader;
   readonly settings: { readonly sections: readonly SettingSectionDeclaration[]; readonly keys: readonly SettingKey<unknown>[] };
   readonly snapshotParticipants: (home: SnapshotHome) => Effect.Effect<Readonly<Record<string, SnapshotParticipant>>>;
@@ -146,6 +148,10 @@ export const assemble = async ({ modules, rested }: ServerParts): Promise<Assemb
     }),
   );
   const feeds = modules.flatMap((module) => module.live?.feeds ?? []);
+  const creationSteps = PROJECT_CREATION.collect(modules).map(({ entry }) => entry);
+  const rights = [...operations.declarations, ...feeds, ...creationSteps].flatMap(({ id, right }): NamedRight[] =>
+    right === undefined ? [] : [{ key: right, by: id }],
+  );
   return {
     modules,
     operations,
@@ -166,7 +172,8 @@ export const assemble = async ({ modules, rested }: ServerParts): Promise<Assemb
     notes: BUILTIN_NOTES.collect(modules).map(({ entry }) => entry),
     nativeRules: NATIVE_RULES.collect(modules),
     homeFollowers: HOME_FOLLOWERS.collect(modules).map(({ entry }) => entry),
-    creationSteps: PROJECT_CREATION.collect(modules).map(({ entry }) => entry),
+    creationSteps,
+    rights,
     entryKinds: entryKinds(modules, rested),
     settings: {
       sections: modules.flatMap((module) => module.settingSections ?? []),

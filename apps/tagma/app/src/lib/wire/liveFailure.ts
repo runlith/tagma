@@ -20,6 +20,7 @@ export function failureOf(error: unknown): LiveFailure {
       code: error.code,
       unblock: [...error.unblock],
       words: error.words,
+      right: error.right,
     };
   }
   if (!(error instanceof RpcClientError.RpcClientError)) {

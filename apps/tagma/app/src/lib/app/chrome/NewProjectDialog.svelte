@@ -15,6 +15,10 @@
 
   const creation = ProjectCreation.use();
   const fields = CreationFields.use();
+  const drawn = (id: string): boolean => {
+    const field = fields.find(id);
+    return field !== undefined && fields.drawn(field) === field;
+  };
 
   let draftName = $state('');
   let draftPath = $state('');
@@ -24,7 +28,7 @@
   let refused = $state.raw<Refused | null>(null);
 
   const draft: CreationDraft = $derived({ name: draftName.trim(), rootPath: draftPath.trim(), storage: draftStorage });
-  const underField = $derived(refused?.field !== undefined && fields.find(refused.field) !== undefined ? refused.field : undefined);
+  const underField = $derived(refused?.field !== undefined && drawn(refused.field) ? refused.field : undefined);
 
   function put(id: string, value: unknown): void {
     if (value !== undefined) {
@@ -55,8 +59,11 @@
     if (catalogs === undefined) return;
     refused = null;
     try {
-      const drawn = Object.fromEntries(Object.entries(contributed).filter(([id]) => fields.find(id) !== undefined));
-      await creation.create({ ...draft, catalogs, contributed: drawn });
+      await creation.create({
+        ...draft,
+        catalogs,
+        contributed: Object.fromEntries(Object.entries(contributed).filter(([id]) => drawn(id))),
+      });
     } catch (error) {
       refused = refusedOf(error);
       return;

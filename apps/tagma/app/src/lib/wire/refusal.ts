@@ -1,5 +1,20 @@
 import type { Words } from '@tagma/server/platform/contract/wire/refusal';
+import type { Right } from '@tagma/server/platform/contract/wire/right';
 import type { Act, Told } from './told.js';
+
+type RefusalInput = {
+  gate: boolean;
+  code: string;
+  reason: string;
+  unblock: readonly string[];
+  inputFile?: string;
+  words?: Words;
+  field?: string;
+  right?: Right;
+  note?: string;
+  act?: Act;
+  cause?: unknown;
+};
 
 export class Refusal extends Error {
   readonly gate: boolean;
@@ -9,21 +24,11 @@ export class Refusal extends Error {
   readonly inputFile?: string;
   readonly words?: Words;
   readonly field?: string;
+  readonly right?: Right;
   readonly note?: string;
   readonly act?: Act;
 
-  constructor(input: {
-    gate: boolean;
-    code: string;
-    reason: string;
-    unblock: readonly string[];
-    inputFile?: string;
-    words?: Words;
-    field?: string;
-    note?: string;
-    act?: Act;
-    cause?: unknown;
-  }) {
+  constructor(input: RefusalInput) {
     super(`${input.code}: ${input.reason}`, { cause: input.cause });
     this.name = 'Refusal';
     this.gate = input.gate;
@@ -33,8 +38,25 @@ export class Refusal extends Error {
     this.inputFile = input.inputFile;
     this.words = input.words;
     this.field = input.field;
+    this.right = input.right;
     this.note = input.note;
     this.act = input.act;
+  }
+
+  hinted(hint: { readonly note?: string; readonly act?: Act }): Refusal {
+    return new Refusal({
+      gate: this.gate,
+      code: this.code,
+      reason: this.reason,
+      unblock: this.unblock,
+      inputFile: this.inputFile,
+      words: this.words,
+      field: this.field,
+      right: this.right,
+      note: hint.note ?? this.note,
+      act: hint.act ?? this.act,
+      cause: this.cause,
+    });
   }
 
   get told(): Told {
@@ -63,7 +85,15 @@ export const retriable = (error: unknown): boolean => !(error instanceof Refusal
 export function refusalOf(value: unknown): Refusal {
   if (value instanceof Refusal) return value;
   if (typeof value === 'object' && value !== null && 'code' in value && 'reason' in value) {
-    const body = value as { code: string; reason: string; unblock?: readonly string[]; inputFile?: string; words?: Words; field?: string };
+    const body = value as {
+      code: string;
+      reason: string;
+      unblock?: readonly string[];
+      inputFile?: string;
+      words?: Words;
+      field?: string;
+      right?: Right;
+    };
     return new Refusal({
       gate: body.code !== 'not-found',
       code: body.code,
@@ -72,6 +102,7 @@ export function refusalOf(value: unknown): Refusal {
       inputFile: body.inputFile,
       words: body.words,
       field: body.field,
+      right: body.right,
     });
   }
   return new Refusal({

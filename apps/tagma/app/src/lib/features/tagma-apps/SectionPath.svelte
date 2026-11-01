@@ -1,12 +1,13 @@
 <script lang="ts">
   import type { SurfaceProps } from '$lib/features/workspace/surface.js';
   import SectionPage from './SectionPage.svelte';
+  import { sectionAt } from './sectionPath.js';
 
   let { path }: SurfaceProps = $props();
 
-  const cut = $derived(path.indexOf('/'));
+  const at = $derived(sectionAt(path));
 </script>
 
-{#if cut > 0}
-  <SectionPage tagmaApp={path.slice(0, cut)} view={path.slice(cut + 1)} />
+{#if at !== null}
+  <SectionPage tagmaApp={at.tagmaApp} view={at.view} />
 {/if}

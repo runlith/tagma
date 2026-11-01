@@ -85,7 +85,7 @@
   const unreachable = $derived(!cold && downFor > UNREACHABLE_MS);
   const reconnecting = $derived(!cold && !unreachable && downFor > RECONNECTING_MS);
   const surfaces = SurfaceRegistry.use();
-  const surface = $derived(surfaces.of(router.routeId));
+  const surface = $derived(surfaces.of(router.routeId, router.params));
   const elsewhere = $derived(Boolean(router.params.project) && surface !== surfaces.home && surfaces.find(surface)?.phone !== true);
 
   function tryAgain(): void {

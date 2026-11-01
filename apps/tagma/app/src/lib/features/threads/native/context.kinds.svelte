@@ -5,7 +5,7 @@
   import { builtinKindDeclaration, type KindDeclaration } from './contribution.js';
   import { nativeStrings } from './strings.js';
 
-  const strings = nativeStrings();
+  const strings = nativeStrings(() => undefined);
 
   export const kinds: readonly KindDeclaration[] = [builtinKindDeclaration({ kind: 'context', render: contextRow })];
 </script>
