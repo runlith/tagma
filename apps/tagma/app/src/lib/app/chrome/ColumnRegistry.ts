@@ -1,7 +1,7 @@
 import { type Resolver, Service } from '@runlith/layer/key';
 import type { Point } from '@runlith/layer/Point';
 import { type ColumnDeclaration, type ColumnFrame, Columns, type ColumnState } from '$lib/features/workspace/column.js';
-import { type Surface, SurfaceRegistry } from '$lib/features/workspace/surface.js';
+import { type RouteParams, type Surface, SurfaceRegistry } from '$lib/features/workspace/surface.js';
 
 export type SectionColumn = {
   readonly id: string;
@@ -49,8 +49,8 @@ export class ColumnRegistry extends Service<ColumnRegistry>()('ColumnRegistry', 
     return id === undefined ? null : this.column(this.index.byId.get(id), app);
   }
 
-  at(routeId: string | undefined, inProject: boolean, app: Resolver): SectionColumn | null {
-    if (inProject) return this.of(this.surfaces.of(routeId), app);
+  at(routeId: string | undefined, params: RouteParams, inProject: boolean, app: Resolver): SectionColumn | null {
+    if (inProject) return this.of(this.surfaces.of(routeId, params), app);
     return routeId === undefined ? null : this.column(this.index.byRoute.get(routeId), app);
   }
 

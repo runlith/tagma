@@ -48,10 +48,10 @@ const registry = () =>
 test('a route id belongs to the surface that declared its directory, and the project root to the surface with the empty route', () => {
   const surfaces = registry();
 
-  expect(surfaces.of('/[project]/mail/[[id]]')).toBe('mail');
-  expect(surfaces.of('/[project]/b/[id]')).toBe('home');
-  expect(surfaces.of('/[project]')).toBe('home');
-  expect(surfaces.of('/[project]/archive')).toBe('archive');
+  expect(surfaces.of('/[project]/mail/[[id]]', {})).toBe('mail');
+  expect(surfaces.of('/[project]/b/[id]', {})).toBe('home');
+  expect(surfaces.of('/[project]', {})).toBe('home');
+  expect(surfaces.of('/[project]/archive', {})).toBe('archive');
   expect(surfaces.owner('b')).toBe('home');
 });
 

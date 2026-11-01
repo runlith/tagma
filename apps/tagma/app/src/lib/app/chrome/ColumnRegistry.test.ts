@@ -1,11 +1,14 @@
 import type { Resolver } from '@runlith/layer/key';
 import { makePoint } from '@runlith/layer/testing';
+import type { Component } from 'svelte';
 import { expect, test } from 'vitest';
 import { type ColumnDeclaration, Columns, type ColumnState } from '$lib/features/workspace/column.js';
-import { type SurfaceDeclaration, SurfaceRegistry, Surfaces } from '$lib/features/workspace/surface.js';
+import { type SurfaceDeclaration, type SurfaceProps, SurfaceRegistry, Surfaces } from '$lib/features/workspace/surface.js';
 import { ColumnRegistry } from './ColumnRegistry.js';
 
 const icon = (() => undefined) as unknown as SurfaceDeclaration['icon'];
+
+const page = (() => undefined) as unknown as Component<SurfaceProps>;
 
 class Inbox implements ColumnState {
   open = true;
@@ -28,6 +31,7 @@ const surfaces = new SurfaceRegistry(
     Surfaces,
     { surface: 'mail', route: 'mail', label: 'Mail', icon, rail: 1, home: true, stands: 'graph', column: 'inbox', remembers: true },
     { surface: 'notes', route: 'notes', label: 'Notes', icon, rail: 2, stands: 'graph', remembers: true },
+    { surface: 'pad', route: 'p/pad', label: 'Pad', icon, stands: 'graph', column: 'inbox', remembers: true, payload: { component: page } },
   ),
 );
 
@@ -55,13 +59,14 @@ test('a surface opens the column it declared, one with none has none, and the co
   expect(columns.of('mail', app)?.open).toBe(false);
 });
 
-test('a column standing on a global route is found by that route and is absent while its room says no', () => {
+test('a project route finds its surface’s column, a contributed page by its path, a global route by itself, and a column whose room says no is absent', () => {
   const desk = { id: 'desk', label: 'desk column', state: Inbox, routes: ['/desk'] } as unknown as ColumnDeclaration;
   const columns = registry(inbox, preferences, desk);
 
-  expect(columns.at('/[project]/mail/[[id]]', true, app)?.id).toBe('inbox');
-  expect(columns.at('/desk', false, app)?.id).toBe('desk');
-  expect(columns.at('/preferences', false, app)).toBeNull();
+  expect(columns.at('/[project]/mail/[[id]]', {}, true, app)?.id).toBe('inbox');
+  expect(columns.at('/[project]/p/[...path]', { path: 'pad' }, true, app)?.id).toBe('inbox');
+  expect(columns.at('/desk', {}, false, app)?.id).toBe('desk');
+  expect(columns.at('/preferences', {}, false, app)).toBeNull();
 });
 
 test('a column whose contribution left and came back under the same id answers the new declaration and its state', () => {

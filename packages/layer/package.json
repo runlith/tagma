@@ -172,6 +172,12 @@
       "svelte": "./src/svelte/PointView.svelte",
       "default": "./src/svelte/PointView.svelte"
     },
+    "./svelte/ShownPayload.svelte": {
+      "types": "./src/svelte/ShownPayload.svelte",
+      "browser": "./src/svelte/ShownPayload.svelte",
+      "svelte": "./src/svelte/ShownPayload.svelte",
+      "default": "./src/svelte/ShownPayload.svelte"
+    },
     "./svelte/screen.svelte": {
       "types": "./src/svelte/screen.svelte.ts",
       "browser": "./src/svelte/screen.svelte.ts",

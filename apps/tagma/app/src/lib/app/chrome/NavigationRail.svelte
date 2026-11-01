@@ -22,7 +22,7 @@
   const inProject = $derived(Boolean(router.params.project));
   const project = $derived(workspace.contextProject);
   const columns = ColumnRegistry.use();
-  const column = $derived(columns.at(router.routeId, inProject, app));
+  const column = $derived(columns.at(router.routeId, router.params, inProject, app));
 </script>
 
 <nav class="flex w-12 shrink-0 flex-col items-center border-r bg-chrome py-1.5" aria-label="Surfaces">

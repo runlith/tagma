@@ -202,10 +202,10 @@ export class SurfaceRegistry extends Service<SurfaceRegistry>()('SurfaceRegistry
     return declared;
   }
 
-  of(routeId: string | null | undefined, params?: RouteParams): Surface {
+  of(routeId: string | null | undefined, params: RouteParams): Surface {
     const route = routeId?.split('/')[2] ?? '';
     const fixed = this.byRoute.get(route) ?? this.byRoute.get('');
-    if (route === CONTRIBUTED_ROUTE && routeId != null && params !== undefined) {
+    if (route === CONTRIBUTED_ROUTE && routeId != null) {
       const wanted = memberRoute(routeId, params);
       const member = wanted === null ? undefined : this.index.memberRoutes.get(wanted);
       if (member !== undefined) return member.surface;
