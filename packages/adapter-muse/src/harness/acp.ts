@@ -1,11 +1,11 @@
 import { clientProfile } from '@runlith/hosted-runner/profile';
-import { COMPACT, COMPACTED, QUOTA, RETRYING, SAID, STEER, WITHDRAW } from '@runlith/hosted-runner/wire/extensions';
+import { ASIDE, COMPACT, COMPACTED, QUOTA, RETRYING, SAID, STEER, WITHDRAW } from '@runlith/hosted-runner/wire/extensions';
 
 export const MUSE_CODE = 'muse-code';
 
 export const MUSE_CODE_STORAGE = 'MUSE_CODE_DIR';
 
-export const MUSE_CODE_EXTENSIONS = [STEER, WITHDRAW, COMPACT, SAID, COMPACTED, RETRYING, QUOTA] as const;
+export const MUSE_CODE_EXTENSIONS = [STEER, WITHDRAW, COMPACT, ASIDE, SAID, COMPACTED, RETRYING, QUOTA] as const;
 
 export const museCodeAcp = clientProfile({
   id: MUSE_CODE,
@@ -16,5 +16,6 @@ export const museCodeAcp = clientProfile({
   usage: 'measured',
   midTurn: 'steer',
   web: 'vendor',
+  aside: 'session',
   extensions: MUSE_CODE_EXTENSIONS,
 });

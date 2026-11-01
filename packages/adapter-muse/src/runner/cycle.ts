@@ -10,13 +10,13 @@ import { Handed } from '@runlith/hosted-runner/handed';
 import { historyBlocks } from '@runlith/hosted-runner/history';
 import { Options, type ClientLaunch } from '@runlith/hosted-runner/options';
 import type { Output } from '@runlith/hosted-runner/output';
-import { QUOTA } from '@runlith/hosted-runner/wire/extensions';
+import { COST, QUOTA } from '@runlith/hosted-runner/wire/extensions';
 import type { HostedToolWire } from '@runlith/hosted-runner/wire/messages';
 import { MUSE_CODE_EXTENSIONS } from '../harness/acp.js';
 import type { McpServerInput } from '@runlith/mcp/server';
 import { MuseSdk, type Frame, type Host, type MuseRefused } from './channel.js';
-import { Feed } from './feed.js';
-import { Compact, ItemEvent, Models, Opened, Quota, Started, TurnStarted, type Item } from './frames.js';
+import { Feed, NOTHING, spentOf, sum, type Spent } from './feed.js';
+import { Compact, ItemEvent, Models, Opened, Quota, Started, TokenUsage, TurnCompleted, TurnStarted, type Item } from './frames.js';
 import { writeSettings, type MusePlace } from './home.js';
 
 const PROVIDER_ID = 'meta';
@@ -51,6 +51,14 @@ type Live = {
   readonly windows: ReadonlyMap<string, number>;
 };
 type Compacting = { readonly session: string; readonly output: Output; readonly done: Deferred.Deferred<Item, AgentFault> };
+type Asking = {
+  readonly session: string;
+  readonly done: Deferred.Deferred<AsideAnswer, AgentFault>;
+  readonly said: string[];
+  spent: Spent;
+  usd: number | null;
+};
+type AsideAnswer = { readonly text: string; readonly usage?: Spent; readonly _meta?: Readonly<Record<string, unknown>> };
 
 const faultOf = (refused: MuseRefused): AgentFault =>
   new AgentFault({
@@ -119,6 +127,7 @@ export const makeMuseCycle = Effect.fnUntraced(function* (door: HostedDoor, proc
   let live: Live | null = null;
   let feed: Feed | null = null;
   let compacting: Compacting | null = null;
+  let asking: Asking | null = null;
   let output: Output | null = null;
   let observed: unknown = null;
   let window: number | null = null;
@@ -227,8 +236,44 @@ export const makeMuseCycle = Effect.fnUntraced(function* (door: HostedDoor, proc
     );
   });
 
+  const aside = Effect.fnUntraced(function* (frame: Frame, side: Asking) {
+    if (frame.method === 'item/completed') {
+      const read = Schema.decodeUnknownResult(ItemEvent)(frame.params);
+      if (Result.isSuccess(read) && read.success.item.kind === 'agentMessage' && read.success.item.text !== undefined)
+        side.said.push(read.success.item.text);
+      return;
+    }
+    if (frame.method === 'session/tokenUsage') {
+      const read = Schema.decodeUnknownResult(TokenUsage)(frame.params);
+      if (Result.isFailure(read)) return;
+      side.spent = sum(side.spent, spentOf(read.success.usage));
+      side.usd = read.success.cumulative?.cost?.usd ?? side.usd;
+      return;
+    }
+    if (frame.request) {
+      process.stderr(`Muse Code asked ${frame.method} inside a side question; it stays unanswered\n`);
+      return;
+    }
+    if (frame.method !== 'turn/completed') return;
+    const read = Schema.decodeUnknownResult(TurnCompleted)(frame.params);
+    if (Result.isFailure(read)) return;
+    if (read.success.terminal !== 'completed')
+      return yield* Deferred.fail(
+        side.done,
+        new AgentFault({
+          code: FAULT.internal,
+          message: read.success.error?.message ?? `Muse Code ended the side question ${read.success.terminal}`,
+        }),
+      );
+    const usage = side.spent === NOTHING ? undefined : side.spent;
+    const cost = side.usd === null ? undefined : { amount: side.usd, currency: 'USD', basis: 'estimate' };
+    yield* Deferred.succeed(side.done, { text: side.said.join('\n\n'), usage, _meta: cost === undefined ? undefined : { [COST]: cost } });
+  });
+
   const route = Effect.fnUntraced(function* (frame: Frame) {
     if (frame.method === 'usage/changed') return yield* quota(frame);
+    const side = asking;
+    if (side !== null && frame.params.sessionId === side.session) return yield* aside(frame, side);
     const standing = compacting;
     if (standing !== null && frame.method.startsWith('item/') && (yield* compacted(frame, standing))) return;
     const turn = feed;
@@ -245,6 +290,8 @@ export const makeMuseCycle = Effect.fnUntraced(function* (door: HostedDoor, proc
     if (turn !== null) yield* Deferred.succeed(turn.done, { status: 'error', detail: reason });
     const standing = compacting;
     if (standing !== null) yield* Deferred.fail(standing.done, new AgentFault({ code: FAULT.internal, message: reason }));
+    const side = asking;
+    if (side !== null) yield* Deferred.fail(side.done, new AgentFault({ code: FAULT.internal, message: reason }));
     yield* settleWords();
     yield* process.died(reason);
   });
@@ -529,6 +576,42 @@ export const makeMuseCycle = Effect.fnUntraced(function* (door: HostedDoor, proc
               Effect.asVoid(Deferred.fail(done, new AgentFault({ code: -32800, message: 'the compaction was cancelled' }))),
             ),
           } satisfies ClientCompaction;
+        }),
+        aside: Effect.fnUntraced(function* (question: string) {
+          if (asking !== null)
+            return yield* new AgentFault({ code: FAULT.invalidRequest, message: 'a side question is already being answered' });
+          const standing = live ?? (yield* attach(seat, yield* wanted()));
+          yield* load(standing, seat);
+          const opened = yield* standing.host
+            .command('session/sideChat', { sessionId: seat.id })
+            .pipe(Effect.mapError(faultOf), Effect.flatMap(decoded(Opened, 'session/sideChat')));
+          const side = opened.session.sessionId;
+          const { model, effort } = options.read();
+          if (model !== null)
+            yield* standing.host
+              .command('session/setModel', { sessionId: side, model: { modelId: model, providerId: PROVIDER_ID } })
+              .pipe(Effect.mapError(faultOf));
+          if (effort !== null)
+            yield* standing.host
+              .command('session/setReasoningEffort', { sessionId: side, reasoningEffort: effort })
+              .pipe(Effect.mapError(faultOf));
+          const done = yield* Deferred.make<AsideAnswer, AgentFault>();
+          asking = { session: side, done, said: [], spent: NOTHING, usd: null };
+          return yield* standing.host
+            .command(
+              'turn/start',
+              { sessionId: side, input: [{ type: 'text', text: question }], ...(effort === null ? {} : { reasoningEffort: effort }) },
+              runner.mint(),
+            )
+            .pipe(
+              Effect.mapError(faultOf),
+              Effect.andThen(Deferred.await(done)),
+              Effect.ensuring(
+                Effect.sync(() => {
+                  asking = null;
+                }),
+              ),
+            );
         }),
         close: Effect.suspend(() => (live?.loaded.has(seat.id) === true ? drop() : Effect.void)),
       },

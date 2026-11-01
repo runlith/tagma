@@ -554,6 +554,44 @@ it.effect('blank words never reach Muse, and a turn costs what Muse priced the s
   }),
 );
 
+it.effect('a side question runs in a side session on the thread model and answers with its text and spend', () =>
+  Effect.gen(function* () {
+    const { agent, sent } = yield* world((one, emit) => {
+      if (one.method === 'session/start') return ok(one, { session: { sessionId: one.params.sessionId } });
+      if (one.method === 'session/sideChat') return ok(one, { session: { sessionId: 'side-1' } });
+      if (one.method === 'turn/start' && one.params.sessionId === 'side-1') {
+        const usage = { inputTokens: 17_624, outputTokens: 5, cachedTokens: 0, reasoningTokens: 0 };
+        return Effect.as(
+          Effect.forkDetach(
+            Effect.gen(function* () {
+              yield* emit({
+                method: 'session/tokenUsage',
+                params: { sessionId: 'side-1', turnId: one.id, modelId: null, usage, promptTokens: 17_624 },
+              });
+              yield* emit({
+                method: 'item/completed',
+                params: {
+                  sessionId: 'side-1',
+                  item: { itemId: 'a', kind: 'agentMessage', status: 'completed', turnId: one.id, text: 'PELICAN-7' },
+                },
+              });
+              yield* emit({ method: 'turn/completed', params: { sessionId: 'side-1', turnId: one.id, terminal: 'completed' } });
+            }),
+          ),
+          { commandId: one.id, status: 'accepted', turnId: one.id, disposition: 'started' },
+        );
+      }
+      return ok(one);
+    });
+    const session = yield* agent.newSession({ cwd: '/work', mcpServers: [] });
+    const asked = yield* agent.extensions!['_tagma/aside']!({ sessionId: session.sessionId, question: 'What is the code word?' });
+    expect(asked).toMatchObject({ text: 'PELICAN-7', usage: { inputTokens: 17_624, outputTokens: 5 } });
+    expect(sent.find((one) => one.method === 'session/setModel' && one.params.sessionId === 'side-1')?.params).toMatchObject({
+      model: { modelId: 'muse-spark-1.2' },
+    });
+  }),
+);
+
 it.effect('a tool whose definition changed under the same name restarts the host and resumes the same session', () =>
   Effect.gen(function* () {
     const turns = ['01a19573-1cea-7c2e-90b4-000000000011', '01a19573-1cea-7c2e-90b4-000000000012'];

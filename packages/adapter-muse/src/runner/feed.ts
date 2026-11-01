@@ -83,7 +83,7 @@ export const spentOf = (usage: Tokens) => ({
   thoughtTokens: usage.reasoningTokens,
 });
 
-type Spent = ReturnType<typeof spentOf>;
+export type Spent = ReturnType<typeof spentOf>;
 
 const remainderOf = (whole: Spent, parts: Spent): Spent | 'negative' | undefined => {
   const left = {
@@ -116,9 +116,9 @@ type FeedPorts = {
   readonly priced: (usd: number) => void;
 };
 
-const NOTHING: Spent = spentOf({ inputTokens: 0, outputTokens: 0, cachedTokens: 0, reasoningTokens: 0 });
+export const NOTHING: Spent = spentOf({ inputTokens: 0, outputTokens: 0, cachedTokens: 0, reasoningTokens: 0 });
 
-const sum = (a: Spent, b: Spent): Spent => ({
+export const sum = (a: Spent, b: Spent): Spent => ({
   inputTokens: a.inputTokens + b.inputTokens,
   outputTokens: a.outputTokens + b.outputTokens,
   totalTokens: a.totalTokens + b.totalTokens,

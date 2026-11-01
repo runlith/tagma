@@ -61,6 +61,7 @@ export interface ClientDriver {
   readonly handed?: Handed;
   readonly queued?: (words: readonly string[]) => Effect.Effect<void>;
   readonly compact?: (instructions: string, output: Output) => Effect.Effect<ClientCompaction, AgentFault>;
+  readonly aside?: (question: string) => Effect.Effect<unknown, AgentFault>;
   readonly close: Effect.Effect<void>;
 }
 
@@ -220,6 +221,7 @@ export const clientSession = Effect.fnUntraced(function* (
             );
           }),
     cancel,
+    aside: client.aside,
     close: Effect.fnUntraced(function* () {
       const running = current;
       yield* cancel();
