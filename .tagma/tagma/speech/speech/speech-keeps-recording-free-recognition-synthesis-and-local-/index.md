@@ -96,18 +96,18 @@ Server:
 
 App:
 
-9. **Window parts.** `app/chrome` declares two points:
-   - a top-bar point, drawn after `CaptureChip`;
-   - a window point, for parts with no place of their own, such as key handlers.
+9. **Window parts.** Two points, `TopBarParts` and `WindowParts` (`shared/window/parts.ts`), declared below speech because chrome imports speech; chrome's `FrameLayer` lists them:
+   - the top-bar point, drawn after `CaptureChip`;
+   - the window point, drawn by `Shell`, for parts with no place of their own, such as key handlers.
 
-   Items of both may name `right?` and `offer?`, or neither. An ungated item draws whatever the right answers. `TopBar` and `Shell` then name no speech part beyond `CaptureChip` and dictation's.
-10. **Draft attachments by kind.** Threads declares a point of draft attachment kinds `{ kind, card, file(item) → File | null, sent?(item, thread) }`.
+   Items of both may name `right?` and `offer?`, or neither, judged as reads. An ungated item draws whatever the right answers. `TopBar` and `Shell` then name no speech part beyond `CaptureChip` and dictation's.
+10. **Draft attachments by kind.** A point of staged-item kinds `StagedKinds` `{ kind, card, file(app, item) → File | null, sent?(app, item, thread) }` and the stage-and-send port `DraftStaging` stand in `shared/threads/staged.ts`, below speech, because threads imports speech's dictation. Threads lists the point and fills the port from `ThreadOnScreen`. A kind's members take the window's resolver, as a tab kind's `stands` does, because a point item is a value with no services of its own. A staged item is `{ kind, key, title, data }`: `key` is its identity in the draft, `data` belongs to the kind.
     - `Draft` stores staged items with their kind. At send it resolves each through its kind, and calls `sent` once the thread accepted the message.
-    - A restored draft drops an item whose kind the build lacks, and so do items stored by an earlier release with no kind. Both are window-local: what such an item referred to stays with its owner.
-    - Threads exports a port that stages an item into the on-screen draft and sends it (today `CallScreen`), and fills it from `ThreadOnScreen`.
-11. **Former routes of a contributed surface.** A surface may declare the routes it answered before. The window sends an address under a former route to the surface's `p/` address, keeping the rest of the path and the query.
-12. **View bridge methods are a point.** The view host declares a point of `tagma/<name>` methods with their notifications. `tagma/speech` keeps `status`, `recognize`, `finish`, `unsubscribe`, `speak` and `silence`, and the apps skill reference documents only those.
-13. **The capture chip** counts captures under their nouns and stops them through item 2.
+    - A restored draft drops an item whose kind the build lacks, and so do items stored by an earlier release with no kind. Both are window-local: what such an item referred to stays with its owner. The point takes members only while the app starts, so a restore reads the kinds as final.
+    - The `staged` topic carries an item to a thread opened beside.
+11. **Former routes of a contributed surface.** A surface under `p/` may declare `formerRoutes`, claimed like its route. When no route file answers an address, the window sends one under a former route to the surface's `p/` address, keeping the rest of the path and the query. While a route file still answers a former route, it serves it.
+12. **View bridge methods are a point.** `TagmaMethods` (`features/views/methods.ts`) holds `tagma/<name>` methods `{ name, notifications, method(owners, mount) }`; a notification name is claimed by one method. Speech contributes `tagma/speech` whole, `listening` and `transcript` included, until the module that keeps captures contributes its own method; then `tagma/speech` keeps `status`, `recognize`, `finish`, `unsubscribe`, `speak` and `silence`, and the apps skill reference documents only those.
+13. **The capture chip** counts captures under their nouns and stops them through item 2. A part that draws a capture itself claims it from `Captures`, and the chip leaves the claimed ones out.
 
 Speech's settings section needs no new point: `SettingsPage.svelte` already draws its contributions, so `Section.svelte` keeps only speech's own cards.
 
