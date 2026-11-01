@@ -3,14 +3,20 @@ import { join, resolve } from 'node:path';
 import { Cause, Clock, Deferred, Effect, Exit, Fiber, FileSystem, Schema, Stream } from 'effect';
 import { AgentFault, FAULT } from '@runlith/acp/agent';
 import { openHost, type HostInput } from '../host.js';
-import { isSessionNotFoundError, isUnauthorizedError, type OpenCodeEvent, type SessionStructuredError } from '@opencode/client';
+import {
+  isSessionNotFoundError,
+  isUnauthorizedError,
+  type OpenCodeEvent,
+  type SessionStructuredError,
+  type TokenUsageInfo,
+} from '@opencode/client';
 import { modelSelection } from '../selection.js';
 import { familyRetries, type WireFailureFamily } from '@runlith/llm/schema/errors';
 import type { TransportFailure } from '@runlith/agent/transcript/entries';
 import { MEASURED, RETRYING } from '@runlith/hosted-runner/wire/extensions';
 import type { Process } from '@runlith/hosted-runner/cycle';
 import type { Relayed } from '@runlith/hosted-runner/relay';
-import { OpenCodeSdk, type Sending } from './channel.js';
+import { OpenCodeSdk, type Compacted, type Sending } from './channel.js';
 import type { ClientOutcome, ClientRun } from '@runlith/hosted-runner/client';
 import { preparation } from './plugin.js';
 import source from './plugin.ts' with { type: 'text' };
@@ -79,6 +85,32 @@ const promptOf = (blocks: Sending['blocks']) => {
     } else throw new Error(`OpenCode cannot receive ${block.type} content`);
   }
   return { text, files };
+};
+
+const spending = (tokens: TokenUsageInfo, message: string, sentAt: string, attempt = 0) => {
+  const input = tokens.input + tokens.cache.read + tokens.cache.write;
+  const output = tokens.output + tokens.reasoning;
+  return {
+    usage: {
+      totalTokens: input + output,
+      inputTokens: input,
+      outputTokens: output,
+      thoughtTokens: tokens.reasoning,
+      cachedReadTokens: tokens.cache.read,
+      cachedWriteTokens: tokens.cache.write,
+    },
+    measured: {
+      message,
+      sentAt,
+      input,
+      output,
+      reasoning: tokens.reasoning,
+      cacheRead: tokens.cache.read,
+      cacheWrite: tokens.cache.write,
+      ttlSeconds: null,
+      attempt,
+    },
+  };
 };
 
 type Active = {
@@ -159,7 +191,7 @@ export const makeOpenCodeSdk = Effect.fn('opencode.makeSdk')(function* (home: Ho
         share: 'disabled',
         update: 'disable',
         warming: false,
-        compaction: { auto: false },
+        compaction: { auto: true },
         plugins: [{ package: plugin, options: { endpoint: `http://127.0.0.1:${callback.port}/call`, secret } }],
       }),
     },
@@ -192,7 +224,28 @@ export const makeOpenCodeSdk = Effect.fn('opencode.makeSdk')(function* (home: Ho
         opening.id ??
         (yield* Effect.tryPromise({ try: () => client.session.create({ location: { directory: opening.cwd } }), catch: failed })).id;
       let run: ClientRun | null = null;
+      let compacting: {
+        readonly request: string;
+        readonly admitted: Deferred.Deferred<void>;
+        readonly done: Deferred.Deferred<Compacted, AgentFault>;
+        readonly settled: Deferred.Deferred<void>;
+        cancelled: boolean;
+      } | null = null;
+      const cancelCompaction = Effect.fn('OpenCodeSdk.cancelCompaction')(function* () {
+        const current = compacting;
+        if (current === null) return;
+        current.cancelled = true;
+        yield* Deferred.await(current.admitted);
+        yield* Effect.tryPromise({ try: () => client.session.interrupt({ sessionID: id }), catch: failed });
+        yield* Effect.tryPromise({ try: () => client.session.wait({ sessionID: id }), catch: failed });
+        const pending = yield* Effect.tryPromise({ try: () => client.session.inbox.list({ sessionID: id }), catch: failed });
+        if (pending.some((item) => item.id === current.request))
+          yield* Effect.tryPromise({ try: () => client.session.inbox.cancel({ sessionID: id, inboxID: current.request }), catch: failed });
+        yield* Deferred.fail(current.done, new AgentFault({ code: -32800, message: 'OpenCode compaction was cancelled' }));
+        yield* Deferred.await(current.settled);
+      });
       const close = Effect.fnUntraced(function* () {
+        yield* cancelCompaction().pipe(Effect.orDie);
         if (run !== null) {
           yield* run.cancel.pipe(Effect.orDie);
           yield* run.wait.pipe(Effect.orDie);
@@ -201,8 +254,103 @@ export const makeOpenCodeSdk = Effect.fn('opencode.makeSdk')(function* (home: Ho
       return {
         id,
         close: close(),
+        cancelCompaction: cancelCompaction(),
+        compact: Effect.fn('OpenCodeSdk.compact')(function* (input) {
+          if (compacting !== null)
+            return yield* new AgentFault({ code: FAULT.invalidRequest, message: 'OpenCode already has a pending compaction' });
+          const request = `msg_${randomUUID().replaceAll('-', '')}`;
+          const done = yield* Deferred.make<Compacted, AgentFault>();
+          const current = {
+            request,
+            done,
+            admitted: yield* Deferred.make<void>(),
+            settled: yield* Deferred.make<void>(),
+            cancelled: false,
+          };
+          compacting = current;
+          return yield* Effect.scoped(
+            Effect.gen(function* () {
+              const selection = yield* Effect.try({
+                try: () => modelSelection(input.selection.model, input.selection.effort),
+                catch: failed,
+              });
+              const connected = yield* Deferred.make<void>();
+              let started: number | null = null;
+              const controller = yield* Effect.acquireRelease(
+                Effect.sync(() => new AbortController()),
+                (controller) => Effect.sync(() => controller.abort()),
+              );
+              const events = yield* Effect.forkScoped(
+                Stream.runForEach(Stream.fromAsyncIterable(client.event.subscribe({ signal: controller.signal }), failed), (event) =>
+                  Effect.gen(function* () {
+                    if (event.type === 'server.connected') {
+                      yield* Deferred.succeed(connected, undefined);
+                      return;
+                    }
+                    if (!('sessionID' in event.data) || event.data.sessionID !== id) return;
+                    if (event.type === 'session.compaction.started' && event.data.inputID === request) started = event.created;
+                    if (started === null) return;
+                    if (event.type !== 'session.compaction.ended' && event.type !== 'session.compaction.failed') return;
+                    const spent =
+                      event.data.tokens === undefined ? undefined : spending(event.data.tokens, request, new Date(started).toISOString());
+                    if (spent !== undefined && input.at === 'step') yield* input.measure(spent.measured);
+                    if (event.type === 'session.compaction.failed') {
+                      yield* Deferred.fail(
+                        done,
+                        new AgentFault({
+                          code: current.cancelled
+                            ? -32800
+                            : classified(event.data.error, false).reason?.family === 'auth'
+                              ? FAULT.authRequired
+                              : FAULT.internal,
+                          message: event.data.error.message,
+                          data: { usage: spent?.usage },
+                        }),
+                      );
+                    } else yield* Deferred.succeed(done, { summary: event.data.text, ...spent });
+                  }),
+                ).pipe(
+                  Effect.andThen(
+                    Effect.fail(new AgentFault({ code: FAULT.internal, message: 'The OpenCode event stream ended during compaction' })),
+                  ),
+                ),
+              );
+              yield* Effect.raceFirst(Deferred.await(connected), Fiber.join(events));
+              yield* Effect.tryPromise({
+                try: () =>
+                  client
+                    .rpc(preparation)
+                    .compact(
+                      { sessionID: id, id: request, system: input.system, instructions: input.instructions },
+                      { location: { directory: opening.cwd } },
+                    ),
+                catch: failed,
+              });
+              yield* Effect.tryPromise({ try: () => client.session.switchModel({ sessionID: id, model: selection }), catch: failed });
+              if (current.cancelled)
+                return yield* new AgentFault({ code: -32800, message: 'OpenCode compaction was cancelled before admission' });
+              yield* Effect.tryPromise({
+                try: () => client.session.compact({ sessionID: id, id: request, delivery: input.at === 'step' ? 'steer' : 'queue' }),
+                catch: failed,
+              });
+              yield* Deferred.succeed(current.admitted, undefined);
+              const result = yield* Effect.raceFirst(Deferred.await(done), Fiber.join(events));
+              if (input.at === 'end') yield* Effect.tryPromise({ try: () => client.session.wait({ sessionID: id }), catch: failed });
+              return result;
+            }),
+          ).pipe(
+            Effect.ensuring(Deferred.succeed(current.admitted, undefined)),
+            Effect.ensuring(
+              Effect.sync(() => {
+                compacting = null;
+              }),
+            ),
+            Effect.ensuring(Deferred.succeed(current.settled, undefined)),
+          );
+        }),
         send: Effect.fn('OpenCodeSdk.send')(function* (input) {
-          if (active !== null) return yield* new AgentFault({ code: FAULT.invalidRequest, message: 'OpenCode already has an active turn' });
+          if (active !== null || compacting !== null)
+            return yield* new AgentFault({ code: FAULT.invalidRequest, message: 'OpenCode already has active work' });
           const selection = yield* Effect.try({ try: () => modelSelection(input.selection.model, input.selection.effort), catch: failed });
           const prompt = yield* Effect.try({ try: () => promptOf(input.blocks), catch: failed });
           const tools = yield* Effect.forEach(input.tools, (tool) =>
@@ -224,6 +372,7 @@ export const makeOpenCodeSdk = Effect.fn('opencode.makeSdk')(function* (home: Ho
           let sent = false;
           let modelStarted = false;
           let started = 0;
+          let compactionStarted = 0;
           let attempt = 0;
           const running: Active = { id, input, names, returned };
           active = running;
@@ -333,33 +482,42 @@ export const makeOpenCodeSdk = Effect.fn('opencode.makeSdk')(function* (home: Ho
                 yield* seal(event.data.assistantMessageID);
                 const tokens = event.data.tokens;
                 if (tokens !== undefined) {
-                  const inputTokens = tokens.input + tokens.cache.read + tokens.cache.write;
-                  const outputTokens = tokens.output + tokens.reasoning;
                   const sentAt = new Date(started || (yield* Clock.currentTimeMillis)).toISOString();
+                  const spent = spending(tokens, event.data.assistantMessageID, sentAt, attempt);
                   yield* input.event({
                     type: 'usage',
                     update: {
                       sessionUpdate: 'usage_update',
-                      used: inputTokens + outputTokens,
+                      used: spent.usage.totalTokens,
                       size: 0,
-                      _meta: {
-                        [MEASURED]: {
-                          message: event.data.assistantMessageID,
-                          sentAt,
-                          input: inputTokens,
-                          output: outputTokens,
-                          reasoning: tokens.reasoning,
-                          cacheRead: tokens.cache.read,
-                          cacheWrite: tokens.cache.write,
-                          ttlSeconds: null,
-                          attempt,
-                        },
-                      },
+                      _meta: { [MEASURED]: spent.measured },
                     },
                   });
                 }
                 yield* input.event({ type: 'phase', phase: 'calling' });
                 attempt = 0;
+                break;
+              }
+              case 'session.compaction.started':
+                if (event.data.reason === 'auto') compactionStarted = event.created;
+                break;
+              case 'session.compaction.ended':
+              case 'session.compaction.failed': {
+                if (event.data.reason !== 'auto') break;
+                if (event.data.tokens !== undefined) {
+                  const spent = spending(event.data.tokens, event.id, new Date(compactionStarted || event.created).toISOString());
+                  yield* input.event({
+                    type: 'usage',
+                    update: {
+                      sessionUpdate: 'usage_update',
+                      used: spent.usage.totalTokens,
+                      size: 0,
+                      _meta: { [MEASURED]: spent.measured },
+                    },
+                  });
+                }
+                if (event.type === 'session.compaction.ended')
+                  yield* input.event({ type: 'compacted', summary: event.data.text, trigger: 'auto' });
                 break;
               }
               case 'session.retry.scheduled': {

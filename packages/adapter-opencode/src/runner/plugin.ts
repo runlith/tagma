@@ -35,10 +35,25 @@ export const preparation = {
       },
       output: { type: 'null' },
     },
+    compact: {
+      input: {
+        type: 'object',
+        properties: {
+          sessionID: { type: 'string', minLength: 1 },
+          id: { type: 'string', minLength: 1 },
+          system: { type: 'string' },
+          instructions: { type: 'string' },
+        },
+        required: ['sessionID', 'id', 'system', 'instructions'],
+        additionalProperties: false,
+      },
+      output: { type: 'null' },
+    },
   },
   events: {},
 } as const satisfies Rpc.PortableDefinition;
 
+type CompactionInstructions = { readonly sessionID: string; readonly id: string; readonly system: string; readonly instructions: string };
 type Content = { readonly type: 'text'; readonly text: string } | { readonly type: 'file'; readonly uri: string; readonly mime: string };
 const contentOf = (value: unknown): readonly Content[] => {
   if (!Array.isArray(value)) throw new Error('The hosted callback returned invalid content');
@@ -58,10 +73,15 @@ export default {
     const secret: unknown = ctx.options.secret;
     if (typeof endpoint !== 'string' || typeof secret !== 'string') throw new Error('The hosted plugin has no callback address');
     let frozen: Preparation | null = null;
+    let compacting: CompactionInstructions | null = null;
     await ctx.rpc.register(preparation, {
       async prepare(input) {
         frozen = input as Preparation;
         await ctx.tool.reload();
+        return null;
+      },
+      async compact(input) {
+        compacting = input as CompactionInstructions;
         return null;
       },
     });
@@ -121,6 +141,15 @@ export default {
       });
       const admitted = new Set(frozen.tools.map((tool) => tool.name));
       event.tools = Object.fromEntries(Object.entries(event.tools).filter(([name]) => admitted.has(name)));
+    });
+    await ctx.session.hook('compaction', async (event) => {
+      const messages = await ctx.session.context({ sessionID: event.sessionID });
+      const current = messages.findLast((message) => message.type === 'compaction' && message.status === 'running');
+      const requested = compacting?.sessionID === event.sessionID && compacting.id === current?.id ? compacting : null;
+      const system = requested?.system ?? (frozen?.sessionID === event.sessionID ? frozen.system : null);
+      if (system === null) throw new Error('The hosted session has no prepared compaction');
+      event.system = [{ type: 'text', text: [system, requested?.instructions].filter(Boolean).join('\n\n') }];
+      event.tools = {};
     });
     await ctx.session.hook('title', (event) => {
       event.result = 'Tagma';

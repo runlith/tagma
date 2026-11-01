@@ -46,6 +46,7 @@ export const TransportFailure = Schema.Struct({
   httpStatus: Schema.optional(Schema.Number),
   retryable: Schema.NullOr(Schema.Boolean),
   modelStarted: Schema.NullOr(Schema.Boolean),
+  contextOverflow: Schema.optional(Schema.Boolean),
   detail: Schema.optional(Schema.String),
   rateLimit: Schema.optional(HttpRateLimitDetails),
   reason: Schema.optional(WireFailureRecord),

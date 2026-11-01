@@ -122,7 +122,7 @@ it.effect('Cursor seals a message after its calls, returns hosted results and re
   }),
 );
 
-it.effect('terminal SDK error codes retain login and capacity failure semantics before a model response', () =>
+it.effect('terminal SDK failures identify context overflow while retaining login and capacity semantics', () =>
   Effect.gen(function* () {
     const agent: sdk.SDKAgent = {
       agentId: 'session',
@@ -148,7 +148,15 @@ it.effect('terminal SDK error codes retain login and capacity failure semantics 
         wait: async () => ({
           id: 'run',
           status: 'error',
-          error: { message: 'rejected', code: typeof message === 'string' ? message : message.text },
+          error: {
+            message:
+              (typeof message === 'string' ? message : message.text) === 'invalid_argument'
+                ? 'Prompt is too long'
+                : (typeof message === 'string' ? message : message.text) === 'resource_exhausted'
+                  ? 'Rate limit exceeded: too many tokens'
+                  : 'invalid key',
+            code: typeof message === 'string' ? message : message.text,
+          },
         }),
       }),
     };
@@ -157,9 +165,10 @@ it.effect('terminal SDK error codes retain login and capacity failure semantics 
       (spy) => Effect.sync(() => spy.mockRestore()),
     );
     const channel = yield* cursorSdk(sdk).open({ id: null, cwd: '/work', directory: '/store', apiKey: 'key', model: undefined });
-    for (const [code, family, retryable] of [
-      ['unauthenticated', 'auth', false],
-      ['resource_exhausted', 'rate-limit', true],
+    for (const [code, family, retryable, contextOverflow] of [
+      ['unauthenticated', 'auth', false, false],
+      ['resource_exhausted', 'rate-limit', true, false],
+      ['invalid_argument', 'invalid-request', false, true],
     ] as const) {
       const run = yield* channel.send({
         id: code,
@@ -170,7 +179,10 @@ it.effect('terminal SDK error codes retain login and capacity failure semantics 
         event: () => Effect.void,
         call: () => Effect.die('no tools'),
       });
-      expect(yield* run.wait).toMatchObject({ status: 'error', failure: { modelStarted: false, retryable, reason: { family } } });
+      expect(yield* run.wait).toMatchObject({
+        status: 'error',
+        failure: { modelStarted: false, retryable, contextOverflow, reason: { family } },
+      });
     }
     yield* channel.close;
   }),

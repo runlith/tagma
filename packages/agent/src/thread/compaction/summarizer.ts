@@ -32,6 +32,7 @@ export type ThreadSummarizerAsk = {
   readonly threadId: string;
   readonly runId?: string;
   readonly running: boolean;
+  readonly foreign?: boolean;
 };
 
 export type ThreadSummarizerPort = (ask: ThreadSummarizerAsk) => Effect.Effect<ThreadSummarizers, ThreadPortFailure>;

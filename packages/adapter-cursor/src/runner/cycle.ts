@@ -4,7 +4,7 @@ import { Effect, FileSystem } from 'effect';
 import { AgentFault, FAULT } from '@runlith/acp/agent';
 import type { ContentBlock } from '@runlith/acp/content';
 import { cursorSelection } from '../selection.js';
-import { COMPACTED, RETRYING, SAID } from '@runlith/hosted-runner/wire/extensions';
+import { RETRYING, SAID } from '@runlith/hosted-runner/wire/extensions';
 import type { Cycle, Process } from '@runlith/hosted-runner/cycle';
 import { clientSession } from '@runlith/hosted-runner/client';
 import type { HostedDoor } from '@runlith/hosted-runner/door';
@@ -38,7 +38,7 @@ export const makeCursorCycle = Effect.fnUntraced(function* (door: HostedDoor, pr
     return model === null ? undefined : cursorSelection(model, effort, parameters);
   };
   return {
-    extensions: [SAID, COMPACTED, RETRYING],
+    extensions: [SAID, RETRYING],
     initialize: {
       protocolVersion: 1,
       agentInfo: { name: 'tagma-cursor', version: launch.version },

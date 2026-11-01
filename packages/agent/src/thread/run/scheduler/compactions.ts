@@ -7,6 +7,7 @@ import {
   behindBarrier,
   compactionHead,
   inboxCompactionValues,
+  inboxSignalValues,
   isCompactionRequest,
   isReaderWordsItem,
   namedSummarizerOf,
@@ -16,7 +17,7 @@ import {
 import { threadCompactionEvent } from '../../events';
 import { actDigest } from '../../keyed';
 import { TransportCannotError } from '../../record';
-import type { ThreadRow, ThreadRunRow } from '../../rows';
+import type { ThreadMetadataRow, ThreadRow, ThreadRunRow } from '../../rows';
 import type { ThreadCompactionPoint, ThreadInboxItem, ThreadInboxItemValues } from '../../storage/inbox';
 import { ThreadRunConflictError, type ThreadRunStartKey } from '../../storage/runs';
 import { ThreadCallBroke, threadCauseOf, type ThreadBorderFailed } from '../../ThreadBorder';
@@ -121,7 +122,9 @@ export const makeCompactions = Effect.fnUntraced(function* ({
     const capability = input.thread.capabilities.compaction;
     const vendor = capability === 'session' && input.summarizing?.kind === 'own';
     const folding: ThreadCompactionRunInput =
-      (capability === 'session' || capability === 'foreign') && !vendor ? { ...input, releases: handover.restore(input.thread) } : input;
+      (capability === 'session' || capability === 'foreign' || input.recovery === true) && !vendor
+        ? { ...input, releases: handover.restore(input.thread) }
+        : input;
     const opened = yield* openings.open(input.thread, {
       kind: 'compaction',
       approval: { mode: 'trust', interactive: false },
@@ -156,7 +159,10 @@ export const makeCompactions = Effect.fnUntraced(function* ({
         ? { compacts: ordered(input, held, entering) }
         : {
             works: Effect.fnUntraced(function* (run: ThreadRunRow) {
-              const work = yield* runs.work(folding, run, yield* Ref.get(held));
+              const work =
+                capability === 'vendor' && input.recovery !== true
+                  ? cannotCompact(input.thread)
+                  : yield* runs.work(folding, run, yield* Ref.get(held));
               const tracking = yield* execution.track(run, { work });
               tracking.startTracking();
               yield* Ref.set(done, tracking.done);
@@ -187,7 +193,15 @@ export const makeCompactions = Effect.fnUntraced(function* ({
     });
   const cannotCompact = (thread: ThreadRow): Effect.Effect<never, ThreadBorderFailed> =>
     new ThreadCallBroke({
-      cause: new TransportCannotError({ threadId: thread.id, capability: 'compaction', adapter: thread.transport.adapter }),
+      cause: new TransportCannotError({
+        threadId: thread.id,
+        capability: 'compaction',
+        adapter: thread.transport.adapter,
+        reason:
+          thread.capabilities.compaction === 'vendor'
+            ? "The vendor owns this session's compaction and exposes no compaction API; Tagma cannot compact it on request without replacing the session and losing its warm cache."
+            : undefined,
+      }),
     });
   const foldsAfterTurn = (thread: ThreadRow, named: ThreadSummarizerSelection | undefined): Effect.Effect<boolean, ThreadBorderFailed> =>
     thread.capabilities.compaction === 'foreign'
@@ -341,6 +355,47 @@ export const makeCompactions = Effect.fnUntraced(function* ({
     return yield* new ThreadCallBroke({ cause: new ThreadRunConflictError({ threadId: thread.id, runId: queued.runId ?? thread.id }) });
   });
   return {
+    recover: Effect.fn('Compactions.recover')(function* (
+      thread: ThreadMetadataRow,
+      runId: string,
+    ): Effect.fn.Return<boolean, ThreadBorderFailed> {
+      if (thread.capabilities.compaction !== 'vendor') return false;
+      const threadId = thread.id;
+      const run = yield* ledger.latestRun(threadId);
+      if (run === null || run.id !== runId || run.kind !== 'turn' || (run.status !== 'failed' && run.status !== 'completed')) return false;
+      const reading = thread.contextReading;
+      const exhausted =
+        reading !== null &&
+        !reading.stale &&
+        reading.runId === run.id &&
+        reading.contextWindow !== null &&
+        reading.contextWindow > 0 &&
+        reading.usage.inputTokens !== undefined &&
+        reading.usage.outputTokens !== undefined &&
+        reading.usage.inputTokens + reading.usage.outputTokens >= reading.contextWindow;
+      if (run.failure?.contextOverflow !== true && !exhausted) return false;
+      const repeated = (yield* inbox.delivered(threadId, run.id)).some((id) => id.startsWith('context-recovery:'));
+      if (repeated) return false;
+      const row = yield* kernel.store.find(threadId);
+      if (row === undefined) return false;
+      const continuing =
+        run.status === 'failed'
+          ? inboxSignalValues(threadId, {
+              id: `context-recovery:${run.id}`,
+              type: 'context-recovery',
+              addressee: 'transport',
+              text: 'The vendor exhausted its context. The thread was compacted into a fresh session; continue the outstanding work from its recorded history without repeating completed tool effects.',
+              occurredAt: new Date(yield* Clock.currentTimeMillis).toISOString(),
+            })
+          : null;
+      yield* open({
+        thread: row,
+        mode: 'automatic',
+        recovery: true,
+        continuation: continuing ?? undefined,
+      });
+      return true;
+    }),
     ended: (runId: string): Effect.Effect<void> =>
       Effect.suspend(() => {
         const waiting = waits.get(runId);
@@ -354,7 +409,8 @@ export const makeCompactions = Effect.fnUntraced(function* ({
       ): Effect.fn.Return<ThreadCompactionOpened, ThreadBorderFailed> {
         const requests = head.length > 0 ? { ids: head.map((item) => item.id), alone: true } : undefined;
         const mode = head.length > 0 && head.every((item) => item.body.mode === 'automatic') ? 'automatic' : 'manual';
-        if (thread.capabilities.compaction === 'core') return yield* open({ thread, requests, mode });
+        if (thread.capabilities.compaction === 'core' || thread.capabilities.compaction === 'vendor')
+          return yield* open({ thread, requests, mode });
         const resolved = yield* summarizing(thread, namedSummarizerOf(head), false).pipe(
           Effect.matchEffect({
             onSuccess: (summarizing) => open({ thread, requests, mode, summarizing }),
@@ -369,7 +425,7 @@ export const makeCompactions = Effect.fnUntraced(function* ({
       ),
     ),
     ask: (thread: ThreadRow, input: ThreadCompactAsk): Effect.Effect<ThreadCompactionAsked, ThreadBorderFailed> =>
-      thread.capabilities.compaction === 'none'
+      thread.capabilities.compaction === 'none' || thread.capabilities.compaction === 'vendor'
         ? cannotCompact(thread)
         : racing(
             thread,
@@ -382,7 +438,7 @@ export const makeCompactions = Effect.fnUntraced(function* ({
       item: ThreadInboxItemValues,
       startKey?: ThreadRunStartKey,
     ): Effect.Effect<ThreadCompactionAhead, ThreadBorderFailed> =>
-      thread.capabilities.compaction === 'none'
+      thread.capabilities.compaction === 'none' || thread.capabilities.compaction === 'vendor'
         ? cannotCompact(thread)
         : racing(
             thread,

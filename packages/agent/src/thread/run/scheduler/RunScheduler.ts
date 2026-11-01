@@ -264,6 +264,7 @@ export const runSchedulerLayer = Layer.effect(
       if ((yield* idleWaitOf(waits, threadId, runId)) !== null) return yield* snapshots.publish(threadId);
       const thread = yield* store.metadata(threadId);
       if (thread === undefined) return;
+      if (yield* compactions.recover(thread, runId)) return;
       yield* queues.next(thread, runId, status === 'aborted').pipe(
         Effect.retry({ times: 1, while: (failure) => failure instanceof ThreadStorageFailed }),
         Effect.catchIf(
