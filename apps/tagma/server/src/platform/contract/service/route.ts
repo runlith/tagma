@@ -1,4 +1,4 @@
-import { type Context, Effect } from 'effect';
+import { type Context, Effect, type Scope } from 'effect';
 import type { HttpServerRequest, HttpServerResponse } from 'effect/http';
 import type { RightKey } from '../wire/right.js';
 
@@ -8,7 +8,7 @@ type RouteAsked = {
   readonly project: number | null;
 };
 
-export type RouteHandler = (asked: RouteAsked) => Effect.Effect<HttpServerResponse.HttpServerResponse>;
+export type RouteHandler = (asked: RouteAsked) => Effect.Effect<HttpServerResponse.HttpServerResponse, never, Scope.Scope>;
 
 export type Route<R = any> = {
   readonly path: `/${string}`;

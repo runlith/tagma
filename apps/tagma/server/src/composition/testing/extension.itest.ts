@@ -354,6 +354,13 @@ const doorway = manifest({
     route({ path: '/doorway/address', handler: answeringAddress }),
     route({ path: '/doorway/returned', preAdmitted: true, handler: answeringAddress }),
     route({ path: '/api/doorway/files/:id', right: 'warmth', handler: servingFile }),
+    route({
+      path: '/api/doorway/project',
+      handler:
+        () =>
+        ({ project }) =>
+          Effect.succeed(HttpServerResponse.text(String(project))),
+    }),
   ],
 });
 
@@ -584,6 +591,11 @@ layer(root, { excludeTestServices: true })('a root composing the core with a mod
         expect(yield* world.door('/api/doorway/files/note')).toEqual({ status: 200, text: 'kept by the doorway' });
         expect(yield* world.door('/api/doorway/files/lost')).toEqual({ status: 404, text: '' });
         expect((yield* world.door('/api/doorway/files/note', 'remote', ranged)).status).toBe(401);
+        const rootPath = yield* world.folder('doorway');
+        const added = yield* world.op('add_project', { name: 'doorway', rootPath, storage: 'stealth' });
+        const project = (added.body as { project: { id: number } }).project.id;
+        expect(yield* world.door(`/api/doorway/project?project=${project}`)).toEqual({ status: 200, text: String(project) });
+        expect((yield* world.door('/api/doorway/project?project=nowhere')).status).toBe(409);
       }),
   );
 });
