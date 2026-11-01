@@ -11,5 +11,7 @@ sources:
     ref: packages/utils/src/worker.ts
   - kind: file
     ref: apps/tagma/server/src/native-harness/transcript/restedWork.ts
+  - kind: file
+    ref: apps/tagma/server/src/threads/journal/restScan.ts
 ---
 A request can survive cancellation of its waiting fiber. Callers that own paths or other resources used remotely join the request so their cleanup waits for its reply, or for the worker's close event after a transport failure. This does not cancel remote work; response-only callers can still abandon their waiter without joining it.
