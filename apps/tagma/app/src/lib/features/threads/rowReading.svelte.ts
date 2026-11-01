@@ -3,6 +3,7 @@ import type { WallClock } from '$lib/features/workspace/WallClock.svelte.js';
 import type { ProviderCatalog } from '$lib/features/providers/Catalog.svelte.js';
 import { timeCompact } from '$lib/shared/time.js';
 import { threadMark, type ThreadMark } from './Life.svelte';
+import type { CallActivity } from './CallActivity.svelte.js';
 import { failedRowDetail } from './native/runEndingLine.js';
 import { runningSinceOf } from './rowKind.js';
 import { TEAM_NAMED, type ThreadTreeNode } from './forest.js';
@@ -34,12 +35,19 @@ export class RowReading {
     private readonly clock: WallClock,
     private readonly lines: WorkLines,
     private readonly catalog: ProviderCatalog,
+    private readonly calls: CallActivity,
   ) {
     const row = $derived(node().row);
     this.mark = $derived(threadMark(row));
     const work = $derived<WorkInput | null>(
       this.mark.state === 'working' && row.phase !== null
-        ? { phase: row.phase.phase, since: row.phase.since, waiting: row.phase.waiting, calls: row.phase.calls, queued: row.phase.queued }
+        ? {
+            phase: row.phase.phase,
+            since: row.phase.since,
+            waiting: row.phase.waiting,
+            calls: row.phase.calls,
+            queued: row.phase.queued + this.calls.waitingOf(row.id),
+          }
         : null,
     );
     const doing = $derived(work === null ? null : this.lines.shown(row.id));

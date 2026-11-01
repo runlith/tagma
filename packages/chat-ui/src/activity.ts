@@ -1,6 +1,11 @@
 import type { AgentRuntimeGuidance } from '@runlith/agent/contracts';
 import { toolDisplayOpensByDefault } from '@runlith/agent/tool/display';
-import { toolFailed as producerToolFailed, toolStanding, toolSettled as producerToolSettled } from '@runlith/agent/transcript/entries';
+import {
+  toolFailed as producerToolFailed,
+  toolReceipt,
+  toolStanding,
+  toolSettled as producerToolSettled,
+} from '@runlith/agent/transcript/entries';
 import { KEEP_WARM_SIGNAL_TYPE } from '@runlith/agent/transcript/keepWarm';
 import { elapsedDuration } from './chatTime';
 import type { ChatLiveStatus } from './liveStatus';
@@ -88,7 +93,8 @@ function foldable(entry: ActivityEntry): entry is ToolActivityEntry {
     toolOperationRefused(entry) ||
     toolOutcomeUnknown(entry) ||
     toolCancelled(entry) ||
-    toolInterrupted(entry)
+    toolInterrupted(entry) ||
+    toolReceipt(entry)
   )
     return false;
   const display = entry.display;

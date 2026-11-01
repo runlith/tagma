@@ -24,6 +24,7 @@
   import MatchText from '$lib/shared/MatchText.svelte';
   import RenameField from './RenameField.svelte';
   import { sameSelection } from './native/modelWords.js';
+  import { CallActivity } from './CallActivity.svelte.js';
   import { RowReading } from './rowReading.svelte.js';
   import { WorkLines } from './workLines.svelte.js';
   import { ProviderCatalog } from '$lib/features/providers/Catalog.svelte.js';
@@ -102,7 +103,7 @@
   const mark = $derived(host === null ? null : workspace.markOf(row.projectId, host.projectId));
   const isRoot = $derived(row.parentThreadId === null);
   const label = $derived(isRoot ? row.title.trim() || 'Untitled' : (row.name ?? row.agentId));
-  const reading = new RowReading(() => node, wallClock, WorkLines.use(), catalog);
+  const reading = new RowReading(() => node, wallClock, WorkLines.use(), catalog, CallActivity.use());
   const inTerminal = $derived(row.harness?.process?.origin === 'adopted' && row.harness.process.state !== 'ended');
   const compacting = $derived(row.phase?.phase === 'compacting');
   const hasChildren = $derived(node.children.length > 0);

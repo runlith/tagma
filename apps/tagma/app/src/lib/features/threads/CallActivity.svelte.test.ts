@@ -71,6 +71,25 @@ test('a call that moves changes its own thread’s calls, and every other thread
   expect(calls.callsOf('c').map((held) => held.phase)).toEqual(['stopping']);
 });
 
+test('only a background call still waiting its turn counts as waiting work of its thread', () => {
+  const { calls, send } = activity();
+  const waiting = (id: string, over: Partial<CallRecord> = {}) =>
+    call('a', id, { mode: 'background', phase: 'waiting', admittedAt: null, ...over });
+  send({
+    type: 'snapshot',
+    calls: [
+      waiting('w-1'),
+      waiting('w-2', { phase: 'preparing' }),
+      waiting('w-3', { phase: 'running', admittedAt: 1_000 }),
+      waiting('w-4', { phase: 'completed', endedAt: 2_000 }),
+      call('a', 'f-1', { phase: 'waiting', admittedAt: null }),
+      waiting('o-1', { threadId: 'b' }),
+    ],
+  });
+  expect(calls.waitingOf('a')).toBe(2);
+  expect(calls.waitingOf('c')).toBe(0);
+});
+
 test('the window keeps every standing call and the newest endings, and what a pruned call was told is forgotten with it', async () => {
   const { calls, send } = activity();
   const history = Array.from({ length: WINDOW }, (_unused, at) => ended(at === 0 ? 'old' : 'busy', `h-${at}`, 10_000 + at));

@@ -108,6 +108,12 @@ export class CallActivity extends Service<CallActivity>()('CallActivity', { tier
     return NO_CALLS;
   }
 
+  waitingOf(threadId: string): number {
+    return this.callsOf(threadId).filter(
+      (call) => call.endedAt === null && call.mode === 'background' && (call.phase === 'waiting' || call.phase === 'preparing'),
+    ).length;
+  }
+
   callAt(threadId: string | null, runId: string | undefined, toolCallId: string): CallRecord | null {
     const record = this.recordAt(threadId, runId, toolCallId);
     return record === null || record.endedAt !== null ? null : record;

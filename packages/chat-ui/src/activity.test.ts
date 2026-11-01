@@ -396,6 +396,16 @@ describe('activityRows', () => {
     ]);
   });
 
+  test('a receipt for a call the thread still holds never folds away, a read-only one included', () => {
+    const receipt: ToolActivityEntry = {
+      ...read('x'),
+      toolOutput: { status: 'background', runId: 'run-1', toolCallId: 'x', tool: 'read' },
+    };
+    expect(activityRows([read('a'), receipt, read('c')]).map((row) => row.kind)).toEqual(['step', 'step', 'step']);
+    const settledLate: ToolActivityEntry = { ...read('x'), toolOutput: 'file text' };
+    expect(activityRows([read('a'), settledLate, read('c')]).map((row) => row.kind)).toEqual(['folded']);
+  });
+
   test('a failed call breaks the fold: its message is an answer, not material', () => {
     const failed: ToolActivityEntry = { ...read('x'), toolState: 'output-error', toolError: 'boom' };
     expect(activityRows([read('a'), failed, read('c')]).map((row) => row.kind)).toEqual(['step', 'step', 'step']);

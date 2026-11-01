@@ -250,6 +250,18 @@ export function toolStanding(entry: {
   return { state: 'running', since: Number.isNaN(started) ? null : started };
 }
 
+export function toolReceipt(entry: { readonly toolState: ThreadToolState; readonly toolOutput?: unknown }): boolean {
+  if (entry.toolState !== 'output-available') return false;
+  const output = entry.toolOutput;
+  if (typeof output !== 'object' || output === null || Array.isArray(output)) return false;
+  const receipt = output as Record<string, unknown>;
+  return (
+    (receipt['status'] === 'background' || receipt['status'] === 'running') &&
+    typeof receipt['runId'] === 'string' &&
+    typeof receipt['toolCallId'] === 'string'
+  );
+}
+
 export type StandingSource = {
   readonly toolName: string;
   readonly title: string | null;
