@@ -14,6 +14,11 @@
       "browser": "./src/lib/app/composition.ts",
       "default": "./src/lib/app/composition.ts"
     },
+    "./window": {
+      "types": "./src/lib/app/window.ts",
+      "browser": "./src/lib/app/window.ts",
+      "default": "./src/lib/app/window.ts"
+    },
     "./tsconfig.json": "./root.tsconfig.json",
     "./package.json": "./package.json",
     "./points/surfaces": {

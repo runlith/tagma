@@ -94,6 +94,7 @@ type Judging = {
   readonly paths: readonly string[];
   readonly caller: TerminalActor | undefined;
   readonly parted: boolean;
+  readonly workdir: string;
 };
 
 const judged = (rules: ActChecks, { caller, parted, ...subject }: Judging): Effect.Effect<Checked, WorktreeFinishRefused> =>
@@ -311,6 +312,7 @@ export const integrate = (
                 debtBase: source,
                 paths,
                 caller: request.caller,
+                workdir: record.path,
               };
               if (!carries || !paths.some(inGraphTree)) return judged(rules, { ...subject, rulesAt: base.root.path, parted: false });
               return Effect.flatMap(git.changed(base.root.path, source, built), (behind) =>

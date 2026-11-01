@@ -61,6 +61,7 @@ export type TreeSubject = {
   readonly caller?: TerminalActor;
   readonly job?: string;
   readonly branch?: string | null;
+  readonly workdir?: string;
 };
 
 export type FileSubject = {

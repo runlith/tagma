@@ -1,4 +1,3 @@
-import { resolve } from 'node:path';
 import { Layer } from 'effect';
 import { checkoutBuildsLayer } from '../../checkout-builds/runner.js';
 import { devSurfaceLayer } from '../../checkout-builds/surface.js';
@@ -19,7 +18,7 @@ const runningRevision = ({ installation, source }: NextPlace): RunningRevision |
 };
 
 const checkoutOf = (place: SourcePlace): string | undefined =>
-  place.installation === undefined ? resolve(place.serverPath, '..', '..', '..') : place.installation.manifest.origin?.checkout;
+  place.installation === undefined ? place.checkout : place.installation.manifest.origin?.checkout;
 
 const nextInstallation = (place: NextPlace) => {
   const { log, record, worktrees } = buildPlaces(place.dataPath);

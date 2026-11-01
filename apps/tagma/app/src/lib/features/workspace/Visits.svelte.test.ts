@@ -59,3 +59,12 @@ test('the entry project opens at the place its root names until the window has a
   visits.remember(project(5, 'five'), 'graph', 'alpha', null);
   expect(visits.resume(project(5, 'five'))).toBe(surfaces.pathOf('five', 'graph', 'alpha'));
 });
+
+test('a visit or entry naming a surface this build lacks resumes at home', () => {
+  const storage = makeStorage();
+  storage.setItem('tagma.visits', JSON.stringify({ 5: { surface: 'elsewhere', elsewhere: 'x', branch: null } }));
+  const home = (name: string) => surfaces.pathOf(name, surfaces.home);
+  expect(new Visits(storage, surfaces).resume(project(5, 'five'))).toBe(home('five'));
+  const entered = new Visits(makeStorage(), surfaces, { project: 'seven', at: { surface: 'elsewhere', place: 'x' } });
+  expect(entered.resume(project(7, 'seven'))).toBe(home('seven'));
+});

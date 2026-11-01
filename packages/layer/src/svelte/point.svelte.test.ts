@@ -4,6 +4,8 @@ import { flush } from '@runlith/testing/flush';
 import { flushSync, mount, unmount } from 'svelte';
 import { describe, expect, it } from 'vitest';
 
+import { App, MountedApp } from '../App.js';
+import { Failure } from '../Failure.js';
 import { KeyIdCollisionError, ServiceStartError } from '../Graph.js';
 import { Service } from '../key.js';
 import { Layer } from '../Layer.js';
@@ -107,6 +109,45 @@ describe('Point', () => {
     expect(() => fixed.register('views', { id: 'view', order: 3 })).toThrow(/only while its scope starts/);
     expect(() => rt.get(Unused).register('views', { id: 'view', order: 0 })).toThrow(/only while its scope starts/);
     await rt.unmount();
+  });
+
+  it('holds its manifest members when read before its scope starts, and the start reports a clash among them once', () => {
+    const Fixed = Point.define<Entry>()('PointTest.Early', { tier: 'app', key: (entry) => entry.id, joins: 'start' });
+    const failures: unknown[] = [];
+    const app = new MountedApp(
+      App.define(
+        Layer.mergeAll(
+          Fixed,
+          Fixed.contribute('core', { id: 'core', order: 0 }),
+          Fixed.contribute('other', { id: 'core', order: 1 }),
+          Fixed.contribute('more', { id: 'more', order: 2 }),
+        ),
+      ),
+      Layer.of(Failure, new Failure((error) => void failures.push(error))),
+      { effectRoot: (build) => (build(), () => undefined), cell: reactiveCell, start: 'mount' },
+    );
+    expect(app.resolve(Fixed).items.map((entry) => entry.id)).toEqual(['core', 'more']);
+    app.start();
+    expect(failures.map((failure) => (failure as ServiceStartError).cause)).toEqual([
+      expect.objectContaining({ name: 'RegistryClash', holders: ['core', 'other'] }),
+    ]);
+    void app.close();
+  });
+
+  it('takes a member an entry brings while its scope has not started, though the point was built before the entry came', async () => {
+    const Early = Point.define<Entry>()('PointTest.Entered', { tier: 'app', key: (entry) => entry.id, joins: 'start' });
+    const entry = Layer.entry('PointTest.entry', () =>
+      Promise.resolve({ default: Early.contribute('entry', { id: 'entered', order: 1 }) }),
+    );
+    const app = new MountedApp(
+      App.define(Layer.mergeAll(Early, Early.contribute('core', { id: 'core', order: 0 }), entry)),
+      Layer.mergeAll(),
+      { effectRoot: (build) => (build(), () => undefined), cell: reactiveCell, start: 'mount' },
+    );
+    const point = app.resolve(Early);
+    await app.enter(entry, undefined);
+    expect(point.items.map((one) => one.id)).toEqual(['core', 'entered']);
+    void app.close();
   });
 
   it('refuses two contributions under one name even when one condition admits both', () => {

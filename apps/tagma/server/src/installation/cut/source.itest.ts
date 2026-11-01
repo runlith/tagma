@@ -103,3 +103,64 @@ it.live(
       expect(diagnostics).toContain('left out producer.ts');
     }),
 );
+
+it.live('a HEAD build carries each submodule at the commit its parent pins, taken from the checkout’s own submodule repository', () =>
+  Effect.gen(function* () {
+    const tree = yield* Effect.acquireRelease(
+      Effect.sync(() => realpathSync(mkdtempSync(join(tmpdir(), 'tagma-source-')))),
+      (root) => Effect.sync(() => rmSync(root, { recursive: true, force: true })),
+    );
+    const git = Effect.fnUntraced(function* (at: string, ...args: string[]) {
+      const ran = yield* spawnedEffect([
+        'git',
+        '-C',
+        at,
+        '-c',
+        'user.name=t',
+        '-c',
+        'user.email=t@t',
+        '-c',
+        'protocol.file.allow=always',
+        ...args,
+      ]);
+      expect(ran.exitCode).toBe(0);
+      return new TextDecoder().decode(ran.stdout).trim();
+    });
+    const library = join(tree, 'library');
+    mkdirSync(library);
+    writeFileSync(join(library, 'value.txt'), 'pinned\n');
+    yield* git(library, 'init', '-q');
+    yield* git(library, 'add', '.');
+    yield* git(library, 'commit', '-q', '-m', 'pinned');
+    const checkout = join(tree, 'checkout');
+    mkdirSync(checkout);
+    writeFileSync(join(checkout, 'package.json'), JSON.stringify({ scripts: { 'tagma:build': 'bun build.ts' } }));
+    writeFileSync(
+      join(checkout, 'build.ts'),
+      `import { runSourceBuild } from ${JSON.stringify(join(import.meta.dir, '../testing/sourceBuild.ts'))};\nawait runSourceBuild(import.meta.dir, process.argv.slice(2));\n`,
+    );
+    writeFileSync(join(checkout, 'build.command'), `${JSON.stringify(process.execPath)} producer.ts`);
+    writeFileSync(
+      join(checkout, 'producer.ts'),
+      `import { copyFileSync, mkdirSync } from 'node:fs';\nimport { join } from 'node:path';\nmkdirSync(process.env.TAGMA_INSTALL_ROOT, { recursive: true });\ncopyFileSync(join(import.meta.dir, 'lib/value.txt'), join(process.env.TAGMA_INSTALL_ROOT, 'value.txt'));\n`,
+    );
+    yield* git(checkout, 'init', '-q');
+    yield* git(checkout, 'submodule', 'add', '-q', library, 'lib');
+    yield* git(checkout, 'config', '--file', '.gitmodules', 'submodule.lib.url', join(tree, 'gone'));
+    yield* git(checkout, 'add', '.');
+    yield* git(checkout, 'commit', '-q', '-m', 'parent pins the library');
+    const submodule = join(checkout, 'lib');
+    writeFileSync(join(submodule, 'value.txt'), 'moved past the pin\n');
+    yield* git(submodule, 'commit', '-q', '-am', 'moved past the pin');
+    const built = yield* spawnedEffect([process.execPath, 'run', 'tagma:build', '--no-restart'], {
+      cwd: checkout,
+      env: { ...process.env, TAGMA_INSTALL_ROOT: join(tree, 'head') },
+    });
+    expect(built.exitCode).toBe(0);
+    expect(readFileSync(join(tree, 'head/value.txt'), 'utf8')).toBe('pinned\n');
+    for (const repository of [checkout, submodule])
+      expect(
+        (yield* git(repository, 'worktree', 'list', '--porcelain')).split('\n').filter((line) => line.startsWith('worktree ')),
+      ).toHaveLength(1);
+  }),
+);
