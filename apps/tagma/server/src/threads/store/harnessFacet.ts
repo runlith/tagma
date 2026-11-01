@@ -1,5 +1,6 @@
 import { eq, sql, type SQL } from 'drizzle-orm';
-import { QueryBuilder, index, integer, sqliteTable, text, type SQLiteColumn } from 'drizzle-orm/sqlite-core';
+import { QueryBuilder, customType, index, integer, sqliteTable, text, type SQLiteColumn } from 'drizzle-orm/sqlite-core';
+import { canonicalJson } from '@runlith/utils/object';
 import { threadRecord } from '../../thread-record/store/table.js';
 import type { StoreDb, StoreFailure } from '../../platform/contract/service/store.js';
 import type { Unit } from '../../platform/contract/service/units.js';
@@ -10,13 +11,19 @@ import type { ExternalSession } from '../contract/wire/harness/externalSession.j
 export const recoverableSession = (facet: SQLiteColumn): SQL =>
   sql`json_type(${facet}, '$.session') = 'object' and json_extract(${facet}, '$.session.state') is not 'ended'`;
 
+const facetText = customType<{ data: ExternalSession; driverData: string }>({
+  dataType: () => 'text',
+  toDriver: canonicalJson,
+  fromDriver: (stored) => JSON.parse(stored),
+});
+
 export const externalSession = sqliteTable(
   'external_session',
   {
     id: text('id')
       .primaryKey()
       .references(() => threadRecord.id, { onDelete: 'cascade' }),
-    facet: text('facet', { mode: 'json' }).$type<ExternalSession>().notNull(),
+    facet: facetText('facet').notNull(),
     cli: text('cli').generatedAlwaysAs(sql`json_extract(facet, '$.name')`, { mode: 'virtual' }),
     sessionKey: text('session_key').generatedAlwaysAs(sql`json_extract(facet, '$.sessionKey')`, { mode: 'virtual' }),
     leaseOwner: text('lease_owner'),

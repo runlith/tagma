@@ -5,8 +5,7 @@ import { threadRecord } from '../../thread-record/store/table.js';
 import type { StoreDb, StoreFailure } from '../../platform/contract/service/store.js';
 import type { MachineUnits, Unit } from '../../platform/contract/service/units.js';
 import { writes } from '../../platform/contract/service/writes.js';
-import { programOf } from '../../platform/store/programs.js';
-import { bindQuery, prepareFor } from '../../platform/store/queries.js';
+import { prepareFor, writePrepared } from '../../platform/store/queries.js';
 import { nativeRows, thread } from '../../threads/store/kernel.js';
 import { declareCapabilities, type DeclaredByAgent } from '../../threads/store/seat.js';
 import { GateRefusal } from '../../platform/contract/wire/refusal.js';
@@ -67,11 +66,9 @@ export class ProtocolRows {
   write(unit: Unit<'machine'>, threadId: string, row: ProtocolRow): Effect.Effect<void, StoreFailure> {
     const encoded = encodeRow(row);
     const { upsert } = protocolQueries(this.db);
-    return Effect.flatMap(Clock.currentTimeMillis, (now) => {
-      const values = { id: threadId, row: encoded, updatedAt: new Date(now) };
-      const program = programOf(unit);
-      return Effect.asVoid(program === null ? unit.run(upsert.execute(values)) : program.write(bindQuery(upsert, values)));
-    });
+    return Effect.flatMap(Clock.currentTimeMillis, (now) =>
+      Effect.asVoid(writePrepared(unit, upsert, { id: threadId, row: encoded, updatedAt: new Date(now) })),
+    );
   }
 
   drop(unit: Unit<'machine'>, threadId: string): Effect.Effect<void, StoreFailure> {

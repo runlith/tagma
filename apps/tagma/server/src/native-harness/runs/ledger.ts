@@ -1,5 +1,4 @@
 import { Clock, Effect } from 'effect';
-import type { ThreadTranscript } from '@runlith/agent/transcript/rows';
 import { sumUsage } from '@runlith/llm/schema/events';
 import { ThreadNotFoundError } from '@runlith/agent/thread/storage/aggregate';
 import type { ThreadRunStage } from '@runlith/agent/thread/rows';
@@ -31,10 +30,10 @@ import { ThreadRecords } from '../../thread-record/contract/service/records.js';
 import { recordFacts } from '../../thread-record/facts.js';
 import { stored, type StoredFailure } from '../../platform/store/crossing.js';
 import { programOf } from '../../platform/store/programs.js';
-import { bindQuery } from '../../platform/store/queries.js';
+import { bindQuery, writePrepared } from '../../platform/store/queries.js';
 import { failedAs } from '../../threads/contract/service/failure.js';
 import { makeEndedRuns } from './endedRuns.js';
-import { makeReaping, staged, trustedRun, type RunLifecycle } from './reaping.js';
+import { makeReaping, staged, stagedFrom, stageText, trustedRun, type RunLifecycle } from './reaping.js';
 import { ThreadEntryKinds } from '@runlith/agent/transcript/kinds';
 
 export type ThreadRunStore = ThreadRunStorage<Unit<'machine'>, WriteUnit<'machine'>> & {
@@ -80,6 +79,39 @@ export const makeRunStores = Effect.gen(function* () {
     .orderBy(asc(threadRun.createdAt), asc(threadRun.id))
     .prepare();
 
+  const heldRun = and(
+    eq(threadRun.id, sql.placeholder('runId')),
+    eq(threadRun.status, 'running'),
+    eq(threadRun.ownerId, sql.placeholder('ownerId')),
+  ) as SQL;
+  const beat = { heartbeatAt: sql.placeholder('heartbeatAt'), updatedAt: sql.placeholder('heartbeatAt') };
+  const patching = {
+    progress: {
+      kept: db
+        .update(threadRun)
+        .set({ progress: stagedFrom(sql.placeholder('stage')), ...beat })
+        .where(heldRun)
+        .prepare(),
+      durable: db
+        .update(threadRun)
+        .set({ progress: stagedFrom(sql.placeholder('stage')), resumes: 0, ...beat })
+        .where(heldRun)
+        .prepare(),
+    },
+    tail: {
+      kept: db
+        .update(threadRun)
+        .set({ streamTail: sql.placeholder('streamTail'), ...beat })
+        .where(heldRun)
+        .prepare(),
+      durable: db
+        .update(threadRun)
+        .set({ streamTail: sql.placeholder('streamTail'), resumes: 0, ...beat })
+        .where(heldRun)
+        .prepare(),
+    },
+  };
+
   const writing = <A, E>(set: WriteSet, work: (unit: WriteUnit<'machine'>) => Effect.Effect<A, E>, tx?: WriteUnit<'machine'>) =>
     tx ? work(tx) : units.write(set, work);
 
@@ -94,22 +126,14 @@ export const makeRunStores = Effect.gen(function* () {
 
     const patchRunning = (
       call: string,
-      runId: string,
-      patch: { progress?: SQL; streamTail?: ThreadTranscript | null; resumes?: number; heartbeatAt: Date },
+      patch: typeof patching.progress.kept,
+      values: { readonly runId: string; readonly heartbeatAt: Date } & Record<string, unknown>,
       tx?: WriteUnit<'machine'>,
     ) =>
       stored(call)(
         writing(
           writes('ThreadRunStore.patchRunning', [runRows]),
-          (unit) =>
-            Effect.asVoid(
-              unit.run(
-                db
-                  .update(threadRun)
-                  .set({ ...patch, updatedAt: patch.heartbeatAt })
-                  .where(owned(runId)),
-              ),
-            ),
+          (unit) => Effect.asVoid(writePrepared(unit, patch, { ...values, ownerId })),
           tx,
         ),
       );
@@ -493,7 +517,12 @@ export const makeRunStores = Effect.gen(function* () {
           ),
         ),
       writeProgress: (runId, progress, heartbeatAt, tx, durable = false) =>
-        patchRunning('writeProgress', runId, { progress: staged(progress), resumes: durable ? 0 : undefined, heartbeatAt }, tx),
+        patchRunning(
+          'writeProgress',
+          durable ? patching.progress.durable : patching.progress.kept,
+          { runId, stage: stageText(progress), heartbeatAt },
+          tx,
+        ),
       writePhase: (runId, phase, tx) =>
         stored('writePhase')(
           writing(
@@ -653,7 +682,12 @@ export const makeRunStores = Effect.gen(function* () {
         );
       },
       writeStreamTail: (runId, tail, heartbeatAt, tx, durable = false) =>
-        patchRunning('writeStreamTail', runId, { streamTail: tail, resumes: durable || tail?.length ? 0 : undefined, heartbeatAt }, tx),
+        patchRunning(
+          'writeStreamTail',
+          durable || tail?.length ? patching.tail.durable : patching.tail.kept,
+          { runId, streamTail: tail, heartbeatAt },
+          tx,
+        ),
     };
   };
 });

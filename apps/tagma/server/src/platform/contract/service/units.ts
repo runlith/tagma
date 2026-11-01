@@ -12,7 +12,7 @@ type ProgramText = { readonly sql: string; readonly params: ReadonlyArray<unknow
 
 export type ProgramQuery = Effect.Effect<unknown, StoreFailure> & ({ toSQL(): ProgramText } | { getQuery(): ProgramText });
 
-type ReturningQuery = ProgramQuery & SQLWrapper;
+type ReturningQuery = ProgramQuery & (SQLWrapper | { rows(): Effect.Effect<ReturnedRows, StoreFailure> });
 
 export type ProgramUnit<Brand extends StoreBrand> = {
   readonly store: StoreIdentity;
