@@ -12,14 +12,6 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead apps/tagma/app/scripts/surfaceConfig.ts#SURFACE_RUNTIME",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/app/scripts/surfaceConfig.ts#SURFACE_STYLES",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "dead-code dead apps/tagma/app/src/lib/app/attention/Attention.svelte.ts#Reply",
           "owner": "5a3bed29"
         },
