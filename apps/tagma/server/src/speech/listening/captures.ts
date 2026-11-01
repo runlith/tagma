@@ -5,13 +5,13 @@ import type { Capture, CapturesEvent } from '../contract/wire/feeds.js';
 
 const MOVES_CAPACITY = 256;
 
-const keyOf = (kind: string, id: string): string => `${kind}:${id}`;
-
 type Open = { readonly capture: Capture; readonly stop: Stop };
 
 export const makeCaptures = Effect.gen(function* () {
   const moved = yield* Effect.acquireRelease(PubSub.sliding<CapturesEvent>(MOVES_CAPACITY), PubSub.shutdown);
-  const standing = new Map<string, Open>();
+  const kinds = new Map<string, Map<string, Open>>();
+  const opened = (kind: string, id: string) => kinds.get(kind)?.get(id);
+  const all = () => [...kinds.values()].flatMap((ids) => [...ids.values()]);
 
   const stopped = (open: Open) =>
     open.stop.pipe(
@@ -28,22 +28,21 @@ export const makeCaptures = Effect.gen(function* () {
   return Captures.of({
     open: (capture, stop) =>
       Effect.suspend(() => {
-        standing.set(keyOf(capture.kind, capture.id), { capture, stop });
+        const ids = kinds.get(capture.kind) ?? new Map<string, Open>();
+        kinds.set(capture.kind, ids.set(capture.id, { capture, stop }));
         return Effect.asVoid(PubSub.publish(moved, { kind: 'opened', capture }));
       }),
     end: (kind, id) =>
-      Effect.suspend(() =>
-        standing.delete(keyOf(kind, id)) ? Effect.asVoid(PubSub.publish(moved, { kind: 'ended', capture: { kind, id } })) : Effect.void,
-      ),
-    count: (kind) =>
-      Effect.sync(() => {
-        let count = 0;
-        for (const open of standing.values()) if (open.capture.kind === kind) count += 1;
-        return count;
+      Effect.suspend(() => {
+        const ids = kinds.get(kind);
+        if (ids?.delete(id) !== true) return Effect.void;
+        if (ids.size === 0) kinds.delete(kind);
+        return Effect.asVoid(PubSub.publish(moved, { kind: 'ended', capture: { kind, id } }));
       }),
+    count: (kind) => Effect.sync(() => kinds.get(kind)?.size ?? 0),
     stop: Effect.fn('Captures.stop')(function* (target) {
       if (target !== null) {
-        const open = standing.get(keyOf(target.kind, target.id));
+        const open = opened(target.kind, target.id);
         if (open === undefined) {
           return yield* new GateRefusal('unknown-capture', `no ${target.kind} ${target.id} is capturing on this server`, [
             'the speech.captures.subscribe feed names what is capturing now',
@@ -52,17 +51,15 @@ export const makeCaptures = Effect.gen(function* () {
         yield* stopped(open);
         return 1;
       }
-      const all = [...standing.values()];
-      const outcomes = yield* Effect.forEach(all, (open) => Effect.result(stopped(open)), { concurrency: 'unbounded' });
+      const standing = all();
+      const outcomes = yield* Effect.forEach(standing, (open) => Effect.result(stopped(open)), { concurrency: 'unbounded' });
       for (const outcome of outcomes) if (outcome._tag === 'Failure') return yield* Effect.fail(outcome.failure);
-      return all.length;
+      return standing.length;
     }),
     events: Stream.unwrap(
       Effect.map(PubSub.subscribe(moved), (subscription) =>
         Stream.concat(
-          Stream.suspend(() =>
-            Stream.succeed<CapturesEvent>({ kind: 'snapshot', captures: [...standing.values()].map((open) => open.capture) }),
-          ),
+          Stream.suspend(() => Stream.succeed<CapturesEvent>({ kind: 'snapshot', captures: all().map((open) => open.capture) })),
           Stream.fromSubscription(subscription),
         ),
       ),

@@ -493,9 +493,9 @@ export const RECOGNITION_OPERATIONS = {
     approval: ASKS_IN_REVIEW,
     ...operatorOnly,
     meaning:
-      'Stop one capture of this machine, or all of them: each stops the way its owner registered — a recognition reads out its confirmed tail, any other capture ends at once.',
+      'Stop one capture of this machine, or all of them: each stops the way its owner registered — a recognition stops hearing and reads out its confirmed tail, any other capture ends at once.',
     grammar:
-      'Name `kind` and `id` together, as the speech.captures.subscribe feed lists them, to stop one; name neither to stop every capture. The call answers once each stop ended.',
+      "Name `kind` and `id` together, as the speech.captures.subscribe feed lists them, to stop one; name neither to stop every capture. The call answers once each owner's stop has run; a recognition's confirmed tail arrives afterwards on its speech.recognize feed, which then ends.",
     input: Schema.Struct({
       kind: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
       id: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
