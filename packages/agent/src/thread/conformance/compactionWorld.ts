@@ -8,6 +8,7 @@ import { ModelIdentity } from '@runlith/llm/schema/options';
 import { modelCatalog } from '@runlith/llm/models/catalog';
 import { DEFAULT_PROVIDER_DESCRIPTIONS } from '@runlith/builtin-catalog/descriptions';
 import { Agent } from '../../agent/Agent';
+import type { CallHooks } from '../../agent/AgentCalls';
 import { agentRule } from '../../agent/policy/AgentRuntimePolicy';
 import { SUB_AGENT_DEPTH } from '../../collaboration/CollaborationConfig';
 import { makeAgentRunner } from '../../agent/AgentRunner';
@@ -151,6 +152,7 @@ export type CompactionWorldOptions = {
   readonly collaboration?: boolean;
   readonly approvers?: ApproversPort;
   readonly resting?: ReadonlySet<string>;
+  readonly callHooks?: () => CallHooks;
 };
 const defaultModels = modelCatalog(DEFAULT_PROVIDER_DESCRIPTIONS);
 export const compactionWorld = Effect.fnUntraced(function* <TTx, TWrite extends TTx = TTx>(
@@ -314,6 +316,7 @@ const makeWorld = Effect.fnUntraced(function* <TTx, TWrite extends TTx>(
     runner,
     runPolicy: { userStartable: true, backgroundStartable: false },
     context: () => Effect.succeed({}),
+    callHooks: options.callHooks,
   });
   const rhythm = { ...RHYTHM, resumeWithinMs: options.resumeWithinMs ?? RHYTHM.resumeWithinMs };
   const ports = Layer.mergeAll(

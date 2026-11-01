@@ -39,7 +39,7 @@ layer(BunFileSystem.layer, { excludeTestServices: true })('snapshot recovery', (
             tables: ['fact'],
             restore: (store) =>
               Effect.sync(() =>
-                store.registerPublication(
+                store.registerPublication(() =>
                   fail ? Effect.fail(new SnapshotFailed({ path, reason: 'injected publication failure' })) : Effect.void,
                 ),
               ),
@@ -54,6 +54,8 @@ layer(BunFileSystem.layer, { excludeTestServices: true })('snapshot recovery', (
           yield* db.run(sql`create table fact(value text)`);
           yield* db.run(sql`insert into fact values ('before')`);
           yield* db.run(sql`create table thread_event(thread_id text, position integer, id text, kind text, payload text)`);
+          yield* db.run(sql`create table thread_rollout_home(path text primary key, imported_at integer not null)`);
+          yield* db.run(sql`insert into thread_rollout_home values (${home}, 1)`);
           yield* snapshots.take({ path, db }, pending);
           yield* db.run(sql`insert into thread_event values ('1', 1, 'evt-1', 'message', '{}')`);
           yield* db.run(sql`update fact set value='after'`);
@@ -70,12 +72,20 @@ layer(BunFileSystem.layer, { excludeTestServices: true })('snapshot recovery', (
       const live = new Database(path, { readonly: true });
       try {
         expect(live.query('select value from fact').get()).toEqual({ value: 'after' });
+        expect(live.query('select path from thread_rollout_home').all()).toEqual([{ path: home }]);
       } finally {
         live.close();
       }
       yield* FileSystem.FileSystem.use((files) => files.writeFileString(rollout, later));
       fail = false;
       const answer = yield* snapshots.restore(path);
+      const restored = new Database(path, { readonly: true });
+      try {
+        expect(restored.query('select value from fact').get()).toEqual({ value: 'before' });
+        expect(restored.query('select path from thread_rollout_home').all()).toEqual([]);
+      } finally {
+        restored.close();
+      }
       expect(answer.quarantine.endsWith(intent.restoration)).toBe(true);
       expect(answer.losses.some((loss) => loss.owner === 'threads' && loss.key === '1/born')).toBe(true);
       expect(yield* FileSystem.FileSystem.use((files) => files.readFileString(rollout))).toBe(before);

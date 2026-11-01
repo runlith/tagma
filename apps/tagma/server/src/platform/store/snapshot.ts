@@ -10,6 +10,7 @@ import { makeDirectory, requireSpace } from '../durable/files.js';
 import { dataSpaceWords } from '../durable/space.js';
 import {
   type SnapshotParticipant,
+  type SnapshotPublication,
   SnapshotFailed,
   type SnapshotStore,
   type SnapshotLoss,
@@ -413,7 +414,7 @@ export function storeSnapshots(
             return yield* new SnapshotFailed({ path, reason: `loss acceptance names no snapshot participant: ${key}` });
         }
         const losses: SnapshotLoss[] = [];
-        const publications: Effect.Effect<void, SnapshotFailed>[] = [];
+        const publications: SnapshotPublication[] = [];
         const tables = manifest.tables.filter((table) => table.data).map((table) => table.name);
         yield* snapshotIO(path, async () => {
           for (const suffix of ['', '-wal', '-shm']) await rm(`${paths.staging}${suffix}`, { force: true });
@@ -513,7 +514,7 @@ export function storeSnapshots(
                 );
               yield* snapshotDocument(paths.intent, { ...manifest, restoration, acceptedLosses });
               yield* makeDirectory(quarantine).pipe(Effect.mapError((cause) => failure(path, cause.reason)));
-              for (const publish of publications) yield* publish;
+              for (const publish of publications) yield* publish({ path, db });
               yield* snapshotDocument(join(quarantine, 'report.json'), { snapshot: manifest.id, losses });
             }),
           );

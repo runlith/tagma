@@ -12,6 +12,7 @@ import { REFLECTION_PAIRS, WORK_PAIRS, WORK_READ_PAIRS } from './work.js';
 import { Effect } from 'effect';
 import type { OperationPair } from '../../platform/contract/service/body.js';
 import { writtenAt } from './answers.js';
+import { targetCopy } from './crossing.js';
 
 const writtenPairs = <const Pairs extends Readonly<Record<string, OperationPair>>>(pairs: Pairs): Pairs =>
   Object.fromEntries(
@@ -23,7 +24,8 @@ const writtenPairs = <const Pairs extends Readonly<Record<string, OperationPair>
             ...pair,
             body: {
               ...pair.body,
-              execute: (...args: Parameters<typeof pair.body.execute>) => Effect.flatMap(pair.body.execute(...args), writtenAt),
+              execute: (...args: Parameters<typeof pair.body.execute>) =>
+                Effect.flatMap(pair.body.execute(...args), (answer) => writtenAt(answer, targetCopy(args[1]))),
             },
           },
     ]),

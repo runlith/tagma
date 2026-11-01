@@ -27,6 +27,8 @@ export type SnapshotCapture = SnapshotScope & {
   readonly directory: string;
 };
 
+export type SnapshotPublication = (store: SnapshotStore) => Effect.Effect<void, SnapshotFailed>;
+
 export type SnapshotRestore = SnapshotScope & {
   readonly snapshot: string;
   readonly directory: string;
@@ -34,7 +36,7 @@ export type SnapshotRestore = SnapshotScope & {
   readonly record: unknown;
   readonly report: (loss: { readonly table: string; readonly key: string; readonly reason: string }) => void;
   readonly acceptedLosses: readonly string[];
-  readonly registerPublication: (work: Effect.Effect<void, SnapshotFailed>) => void;
+  readonly registerPublication: (work: SnapshotPublication) => void;
 };
 
 export type SnapshotParticipant = {

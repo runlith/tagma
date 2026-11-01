@@ -166,13 +166,13 @@ export function rolloutParticipant(machine: string, home: string): SnapshotParti
           store.path,
           `unrecoverable rollout pins: ${missing.join('; ')}; repair them or repeat restore-snapshot with --accept-loss for each named threads:project/thread`,
         );
-      const imported = yield* store.db
-        .all<{ name: string }>(sql`select name from sqlite_master where type = 'table' and name = 'thread_rollout_home'`)
-        .pipe(Effect.mapError((cause) => failed(store.path, cause)));
-      if (imported.length > 0)
-        yield* store.db.run(sql`delete from thread_rollout_home`).pipe(Effect.mapError((cause) => failed(store.path, cause)));
-      store.registerPublication(
+      store.registerPublication((original) =>
         Effect.gen(function* () {
+          const imported = yield* original.db
+            .all<{ name: string }>(sql`select name from sqlite_master where type = 'table' and name = 'thread_rollout_home'`)
+            .pipe(Effect.mapError((cause) => failed(original.path, cause)));
+          if (imported.length > 0)
+            yield* original.db.run(sql`delete from thread_rollout_home`).pipe(Effect.mapError((cause) => failed(original.path, cause)));
           const quarantine = join(store.quarantine, 'rollouts');
           yield* makeDirectory(quarantine).pipe(Effect.mapError((cause) => failed(quarantine, cause.reason)));
           yield* durable(

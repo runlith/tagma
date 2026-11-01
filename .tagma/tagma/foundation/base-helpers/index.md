@@ -85,6 +85,9 @@ fields:
     "id": "@runlith/utils",
     "kind": "kit"
   }
+edges:
+  - kind: imports-tests
+    to: 01a13b4d-7a3d-7729-955f-a344b43ff1ba
 sources:
   - kind: dir
     ref: packages/utils

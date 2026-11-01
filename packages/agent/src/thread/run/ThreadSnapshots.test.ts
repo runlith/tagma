@@ -1,6 +1,7 @@
 import { expect } from 'bun:test';
 import { it } from '@runlith/effect-test';
-import { Clock, Context, Deferred, Effect, Fiber, Layer, Queue } from 'effect';
+import { Clock, Context, Deferred, Effect, Exit, Fiber, Layer, Queue } from 'effect';
+import { ThreadStorageFailed } from '../persisted';
 import { Usage } from '@runlith/llm/schema/events';
 import { TestClock } from 'effect/testing';
 import { ThreadEntryKinds, makeThreadEntryReader } from '../../transcript/kinds';
@@ -234,6 +235,62 @@ it.effect(
     expect(readings.map((status) => status.launchBlocked === true)).toEqual([false, true, false]);
   }),
 );
+it.effect(
+  'committed and deadline publications prepare their source after the caller journal hold ends',
+  Effect.fnUntraced(function* () {
+    const journal = yield* threadJournalLane;
+    const prepared = yield* Queue.unbounded<Exit.Exit<unknown, unknown>>();
+    let source: 'plain' | 'compressed' = 'compressed';
+    const residence = ThreadResidence.of({
+      holding: (_threadId, work) => work,
+      reading: (threadId, work) =>
+        Effect.andThen(
+          Effect.suspend(() =>
+            source === 'plain'
+              ? Effect.void
+              : journal
+                  .enter(
+                    threadId,
+                    Effect.sync(() => {
+                      source = 'plain';
+                    }),
+                  )
+                  .pipe(
+                    Effect.asVoid,
+                    Effect.mapError((cause) => new ThreadStorageFailed({ call: 'source.prepare', cause })),
+                    Effect.onExit((outcome) => Queue.offer(prepared, outcome)),
+                  ),
+          ),
+          work,
+        ),
+    });
+    const world = yield* snapshotsOver({ residence, rhythm: { ...RHYTHM, takeoverAfterMs: 60_000 } });
+    world.active.set('t', runRow('run-1', { threadId: 't' }));
+    const frames = yield* world.frames;
+    yield* journal.enter(
+      't',
+      Effect.andThen(
+        world.transit([words('committed', 'retained')], {}, 'moved'),
+        world.patch({ updatedAt: new Date(-STALL_FLOOR_MS + 25), capabilities: { ...world.capabilities, callEnvelopeMs: 25 } }),
+      ),
+    );
+    expect(Exit.isSuccess(yield* Queue.take(prepared))).toBe(true);
+    const committed = yield* frames.at(0);
+    expect(committed.state.status.life).toBe('working');
+    expect(committed.state.position).toBe(1);
+    expect(committed.state.activeRun?.id).toBe('run-1');
+    yield* journal.enter('t', world.snapshots.publish('t'));
+    yield* frames.at(1);
+    source = 'compressed';
+    yield* TestClock.adjust(26);
+    expect(Exit.isSuccess(yield* Queue.take(prepared))).toBe(true);
+    const deadline = yield* frames.at(2);
+    expect(deadline.state.status.life).toBe('stalled');
+    expect(deadline.state.position).toBe(committed.state.position);
+    expect(deadline.deltas).toEqual([]);
+  }),
+);
+
 it.effect(
   'the owner publishes a stall at its deadline with no event and lifts it on progress',
   Effect.fnUntraced(function* () {
@@ -595,6 +652,7 @@ const snapshotsOver = Effect.fnUntraced(function* (
   options: {
     readonly threads?: readonly string[];
     readonly rhythm?: ThreadRunLeaseRhythm;
+    readonly residence?: ThreadResidence['Service'];
     readonly project?: (state: ThreadState) => Effect.Effect<ThreadState, ThreadBorderFailed>;
   } = {},
 ) {
@@ -676,7 +734,7 @@ const snapshotsOver = Effect.fnUntraced(function* (
     wordsInFlightLayer,
     transportsLayer,
     Layer.succeed(ThreadLeaseRhythm, options.rhythm ?? RHYTHM),
-    Layer.succeed(ThreadResidence, null),
+    Layer.succeed(ThreadResidence, options.residence ?? null),
     Layer.succeed(ThreadResting, null),
     Layer.succeed(
       RunEndings,
