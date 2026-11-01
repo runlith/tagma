@@ -82,12 +82,20 @@ const MCP_PATH = '/mcp';
 const answerHttp = async (input: HttpServerInput, request: Request): Promise<Response> => {
   if (request.headers.get('authorization') !== `Bearer ${input.bearer}`) return new Response('unauthorized', { status: 401 });
   if (new URL(request.url).pathname !== MCP_PATH) return new Response('not found', { status: 404 });
+  if (request.method !== 'POST') return new Response('method not allowed', { status: 405, headers: { allow: 'POST' } });
   const server = mcpToolServer(input);
   const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
   await server.connect(transport);
+  const gone = Promise.withResolvers<Response>();
+  const dropped = () => {
+    void server.close();
+    gone.resolve(new Response(null, { status: 499 }));
+  };
+  request.signal.addEventListener('abort', dropped, { once: true });
   try {
-    return await transport.handleRequest(request);
+    return await Promise.race([transport.handleRequest(request), gone.promise]);
   } finally {
+    request.signal.removeEventListener('abort', dropped);
     await server.close();
   }
 };
@@ -96,7 +104,7 @@ export const serveMcpOverHttp = (input: HttpServerInput): Effect.Effect<McpHttpS
   Effect.map(
     Effect.acquireRelease(
       Effect.try({
-        try: () => Bun.serve({ hostname: '127.0.0.1', port: 0, fetch: (request) => answerHttp(input, request) }),
+        try: () => Bun.serve({ hostname: '127.0.0.1', port: 0, idleTimeout: 0, fetch: (request) => answerHttp(input, request) }),
         catch: (error) => new McpServeFailed({ transport: 'http', reason: reasonOf(error) }),
       }),
       (served) => Effect.promise(() => served.stop(true)),

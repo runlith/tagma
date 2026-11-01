@@ -54,3 +54,39 @@ it.live('a loopback MCP server refuses a request without its bearer, lists its t
     }),
   ),
 );
+
+it.live('a loopback MCP server refuses a GET stream and aborts a running call when its client disconnects', () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const aborted = Promise.withResolvers<void>();
+      const started = Promise.withResolvers<void>();
+      const { url } = yield* serveMcpOverHttp({
+        name: 'tagma',
+        version: '1',
+        bearer: TOKEN,
+        tools: () => [],
+        call: (_tool, _input, _meta, _id, signal) => {
+          started.resolve();
+          signal.addEventListener('abort', () => aborted.resolve());
+          return new Promise(() => {});
+        },
+      });
+      const headers = {
+        authorization: `Bearer ${TOKEN}`,
+        'content-type': 'application/json',
+        accept: 'application/json, text/event-stream',
+      };
+      expect((yield* Effect.promise(() => fetch(url, { method: 'GET', headers }))).status).toBe(405);
+      const controller = new AbortController();
+      const pending = fetch(url, {
+        method: 'POST',
+        headers,
+        signal: controller.signal,
+        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'wait', arguments: {} } }),
+      }).catch(() => undefined);
+      yield* Effect.promise(() => started.promise);
+      controller.abort();
+      yield* Effect.promise(() => Promise.all([pending, aborted.promise]));
+    }),
+  ),
+);
