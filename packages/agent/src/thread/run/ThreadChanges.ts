@@ -1,5 +1,6 @@
 import { Context, Deferred, Effect, Layer, type Scope } from 'effect';
 import type { ThreadEventRecord } from '../events';
+import type { ThreadStore, ThreadTransitions, ThreadWriteTx } from '../ThreadPorts';
 import { ThreadChangeCollector } from '../transition/port';
 import type { ThreadChangePart, ThreadChangeRevision, ThreadMetadataChange, ThreadRunChange, ThreadStateChange } from '../state';
 
@@ -16,6 +17,41 @@ export class ThreadChanges extends Context.Service<
     settle(threadId: string, unit: object, revision: ThreadChangeRevision | undefined): Effect.Effect<void>;
   }
 >()('@runlith/agent/ThreadChanges') {}
+
+type ChangeOwners = {
+  readonly store: ThreadStore['Service'];
+  readonly transitions: ThreadTransitions['Service'];
+  readonly changes: ThreadChanges['Service'];
+};
+
+export const changeUnit = Effect.fnUntraced(function* <A, E>(
+  { store, transitions, changes }: ChangeOwners,
+  threadIds: readonly string[],
+  identity: string,
+  work: (unit: ThreadWriteTx) => Effect.Effect<A, E>,
+) {
+  const write = Effect.fnUntraced(function* (unit: ThreadWriteTx) {
+    yield* transitions.opened(threadIds, unit);
+    for (const threadId of threadIds) changes.claim(threadId, unit);
+    const result = yield* work(unit);
+    yield* transitions.revised(threadIds, unit, (revisions) =>
+      Effect.forEach(
+        threadIds,
+        (threadId) => {
+          const revision = revisions.get(threadId);
+          return revision === undefined ? Effect.void : changes.settle(threadId, unit, revision);
+        },
+        { discard: true },
+      ),
+    );
+    return result;
+  });
+  if (store.program !== undefined) {
+    const result = yield* store.program(identity, write);
+    if (result !== null) return result;
+  }
+  return yield* store.transaction(write);
+});
 
 type Subscription = { readonly moved: Set<string>; wake: Deferred.Deferred<void> | null };
 

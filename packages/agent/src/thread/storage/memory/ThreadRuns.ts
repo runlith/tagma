@@ -317,9 +317,10 @@ export function makeMemoryRuns({ memory, ownerId, scope }: MemoryRunsInput): Thr
         (unit) =>
           attempt('writePhase', () => {
             const run = owned(runId);
-            if (!run) return;
+            if (!run) return [];
             const stage = stageOf(run.progress);
-            change(unit, run, { progress: phase === null ? stage : { ...stage, phase } });
+            const changed = change(unit, run, { progress: phase === null ? stage : { ...stage, phase } });
+            return [{ id: changed.id, threadId: changed.threadId, progress: changed.progress, updatedAt: changed.updatedAt }];
           }),
         tx,
       ),
