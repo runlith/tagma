@@ -4,6 +4,7 @@ import type { CheckSubjectKind, FeedDeclaration, Operation, OperationDeclaration
 import { checkManifests, type DeclaredOperations, type Manifest, operationsOf } from '../platform/contract/service/manifest.js';
 import type { Route } from '../platform/contract/service/route.js';
 import { DOOR_PATHS } from '../http/door.js';
+import { SOCKET_PATHS } from './socketBinding.js';
 import type { Machine } from '../platform/contract/service/capacity.js';
 import type { PoolDeclaration } from '@runlith/held/Capacity';
 import type { SubjectKind } from '../platform/contract/wire/place.js';
@@ -135,7 +136,7 @@ export const participantsOf =
     );
 
 export const assemble = async ({ modules, rested }: ServerParts): Promise<Assembly> => {
-  checkManifests(modules, DOOR_PATHS);
+  checkManifests(modules, [...DOOR_PATHS, ...SOCKET_PATHS]);
   const operations = collect(await Effect.runPromise(operationsOf(modules)));
   const registry = operationRegistry<OperationId>(
     projectedOperations(Object.fromEntries(operations.declarations.map((declaration) => [declaration.id, declaration]))),

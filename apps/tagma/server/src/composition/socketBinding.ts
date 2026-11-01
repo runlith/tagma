@@ -16,6 +16,12 @@ import { doorStep } from './http/answering.js';
 import { Recognitions } from '../speech/contract/service/recognitions.js';
 import { DesktopChannel } from '../desktop-browser/contract/service/channel.js';
 import { desktopReportRoute } from '../desktop-browser/door.js';
+import { REPORT_PATH } from '../desktop-browser/contract/wire/channel.js';
+import { SENDING_PATH } from '../speech/contract/wire/listening.js';
+import { TAGMA_SOCKET_PATH } from '../socket/rpc.js';
+import type { DoorPath } from '../platform/contract/service/route.js';
+
+export const SOCKET_PATHS: readonly DoorPath[] = [TAGMA_SOCKET_PATH, SENDING_PATH, REPORT_PATH].map((path) => ({ path, prefix: false }));
 
 export type LiveDoorOf<M> = M extends { readonly live: { readonly handlers: (door: Context.Context<infer R>) => unknown } } ? R : never;
 
