@@ -5,9 +5,9 @@ ord: 45
 tags: ["explanation"]
 sources:
   - kind: file
-    ref: packages/layer/src/Point.ts
-  - kind: file
     ref: packages/layer/src/Graph.ts
+  - kind: file
+    ref: packages/layer/src/Point.ts
 ---
 `contribute` makes a member of its own for each call so the contribution lives exactly as long as the layer that carries it: under `Layer.when` it joins and leaves with the condition, in a chunk when the chunk lands, and at the point's tier it closes with the point's scope. It is eager because nothing resolves it — only its build joins the point, under lazy building too. A browser window resolves keys in its route loads before `App.mount` starts the app scope, and a start alone would wake no member then. So a `Layer.member` definition names its owner (`joins`). The graph builds the owner's standing members in a scope that has not started as soon as the outermost build returns: when the owner is built or given as a value, and when a member is admitted while its owner already stands, as an entry a child route load registers. One drain runs at a time and takes newly queued owners in turn, so its depth does not grow with the number of owners. Waiting for that return keeps a member that needs a key still being built from failing as a cycle. A member whose early join failed is not tried again by that scope's start, so its clash is reported once. Its id is the point's id and `from`, so two `contribute` calls with one `from` on one point are two keys of one id and refuse `KeyIdCollisionError`, inside one condition or chunk too; give each contribution its own `from`.
 

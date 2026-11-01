@@ -10,6 +10,8 @@ sources:
   - kind: file
     ref: packages/agent/src/thread/run/lifecycle/RunLifecycle.ts
   - kind: file
+    ref: packages/agent/src/thread/run/lifecycle/RunReports.ts
+  - kind: file
     ref: packages/agent/src/thread/run/RunExecution.ts
   - kind: file
     ref: packages/agent/src/thread/run/ThreadStopping.ts
@@ -21,8 +23,6 @@ sources:
   - kind: symbol
     ref: packages/agent/src/thread/run/lifecycle/closing.ts
     symbol: makeRunClosing
-  - kind: file
-    ref: packages/agent/src/thread/run/lifecycle/RunReports.ts
 ---
 Every stop entry — `stop_run`, `stop_agent`, scheduler interrupt-task, rewind, agent restart, archive, delete, project and worktree removal — goes through `ThreadStopping.stop`. The stop entry reads the thread's metadata row, not its history: a stop needs only the thread's transport and capabilities, and history reading grows with its length and can wait on the journal lane at an offloaded thread. `ThreadStopping.stop` takes the thread's current turn (another's expected turn is `run-mismatch` with the current one); a caller that waits for the end (delete, rewind, `stop_agent` on a step) stops and waits on exactly the turn it picked, even if its end is already recorded — otherwise deletion or rewind would proceed while a native turn still holds its fiber. It also writes a `stop` note on the run's activity: door, `by`, expected turn and outcome; note time is receipt time. `RunExecution.stop` sets the stop intent in `RunControl` and immediately calls `interrupt` of the transport holding the turn; the durable `stopRequest` is written in parallel with the interrupt and is needed by restarts and foreign processes. So the turn end in this process can arrive before the durable request. `RunLifecycle` at any end merges the in-memory intent with the row's `stopRequest` and writes the outcome with the same end record — without that, a native run interrupted before the request write would end `failed`, and withdraw and the marker would be lost.
 

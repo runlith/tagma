@@ -15,7 +15,7 @@ import type { HostManagement } from '../executions/contract/service/host.js';
 import type { ProjectIdentification, Projects } from '../projects/contract/service/registry.js';
 
 export type SourcePlace = {
-  readonly serverPath: string;
+  readonly checkout: string;
   readonly installation: Installation | undefined;
 };
 
