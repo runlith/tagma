@@ -1,6 +1,6 @@
 ---
 id: 01a19888-3749-73c6-8c8d-4675e44d6479
-title: Read-time row selections cannot capture their key, and a SQLite answer past its byte budget is refused
+title: "Read-time row selections cannot capture their key: seal and read evaluate one compiled selection"
 ord: 3
 tags: ["task"]
 fields:
