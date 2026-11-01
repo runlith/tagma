@@ -13,7 +13,7 @@ import {
   TRANSFER_FILE,
   dataDirectory,
 } from '@tagma/server/installation/contract/wire/layout';
-import { CHANNEL } from '@tagma/server/composition/channel';
+import { CHANNEL } from './channel.js';
 import { CHANNELS, type Channel } from '@tagma/server/installation/contract/wire/channel';
 import { holderName, junctionDirectory, readActive } from '@tagma/server/installation/contract/wire/junction';
 import type { MachineState } from '@tagma/server/installation/contract/wire/machine';

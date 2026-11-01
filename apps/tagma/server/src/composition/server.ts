@@ -449,7 +449,7 @@ export const serve = async (build: Build): Promise<void> => {
               installation === undefined
                 ? {
                     runtime: process.execPath,
-                    entry: join(serverPath, 'src', build.cut.entries.cli),
+                    entry: build.cut.entries.cli,
                     server: `http://${LOOPBACK_HOST}:${port}`,
                     owner: realpathSync(dataPath),
                   }

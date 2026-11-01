@@ -4,7 +4,7 @@ import { WindowPlacement } from '@runlith/desktop-host/WindowPlacement';
 import { DEFAULT_WINDOW_BEHAVIOR_STATE, type WindowBehaviorState } from '@runlith/window-behavior/contract/state';
 import { ElectronWindowBehaviorHost } from '@runlith/window-behavior/host-electron/ElectronWindowBehaviorHost';
 import { behaviorWindowOptions } from '@runlith/window-behavior/host-electron/bootstrap';
-import { CHANNEL } from '@tagma/server/composition/channel';
+import { CHANNEL } from './channel.js';
 import {
   BrowserWindow,
   type BrowserWindowConstructorOptions,

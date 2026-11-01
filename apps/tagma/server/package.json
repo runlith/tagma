@@ -227,9 +227,8 @@
       "bun": "./src/composition/shipped.ts",
       "default": null
     },
-    "./composition/channel": {
+    "./composition/developer/channel": {
       "types": "./src/composition/developer/channel.ts",
-      "release": "./src/composition/release/channel.ts",
       "node": "./src/composition/developer/channel.ts",
       "bun": "./src/composition/developer/channel.ts",
       "default": "./src/composition/developer/channel.ts"

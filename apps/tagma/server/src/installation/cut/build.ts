@@ -1,6 +1,5 @@
 import { writeFileSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { Effect, Layer, Schema } from 'effect';
 import * as BunChildProcessSpawner from '@effect/platform-bun/BunChildProcessSpawner';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
@@ -18,7 +17,8 @@ import { cameUp, serverLines } from './came.js';
 import { readInstallation, refusalDetail, verifyInstallation } from '../closure/read.js';
 import type { LauncherWritten } from '../setup/launcher.js';
 import type { BuildServer } from './port.js';
-import { type Composition, releaseInstallation, stepBack } from './release.js';
+import type { Composition } from './descriptor.js';
+import { releaseInstallation, stepBack } from './release.js';
 
 const spawning = BunChildProcessSpawner.layer.pipe(Layer.provide(Layer.mergeAll(BunFileSystem.layer, BunPath.layer)));
 
@@ -129,7 +129,6 @@ const landRelease = Effect.fnUntraced(function* (
   origin: { readonly checkout: string } | null | undefined,
   composition: Composition,
 ) {
-  const source = fileURLToPath(new URL('../../../', import.meta.url));
   const note = process.env[BUILD_SWAPPED_ENV];
   const swapped = (version: string): void => {
     if (note === undefined || note === '') return;
@@ -139,7 +138,6 @@ const landRelease = Effect.fnUntraced(function* (
   };
   const read = yield* Effect.result(
     releaseInstallation(
-      source,
       installationRoot(composition.channel),
       launcherPath(composition.channel),
       process.env,

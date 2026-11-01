@@ -1,7 +1,7 @@
 import { watch } from 'node:fs';
 import { join } from 'node:path';
 import { RESTART_RECORD } from '@tagma/server/installation/contract/wire/restart';
-import { CHANNEL } from '@tagma/server/composition/channel';
+import { CHANNEL } from './channel.js';
 import { currentVersion } from '@tagma/server/installation/closure/versions';
 import { ASKED_EVERY_MS, dataDirectory, installationsRoot, serveLogPath } from '@tagma/server/installation/contract/wire/layout';
 import type { Channel } from '@tagma/server/installation/contract/wire/channel';

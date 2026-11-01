@@ -9,21 +9,21 @@ import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import * as BunPath from '@effect/platform-bun/BunPath';
 import { Git, gitLayer } from '@runlith/git/Git';
 import { troubleOf } from '@runlith/git/repository';
-import { gitHubCli, type GitHubCli } from '@runlith/github/GitHubCli';
 import { developerLabels } from '@runlith/tagma/adapter/host-modules';
 import { gitCut, gitTree } from '../../platform/git/readings.js';
 import { refusalLines } from '@runlith/agent/tool/refusal';
 import { EXECUTIONS_RUNTIME } from '../contract/wire/archive.js';
-import { compareReleases, FEED_REPOSITORY, isRelease, newestOf, releaseAfter, type StoreMarks } from '../contract/wire/feed.js';
+import { compareReleases, isRelease, newestOf, releaseAfter, type StoreMarks } from '../contract/wire/feed.js';
 import type { Channel } from '../contract/wire/channel.js';
 import { dataDirectory, hostBundle, RELEASE_INSIDE } from '../contract/wire/layout.js';
 import { diskImage } from './dmg.js';
 import { DESKTOP, IRREVERSIBLE_STORES, type IrreversibleChange, MIGRATIONS } from '../contract/wire/manifest.js';
 import { releaseIdentity } from '../setup/signing.js';
 import { output } from './command.js';
+import type { Composition, Publisher } from './descriptor.js';
 import { archiveTrouble, developerInputs, type Label, sourceComments } from './proof.js';
-import { checkoutTags, highestOf, issuedReleases } from './published.js';
-import { type Composition, INPUT_RECORDS, RELEASE_LOG, ReleaseRefused, releaseStaged } from './release.js';
+import { checkoutTags, highestOf } from './published.js';
+import { INPUT_RECORDS, RELEASE_LOG, ReleaseRefused, releaseStaged } from './release.js';
 import { releaseRuntime } from './runtime.js';
 import { type Built, type BuiltPlatform, INPUTS, MAPS, type Released, stagedCut, type Stages, type Trying } from './stage.js';
 import { machineTarget, type Target, TARGETS, targetName } from './target.js';
@@ -32,8 +32,6 @@ import { trialStart } from './trial.js';
 export const RELEASE_DIRECTORY = 'release';
 export const KEPT_MAPS = 'maps';
 export const diskImageFile = (channel: Channel, release: string, target: Target): string => `${channel.name}-${release}-${target.arch}.dmg`;
-export const desktopAssets = (sourcePath: string): string => resolve(sourcePath, '..', 'desktop', 'assets');
-export const checkoutOf = (sourcePath: string): string => resolve(sourcePath, '..', '..', '..');
 export type CutCache = { readonly runtimes: string; readonly packages: string };
 export const cutCache = (data: string): CutCache => ({
   runtimes: join(data, 'cut-cache', 'runtimes'),
@@ -43,11 +41,6 @@ export const cutCache = (data: string): CutCache => ({
 const PACK_FLAGS = ['--no-xattrs', '--no-mac-metadata', '--no-acls', '--no-fflags', '--uid', '0', '--gid', '0', '--numeric-owner'];
 const MIGRATION = /^\d{14}_/u;
 const TOLD = 10;
-
-export type Steps = {
-  readonly graph: readonly string[];
-  readonly journal: readonly string[];
-};
 
 export type Previous = { readonly stores: StoreMarks; readonly changes: readonly IrreversibleChange[] };
 
@@ -90,7 +83,7 @@ export const packRelease = (
     Effect.flatMap((ran) => (ran.status === 0 ? Effect.void : Effect.fail(`tar exited ${ran.status}: ${ran.text.trim()}`))),
   );
 
-export const storesOf = Effect.fnUntraced(function* (sourcePath: string, steps: Steps) {
+export const storesOf = Effect.fnUntraced(function* ({ roots, steps }: Composition) {
   const files = yield* FileSystem.FileSystem;
   const migrations = (dir: string) =>
     files.readDirectory(dir).pipe(
@@ -100,8 +93,8 @@ export const storesOf = Effect.fnUntraced(function* (sourcePath: string, steps: 
       ),
     );
   const stores: StoreMarks = {
-    'machine-store': yield* migrations(join(sourcePath, MIGRATIONS)),
-    'host-store': yield* migrations(join(checkoutOf(sourcePath), 'packages', 'execution-host', MIGRATIONS)),
+    'machine-store': yield* migrations(join(roots.server, MIGRATIONS)),
+    'host-store': yield* migrations(join(roots.packages, 'execution-host', MIGRATIONS)),
     graph: steps.graph,
     journal: steps.journal,
   };
@@ -113,19 +106,20 @@ export type Cut = {
   readonly asked: string | null;
   readonly out: string;
   readonly cache: CutCache;
-  readonly steps: Steps;
-  readonly repo: string;
-  readonly gh: GitHubCli;
 };
 
-export const cutRelease = Effect.fn('installation.cutRelease')(function* (
-  sourcePath: string,
-  { composition, asked, out, cache, steps, repo, gh }: Cut,
-): Effect.fn.Return<Released, ReleaseRefused, Machine | Scope.Scope> {
+export const publishedBy = (publisher: Publisher | null) => (publisher === null ? Effect.succeed(null) : Effect.scoped(publisher.latest));
+
+export const cutRelease = Effect.fn('installation.cutRelease')(function* ({
+  composition,
+  asked,
+  out,
+  cache,
+}: Cut): Effect.fn.Return<Released, ReleaseRefused, Machine | Scope.Scope> {
   const files = yield* FileSystem.FileSystem;
   const git = yield* Git;
   const context = yield* Effect.context<Machine>();
-  const checkout = checkoutOf(sourcePath);
+  const { checkout, packages, server } = composition.roots;
   let logged = '';
   const refusal = (step: string, detail: string, unblock: readonly string[] = []) =>
     new ReleaseRefused({ step, detail, log: logged, unblock: [...unblock] });
@@ -147,17 +141,18 @@ export const cutRelease = Effect.fn('installation.cutRelease')(function* (
     );
   }
 
-  const issued = yield* issuedReleases(gh, repo, checkout).pipe(
+  const { publisher } = composition;
+  const latest = yield* publishedBy(publisher).pipe(
     Effect.mapError((trouble) =>
-      refusal('feed', `what ${repo} publishes could not be read: ${trouble.detail}`, [
+      refusal('feed', `what ${publisher?.place} publishes could not be read: ${trouble.detail}`, [
         ...trouble.unblock,
-        'the version and what is irreversible are judged against the newest published release: reach GitHub, then bun run tagma:release',
+        `the version and what is irreversible are judged against the newest published release: reach ${publisher?.place}, then bun run tagma:release`,
       ]),
     ),
   );
   const tags = yield* checkoutTags(checkout).pipe(Effect.mapError((trouble) => refusal('tree', trouble.detail)));
-  const highest = highestOf(issued, tags);
-  const newest = issued.latest === null ? null : newestOf(issued.latest);
+  const highest = highestOf(latest, tags);
+  const newest = latest === null ? null : newestOf(latest);
   if (asked !== null && highest !== null && compareReleases(asked, highest) <= 0) {
     return yield* refuse('version', `${highest} is published, and each version is newer than every one before it`, [
       `bun run tagma:release --version <a version after ${highest}>`,
@@ -166,7 +161,7 @@ export const cutRelease = Effect.fn('installation.cutRelease')(function* (
   }
   const release = asked ?? releaseAfter(highest);
 
-  const stores = yield* storesOf(sourcePath, steps);
+  const stores = yield* storesOf(composition);
   const dropped = newest === null ? [] : droppedOf(stores, newest.stores);
   if (newest !== null && dropped.length > 0) {
     return yield* refuse(
@@ -186,11 +181,11 @@ export const cutRelease = Effect.fn('installation.cutRelease')(function* (
   const signer = yield* releaseIdentity.pipe(Effect.mapError((failure) => refusal('signing', failure.detail, failure.unblock)));
 
   const manifests = [
-    ...(yield* files.readDirectory(join(checkout, 'packages')).pipe(Effect.mapError(unreadable(join(checkout, 'packages'))))).map((name) =>
-      join(checkout, 'packages', name, 'package.json'),
+    ...(yield* files.readDirectory(packages).pipe(Effect.mapError(unreadable(packages)))).map((name) =>
+      join(packages, name, 'package.json'),
     ),
-    ...(yield* files.readDirectory(join(sourcePath, 'src')).pipe(Effect.mapError(unreadable(join(sourcePath, 'src'))))).map((name) =>
-      join(sourcePath, 'src', name, 'module.json'),
+    ...(yield* files.readDirectory(join(server, 'src')).pipe(Effect.mapError(unreadable(join(server, 'src'))))).map((name) =>
+      join(server, 'src', name, 'module.json'),
     ),
   ];
   const declared = yield* Effect.tryPromise({
@@ -203,7 +198,7 @@ export const cutRelease = Effect.fn('installation.cutRelease')(function* (
 
   const built = Effect.fnUntraced(function* (home: string, target: Target, runtime: string) {
     const inputs = join(home, INPUTS);
-    const landed = yield* releaseStaged(sourcePath, home, composition, {
+    const landed = yield* releaseStaged(home, composition, {
       number: release,
       signer,
       maps: join(home, MAPS),
@@ -237,7 +232,7 @@ export const cutRelease = Effect.fn('installation.cutRelease')(function* (
       }
       const kept = yield* sourceComments(recorded, checkout).pipe(Effect.mapError((failure) => refusal('comments', failure)));
       yield* packRelease(join(landed.root, DESKTOP), archive, application).pipe(Effect.mapError((failure) => refusal('pack', failure)));
-      yield* diskImage(join(landed.root, DESKTOP, application), image, desktopAssets(sourcePath), composition.channel.name, {
+      yield* diskImage(join(landed.root, DESKTOP, application), image, composition.brand.assets, composition.channel.name, {
         identity: signer.fingerprint,
         timestamp: true,
       }).pipe(Effect.mapError((failure) => refusal('disk image', failure)));
@@ -301,8 +296,7 @@ export const cutRelease = Effect.fn('installation.cutRelease')(function* (
   return yield* stagedCut(out, { release, commit: cut.head, stores, irreversible }, stages);
 }, Effect.scoped);
 
-const USAGE = 'bun run tagma:release [--version <x.y.z>] [--repo <owner/name>] [--out <dir>] [--notarize] [--json]';
-const REPOSITORY = /^[\w.-]+\/[\w.-]+$/u;
+const USAGE = 'bun run tagma:release [--version <x.y.z>] [--out <dir>] [--notarize] [--json]';
 
 const spawning = BunChildProcessSpawner.layer.pipe(Layer.provide(Layer.mergeAll(BunFileSystem.layer, BunPath.layer)));
 
@@ -324,13 +318,7 @@ export const flagsOf = (given: readonly string[], told: (code: string, reason: s
   return { json, value: (name) => values.get(name), rest: args.filter((one) => one !== '--json') };
 };
 
-export const releaseCommand = Effect.fnUntraced(function* (
-  sourcePath: string,
-  given: readonly string[],
-  composition: Composition,
-  steps: Steps,
-  developer: Channel,
-) {
+export const releaseCommand = Effect.fnUntraced(function* (given: readonly string[], composition: Composition) {
   let json = given.includes('--json');
   const told = (code: string, reason: string, unblock: readonly string[] = [USAGE]): never => {
     if (json) console.log(JSON.stringify({ code, reason, unblock }));
@@ -340,22 +328,14 @@ export const releaseCommand = Effect.fnUntraced(function* (
   const flags = flagsOf(given, told);
   json = flags.json;
   if (flags.rest.length > 0) told('usage', `${flags.rest.join(' ')} is not understood`);
-  const repo = flags.value('--repo') ?? FEED_REPOSITORY;
-  if (!REPOSITORY.test(repo)) told('usage', `${repo} names no GitHub repository: owner/name`);
-  const data = dataDirectory(developer, process.env);
+  const data = dataDirectory(composition.workshop, process.env);
   if (data === null) return told('no-home', 'HOME names no home directory, so where the release is cut is unknown');
   const named = flags.value('--out');
   const out = named === undefined ? join(data, RELEASE_DIRECTORY) : resolve(named);
   const cut = yield* Effect.result(
-    cutRelease(sourcePath, {
-      composition,
-      asked: flags.value('--version') ?? null,
-      out,
-      cache: cutCache(data),
-      steps,
-      repo,
-      gh: gitHubCli,
-    }).pipe(Effect.provide(Layer.mergeAll(gitLayer.pipe(Layer.provide(spawning)), spawning, BunFileSystem.layer))),
+    cutRelease({ composition, asked: flags.value('--version') ?? null, out, cache: cutCache(data) }).pipe(
+      Effect.provide(Layer.mergeAll(gitLayer.pipe(Layer.provide(spawning)), spawning, BunFileSystem.layer)),
+    ),
   );
   if (cut._tag === 'Failure') {
     return told('release-refused', `${cut.failure.step}: ${cut.failure.detail}`, [
@@ -382,7 +362,9 @@ export const releaseCommand = Effect.fnUntraced(function* (
     `a feed of this release alone, to try an update on this machine: ${feed}`,
     `source maps ${maps}: publishing keeps them under ${join(data, KEPT_MAPS, record.release)}`,
     `log ${log}`,
-    `bun run tagma:release publish — publishes ${record.release} in ${repo}`,
+    composition.publisher === null
+      ? 'this distribution names no publisher, so the release is placed by hand'
+      : `bun run tagma:release publish — publishes ${record.release} in ${composition.publisher.place}`,
   ])
     console.log(line);
 });

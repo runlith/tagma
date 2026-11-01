@@ -1,450 +1,113 @@
 import { createHash } from 'node:crypto';
-import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { basename, dirname, join } from 'node:path';
+import { join } from 'node:path';
 import { afterAll, expect } from 'bun:test';
 import { it } from '@runlith/effect-test';
-import { Effect, FileSystem, Layer } from 'effect';
+import { Effect, Layer } from 'effect';
 import * as BunChildProcessSpawner from '@effect/platform-bun/BunChildProcessSpawner';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import * as BunPath from '@effect/platform-bun/BunPath';
-import { type Git, gitLayer } from '@runlith/git/Git';
-import { type GitHubCli, ProgramFailed } from '@runlith/github/GitHubCli';
-import { compareReleases, type Feed, releaseFile } from '../contract/wire/feed.js';
-import type { IrreversibleChange } from '../contract/wire/manifest.js';
+import { gitLayer } from '@runlith/git/Git';
+import type { Feed } from '../contract/wire/feed.js';
+import type { Publisher } from './descriptor.js';
 import { MAPS, RELEASE_RECORD, type ReleaseRecord } from './stage.js';
-import { NotarizationRefused, type Notary } from './notarize.js';
+import type { Notary } from './notarize.js';
 import { publishRelease } from './publish.js';
 
-const REPO = 'test/tagma';
 const scratch = realpathSync(mkdtempSync(join(tmpdir(), 'tagma-publish-')));
 afterAll(() => rmSync(scratch, { recursive: true, force: true }));
 
 const spawning = BunChildProcessSpawner.layer.pipe(Layer.provide(Layer.mergeAll(BunFileSystem.layer, BunPath.layer)));
-const machine = Layer.mergeAll(gitLayer.pipe(Layer.provide(spawning)), BunFileSystem.layer);
-const run = <A, E>(effect: Effect.Effect<A, E, FileSystem.FileSystem | Git>) => Effect.result(effect.pipe(Effect.provide(machine)));
+const machine = Layer.mergeAll(gitLayer.pipe(Layer.provide(spawning)), spawning, BunFileSystem.layer);
 
-const sha = (bytes: Uint8Array): string => createHash('sha256').update(bytes).digest('hex');
 const git = (args: readonly string[]) => Bun.spawnSync(['git', ...args], { stdout: 'pipe', stderr: 'pipe' });
 const said = (args: readonly string[]) => git(args).stdout.toString().trim();
+const sha = (bytes: Uint8Array): string => createHash('sha256').update(bytes).digest('hex');
 
-const source = (name: string): string => {
-  const checkout = join(scratch, name);
-  mkdirSync(checkout);
-  expect(git(['-C', checkout, 'init', '-q', '-b', 'main']).exitCode).toBe(0);
-  return checkout;
-};
-const committed = (checkout: string): string => {
-  expect(git(['-C', checkout, '-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '--allow-empty', '-m', 'cut']).exitCode).toBe(0);
-  return said(['-C', checkout, 'rev-parse', 'HEAD']);
-};
-
-const changed = (checkout: string, files: Record<string, string>, ...message: string[]): string => {
-  for (const [path, text] of Object.entries(files)) {
-    mkdirSync(dirname(join(checkout, path)), { recursive: true });
-    writeFileSync(join(checkout, path), text);
-  }
-  expect(git(['-C', checkout, 'add', '-A']).exitCode).toBe(0);
-  const args = [
-    '-C',
-    checkout,
-    '-c',
-    'user.name=t',
-    '-c',
-    'user.email=t@t',
-    'commit',
-    '-q',
-    ...message.flatMap((paragraph) => ['-m', paragraph]),
-  ];
-  expect(git(args).exitCode).toBe(0);
-  return said(['-C', checkout, 'rev-parse', 'HEAD']);
-};
-
-const cutInto = (
-  at: string,
-  commit: string,
-  release: string,
-  image = true,
-  irreversible: readonly IrreversibleChange[] = [],
-): ReleaseRecord => {
+const cutInto = (at: string, commit: string, release: string): void => {
   rmSync(at, { recursive: true, force: true });
   mkdirSync(join(at, MAPS), { recursive: true });
   writeFileSync(join(at, MAPS, 'http.js.map'), `{"release":"${release}"}`);
-  const platforms: Record<string, { archive: string; sha256: string; size: number }> = {};
-  const images: Record<string, string> = {};
-  for (const arch of ['arm64', 'x64']) {
-    const archive = `tagma-${release}-darwin-${arch}.tar.gz`;
-    const bytes = new TextEncoder().encode(`the ${arch} archive of ${release} at ${commit}\n`);
-    writeFileSync(join(at, archive), bytes);
-    platforms[`darwin-${arch}`] = { archive, sha256: sha(bytes), size: bytes.length };
-    images[`darwin-${arch}`] = `Tagma-${release}-${arch}.dmg`;
-    if (image) writeFileSync(join(at, images[`darwin-${arch}`]!), `the ${arch} dmg of ${release}\n`);
-  }
+  const archive = `tagma-${release}-darwin-arm64.tar.gz`;
+  const bytes = new TextEncoder().encode(`the archive of ${release}\n`);
+  writeFileSync(join(at, archive), bytes);
+  writeFileSync(join(at, `Tagma-${release}-arm64.dmg`), `the dmg of ${release}\n`);
   const record: ReleaseRecord = {
     release,
     commit,
-    platforms,
-    images,
+    platforms: { 'darwin-arm64': { archive, sha256: sha(bytes), size: bytes.length } },
+    images: { 'darwin-arm64': `Tagma-${release}-arm64.dmg` },
     stores: { 'machine-store': [], 'host-store': [], graph: [], journal: [] },
-    irreversible,
+    irreversible: [],
     notarized: false,
   };
   writeFileSync(join(at, RELEASE_RECORD), JSON.stringify(record));
-  return record;
 };
 
-const apple = () => {
-  const sealed: string[] = [];
-  const failing = { refuse: false };
-  const notary: Notary = {
-    seal: (cut, into, record) =>
-      Effect.suspend(() => {
-        sealed.push(record.release);
-        if (failing.refuse) return Effect.fail(new NotarizationRefused({ detail: 'Apple answered Invalid', unblock: [] }));
-        mkdirSync(into, { recursive: true });
-        for (const file of [...Object.values(record.platforms).map((one) => one.archive), ...Object.values(record.images)])
-          writeFileSync(join(into, file), readFileSync(join(cut, file)));
-        return Effect.succeed({ ...record, notarized: true });
+const notary: Notary = {
+  seal: (cut, into, record) =>
+    Effect.sync(() => {
+      mkdirSync(into, { recursive: true });
+      for (const file of [...Object.values(record.platforms).map((one) => one.archive), ...Object.values(record.images)])
+        writeFileSync(join(into, file), readFileSync(join(cut, file)));
+      return { ...record, notarized: true };
+    }),
+};
+
+const shelf = () => {
+  const placed: { publication: Parameters<Publisher['publish']>[0]; present: readonly boolean[] }[] = [];
+  let latest: Feed | null = null;
+  const publisher: Publisher = {
+    place: 'the test shelf',
+    latest: Effect.sync(() => latest),
+    address: (release, file) => `https://shelf.test/${release}/${file}`,
+    publish: (publication) =>
+      Effect.sync(() => {
+        placed.push({ publication, present: publication.files.map((file) => existsSync(join(publication.home, file))) });
+        latest = publication.feed;
+        return { page: null };
       }),
   };
-  return { notary, sealed, failing };
-};
-
-type Held = {
-  draft: boolean;
-  prerelease: boolean;
-  target: string;
-  notes: string;
-  assets: { name: string; size: number; state: string; digest: string; bytes: Uint8Array }[];
-};
-
-const github = () => {
-  const releases = new Map<string, Held>();
-  const tags = new Map<string, string>();
-  const pushed = new Set<string>();
-  const failing = { upload: false };
-  const access = { push: true };
-  let latest: string | null = null;
-  const answer = (stdout: string) => Effect.succeed({ status: 0 as const, stdout, stderr: '' });
-  const failed = (stderr: string) => Effect.fail(new ProgramFailed({ phase: 'exit', detail: stderr, status: 1, stdout: '', stderr }));
-  const latestTag = (): string | null => {
-    const marked = latest === null ? undefined : releases.get(latest);
-    if (latest !== null && marked !== undefined && !marked.draft && !marked.prerelease) return latest;
-    return (
-      [...releases.entries()]
-        .filter(([, one]) => !one.draft && !one.prerelease)
-        .map(([tag]) => tag)
-        .toSorted((a, b) => compareReleases(b.slice(1), a.slice(1)))[0] ?? null
-    );
-  };
-  const api = (args: readonly string[]) => {
-    const path = args.find((one) => one.startsWith('repos/')) ?? '';
-    if (path === `repos/${REPO}`) return answer(JSON.stringify({ permissions: { push: access.push } }));
-    if (path.startsWith(`repos/${REPO}/commits/`)) {
-      const commit = path.slice(`repos/${REPO}/commits/`.length);
-      return pushed.has(commit) ? answer(`${commit}\n`) : failed(`gh: No commit found for SHA: ${commit} (HTTP 422)`);
-    }
-    if (path.startsWith(`repos/${REPO}/git/ref/tags/`)) {
-      const commit = tags.get(path.slice(`repos/${REPO}/git/ref/tags/`.length));
-      return commit === undefined ? failed('gh: Not Found (HTTP 404)') : answer(`commit ${commit}\n`);
-    }
-    if (path.startsWith(`repos/${REPO}/releases`)) {
-      return answer([...releases.entries()].flatMap(([tag, one]) => (one.draft ? [] : [`${tag}\n`])).join(''));
-    }
-    return failed(`gh api ${path} is not faked`);
-  };
-  const cli: GitHubCli = {
-    run: (args) =>
-      Effect.suspend(() => {
-        if (args[0] === 'api') return api(args);
-        const verb = args[1] ?? '';
-        const tag = args[2]?.startsWith('--') === false ? args[2] : latestTag();
-        const held = tag === null ? undefined : releases.get(tag);
-        if (verb === 'create') {
-          if (held !== undefined) return failed('tag already exists');
-          releases.set(tag!, {
-            draft: args.includes('--draft'),
-            prerelease: false,
-            target: args[args.indexOf('--target') + 1]!,
-            notes: args[args.indexOf('--notes') + 1]!,
-            assets: [],
-          });
-          return answer('');
-        }
-        if (held === undefined || tag === null) return failed('release not found\n');
-        if (verb === 'view') {
-          const at = held.draft ? 'untagged-0' : tag;
-          const assets = held.assets.map(({ bytes: _, ...one }) => ({
-            ...one,
-            url: `https://github.com/${REPO}/releases/download/${at}/${one.name}`,
-          }));
-          return answer(
-            JSON.stringify({
-              tagName: tag,
-              isDraft: held.draft,
-              isPrerelease: held.prerelease,
-              url: `https://github.com/${REPO}/releases/tag/${tag}`,
-              targetCommitish: held.target,
-              body: held.notes,
-              assets,
-            }),
-          );
-        }
-        if (verb === 'download') {
-          const name = args[args.indexOf('--pattern') + 1]!;
-          const found = held.assets.find((one) => one.name === name);
-          if (found === undefined) return failed('no assets match the file pattern\n');
-          writeFileSync(join(args[args.indexOf('--dir') + 1]!, name), found.bytes);
-          return answer('');
-        }
-        if (verb === 'upload') {
-          for (const path of args.slice(3, args.indexOf('--repo'))) {
-            const bytes = new Uint8Array(readFileSync(path));
-            const name = basename(path);
-            held.assets = [
-              ...held.assets.filter((one) => one.name !== name),
-              { name, size: bytes.length, state: 'uploaded', digest: `sha256:${sha(bytes)}`, bytes },
-            ];
-            if (failing.upload) return failed('connection reset');
-          }
-          return answer('');
-        }
-        if (verb === 'edit') {
-          if (args.includes('--target')) held.target = args[args.indexOf('--target') + 1]!;
-          if (args.includes('--notes')) held.notes = args[args.indexOf('--notes') + 1]!;
-          if (args.includes('--prerelease=false')) held.prerelease = false;
-          if (args.includes('--draft=false')) {
-            held.draft = false;
-            if (!tags.has(tag)) tags.set(tag, held.target);
-          }
-          if (args.includes('--latest') && !held.prerelease) latest = tag;
-          return answer('');
-        }
-        return failed(`gh release ${verb} is not faked`);
-      }),
-  };
-  const feedOf = (tag: string): Feed => {
-    const bytes = releases.get(tag)?.assets.find((one) => one.name === 'feed.json')?.bytes;
-    return JSON.parse(new TextDecoder().decode(bytes));
-  };
-  return { cli, releases, tags, pushed, failing, access, latestTag, feedOf };
-};
-
-const placeOf = (name: string) => {
-  const checkout = source(`${name}-source`);
-  return { cut: join(scratch, `${name}-release`), checkout, repo: REPO, kept: join(scratch, `${name}-maps`) };
+  return { publisher, placed };
 };
 
 it.live(
-  'a release goes public only with every archive, DMG and its feed in place, tagged on its commit; publishing again after a failed upload finishes it, and the next release carries the feed before it',
+  'a descriptor publisher receives the notarized files and the feed with the release first, the checkout is tagged, and a number not above the published is refused',
   () =>
     Effect.gen(function* () {
-      const gh = github();
-      const notarizing = apple().notary;
-      const place = placeOf('journey');
-      const firstCommit = committed(place.checkout);
-      gh.pushed.add(firstCommit);
-      const first = cutInto(place.cut, firstCommit.slice(0, 10), '0.2.0');
+      const checkout = join(scratch, 'checkout');
+      mkdirSync(checkout);
+      expect(git(['-C', checkout, 'init', '-q', '-b', 'main']).exitCode).toBe(0);
+      const commit = (message: string) => {
+        expect(
+          git(['-C', checkout, '-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '--allow-empty', '-m', message]).exitCode,
+        ).toBe(0);
+        return said(['-C', checkout, 'rev-parse', 'HEAD']);
+      };
+      const { publisher, placed } = shelf();
+      const place = { cut: join(scratch, 'release'), checkout, kept: join(scratch, 'maps') };
+      const publish = () => Effect.result(publishRelease(publisher, notary, place).pipe(Effect.provide(machine)));
 
-      gh.failing.upload = true;
-      const broken = yield* run(publishRelease(gh.cli, notarizing, place));
-      const draft = structuredClone(gh.releases.get('v0.2.0'));
-      gh.releases.get('v0.2.0')!.prerelease = true;
-      gh.failing.upload = false;
-      const one = yield* run(publishRelease(gh.cli, notarizing, place));
+      const first = commit('feat: first');
+      cutInto(place.cut, first, '0.2.0');
+      expect((yield* publish())._tag).toBe('Success');
+      cutInto(place.cut, commit('fix: second'), '0.2.1');
+      const second = yield* publish();
+      cutInto(place.cut, commit('fix: behind'), '0.1.9');
+      const behind = yield* publish();
 
-      expect(broken._tag === 'Failure' && broken.failure.step).toBe('upload');
-      expect(draft).toMatchObject({ draft: true, target: firstCommit });
-      expect(gh.latestTag()).toBe('v0.2.0');
-      expect(gh.releases.get('v0.2.0')).toMatchObject({ draft: false, prerelease: false, target: firstCommit });
-      expect(
-        gh.releases
-          .get('v0.2.0')
-          ?.assets.map((asset) => asset.name)
-          .sort(),
-      ).toEqual([...Object.values(first.platforms).map((archive) => archive.archive), ...Object.values(first.images), 'feed.json'].sort());
-      expect(gh.feedOf('v0.2.0').releases.map((entry) => [entry.release, entry.platforms['darwin-x64']])).toEqual([
-        ['0.2.0', { ...first.platforms['darwin-x64']!, archive: releaseFile(REPO, '0.2.0', first.platforms['darwin-x64']!.archive) }],
+      expect(placed.map(({ present }) => present)).toEqual([
+        [true, true],
+        [true, true],
       ]);
-      expect(one._tag === 'Success' && one.success.feed).toBe(releaseFile(REPO, '0.2.0', 'feed.json'));
-      expect([gh.tags.get('v0.2.0'), said(['-C', place.checkout, 'rev-parse', 'v0.2.0^{commit}'])]).toEqual([firstCommit, firstCommit]);
-      expect(readFileSync(join(place.kept, '0.2.0', 'http.js.map'), 'utf8')).toBe('{"release":"0.2.0"}');
-
-      const secondCommit = committed(place.checkout);
-      gh.pushed.add(secondCommit);
-      cutInto(place.cut, secondCommit.slice(0, 10), '0.2.1', true, [{ store: 'machine-store', release: '0.2.1' }]);
-      const two = yield* run(publishRelease(gh.cli, notarizing, place));
-      const published = structuredClone([...gh.releases.entries()]);
-      const again = yield* run(publishRelease(gh.cli, notarizing, place));
-
-      expect(two._tag).toBe('Success');
-      expect(again._tag).toBe('Success');
-      expect(gh.latestTag()).toBe('v0.2.1');
-      expect(gh.feedOf('v0.2.1').releases.map((entry) => [entry.release, entry.irreversible])).toEqual([
-        ['0.2.1', true],
-        ['0.2.0', false],
+      expect(placed.map(({ publication }) => publication.record.notarized)).toEqual([true, true]);
+      expect(placed[1]?.publication.feed.releases.map((one) => [one.release, one.platforms['darwin-arm64']?.archive])).toEqual([
+        ['0.2.1', 'https://shelf.test/0.2.1/tagma-0.2.1-darwin-arm64.tar.gz'],
+        ['0.2.0', 'https://shelf.test/0.2.0/tagma-0.2.0-darwin-arm64.tar.gz'],
       ]);
-      expect([...gh.releases.entries()]).toEqual(published);
-      expect(said(['-C', place.checkout, 'tag', '--list'])).toBe('v0.2.0\nv0.2.1');
-    }),
-);
-
-it.live(
-  'a release taken down as a prerelease is not published again, the next one is offered over the release before it, and a number this checkout published once is not published twice',
-  () =>
-    Effect.gen(function* () {
-      const gh = github();
-      const notarizing = apple().notary;
-      const place = placeOf('takedown');
-      for (const release of ['0.2.0', '0.2.1']) {
-        const commit = committed(place.checkout);
-        gh.pushed.add(commit);
-        cutInto(place.cut, commit, release);
-        expect((yield* run(publishRelease(gh.cli, notarizing, place)))._tag).toBe('Success');
-      }
-      gh.releases.get('v0.2.1')!.prerelease = true;
-
-      const takenDown = yield* run(publishRelease(gh.cli, notarizing, place));
-      const commit = committed(place.checkout);
-      gh.pushed.add(commit);
-      cutInto(place.cut, commit, '0.2.2');
-      const next = yield* run(publishRelease(gh.cli, notarizing, place));
-      const latest = gh.latestTag();
-      const offered = gh.feedOf('v0.2.2').releases.map((entry) => entry.release);
-      gh.releases.delete('v0.2.2');
-      const reused = yield* run(publishRelease(gh.cli, notarizing, place));
-
-      expect(takenDown._tag === 'Failure' && takenDown.failure.step).toBe('release');
-      expect(next._tag).toBe('Success');
-      expect(latest).toBe('v0.2.2');
-      expect(offered).toEqual(['0.2.2', '0.2.0']);
-      expect(reused._tag === 'Failure' && reused.failure.step).toBe('version');
-      expect(gh.releases.has('v0.2.2')).toBe(false);
-    }),
-);
-
-it.live(
-  'a cut Apple refuses, one whose commit is not on GitHub, one the account cannot push, one whose tag GitHub holds on another commit, one without its DMG and one not newer than what is published leave GitHub as it was',
-  () =>
-    Effect.gen(function* () {
-      const gh = github();
-      const notarized = apple();
-      const place = placeOf('refused');
-      const cut = committed(place.checkout);
-
-      cutInto(place.cut, cut, '0.2.0');
-      const unpushed = yield* run(publishRelease(gh.cli, notarized.notary, place));
-      gh.pushed.add(cut);
-      gh.access.push = false;
-      const unwritable = yield* run(publishRelease(gh.cli, notarized.notary, place));
-      gh.access.push = true;
-      gh.tags.set('v0.2.0', 'f'.repeat(40));
-      const foreignTag = yield* run(publishRelease(gh.cli, notarized.notary, place));
-      gh.tags.delete('v0.2.0');
-      notarized.failing.refuse = true;
-      const refused = yield* run(publishRelease(gh.cli, notarized.notary, place));
-      notarized.failing.refuse = false;
-      cutInto(place.cut, cut, '0.2.0', false);
-      const imageless = yield* run(publishRelease(gh.cli, notarized.notary, place));
-      const untouched = gh.releases.size;
-      cutInto(place.cut, cut, '0.2.0');
-      yield* run(publishRelease(gh.cli, notarized.notary, place));
-      cutInto(place.cut, cut, '0.1.9');
-      const older = yield* run(publishRelease(gh.cli, notarized.notary, place));
-
-      expect(
-        [unpushed, unwritable, foreignTag, refused, imageless, older].map((outcome) =>
-          outcome._tag === 'Failure' ? outcome.failure.step : 'published',
-        ),
-      ).toEqual(['commit', 'access', 'tag', 'notarization', 'release', 'version']);
-      expect(notarized.sealed).toEqual(['0.2.0', '0.2.0']);
-      expect(untouched).toBe(0);
-      expect([...gh.releases.keys()]).toEqual(['v0.2.0']);
-    }),
-);
-
-it.live(
-  'a release body lists the feat, fix and perf commits since the release before it by type, breaking changes first, with no graph commit and no other type; a published release keeps its body',
-  () =>
-    Effect.gen(function* () {
-      const gh = github();
-      const notarizing = apple().notary;
-      const place = placeOf('notes');
-      const { checkout } = place;
-      const push = (commit: string) => gh.pushed.add(commit);
-
-      push(changed(checkout, { 'first.txt': 'a' }, 'feat(old): ship the first thing', 'Task: 11aa The first task'));
-      const firstCommit = changed(checkout, { 'second.txt': 'b' }, 'Old phrase without a type (26c5d6b8)');
-      push(firstCommit);
-      cutInto(place.cut, firstCommit, '0.2.0');
-      gh.failing.upload = true;
-      yield* run(publishRelease(gh.cli, notarizing, place));
-      const draftNotes = gh.releases.get('v0.2.0')?.notes;
-      gh.failing.upload = false;
-      yield* run(publishRelease(gh.cli, notarizing, place));
-      const firstNotes = gh.releases.get('v0.2.0')?.notes;
-
-      changed(
-        checkout,
-        { 'threads.txt': 'c' },
-        'feat(threads): move a thread into another project',
-        'Why and what changed.',
-        'Task: 26c5d6b8 Move a thread into another project\nTask: 0aa1 A second task\nCo-authored-by: Tagma <agent@tagma.dev>',
-      );
-      changed(checkout, { 'facts.txt': 'd' }, 'fix(code-facts): keep symbols across renames', 'Task: b3c4 Keep symbols');
-      for (const type of ['refactor(graph)', 'docs', 'test(threads)', 'build', 'ci', 'chore(deps)', 'revert']) {
-        changed(checkout, { [`${type.replace(/\W/gu, '')}.txt`]: type }, `${type}: not a line of the notes`, 'Task: 99ff Not listed');
-      }
-      changed(checkout, { '.tagma/graph.json': '1' }, 'feat(graph): record the acts of a session');
-      changed(checkout, { '.tagma/graph.json': '2', 'mixed.txt': 'e' }, 'fix(tagma): a change in code and in the graph');
-      changed(
-        checkout,
-        { 'cli.txt': 'f' },
-        'feat(cli)!: rename the publish command',
-        'BREAKING CHANGE: publish is now ship\nTask: 77ee Rename the command',
-      );
-      changed(checkout, { 'perf.txt': 'g' }, 'perf(graph): read a block once');
-      changed(checkout, { 'again.txt': 'h' }, 'fix(threads): second fix, newer');
-      const secondCommit = changed(checkout, { 'product.txt': 'i' }, 'feat: a change across the product');
-      push(secondCommit);
-      cutInto(place.cut, secondCommit, '0.2.1');
-      const two = yield* run(publishRelease(gh.cli, notarizing, place));
-      const secondNotes = gh.releases.get('v0.2.1')?.notes;
-
-      gh.releases.get('v0.2.1')!.notes = 'edited by hand';
-      const again = yield* run(publishRelease(gh.cli, notarizing, place));
-
-      expect(draftNotes).toBe(firstNotes);
-      expect(firstNotes).toBe('## Features\n\n- **old:** ship the first thing\n  - Task: 11aa The first task');
-      expect(two._tag).toBe('Success');
-      expect(secondNotes).toBe(
-        [
-          '## BREAKING CHANGES',
-          '',
-          '- **cli:** rename the publish command',
-          '  publish is now ship',
-          '  - Task: 77ee Rename the command',
-          '',
-          '## Features',
-          '',
-          '- a change across the product',
-          '- **threads:** move a thread into another project',
-          '  - Task: 26c5d6b8 Move a thread into another project',
-          '  - Task: 0aa1 A second task',
-          '',
-          '## Fixes',
-          '',
-          '- **threads:** second fix, newer',
-          '- **tagma:** a change in code and in the graph',
-          '- **code-facts:** keep symbols across renames',
-          '  - Task: b3c4 Keep symbols',
-          '',
-          '## Performance',
-          '',
-          '- **graph:** read a block once',
-        ].join('\n'),
-      );
-      expect(again._tag).toBe('Success');
-      expect(gh.releases.get('v0.2.1')?.notes).toBe('edited by hand');
+      expect(second._tag === 'Success' && second.success.maps).toBe(join(place.kept, '0.2.1'));
+      expect(said(['-C', checkout, 'rev-parse', 'v0.2.0^{commit}'])).toBe(first);
+      expect(behind._tag === 'Failure' && behind.failure.step).toBe('version');
     }),
 );

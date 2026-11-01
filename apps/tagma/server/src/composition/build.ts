@@ -1,7 +1,7 @@
 import type { Context, Layer, ManagedRuntime } from 'effect';
 import type { Manifest } from '../platform/contract/service/manifest.js';
 import type { Channel } from '../installation/contract/wire/channel.js';
-import type { Composition } from '../installation/cut/release.js';
+import type { Distribution } from '../installation/cut/descriptor.js';
 import type { Bindings } from './next.js';
 import type { CoreBindings, VerbBindings, VerbModule } from './cli/binding.js';
 import type { LiveDoorOf, SocketDoor } from './socketBinding.js';
@@ -55,5 +55,5 @@ export type Build = {
   readonly verbs: readonly VerbModule[];
   readonly verbBindings: (core: CoreBindings) => VerbBindings;
   readonly parts: () => Promise<CheckedParts>;
-  readonly cut: Composition;
+  readonly cut: Distribution;
 };

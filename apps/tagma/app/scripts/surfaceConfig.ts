@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync
 import { absoluteSources } from '@runlith/bundle/maps';
 import { dirname, join, relative, resolve } from 'node:path';
 import { serverPort, surfaceDevPort } from '@tagma/server/installation/contract/wire/ports';
-import { CHANNEL } from '@tagma/server/composition/channel';
+import { CHANNEL } from '@tagma/server/composition/developer/channel';
 import { browserGuard } from '@runlith/vite-browser-guard/browserGuard';
 import { surfaceOut } from '../surfaceOut.js';
 import { sveltekit } from '@sveltejs/kit/vite';

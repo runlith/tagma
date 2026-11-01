@@ -3,7 +3,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { serverPort, surfaceDevPort } from '@tagma/server/installation/contract/wire/ports';
 import { hostBinary } from '@tagma/server/installation/contract/wire/layout';
-import { CHANNEL } from '@tagma/server/composition/channel';
+import { CHANNEL } from '@tagma/server/composition/developer/channel';
 import { runDev } from '@runlith/dev-runner';
 
 const packageRoot = dirname(dirname(fileURLToPath(import.meta.url)));

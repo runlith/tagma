@@ -1,0 +1,108 @@
+import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
+import { Effect, FileSystem, Layer } from 'effect';
+import { ClaimHolders } from '../../executions/contract/service/host.js';
+import { hostsStaying } from '../../executions/host/staying.js';
+import { GRAPH_STEPS } from '../../graph/steps/sequence.js';
+import { build } from '../../installation/cut/build.js';
+import type { Composition } from '../../installation/cut/descriptor.js';
+import { releaseCommand } from '../../installation/cut/pipeline.js';
+import type { InstanceHosts } from '../../installation/cut/port.js';
+import { notarizeCommand, publishCommand } from '../../installation/cut/publish.js';
+import { transitionCommand } from '../../installation/cut/transition.js';
+import { tryout } from '../../installation/cut/try.js';
+import type { Channel } from '../../installation/contract/wire/channel.js';
+import { readRemoteStartup } from '../../installation/process/serverStart.js';
+import { CurrentInvocation } from '../../platform/cli/verb.js';
+import type { Build } from '../build.js';
+import { doorOf } from '../cli/door.js';
+import { SIGNERS } from '../cli/signers.js';
+import { entryKinds } from '../entryKinds.js';
+import { claimHoldersLayer } from '../hostClaims.js';
+
+const cutOf = async (of: Build): Promise<Composition> => {
+  const { modules, rested } = await of.parts();
+  return {
+    ...of.cut,
+    channel: of.channel,
+    steps: {
+      graph: GRAPH_STEPS.map((step) => step.id),
+      journal: entryKinds(modules, rested).steps.map((step) => step.name),
+    },
+    stores: modules.flatMap((module) => module.stores ?? []),
+  };
+};
+
+const cutting = async (command: Effect.Effect<void>, signals: readonly NodeJS.Signals[] = ['SIGTERM', 'SIGINT']) => {
+  const halted = new AbortController();
+  for (const signal of signals) process.once(signal, () => halted.abort());
+  await Effect.runPromise(command, { signal: halted.signal }).catch((cause: unknown) => {
+    if (!halted.signal.aborted) throw cause;
+    console.error('[tagma] stopped');
+    process.exit(143);
+  });
+};
+
+export const releaseCut = async (of: Build, given: readonly string[]): Promise<void> => {
+  const composition = await cutOf(of);
+  const cut = given.filter((one) => one !== '--notarize');
+  const out = cut.flatMap((one, at) => (one === '--json' ? [one] : one === '--out' ? [one, cut[at + 1] ?? ''] : []));
+  await cutting(
+    given[0] === 'publish'
+      ? publishCommand(given.slice(1), composition)
+      : given[0] === 'notarize'
+        ? notarizeCommand(given.slice(1), composition)
+        : cut.length === given.length
+          ? releaseCommand(given, composition)
+          : Effect.andThen(releaseCommand(cut, composition), notarizeCommand(out, composition)),
+  );
+};
+
+export const transitionCut = async (of: Build, given: readonly string[]): Promise<void> =>
+  cutting(transitionCommand(given, await cutOf(of)));
+
+const serverAt = (channel: Channel) => {
+  const door = doorOf(channel);
+  return {
+    door,
+    startup: () => Effect.flatMap(CurrentInvocation, (at) => readRemoteStartup(door.baseUrl(at))),
+  };
+};
+
+export const buildCut = async (of: Build, given: readonly string[]): Promise<void> => {
+  const { door, startup } = serverAt(of.channel);
+  await cutting(
+    build(
+      { ask: door.ask, baseUrl: door.baseUrl, boundHere: door.boundHere, healthOrNone: door.healthOrNone, startup },
+      given,
+      await cutOf(of),
+    ),
+  );
+};
+
+const hosts: InstanceHosts = {
+  staying: (database) =>
+    Effect.flatMap(Effect.all([ClaimHolders, FileSystem.FileSystem]), ([holders, files]) => hostsStaying(holders, files, database)).pipe(
+      Effect.map((staying) =>
+        staying.map(({ state, claim }) => ({
+          state,
+          holders: claim._tag === 'Held' ? claim.holders : [],
+          detail: claim._tag === 'Unmeasured' ? claim.detail : null,
+        })),
+      ),
+      Effect.provide(Layer.merge(BunFileSystem.layer, claimHoldersLayer)),
+    ),
+};
+
+export const tryCut = async (of: Build, working: Channel, given: readonly string[]): Promise<void> => {
+  const { door, startup } = serverAt(working);
+  await cutting(
+    tryout(
+      { baseUrl: door.baseUrl, healthOrNone: door.healthOrNone, startup },
+      hosts,
+      given,
+      SIGNERS.flatMap(({ variable }) => (variable === undefined ? [] : [variable])),
+      await cutOf(of),
+    ),
+    ['SIGTERM', 'SIGINT', 'SIGHUP'],
+  );
+};

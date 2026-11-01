@@ -532,8 +532,13 @@ export const makeReleaseChannel = Effect.fnUntraced(function* (place: ChannelPla
 
   yield* Effect.forkScoped(
     Stream.runForEach(Stream.changes(feeds), (url) => {
-      feedUrl = url;
-      return refresh();
+      feedUrl = url.trim() === '' ? null : url;
+      if (feedUrl !== null) return refresh();
+      feed = null;
+      issue = null;
+      readFrom = null;
+      keep();
+      return shift();
     }),
   );
   yield* Effect.forkScoped(Effect.forever(Effect.andThen(Effect.sleep(FEED_EVERY), refresh())));

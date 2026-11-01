@@ -1,6 +1,5 @@
 import { mkdirSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { Effect, Layer, Schema } from 'effect';
 import * as BunChildProcessSpawner from '@effect/platform-bun/BunChildProcessSpawner';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
@@ -17,7 +16,8 @@ import { dataDirectoryLocked } from '../../platform/lock/holder.js';
 import { LOCK_FILE, type DirectoryHolder } from '../../platform/contract/wire/lock.js';
 import { answeredHere, besideConflict, besideEnv, besideHome, besidePort, besideRoot } from './beside.js';
 import { portBlock } from '../contract/wire/ports.js';
-import { type Composition, releaseBeside } from './release.js';
+import type { Composition } from './descriptor.js';
+import { releaseBeside } from './release.js';
 import type { CutServer, HealthAnswer, InstanceHosts } from './port.js';
 import { awaitStart, comingUp } from '../process/serverStart.js';
 import { ServerLaunch } from '../process/launch.js';
@@ -260,9 +260,8 @@ export const tryout = (
         `bun run tagma:try --port <n> — its pages stand one above whatever port it serves`,
       ]);
     }
-    const source = fileURLToPath(new URL('../../../', import.meta.url));
     const cut = yield* Effect.result(
-      releaseBeside(source, installRoot, launcherPath(channel), composition, besideEnv(root, port)).pipe(
+      releaseBeside(installRoot, launcherPath(channel), composition, besideEnv(root, port)).pipe(
         Effect.provide(Layer.mergeAll(gitLayer.pipe(Layer.provide(spawning)), spawning, BunFileSystem.layer)),
       ),
     );
@@ -293,7 +292,7 @@ export const tryout = (
             : `the server left with ${outcome.code} before ${url} answered`;
       refuse(json, 'server-not-up', why, [`${log} — what it printed, under the start of ${launch.startedAt}`]);
     }
-    const registered = yield* Effect.promise(async () => registerCheckout(runtime, entry, await checkoutRoot(source)));
+    const registered = yield* Effect.promise(async () => registerCheckout(runtime, entry, await checkoutRoot(composition.roots.server)));
     print(
       json,
       {

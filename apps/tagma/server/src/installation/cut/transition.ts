@@ -15,11 +15,12 @@ import { type FeedRelease, releaseAfter } from '../contract/wire/feed.js';
 import { dataDirectory, hostBundle } from '../contract/wire/layout.js';
 import { DESKTOP } from '../contract/wire/manifest.js';
 import { releaseIdentity } from '../setup/signing.js';
-import { checkoutOf, cutCache, flagsOf, irreversibleOf, packRelease, RELEASE_DIRECTORY, type Steps, storesOf } from './pipeline.js';
+import type { Composition } from './descriptor.js';
+import { cutCache, flagsOf, irreversibleOf, packRelease, RELEASE_DIRECTORY, storesOf } from './pipeline.js';
 import { releaseRuntime } from './runtime.js';
 import { machineTarget, targetName } from './target.js';
 import { decodeRecord, digestOf, feedEntry, RELEASE_RECORD } from './stage.js';
-import { type Composition, ReleaseRefused, releaseStaged } from './release.js';
+import { ReleaseRefused, releaseStaged } from './release.js';
 import { transitionTrouble, trialStart } from './trial.js';
 import {
   carried,
@@ -165,13 +166,8 @@ const atHead = (checkout: string, given: readonly string[]): Effect.Effect<numbe
     }
   });
 
-export const transitionCommand = Effect.fnUntraced(function* (
-  sourcePath: string,
-  given: readonly string[],
-  composition: Composition,
-  steps: Steps,
-  developer: Channel,
-) {
+export const transitionCommand = Effect.fnUntraced(function* (given: readonly string[], composition: Composition) {
+  const { checkout, desktop } = composition.roots;
   const told = (code: string, reason: string, unblock: readonly string[] = [USAGE]): never => {
     console.error(refusalLines({ code, reason, unblock: [...unblock] }).join('\n'));
     process.exit(2);
@@ -179,14 +175,14 @@ export const transitionCommand = Effect.fnUntraced(function* (
   if (given.includes('--head')) {
     return process.exit(
       yield* atHead(
-        checkoutOf(sourcePath),
+        checkout,
         given.filter((one) => one !== '--head'),
       ),
     );
   }
   const flags = flagsOf(given, told);
   if (flags.rest.length > 0) told('usage', `${flags.rest.join(' ')} is not understood`);
-  const data = dataDirectory(developer, process.env) ?? told('no-home', 'HOME names no home directory');
+  const data = dataDirectory(composition.workshop, process.env) ?? told('no-home', 'HOME names no home directory');
   const release = join(data, RELEASE_DIRECTORY);
   const cut = existsSync(release) ? yield* Effect.promise(() => realpath(release)) : release;
   const named = flags.value('--from');
@@ -208,7 +204,7 @@ export const transitionCommand = Effect.fnUntraced(function* (
   const number = flags.value('--version') ?? releaseAfter(before.success.release);
   const out = yield* Effect.promise(() => mkdtemp(join(tmpdir(), 'tagma-transition-')));
   const staged = yield* Effect.gen(function* () {
-    const stores = yield* storesOf(sourcePath, steps);
+    const stores = yield* storesOf(composition);
     const irreversible = irreversibleOf(number, stores, { stores: before.success.stores, changes: before.success.irreversible });
     const signer = yield* releaseIdentity.pipe(
       Effect.mapError((failure) => new ReleaseRefused({ step: 'signing', detail: failure.detail, log: '', unblock: failure.unblock })),
@@ -223,10 +219,10 @@ export const transitionCommand = Effect.fnUntraced(function* (
       });
     }
     const cache = cutCache(data);
-    const runtime = yield* releaseRuntime(checkoutOf(sourcePath), Bun.version, target, cache.runtimes).pipe(
+    const runtime = yield* releaseRuntime(checkout, Bun.version, target, cache.runtimes).pipe(
       Effect.mapError((trouble) => new ReleaseRefused({ step: 'runtime', detail: trouble.detail, log: '', unblock: trouble.unblock })),
     );
-    const landed = yield* releaseStaged(sourcePath, join(out, 'stage'), composition, {
+    const landed = yield* releaseStaged(join(out, 'stage'), composition, {
       number,
       signer,
       maps: join(out, 'maps'),
@@ -267,7 +263,7 @@ export const transitionCommand = Effect.fnUntraced(function* (
     before: before.success.release,
     archive: staged.success.archive,
     offer: staged.success.offer,
-    desktop: resolve(sourcePath, '..', 'desktop'),
+    desktop,
     out,
   };
   console.log(`${composition.channel.name} ${number} of this tree, over ${plan.before} from ${from}`);

@@ -8,13 +8,12 @@ import * as BunChildProcessSpawner from '@effect/platform-bun/BunChildProcessSpa
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import * as BunPath from '@effect/platform-bun/BunPath';
 import { gitLayer } from '@runlith/git/Git';
-import { type GitHubCli, ProgramFailed } from '@runlith/github/GitHubCli';
 import type { Applications } from '../contract/service/applications.js';
 import { CHANNELS } from '../contract/wire/channel.js';
 import type { Feed } from '../contract/wire/feed.js';
+import type { Composition, Publisher } from './descriptor.js';
 import { cutRelease } from './pipeline.js';
 
-const REPO = 'test/tagma';
 const scratch = realpathSync(mkdtempSync(join(tmpdir(), 'tagma-cut-judged-')));
 afterAll(() => rmSync(scratch, { recursive: true, force: true }));
 
@@ -45,7 +44,7 @@ const published: Feed = {
     {
       release: '0.2.0',
       platforms: {
-        'darwin-arm64': { archive: `https://github.com/${REPO}/releases/download/v0.2.0/a.tar.gz`, sha256: '0'.repeat(64), size: 1 },
+        'darwin-arm64': { archive: 'https://shelf.test/0.2.0/a.tar.gz', sha256: '0'.repeat(64), size: 1 },
       },
       irreversible: false,
       stores: {
@@ -59,22 +58,15 @@ const published: Feed = {
   ],
 };
 
-const gh: GitHubCli = {
-  run: (args) =>
-    Effect.suspend(() => {
-      const answer = (stdout: string) => Effect.succeed({ status: 0 as const, stdout, stderr: '' });
-      if (args[0] === 'api') return answer('v0.2.0\nv0.2.1\n');
-      if (args[1] === 'view') return answer(JSON.stringify({ tagName: 'v0.2.0', assets: [{ name: 'feed.json' }] }));
-      if (args[1] === 'download' && args[2] === 'v0.2.0') {
-        writeFileSync(join(args[args.indexOf('--dir') + 1]!, 'feed.json'), JSON.stringify(published));
-        return answer('');
-      }
-      return Effect.fail(new ProgramFailed({ phase: 'exit', detail: `gh ${args.join(' ')} is not faked`, status: 1 }));
-    }),
+const publisher: Publisher = {
+  place: 'the test shelf',
+  latest: Effect.succeed(published),
+  address: (release, file) => `https://shelf.test/${release}/${file}`,
+  publish: () => Effect.die('a refused cut publishes nothing'),
 };
 
 it.live(
-  'a cut is refused before it builds when it names a number not above every published one, a taken-down prerelease included, or lacks a migration the newest published release carried',
+  'a cut is refused before it builds when it names a number not above the published one, or lacks a migration the newest published release carried',
   () =>
     Effect.gen(function* () {
       const checkout = join(scratch, 'checkout');
@@ -85,25 +77,33 @@ it.live(
       git(checkout, ['init', '-q', '-b', 'main']);
       git(checkout, ['add', '-A']);
       git(checkout, ['commit', '-q', '-m', 'cut']);
+      const composition: Composition = {
+        conditions: [],
+        channel: CHANNELS.stable,
+        workshop: CHANNELS.dev,
+        applications,
+        roots: { checkout, server: source, packages: join(checkout, 'packages'), desktop: join(checkout, 'apps/tagma/desktop') },
+        entries: { cli: join(source, 'src/composition/release/cli.ts'), server: join(source, 'src/composition/release/server.ts') },
+        client: { root: join(checkout, 'apps/tagma/app'), config: null },
+        brand: { assets: join(checkout, 'apps/tagma/desktop/assets') },
+        signing: { notary: 'test' },
+        plugins: [],
+        feed: null,
+        publisher,
+        steps: { graph: [], journal: [] },
+        stores: [],
+      };
       const cut = (asked: string | null) =>
         Effect.flip(
-          cutRelease(source, {
-            composition: {
-              conditions: [],
-              channel: CHANNELS.stable,
-              applications,
-              entries: { cli: 'composition/release/cli.ts', server: 'composition/release/server.ts' },
-            },
+          cutRelease({
+            composition,
             asked,
             out: join(scratch, 'release'),
             cache: { runtimes: join(scratch, 'runtimes'), packages: join(scratch, 'packages') },
-            steps: { graph: [], journal: [] },
-            repo: REPO,
-            gh,
           }),
         ).pipe(Effect.provide(machine));
 
-      const behind = yield* cut('0.2.1');
+      const behind = yield* cut('0.2.0');
       const lacking = yield* cut(null);
 
       expect(behind.step).toBe('version');

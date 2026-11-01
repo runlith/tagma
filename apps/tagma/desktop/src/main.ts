@@ -23,7 +23,7 @@ import { Fronts } from './fronts.js';
 import { bundleOf, carriedBy, carriedIn, keptApplication, leaseRelease, numbered, standingIn } from './release.js';
 import { DESKTOP_DATA, dataDirectory, installationsRoot, serveLogPath } from '@tagma/server/installation/contract/wire/layout';
 import { isRelease } from '@tagma/server/installation/contract/wire/feed';
-import { CHANNEL } from '@tagma/server/composition/channel';
+import { CHANNEL } from './channel.js';
 import { Quitting } from './quitting.js';
 import { composed, writeReport } from './report.js';
 import { applicationFolders, inApplications, moveToApplications } from './placing.js';

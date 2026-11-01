@@ -1,41 +1,21 @@
 import { join, resolve } from 'node:path';
-import { Data, Duration, Effect, FileSystem, Layer, type PlatformError, Schema } from 'effect';
+import { Data, Effect, FileSystem, Layer, type PlatformError } from 'effect';
 import * as BunChildProcessSpawner from '@effect/platform-bun/BunChildProcessSpawner';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import * as BunPath from '@effect/platform-bun/BunPath';
 import { Git, gitLayer } from '@runlith/git/Git';
-import { gitHubCli, type GitHubCli, type ProgramFailure } from '@runlith/github/GitHubCli';
 import { refusalLines } from '@runlith/agent/tool/refusal';
-import {
-  compareReleases,
-  type Feed,
-  FEED_FILE,
-  FEED_REPOSITORY,
-  feedAddress,
-  type PlatformArchives,
-  releaseFile,
-  tagOf,
-} from '../contract/wire/feed.js';
-import type { Channel } from '../contract/wire/channel.js';
+import { compareReleases, type Feed, FEED_FILE, tagOf } from '../contract/wire/feed.js';
 import { dataDirectory } from '../contract/wire/layout.js';
 import { developerTeam, releaseIdentity } from '../setup/signing.js';
+import type { Composition, CutMachine, Publisher, PublishTrouble } from './descriptor.js';
 import { appleNotary, type Notary } from './notarize.js';
-import { checkoutOf, desktopAssets, flagsOf, KEPT_MAPS, RELEASE_DIRECTORY } from './pipeline.js';
+import { flagsOf, KEPT_MAPS, publishedBy, RELEASE_DIRECTORY } from './pipeline.js';
 import { releaseNotes } from './notes.js';
-import {
-  checkoutTags,
-  ghTrouble,
-  highestOf,
-  issuedReleases,
-  precedingOf,
-  type PublishedTrouble,
-  releaseFeed,
-  remoteTag,
-} from './published.js';
+import { checkoutTags, highestOf, precedingOf } from './published.js';
 import {
   decodeRecord,
   digestOf,
-  encodeFeed,
   feedEntry,
   homeOf,
   landNotarized,
@@ -46,10 +26,7 @@ import {
   type ReleaseRecord,
 } from './stage.js';
 
-const REPOSITORY = /^[\w.-]+\/[\w.-]+$/u;
-const NOT_FOUND = /release not found/u;
-const NO_COMMIT = /No commit found|\(HTTP 404\)|\(HTTP 422\)/u;
-const USAGE = 'bun run tagma:release publish [--repo <owner/name>] [--out <dir>] [--json]';
+const USAGE = 'bun run tagma:release publish [--out <dir>] [--json]';
 
 export class PublishRefused extends Data.TaggedError('PublishRefused')<{
   readonly step: string;
@@ -59,44 +36,11 @@ export class PublishRefused extends Data.TaggedError('PublishRefused')<{
 
 export type Published = {
   readonly release: string;
-  readonly page: string;
+  readonly page: string | null;
   readonly platforms: Readonly<Record<string, string>>;
   readonly images: Readonly<Record<string, string>>;
-  readonly feed: string;
   readonly maps: string;
 };
-
-const Asset = Schema.Struct({
-  name: Schema.String,
-  size: Schema.Int,
-  url: Schema.String,
-  state: Schema.String,
-  digest: Schema.optional(Schema.NullOr(Schema.String)),
-});
-type Asset = typeof Asset.Type;
-const GitHubRelease = Schema.Struct({
-  isDraft: Schema.Boolean,
-  isPrerelease: Schema.Boolean,
-  url: Schema.String,
-  targetCommitish: Schema.String,
-  body: Schema.String,
-  assets: Schema.Array(Asset),
-});
-type GitHubRelease = typeof GitHubRelease.Type;
-const decodeGitHubRelease = Schema.decodeUnknownResult(Schema.fromJsonString(GitHubRelease));
-const Repository = Schema.Struct({ permissions: Schema.optional(Schema.Struct({ push: Schema.Boolean })) });
-const decodeRepository = Schema.decodeUnknownResult(Schema.fromJsonString(Repository));
-
-type Shipped = { readonly path: string; readonly name: string; readonly size: number; readonly sha256: string };
-
-const fits = (assets: readonly Asset[], one: Shipped): Asset | undefined =>
-  assets.find(
-    (asset) =>
-      asset.name === one.name &&
-      asset.size === one.size &&
-      asset.state === 'uploaded' &&
-      (asset.digest == null || asset.digest === `sha256:${one.sha256}`),
-  );
 
 const refused = (step: string, detail: string, unblock: readonly string[] = []) =>
   new PublishRefused({ step, detail, unblock: [...unblock] });
@@ -104,63 +48,8 @@ const refused = (step: string, detail: string, unblock: readonly string[] = []) 
 const AGAIN = 'bun run tagma:release publish — publishing again takes up what stands';
 const RECUT = 'bun run tagma:release, then bun run tagma:release publish — the cut takes the next number';
 
-const ghFailed = (step: string, repo: string) => (failure: ProgramFailure) => {
-  const trouble = ghTrouble(repo)(failure);
-  return refused(step, trouble.detail, failure._tag === 'ProgramUnavailable' ? trouble.unblock : [...trouble.unblock, AGAIN]);
-};
-
-const troubled = (step: string) => (trouble: PublishedTrouble) =>
+const troubled = (step: string) => (trouble: PublishTrouble) =>
   refused(step, trouble.detail, trouble.unblock.length > 0 ? trouble.unblock : [AGAIN]);
-
-const writable = Effect.fn('installation.publishAccess')(function* (gh: GitHubCli, repo: string, cwd: string) {
-  const answered = yield* gh.run(['api', `repos/${repo}`], cwd).pipe(Effect.mapError(ghFailed('access', repo)));
-  const read = decodeRepository(answered.stdout);
-  if (read._tag === 'Failure') return yield* refused('access', `gh api repos/${repo} answered what does not read: ${read.failure.message}`);
-  if (read.success.permissions?.push === true) return;
-  return yield* refused('access', `the account gh signs in with cannot push to ${repo}, and publishing makes its releases`, [
-    `gh auth status — the account and its scopes; gh auth refresh -s repo adds the repo scope`,
-    `an admin of ${repo.split('/')[0]} grants this account write access to ${repo}`,
-  ]);
-});
-
-const committed = (gh: GitHubCli, repo: string, commit: string, release: string, cwd: string): Effect.Effect<void, PublishRefused> =>
-  gh.run(['api', `repos/${repo}/commits/${commit}`, '--jq', '.sha'], cwd).pipe(
-    Effect.asVoid,
-    Effect.mapError((failure) =>
-      failure._tag === 'ProgramFailed' && failure.phase === 'exit' && NO_COMMIT.test(failure.stderr ?? '')
-        ? refused('commit', `${commit}, which ${release} was cut from, is not in ${repo}, and the tag of ${release} is made on it`, [
-            `git push — the branch holding ${commit} reaches ${repo}, then bun run tagma:release publish`,
-          ])
-        : ghFailed('commit', repo)(failure),
-    ),
-    Effect.withSpan('installation.publishCommit'),
-  );
-
-const offersAsCut = (offered: PlatformArchives, record: ReleaseRecord, repo: string): boolean =>
-  Object.keys(offered).length === Object.keys(record.platforms).length &&
-  Object.entries(record.platforms).every(([platform, one]) => {
-    const there = offered[platform];
-    return there?.archive === releaseFile(repo, record.release, one.archive) && there.sha256 === one.sha256 && there.size === one.size;
-  });
-
-const viewed = (gh: GitHubCli, repo: string, tag: string, cwd: string): Effect.Effect<GitHubRelease | null, PublishRefused> =>
-  gh.run(['release', 'view', tag, '--repo', repo, '--json', 'isDraft,isPrerelease,url,targetCommitish,body,assets'], cwd).pipe(
-    Effect.map((ended): string | null => ended.stdout),
-    Effect.catchTag('ProgramFailed', (failure) =>
-      failure.phase === 'exit' && NOT_FOUND.test(failure.stderr ?? '') ? Effect.succeed(null) : Effect.fail(failure),
-    ),
-    Effect.mapError(ghFailed('release', repo)),
-    Effect.flatMap((text) => {
-      if (text === null) return Effect.succeed(null);
-      const decoded = decodeGitHubRelease(text);
-      return decoded._tag === 'Success'
-        ? Effect.succeed(decoded.success)
-        : Effect.fail(refused('release', `gh release view ${tag} answered what does not read as a release: ${decoded.failure.message}`));
-    }),
-  );
-
-const digested = (path: string): Effect.Effect<string, PublishRefused> =>
-  Effect.tryPromise({ try: () => digestOf(path), catch: (error) => refused('release', `${path} could not be read: ${String(error)}`) });
 
 const unreadableIn = (step: string) => (path: string) => (error: PlatformError.PlatformError) =>
   refused(step, `${path} could not be read: ${error.reason._tag}`);
@@ -192,7 +81,10 @@ const cutStanding = Effect.fnUntraced(function* (cut: string): Effect.fn.Return<
   for (const one of Object.values(record.platforms)) {
     const path = join(home, one.archive);
     const size = Number((yield* files.stat(path).pipe(Effect.mapError(unreadable(path)))).size);
-    const sha256 = yield* digested(path);
+    const sha256 = yield* Effect.tryPromise({
+      try: () => digestOf(path),
+      catch: (error) => refused('release', `${path} could not be read: ${String(error)}`),
+    });
     if (size !== one.size || sha256 !== one.sha256) {
       return yield* refused(
         'archive',
@@ -226,177 +118,81 @@ export const notarizeRelease = Effect.fnUntraced(function* (notary: Notary, cut:
 export type Publishing = {
   readonly cut: string;
   readonly checkout: string;
-  readonly repo: string;
   readonly kept: string;
 };
 
+const checkoutCommit = Effect.fnUntraced(function* (checkout: string, record: ReleaseRecord) {
+  const git = yield* Git;
+  const resolved = yield* git
+    .run(['rev-parse', '--verify', '--quiet', `${record.commit}^{commit}`], { cwd: checkout })
+    .pipe(Effect.mapError((failure) => refused('commit', failure.message, [AGAIN])));
+  if (resolved.status !== 0) {
+    return yield* refused('commit', `${record.commit}, which ${record.release} was cut from, is no commit of ${checkout}`, [
+      'bun run tagma:release publish from the checkout the release was cut in',
+    ]);
+  }
+  const commit = resolved.stdout.trim();
+  const tag = tagOf(record.release);
+  const tagged = yield* git
+    .run(['tag', '--list', tag, '--format=%(objectname)'], { cwd: checkout })
+    .pipe(Effect.mapError((failure) => refused('tag', failure.message, [AGAIN])));
+  const standing = tagged.stdout.trim();
+  if (standing !== '' && standing !== commit) {
+    return yield* refused('tag', `${tag} in ${checkout} names ${standing}, and ${record.release} was cut from ${commit}`, [
+      `git tag -d ${tag}, if it names nothing published`,
+    ]);
+  }
+  return { commit, tagged: standing !== '' };
+});
+
 export const publishRelease = (
-  gh: GitHubCli,
+  publisher: Publisher,
   notary: Notary,
-  { cut, checkout, repo, kept }: Publishing,
-): Effect.Effect<Published, PublishRefused, FileSystem.FileSystem | Git> =>
+  { cut, checkout, kept }: Publishing,
+): Effect.Effect<Published, PublishRefused, CutMachine> =>
   Effect.scoped(
     Effect.gen(function* () {
       const files = yield* FileSystem.FileSystem;
       const git = yield* Git;
       const unreadable = unreadableIn('release');
-      const cutStood = yield* cutStanding(cut);
-      const { release } = cutStood.record;
+      const stood = yield* cutStanding(cut);
+      const { release } = stood.record;
       const tag = tagOf(release);
-
-      yield* writable(gh, repo, cut);
-      const resolved = yield* git
-        .run(['rev-parse', '--verify', '--quiet', `${cutStood.record.commit}^{commit}`], { cwd: checkout })
-        .pipe(Effect.mapError((failure) => refused('commit', failure.message, [AGAIN])));
-      if (resolved.status !== 0) {
-        return yield* refused('commit', `${cutStood.record.commit}, which ${release} was cut from, is no commit of ${checkout}`, [
-          'bun run tagma:release publish from the checkout the release was cut in',
-        ]);
-      }
-      const commit = resolved.stdout.trim();
-      const sourceTag = yield* git
-        .run(['tag', '--list', tag, '--format=%(objectname)'], { cwd: checkout })
-        .pipe(Effect.mapError((failure) => refused('tag', failure.message, [AGAIN])));
-      const standing = sourceTag.stdout.trim();
-      if (standing !== '' && standing !== commit) {
-        return yield* refused('tag', `${tag} in ${checkout} names ${standing}, and ${release} was cut from ${commit}`, [
-          `git tag -d ${tag}, if it names nothing published`,
-        ]);
-      }
-      const remote = yield* remoteTag(gh, repo, tag, cut).pipe(Effect.mapError(troubled('tag')));
-      if (remote !== null && remote !== commit) {
-        return yield* refused(
-          'tag',
-          `${tag} in ${repo} names ${remote}, and ${release} was cut from ${commit}; GitHub publishes a release on the tag that stands`,
-          [`git push origin :refs/tags/${tag} — if ${tag} names nothing published`, RECUT],
-        );
-      }
-      const found = yield* viewed(gh, repo, tag, cut);
-      if (found?.isDraft === false && found.isPrerelease) {
-        return yield* refused(
-          'release',
-          `${tag} is published in ${repo} as a prerelease: it is taken down, and Latest is a release before it`,
-          [`gh release edit ${tag} --repo ${repo} --prerelease=false --latest — offers it again`, RECUT],
-        );
-      }
-      const drafting = found === null || found.isDraft;
-      let before: Feed | null = null;
-      let notes = '';
-      if (drafting) {
-        if (standing !== '') {
+      const { commit, tagged } = yield* checkoutCommit(checkout, stood.record);
+      const latest = yield* publishedBy(publisher).pipe(Effect.mapError(troubled('feed')));
+      const tags = yield* checkoutTags(checkout).pipe(Effect.mapError(troubled('tag')));
+      const placed = latest?.releases.some((one) => one.release === release) ?? false;
+      if (!placed) {
+        if (tagged) {
           return yield* refused(
             'version',
-            `${tag} stands in ${checkout}, so ${release} was published from it once, and ${repo} holds no published release of it now; a number is published once`,
+            `${tag} stands in ${checkout}, so ${release} was published from it once, and ${publisher.place} offers no ${release} now; a number is published once`,
             [RECUT],
           );
         }
-        const issued = yield* issuedReleases(gh, repo, cut).pipe(Effect.mapError(troubled('release')));
-        const tags = yield* checkoutTags(checkout).pipe(Effect.mapError(troubled('tag')));
-        const highest = highestOf(issued, tags);
+        const highest = highestOf(latest, tags);
         if (highest !== null && compareReleases(release, highest) <= 0) {
-          return yield* refused('version', `${highest} is published in ${repo}, and a release is published over every one before it`, [
-            RECUT,
-          ]);
-        }
-        yield* committed(gh, repo, commit, release, cut);
-        before = issued.latest;
-        const previous = precedingOf(issued, tags, release);
-        notes = yield* releaseNotes(checkout, previous !== null && tags.includes(previous) ? tagOf(previous) : null, commit).pipe(
-          Effect.mapError((failure) => refused('notes', failure.detail, [AGAIN])),
-        );
-      }
-
-      const { record, home } = yield* notarizedCut(notary, cut, cutStood);
-      const shipped: readonly Shipped[] = [
-        ...Object.values(record.platforms).map((one) => ({
-          path: join(home, one.archive),
-          name: one.archive,
-          size: one.size,
-          sha256: one.sha256,
-        })),
-        ...(yield* Effect.forEach(Object.values(record.images), (name) =>
-          Effect.gen(function* () {
-            const path = join(home, name);
-            const size = Number((yield* files.stat(path).pipe(Effect.mapError(unreadable(path)))).size);
-            return { path, name, size, sha256: yield* digested(path) } satisfies Shipped;
-          }),
-        )),
-      ];
-
-      const address = (name: string): string => releaseFile(repo, release, name);
-      let landed: GitHubRelease;
-      if (found !== null && !found.isDraft) {
-        const owed = shipped.filter((one) => fits(found.assets, one) === undefined);
-        if (owed.length > 0) {
           return yield* refused(
-            'release',
-            `${tag} is published in ${repo} without ${owed.map((one) => one.name).join(' and ')} as cut, and a published release keeps its files`,
+            'version',
+            `${highest} is published in ${publisher.place}, and a release is published over every one before it`,
             [RECUT],
           );
         }
-        const offered = (yield* releaseFeed(gh, repo, tag, cut).pipe(Effect.mapError(troubled('feed')))).releases[0];
-        if (offered.release !== release || !offersAsCut(offered.platforms, record, repo)) {
-          return yield* refused('feed', `${FEED_FILE} of ${tag} in ${repo} does not offer ${release} first with its archives as cut`, [
-            RECUT,
-          ]);
-        }
-        landed = found;
-      } else {
-        const next: Feed = {
-          releases: [feedEntry(record, address), ...(before?.releases ?? []).filter((one) => compareReleases(one.release, release) < 0)],
-        };
-        const written = yield* files
-          .makeTempDirectoryScoped({ prefix: 'tagma-publish-' })
-          .pipe(Effect.mapError((error) => refused('feed', `a directory for ${FEED_FILE} could not be made: ${error.reason._tag}`)));
-        const feedPath = join(written, FEED_FILE);
-        const feedText = `${encodeFeed(next)}\n`;
-        yield* files.writeFileString(feedPath, feedText).pipe(Effect.mapError(unreadableIn('feed')(feedPath)));
-        const feed: Shipped = { path: feedPath, name: FEED_FILE, size: Buffer.byteLength(feedText), sha256: yield* digested(feedPath) };
-
-        if (found === null) {
-          yield* gh
-            .run(
-              ['release', 'create', tag, '--repo', repo, '--draft', '--target', commit, '--title', `Tagma ${release}`, '--notes', notes],
-              cut,
-            )
-            .pipe(Effect.mapError(ghFailed('release', repo)));
-        } else {
-          const corrections = [
-            ...(found.targetCommitish === commit ? [] : ['--target', commit]),
-            ...(found.body.trim() === notes ? [] : ['--notes', notes]),
-          ];
-          if (corrections.length > 0) {
-            yield* gh.run(['release', 'edit', tag, '--repo', repo, ...corrections], cut).pipe(Effect.mapError(ghFailed('release', repo)));
-          }
-        }
-        const draft = found ?? (yield* viewed(gh, repo, tag, cut));
-        if (draft === null)
-          return yield* refused('release', `gh created the draft release ${tag} in ${repo} and does not find it`, [AGAIN]);
-        const owed = [...shipped, feed].filter((one) => fits(draft.assets, one) === undefined);
-        if (owed.length > 0) {
-          yield* gh
-            .run(['release', 'upload', tag, ...owed.map((one) => one.path), '--repo', repo, '--clobber'], cut, Duration.infinity)
-            .pipe(Effect.mapError(ghFailed('upload', repo)));
-        }
-        yield* gh
-          .run(['release', 'edit', tag, '--repo', repo, '--draft=false', '--prerelease=false', '--latest'], cut)
-          .pipe(Effect.mapError(ghFailed('release', repo)));
-        const published = yield* viewed(gh, repo, tag, cut);
-        if (published === null || published.isDraft || published.isPrerelease || fits(published.assets, feed) === undefined) {
-          return yield* refused('release', `${tag} in ${repo} does not stand published with its ${FEED_FILE}`, [AGAIN]);
-        }
-        landed = published;
       }
-      const unfit = shipped.filter((one) => fits(landed.assets, one)?.url !== address(one.name));
-      if (unfit.length > 0) {
-        return yield* refused(
-          'release',
-          `${tag} in ${repo} does not serve ${unfit.map((one) => one.name).join(' and ')} as cut at the address its ${FEED_FILE} names`,
-          [`gh release edit ${tag} --repo ${repo} --prerelease — takes it down while the cause is found`],
-        );
-      }
+      const previous = precedingOf(latest, tags, release);
+      const notes = yield* releaseNotes(checkout, previous !== null && tags.includes(previous) ? tagOf(previous) : null, commit).pipe(
+        Effect.mapError((failure) => refused('notes', failure.detail, [AGAIN])),
+      );
 
-      if (standing === '') {
+      const { record, home } = yield* notarizedCut(notary, cut, stood);
+      const address = (name: string): string => publisher.address(release, name);
+      const feed: Feed = {
+        releases: [feedEntry(record, address), ...(latest?.releases ?? []).filter((one) => compareReleases(one.release, release) < 0)],
+      };
+      const shipped = [...Object.values(record.platforms).map((one) => one.archive), ...Object.values(record.images)];
+      const landed = yield* publisher.publish({ record, home, files: shipped, feed, notes }).pipe(Effect.mapError(troubled('publish')));
+
+      if (!tagged) {
         yield* git.run(['tag', tag, commit], { cwd: checkout }).pipe(
           Effect.mapError((failure) => refused('tag', failure.message, [AGAIN])),
           Effect.flatMap((answer) =>
@@ -413,10 +209,9 @@ export const publishRelease = (
 
       return {
         release,
-        page: landed.url,
+        page: landed.page,
         platforms: Object.fromEntries(Object.entries(record.platforms).map(([platform, one]) => [platform, address(one.archive)])),
         images: Object.fromEntries(Object.entries(record.images).map(([platform, name]) => [platform, address(name)])),
-        feed: address(FEED_FILE),
         maps,
       } satisfies Published;
     }),
@@ -427,7 +222,7 @@ const machine = Layer.mergeAll(gitLayer.pipe(Layer.provide(spawning)), spawning,
 
 type Told = (code: string, reason: string, unblock?: readonly string[]) => never;
 
-const notaryOf = Effect.fnUntraced(function* (sourcePath: string, told: Told): Effect.fn.Return<Notary> {
+const notaryOf = Effect.fnUntraced(function* (composition: Composition, told: Told): Effect.fn.Return<Notary> {
   const signer = yield* Effect.result(releaseIdentity.pipe(Effect.provide(machine)));
   if (signer._tag === 'Failure') return told('signing-refused', signer.failure.detail, signer.failure.unblock);
   const team = developerTeam(signer.success);
@@ -435,27 +230,35 @@ const notaryOf = Effect.fnUntraced(function* (sourcePath: string, told: Told): E
   return yield* appleNotary({
     signing: { identity: signer.success.fingerprint, timestamp: true },
     team,
-    assets: desktopAssets(sourcePath),
+    assets: composition.brand.assets,
+    profile: composition.signing.notary,
   }).pipe(Effect.provide(machine));
 });
 
 const NOTARIZE_USAGE = 'bun run tagma:release notarize [--out <dir>] [--json]';
 
-export const notarizeCommand = Effect.fnUntraced(function* (sourcePath: string, given: readonly string[], developer: Channel) {
-  let json = given.includes('--json');
-  const told: Told = (code, reason, unblock = [NOTARIZE_USAGE]) => {
-    if (json) console.log(JSON.stringify({ code, reason, unblock }));
+const toldBy =
+  (usage: string, json: () => boolean): Told =>
+  (code, reason, unblock = [usage]) => {
+    if (json()) console.log(JSON.stringify({ code, reason, unblock }));
     else console.error(refusalLines({ code, reason, unblock: [...unblock] }).join('\n'));
     process.exit(2);
   };
+
+const cutIn = (composition: Composition, named: string | undefined, told: Told) => {
+  const data = dataDirectory(composition.workshop, process.env);
+  if (data === null) return told('no-home', 'HOME names no home directory, so where the release is cut is unknown');
+  return { data, cut: named === undefined ? join(data, RELEASE_DIRECTORY) : resolve(named) };
+};
+
+export const notarizeCommand = Effect.fnUntraced(function* (given: readonly string[], composition: Composition) {
+  let json = given.includes('--json');
+  const told = toldBy(NOTARIZE_USAGE, () => json);
   const flags = flagsOf(given, told);
   json = flags.json;
   if (flags.rest.length > 0) told('usage', `${flags.rest.join(' ')} is not understood: notarizing takes the release that is cut`);
-  const data = dataDirectory(developer, process.env);
-  if (data === null) return told('no-home', 'HOME names no home directory, so where the release is cut is unknown');
-  const named = flags.value('--out');
-  const cut = named === undefined ? join(data, RELEASE_DIRECTORY) : resolve(named);
-  const notary = yield* notaryOf(sourcePath, told);
+  const { cut } = cutIn(composition, flags.value('--out'), told);
+  const notary = yield* notaryOf(composition, told);
   const outcome = yield* Effect.result(notarizeRelease(notary, cut).pipe(Effect.provide(machine)));
   if (outcome._tag === 'Failure') {
     return told('notarize-refused', `${outcome.failure.step}: ${outcome.failure.detail}`, outcome.failure.unblock);
@@ -466,56 +269,53 @@ export const notarizeCommand = Effect.fnUntraced(function* (sourcePath: string, 
     return;
   }
   for (const line of [
-    `Tagma ${record.release} is notarized by Apple and stapled; nothing is published`,
+    `${composition.channel.name} ${record.release} is notarized by Apple and stapled; nothing is published`,
     ...Object.entries(record.platforms).flatMap(([platform, one]) => [
       `application ${platform} ${join(home, record.images[platform] ?? '')} — opens without a warning on a Mac of its kind`,
       `update archive ${platform} ${join(home, one.archive)}, sha256 ${one.sha256}`,
     ]),
-    'bun run tagma:release publish — publishes it without sending it to Apple again',
+    composition.publisher === null
+      ? 'this distribution names no publisher, so the release is placed by hand'
+      : 'bun run tagma:release publish — publishes it without sending it to Apple again',
   ])
     console.log(line);
 });
 
-export const publishCommand = Effect.fnUntraced(function* (sourcePath: string, given: readonly string[], developer: Channel) {
-  const checkout = checkoutOf(sourcePath);
+export const publishCommand = Effect.fnUntraced(function* (given: readonly string[], composition: Composition) {
+  const { checkout } = composition.roots;
   let json = given.includes('--json');
-  const told = (code: string, reason: string, unblock: readonly string[] = [USAGE]): never => {
-    if (json) console.log(JSON.stringify({ code, reason, unblock }));
-    else console.error(refusalLines({ code, reason, unblock: [...unblock] }).join('\n'));
-    process.exit(2);
-  };
+  const told = toldBy(USAGE, () => json);
   const flags = flagsOf(given, told);
   json = flags.json;
   if (flags.rest.length > 0) told('usage', `${flags.rest.join(' ')} is not understood: publishing takes the release that is cut`);
-  const repo = flags.value('--repo') ?? FEED_REPOSITORY;
-  if (!REPOSITORY.test(repo)) told('usage', `${repo} names no GitHub repository: owner/name`);
-  const data = dataDirectory(developer, process.env);
-  if (data === null) return told('no-home', 'HOME names no home directory, so where the release is cut is unknown');
-  const named = flags.value('--out');
-  const notary = yield* notaryOf(sourcePath, told);
+  const { publisher } = composition;
+  if (publisher === null) {
+    return told('no-publisher', `${composition.channel.name} names no publisher, so this distribution publishes nothing`, [
+      'bun run tagma:release notarize — notarizes the cut, which is then placed by hand',
+    ]);
+  }
+  const { data, cut } = cutIn(composition, flags.value('--out'), told);
+  const notary = yield* notaryOf(composition, told);
   const outcome = yield* Effect.result(
-    publishRelease(gitHubCli, notary, {
-      cut: named === undefined ? join(data, RELEASE_DIRECTORY) : resolve(named),
-      checkout,
-      repo,
-      kept: join(data, KEPT_MAPS),
-    }).pipe(Effect.provide(machine)),
+    publishRelease(publisher, notary, { cut, checkout, kept: join(data, KEPT_MAPS) }).pipe(Effect.provide(machine)),
   );
   if (outcome._tag === 'Failure') {
     return told('publish-refused', `${outcome.failure.step}: ${outcome.failure.detail}`, outcome.failure.unblock);
   }
   const done = outcome.success;
   if (json) {
-    console.log(JSON.stringify({ ...done, repo }, null, 2));
+    console.log(JSON.stringify({ ...done, place: publisher.place, feed: composition.feed }, null, 2));
     return;
   }
   for (const line of [
-    `Tagma ${done.release} published in ${repo} — ${done.page}`,
+    `${composition.channel.name} ${done.release} published in ${publisher.place}${done.page === null ? '' : ` — ${done.page}`}`,
     ...Object.entries(done.platforms).flatMap(([platform, archive]) => [
       `application ${platform} ${done.images[platform] ?? 'missing'}`,
       `update archive ${platform} ${archive}`,
     ]),
-    `feed ${done.feed} — Tagma reads it from ${feedAddress(repo)} while ${done.release} is Latest`,
+    composition.feed === null
+      ? `${FEED_FILE} is placed, and a release of this distribution reads only the release.feed setting`
+      : `${composition.channel.name} reads the feed from ${composition.feed}`,
     `tag ${tagOf(done.release)} in ${checkout}; source maps kept in ${done.maps}`,
   ])
     console.log(line);

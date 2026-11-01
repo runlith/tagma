@@ -1,5 +1,5 @@
 import { type BrowserWindow, Menu, type MenuItemConstructorOptions, app, dialog, powerMonitor } from 'electron';
-import { CHANNEL } from '@tagma/server/composition/channel';
+import { CHANNEL } from './channel.js';
 import { type Leaving, stopAll, stopIdle } from './leaving.js';
 import { machineWork, type Refusal, type Work } from './server.js';
 import { tell } from './telling.js';

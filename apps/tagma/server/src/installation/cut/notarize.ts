@@ -9,8 +9,6 @@ import { packRelease } from './pipeline.js';
 import { digestOf, type ReleaseRecord, replaced } from './stage.js';
 import type { FeedArchive } from '../contract/wire/feed.js';
 
-export const NOTARY_PROFILE = 'tagma-notary';
-
 export class NotarizationRefused extends Data.TaggedError('NotarizationRefused')<{
   readonly detail: string;
   readonly unblock: readonly string[];
@@ -20,7 +18,7 @@ export type Notary = {
   readonly seal: (cut: string, into: string, record: ReleaseRecord) => Effect.Effect<ReleaseRecord, NotarizationRefused>;
 };
 
-export type Developer = { readonly signing: Signing; readonly team: string; readonly assets: string };
+export type Developer = { readonly signing: Signing; readonly team: string; readonly assets: string; readonly profile: string };
 
 export type Apple = {
   readonly submit: (path: string) => Effect.Effect<string, NotarizationRefused>;
@@ -59,10 +57,10 @@ const ran = (command: string, args: readonly string[], cwd: string): Effect.Effe
 const lastLine = (text: string): string => text.trim().split('\n').at(-1) ?? '';
 
 const appleOf = (developer: Developer, context: Context.Context<Spawner>): Apple => {
-  const profile = ['--keychain-profile', NOTARY_PROFILE, '--output-format', 'json'];
+  const profile = ['--keychain-profile', developer.profile, '--output-format', 'json'];
   const missing = (file: string, said: string) =>
     refused(`Apple did not take ${file}: ${said.trim()}`, [
-      `xcrun notarytool store-credentials ${NOTARY_PROFILE} --apple-id <the Apple ID of the team> --team-id ${developer.team}, if the profile is missing`,
+      `xcrun notarytool store-credentials ${developer.profile} --apple-id <the Apple ID of the team> --team-id ${developer.team}, if the profile is missing`,
       'bun run tagma:release notarize — takes up the notarization where it stopped',
     ]);
   const provided = <A>(effect: Effect.Effect<A, NotarizationRefused, Spawner>) => effect.pipe(Effect.provideContext(context));
@@ -90,7 +88,7 @@ const appleOf = (developer: Developer, context: Context.Context<Spawner>): Apple
       if (decoded._tag === 'Failure') return yield* missing(`submission ${id}`, answered.text);
       if (decoded.success.status === ACCEPTED) return;
       const log = yield* Effect.result(
-        provided(ran('/usr/bin/xcrun', ['notarytool', 'log', id, '--keychain-profile', NOTARY_PROFILE], '/')),
+        provided(ran('/usr/bin/xcrun', ['notarytool', 'log', id, '--keychain-profile', developer.profile], '/')),
       );
       const told = log._tag === 'Success' ? log.success.trim() : `its log could not be read: ${log.failure.detail}`;
       return yield* refused(`Apple answered ${decoded.success.status} for submission ${id}:\n${told}`, [

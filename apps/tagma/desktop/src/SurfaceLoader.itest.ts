@@ -20,7 +20,7 @@ import {
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { CHANNEL } from '@tagma/server/composition/channel';
+import { CHANNEL } from './channel.js';
 import { ATTEMPT_FILE, RELEASE_INSIDE, dataDirectory, hostBundle } from '@tagma/server/installation/contract/wire/layout';
 import { RESTART_RECORD, type RestartRecord } from '@tagma/server/installation/contract/wire/restart';
 import { LOCK_FILE } from '@tagma/server/platform/contract/wire/lock';
