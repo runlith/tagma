@@ -130,22 +130,22 @@ export const memoryMerges = () => {
         return stopped('the checkout or its trees could not be read');
       if (checkout.ref !== at.ref || refs.get(at.ref) !== at.commit)
         return stopped('the checkout no longer stands at the published commit');
-      const dirty = paths.some(
-        (path) => checkout.index[path] !== after[path] && (checkout.index[path] !== before[path] || checkout.files[path] !== before[path]),
-      );
-      if (dirty) return stopped('local changes would be overwritten');
+      const kept: string[] = [];
       for (const path of paths) {
         if (checkout.index[path] === after[path]) continue;
         const value = after[path];
+        const dirty = checkout.index[path] !== before[path] || checkout.files[path] !== before[path];
+        if (dirty) kept.push(path);
+        if (dirty && checkout.index[path] !== before[path]) continue;
         if (value === undefined) {
-          delete checkout.files[path];
+          if (!dirty) delete checkout.files[path];
           delete checkout.index[path];
         } else {
-          checkout.files[path] = value;
+          if (!dirty) checkout.files[path] = value;
           checkout.index[path] = value;
         }
       }
-      return { unsynced: [], reason: null };
+      return kept.length === 0 ? { unsynced: [], reason: null } : { unsynced: kept, reason: 'their files held uncommitted work' };
     }),
     proved: (_repository, _checkout, ref, id) =>
       Effect.succeed(reachable(refs.get(ref) ?? '').has(id) || (reflogs.get(ref)?.has(id) ?? false)),

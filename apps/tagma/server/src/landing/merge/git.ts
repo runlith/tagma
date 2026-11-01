@@ -23,6 +23,7 @@ import { MERGE_TRAILER } from '../contract/wire/merge.js';
 import { commitConfig, commitHooks, landedHook, MERGING } from '../land/hooks.js';
 import { LandingLanes } from '../land/lanes.js';
 import { advanced, makeCommit } from '../land/publish.js';
+import { bringCheckout } from '../land/bring.js';
 import { carriedSafely, NOTHING_CARRIED } from '../land/reshaping.js';
 
 const failed = (failure: OwnGitFailed): WorktreeFinishRefused =>
@@ -65,24 +66,30 @@ export const makeMergeGit = Effect.gen(function* () {
       if ((yield* shaOf(checkout, ref)) !== commit) return `${ref} moved past ${commit}`;
       return null;
     });
-    const brought = Effect.gen(function* () {
+    const brought = Effect.fnUntraced(function* (index: string) {
       const before = yield* standing;
       if (before !== null)
         return yield* unsynced(`${before} before ${checkout} was brought to the merge, so its files were left as they were`);
-      yield* gitAnswer(git, 'merge-refresh', ['-C', checkout, 'update-index', '-q', '--refresh']);
-      const read = yield* Effect.result(runGit(git, 'merge-checkout', ['-C', checkout, 'read-tree', '-m', '-u', base, commit]));
-      if (read._tag === 'Failure') return yield* unsynced(`git left ${checkout} as it was: ${read.failure.message}`);
+      const read = yield* bringCheckout(git, checkout, index, base, commit);
+      if (read.failure !== null) return { unsynced: read.kept, reason: `git left ${checkout} as it was: ${read.failure}` };
       const after = yield* standing;
       if (after !== null)
         return yield* unsynced(
           `${after} while ${checkout} was brought to the merge, so its index and files hold the merge and not what the branch holds now`,
         );
+      if (read.kept.length > 0)
+        return {
+          unsynced: read.kept,
+          reason: `${read.kept.join(', ')} held uncommitted work in ${checkout}, so their files kept it, and every other path the merge wrote was brought to it`,
+        } satisfies MergeSettled;
       return { unsynced: [], reason: null } satisfies MergeSettled;
     });
-    return Effect.flatMap(Effect.result(Effect.flatMap(indexPath(git, checkout), (index) => indexWrites.hold(index, brought))), (done) =>
-      done._tag === 'Success'
-        ? Effect.succeed(done.success)
-        : unsynced(`${checkout} could not be brought to the merge: ${done.failure.message}`),
+    return Effect.flatMap(
+      Effect.result(Effect.flatMap(indexPath(git, checkout), (index) => indexWrites.hold(index, brought(index)))),
+      (done) =>
+        done._tag === 'Success'
+          ? Effect.succeed(done.success)
+          : unsynced(`${checkout} could not be brought to the merge: ${done.failure.message}`),
     );
   };
   const create = Effect.fnUntraced(function* (checkout: string, commit: Parameters<MergeGit['Service']['create']>[1]) {

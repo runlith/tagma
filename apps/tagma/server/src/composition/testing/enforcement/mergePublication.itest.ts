@@ -75,4 +75,32 @@ layer(Layer.merge(demoGraphLayer(), BunFileSystem.layer), { excludeTestServices:
         }),
       ),
   );
+  it.effect(
+    'a merge whose base checkout gains uncommitted work on one of its paths after admission brings every other path and its index to the merge, and keeps only that file',
+    () =>
+      withDemo((demo) =>
+        Effect.gen(function* () {
+          let base = '';
+          const { finishing, make, project, projectId } = yield* composed(
+            demo,
+            makeMachineWorld(() => null),
+            {
+              before: () => Effect.sync(() => (writeFileSync(join(base, 'lock.txt'), 'peer lock\n'), UNCHECKED)),
+            },
+          );
+          base = project;
+          yield* commitEffect(project, 'lock.txt', 'lock\n', 'a lockfile');
+          const side = yield* make('half');
+          yield* commitEffect(side.path, 'lock.txt', 'moved lock\n', 'move the lock');
+          yield* commitEffect(side.path, 'pin.txt', 'pinned\n', 'move the pin');
+          const answer = yield* finishing.merge(projectId, side.rootId, {});
+          expect(answer.base.head).toBe(yield* shEffect(project, ['rev-parse', 'HEAD']));
+          expect(answer.unsynced?.paths).toEqual(['lock.txt']);
+          expect(readFileSync(join(project, 'pin.txt'), 'utf8')).toBe('pinned\n');
+          expect(readFileSync(join(project, 'lock.txt'), 'utf8')).toBe('peer lock\n');
+          expect(yield* shEffect(project, ['diff', '--cached', '--name-only'])).toBe('');
+          expect(yield* shEffect(project, ['status', '--porcelain', '--untracked-files=no'])).toBe('M lock.txt');
+        }),
+      ),
+  );
 });
