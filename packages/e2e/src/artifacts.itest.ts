@@ -5,6 +5,8 @@ import { join } from 'node:path';
 import { it } from '@runlith/effect-test';
 import { Cause, Deferred, Effect, Exit, Fiber } from 'effect';
 import { onFailure, recorded } from './artifacts.ts';
+import { HANG_MS } from '@runlith/testbed/kinds';
+import { TestClock } from 'effect/testing';
 
 it.live('a body failure records evidence before releasing its fixture', () =>
   Effect.gen(function* () {
@@ -28,6 +30,34 @@ it.live('a body failure records evidence before releasing its fixture', () =>
     expect(readFileSync(artifact, 'utf8')).toBe('failure evidence');
     expect(open).toBe(false);
     expect(Exit.isFailure(exit) && Cause.pretty(exit.cause)).toContain('body failed');
+  }),
+);
+
+it.effect('the hang bound captures evidence before releasing its fixture', () =>
+  Effect.gen(function* () {
+    const ready = yield* Deferred.make<string>();
+    let open = true;
+    const running = yield* Effect.forkChild(
+      recorded('timed recording', (directory) =>
+        Effect.gen(function* () {
+          const stop = onFailure((path) => writeFile(join(path, 'evidence.txt'), open ? 'failure evidence' : 'resource already closed'));
+          yield* Effect.addFinalizer(() =>
+            Effect.sync(() => {
+              open = false;
+              stop();
+            }),
+          );
+          yield* Deferred.succeed(ready, directory);
+          return yield* Effect.never;
+        }),
+      ),
+    );
+    const directory = yield* Deferred.await(ready);
+    yield* TestClock.adjust(HANG_MS);
+    const exit = yield* Fiber.await(running);
+    expect(readFileSync(join(directory, 'evidence.txt'), 'utf8')).toBe('failure evidence');
+    expect(open).toBe(false);
+    expect(Exit.isFailure(exit) && Cause.pretty(exit.cause)).toContain(`Artifacts: ${directory}`);
   }),
 );
 

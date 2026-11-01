@@ -4,7 +4,7 @@ import { mkdirSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 import { reportPath } from '@runlith/testbed/fixture';
 import { HANG_MS } from '@runlith/testbed/kinds';
-import { Cause, Effect, Exit, Fiber, Scope } from 'effect';
+import { Cause, Clock, Effect, Exit, Fiber, Scope } from 'effect';
 
 export type FailureArtifact = (directory: string) => Promise<void>;
 type Recording = { readonly directory: string; readonly failures: Set<FailureArtifact> };
@@ -51,34 +51,39 @@ export const recorded = Effect.fn('e2e.recorded')(function* <A, E>(
   work: (directory: string) => Effect.Effect<A, E, Scope.Scope>,
 ) {
   const directory = artifactDirectory(Bun.main, name);
+  const clock = yield* Clock.Clock;
   return yield* Effect.callback<A>((resume, signal) => {
     const running = record(directory, () =>
       Effect.runPromiseExit(
-        Effect.scoped(
-          Effect.uninterruptibleMask((restore) =>
-            Effect.gen(function* () {
-              const scope = yield* Effect.acquireRelease(Scope.make(), (scope, exit) => Scope.close(scope, exit));
-              const test = yield* Effect.forkChild(restore(Effect.exit(Scope.provide(work(directory), scope))));
-              const observed = yield* Effect.exit(
-                restore(
-                  Effect.timeoutOrElse(Fiber.join(test), {
-                    duration: HANG_MS,
-                    orElse: () => Effect.die(new Error(`test timed out after ${HANG_MS}ms`)),
-                  }),
-                ),
-              );
-              const outcome = Exit.isFailure(observed) ? Exit.failCause(observed.cause) : observed.value;
-              if (Exit.isFailure(outcome)) {
-                const captured = yield* Effect.exit(Effect.tryPromise(() => captureFailure()));
-                const errors = [Cause.pretty(outcome.cause), ...(Exit.isFailure(captured) ? [Cause.pretty(captured.cause)] : [])];
-                yield* Fiber.interrupt(test);
-                const ended = yield* Fiber.await(test);
-                if (Exit.isFailure(ended) && !Cause.hasInterruptsOnly(ended.cause)) errors.push(Cause.pretty(ended.cause));
-                return yield* Effect.die(new Error(`${errors.join('\n')}\nArtifacts: ${directory}`));
-              }
-              return outcome.value;
-            }),
+        Effect.provideService(
+          Effect.scoped(
+            Effect.uninterruptibleMask((restore) =>
+              Effect.gen(function* () {
+                const scope = yield* Effect.acquireRelease(Scope.make(), (scope, exit) => Scope.close(scope, exit));
+                const test = yield* Effect.forkChild(restore(Effect.exit(Scope.provide(work(directory), scope))));
+                const observed = yield* Effect.exit(
+                  restore(
+                    Effect.timeoutOrElse(Fiber.join(test), {
+                      duration: HANG_MS,
+                      orElse: () => Effect.die(new Error(`test timed out after ${HANG_MS}ms`)),
+                    }),
+                  ),
+                );
+                const outcome = Exit.isFailure(observed) ? Exit.failCause(observed.cause) : observed.value;
+                if (Exit.isFailure(outcome)) {
+                  const captured = yield* Effect.exit(Effect.tryPromise(() => captureFailure()));
+                  const errors = [Cause.pretty(outcome.cause), ...(Exit.isFailure(captured) ? [Cause.pretty(captured.cause)] : [])];
+                  yield* Fiber.interrupt(test);
+                  const ended = yield* Fiber.await(test);
+                  if (Exit.isFailure(ended) && !Cause.hasInterruptsOnly(ended.cause)) errors.push(Cause.pretty(ended.cause));
+                  return yield* Effect.die(new Error(`${errors.join('\n')}\nArtifacts: ${directory}`));
+                }
+                return outcome.value;
+              }),
+            ),
           ),
+          Clock.Clock,
+          clock,
         ),
         { signal },
       ),
