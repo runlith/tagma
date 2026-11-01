@@ -19,7 +19,6 @@ import type { ProjectRow } from '../projects/contract/wire/project.js';
 import { placeAt } from '../projects/identity.js';
 import { DevSurface, type SurfaceRefusal } from './contract/service/surface.js';
 
-const APP = join('apps', 'tagma', 'app');
 const VITE = ['run', '--bun', 'vite'];
 const LABEL = 'Tagma dev surface';
 const SURFACE_OUT = 'TAGMA_SURFACE_OUT';
@@ -28,7 +27,9 @@ const SCRIPT = 'javascript';
 const ASKED_EVERY = '250 millis';
 const TAIL_LINES = 20;
 
-export type SurfaceOptions = { readonly checkout: string | undefined; readonly port: number };
+export type SurfaceApp = { readonly root: string; readonly config: string | null };
+
+export type SurfaceOptions = { readonly checkout: string | undefined; readonly app: SurfaceApp; readonly port: number };
 
 type Attempt =
   | { readonly _tag: 'Started'; readonly execution: ExecutionRef; readonly project: ProjectRow; readonly cwd: string }
@@ -101,7 +102,7 @@ export const makeDevSurface = Effect.fnUntraced(function* (options: SurfaceOptio
     const actor = { _tag: 'Operator' } as const;
     const principal = principalOf(actor);
     const project = yield* projectOf(checkout);
-    const cwd = join(checkout, APP);
+    const cwd = join(checkout, options.app.root);
     const operation = HostRequestKey.make(`dev-surface:${crypto.randomUUID()}`);
     const target = yield* terminals.target({ projectId: project.id, kind: 'host', cwd }).pipe(Effect.mapError(passed));
     const receipt = yield* Effect.scoped(
@@ -111,7 +112,7 @@ export const makeDevSurface = Effect.fnUntraced(function* (options: SurfaceOptio
         target,
         targetKey: targetKeyOf(targetIdentity(target, principal, principal)),
         program: process.execPath,
-        args: VITE,
+        args: options.app.config === null ? VITE : [...VITE, '--config', join(checkout, options.app.config)],
         label: LABEL,
         transport: 'pty',
         lifetime: 'held',

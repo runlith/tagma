@@ -17,6 +17,7 @@ import {
   revisionLabel,
 } from '../installation/contract/wire/layout.js';
 import { currentVersion, releasesNewestFirst } from '../installation/closure/versions.js';
+import { declaredSubmodules, SUBMODULE_PATHS } from '../installation/cut/source.js';
 import { type InstallRefused, NextInstallation, type StopRefused } from '../installation/contract/service/next.js';
 import type { NextFrame } from '../installation/contract/wire/next.js';
 import {
@@ -32,6 +33,15 @@ import { actsOf, backOf, installedOf, installingOf, offersOf, standingOf, update
 import { commandOf, endGroup } from './group.js';
 
 const HOST = BunChildProcessSpawner.layer.pipe(Layer.provide(Layer.mergeAll(BunFileSystem.layer, BunPath.layer)));
+
+const submoduleRepositories = async (repository: string, env: Record<string, string | undefined>): Promise<readonly string[]> => {
+  if (!existsSync(join(repository, '.gitmodules'))) return [];
+  const listed = Bun.spawn(['git', '-C', repository, ...SUBMODULE_PATHS], { env, stdin: 'ignore', stdout: 'pipe', stderr: 'ignore' });
+  const [output, code] = await Promise.all([new Response(listed.stdout).text(), listed.exited]);
+  if (code !== 0) return [];
+  const direct = declaredSubmodules(output).map((path) => join(repository, path));
+  return [...direct, ...(await Promise.all(direct.map((nested) => submoduleRepositories(nested, env)))).flat()];
+};
 
 const TAIL_BYTES = 4096;
 const TAIL_LINES = 20;
@@ -204,12 +214,13 @@ export const makeCheckoutBuilds = Effect.fnUntraced(function* (options: Checkout
       stderr: 'ignore',
     }).exited.catch(() => undefined);
     await rm(worktree, { recursive: true, force: true }).catch(() => undefined);
-    await Bun.spawn(['git', '-C', checkout, 'worktree', 'prune'], {
-      env,
-      stdin: 'ignore',
-      stdout: 'ignore',
-      stderr: 'ignore',
-    }).exited.catch(() => undefined);
+    for (const repository of [checkout, ...(await submoduleRepositories(checkout, env))])
+      await Bun.spawn(['git', '-C', repository, 'worktree', 'prune'], {
+        env,
+        stdin: 'ignore',
+        stdout: 'ignore',
+        stderr: 'ignore',
+      }).exited.catch(() => undefined);
   };
 
   const halt = async (building: BuildRunning): Promise<BuildEnded | null> => {

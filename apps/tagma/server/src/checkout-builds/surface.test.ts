@@ -15,7 +15,7 @@ import type { TerminalRecord } from '../executions/contract/wire/terminals.js';
 import { ProjectIdentification, Projects } from '../projects/contract/service/registry.js';
 import type { ProjectIdentity, ProjectRow } from '../projects/contract/wire/project.js';
 import { DevSurface } from './contract/service/surface.js';
-import { devSurfaceLayer } from './surface.js';
+import { devSurfaceLayer, type SurfaceApp } from './surface.js';
 
 const CHECKOUT = '/work/runlith';
 const PORT = 5642;
@@ -25,6 +25,7 @@ const EXECUTION = { installation: 'install-1', execution: 'exec-1', incarnation:
 
 type Scene = {
   readonly checkout?: string | null;
+  readonly app?: SurfaceApp;
   readonly answers: 'already' | 'once-started' | 'later';
   readonly ended?: ExecutionSummary;
   readonly lines?: readonly string[];
@@ -85,9 +86,11 @@ const surfaceOf = Effect.fnUntraced(function* (scene: Scene) {
     ),
   );
   const built = yield* Layer.build(
-    devSurfaceLayer({ checkout: scene.checkout === null ? undefined : (scene.checkout ?? CHECKOUT), port: PORT }).pipe(
-      Layer.provide(doubles),
-    ),
+    devSurfaceLayer({
+      checkout: scene.checkout === null ? undefined : (scene.checkout ?? CHECKOUT),
+      app: scene.app ?? { root: 'apps/tagma/app', config: null },
+      port: PORT,
+    }).pipe(Layer.provide(doubles)),
   );
   return {
     serve: Context.get(built, DevSurface).serve,
@@ -120,6 +123,19 @@ it.effect('a silent address starts one held terminal of the checkout app on this
           { _tag: 'Unset', name: 'TAGMA_SURFACE_OUT' },
         ],
       ],
+    ]);
+  }),
+);
+
+it.effect('a root whose app stands elsewhere in its checkout starts Vite there with its own config', () =>
+  Effect.gen(function* () {
+    const surface = yield* surfaceOf({
+      answers: 'once-started',
+      app: { root: 'tagma/apps/tagma/app', config: 'apps/tagma/root/app/vite.config.ts' },
+    });
+    expect(yield* surface.serve).toEqual({ url: URL, started: true });
+    expect(surface.starts.map((start) => [start.target.footprint.resource.path, start.args])).toEqual([
+      [`${CHECKOUT}/tagma/apps/tagma/app`, ['run', '--bun', 'vite', '--config', `${CHECKOUT}/apps/tagma/root/app/vite.config.ts`]],
     ]);
   }),
 );

@@ -34,6 +34,6 @@ const nextInstallation = (place: NextPlace) => {
   }).pipe(Layer.provide(Layer.succeed(SourceChanges, sourceChanges(place.roots, place.watch))));
 };
 
-const door = (place: DoorPlace) => devSurfaceLayer({ checkout: checkoutOf(place), port: place.port });
+const door = (place: DoorPlace) => devSurfaceLayer({ checkout: checkoutOf(place), app: place.app, port: place.port });
 
 export const BINDINGS: BindingChoice = { nextInstallation, door };

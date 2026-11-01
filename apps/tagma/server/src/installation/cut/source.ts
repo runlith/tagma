@@ -24,6 +24,14 @@ class SourceRefused extends Data.TaggedError('SourceRefused')<{
 const graphPath = (path: string): boolean => path === '.tagma' || path.startsWith('.tagma/');
 const unblock = ['commit the changes to include them in HEAD', 'bun run tagma:build --tree — deliberately build the working tree'];
 
+export const SUBMODULE_PATHS = ['config', '-z', '--file', '.gitmodules', '--get-regexp', '^submodule\\..*\\.path$'] as const;
+
+export const declaredSubmodules = (output: string): readonly string[] =>
+  output.split('\0').flatMap((entry) => {
+    const value = entry.slice(entry.indexOf('\n') + 1);
+    return entry.includes('\n') && value !== '' ? [value] : [];
+  });
+
 export const buildHead = Effect.fn('installation.buildHead')(function* (
   checkout: string,
   given: readonly string[],
@@ -60,15 +68,11 @@ export const buildHead = Effect.fn('installation.buildHead')(function* (
   const submodulesOf = Effect.fn('installation.headSubmodules')(function* (place: string) {
     const declared = yield* files.exists(join(place, '.gitmodules')).pipe(Effect.mapError((failure) => failed(failure.message)));
     if (!declared) return [];
-    const paths = yield* commandIn(place, ['config', '--file', '.gitmodules', '--get-regexp', '^submodule\\..*\\.path$']);
-    const named = paths.split('\n').flatMap((line) => {
-      const path = line.trim().split(' ').slice(1).join(' ');
-      return path === '' ? [] : [path];
-    });
+    const named = declaredSubmodules(yield* commandIn(place, SUBMODULE_PATHS));
     if (named.length === 0) return [];
-    const staged = yield* commandIn(place, ['ls-files', '--stage', '--', ...named]);
-    return staged.split('\n').flatMap((line) => {
-      const linked = /^160000 ([0-9a-f]+) 0\t(.+)$/u.exec(line);
+    const staged = yield* commandIn(place, ['ls-files', '-z', '--stage', '--', ...named.map((path) => `:(literal)${path}`)]);
+    return staged.split('\0').flatMap((entry) => {
+      const linked = /^160000 ([0-9a-f]+) 0\t(.+)$/su.exec(entry);
       return linked?.[1] === undefined || linked[2] === undefined ? [] : [{ pinned: linked[1], path: linked[2] }];
     });
   });
