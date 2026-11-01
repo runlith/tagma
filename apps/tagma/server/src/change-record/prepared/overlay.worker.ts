@@ -16,7 +16,10 @@ self.addEventListener('message', (event: MessageEvent<OverlayAsk>) => {
     self.postMessage(
       (base === null || staged === null
         ? { kind: 'unweighable' }
-        : { kind: 'overlaid', text: overlay({ base, selected: event.data.selected, staged }) }) satisfies OverlayAnswer,
+        : {
+            kind: 'overlaid',
+            text: overlay({ base, selected: event.data.selected, staged, working: event.data.working, positions: event.data.positions }),
+          }) satisfies OverlayAnswer,
     );
   } catch (cause) {
     self.postMessage({ kind: 'failed', reason: String(cause) } satisfies OverlayAnswer);
