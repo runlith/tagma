@@ -4,7 +4,7 @@ import { CostLedger, costLedgerLayer, rootCost } from '@runlith/performance/Cost
 import { APPROVAL, lifecycleWorld, started } from '@runlith/agent/thread/conformance/lifecycleWorld';
 import type { ThreadStateChange } from '@runlith/agent/thread/state';
 import { openThreadStore } from '../../composition/testing/storageHarness.js';
-import { eq, sql } from 'drizzle-orm';
+import { sql } from 'drizzle-orm';
 import { Clock, Effect, Layer, Tracer } from 'effect';
 import { SCOPED_RUN } from '../row.js';
 import { demoGraphLayer, withDemo } from '../../composition/testing/graphFixture.js';
@@ -12,6 +12,7 @@ import { makeThreadRecords } from '../../thread-record/layer.js';
 import { threadStack } from '../../composition/testing/threadParts.js';
 import { CORE_KINDS, threadRunStore } from '../testing/doubles.js';
 import { threadRun } from '../../threads/store/kernel.js';
+import { threadRev } from '../store/thread.js';
 
 it.live('a beat commits as one program and answers its owner’s stop requests and thread revision', () =>
   Effect.gen(function* () {
@@ -103,11 +104,22 @@ layer(demoGraphLayer(), { excludeTestServices: true })('run heartbeat', (it) => 
                 Effect.map((started) => started.run),
                 Effect.orDie,
               );
-          const heartbeatOf = (runId: string) =>
-            Effect.map(
-              db.select({ at: threadRun.heartbeatAt }).from(threadRun).where(eq(threadRun.id, runId)).get().pipe(Effect.orDie),
-              (row) => row?.at.getTime() ?? null,
-            );
+          const standing = Effect.map(
+            Effect.all([
+              db.select({ id: threadRun.id, at: threadRun.heartbeatAt }).from(threadRun),
+              db.select({ id: threadRev.threadId, revision: threadRev.changeRev }).from(threadRev),
+            ]).pipe(Effect.orDie),
+            ([runRows, revisions]) => ({
+              runs: new Map(runRows.map((row) => [row.id, row.at.getTime()])),
+              revisions: new Map(revisions.map((row) => [row.id, row.revision])),
+            }),
+          );
+          type Standing = Effect.Success<typeof standing>;
+          const touched = (before: Standing, after: Standing) => {
+            const moved = (was: ReadonlyMap<string, number>, now: ReadonlyMap<string, number>) =>
+              [...new Set([...was.keys(), ...now.keys()])].filter((id) => was.get(id) !== now.get(id)).sort();
+            return { runs: moved(before.runs, after.runs), revisions: moved(before.revisions, after.revisions) };
+          };
           const going = [yield* start((yield* born(1))[0]!), yield* start((yield* born(1))[0]!)];
           yield* born(2);
           const totalChanges = Effect.map(db.all<{ n: number }>(sql`select total_changes() as n`).pipe(Effect.orDie), (rows) => rows[0]!.n);
@@ -117,10 +129,7 @@ layer(demoGraphLayer(), { excludeTestServices: true })('run heartbeat', (it) => 
             return { ...measured, rows: (yield* totalChanges) - before };
           });
           const measure = Effect.gen(function* () {
-            const before = yield* Effect.all(
-              going.map((run) => heartbeatOf(run.id)),
-              { concurrency: 2 },
-            );
+            const before = yield* standing;
             const beaten = new Date((yield* Clock.currentTimeMillis) + 5 * MINUTE);
             const beat = yield* written(
               runs.writeHeartbeats(
@@ -128,27 +137,27 @@ layer(demoGraphLayer(), { excludeTestServices: true })('run heartbeat', (it) => 
                 beaten,
               ),
             );
-            const after = yield* Effect.all(
-              going.map((run) => heartbeatOf(run.id)),
-              { concurrency: 2 },
-            );
+            const between = yield* standing;
             const search = yield* written(runs.reapableRuns({ kind: 'stale-heartbeat', heartbeatBefore: new Date(beaten.getTime() + 1) }));
-            const changed = after.flatMap((at, index) => (at !== before[index] ? [String(index)] : []));
             return {
               beat: beat.count,
               beatRows: beat.rows,
               search: search.count,
               searchRows: search.rows,
               found: search.value.map((row) => row.id).sort(),
-              changed,
+              beaten: touched(before, between),
+              searched: touched(between, yield* standing),
             };
           });
           const few = yield* measure;
           yield* born(12);
           const many = yield* measure;
-          expect(few.changed).toEqual(['0', '1']);
-          expect(many.changed).toEqual(['0', '1']);
-          expect(few.beatRows).toBe(2 * going.length);
+          const goingRows = { runs: going.map((run) => run.id).sort(), revisions: going.map((run) => run.threadId).sort() };
+          expect({ few: few.beaten, many: many.beaten }).toEqual({ few: goingRows, many: goingRows });
+          expect({ few: few.searched, many: many.searched }).toEqual({
+            few: { runs: [], revisions: [] },
+            many: { runs: [], revisions: [] },
+          });
           expect(many.beatRows).toBe(few.beatRows);
           expect(few.searchRows).toBe(0);
           expect(many.searchRows).toBe(0);

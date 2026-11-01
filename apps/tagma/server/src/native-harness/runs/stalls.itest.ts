@@ -3,7 +3,8 @@ import { layer } from '@runlith/effect-test';
 import { eq } from 'drizzle-orm';
 import { Clock, Effect } from 'effect';
 import { THREAD_RUN_AWAITING_QUESTION_STAGE } from '@runlith/agent/thread/storage/runs';
-import { thread } from '../../threads/store/kernel.js';
+import { nativeRows, thread } from '../../threads/store/kernel.js';
+import { conversationWrites } from '../../threads/store/journal.js';
 import { SCOPED_RUN } from '../row.js';
 import { demoGraphLayer, withDemo } from '../../composition/testing/graphFixture.js';
 import { makeThreadRecords } from '../../thread-record/layer.js';
@@ -157,7 +158,7 @@ layer(demoGraphLayer(), { excludeTestServices: true })('run stalls', (it) => {
         expect(yield* stalled).toEqual([made.watched!]);
         const journal = yield* sqliteThreadJournal();
         yield* demo.graph.units
-          .write(writes('StallEnvelope.report', [threadEvent()]), (unit) =>
+          .write(writes('StallEnvelope.report', [threadEvent(), nativeRows], conversationWrites), (unit) =>
             journal.append(
               {
                 threadId: made.watched!,
