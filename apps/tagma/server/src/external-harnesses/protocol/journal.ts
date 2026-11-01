@@ -176,6 +176,7 @@ export class ProtocolJournal {
     private readonly reports: AdapterReports,
     private readonly threads: NativeStorage['Service']['threads'],
     private readonly publishing: (threadId: string) => Effect.Effect<void, ThreadBorderFailed>,
+    private readonly projecting: HarnessThreads<NativeThreadState, Unit<'machine'>, WriteUnit<'machine'>>,
     private readonly inbox: ThreadInbox['Service'],
     private readonly pictures: ThreadAttachmentStore,
     private readonly asides: ThreadAsides,
