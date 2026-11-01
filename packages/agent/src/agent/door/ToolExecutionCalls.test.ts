@@ -960,7 +960,10 @@ describe('the door under the run’s call owner', () => {
         prepare: () => Deferred.succeed(reading, undefined).pipe(Effect.andThen(Effect.never)),
         execute: () => Effect.succeed({ done: true }),
       });
-      const fiber = yield* Effect.forkScoped(failing(doorOver({ calls }), slowToRead));
+      const door = doorOver({ calls });
+      const placed = { toolCallId: 'call-1', name: 'slow', claims: [NOTES_WRITE] };
+      door.order.place([placed]);
+      const fiber = yield* Effect.forkScoped(failing(door, slowToRead));
       yield* Deferred.await(reading);
       yield* calls.control(address, { action: 'stop' });
       expect(yield* Fiber.join(fiber)).toMatchObject({
@@ -968,6 +971,15 @@ describe('the door under the run’s call owner', () => {
         cause: { _tag: 'Tool.Failed', reason: 'Stopped by the operator.' },
       });
       expect(calls.snapshot()[0]).toMatchObject({ phase: 'stopped' });
+      door.order.place([placed, { toolCallId: 'call-2', name: 'write', claims: [NOTES_WRITE] }]);
+      const next = Tool.make({
+        display: () => ({ form: 'none' }),
+        approval: ASKS_NEVER,
+        description: 'Write after the stopped call.',
+        parameters: Schema.Struct({}),
+        execute: () => Effect.succeed({ written: true }),
+      });
+      expect(yield* settle(door, next, 'call-2')).toMatchObject({ executed: true, output: { written: true } });
     }),
   );
   it.effect(

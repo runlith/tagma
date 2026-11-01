@@ -191,10 +191,7 @@ export const makeAgentToolDoor = <TCtx>({
           );
           return ledger.preflighting(
             call,
-            restore(preparing).pipe(
-              Effect.tap((prepared) => Effect.sync(() => execution.prepared(call, prepared))),
-              Effect.tapError(() => Effect.sync(() => order.release(call.toolCallId))),
-            ),
+            restore(preparing).pipe(Effect.tap((prepared) => Effect.sync(() => execution.prepared(call, prepared)))),
           );
         }),
       ),

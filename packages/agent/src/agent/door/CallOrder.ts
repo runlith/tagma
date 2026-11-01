@@ -154,6 +154,7 @@ export type CallOrder = ReturnType<typeof makeCallOrder>;
 
 export const makeCallOrder = (thread?: CallOrderThread) => {
   const placed = new Map<string, Placed>();
+  const ended = new Set<string>();
   const waits = new Map<string, CallWait>();
   const signal = makeSignal();
   const self = {};
@@ -202,7 +203,7 @@ export const makeCallOrder = (thread?: CallOrderThread) => {
     place: (calls: readonly OrderedCall[]): readonly string[] => {
       const fresh: string[] = [];
       for (const call of calls) {
-        if (placed.has(call.toolCallId)) continue;
+        if (placed.has(call.toolCallId) || ended.has(call.toolCallId)) continue;
         placed.set(call.toolCallId, { ...call, seq: thread?.claims.next() ?? ++local, answered: false, asking: false });
         fresh.push(call.toolCallId);
       }
@@ -251,6 +252,7 @@ export const makeCallOrder = (thread?: CallOrderThread) => {
       const call = placed.get(toolCallId);
       if (call === undefined || call.answered) return;
       if (!call.claims.some(heldAfterAnswer)) {
+        ended.add(toolCallId);
         placed.delete(toolCallId);
         waits.delete(toolCallId);
       } else {
@@ -280,6 +282,7 @@ export const makeCallOrder = (thread?: CallOrderThread) => {
     },
 
     release: (toolCallId: string): void => {
+      ended.add(toolCallId);
       waits.delete(toolCallId);
       unstand(toolCallId);
       if (!placed.delete(toolCallId)) return;
@@ -289,6 +292,7 @@ export const makeCallOrder = (thread?: CallOrderThread) => {
     clear: (): void => {
       for (const toolCallId of placed.keys()) unstand(toolCallId);
       placed.clear();
+      ended.clear();
       waits.clear();
       moved();
     },

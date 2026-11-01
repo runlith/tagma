@@ -789,7 +789,12 @@ export const makeToolExecution = <TCtx>({
     preparing: <A, E>(call: AgentPermissionQuestion, reading: Effect.Effect<A, E>, stopped: (reason: string) => E): Effect.Effect<A, E> =>
       Effect.flatMap(tracking(call), (tracked) =>
         (tracked === null ? reading : tracked.call.prepare(reading, stopped)).pipe(
-          Effect.onError(() => Effect.sync(() => ended(call.toolCallId))),
+          Effect.onError(() =>
+            Effect.sync(() => {
+              order.release(call.toolCallId);
+              ended(call.toolCallId);
+            }),
+          ),
         ),
       ),
 

@@ -49,7 +49,7 @@ export const names: Builtin<'names', NamesParams> = {
             why: 'One subject: the remeasurement lifecycle of an open checkout — Start waiters, rule-slot scheduling with its per-request answers, pauses, debt and origin-tracing lanes, HEAD observation and cancellation share the same copy and confirmed measurement boundary.',
           },
           {
-            lines: 812,
+            lines: 817,
             path: 'packages/agent/src/agent/door/ToolExecution.ts',
             why: "One subject: a tool call's life at the door from admission through permission, order and execution to confirmed delivery, foreground or carried to the background at any stage; the stages and final release share the same tracked call, read-back, order claim, causal cost and ledger.",
           },
