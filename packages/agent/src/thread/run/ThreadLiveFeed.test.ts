@@ -42,6 +42,26 @@ function readerOf(events: readonly ThreadLiveEvent<ThreadStateShape>[]): FeedVie
 }
 
 describe('ThreadLiveFeed', () => {
+  it.effect('a new live lane cannot resume an old run at its reused sequence', () =>
+    Effect.gen(function* () {
+      const feed = yield* makeThreadLiveFeed<ThreadStateShape>();
+      const events: ThreadLiveEvent<ThreadStateShape>[] = [];
+      const first = feed.subscribe('thread-1', (event) => events.push(event));
+      feed.progress('thread-1', 'run-1', { phase: { phase: 'reasoning', since: 1 }, estimate: null });
+      const opening = feed.view('thread-1');
+      feed.publishState(frame(1, { active: null, latest: 'run-1' }));
+      first();
+      const second = feed.subscribe('thread-1', (event) => events.push(event));
+      feed.progress('thread-1', 'run-2', { phase: { phase: 'writing', since: 2 }, estimate: null });
+      const successor = feed.view('thread-1');
+      expect(opening.at.seq).toBe(successor.at.seq);
+      expect(opening.incarnation).not.toBe(successor.incarnation);
+      expect(events[0]).toMatchObject({ incarnation: opening.incarnation, runId: 'run-1' });
+      expect(events.at(-1)).toMatchObject({ incarnation: successor.incarnation, runId: 'run-2', at: successor.at });
+      second();
+    }),
+  );
+
   it.effect(
     'a landed entry leaves the open tail with its published record, and a finished run drops what never landed',
     Effect.fnUntraced(function* () {

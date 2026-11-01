@@ -36,7 +36,16 @@ function feed(view: ThreadOpenView = NO_VIEW, journal: Journal = 'none') {
     releases: () => released,
     send: (change: ThreadOpenChange) => emit?.([change]),
     sendState: (...entries: readonly ThreadTranscriptEntry[]) =>
-      emit?.(phaseChanges({ type: 'state', at: { position: 1, seq: 1 }, frame: stateOf(entries), weight: 0 })),
+      emit?.(
+        phaseChanges({
+          type: 'state',
+          incarnation: 'phase-test',
+          runId: 'run-1',
+          at: { position: 1, seq: 1 },
+          frame: stateOf(entries),
+          weight: 0,
+        }),
+      ),
     read: (entries: readonly ThreadTranscriptEntry[]) => deliver?.(entries),
   };
 }

@@ -132,6 +132,21 @@ it.effect.each(['resource', 'commands'] as const)('an archive whose %s closure f
   }),
 );
 
+it.effect('launch blocking and release reach a listed row without a full state publication', () =>
+  Effect.gen(function* () {
+    const { list, gate } = yield* opened();
+    const blocked = yield* Queue.unbounded<boolean>();
+    const stop = list.subscribe(1, (event) => {
+      if (event.kind === 'row') Queue.offerUnsafe(blocked, event.row.launchBlocked === true);
+    });
+    yield* Effect.addFinalizer(() => Effect.sync(stop));
+    gate.refused('thread', true);
+    expect(yield* Queue.take(blocked)).toBe(true);
+    gate.lift('thread');
+    expect(yield* Queue.take(blocked)).toBe(false);
+  }),
+);
+
 it.effect('resync publishes its window before row frames announced while it reads', () =>
   Effect.gen(function* () {
     const { list, reading, release } = yield* opened();
@@ -180,31 +195,5 @@ it.effect('changed held-path counts publish the row and a cleared count replaces
     yield* list.markHeld('thread');
     expect(yield* Queue.take(events)).toBe(0);
     expect((yield* list.row('thread'))?.held.paths).toBe(0);
-  }),
-);
-
-it.effect('a launch block reaches the announced thread row and lifting it clears that row', () =>
-  Effect.gen(function* () {
-    const world = yield* opened();
-    const first = yield* Deferred.make<boolean>();
-    const second = yield* Deferred.make<boolean>();
-    let count = 0;
-    world.list.subscribe(1, (event) => {
-      if (event.kind !== 'row') return;
-      count += 1;
-      Deferred.doneUnsafe(count === 1 ? first : second, Effect.succeed(event.row.launchBlocked === true));
-    });
-    const state = {
-      thread: { id: 'thread', ownerId: 'operator' },
-      activeRun: null,
-      latestRun: null,
-      status: {},
-    } as unknown as NativeThreadState;
-    while (!world.gate.blocked('thread')) world.gate.refused('thread');
-    world.emit(state);
-    const blocked = yield* Deferred.await(first);
-    world.gate.lift('thread');
-    world.emit(state);
-    expect([blocked, yield* Deferred.await(second)]).toEqual([true, false]);
   }),
 );
