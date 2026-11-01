@@ -88,8 +88,8 @@ Server:
    - `read_machine_state` answers the items as an optional list beside `server.calls`. `server.calls` keeps its shape, answered as the total of the items, so a CLI or desktop of an earlier release still decodes the answer.
    - The desktop's busy check and quit words read the list when it stands, and `calls` otherwise.
 8. **Tables leave the machine store with their rows.** A machine-store migration that removes tables may set them aside.
-   - The migration writes their rows into `<data>/stores/set-aside/<migration>.sqlite` through a temporary file renamed into place, replacing any file of that name. A start that ran the migration and was then rolled back leaves the file behind, and the start after it writes it again, whole.
-   - A module store declares the set-aside it adopts. Adoption runs only after the local door opens, when no rollback can follow. It inserts by the rows' own keys, so an adoption interrupted at any step and run again neither repeats nor loses a row. It deletes the file only once its own write committed.
+   - The migration names those tables in `aside.json` (`{ "tables": [...] }`) beside its `migration.sql`, and its rows are written into `<data>/stores/set-aside/<migration>.sqlite` through a temporary file renamed into place, replacing any file of that name. A start that ran the migration and was then rolled back leaves the file behind, and the start after it writes it again, whole.
+   - A module store declares the set-aside it adopts: `adopts`, the migration names, on its `stores` entry. Composition runs `Store.adopt` for each only after `Maintenance.opened`, when no rollback can follow. It inserts every table of the file into the module store's same-named table by the rows' own keys, in one transaction, so an adoption interrupted at any step and run again neither repeats nor loses a row; a target table with no primary key or unique index is refused. It deletes the file only once its own write committed.
    - A set-aside nobody adopts stays where it is.
 
    The core loses no row a removed table held, whichever version a machine updates from.
@@ -127,7 +127,7 @@ Speech's settings section needs no new point: `SettingsPage.svelte` already draw
   - declares an operation on the speech capability, which an agent carrying the capability is offered;
   - serves an HTTP group under `/api/<id>/`, refused `right-missing` when `Access` answers `none`;
   - adds a live-work count that `read_machine_state` lists, while `server.calls` answers the total;
-  - adopts the set-aside of a test table that a test machine migration removed, with every row. Each step is checked: a rollback after the migration, re-entry, an adoption interrupted before and after its commit, and a version skip over the release that set the table aside;
+  - adopts a set-aside only after `Maintenance.opened`, leaving one nobody adopts in place (`composition/testing/setAside.itest.ts`). The composed core carries the product's own machine chain, so the steps of a removing migration are proved on a test machine chain and a test module store (`platform/store/aside.itest.ts`): every row reaches the store across a rollback after the migration, re-entry, an adoption interrupted before and after its commit, and a version skip over the release that set the table aside;
   - keeps a file in its files directory that a world transfer carries, both with and without the module in the target build;
   - reads a thread's home through the thread owners from its serving lifetime. The test world signs in no model and so creates no thread; a keyed delivery is proved by the delivering module's own test.
 - A build without that module opens the same data directory and serves, leaving the module's store, files directory and set-aside in place.
