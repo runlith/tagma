@@ -316,6 +316,11 @@ const unresolvable =
   (word: ShellWord): boolean =>
     !word.literal || word.text === '' || GLOB.test(word.text) || word.text.startsWith('~') || (cwd === null && !word.text.startsWith('/'));
 
+const unplaced =
+  (cwd: string | null) =>
+  (word: ShellWord): boolean =>
+    !word.literal || word.text === '' || word.text.startsWith('~') || (cwd === null && !word.text.startsWith('/'));
+
 function editedPaths(found: Program): { readonly operands: readonly ShellWord[]; readonly sides: readonly string[] } | null {
   const { name, words } = found;
   const texts = words.map((word) => word.text);
@@ -463,7 +468,8 @@ function mutatedPaths(found: Program, cwd: string | null): readonly CommandPath[
     if (pathspecs === null || at === null || pathspecs === undefined)
       return operation !== null && GIT_WRITES.has(operation) ? null : undefined;
     const base = cwd === null ? null : resolve(cwd, ...at.within);
-    if (pathspecs.some((word) => unresolvable(base)(word) || word.text.startsWith(':'))) return null;
+    const unnamed = operation === 'mv' ? unplaced(base) : unresolvable(base);
+    if (pathspecs.some((word) => unnamed(word) || word.text.startsWith(':'))) return null;
     return pathspecs.map((word) => resolve(base ?? '/', word.text));
   }
   if (name === 'find') {
@@ -476,7 +482,8 @@ function mutatedPaths(found: Program, cwd: string | null): readonly CommandPath[
   if (words.some((word) => word.text === '-t' || word.text.startsWith('--target-directory'))) return null;
   const operands = operandsOf(words, 1);
   if (OPERANDS_WRITE.has(name)) return operandPaths(operands, cwd);
-  if (operands.length === 0 || operands.some(unresolvable(cwd))) return null;
+  const unnamed = name === 'rsync' ? unresolvable(cwd) : unplaced(cwd);
+  if (operands.length === 0 || operands.some(unnamed)) return null;
   const chosen = name === 'mv' ? operands : operands.slice(-1);
   return chosen.map((word) => resolve(cwd ?? '/', word.text));
 }
