@@ -1,6 +1,6 @@
 ---
 id: 01a19552-4445-7626-9b10-6331a5831132
-title: Tagma's compaction of a hosted Cursor thread drops the warm Cursor session and rebuilds it from a text fold, though Cursor compacts itself
+title: Tagma's compaction of a hosted Cursor thread drops the warm SDK session and rebuilds it from a text fold
 ord: 4
 tags: ["task"]
 fields:
