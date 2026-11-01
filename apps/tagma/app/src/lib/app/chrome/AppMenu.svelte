@@ -114,7 +114,6 @@
         </DropdownMenu.SubContent>
       </DropdownMenu.Sub>
     {/if}
-    <PointView point={parts} props={{}} only={(part) => part.place === 'end'} frame={before} />
     <PointView point={parts} props={{}} only={(part) => part.place === 'foot'} frame={before} />
   </DropdownMenu.Content>
 </DropdownMenu.Root>
