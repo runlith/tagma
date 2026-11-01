@@ -250,16 +250,48 @@ test("a resting row's stamp is the tree's last event, never the row's last write
 test('a working row names its open call, and a working row with no call standing still draws its line', () => {
   const running = { life: 'working', activeRunId: 'run-1', activeRunStartedAt: new Date().toISOString() } as const;
   const calls = [
-    { name: 'read', title: 'read ThreadRow.svelte', since: Date.now() },
-    { name: 'bash', title: null, since: Date.now() },
+    { id: 'call-1', name: 'read', title: 'read ThreadRow.svelte', since: Date.now() },
+    { id: 'call-2', name: 'bash', title: null, since: Date.now() },
   ];
-  const line = draw(entry({ id: 'calling', ...running, phase: { phase: 'tools', since: null, calls, queued: 0 } })).querySelector(
+  const line = draw(entry({ id: 'calling', ...running, phase: { phase: 'tools', since: null, calls, queued: [] } })).querySelector(
     '[data-thread-line]',
   );
   expect(line?.textContent).toContain('read ThreadRow.svelte');
 
-  const thinking = draw(entry({ id: 'thinking', ...running, phase: { phase: 'reasoning', since: Date.now(), calls: [], queued: 0 } }));
+  const thinking = draw(entry({ id: 'thinking', ...running, phase: { phase: 'reasoning', since: Date.now(), calls: [], queued: [] } }));
   expect(thinking.querySelector('[data-thread-line]')).not.toBeNull();
+});
+
+const waitingCall = (toolCallId: string) => ({
+  runId: 'run-1',
+  toolCallId,
+  threadId: 'thread-1',
+  name: 'bash',
+  input: {},
+  phase: 'waiting',
+  mode: 'background',
+  detachable: false,
+  startedAt: 1,
+  admittedAt: null,
+  endedAt: null,
+  expiresAt: null,
+  expiresBy: null,
+  limitCeilingMs: null,
+  detail: null,
+  executions: [],
+});
+
+function lineWith(row: ThreadListRow, ...held: readonly string[]): string {
+  const feed = liveFeed();
+  const host = draw(row, [], row.readerOrderAt, null, feed);
+  feed.routes.get('calls.subscribe')?.({ type: 'snapshot', calls: held.map(waitingCall) });
+  flushSync();
+  return host.querySelector('[data-thread-line]')?.textContent?.trim() ?? '';
+}
+
+test('background calls waiting their turn stay told on a row whose turn has ended', () => {
+  expect(lineWith(entry({ owes: true }), 'call-1', 'call-2')).toContain('2 queued');
+  expect(lineWith(entry({ owes: true }))).toBe('');
 });
 
 test('a child on its parent’s selection draws its plate faint, and one on another model at full ink', () => {

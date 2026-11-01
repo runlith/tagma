@@ -4,7 +4,7 @@ import { NO_WORK, observe, type WorkInput, type WorkMemory, type WorkPhase } fro
 const input = (phase: WorkPhase | null, ...calls: readonly [string, string?][]): WorkInput => ({
   phase,
   since: null,
-  calls: calls.map(([name, title]) => ({ name, title: title ?? null, since: 0 })),
+  calls: calls.map(([name, title], index) => ({ id: `call-${index}`, name, title: title ?? null, since: 0 })),
   queued: 0,
 });
 
@@ -127,14 +127,14 @@ test('an open call past five seconds carries its time from the instant the serve
 
 test('the line says what runs, who runs beside it and how much waits; a call nobody dated carries no time', () => {
   const calls = [
-    { name: 'bash', title: 'bun test', since: 0 },
-    { name: 'read', title: 'a.ts', since: 0 },
+    { id: 'call-1', name: 'bash', title: 'bun test', since: 0 },
+    { id: 'call-2', name: 'read', title: 'a.ts', since: 0 },
   ];
   const dated = run([[30_000, { ...input('tools'), calls, queued: 2 }]]);
   expect(dated.shown?.text).toBe('bun test · +1 · 2 queued');
   expect(dated.shown?.elapsed).toBe('30s');
 
-  const undated = run([[30_000, { ...input('tools'), calls: [{ name: 'bash', title: null, since: null }], queued: 0 }]]);
+  const undated = run([[30_000, { ...input('tools'), calls: [{ id: 'call-1', name: 'bash', title: null, since: null }], queued: 0 }]]);
   expect(undated.shown?.text).toBe('bash');
 
   expect(run([[0, { ...input('tools'), queued: 3 }]]).shown?.text).toBe('3 queued');

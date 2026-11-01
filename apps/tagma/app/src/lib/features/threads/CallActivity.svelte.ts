@@ -1,4 +1,5 @@
 import type { CallAddress, CallControl, CallControlResult, CallEvent, CallRecord } from '@runlith/agent/callProgress';
+import type { ThreadPhase } from '@tagma/server/threads/contract/wire/list';
 import { Scope } from '@runlith/layer/Scope';
 import { Service } from '@runlith/layer/key';
 import { Door } from '$lib/wire/Door.js';
@@ -108,9 +109,14 @@ export class CallActivity extends Service<CallActivity>()('CallActivity', { tier
     return NO_CALLS;
   }
 
-  waitingOf(threadId: string): number {
+  waitingOf(threadId: string, standing: ThreadPhase | null): number {
+    const told = new Set([...(standing?.calls.map((call) => call.id) ?? []), ...(standing?.queued ?? [])]);
     return this.callsOf(threadId).filter(
-      (call) => call.endedAt === null && call.mode === 'background' && (call.phase === 'waiting' || call.phase === 'preparing'),
+      (call) =>
+        call.endedAt === null &&
+        call.mode === 'background' &&
+        (call.phase === 'waiting' || call.phase === 'preparing') &&
+        !told.has(call.toolCallId),
     ).length;
   }
 

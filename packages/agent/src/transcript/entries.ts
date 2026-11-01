@@ -263,24 +263,30 @@ export function toolReceipt(entry: { readonly toolState: ThreadToolState; readon
 }
 
 export type StandingSource = {
+  readonly toolCallId: string;
   readonly toolName: string;
   readonly title: string | null;
   readonly toolState: ThreadToolState;
   readonly execution?: ThreadToolExecution;
 };
 
-export type StandingCall = { readonly name: string; readonly title: string | null; readonly since: number | null };
+export type StandingCall = {
+  readonly id: string;
+  readonly name: string;
+  readonly title: string | null;
+  readonly since: number | null;
+};
 
-export type StandingWork = { readonly calls: readonly StandingCall[]; readonly queued: number };
+export type StandingWork = { readonly calls: readonly StandingCall[]; readonly queued: readonly string[] };
 
 export function standingWork(tools: Iterable<StandingSource>): StandingWork {
   const calls: StandingCall[] = [];
-  let queued = 0;
+  const queued: string[] = [];
   for (const tool of tools) {
     const standing = toolStanding(tool);
     if (standing === null) continue;
-    if (standing.state === 'queued') queued += 1;
-    else calls.push({ name: tool.toolName, title: tool.title, since: standing.since });
+    if (standing.state === 'queued') queued.push(tool.toolCallId);
+    else calls.push({ id: tool.toolCallId, name: tool.toolName, title: tool.title, since: standing.since });
   }
   return { calls: calls.sort(oldestFirst), queued };
 }

@@ -27,8 +27,10 @@ export const threadPhaseSchema = Schema.Struct({
   phase: AgentPhase.fields.phase,
   since: Schema.NullOr(AgentPhase.fields.since),
   waiting: AgentPhase.fields.waiting,
-  calls: Schema.Array(Schema.Struct({ name: Schema.String, title: Schema.NullOr(Schema.String), since: Schema.NullOr(Schema.Number) })),
-  queued: Schema.Number,
+  calls: Schema.Array(
+    Schema.Struct({ id: Schema.String, name: Schema.String, title: Schema.NullOr(Schema.String), since: Schema.NullOr(Schema.Number) }),
+  ),
+  queued: Schema.Array(Schema.String),
 });
 export type ThreadPhase = typeof threadPhaseSchema.Type;
 

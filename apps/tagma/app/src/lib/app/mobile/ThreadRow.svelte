@@ -4,6 +4,7 @@
   import ContextRing from '$lib/features/threads/native/ContextRing.svelte';
   import ModelPlate from '$lib/features/threads/native/ModelPlate.svelte';
   import { CallActivity } from '$lib/features/threads/CallActivity.svelte.js';
+  import HomeHold from '$lib/features/threads/HomeHold.svelte';
   import { RowReading } from '$lib/features/threads/rowReading.svelte.js';
   import { WorkLines } from '$lib/features/threads/workLines.svelte.js';
   import { ProviderCatalog } from '$lib/features/providers/Catalog.svelte.js';
@@ -90,6 +91,6 @@
 {#if frame}{@render frame(body)}{:else}{@render body()}{/if}
 {#if open}
   {#each node.children as child (child.row.id)}
-    <Self node={child} {project} depth={depth + 1} />
+    <HomeHold projectId={child.row.projectId}><Self node={child} {project} depth={depth + 1} /></HomeHold>
   {/each}
 {/if}

@@ -55,7 +55,7 @@ const membershipOf = (groups: readonly ProjectGroup[]): Membership => {
 
 function recordedPhase(row: ThreadSummary): ThreadPhase | null {
   const recorded = row.activeRun?.phase;
-  return recorded === undefined || recorded === null ? null : { phase: recorded.phase, since: recorded.since, calls: [], queued: 0 };
+  return recorded === undefined || recorded === null ? null : { phase: recorded.phase, since: recorded.since, calls: [], queued: [] };
 }
 
 export const makeThreadList = Effect.gen(function* () {

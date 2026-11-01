@@ -86,8 +86,21 @@ test('only a background call still waiting its turn counts as waiting work of it
       waiting('o-1', { threadId: 'b' }),
     ],
   });
-  expect(calls.waitingOf('a')).toBe(2);
-  expect(calls.waitingOf('c')).toBe(0);
+  expect(calls.waitingOf('a', null)).toBe(2);
+  expect(calls.waitingOf('c', null)).toBe(0);
+});
+
+test('a waiting call the thread’s phase already stands is not waiting work again, whichever list the phase keeps it in', () => {
+  const { calls, send } = activity();
+  const waiting = (id: string) => call('a', id, { mode: 'background', phase: 'waiting', admittedAt: null });
+  send({ type: 'snapshot', calls: [waiting('w-1'), waiting('w-2'), waiting('w-3')] });
+  const phase = {
+    phase: 'tools',
+    since: null,
+    calls: [{ id: 'w-1', name: 'bash', title: null, since: null }],
+    queued: ['w-2'],
+  } as const;
+  expect(calls.waitingOf('a', phase)).toBe(1);
 });
 
 test('the window keeps every standing call and the newest endings, and what a pruned call was told is forgotten with it', async () => {

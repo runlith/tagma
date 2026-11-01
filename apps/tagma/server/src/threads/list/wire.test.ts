@@ -453,8 +453,8 @@ test('a full thread list row survives the wire with every key equal', () => {
     phase: {
       phase: 'tools',
       since: 1_757_696_400_000,
-      calls: [{ name: 'read', title: 'Read protocol.ts', since: 1_757_696_401_000 }],
-      queued: 0,
+      calls: [{ id: 'call-1', name: 'read', title: 'Read protocol.ts', since: 1_757_696_401_000 }],
+      queued: [],
     },
     held: { paths: 2, unproven: 0 },
     account: 'operator',

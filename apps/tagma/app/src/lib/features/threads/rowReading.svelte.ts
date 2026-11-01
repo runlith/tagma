@@ -6,6 +6,7 @@ import { threadMark, type ThreadMark } from './Life.svelte';
 import type { CallActivity } from './CallActivity.svelte.js';
 import { failedRowDetail } from './native/runEndingLine.js';
 import { runningSinceOf } from './rowKind.js';
+import { queuedCalls } from './workWords.js';
 import { TEAM_NAMED, type ThreadTreeNode } from './forest.js';
 import type { WorkInput } from './workLine.js';
 import type { WorkLines } from './workLines.svelte.js';
@@ -39,6 +40,7 @@ export class RowReading {
   ) {
     const row = $derived(node().row);
     this.mark = $derived(threadMark(row));
+    const waiting = $derived(this.calls.waitingOf(row.id, row.phase));
     const work = $derived<WorkInput | null>(
       this.mark.state === 'working' && row.phase !== null
         ? {
@@ -46,7 +48,7 @@ export class RowReading {
             since: row.phase.since,
             waiting: row.phase.waiting,
             calls: row.phase.calls,
-            queued: row.phase.queued + this.calls.waitingOf(row.id),
+            queued: row.phase.queued.length + waiting,
           }
         : null,
     );
@@ -61,6 +63,9 @@ export class RowReading {
       const id = untrack(() => row.id);
       return () => this.lines.release(id);
     });
+
+    const waitingLine = (): RowLine | null =>
+      waiting === 0 ? null : { text: queuedCalls(waiting), tone: 'text-muted-foreground', elapsed: null };
 
     this.own = $derived.by<RowLine | null>(() => {
       if (row.launchBlocked === true) {
@@ -77,7 +82,7 @@ export class RowReading {
           return { text: 'no movement for a long time', tone: 'text-destructive', elapsed: null };
         case 'working':
           return doing === null
-            ? null
+            ? waitingLine()
             : {
                 text: doing.text,
                 tone: doing.view.kind === 'phase' || doing.view.kind === 'opening' ? 'text-muted-foreground/70' : 'text-muted-foreground',
@@ -106,7 +111,7 @@ export class RowReading {
         }
         case 'owes':
         case 'quiet':
-          return null;
+          return waitingLine();
       }
     });
 

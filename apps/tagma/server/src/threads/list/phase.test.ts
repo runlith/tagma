@@ -76,7 +76,7 @@ test('the phase names the row while no call stands, dated by the instant its spe
   const world = feed();
   world.phases.follow('thread-1', 'run-1');
   world.send(phase('reasoning', 1_700_000_000_000));
-  expect(world.phases.phaseOf('thread-1')).toEqual({ phase: 'reasoning', since: 1_700_000_000_000, calls: [], queued: 0 });
+  expect(world.phases.phaseOf('thread-1')).toEqual({ phase: 'reasoning', since: 1_700_000_000_000, calls: [], queued: [] });
 });
 
 test('what the opening waits on names the row, and the first step phase takes it off', () => {
@@ -84,7 +84,7 @@ test('what the opening waits on names the row, and the first step phase takes it
   world.phases.follow('thread-1', 'run-1');
   const waiting = { reason: 'graph', place: 'tagma-exp-classes-d74152' };
   world.send({ op: 'progress', progress: { phase: { phase: 'opening', since: 1_700_000_000_000, waiting }, estimate: null } });
-  expect(world.phases.phaseOf('thread-1')).toEqual({ phase: 'opening', since: 1_700_000_000_000, waiting, calls: [], queued: 0 });
+  expect(world.phases.phaseOf('thread-1')).toEqual({ phase: 'opening', since: 1_700_000_000_000, waiting, calls: [], queued: [] });
 
   world.send(phase('preparing', 1_700_000_041_000));
   expect(world.phases.phaseOf('thread-1')?.waiting).toBeUndefined();
@@ -98,15 +98,17 @@ test('a call is dated by the instant its executor admitted it, never by when the
   expect(world.phases.phaseOf('thread-1')).toEqual({
     phase: 'tools',
     since: 0,
-    calls: [{ name: 'read', title: null, since: Date.parse(startedAt) }],
-    queued: 0,
+    calls: [{ id: 'call-1', name: 'read', title: null, since: Date.parse(startedAt) }],
+    queued: [],
   });
 
   world.send(tool('call-1', 'read', 'input-available', 'agent.ts', started));
-  expect(world.phases.phaseOf('thread-1')?.calls).toEqual([{ name: 'read', title: 'agent.ts', since: Date.parse(startedAt) }]);
+  expect(world.phases.phaseOf('thread-1')?.calls).toEqual([
+    { id: 'call-1', name: 'read', title: 'agent.ts', since: Date.parse(startedAt) },
+  ]);
 
   world.send(tool('call-1', 'read', 'output-available', 'agent.ts', started));
-  expect(world.phases.phaseOf('thread-1')).toEqual({ phase: 'tools', since: 0, calls: [], queued: 0 });
+  expect(world.phases.phaseOf('thread-1')).toEqual({ phase: 'tools', since: 0, calls: [], queued: [] });
 });
 
 test('a call its executor said nothing about or Tagma has not admitted yet stands undated, a queued one is counted apart, and an argument still streaming is no call', () => {
@@ -120,14 +122,14 @@ test('a call its executor said nothing about or Tagma has not admitted yet stand
     phase: 'tools',
     since: null,
     calls: [
-      { name: 'bash', title: null, since: null },
-      { name: 'grep', title: null, since: null },
+      { id: 'call-1', name: 'bash', title: null, since: null },
+      { id: 'call-4', name: 'grep', title: null, since: null },
     ],
-    queued: 1,
+    queued: ['call-2'],
   });
 
   world.send(tool('call-2', 'read', 'input-available', undefined, started));
-  expect(world.phases.phaseOf('thread-1')?.queued).toBe(0);
+  expect(world.phases.phaseOf('thread-1')?.queued).toEqual([]);
   expect(world.phases.phaseOf('thread-1')?.calls.map((call) => call.name)).toEqual(['read', 'bash', 'grep']);
 });
 
@@ -137,7 +139,7 @@ test('one call leaving the open tail leaves its neighbours', () => {
   world.send(tool('call-1', 'read', 'input-available', undefined, started));
   world.send(tool('call-2', 'bash', 'input-available', undefined, started));
   world.send({ op: 'drop', id: 'call-1' });
-  expect(world.phases.phaseOf('thread-1')?.calls).toEqual([{ name: 'bash', title: null, since: Date.parse(startedAt) }]);
+  expect(world.phases.phaseOf('thread-1')?.calls).toEqual([{ id: 'call-2', name: 'bash', title: null, since: Date.parse(startedAt) }]);
 });
 
 test('a phase from inside the stream leaves an open call standing; the step ending takes it off', () => {
@@ -148,12 +150,12 @@ test('a phase from inside the stream leaves an open call standing; the step endi
   expect(world.phases.phaseOf('thread-1')).toEqual({
     phase: 'writing',
     since: 5,
-    calls: [{ name: 'bash', title: null, since: Date.parse(startedAt) }],
-    queued: 0,
+    calls: [{ id: 'call-1', name: 'bash', title: null, since: Date.parse(startedAt) }],
+    queued: [],
   });
 
   world.send(phase('retrying', 9));
-  expect(world.phases.phaseOf('thread-1')).toEqual({ phase: 'retrying', since: 9, calls: [], queued: 0 });
+  expect(world.phases.phaseOf('thread-1')).toEqual({ phase: 'retrying', since: 9, calls: [], queued: [] });
 });
 
 test('following a run already under way reads the calls open in it', () => {
@@ -169,8 +171,8 @@ test('following a run already under way reads the calls open in it', () => {
   expect(world.phases.phaseOf('thread-1')).toEqual({
     phase: 'tools',
     since: 3,
-    calls: [{ name: 'bash', title: 'bun test', since: Date.parse(startedAt) }],
-    queued: 1,
+    calls: [{ id: 'call-1', name: 'bash', title: 'bun test', since: Date.parse(startedAt) }],
+    queued: ['call-2'],
   });
   expect(world.changed).toEqual(['thread-1']);
 });
@@ -179,7 +181,9 @@ test('a call journaled by an adapter arrives as a state delta, stands while open
   const world = feed();
   world.phases.follow('thread-1', 'run-1');
   world.sendState(entry('call-1', 'bash', 'input-available', 'bun test', started));
-  expect(world.phases.phaseOf('thread-1')?.calls).toEqual([{ name: 'bash', title: 'bun test', since: Date.parse(startedAt) }]);
+  expect(world.phases.phaseOf('thread-1')?.calls).toEqual([
+    { id: 'call-1', name: 'bash', title: 'bun test', since: Date.parse(startedAt) },
+  ]);
   world.sendState(entry('call-1', 'bash', 'output-available', 'bun test', started));
   expect(world.phases.phaseOf('thread-1')?.calls).toEqual([]);
 });
@@ -213,7 +217,7 @@ test('the phase a run opens on is announced', () => {
   const world = feed();
   world.phases.follow('thread-1', 'run-1');
   world.send(phase('preparing'));
-  expect(world.phases.phaseOf('thread-1')).toEqual({ phase: 'preparing', since: 0, calls: [], queued: 0 });
+  expect(world.phases.phaseOf('thread-1')).toEqual({ phase: 'preparing', since: 0, calls: [], queued: [] });
   expect(world.changed).toEqual(['thread-1']);
 });
 
