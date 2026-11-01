@@ -1,5 +1,5 @@
 import type { BUILTINS } from '@tagma/inspection/builtins';
-import type { FACT_KINDS, FactSide, ProgramFinding } from '@tagma/inspection/program';
+import type { FACT_KINDS, FactSide, ProgramFinding, ProgramMode, ProgramRemeasure } from '@tagma/inspection/program';
 import type { CONCERNS } from '@tagma/inspection/rule';
 
 export type ModulesParams = (typeof BUILTINS)['modules']['params']['Encoded'];
@@ -133,9 +133,18 @@ export type Side = {
   readonly facts: Facts | null;
 };
 
-export type InspectionInput<Params extends object> = { readonly params: Params; readonly tree: Side; readonly base: Side | null };
+export type InspectionInput<Params extends object> = {
+  readonly params: Params;
+  readonly tree: Side;
+  readonly base: Side | null;
+  readonly mode?: ProgramMode;
+};
 
-export type Reading = { readonly findings: readonly Finding[]; readonly covered?: 'paths' | 'reach' | readonly string[] };
+export type Reading = {
+  readonly findings: readonly Finding[];
+  readonly covered?: 'paths' | 'reach' | readonly string[];
+  readonly remeasure?: ProgramRemeasure;
+};
 
 export type Answer = { readonly tree: Reading; readonly base?: Reading };
 

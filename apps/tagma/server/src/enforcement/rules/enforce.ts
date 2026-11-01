@@ -37,6 +37,7 @@ import type { TerminalActor } from '../../executions/contract/wire/terminals.js'
 import { followedDebt, lineageFrom, needsLineage, renamedBetween, renamedModuleDebt } from '../lineage.js';
 import { declarationOf, keepMeasurement, measurementsOf, treeOf } from './measurements.js';
 import { type CheckoutPlace, measureReach, movedUnder, placeOf, reachRefusal, standingAt } from './measure.js';
+import type { ProgramRemeasure } from '@tagma/inspection/program';
 import { measureBound } from './measureBound.js';
 import type { ProjectRow } from '../../projects/contract/wire/project.js';
 import { measuredRoot } from '../../graph/contract/service/serving.js';
@@ -92,6 +93,7 @@ export type Prepared = EnforcementPlan & {
   readonly consents: readonly Raised[];
   readonly code?: string;
   readonly sources?: Readonly<Record<string, string>>;
+  readonly remeasure?: ProgramRemeasure;
   readonly shelf?: string | undefined;
   readonly commonDir?: string | undefined;
 };
@@ -482,6 +484,7 @@ export const planEnforcement = Effect.fn('enforcement.plan')(function* (row: Blo
     ms: measured.ms,
     document: written,
     sources: ledgerSources(ledger, found),
+    remeasure: measured.remeasure,
     read: measured.read,
     footprint: measured.footprint,
     packCheck: newBuiltin ? true : undefined,
@@ -571,6 +574,7 @@ export const measurementKept = Effect.fn('enforcement.measurementKept')(function
       ms: prepared.ms,
       at: prepared.at,
       sources: prepared.sources,
+      remeasure: prepared.remeasure,
       identity: {
         tree: tree ?? (yield* treeOf(prepared.root, prepared.head)),
         declaration,

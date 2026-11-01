@@ -110,7 +110,11 @@ export const ProgramFacts = Schema.Struct({
 });
 export type ProgramFacts = typeof ProgramFacts.Type;
 
+export const ProgramMode = Schema.Literals(['change', 'measure']);
+export type ProgramMode = typeof ProgramMode.Type;
+
 export const ProgramInvocation = Schema.Struct({
+  mode: Schema.optional(ProgramMode),
   request: Schema.NonEmptyString,
   checker: Schema.NonEmptyString,
   keys: Schema.NonEmptyArray(ProgramKey),
@@ -144,7 +148,11 @@ export type ProgramFinding = typeof ProgramFinding.Type;
 export const ProgramCoverage = Schema.Union([Schema.Array(path), Schema.Struct({ scope: Schema.Literal('reach') })]);
 export type ProgramCoverage = typeof ProgramCoverage.Type;
 
+export const ProgramRemeasure = Schema.Literal('delta');
+export type ProgramRemeasure = typeof ProgramRemeasure.Type;
+
 export const ProgramResult = Schema.Struct({
+  remeasure: Schema.optional(ProgramRemeasure),
   key: Schema.NonEmptyString,
   side: Schema.Literals(['tree', 'base']),
   covered: ProgramCoverage,
