@@ -25,13 +25,14 @@ export const writtenAt = Effect.fnUntraced(function* <A extends { readonly graph
 ) {
   const graph = yield* CurrentGraph;
   const copy =
-    answer.graphCopy ??
-    (selected === null
-      ? undefined
-      : (selected ??
-        (graph === null
-          ? undefined
-          : { projectId: graph.projectId, checkout: graph.checkout, tree: graph.layout.treeRoot, branch: undefined })));
+    'graphCopy' in answer
+      ? answer.graphCopy
+      : selected === null
+        ? undefined
+        : (selected ??
+          (graph === null
+            ? undefined
+            : { projectId: graph.projectId, checkout: graph.checkout, tree: graph.layout.treeRoot, branch: undefined }));
   if (copy === undefined || copy.branch !== undefined) return answer;
   const project = yield* (yield* Projects).byId(copy.projectId);
   const branch =

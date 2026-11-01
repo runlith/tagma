@@ -131,9 +131,14 @@ layer(Layer.effect(Moving, setup).pipe(Layer.provideMerge(fixture)), { excludeTe
         code: 'module-map-invalid',
       });
 
+      const destination = yield* world.runtime.pool.resolve({ projectId: to });
       expect(answered(yield* doors.atNative('update_block', { blockId: card, parentId: landing }, at))).toMatchObject({
         block: { name: card },
+        graphCopy: { projectId: to, checkout: destination.checkout, tree: destination.layout.treeRoot, branch: null },
         moved: { blocks: 2, relinked: 1 },
+      });
+      expect((yield* world.op('read_events', { project: from, limit: 1 })).body).toMatchObject({
+        events: [{ op: 'depart', blockName: card }],
       });
       expect(answered(yield* doors.atNative('read_block', { blockIds: [card, rule, shelf] }, at)).reads).toMatchObject([
         { name: card, projectId: to },
@@ -142,6 +147,59 @@ layer(Layer.effect(Moving, setup).pipe(Layer.provideMerge(fixture)), { excludeTe
       ]);
       expect(answered(yield* doors.atNative('read_enforcement', { project: to }, at)).counts).toMatchObject({ enforced: 1, gate: 1 });
       expect(answered(yield* doors.atNative('read_enforcement', { project: from }, at)).counts).toMatchObject({ enforced: 0 });
+    }),
+  );
+
+  it.effect('a resumed move answers with the destination copy from the source thread', () =>
+    Effect.gen(function* () {
+      const world = yield* DoorFixture;
+      const { from, to } = yield* Moving;
+      const doors = makeThreadDoors(world, from, TOOLS);
+      const born = yield* world.op('create_thread', {}, `project=${from}`);
+      const thread = (born.body as { snapshot: { thread: { id: string; ownerId: string } } }).snapshot.thread;
+      const at = yield* doors.doorsFor(thread.id, thread.ownerId);
+      const name = named(yield* doors.atNative('create_block', { title: 'Interrupted move', parentId: yield* topOf(from) }, at));
+      const source = yield* world.runtime.pool.resolve({ projectId: from });
+      const destination = yield* world.runtime.pool.resolve({ projectId: to });
+      const sourceBlocks = Context.get(source.context, Blocks);
+      const targetBlocks = Context.get(destination.context, Blocks);
+      const row = yield* sourceBlocks.blockById(yield* Context.get(source.context, BlockNames).idOfName(name));
+      const sourceRoot = yield* sourceBlocks.rootBlockOf(from);
+      const targetRoot = yield* targetBlocks.rootBlockOf(to);
+      yield* targetBlocks.arrive({
+        projectId: to,
+        parentId: targetRoot.id,
+        from: sourceRoot.uuid,
+        blocks: [
+          {
+            uuid: row.uuid,
+            parent: null,
+            ord: row.ord,
+            title: row.title,
+            body: row.body,
+            tags: row.tags,
+            fields: row.fields,
+            sessions: [],
+            createdAt: row.createdAt,
+            updatedAt: row.updatedAt,
+            sources: [],
+            links: [],
+            far: [],
+          },
+        ],
+      });
+      const target = yield* topOf(to);
+      expect(answered(yield* doors.atNative('update_block', { blockId: `${from}/${name}`, parentId: target }, at))).toMatchObject({
+        block: { name },
+        graphCopy: { projectId: to, checkout: destination.checkout, tree: destination.layout.treeRoot, branch: null },
+        moved: { blocks: 1 },
+      });
+      expect((yield* world.op('read_events', { project: from, limit: 1 })).body).toMatchObject({
+        events: [{ op: 'depart', blockName: name }],
+      });
+      expect(answered(yield* doors.atNative('read_block', { project: to, blockIds: [name] }, at)).reads).toMatchObject([
+        { name, projectId: to, parentName: target },
+      ]);
     }),
   );
 });

@@ -362,16 +362,20 @@ type PreparedTargets<F> = {
   readonly copyFailures: readonly CopyFailure[];
 };
 
+export const copyOf = (target: GraphTarget): GraphCopy | null | undefined => {
+  if (target.graph === null) return undefined;
+  const checkout = Context.get(target.graph, MeasuredCheckout);
+  const tree = Context.get(target.graph, ServedTree);
+  if (checkout === null || checkout.projectId !== target.projectId || tree === null) return null;
+  return { projectId: target.projectId, checkout: checkout.path, tree: tree.treeRoot };
+};
+
 export const targetCopy = (prepared: unknown): GraphCopy | null | undefined => {
   if (typeof prepared !== 'object' || prepared === null || !('targeted' in prepared) || prepared.targeted !== true) return undefined;
   const { resolution } = prepared as PreparedTargets<unknown>;
   if (Result.isFailure(resolution)) return undefined;
   const target = resolution.success.selected;
-  if (target === null || target.graph === null) return undefined;
-  const checkout = Context.get(target.graph, MeasuredCheckout);
-  const tree = Context.get(target.graph, ServedTree);
-  if (checkout === null || checkout.projectId !== target.projectId || tree === null) return null;
-  return { projectId: target.projectId, checkout: checkout.path, tree: tree.treeRoot };
+  return target === null ? undefined : copyOf(target);
 };
 
 export const targeted = <Input, A, E, R, F = null, EF = never, RF = never>(
