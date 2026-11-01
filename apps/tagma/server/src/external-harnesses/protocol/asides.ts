@@ -30,7 +30,7 @@ export class ProtocolAsides {
     const served = harnessServed(link.adapter, link.facet, link.asked);
     if (served === null || !this.offered(link)) return undefined;
     const threadId = link.threadId;
-    return { served, life: link.profile.asideLife ?? 'cache', ask: (question) => this.ask(threadId, question) };
+    return { served, ask: (question) => this.ask(threadId, question) };
   }
 
   exited(threadId: string): Effect.Effect<void> {

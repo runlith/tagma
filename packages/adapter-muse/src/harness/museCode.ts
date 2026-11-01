@@ -3,7 +3,7 @@ import { QuotaUnavailable } from '@runlith/llm/schema/quota';
 import type { HarnessProvider } from '@runlith/tagma/adapter/provider';
 import { icon } from '../icon.js';
 import { accounts } from './accounts.js';
-import { MUSE_CODE, museCodeAcp } from './acp.js';
+import { MUSE_CODE, MUSE_CODE_CACHE_SECONDS, museCodeAcp } from './acp.js';
 import { catalog } from './catalog.js';
 import { museCodeProgram } from './program.js';
 
@@ -26,7 +26,7 @@ export const museCode: HarnessProvider = {
   dynamicCatalog: true,
   models: {},
   defaultTextModel: '',
-  cacheLifetime: { promisedSeconds: null, prior: null },
+  cacheLifetime: { promisedSeconds: MUSE_CODE_CACHE_SECONDS, prior: null },
   accountMode: {
     section: MUSE_CODE,
     title: 'Muse Code',

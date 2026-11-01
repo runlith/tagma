@@ -13,7 +13,6 @@ export type ClientProfile = {
   readonly web?: AcpProfile['web'];
   readonly program?: string;
   readonly aside?: AcpProfile['proves']['aside'];
-  readonly asideLife?: AcpProfile['asideLife'];
   readonly toolCatalog?: AcpProfile['toolCatalog'];
 };
 
@@ -28,7 +27,6 @@ export const clientProfile = ({
   web = 'none',
   program,
   aside = 'none',
-  asideLife,
   toolCatalog = 'turn',
 }: ClientProfile): AcpProfile => ({
   ...(program === undefined ? {} : { program }),
@@ -63,7 +61,6 @@ export const clientProfile = ({
     usage,
     aside,
   },
-  asideLife,
   toolCatalog,
   storage,
   graceMs: 5_000,

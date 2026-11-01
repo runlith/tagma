@@ -19,7 +19,6 @@ const capture = Effect.gen(function* () {
     readerInput: 'reader:run',
     aside: {
       served: { provider: 'subscription', model: 'claude-sonnet-5-5', reasoning: 'low' },
-      life: 'cache' as const,
       ask: () => Effect.succeed({ text: 'Held turn', finishReason: 'stop', usage: undefined }),
     },
     reading: {
@@ -86,32 +85,6 @@ it.effect('missing, previous-run, foreign-provider or unpromised context cannot 
       expect(yield* copies.measured({ ...input, reading })).toBe(false);
       expect(held.of(input.threadId)).toBeUndefined();
     }
-  }),
-);
-
-it.effect('a session that answers asides itself while it lives holds a copy with no cache deadline until its process exits', () =>
-  Effect.gen(function* () {
-    const held = yield* makeThreadAsides;
-    const copies = yield* makeSessionCopies.pipe(Effect.provideService(HarnessAsides, held));
-    const input = yield* capture;
-    const muse = {
-      ...input,
-      aside: {
-        ...input.aside,
-        served: { provider: 'muse-oauth', model: 'muse-spark-1.2', reasoning: 'minimal' },
-        life: 'session' as const,
-      },
-      reading: { ...input.reading, provider: 'muse-oauth', model: 'muse-spark-1.2', cache: { ttlSeconds: null } },
-    };
-    expect(yield* copies.measured(muse)).toBe(true);
-    yield* TestClock.adjust('3 hours');
-    const live = held.of(muse.threadId);
-    expect(live).toMatchObject({ source: 'session', runId: muse.turn, expiresAt: null });
-    if (live === undefined) return yield* Effect.die('the measured session supplied no copy');
-    expect((yield* held.ask(muse.threadId, live, { instruction: 'name the turn' })).text).toBe('Held turn');
-    expect(yield* copies.measured({ ...muse, reading: { ...muse.reading, runId: 'past' } })).toBe(false);
-    yield* copies.exited(muse.threadId);
-    expect(held.of(muse.threadId)).toBeUndefined();
   }),
 );
 

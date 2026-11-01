@@ -8,6 +8,7 @@ import { SERVED, type Dispatched } from '@runlith/hosted-runner/bridge';
 import type { ClientOutcome } from '@runlith/hosted-runner/client';
 import type { Output } from '@runlith/hosted-runner/output';
 import { MEASURED, RETRYING } from '@runlith/hosted-runner/wire/extensions';
+import { MUSE_CODE_CACHE_SECONDS } from '../harness/acp.js';
 import type { Frame, Host, MuseRefused } from './channel.js';
 import {
   Approval,
@@ -540,7 +541,7 @@ export class Feed {
             cacheWrite: spent.cachedWriteTokens,
             output: spent.outputTokens,
             reasoning: spent.thoughtTokens,
-            ttlSeconds: null,
+            ttlSeconds: MUSE_CODE_CACHE_SECONDS,
             ...(this.attempt > 0 ? { attempt: this.attempt } : {}),
           },
         },

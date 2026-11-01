@@ -23,7 +23,7 @@ const warmUntil = (reading: ThreadContextReading, provider: string, now: number)
 
 const sessionAside = ({ turn, aside, readerInput, reading }: SessionCapture, now: number): AgentAside | null => {
   if (reading === null || reading.runId !== turn || reading.provider !== aside.served.provider) return null;
-  const expiresAt = aside.life === 'session' ? null : warmUntil(reading, aside.served.provider, now);
+  const expiresAt = warmUntil(reading, aside.served.provider, now);
   if (expiresAt === undefined) return null;
   const measuredAt = Date.parse(reading.measuredAt);
   return {

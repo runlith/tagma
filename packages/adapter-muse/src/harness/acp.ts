@@ -5,6 +5,8 @@ export const MUSE_CODE = 'muse-code';
 
 export const MUSE_CODE_STORAGE = 'MUSE_CODE_DIR';
 
+export const MUSE_CODE_CACHE_SECONDS = 1_200;
+
 export const MUSE_CODE_EXTENSIONS = [STEER, WITHDRAW, COMPACT, ASIDE, SAID, COMPACTED, RETRYING, QUOTA] as const;
 
 export const museCodeAcp = clientProfile({
@@ -17,7 +19,6 @@ export const museCodeAcp = clientProfile({
   midTurn: 'steer',
   web: 'vendor',
   aside: 'session',
-  asideLife: 'session',
   toolCatalog: 'dispatch',
   extensions: MUSE_CODE_EXTENSIONS,
 });
