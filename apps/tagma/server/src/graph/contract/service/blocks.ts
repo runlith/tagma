@@ -6,10 +6,9 @@ import type { EdgeKind } from '../wire/edges.js';
 import type { PlacementRefusal } from './sources.js';
 import type { TransitionRefusal } from '../wire/lifecycle.js';
 import type { ActState } from './transaction.js';
-import type { BlockMeasurement, BlockRecord, BlockRow, BlockWrite, EdgeRow } from './acts.js';
+import type { BlockMeasurement, BlockRecord, BlockRow, BlockWrite, EdgeRow, MeasuredBlock } from './acts.js';
 import type { Tagged } from '../wire/tags/roles.js';
 import type { Delivery } from '../wire/tags/law.js';
-import type { NodeActions } from '../wire/tags/actions.js';
 import type { TagTable } from '../wire/tags/table.js';
 import type { CreationDefaultRefusal } from '../wire/tags/profile.js';
 import type { ModuleCard, ModuleWrite } from '../wire/modules.js';
@@ -189,7 +188,7 @@ export class Blocks extends Context.Service<
     records<TRow extends { id: number; projectId: number; tags: readonly string[] }, TFact extends keyof BlockMeasurement>(
       rows: readonly TRow[],
       facts: readonly TFact[],
-    ): Effect.Effect<Array<TRow & Pick<BlockMeasurement, TFact> & { readonly actions: NodeActions }>, StoreFailure>;
+    ): Effect.Effect<MeasuredBlock<TRow, TFact>[], StoreFailure>;
   }
 >()('tagma/graph/Blocks') {}
 

@@ -233,7 +233,7 @@
     const work = tags.workTag;
     if (work === null) return;
     busy = true;
-    let task: { readonly name: string } | undefined;
+    let task: { readonly identity: string } | undefined;
     try {
       task = await blocks.create.run(
         { parentId: name, tags: [work], title: `Remove the ${plural(row.escaped, 'violation')} that slipped past this rule` },
@@ -245,8 +245,8 @@
       busy = false;
     }
     if (task === undefined) return;
-    if (await enforce(target, { absorb: 'all', owner: task.name })) deciding = false;
-    else await blocks.trash.run(task.name).catch((error: unknown) => notices.refusal(error));
+    if (await enforce(target, { absorb: 'all', owner: task.identity })) deciding = false;
+    else await blocks.trash.run(task.identity).catch((error: unknown) => notices.refusal(error));
   }
 </script>
 

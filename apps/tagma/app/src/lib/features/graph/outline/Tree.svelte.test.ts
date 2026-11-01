@@ -52,10 +52,19 @@ const VOCABULARY: Vocabulary = {
   revision: { format: 2, revision: '' },
 };
 
+const identityOf = (name: string) =>
+  [...name]
+    .reduce((key, char) => (key * 31 + char.charCodeAt(0)) >>> 0, 0)
+    .toString(16)
+    .padStart(32, '0');
+
 const row = (name: string, parentName: string | null, ord: number, title: string): WrittenBlock => ({
   name,
+  identity: identityOf(name),
+  rowKey: [...name].reduce((key, char) => (key * 31 + char.charCodeAt(0)) >>> 0, 0),
   projectId: 1,
   parentName,
+  parentIdentity: parentName === null ? null : identityOf(parentName),
   ord,
   tags: [],
   fields: {},
@@ -97,11 +106,13 @@ test('a row opens its block instead of editing; F2 starts the edit, Enter starts
     if (path === '/api/op/update_block') {
       const asked = (await request.json()) as { blockId: string; title?: string; parentId?: string; ord?: number };
       if (asked.title !== undefined) titled.push({ blockId: asked.blockId, title: asked.title });
-      const current = rows.get(asked.blockId)!;
+      const current = rows.get(asked.blockId) ?? [...rows.values()].find((block) => block.identity === asked.blockId)!;
+      const parent = [...rows.values()].find((block) => block.identity === asked.parentId);
       const next = {
         ...current,
         title: asked.title ?? current.title,
-        parentName: asked.parentId ?? current.parentName,
+        parentName: parent?.name ?? current.parentName,
+        parentIdentity: parent?.identity ?? current.parentIdentity,
         ord: asked.ord ?? current.ord,
       };
       rows.set(next.name, next);
@@ -109,7 +120,7 @@ test('a row opens its block instead of editing; F2 starts the edit, Enter starts
     }
     if (path === '/api/op/apply_batch') {
       rows.set('e5f6a7b8', row('e5f6a7b8', 'root', 2, ''));
-      return json({ status: 'ok', overview: '', ids: { n: 'e5f6a7b8' } });
+      return json({ status: 'ok', overview: '', ids: { n: 'e5f6a7b8' }, identities: { n: identityOf('e5f6a7b8') } });
     }
     throw new Error(`Unexpected request ${request.url}`);
   };
@@ -179,7 +190,7 @@ test('a row opens its block instead of editing; F2 starts the edit, Enter starts
   const release = linkWithin(opening, 'a[data-block]', (element) => blockLink({ name: element.dataset['block'] ?? '' }))(target);
   flushSync();
 
-  const link = (name: string): HTMLAnchorElement => target.querySelector<HTMLAnchorElement>(`a[data-block="${name}"]`)!;
+  const link = (name: string): HTMLAnchorElement => target.querySelector<HTMLAnchorElement>(`a[data-block="${identityOf(name)}"]`)!;
   const titleOf = (name: string): HTMLElement => link(name).closest('.block-row')!.querySelector<HTMLElement>('[data-placeholder]')!;
   const editable = (element: Element): boolean => element.getAttribute('contenteditable') === 'true';
   const editing = (): string | null => {
@@ -195,29 +206,29 @@ test('a row opens its block instead of editing; F2 starts the edit, Enter starts
     titleOf('a1b2c3d4').dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
     link('a1b2c3d4').dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
     flushSync();
-    expect(opened).toEqual([{ kind: 'block', target: { name: 'a1b2c3d4' }, from: undefined }]);
+    expect(opened).toEqual([{ kind: 'block', target: { name: identityOf('a1b2c3d4') }, from: undefined }]);
     expect(editable(titleOf('a1b2c3d4'))).toBe(false);
     expect(editing()).toBeNull();
 
     link('a1b2c3d4').focus();
     link('a1b2c3d4').dispatchEvent(new KeyboardEvent('keydown', { key: 'F2', bubbles: true, cancelable: true }));
     flushSync();
-    expect(editing()).toBe('a1b2c3d4');
+    expect(editing()).toBe(identityOf('a1b2c3d4'));
 
     titleOf('a1b2c3d4').textContent = 'Plan the week';
     titleOf('a1b2c3d4').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
-    await waitUntil(() => editing() === 'e5f6a7b8');
-    expect(titled).toContainEqual({ blockId: 'a1b2c3d4', title: 'Plan the week' });
+    await waitUntil(() => editing() === identityOf('e5f6a7b8'));
+    expect(titled).toContainEqual({ blockId: identityOf('a1b2c3d4'), title: 'Plan the week' });
 
     titleOf('e5f6a7b8').textContent = 'Draft';
     titleOf('e5f6a7b8').dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }));
     await waitUntil(() => rows.get('e5f6a7b8')?.parentName === 'a1b2c3d4');
-    await waitUntil(() => editing() === 'e5f6a7b8');
+    await waitUntil(() => editing() === identityOf('e5f6a7b8'));
     expect(titleOf('e5f6a7b8').textContent).toBe('Draft');
     titleOf('e5f6a7b8').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
     flushSync();
     expect(editing()).toBeNull();
-    expect(titled.filter((entry) => entry.blockId === 'e5f6a7b8').map((entry) => entry.title)).toEqual(['Draft']);
+    expect(titled.filter((entry) => entry.blockId === identityOf('e5f6a7b8')).map((entry) => entry.title)).toEqual(['Draft']);
     expect(opened).toHaveLength(1);
 
     link('a1b2c3d4').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2, clientX: 40, clientY: 20 }));

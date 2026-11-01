@@ -27,21 +27,39 @@ export type TitleEdit = { readonly name: string; readonly at: 'start' | 'end' };
 
 export class TreeScreen extends Screen<TreeScreen, TreeScreenOptions>()('TreeScreen', { tier: 'graph' }) {
   private asked = $state<string | null>(null);
+  private resolved = $state<{ readonly asked: string; readonly identity: string } | null>(null);
+
+  get requestedName(): string | null {
+    return this.reading === 'graph' ? this.asked : (this.asked ?? this.tree.rootName);
+  }
 
   get rootName(): string | null {
-    return this.asked ?? this.tree.rootName;
+    if (this.asked === null) return this.tree.rootName;
+    if (this.resolved?.asked === this.asked) return this.resolved.identity;
+    return this.reading === 'block' ? this.asked : (this.tree.block(this.asked)?.identity ?? this.asked);
   }
 
   set rootName(name: string | null) {
     this.asked = name;
+    this.resolved = null;
+  }
+
+  resolveRoot(asked: string, identity: string): void {
+    if (this.requestedName !== asked || this.asked === null || (this.resolved?.asked === asked && this.resolved.identity === identity))
+      return;
+    this.resolved = { asked, identity };
+    if (this.expanded.delete(asked)) this.expanded.add(identity);
   }
 
   get root(): TreeBlock | undefined {
+    if (this.reading === 'block' && this.asked !== null && this.resolved?.asked !== this.asked) return undefined;
     return this.rootName === null ? undefined : this.tree.block(this.rootName);
   }
 
   get rootAbsent(): boolean {
-    return this.asked !== null && this.tree.loaded && this.tree.block(this.asked) === undefined;
+    if (this.asked === null || !this.tree.loaded) return false;
+    if (this.resolved?.asked === this.asked) return this.tree.block(this.resolved.identity) === undefined;
+    return this.reading !== 'block' && this.tree.block(this.asked) === undefined;
   }
 
   expanded = new SvelteSet<string>();
@@ -96,13 +114,17 @@ export class TreeScreen extends Screen<TreeScreen, TreeScreenOptions>()('TreeScr
     return this.tree.trashRoots;
   }
 
+  trash(name: string): TreeBlock | undefined {
+    return this.tree.trash(name);
+  }
+
   readonly visibleNames = $derived.by(() => {
     if (this.rootName === null) return [];
     const rows: string[] = [];
     const walk = (name: string) => {
       for (const child of this.visibleChildren(name)) {
         rows.push(child);
-        if (this.readingLens.active || this.expanded.has(child)) walk(child);
+        if (this.readingLens.active || this.isExpanded(child)) walk(child);
       }
     };
     walk(this.rootName);
@@ -118,11 +140,11 @@ export class TreeScreen extends Screen<TreeScreen, TreeScreenOptions>()('TreeScr
     if (!this.readingLens.active) return null;
     const visible = new Set<string>();
     for (const block of this.tree.blocks.values()) {
-      if (!this.matchesFilter(block.name) && !this.readingLens.exempt.has(block.name)) continue;
-      let cursor: string | null = block.name;
+      if (!this.matchesFilter(block.identity) && !this.readingLens.exempt.has(block.identity)) continue;
+      let cursor: string | null = block.identity;
       while (cursor !== null && !visible.has(cursor)) {
         visible.add(cursor);
-        cursor = this.tree.block(cursor)?.parentName ?? null;
+        cursor = this.tree.block(cursor)?.parentIdentity ?? null;
       }
     }
     return visible;
@@ -136,6 +158,10 @@ export class TreeScreen extends Screen<TreeScreen, TreeScreenOptions>()('TreeScr
     return this.tree.block(name) ?? this.ghosts.get(name);
   }
 
+  liveBlock(identity: string): TreeBlock | undefined {
+    return this.tree.blocks.get(identity);
+  }
+
   get lensActive(): boolean {
     return this.marks.size > 0 || this.ghosts.size > 0;
   }
@@ -143,9 +169,9 @@ export class TreeScreen extends Screen<TreeScreen, TreeScreenOptions>()('TreeScr
   setLens(marks: readonly BlockMark[], blocks: readonly Block[]): void {
     this.marks.clear();
     this.ghosts.clear();
-    for (const mark of marks) this.marks.set(mark.blockName, mark.mark);
+    for (const mark of marks) this.marks.set(mark.identity, mark.mark);
     for (const row of blocks) {
-      if (row.deletedAt !== null) this.ghosts.set(row.name, row);
+      if (row.deletedAt !== null) this.ghosts.set(row.identity, row);
     }
   }
 
@@ -169,7 +195,8 @@ export class TreeScreen extends Screen<TreeScreen, TreeScreenOptions>()('TreeScr
     });
     const filterSet = this.filterVisible;
     if (filterSet !== null) rows = rows.filter((childName) => filterSet.has(childName));
-    const ghosts = [...this.ghosts.values()].filter((row) => row.parentName === name).map((row) => row.name);
+    const parentIdentity = this.tree.block(name)?.identity ?? name;
+    const ghosts = [...this.ghosts.values()].filter((row) => row.parentIdentity === parentIdentity).map((row) => row.identity);
     return this.sortRows(ghosts.length === 0 ? rows : [...rows, ...ghosts]);
   }
 
@@ -197,7 +224,10 @@ export class TreeScreen extends Screen<TreeScreen, TreeScreenOptions>()('TreeScr
   }
 
   load(rootBlockName?: string): void {
-    this.asked = rootBlockName ?? null;
+    const asked = rootBlockName ?? null;
+    if (this.loaded && this.asked === asked) return;
+    this.asked = asked;
+    this.resolved = null;
     this.restoreExpanded();
     const lensKey = this.lensMemoryKey();
     if (lensKey !== null) this.readingLens.restore(lensKey);
@@ -205,17 +235,22 @@ export class TreeScreen extends Screen<TreeScreen, TreeScreenOptions>()('TreeScr
     this.loaded = true;
   }
 
+  isExpanded(name: string): boolean {
+    if (this.expanded.has(name)) return true;
+    const row = this.tree.block(name);
+    return row !== undefined && this.tree.block(row.name)?.identity === row.identity && this.expanded.has(row.name);
+  }
+
   toggle(name: string): void {
-    if (this.expanded.has(name)) this.expanded.delete(name);
-    else this.expanded.add(name);
-    this.persistExpanded();
+    if (this.isExpanded(name)) this.collapse(name);
+    else this.expand(name);
   }
 
   private closedFrom = $state<string[] | null>(null);
 
   readonly anyOpen = $derived.by(() => {
     for (const name of this.expanded) {
-      if (name !== this.rootName) return true;
+      if ((this.tree.block(name)?.identity ?? name) !== this.rootName) return true;
     }
     return false;
   });
@@ -225,7 +260,7 @@ export class TreeScreen extends Screen<TreeScreen, TreeScreenOptions>()('TreeScr
   }
 
   closeAll(): void {
-    this.closedFrom = [...this.expanded].filter((name) => name !== this.rootName);
+    this.closedFrom = [...this.expanded].filter((name) => (this.tree.block(name)?.identity ?? name) !== this.rootName);
     this.expanded.clear();
     if (this.rootName !== null) this.expanded.add(this.rootName);
     this.persistExpanded();
@@ -242,7 +277,7 @@ export class TreeScreen extends Screen<TreeScreen, TreeScreenOptions>()('TreeScr
   setBranch(name: string, expand: boolean): void {
     const walk = (node: string) => {
       if (expand) this.expanded.add(node);
-      else this.expanded.delete(node);
+      else this.forgetExpanded(node);
       for (const child of this.children(node)) walk(child);
     };
     walk(name);
@@ -250,15 +285,21 @@ export class TreeScreen extends Screen<TreeScreen, TreeScreenOptions>()('TreeScr
   }
 
   expand(name: string): void {
-    if (this.expanded.has(name)) return;
+    if (this.isExpanded(name)) return;
     this.expanded.add(name);
     this.persistExpanded();
   }
 
   collapse(name: string): void {
-    if (!this.expanded.has(name)) return;
-    this.expanded.delete(name);
+    if (!this.isExpanded(name)) return;
+    this.forgetExpanded(name);
     this.persistExpanded();
+  }
+
+  private forgetExpanded(name: string): void {
+    this.expanded.delete(name);
+    const row = this.tree.block(name);
+    if (row !== undefined && this.tree.block(row.name)?.identity === row.identity) this.expanded.delete(row.name);
   }
 
   edit(name: string, at: TitleEdit['at'] = 'end'): void {
@@ -369,8 +410,8 @@ export class TreeScreen extends Screen<TreeScreen, TreeScreenOptions>()('TreeScr
   async createAfter(name: string): Promise<void> {
     await this.structural(async () => {
       const source = this.tree.block(name);
-      if (!source || source.parentName === null) return;
-      const parentName = source.parentName;
+      if (!source || source.parentIdentity === null) return;
+      const parentName = source.parentIdentity;
       try {
         const siblings = this.children(parentName);
         const nextId = siblings[siblings.indexOf(name) + 1];
@@ -381,7 +422,7 @@ export class TreeScreen extends Screen<TreeScreen, TreeScreenOptions>()('TreeScr
         if (next) ops.push({ op: 'update', id: '$n', ord: (source.ord + next.ord) / 2 });
         const result = await this.repo.applyBatch.run(ops, { throwOnError: true });
         await this.tree.reload();
-        const createdName = result?.ids.n;
+        const createdName = result?.identities.n;
         if (createdName !== undefined) {
           this.readingLens.exempt.add(createdName);
           this.edit(createdName, 'start');
@@ -399,8 +440,8 @@ export class TreeScreen extends Screen<TreeScreen, TreeScreenOptions>()('TreeScr
         this.expand(parentName);
         await this.tree.reload();
         if (created) {
-          this.readingLens.exempt.add(created.name);
-          this.edit(created.name, 'start');
+          this.readingLens.exempt.add(created.identity);
+          this.edit(created.identity, 'start');
         }
       } catch (error) {
         this.failure.report(error);
@@ -411,8 +452,8 @@ export class TreeScreen extends Screen<TreeScreen, TreeScreenOptions>()('TreeScr
   async indent(name: string): Promise<void> {
     await this.structural(async () => {
       const block = this.tree.block(name);
-      if (!block || block.parentName === null) return;
-      const visible = this.visibleChildren(block.parentName);
+      if (!block || block.parentIdentity === null) return;
+      const visible = this.visibleChildren(block.parentIdentity);
       const index = visible.indexOf(name);
       if (index <= 0) return;
       const newParentName = visible[index - 1];
@@ -434,17 +475,17 @@ export class TreeScreen extends Screen<TreeScreen, TreeScreenOptions>()('TreeScr
   async outdent(name: string): Promise<void> {
     await this.structural(async () => {
       const block = this.tree.block(name);
-      if (!block || block.parentName === null || block.parentName === this.rootName) return;
-      const parent = this.tree.block(block.parentName);
-      if (!parent || parent.parentName === null) return;
-      const parentSiblings = this.children(parent.parentName);
-      const parentIndex = parentSiblings.indexOf(parent.name);
+      if (!block || block.parentIdentity === null || block.parentIdentity === this.rootName) return;
+      const parent = this.tree.block(block.parentIdentity);
+      if (!parent || parent.parentIdentity === null) return;
+      const parentSiblings = this.children(parent.parentIdentity);
+      const parentIndex = parentSiblings.indexOf(parent.identity);
       const followingId = parentSiblings[parentIndex + 1];
       const following = followingId === undefined ? undefined : this.tree.block(followingId);
       const ord = following ? (parent.ord + following.ord) / 2 : parent.ord + 1;
       const writing = this.editing?.name === name;
       try {
-        await this.repo.update.run({ name, changes: { parentId: parent.parentName, ord } }, { throwOnError: true });
+        await this.repo.update.run({ name, changes: { parentId: parent.parentIdentity, ord } }, { throwOnError: true });
         await this.tree.reload();
         if (writing) this.edit(name, 'end');
       } catch (error) {
@@ -465,12 +506,12 @@ export class TreeScreen extends Screen<TreeScreen, TreeScreenOptions>()('TreeScr
     if (this.readingLens.sortMode !== 'manual') return;
     await this.structural(async () => {
       const block = this.tree.block(name);
-      if (!block || block.parentName === null) return;
-      const visible = this.visibleChildren(block.parentName);
+      if (!block || block.parentIdentity === null) return;
+      const visible = this.visibleChildren(block.parentIdentity);
       const visibleIndex = visible.indexOf(name);
       const neighbourName = visible[visibleIndex + step];
       if (neighbourName === undefined) return;
-      const siblings = this.children(block.parentName);
+      const siblings = this.children(block.parentIdentity);
       const ord = this.ordAround(siblings, siblings.indexOf(neighbourName), step);
       const writing = this.editing?.name === name;
       try {

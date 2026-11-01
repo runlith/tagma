@@ -4,8 +4,13 @@ import { feed } from '../../../platform/contract/wire/operation.js';
 import { GRAPH_EVENT_OPS, eventSchema, journalSessionSchema } from './journal.js';
 import { recoveryNoticeSchema } from './recovery.js';
 import { edgeSchema, refSchema, treeBlockSchema } from './rows.js';
+import { BlockIdentity } from './references.js';
 
-const changeEventSchema = Schema.Struct({ ...eventSchema.fields, op: Schema.Literals(GRAPH_EVENT_OPS) });
+const changeEventSchema = Schema.Struct({
+  ...eventSchema.fields,
+  op: Schema.Literals(GRAPH_EVENT_OPS),
+  identity: Schema.NullOr(BlockIdentity),
+});
 
 export const graphChangeSchema = Schema.Struct({
   type: Schema.tag('change'),
@@ -17,6 +22,7 @@ export const graphChangeSchema = Schema.Struct({
   refs: Schema.Array(refSchema),
   sessions: Schema.Array(journalSessionSchema),
   ready: Schema.Array(Schema.String),
+  readyIdentities: Schema.Array(BlockIdentity),
   trash: Schema.Array(treeBlockSchema),
 });
 

@@ -35,9 +35,11 @@ export class SidebarTree extends Screen<SidebarTree>()('SidebarTree', { tier: 'g
     for (const name of storedNames(storage.getItem(expandedKey(projectId)))) this.expanded.add(name);
   }
 
+  readonly openNames = $derived.by(() => new Set([...this.expanded].map((name) => this.tree.block(name)?.identity ?? name)));
+
   readonly lines: readonly TreeLine[] = $derived.by(() => {
     const root = this.tree.rootName;
-    return root === null ? [] : treeLines(root, (name) => this.visibleChildren(name), this.expanded);
+    return root === null ? [] : treeLines(root, (name) => this.visibleChildren(name), this.openNames);
   });
 
   block(name: string): TreeBlock | undefined {
@@ -53,18 +55,21 @@ export class SidebarTree extends Screen<SidebarTree>()('SidebarTree', { tier: 'g
   }
 
   toggle(name: string): void {
-    if (!this.expanded.delete(name)) this.expanded.add(name);
-    this.persist();
+    if (this.openNames.has(name)) this.collapse(name);
+    else this.expand(name);
   }
 
   expand(name: string): void {
-    if (this.expanded.has(name)) return;
+    if (this.openNames.has(name)) return;
     this.expanded.add(name);
     this.persist();
   }
 
   collapse(name: string): void {
-    if (!this.expanded.delete(name)) return;
+    if (!this.openNames.has(name)) return;
+    this.expanded.delete(name);
+    const row = this.tree.block(name);
+    if (row !== undefined && this.tree.block(row.name)?.identity === row.identity) this.expanded.delete(row.name);
     this.persist();
   }
 

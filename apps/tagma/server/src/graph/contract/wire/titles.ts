@@ -1,7 +1,7 @@
 import { Schema } from 'effect';
 import { refusalSchema } from '../../../platform/contract/wire/refusal.js';
 import { graphReportFields } from './answers.js';
-import { BlockName } from './references.js';
+import { BlockIdentity, BlockName } from './references.js';
 
 const unreadableCopySchema = Schema.Struct({
   projectId: Schema.Number,
@@ -15,6 +15,9 @@ export type UnreadableCopy = typeof unreadableCopySchema.Type;
 
 const locatedTitleSchema = Schema.Struct({
   name: BlockName,
+  shortName: BlockName,
+  identity: BlockIdentity,
+  rowKey: Schema.optional(Schema.Number),
   title: Schema.String,
   projectId: Schema.Number,
   branch: Schema.optional(Schema.NullOr(Schema.String)).annotate({

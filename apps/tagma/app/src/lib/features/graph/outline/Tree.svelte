@@ -87,7 +87,7 @@
       <Dialog.Description>Deleted blocks stay here until restored.</Dialog.Description>
     </Dialog.Header>
     <div class="-mx-2 max-h-96 overflow-y-auto px-2">
-      {#each store.trashRoots as row (row.name)}
+      {#each store.trashRoots as row (row.identity)}
         <div class="group/trash flex items-center gap-2 rounded-lg px-2 py-1.5 text-ui transition-colors hover:bg-hover">
           <TagIcon tag={tags.tagOf(row)} class="size-3.5 shrink-0 text-muted-foreground" />
           <span class="min-w-0 flex-1 truncate {row.title.trim() ? '' : 'text-muted-foreground'}">
@@ -96,7 +96,7 @@
           {#if row.deletedAt}
             <span class="shrink-0 stamp tabular text-muted-foreground/60">{timeAgo(row.deletedAt)}</span>
           {/if}
-          <Button variant="outline" size="xs" onclick={() => store.restore(row.name)}>Restore</Button>
+          <Button variant="outline" size="xs" onclick={() => store.restore(row.identity)}>Restore</Button>
         </div>
       {/each}
     </div>

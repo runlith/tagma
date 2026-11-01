@@ -27,7 +27,7 @@ import { BlockRows } from '../acts/rows.js';
 import { type BlockMeasurement, type BlockRecord, type BlockRow, MEASURED_FACTS } from '../contract/service/acts.js';
 import { Selection, type BlockPosition, type BlockTitle, type ReadyPageFilter, type SelectionRefusal } from '../contract/service/reads.js';
 import { standingCondition } from '../work/standingCondition.js';
-import { blockName, TitleNames } from '../contract/wire/references.js';
+import { blockIdentity, blockName, TitleNames } from '../contract/wire/references.js';
 import { GateRefusal, cursorRefusal, walks } from '../../platform/contract/wire/refusal.js';
 import { readsOf } from '../acts/reads.js';
 import { GraphUnits } from '../../platform/contract/service/units.js';
@@ -290,6 +290,7 @@ export const selectionLayer: Layer.Layer<Selection, never, GraphStore | BlockNam
         for (const fact of facts) marks[fact] = row[fact];
         return {
           name: blockName(row.uuid),
+          identity: blockIdentity(row.uuid),
           tags: row.tags,
           fields: row.fields,
           actions: row.actions,
@@ -553,7 +554,7 @@ export const selectionLayer: Layer.Layer<Selection, never, GraphStore | BlockNam
           const room = rowsPerStatement(1);
           for (let at = 0; at < tails.length; at += room) {
             const rows = yield* db
-              .select({ uuid: block.uuid, title: block.title, projectId: block.projectId })
+              .select({ uuid: block.uuid, title: block.title, projectId: block.projectId, rowKey: block.id })
               .from(block)
               .where(and(inArray(spokenTail, tails.slice(at, at + room)), isNull(block.deletedAt)));
             for (const row of rows) {

@@ -2,7 +2,7 @@ import { Schema } from 'effect';
 import { operation } from '../../../../platform/contract/wire/operation.js';
 import { startPriceSchema } from '../../../../platform/contract/wire/start.js';
 import { graphArms as arms } from '../answers.js';
-import { blockRef } from '../fields.js';
+import { blockMention, blockRef } from '../fields.js';
 import { placeRole } from '../../../../platform/contract/wire/place.js';
 import { pathExistsReportSchema } from '../pathExists.js';
 import { blockSchema, edgeSchema, refSchema, treeBlockSchema, writtenBlockSchema } from '../rows.js';
@@ -41,10 +41,10 @@ export const OUTLINE_OPERATIONS = {
   list_trash: operation('list_trash', {
     ...SURFACE_READ,
     ...read('List the trashed subtrees?', 'Listed the trash'),
-    meaning: 'List the roots of the trashed subtrees of the served project.',
-    input: graphInput({}),
+    meaning: 'List the roots of the trashed subtrees of the served project, or the root named by an address.',
+    input: graphInput({ name: Schema.optional(blockMention) }),
     answer: arms({ ok: { blocks: Schema.Array(blockSchema) } }),
-    refusals: [],
+    refusals: ['bad-name', 'ambiguous-name', 'not-found', 'place-mismatch'],
   }),
 
   read_edges: operation('read_edges', {

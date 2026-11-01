@@ -9,7 +9,7 @@ import { blockListRowSchema, viewResultsSchema } from './reads.js';
 import { graphReportFields, type GraphReport } from './answers.js';
 import { nodeActionsSchema } from './tags/actions.js';
 import { farEndSchema, type RefElsewhere, refElsewhereSchema } from './far.js';
-import { BlockName } from './references.js';
+import { BlockIdentity, BlockName, blockReferenceSchema, type BlockReference } from './references.js';
 
 export const projectSchema = Schema.Struct({
   id: Schema.Number,
@@ -43,8 +43,11 @@ export type ProjectBranch = typeof projectBranchSchema.Type;
 
 const treeBlockFields = {
   name: BlockName,
+  identity: BlockIdentity,
+  rowKey: Schema.Number.annotate({ description: 'The row’s correlation key in this graph copy, until its dataset is replaced.' }),
   projectId: Schema.Number,
   parentName: Schema.NullOr(BlockName),
+  parentIdentity: Schema.NullOr(BlockIdentity),
   ord: Schema.Number,
   tags: tagsField,
   fields: fieldsField,
@@ -86,6 +89,10 @@ export type ListedBlock = TreeBlock | typeof blockListRowSchema.Type;
 export const edgeSchema = Schema.Struct({
   fromName: BlockName,
   toName: BlockName,
+  fromIdentity: Schema.NullOr(BlockIdentity),
+  toIdentity: Schema.NullOr(BlockIdentity),
+  fromRowKey: Schema.NullOr(Schema.Number),
+  toRowKey: Schema.NullOr(Schema.Number),
   kind: edgeNameSchema,
   createdBySessionId: Schema.NullOr(Schema.Number),
   createdAt: Schema.String,
@@ -95,7 +102,14 @@ export const edgeSchema = Schema.Struct({
 });
 export type Edge = typeof edgeSchema.Type;
 
-export const refSchema = Schema.Struct({ fromName: BlockName, toName: BlockName });
+export const refSchema = Schema.Struct({
+  fromName: BlockName,
+  toName: BlockName,
+  fromIdentity: BlockIdentity,
+  toIdentity: BlockIdentity,
+  fromRowKey: Schema.Number,
+  toRowKey: Schema.Number,
+});
 export type Ref = typeof refSchema.Type;
 
 export const sourceSchema = Schema.Struct({
@@ -114,10 +128,16 @@ export interface BlockRead extends Block, GraphReport {
   readonly edgesIn: readonly Edge[];
   readonly edgesInUnread?: readonly string[] | undefined;
   readonly refsOut: readonly string[];
+  readonly refsOutDetails: readonly BlockReference[];
   readonly refsElsewhere?: readonly RefElsewhere[] | undefined;
   readonly refsAbsent?: readonly string[] | undefined;
   readonly refsIn: readonly string[];
-  readonly restingIn: { readonly edges: readonly Edge[]; readonly refs: readonly string[] };
+  readonly refsInDetails: readonly BlockReference[];
+  readonly restingIn: {
+    readonly edges: readonly Edge[];
+    readonly refs: readonly string[];
+    readonly refsDetails: readonly BlockReference[];
+  };
   readonly sources: readonly Source[];
   readonly reach: string | null;
   readonly ending: BlockEndingBody | null;
@@ -153,6 +173,7 @@ export const blockReadSchema: Schema.Codec<BlockRead> = Schema.Struct({
     description: 'Projects of this machine whose edges into this block could not be read yet: edgesIn may lack theirs.',
   }),
   refsOut: Schema.Array(BlockName),
+  refsOutDetails: Schema.Array(blockReferenceSchema),
   refsElsewhere: Schema.optional(Schema.Array(refElsewhereSchema)).annotate({
     description: 'The references of refsOut that stand in another project of this machine, with that project.',
   }),
@@ -160,7 +181,12 @@ export const blockReadSchema: Schema.Codec<BlockRead> = Schema.Struct({
     description: 'Names written in the body that no copy of this machine holds.',
   }),
   refsIn: Schema.Array(BlockName),
-  restingIn: Schema.Struct({ edges: Schema.Array(edgeSchema), refs: Schema.Array(BlockName) }),
+  refsInDetails: Schema.Array(blockReferenceSchema),
+  restingIn: Schema.Struct({
+    edges: Schema.Array(edgeSchema),
+    refs: Schema.Array(BlockName),
+    refsDetails: Schema.Array(blockReferenceSchema),
+  }),
   sources: Schema.Array(sourceSchema),
   reach: Schema.NullOr(Schema.String),
   ending: Schema.NullOr(blockEndingSchema),

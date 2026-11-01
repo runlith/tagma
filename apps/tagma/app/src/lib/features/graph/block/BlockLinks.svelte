@@ -3,8 +3,8 @@
   import type { TreeScreen } from '$lib/features/graph/TreeScreen.svelte.js';
 
   const referrersOf = (read: BlockRead, store: TreeScreen): readonly string[] => {
-    const outlined = new Set(store.visibleChildren(read.name));
-    return read.refsIn.filter((name) => name !== read.name && !outlined.has(name));
+    const outlined = new Set(store.visibleChildren(read.identity));
+    return read.refsInDetails.filter((ref) => ref.identity !== read.identity && !outlined.has(ref.identity)).map((ref) => ref.identity);
   };
 
   export function hasLinks(read: BlockRead, store: TreeScreen): boolean {
@@ -16,7 +16,7 @@
       (read.refsAbsent?.length ?? 0) > 0 ||
       referrersOf(read, store).length > 0 ||
       read.restingIn.edges.length > 0 ||
-      read.restingIn.refs.some((name) => name !== read.name)
+      read.restingIn.refsDetails.some((ref) => ref.identity !== read.identity)
     );
   }
 </script>
@@ -87,7 +87,7 @@
         return [
           label === undefined || edge.kind === 'relates' ? `edge:${edge.kind}` : `edge:out:${edge.kind}`,
           label ?? edge.kind,
-          { name: edge.toName, far: edge.graph, held },
+          { name: edge.toIdentity ?? edge.toName, far: edge.graph, held },
         ] as const;
       }),
       ...read.edgesIn.map((edge) => {
@@ -95,7 +95,7 @@
         return [
           label === undefined || edge.kind === 'relates' ? `edge:${edge.kind}` : `edge:in:${edge.kind}`,
           label ?? edge.kind,
-          { name: edge.fromName, far: edge.graph },
+          { name: edge.fromIdentity ?? edge.fromName, far: edge.graph },
         ] as const;
       }),
     ]),
@@ -103,9 +103,10 @@
 
   const referenceGroups = $derived.by(() => {
     const groups: LinkGroup[] = [];
-    const elsewhere = new Map((read.refsElsewhere ?? []).map((ref) => [ref.name, ref] as const));
+    const elsewhere = new Map((read.refsElsewhere ?? []).map((ref) => [ref.identity, ref] as const));
     const out: LinkItem[] = [
-      ...read.refsOut.map((name): LinkItem => {
+      ...read.refsOutDetails.map((ref): LinkItem => {
+        const name = ref.identity;
         const there = elsewhere.get(name);
         return there === undefined
           ? { name }
@@ -131,9 +132,11 @@
       [
         ...read.restingIn.edges.map((edge) => {
           const label = IN_LABEL[edge.kind] ?? edge.kind;
-          return [label, label, { name: edge.fromName, far: edge.graph }] as const;
+          return [label, label, { name: edge.fromIdentity ?? edge.fromName, far: edge.graph }] as const;
         }),
-        ...read.restingIn.refs.filter((name) => name !== read.name).map((name) => ['Referenced by', 'Referenced by', { name }] as const),
+        ...read.restingIn.refsDetails
+          .filter((ref) => ref.identity !== read.identity)
+          .map((ref) => ['Referenced by', 'Referenced by', { name: ref.identity }] as const),
       ],
       'resting:',
     ),
@@ -145,7 +148,7 @@
   async function unlink(item: LinkItem): Promise<void> {
     if (item.held === undefined) return;
     try {
-      await blocks.unlink.run({ from: read.name, kind: item.held.kind, to: item.name }, { throwOnError: true });
+      await blocks.unlink.run({ from: read.identity, kind: item.held.kind, to: item.name }, { throwOnError: true });
       unlinked();
     } catch (error) {
       notices.refusal(error);
@@ -155,7 +158,7 @@
   let restingOpen = $state(false);
 
   $effect(() => {
-    void read.name;
+    void read.identity;
     restingOpen = false;
   });
 </script>

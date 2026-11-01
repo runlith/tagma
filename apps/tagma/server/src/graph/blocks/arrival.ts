@@ -96,6 +96,7 @@ export const blockArrival = Effect.gen(function* () {
       Effect.gen(function* () {
         const parent = yield* rows.blockById(input.parentId);
         const graph = (yield* rows.rootBlockOf(input.projectId)).uuid;
+        const renamedRows: number[] = [];
         for (const page of pagesOf(
           input.blocks.map((one) => one.uuid),
           1,
@@ -104,7 +105,10 @@ export const blockArrival = Effect.gen(function* () {
             .select({ id: block.id })
             .from(block)
             .where(and(inArray(block.uuid, page), isNotNull(block.deletedAt)));
-          for (const { id } of resting) yield* db.update(block).set({ uuid: mintBlockId() }).where(eq(block.id, id));
+          for (const { id } of resting) {
+            yield* db.update(block).set({ uuid: mintBlockId() }).where(eq(block.id, id));
+            renamedRows.push(id);
+          }
         }
         const born = new Map<string, BlockRow>();
         for (const one of input.blocks) {
@@ -136,7 +140,16 @@ export const blockArrival = Effect.gen(function* () {
             .get();
           if (row === undefined) return yield* Effect.die('block insert returned no row');
           yield* projection.syncBorn(row, one.sources.length === 0);
-          yield* act.record('create', row, { kind: table.tagOf(row)?.id ?? null, chars: row.body.length }, now);
+          yield* act.record(
+            'create',
+            row,
+            {
+              kind: table.tagOf(row)?.id ?? null,
+              chars: row.body.length,
+              renamed: born.size === 0 && renamedRows.length > 0 ? renamedRows : undefined,
+            },
+            now,
+          );
           born.set(one.uuid, row);
         }
         for (const one of input.blocks) {

@@ -2,7 +2,7 @@ import { PageCursor } from '@runlith/paging';
 import { Schema } from 'effect';
 import { arms } from '../../../platform/contract/wire/operation.js';
 import { handle } from '@runlith/utils/printed';
-import { BlockName } from './references.js';
+import { BlockIdentity, BlockName } from './references.js';
 import { refusalSchema } from '../../../platform/contract/wire/refusal.js';
 import { startPriceSchema } from '../../../platform/contract/wire/start.js';
 import { nodeActionsSchema } from './tags/actions.js';
@@ -49,6 +49,7 @@ export const graphArms = <const Arms extends Record<string, Schema.Struct.Fields
 
 export const blockAnswerSchema = Schema.Struct({
   name: BlockName,
+  identity: BlockIdentity,
   tags: Schema.Array(Schema.String),
   fields: Schema.Record(Schema.String, Schema.Unknown),
   actions: nodeActionsSchema,
@@ -67,6 +68,9 @@ export const callJournalRangeSchema = Schema.Struct({
   from: Schema.Number,
   to: Schema.Number,
   chars: Schema.optional(Schema.Struct({ from: Schema.Number, to: Schema.Number })),
+  subject: Schema.optional(Schema.Struct({ name: BlockName, copy: graphCopySchema })).annotate({
+    description: 'The journal’s block and copy when they differ from the returned block.',
+  }),
 });
 
 export const remainingDebtSchema = Schema.Struct({

@@ -4,6 +4,9 @@ import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { GRANT_HEADER } from '../../../platform/contract/service/credentials.js';
 import { join } from 'node:path';
 import { Context, Effect, FileSystem, Layer } from 'effect';
+import { ToolAnswer, toolExecute, toolPrepare } from '@runlith/agent/tool';
+import { unthreadedCaller } from '../callers.js';
+import { Projects } from '../../../projects/contract/service/registry.js';
 import { Coverage } from '../../../workspace/contract/service/roots.js';
 import type { CoveredRepositoriesAnswer } from '../../../workspace/contract/wire/repositories.js';
 import { makeThreadDoors, type Outcome } from '../threadDoors.js';
@@ -160,6 +163,46 @@ layer(Layer.effect(Place, setup).pipe(Layer.provideMerge(BunFileSystem.layer)), 
       const mainCopy = { projectId: project, checkout: mainCheckout, tree: main.layout.treeRoot, branch: null };
       expect(renamed).toMatchObject({ graphCopy: mainCopy });
       expect(finished).toMatchObject({ graphCopy: mainCopy });
+      const global = yield* Context.get(world.runtime.graph, Projects).global();
+      if (global === undefined) return yield* Effect.die('the fixture has no global project');
+      const globalRoot = ((yield* world.op('list_root_blocks', { project: global.id })).body as { blocks: { name: string }[] }).blocks[0]!
+        .name;
+      const branchNote = yield* answered(
+        yield* doors.atNative('create_block', { parentId: parent, title: 'A note leaving the worktree' }, placed),
+      );
+      const movedName = (branchNote.block as { name: string }).name;
+      const tool = placed.native.update_block!;
+      const call = { toolCallId: 'branch-departure', caller: unthreadedCaller, messages: [] };
+      const input = { blockId: movedName, parentId: globalRoot };
+      const prepared = yield* toolPrepare(tool)!(input, call);
+      const movedAnswer = yield* toolExecute(tool)!(input, { ...call, prepared: prepared?.prepared });
+      const moved = JSON.parse(JSON.stringify(movedAnswer instanceof ToolAnswer ? movedAnswer.value : movedAnswer)) as {
+        graphCopy: { projectId: number };
+        journal: { from: number; to: number; subject: { name: string; copy: unknown } };
+        journalUnreadable?: string;
+      };
+      const branchEvents = (yield* world.op('read_events', { limit: 1 }, `project=${project}&cwd=${encodeURIComponent(destination)}`))
+        .body as {
+        events: { id: number; op: string; blockName: string }[];
+      };
+      expect(branchEvents.events).toMatchObject([{ op: 'depart', blockName: movedName }]);
+      const departure = branchEvents.events[0]!;
+      expect(moved).toMatchObject({
+        graphCopy: { projectId: global.id },
+        journal: {
+          from: departure.id - 1,
+          to: departure.id,
+          subject: { copy: { projectId: project, checkout: destination, tree: placed.served.layout.treeRoot, branch: 'reflection' } },
+        },
+      });
+      expect(moved.journalUnreadable).toBeUndefined();
+      expect(
+        yield* world.op(
+          'read_block_diff',
+          { blockId: moved.journal.subject.name, from: moved.journal.from, to: moved.journal.to },
+          `project=${project}&cwd=${encodeURIComponent(destination)}`,
+        ),
+      ).toMatchObject({ status: 200, body: { diff: { ops: ['depart'] } } });
       expect(yield* asThread('read_block', { blockIds: [inheritedTask] })).toMatchObject({
         status: 200,
         body: { reads: [{ name: inheritedTask, fields: { status: 'open' } }] },

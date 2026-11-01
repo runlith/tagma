@@ -48,7 +48,7 @@ export class Translations extends Service<Translations>()('Translations', { tier
     super();
     const held = live.hold(
       (client) => client['translations.changes']({ projectId: aim.projectId }),
-      (frame) => void this.moved(new Set([frame.block])),
+      (frame) => void this.moved(new Set([frame.block, frame.identity])),
       (reason) => {
         if (reason.kind === 'subscription') failure.report(new Error(reason.message));
       },
@@ -56,7 +56,8 @@ export class Translations extends Service<Translations>()('Translations', { tier
     scope.defer(() => held.unsubscribe());
     scope.defer(
       feed.frames((frame) => {
-        if (frame.type === 'change' && frame.blocks.length > 0) void this.moved(new Set(frame.blocks.map((row) => row.name)));
+        if (frame.type === 'change' && frame.blocks.length > 0)
+          void this.moved(new Set(frame.blocks.flatMap((row) => [row.name, row.identity])));
       }),
     );
   }

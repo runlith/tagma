@@ -115,6 +115,7 @@ const change = (over: Partial<Extract<GraphFrame, { type: 'change' }>> = {}): Gr
   edges: [],
   refs: [],
   ready: [],
+  readyIdentities: [],
   trash: [],
   ...over,
 });
@@ -150,6 +151,26 @@ test('a resync refreshes the vocabulary that could have changed while the graph 
   world.frame({ type: 'resync' });
 
   await waitUntil(() => world.tags.titleOnly.includes('invoice'));
+});
+
+test('a resync cannot expose edges from the previous dataset', async () => {
+  const edge = {
+    fromName: '00000001',
+    toName: '00000002',
+    fromIdentity: '00000000000000000000000000000001',
+    toIdentity: '00000000000000000000000000000002',
+    fromRowKey: 1,
+    toRowKey: 2,
+    kind: 'relates',
+    createdBySessionId: null,
+    createdAt: '2026-09-05T00:00:00Z',
+  };
+  const world = open(async (url) => (url.pathname === '/api/op/read_edges' ? json({ status: 'ok', edges: [edge] }) : json(writers([]))));
+  const edges = world.app.get(BlocksRepo).edges;
+  await edges.loadOrThrow();
+  expect(edges.watch()).toEqual([edge]);
+  world.frame({ type: 'resync' });
+  expect(edges.watch()).toBeUndefined();
 });
 
 test('live writers survive initial loading and a reconnect fills the sessions missed during the gap', async () => {

@@ -8,7 +8,7 @@ export const useEngineAnswered = (read: () => BlockRead | null): (() => boolean)
   return () => {
     const rule = read();
     if (rule === null || !tags.enforced(rule)) return true;
-    const first = repo.engine.key({ rule: rule.name, focus: null });
+    const first = repo.engine.key({ rule: rule.identity, focus: null });
     return first.data !== undefined || first.error !== undefined;
   };
 };

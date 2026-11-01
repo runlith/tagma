@@ -21,16 +21,18 @@
 
   type ToolBlockRow = Tagged & {
     readonly name: string;
+    readonly identity?: string;
     readonly title: string;
   };
 
   let { block, diff, place }: { block: ToolBlockRow; diff?: string; place?: BlockPlace } = $props();
 
   const status = $derived(tags.statusOf(block));
-  const placed = $derived(place === undefined ? null : titles.placed(block.name, place, diff));
+  const name = $derived(block.identity ?? block.name);
+  const placed = $derived(place === undefined ? null : titles.placed(name, place, diff));
   const view = $derived<BlockRefView>(
     placed === null
-      ? blockRefView(addresses, block.name, null, titles.peer(block.name), { diff })
+      ? blockRefView(addresses, name, null, titles.peer(name), { diff })
       : { text: block.title, title: null, dead: false, href: placed ?? null },
   );
   const copy = $derived<GraphAim | undefined>(
@@ -48,7 +50,7 @@
   href={view.href}
   role={view.href === null ? 'link' : undefined}
   tabindex={view.href === null ? 0 : undefined}
-  {@attach linkTarget(opening, () => blockLink({ name: block.name, copy, diff }), here)}
+  {@attach linkTarget(opening, () => blockLink({ name, copy, diff }), here)}
   class="flex h-7 min-w-0 items-center gap-2 rounded-md px-1.5 text-ui transition-colors select-none hover:bg-hover"
 >
   <TagIcon tag={tags.tagOf(block)} class="size-3.5 shrink-0 text-muted-foreground" />

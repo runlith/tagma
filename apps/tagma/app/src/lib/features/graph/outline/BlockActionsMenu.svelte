@@ -69,7 +69,7 @@
 
   function showTranslation(language: string): void {
     if (translated !== undefined) translated(language);
-    else void opening.open(blockLink({ name: block.name, copy: door.aim, lang: language }), 'full', here);
+    else void opening.open(blockLink({ name: block.identity, copy: door.aim, lang: language }), 'full', here);
   }
 
   let open = $state(false);
@@ -87,11 +87,10 @@
   }
 
   async function remove(): Promise<void> {
-    const { name, parentName } = block;
-    if (await store.remove(name)) onDeleted?.(parentName);
+    if (await store.remove(block.identity)) onDeleted?.(block.parentIdentity);
   }
 
-  const link = $derived(blockLink({ name: block.name, copy: door.aim }));
+  const link = $derived(blockLink({ name: block.identity, copy: door.aim }));
   const shape = $derived(opening.shape(link, here, steps?.click));
   const ways = $derived(steps === undefined ? [] : (shape?.steps ?? []));
   const places = $derived(shape?.places ?? []);
@@ -103,7 +102,9 @@
   const law = $derived(tags.supports(block, LAW));
   const team = $derived(workspace.find(block.projectId)?.storage === 'team');
   const stealth = $derived(block.stealth === true);
-  const storable = $derived(team && block.parentName !== null && (stealth ? store.block(block.parentName)?.stealth !== true : true));
+  const storable = $derived(
+    team && block.parentIdentity !== null && (stealth ? store.block(block.parentIdentity)?.stealth !== true : true),
+  );
   const acting = $derived(rename !== undefined || places.length > 0 || !leaf || moves || law || storable);
 
   const BY_SOURCES = 'sources';
@@ -152,7 +153,7 @@
           <DropdownMenu.SubTrigger icon={Plus}>Add child</DropdownMenu.SubTrigger>
           <DropdownMenu.SubContent class="min-w-40">
             {#each tags.titleOnly as tag (tag)}
-              <DropdownMenu.Item onSelect={() => store.createChild(block.name, tag)}>
+              <DropdownMenu.Item onSelect={() => store.createChild(block.identity, tag)}>
                 {#snippet lead()}<TagIcon {tag} class="size-3.5" />{/snippet}
                 <span class="capitalize">{tag}</span>
               </DropdownMenu.Item>
@@ -164,7 +165,7 @@
             <DropdownMenu.SubTrigger icon={EyeOff}>Add stealth child</DropdownMenu.SubTrigger>
             <DropdownMenu.SubContent class="min-w-40">
               {#each tags.titleOnly as tag (tag)}
-                <DropdownMenu.Item onSelect={() => store.createChild(block.name, tag, 'stealth')}>
+                <DropdownMenu.Item onSelect={() => store.createChild(block.identity, tag, 'stealth')}>
                   {#snippet lead()}<TagIcon {tag} class="size-3.5" />{/snippet}
                   <span class="capitalize">{tag}</span>
                 </DropdownMenu.Item>
@@ -176,7 +177,7 @@
       {#if storable}
         <DropdownMenu.Item
           icon={stealth ? FolderGit2 : EyeOff}
-          onSelect={() => void store.setStorage(block.name, stealth ? 'team' : 'stealth')}
+          onSelect={() => void store.setStorage(block.identity, stealth ? 'team' : 'stealth')}
         >
           {stealth ? 'Move to team' : 'Move to stealth'}
         </DropdownMenu.Item>
@@ -194,7 +195,7 @@
         {@const delivered = tags.deliveredBy(block)}
         {@const delivery = delivered.stated ?? BY_SOURCES}
         {@const choices = choicesOf(delivered.declared)}
-        <DropdownMenu.Item icon={Power} onSelect={() => void store.setLawEnabled(block.name, off)}>
+        <DropdownMenu.Item icon={Power} onSelect={() => void store.setLawEnabled(block.identity, off)}>
           {off ? 'Switch on' : 'Switch off'}
         </DropdownMenu.Item>
         {#if delivered.declared.length > 0}
@@ -205,7 +206,7 @@
             <DropdownMenu.SubContent class="min-w-40">
               <DropdownMenu.RadioGroup
                 value={delivery}
-                onValueChange={(next) => void store.setLawDelivery(block.name, next === BY_SOURCES ? null : (next as Delivery))}
+                onValueChange={(next) => void store.setLawDelivery(block.identity, next === BY_SOURCES ? null : (next as Delivery))}
               >
                 {#each choices as choice (choice.value)}
                   <DropdownMenu.RadioItem value={choice.value} title={choice.says}>{choice.label}</DropdownMenu.RadioItem>
@@ -221,14 +222,14 @@
       <DropdownMenu.Item icon={way.icon} keys={way.keys} onSelect={() => run(way.run)}>{way.words}</DropdownMenu.Item>
     {/each}
     {#if !leaf}
-      <DropdownMenu.Item icon={Share2} onSelect={() => void router.goto(addresses.scoped('graph', block.name))}>
+      <DropdownMenu.Item icon={Share2} onSelect={() => void router.goto(addresses.scoped('graph', block.identity))}>
         Open in graph
       </DropdownMenu.Item>
-      <DropdownMenu.Item icon={History} onSelect={() => void router.goto(addresses.scoped('journal', block.name))}>
+      <DropdownMenu.Item icon={History} onSelect={() => void router.goto(addresses.scoped('journal', block.identity))}>
         Open in journal
       </DropdownMenu.Item>
     {/if}
-    <TranslateItem block={block.name} shown={showTranslation} />
+    <TranslateItem block={block.identity} shown={showTranslation} />
     {#if linksPlacement !== undefined}
       {@const placement = linksPlacement}
       <DropdownMenu.Item icon={placement.beside ? PanelBottom : PanelRight} onSelect={() => placement.toggle()}>

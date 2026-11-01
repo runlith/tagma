@@ -5,7 +5,7 @@ import { block } from '../store/tables.js';
 import { batchDocument } from '../contract/wire/batch.js';
 import type { GraphFrame } from '../contract/service/journal.js';
 import type { TreeBlock } from '../contract/wire/rows.js';
-import { blockName } from '../contract/wire/references.js';
+import { blockIdentity, blockName } from '../contract/wire/references.js';
 import { wireTreeBlock } from '../reading/rows.js';
 import { demoGraphLayer, type DemoOwners, withDemo } from '../../composition/testing/graphFixture.js';
 
@@ -103,7 +103,16 @@ layer(demoGraphLayer(), { excludeTestServices: true })('graph feed', (it) => {
         expect(change.blocks.some((row) => row.name === a || row.name === b)).toBe(true);
         expect(change.events.some((entry) => entry.blockName === a && entry.op === 'update')).toBe(true);
         expect(change.events.map((entry) => entry.op)).toContain('create');
-        expect(change.refs).toEqual([{ fromName: a as string, toName: b as string }]);
+        expect(change.refs).toEqual([
+          {
+            fromName: a as string,
+            toName: b as string,
+            fromIdentity: result.identities.a!,
+            toIdentity: result.identities.b!,
+            fromRowKey: change.blocks.find((row) => row.identity === result.identities.a)!.rowKey,
+            toRowKey: change.blocks.find((row) => row.identity === result.identities.b)!.rowKey,
+          },
+        ]);
 
         const there = yield* demo.nameOf(
           (yield* graph.blocks.create({ projectId: other, tags: ['idea'], title: 'there', parentId: otherRoot })).id,
@@ -245,6 +254,74 @@ layer(demoGraphLayer(), { excludeTestServices: true })('graph feed', (it) => {
           fields: { id: 'invoice', fields: { total: 'number' } },
         });
         expect((yield* feed.nth(2)).type).toBe('resync');
+      }),
+    ),
+  );
+
+  it.effect('departure and arrival publish every renamed row in its own graph', () =>
+    withDemo((demo) =>
+      Effect.gen(function* () {
+        const { graph, projectId, root } = demo;
+        const target = (yield* graph.projectLifecycle.create({ name: 'target', rootPath: yield* demo.fixture.directory('target') })).id;
+        const other = (yield* graph.projectLifecycle.create({ name: 'other', rootPath: yield* demo.fixture.directory('other') })).id;
+        const targetRoot = yield* graph.blocks.rootBlockOf(target);
+        const otherRoot = yield* graph.blocks.rootBlockOf(other);
+        const sourceRoot = yield* graph.blocks.rootBlockOf(projectId);
+        const parent = yield* graph.blocks.create({ projectId, parentId: root, title: 'parent' });
+        const child = yield* graph.blocks.create({ projectId, parentId: parent.id, title: 'child' });
+        const source = yield* watch(graph, projectId);
+        yield* graph.trash.depart({ id: parent.id, to: { graph: targetRoot.uuid, label: targetRoot.title } });
+        const departed = yield* source.change(1);
+        expect(departed.blocks).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ rowKey: parent.id, deletedAt: expect.any(String) }),
+            expect.objectContaining({ rowKey: child.id, deletedAt: expect.any(String) }),
+          ]),
+        );
+        expect(departed.blocks.find((row) => row.rowKey === parent.id)?.identity).not.toBe(blockIdentity(parent.uuid));
+        expect(departed.blocks.find((row) => row.rowKey === child.id)?.identity).not.toBe(blockIdentity(child.uuid));
+
+        const waiting = yield* watch(graph, other);
+        const old = yield* graph.blocks.create({ projectId: other, parentId: otherRoot.id, title: 'old trash', uuid: parent.uuid });
+        yield* waiting.change(1);
+        yield* graph.trash.delete({ id: old.id });
+        yield* waiting.change(2);
+        const arriving = yield* watch(graph, target);
+        const carried = (row: typeof parent, parentUuid: string | null) => ({
+          uuid: row.uuid,
+          parent: parentUuid,
+          ord: row.ord,
+          title: row.title,
+          body: row.body,
+          tags: row.tags,
+          fields: row.fields,
+          sessions: [],
+          createdAt: row.createdAt,
+          updatedAt: row.updatedAt,
+          sources: [],
+          links: [],
+          far: [],
+        });
+        yield* graph.blocks.arrive({
+          projectId: target,
+          parentId: targetRoot.id,
+          from: sourceRoot.uuid,
+          blocks: [carried(parent, null), carried(child, parent.uuid)],
+        });
+        const born = yield* arriving.change(1);
+        yield* graph.blocks.create({ projectId: target, parentId: targetRoot.id, title: 'after arrival' });
+        yield* arriving.change(2);
+        expect(waiting.frames).toHaveLength(3);
+        const renamed = yield* waiting.change(3);
+        const replaced = renamed.blocks.find((row) => row.rowKey === old.id);
+        expect(replaced?.identity).not.toBe(blockIdentity(old.uuid));
+        expect(renamed.trash).toEqual([expect.objectContaining({ rowKey: old.id, identity: replaced?.identity })]);
+        expect(born.blocks).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ identity: blockIdentity(parent.uuid) }),
+            expect.objectContaining({ identity: blockIdentity(child.uuid), parentIdentity: blockIdentity(parent.uuid) }),
+          ]),
+        );
       }),
     ),
   );

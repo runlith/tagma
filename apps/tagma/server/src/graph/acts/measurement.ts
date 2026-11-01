@@ -4,10 +4,9 @@ import type { GraphStore } from '../../platform/contract/service/store.js';
 import { block, edge, event } from '../store/tables.js';
 import { type Tagged, hasTag } from '../contract/wire/tags/roles.js';
 import type { TagTable } from '../contract/wire/tags/table.js';
-import type { NodeActions } from '../contract/wire/tags/actions.js';
 import type { Tags } from '../contract/service/vocabulary.js';
 import { carriesTag } from '../vocabulary/projection.js';
-import { type Answer, type BlockMeasurement, BlockAnswers } from '../contract/service/acts.js';
+import { type Answer, type BlockMeasurement, type MeasuredBlock, BlockAnswers } from '../contract/service/acts.js';
 import { LIFECYCLE } from '../contract/wire/tags/lifecycle.js';
 import { OBSERVATION } from '../contract/wire/tags/observation.js';
 import { carriesContract, contractAt, contractNotAt } from '../vocabulary/projection.js';
@@ -150,7 +149,7 @@ export function actMarks(db: GraphStore['Service']['db'], tags: Tags['Service'])
     TRow extends { id: number; projectId: number; tags: readonly string[] },
     TFact extends keyof BlockMeasurement,
   >(rows: readonly TRow[], facts: readonly TFact[]) {
-    const result: Array<TRow & Pick<BlockMeasurement, TFact> & { readonly actions: NodeActions }> = [];
+    const result: MeasuredBlock<TRow, TFact>[] = [];
     if (rows.length === 0) return result;
     const byProject = new Map<number, number[]>();
     for (const row of rows) {

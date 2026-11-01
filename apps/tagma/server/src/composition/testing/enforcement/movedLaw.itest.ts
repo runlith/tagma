@@ -3,11 +3,13 @@ import { dirname, join } from 'node:path';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { layer } from '@runlith/effect-test';
 import { Context, Effect, FileSystem, Layer } from 'effect';
+import { ToolAnswer, toolExecute, toolPrepare } from '@runlith/agent/tool';
+import { unthreadedCaller } from '../callers.js';
 import { TRIGGERS } from '../../../graph/testing/triggers.js';
 import { BlockNames } from '../../../graph/contract/service/acts.js';
 import { Blocks } from '../../../graph/contract/service/blocks.js';
 import { DoorFixture, doorFixture, projectLeaving } from '../doorFixture.js';
-import { makeThreadDoors, type Outcome } from '../threadDoors.js';
+import { makeThreadDoors, type Doors, type Outcome } from '../threadDoors.js';
 import { suiteGit } from '../suiteGit.js';
 import { LAYERED, LAYERED_KEY } from '../../../enforcement/testing/layered.js';
 
@@ -32,6 +34,14 @@ const answered = (outcome: Outcome): Record<string, unknown> => {
 };
 
 const named = (outcome: Outcome): string => (answered(outcome).block as { name: string }).name;
+
+const native = Effect.fnUntraced(function* (at: Doors, id: string, input: Record<string, unknown>, key: string) {
+  const tool = at.native[id]!;
+  const call = { toolCallId: key, caller: unthreadedCaller, messages: [] };
+  const prepared = yield* toolPrepare(tool)!(input, call);
+  const result = yield* toolExecute(tool)!(input, { ...call, prepared: prepared?.prepared });
+  return JSON.parse(JSON.stringify(result instanceof ToolAnswer ? result.value : result)) as Record<string, unknown>;
+});
 
 const topOf = Effect.fnUntraced(function* (project: number) {
   const world = yield* DoorFixture;
@@ -119,6 +129,21 @@ layer(Layer.effect(Moving, setup).pipe(Layer.provideMerge(fixture)), { excludeTe
         ),
       );
       const landing = named(yield* doors.atNative('create_block', { project: to, title: 'Landing', parentId: yield* topOf(to) }, at));
+      const ordinary = yield* native(
+        at,
+        'create_block',
+        { title: 'Stays at the source', parentId: fromTop, edges: [{ kind: 'relates', to: card }] },
+        'signed-create',
+      );
+      const witness = (ordinary.block as { name: string }).name;
+      const created = (yield* world.op('read_events', { project: from, limit: 2 })).body as {
+        events: { id: number; op: string; blockName: string }[];
+      };
+      expect(created.events).toMatchObject([
+        { op: 'link', blockName: witness },
+        { op: 'create', blockName: witness },
+      ]);
+      expect(ordinary.journal).toEqual({ from: created.events[1]!.id - 1, to: created.events[0]!.id });
 
       expect(yield* doors.atNative('update_block', { blockId: shelf, parentId: landing }, at)).toMatchObject({
         class: 'refusal',
@@ -132,14 +157,56 @@ layer(Layer.effect(Moving, setup).pipe(Layer.provideMerge(fixture)), { excludeTe
       });
 
       const destination = yield* world.runtime.pool.resolve({ projectId: to });
-      expect(answered(yield* doors.atNative('update_block', { blockId: card, parentId: landing }, at))).toMatchObject({
+      const source = yield* world.runtime.pool.resolve({ projectId: from });
+      const result = yield* native(at, 'update_block', { blockId: card, parentId: landing }, 'signed-move');
+      const events = (yield* world.op('read_events', { project: from, limit: 3 })).body as {
+        events: { id: number; op: string; blockName: string }[];
+      };
+      expect(events.events).toMatchObject([
+        { op: 'depart', blockName: card },
+        { op: 'link', blockName: witness },
+        { op: 'unlink', blockName: witness },
+      ]);
+      const departure = events.events[0]!;
+      const history = (yield* world.op('read_journal', { project: from, limit: 2 })).body as {
+        batches: { blockName: string; moved?: { name: string } }[];
+      };
+      const departed = history.batches.find((batch) => batch.moved?.name === card)!.blockName;
+      expect(result.journalUnreadable).toBeUndefined();
+      const subjectName = (result.journal as { subject: { name: string } }).subject.name;
+      expect(subjectName.endsWith(departed)).toBe(true);
+      expect(result).toMatchObject({
         block: { name: card },
         graphCopy: { projectId: to, checkout: destination.checkout, tree: destination.layout.treeRoot, branch: null },
         moved: { blocks: 2, relinked: 1 },
+        journal: {
+          from: departure.id - 1,
+          to: departure.id,
+          subject: {
+            name: subjectName,
+            copy: { projectId: from, checkout: source.checkout, tree: source.layout.treeRoot, branch: null },
+          },
+        },
       });
-      expect((yield* world.op('read_events', { project: from, limit: 1 })).body).toMatchObject({
-        events: [{ op: 'depart', blockName: card }],
+      const sourceNames = Context.get(source.context, BlockNames);
+      const sourceUuid = yield* sourceNames.uuidOf(yield* sourceNames.idOfName(subjectName));
+      if (sourceUuid === null) return yield* Effect.die('the departure has no source identity');
+      expect(subjectName).toBe(sourceUuid.replaceAll('-', ''));
+      const targetBlocks = Context.get(destination.context, Blocks);
+      const collision = yield* targetBlocks.create({
+        projectId: to,
+        parentId: (yield* targetBlocks.rootBlockOf(to)).id,
+        title: 'A foreign block with the same short name',
+        uuid: (sourceUuid[0] === '0' ? '1' : '0') + sourceUuid.slice(1),
       });
+      expect(collision.uuid.replaceAll('-', '').slice(-8)).toBe(sourceUuid.replaceAll('-', '').slice(-8));
+      expect(yield* doors.atNative('read_block', { project: from, blockIds: [subjectName] }, at)).toMatchObject({
+        class: 'refusal',
+        code: 'deleted',
+      });
+      expect(
+        yield* world.op('read_block_diff', { project: from, blockId: subjectName, from: departure.id - 1, to: departure.id }),
+      ).toMatchObject({ status: 200, body: { diff: { ops: ['depart'], changes: [{ kind: 'move' }] } } });
       expect(answered(yield* doors.atNative('read_block', { blockIds: [card, rule, shelf] }, at)).reads).toMatchObject([
         { name: card, projectId: to },
         { name: rule, projectId: to, fields: { enforcement: { strictness: 'gate', inspection: LAYERED_KEY } } },
@@ -189,17 +256,144 @@ layer(Layer.effect(Moving, setup).pipe(Layer.provideMerge(fixture)), { excludeTe
         ],
       });
       const target = yield* topOf(to);
-      expect(answered(yield* doors.atNative('update_block', { blockId: `${from}/${name}`, parentId: target }, at))).toMatchObject({
+      const result = yield* native(at, 'update_block', { blockId: `${from}/${name}`, parentId: target }, 'signed-resumed-move');
+      const events = (yield* world.op('read_events', { project: from, limit: 1 })).body as {
+        events: { id: number; op: string; blockName: string }[];
+      };
+      expect(events.events).toMatchObject([{ op: 'depart', blockName: name }]);
+      const departure = events.events[0]!;
+      const history = (yield* world.op('read_journal', { project: from, limit: 1 })).body as {
+        batches: { blockName: string; moved?: { name: string } }[];
+      };
+      const departed = history.batches.find((batch) => batch.moved?.name === name)!.blockName;
+      expect(result.journalUnreadable).toBeUndefined();
+      const subjectName = (result.journal as { subject: { name: string } }).subject.name;
+      expect(subjectName.endsWith(departed)).toBe(true);
+      expect(result).toMatchObject({
         block: { name },
         graphCopy: { projectId: to, checkout: destination.checkout, tree: destination.layout.treeRoot, branch: null },
         moved: { blocks: 1 },
+        journal: {
+          from: departure.id - 1,
+          to: departure.id,
+          subject: {
+            name: subjectName,
+            copy: { projectId: from, checkout: source.checkout, tree: source.layout.treeRoot, branch: null },
+          },
+        },
       });
-      expect((yield* world.op('read_events', { project: from, limit: 1 })).body).toMatchObject({
-        events: [{ op: 'depart', blockName: name }],
-      });
+      expect(
+        yield* world.op('read_block_diff', { project: from, blockId: subjectName, from: departure.id - 1, to: departure.id }),
+      ).toMatchObject({ status: 200, body: { diff: { ops: ['depart'], changes: [{ kind: 'move' }] } } });
       expect(answered(yield* doors.atNative('read_block', { project: to, blockIds: [name] }, at)).reads).toMatchObject([
         { name, projectId: to, parentName: target },
       ]);
+
+      const sourceNames = Context.get(source.context, BlockNames);
+      const departedUuid = yield* sourceNames.uuidOf(yield* sourceNames.idOfName(subjectName));
+      if (departedUuid === null) return yield* Effect.die('the source trash block has no identity');
+      const split = departedUuid.length - 12;
+      const twinUuid = departedUuid.slice(0, split) + (departedUuid[split] === '0' ? '1' : '0') + departedUuid.slice(split + 1);
+      const twin = yield* sourceBlocks.create({
+        projectId: from,
+        parentId: sourceRoot.id,
+        title: 'A local block with the same short name',
+        uuid: twinUuid,
+      });
+      const twinIdentity = twin.uuid.replaceAll('-', '');
+      expect(twinIdentity.slice(-8)).toBe(subjectName.slice(-8));
+      const trash = (yield* world.op('list_trash', { project: from })).body as { blocks: { name: string; identity?: string }[] };
+      expect(trash.blocks).toContainEqual(expect.objectContaining({ name: subjectName.slice(-8), identity: subjectName }));
+      expect(yield* world.op('list_trash', { project: from, name: subjectName.slice(-12) })).toMatchObject({
+        status: 200,
+        body: { blocks: [{ identity: subjectName }] },
+      });
+      expect(yield* world.op('list_trash', { project: from, name: subjectName.slice(-8) })).toMatchObject({
+        status: 409,
+        body: { code: 'ambiguous-name' },
+      });
+      expect(yield* world.op('restore_block', { project: from, blockId: subjectName })).toMatchObject({ status: 200 });
+      const tree = (yield* world.op('read_tree', { project: from })).body as {
+        blocks: { name: string; identity?: string; parentIdentity?: string | null }[];
+      };
+      expect(tree.blocks.filter((block) => block.name === subjectName.slice(-8))).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ identity: subjectName, parentIdentity: sourceRoot.uuid.replaceAll('-', '') }),
+          expect.objectContaining({ identity: twinIdentity, parentIdentity: sourceRoot.uuid.replaceAll('-', '') }),
+        ]),
+      );
+      expect(
+        yield* world.op('update_block', { project: from, blockId: subjectName, title: 'Restored source', body: `[[${twinIdentity}]]` }),
+      ).toMatchObject({ status: 200 });
+      expect(yield* world.op('link_blocks', { project: from, fromId: subjectName, kind: 'relates', toId: twinIdentity })).toMatchObject({
+        status: 200,
+      });
+      expect(yield* world.op('read_block', { project: from, blockIds: [subjectName.slice(-12)] })).toMatchObject({
+        status: 200,
+        body: { reads: [{ identity: subjectName, title: 'Restored source' }] },
+      });
+      expect(yield* world.op('read_block', { project: from, blockIds: [subjectName.slice(-8)] })).toMatchObject({
+        status: 409,
+        body: { code: 'ambiguous-name' },
+      });
+      expect(yield* world.op('read_edges', { project: from })).toMatchObject({
+        status: 200,
+        body: { edges: expect.arrayContaining([expect.objectContaining({ fromIdentity: subjectName, toIdentity: twinIdentity })]) },
+      });
+      expect(yield* world.op('read_refs', { project: from })).toMatchObject({
+        status: 200,
+        body: { refs: expect.arrayContaining([expect.objectContaining({ fromIdentity: subjectName, toIdentity: twinIdentity })]) },
+      });
+      expect(yield* world.op('read_block', { project: from, blockIds: [subjectName, twinIdentity] })).toMatchObject({
+        status: 200,
+        body: {
+          reads: [
+            {
+              name: subjectName.slice(-8),
+              identity: subjectName,
+              title: 'Restored source',
+              refsOutDetails: [{ name: twinIdentity.slice(-8), identity: twinIdentity }],
+            },
+            {
+              name: twinIdentity.slice(-8),
+              identity: twinIdentity,
+              title: 'A local block with the same short name',
+              refsInDetails: [{ name: subjectName.slice(-8), identity: subjectName }],
+            },
+          ],
+        },
+      });
+      expect(yield* world.op('read_titles', { project: from, names: [subjectName, twinIdentity] })).toMatchObject({
+        status: 200,
+        body: {
+          titles: [
+            { name: subjectName, identity: subjectName, rowKey: expect.any(Number) },
+            { name: twinIdentity, identity: twinIdentity, rowKey: expect.any(Number) },
+          ],
+        },
+      });
+      const partial = subjectName.slice(-12);
+      expect(yield* world.op('read_titles', { project: from, names: [partial] })).toMatchObject({
+        status: 200,
+        body: { titles: [{ name: partial, shortName: subjectName.slice(-8), identity: subjectName }] },
+      });
+      const collisionUuid = (departedUuid[0] === '0' ? '1' : '0') + departedUuid.slice(1);
+      yield* sourceBlocks.create({ projectId: from, parentId: sourceRoot.id, uuid: collisionUuid, title: 'A newly colliding block' });
+      expect(yield* world.op('read_titles', { project: from, names: [partial] })).toMatchObject({
+        status: 409,
+        body: { code: 'ambiguous-name' },
+      });
+      const batch = yield* world.op('apply_batch', {
+        project: from,
+        ops: [{ op: 'create', $id: 'child', parentId: subjectName, title: 'Child of restored source' }],
+      });
+      expect(batch.status).toBe(200);
+      const identity = (batch.body as { identities: { child: string } }).identities.child;
+      expect(identity).toHaveLength(32);
+      expect(yield* world.op('read_block', { project: from, blockIds: [identity] })).toMatchObject({
+        status: 200,
+        body: { reads: [{ identity, parentIdentity: subjectName }] },
+      });
     }),
   );
 });

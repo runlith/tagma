@@ -1,7 +1,7 @@
 import { PageCursor } from '@runlith/paging';
 import { Schema } from 'effect';
 import { fieldsField, tagsField } from './fields.js';
-import { BlockName } from './references.js';
+import { BlockIdentity, BlockName } from './references.js';
 import { nodeActionsSchema } from './tags/actions.js';
 
 export const pageFacts = {
@@ -13,6 +13,7 @@ export const pageFacts = {
 
 export const blockListRowSchema = Schema.Struct({
   name: BlockName,
+  identity: BlockIdentity,
   tags: tagsField,
   fields: fieldsField,
   actions: nodeActionsSchema,
@@ -85,6 +86,7 @@ export const blockChangeSchema = Schema.Struct({
   kind: Schema.Literals(BLOCK_CHANGE_KINDS),
   label: Schema.String,
   peerName: Schema.NullOr(BlockName),
+  peerIdentity: Schema.NullOr(BlockIdentity),
 });
 export type BlockChange = typeof blockChangeSchema.Type;
 
@@ -109,6 +111,7 @@ export const MARK_KINDS = ['added', 'deleted', 'restored', 'moved', 'edited'] as
 export type MarkKind = (typeof MARK_KINDS)[number];
 export const blockMarkSchema = Schema.Struct({
   blockName: BlockName,
+  identity: BlockIdentity,
   mark: Schema.Literals(MARK_KINDS),
   entries: Schema.Number,
   sessions: Schema.Array(Schema.NullOr(Schema.Number)),

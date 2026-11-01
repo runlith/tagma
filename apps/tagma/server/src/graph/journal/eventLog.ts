@@ -17,7 +17,11 @@ import { readsOf } from '../acts/reads.js';
 import { GraphUnits } from '../../platform/contract/service/units.js';
 import { mirrorRevision } from '../tree/mirror.js';
 
-export type Concerned = { readonly ids: number[]; readonly unreadable: JournalPayloadUnreadable | null };
+export type Concerned = {
+  readonly ids: number[];
+  readonly renamed?: readonly number[];
+  readonly unreadable: JournalPayloadUnreadable | null;
+};
 
 const withPeers = <A>(
   own: readonly number[],
@@ -30,6 +34,12 @@ export function blocksOf(row: ActEntry): Concerned {
   if (!GRAPH_EVENT_OPS.includes(row.op)) return { ids: [], unreadable: null };
   const own = row.blockId === null ? [] : [row.blockId];
   switch (row.op) {
+    case 'create': {
+      const read = readJournal.create(row);
+      return read._tag === 'Success'
+        ? { ids: own, renamed: read.success.renamed, unreadable: null }
+        : { ids: own, unreadable: read.failure };
+    }
     case 'link':
     case 'unlink':
       return withPeers(own, readJournal.link(row), (payload) => (payload.toId === undefined ? [] : [payload.toId]));
@@ -53,7 +63,6 @@ export function blocksOf(row: ActEntry): Concerned {
     case 'project_add':
     case 'project_set_root':
     case 'project_set':
-    case 'create':
     case 'update':
     case 'claim':
     case 'release':

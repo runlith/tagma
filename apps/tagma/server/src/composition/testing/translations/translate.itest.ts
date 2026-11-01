@@ -87,6 +87,8 @@ it.live('a block translates by parts into a stored projection that marks and upd
     const second = `Second paragraph naming [[${other}]] at https://example.com/b.`;
     const code = '```ts\nconst kept = 1;\n```';
     const block = yield* created('Original title', [intro, code, second].join('\n\n'));
+    const identity = ((yield* world.op('read_block', { blockIds: [block] }, at)).body as { reads: { identity: string }[] }).reads[0]!
+      .identity;
     const translate = (input: Record<string, unknown> = {}) => world.op('translate_block', { block, language: 'ru', ...input }, at);
     const read = Effect.suspend(() =>
       Effect.map(world.op('read_block_translation', { block, language: 'ru' }, at), (answer) => answer.body as Read),
@@ -116,7 +118,7 @@ it.live('a block translates by parts into a stored projection that marks and upd
     held.until = yield* Deferred.make<void>();
     expect((yield* translate()).body).toMatchObject({ status: 'translating', joined: false, model: MODEL, sending: 3 });
     yield* Deferred.await(held.asked);
-    yield* until(block, (frame) => frame.landed === 2);
+    expect(yield* until(block, (frame) => frame.landed === 2)).toMatchObject({ identity });
     expect(yield* read).toMatchObject({
       languages: [{ language: 'ru', state: 'translating' }],
       projection: {

@@ -69,6 +69,7 @@ test('a landed block keeps the journal read failure visible', () => {
       status: 'ok',
       block: {
         name: 'abcd1234',
+        identity: '000000000000000000000000abcd1234',
         tags: [],
         fields: {},
         actions: { moves: [], slots: [], offers: [], revision: 'test' },

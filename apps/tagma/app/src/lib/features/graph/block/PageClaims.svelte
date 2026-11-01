@@ -10,6 +10,8 @@
   const bar = Bar.use();
   const tags = TagCatalog.use();
 
-  $effect(() => topics.offer(() => (read === null ? null : { kind: 'block', name: read.name, title: read.title, tag: tags.tagOf(read) })));
+  $effect(() =>
+    topics.offer(() => (read === null ? null : { kind: 'block', name: read.identity, title: read.title, tag: tags.tagOf(read) })),
+  );
   $effect(() => bar.name(() => read?.title ?? null));
 </script>

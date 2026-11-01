@@ -50,8 +50,11 @@ const picked = (...names: string[]) => new Set(names);
 
 const row = (over: Partial<TreeBlock> = {}): TreeBlock => ({
   name: 'aaaa1111',
+  identity: over.name ?? 'aaaa1111',
+  rowKey: 1,
   projectId: 1,
   parentName: 'root',
+  parentIdentity: over.parentName === null ? null : (over.parentName ?? 'root'),
   ord: 0,
   tags: ['task'],
   fields: { status: 'open' },

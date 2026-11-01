@@ -135,7 +135,7 @@
               {hits.total > hits.items.length ? `${hits.items.length} of ${hits.total}` : hits.total}
             </span>
           </div>
-          {#each hits.items as block (block.name)}
+          {#each hits.items as block (block.identity)}
             <SidebarRow {block} project={project.name} />
           {/each}
         {/if}

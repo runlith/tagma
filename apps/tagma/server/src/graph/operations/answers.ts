@@ -16,7 +16,7 @@ import { WorkDebt } from '../contract/service/workDebt.js';
 import type { GraphCopy, BlockAnswer, BlockResultAnswer } from '../contract/wire/answers.js';
 import type { BlockRecord, BlockWrite } from '../contract/service/acts.js';
 import type { BlockEnd, WorklessSpec } from '../contract/service/work.js';
-import { addressed, blockName } from '../contract/wire/references.js';
+import { addressed, blockIdentity, blockName } from '../contract/wire/references.js';
 import type { Priced } from '../../platform/contract/service/start.js';
 
 export const writtenAt = Effect.fnUntraced(function* <A extends { readonly graphCopy?: GraphCopy }>(
@@ -46,11 +46,12 @@ export const writtenAt = Effect.fnUntraced(function* <A extends { readonly graph
 export function blockSummary(row: BlockRecord): BlockAnswer {
   return {
     name: blockName(row.uuid),
+    identity: blockIdentity(row.uuid),
     tags: row.tags,
     fields: row.fields,
     actions: row.actions,
     title: row.title,
-    parentName: row.parentId === null ? null : blockName((row as { parentUuid?: string | null }).parentUuid ?? ''),
+    parentName: row.parentId === null ? null : blockName(row.parentUuid ?? ''),
     superseded: row.superseded,
     blocked: row.blocked,
     stealth: row.stealth ? true : undefined,

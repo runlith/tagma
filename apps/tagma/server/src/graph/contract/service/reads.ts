@@ -12,6 +12,7 @@ import type { AnsweredCheck } from '../wire/rows.js';
 import { type BlockEnding } from './work.js';
 import type { FarEnd, RefElsewhere } from '../wire/far.js';
 import type { FarHeld } from './foreign.js';
+import type { BlockReference } from '../wire/references.js';
 
 export type SelectionRefusal = ReferenceRefusal | 'not-found' | 'source-outside' | 'query-shape';
 
@@ -36,6 +37,7 @@ export type BlockTitle = {
   readonly uuid: string;
   readonly title: string;
   readonly projectId: number;
+  readonly rowKey?: number;
 };
 
 export class Selection extends Context.Service<
@@ -144,12 +146,15 @@ export type BlockDetail = BlockRecord & {
   edgesIn: DetailEdge[];
   edgesInUnread: readonly string[];
   refsOut: string[];
+  refsOutDetails: BlockReference[];
   refsElsewhere: readonly RefElsewhere[];
   refsAbsent: string[];
   refsIn: string[];
+  refsInDetails: BlockReference[];
   restingIn: {
     edges: DetailEdge[];
     refs: string[];
+    refsDetails: BlockReference[];
   };
   sources: SourceRow[];
   reach: string | null;

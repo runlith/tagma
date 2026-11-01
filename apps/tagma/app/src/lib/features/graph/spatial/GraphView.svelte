@@ -107,13 +107,13 @@
         node.r = radiusOf(depth);
       } else {
         node = { name, depth, r: radiusOf(depth), x: 0, y: 0, vx: 0, vy: 0, fx: null, fy: null };
-        fresh.push({ node, parentName: block.parentName, index: childrenOf.get(block.parentName ?? '')?.length ?? 0 });
+        fresh.push({ node, parentName: block.parentIdentity, index: childrenOf.get(block.parentIdentity ?? '')?.length ?? 0 });
       }
       nextByName.set(name, node);
-      if (block.parentName !== null) {
-        const list = childrenOf.get(block.parentName) ?? [];
+      if (block.parentIdentity !== null) {
+        const list = childrenOf.get(block.parentIdentity) ?? [];
         list.push(node);
-        childrenOf.set(block.parentName, list);
+        childrenOf.set(block.parentIdentity, list);
       }
     }
 
@@ -154,17 +154,18 @@
     }
     kindByPair = new Map();
     for (const edge of currentEdges) {
-      kindByPair.set(pair(edge.fromName, edge.toName), edge.kind);
-      const from = nextByName.get(edge.fromName);
-      const to = nextByName.get(edge.toName);
-      if (!from || !to || linkedPairs.has(pair(from.name, to.name))) continue;
+      const from = edge.fromIdentity === null ? undefined : nextByName.get(edge.fromIdentity);
+      const to = edge.toIdentity === null ? undefined : nextByName.get(edge.toIdentity);
+      if (!from || !to) continue;
+      kindByPair.set(pair(from.name, to.name), edge.kind);
+      if (linkedPairs.has(pair(from.name, to.name))) continue;
       linkedPairs.add(pair(from.name, to.name));
       nextLinks.push({ from, to, kind: 'edge', rest: 240 });
     }
     for (const refPair of currentRefs) {
-      if (refPair.fromName === refPair.toName) continue;
-      const from = nextByName.get(refPair.fromName);
-      const to = nextByName.get(refPair.toName);
+      if (refPair.fromIdentity === refPair.toIdentity) continue;
+      const from = nextByName.get(refPair.fromIdentity);
+      const to = nextByName.get(refPair.toIdentity);
       if (!from || !to || linkedPairs.has(pair(from.name, to.name))) continue;
       linkedPairs.add(pair(from.name, to.name));
       nextLinks.push({ from, to, kind: 'ref', rest: 280 });
@@ -421,7 +422,7 @@
       const state = stateOf(node);
       const focus = node.name === hoveredName || node.name === selection.name;
       if (!focus && state.presence < 0.35) continue;
-      const parentName = store.block(node.name)?.parentName;
+      const parentName = store.block(node.name)?.parentIdentity;
       if (!focus && parentName != null && nodeByName.has(parentName) && !placedIds.has(parentName)) continue;
       const cap = node.depth === 0 ? 20 : node.depth === 1 ? 14 : 12;
       let screenFont = Math.min(LABEL_WORLD(node.r) * scale, cap);

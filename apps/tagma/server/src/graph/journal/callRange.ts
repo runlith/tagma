@@ -3,8 +3,11 @@ import type { StoreFailure } from '../../platform/contract/service/store.js';
 import { WriterRegister, SignedSession } from '../../platform/contract/service/writers.js';
 import { BlockNames, type ActEntry } from '../contract/service/acts.js';
 import type { GraphServices } from '../contract/service/services.js';
-import type { GateRefusal } from '../../platform/contract/wire/refusal.js';
-import { type JournalPayloadUnreadable, readJournal } from '../contract/wire/journalPayloads.js';
+import { GateRefusal } from '../../platform/contract/wire/refusal.js';
+import { JournalPayloadUnreadable, readJournal } from '../contract/wire/journalPayloads.js';
+import type { GraphCopy } from '../contract/wire/answers.js';
+import { blockIdentity, TitleNames } from '../contract/wire/references.js';
+import { writtenAt } from '../operations/answers.js';
 import { GraphJournal } from '../contract/service/journal.js';
 import type { CallJournalRange, CallRecorded, JournalReading } from '../contract/wire/callRange.js';
 import type { CallKey } from '../../platform/contract/wire/ids.js';
@@ -40,12 +43,39 @@ export function journalRange(projectId: number) {
       Effect.gen(function* () {
         const rows = yield* callRows(callId);
         if (rows.length === 0) return null;
-        const blockId = yield* (yield* BlockNames).idOfName(name);
+        const names = yield* BlockNames;
+        const asked = new TitleNames([name]);
+        let departed: number | undefined;
+        for (const row of rows) {
+          if (row.projectId !== projectId || row.op !== 'depart') continue;
+          const payload = yield* Effect.fromResult(readJournal.depart(row));
+          if (asked.matches(payload.uuid, projectId).length === 0) continue;
+          if (row.blockId === null) {
+            return yield* new JournalPayloadUnreadable({ eventId: row.id, op: row.op, reason: 'the departure names no source block' });
+          }
+          if (departed !== undefined && departed !== row.blockId) {
+            return yield* new GateRefusal('ambiguous-name', `${name} names multiple departures in this call`, [
+              'read the source journal for the individual departures',
+            ]);
+          }
+          departed = row.blockId;
+        }
+        const blockId = departed ?? (yield* names.idOfName(name));
         const own = rows.filter((row) => row.blockId === blockId && row.projectId === projectId);
         const first = own[0];
         const last = own[own.length - 1];
         if (first === undefined || last === undefined) return null;
-        return { from: first.id - 1, to: last.id, ...(yield* bodySize(own)) };
+        const range = { from: first.id - 1, to: last.id, ...(yield* bodySize(own)) };
+        if (departed === undefined) return range;
+        const uuid = yield* names.uuidOf(blockId);
+        const empty: { readonly graphCopy?: GraphCopy } = {};
+        const { graphCopy } = yield* writtenAt(empty);
+        if (uuid === null || graphCopy === undefined || graphCopy.projectId !== projectId || graphCopy.branch === undefined) {
+          return yield* new GateRefusal('journal-unreadable', 'the departure’s source block or graph copy cannot be addressed', [
+            'read the source journal for the departure',
+          ]);
+        }
+        return { ...range, subject: { name: blockIdentity(uuid), copy: graphCopy } };
       });
     return Effect.map(Effect.result(reading), (result): JournalReading =>
       result._tag === 'Success'

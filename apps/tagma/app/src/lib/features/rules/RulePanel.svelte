@@ -10,7 +10,7 @@
 </script>
 
 {#if tags.enforced(read)}
-  <Engine name={read.name} updatedAt={read.updatedAt} />
+  <Engine name={read.identity} updatedAt={read.updatedAt} />
 {:else if !tags.switchedOff(read)}
-  <RuleText name={read.name} />
+  <RuleText name={read.identity} />
 {/if}

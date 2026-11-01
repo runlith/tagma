@@ -34,7 +34,7 @@
     if (tag === null || root === null) return;
     try {
       const block = await blocks.create.run({ parentId: root, title: 'New rule', tags: [tag] }, { throwOnError: true });
-      if (block !== undefined) void router.goto(addresses.block(block.name));
+      if (block !== undefined) void router.goto(addresses.block(block.identity));
     } catch (error) {
       notices.refusal(error);
     }

@@ -14,11 +14,11 @@
 
   function run(action: StatusAction): void {
     const op = action.op;
-    if (op === null) void store.setStatus(block.name, action.to);
-    else if (op === 'claim_block') void store.claim(block.name);
-    else if (op === 'release_block') void store.release(block.name);
-    else if (op === 'finish_block') void store.done(block.name);
-    else if (op === 'close_block') void store.close(block.name);
+    if (op === null) void store.setStatus(block.identity, action.to);
+    else if (op === 'claim_block') void store.claim(block.identity);
+    else if (op === 'release_block') void store.release(block.identity);
+    else if (op === 'finish_block') void store.done(block.identity);
+    else if (op === 'close_block') void store.close(block.identity);
     else op satisfies never;
   }
 </script>
