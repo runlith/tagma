@@ -82,7 +82,7 @@ export const REGISTRY_OPERATIONS = {
       }),
       contributed: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)).annotate({
         description:
-          'Values for the creation steps this server’s modules contribute, keyed by step id. Each step takes its value after registration and before the graph first opens; a value it refuses, or an id no step takes, refuses the registration whole, naming the entry in `field`.',
+          'Values for the creation steps this server’s modules contribute, keyed by step id. Each step takes its value after registration and before the graph first opens; a value it refuses, an id no step takes, or a step whose right this access lacks refuses the registration whole, naming the entry in `field`.',
       }),
     }),
     answer: arms({ ok: { project: projectSchema, returned: Schema.Boolean } }),
@@ -94,6 +94,7 @@ export const REGISTRY_OPERATIONS = {
       'unknown-catalog',
       'remote-invalid',
       'field-invalid',
+      'right-missing',
     ],
   }),
 

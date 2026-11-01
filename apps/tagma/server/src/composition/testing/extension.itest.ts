@@ -15,6 +15,8 @@ import { manifest } from '../../platform/contract/service/manifest.js';
 import { ASKS_NEVER } from '../../platform/contract/wire/conditions.js';
 import { arms, operation } from '../../platform/contract/wire/operation.js';
 import { GateRefusal } from '../../platform/contract/wire/refusal.js';
+import type { Right } from '../../platform/contract/wire/right.js';
+import { Access } from '../../platform/contract/service/access.js';
 import { testGrantSigner } from '../../platform/testing/grants.js';
 import { MachineStore } from '../../platform/contract/service/store.js';
 import { serverParts } from '../build.js';
@@ -40,6 +42,26 @@ type Mark = { readonly mark: string; readonly opened: boolean };
 
 class Marks extends Context.Service<Marks, Map<number, Mark>>()('testing/Marks') {}
 
+class Grants extends Context.Service<Grants, { level: Right['access'] }>()('testing/Grants') {}
+
+const grantsLayer = Layer.sync(Grants, (): Grants['Service'] => ({ level: 'none' }));
+
+const accessLayer = Layer.effect(
+  Access,
+  Effect.gen(function* () {
+    const grants = yield* Grants;
+    return Access.of({
+      right: (key) =>
+        Effect.sync(() => ({
+          key,
+          state: grants.level === 'none' ? 'lapsed' : 'granted',
+          access: grants.level,
+          unblock: ['renew warmth'],
+        })),
+    });
+  }),
+);
+
 const GREETING_OPERATIONS = {
   greet: operation('greet', {
     approval: ASKS_NEVER,
@@ -61,6 +83,26 @@ const GREETING_OPERATIONS = {
     presentation: { running: 'Greeting', done: 'Greeted' },
     subjects: () => [],
   }),
+  greet_warmly: operation('greet_warmly', {
+    approval: ASKS_NEVER,
+    doors: { http: true },
+    callers: 'operator',
+    subject: 'none',
+    place: 'machine',
+    waits: [],
+    lifetimes: [],
+    effect: 'read',
+    identity: 'none',
+    right: 'warmth',
+    meaning: 'Greet warmly, which only an access granting warmth admits.',
+    input: Schema.Struct({ name: Schema.String }),
+    answer: arms({ greeted: { text: Schema.String } }),
+    refusals: [],
+    confirmation: (input: { readonly name: string }) => ({ summary: `Greet ${input.name} warmly?` }),
+    confirmLabel: 'Greet',
+    presentation: { running: 'Greeting', done: 'Greeted' },
+    subjects: () => [],
+  }),
 };
 
 const greeting = manifest({
@@ -74,6 +116,12 @@ const greeting = manifest({
         execute: Effect.fnUntraced(function* (input) {
           return { status: 'greeted' as const, text: (yield* Greeting).of(input.name) };
         }),
+      }),
+    ),
+    pair(
+      GREETING_OPERATIONS.greet_warmly,
+      body(GREETING_OPERATIONS.greet_warmly, {
+        execute: (input) => Effect.succeed({ status: 'greeted' as const, text: `Warmly, ${input.name}` }),
       }),
     ),
   ],
@@ -95,11 +143,18 @@ const greeting = manifest({
       step: (_projectId: number, gate: 'open' | 'shut') =>
         gate === 'shut' ? Effect.fail(new GateRefusal('field-invalid', 'the gate is shut', ['open the gate'])) : Effect.void,
     } satisfies CreationStep<'open' | 'shut'>,
+    {
+      id: 'greeting-seal',
+      value: Schema.String,
+      right: 'warmth',
+      step: () => Effect.void,
+    } satisfies CreationStep<string>,
   ),
   lifetimes: {
     installation: Layer.mergeAll(
       Layer.succeed(Salutation, { word: 'Hello' }),
       Layer.sync(Marks, () => new Map<number, Mark>()),
+      accessLayer.pipe(Layer.provideMerge(grantsLayer)),
     ),
     serving: Layer.effect(
       Greeting,
@@ -118,6 +173,7 @@ class Root extends Context.Service<
     readonly op: (id: string, input: unknown) => Effect.Effect<{ readonly status: number; readonly body: unknown }>;
     readonly folder: (label: string) => Effect.Effect<string>;
     readonly marks: Map<number, Mark>;
+    readonly grants: Grants['Service'];
   }
 >()('testing/Root') {}
 
@@ -170,6 +226,7 @@ const root = Layer.effect(
         ),
       folder: (label) => Effect.orDie(files.makeTempDirectory({ directory: home, prefix: `${label}-` })),
       marks: Context.getUnsafe(runtime.owners, Marks),
+      grants: Context.getUnsafe(runtime.owners, Grants),
     });
   }),
 ).pipe(Layer.provide(BunFileSystem.layer));
@@ -218,6 +275,36 @@ layer(root, { excludeTestServices: true })('a root composing the core with a mod
       const after = yield* add('after', {});
       const id = (answer: { readonly body: unknown }) => (answer.body as { project: { id: number } }).project.id;
       expect(id(after)).toBe(id(born) + 3);
+    }),
+  );
+
+  it.effect('admits an operation and a creation step naming a right only as far as its access filler answers', () =>
+    Effect.gen(function* () {
+      const world = yield* Root;
+      const sealed = (name: string) =>
+        Effect.flatMap(world.folder(name), (rootPath) =>
+          world.op('add_project', { name, rootPath, storage: 'stealth', contributed: { 'greeting-seal': 'wax' } }),
+        );
+
+      world.grants.level = 'none';
+      expect(yield* world.op('greet_warmly', { name: 'Ada' })).toMatchObject({
+        status: 409,
+        body: {
+          code: 'right-missing',
+          unblock: ['renew warmth'],
+          right: { key: 'warmth', state: 'lapsed', access: 'none', unblock: ['renew warmth'] },
+        },
+      });
+
+      world.grants.level = 'read';
+      expect(yield* world.op('greet_warmly', { name: 'Ada' })).toMatchObject({ status: 200, body: { text: 'Warmly, Ada' } });
+      expect(yield* sealed('read-sealed')).toMatchObject({
+        status: 409,
+        body: { code: 'right-missing', field: 'greeting-seal', right: { access: 'read' } },
+      });
+
+      world.grants.level = 'full';
+      expect(yield* sealed('full-sealed')).toMatchObject({ status: 200 });
     }),
   );
 });

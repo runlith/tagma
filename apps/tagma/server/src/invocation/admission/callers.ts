@@ -4,6 +4,7 @@ import type { OperationCallers } from '../../platform/contract/wire/operation.js
 import { GateRefusal } from '../../platform/contract/wire/refusal.js';
 import { OperationCatalog } from '../contract/service/catalog.js';
 import { externalRefusal } from '../contract/service/refusals.js';
+import { admitRight } from '../../platform/contract/service/access.js';
 
 export const admitCallers = (
   id: string,
@@ -36,5 +37,8 @@ export const admitOperation = (named: string, caller: Caller, input: unknown): E
     const id = catalog.registry.named(named);
     if (id === null) return Effect.die(new Error(`No operation is registered as ${named}.`));
     const entry = catalog.registry.entry(id);
-    return admitCallers(id, entry.callers, entry.meaning, caller, entry.external === true);
+    return Effect.andThen(
+      admitCallers(id, entry.callers, entry.meaning, caller, entry.external === true),
+      admitRight(id, entry.right, entry.effect === 'read' ? 'read' : 'write'),
+    );
   });
