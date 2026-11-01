@@ -5,6 +5,7 @@ import { makeWalks } from './walks.js';
 import { foldPath } from './fold.js';
 import { contentOf } from './folding.js';
 import { stepsIn } from '@runlith/utils/sequenceDiff';
+import { unpackVerdict } from './packed.js';
 
 const textOf = (lines: number, seed: string): string => Array.from({ length: lines }, (_, at) => `${seed} ${at}\n`).join('');
 
@@ -117,6 +118,19 @@ it.live('the worker-run fold answers the verdict of the pure fold and keeps its 
     });
     if (remote.result.verdict !== 'proven' || local.result.verdict !== 'proven') return yield* Effect.die('both folds must prove');
     expect(remote.result.lines).toEqual(local.result.lines);
+    const packed = yield* walks.pack(remote.result, 1 << 20, 'now');
+    expect(packed).not.toBeNull();
+    if (packed === null) return yield* Effect.die('the verdict must fit its resident budget');
+    const restored = unpackVerdict(packed);
+    expect(restored.verdict).toBe('proven');
+    if (restored.verdict !== 'proven') return yield* Effect.die('the packed verdict must stay proven');
+    if (restored.lines === 'unweighed' || remote.result.lines === 'unweighed')
+      return yield* Effect.die('the text verdict must keep its lines');
+    expect([...restored.lines]).toEqual([...remote.result.lines]);
+    expect(restored.regions.map((region) => ({ ...region, lines: [...region.lines] }))).toEqual(
+      remote.result.regions.map((region) => ({ ...region, lines: [...region.lines] })),
+    );
+    expect(restored.overwritten).toEqual(new Map(remote.result.overwritten));
     expect(remote.record?.last).toBe('a');
   }),
 );
