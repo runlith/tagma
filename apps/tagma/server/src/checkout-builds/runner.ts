@@ -344,7 +344,7 @@ export const makeCheckoutBuilds = Effect.fnUntraced(function* (options: Checkout
     const sink = await open(options.log, 'a');
     const runtime = options.runtime ?? process.execPath;
     const inherited = options.env ?? process.env;
-    const refusedNote = join(dirname(options.log), REFUSED_NOTE);
+    const refusedNote = join(dirname(options.log), `${REFUSED_NOTE}-${started.since.replace(/[^0-9A-Za-z]/g, '')}`);
     const env = { ...inherited, HOME: inherited[BUILD_HOME_ENV] ?? inherited.HOME, [BUILD_REFUSED_ENV]: refusedNote };
     const say = (line: string) => sink.write(`${line}\n`);
     const note = join(dirname(options.log), SWAPPED_NOTE);
@@ -405,7 +405,6 @@ export const makeCheckoutBuilds = Effect.fnUntraced(function* (options: Checkout
         `\n=== tagma build ${started.from} ${started.revision} started ${started.since} by pid ${process.pid}${started.then === null ? '' : `, then ${started.then}`} ===`,
       );
       if (running !== null) running = { ...running, offset: (await sink.stat()).size };
-      await rm(refusedNote, { force: true });
       const decision = await decided();
       const stoppedAt = running?.record.step ?? started.step;
       const [outcome, build, detail] = decision[0] !== 'failed' || stopping === null ? decision : await stoppedAs(stoppedAt);
@@ -423,6 +422,7 @@ export const makeCheckoutBuilds = Effect.fnUntraced(function* (options: Checkout
     } finally {
       if (cut !== null && existsSync(cut)) await reap(null, cut);
       cut = null;
+      await rm(refusedNote, { force: true });
       await sink.close();
     }
   };

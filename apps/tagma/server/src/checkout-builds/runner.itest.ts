@@ -101,18 +101,26 @@ it.live('HEAD builds use a disposable worktree, tree builds use the checkout, an
 
     const said = (code: string, reason: string, unblock: string) =>
       `printf '%s\\n' '${JSON.stringify({ code, reason, unblock: [unblock] })}' >> "$TAGMA_BUILD_REFUSED"`;
-    writeScript(
-      `echo failed-output; ${said('release-failed', 'the bundle did not build', 'read the log')}; ${said('source-refused', 'HEAD did not build', 'build the tree')}; exit 3`,
-    );
-    const failed = yield* successor.install('tree', null, null);
+    writeScript(`echo failed-output; ${said('release-failed', 'the bundle did not build', 'read the log')}; exit 3`);
+    yield* git(checkout, 'commit', '-qam', 'a build that refuses');
+    const failed = yield* successor.install('head', null, null);
     const ended = yield* settled(successor, failed.installing.since);
     expect(ended).toMatchObject({ outcome: 'failed', build: null });
-    expect(ended?.detail).toContain('code 3');
+    expect(ended?.detail).toContain('code 2');
     expect(ended?.tail).toContain('failed-output');
-    expect(ended?.refused).toEqual({
+    expect([ended?.refused?.code, ended?.refused?.reason, ended?.refused?.unblock[0]]).toEqual([
+      'release-failed',
+      'the bundle did not build',
+      'read the log',
+    ]);
+    expect(ended?.refused?.unblock.length).toBeGreaterThan(1);
+
+    writeScript(`${said('release-failed', 'the tree did not build', 'fix the tree')}; exit 3`);
+    const again = yield* successor.install('tree', null, null);
+    expect((yield* settled(successor, again.installing.since))?.refused).toEqual({
       code: 'release-failed',
-      reason: 'the bundle did not build',
-      unblock: ['read the log', 'build the tree'],
+      reason: 'the tree did not build',
+      unblock: ['fix the tree'],
     });
     expect(yield* successor.installing).toBeNull();
   }),
