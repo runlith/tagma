@@ -21,7 +21,8 @@ const Login = Schema.fromJsonString(
 );
 
 const loginPath = (env: Readonly<Record<string, string | undefined>>): string | null => {
-  const config = env.XDG_CONFIG_HOME || (env.HOME ? join(env.HOME, '.config') : null);
+  const home = env.HOME || env.USERPROFILE;
+  const config = env.XDG_CONFIG_HOME || (home ? join(home, '.config') : null);
   return config === null ? null : join(config, 'muse', 'auth.json');
 };
 
@@ -30,7 +31,8 @@ const loggedIn = Effect.fnUntraced(function* (output: HarnessOutput) {
     return yield* new AccountUnreadable({ message: `muse --version exited ${output.code}: ${(output.stderr || output.stdout).trim()}` });
   const version = VERSION.exec(output.stdout)?.[1];
   const path = loginPath(process.env);
-  if (path === null) return yield* new AccountUnreadable({ message: 'HOME names no home directory, so the Muse login cannot be read' });
+  if (path === null)
+    return yield* new AccountUnreadable({ message: 'HOME and USERPROFILE name no home directory, so the Muse login cannot be read' });
   const file = Bun.file(path);
   if (!(yield* Effect.promise(() => file.exists()))) return null;
   const text = yield* Effect.tryPromise({

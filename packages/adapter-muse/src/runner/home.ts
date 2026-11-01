@@ -35,14 +35,17 @@ export const prepareHome = Effect.fn('muse.prepareHome')(function* (
   env: Readonly<Record<string, string | undefined>>,
   platform: NodeJS.Platform,
 ) {
-  if (platform !== 'darwin' && platform !== 'linux')
+  if (platform !== 'darwin' && platform !== 'linux' && platform !== 'win32')
     return yield* new AgentFault({
       code: FAULT.internal,
-      message: `Tagma hosts Muse Code on macOS and Linux; how its login is reached from a separate home on ${platform} is not established`,
+      message: `Tagma hosts Muse Code on macOS, Linux and Windows; how its login is reached from a separate home on ${platform} is not established`,
     });
-  const user = env.HOME;
+  const user = env.HOME || env.USERPROFILE;
   if (!user)
-    return yield* new AgentFault({ code: FAULT.internal, message: 'HOME names no home directory, so the Muse login cannot be found' });
+    return yield* new AgentFault({
+      code: FAULT.internal,
+      message: 'HOME and USERPROFILE name no home directory, so the Muse login cannot be found',
+    });
   const files = yield* FileSystem.FileSystem;
   const userConfig = env.XDG_CONFIG_HOME || join(user, '.config');
   const config = join(place.config, 'muse');
@@ -59,6 +62,7 @@ export const prepareHome = Effect.fn('muse.prepareHome')(function* (
   return {
     ...kept,
     HOME: place.account,
+    ...(platform === 'win32' ? { USERPROFILE: place.account } : {}),
     XDG_CONFIG_HOME: place.config,
     XDG_DATA_HOME: join(place.account, '.local', 'share'),
     XDG_STATE_HOME: join(place.account, '.local', 'state'),
