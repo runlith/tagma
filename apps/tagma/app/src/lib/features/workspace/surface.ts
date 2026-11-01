@@ -1,7 +1,6 @@
 import type { Project } from '@tagma/server/graph/contract/wire/rows';
 import { Service } from '@runlith/layer/key';
 import { Point } from '@runlith/layer/Point';
-import type { Shown } from '@runlith/layer/svelte/payload';
 import type { Component, Snippet } from 'svelte';
 
 export type Surface = string;
@@ -14,9 +13,7 @@ export const CONTRIBUTED_ROUTE = 'p';
 
 export type SurfaceProps = { readonly path: string };
 
-type SurfaceView = { readonly tagmaApp: string; readonly view: string };
-
-type SurfacePayload = Shown<SurfaceProps, SurfaceView>['payload'];
+type SurfacePayload = { readonly component: Component<SurfaceProps> };
 
 export type SurfaceDeclaration = {
   readonly surface: Surface;
@@ -205,12 +202,16 @@ export class SurfaceRegistry extends Service<SurfaceRegistry>()('SurfaceRegistry
   of(routeId: string | null | undefined, params: RouteParams): Surface {
     const route = routeId?.split('/')[2] ?? '';
     const fixed = this.byRoute.get(route) ?? this.byRoute.get('');
-    if (route === CONTRIBUTED_ROUTE && routeId != null) {
-      const wanted = memberRoute(routeId, params);
-      const member = wanted === null ? undefined : this.index.memberRoutes.get(wanted);
-      if (member !== undefined) return member.surface;
+    const wanted = route === CONTRIBUTED_ROUTE && routeId != null ? memberRoute(routeId, params) : null;
+    return (wanted === null ? undefined : this.member(wanted))?.surface ?? fixed?.surface ?? this.home;
+  }
+
+  private member(route: string): SurfaceDeclaration | undefined {
+    for (let end = route.length; end > CONTRIBUTED_ROUTE.length; end = route.lastIndexOf('/', end - 1)) {
+      const found = this.index.memberRoutes.get(route.slice(0, end));
+      if (found !== undefined) return found;
     }
-    return fixed?.surface ?? this.home;
+    return undefined;
   }
 
   pathOf(project: string, surface: Surface, place: string | null = null): string {

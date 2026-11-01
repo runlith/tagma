@@ -28,11 +28,12 @@ export function surfaceConfig(options: SurfaceOptions = {}): UserConfig {
   const built = buildConditionsIn(process.env);
   const maps = process.env[BUILD_MAPS_ENV]?.trim() || null;
   const inputs = process.env[BUILD_INPUTS_ENV]?.trim() || null;
-  const sources = options.sources ?? [];
+  const sources = (options.sources ?? []).map((source) => resolve(source));
+  const runtime = options.runtime === undefined ? null : resolve(options.runtime);
   return defineConfig({
     plugins: [
-      ...(options.runtime === undefined ? [] : [rootRuntime(resolve(options.runtime))]),
-      ...(sources.length === 0 ? [] : [rootSources(sources.map((source) => resolve(source)))]),
+      ...(runtime === null ? [] : [rootRuntime(runtime)]),
+      ...(sources.length === 0 ? [] : [rootSources(sources)]),
       browserGuard(),
       tailwindcss(),
       sveltekit(),
@@ -45,7 +46,7 @@ export function surfaceConfig(options: SurfaceOptions = {}): UserConfig {
       port: surfaceDevPort(backendPort),
       strictPort: true,
       proxy: serverProxy(backendPort),
-      fs: { allow: [resolve(APP, '../../..'), ...(options.runtime === undefined ? [] : [dirname(resolve(options.runtime))]), ...sources] },
+      fs: { allow: [resolve(APP, '../../..'), ...(runtime === null ? [] : [dirname(runtime)]), ...sources] },
     },
     preview: {
       proxy: serverProxy(backendPort),
