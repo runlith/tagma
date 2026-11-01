@@ -205,7 +205,9 @@ export const makeRowCapture = (
       ] as const;
     }),
   );
-  const advancing = db.query(`UPDATE ${PROJECTION_CLOCK} SET cursor = cursor + 1 RETURNING id, cursor`);
+  const advancing = db.query(`UPDATE ${PROJECTION_CLOCK} SET cursor = cursor + 1 WHERE id = '' RETURNING cursor`);
+  const clearingRows = db.query(`DELETE FROM ${ROWS}`);
+  const clearingDirty = db.query(`DELETE FROM ${DIRTY}`);
   const validate = () => {
     const now = schema.values()[0]![0];
     if (now === installed) return;
@@ -252,10 +254,11 @@ export const makeRowCapture = (
           selected.push({ selection: String(id), key: logical, values: result.length === 0 ? null : JSON.parse(String(result[0]![0])) });
         }
       db.query(`UPDATE ${STATE} SET bytes = ?, gap = ?`).run(gap ? Number(held![3]) : Number(held![3]) - remaining, gap ? 1 : 0);
-      const advanced = advancing.values();
-      const cursor = Number(advanced.find((row) => row[0] === '')![1]);
+      const cursor = Number(advancing.values()[0]![0]);
+      const changes = gap ? [] : rows.values().map((row) => JSON.parse(String(row[0])) as RowChange);
+      clearingRows.run();
+      clearingDirty.run();
       if (gap) return { _tag: 'Gap', incarnation, cursor, bytes: 0 };
-      const changes = rows.values().map((row) => JSON.parse(String(row[0])) as RowChange);
       return { _tag: 'Complete', incarnation, cursor, bytes: Number(held![3]) - remaining, changes, selected };
     },
   };

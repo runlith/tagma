@@ -155,11 +155,31 @@ it.live('row commits capture actual keys and cascades, isolate savepoint rollbac
       cursor: 8,
       changes: [expect.objectContaining({ projection: 'parent', kind: 'update', values: { stamp: 6 } })],
     });
+    const refusedCommit = yield* both(
+      Effect.gen(function* () {
+        yield* sql`BEGIN`;
+        yield* sql`PRAGMA defer_foreign_keys = ON`;
+        yield* sql`INSERT INTO child VALUES ('orphan', 'late')`;
+        const refused = yield* Effect.exit(sql`COMMIT`);
+        yield* sql`INSERT INTO parent VALUES ('late', '', 0)`;
+        yield* sql`COMMIT`;
+        return refused;
+      }),
+    );
+    expect(Exit.isFailure(refusedCommit)).toBe(true);
+    expect(commits[8]).toMatchObject({
+      _tag: 'Complete',
+      cursor: 9,
+      changes: expect.arrayContaining([
+        expect.objectContaining({ projection: 'child', kind: 'insert', key: ['orphan'] }),
+        expect.objectContaining({ projection: 'parent', kind: 'insert', key: ['late'] }),
+      ]),
+    });
     yield* sql`ALTER TABLE parent ADD COLUMN extra TEXT`;
     const reshaped = yield* Effect.exit(both(sql`UPDATE parent SET stamp = 4 WHERE id = 'outside'`));
     expect(Exit.isFailure(reshaped)).toBe(true);
-    expect(yield* sql`SELECT stamp FROM parent`).toEqual([{ stamp: 6 }]);
-    expect(commits.length).toBe(8);
+    expect(yield* sql`SELECT stamp FROM parent WHERE id = 'outside'`).toEqual([{ stamp: 6 }]);
+    expect(commits.length).toBe(9);
   }),
 );
 
