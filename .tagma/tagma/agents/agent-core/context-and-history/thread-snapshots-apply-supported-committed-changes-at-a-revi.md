@@ -1,6 +1,6 @@
 ---
 id: 01a190e8-4cc1-7d06-8ccf-bdeb546133ca
-title: Thread snapshots apply supported committed changes at an exact revision and journal cut
+title: Thread snapshots apply supported committed changes at a revision and journal position
 ord: 18
 tags: ["explanation"]
 edges:
