@@ -24,7 +24,7 @@ sources:
 ---
 **Value.** The operator sees which skills the agent will get in this checkout and where each came from, and removes the extras without touching files.
 
-**How.** Settings → Skills: skills in groups "this project", "yours, everywhere", "built into the server", with path and description, a toggle per skill, files rejected with a reason, and a Re-read button; below — source settings. The same data is answered by `read_workspace_sources` and `reload_workspace_sources`; `read_agent_skills` answers the catalog of a specific thread or agent type (read by the composer and the agent library). All three are operator-only.
+**How.** Settings → Skills: skills in groups "this project", one "from <member> in this group" per other member of the project's group, "yours, everywhere", "from plugins enabled here", "built into the server", with path and description, a toggle per skill, files rejected with a reason, and a Re-read button; below — source settings. The same data is answered by `read_workspace_sources` and `reload_workspace_sources`; `read_agent_skills` answers the catalog of a specific thread or agent type (read by the composer and the agent library). All three are operator-only.
 
 **Behaviour.**
 - Disabling writes the name into `skills.disabled` of the selected layer; layers merge.
