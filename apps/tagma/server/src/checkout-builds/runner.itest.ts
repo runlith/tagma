@@ -99,12 +99,21 @@ it.live('HEAD builds use a disposable worktree, tree builds use the checkout, an
     expect((yield* successor.reading).installed).toMatchObject({ since: tree.installing.since, outcome: 'landed', build: 'v9' });
     expect((yield* Effect.flip(successor.stop())).code).toBe('nothing-installing');
 
-    writeScript('echo failed-output; exit 3');
+    const said = (code: string, reason: string, unblock: string) =>
+      `printf '%s\\n' '${JSON.stringify({ code, reason, unblock: [unblock] })}' >> "$TAGMA_BUILD_REFUSED"`;
+    writeScript(
+      `echo failed-output; ${said('release-failed', 'the bundle did not build', 'read the log')}; ${said('source-refused', 'HEAD did not build', 'build the tree')}; exit 3`,
+    );
     const failed = yield* successor.install('tree', null, null);
     const ended = yield* settled(successor, failed.installing.since);
     expect(ended).toMatchObject({ outcome: 'failed', build: null });
     expect(ended?.detail).toContain('code 3');
     expect(ended?.tail).toContain('failed-output');
+    expect(ended?.refused).toEqual({
+      code: 'release-failed',
+      reason: 'the bundle did not build',
+      unblock: ['read the log', 'build the tree'],
+    });
     expect(yield* successor.installing).toBeNull();
   }),
 );

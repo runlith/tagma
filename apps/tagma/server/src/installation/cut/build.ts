@@ -1,4 +1,4 @@
-import { writeFileSync } from 'node:fs';
+import { appendFileSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 import { Effect, Layer, Schema } from 'effect';
 import * as BunChildProcessSpawner from '@effect/platform-bun/BunChildProcessSpawner';
@@ -7,7 +7,7 @@ import * as BunPath from '@effect/platform-bun/BunPath';
 import { gitLayer } from '@runlith/git/Git';
 import { installationRoot, launcherPath } from '../paths.js';
 import type { Channel } from '../contract/wire/channel.js';
-import { BUILD_COMMAND, BUILD_SOURCE_ENV, BUILD_SWAPPED_ENV, CURRENT } from '../contract/wire/layout.js';
+import { BUILD_COMMAND, BUILD_REFUSED_ENV, BUILD_SOURCE_ENV, BUILD_SWAPPED_ENV, CURRENT } from '../contract/wire/layout.js';
 import { refusalLines } from '@runlith/agent/tool/refusal';
 import type { RefusalBody } from '../../platform/contract/wire/refusal.js';
 import { CurrentInvocation, failureLines, refusalOf } from '../../platform/cli/verb.js';
@@ -24,6 +24,12 @@ import { buildHead, type BuildAttribution } from './source.js';
 const spawning = BunChildProcessSpawner.layer.pipe(Layer.provide(Layer.mergeAll(BunFileSystem.layer, BunPath.layer)));
 
 const refuse = (json: boolean, code: string, reason: string, unblock: string[]): never => {
+  const note = process.env[BUILD_REFUSED_ENV];
+  if (note !== undefined && note !== '') {
+    try {
+      appendFileSync(note, `${JSON.stringify({ code, reason, unblock })}\n`);
+    } catch {}
+  }
   if (json) console.log(JSON.stringify({ code, reason, unblock }));
   else console.error(refusalLines({ code, reason, unblock }).join('\n'));
   process.exit(2);

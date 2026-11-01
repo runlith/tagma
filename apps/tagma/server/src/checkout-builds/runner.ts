@@ -12,6 +12,7 @@ import { ownGitLayer } from '../platform/git/ownGit.js';
 import {
   BUILD_COMMAND,
   BUILD_HOME_ENV,
+  BUILD_REFUSED_ENV,
   BUILD_SWAPPED_ENV,
   BUILD_WORKTREE_ENV,
   revisionLabel,
@@ -19,7 +20,7 @@ import {
 import { currentVersion, releasesNewestFirst } from '../installation/closure/versions.js';
 import { declaredSubmodules, SUBMODULE_PATHS } from '../installation/cut/source.js';
 import { type InstallRefused, NextInstallation, type StopRefused } from '../installation/contract/service/next.js';
-import type { NextFrame } from '../installation/contract/wire/next.js';
+import { type InstallRefusal, installRefusalSchema, type NextFrame } from '../installation/contract/wire/next.js';
 import {
   type BuildEnded,
   buildEndedSchema,
@@ -47,6 +48,23 @@ const TAIL_BYTES = 4096;
 const TAIL_LINES = 20;
 
 const SWAPPED_NOTE = 'build.swapped';
+
+const REFUSED_NOTE = 'build.refused';
+
+const decodeRefusal = Schema.decodeUnknownResult(Schema.fromJsonString(installRefusalSchema));
+
+const refusedIn = (note: string): InstallRefusal | undefined => {
+  if (!existsSync(note)) return undefined;
+  const said = readFileSync(note, 'utf8')
+    .split('\n')
+    .flatMap((line) => {
+      const read = line === '' ? null : decodeRefusal(line);
+      return read !== null && read._tag === 'Success' ? [read.success] : [];
+    });
+  const cause = said[0];
+  if (cause === undefined) return undefined;
+  return { code: cause.code, reason: cause.reason, unblock: [...new Set(said.flatMap((one) => one.unblock))] };
+};
 
 const heldSchema = Schema.Struct({ pid: Schema.Int, command: Schema.String });
 type Held = typeof heldSchema.Type;
@@ -235,6 +253,7 @@ export const makeCheckoutBuilds = Effect.fnUntraced(function* (options: Checkout
     build: string | null,
     detail: string,
     tail: readonly string[],
+    refused?: InstallRefusal,
   ): BuildEnded => ({
     from: started.from,
     revision: started.revision,
@@ -247,6 +266,7 @@ export const makeCheckoutBuilds = Effect.fnUntraced(function* (options: Checkout
     tail,
     then: started.then,
     restartRefused: null,
+    refused,
   });
 
   const stepped = (step: BuildStep): void => {
@@ -324,7 +344,8 @@ export const makeCheckoutBuilds = Effect.fnUntraced(function* (options: Checkout
     const sink = await open(options.log, 'a');
     const runtime = options.runtime ?? process.execPath;
     const inherited = options.env ?? process.env;
-    const env = { ...inherited, HOME: inherited[BUILD_HOME_ENV] ?? inherited.HOME };
+    const refusedNote = join(dirname(options.log), REFUSED_NOTE);
+    const env = { ...inherited, HOME: inherited[BUILD_HOME_ENV] ?? inherited.HOME, [BUILD_REFUSED_ENV]: refusedNote };
     const say = (line: string) => sink.write(`${line}\n`);
     const note = join(dirname(options.log), SWAPPED_NOTE);
     const step = async (title: string, command: readonly string[], cwd: string, more: Record<string, string> = {}): Promise<number> => {
@@ -384,15 +405,18 @@ export const makeCheckoutBuilds = Effect.fnUntraced(function* (options: Checkout
         `\n=== tagma build ${started.from} ${started.revision} started ${started.since} by pid ${process.pid}${started.then === null ? '' : `, then ${started.then}`} ===`,
       );
       if (running !== null) running = { ...running, offset: (await sink.stat()).size };
+      await rm(refusedNote, { force: true });
       const decision = await decided();
       const stoppedAt = running?.record.step ?? started.step;
       const [outcome, build, detail] = decision[0] !== 'failed' || stopping === null ? decision : await stoppedAs(stoppedAt);
+      const failed = outcome === 'failed';
       const last = endedAs(
         started,
         outcome,
         build,
         detail,
-        outcome === 'failed' ? tailOf(options.log, running?.offset ?? 0, TAIL_LINES) : [],
+        failed ? tailOf(options.log, running?.offset ?? 0, TAIL_LINES) : [],
+        failed ? refusedIn(refusedNote) : undefined,
       );
       await say(`=== tagma build ${started.from} ${started.revision} ${outcome} ${last.endedAt}: ${detail} ===`);
       return last;

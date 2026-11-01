@@ -66,6 +66,13 @@ export const installingSchema = Schema.Struct({
 });
 export type Installing = typeof installingSchema.Type;
 
+export const installRefusalSchema = Schema.Struct({
+  code: Schema.String,
+  reason: Schema.String,
+  unblock: Schema.Array(Schema.String),
+});
+export type InstallRefusal = typeof installRefusalSchema.Type;
+
 export const installedSchema = Schema.Struct({
   offer: Schema.String,
   title: Schema.String,
@@ -79,6 +86,7 @@ export const installedSchema = Schema.Struct({
   tail: Schema.Array(Schema.String),
   then: Schema.NullOr(thenSchema),
   restartRefused: Schema.NullOr(Schema.String),
+  refused: Schema.optional(installRefusalSchema),
 });
 export type Installed = typeof installedSchema.Type;
 
