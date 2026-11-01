@@ -9,9 +9,15 @@ import {
   ThreadRunKeyReusedError,
   type ThreadRunStorage,
   type ThreadRunHeartbeat,
+  type ThreadRunPhase,
   type ThreadRunStopAsked,
 } from '@runlith/agent/thread/storage/runs';
-import { parseThreadRunStopRequest, parseThreadRunUsage, type ThreadStorageFailed } from '@runlith/agent/thread/persisted';
+import {
+  parseThreadRunProgress,
+  parseThreadRunStopRequest,
+  parseThreadRunUsage,
+  type ThreadStorageFailed,
+} from '@runlith/agent/thread/persisted';
 import { mergedStopRequest, seedThreadNotification } from '@runlith/agent/thread/storage/settlement';
 import { and, asc, desc, eq, inArray, type SQL, sql } from 'drizzle-orm';
 import { MachineStore } from '../../platform/contract/service/store.js';
@@ -490,20 +496,40 @@ export const makeRunStores = Effect.gen(function* () {
           writing(
             writes('ThreadRunStore.writePhase', [threadRun]),
             (unit) =>
-              Effect.asVoid(
-                unit.run(
-                  db
-                    .update(threadRun)
-                    .set({
-                      progress:
-                        phase === null
-                          ? sql`json_remove(${threadRun.progress}, '$.phase')`
-                          : sql`json_set(${threadRun.progress}, '$.phase', json(${JSON.stringify(phase)}))`,
-                      updatedAt: new Date(clock.currentTimeMillisUnsafe()),
-                    })
-                    .where(owned(runId)),
-                ),
-              ),
+              Effect.gen(function* () {
+                const statement = db
+                  .update(threadRun)
+                  .set({
+                    progress:
+                      phase === null
+                        ? sql`json_remove(${threadRun.progress}, '$.phase')`
+                        : sql`json_set(${threadRun.progress}, '$.phase', json(${JSON.stringify(phase)}))`,
+                    updatedAt: new Date(clock.currentTimeMillisUnsafe()),
+                  })
+                  .where(owned(runId))
+                  .returning({
+                    id: threadRun.id,
+                    threadId: threadRun.threadId,
+                    progress: threadRun.progress,
+                    updatedAt: threadRun.updatedAt,
+                  });
+                const program = programOf(unit);
+                if (program === null) return yield* unit.run(statement);
+                const written: ThreadRunPhase[] = [];
+                yield* program.returning(statement, (rows) =>
+                  Effect.sync(() => {
+                    for (const [id, threadId, progress, updatedAt] of rows) {
+                      written.push({
+                        id: String(id),
+                        threadId: String(threadId),
+                        progress: parseThreadRunProgress(threadRun.progress.mapFromDriverValue(String(progress))),
+                        updatedAt: threadRun.updatedAt.mapFromDriverValue(Number(updatedAt)),
+                      });
+                    }
+                  }),
+                );
+                return written;
+              }),
             tx,
           ),
         ),

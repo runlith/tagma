@@ -2,9 +2,17 @@ import { Clock, Context, Effect, FiberMap, Layer } from 'effect';
 import type { AgentPhase, AgentWaiting } from '../../agent/AgentPhase';
 import type { ThreadContextEstimate, ThreadLiveProgress } from '../../transcript/live';
 import type { ThreadPortFailure } from '../ThreadBorder';
-import { ThreadFeed, ThreadOwner, ThreadRunStoreFactory, ThreadStreamRhythm, type ThreadWriteTx } from '../ThreadPorts';
+import {
+  ThreadFeed,
+  ThreadOwner,
+  ThreadRunStoreFactory,
+  ThreadStore,
+  ThreadStreamRhythm,
+  ThreadTransitions,
+  type ThreadWriteTx,
+} from '../ThreadPorts';
 import type { ThreadRunRef } from './ThreadRunLedger';
-import { ThreadChanges } from './ThreadChanges';
+import { changeUnit, ThreadChanges } from './ThreadChanges';
 
 export type PhaseEntry = {
   readonly waiting?: AgentWaiting;
@@ -22,6 +30,7 @@ export class RunProgress extends Context.Service<
 >()('@runlith/agent/RunProgress') {}
 
 type Held = {
+  readonly run: ThreadRunRef;
   shown: ThreadLiveProgress;
   unwritten: boolean;
 };
@@ -47,30 +56,42 @@ const samePhase = (held: AgentPhase | null, next: AgentPhase | null): boolean =>
 export const runProgressLayer: Layer.Layer<
   RunProgress,
   never,
-  ThreadFeed | ThreadStreamRhythm | ThreadRunStoreFactory | ThreadOwner | ThreadChanges
+  ThreadFeed | ThreadStreamRhythm | ThreadRunStoreFactory | ThreadOwner | ThreadChanges | ThreadStore | ThreadTransitions
 > = Layer.effect(
   RunProgress,
   Effect.gen(function* () {
     const feed = yield* ThreadFeed;
     const changes = yield* ThreadChanges;
+    const store = yield* ThreadStore;
+    const transitions = yield* ThreadTransitions;
     const rhythm = yield* ThreadStreamRhythm;
     const runs = (yield* ThreadRunStoreFactory).create((yield* ThreadOwner).id);
     const held = new Map<string, Held>();
     const ticks = yield* FiberMap.make<string, void, ThreadPortFailure>();
-    const heldOf = (runId: string): Held => {
-      const standing = held.get(runId);
+    const heldOf = (run: ThreadRunRef): Held => {
+      const standing = held.get(run.id);
       if (standing !== undefined) return standing;
-      const fresh: Held = { shown: { phase: null, estimate: null }, unwritten: false };
-      held.set(runId, fresh);
+      const fresh: Held = { run, shown: { phase: null, estimate: null }, unwritten: false };
+      held.set(run.id, fresh);
       return fresh;
     };
     const pending = (runId: string): boolean => held.get(runId)?.unwritten === true;
+    const written = Effect.fnUntraced(function* (run: ThreadRunRef, unit: ThreadWriteTx) {
+      const standing = held.get(run.id);
+      if (standing === undefined || !standing.unwritten) return;
+      const phase = standing.shown.phase;
+      const changed = yield* runs.writePhase(run.id, phase, unit);
+      yield* unit.afterCommit(
+        Effect.sync(() => {
+          for (const { threadId, ...patch } of changed) changes.note(threadId, unit, { kind: 'run', run: patch });
+          if (standing.shown.phase === phase) standing.unwritten = false;
+        }),
+      );
+    });
     const durable = Effect.fn('RunProgress.durable')(function* (runId: string) {
       const standing = held.get(runId);
       if (standing === undefined || !standing.unwritten) return;
-      const phase = standing.shown.phase;
-      yield* runs.writePhase(runId, phase);
-      if (standing.shown.phase === phase) standing.unwritten = false;
+      yield* changeUnit({ store, transitions, changes }, [standing.run.threadId], `phase:${runId}`, (unit) => written(standing.run, unit));
     });
     const tick = (runId: string): Effect.Effect<void> =>
       Effect.asVoid(
@@ -92,7 +113,7 @@ export const runProgressLayer: Layer.Layer<
       enter: (run, phase, entry = {}) =>
         Effect.flatMap(Clock.currentTimeMillis, (now) =>
           Effect.suspend(() => {
-            const standing = heldOf(run.id);
+            const standing = heldOf(run);
             const next = entered(standing.shown.phase, phase, entry, now);
             if (samePhase(standing.shown.phase, next)) return Effect.void;
             shown(run, standing, { phase: next, estimate: standing.shown.estimate });
@@ -102,24 +123,10 @@ export const runProgressLayer: Layer.Layer<
         ),
       estimate: (run, estimate) =>
         Effect.sync(() => {
-          const standing = heldOf(run.id);
+          const standing = heldOf(run);
           shown(run, standing, { phase: standing.shown.phase, estimate });
         }),
-      written: (run, tx) =>
-        Effect.suspend(() => {
-          const standing = held.get(run.id);
-          if (standing === undefined || !standing.unwritten) return Effect.void;
-          const phase = standing.shown.phase;
-          changes.note(run.threadId, tx, { kind: 'unseen' });
-          return Effect.andThen(
-            runs.writePhase(run.id, phase, tx),
-            tx.afterCommit(
-              Effect.sync(() => {
-                if (standing.shown.phase === phase) standing.unwritten = false;
-              }),
-            ),
-          );
-        }),
+      written,
       end: (runId) =>
         Effect.suspend(() => {
           held.delete(runId);

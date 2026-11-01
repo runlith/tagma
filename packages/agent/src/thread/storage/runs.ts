@@ -43,6 +43,13 @@ export type ThreadRunHeartbeat = {
   readonly updatedAt: Date;
 };
 
+export type ThreadRunPhase = {
+  readonly id: string;
+  readonly threadId: string;
+  readonly progress: ThreadRunProgress;
+  readonly updatedAt: Date;
+};
+
 type ThreadRunHeartbeats = {
   readonly written: readonly ThreadRunHeartbeat[];
   readonly asked: readonly ThreadRunStopAsked[];
@@ -221,7 +228,7 @@ export interface ThreadRunStorage<TTx, TWrite extends TTx = TTx> {
     tx?: TWrite,
     durable?: boolean,
   ): Effect.Effect<void, ThreadPortFailure>;
-  writePhase(runId: string, phase: AgentPhase | null, tx?: TWrite): Effect.Effect<void, ThreadPortFailure>;
+  writePhase(runId: string, phase: AgentPhase | null, tx?: TWrite): Effect.Effect<readonly ThreadRunPhase[], ThreadPortFailure>;
   addUsage(runId: string, delta: Usage, heartbeatAt: Date, tx?: TWrite): Effect.Effect<void, ThreadPortFailure>;
   charge(runId: string, charge: ThreadRunCharge, tx?: TWrite): Effect.Effect<void, ThreadPortFailure>;
   writeHeartbeats(runIds: readonly string[], heartbeatAt: Date, tx?: TWrite): Effect.Effect<ThreadRunHeartbeats, ThreadPortFailure>;

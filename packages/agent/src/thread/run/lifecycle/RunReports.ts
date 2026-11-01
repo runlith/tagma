@@ -216,16 +216,20 @@ export const runReportsLayer = Layer.effect(
       const tail = yield* openTail(run, false, tx);
       const at = new Date(yield* Clock.currentTimeMillis);
       yield* runs.writeStreamTail(run.id, tail, at, tx, durable);
-      changes.note(run.threadId, tx, {
-        kind: 'run',
-        run: {
-          id: run.id,
-          streamTail: tail,
-          heartbeatAt: at,
-          updatedAt: at,
-          ...(durable || tail?.length ? { resumes: 0 } : {}),
-        },
-      });
+      yield* tx.afterCommit(
+        Effect.sync(() =>
+          changes.note(run.threadId, tx, {
+            kind: 'run',
+            run: {
+              id: run.id,
+              streamTail: tail,
+              heartbeatAt: at,
+              updatedAt: at,
+              ...(durable || tail?.length ? { resumes: 0 } : {}),
+            },
+          }),
+        ),
+      );
     });
     const kernel = yield* transitionDeps;
     const ownerId = (yield* ThreadOwner).id;
