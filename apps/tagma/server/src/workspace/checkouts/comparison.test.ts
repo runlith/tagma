@@ -30,9 +30,9 @@ test('a named path replaces only its rows, retaining whole-tree coverage', () =>
     {
       ...empty,
       staged: [
-        { path: 'dir/a', status: 'modified', lines: { added: 1, removed: 0 } },
+        { path: 'dir/a', status: 'modified', lines: { added: 1, removed: 0 }, mark: 1 },
         { path: 'elsewhere/new', oldPath: 'dir/old', status: 'renamed', lines: { added: 1, removed: 0 } },
-        { path: 'other', status: 'modified', lines: { added: 1, removed: 0 } },
+        { path: 'other', status: 'modified', lines: { added: 1, removed: 0 }, mark: 1 },
       ],
     },
   );
@@ -44,7 +44,7 @@ test('a named path replaces only its rows, retaining whole-tree coverage', () =>
     },
     {
       ...empty,
-      staged: [{ path: 'dir/a', status: 'added', lines: { added: 3, removed: 0 } }],
+      staged: [{ path: 'dir/a', status: 'added', lines: { added: 3, removed: 0 }, mark: 2 }],
       untracked: [{ path: 'dir/new', status: 'untracked', lines: { added: 2, removed: 0 } }],
     },
   );
@@ -56,6 +56,7 @@ test('a named path replaces only its rows, retaining whole-tree coverage', () =>
     { added: 3, removed: 0 },
     { added: 1, removed: 0 },
   ]);
+  expect(merged.areas.staged.map((row) => row.mark)).toEqual([2, 1]);
   expect(merged.status.entries.untracked.map((row) => row.path)).toEqual(['dir/new']);
 });
 

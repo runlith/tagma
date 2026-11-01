@@ -25,10 +25,10 @@ export type Compared = {
 };
 
 export type Areas = {
-  readonly staged: readonly ComparedPath[];
-  readonly unstaged: readonly ComparedPath[];
-  readonly untracked: readonly ComparedPath[];
-  readonly unmerged: readonly ComparedPath[];
+  readonly staged: readonly CheckoutEntry[];
+  readonly unstaged: readonly CheckoutEntry[];
+  readonly untracked: readonly CheckoutEntry[];
+  readonly unmerged: readonly CheckoutEntry[];
 };
 
 type Metadata = {
@@ -84,12 +84,13 @@ const weighed = (stats: readonly PathStat[]): ReadonlyMap<string, LineStat> => n
 
 const UNWEIGHED: ReadonlyMap<string, LineStat> = new Map();
 
-const tracked = (entries: readonly StatusRow[], stats: ReadonlyMap<string, LineStat>): ComparedPath[] =>
+const tracked = (entries: readonly StatusRow[], stats: ReadonlyMap<string, LineStat>, mark: number): CheckoutEntry[] =>
   entries.map((entry) => ({
     path: entry.path,
     status: entry.status,
     oldPath: entry.oldPath,
     lines: stats.get(entry.path) ?? 'unweighed',
+    mark,
   }));
 
 const comparedEntry = (entry: ComparedRow): ComparedPath => ({
@@ -99,10 +100,8 @@ const comparedEntry = (entry: ComparedRow): ComparedPath => ({
   lines: entry.lines,
 });
 
-const conflicted = (entries: readonly StatusRow[]): ComparedPath[] =>
-  entries.map((entry) => ({ path: entry.path, status: entry.status, lines: 'unweighed' }));
-
-const entriesOf = (paths: readonly ComparedPath[]): CheckoutEntry[] => paths.map((entry) => ({ ...entry }));
+const conflicted = (entries: readonly StatusRow[], mark: number): CheckoutEntry[] =>
+  entries.map((entry) => ({ path: entry.path, status: entry.status, lines: 'unweighed', mark }));
 
 export const mergeScopedReading = (previous: TreeReading, fresh: TreeReading, paths: readonly string[]): TreeReading => {
   const scopes = new Set(paths);
@@ -267,6 +266,7 @@ export const readTree = Effect.fn('CheckoutRows.readTree')(function* (
   paths?: readonly string[],
 ): Effect.fn.Return<TreeReading, GitFailure> {
   const scoped = previous !== undefined && paths !== undefined;
+  const mark = sharedTreeCell(shared.trees, state.rootId).epoch;
   const [took, status] = yield* Effect.timed(
     statusAt(shared.git, state.dir, {
       untracked: 'all',
@@ -310,14 +310,15 @@ export const readTree = Effect.fn('CheckoutRows.readTree')(function* (
         path: entry.path,
         status: entry.status,
         lines,
+        mark,
       })),
     { concurrency: OPEN_FILES },
   );
   const areas: Areas = {
-    staged: tracked(status.entries.staged, staged),
-    unstaged: tracked(status.entries.unstaged, unstaged),
+    staged: tracked(status.entries.staged, staged, mark),
+    unstaged: tracked(status.entries.unstaged, unstaged, mark),
     untracked,
-    unmerged: conflicted(status.entries.unmerged),
+    unmerged: conflicted(status.entries.unmerged, mark),
   };
   const fresh = { status, sequencer, statusMs, publishTo, areas };
   return scoped ? mergeScopedReading(previous, fresh, paths) : fresh;
@@ -353,10 +354,10 @@ export const readRow = Effect.fn('CheckoutRows.readRow')(function* (
     behind: status.branch.behind,
     operation: sequencer,
     entries: {
-      staged: areaOf(entriesOf(areas.staged)),
-      unstaged: areaOf(entriesOf(areas.unstaged)),
-      untracked: areaOf(entriesOf(areas.untracked)),
-      unmerged: areaOf(entriesOf(areas.unmerged)),
+      staged: areaOf(areas.staged),
+      unstaged: areaOf(areas.unstaged),
+      untracked: areaOf(areas.untracked),
+      unmerged: areaOf(areas.unmerged),
     },
     unresolvedBase,
     compare:

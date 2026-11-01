@@ -52,7 +52,7 @@ export const CheckoutHolder = Schema.Struct({
 });
 export type CheckoutHolder = typeof CheckoutHolder.Type;
 
-export const CheckoutEntry = Schema.Struct(ComparedPath.fields);
+export const CheckoutEntry = Schema.Struct({ ...ComparedPath.fields, mark: Schema.optional(Schema.Int) });
 export type CheckoutEntry = typeof CheckoutEntry.Type;
 
 export const CheckoutArea = Schema.Struct({

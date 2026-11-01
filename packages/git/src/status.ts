@@ -70,6 +70,7 @@ export type StatusOptions = {
   readonly paths?: readonly string[];
   readonly capture?: number;
   readonly monitor?: boolean;
+  readonly ignoreSubmodules?: 'none' | 'untracked' | 'dirty' | 'all';
 };
 
 export type Status = {
@@ -320,6 +321,7 @@ export const statusAt = Effect.fn('Git.status')(function* (
     '-z',
     '--branch',
     `--untracked-files=${options.untracked}`,
+    ...(options.ignoreSubmodules === undefined ? [] : [`--ignore-submodules=${options.ignoreSubmodules}`]),
     ...(paths === null ? [] : ['--', ...paths]),
   ];
   const listing = yield* run(git, dir, args, options.capture);

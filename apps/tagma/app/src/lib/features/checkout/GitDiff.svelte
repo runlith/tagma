@@ -42,7 +42,9 @@
     return holdings.of(tab.path)?.lines ?? null;
   });
 
-  const mark = $derived(entries.length === 0 ? undefined : entries.map((one) => `${one.status}:${weightMark(one.lines)}`).join('|'));
+  const mark = $derived(
+    entries.length === 0 ? undefined : entries.map((one) => `${one.status}:${one.mark ?? weightMark(one.lines)}`).join('|'),
+  );
 
   $effect(() => {
     if (commit !== null || !lists.loaded || entries.length > 0) return;

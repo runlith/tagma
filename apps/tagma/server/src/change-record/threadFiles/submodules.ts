@@ -1,7 +1,7 @@
-import { Effect, type FileSystem } from 'effect';
+import { Effect, Schema, type FileSystem } from 'effect';
 import { stagedEntriesAt, type TreeEntry } from '@runlith/git/entries';
 import { treePathsAt } from '@runlith/git/treePaths';
-import { commandFor, commitOf, GitUnreadable } from '@runlith/git/repository';
+import { commandFor, commitOf, GitUnreadable, literal } from '@runlith/git/repository';
 import { statusAt } from '@runlith/git/status';
 import type { Git } from '@runlith/git/Git';
 import { join } from 'node:path';
@@ -47,8 +47,14 @@ export const submoduleAnswer = (rootId: RootId, path: string, submodule: Submodu
 export const pastSubmodule = (before: TreeEntry | null, after: TreeEntry | null): SubmoduleDiff | null =>
   isLink(before) || isLink(after) ? { before: endOf(before), after: endOf(after) } : null;
 
-const statAt = Effect.fnUntraced(function* (files: FileSystem.FileSystem, path: string) {
-  return yield* files.stat(path).pipe(
+const notLink = Schema.is(Schema.Struct({ code: Schema.Literal('EINVAL') }));
+
+const kindAt = Effect.fnUntraced(function* (files: FileSystem.FileSystem, path: string) {
+  return yield* files.readLink(path).pipe(
+    Effect.as('SymbolicLink' as const),
+    Effect.catchReason('PlatformError', 'Unknown', (reason, error) =>
+      notLink(reason.cause) ? Effect.map(files.stat(path), (entry) => entry.type) : Effect.fail(error),
+    ),
     Effect.catchReason('PlatformError', 'NotFound', () => Effect.succeed(null)),
     Effect.mapError((cause) => new PathUnreadable({ path, cause, asking: 'probe' })),
   );
@@ -63,8 +69,8 @@ export const workingSubmodule = Effect.fn('Authorship.submodule')(function* (
   side?: AuthorshipSide,
 ) {
   const at = join(dir, path);
-  const standing = side === 'staged' ? null : yield* statAt(files, at);
-  if (side === undefined && head !== null && !isLink(head) && standing?.type !== 'Directory') return null;
+  const standing = side === 'staged' ? null : yield* kindAt(files, at);
+  if (side === undefined && !isLink(head) && standing !== 'Directory' && (head !== null || standing !== null)) return null;
   const own = actingGit(git, 'thread-files-submodule');
   const index = yield* stagedEntriesAt(own, dir, [path], { capture: READING_CAPTURE });
   const unread = index.unread.get(path);
@@ -77,17 +83,17 @@ export const workingSubmodule = Effect.fn('Authorship.submodule')(function* (
   if (!isLink(staged)) {
     return {
       before: endOf(before),
-      after: standing === null || standing.type === 'Directory' ? { kind: 'absent' as const } : { kind: 'file' as const },
+      after: standing === null || standing === 'Directory' ? { kind: 'absent' as const } : { kind: 'file' as const },
     };
   }
-  if (standing !== null && standing.type !== 'Directory') return { before: endOf(before), after: { kind: 'file' as const } };
+  if (standing !== null && standing !== 'Directory') return { before: endOf(before), after: { kind: 'file' as const } };
   const status = yield* Effect.catchTag(
-    statusAt(own, dir, { paths: [path], untracked: 'all', monitor: false, capture: READING_CAPTURE }),
+    statusAt(own, dir, { paths: [literal(path)], untracked: 'all', monitor: false, ignoreSubmodules: 'none', capture: READING_CAPTURE }),
     'GitRefused',
     refusedByGit,
   );
   const row = status.entries.unstaged.find((row) => row.path === path) ?? status.entries.staged.find((row) => row.path === path);
-  const metadata = standing === null ? null : yield* statAt(files, join(at, '.git'));
+  const metadata = standing === null ? null : yield* kindAt(files, join(at, '.git'));
   if (metadata === null) {
     const missing = row?.modes?.worktree === '000000';
     return {

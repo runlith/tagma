@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import type { Holding, HoldingsFrame } from '@tagma/server/change-record/contract/wire/holdings';
+import type { PathAuthorship } from '@tagma/server/change-record/contract/wire/authorship';
 import type { CheckoutArea, CheckoutEntry, CheckoutState } from '@tagma/server/workspace/contract/wire/checkout';
 import { Layer } from '@runlith/layer/Layer';
 import { stubAll, stubMutation, stubSingle } from '@runlith/query/testing';
@@ -89,7 +90,9 @@ afterEach(async () => {
   app = undefined;
 });
 
-function draw(over: { places?: Worktrees; history?: unknown; view?: Component; router?: Router } = {}): HTMLElement {
+function draw(
+  over: { places?: Worktrees; history?: unknown; view?: Component; router?: Router; authorship?: CheckoutRepo['authorship'] } = {},
+): HTMLElement {
   app = mountShell(
     Layer.mergeAll(
       screen(),
@@ -120,7 +123,7 @@ function draw(over: { places?: Worktrees; history?: unknown; view?: Component; r
         new Opening(testLinks(), {} as never, {} as never, { refusal: () => undefined } as never, new Host('desktop', 'macos')),
       ),
       Layer.of(CheckoutRepo, {
-        authorship: {
+        authorship: over.authorship ?? {
           name: 'authorship',
           key: (_key: AuthorshipKey) => stubSingle({}),
           all: stubAll,
@@ -170,6 +173,40 @@ const pathsUnder = (page: HTMLElement, section: string): string[] =>
   [...(page.querySelector(`[data-change-section="${section}"]`)?.querySelectorAll('[data-change-path]') ?? [])].map(
     (node) => node.getAttribute('data-change-path') ?? '',
   );
+
+test('an open submodule diff updates after staging another commit with the same line counts', async () => {
+  const before = 'a'.repeat(40);
+  const first = 'b'.repeat(40);
+  const next = 'c'.repeat(40);
+  const answer = (oid: string): PathAuthorship => ({
+    rootId: 'root-1' as PathAuthorship['rootId'],
+    path: 'library',
+    binary: false,
+    timedOut: false,
+    lines: [],
+    sides: { before: 'library', after: 'library' },
+    submodule: { before: { kind: 'commit', oid: before }, after: { kind: 'commit', oid } },
+  });
+  const shown = $state({ answer: answer(first) });
+  const query = stubSingle({
+    get data() {
+      return shown.answer;
+    },
+    refresh: async () => {
+      shown.answer = answer(next);
+      return shown.answer;
+    },
+  });
+  const page = draw({ authorship: { name: 'authorship', key: () => query, all: stubAll, reset: () => undefined } as never });
+  sent(checkoutRow({ staged: area([{ ...changed('library'), mark: 1 }]) }));
+  page.querySelector<HTMLButtonElement>('[data-change-section="git-staged"] button[data-change-path="library"]')?.click();
+  flushSync();
+  expect(page.querySelector('[data-diff-submodule]')?.textContent).toContain(first);
+  sent({ ...checkoutRow({ staged: area([{ ...changed('library'), mark: 2 }]) }), revision: 2 });
+  await Promise.resolve();
+  flushSync();
+  expect(page.querySelector('[data-diff-submodule]')?.textContent).toContain(next);
+});
 
 test('checkout sides stay distinct, then holder groups and counts follow the judged frame', () => {
   const page = draw();
