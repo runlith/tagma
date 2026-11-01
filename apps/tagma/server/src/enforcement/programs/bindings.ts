@@ -3,6 +3,7 @@ import type { Footprint } from '@tagma/inspection/node/reading';
 import type { Unjudged } from '@tagma/inspection/verdict';
 import { Clock, Effect, Result } from 'effect';
 import type { TerminalActor } from '../../executions/contract/wire/terminals.js';
+import type { JudgedPlacing } from '../contract/wire/checks.js';
 import type { CountedDebt, Programmed } from '../contract/wire/document.js';
 import type { InspectionCoverage, RuleViolation } from '../contract/wire/enforcement.js';
 import type { JudgeLane } from '../workers/asks.js';
@@ -27,6 +28,7 @@ export type BindingSubject = {
   readonly caller: TerminalActor | null;
   readonly lane: JudgeLane;
   readonly priority?: 'foreground' | 'background';
+  readonly within?: JudgedPlacing;
 };
 
 export type BoundReading = {

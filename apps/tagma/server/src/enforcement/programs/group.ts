@@ -12,6 +12,7 @@ import { Clock, Effect, Option, Result, Schema } from 'effect';
 import { ProgramRoad } from '../../executions/contract/service/programs.js';
 import type { TerminalActor } from '../../executions/contract/wire/terminals.js';
 import type { Checker } from './checker.js';
+import type { JudgedPlace, JudgedPlacing } from '../contract/wire/checks.js';
 import type { InspectionCoverage, RuleViolation } from '../contract/wire/enforcement.js';
 import { type CountedDebt, isLinter, type Programmed } from '../contract/wire/document.js';
 import { MESSAGE_CHARS } from '../contract/wire/pages.js';
@@ -40,6 +41,7 @@ export type GroupSubject = {
   readonly caller: TerminalActor | null;
   readonly lane?: JudgeLane;
   readonly paths?: readonly string[] | null;
+  readonly within?: JudgedPlacing;
 };
 
 export type BindingReading = {
@@ -60,6 +62,22 @@ export type ProgramRun<A> = {
 };
 
 const rejected = (reason: string) => new InspectionFailed({ cause: 'program', reason });
+
+const placed = <A>(
+  subject: GroupSubject,
+  run: (place: JudgedPlace | null) => Effect.Effect<A, InspectionFailed>,
+): Effect.Effect<A, InspectionFailed> =>
+  subject.within === undefined
+    ? run(null)
+    : subject
+        .within(run)
+        .pipe(
+          Effect.catchTag('PlaceUnavailable', (failure) =>
+            Effect.fail(
+              new InspectionFailed({ cause: 'host', reason: `the judged tree could not be set out for the program: ${failure.message}` }),
+            ),
+          ),
+        );
 
 export const reachOf = (binding: Pick<ProgramBinding, 'places' | 'check'>): BindingReach => ({
   places: [...new Set(binding.places)].sort(),
@@ -146,40 +164,44 @@ const execute = Effect.fn('enforcement.program.group')(function* (
           covers: (key, path) => inProgramReach(key.reach, path),
           lane: subject.lane,
         })
-      : yield* Effect.gen(function* () {
-          const started = performance.now();
-          if (checker.launch === null) return yield* rejected(`the runner ${checker.id} names no argv`);
-          const ending = yield* road.value.run({
-            projectId: subject.projectId,
-            actor: subject.caller!,
-            argv: checker.launch,
-            cwd: checker.cwd,
-            env: { [PRELOAD_ROOT]: subject.root, [PRELOAD_TREE]: subject.tree },
-            stdin: JSON.stringify(input),
-            operation: `inspection/${input.request}`,
-            subject: `checker ${checker.id}`,
-          });
-          yield* Effect.annotateCurrentSpan({
-            'checker.identity': checker.id,
-            'checker.processes': ending._tag === 'Unrun' ? 0 : 1,
-            'checker.keys': keys.size,
-            'checker.ms': Math.round(performance.now() - started),
-          });
-          if (ending._tag === 'Unrun') return yield* new InspectionFailed({ cause: 'host', reason: ending.said });
-          if (ending._tag === 'Stopped')
-            return yield* new InspectionFailed({
-              cause: ending.late ? 'deadline' : 'program',
-              reason: `${ending.said}; ${ending.stderr.slice(-2000)}`,
+      : yield* placed(subject, (place) =>
+          Effect.gen(function* () {
+            const started = performance.now();
+            if (checker.launch === null) return yield* rejected(`the runner ${checker.id} names no argv`);
+            const root = place?.dir ?? subject.root;
+            const ending = yield* road.value.run({
+              projectId: subject.projectId,
+              actor: subject.caller!,
+              argv: checker.launch,
+              cwd: place?.dir ?? checker.cwd,
+              policyRoot: place === null ? undefined : subject.root,
+              env: { ...place?.env, [PRELOAD_ROOT]: root, [PRELOAD_TREE]: subject.tree },
+              stdin: JSON.stringify(place === null ? input : { ...input, root, workdir: place.dir }),
+              operation: `inspection/${input.request}`,
+              subject: `checker ${checker.id}`,
             });
-          if (ending.exitCode !== 0 || ending.cut)
-            return yield* rejected(
-              `checker exited ${ending.exitCode}${ending.cut ? ' with truncated output' : ''}; ${ending.stderr.slice(-2000)}`,
-            );
-          return yield* Effect.try({
-            try: () => JSON.parse(ending.stdout) as unknown,
-            catch: () => rejected('checker output is not JSON'),
-          });
-        });
+            yield* Effect.annotateCurrentSpan({
+              'checker.identity': checker.id,
+              'checker.processes': ending._tag === 'Unrun' ? 0 : 1,
+              'checker.keys': keys.size,
+              'checker.ms': Math.round(performance.now() - started),
+            });
+            if (ending._tag === 'Unrun') return yield* new InspectionFailed({ cause: 'host', reason: ending.said });
+            if (ending._tag === 'Stopped')
+              return yield* new InspectionFailed({
+                cause: ending.late ? 'deadline' : 'program',
+                reason: `${ending.said}; ${ending.stderr.slice(-2000)}`,
+              });
+            if (ending.exitCode !== 0 || ending.cut)
+              return yield* rejected(
+                `checker exited ${ending.exitCode}${ending.cut ? ' with truncated output' : ''}; ${ending.stderr.slice(-2000)}`,
+              );
+            return yield* Effect.try({
+              try: () => JSON.parse(ending.stdout) as unknown,
+              catch: () => rejected('checker output is not JSON'),
+            });
+          }),
+        );
   const answer = readProgramAnswer(input, json);
   if (Result.isFailure(answer)) return yield* rejected(answer.failure);
   const readings = new Map(answer.success.readings.map((one) => [`${one.key}/${one.side}`, one]));
