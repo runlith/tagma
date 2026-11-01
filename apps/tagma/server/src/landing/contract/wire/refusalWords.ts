@@ -6,7 +6,7 @@ export const REFUSAL_WORDS = {
   'base-held': 'Base lines held by another session',
   'base-mid-operation': 'Git operation under way in base',
   'base-not-checked-out': 'Base branch not checked out',
-  'base-staged': 'Base checkout has staged changes',
+  'base-staged': 'Base checkout has staged changes where the merge writes',
   'commit-unsigned': 'Commit could not be signed',
   'gh-refused': 'GitHub CLI failed',
   'landing-busy': 'Checkout busy, nothing committed',
