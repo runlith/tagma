@@ -14,7 +14,7 @@ import type { OwnStore } from './ownStore.js';
 import type { Machine } from './capacity.js';
 import type { ThreadEntryKind, ThreadFormStep } from '@runlith/agent/transcript/kinds';
 import type { PoolDeclaration } from '@runlith/held/Capacity';
-import { type DoorPath, overlaps, type Route, routedPath } from './route.js';
+import { type DoorPath, overlaps, type Route } from './route.js';
 
 import { journaledOf, type OperationSet, type RefusalWords } from '../wire/manifest.js';
 import type { ModulePresentation } from './presentation.js';
@@ -157,15 +157,17 @@ export class ManifestConflict extends Data.TaggedError('ManifestConflict')<{
 
 class RouteInexact extends Data.TaggedError('RouteInexact')<{ readonly module: string; readonly path: string }> {
   override get message(): string {
-    return `${this.module} declares the route ${this.path}, which is not one exact path in the form the router sees: lowercase, decoded, without repeated or trailing slashes, wildcards or parameters`;
+    return `${this.module} declares the route ${this.path}, which is not an exact module path: two or more segments of lowercase letters, digits, ".", "_", "~" and "-", each beginning with a letter or digit`;
   }
 }
+
+const EXACT_ROUTE = /^(?:\/[a-z0-9][a-z0-9._~-]*){2,}$/u;
 
 const DOOR = 'door';
 
 const checkRoutes = (module: Manifest, owners: Map<string, string>, door: readonly DoorPath[]): void => {
   for (const { path } of module.routes ?? []) {
-    if (routedPath(path) !== path || /[*:]/u.test(path)) throw new RouteInexact({ module: module.id, path });
+    if (!EXACT_ROUTE.test(path)) throw new RouteInexact({ module: module.id, path });
     const owner = owners.get(path) ?? (door.some((served) => overlaps(path, served)) ? DOOR : undefined);
     if (owner !== undefined) throw new ManifestConflict({ collection: 'routes', id: path, owners: [owner, module.id] });
     owners.set(path, module.id);

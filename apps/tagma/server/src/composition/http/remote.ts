@@ -202,7 +202,7 @@ export const remoteServing = (remote: RemoteDoor) =>
         Context.add(DoorAddress, remoteAddress(access)),
       );
       const app = Layer.mergeAll(
-        doorLayer({ status, routes: remote.assembly.routes }),
+        doorLayer({ status, routes: remote.assembly.routes.filter((declared) => !declared.preAdmitted) }),
         liveServing(remote.assembly, remote.connections).pipe(Layer.provide(socketOperationsLayer)),
         artifactRoutes(remote.artifacts, { index: ARTIFACT_PREFIX, sandboxed: true }),
       ).pipe(Layer.provide(doorCompositionLayer), Layer.provide(Layer.succeedContext(door)));

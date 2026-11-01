@@ -638,7 +638,7 @@ layer(Layer.effect(Remote, setup).pipe(Layer.provideMerge(BunFileSystem.layer)),
           expect.stringContaining('Sign-in refused'),
         ]);
       }
-      for (const path of ['/mcp/oauth/callback/more', '/mcp/oauth', '/mcp/oauth/callbacks']) {
+      for (const path of ['/mcp/oauth/callback/more', '/mcp/oauth', '/mcp/oauth/callbacks', '/mcp/oauth/callback;x']) {
         const shell = yield* remote(`${path}?state=unknown`, { origin: null, headers: { accept: 'text/html' } });
         expect([path, shell.status, yield* Effect.promise(() => shell.text())]).toEqual([
           path,
@@ -648,6 +648,10 @@ layer(Layer.effect(Remote, setup).pipe(Layer.provideMerge(BunFileSystem.layer)),
       }
       const posted = yield* remote('/mcp/oauth/callback?state=unknown', { method: 'POST', body: {} });
       expect(yield* refusal(posted)).toEqual([401, 'device-unpaired']);
+      const head = yield* remote('/mcp/oauth/callback?state=unknown', { method: 'HEAD', headers: { accept: 'text/html' } });
+      expect([head.status, head.headers.get('content-type')]).toEqual([200, expect.stringContaining('text/html')]);
+      const upgrade = yield* remote('/mcp/oauth/callback?state=unknown', { headers: { upgrade: 'websocket', connection: 'upgrade' } });
+      expect(yield* refusal(upgrade)).toEqual([401, 'device-unpaired']);
     }),
   );
 
