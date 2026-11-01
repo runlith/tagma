@@ -1,15 +1,29 @@
 /// <reference types="bun" />
 
 import { randomUUID } from 'node:crypto';
-import { closeSync, existsSync, mkdirSync, openSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import {
+  closeSync,
+  existsSync,
+  ftruncateSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+  writeSync,
+} from 'node:fs';
 import { totalmem } from 'node:os';
 import { dirname, join } from 'node:path';
 import { closeOnExec, lockExclusive, unlock } from '@runlith/file-lock/flock';
 import { type EngineHearing, openEngine } from './engine.js';
 import {
   CHANGES_PER_LINE,
+  HELLO_MS,
   READY,
   decodeAsk,
+  decodeSaid,
   lines,
   type Outbox,
   outbox,
@@ -33,6 +47,8 @@ const COOKIE = '.watch-cookie-';
 const COOKIE_EVERY_MS = 20;
 
 const COOKIE_HEARD_MS = 3_000;
+
+const OWNER_ENDS_MS = 5_000;
 
 let cookies = 0;
 
@@ -66,14 +82,18 @@ type Native = {
   ended: boolean;
 };
 
-const [socketWord, retainWord, lifetime] = process.argv.slice(2);
+const [socketWord, retainWord, lifetime, condemnedWord] = process.argv.slice(2);
 if (socketWord === undefined) throw new Error('the watcher takes the path of its socket');
 const socketPath: string = socketWord;
+const ownerPath = `${socketPath}.owner`;
 const RETAIN = Number(retainWord);
 if (!Number.isSafeInteger(RETAIN) || RETAIN < 1)
   throw new Error(`the watcher takes how many changed paths a root keeps, not ${retainWord}`);
 const DETACHED = lifetime === 'detached';
 const OWNED = lifetime === 'with-client';
+const CONDEMNED = condemnedWord === undefined ? null : Number(condemnedWord);
+if (CONDEMNED !== null && (!Number.isSafeInteger(CONDEMNED) || CONDEMNED < 1))
+  throw new Error(`the watcher takes the pid of the process it replaces, not ${condemnedWord}`);
 
 const engine = openEngine();
 const natives = new Map<string, Native>();
@@ -384,6 +404,8 @@ const answered = async (peer: Peer, ask: WatchAsk): Promise<void> => {
       send(peer, { t: 'done', id: ask.id });
       peer.flush();
       return stop();
+    case 'hello':
+      return send(peer, { t: 'hello', id: ask.id, pid: process.pid });
   }
 };
 
@@ -425,22 +447,64 @@ const sweep = (): void => {
   }
 };
 
-const serving = async (): Promise<boolean> => {
-  try {
-    const probe = await Bun.connect({ unix: socketPath, socket: { data: () => undefined } });
-    probe.end();
-    return true;
-  } catch {
-    return false;
-  }
+const answering = (): Promise<number | null> =>
+  new Promise((resolve) => {
+    let probe: Bun.Socket<undefined> | null = null;
+    let settled = false;
+    const done = (pid: number | null): void => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(deadline);
+      probe?.end();
+      resolve(pid);
+    };
+    const deadline = setTimeout(() => done(null), HELLO_MS);
+    const read = lines((line) => {
+      const said = decodeSaid(line);
+      if (said._tag === 'Success' && said.success.t === 'hello') done(said.success.pid);
+    });
+    Bun.connect({
+      unix: socketPath,
+      socket: { data: (_peer, chunk) => read(chunk), close: () => done(null), error: () => done(null) },
+    }).then(
+      (opened) => {
+        probe = opened;
+        if (settled) return void opened.end();
+        opened.write(`${JSON.stringify({ t: 'hello', id: 0 } satisfies WatchAsk)}\n`);
+      },
+      () => done(null),
+    );
+  });
+
+const opening = (path: string): number => {
+  const fd = openSync(path, 'a+');
+  closeOnExec(fd);
+  return fd;
 };
 
 const guard = (() => {
   mkdirSync(dirname(socketPath), { recursive: true });
-  const fd = openSync(`${socketPath}.lock`, 'a');
-  closeOnExec(fd);
-  return fd;
+  return opening(`${socketPath}.lock`);
 })();
+
+const owner = opening(ownerPath);
+
+const ownerEnded = async (): Promise<void> => {
+  if (lockExclusive(owner) === 'locked') return;
+  const pid = Number(readFileSync(ownerPath, 'utf8').trim());
+  if (!Number.isSafeInteger(pid) || pid < 1) throw new Error(`${ownerPath} is held by a process it does not name`);
+  console.error(`[watch] the watch process ${pid} holds ${socketPath} and does not answer, so it is ended`);
+  try {
+    process.kill(pid, 'SIGKILL');
+  } catch (cause) {
+    if ((cause as NodeJS.ErrnoException).code !== 'ESRCH') throw cause;
+  }
+  const until = Date.now() + OWNER_ENDS_MS;
+  while (lockExclusive(owner) === 'held') {
+    if (Date.now() >= until) throw new Error(`the watch process ${pid} still holds ${socketPath} ${OWNER_ENDS_MS} ms after it was killed`);
+    await Bun.sleep(CLAIM_EVERY_MS);
+  }
+};
 
 const claimed = async <A>(work: () => Promise<A> | A): Promise<A> => {
   while (lockExclusive(guard) === 'held') await Bun.sleep(CLAIM_EVERY_MS);
@@ -454,7 +518,11 @@ const claimed = async <A>(work: () => Promise<A> | A): Promise<A> => {
 const inodeAt = (path: string): number | null => statSync(path, { throwIfNoEntry: false })?.ino ?? null;
 
 const bound = await claimed(async () => {
-  if (await serving()) return null;
+  const standing = await answering();
+  if (standing !== null && standing !== CONDEMNED) return null;
+  await ownerEnded();
+  ftruncateSync(owner, 0);
+  writeSync(owner, `${process.pid}\n`);
   rmSync(socketPath, { force: true });
   const listener = Bun.listen<Connection>({
     unix: socketPath,
@@ -479,6 +547,7 @@ const bound = await claimed(async () => {
 
 if (bound === null) {
   closeSync(guard);
+  closeSync(owner);
   process.exit(0);
 }
 
@@ -490,6 +559,7 @@ async function stop(): Promise<void> {
   bound?.listener.stop(true);
   await claimed(() => {
     if (bound !== null && bound.inode !== null && inodeAt(socketPath) === bound.inode) rmSync(socketPath, { force: true });
+    unlock(owner);
   });
   process.exit(0);
 }

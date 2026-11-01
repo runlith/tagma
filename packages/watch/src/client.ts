@@ -7,7 +7,7 @@ import { Data, Effect, Option, Schema, type Scope } from 'effect';
 import { lockExclusive, unlock } from '@runlith/file-lock/flock';
 import { buildEngine, crateStands } from './artifact.js';
 import { LIBRARY } from './engine.js';
-import { type Outbox, READY, decodeSaid, lines, outbox, type WatchAsk, type WatchChange, type WatchSaid } from './protocol.js';
+import { HELLO_MS, type Outbox, READY, decodeSaid, lines, outbox, type WatchAsk, type WatchChange, type WatchSaid } from './protocol.js';
 
 const WATCHER = fileURLToPath(new URL('./watcher.ts', import.meta.url));
 
@@ -29,6 +29,7 @@ const ANSWER_MS: { readonly [K in WatchAsk['t']]: number } = {
   moved: 10_000,
   retire: 10_000,
   shutdown: 10_000,
+  hello: HELLO_MS,
 };
 
 export class WatchRefused extends Data.TaggedError('WatchRefused')<{ readonly message: string }> {}
@@ -119,6 +120,7 @@ type Link = {
   readonly hearings: Map<number, WatchHearing>;
   readonly out: Outbox;
   gone: string | null;
+  pid: number | null;
 };
 
 type Asked = { readonly [K in WatchAsk['t']]: Omit<Extract<WatchAsk, { t: K }>, 'id'> }[WatchAsk['t']];
@@ -168,6 +170,7 @@ export const makeWatchClient = Effect.fnUntraced(function* (place: WatchPlace): 
   let next = 0;
   let closed = false;
   let others: Promise<void> | null = null;
+  let condemned: number | null = null;
 
   const lose = (held: Link, reason: string): void => {
     if (held.gone !== null) return;
@@ -221,21 +224,46 @@ export const makeWatchClient = Effect.fnUntraced(function* (place: WatchPlace): 
           if (held !== null) lose(held, `the watch channel failed: ${reasonOf(cause)}`);
         },
       },
-    }).then((peer) => {
-      held = { peer, waiting: new Map(), hearings: new Map(), out: outbox((bytes) => peer.write(bytes)), gone: null };
-      live = held;
-      others ??= retireOthers(channel).catch((cause: unknown) =>
-        console.error(`[watch] other watch processes were not retired: ${reasonOf(cause)}`),
-      );
-      return held;
-    });
+    })
+      .then((peer) => {
+        held = { peer, waiting: new Map(), hearings: new Map(), out: outbox((bytes) => peer.write(bytes)), gone: null, pid: null };
+        return greeted(held);
+      })
+      .then((greeting) => {
+        live = greeting;
+        others ??= retireOthers(channel).catch((cause: unknown) =>
+          console.error(`[watch] other watch processes were not retired: ${reasonOf(cause)}`),
+        );
+        return greeting;
+      });
   };
 
-  const started = async (): Promise<void> => {
+  const greeted = (held: Link): Promise<Link> =>
+    new Promise((resolve, reject) => {
+      asked(
+        held,
+        { t: 'hello' },
+        {
+          answer: (said) => {
+            if (said.t === 'hello') {
+              held.pid = said.pid;
+              return resolve(held);
+            }
+            lose(held, `the watch process answered hello with ${said.t}`);
+            held.peer.end();
+            reject(new Error(`the watch process answered hello with ${said.t}`));
+          },
+          lost: (reason) => reject(new Error(reason)),
+        },
+      );
+    });
+
+  const started = async (replacing: number | null): Promise<void> => {
     const owned = place.lifetime === 'with-client';
     mkdirSync(dirname(socket), { recursive: true });
     const log = owned ? null : openSync(`${socket}.log`, 'a');
-    const spawned = Bun.spawn([process.execPath, 'run', WATCHER, socket, String(retain), place.lifetime], {
+    const condemning = replacing === null ? [] : [String(replacing)];
+    const spawned = Bun.spawn([process.execPath, 'run', WATCHER, socket, String(retain), place.lifetime, ...condemning], {
       stdin: owned ? 'pipe' : place.lifetime === 'with-parent' ? 'inherit' : 'ignore',
       stdout: 'pipe',
       stderr: log ?? 'inherit',
@@ -262,14 +290,18 @@ export const makeWatchClient = Effect.fnUntraced(function* (place: WatchPlace): 
     }
   };
 
+  const fresh = (): Promise<Link> => {
+    const replacing = condemned;
+    condemned = null;
+    return started(replacing).then(connected);
+  };
+
   const linked = (): Promise<Link> => {
     if (closed) return Promise.reject(new Error('the watch client is closed'));
-    link ??= connected()
-      .catch(() => started().then(connected))
-      .catch((cause: unknown) => {
-        link = null;
-        throw cause;
-      });
+    link ??= (condemned === null ? connected().catch(fresh) : fresh()).catch((cause: unknown) => {
+      link = null;
+      throw cause;
+    });
     return link;
   };
 
@@ -282,7 +314,10 @@ export const makeWatchClient = Effect.fnUntraced(function* (place: WatchPlace): 
     const id = ++next;
     const within = ANSWER_MS[ask.t];
     const deadline = setTimeout(() => {
-      if (held.waiting.has(id)) lose(held, `the watch process did not answer ${ask.t} within ${within} ms`);
+      if (!held.waiting.has(id)) return;
+      if (held.pid !== null) condemned = held.pid;
+      lose(held, `the watch process did not answer ${ask.t} within ${within} ms`);
+      held.peer.end();
     }, within);
     deadline.unref();
     wrote(

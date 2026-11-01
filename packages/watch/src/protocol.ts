@@ -21,6 +21,7 @@ export const WatchAsk = Schema.Union([
   Schema.Struct({ t: Schema.Literal('moved'), id: Id, at: Schema.String, cursor: Schema.String }),
   Schema.Struct({ t: Schema.Literal('retire'), id: Id }),
   Schema.Struct({ t: Schema.Literal('shutdown'), id: Id }),
+  Schema.Struct({ t: Schema.Literal('hello'), id: Id }),
 ]);
 export type WatchAsk = typeof WatchAsk.Type;
 
@@ -37,8 +38,11 @@ export const WatchSaid = Schema.Union([
   Schema.Struct({ t: Schema.Literal('settled'), id: Id, settled: Schema.Boolean }),
   Schema.Struct({ t: Schema.Literal('moved'), id: Id, changes: Schema.NullOr(Schema.Array(WatchChange)) }),
   Schema.Struct({ t: Schema.Literal('done'), id: Id }),
+  Schema.Struct({ t: Schema.Literal('hello'), id: Id, pid: Schema.Int }),
 ]);
 export type WatchSaid = typeof WatchSaid.Type;
+
+export const HELLO_MS = 3_000;
 
 export const decodeAsk = Schema.decodeUnknownResult(Schema.fromJsonString(WatchAsk));
 export const decodeSaid = Schema.decodeUnknownResult(Schema.fromJsonString(WatchSaid));

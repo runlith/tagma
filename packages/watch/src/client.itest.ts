@@ -3,7 +3,7 @@ import { it } from '@runlith/effect-test';
 import { mkdir, mkdtemp, realpath, rename, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { Effect, Queue } from 'effect';
+import { Effect, Queue, type Scope } from 'effect';
 import { makeWatchClient, type WatchHearing } from './client.js';
 import type { WatchChange } from './protocol.js';
 
@@ -92,6 +92,62 @@ it.live('a lost watch process ends every open subscription, and the next subscri
     yield* Effect.promise(() => writeFile(join(tree, 'after'), 'x'));
     expect(yield* pathsUntil(second.heard, 'after')).toContain('after');
   }),
+);
+
+const watchers = (place: string): number[] =>
+  Bun.spawnSync(['pgrep', '-f', place]).stdout.toString().trim().split('\n').filter(Boolean).map(Number);
+
+const frozen = (place: string): Effect.Effect<number, never, Scope.Scope> =>
+  Effect.acquireRelease(
+    Effect.sync(() => {
+      const [pid] = watchers(place);
+      if (pid === undefined) throw new Error('no watch process to freeze');
+      process.kill(pid, 'SIGSTOP');
+      return pid;
+    }),
+    (pid) =>
+      Effect.sync(() => {
+        try {
+          process.kill(pid, 'SIGKILL');
+        } catch {}
+      }),
+  );
+
+it.live('a detached process that stops answering is ended by the next client, which is served by a process of its own', () =>
+  Effect.gen(function* () {
+    const { tree, place } = yield* world();
+    const before = yield* makeWatchClient({ dir: place, lifetime: 'detached' });
+    yield* before.subscribe(tree, TREE, (yield* hearing).into);
+    const stopped = yield* frozen(place);
+    const after = yield* makeWatchClient({ dir: place, lifetime: 'detached' });
+    yield* Effect.addFinalizer(() => after.shutdown);
+    const opened = yield* hearing;
+    yield* after.subscribe(tree, TREE, opened.into);
+    yield* Effect.promise(() => writeFile(join(tree, 'after'), 'x'));
+    expect(yield* pathsUntil(opened.heard, 'after')).toContain('after');
+    expect({ ended: !watchers(place).includes(stopped), standing: watchers(place).length }).toEqual({ ended: true, standing: 1 });
+  }),
+);
+
+it.live(
+  'a process that misses an answer deadline is replaced, and the same client is answered by the new one',
+  () =>
+    Effect.gen(function* () {
+      const { tree, place } = yield* world();
+      const client = yield* makeWatchClient({ dir: place, lifetime: 'detached' });
+      yield* Effect.addFinalizer(() => client.shutdown);
+      yield* client.subscribe(tree, TREE, (yield* hearing).into);
+      const stopped = yield* frozen(place);
+      const missed = yield* Effect.flip(client.settle(tree, []));
+      const answered = yield* client.settle(tree, []);
+      expect({
+        missed: missed._tag,
+        answered: typeof answered,
+        ended: !watchers(place).includes(stopped),
+        standing: watchers(place).length,
+      }).toEqual({ missed: 'WatchLost', answered: 'boolean', ended: true, standing: 1 });
+    }),
+  40_000,
 );
 
 it.live('a detached process keeps what changed while no client was connected, and answers it to the next one from its own record', () =>
