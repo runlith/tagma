@@ -7,6 +7,8 @@ import type { ProjectChanges } from '../projects/contract/service/changes.js';
 import type { Projects } from '../projects/contract/service/registry.js';
 import type { Settings } from '../settings/contract/service/values.js';
 import type { Captures } from '../speech/contract/service/captures.js';
+import type { SecretOwners } from '../secrets/contract/service/secrets.js';
+import type { InstalledChannel } from '../installation/contract/service/channel.js';
 import type { Manifest } from '../platform/contract/service/manifest.js';
 import { type OwnStore, ownStorePath, setAsidePath } from '../platform/contract/service/ownStore.js';
 import { type Adopting, IN_MEMORY, MachineStore } from '../platform/contract/service/store.js';
@@ -16,7 +18,17 @@ import { CORE_MODULES } from './core.js';
 
 const CORE: ReadonlySet<Manifest> = new Set(CORE_MODULES);
 
-export type ExtensionOwners = Settings | Projects | ProjectChanges | Maintenance | Handoff | Speech | AudioDevices | Captures;
+export type ExtensionOwners =
+  | Settings
+  | Projects
+  | ProjectChanges
+  | Maintenance
+  | Handoff
+  | Speech
+  | AudioDevices
+  | Captures
+  | SecretOwners
+  | InstalledChannel;
 
 type ExtensionLayer = Layer.Layer<never, unknown, any>;
 
