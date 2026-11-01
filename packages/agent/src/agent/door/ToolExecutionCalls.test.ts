@@ -576,6 +576,59 @@ describe('the door under the run’s call owner', () => {
     }),
   );
   it.effect(
+    'a parked adoption receipt keeps the source until the late outcome is preserved and delivered',
+    Effect.fnUntraced(function* () {
+      const calls = yield* makeCalls();
+      const settlements = yield* makeCallSettlements;
+      const delivering = yield* Deferred.make<void>();
+      const delivered = yield* Deferred.make<void>();
+      let source = 'complete producer output';
+      let preserved = '';
+      const tool = Tool.make({
+        display: () => ({ form: 'none' }),
+        approval: ASKS_NEVER,
+        description: 'Return a retained source.',
+        parameters: Schema.Struct({}),
+        execute: () => Effect.succeed('source address'),
+        settled: () => {
+          source = '';
+        },
+      });
+      const outputs: AgentToolOutputs = {
+        project: () =>
+          Effect.sync(() => {
+            preserved = source;
+            return { output: preserved, modelOutput: { type: 'text', value: preserved } };
+          }),
+        projectMessages: (messages) => Effect.succeed(messages),
+      };
+      const door = doorOver({
+        calls,
+        settlements,
+        outputs,
+        hooks: {
+          retain: () => Effect.succeed({ release: Effect.void }),
+          detaching: () => Effect.void,
+          asking: () => Effect.succeed({ allowed: true }),
+          completed: () => Deferred.succeed(delivering, undefined).pipe(Effect.andThen(Deferred.await(delivered))),
+        },
+      });
+      const call = { name: 'retained', tool, input: {}, toolCallId: 'call-1' };
+      const adoption = yield* door.adopt({ ...call, options: { toolCallId: call.toolCallId, messages: [] } }, yield* door.approved(call));
+      if ('refused' in adoption) return yield* Effect.die(adoption.refused);
+      settlements.recorded('run-1', 'call-1');
+      yield* adoption.live;
+      yield* Deferred.await(delivering);
+      const atDelivery = source;
+      yield* Deferred.succeed(delivered, undefined);
+      yield* adoption.settled;
+      expect(preserved).toBe('complete producer output');
+      expect(atDelivery).toBe('complete producer output');
+      expect(source).toBe('');
+      expect(settlements.size).toBe(0);
+    }),
+  );
+  it.effect(
     'a stopped detached call retains its read-back until its outcome is delivered after the run ends',
     Effect.fnUntraced(function* () {
       const calls = yield* makeCalls();

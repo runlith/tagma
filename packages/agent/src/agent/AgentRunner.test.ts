@@ -1423,8 +1423,10 @@ describe('AgentRunner context overflow recovery', () => {
       expect(executions).toBe(1);
       expect(projections).toBe(1);
       expect(receivedRetention).toEqual(resultRetention);
-      expect(handle.runState.latestOutput('side_effect')).toEqual(expect.objectContaining({ toolCompleted: true, retained: false }));
-      expect(JSON.stringify(handle.runState.toolsSoFar())).not.toContain(rawOutput);
+      expect((yield* handle.output.steps)[0]?.toolResults[0]?.output).toEqual(
+        expect.objectContaining({ toolCompleted: true, retained: false }),
+      );
+      expect(JSON.stringify(yield* handle.output.steps)).not.toContain(rawOutput);
       expect(contextSteps).toEqual([0, 1]);
       expect(contextMessageRoles[1]).toEqual(['user', 'assistant', 'tool']);
     }),
@@ -2153,8 +2155,9 @@ describe('AgentRunner loop grain', () => {
         agentRule<Record<string, never>>(
           'seal',
           (ctx) => {
-            if (ctx.hook !== 'beforeStep') return null;
-            if (ctx.run.latestOutput('report') !== undefined) return null;
+            const seal = ctx.run.ruleState('seal', () => ({ recorded: false }));
+            if (ctx.hook === 'afterTool' && ctx.tool?.name === 'report') seal.recorded = true;
+            if (ctx.hook !== 'beforeStep' || seal.recorded) return null;
             return { type: 'require' };
           },
           { owner: 'test' },
@@ -4133,7 +4136,7 @@ describe('AgentRunner context boundary', () => {
       );
       expect(yield* handle.output.text).toBe('Gave up on that id.');
       const part = handle.completedSteps()[1]?.content.find((entry) => entry.type === 'tool-result');
-      return { ran, result: part?.result };
+      return { ran, result: part?.result, count: handle.runState.count('side_effect'), streak: handle.runState.streak('side_effect') };
     });
     it.live(
       'is answered with its recorded outcome after it, even where the tool was removed, and runs nothing again',
@@ -4141,6 +4144,8 @@ describe('AgentRunner context boundary', () => {
         const replayed = yield* afterBoundary(toolCallTurn('side_effect', 'call-1'), true);
         expect(replayed.ran).toBe(1);
         expect(replayed.result?.type).not.toBe('error');
+        expect(replayed.count).toBe(1);
+        expect(replayed.streak).toBe(1);
       }),
     );
     it.live(

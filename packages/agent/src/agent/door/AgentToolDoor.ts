@@ -288,49 +288,51 @@ export const makeAgentToolDoor = <TCtx>({
 
     settle: (call: AgentToolInvocation, prepared?: AgentToolPreflight): Effect.Effect<AgentToolOutcome, AgentToolFailure> => {
       const toolCallId = call.options.toolCallId;
-      return execution.costing(
-        toolCallId,
-        call.name,
-        ledger.once(toolCallId, call.name, call.input, () =>
-          answering(call.name, toolCallId, () => {
-            if (prepared === undefined && call.confirmed === true && !ledger.resolvable(call.tool, toolCallId, call.name, call.input)) {
-              return Effect.fail(admission.lostResolution(call.name, toolCallId));
-            }
-            const entered: Effect.Effect<AgentToolAttended, AgentToolFailure> = prepared
-              ? Effect.map(admission.accepted(call, prepared), (ready) => ({ kind: 'prepared', prepared: ready }))
-              : execution.attend(call, preflight(questionOf(call)));
-            return Effect.flatMap(entered, (attended) => {
-              if (attended.kind === 'answered') return receipted(call, attended.outcome);
-              const ready = attended.prepared;
-              return agentSpan({ type: 'tool-call', runId: run.runId, toolName: call.name, toolCallId, executedBy: 'host' })(
-                called(
-                  call.name,
-                  toolCallId,
-                  'host',
-                  call.arguments,
-                  execution.perform(call, ready).pipe(
-                    Effect.catchTag('AgentToolFailed', (failure) =>
-                      Clock.currentTimeMillis.pipe(
-                        Effect.flatMap((at) =>
-                          Effect.fail(
-                            new AgentToolFailed({
-                              toolName: failure.toolName,
-                              toolCallId: failure.toolCallId,
-                              cause: failure.cause,
-                              projection: failure.projection,
-                              durationMs: at - ready.openedAt,
-                            }),
+      return execution
+        .costing(
+          toolCallId,
+          call.name,
+          ledger.once(toolCallId, call.name, call.input, () =>
+            answering(call.name, toolCallId, () => {
+              if (prepared === undefined && call.confirmed === true && !ledger.resolvable(call.tool, toolCallId, call.name, call.input)) {
+                return Effect.fail(admission.lostResolution(call.name, toolCallId));
+              }
+              const entered: Effect.Effect<AgentToolAttended, AgentToolFailure> = prepared
+                ? Effect.map(admission.accepted(call, prepared), (ready) => ({ kind: 'prepared', prepared: ready }))
+                : execution.attend(call, preflight(questionOf(call)));
+              return Effect.flatMap(entered, (attended) => {
+                if (attended.kind === 'answered') return receipted(call, attended.outcome);
+                const ready = attended.prepared;
+                return agentSpan({ type: 'tool-call', runId: run.runId, toolName: call.name, toolCallId, executedBy: 'host' })(
+                  called(
+                    call.name,
+                    toolCallId,
+                    'host',
+                    call.arguments,
+                    execution.perform(call, ready).pipe(
+                      Effect.catchTag('AgentToolFailed', (failure) =>
+                        Clock.currentTimeMillis.pipe(
+                          Effect.flatMap((at) =>
+                            Effect.fail(
+                              new AgentToolFailed({
+                                toolName: failure.toolName,
+                                toolCallId: failure.toolCallId,
+                                cause: failure.cause,
+                                projection: failure.projection,
+                                durationMs: at - ready.openedAt,
+                              }),
+                            ),
                           ),
                         ),
                       ),
                     ),
                   ),
-                ),
-              );
-            });
-          }),
-        ),
-      );
+                );
+              });
+            }),
+          ),
+        )
+        .pipe(Effect.onExit(() => Effect.sync(() => execution.ended(toolCallId))));
     },
 
     settled: (call: AgentToolProduced): Effect.Effect<AgentToolOutcome, AgentToolFailure> =>

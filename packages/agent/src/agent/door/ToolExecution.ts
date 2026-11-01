@@ -162,6 +162,34 @@ export const makeToolExecution = <TCtx>({
     return tracked;
   };
 
+  const tracking = (call: AgentPermissionQuestion): Effect.Effect<TrackedCall<TCtx> | null> =>
+    Effect.withFiber((fiber) => {
+      const tracked = track(call);
+      if (tracked?.settlement !== undefined) return Effect.succeed(tracked);
+      const settlements = run.settlements ?? Context.get(fiber.context, ToolSettlements);
+      const settlement = settlements?.retain(
+        { toolCallId: call.toolCallId, caller: run.caller },
+        () => {
+          finishCost(call.toolCallId);
+          owned.delete(call.toolCallId);
+          costs.delete(call.toolCallId);
+          if (run.mode === 'hosted') {
+            ledger.forget(call.toolCallId);
+            run.runState.confirmed(call.toolCallId);
+          }
+        },
+        () => tracked?.call.record.mode === 'background',
+        'call',
+      );
+      if (tracked !== null) tracked.settlement = settlement;
+      return Effect.succeed(tracked);
+    });
+
+  const ended = (toolCallId: string): void => {
+    const tracked = owned.get(toolCallId);
+    if (tracked !== undefined && tracked.call.record.mode !== 'background') tracked.settlement?.ended();
+  };
+
   //! Before execution only a thread that owes the outcome and can ask the call's reader may take it.
   const handable = (tracked: TrackedCall<TCtx>): boolean =>
     tracked.call.record.threadId !== null && tracked.hooks?.detaching !== undefined && tracked.hooks.asking !== undefined;
@@ -221,7 +249,6 @@ export const makeToolExecution = <TCtx>({
     prepared: AgentToolPreflight,
     output: StructuredValue,
     verdict: ToolVerdict,
-    step: number | undefined,
     took: Effect.Effect<number>,
   ): Effect.fn.Return<AgentToolOutcome, AgentToolFailure> {
     const { name, tool } = call;
@@ -236,7 +263,6 @@ export const makeToolExecution = <TCtx>({
       },
       false,
     );
-    run.runState.noteToolRefusal(name, refusal.output, call.options.toolCallId, step ?? run.runState.stepNumber);
     const durationMs = yield* took;
     return {
       ...refusal,
@@ -291,7 +317,7 @@ export const makeToolExecution = <TCtx>({
     }
     if (unanswered) {
       const refused = permissionRefusal(permission, name);
-      return yield* unexecuted(call, prepared, toJson(refused), { kind: 'denied' }, step, took);
+      return yield* unexecuted(call, prepared, toJson(refused), { kind: 'denied' }, took);
     }
     const waited = order.waited(options.toolCallId);
     if (tracked !== undefined) {
@@ -320,7 +346,6 @@ export const makeToolExecution = <TCtx>({
             () => settled(identity),
             () => owner?.record.mode === 'background',
           );
-    if (tracked !== undefined) tracked.settlement = settlement;
     const answered = yield* Effect.uninterruptibleMask((restore) =>
       restore(execute(input, options)).pipe(
         Effect.tap((output) =>
@@ -362,7 +387,6 @@ export const makeToolExecution = <TCtx>({
       tool.keepsTail ? 'tail' : 'head',
       prepared.resultRetention,
     );
-    runState.noteToolOutput(name, projection.output, options.toolCallId, step ?? runState.stepNumber);
     const after = yield* rules.evaluate(
       {
         hook: 'afterTool',
@@ -449,9 +473,6 @@ export const makeToolExecution = <TCtx>({
       tool.keepsTail ? 'tail' : 'head',
       prepared.resultRetention,
     );
-    const runState = run.runState;
-    if (performed) runState.noteToolOutput(name, projection.output, call.options.toolCallId, tracked.stepNumber);
-    else runState.noteToolRefusal(name, projection.output, call.options.toolCallId, tracked.stepNumber);
     const durationMs = now() - prepared.openedAt;
     const display = outputs.display({
       tool,
@@ -504,7 +525,6 @@ export const makeToolExecution = <TCtx>({
         : own?.text !== undefined
           ? { type: 'text', value: own.text }
           : outcomeOutput(tool, prepared.rawInput, output);
-    run.runState.noteToolOutput(name, output, call.options.toolCallId, tracked.stepNumber);
     const durationMs = now() - prepared.openedAt;
     return {
       output,
@@ -533,7 +553,7 @@ export const makeToolExecution = <TCtx>({
     const asking = tracked.hooks?.asking;
     if (asking === undefined) {
       const refused = permissionRefusal(prepared.permission, call.name);
-      return Option.some(yield* unexecuted(call, prepared, toJson(refused), { kind: 'denied' }, tracked.stepNumber, took));
+      return Option.some(yield* unexecuted(call, prepared, toJson(refused), { kind: 'denied' }, took));
     }
     const verdict = yield* asking(tracked.call.record, {
       prepared,
@@ -552,7 +572,7 @@ export const makeToolExecution = <TCtx>({
         : verdict.stopped === true
           ? { kind: 'cancelled' }
           : { kind: 'denied' };
-    return Option.some(yield* unexecuted(call, prepared, toJson(verdict.output), kind, tracked.stepNumber, took));
+    return Option.some(yield* unexecuted(call, prepared, toJson(verdict.output), kind, took));
   });
 
   const decided = Effect.fnUntraced(function* (
@@ -569,7 +589,7 @@ export const makeToolExecution = <TCtx>({
     if (permission.verdict === 'deny' || (unanswered && run.unattended)) {
       const refused = permissionRefusal(permission, call.name);
       const took = Effect.map(Clock.currentTimeMillis, (at) => at - prepared.openedAt);
-      return Option.some(yield* unexecuted(call, prepared, toJson(refused), { kind: 'denied' }, tracked.stepNumber, took));
+      return Option.some(yield* unexecuted(call, prepared, toJson(refused), { kind: 'denied' }, took));
     }
     return unanswered ? yield* permitted(ready, prepared, tracked) : Option.none();
   });
@@ -635,7 +655,12 @@ export const makeToolExecution = <TCtx>({
         handed: life.handed,
         completed: (exit) =>
           (tracked.hooks?.completed(tracked.call.record, exit) ?? Effect.void).pipe(
-            Effect.tap(() => Effect.sync(() => tracked.settlement?.delivered())),
+            Effect.tap(() =>
+              Effect.sync(() => {
+                tracked.settlement?.ended();
+                tracked.settlement?.delivered();
+              }),
+            ),
           ),
       })
       .pipe(
@@ -718,18 +743,25 @@ export const makeToolExecution = <TCtx>({
     claims: readonly Claim[],
   ): Effect.fn.Return<AgentCallAdoption> {
     const toolCallId = call.options.toolCallId;
-    const tracked = track({ name: call.name, tool: call.tool, input: call.input, toolCallId, resultRetention: call.resultRetention });
+    const tracked = yield* tracking({
+      name: call.name,
+      tool: call.tool,
+      input: call.input,
+      toolCallId,
+      resultRetention: call.resultRetention,
+    });
     if (tracked === null || !handable(tracked)) return { refused: 'No thread can own this call’s outcome in the background.' };
     const acquired = yield* Effect.exit(acquiring(tracked));
     if (Exit.isFailure(acquired)) return { refused: stays('it could not take its own resources', acquired.cause) };
     const lifetime = acquired.value;
+    const restore = tracked.settlement?.defer();
     const clock = yield* Clock.Clock;
     const receipt = backgroundReceipt(call, prepared, tracked, () => clock.currentTimeMillisUnsafe());
     const ready: Ready = { call, prepared };
     return {
       call: tracked.call.record,
       receipt,
-      abandon: lifetime === null ? Effect.void : lifetime.release,
+      abandon: (lifetime === null ? Effect.void : lifetime.release).pipe(Effect.ensuring(Effect.sync(() => restore?.()))),
       settled: tracked.call.settled,
       live: Effect.suspend(() => {
         order.place([{ toolCallId, name: call.name, claims }]);
@@ -752,35 +784,37 @@ export const makeToolExecution = <TCtx>({
   return {
     costing,
     finishCost,
+    ended,
 
-    preparing: <A, E>(call: AgentPermissionQuestion, reading: Effect.Effect<A, E>, stopped: (reason: string) => E): Effect.Effect<A, E> => {
-      const tracked = track(call);
-      return tracked === null ? reading : tracked.call.prepare(reading, stopped);
-    },
+    preparing: <A, E>(call: AgentPermissionQuestion, reading: Effect.Effect<A, E>, stopped: (reason: string) => E): Effect.Effect<A, E> =>
+      Effect.flatMap(tracking(call), (tracked) =>
+        (tracked === null ? reading : tracked.call.prepare(reading, stopped)).pipe(
+          Effect.onError(() => Effect.sync(() => ended(call.toolCallId))),
+        ),
+      ),
 
-    attend: (
+    attend: Effect.fn('ToolExecution.attend')(function* (
       call: AgentToolInvocation,
       preparing: Effect.Effect<AgentToolPreflight, AgentToolFailure>,
-    ): Effect.Effect<AgentToolAttended, AgentToolFailure> =>
-      Effect.suspend(() => {
-        const prepared = (value: AgentToolPreflight): AgentToolAttended => ({ kind: 'prepared', prepared: value });
-        const tracked = track({
-          name: call.name,
-          tool: call.tool,
-          input: call.input,
-          toolCallId: call.options.toolCallId,
-          resultRetention: call.resultRetention,
-        });
-        if (tracked === null || !handable(tracked)) return Effect.map(preparing, prepared);
-        const attended = Effect.map(
-          tracked.call.attend(preparing, (held) => takeOver(call, tracked, held)),
-          (taken): AgentToolAttended => (taken.handed ? { kind: 'answered', outcome: taken.receipt } : prepared(taken.value)),
-        );
-        if (call.tool.doorFields?.includes('background') !== true || doorAsked(call.input, 'background') !== true) return attended;
-        return Effect.flatMap(takeOver(call, tracked, preparing), (taken) =>
-          'receipt' in taken ? Effect.succeed<AgentToolAttended>({ kind: 'answered', outcome: taken.receipt }) : attended,
-        );
-      }),
+    ): Effect.fn.Return<AgentToolAttended, AgentToolFailure> {
+      const prepared = (value: AgentToolPreflight): AgentToolAttended => ({ kind: 'prepared', prepared: value });
+      const tracked = yield* tracking({
+        name: call.name,
+        tool: call.tool,
+        input: call.input,
+        toolCallId: call.options.toolCallId,
+        resultRetention: call.resultRetention,
+      });
+      if (tracked === null || !handable(tracked)) return yield* Effect.map(preparing, prepared);
+      const attended = Effect.map(
+        tracked.call.attend(preparing, (held) => takeOver(call, tracked, held)),
+        (taken): AgentToolAttended => (taken.handed ? { kind: 'answered', outcome: taken.receipt } : prepared(taken.value)),
+      );
+      if (call.tool.doorFields?.includes('background') !== true || doorAsked(call.input, 'background') !== true) return yield* attended;
+      return yield* Effect.flatMap(takeOver(call, tracked, preparing), (taken) =>
+        'receipt' in taken ? Effect.succeed<AgentToolAttended>({ kind: 'answered', outcome: taken.receipt }) : attended,
+      );
+    }),
 
     queued: (toolCallId: string, reason: string): void => {
       owned.get(toolCallId)?.call.stage('waiting', reason);
@@ -798,6 +832,7 @@ export const makeToolExecution = <TCtx>({
     decline: (toolCallId: string, reason: string, phase: 'failed' | 'stopped' = 'failed'): void => {
       order.release(toolCallId);
       callOf(toolCallId)?.finish(phase, reason);
+      ended(toolCallId);
     },
 
     prepared: (call: AgentPermissionQuestion, prepared: AgentToolPreflight): void => {
