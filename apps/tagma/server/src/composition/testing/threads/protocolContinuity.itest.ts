@@ -208,8 +208,15 @@ layer(protocolFixture('protocol-continuity'), { excludeTestServices: true })('AC
             refuses: false,
             runs: (runs) => ({
               ...runs,
-              writeHeartbeats: (ids, at) =>
-                Effect.tap(runs.writeHeartbeats(ids, at), () => (outage ? Deferred.succeed(heartbeat, undefined) : Effect.void)),
+              writeHeartbeats: (ids, at, unit) =>
+                Effect.tap(runs.writeHeartbeats(ids, at, unit), (result) => {
+                  const observed = Effect.suspend(() =>
+                    outage && result.written.some((run) => run.threadId === threadId)
+                      ? Effect.asVoid(Deferred.succeed(heartbeat, undefined))
+                      : Effect.void,
+                  );
+                  return unit ? unit.afterCommit(observed) : observed;
+                }),
             }),
             terminals: (terminals) => ({
               ...terminals,
