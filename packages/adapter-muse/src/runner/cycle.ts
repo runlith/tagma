@@ -19,8 +19,8 @@ import { Compact, ItemEvent, Models, Opened, Quota, Started, TokenUsage, TurnCom
 import { keepPriced, keepState, keptPriced, keptState, writeSettings, type MusePlace } from './home.js';
 import { observationOf } from './quota.js';
 import { Compactions } from './compactions.js';
+import { HostModels } from './models.js';
 
-const PROVIDER_ID = 'meta';
 const PROFILE = ':ask-me';
 const APPROVALS = 'promptUnmatched';
 const CONTINUE = 'Continue the work.';
@@ -49,7 +49,7 @@ type Live = {
   readonly key: string;
   readonly scope: Scope.Closeable;
   readonly loaded: Set<string>;
-  readonly windows: ReadonlyMap<string, number>;
+  readonly models: HostModels;
 };
 type Compacting = { readonly session: string; readonly output: Output; readonly done: Deferred.Deferred<Item, AgentFault> };
 type Asking = {
@@ -346,8 +346,7 @@ export const makeMuseCycle = Effect.fnUntraced(function* (door: HostedDoor, proc
         Effect.onError(() => Scope.close(owned, Exit.void)),
       );
     const listed = yield* host.request('model/list', {}).pipe(Effect.mapError(faultOf), Effect.flatMap(decoded(Models, 'model/list')));
-    const windows = new Map(listed.models.flatMap((row) => (row.contextLimit === null ? [] : [[row.modelId, row.contextLimit] as const])));
-    const made: Live = { host, key, scope: owned, loaded: new Set(), windows };
+    const made: Live = { host, key, scope: owned, loaded: new Set(), models: new HostModels(listed) };
     live = made;
     yield* Effect.forkIn(
       Effect.flatMap(host.ended, (reason) => (live === made ? died(`Muse Code ended under a live session: ${reason}`) : Effect.void)),
@@ -365,7 +364,7 @@ export const makeMuseCycle = Effect.fnUntraced(function* (door: HostedDoor, proc
           sessionId: seat.id,
           workspaceRoot: seat.cwd,
           ...(model === null ? {} : { modelId: model }),
-          providerId: PROVIDER_ID,
+          providerId: standing.models.provider,
           approvalMode: APPROVALS,
           permissionProfile: PROFILE,
           config,
@@ -393,7 +392,7 @@ export const makeMuseCycle = Effect.fnUntraced(function* (door: HostedDoor, proc
     const { model } = options.read();
     if (model !== null && (applied?.session !== seat.id || applied.model !== model)) {
       yield* standing.host
-        .command('session/setModel', { sessionId: seat.id, model: { modelId: model, providerId: PROVIDER_ID } })
+        .command('session/setModel', { sessionId: seat.id, model: standing.models.selection(model) })
         .pipe(Effect.mapError(faultOf));
       if (applied?.model !== model) window = null;
       applied = { session: seat.id, model };
@@ -406,7 +405,7 @@ export const makeMuseCycle = Effect.fnUntraced(function* (door: HostedDoor, proc
     return { prompt: servedPrompt(agent.prompt, listed.dispatch), web: agent.web, listed } satisfies Want;
   });
 
-  const windowOf = () => window ?? (applied === null ? null : (live?.windows.get(applied.model) ?? null));
+  const windowOf = () => window ?? (applied === null ? null : (live?.models.windowOf(applied.model) ?? null));
 
   const sessionOf = (seat: Seat, seed: readonly ContentBlock[], outlet: Outlet) => {
     let history = seed;
@@ -659,7 +658,7 @@ export const makeMuseCycle = Effect.fnUntraced(function* (door: HostedDoor, proc
             const { model, effort } = options.read();
             if (model !== null)
               yield* standing.host
-                .command('session/setModel', { sessionId: side, model: { modelId: model, providerId: PROVIDER_ID } })
+                .command('session/setModel', { sessionId: side, model: standing.models.selection(model) })
                 .pipe(Effect.mapError(faultOf));
             if (effort !== null)
               yield* standing.host

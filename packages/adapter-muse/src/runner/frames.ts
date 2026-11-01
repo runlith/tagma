@@ -127,11 +127,13 @@ export const SessionRead = Schema.Struct({
 });
 export const Models = Schema.Struct({
   providerId: Schema.String,
+  profileId: Schema.optional(Schema.NullOr(Schema.String)),
   models: Schema.Array(
     Schema.Struct({
       modelId: Schema.String,
       displayLabel: Schema.String,
       providerId: Schema.String,
+      profileId: Schema.optional(Schema.NullOr(Schema.String)),
       isDefault: Schema.Boolean,
       contextLimit: Schema.NullOr(Schema.Finite),
       outputLimit: Schema.NullOr(Schema.Finite),

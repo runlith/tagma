@@ -57,6 +57,7 @@ const world = Effect.fnUntraced(function* (
               return method === 'model/list'
                 ? Effect.succeed({
                     providerId: 'meta',
+                    profileId: 'tbh',
                     models: [
                       {
                         modelId: 'muse-spark-1.2',
@@ -788,7 +789,7 @@ it.effect('a side question runs in a side session on the thread model and answer
     const asked = yield* agent.extensions!['_tagma/aside']!({ sessionId: session.sessionId, question: 'What is the code word?' });
     expect(asked).toMatchObject({ text: 'PELICAN-7', usage: { inputTokens: 17_624, outputTokens: 5 } });
     expect(sent.find((one) => one.method === 'session/setModel' && one.params.sessionId === 'side-1')?.params).toMatchObject({
-      model: { modelId: 'muse-spark-1.2' },
+      model: { modelId: 'muse-spark-1.2', providerId: 'meta', profileId: 'tbh' },
     });
   }),
 );
