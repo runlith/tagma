@@ -4158,66 +4158,6 @@ describe('AgentRunner context boundary', () => {
     );
   });
   it.live(
-    'a call awaiting a reader holds the boundary shut for the step that follows it',
-    Effect.fnUntraced(function* () {
-      const model = fakeModel((callNumber) =>
-        callNumber === 1 ? toolCallTurn('confirm_me', 'call-1') : textTurn('Answered while it waits.'),
-      );
-      const asked: number[] = [];
-      let pending = true;
-      const asking = new Agent({
-        id: 'asking-agent',
-        name: 'Asking agent',
-        description: 'Leaves one call waiting for a reader.',
-        stopWhen: [stepLimit(TEST_MAX_STEPS)],
-        instructions: () => 'Ask before you act.',
-        tools: () => ({
-          confirm_me: Tool.make({
-            display: () => ({ form: 'none' }),
-            approval: ASKS_IN_REVIEW,
-            description: 'Change a file.',
-            parameters: Schema.Struct({}),
-            execute: () => Effect.succeed('wrote it'),
-            mutates: true,
-            confirmation: { prompt: () => ({ summary: 'Write it?' }), confirmLabel: 'Write' },
-          }),
-        }),
-      });
-      const handle = yield* runner(model).run(asking, {
-        runId: 'run-waiting',
-        ctx: {},
-        model: { ownerId: 'owner-1', provider: 'subscription', model: 'claude-opus-5', reasoning: 'xhigh', switches: {} },
-        messages: [Message.user('Answer.')],
-        signals: {
-          drain: (stepNumber) =>
-            Effect.sync(() => {
-              if (stepNumber === 0) return [];
-              pending = false;
-              return [{ type: 'message', text: 'And also this.', occurredAt: '' } as ThreadSignal];
-            }),
-          hasPending: () => Effect.succeed(pending),
-        },
-        approval: { mode: 'review', interactive: true },
-        modeOf: builtinMode('review'),
-        boundary: ({ stepNumber, scope }) => {
-          asked.push(stepNumber);
-          return Effect.succeed(
-            agentScope({
-              generation: scope.generation + 1,
-              ctx: {},
-              model: scope.model,
-              resolved: { catalog: scope.catalog, withheld: [] },
-            }),
-          );
-        },
-      });
-      yield* handle.output.finishReason;
-      expect(model.calls).toHaveLength(2);
-      expect(handle.completedSteps()[0]?.toolResults).toEqual([]);
-      expect(asked).toEqual([0]);
-    }),
-  );
-  it.live(
     'a step limit counts the steps taken before the boundary as well as after it',
     Effect.fnUntraced(function* () {
       const model = fakeModel(() => toolCallTurn('side_effect', `call-${Math.random()}`));

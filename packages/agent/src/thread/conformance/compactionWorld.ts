@@ -35,6 +35,7 @@ import { ThreadCallBroke } from '../ThreadBorder';
 import { threadHostLayer } from '../ThreadPorts';
 import type { ThreadToolOutputStorage } from '../toolOutputs';
 import type { ThreadStorageFactory, ThreadStorageHarness } from './storagePort';
+import type { ApproversPort } from '../Approvers';
 import { ThreadEntryKinds } from '../../transcript/kinds';
 import { ASKS_IN_REVIEW, ASKS_NEVER } from '../../permissions/vocabulary';
 import { until as waitUntil } from './runLog/support';
@@ -148,6 +149,7 @@ export type CompactionWorldOptions = {
   readonly billed?: boolean;
   readonly resumeWithinMs?: number;
   readonly collaboration?: boolean;
+  readonly approvers?: ApproversPort;
   readonly resting?: ReadonlySet<string>;
 };
 const defaultModels = modelCatalog(DEFAULT_PROVIDER_DESCRIPTIONS);
@@ -353,6 +355,7 @@ const makeWorld = Effect.fnUntraced(function* <TTx, TWrite extends TTx>(
       }),
     ),
     threadHostLayer({
+      approvers: options.approvers,
       resting:
         options.resting === undefined ? undefined : { resting: (threadId: string) => Effect.sync(() => options.resting!.has(threadId)) },
       rhythms: {
