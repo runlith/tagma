@@ -474,7 +474,7 @@ layer(root, { excludeTestServices: true })('a root composing the core with a mod
             server: {
               calls: count,
               work: expect.arrayContaining([
-                expect.objectContaining({ id: 'speech/listenings', count: 0 }),
+                expect.objectContaining({ id: 'calls/listenings', count: 0 }),
                 expect.objectContaining({ id: 'greeting/tones', count }),
               ]),
             },
@@ -625,6 +625,7 @@ it.live('the core alone opens a data directory written by modules it lacks, and 
     yield* Scope.close(first, Exit.void);
     expect(existsSync(ownStorePath(join(home, 'tagma.sqlite'), 'greeting'))).toBe(true);
     expect(existsSync(ownStorePath(join(home, 'tagma.sqlite'), 'graph-remote'))).toBe(true);
+    expect(existsSync(ownStorePath(join(home, 'tagma.sqlite'), 'calls'))).toBe(true);
 
     const second = yield* Scope.make();
     yield* Effect.addFinalizer(() => Scope.close(second, Exit.void));

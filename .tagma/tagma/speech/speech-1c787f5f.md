@@ -64,4 +64,4 @@ sources:
   - kind: dir
     ref: apps/tagma/app/src/lib/features/speech
 ---
-The operator talks to the agent by voice: dictation into the input field, a call from a thread, the library of recorded calls and their settings.
+The operator talks to the agent by voice: dictation into the input field, recognition and spoken replies in an app view, the speech check and the speech settings.

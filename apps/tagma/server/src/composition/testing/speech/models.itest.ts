@@ -4,7 +4,7 @@ import { expect } from 'bun:test';
 import { type Cause, Effect, Fiber, Queue, Stream } from 'effect';
 import type { LocalModels } from '../../../speech/contract/service/models.js';
 import type { InstallEvent } from '../../../speech/contract/wire/feeds.js';
-layer(speechFixture({}), { excludeTestServices: true })('speech', (it) => {
+layer(speechFixture(), { excludeTestServices: true })('speech', (it) => {
   it.effect('an install tells its progress to a subscriber from the start to the whole model', () =>
     Effect.flatMap(SpeechFixture, (fixture) =>
       Effect.gen(function* () {

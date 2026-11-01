@@ -68,93 +68,6 @@ export const globalDictationKey = settingKey({
   merge: 'replace',
 });
 
-export const callTracks = settingKey({
-  id: 'speech.calls.tracks',
-  order: 905,
-  title: 'Call recording',
-  description:
-    'What Record call captures: `both` is the microphone (you) and system audio (everyone else in the call); `mic` is the microphone alone, for a meeting in one room. Speaker echo cancellation is controlled separately by `speech.calls.echo`.',
-  schema: Schema.Literals(['both', 'mic']),
-  fallback: 'both',
-  scopes: ['user'],
-  merge: 'replace',
-});
-
-export const callSpeakers = settingKey({
-  id: 'speech.calls.speakers',
-  order: 906,
-  title: 'Separate speakers in calls',
-  description:
-    'Whether a recorded call numbers the people on the other side when its recognizer can tell speakers apart; a recognizer that cannot records the call without numbers.',
-  schema: Schema.Boolean,
-  fallback: true,
-  scopes: ['user'],
-  merge: 'replace',
-});
-
-export const callKeys = settingKey({
-  id: 'speech.calls.keys',
-  order: 907,
-  title: 'Call keys',
-  description:
-    'The chords the Tagma window answers while a call records, written like the dictation key: `mark` sets a mark at this moment, `mute` mutes or unmutes the microphone.',
-  schema: Schema.Struct({
-    mark: Schema.String.check(Schema.isMinLength(1)),
-    mute: Schema.String.check(Schema.isMinLength(1)),
-  }),
-  fallback: { mark: 'Control+Alt+KeyM', mute: 'Control+Alt+KeyA' },
-  scopes: ['user'],
-  merge: 'replace',
-});
-
-export const callFollowEvery = settingKey({
-  id: 'speech.calls.followEvery',
-  order: 909,
-  title: 'Agent beside a call',
-  description:
-    'How many minutes apart an agent following a call receives what was newly said; it also receives a piece at each mark you set and when the call ends.',
-  schema: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 60 })),
-  fallback: 3,
-  scopes: ['user'],
-  merge: 'replace',
-});
-
-export const callAudio = settingKey({
-  id: 'speech.calls.audio',
-  order: 908,
-  title: 'Call audio',
-  description:
-    'Whether a new call records its sound for the player and for recognizing it again (`record`), and how many days from its start the sound of every call is kept (`days`; empty keeps it for good). A shorter term erases older sound at the next hourly pass; the transcript stays.',
-  schema: Schema.Struct({ record: Schema.Boolean, days: Schema.NullOr(Schema.Int.check(Schema.isGreaterThanOrEqualTo(1))) }),
-  fallback: { record: true, days: 30 },
-  scopes: ['user'],
-  merge: 'replace',
-});
-
-export const callAgain = settingKey({
-  id: 'speech.calls.again',
-  order: 911,
-  title: 'Recognize calls again with',
-  description:
-    'The provider and model Recognize again uses for the recorded sound of an ended call when it names none: a model that hears a whole file, or a local model faster than real time. Empty takes the first available file model that tells speakers apart.',
-  schema: Schema.Struct({ provider: Schema.optional(Schema.String), model: Schema.optional(Schema.String) }),
-  fallback: {},
-  scopes: ['user'],
-  merge: 'replace',
-});
-
-export const callEcho = settingKey({
-  id: 'speech.calls.echo',
-  order: 912,
-  title: 'Cancel speaker echo in calls',
-  description:
-    'Whether a new call that records system audio takes out of the microphone what plays from the speakers, so the other side is not heard twice as you. It applies only when sound goes to the speakers, never to headphones, and may soften your words spoken over theirs.',
-  schema: Schema.Boolean,
-  fallback: false,
-  scopes: ['user'],
-  merge: 'replace',
-});
-
 export const languages = settingKey({
   id: 'speech.languages',
   order: 905,
@@ -230,13 +143,6 @@ export const SPEECH_SETTINGS = [
   dictationKey,
   globalDictation,
   globalDictationKey,
-  callTracks,
-  callSpeakers,
-  callKeys,
-  callAudio,
-  callAgain,
-  callFollowEvery,
-  callEcho,
   languages,
   voiceChoice,
   microphone,

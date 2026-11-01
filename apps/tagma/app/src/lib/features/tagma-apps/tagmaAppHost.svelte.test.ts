@@ -5,7 +5,8 @@ import { expect, test } from 'vitest';
 import type { ThreadPresence } from '$lib/features/presence/Presence.svelte.js';
 import { makePoint } from '@runlith/layer/testing';
 import type { ViewCall, ViewParams } from '../views/ViewBridge.js';
-import { type TagmaMethod, TagmaMethods, THREAD_CHANGED } from './methods.js';
+import { bridgeMethod, THREAD_CHANGED } from '@tagma/server/views/contract/wire/bridge';
+import { type TagmaMethod, TagmaMethods } from './methods.js';
 import { type TagmaAppHostOwners, tagmaAppHost } from './tagmaAppHost.svelte.js';
 
 class Watched {
@@ -19,9 +20,8 @@ class Watched {
 const rowOf = (life: string, text: string): PresenceRow =>
   ({ status: { life, runId: life === 'working' ? 'run-1' : null }, tail: null, saidLine: text, outcome: null }) as unknown as PresenceRow;
 
-const declared = (name: string, notifications: readonly string[] = []): TagmaMethod => ({
-  name,
-  notifications,
+const declared = (id: string, notifications: readonly string[] = []): TagmaMethod => ({
+  declaration: bridgeMethod({ id, notifications, signature: '{…}', description: 'echoes' }),
   method: (_owners, mount) => async (params) => ({ projectId: mount.projectId, params }),
 });
 

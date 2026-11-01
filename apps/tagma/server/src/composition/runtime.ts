@@ -33,8 +33,8 @@ import { fileWatcherLayer } from './fileWatcher.js';
 import { PROGRAM_RELEASE } from '../platform/contract/wire/program.js';
 import { MachineAgents } from '../installation/contract/service/agents.js';
 import { LiveWorks } from '../platform/contract/service/live.js';
+import { BridgeMethods } from '../views/contract/service/bridge.js';
 import { Handoff } from '../platform/contract/service/handoff.js';
-import { Listenings } from '../speech/contract/service/listenings.js';
 import { ThreadRunning } from '../threads/contract/service/reads.js';
 import type { TokenStore } from '@runlith/llm/oauth/FileTokenStore';
 import { artifacts } from '../artifacts/artifacts.js';
@@ -45,17 +45,13 @@ import { AccountCredentials, ModelAccess } from '../providers/contract/service/a
 import { DefaultAccounts } from '../providers/contract/service/accounts.js';
 import { CredentialFiles, KeyedProviders, ProviderCredentials, QuotaProviders } from '../providers/contract/service/credentials.js';
 import { credentialsLayer } from '../speech/credentials.js';
-import { RECORDINGS } from '../speech/contract/service/recording.js';
 import { KEYED_SPEECH, speechInstallation, speechPlace } from './speech.js';
-import { callThreads } from './callThreads.js';
 import { browserBindings, browserRuns, cookieSourcesLayer } from './browser.js';
 import { browser } from '../browser/browser.js';
 import { images } from '../images/images.js';
 import { managedBrowser } from '../managed-browser/managed-browser.js';
 import { pageRender } from '../page-render/page-render.js';
 import { desktopBrowser } from '../desktop-browser/desktop-browser.js';
-import { Attachments } from '../threads/contract/service/attachments.js';
-import { ThreadTurns } from '../threads/turns/acts.js';
 import { providers } from '../providers/providers.js';
 import type { VendorWire } from '../providers/accounts/signIns.js';
 import { SignIns, VendorWires } from '../providers/contract/service/signIns.js';
@@ -330,7 +326,6 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
     toolOutputsPath?: string;
     scratchPath?: string;
     artifactsPath?: string;
-    recordingsPath?: string;
     artifactOrigin?: string;
     sandboxPort?: number;
     sites?: LocalSites;
@@ -458,7 +453,6 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
     Layer.provide(options.vendorWire === undefined ? Layer.empty : Layer.succeed(VendorWires, { wire: options.vendorWire })),
   );
   const machine = machineWorld(() => presentCarried(CARRIED_RIPGREP));
-  const calls = callThreads();
   const browserThreads = browserRuns();
   const mcpPlacesPort = mcpPlaces();
   const sandboxInstallation = Layer.effect(
@@ -624,6 +618,7 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
                 Layer.provide(
                   Layer.succeed(ToolOutputsPlace, options.toolOutputsPath === undefined ? {} : { path: options.toolOutputsPath }),
                 ),
+                Layer.provide(Layer.succeed(BridgeMethods, { all: assembly.bridgeMethods })),
                 Layer.provide(BunFileSystem.layer),
               ),
             ),
@@ -660,8 +655,6 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
               speechInstallation({
                 place: speechPlace(channel, options.sourcePath, options.installation, storeDirectory(storePath)),
                 credentials: credentialsLayer,
-                calls: calls.port,
-                recordings: options.recordingsPath ?? join(dirname(storePath), RECORDINGS),
               }).pipe(Layer.provide(readyProviders), Layer.provide(BunFileSystem.layer)),
             ),
             browsers,
@@ -850,14 +843,6 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
   );
   yield* Scope.provide(
     mcpPlacesPort.bind({ coverage: Context.get(owners, Coverage), bases: [scratch.root, options.attachmentsPath] }),
-    stackScope,
-  );
-  yield* Scope.provide(
-    calls.bind({
-      turns: Context.get(owners, ThreadTurns),
-      attachments: Context.get(owners, Attachments),
-      records: Context.get(built, ThreadRecords),
-    }),
     stackScope,
   );
   const resolution = sessionResolution(store, Context.get(built, Terminals), Context.get(built, ThreadRecords));

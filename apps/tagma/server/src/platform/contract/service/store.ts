@@ -124,7 +124,7 @@ export type Store<Brand extends StoreBrand> = {
   ) => Effect.Effect<A, E | StoreFailure | ProgramConflict>;
   readonly readOnly: <A, E, R>(work: (db: StoreDb<Brand>) => Effect.Effect<A, E, R>) => Effect.Effect<A, E | StoreFailure, R>;
   readonly vacuum: () => Effect.Effect<VacuumVerdict, StoreFailure>;
-  readonly adopted: Effect.Effect<void>;
+  readonly adopted: Effect.Effect<boolean>;
   readonly freeing: <A, E, R>(work: Effect.Effect<A, E, R>) => Effect.Effect<readonly [A, number], E | StoreFailure, R>;
   readonly moves: TableMoves;
   readonly stalled: Effect.Effect<WriterStall | null>;

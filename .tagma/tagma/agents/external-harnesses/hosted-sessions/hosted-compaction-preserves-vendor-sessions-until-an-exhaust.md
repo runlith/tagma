@@ -12,21 +12,21 @@ sources:
   - kind: file
     ref: apps/tagma/server/src/external-harnesses/protocol/prompts.ts
   - kind: file
+    ref: apps/tagma/server/src/native-harness/compaction/limits.ts
+  - kind: file
     ref: apps/tagma/server/src/native-harness/compaction/spend.ts
   - kind: file
     ref: apps/tagma/server/src/threads/contract/service/compaction.ts
   - kind: file
     ref: packages/agent/src/thread/run/scheduler/compactions.ts
+  - kind: file
+    ref: packages/hosted-runner/src/profile.ts
   - kind: symbol
     ref: apps/tagma/server/src/external-harnesses/protocol/journal.ts
     symbol: eventsOf
   - kind: symbol
     ref: packages/agent/src/thread/run/ThreadCompactionRuns.ts
     symbol: isCompactionRun
-  - kind: file
-    ref: apps/tagma/server/src/native-harness/compaction/limits.ts
-  - kind: file
-    ref: packages/hosted-runner/src/profile.ts
 ---
 On a `session` transport, a manual request and Tagma's fill threshold can start `_tagma/compact` in the already open vendor session with the native summarizer's instructions. Tagma's threshold comes from its settings and model catalog, and the window size from the agent's measurement. The Claude runner keeps its autocompaction off ([[d0810682|Claude runner]]); OpenCode also keeps its engine's automatic compaction and overflow recovery enabled. The same rule and the same chain as on a native thread pick the summarizer (`read_compaction_choices`, `ThreadCompactor.summarizing`), and the pick decides the road the core opens for the run (`Compactions.open`):
 

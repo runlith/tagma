@@ -1,5 +1,6 @@
 import { SENT_FRAME_SAMPLES, SENT_HEADER_BYTES } from '@tagma/server/speech/contract/wire/listening';
 import type { SoundChannel } from '$lib/wire/SoundChannel.js';
+import type { FeedFailure } from '../../views/ViewFeeds.js';
 
 const SENT_RATE = 16_000;
 const BACKLOG_MS = 10_000;
@@ -50,11 +51,9 @@ class Frames extends AudioWorkletProcessor {
 registerProcessor('sent-frames', Frames);
 `;
 
-export type SenderFailure = { readonly code: string; readonly reason: string; readonly unblock: readonly string[] };
-
 class Silent extends Error {}
 
-export function microphoneMissing(): SenderFailure | null {
+export function microphoneMissing(): FeedFailure | null {
   if (window.isSecureContext && navigator.mediaDevices?.getUserMedia !== undefined && 'AudioWorkletNode' in window) return null;
   return {
     code: 'browser-mic-missing',
@@ -89,7 +88,7 @@ export class Sender {
   constructor(
     private readonly channel: SoundChannel,
     private readonly id: string,
-    private readonly failed: (failure: SenderFailure) => void,
+    private readonly failed: (failure: FeedFailure) => void,
   ) {}
 
   async start(): Promise<boolean> {
@@ -156,7 +155,7 @@ export class Sender {
     this.held = [];
   }
 
-  private lose(failure: SenderFailure): void {
+  private lose(failure: FeedFailure): void {
     if (this.stopped) return;
     this.stop();
     this.failed(failure);
@@ -222,7 +221,7 @@ export class Sender {
   }
 }
 
-function closedBy(event: CloseEvent): SenderFailure {
+function closedBy(event: CloseEvent): FeedFailure {
   if (event.code === POLICY_CLOSE) {
     return {
       code: 'sender-refused',
@@ -244,7 +243,7 @@ function closedBy(event: CloseEvent): SenderFailure {
   };
 }
 
-function refusedBy(error: unknown): SenderFailure {
+function refusedBy(error: unknown): FeedFailure {
   if (error instanceof Silent) {
     return {
       code: 'browser-audio-suspended',

@@ -1,0 +1,11 @@
+{
+  "tables": [
+    "listening",
+    "listening_speaker",
+    "listening_follower",
+    "listening_given",
+    "transcript_line",
+    "transcript_entry",
+    "transcript_staged"
+  ]
+}

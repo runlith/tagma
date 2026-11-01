@@ -40,7 +40,6 @@ import { doorCompositionLayer } from './http/handlers.js';
 import { requestLine } from '../http/door.js';
 import { routedContext } from '../graph/serving/routing.js';
 import { makeRuntime, type ServerRuntime } from './runtime.js';
-import { RECORDINGS } from '../speech/contract/service/recording.js';
 import { SHIPPED_PRESETS } from '../marketplaces/contract/wire/presets.js';
 import { assemble } from './manifest.js';
 import type { Build } from './build.js';
@@ -425,7 +424,6 @@ export const serve = async (build: Build): Promise<void> => {
             tokensPath: join(dataPath, 'tokens.json'),
             attachmentsPath: join(dataPath, 'attachments'),
             artifactsPath: join(dataPath, 'artifacts'),
-            recordingsPath: join(dataPath, RECORDINGS),
             artifactOrigin: `http://localhost:${artifactPort}`,
             sandboxPort,
             sites: localSites,

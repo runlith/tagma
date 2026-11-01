@@ -1,33 +1,8 @@
 import { Schema } from 'effect';
 import { Source } from '@runlith/audio/port/devices';
 import { feed } from '../../../platform/contract/wire/operation.js';
-import { Heard, HeardTrackAsk, Line, ListeningEvent, RecognitionPurpose, RecognizerAsk, TrackPlace } from './listening.js';
+import { Heard, HeardTrackAsk, RecognitionPurpose, RecognizerAsk, TrackPlace } from './listening.js';
 import { SpeakAsk, Synthesized } from './speaking.js';
-
-const projectId = Schema.Int.check(Schema.isGreaterThan(0));
-
-export const LISTENING_FEED = feed('speech.listening.subscribe', {
-  input: Schema.Struct({ projectId, listening: Schema.String }),
-  event: ListeningEvent,
-  refusals: ['unknown-listening'],
-  callers: 'any',
-  admission: 'project',
-});
-
-export const TRANSCRIPT_FEED = feed('speech.transcript.subscribe', {
-  input: Schema.Struct({
-    projectId,
-    listening: Schema.String,
-    after: Schema.optional(Schema.Int),
-    stay: Schema.optional(Schema.Boolean).annotate({
-      description: 'Keep the feed open past the confirmed tail of an ended listening, to hear its later marks and corrections.',
-    }),
-  }),
-  event: Line,
-  refusals: ['unknown-listening'],
-  callers: 'any',
-  admission: 'project',
-});
 
 export const RECOGNIZE_FEED = feed('speech.recognize', {
   input: Schema.Struct({
@@ -101,4 +76,4 @@ export const SYNTHESIS_FEED = feed('speech.synthesize', {
   callers: 'operator',
 });
 
-export const SPEECH_FEEDS = [LISTENING_FEED, TRANSCRIPT_FEED, RECOGNIZE_FEED, INSTALL_FEED, CAPTURES_FEED, SYNTHESIS_FEED] as const;
+export const SPEECH_FEEDS = [RECOGNIZE_FEED, INSTALL_FEED, CAPTURES_FEED, SYNTHESIS_FEED] as const;

@@ -31,9 +31,6 @@ import {
 import { type Installation, releaseApplication } from '../installation/contract/wire/manifest.js';
 import { installationRoot } from '../installation/paths.js';
 import type { Channel } from '../installation/contract/wire/channel.js';
-import { Echo, EchoUnloaded } from '../speech/contract/service/echo.js';
-import { CallThreads } from '../speech/contract/service/callThreads.js';
-import { RecordingsPlace } from '../speech/contract/service/recording.js';
 import { speech } from '../speech/speech.js';
 import { InstallFailed, LocalModels, ModelRefused } from '../speech/contract/service/models.js';
 
@@ -137,28 +134,11 @@ const recognizers = (place: SpeechPlace) => {
   );
 };
 
-const echo = Layer.succeed(Echo, {
-  open: (format) =>
-    Effect.tryPromise({
-      try: () => import('@runlith/echo/sonora'),
-      catch: (cause) => new EchoUnloaded({ message: `the echo canceller did not load: ${String(cause)}` }),
-    }).pipe(Effect.flatMap((sonora) => sonora.open(format))),
-});
-
 const speechBindings = (place: SpeechPlace) =>
-  Layer.mergeAll(recognizers(place), devices(place), local, echo).pipe(
+  Layer.mergeAll(recognizers(place), devices(place), local).pipe(
     Layer.provide(store(place)),
     Layer.provide(Layer.mergeAll(webSockets, FetchHttpClient.layer)),
   );
 
-export const speechInstallation = <A, E, R>(input: {
-  readonly place: SpeechPlace;
-  readonly credentials: Layer.Layer<A, E, R>;
-  readonly calls: CallThreads['Service'];
-  readonly recordings: string;
-}) =>
-  speech.lifetimes.installation.pipe(
-    Layer.provideMerge(speechBindings(input.place).pipe(Layer.provide(input.credentials))),
-    Layer.provide(Layer.succeed(CallThreads, input.calls)),
-    Layer.provide(Layer.succeed(RecordingsPlace, { root: input.recordings })),
-  );
+export const speechInstallation = <A, E, R>(input: { readonly place: SpeechPlace; readonly credentials: Layer.Layer<A, E, R> }) =>
+  speech.lifetimes.installation.pipe(Layer.provideMerge(speechBindings(input.place).pipe(Layer.provide(input.credentials))));

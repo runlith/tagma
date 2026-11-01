@@ -10,9 +10,9 @@ edges:
     to: 01a19464-5da9-72ce-aa52-6e9c55501889
 sources:
   - kind: file
-    ref: apps/tagma/server/src/platform/store/aside.ts
-  - kind: file
     ref: apps/tagma/server/src/composition/extensions.ts
+  - kind: file
+    ref: apps/tagma/server/src/platform/store/aside.ts
 ---
 A machine-store migration declares the tables it removes in `aside.json` beside its `migration.sql`. Before that migration's transaction, the opening store attaches a temporary file, copies each declared table whole, detaches it and renames it to `<data>/stores/set-aside/<migration>.sqlite`. The copy runs outside the migration's transaction because SQLite refuses ATTACH inside one; the rename is flushed before the migration commits its drop, so no committed drop exists without the file.
 
@@ -22,6 +22,6 @@ A module store names the migrations whose set-aside it adopts (`adopts` on its `
 
 Identity is the target's primary key alone. The conflict clause names exactly those columns, so a clash on any other unique index raises and the file stays, instead of a row being silently dropped and its only copy deleted. A target with no primary key, a key column the set-aside lacks, or a set-aside row with an empty key is refused for the same reason: SQLite would allocate a fresh rowid or let NULL keys pass, and a repeat would duplicate rows. Foreign keys are deferred to the adoption's commit, since the file's tables arrive in name order, not dependency order. A set-aside nobody adopts stays where it lies, for a build that carries its module.
 
-Installation lifetimes are built over a module store before the door opens, so they can see it before its set-aside rows have arrived. `Store.adopted` resolves once every adoption of that store has ended, whether the rows were adopted, the file was absent, or the adoption failed. A failure is logged, and the file is kept for the next start. A module that reads its store to build state it keeps, such as a cache or an index, waits on it first.
+Installation lifetimes are built over a module store before the door opens, so they can see it before its set-aside rows have arrived. `Store.adopted` resolves once every adoption of that store has ended, and answers whether every set-aside landed: true when each file was adopted or absent, false when any adoption failed. A failure is logged, and the file is kept for the next start. A module that reads its store to build state it keeps, such as a cache or an index, waits on it first, and one that would remove anything because its row is absent does so only when the answer is true: until then the missing rows may still be in a set-aside.
 
 The attached file and the transaction share one connection: a store's statements and transactions both run on its single writer connection, and its readers never see the attachment.

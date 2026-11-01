@@ -304,8 +304,8 @@ test('the final keepalive request completes after cancellation while an earlier 
 
 test('a declared binary route is addressed on the server door, and its bytes or its refusal reach the reader', async () => {
   const door = doorOf();
-  const address = door.address((routes) => routes.speech.peaks({ params: { id: 'call 1', track: 'mic' }, query: { project: '7' } }));
-  expect(address).toBe('http://tagma.test/api/speech/listenings/call%201/tracks/mic/peaks?project=7');
+  const address = door.address((routes) => routes.checkouts.preview({ query: { path: 'a.png', full: 'true' } }));
+  expect(address).toBe('http://tagma.test/api/files/preview?path=a.png&full=true');
   expect(door.address('/api/threads/t1/attachments/a.png', { project: '7' })).toBe(
     'http://tagma.test/api/threads/t1/attachments/a.png?project=7',
   );

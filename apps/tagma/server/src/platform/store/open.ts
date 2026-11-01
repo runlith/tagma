@@ -246,7 +246,7 @@ type Opened = {
   readonly moves: TableMoves;
   readonly programs: Programs['Service'];
   readonly stalled: Effect.Effect<WriterStall | null>;
-  readonly adopted: Effect.Effect<void>;
+  readonly adopted: Effect.Effect<boolean>;
 };
 
 const storeOf = <Brand extends StoreBrand>({

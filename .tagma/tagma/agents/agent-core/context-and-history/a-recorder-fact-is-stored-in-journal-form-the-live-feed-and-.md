@@ -8,14 +8,14 @@ edges:
     to: 01a12f88-66ed-7306-9d96-db5a9ea5cde8
 sources:
   - kind: file
+    ref: packages/agent/src/thread/run/OpenParts.ts
+  - kind: file
     ref: packages/agent/src/thread/run/ThreadFactQueue.ts
+  - kind: file
+    ref: packages/agent/src/thread/run/ThreadToolRecords.ts
   - kind: symbol
     ref: packages/agent/src/thread/run/ThreadLiveFeed.ts
     symbol: sameBesides
-  - kind: file
-    ref: packages/agent/src/thread/run/OpenParts.ts
-  - kind: file
-    ref: packages/agent/src/thread/run/ThreadToolRecords.ts
 ---
 A recorder fact is stored in journal form: the live feed and the journal carry one JSON document.
 

@@ -80,10 +80,9 @@ Requests the view sends — at most 64 in flight; any other method answers `-326
 - `tools/call {name, arguments}` — a `view` tool of its app, else `app-tool-unoffered`; the process sees caller `operator`. The answer is the MCP result: `content`, `structuredContent`, `isError`.
 - `resources/read {uri}`; `resources/subscribe {uri}`, `resources/unsubscribe {uri}` — updates arrive as `notifications/resources/updated {uri}`, and a subscription survives restarts and crashes of the process.
 - `ui/open-link {url}` — an `http` or `https` link, only during a click inside the view.
-- `tagma/open` — `{threadId, beside?}` opens a thread, `{section: <view>}` or `{pane: <view>}` a section or pane the app contributes; only during a click inside the view.
-- `tagma/storage/get {key}` answers `{stored, value?}`; `tagma/storage/set {key, value}` keeps a JSON value of at most 1 MiB, and without `value` removes it. The values stand in the app's data directory, shared by all its views, projects and devices.
-- `tagma/thread {threadId}` answers `{threadId, life, runId, text, ended}` — whether a run is going, the reply as it streams or the last line said, how the last run ended — or `{threadId, missing}`; each change follows as `tagma/notifications/thread` until `tagma/thread/unwatch {threadId}` or teardown.
-- `tagma/speech {action, …}` — recognition, call transcripts and spoken replies through Tagma's speech: the `speech` reference.
+<!-- bridge-methods -->
+
+The methods above are the ones this installation serves; a method outside the list answers `-32601`. A notification arrives as a JSON-RPC notification of that name. A `Reference:` names a section of this skill: ask for it in `references` of `load_skill`.
 
 Messages the host sends:
 - `ui/notifications/host-context-changed` with a new `theme`, `styles` or `containerDimensions`;

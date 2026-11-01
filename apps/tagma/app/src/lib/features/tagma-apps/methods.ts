@@ -1,3 +1,4 @@
+import { type BridgeMethod, capabilityOf, HOST_BRIDGE, THREAD_CHANGED } from '@tagma/server/views/contract/wire/bridge';
 import { Point } from '@runlith/layer/Point';
 import type { Door } from '$lib/wire/Door.js';
 import type { LiveConnection } from '$lib/wire/Live.js';
@@ -9,34 +10,25 @@ type MethodOwners = { readonly door: Door; readonly live: LiveConnection; readon
 type MethodMount = { readonly projectId: number };
 
 export interface TagmaMethod {
-  readonly name: string;
-  readonly notifications: readonly string[];
+  readonly declaration: BridgeMethod;
   readonly method: (owners: MethodOwners, mount: MethodMount) => ViewMethod;
 }
 
-export const THREAD_CHANGED = 'tagma/notifications/thread';
+const HOSTED = new Set<string>(HOST_BRIDGE.flatMap(({ id }) => [`tagma/${id}`, capabilityOf(id)]));
 
-export const HOST_METHODS = ['open', 'storage/get', 'storage/set', 'thread', 'thread/unwatch'] as const;
-
-export type HostMethod = (typeof HOST_METHODS)[number];
-
-export const capabilityOf = (name: string): string => `tagma/${name.split('/')[0]}`;
-
-const HOSTED = new Set<string>([...HOST_METHODS.map((name) => `tagma/${name}`), ...HOST_METHODS.map(capabilityOf)]);
-
-const admitsOf = (declared: TagmaMethod): string | null => {
-  if (HOSTED.has(`tagma/${declared.name}`) || HOSTED.has(capabilityOf(declared.name))) {
-    return `the app view host serves "${capabilityOf(declared.name)}" itself`;
+const admitsOf = ({ declaration }: TagmaMethod): string | null => {
+  if (HOSTED.has(`tagma/${declaration.id}`) || HOSTED.has(capabilityOf(declaration.id))) {
+    return `the app view host serves "${capabilityOf(declaration.id)}" itself`;
   }
-  return declared.notifications.includes(THREAD_CHANGED) ? `the app view host sends "${THREAD_CHANGED}" itself` : null;
+  return declaration.notifications.includes(THREAD_CHANGED) ? `the app view host sends "${THREAD_CHANGED}" itself` : null;
 };
 
 export const TagmaMethods = Point.define<TagmaMethod>()('TagmaMethods', {
   tier: 'app',
-  key: (declared) => `tagma/${declared.name}`,
+  key: ({ declaration }) => `tagma/${declaration.id}`,
   admits: admitsOf,
-  claims: (declared) => [
-    `View capability "${capabilityOf(declared.name)}"`,
-    ...declared.notifications.map((notification) => `View notification "${notification}"`),
+  claims: ({ declaration }) => [
+    `View capability "${capabilityOf(declaration.id)}"`,
+    ...declaration.notifications.map((notification) => `View notification "${notification}"`),
   ],
 });

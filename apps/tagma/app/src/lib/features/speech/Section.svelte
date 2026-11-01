@@ -3,8 +3,6 @@
   import KeyCard from '$lib/features/settings/KeyCard.svelte';
   import { pick, type SectionProps } from '$lib/features/settings/section.js';
   import Card from './Card.svelte';
-  import CallAgain from './CallAgain.svelte';
-  import CallSound from './CallSound.svelte';
   import CheckPanel from './CheckPanel.svelte';
   import Devices from './Devices.svelte';
   import Languages from './Languages.svelte';
@@ -41,15 +39,6 @@
       <Voice models={status.models} {place} />
     </Card>
     <VoiceInput models={status.models} {place} />
-    <KeyCard
-      title="Calls"
-      entries={pick(catalog.entriesOf('speech'), [SPEECH.callTracks, SPEECH.callSpeakers])}
-      {catalog}
-      {scope}
-      {project}
-    />
-    <CallSound {place} />
-    <CallAgain models={status.models} {place} />
     <Devices devices={status.devices} {place} />
     <KeyCard title="Speech boundaries" entries={pick(catalog.entriesOf('speech'), [SPEECH.segmenter])} {catalog} {scope} {project} />
     <LocalModels local={status.local} />

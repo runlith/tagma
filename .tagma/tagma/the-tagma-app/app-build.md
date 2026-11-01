@@ -28,6 +28,8 @@ sources:
   - kind: dir
     ref: apps/tagma/app/scripts
   - kind: file
+    ref: apps/tagma/app/compilerOptions.js
+  - kind: file
     ref: apps/tagma/app/surfaceOut.js
   - kind: file
     ref: apps/tagma/app/svelte.config.js
@@ -35,7 +37,5 @@ sources:
     ref: apps/tagma/app/vite.config.ts
   - kind: file
     ref: apps/tagma/app/vitest.config.ts
-  - kind: file
-    ref: apps/tagma/app/compilerOptions.js
 ---
 The app is built by Vite and SvelteKit into static assets the server serves. The factory of its Vite config lives here (`scripts/surfaceConfig.ts`), used by both the app build and builds on top of it. Its Svelte compiler options (`compilerOptions.js`, exported as `@tagma/app/compilerOptions`) are the one place every root's Svelte config takes them from, so a root compiles the core's components exactly as the core does. Next to it lie the SvelteKit and Vitest configs, the build output directory and the dev-stand script.

@@ -105,7 +105,7 @@ const world = Effect.fnUntraced(function* (demo: EffectDemo) {
     Effect.provideService(Settings, demo.graph.settings),
   );
   const sourceCache = Context.get(
-    yield* Layer.build(workspaceInputsLayer((root) => [skillTarget(root)])).pipe(
+    yield* Layer.build(workspaceInputsLayer((root) => [skillTarget(root)], [])).pipe(
       Effect.provideService(EnabledPlugins, (yield* enabledPlugins()).service),
     ),
     WorkspaceInputs,

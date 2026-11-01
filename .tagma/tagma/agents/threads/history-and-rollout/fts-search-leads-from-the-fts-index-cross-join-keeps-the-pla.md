@@ -10,7 +10,7 @@ sources:
   - kind: file
     ref: apps/tagma/server/src/graph/search/ranking.ts
   - kind: file
-    ref: apps/tagma/server/src/speech/store/matches.ts
+    ref: apps/tagma/server/src/calls/store/matches.ts
   - kind: file
     ref: apps/tagma/server/src/threads/journal/conversationReads.ts
 ---

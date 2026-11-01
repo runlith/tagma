@@ -28,8 +28,6 @@ import { ServedGraphs } from '../../graph/contract/service/serving.js';
 import type { JudgingServices } from '../../enforcement/serving.js';
 import type { OperationChecks } from '../../invocation/contract/service/operationChecks.js';
 import { threadsHandler } from './threads.js';
-import { speechHandler } from './speech.js';
-import type { Listenings } from '../../speech/contract/service/listenings.js';
 import type { Attachments } from '../../threads/contract/service/attachments.js';
 import type { ScratchAreas } from '../../threads/contract/service/scratch.js';
 import type { SessionResolution } from '../../external-harnesses/contract/service/sessionResolution.js';
@@ -87,8 +85,7 @@ export type HandlerOwners =
   | TargetPreparation
   | Worlds
   | ThreadLookup
-  | OwedCalls
-  | Listenings;
+  | OwedCalls;
 
 export type DoorLifetime = GraphDirectory | OperationCatalog;
 
@@ -197,7 +194,6 @@ export const handlers = (status: RuntimeStatus) =>
         health: healthHandler(status, Context.get(door, Succession), Context.get(door, MachineStore)),
         operations: operationsHandler(performById, catalog, invocationAssembly.detaching(Context.get(door, OwedCalls))),
         threads: threadsHandler(),
-        speech: speechHandler(),
         checkouts: checkoutsHandler(Context.get(door, CheckoutPlaces), {
           roots: Context.get(door, FileRoots),
           git: Context.get(door, Git),
