@@ -10,13 +10,13 @@ edges:
     to: 01a1956f-1d5b-7679-82e2-dd7903cec1d8
 sources:
   - kind: file
-    ref: apps/tagma/server/src/platform/contract/service/route.ts
-  - kind: file
-    ref: apps/tagma/server/src/platform/contract/service/door.ts
-  - kind: file
     ref: apps/tagma/server/src/composition/http/door.ts
   - kind: file
     ref: apps/tagma/server/src/composition/http/remote.ts
+  - kind: file
+    ref: apps/tagma/server/src/platform/contract/service/door.ts
+  - kind: file
+    ref: apps/tagma/server/src/platform/contract/service/route.ts
 ---
 A module serves a GET of its own — a sign-in that returns to the machine, a file it keeps — by listing `routes` in its server manifest, built with `route()`. Composition adds every route to the HTTP door as a GET, building each handler from the door's own context, so one route answers differently on the local and the remote door. A return address comes from `DoorAddress` in that same context: on the local door, the origin it actually listens on; on the remote door, the remote origin, null while remote access is not ready.
 

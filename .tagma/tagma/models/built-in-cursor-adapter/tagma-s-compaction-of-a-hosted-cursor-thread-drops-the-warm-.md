@@ -15,11 +15,11 @@ edges:
     to: 01a1646a-30fe-70a6-aa96-25c09d6cee47
 sources:
   - kind: file
-    ref: packages/hosted-runner/src/profile.ts
-  - kind: file
     ref: apps/tagma/server/src/native-harness/compaction/choice.ts
   - kind: file
     ref: apps/tagma/server/src/native-harness/compaction/policy.ts
+  - kind: file
+    ref: packages/hosted-runner/src/profile.ts
 ---
 A Cursor thread on the hosted runner declares `compaction: 'foreign'` (`clientProfile` in `packages/hosted-runner/src/profile.ts`). For such a thread every Tagma compaction — the fill threshold after a turn and a manual `/compact` — takes the foreign-model road ([[92391518]]): `summarizersOf` (`apps/tagma/server/src/native-harness/compaction/choice.ts`) picks the configured summarizer chain regardless of cache warmth, a model from that chain retells the Tagma journal, and `TransportHistory.restore` stops the runner and drops the Cursor session; the next turn opens a new SDK session from the folded journal sent as text blocks.
 

@@ -10,9 +10,9 @@ edges:
     to: 01a19464-5da9-72ce-aa52-6e9c55501889
 sources:
   - kind: file
-    ref: apps/tagma/server/src/platform/store/aside.ts
-  - kind: file
     ref: apps/tagma/server/src/composition/extensions.ts
+  - kind: file
+    ref: apps/tagma/server/src/platform/store/aside.ts
 ---
 A machine-store migration declares the tables it removes in `aside.json` beside its `migration.sql`. Before that migration's transaction, the opening store attaches a temporary file, copies each declared table whole, detaches it and renames it to `<data>/stores/set-aside/<migration>.sqlite`. The copy runs outside the migration's transaction because SQLite refuses ATTACH inside one; the rename is flushed before the migration commits its drop, so no committed drop exists without the file.
 

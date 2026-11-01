@@ -12,9 +12,9 @@ edges:
     to: 01a19371-bc70-7ecd-b2c5-96b9f492b72c
 sources:
   - kind: dir
-    ref: apps/tagma/server/src/speech
-  - kind: dir
     ref: apps/tagma/app/src/lib/features/speech
+  - kind: dir
+    ref: apps/tagma/server/src/speech
 ---
 Paths under `apps/tagma/server/src/` and `apps/tagma/app/src/` unless stated. Read against the code on 2026-11-01. This is the next capability woven through core flows to become points at its owners under [[f492b72c]], after the stealth repository's remote side ([[e41dca93]]).
 
