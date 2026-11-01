@@ -154,9 +154,11 @@ export const assemble = async ({ modules, rested }: ServerParts): Promise<Assemb
   );
   const feeds = modules.flatMap((module) => module.live?.feeds ?? []);
   const creationSteps = PROJECT_CREATION.collect(modules).map(({ entry }) => entry);
-  const rights = [...operations.declarations, ...feeds, ...creationSteps].flatMap(({ id, right }): NamedRight[] =>
-    right === undefined ? [] : [{ key: right, by: id }],
-  );
+  const routes = modules.flatMap((module) => module.routes ?? []);
+  const rights = [
+    ...[...operations.declarations, ...feeds, ...creationSteps].map(({ id, right }) => ({ by: id, right })),
+    ...routes.map(({ path, right }) => ({ by: path, right })),
+  ].flatMap(({ by, right }): NamedRight[] => (right === undefined ? [] : [{ key: right, by }]));
   return {
     modules,
     operations,
@@ -188,7 +190,7 @@ export const assemble = async ({ modules, rested }: ServerParts): Promise<Assemb
     snapshotParticipants: participantsOf(modules),
     drivers: new Set(modules.flatMap((module) => (module.drivers ?? []).map(({ id }) => id))),
     feeds,
-    routes: modules.flatMap((module) => module.routes ?? []),
+    routes,
     live: liveRpc(feeds),
     socketVerbs: Object.fromEntries(
       feeds.flatMap((declared) => (declared.performs === undefined ? [] : [[declared.id, OperationId.make(declared.performs)] as const])),

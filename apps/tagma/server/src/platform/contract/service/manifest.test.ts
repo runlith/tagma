@@ -103,10 +103,11 @@ describe('manifest registration', () => {
     );
   });
 
-  it('refuses, naming both owners, one route path declared by two modules or overlapping a path the door serves itself, and a path the router would read otherwise', () => {
+  it('refuses, naming both owners, route paths of two modules or of the door that one request could match, and a path the router would read otherwise', () => {
     const answering = (path: `/${string}`) => route({ path, handler: () => () => Effect.die('never answered') });
     const door = [
-      { path: '/api/', prefix: true },
+      { path: '/api/', prefix: true, modules: true as const },
+      { path: '/api/one/kept/:at', prefix: false },
       { path: '/back/home', prefix: false },
     ];
     const owners = (modules: readonly Manifest[]) => {
@@ -126,9 +127,30 @@ describe('manifest registration', () => {
     expect(owners([{ id: 'one', routes: [answering('/api/back')] }])).toEqual(['routes', '/api/back', 'door', 'one']);
     expect(owners([{ id: 'one', routes: [answering('/back/home')] }])).toEqual(['routes', '/back/home', 'door', 'one']);
     expect(owners([{ id: 'one', routes: [answering('/back/homes'), answering('/apis/back')] }])).toBeNull();
-    for (const path of ['/Back/again', '/back/again/', '/back', '/back/again;x', '/back/%61gain', '/_app/back', '/back/:id'] as const) {
+    expect(
+      owners([
+        { id: 'one', routes: [answering('/side/:id')] },
+        { id: 'two', routes: [answering('/side/again')] },
+      ]),
+    ).toEqual(['routes', '/side/again', 'one', 'two']);
+    expect(owners([{ id: 'one', routes: [answering('/back/:id')] }])).toEqual(['routes', '/back/:id', 'door', 'one']);
+    expect(owners([{ id: 'one', routes: [answering('/api/one/files/:id'), answering('/api/one/kept')] }])).toBeNull();
+    expect(owners([{ id: 'one', routes: [answering('/api/one/kept/:file')] }])).toEqual(['routes', '/api/one/kept/:file', 'door', 'one']);
+    expect(owners([{ id: 'one', routes: [answering('/api/two/files/:id')] }])).toEqual(['routes', '/api/two/files/:id', 'door', 'one']);
+    for (const path of [
+      '/Back/again',
+      '/back/again/',
+      '/back',
+      '/back/again;x',
+      '/back/%61gain',
+      '/_app/back',
+      '/:id/back',
+      '/back/:1d',
+    ] as const) {
       expect(owners([{ id: 'one', routes: [answering(path)] }])).toMatchObject({ _tag: 'RouteInexact', path });
     }
+    const returned = route({ path: '/back/:id', preAdmitted: true, handler: () => () => Effect.die('never answered') });
+    expect(owners([{ id: 'one', routes: [returned] }])).toMatchObject({ _tag: 'RouteInexact', path: '/back/:id' });
   });
 
   it('rejects a repeated module even when it contributes no operations', () => {

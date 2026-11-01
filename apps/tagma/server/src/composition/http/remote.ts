@@ -154,7 +154,7 @@ export const remoteGate = (admission: Admission['Service'], shell: Shell | null,
       return yield* Effect.gen(function* () {
         if (request.method === PAIRING_ENDPOINT.method && path === PAIRING_ENDPOINT.path) return yield* pairing(admission);
         const admitted = request.method === 'GET' && !upgrade && path !== null ? preAdmitted.get(path) : undefined;
-        if (admitted !== undefined) return yield* admitted(request);
+        if (admitted !== undefined) return yield* admitted({ request, params: {}, project: null });
         if (reading(request.method) && !upgrade && !gated(path)) return yield* shellOf(shell);
         const credential = request.cookies[DEVICE_COOKIE];
         return yield* admission.remote(

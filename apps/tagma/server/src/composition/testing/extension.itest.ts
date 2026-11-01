@@ -49,7 +49,7 @@ import { assemble } from '../manifest.js';
 import { servedAssembly as served } from './assembled.js';
 import { ASSEMBLY } from './composed.js';
 import { DoorAddress } from '../../platform/contract/service/door.js';
-import { route } from '../../platform/contract/service/route.js';
+import { route, type RouteHandler, spanOf } from '../../platform/contract/service/route.js';
 import { remoteServing } from '../http/remote.js';
 import { Connections } from '../../socket/connections.js';
 import { websocketHttpTracing } from '../../socket/live.js';
@@ -334,11 +334,26 @@ const greeting = manifest({
 const answeringAddress = (door: Context.Context<DoorAddress>) => () =>
   Effect.succeed(HttpServerResponse.text(Context.get(door, DoorAddress).origin() ?? 'no address'));
 
+const KEPT_FILES: Readonly<Record<string, string>> = { note: 'kept by the doorway' };
+
+const servingFile =
+  (): RouteHandler =>
+  ({ request, params }) => {
+    const text = KEPT_FILES[params.id ?? ''];
+    if (text === undefined) return Effect.succeed(HttpServerResponse.empty({ status: 404 }));
+    const asked = spanOf(request.headers.range, text.length);
+    if (asked === 'unsatisfiable') return Effect.succeed(HttpServerResponse.empty({ status: 416 }));
+    return Effect.succeed(
+      asked === null ? HttpServerResponse.text(text) : HttpServerResponse.text(text.slice(asked.start, asked.end + 1), { status: 206 }),
+    );
+  };
+
 const doorway = manifest({
   id: 'doorway',
   routes: [
     route({ path: '/doorway/address', handler: answeringAddress }),
     route({ path: '/doorway/returned', preAdmitted: true, handler: answeringAddress }),
+    route({ path: '/api/doorway/files/:id', right: 'warmth', handler: servingFile }),
   ],
 });
 
@@ -348,7 +363,11 @@ class Root extends Context.Service<
   Root,
   {
     readonly origin: string;
-    readonly door: (path: string, at?: 'remote') => Effect.Effect<{ readonly status: number; readonly text: string }>;
+    readonly door: (
+      path: string,
+      at?: 'remote',
+      headers?: Readonly<Record<string, string>>,
+    ) => Effect.Effect<{ readonly status: number; readonly text: string }>;
     readonly op: (id: string, input: unknown, query?: string) => Effect.Effect<{ readonly status: number; readonly body: unknown }>;
     readonly said: (name: string) => Effect.Effect<string>;
     readonly folder: (label: string) => Effect.Effect<string>;
@@ -400,9 +419,9 @@ const root = Layer.effect(
     const remoteOrigin = HttpServer.formatAddress(Context.get(remote, HttpServer.HttpServer).address);
     return Root.of({
       origin,
-      door: (path, at) =>
+      door: (path, at, headers) =>
         Effect.promise(async () => {
-          const response = await fetch(`${at === 'remote' ? remoteOrigin : origin}${path}`);
+          const response = await fetch(`${at === 'remote' ? remoteOrigin : origin}${path}`, { headers });
           return { status: response.status, text: await response.text() };
         }),
       op: (id, input, query) => request(`/api/op/${id}${query === undefined ? '' : `?${query}`}`, input),
@@ -549,6 +568,24 @@ layer(root, { excludeTestServices: true })('a root composing the core with a mod
         expect(yield* world.door('/doorway/returned', 'remote')).toEqual({ status: 200, text: 'no address' });
       }),
   );
+
+  it.effect(
+    'serves a file by id under its own API prefix with the range asked, only as far as the right its route names, and not before device admission',
+    () =>
+      Effect.gen(function* () {
+        const world = yield* Root;
+        const ranged = { range: 'bytes=0-3' };
+        world.grants.level = 'none';
+        const refused = yield* world.door('/api/doorway/files/note', undefined, ranged);
+        expect(refused.status).toBe(409);
+        expect(JSON.parse(refused.text)).toMatchObject({ code: 'right-missing', right: { key: 'warmth', access: 'none' } });
+        world.grants.level = 'read';
+        expect(yield* world.door('/api/doorway/files/note', undefined, ranged)).toEqual({ status: 206, text: 'kept' });
+        expect(yield* world.door('/api/doorway/files/note')).toEqual({ status: 200, text: 'kept by the doorway' });
+        expect(yield* world.door('/api/doorway/files/lost')).toEqual({ status: 404, text: '' });
+        expect((yield* world.door('/api/doorway/files/note', 'remote', ranged)).status).toBe(401);
+      }),
+  );
 });
 
 it.live('the core alone opens a data directory written by modules it lacks, and serves its own operations over it', () =>
@@ -584,6 +621,7 @@ it.live('the core alone opens a data directory written by modules it lacks, and 
     expect((yield* alone('/health')).status).toBe(200);
     expect((yield* alone('/api/op/greet', { name: 'Ada' })).body).toMatchObject({ code: 'unknown-operation' });
     expect((yield* alone('/doorway/address')).status).toBe(404);
+    expect(yield* alone('/api/doorway/files/note')).toMatchObject({ status: 404, body: { code: 'not-found' } });
     const settings = yield* alone('/api/op/read_settings', { project });
     expect(settings.status).toBe(200);
     expect(JSON.stringify(settings.body)).not.toContain(greetingWord.id);

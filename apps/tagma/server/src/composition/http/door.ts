@@ -32,7 +32,9 @@ import { retiredRoutes } from '../../http/retired.js';
 import { Devices } from '../../remote/contract/service/devices.js';
 import { ConnectionHeaders } from '../../invocation/contract/service/admission.js';
 import { OperationCatalog } from '../../invocation/contract/service/catalog.js';
-import type { Route } from '../../platform/contract/service/route.js';
+import type { Route, RouteHandler } from '../../platform/contract/service/route.js';
+import { admitRight } from '../../platform/contract/service/access.js';
+import { refusalBody } from '../../platform/contract/wire/refusal.js';
 
 const callerCheckout = HttpMiddleware.make((app) =>
   Effect.gen(function* () {
@@ -52,12 +54,41 @@ export type DoorOptions = {
   readonly appDist?: string;
 };
 
+const routeCall = (door: Context.Context<DoorServices>, declared: Route, handler: RouteHandler) => {
+  const admission = admissionOf(door);
+  return Effect.fnUntraced(
+    function* (request: HttpServerRequest.HttpServerRequest) {
+      const params = yield* HttpRouter.params;
+      const query = new URL(request.url, 'http://localhost').searchParams;
+      const call = yield* admission.admit(
+        request.headers,
+        {
+          project: query.get('project') ?? undefined,
+          cwd: query.get('cwd') ?? undefined,
+          branch: query.get('branch') ?? undefined,
+          scope: query.get('scope') ?? undefined,
+        },
+        null,
+      );
+      yield* Effect.provide(admitRight(`The route ${declared.path}`, declared.right, 'read'), door);
+      return yield* admission.carry(call, { key: null }, handler({ request, params, project: call.project?.id ?? null }));
+    },
+    Effect.catchTag('GateRefusal', (refusal) => Effect.succeed(HttpServerResponse.jsonUnsafe(refusalBody(refusal), { status: 409 }))),
+  );
+};
+
 const moduleRoutes = (routes: readonly Route[]) =>
   Layer.unwrap(
     Effect.flatMap(Effect.context<DoorServices>(), (door) =>
       Effect.map(
         Effect.forEach(routes, (declared) =>
-          Effect.map(declared.handler(door), (handler) => HttpRouter.add('GET', declared.path, handler)),
+          Effect.map(declared.handler(door), (handler) =>
+            HttpRouter.add(
+              'GET',
+              declared.path,
+              declared.preAdmitted ? (request) => handler({ request, params: {}, project: null }) : routeCall(door, declared, handler),
+            ),
+          ),
         ),
         (added) => Layer.mergeAll(Layer.empty, ...added),
       ),
