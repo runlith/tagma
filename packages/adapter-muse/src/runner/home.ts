@@ -86,28 +86,36 @@ const settingsOf = (settings: MuseSettings) => ({
   },
 });
 
-const pricedPath = (place: MusePlace, session: string) => join(place.config, `${session}.priced`);
-
-export const keepPriced = Effect.fn('muse.keepPriced')(function* (place: MusePlace, session: string, usd: number) {
+const replaced = Effect.fnUntraced(function* (path: string, text: string, doing: string) {
   const files = yield* FileSystem.FileSystem;
-  yield* files
-    .writeFileString(pricedPath(place, session), String(usd))
-    .pipe(Effect.mapError(failed(`keep the priced total of ${session}`)));
+  yield* files.writeFileString(`${path}.next`, text).pipe(Effect.mapError(failed(doing)));
+  yield* files.rename(`${path}.next`, path).pipe(Effect.mapError(failed(doing)));
 });
 
-export const keptPriced = Effect.fn('muse.keptPriced')(function* (place: MusePlace, session: string) {
+type SessionState = 'priced' | 'compaction';
+
+const statePath = (place: MusePlace, session: string, state: SessionState) => join(place.config, `${session}.${state}`);
+
+export const keepState = Effect.fn('muse.keepState')(function* (place: MusePlace, session: string, state: SessionState, text: string) {
+  yield* replaced(statePath(place, session, state), text, `keep the ${state} state of ${session}`);
+});
+
+export const keptState = Effect.fn('muse.keptState')(function* (place: MusePlace, session: string, state: SessionState) {
   const files = yield* FileSystem.FileSystem;
-  const text = yield* files.readFileString(pricedPath(place, session)).pipe(
+  return yield* files.readFileString(statePath(place, session, state)).pipe(
     Effect.catchReason('PlatformError', 'NotFound', () => Effect.succeed(null)),
-    Effect.mapError(failed(`read the priced total of ${session}`)),
+    Effect.mapError(failed(`read the ${state} state of ${session}`)),
   );
-  const usd = text === null ? Number.NaN : Number(text);
+});
+
+export const keepPriced = (place: MusePlace, session: string, usd: number) => keepState(place, session, 'priced', String(usd));
+
+export const keptPriced = Effect.fn('muse.keptPriced')(function* (place: MusePlace, session: string) {
+  const text = (yield* keptState(place, session, 'priced'))?.trim() ?? '';
+  const usd = text === '' ? Number.NaN : Number(text);
   return Number.isFinite(usd) ? usd : null;
 });
 
 export const writeSettings = Effect.fn('muse.writeSettings')(function* (place: MusePlace, settings: MuseSettings) {
-  const files = yield* FileSystem.FileSystem;
-  const path = join(place.config, 'muse', 'settings.json');
-  yield* files.writeFileString(`${path}.next`, JSON.stringify(settingsOf(settings))).pipe(Effect.mapError(failed('write its settings')));
-  yield* files.rename(`${path}.next`, path).pipe(Effect.mapError(failed('write its settings')));
+  yield* replaced(join(place.config, 'muse', 'settings.json'), JSON.stringify(settingsOf(settings)), 'write its settings');
 });

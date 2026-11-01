@@ -7,6 +7,7 @@ import type { HostedDoor } from '@runlith/hosted-runner/door';
 import type { McpServerInput } from '@runlith/mcp/server';
 import { MuseRefused, MuseSdk, type Frame, type Host } from './channel.js';
 import { makeMuseCycle } from './cycle.js';
+import { MUSE_CODE_CACHE_SECONDS } from '../harness/acp.js';
 
 const TURN = '01a19573-1cea-7c2e-90b4-2854e4328409';
 
@@ -119,7 +120,13 @@ const world = Effect.fnUntraced(function* (
         ? Effect.fail(PlatformError.systemError({ _tag: 'NotFound', module: 'FileSystem', method: 'readFileString' }))
         : Effect.succeed(text);
     },
-    rename: () => Effect.void,
+    rename: (from, to) =>
+      Effect.sync(() => {
+        const text = stored.get(from);
+        if (text === undefined) return;
+        stored.set(to, text);
+        stored.delete(from);
+      }),
   });
   const cycle = yield* makeMuseCycle(
     door,
@@ -232,7 +239,10 @@ it.effect('a turn runs under the Tagma turn id, seals each Tagma call before app
         (one) => one.kind === 'update' && (one.body as { update: { sessionUpdate: string } }).update.sessionUpdate === 'usage_update',
       )?.body,
     ).toMatchObject({
-      update: { size: 1_000_000, _meta: { 'tagma/measured': { input: 100, cacheRead: 80, output: 10, reasoning: 2 } } },
+      update: {
+        size: 1_000_000,
+        _meta: { 'tagma/measured': { input: 100, cacheRead: 80, output: 10, reasoning: 2, ttlSeconds: MUSE_CODE_CACHE_SECONDS } },
+      },
     });
   }),
 );
@@ -514,18 +524,22 @@ it.effect('a stopped turn whose history Muse cannot serve leaves an accepted ste
 );
 
 it.effect(
-  'a stop while Muse is still admitting a compaction replaces its host, and the next turn records the boundary Muse completed',
+  'a stop while Muse is still admitting a compaction replaces its host, and a later runner records the boundary Muse completed once its history shows it',
   () =>
     Effect.gen(function* () {
       const compaction = { itemId: 'c1', kind: 'compaction', status: 'completed', outcome: 'compacted', trigger: 'manual' };
-      const { agent, sent, hosts, seen } = yield* world((one, emit) => {
+      const stored = new Map<string, string>();
+      let reads = 0;
+      const script: Script = (one, emit) => {
         if (one.method === 'session/start' || one.method === 'session/resume')
           return ok(one, { session: { sessionId: one.params.sessionId, approvalMode: { mode: 'promptUnmatched' } } });
         if (one.method === 'session/compact') return Effect.never;
         if (one.method === 'session/read')
-          return Effect.succeed({
-            history: { mode: 'inline', items: [{ kind: 'earlierHistory' }, { ...compaction, tokensBefore: 900, tokensAfter: 90 }] },
-          });
+          return Effect.succeed(
+            ++reads === 1
+              ? { history: { mode: 'none', noneReason: 'historyBudget' } }
+              : { history: { mode: 'inline', items: [{ kind: 'earlierHistory' }, { ...compaction, tokensBefore: 900, tokensAfter: 90 }] } },
+          );
         if (one.method === 'turn/start')
           return Effect.as(
             Effect.forkDetach(
@@ -534,7 +548,8 @@ it.effect(
             { commandId: one.id, status: 'accepted', turnId: one.id, disposition: 'started' },
           );
         return ok(one);
-      });
+      };
+      const { agent, sent, hosts } = yield* world(script, undefined, undefined, stored);
       const session = yield* agent.newSession({ cwd: '/work', mcpServers: [] });
       const compact = agent.extensions!['_tagma/compact']!;
       const compacting = yield* Effect.forkChild(compact({ sessionId: session.sessionId, instructions: '', at: 'end' }));
@@ -544,16 +559,21 @@ it.effect(
       yield* agent.cancel({ sessionId: session.sessionId });
       expect((yield* Effect.flip(Fiber.join(compacting))).code).toBe(-32800);
       expect(hosts.closed).toBe(1);
-      yield* agent.prompt({ sessionId: session.sessionId, prompt: [{ type: 'text', text: 'go' }], _meta: { 'tagma/turn': TURN } });
-      yield* agent.prompt({
-        sessionId: session.sessionId,
-        prompt: [{ type: 'text', text: 'again' }],
-        _meta: { 'tagma/turn': '01a19573-1cea-7c2e-90b4-000000000031' },
-      });
+      const restarted = yield* world(script, undefined, undefined, stored);
+      yield* (
+        restarted.agent.resumeSession?.({ sessionId: session.sessionId, cwd: '/work', mcpServers: [] }) ??
+          Effect.die('the hosted agent resumes no session')
+      );
+      for (const [text, turn] of [
+        ['go', TURN],
+        ['again', '01a19573-1cea-7c2e-90b4-000000000031'],
+        ['more', '01a19573-1cea-7c2e-90b4-000000000032'],
+      ] as const)
+        yield* restarted.agent.prompt({ sessionId: session.sessionId, prompt: [{ type: 'text', text }], _meta: { 'tagma/turn': turn } });
       expect([
-        seen.filter((one) => one.kind === '_tagma/compacted').map((one) => one.body),
-        sent.filter((one) => one.method === 'session/read').length,
-      ]).toEqual([[expect.objectContaining({ trigger: 'manual', preTokens: 900, postTokens: 90 })], 1]);
+        restarted.seen.filter((one) => one.kind === '_tagma/compacted').map((one) => one.body),
+        restarted.sent.filter((one) => one.method === 'session/read').length,
+      ]).toEqual([[expect.objectContaining({ trigger: 'auto', preTokens: 900, postTokens: 90 })], 2]);
     }),
 );
 
@@ -720,6 +740,18 @@ it.effect(
         _meta: { 'tagma/turn': turns[2] },
       });
       expect(third._meta).toMatchObject({ 'tagma/cost': { amount: 0.25, currency: 'USD', basis: 'estimate' } });
+      for (const path of stored.keys()) if (path.endsWith('.priced')) stored.set(path, '');
+      const emptied = yield* world(script, undefined, undefined, stored);
+      yield* (
+        emptied.agent.resumeSession?.({ sessionId: session.sessionId, cwd: '/work', mcpServers: [] }) ??
+          Effect.die('the hosted agent resumes no session')
+      );
+      const fourth = yield* emptied.agent.prompt({
+        sessionId: session.sessionId,
+        prompt: [{ type: 'text', text: 'four' }],
+        _meta: { 'tagma/turn': '01a19573-1cea-7c2e-90b4-000000000024' },
+      });
+      expect(fourth._meta).not.toHaveProperty('tagma/cost');
     }),
 );
 

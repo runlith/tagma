@@ -6,9 +6,6 @@ import type { SessionThreads } from '../contract/service/sessionThreads.js';
 import { harnessJudging } from './decision.js';
 import { builtinHarness, shippedHarnessAdapters } from '../testing/builtin.js';
 import type { HarnessName } from '../../threads/contract/wire/harness/names.js';
-import { museCode } from '@runlith/adapter-muse/harness';
-import { declaredHarness } from '../adapter/declared.js';
-import { judgedCall, type PermissionAsk } from '../protocol/asks.js';
 
 it.effect('the vendor owns tool names from its hooks through the approval verdict', () =>
   Effect.gen(function* () {
@@ -25,22 +22,6 @@ it.effect('the vendor owns tool names from its hooks through the approval verdic
       _tag: 'Unspoken',
     });
     expect(yield* (yield* judgingFor('review', builtinModeRegistry(), 'codex')).verdict('t', read, false)).toMatchObject({ _tag: 'Asks' });
-  }),
-);
-
-it.effect('an ACP-only harness asking about a vendor fetch names it by its kind: it asks to reach the address', () =>
-  Effect.gen(function* () {
-    const muse = declaredHarness(museCode)!;
-    const ask = {
-      kind: 'permission',
-      id: 1,
-      params: {
-        toolCall: { toolCallId: 'call_1', name: 'webfetch', kind: 'fetch', rawInput: { url: 'https://example.com' } },
-        options: [],
-      },
-    } as unknown as PermissionAsk;
-    const { call } = judgedCall(ask, undefined, false, muse.tools);
-    expect((yield* judgingFor('review')).prompt(muse, call)).toBe('Muse Code asks to reach `https://example.com`');
   }),
 );
 

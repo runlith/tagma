@@ -16,7 +16,7 @@ import type { McpServerInput } from '@runlith/mcp/server';
 import { MuseSdk, type Frame, type Host, type MuseRefused } from './channel.js';
 import { Feed, NOTHING, spentOf, sum, type Spent } from './feed.js';
 import { Compact, ItemEvent, Models, Opened, Quota, Started, TokenUsage, TurnCompleted, TurnStarted, type Item } from './frames.js';
-import { keepPriced, keptPriced, writeSettings, type MusePlace } from './home.js';
+import { keepPriced, keepState, keptPriced, keptState, writeSettings, type MusePlace } from './home.js';
 import { observationOf } from './quota.js';
 import { Compactions } from './compactions.js';
 
@@ -146,7 +146,6 @@ export const makeMuseCycle = Effect.fnUntraced(function* (door: HostedDoor, proc
   const refused = new Set<string>();
   const steers = new Map<string, { readonly command: string; readonly feed: Feed }>();
   const priced = new Map<string, number>();
-  const compactions = new Compactions();
   const stored = <A>(work: Effect.Effect<A, AgentFault, FileSystem.FileSystem>, none: A) =>
     work.pipe(
       Effect.provideService(FileSystem.FileSystem, files),
@@ -162,6 +161,10 @@ export const makeMuseCycle = Effect.fnUntraced(function* (door: HostedDoor, proc
       priced.set(session, usd);
       return stored(keepPriced(runner.place, session, usd), undefined);
     });
+  const compactions = new Compactions({
+    read: (session) => stored(keptState(runner.place, session, 'compaction'), null),
+    write: (session, text) => stored(keepState(runner.place, session, 'compaction', text), undefined),
+  });
 
   const slot = (input: string) => {
     const standing = words.get(input);
@@ -291,7 +294,7 @@ export const makeMuseCycle = Effect.fnUntraced(function* (door: HostedDoor, proc
       if (typeof id === 'string' && (turn === null || !turn.owns(id))) return yield* orphan(frame);
     }
     if (turn !== null && frame.params.sessionId === turn.session) {
-      compactions.delivered(frame);
+      yield* compactions.delivered(frame);
       return yield* turn.frame(frame);
     }
     if (frame.request) process.stderr(`Muse Code asked ${frame.method} with no turn running; it stays unanswered\n`);
@@ -305,7 +308,7 @@ export const makeMuseCycle = Effect.fnUntraced(function* (door: HostedDoor, proc
     if (turn !== null) yield* Deferred.succeed(turn.done, { status: 'error', detail: reason });
     const standing = compacting;
     if (standing !== null) {
-      compactions.doubt(standing.session);
+      yield* compactions.doubt(standing.session);
       yield* Deferred.fail(standing.done, new AgentFault({ code: FAULT.internal, message: reason }));
     }
     const side = asking;
@@ -319,7 +322,7 @@ export const makeMuseCycle = Effect.fnUntraced(function* (door: HostedDoor, proc
     if (standing === null) return;
     live = null;
     applied = null;
-    if (compacting !== null) compactions.doubt(compacting.session);
+    if (compacting !== null) yield* compactions.doubt(compacting.session);
     const side = asking;
     if (side !== null)
       yield* Deferred.fail(side.done, new AgentFault({ code: FAULT.internal, message: 'Muse Code was replaced under the side question' }));
@@ -588,7 +591,7 @@ export const makeMuseCycle = Effect.fnUntraced(function* (door: HostedDoor, proc
           }).pipe(Effect.onError(() => release));
           const asked = yield* Effect.raceFirst(admit, Effect.as(halted, Option.none<typeof Compact.Type>()));
           if (Option.isNone(asked)) {
-            compactions.doubt(seat.id);
+            yield* compactions.doubt(seat.id);
             yield* drop();
             yield* Deferred.fail(
               done,
@@ -607,7 +610,7 @@ export const makeMuseCycle = Effect.fnUntraced(function* (door: HostedDoor, proc
                 item.outcome === 'compacted'
                   ? Effect.as(
                       Effect.andThen(
-                        Effect.sync(() => compactions.record(item.itemId)),
+                        compactions.record(seat.id, item.itemId),
                         out.event({
                           type: 'compacted',
                           summary: '',

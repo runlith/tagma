@@ -11,26 +11,63 @@ const Served = Schema.Struct({
   }),
 });
 
+const Kept = Schema.Struct({ recorded: Schema.NullOr(Schema.String), doubted: Schema.Boolean });
+type Kept = typeof Kept.Type;
+
+const NONE: Kept = { recorded: null, doubted: false };
+
+type CompactionStore = {
+  readonly read: (session: string) => Effect.Effect<string | null>;
+  readonly write: (session: string, text: string) => Effect.Effect<void>;
+};
+
 const compactionOf = (raw: unknown): Item | null => {
   const read = Schema.decodeUnknownResult(Item)(raw);
   return Result.isSuccess(read) && read.success.kind === 'compaction' ? read.success : null;
 };
 
+const parsed = (text: string | null): Kept => {
+  if (text === null) return NONE;
+  try {
+    const read = Schema.decodeUnknownResult(Kept)(JSON.parse(text));
+    return Result.isSuccess(read) ? read.success : NONE;
+  } catch {
+    return NONE;
+  }
+};
+
 export class Compactions {
-  private readonly recorded = new Set<string>();
-  private readonly doubted = new Set<string>();
+  private readonly states = new Map<string, Kept>();
 
-  doubt(session: string): void {
-    this.doubted.add(session);
-  }
+  constructor(private readonly store: CompactionStore) {}
 
-  record(itemId: string): void {
-    this.recorded.add(itemId);
-  }
+  private readonly state = Effect.fnUntraced(function* (this: Compactions, session: string) {
+    const known = this.states.get(session);
+    if (known !== undefined) return known;
+    const kept = parsed(yield* this.store.read(session));
+    this.states.set(session, kept);
+    return kept;
+  });
 
-  delivered(frame: Frame): void {
+  private readonly put = Effect.fnUntraced(function* (this: Compactions, session: string, kept: Kept) {
+    this.states.set(session, kept);
+    yield* this.store.write(session, JSON.stringify(kept));
+  });
+
+  readonly doubt = Effect.fnUntraced(function* (this: Compactions, session: string) {
+    const kept = yield* this.state(session);
+    if (!kept.doubted) yield* this.put(session, { ...kept, doubted: true });
+  });
+
+  readonly record = Effect.fnUntraced(function* (this: Compactions, session: string, itemId: string) {
+    const kept = yield* this.state(session);
+    yield* this.put(session, { ...kept, recorded: itemId });
+  });
+
+  delivered(frame: Frame): Effect.Effect<void> {
     const item = frame.method === 'item/completed' ? compactionOf(frame.params.item) : null;
-    if (item !== null) this.recorded.add(item.itemId);
+    const session = frame.params.sessionId;
+    return item === null || typeof session !== 'string' ? Effect.void : this.record(session, item.itemId);
   }
 
   readonly reconcile = Effect.fnUntraced(function* (
@@ -40,25 +77,20 @@ export class Compactions {
     out: Output,
     stderr: (text: string) => void,
   ) {
-    if (!this.doubted.has(session)) return;
+    const kept = yield* this.state(session);
+    if (!kept.doubted) return;
     const served = yield* host.request('session/read', { sessionId: session, excludeItems: false });
-    this.doubted.delete(session);
     const read = Schema.decodeUnknownResult(Served)(served);
     const history = Result.isSuccess(read) ? read.success.history : null;
     const held = history?.snapshot?.state.items ?? (history?.mode === 'inline' ? (history.items ?? null) : null);
     if (held === null)
       return stderr(
-        `Muse Code cannot show whether a compaction a stop cut off completed: ${Result.isFailure(read) ? read.failure.message : `it served the history as ${history?.mode}`}\n`,
+        `Muse Code cannot show yet whether a compaction a stop cut off completed: ${Result.isFailure(read) ? read.failure.message : `it served the history as ${history?.mode}`}\n`,
       );
     const last = held.flatMap((raw) => compactionOf(raw) ?? []).at(-1);
-    if (last === undefined || last.outcome !== 'compacted' || this.recorded.has(last.itemId)) return;
-    this.recorded.add(last.itemId);
-    yield* out.event({
-      type: 'compacted',
-      summary: '',
-      trigger: last.trigger === 'manual' ? 'manual' : 'auto',
-      preTokens: last.tokensBefore,
-      postTokens: last.tokensAfter,
-    });
+    if (last === undefined || last.outcome !== 'compacted' || last.itemId === kept.recorded)
+      return yield* this.put(session, { ...kept, doubted: false });
+    yield* out.event({ type: 'compacted', summary: '', trigger: 'auto', preTokens: last.tokensBefore, postTokens: last.tokensAfter });
+    yield* this.put(session, { recorded: last.itemId, doubted: false });
   });
 }
