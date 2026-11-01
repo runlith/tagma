@@ -84,17 +84,7 @@ export class SetAsideFailed extends Data.TaggedError('SetAsideFailed')<{ readonl
   }
 }
 
-export class SetAsideRefused extends Data.TaggedError('SetAsideRefused')<{
-  readonly path: string;
-  readonly table: string;
-  readonly reason: 'keyless';
-}> {
-  override get message(): string {
-    return `the set-aside at ${this.path} is not adopted: ${this.table} has no primary key or unique index here, so a repeated adoption would repeat its rows`;
-  }
-}
-
-export type Adoption = { readonly outcome: 'absent' } | { readonly outcome: 'adopted'; readonly rows: number };
+export type Adopting = { readonly files: readonly string[]; readonly after: Effect.Effect<void> };
 
 export type StoreOpenFailure =
   | SetAsideFailed
@@ -134,7 +124,7 @@ export type Store<Brand extends StoreBrand> = {
   ) => Effect.Effect<A, E | StoreFailure | ProgramConflict>;
   readonly readOnly: <A, E, R>(work: (db: StoreDb<Brand>) => Effect.Effect<A, E, R>) => Effect.Effect<A, E | StoreFailure, R>;
   readonly vacuum: () => Effect.Effect<VacuumVerdict, StoreFailure>;
-  readonly adopt: (file: string) => Effect.Effect<Adoption, StoreFailure | SetAsideFailed | SetAsideRefused>;
+  readonly adopted: Effect.Effect<void>;
   readonly freeing: <A, E, R>(work: Effect.Effect<A, E, R>) => Effect.Effect<readonly [A, number], E | StoreFailure, R>;
   readonly moves: TableMoves;
   readonly stalled: Effect.Effect<WriterStall | null>;

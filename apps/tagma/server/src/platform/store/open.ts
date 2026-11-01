@@ -10,6 +10,7 @@ import { statfs } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import {
+  type Adopting,
   GraphStore,
   MachineStore,
   type MigrationChain,
@@ -30,7 +31,7 @@ import { seedDatabase } from './seed.js';
 import { storeTransaction, UnitStore, WriterTimings } from './transaction.js';
 import { storeProgram } from './programs.js';
 import { type Freeing, reclaiming, vacuumStore } from './vacuum.js';
-import { adoptSetAside, setAside } from './aside.js';
+import { adopting, setAside } from './aside.js';
 import { checkStatement, readConsequences } from './writes.js';
 import { WriteSetMode } from '../contract/service/writes.js';
 import { TableMoves } from './moves.js';
@@ -48,6 +49,7 @@ export type StoreOptions = {
   readonly readers?: number;
   readonly withoutSnapshot?: boolean;
   readonly durable?: boolean;
+  readonly adopting?: Adopting;
 };
 
 const appliedAt =
@@ -95,6 +97,7 @@ const fileLayer = <I, Brand extends StoreBrand, A>(
         options.readers,
         options.withoutSnapshot,
         options.durable,
+        options.adopting,
       );
     }),
   ).pipe(Layer.provide(BunFileSystem.layer));
@@ -177,6 +180,7 @@ function connection<Brand extends StoreBrand, A>(
   readers?: number,
   withoutSnapshot = false,
   durable = true,
+  adoptions?: Adopting,
 ): Layer.Layer<A, StoreOpenFailure> {
   return Layer.unwrap(
     Effect.map(Effect.all([WriteSetMode, ChildLedger]), ([mode, ledger]) => {
@@ -184,7 +188,7 @@ function connection<Brand extends StoreBrand, A>(
       const identity = { path, generation: ++generations };
       const classed = durable && mode === 'refuse';
       return Layer.effectContext(
-        Effect.map(open<Brand>(identity, migrations, processes, freeBytes, timings, withoutSnapshot, classed), (opened) =>
+        Effect.map(open<Brand>(identity, migrations, processes, freeBytes, timings, withoutSnapshot, classed, adoptions), (opened) =>
           mint({ ...opened, processes, durable }),
         ),
       ).pipe(
@@ -242,6 +246,7 @@ type Opened = {
   readonly moves: TableMoves;
   readonly programs: Programs['Service'];
   readonly stalled: Effect.Effect<WriterStall | null>;
+  readonly adopted: Effect.Effect<void>;
 };
 
 const storeOf = <Brand extends StoreBrand>({
@@ -257,45 +262,43 @@ const storeOf = <Brand extends StoreBrand>({
   stalled,
   processes,
   durable,
-}: Opened): Store<Brand> => {
-  const transaction = storeTransaction<Brand>(db, timings, identity, moves, classed, processes.writerMetrics);
-  return {
-    processes,
-    durable,
-    db: storeDb<Brand>(db),
-    path: identity.path,
-    identity,
-    schema,
-    transaction,
-    program: storeProgram<Brand>(db, programs, identity, moves, classed, processes.writerMetrics),
-    readOnly: (work) =>
-      Effect.scoped(
-        Effect.flatMap(makeWithDefaults(), (reader) => work(storeDb<Brand>(reader))).pipe(
-          Effect.provide(
-            Layer.unwrap(
-              Effect.map(ChildLedger, (ledger) =>
-                sqliteProcessLayer(
-                  {
-                    filename: identity.path,
-                    readonly: true,
-                    readers: 0,
-                    onLost: (reason) => console.warn(`[tagma] an isolated reader at ${identity.path} is gone: ${reason}`),
-                    onSpawned: ({ pid }) => ledger.record({ pid, role: 'database' }),
-                  },
-                  processes,
-                ),
+  adopted,
+}: Opened): Store<Brand> => ({
+  processes,
+  durable,
+  db: storeDb<Brand>(db),
+  path: identity.path,
+  identity,
+  schema,
+  transaction: storeTransaction<Brand>(db, timings, identity, moves, classed, processes.writerMetrics),
+  program: storeProgram<Brand>(db, programs, identity, moves, classed, processes.writerMetrics),
+  readOnly: (work) =>
+    Effect.scoped(
+      Effect.flatMap(makeWithDefaults(), (reader) => work(storeDb<Brand>(reader))).pipe(
+        Effect.provide(
+          Layer.unwrap(
+            Effect.map(ChildLedger, (ledger) =>
+              sqliteProcessLayer(
+                {
+                  filename: identity.path,
+                  readonly: true,
+                  readers: 0,
+                  onLost: (reason) => console.warn(`[tagma] an isolated reader at ${identity.path} is gone: ${reason}`),
+                  onSpawned: ({ pid }) => ledger.record({ pid, role: 'database' }),
+                },
+                processes,
               ),
             ),
           ),
         ),
       ),
-    vacuum: () => vacuumStore(db, identity.path, freeBytes),
-    adopt: (file) => adoptSetAside<Brand>(db, transaction, file),
-    freeing,
-    moves,
-    stalled,
-  };
-};
+    ),
+  vacuum: () => vacuumStore(db, identity.path, freeBytes),
+  adopted,
+  freeing,
+  moves,
+  stalled,
+});
 
 const open = <Brand extends StoreBrand>(
   identity: StoreIdentity,
@@ -305,18 +308,22 @@ const open = <Brand extends StoreBrand>(
   timings: WriterTimings,
   withoutSnapshot = false,
   classed = false,
+  adoptions?: Adopting,
 ) =>
   Effect.flatMap(
     Effect.tap(migrated(identity.path, migrations, processes, withoutSnapshot), ({ db }) => readConsequences(identity, db)),
     ({ db, schema }) => {
       const moves = new TableMoves();
+      const transaction = storeTransaction<'machine'>(db, timings, identity, moves, classed, processes.writerMetrics);
       return Effect.map(
         Effect.all([
-          reclaiming(db, storeTransaction<'machine'>(db, timings, identity, moves, classed, processes.writerMetrics)),
+          reclaiming(db, transaction),
           Connections,
           Programs,
+          adopting(db, storeTransaction<StoreBrand>(db, timings, identity, moves, classed, processes.writerMetrics), adoptions),
         ]),
-        ([freeing, connections, programs]) => ({
+        ([freeing, connections, programs, adopted]) => ({
+          adopted,
           db,
           schema,
           identity,

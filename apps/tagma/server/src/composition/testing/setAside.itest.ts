@@ -6,7 +6,7 @@ import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { sql } from 'drizzle-orm';
-import { Context, Deferred, Effect, FileSystem, Layer, Schedule } from 'effect';
+import { Context, Deferred, Effect, FileSystem, Layer } from 'effect';
 import { Maintenance } from '../../platform/contract/service/maintenance.js';
 import type { Manifest } from '../../platform/contract/service/manifest.js';
 import { setAsidePath } from '../../platform/contract/service/ownStore.js';
@@ -76,10 +76,8 @@ layer(BunFileSystem.layer, { excludeTestServices: true })('a module store adopti
       expect(existsSync(adopted)).toBe(true);
 
       yield* Deferred.succeed(door, undefined);
-      yield* Effect.repeat(
-        Effect.sync(() => existsSync(adopted)),
-        { until: (present) => !present, schedule: Schedule.spaced('5 millis') },
-      );
+      yield* store.adopted;
+      expect(existsSync(adopted)).toBe(false);
       expect(yield* held).toEqual([
         { id: 'a', title: 'call a' },
         { id: 'b', title: 'call b' },

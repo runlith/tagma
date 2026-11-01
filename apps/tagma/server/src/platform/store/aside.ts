@@ -1,11 +1,12 @@
 import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
-import { Effect, Schema } from 'effect';
+import { Data, Deferred, Effect, Schema } from 'effect';
 import { sql } from 'drizzle-orm';
 import type { EffectSQLiteBunDatabase } from 'drizzle-orm/effect-sqlite-bun';
-import { type Adoption, IN_MEMORY, SetAsideFailed, SetAsideRefused, type Store, type StoreBrand } from '../contract/service/store.js';
+import { type Adopting, IN_MEMORY, SetAsideFailed, type Store, type StoreBrand } from '../contract/service/store.js';
 import { setAsidePath } from '../contract/service/ownStore.js';
+import { watched } from '../contract/service/drives.js';
 import { type DurableWriteFailed, makeDirectory, moveFile, removeFile } from '../durable/files.js';
 
 const DECLARATION = 'aside.json';
@@ -57,11 +58,51 @@ export const setAside = Effect.fn('Store.setAside')(function* (
   console.log(`[tagma] migration ${migration}: ${tables.join(', ')} set aside with their rows at ${target}`);
 });
 
+class SetAsideRefused extends Data.TaggedError('SetAsideRefused')<{
+  readonly path: string;
+  readonly table: string;
+  readonly reason: 'no-table' | 'keyless' | 'key-missing' | 'key-empty';
+}> {
+  override get message(): string {
+    const why = {
+      'no-table': 'this store has no table of that name',
+      keyless: 'its table here has no primary key',
+      'key-missing': 'the set-aside lacks a column of its primary key here',
+      'key-empty': 'a set-aside row has no value in its primary key here',
+    }[this.reason];
+    return `the set-aside at ${this.path} is not adopted: ${this.table}: ${why}, so its rows could not be taken exactly once`;
+  }
+}
+
+type Adoption = { readonly outcome: 'absent' } | { readonly outcome: 'adopted'; readonly rows: number };
+
+type Planned = { readonly table: string; readonly columns: string; readonly key: string };
+
 let attachments = 0;
 
-export const adoptSetAside = Effect.fn('Store.adopt')(function* <Brand extends StoreBrand>(
+const planned = Effect.fnUntraced(function* (db: EffectSQLiteBunDatabase, file: string, alias: string, table: string) {
+  const refused = (reason: SetAsideRefused['reason']) => new SetAsideRefused({ path: file, table, reason });
+  const target = yield* db.all<{ name: string; pk: number }>(sql`select name, pk from pragma_table_info(${table}, 'main')`);
+  if (target.length === 0) return yield* refused('no-table');
+  const key = target.filter((column) => column.pk > 0).toSorted((a, b) => a.pk - b.pk);
+  if (key.length === 0) return yield* refused('keyless');
+  const source = new Set(
+    (yield* db.all<{ name: string }>(sql`select name from pragma_table_info(${table}, ${alias})`)).map((column) => column.name),
+  );
+  if (key.some((column) => !source.has(column.name))) return yield* refused('key-missing');
+  const empty = key.map((column) => `${quoted(column.name)} is null`).join(' or ');
+  const [unkeyed] = yield* db.all<{ n: number }>(sql.raw(`select count(*) as n from ${quoted(alias)}.${quoted(table)} where ${empty}`));
+  if ((unkeyed?.n ?? 0) > 0) return yield* refused('key-empty');
+  return {
+    table,
+    columns: [...source].map(quoted).join(', '),
+    key: key.map((column) => quoted(column.name)).join(', '),
+  } satisfies Planned;
+});
+
+const adoptFile = Effect.fn('Store.adopt')(function* (
   db: EffectSQLiteBunDatabase,
-  transaction: Store<Brand>['transaction'],
+  transaction: Store<StoreBrand>['transaction'],
   file: string,
 ) {
   if (!existsSync(file)) return { outcome: 'absent' } satisfies Adoption;
@@ -71,21 +112,15 @@ export const adoptSetAside = Effect.fn('Store.adopt')(function* <Brand extends S
     const tables = yield* db.all<{ name: string }>(
       sql.raw(`select name from ${quoted(alias)}.sqlite_master where type = 'table' and name not like 'sqlite_%' order by name`),
     );
-    for (const { name } of tables) {
-      const keyed = yield* db.all<{ n: number }>(
-        sql`select (select count(*) from pragma_table_info(${name}, 'main') where pk > 0) + (select count(*) from pragma_index_list(${name}, 'main') where "unique" = 1) as n`,
-      );
-      if ((keyed[0]?.n ?? 0) === 0) return yield* new SetAsideRefused({ path: file, table: name, reason: 'keyless' });
-    }
+    const plans = yield* Effect.forEach(tables, ({ name }) => planned(db, file, alias, name));
     return yield* transaction('store.adopt', () =>
       Effect.gen(function* () {
+        yield* db.run(sql`PRAGMA defer_foreign_keys = ON`);
         let inserted = 0;
-        for (const { name } of tables) {
-          const columns = yield* db.all<{ name: string }>(sql`select name from pragma_table_info(${name}, ${alias})`);
-          const list = columns.map((column) => quoted(column.name)).join(', ');
+        for (const { table, columns, key } of plans) {
           yield* db.run(
             sql.raw(
-              `INSERT INTO main.${quoted(name)} (${list}) SELECT ${list} FROM ${quoted(alias)}.${quoted(name)} WHERE true ON CONFLICT DO NOTHING`,
+              `INSERT INTO main.${quoted(table)} (${columns}) SELECT ${columns} FROM ${quoted(alias)}.${quoted(table)} WHERE true ON CONFLICT (${key}) DO NOTHING`,
             ),
           );
           inserted += (yield* db.all<{ n: number }>(sql`select changes() as n`))[0]?.n ?? 0;
@@ -96,4 +131,29 @@ export const adoptSetAside = Effect.fn('Store.adopt')(function* <Brand extends S
   }).pipe(Effect.ensuring(Effect.orDie(db.run(sql.raw(`DETACH DATABASE ${quoted(alias)}`)))));
   yield* removeFile(file).pipe(Effect.mapError(unwritten));
   return { outcome: 'adopted', rows } satisfies Adoption;
+});
+
+export const adopting = Effect.fnUntraced(function* (
+  db: EffectSQLiteBunDatabase,
+  transaction: Store<StoreBrand>['transaction'],
+  plan: Adopting | undefined,
+) {
+  if (plan === undefined || plan.files.length === 0) return Effect.void;
+  const ended = yield* Deferred.make<void>();
+  const adopt = (file: string) =>
+    watched(
+      `store.adopt ${file}`,
+      Effect.tap(adoptFile(db, transaction, file), (adopted) =>
+        Effect.sync(() => {
+          if (adopted.outcome === 'adopted') console.log(`[tagma] ${file}: ${adopted.rows} rows adopted`);
+        }),
+      ),
+    );
+  yield* Effect.forkScoped(
+    Effect.andThen(
+      plan.after,
+      Effect.forEach(plan.files, (file) => Effect.exit(adopt(file)), { discard: true }),
+    ).pipe(Effect.ensuring(Deferred.succeed(ended, undefined))),
+  );
+  return Deferred.await(ended);
 });
