@@ -18,8 +18,10 @@ sources:
     ref: packages/agent/src/thread/run/RunProgress.ts
   - kind: file
     ref: packages/agent/src/thread/run/lifecycle/RunReports.ts
+  - kind: file
+    ref: packages/agent/src/thread/run/ThreadSnapshots.test.ts
 ---
-`ThreadSnapshots` keeps each thread's last published state at the change revision it was read or applied at, with the inputs its status was derived from (input receipts, open questions, the newest ending), at most 256 threads, the least recently changed leaving first. Typed committed changes run on one drain per thread. Explicit `publish` calls and publications asked by status deadlines enter the same per-thread snapshot lane; they do not enter that drain. The lane and the framed and opening revision marks prevent a frame older than one already sent.
+`ThreadSnapshots` keeps each thread's last published state at the change revision it was read or applied at, with the inputs its status was derived from (input receipts, open questions, the newest ending), at most 256 threads, the least recently changed leaving first. Typed committed changes run on one drain per thread. Explicit `publish` calls and publications asked by status deadlines enter the same per-thread snapshot lane; they do not enter that drain. The lane and the framed and opening revision marks prevent a frame older than one already sent. Background forks use the owner's construction context so later callers' transaction and lane marks cannot survive into detached work; the causing cost and committed work's requested span parent are carried explicitly.
 
 **The change revision** is the thread's first clock (`native_thread_rev.change_rev`). A trigger on every table the projected state or the host's parts of it read advances it on each row written: `native_thread`, `thread`, `thread_mandate`, `thread_run`, `thread_event`, `thread_entry`, `thread_inbox`, `thread_call`, `external_session` and `thread_view_pin`. A write for which its producer supplies no typed change still advances that clock. Memory storage counts its committed write units instead, a coarser clock that is still exact for the projection. A whole read takes the revision first, so a write landing during the read leaves the held revision older than what it read, and the next change reads again.
 
