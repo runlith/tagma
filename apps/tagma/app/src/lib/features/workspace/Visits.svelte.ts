@@ -71,7 +71,8 @@ export class Visits extends Service<Visits>()('Visits', { tier: 'app' }) {
   resume(project: Project): string {
     const surface = this.held.get(String(project.id))?.surface;
     const at = this.entry?.project === project.name ? this.entry.at : undefined;
-    if (surface == null && at !== undefined) return this.registry.pathOf(project.name, at.surface, at.place);
+    if (surface == null && at !== undefined && this.registry.find(at.surface) !== undefined)
+      return this.registry.pathOf(project.name, at.surface, at.place);
     return this.href(project, surface != null && this.registry.portable(surface) ? surface : this.registry.home);
   }
 }

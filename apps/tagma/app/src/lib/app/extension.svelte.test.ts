@@ -65,7 +65,7 @@ test('a layer merged from outside the features declares a settings section and c
   expect(page.querySelectorAll('[data-testid="extension-note"]')).toHaveLength(1);
 });
 
-test('a surface merged from outside the features renders through the one contributed route, and a build without it renders nothing there', async () => {
+test('a surface merged from outside the features renders through the one contributed route, and a build without it says it has no page there', async () => {
   const at = makeRouter({ routeId: '/[project]/p/[...path]', params: { project: 'runlith', path: 'notes' } });
   const notes = Surfaces.contribute('extension', {
     surface: 'notes',
@@ -86,5 +86,5 @@ test('a surface merged from outside the features renders through the one contrib
   app = mountShell(Layer.mergeAll(Surfaces, SurfaceRegistry), Layer.mergeAll(), { router: at });
   const bare = app.draw(SurfacePage as never, {});
   flushSync();
-  expect(bare.textContent?.trim()).toBe('');
+  expect([bare.querySelector('[data-testid="extension-page"]'), bare.querySelector('[data-absent]') !== null]).toEqual([null, true]);
 });

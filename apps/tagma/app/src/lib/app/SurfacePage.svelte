@@ -1,6 +1,7 @@
 <script lang="ts">
   import { Router } from '@runlith/layer/Router';
   import ShownPayload from '@runlith/layer/svelte/ShownPayload.svelte';
+  import AbsentSurface from '$lib/features/workspace/AbsentSurface.svelte';
   import { SurfaceRegistry } from '$lib/features/workspace/surface.js';
 
   const router = Router.use();
@@ -13,4 +14,6 @@
   {#key shown.payload.component}
     <ShownPayload id={`Surfaces/${shown.surface}`} payload={shown.payload} props={{ path }} />
   {/key}
+{:else}
+  <AbsentSurface {path} />
 {/if}
