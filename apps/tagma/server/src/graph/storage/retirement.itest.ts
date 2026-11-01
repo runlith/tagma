@@ -14,6 +14,7 @@ import { graphPool } from '../testing/doubles.js';
 import { ServedGraphs } from '../contract/service/serving.js';
 import { MIRROR_IDENTITY, type MirrorIdentity } from '../contract/wire/storage.js';
 import { ShadowGit } from '../tree/shadow.js';
+import { NO_SIDE } from '../contract/service/exchange.js';
 import { mirrorPath, resolveStorageLayout, storageHomes, MIRROR_FILES } from './layout.js';
 import { mirrorsLayer, retireMirrors } from './retirement.js';
 import { Mirrors } from '../contract/service/mirrors.js';
@@ -86,7 +87,7 @@ layer(demoGraphLayer({ repos: ['repository', 'removed'], source: 'repository' })
         yield* files.remove(old.root, { recursive: true });
         const stealth = yield* resolveStorageLayout({ mode: 'stealth', projectId: id, appHome, worktree: root });
         if (stealth.mode !== 'stealth') return yield* Effect.die('expected stealth layout');
-        const shadow = yield* ShadowGit.open(stealth.gitDir, git, null);
+        const shadow = yield* ShadowGit.open(stealth.gitDir, git, NO_SIDE);
         const stealthGone = join(dirname(stealth.treeRoot), 'retired');
         const stealthKept = join(dirname(stealth.treeRoot), 'stranded');
         yield* shadow.branch('retired', 'main');

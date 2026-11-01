@@ -8,16 +8,9 @@ import type { ServedGraphs } from '../contract/service/serving.js';
 import type { graphFrameSchema, threadWorkFrameSchema } from '../contract/wire/feed.js';
 
 import type { GraphRecoveries } from '../contract/service/recovery.js';
-import type { GraphRemotes } from '../contract/service/remote.js';
 
-export const graphChannel = (
-  pool: ServedGraphs['Service'],
-  recoveries: GraphRecoveries['Service'],
-  holders: HolderCopies['Service'],
-  remotes: GraphRemotes['Service'],
-) => ({
+export const graphChannel = (pool: ServedGraphs['Service'], recoveries: GraphRecoveries['Service'], holders: HolderCopies['Service']) => ({
   'graph.recovery': ({ projectId }: { readonly projectId: number }) => recoveries.follow(projectId),
-  'graph.remote': ({ projectId }: { readonly projectId: number }) => remotes.follow(projectId),
   'graph.subscribe': ({ projectId, branch }: { readonly projectId: number; readonly branch?: string }) =>
     Stream.unwrap(
       Effect.gen(function* () {

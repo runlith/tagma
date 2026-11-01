@@ -6,4 +6,4 @@ export type VerbBindings = Readonly<Record<string, readonly VerbBinding[]>>;
 
 export type VerbModule = { readonly id: string; readonly verbs: (...bindings: never[]) => VerbSources };
 
-export type CoreBindings = { readonly installation: VerbBinding };
+export type CoreBindings = { readonly installation: VerbBinding; readonly operations: VerbBinding };

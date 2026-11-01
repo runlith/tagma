@@ -15,9 +15,9 @@ edges:
     to: 01a18cde-5f93-73e8-aa31-64572afe6fec
 sources:
   - kind: file
-    ref: apps/tagma/server/src/change-record/lines/walks.ts
-  - kind: file
     ref: apps/tagma/server/src/change-record/lines/projection.ts
+  - kind: file
+    ref: apps/tagma/server/src/change-record/lines/walks.ts
 ---
 Remove the serving-loop regression introduced by bounded verdict retention: a cold or evicted Holdings judgement must not construct or transport a whole-file line-object graph there. Keep resident detail bounded and preserve exact landing, rollback, request freshness and partial-input recovery.
 

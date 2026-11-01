@@ -1,0 +1,1 @@
+ALTER TABLE `project_policy` DROP COLUMN `graph_remote`;

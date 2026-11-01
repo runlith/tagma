@@ -5,7 +5,7 @@ ord: 261
 tags: ["spec"]
 fields:
   {
-    "status": "open"
+    "status": "closed"
   }
 edges:
   - kind: relates
@@ -15,21 +15,15 @@ Paths under `apps/tagma/server/src/` unless stated. This is the first capability
 
 ## What stands
 
-- A stealth repository's remote exchange already sits behind `GraphRemotes` (`graph/contract/service/remote.ts`). `makeGraphRemotes` (`graph/serving/remotes.ts`) fills it over the git plumbing in `graph/storage/remote.ts`.
-- Its address is core state: the `graph_remote` column of `project_policy` (`graph/store/policy.ts`), and `graphRemote` on the policy row, on the `Project` wire row and in project creation's input. 22 non-test files under `graph/` and `projects/` carry it.
-- Core flows branch on the address with no step to join:
-  - `ShadowGit.open(gitDir, git, origin)` births a missing `graph.git` from it, and every opener passes it (`serving/birth.ts`, `open.ts`, `attach.ts`, `recovery.ts`, `twinning.ts`, `pool.ts`, `storage/move.ts`);
-  - opening attaches the stealth shadow when a remote is set;
-  - a storage move returns early only when there are no hidden blocks and no remote;
-  - topology fast-forwards a tree to the remote tracking branch, or seeds a new twin from it.
-- The pool builds the exchanger unconditionally and wakes it after act commits and on freshness.
+- **One port at graph.** `GraphExchange` (`graph/contract/service/exchange.ts`, explanation [[17075e73]]) answers per project the side of a stealth `graph.git` — what a missing one is born from and the tracking-ref namespace topology follows — and takes the wakes after graph commits, accepted refreshes and copy openings. `ShadowGit.open` takes that side instead of an address, and every opener passes it: birth, opening (the team project's stealth layer attaches when `graph.git` stands or the side names a birth), recovery, twin renames, detached reads and storage moves. The pool hands the filler a host (`graph/serving/exchange.ts`): a project's stealth `graph.git`, branch following, `moved`, opening, and setting the graph aside for a restore.
+- **The core default answers none.** A build with no filler births empty, reads no tracking ref and ignores wakes — the path a project with no remote always took. The graph's own tests run on `NO_SIDE`; `composition/testing/exchange.itest.ts` composes the core modules with a test filler that births from a bare repository, supplies `refs/remotes/sync/*` that topology fast-forwards the served tree to and seeds a new branch's twin from, and is woken after commits, all through the port and the host.
+- **The exchanger is the `graph-remote` module** (`graph-remote/`), outside `CORE_MODULES` and carried by both the developer and release builds: the git plumbing, `set_graph_remote`, `read_graph_remote`, the `graph.remote` feed, the `tagma remote` verb, and on the app side `RemoteCard` and the New project field `RemoteField` (`apps/tagma/app/src/lib/features/graph/`), which the app root contributes to `CreationFields`. Its answers no longer carry the project row.
+- **No remote address in core state.** Migration `20261101013059_drop_graph_remote` drops `project_policy.graph_remote`; `graphRemote` left the policy row, the `Project` wire row, `ProjectPolicy`, `ProjectLifecycle.create` and `add_project`'s input. A new project names its remote through `contributed: { 'graph-remote': <remote> }` (CLI `tagma project add --step graph-remote=<remote>`). The address lives in the module's store `<data>/stores/graph-remote.sqlite`, kept by project id like the registration, so removal and return need no follower; data-directory relocation never rewrote the address before and does not now. Addresses written before the module are adopted once per project, when first needed, from its `graph.git`'s `remote.origin.url` — a project removed before the upgrade and returned after included (explanation [[1ff01c14]], test `composition/testing/remoteAdoption.itest.ts`).
+- **Branch following stays core.** Twins, topology, stealth-merge recovery and the forward of branches no tree holds are the graph's, reached by the filler only through the host.
 
 ## What will stand
 
-1. **One port at graph for the remote side of a stealth repository.** For each project it answers three things: what a missing `graph.git` is born from, which remote tracking refs topology follows, and whom to wake after a graph commit or opening. `ShadowGit.open`, opening, storage moves and topology ask the port instead of taking an address argument. The port is phrased as exchange in general, so a self-hosted sync can fill it as well.
-2. **The core default answers none.** That is the path `origin = null` takes today, so with no other filler the core births, opens, moves and follows branches exactly as a project with no remote does now.
-3. **No remote address in core state.** A migration drops the `graph_remote` column. `graphRemote` leaves the policy row, the `Project` row and project creation, which carries a filler's input through the `contributed` map of [[0ac072c1]], item 5. A filler keeps its own state in its own store (item 7) and follows project removal and moves through the existing `thread-record/home-followers` and `platform/relocations` points.
-4. **Branch-following stays core.** Twins, topology and stealth-merge recovery behave the same with or without a filler.
+The exchanger leaves this repository for the closed one in a later task, reaching the graph only through the port, the host and the core's exported entries.
 
 ## Acceptance
 

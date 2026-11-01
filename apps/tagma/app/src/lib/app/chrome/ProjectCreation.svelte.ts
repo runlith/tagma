@@ -18,7 +18,6 @@ export type ProjectDraft = {
   readonly rootPath: string;
   readonly storage: StorageMode;
   readonly catalogs?: readonly string[];
-  readonly graphRemote?: string;
   readonly contributed?: Readonly<Record<string, unknown>>;
 };
 

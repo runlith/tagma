@@ -9,6 +9,7 @@ import { dirname, join } from 'node:path';
 import { Context, Effect, FileSystem, Layer } from 'effect';
 import { ownGitLayer } from '../../platform/git/ownGit.js';
 import { ShadowGit } from './shadow.js';
+import { NO_SIDE } from '../contract/service/exchange.js';
 import { TreeMerges } from './merges.js';
 
 const block = (body: string, id = '0198c3d4-7b2a-7f00-8000-3f9ac2b41e7a') => `---\nid: ${id}\ntitle: Rule\nord: 1\n---\n${body}\n`;
@@ -23,7 +24,7 @@ class MergeTemplate extends Context.Service<MergeTemplate, { readonly gitDir: st
 const templates = kind(MergeTemplate, (_params: null, root: string) =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
-    const shadow = yield* ShadowGit.open(join(root, 'graph.git'), yield* Git, null);
+    const shadow = yield* ShadowGit.open(join(root, 'graph.git'), yield* Git, NO_SIDE);
     const tree = join(root, 'tree');
     yield* shadow.attach(tree, 'main');
     yield* fs.writeFileString(join(tree, 'rule.md'), block('base'));
@@ -49,7 +50,7 @@ const world = Effect.fn('mergesFixture.copy')(function* () {
   const root = yield* fs.makeTempDirectoryScoped({ prefix: 'graph-merges-' });
   const gitDir = join(root, 'graph.git');
   yield* fs.copy(source, gitDir, { overwrite: true });
-  const shadow = yield* ShadowGit.open(gitDir, yield* Git, null);
+  const shadow = yield* ShadowGit.open(gitDir, yield* Git, NO_SIDE);
   const tree = join(root, 'tree');
   yield* shadow.attach(tree, 'main');
   return { shadow, tree, theirs, base };
@@ -65,7 +66,7 @@ layer(template, { excludeTestServices: true })('graph merge recovery', (it) => {
       expect(yield* shadow.run('head', ['-C', tree, 'rev-parse', 'HEAD'])).toBe(base);
       expect(yield* fs.readFileString(join(tree, 'rule.md'))).toBe(block('current knowledge'));
       expect(yield* shadow.unmergedPaths(tree)).toEqual([]);
-      const reopened = TreeMerges.at(yield* ShadowGit.open(shadow.gitDir, yield* Git, null), tree);
+      const reopened = TreeMerges.at(yield* ShadowGit.open(shadow.gitDir, yield* Git, NO_SIDE), tree);
       const pending = yield* reopened.read();
       expect(pending).toMatchObject({ branch: 'main', incoming: 'incoming', base, theirs, conflicts: ['rule.md'], threadId: null });
       if (pending === null) return yield* Effect.fail('missing recovery');

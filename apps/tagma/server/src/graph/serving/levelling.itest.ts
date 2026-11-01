@@ -11,6 +11,7 @@ import { FORMAT_FILE } from '../contract/wire/storage.js';
 import { Catalogs, NO_CATALOGS } from '../contract/wire/catalogs.js';
 import { storageHomes, resolveStorageLayout } from '../storage/layout.js';
 import { ShadowGit } from '../tree/shadow.js';
+import { NO_SIDE } from '../contract/service/exchange.js';
 import { TreeMerges } from '../tree/merges.js';
 import { markerText, readMarker } from '../tree/marker.js';
 import { shippedSteps } from '../steps/sequence.js';
@@ -56,7 +57,7 @@ layer(demoGraphLayer({ repos: ['levelling'] }).pipe(Layer.provideMerge(BunFileSy
             const homes = storageHomes(graph.store.path);
             const current = yield* resolveStorageLayout({ mode: 'stealth', projectId: row.id, ...homes, worktree: checkout });
             if (current.mode !== 'stealth') return yield* Effect.die('the fixture requires a stealth tree');
-            const shadow = yield* ShadowGit.open(current.gitDir, graph.git, null);
+            const shadow = yield* ShadowGit.open(current.gitDir, graph.git, NO_SIDE);
             const git = (...args: string[]) => runGit(graph.git, 'test-levelling', args);
             const main = yield* git('-C', checkout, 'symbolic-ref', '--short', 'HEAD');
             if (main !== 'main') yield* shadow.branch(main, 'main');

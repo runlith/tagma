@@ -5,13 +5,13 @@ ord: 1
 tags: ["explanation"]
 sources:
   - kind: file
-    ref: apps/tagma/app/src/lib/features/workspace/surface.ts
-  - kind: file
     ref: apps/tagma/app/src/lib/features/workspace/actions.ts
   - kind: file
     ref: apps/tagma/app/src/lib/features/workspace/address.ts
   - kind: file
     ref: apps/tagma/app/src/lib/features/workspace/Addresses.ts
+  - kind: file
+    ref: apps/tagma/app/src/lib/features/workspace/surface.ts
 ---
 A list many features fill is a point its lower owner declares, and each feature contributes from its own `layer.ts`. Surfaces (`Surfaces`, workspace), section columns (`Columns`, workspace), palette actions (`PaletteActions`, workspace), tab kinds (`Panes`, shared panes), link kinds and link menu items (`LinkKinds`, `LinkMenuItems`, opening), settings sections and their contributions (`SettingSections`, `SectionContributions`, settings). The owner stands below every feature that contributes to it. If it loaded their files itself, every importer of addresses would pull all features up the module order. A root outside the core merges its own feature layer beside them, and its items join the same points.
 

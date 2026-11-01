@@ -30,6 +30,7 @@ import { projectToTree, syncProject } from '../tree/projection.js';
 import { treeHeadStamp } from '../tree/stamp.js';
 import { coverCommitJournals } from '../tree/message.js';
 import { ShadowGit } from '../tree/shadow.js';
+import type { GraphSide } from '../contract/service/exchange.js';
 import type { BlockTreeUnreadable } from '../tree/layout.js';
 import { treeHoldsAny } from '../tree/scan.js';
 import { syncTopology } from '../tree/topology.js';
@@ -104,8 +105,7 @@ export const syncRegistry = Effect.fn('MirrorBuilder.syncRegistry')(function* (
           mine !== undefined &&
           mine.strictProvenance === fields.strictProvenance &&
           mine.private === fields.private &&
-          mine.storage === fields.storage &&
-          mine.graphRemote === fields.graphRemote
+          mine.storage === fields.storage
         )
           continue;
         yield* writePolicy(db, projectId, fields);
@@ -188,12 +188,12 @@ export const travelMirror = Effect.fnUntraced(function* (
 
 export const attachShadowTree = Effect.fnUntraced(function* (
   git: Git['Service'],
-  row: ProjectPolicyRow,
+  side: GraphSide,
   checkout: string,
   layout: StealthLayout,
   steps: GraphSteps['Service'],
 ) {
-  const shadow = yield* ShadowGit.open(layout.gitDir, git, row.graphRemote);
+  const shadow = yield* ShadowGit.open(layout.gitDir, git, side);
   const repo = yield* treeBranch(checkout);
   if ('held' in repo && repo.held === 'no-repository') yield* shadow.attach(layout.treeRoot, 'main');
   else yield* syncTopology(shadow, checkout, layout.treeRoot, steps, { absorb: false });
@@ -202,7 +202,7 @@ export const attachShadowTree = Effect.fnUntraced(function* (
 
 export const attachTree = Effect.fnUntraced(function* (
   git: Git['Service'],
-  row: ProjectPolicyRow,
+  side: GraphSide,
   checkout: string,
   layout: StorageLayout,
   steps: GraphSteps['Service'],
@@ -211,7 +211,7 @@ export const attachTree = Effect.fnUntraced(function* (
     mkdirSync(layout.treeRoot, { recursive: true });
     return { shadow: null, twinned: false };
   }
-  return { shadow: yield* attachShadowTree(git, row, checkout, layout, steps), twinned: true };
+  return { shadow: yield* attachShadowTree(git, side, checkout, layout, steps), twinned: true };
 });
 
 export function treeHoldsBlocks(treeRoot: string): Effect.Effect<boolean, BlockTreeUnreadable> {

@@ -26,6 +26,7 @@ import type { ProjectSetting, ProjectSettings } from '../wire/storage.js';
 import type { ServesFrom } from '../wire/storage.js';
 import type { BlockRow, TreeGuard, TreeProjection } from './acts.js';
 import type { Tags } from './vocabulary.js';
+import type { GraphSide } from './exchange.js';
 import type { AdmittedProject, ProjectPolicyRow } from '../wire/serving.js';
 import type { Git } from '@runlith/git/Git';
 import type { ProjectBranch } from '../wire/rows.js';
@@ -130,16 +131,12 @@ export class ProjectPolicy extends Context.Service<
       id: number;
       mode: StorageMode;
     }): Effect.Effect<ProjectPolicyRow, StoreFailure | GateRefusal<FloorRefusal | 'not-found'>>;
-    setRemote(input: {
-      id: number;
-      remote: string | null;
-    }): Effect.Effect<ProjectPolicyRow, StoreFailure | GateRefusal<FloorRefusal | 'not-found'>>;
     servesFrom(ids: readonly number[]): Effect.Effect<Map<number, ServesFrom>, StoreFailure>;
     subscribe(subscriber: (event: ProjectPolicyChanged) => Effect.Effect<void>): () => void;
   }
 >()('tagma/graph/ProjectPolicy') {}
 
-export type ProjectPolicyChanged = { readonly projectId: number; readonly field: ProjectSetting | 'storage' | 'graphRemote' };
+export type ProjectPolicyChanged = { readonly projectId: number; readonly field: ProjectSetting | 'storage' };
 
 export class ProjectLifecycle extends Context.Service<
   ProjectLifecycle,
@@ -152,7 +149,6 @@ export class ProjectLifecycle extends Context.Service<
         private?: boolean;
         storage?: StorageMode;
         catalogs?: readonly string[];
-        graphRemote?: string;
       },
       birth?: (row: ProjectPolicyRow) => Effect.Effect<void, E, R>,
     ): Effect.Effect<
@@ -392,6 +388,7 @@ export type KeptRefusal =
 export type StorageMove = { readonly projectId: number; readonly mode: StorageMode; readonly keep?: readonly string[] };
 
 export type ServingMoveBindings = {
+  readonly side: GraphSide;
   readonly releaseProject: (projectId: number) => Effect.Effect<void>;
   readonly resolveFresh: (projectId: number) => Effect.Effect<void, GateRefusal<OpenRefusal>>;
   readonly kept: (
