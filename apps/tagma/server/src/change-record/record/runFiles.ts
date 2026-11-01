@@ -12,7 +12,6 @@ import type { RunFilesFailure } from '../contract/service/runFiles.js';
 import { LineWrites } from '../contract/service/lineWrites.js';
 import type { RunFile, RunFilePage, RunSelection } from '../contract/wire/runFiles.js';
 import type { LineCounts, LinesReverted } from '../contract/wire/runFiles.js';
-import type { Folder } from '../holdings/judge.js';
 import { restoreAt, type Restoring } from '../holdings/restore.js';
 import type { Walks } from '../lines/walks.js';
 import { working } from '../threadFiles/sides.js';
@@ -92,15 +91,19 @@ export const revertPlan = (
   const own = counted();
   const reverted = counted();
   const held = new Map<string, { added: number; removed: number }>();
-  for (const line of verdict.lines === 'unweighed' ? [] : verdict.lines) {
-    if (line.mark === 'external') continue;
-    if (ids.has(line.mark.row)) {
-      own[line.kind] += 1;
-      if (back.has(line.mark.row)) reverted[line.kind] += 1;
-    } else if (line.mark.holder !== selection.threadId) {
-      const lines = held.get(line.mark.holder) ?? counted();
-      lines[line.kind] += 1;
-      held.set(line.mark.holder, lines);
+  for (const writer of verdict.writers) {
+    if (ids.has(writer.row)) {
+      own.added += writer.added;
+      own.removed += writer.removed;
+      if (back.has(writer.row)) {
+        reverted.added += writer.added;
+        reverted.removed += writer.removed;
+      }
+    } else if (writer.holder !== selection.threadId) {
+      const lines = held.get(writer.holder) ?? counted();
+      lines.added += writer.added;
+      lines.removed += writer.removed;
+      held.set(writer.holder, lines);
     }
   }
   const overwritten = live.filter((id) => !verdict.standing.has(id) && verdict.overwritten.has(id));
@@ -129,7 +132,6 @@ export function runFilesOver(
   graphDirectory: string,
   walks: Walks,
 ) {
-  const folder: Folder = (input, cached, alignment, lane) => walks.fold(input, cached, alignment, lane);
   const unproven = (reason: string) =>
     new GateRefusal('root-unproven', `which checkout the selection reads is unknown: ${reason}`, [
       'use a proved checkout of the thread’s project',
@@ -154,7 +156,7 @@ export function runFilesOver(
       rows.filter((row) => row.threadId === selection.threadId && row.runId !== null && runs.has(row.runId)).map((row) => row.id),
     );
     const readers = { store, units, git: checkout.git, files: yield* FileSystem.FileSystem, walks };
-    const restoring = yield* restoreAt(readers, folder, { rootId: key, dir: checkout.root }, path, selected);
+    const restoring = yield* restoreAt(readers, { rootId: key, dir: checkout.root }, path, selected);
     if (restoring.kind === 'folded' && restoring.working.kind === 'whole') return refused('binary');
     if (restoring.kind === 'unread') return refused('path-unreadable');
     return { plan: revertPlan(path, rows, selection, restoring), state: stateOf(rows) };

@@ -1,5 +1,5 @@
 import type { Ambient, Currents, Definition } from './App.js';
-import type { AlwaysOpen, AnyKey, DeepestOpen, Key, Ladder, Provided, Reach, Tier } from './key.js';
+import type { AnyKey, DeepestOpen, Key, Ladder, Provided, Reach, Tier } from './key.js';
 import type { Named, OutOf, Satisfying, When } from './Layer.js';
 import type { Platform } from './Platform.js';
 import type { Router } from './Router.js';
@@ -9,26 +9,19 @@ export interface Manifest {}
 
 type World = Provided<typeof Platform> | Provided<typeof Router>;
 
-type Unconditional<O> = O extends When<AnyKey, object> ? never : O;
 type Keys<O> = O extends When<infer K, object> ? K : O;
 
-export interface Ground<Always, Maybe, Outs = never> {
-  readonly always: Always;
+export interface Ground<Maybe, Outs> {
   readonly maybe: Maybe;
   readonly outs: Outs;
 }
 
-export type GroundOf<M, L = readonly []> = Ground<
-  Unconditional<OutOf<M>> | Ambient | World | Currents<L>,
-  Keys<OutOf<M>> | Ambient | World | Currents<L>,
-  OutOf<M> | Ambient | World | Currents<L>
->;
+export type GroundOf<M, L = readonly []> = Ground<Keys<OutOf<M>> | Ambient | World | Currents<L>, OutOf<M> | Ambient | World | Currents<L>>;
 
 type AppGround = Manifest extends { readonly app: Definition<infer M, infer L> } ? GroundOf<M, L> : undefined;
 
-type AlwaysOf<G> = G extends Ground<infer A, unknown, unknown> ? A : never;
-type MaybeOf<G> = G extends Ground<unknown, infer M, unknown> ? M : never;
-type OutsOf<G> = G extends Ground<unknown, unknown, infer O> ? O : never;
+type MaybeOf<G> = G extends Ground<infer M, unknown> ? M : never;
+type OutsOf<G> = G extends Ground<unknown, infer O> ? O : never;
 
 type Refusal<Why extends string, What> = { readonly [W in Why]: What };
 
@@ -53,17 +46,19 @@ type Implied<T> =
           : never
     : never;
 
+type GivenWithItsTier<P, Outs> = P extends AnyKey
+  ? [When<P, Named<Implied<TierOf<P>>>>] extends [Satisfying<Outs>]
+    ? true
+    : false
+  : false;
+
 export type UseDoorOn<K, G> = G extends undefined
   ? unknown
   : Provided<K> extends infer P
     ? Judged<P> extends false
       ? unknown
-      : [P] extends [AlwaysOf<G>]
-        ? [TierOf<P>] extends [AlwaysOpen]
-          ? unknown
-          : TierOf<P> extends Rungs
-            ? Refusal<'exists only while its rung is open: take it with find(), or in a screen of its tier', P>
-            : Refusal<'exists only in one kind of its rung: take it with find(), or in a screen of its tier', P>
+      : GivenWithItsTier<P, OutsOf<G>> extends true
+        ? unknown
         : [P] extends [MaybeOf<G>]
           ? Refusal<'the manifest provides it only under a condition: take it with find()', P>
           : Refusal<'not in the manifest', P>

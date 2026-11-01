@@ -10,8 +10,6 @@ import { CheckoutRepo } from './Repo.js';
 import { Checkout } from './Selection.svelte.js';
 import { stillEditing, threadGroups, type ThreadGroup, type ThreadGroupEntry } from './threadGroups.js';
 
-type Checkouts = ReturnType<typeof CheckoutRepo.use>;
-
 export type Side = AuthorshipSide | null;
 
 export type Walked = { readonly path: string; readonly lines: CheckoutLines; readonly side: Side };
@@ -32,7 +30,7 @@ export class GitLists extends Service<GitLists>()('GitLists', { tier: 'graph' })
     private readonly holdings: Holdings,
     private readonly marks: ReaderMarks,
     private readonly names: ThreadNames,
-    private readonly repo: Checkouts,
+    private readonly repo: CheckoutRepo,
   ) {
     super();
   }

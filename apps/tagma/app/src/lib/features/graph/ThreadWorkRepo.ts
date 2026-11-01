@@ -1,5 +1,6 @@
 import { ThreadId } from '@tagma/server/platform/contract/wire/thread';
 import { THREAD_WORK_ROWS } from '@tagma/server/graph/contract/wire/threadWork';
+import type { InstanceOf } from '@runlith/layer/key';
 import type { KeyedLoaderContext } from '@runlith/query/types';
 import { Repo } from '@runlith/query/repo';
 import { Door } from '$lib/wire/Door.js';
@@ -37,3 +38,5 @@ export const ThreadWorkRepo = Repo.define(
   }),
   { tier: 'app', door: Door },
 );
+
+export type ThreadWorkRepo = InstanceOf<typeof ThreadWorkRepo>;

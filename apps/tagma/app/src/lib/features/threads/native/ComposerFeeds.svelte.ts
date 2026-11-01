@@ -13,7 +13,7 @@ export class ComposerFeeds {
 
   constructor(
     private readonly draft: ThreadDraft,
-    private readonly selection: ReturnType<typeof SelectionRepo.use>,
+    private readonly selection: SelectionRepo,
     private readonly tags: TagCatalog,
     private readonly projectId: number,
     private readonly dismiss: () => void,

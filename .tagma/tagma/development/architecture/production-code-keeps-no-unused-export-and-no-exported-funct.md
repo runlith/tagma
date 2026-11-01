@@ -2857,10 +2857,6 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead apps/tagma/server/src/change-record/lines/fold.ts#foldPath",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "dead-code dead apps/tagma/server/src/change-record/lines/folding.ts#Splice",
           "owner": "5a3bed29"
         },

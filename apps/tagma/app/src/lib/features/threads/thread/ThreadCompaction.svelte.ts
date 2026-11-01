@@ -17,9 +17,6 @@ import { ThreadEffects } from './ThreadEffects.js';
 import { ThreadFeed } from './ThreadFeed.svelte.js';
 import { refusedBy, type ThreadRefused } from './ThreadRefused.js';
 
-type Threads = ReturnType<typeof ThreadsRepo.use>;
-type Settings = ReturnType<typeof SettingsRepo.use>;
-
 export class ThreadCompaction extends Service<ThreadCompaction>()('ThreadCompaction', { tier: 'thread' }) {
   static *make() {
     return new ThreadCompaction(
@@ -46,8 +43,8 @@ export class ThreadCompaction extends Service<ThreadCompaction>()('ThreadCompact
   constructor(
     private readonly feed: ThreadFeed,
     private readonly effects: ThreadEffects,
-    private readonly threads: Threads,
-    private readonly settings: Settings,
+    private readonly threads: ThreadsRepo,
+    private readonly settings: SettingsRepo,
     private readonly projectId: number,
     private readonly accounts: UsageAccounts,
     private readonly list: ThreadList,

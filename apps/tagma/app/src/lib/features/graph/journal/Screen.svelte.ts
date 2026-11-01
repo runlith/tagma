@@ -13,9 +13,6 @@ import { BlocksRepo } from '$lib/features/graph/BlocksRepo.js';
 import { GraphFeed } from '$lib/features/graph/Feed.js';
 import { JournalRepo } from '$lib/features/graph/JournalRepo.js';
 
-type Blocks = ReturnType<typeof BlocksRepo.use>;
-type Journal = ReturnType<typeof JournalRepo.use>;
-
 const PAGE_ENTRIES = 100;
 
 export type OpenedBatch = { diff: BlockDiff; marks: readonly BlockMark[]; blocks: readonly Block[] };
@@ -71,8 +68,8 @@ export class JournalScreen extends Screen<JournalScreen>()('JournalScreen', { ti
 
   constructor(
     projectId: number,
-    private readonly journal: Journal,
-    private readonly blocksRepo: Blocks,
+    private readonly journal: JournalRepo,
+    private readonly blocksRepo: BlocksRepo,
     private readonly live: JournalLive,
     feed: GraphFeed,
     scope: Scope,
@@ -158,7 +155,7 @@ export class JournalScreen extends Screen<JournalScreen>()('JournalScreen', { ti
     }
   }
 
-  private window(input: Parameters<Journal['batches']['key']>[0], fresh: boolean) {
+  private window(input: Parameters<JournalRepo['batches']['key']>[0], fresh: boolean) {
     const query = this.journal.batches.key(input);
     return fresh ? query.refresh({ throwOnError: true }) : query.loadOrThrow();
   }

@@ -1,11 +1,9 @@
 import type { Piece } from '@tagma/server/speech/contract/wire/listening';
 import type { ThreadsRepo } from '../Repo.js';
 
-type Threads = ReturnType<typeof ThreadsRepo.use>;
-
 export class CallPieces {
   constructor(
-    private readonly threads: Threads,
+    private readonly threads: ThreadsRepo,
     private readonly projectId: number,
   ) {}
 

@@ -1,5 +1,6 @@
 import { arrayView } from '@runlith/utils/collection';
 import type { Mark } from './marks.js';
+import { lineIn, shareText, type TextSlice } from './text.js';
 import type { MarkedLine, Proven, Verdict } from './projection.js';
 
 type Columns = {
@@ -20,8 +21,7 @@ export type PackedVerdict = { readonly bytes: number } & (
       readonly lines: Columns | 'unweighed';
       readonly regions: Columns;
       readonly ranges: Float64Array;
-      readonly text: string;
-      readonly offsets: Float64Array;
+      readonly text: TextSlice;
       readonly marks: readonly Mark[];
       readonly rows: readonly string[];
     }
@@ -71,11 +71,15 @@ export function packVerdict(verdict: Verdict, limit: number): PackedVerdict | nu
     return index;
   };
   const columns = (given: readonly MarkedLine[]): Columns => {
-    const positions = new Float64Array(given.length * 2);
-    const indices = new Uint32Array(given.length * 2);
-    const kinds = new Uint8Array(given.length);
-    const follows = given.some((line) => line.follows !== undefined) ? new Float64Array(given.length).fill(NaN) : new Float64Array();
-    const removals = given.some((line) => line.removal !== undefined) ? new Float64Array(given.length * 2).fill(NaN) : new Float64Array();
+    const positions = new Float64Array(new SharedArrayBuffer(given.length * 16));
+    const indices = new Uint32Array(new SharedArrayBuffer(given.length * 8));
+    const kinds = new Uint8Array(new SharedArrayBuffer(given.length));
+    const follows = new Float64Array(new SharedArrayBuffer(given.some((line) => line.follows !== undefined) ? given.length * 8 : 0)).fill(
+      NaN,
+    );
+    const removals = new Float64Array(new SharedArrayBuffer(given.some((line) => line.removal !== undefined) ? given.length * 16 : 0)).fill(
+      NaN,
+    );
     for (const [at, line] of given.entries()) {
       positions[at * 2] = line.at;
       positions[at * 2 + 1] = line.unit;
@@ -93,7 +97,7 @@ export function packVerdict(verdict: Verdict, limit: number): PackedVerdict | nu
   };
   const packed = lines === 'unweighed' ? lines : columns(lines);
   const slices = columns(regions.flatMap((region) => region.lines));
-  const ranges = new Float64Array(regions.length * 5);
+  const ranges = new Float64Array(new SharedArrayBuffer(regions.length * 40));
   let end = 0;
   for (const [at, region] of regions.entries()) {
     end += region.lines.length;
@@ -101,6 +105,7 @@ export function packVerdict(verdict: Verdict, limit: number): PackedVerdict | nu
   }
   bytes += ranges.byteLength + 128;
   for (const hand of summary.hands) bytes += 128 + stringBytes(hand.holder);
+  for (const writer of summary.writers) bytes += 128 + stringBytes(writer.row) + stringBytes(writer.holder);
   for (const row of summary.standing) bytes += 64 + stringBytes(row);
   for (const [row, overwritten] of summary.overwritten) {
     bytes += 128 + stringBytes(row);
@@ -109,14 +114,14 @@ export function packVerdict(verdict: Verdict, limit: number): PackedVerdict | nu
   bytes += summary.links.length * 128;
   if (bytes > limit) return null;
   const values = [...texts.keys()];
-  const offsets = new Float64Array(values.length + 1);
+  const offsets = new Array<number>(values.length + 1);
   let length = 0;
   for (const [at, text] of values.entries()) {
     offsets[at] = length;
     length += text.length;
   }
   offsets[values.length] = length;
-  return { kind: 'proven', summary, lines: packed, regions: slices, ranges, text: values.join(''), offsets, marks, rows, bytes };
+  return { kind: 'proven', summary, lines: packed, regions: slices, ranges, text: shareText(values.join(''), offsets), marks, rows, bytes };
 }
 
 export function unpackVerdict(packed: PackedVerdict): Verdict {
@@ -132,7 +137,7 @@ export function unpackVerdict(packed: PackedVerdict): Verdict {
         at: given.positions[at * 2]!,
         unit: given.positions[at * 2 + 1]!,
         mark: packed.marks[given.indices[at * 2]!]!,
-        text: packed.text.slice(packed.offsets[text], packed.offsets[text + 1]),
+        text: lineIn(packed.text, text),
         follows: follows === undefined || Number.isNaN(follows) ? undefined : follows,
         removal:
           removal === undefined || Number.isNaN(removal) ? undefined : { row: packed.rows[removal]!, ordinal: given.removals[at * 2 + 1]! },

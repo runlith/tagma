@@ -15,8 +15,6 @@ import { Live, type LiveConnection } from '$lib/wire/Live.js';
 import { refusalOf } from '$lib/wire/refusal.js';
 import { sumLines } from './lineCount.js';
 
-type Projects = ReturnType<typeof ProjectsRepo.use>;
-
 export type CheckoutAbsence = 'no-working-copy' | 'unread';
 
 export type CheckoutSectionName = 'conflicts' | 'staged' | 'changes' | 'graph';
@@ -74,7 +72,7 @@ export class Checkout extends Service<Checkout>()('Checkout', { tier: 'graph', e
   constructor(
     private readonly live: LiveConnection,
     private readonly aim: GraphAim,
-    private readonly projects: Projects,
+    private readonly projects: ProjectsRepo,
     private readonly worktrees: Worktrees,
     private readonly marks: ReaderMarks,
     scope: Scope,

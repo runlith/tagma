@@ -67,13 +67,12 @@ export class OperationTable extends Service<OperationTable>()('OperationTable', 
     const modules = this.catalog.items;
     if (this.loading?.modules === modules) return this.loading.table;
     const table = declarationsOf(modules).then(
-      (catalog): Table => {
+      (catalog): Table | Promise<Table> => {
+        if (this.catalog.items !== modules) return this.load();
         const declared: ReadonlyMap<string, OperationDeclaration> = new Map(Object.entries(catalog.declarations));
         const read = { modules, declared, ownedBy: catalog.ownedBy };
-        if (this.catalog.items === modules) {
-          this.loaded = read;
-          this.loadedNotice?.();
-        }
+        this.loaded = read;
+        this.loadedNotice?.();
         return read;
       },
       (failure: unknown) => {

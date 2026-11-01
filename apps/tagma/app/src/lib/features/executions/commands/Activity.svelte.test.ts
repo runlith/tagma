@@ -21,7 +21,6 @@ import { ThreadNames, type OwnerWords } from '$lib/shared/threads/Names.svelte.j
 
 const NOW = 1_700_000_000_000;
 const PAGE = 200;
-type Repo = ReturnType<typeof ExecutionsRepo.use>;
 
 const entry = (phase: 'running' | 'ended', over: Partial<CommandEntry> = {}): CommandEntry =>
   ({
@@ -148,7 +147,7 @@ function doorOver(catalog: readonly CommandReading[], host?: unknown, terminals:
         },
       }),
     },
-  } as unknown as Repo;
+  } as unknown as ExecutionsRepo;
   const acts = new ExecutionActs({
     perform: async (operation: string, input: { readonly execution: string; readonly cause: string }) => {
       if (operation !== 'stop_command') throw new Error(`this suite makes no ${operation} call`);

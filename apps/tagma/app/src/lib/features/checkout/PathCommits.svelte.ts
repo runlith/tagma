@@ -3,8 +3,6 @@ import type { HistoryCommit } from '@tagma/server/workspace/contract/wire/histor
 import { CheckoutRepo } from './Repo.js';
 import { SHORT_SHA } from './reading.js';
 
-type Repo = ReturnType<typeof CheckoutRepo.use>;
-
 export type HistoryAim = { readonly projectId: number; readonly rootId: RootId; readonly path?: string };
 
 export type CommitLine = {
@@ -24,7 +22,7 @@ export class PathCommits {
   private held = $state<{ at: HistoryAim; commits: readonly HistoryCommit[]; cursor: string } | null>(null);
 
   constructor(
-    private readonly repo: Repo,
+    private readonly repo: CheckoutRepo,
     private readonly at: () => HistoryAim | null,
   ) {}
 

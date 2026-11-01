@@ -20,8 +20,6 @@ import {
 } from './testing/endpoint.js';
 import type { ExecutionsRepo } from '../Repo.js';
 
-type Repo = ReturnType<typeof ExecutionsRepo.use>;
-
 const ESC = String.fromCharCode(0x1b);
 const ETX = String.fromCharCode(0x03);
 const INERT = '␛';
@@ -131,7 +129,7 @@ const repoOver = (behavior: Behavior = {}, admission = HOST_INPUT_ADMISSION_BYTE
         return Promise.resolve({ closed: true });
       },
     },
-  } as unknown as Repo;
+  } as unknown as ExecutionsRepo;
 
   const client = { 'terminal.lane.hold': (payload: unknown) => payload };
   const live = {

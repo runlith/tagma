@@ -3,6 +3,7 @@ import type { Resolver } from '@runlith/layer/key';
 import { makePoint, makeStorage } from '@runlith/layer/testing';
 import { SurfaceRegistry, Surfaces } from '$lib/features/workspace/surface.js';
 import { type PaneKind, Panes } from '$lib/shared/panes/pane.js';
+import { gateOf } from '$lib/wire/access.js';
 import { PaneRegistry } from './PaneRegistry.js';
 import { SidePanes } from './SidePanes.svelte.js';
 import { TabLayouts } from './TabLayouts.svelte.js';
@@ -28,7 +29,7 @@ const NO_APP: Resolver = {
 
 export function testArea(kinds: readonly PaneKind[], storage: PlatformStorage = makeStorage(), app: Resolver = NO_APP): TestArea {
   const registry = testPanes(...kinds);
-  const panes = new SidePanes(registry);
+  const panes = new SidePanes(registry, gateOf(undefined, 'read'));
   const layouts = new TabLayouts(1, storage, registry, noSurfaces(), () => 1);
   panes.attach(layouts, app);
   panes.showSection('test');

@@ -76,19 +76,13 @@ const door = {
 };
 
 describe('use()', () => {
-  it('opens on a key the manifest always provides in a tier open wherever anything is, and on what every world hands', () => {
-    expect([door.use(Clock), door.use(Lobby), door.use(Platform), door.use(Router)]).toHaveLength(4);
+  it('opens on a key given without a condition or only under its own tier, whatever tier the caller stands in', () => {
+    expect([door.use(Clock), door.use(Platform), door.use(Visit), door.use(Account), door.use(Chair), door.use(Card)]).toHaveLength(6);
   });
 
-  it('refuses a key under a condition, one of a rung that may be closed, one of a kind, and one not provided', () => {
+  it('refuses a key under a condition other than its tier, and one not provided', () => {
     // @ts-expect-error provided only while the toggle is on
     door.use(Day);
-    // @ts-expect-error the visitor's rung may be closed
-    door.use(Visit);
-    // @ts-expect-error a guest has no account
-    door.use(Account);
-    // @ts-expect-error a seat's source always answers, but the seat stands under a room that may be closed
-    door.use(Chair);
     // @ts-expect-error nothing provides it
     door.use(Absent);
     expect(door.use).toBeTypeOf('function');

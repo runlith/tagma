@@ -12,8 +12,6 @@ import { Live, type LiveConnection } from '$lib/wire/Live.js';
 import { WorktreesRepo } from './Repo.js';
 import { WorktreeWindow } from './Window.svelte.js';
 
-type Repo = ReturnType<typeof WorktreesRepo.use>;
-
 export type WorktreeCreation = {
   readonly id: string;
   readonly label: string;
@@ -94,7 +92,7 @@ export class Worktrees extends Service<Worktrees>()('Worktrees', { tier: 'projec
     private readonly live: LiveConnection,
     private readonly router: Router,
     private readonly focus: ProjectFocus,
-    private readonly repo: Repo,
+    private readonly repo: WorktreesRepo,
     private readonly notices: Notices,
     private readonly scope: Scope,
     private readonly failure: Failure,

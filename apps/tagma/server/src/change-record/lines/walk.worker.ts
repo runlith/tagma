@@ -5,24 +5,21 @@ import { endsOf } from './ends.js';
 import { tallyOf } from './tally.js';
 import { bytesDigest } from '@runlith/files/content';
 import { hunked } from './hunked.js';
-import { answerFold } from './jobs.js';
+import { FoldResidence } from './residence.js';
 import { prepareBytes, prepareText } from './folding.js';
 import { releaseSpan } from './released.js';
 import { debtWindows } from './owed.js';
-import { packVerdict } from './packed.js';
 import type { WalkAnswer, WalkAsk } from './walks.js';
 
 declare const self: Worker;
+let residence: FoldResidence | undefined;
 
 const answered = (ask: WalkAsk): WalkAnswer | Promise<WalkAnswer> => {
   switch (ask.kind) {
     case 'fold': {
-      let used = 0;
-      const answer = answerFold(ask.job, { expired: (amount) => (used += amount) > ask.limit });
-      return { id: ask.id, kind: 'fold', answer: { answer, used } };
+      residence ??= new FoldResidence(ask.memory);
+      return { id: ask.id, kind: 'fold', answer: residence.judge(ask.input, ask.cached, ask.alignment, ask.selected) };
     }
-    case 'pack':
-      return { id: ask.id, kind: 'pack', answer: packVerdict(ask.verdict, ask.limit) };
     case 'text':
       return { id: ask.id, kind: 'text', answer: prepareText(ask.text, ask.digest) };
     case 'bytes':

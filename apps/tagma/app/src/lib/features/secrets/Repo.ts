@@ -1,4 +1,5 @@
 import type { SecretSet } from '@tagma/server/secrets/contract/wire/rows';
+import type { InstanceOf } from '@runlith/layer/key';
 import type { KeyedLoaderContext } from '@runlith/query/types';
 import { Repo } from '@runlith/query/repo';
 import { Door, type Lens } from '$lib/wire/Door.js';
@@ -46,3 +47,5 @@ export const SecretsRepo = Repo.define(
   }),
   { tier: 'app', door: Door },
 );
+
+export type SecretsRepo = InstanceOf<typeof SecretsRepo>;

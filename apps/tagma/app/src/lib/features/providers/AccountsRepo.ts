@@ -1,6 +1,7 @@
 import type { AccountKey } from '@runlith/llm/models/authStatus';
 import type { SignInMethod } from '@runlith/llm/oauth/vendor';
 import type { ExecutionRef } from '@runlith/executions/protocol/execution';
+import type { InstanceOf } from '@runlith/layer/key';
 import { Repo } from '@runlith/query/repo';
 import { Door } from '$lib/wire/Door.js';
 
@@ -93,3 +94,5 @@ export const AccountsRepo = Repo.define(
   }),
   { tier: 'app', door: Door },
 );
+
+export type AccountsRepo = InstanceOf<typeof AccountsRepo>;

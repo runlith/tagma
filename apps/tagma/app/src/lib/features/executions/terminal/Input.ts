@@ -12,8 +12,6 @@ import type { LayoutCategory, TerminalAct, TerminalKeymap } from './Keymap.js';
 import type { Writer } from './Output.js';
 import type { ExecutionAddress, InputAct, ExecutionsRepo } from '../Repo.js';
 
-type Repo = ReturnType<typeof ExecutionsRepo.use>;
-
 export const INPUT_COALESCE_MAX_CODE_UNITS = 4096;
 export const HOST_INPUT_ADMISSION_BYTES = 16 * 1024;
 export const INPUT_WINDOW_ACTS = (512 * 1024) / HOST_INPUT_ADMISSION_BYTES;
@@ -304,7 +302,7 @@ export class TerminalInput {
 
   constructor(
     private readonly engine: Engine,
-    private readonly repo: Repo,
+    private readonly repo: ExecutionsRepo,
     private readonly keymap: TerminalKeymap,
     private readonly clipboard: Clipboard,
     private readonly clock: Clock,
@@ -1056,7 +1054,7 @@ export class TerminalInput {
   }
 
   private async requestLane(address: ExecutionAddress, view: string, epoch: number): Promise<void> {
-    let answer: Awaited<ReturnType<Repo['laneOpen']['run']>>;
+    let answer: Awaited<ReturnType<ExecutionsRepo['laneOpen']['run']>>;
     for (;;) {
       try {
         answer = await this.repo.laneOpen.run({ ...address, view }, { throwOnError: true });

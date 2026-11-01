@@ -4,8 +4,6 @@ import type { Notices } from '$lib/features/notices/Service.svelte.js';
 import { type SettingsRepo, writtenCatalog } from '$lib/features/settings/SettingsRepo.js';
 import { parseStoredWorktrees, type StoredLayout, type StoredWorktrees } from './layout.js';
 
-type Settings = ReturnType<typeof SettingsRepo.use>;
-
 type Entry = { readonly id: string; readonly value: unknown };
 
 export class TerminalSettings {
@@ -14,11 +12,11 @@ export class TerminalSettings {
   private queued: StoredWorktrees | null = null;
   private writing = false;
   private failed = false;
-  private readonly saving: Settings['write'];
+  private readonly saving: SettingsRepo['write'];
 
   constructor(
     private readonly projectId: number,
-    private readonly settings: Settings,
+    private readonly settings: SettingsRepo,
     private readonly notices: Notices,
     scope: Scope,
   ) {

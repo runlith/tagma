@@ -4,7 +4,7 @@ import { netOf, type NetWindow, type NetWork } from './net.js';
 import { alignBase, type BaseAlignment, type BaseWork } from './projection.js';
 import { linksOf, type EditLink, type LinkWork } from './provenance.js';
 
-export type FoldJob =
+type FoldJob =
   | { readonly kind: 'hunk'; readonly work: HunkWork }
   | { readonly kind: 'gaps'; readonly work: GapScan }
   | { readonly kind: 'gap'; readonly work: GapWork }
@@ -19,7 +19,6 @@ export type FoldAnswer =
   | { readonly kind: 'net'; readonly answer: readonly NetWindow[] | Unknown }
   | { readonly kind: 'links'; readonly answer: readonly EditLink[] | Unknown };
 export type FoldWork<A> = Generator<FoldJob, A, FoldAnswer>;
-export type FoldResponse = { readonly answer: FoldAnswer; readonly used: number };
 
 type Answer<K extends FoldJob['kind']> = Extract<FoldAnswer, { readonly kind: K }>['answer'];
 export function* askFold<K extends FoldJob['kind']>(job: Extract<FoldJob, { readonly kind: K }>): FoldWork<Answer<K>> {
@@ -28,7 +27,7 @@ export function* askFold<K extends FoldJob['kind']>(job: Extract<FoldJob, { read
   return response.answer as Answer<K>;
 }
 
-export function answerFold(job: FoldJob, budget: Deadline): FoldAnswer {
+function answerFold(job: FoldJob, budget: Deadline): FoldAnswer {
   switch (job.kind) {
     case 'hunk':
       return { kind: job.kind, answer: prepareHunk(job.work, budget) };

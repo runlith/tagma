@@ -1,17 +1,20 @@
 import { stepsIn } from '@runlith/utils/sequenceDiff';
+import * as Schema from 'effect/Schema';
 import { contentDigest } from '@runlith/files/content';
 import { alignWindow } from './alignment.js';
 import { tokensOf } from './marks.js';
 import type { FormedLine, Proven } from './projection.js';
 
-export type DebtWindow = {
-  readonly lead: string | null;
-  readonly before: readonly string[];
-  readonly after: readonly string[];
-  readonly trail: string | null;
-};
+export const DebtWindowSchema = Schema.Struct({
+  lead: Schema.NullOr(Schema.String),
+  before: Schema.Array(Schema.String),
+  after: Schema.Array(Schema.String),
+  trail: Schema.NullOr(Schema.String),
+});
+export type DebtWindow = typeof DebtWindowSchema.Type;
 
 export type Debt = { readonly commit: string; readonly windows: readonly DebtWindow[] };
+export type DebtReference = Pick<Debt, 'commit'>;
 
 const WINDOW_STEPS = 4_000_000;
 

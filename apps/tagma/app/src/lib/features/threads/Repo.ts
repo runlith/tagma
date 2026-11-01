@@ -7,6 +7,7 @@ import type { AgentApprovalMode } from '@runlith/agent/contracts';
 import type { TeamLayer } from '@runlith/agent/collaboration/team';
 import type { NameProvenance } from '@tagma/server/thread-record/contract/wire/name';
 import type { ThreadRewindScope } from '@runlith/agent/transcript/eventFold';
+import type { InstanceOf } from '@runlith/layer/key';
 import type { KeyedLoaderContext } from '@runlith/query/types';
 import { Repo } from '@runlith/query/repo';
 import { Door } from '$lib/wire/Door.js';
@@ -442,3 +443,5 @@ export const ThreadsRepo = Repo.define(
   }),
   { tier: 'app', door: Door },
 );
+
+export type ThreadsRepo = InstanceOf<typeof ThreadsRepo>;

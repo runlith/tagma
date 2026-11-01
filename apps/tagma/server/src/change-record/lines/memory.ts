@@ -1,16 +1,20 @@
+import { totalmem } from 'node:os';
 import type { FoldState, TextContent } from './folding.js';
 import type { BaseAlignment } from './projection.js';
 
-type Entry =
-  | { readonly kind: 'fold'; readonly value: FoldState; readonly bytes: number }
+type Retained = { readonly bytes: number };
+export const foldMemoryBudget = (): number => Math.min(256 * 1024 * 1024, Math.floor(totalmem() / 64));
+
+type Entry<State extends Retained> =
+  | { readonly kind: 'fold'; readonly value: State; readonly bytes: number }
   | { readonly kind: 'alignment'; readonly value: BaseAlignment; readonly bytes: number }
   | { readonly kind: 'oversized'; readonly bytes: number };
 export type Retention =
   | { readonly kind: 'kept' }
   | { readonly kind: 'oversized'; readonly path: string; readonly bytes: number; readonly limit: number };
 
-export class FoldMemory {
-  private readonly entries = new Map<string, Entry>();
+export class FoldMemory<State extends Retained = FoldState> {
+  private readonly entries = new Map<string, Entry<State>>();
   private bytes = 0;
   private tinyNoted = false;
   constructor(readonly limit: number) {
@@ -19,11 +23,11 @@ export class FoldMemory {
   get retained(): number {
     return this.bytes;
   }
-  fold(path: string): FoldState | undefined {
+  fold(path: string): State | undefined {
     const entry = this.touch(`fold:${path}`);
     return entry?.kind === 'fold' ? entry.value : undefined;
   }
-  keep(path: string, state: FoldState): Retention {
+  keep(path: string, state: State): Retention {
     const key = `fold:${path}`;
     const overhead = key.length * 2 + 128;
     if (state.bytes + overhead <= this.limit) {
@@ -60,7 +64,7 @@ export class FoldMemory {
   private pair(from: string | null, to: string | null, normalized: boolean): string {
     return `base:${normalized ? 1 : 0}:${from === null ? -1 : from.length}:${from ?? ''}:${to ?? 'absent'}`;
   }
-  private touch(key: string): Entry | undefined {
+  private touch(key: string): Entry<State> | undefined {
     const entry = this.entries.get(key);
     if (entry === undefined) return undefined;
     this.entries.delete(key);
@@ -73,7 +77,7 @@ export class FoldMemory {
     this.bytes -= entry.bytes;
     this.entries.delete(key);
   }
-  private put(key: string, entry: Entry): void {
+  private put(key: string, entry: Entry<State>): void {
     this.drop(key);
     if (entry.bytes > this.limit) return;
     while (this.bytes + entry.bytes > this.limit) {

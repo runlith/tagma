@@ -61,8 +61,6 @@ import {
 } from '../terminal/engineOptions.js';
 import { SCROLLBAR_INK } from '../terminal/canvasInk.js';
 
-type Settings = ReturnType<typeof SettingsRepo.use>;
-
 export type AppearancePane = {
   readonly id: string;
   applyOptions(options: ITerminalOptions): void;
@@ -117,7 +115,7 @@ export class TerminalAppearance extends Service<TerminalAppearance>()('TerminalA
   private readonly lastContrast = new WeakMap<AppearancePane, number>();
 
   constructor(
-    private readonly repo: Settings,
+    private readonly repo: SettingsRepo,
     private readonly workspace: Workspace,
     theme: Theme,
   ) {

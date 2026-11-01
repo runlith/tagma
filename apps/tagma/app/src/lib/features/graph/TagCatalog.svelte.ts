@@ -88,7 +88,7 @@ export class TagCatalog extends Service<TagCatalog>()('TagCatalog', { tier: 'pro
   private generation = 0;
 
   constructor(
-    private readonly repo: ReturnType<typeof TagsRepo.use>,
+    private readonly repo: TagsRepo,
     private readonly projectId: number,
     private readonly scope: Scope,
     private readonly failure: Failure,

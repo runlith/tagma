@@ -1,14 +1,17 @@
+import * as Schema from 'effect/Schema';
 import { contentLines, digestKey, type FoldState, type TextContent } from './folding.js';
 import { joined, keyOf, leaf, lookup, runsOf, sizeOf, sliced, type Point, type Rope, type Source } from './marks.js';
 
-export type Removal = { readonly row: string; readonly ordinal: number };
+const RemovalSchema = Schema.Struct({ row: Schema.String, ordinal: Schema.Number });
+export type Removal = typeof RemovalSchema.Type;
 
-export type LandedPiece = {
-  readonly side: 'head' | 'working';
-  readonly start: number;
-  readonly count: number;
-  readonly removal?: Removal;
-};
+export const LandedPieceSchema = Schema.Struct({
+  side: Schema.Literals(['head', 'working']),
+  start: Schema.Number,
+  count: Schema.Number,
+  removal: Schema.optional(RemovalSchema),
+});
+export type LandedPiece = typeof LandedPieceSchema.Type;
 
 export type Landed = {
   readonly digest: string;

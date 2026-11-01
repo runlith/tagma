@@ -18,8 +18,6 @@ export type BesidePage = {
   readonly from?: LinkFrom | undefined;
 };
 
-type Settings = ReturnType<typeof SettingsRepo.use>;
-
 export type LinkRoute = 'panel' | 'system';
 
 const sameUrl = (one: string | undefined, two: string): boolean =>
@@ -34,7 +32,7 @@ export class Links extends Service<Links>()('Links', { tier: 'app' }) {
     private readonly door: Door,
     private readonly placing: BesidePort,
     private readonly project: () => ProjectAim | undefined,
-    private readonly settings: Settings,
+    private readonly settings: SettingsRepo,
     private readonly notices: Notices,
     private readonly external: LinkPort,
   ) {
