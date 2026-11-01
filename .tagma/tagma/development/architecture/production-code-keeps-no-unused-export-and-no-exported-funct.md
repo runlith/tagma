@@ -10762,10 +10762,6 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead apps/tagma/server/src/views/sections.ts#SectionPointName",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "dead-code dead apps/tagma/server/src/workspace/assignments/lineage.ts#lineageOf",
           "owner": "5a3bed29"
         },
