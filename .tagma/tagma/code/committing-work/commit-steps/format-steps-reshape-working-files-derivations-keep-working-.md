@@ -1,6 +1,6 @@
 ---
 id: 01a113ab-20fb-747e-aa1e-9c77f37610fd
-title: Commit steps change only the step's files; a refusal publishes nothing, and the steps delta reaches working files after landing or a refusal that judged their shape
+title: Format steps reshape working files; derivations keep working outputs intact
 ord: 1
 tags: ["explanation"]
 sources:
@@ -13,7 +13,7 @@ sources:
   - kind: file
     ref: apps/tagma/server/src/commit-steps/shape.ts
 ---
-A step is only a transformation of a file into itself, so the commit takes not everything the tool wrote but the hash (with `cleans`, as in `ownBlobs`) of the paths the step received. Cache, `.next` files and any write next to them stay in the private tree and vanish at its next reset; a file deleted by a step is `format-failed`, because the commit shape cannot be produced — not a reason to silently lose it.
+A format step transforms a file into itself, so the commit takes only the hash (with `cleans`, as in `ownBlobs`) of its selected files. Derivations run after formatting over the same private tree, take only declared output paths, and do not deliver a reshape to working outputs or reattribute their remaining lines. Cache, `.next` files and any write next to them stay in the private tree and vanish at its next reset; a file deleted by a step is `format-failed`, because the commit shape cannot be produced — not a reason to silently lose it.
 
 - **Commands come from the commit version's `Config`** (`Configs.read` over the commit tree, [[8fda30d8]]): an uncommitted or ignored edit to `tagma.config.ts` has no effect on the commit. A config that does not evaluate is a `config-invalid` refusal with a place, not a silent skip.
 - **`ok` is the codes by which the tool says "done"**, not "no violations left": findings after `--fix` are judged by the inspection, which has debt and per-line-holder splitting. Only failures of the command itself refuse the commit: a code outside `ok` (`format-failed`), no program (`format-missing`), blown ceiling (`format-cut`).
