@@ -4150,14 +4150,6 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead apps/tagma/server/src/executions/contract/service/commands.ts#OutputSearchRefusal",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/executions/contract/service/commands.ts#CommandWaitMove",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "dead-code dead apps/tagma/server/src/executions/contract/service/git.ts#ServingGitRequest",
           "owner": "5a3bed29"
         },
@@ -7682,14 +7674,6 @@ fields:
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/native-harness/keepWarm/driver.ts#KeepWarmInput",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/native-harness/keepWarm/reads.ts#KeepWarmWaiting",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/native-harness/keepWarm/reads.ts#KeepWarmReads",
           "owner": "5a3bed29"
         },
         {
@@ -19788,14 +19772,6 @@ fields:
         },
         {
           "commit": "18ddb3d39142cac45f89198a91bd2774e349db95",
-          "fingerprint": "dead-code dead packages/agent/src/transcript/kinds.ts#ThreadReaderWorker",
-          "fix": "Delete it; drop `export` when its own file uses it. A test-only consumer is not a reason to export it.",
-          "line": 159,
-          "path": "packages/agent/src/transcript/kinds.ts",
-          "said": "exported type `ThreadReaderWorker` is imported by no production file"
-        },
-        {
-          "commit": "18ddb3d39142cac45f89198a91bd2774e349db95",
           "fingerprint": "dead-code dead packages/chrome-for-testing/src/build.ts#cachedExecutable",
           "fix": "Delete it; drop `export` when its own file uses it. A test-only consumer is not a reason to export it.",
           "line": 23,
@@ -20041,6 +20017,14 @@ fields:
           "line": 42,
           "path": "packages/mcp/src/sdkServer.ts",
           "said": "exported type `StdioServerInput` is imported by no production file"
+        },
+        {
+          "commit": "18ddb3d39142cac45f89198a91bd2774e349db95",
+          "fingerprint": "dead-code dead packages/agent/src/transcript/kinds.ts#ThreadReaderWorker",
+          "fix": "Delete it; drop `export` when its own file uses it. A test-only consumer is not a reason to export it.",
+          "line": 159,
+          "path": "packages/agent/src/transcript/kinds.ts",
+          "said": "exported type `ThreadReaderWorker` is imported by no production file"
         }
       ],
       "inspection": "dead-code",
