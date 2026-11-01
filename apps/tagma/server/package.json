@@ -1197,6 +1197,11 @@
       "browser": "./src/platform/contract/wire/manifest.ts",
       "default": "./src/platform/contract/wire/manifest.ts"
     },
+    "./platform/contract/wire/projection": {
+      "types": "./src/platform/contract/wire/projection.ts",
+      "browser": "./src/platform/contract/wire/projection.ts",
+      "default": "./src/platform/contract/wire/projection.ts"
+    },
     "./providers/contract/wire/signIns": {
       "types": "./src/providers/contract/wire/signIns.ts",
       "browser": "./src/providers/contract/wire/signIns.ts",
