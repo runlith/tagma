@@ -4,4 +4,5 @@ import { Point } from '@runlith/layer/Point';
 export const WireCatalog = Point.define<WireModule>()('WireCatalog', {
   tier: 'app',
   key: (module) => module.id,
+  claims: (module) => (module.feeds ?? []).map((feed) => `feed:${feed.id}`),
 });

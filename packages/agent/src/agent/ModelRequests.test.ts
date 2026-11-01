@@ -271,7 +271,9 @@ describe('wireToolDefinitions', () => {
   test('the same selection is answered with the same objects, so a reader may hold them', () => {
     const tools = catalog('read', 'write');
     expect(wireToolDefinitions(tools, undefined)).toBe(wireToolDefinitions(tools, undefined));
-    expect(wireToolDefinitions(tools, ['read'])).toBe(wireToolDefinitions(tools, ['read']));
+    const selected = wireToolDefinitions(tools, ['read']);
+    wireToolDefinitions(tools, undefined);
+    expect(wireToolDefinitions(tools, ['read'])).toBe(selected);
     expect(wireToolDefinitions(catalog('read', 'write'), undefined)).not.toBe(wireToolDefinitions(tools, undefined));
   });
 });

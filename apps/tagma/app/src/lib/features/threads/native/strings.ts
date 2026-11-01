@@ -1,5 +1,3 @@
-import { OPERATIONS } from '@tagma/server/composition/operations';
-import type { CatalogOperationId } from '$lib/wire/operation.js';
 import { toolPresentation as presentationOf } from '@tagma/server/native-harness/tools/presentation';
 import type { ToolWords } from '@runlith/agent/tool/words';
 import { mcpToolNamed } from '@runlith/mcp/identity';
@@ -11,17 +9,16 @@ import type { ChatRewindWords } from '@runlith/chat-ui/rewind';
 import type { ChatStrings } from '@runlith/chat-ui/strings';
 import { queuedCalls, waitingWords } from '../workWords.js';
 
-const operationWords = (toolName: string): ToolWords | undefined =>
-  Object.hasOwn(OPERATIONS, toolName) ? OPERATIONS[toolName as CatalogOperationId].presentation : undefined;
-
-const toolPresentation = (toolName: string) => presentationOf(toolName, operationWords);
+type OperationWords = (toolName: string) => ToolWords | undefined;
 
 const toolLabel = (toolName: string): string => {
   const server = mcpToolNamed(toolName);
   return server === null ? toolName.replaceAll('_', ' ') : `${server.tool} on ${server.server}`;
 };
 
-export function activityWords(): Pick<
+function activityWords(
+  operationWords: OperationWords,
+): Pick<
   ChatStrings,
   | 'livePhase'
   | 'queuedCalls'
@@ -34,6 +31,7 @@ export function activityWords(): Pick<
   | 'toolRunningAlone'
   | 'toolUnknown'
 > {
+  const toolPresentation = (toolName: string) => presentationOf(toolName, operationWords);
   return {
     livePhase: (phase, waiting) =>
       (phase === 'opening' && waiting !== null ? waitingWords(waiting) : null) ??
@@ -136,7 +134,8 @@ const RETRY_REASONS: Readonly<Record<string, string>> = {
   unknown: 'network',
 };
 
-export function nativeStrings(): ChatStrings {
+export function nativeStrings(operationWords: OperationWords): ChatStrings {
+  const toolPresentation = (toolName: string) => presentationOf(toolName, operationWords);
   return {
     locale: 'en',
 
@@ -171,7 +170,7 @@ export function nativeStrings(): ChatStrings {
       `${{ completed: 'Finished in', failed: 'Failed after', aborted: 'Stopped after', cut: 'Interrupted after' }[status]} ${duration}`,
     retryingIn: (duration) => `Retrying in ${duration}`,
 
-    ...activityWords(),
+    ...activityWords(operationWords),
     signal: (signalType, sender) => signalLine(signalType, sender),
     wordsFrom: (intent) => wordsLead(intent),
     wordsUnconfirmed: () => 'Not confirmed: the agent may have read these words, but never said so.',

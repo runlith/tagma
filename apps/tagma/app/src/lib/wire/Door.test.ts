@@ -5,13 +5,12 @@ import { Effect, Schema } from 'effect';
 import { PAIRING_ENDPOINT, PairedAnswer } from '@tagma/server/remote/contract/wire/access';
 import { expect, test } from 'vitest';
 import { THREADS_ENTRY_KINDS } from '@tagma/server/threads/contract/wire/entryKinds';
-import { CATALOG_MODULES } from '@tagma/server/composition/catalog';
 import { makePoint, makeRouter } from '@runlith/layer/testing';
 import { Refusal } from './refusal.js';
 import { Door } from './Door.js';
-import { OperationCodecs } from './operation.js';
+import { OperationTable } from './operation.js';
 import { ServerOrigin } from './ServerOrigin.svelte.js';
-import { loadCatalog, testOperations } from './testing.js';
+import { FIXTURE_MODULE, loadCatalog, testOperations } from './testing.js';
 import { WireCatalog } from './WireCatalog.js';
 import { wireEntries, WireEntryKinds } from './WireEntryKinds.js';
 
@@ -89,18 +88,18 @@ test('a kind contributed after the door was built is read by its next request, a
   expect(refused).toMatchObject({ name: 'RegistryRefusal', contributor: 'other' });
 });
 
-test('an operation of a catalog entry contributed after the door was built is performed, and one no entry declares is refused unsent', async () => {
+test('an operation of an extra catalog entry contributed after the door was built decodes its answer, and before it is refused unsent', async () => {
   const catalog = makePoint(WireCatalog);
-  const door = new Door(fetch, new ServerOrigin('http://tagma.test'), makeRouter(), new OperationCodecs(catalog));
+  const door = new Door(fetch, new ServerOrigin('http://tagma.test'), makeRouter(), new OperationTable(catalog));
   let sent = 0;
   answer = () => {
     sent += 1;
-    return Response.json({ status: 'ok', sessions: [] });
+    return Response.json({ status: 'stamped', at: '2026-10-31T12:00:00.000Z' });
   };
-  await expect(door.perform('list_sessions', {}, {})).rejects.toBeInstanceOf(Refusal);
+  await expect(door.perform('fixture_stamp', {}, {})).rejects.toBeInstanceOf(Refusal);
   expect(sent).toBe(0);
-  catalog.register('late', ...CATALOG_MODULES);
-  await door.perform('list_sessions', {}, {}).catch(() => undefined);
+  catalog.register('fixture', FIXTURE_MODULE);
+  expect(await door.perform('fixture_stamp', {}, {})).toEqual({ status: 'stamped', at: new Date('2026-10-31T12:00:00.000Z') });
   expect(sent).toBe(1);
 });
 

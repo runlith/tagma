@@ -4,11 +4,10 @@ import { projectsVerbs } from './cli.js';
 import { ProjectChanges } from './contract/service/changes.js';
 import type { ProjectsLive } from './contract/service/live.js';
 import { Projects } from './contract/service/registry.js';
-import { PROJECTS_FEED, type RegistryRevision } from './contract/wire/feed.js';
+import type { RegistryRevision } from './contract/wire/feed.js';
+import { projects as declaration } from './contract/wire/module.js';
 
-const FEEDS = [PROJECTS_FEED] as const;
-
-const live: ProjectsLive = liveOf(FEEDS, (door) => {
+const live: ProjectsLive = liveOf(declaration.feeds, (door) => {
   const projects = Context.get(door, Projects);
   const changes = Context.get(door, ProjectChanges);
   return {
@@ -27,7 +26,7 @@ const live: ProjectsLive = liveOf(FEEDS, (door) => {
 });
 
 export const projects = manifest({
-  id: 'projects',
+  ...declaration,
   verbs: projectsVerbs,
   live,
   tables: async () => {

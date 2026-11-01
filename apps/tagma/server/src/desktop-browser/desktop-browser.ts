@@ -4,13 +4,13 @@ import { refusingStream } from '../platform/contract/service/body.js';
 import { lazyLayer, liveOf, manifest } from '../platform/contract/service/manifest.js';
 import { desktopAdapter } from './adapter.js';
 import { DesktopChannel } from './contract/service/channel.js';
-import { ATTACH_FEED } from './contract/wire/channel.js';
+import { desktopBrowser as declaration } from './contract/wire/module.js';
 
 export const desktopBrowser = manifest({
-  id: 'desktop-browser',
+  ...declaration,
   title: 'Tagma desktop browser host',
   contributions: HOST_ADAPTERS.of(desktopAdapter),
-  live: liveOf([ATTACH_FEED] as const, (door: Context.Context<DesktopChannel>) => ({
+  live: liveOf(declaration.feeds, (door: Context.Context<DesktopChannel>) => ({
     attach_browser_host: ({ host, pid }: { readonly host: string; readonly pid: number }) =>
       refusingStream(Context.get(door, DesktopChannel).attach(host, pid)),
   })),
