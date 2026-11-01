@@ -14,7 +14,6 @@ import { recoveryEntryId } from '../../../transcript/entryNames';
 import { actDigest } from '../../keyed';
 import type { ThreadRunKind, ThreadRunProgress, ThreadRunRow, ThreadRunStage } from '../../rows';
 import type { RunHalt } from '../../../transcript/live';
-import type { ThreadRunChange } from '../../state';
 import { ROUTED_AWAITING } from '../routedQuestions';
 import {
   RunActRefused,
@@ -41,7 +40,7 @@ import { RunControl } from '../RunControl';
 import { mergedStopRequest, type ThreadRunStopRequest } from '../../storage/settlement';
 import { RunProgress } from '../RunProgress';
 import { RunAdmission } from '../runAdmission';
-import { ThreadChanges } from '../ThreadChanges';
+import { changeUnit, ThreadChanges } from '../ThreadChanges';
 import { settledEvent, type ThreadRunRef, type ThreadRunSettled } from '../ThreadRunLedger';
 import { ThreadSettlementOutbox } from '../ThreadSettlementOutbox';
 import {
@@ -501,34 +500,20 @@ export const runLifecycleLayer = Layer.effect(
         if (beaten.length === 0) return [];
         const threadIds = [...new Set(beaten.map((run) => run.threadId))];
         const runIds = beaten.map((run) => run.id);
-        const write = Effect.fnUntraced(function* (tx: ThreadWriteTx) {
-          yield* kernel.transitions.opened(threadIds, tx);
-          const { written, asked } = yield* runs.writeHeartbeats(runIds, at, tx);
-          yield* kernel.transitions.revised(threadIds, tx, (revisions) => {
-            const byThread = new Map<string, ThreadRunChange[]>();
-            for (const { threadId, ...run } of written) {
-              const held = byThread.get(threadId);
-              if (held === undefined) byThread.set(threadId, [run]);
-              else held.push(run);
-            }
-            return Effect.forEach(
-              threadIds,
-              (threadId) => {
-                const revision = revisions.get(threadId);
-                return revision === undefined
-                  ? Effect.void
-                  : changes.deliver({ kind: 'ran', threadId, revision, runs: byThread.get(threadId) ?? [] });
-              },
-              { discard: true },
+        return yield* changeUnit(
+          { store: kernel.store, transitions: kernel.transitions, changes },
+          threadIds,
+          `beat:${at.getTime()}:${runIds.join(',')}`,
+          Effect.fnUntraced(function* (unit) {
+            const { written, asked } = yield* runs.writeHeartbeats(runIds, at, unit);
+            yield* unit.afterCommit(
+              Effect.sync(() => {
+                for (const { threadId, ...run } of written) changes.note(threadId, unit, { kind: 'run', run });
+              }),
             );
-          });
-          return asked;
-        });
-        if (kernel.store.program !== undefined) {
-          const programmed = yield* kernel.store.program(`beat:${at.getTime()}:${runIds.join(',')}`, write);
-          if (programmed !== null) return programmed;
-        }
-        return yield* kernel.store.transaction(write);
+            return asked;
+          }),
+        );
       }),
 
       stop: Effect.fnUntraced(function* (run, intent, live, tx) {

@@ -54,7 +54,9 @@ export type ThreadStateChange =
     }
   | { readonly kind: 'moved'; readonly threadId: string };
 
-export type ThreadRunChange = { readonly id: string } & Partial<Pick<ThreadRunRow, 'heartbeatAt' | 'updatedAt' | 'streamTail' | 'resumes'>>;
+export type ThreadRunChange = { readonly id: string } & Partial<
+  Pick<ThreadRunRow, 'heartbeatAt' | 'updatedAt' | 'streamTail' | 'resumes' | 'progress'>
+>;
 
 export type ThreadChangePart =
   | {

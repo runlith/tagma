@@ -23,7 +23,7 @@ import type { ThreadRunStartFrom } from '../storage/runs';
 import { makeThreadDigestStrategy } from '../compaction/digestStrategy';
 import { makeThreadSummaryStrategy } from '../compaction/summaryStrategy';
 import { runRequestsLayer } from '../run/requests';
-import { runProgressLayer } from '../run/RunProgress';
+import { RunProgress, runProgressLayer } from '../run/RunProgress';
 import { makeThreadCompaction } from '../run/ThreadCompaction';
 import { threadRunAccountingLayer } from '../run/ThreadRunAccounting';
 import { COMPACTION_POLICY, COMPACTION_PROMPT, COMPACTION_TEXT, inertAttachments, neverModels } from './runLog/world';
@@ -49,6 +49,7 @@ export type LifecycleWorld<TTx, TWrite extends TTx> = {
   readonly handover: Handover;
   readonly control: RunControl['Service'];
   readonly changes: ThreadChanges['Service'];
+  readonly progress: RunProgress['Service'];
   readonly gate: LaunchGate['Service'];
   readonly adapter: FakeAdapter;
   readonly feed: ThreadLiveFeed<ThreadState>;
@@ -65,10 +66,11 @@ export type LifecycleWorld<TTx, TWrite extends TTx> = {
 export const lifecycleWorld = Effect.fnUntraced(function* <TTx, TWrite extends TTx, R = never>(
   open: ThreadStorageFactory<TTx, TWrite, R>,
   beatEveryMs = 30_000,
+  streamFlushIntervalMs = 0,
 ) {
   const storage = yield* Effect.acquireRelease(open(), (storage) => storage.dispose());
   const thread = yield* storage.createThread({ ownerId: OWNER, scope: SCOPE });
-  return yield* lifecycleWorldOver(storage, thread, beatEveryMs);
+  return yield* lifecycleWorldOver(storage, thread, beatEveryMs, fakeAdapter(), streamFlushIntervalMs);
 });
 
 export const lifecycleWorldOver = Effect.fnUntraced(function* <TTx, TWrite extends TTx>(
@@ -76,9 +78,10 @@ export const lifecycleWorldOver = Effect.fnUntraced(function* <TTx, TWrite exten
   thread: ThreadRow,
   beatEveryMs = 30_000,
   adapter: FakeAdapter = fakeAdapter(),
+  streamFlushIntervalMs = 0,
 ) {
   const scope = yield* Scope.fork(yield* Effect.scope);
-  return yield* makeWorld(storage, thread, beatEveryMs, scope, adapter).pipe(Scope.provide(scope));
+  return yield* makeWorld(storage, thread, beatEveryMs, scope, adapter, streamFlushIntervalMs).pipe(Scope.provide(scope));
 });
 
 const makeWorld = Effect.fnUntraced(function* <TTx, TWrite extends TTx>(
@@ -87,6 +90,7 @@ const makeWorld = Effect.fnUntraced(function* <TTx, TWrite extends TTx>(
   beatEveryMs: number,
   scope: Scope.Closeable,
   adapter: FakeAdapter,
+  streamFlushIntervalMs: number,
 ): Effect.fn.Return<LifecycleWorld<TTx, TWrite>, never, Scope.Scope> {
   const admission = makeLandingHolds();
   const feed = yield* makeThreadLiveFeed<ThreadState>();
@@ -143,7 +147,7 @@ const makeWorld = Effect.fnUntraced(function* <TTx, TWrite extends TTx>(
               settledNotificationBatch: 1,
               settledNotifyAttemptLimit: 1,
             },
-            streamFlushIntervalMs: 0,
+            streamFlushIntervalMs,
           },
           ownerId: INSTANCE,
         }),
@@ -191,6 +195,7 @@ const makeWorld = Effect.fnUntraced(function* <TTx, TWrite extends TTx>(
     settlements: Context.get(services, ThreadRunSettlements),
     control: Context.get(services, RunControl),
     changes: Context.get(services, ThreadChanges),
+    progress: Context.get(services, RunProgress),
     handover,
     gate: Context.get(services, LaunchGate),
     adapter,

@@ -10,9 +10,12 @@ import { FeedView } from '../../transcript/testing/feedView';
 import { STALL_FLOOR_MS } from '../../agent/callProgress';
 import type { ThreadBorderFailed, ThreadPortFailure } from '../ThreadBorder';
 import type { ThreadContextReading, ThreadMetadataRow, ThreadRunRow } from '../rows';
-import type { ThreadState, ThreadStateFrame } from '../state';
+import type { ThreadState, ThreadStateFrame, ThreadStateChange } from '../state';
 import {
   ThreadLeaseRhythm,
+  ThreadOwner,
+  ThreadStreamRhythm,
+  ThreadTransitions,
   ThreadResidence,
   ThreadResting,
   type ThreadRunLeaseRhythm,
@@ -42,6 +45,8 @@ import { LaunchGate, LAUNCH_REFUSALS_BEFORE_BLOCK, launchGateLayer } from './Lau
 import { ThreadChanges, threadChangesLayer } from './ThreadChanges';
 import { ThreadRunLedger } from './ThreadRunLedger';
 import { ThreadSnapshots, threadSnapshotsLayer } from './ThreadSnapshots';
+import { RunProgress, runProgressLayer } from './RunProgress';
+import { journalLaneFaces, ThreadJournalLane, threadJournalLane } from '../transition/lane';
 import { wordsInFlightLayer } from './WordsInFlight';
 import { transportsLayer } from '../transport/Transports';
 import { makeThreadLiveFeed, threadFeedLayer, type ThreadLiveEvent } from './ThreadLiveFeed';
@@ -388,6 +393,98 @@ it.effect(
   }),
 );
 it.effect(
+  'a delayed phase preserves the applied revision so the next append carries its exact state without a read',
+  Effect.fnUntraced(function* () {
+    const journal = yield* threadJournalLane;
+    const lane = journalLaneFaces(journal);
+    yield* Effect.provideService(
+      Effect.gen(function* () {
+        const world = yield* snapshotsOver();
+        const runs = makeMemoryRuns({ memory: world.memory, ownerId: 'owner', scope: null });
+        const row = yield* world.rows.metadata('t');
+        if (row === undefined) return yield* Effect.die('the phase projection has no thread');
+        const { run } = yield* runs.createRun({
+          startFrom: row,
+          kind: 'turn',
+          approval: { mode: 'trust', interactive: false },
+          progress: { stage: 'running', message: null },
+        });
+        world.active.set('t', run);
+        const services = yield* Layer.build(runProgressLayer).pipe(
+          Effect.provide(world.context),
+          Effect.provideService(ThreadOwner, ThreadOwner.of({ id: 'owner' })),
+          Effect.provideService(ThreadStreamRhythm, ThreadStreamRhythm.of({ flushIntervalMs: 250 })),
+        );
+        const progress = Context.get(services, RunProgress);
+        const transitions = Context.get(world.context, ThreadTransitions);
+        const frames = yield* world.frames;
+        yield* world.snapshots.publish('t');
+        const reads = world.reads.latest;
+        const entered = yield* Deferred.make<void>();
+        const release = yield* Deferred.make<void>();
+        const phased = yield* Deferred.make<void>();
+        world.changes.project((change: ThreadStateChange) =>
+          Effect.andThen(
+            world.snapshots.committed(change),
+            change.kind === 'ran' && change.runs.some((patch) => patch.progress?.phase?.phase === 'reasoning')
+              ? Deferred.succeed(phased, undefined)
+              : Effect.void,
+          ),
+        );
+        yield* progress.enter(run, 'reasoning', { since: 17 });
+        const older = yield* Effect.forkScoped(
+          lane.order(
+            't',
+            world.rows.transaction(
+              Effect.fnUntraced(function* (unit: MemoryTx) {
+                const committed = unit as unknown as ThreadWriteTx;
+                yield* transitions.opened(['t'], committed);
+                world.changes.claim('t', unit);
+                yield* runs.writeProgress(run.id, { stage: 'running', message: 'before phase' }, new Date(0), unit);
+                const stored = yield* runs.runById(run.id, unit);
+                if (stored === null) return yield* Effect.die('the older projection writer lost its run');
+                yield* unit.afterCommit(Effect.andThen(Deferred.succeed(entered, undefined), Deferred.await(release)));
+                yield* unit.afterCommit(
+                  Effect.sync(() =>
+                    world.changes.note('t', unit, {
+                      kind: 'run',
+                      run: { id: run.id, progress: stored.progress, updatedAt: stored.updatedAt },
+                    }),
+                  ),
+                );
+                yield* transitions.revised(['t'], committed, (revisions) => world.changes.settle('t', unit, revisions.get('t')));
+              }),
+            ),
+          ),
+        );
+        yield* Deferred.await(entered);
+        yield* TestClock.adjust('250 millis');
+        yield* Effect.raceFirst(
+          Deferred.await(phased),
+          Effect.whileLoop({
+            while: () => !journal.standing().some((held) => held.key === 't' && held.waiting > 0),
+            body: () => Effect.yieldNow,
+            step: () => {},
+          }),
+        );
+        yield* Deferred.succeed(release, undefined);
+        yield* Fiber.join(older);
+        yield* Deferred.await(phased);
+        yield* progress.end(run.id);
+        world.active.set('t', (yield* runs.runById(run.id))!);
+        yield* world.transit([words('after-phase', 'next committed entry', run.id)]);
+        const frame = yield* frames.reaching(1);
+        expect(world.reads.latest).toBe(reads);
+        expect(frame.state.activeRun?.progress.phase).toEqual({ phase: 'reasoning', since: 17 });
+        expect(frame.deltas.map((delta) => delta.position)).toEqual([1]);
+        expect(stripped(frame.state)).toEqual(stripped(yield* world.snapshots.state('t')));
+      }),
+      ThreadJournalLane,
+      lane,
+    );
+  }),
+);
+it.effect(
   'a change that does not follow the published position reads the thread again and publishes every fact once',
   Effect.fnUntraced(function* () {
     const world = yield* snapshotsOver();
@@ -669,6 +766,7 @@ const snapshotsOver = Effect.fnUntraced(function* (
     };
   });
   return {
+    context,
     memory,
     rows,
     patch,

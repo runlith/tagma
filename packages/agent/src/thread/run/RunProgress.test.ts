@@ -1,55 +1,51 @@
 import { expect } from 'bun:test';
 import { it } from '@runlith/effect-test';
-import { Context, Effect, Layer } from 'effect';
+import { Effect } from 'effect';
 import { TestClock } from 'effect/testing';
-import type { AgentPhase } from '../../agent/AgentPhase';
-import { unreadRuns } from '../conformance/runCycle/runDoubles';
-import type { ThreadState } from '../state';
-import { ThreadOwner, ThreadRunStoreFactory, ThreadStreamRhythm } from '../ThreadPorts';
-import { RunProgress, runProgressLayer } from './RunProgress';
-import { makeThreadLiveFeed, threadFeedLayer } from './ThreadLiveFeed';
-import { threadChangesLayer } from './ThreadChanges';
-const RUN = { id: 'run-1', threadId: 'thread-1' };
+import { APPROVAL, lifecycleWorld, started } from '../conformance/lifecycleWorld';
+import { openMemoryStorage } from '../conformance/memoryStorage';
+import type { ThreadStateChange } from '../state';
+
 const progressed = Effect.gen(function* () {
-  const live = yield* makeThreadLiveFeed<ThreadState>();
-  const stored: (AgentPhase | null)[] = [];
-  const runs = {
-    ...unreadRuns,
-    writePhase: (_runId: string, phase: AgentPhase | null) => Effect.sync(() => void stored.push(phase)),
+  const world = yield* lifecycleWorld(openMemoryStorage, 30_000, 250);
+  const { run } = started(yield* world.lifecycle.create(world.startFrom, APPROVAL, { kind: 'turn' }));
+  const changes: ThreadStateChange[] = [];
+  world.changes.project((change) => Effect.sync(() => void changes.push(change)));
+  return {
+    run,
+    progress: world.progress,
+    changes,
+    stored: world.runs.runById(run.id),
+    shown: () => world.feed.view(run.threadId).progress,
   };
-  const context = yield* Layer.build(
-    runProgressLayer.pipe(
-      Layer.provide(
-        Layer.mergeAll(
-          threadChangesLayer,
-          threadFeedLayer(live, (state) => Effect.succeed(state)),
-          Layer.succeed(ThreadStreamRhythm, { flushIntervalMs: 250 }),
-          Layer.succeed(ThreadOwner, ThreadOwner.of({ id: 'owner' })),
-          Layer.succeed(ThreadRunStoreFactory, ThreadRunStoreFactory.of({ create: () => runs })),
-        ),
-      ),
-    ),
-  );
-  return { progress: Context.get(context, RunProgress), stored, shown: () => live.view('thread-1').progress };
 });
 it.effect(
   'a phase change keeps the context estimate the run published before it',
   Effect.fnUntraced(function* () {
-    const { progress, shown } = yield* progressed;
-    yield* progress.estimate(RUN, { stepNumber: 0, tokens: 1_200, contextWindow: 200_000 });
-    yield* progress.enter(RUN, 'writing');
+    const { run, progress, shown } = yield* progressed;
+    yield* progress.estimate(run, { stepNumber: 0, tokens: 1_200, contextWindow: 200_000 });
+    yield* progress.enter(run, 'writing');
     expect(shown()).toEqual({ phase: { phase: 'writing', since: 0 }, estimate: { stepNumber: 0, tokens: 1_200, contextWindow: 200_000 } });
   }),
 );
 it.effect(
-  'a phase no run write carries reaches the run row one rhythm later, and one thinking spell keeps its start',
+  'a phase no run write carries reaches the row and projection one rhythm later, keeping its thinking spell start',
   Effect.fnUntraced(function* () {
-    const { progress, stored } = yield* progressed;
-    yield* progress.enter(RUN, 'calling');
+    const { run, progress, stored, changes } = yield* progressed;
+    yield* progress.enter(run, 'calling');
     yield* TestClock.adjust('100 millis');
-    yield* progress.enter(RUN, 'reasoning');
-    expect(stored).toEqual([]);
+    yield* progress.enter(run, 'reasoning');
+    expect((yield* stored)?.progress.phase).toBeUndefined();
     yield* TestClock.adjust('200 millis');
-    expect(stored).toEqual([{ phase: 'reasoning', since: 0 }]);
+    const row = yield* stored;
+    expect(row?.progress.phase).toEqual({ phase: 'reasoning', since: 0 });
+    expect(changes).toEqual([
+      {
+        kind: 'ran',
+        threadId: run.threadId,
+        revision: { from: expect.any(Number), to: expect.any(Number) },
+        runs: [{ id: run.id, progress: row?.progress, updatedAt: row?.updatedAt }],
+      },
+    ]);
   }),
 );

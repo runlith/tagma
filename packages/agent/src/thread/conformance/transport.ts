@@ -1,6 +1,8 @@
 import { describe, expect } from 'bun:test';
 import type { Tester } from '@runlith/effect-test';
 import { Clock, Deferred, Effect, type Scope } from 'effect';
+import { TestClock } from 'effect/testing';
+import type { ThreadStateChange } from '../state';
 import { Message } from '@runlith/llm/schema/messages';
 import { Usage } from '@runlith/llm/schema/events';
 import { assistantMessageEntryId, hostedToolEntryId, retryEntryId } from '../../transcript/entryNames';
@@ -49,6 +51,59 @@ export function describeTransportContract<TTx, TWrite extends TTx = TTx, R = nev
         expect((yield* report(world, reports.recorded(run, words, 'stdout:11'))).status).toBe('settled');
         expect(yield* kinds()).toEqual(['message', 'run-end']);
       }),
+    );
+    test(
+      'a report contributes its phase and later tail in write order at the committed stamp',
+      Effect.fnUntraced(function* () {
+        const base = yield* Clock.Clock;
+        let stamp = 0;
+        const next = () => ++stamp;
+        const clock: Clock.Clock = {
+          currentTimeMillisUnsafe: next,
+          currentTimeMillis: Effect.sync(next),
+          currentTimeNanosUnsafe: () => base.currentTimeNanosUnsafe(),
+          currentTimeNanos: base.currentTimeNanos,
+          monotonicTimeNanosUnsafe: () => base.monotonicTimeNanosUnsafe(),
+          monotonicTimeNanos: base.monotonicTimeNanos,
+          sleep: (duration) => base.sleep(duration),
+        };
+        yield* Effect.provideService(
+          Effect.gen(function* () {
+            const world = yield* lifecycleWorld(open, 30_000, 250);
+            const run = yield* opened(world);
+            const reports = world.reports.of(ADAPTER);
+            yield* reports.live(run, { op: 'phase', phase: 'reasoning' });
+            yield* reports.live(run, { op: 'append', stream: 'message', part: 0, text: 'Open words.' });
+            const handed: ThreadStateChange[] = [];
+            world.changes.project((change) => Effect.sync(() => void handed.push(change)));
+            const write = Effect.fnUntraced(function* (unit: TWrite) {
+              yield* world.storage.transitions.opened([run.threadId], unit);
+              world.changes.claim(run.threadId, unit as object);
+              yield* reports.recorded(run, [], 'phase-tail').run(unit as ThreadWriteTx);
+              yield* world.storage.transitions.revised([run.threadId], unit, (revisions) =>
+                world.changes.settle(run.threadId, unit as object, revisions.get(run.threadId)),
+              );
+            });
+            if (world.storage.aggregate.program === undefined || (yield* world.storage.aggregate.program('phase-tail', write)) === null) {
+              yield* world.storage.aggregate.transaction(write);
+            }
+            const stored = yield* world.runs.runById(run.id);
+            const patches = handed.flatMap((change) => (change.kind === 'moved' ? [] : (change.runs ?? [])));
+            expect(patches).toEqual([
+              {
+                id: run.id,
+                progress: stored?.progress,
+                streamTail: stored?.streamTail,
+                heartbeatAt: stored?.heartbeatAt,
+                updatedAt: stored?.updatedAt,
+                resumes: stored?.resumes,
+              },
+            ]);
+          }),
+          Clock.Clock,
+          clock,
+        );
+      }, Effect.provide(TestClock.layer())),
     );
     test(
       'the evidence of a report stands in the storage across a restart, is bounded per run, and goes with the run',
