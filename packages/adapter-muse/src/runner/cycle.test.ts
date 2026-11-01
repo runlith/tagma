@@ -513,23 +513,48 @@ it.effect('a stopped turn whose history Muse cannot serve leaves an accepted ste
   }),
 );
 
-it.effect('a stop while Muse is still admitting a compaction replaces its host, so a compaction Muse admitted cannot go on unseen', () =>
-  Effect.gen(function* () {
-    const { agent, sent, hosts } = yield* world((one) => {
-      if (one.method === 'session/start') return ok(one, { session: { sessionId: one.params.sessionId } });
-      if (one.method === 'session/compact') return Effect.never;
-      return ok(one);
-    });
-    const session = yield* agent.newSession({ cwd: '/work', mcpServers: [] });
-    const compact = agent.extensions!['_tagma/compact']!;
-    const compacting = yield* Effect.forkChild(compact({ sessionId: session.sessionId, instructions: '', at: 'end' }));
-    while (!sent.some((one) => one.method === 'session/compact')) yield* Effect.yieldNow;
-    const second = yield* Effect.flip(compact({ sessionId: session.sessionId, instructions: '', at: 'end' }));
-    expect(second.message).toContain('busy');
-    yield* agent.cancel({ sessionId: session.sessionId });
-    expect((yield* Effect.flip(Fiber.join(compacting))).code).toBe(-32800);
-    expect(hosts.closed).toBe(1);
-  }),
+it.effect(
+  'a stop while Muse is still admitting a compaction replaces its host, and the next turn records the boundary Muse completed',
+  () =>
+    Effect.gen(function* () {
+      const compaction = { itemId: 'c1', kind: 'compaction', status: 'completed', outcome: 'compacted', trigger: 'manual' };
+      const { agent, sent, hosts, seen } = yield* world((one, emit) => {
+        if (one.method === 'session/start' || one.method === 'session/resume')
+          return ok(one, { session: { sessionId: one.params.sessionId, approvalMode: { mode: 'promptUnmatched' } } });
+        if (one.method === 'session/compact') return Effect.never;
+        if (one.method === 'session/read')
+          return Effect.succeed({
+            history: { mode: 'inline', items: [{ kind: 'earlierHistory' }, { ...compaction, tokensBefore: 900, tokensAfter: 90 }] },
+          });
+        if (one.method === 'turn/start')
+          return Effect.as(
+            Effect.forkDetach(
+              emit({ method: 'turn/completed', params: { sessionId: one.params.sessionId, turnId: one.id, terminal: 'completed' } }),
+            ),
+            { commandId: one.id, status: 'accepted', turnId: one.id, disposition: 'started' },
+          );
+        return ok(one);
+      });
+      const session = yield* agent.newSession({ cwd: '/work', mcpServers: [] });
+      const compact = agent.extensions!['_tagma/compact']!;
+      const compacting = yield* Effect.forkChild(compact({ sessionId: session.sessionId, instructions: '', at: 'end' }));
+      while (!sent.some((one) => one.method === 'session/compact')) yield* Effect.yieldNow;
+      const second = yield* Effect.flip(compact({ sessionId: session.sessionId, instructions: '', at: 'end' }));
+      expect(second.message).toContain('busy');
+      yield* agent.cancel({ sessionId: session.sessionId });
+      expect((yield* Effect.flip(Fiber.join(compacting))).code).toBe(-32800);
+      expect(hosts.closed).toBe(1);
+      yield* agent.prompt({ sessionId: session.sessionId, prompt: [{ type: 'text', text: 'go' }], _meta: { 'tagma/turn': TURN } });
+      yield* agent.prompt({
+        sessionId: session.sessionId,
+        prompt: [{ type: 'text', text: 'again' }],
+        _meta: { 'tagma/turn': '01a19573-1cea-7c2e-90b4-000000000031' },
+      });
+      expect([
+        seen.filter((one) => one.kind === '_tagma/compacted').map((one) => one.body),
+        sent.filter((one) => one.method === 'session/read').length,
+      ]).toEqual([[expect.objectContaining({ trigger: 'manual', preTokens: 900, postTokens: 90 })], 1]);
+    }),
 );
 
 it.effect('a stop while Muse never answers the opening ends the turn cancelled and replaces the host, sending none of its words', () =>
