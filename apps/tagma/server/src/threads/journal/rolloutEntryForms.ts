@@ -199,53 +199,58 @@ export type FormSource = {
     source: PublishedSource,
   ) => Effect.Effect<boolean, StoreFailure>;
   readonly discard: (threadId: string, path: string, source: PublishedSource) => Effect.Effect<void, RolloutUnreadable>;
+  readonly restep: (unit: WriteUnit<'machine'>, threadId: string, step: string | null) => Effect.Effect<void, StoreFailure>;
+  readonly using: <A, E, R>(threadId: string, work: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>;
 };
 
 const FORMING_SOURCE = writes('ThreadRollout.formSource', [publishedSourceRows], FORMING, conversationWrites);
 
-const settledWith = Effect.fnUntraced(function* (
-  db: StoreDb<'machine'>,
-  write: RolloutFormWrite,
-  threadId: string,
-  path: string,
-  publishing: RolloutPublishing,
-  sources: FormSource,
-) {
-  const source = yield* sources.stage(threadId, path);
-  const settled = yield* write(
-    source === null ? FORMING : FORMING_SOURCE,
-    Effect.fnUntraced(function* (unit) {
-      const standing = yield* unit.run(
-        db
-          .select({ publishing: threadRolloutForm.publishing })
-          .from(threadRolloutForm)
-          .where(eq(threadRolloutForm.threadId, threadId))
-          .get(),
-      );
-      if (standing?.publishing?.sha256 !== publishing.sha256) return false;
-      if (source !== null && !(yield* sources.publishIn(unit, threadId, path, source))) return false;
-      if (publishing.cursorBytes !== null) {
-        yield* unit.run(
+const settledWith = Effect.fnUntraced(
+  function* (
+    db: StoreDb<'machine'>,
+    write: RolloutFormWrite,
+    threadId: string,
+    path: string,
+    publishing: RolloutPublishing,
+    sources: FormSource,
+  ) {
+    const source = yield* sources.stage(threadId, path);
+    const settled = yield* write(
+      source === null ? FORMING : FORMING_SOURCE,
+      Effect.fnUntraced(function* (unit) {
+        const standing = yield* unit.run(
           db
-            .update(threadRolloutCursor)
-            .set({ nextByteOffset: publishing.cursorBytes, generation: sql`${threadRolloutCursor.generation} + 1` })
-            .where(eq(threadRolloutCursor.threadId, threadId)),
+            .select({ publishing: threadRolloutForm.publishing })
+            .from(threadRolloutForm)
+            .where(eq(threadRolloutForm.threadId, threadId))
+            .get(),
         );
-      }
-      if (publishing.refusalBytes !== null) {
-        yield* unit.run(
-          db
-            .update(threadRolloutRefusal)
-            .set({ nextByteOffset: publishing.refusalBytes })
-            .where(eq(threadRolloutRefusal.threadId, threadId)),
-        );
-      }
-      yield* unit.run(db.update(threadRolloutForm).set({ publishing: null }).where(eq(threadRolloutForm.threadId, threadId)));
-      return true;
-    }),
-  );
-  if (!settled && source !== null) yield* sources.discard(threadId, path, source);
-});
+        if (standing?.publishing?.sha256 !== publishing.sha256) return false;
+        if (source !== null && !(yield* sources.publishIn(unit, threadId, path, source))) return false;
+        if (publishing.cursorBytes !== null) {
+          yield* unit.run(
+            db
+              .update(threadRolloutCursor)
+              .set({ nextByteOffset: publishing.cursorBytes, generation: sql`${threadRolloutCursor.generation} + 1` })
+              .where(eq(threadRolloutCursor.threadId, threadId)),
+          );
+        }
+        if (publishing.refusalBytes !== null) {
+          yield* unit.run(
+            db
+              .update(threadRolloutRefusal)
+              .set({ nextByteOffset: publishing.refusalBytes })
+              .where(eq(threadRolloutRefusal.threadId, threadId)),
+          );
+        }
+        yield* unit.run(db.update(threadRolloutForm).set({ publishing: null }).where(eq(threadRolloutForm.threadId, threadId)));
+        return true;
+      }),
+    );
+    if (!settled && source !== null) yield* sources.discard(threadId, path, source);
+  },
+  (effect, _db, _write, threadId, _path, _publishing, sources) => sources.using(threadId, effect),
+);
 
 const publishedHere = Effect.fnUntraced(function* (path: string, publishing: RolloutPublishing) {
   const state = yield* rolloutStateOf(path);
@@ -379,7 +384,7 @@ export const stagedRollout = Effect.fnUntraced(function* (
   const commit = Effect.fnUntraced(function* (transcribed: boolean) {
     const recording = yield* Effect.result(
       write(
-        FORMING,
+        FORMING_SOURCE,
         Effect.fnUntraced(function* (unit) {
           yield* unmarked(unit);
           if ((yield* heldThread(db, unit, threadId)) === undefined) return false;
@@ -387,6 +392,7 @@ export const stagedRollout = Effect.fnUntraced(function* (
             db.insert(threadRolloutForm).values({ threadId, formedAt: new Date(yield* Clock.currentTimeMillis), publishing, step }),
           );
           yield* formStoredIn(db, unit, threadId, kinds, pending);
+          if (publishing === null) yield* sources.restep(unit, threadId, step);
           return true;
         }),
       ),

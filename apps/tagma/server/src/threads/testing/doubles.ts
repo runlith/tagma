@@ -496,6 +496,7 @@ export const journalSources = Effect.fnUntraced(
 const unpublished = (call: string) => Effect.die(`No journal source is published in this scenario, so ${call} has nothing to act on.`);
 
 const unpublishedSources: SourcePublication = {
+  using: (_threadId, work) => work,
   stage: () => unpublished('stage'),
   digest: () => unpublished('digest'),
   publishIn: () => unpublished('publishIn'),
@@ -503,12 +504,18 @@ const unpublishedSources: SourcePublication = {
   discard: () => unpublished('discard'),
 };
 
-export const rolloutForms = (journal: JournalEntry, kinds: ThreadEntryReader, stage: StageRollout = stagedHere, folds?: NativeFolds) =>
+export const rolloutForms = (
+  journal: JournalEntry,
+  kinds: ThreadEntryReader,
+  stage: StageRollout = stagedHere,
+  folds?: NativeFolds,
+  retention: SourceRetention = sourceRetention(),
+) =>
   Effect.provideService(
     makeRolloutForms({
       journal,
       stage,
-      publication: folds === undefined ? unpublishedSources : sourcePublication(folds, sourceRetention()),
+      publication: folds === undefined ? unpublishedSources : sourcePublication(folds, retention),
     }),
     ThreadEntryKinds,
     kinds,

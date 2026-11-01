@@ -18,6 +18,8 @@ import {
   exportThreadRollout,
   rehydrateThreadRecords,
   journalSources,
+  restedReads,
+  compressRollout,
 } from '../../../threads/testing/doubles.js';
 import { project } from '../../../projects/testing/doubles.js';
 import { bornThread } from '../../../native-harness/testing/born.js';
@@ -33,7 +35,7 @@ const storeLayer = unitsLayer(MachineUnits, MachineStore).pipe(
   Layer.merge(Layer.succeed(ThreadEntryKinds, ENTRY_KINDS)),
   Layer.merge(BunFileSystem.layer),
 );
-const raise = Effect.fn('testing.restedThread')(function* (threadId: string) {
+const raise = Effect.fn('testing.restedThread')(function* (threadId: string, said = 'hello') {
   const files = yield* FileSystem.FileSystem;
   const { db } = yield* MachineStore;
   const registered = yield* db
@@ -65,8 +67,8 @@ const raise = Effect.fn('testing.restedThread')(function* (threadId: string) {
     id: 'e-1',
     kind: 'message',
     payload: {
-      entry: { type: 'message', id: 'm-1', role: 'user', text: 'hello' },
-      messages: [{ role: 'user', content: [{ type: 'text', text: 'hello' }] }],
+      entry: { type: 'message', id: 'm-1', role: 'user', text: said },
+      messages: [{ role: 'user', content: [{ type: 'text', text: said }] }],
     },
   });
   yield* db.run(
@@ -77,10 +79,10 @@ const raise = Effect.fn('testing.restedThread')(function* (threadId: string) {
   );
   yield* db.run(sql`insert into thread_log (thread_id, history_through, entries_through) values (${threadId}, 1, 1)`);
   yield* db.run(
-    sql`insert into thread_history_item (thread_id, ord, message) values (${threadId}, 0, ${JSON.stringify({ role: 'user', content: [{ type: 'text', text: 'hello' }] })})`,
+    sql`insert into thread_history_item (thread_id, ord, message) values (${threadId}, 0, ${JSON.stringify({ role: 'user', content: [{ type: 'text', text: said }] })})`,
   );
   yield* db.run(
-    sql`insert into thread_entry (thread_id, ord, entry_id, type, entry) values (${threadId}, 0, ${'m-1'}, ${'message'}, ${JSON.stringify({ type: 'message', id: 'm-1', role: 'user', text: 'hello' })})`,
+    sql`insert into thread_entry (thread_id, ord, entry_id, type, entry) values (${threadId}, 0, ${'m-1'}, ${'message'}, ${JSON.stringify({ type: 'message', id: 'm-1', role: 'user', text: said })})`,
   );
   const home = yield* files.makeTempDirectoryScoped({ prefix: 'evict-' });
   const path = join(home, String(registered.id), `${threadId}.jsonl`);
@@ -244,6 +246,38 @@ it.live('a return refuses a journal that no longer begins with its published sou
     expect(yield* world.db.all(sql`select origin from thread_published_source where thread_id = 't-diverged'`)).toEqual([
       { origin: 'offload' },
     ]);
+  }).pipe(Effect.provide(storeLayer)),
+);
+
+it.live('a return refuses a journal whose bytes changed under the same decoded text', () =>
+  Effect.gen(function* () {
+    const world = yield* raise('t-bytes', 'mark � here');
+    expect(yield* evictThreadProjection({ threadId: 't-bytes', path: world.path, parts: world.parts })).toMatchObject({
+      outcome: 'evicted',
+    });
+    const original = Buffer.from(yield* world.files.readFile(world.path));
+    const at = original.indexOf(Buffer.from([0xef, 0xbf, 0xbd]));
+    expect(at).toBeGreaterThan(0);
+    const changed = Buffer.from(original);
+    changed.set([0xf0, 0x90, 0x80], at);
+    yield* world.files.writeFile(world.path, changed);
+    const returned = yield* Effect.result(rehydrateThreadRecords({ threadId: 't-bytes', path: world.path, parts: world.parts }));
+    expect(returned._tag === 'Failure' && returned.failure._tag).toBe('RolloutSyncRefused');
+    expect(yield* world.rest).toBeInstanceOf(Date);
+  }).pipe(Effect.provide(storeLayer)),
+);
+
+it.live('a read of a published source answers without opening its damaged compressed journal', () =>
+  Effect.gen(function* () {
+    const world = yield* raise('t-packed');
+    expect(yield* evictThreadProjection({ threadId: 't-packed', path: world.path, parts: world.parts })).toMatchObject({
+      outcome: 'evicted',
+    });
+    yield* compressRollout(world.path);
+    yield* world.files.writeFileString(`${world.path}.zst`, 'not a zstd frame');
+    const reads = yield* restedReads(ENTRY_KINDS, world.home, world.parts.native.folds);
+    const events = yield* reads.events('t-packed', { afterPosition: 0, head: 1, limit: 10 });
+    expect(events?.map((row) => row.id)).toEqual(['e-1']);
   }).pipe(Effect.provide(storeLayer)),
 );
 

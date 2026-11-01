@@ -9,7 +9,14 @@ import { MachineUnits } from '../../platform/contract/service/units.js';
 import { writes } from '../../platform/contract/service/writes.js';
 import { recordFacts } from '../../thread-record/facts.js';
 import { restedAtOf } from '../rest.js';
-import { journalProjectOf, publishedSourceRows, threadPublishedSource, threadRolloutForm, threadSourceIntent } from '../store/journal.js';
+import {
+  journalProjectOf,
+  publishedSourceRows,
+  threadPublishedSource,
+  threadRolloutCursor,
+  threadRolloutForm,
+  threadSourceIntent,
+} from '../store/journal.js';
 import type { SourceReplacement } from './sourceReplacement.js';
 import { ROLLOUT_SUFFIX } from './rolloutForms.js';
 import { sourcePath, type SourcePublication } from './sourceFiles.js';
@@ -43,8 +50,11 @@ export const makeSourcePublisher = Effect.fnUntraced(function* (input: {
       form: threadRolloutForm.step,
       publishing: threadRolloutForm.publishing,
       intent: threadSourceIntent.operation,
+      consumed: threadRolloutCursor.nextByteOffset,
+      reached: threadRolloutCursor.nextPosition,
     })
     .from(recordFacts)
+    .leftJoin(threadRolloutCursor, eq(threadRolloutCursor.threadId, recordFacts.id))
     .leftJoin(threadPublishedSource, eq(threadPublishedSource.threadId, recordFacts.id))
     .leftJoin(threadRolloutForm, eq(threadRolloutForm.threadId, recordFacts.id))
     .leftJoin(threadSourceIntent, eq(threadSourceIntent.threadId, recordFacts.id))
@@ -90,6 +100,14 @@ export const makeSourcePublisher = Effect.fnUntraced(function* (input: {
           const adopted = yield* input.publication
             .stage({ canonical: path, candidate: { kind: 'current' }, form: formed.form, origin: 'adopted' })
             .pipe(Effect.provideService(ThreadEntryKinds, kinds), Effect.mapError(io));
+          if (adopted.bytes < (formed.consumed ?? 0) || adopted.position + 1 < (formed.reached ?? 1)) {
+            yield* input.publication.discard(threadId, path, adopted).pipe(Effect.mapError(io));
+            return yield* io(
+              new Error(
+                `The journal of ${threadId} ends at byte ${adopted.bytes}, before the ${formed.consumed} bytes its rows consumed, so it is not adopted.`,
+              ),
+            );
+          }
           const published = yield* units
             .write(publishing, (unit) =>
               Effect.gen(function* () {
@@ -100,7 +118,9 @@ export const makeSourcePublisher = Effect.fnUntraced(function* (input: {
                   now.source !== null ||
                   now.publishing !== null ||
                   now.intent !== null ||
-                  now.form !== formed.form
+                  now.form !== formed.form ||
+                  now.consumed !== formed.consumed ||
+                  now.reached !== formed.reached
                 )
                   return false;
                 yield* input.publication.publishIn(db, unit, threadId, path, adopted);
@@ -119,7 +139,7 @@ export const makeSourcePublisher = Effect.fnUntraced(function* (input: {
   const open = Effect.fnUntraced(function* (threadId: string) {
     if (input.home !== undefined) {
       const row = yield* standing(threadId).pipe(Effect.mapError(io));
-      if (row !== undefined && row.rested !== null && row.journal !== null) {
+      if (row !== undefined && row.rested !== null && row.journal !== null && !current(row)) {
         const path = `${input.home}/${row.journal}/${threadId}${ROLLOUT_SUFFIX}`;
         if (row.intent !== null) yield* input.journal(threadId, input.replacement.settle(threadId, path)).pipe(Effect.mapError(io));
         yield* input.forms.readable(threadId, path).pipe(Effect.mapError(io));

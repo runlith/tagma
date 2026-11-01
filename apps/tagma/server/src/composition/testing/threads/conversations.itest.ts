@@ -613,9 +613,9 @@ describe('conversation index and journal', () => {
       expect([repaired.matches.map((hit) => hit.threadId), repaired.coverage]).toEqual([['t-missing'], { complete: false, unindexed: 1 }]);
     }).pipe(Effect.provide(fixture)),
   );
-  it.live('a truncated rollout adopted without a published source indexes its surviving prefix without claiming complete coverage', () =>
+  it.live('a rollout truncated below the prefix its rows consumed is neither adopted nor returned, and keeps coverage open', () =>
     Effect.gen(function* () {
-      const { files } = yield* World;
+      const { files, context, db } = yield* World;
       const own = yield* registered('cut');
       const path = yield* rested(
         't-cut',
@@ -637,7 +637,12 @@ describe('conversation index and journal', () => {
       yield* forget('t-cut');
       yield* backfilled();
       const cut = yield* search({ query: 'Stefan', scope: { kind: 'projects', ids: [own] } });
-      expect([cut.matches.map((hit) => hit.match.entryId), cut.coverage]).toEqual([['c-1'], { complete: false, unindexed: 1 }]);
+      expect([cut.matches.map((hit) => hit.match.entryId), cut.coverage]).toEqual([[], { complete: false, unindexed: 1 }]);
+      expect(yield* db.all(sql`select generation from thread_published_source where thread_id = 't-cut'`)).toEqual([]);
+      const returned = yield* Effect.result(
+        rehydrateThreadRecords({ threadId: 't-cut', path, parts: yield* nativeOnlyParts }).pipe(Effect.provide(context)),
+      );
+      expect(returned._tag === 'Failure' && returned.failure._tag).toBe('RolloutSyncRefused');
     }).pipe(Effect.provide(fixture)),
   );
   it.live('a headless rollout is not adopted as whole history', () =>

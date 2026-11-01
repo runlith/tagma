@@ -139,6 +139,7 @@ const publishSourceIn = Effect.fnUntraced(function* (
 export type SourcePublication = ReturnType<typeof sourcePublication>;
 
 export const sourcePublication = (folds: NativeFolds, retention: SourceRetention) => ({
+  using: retention.using,
   stage: (input: SourceStage) => stageSource(input, folds),
   digest: (path: string) => folds.digest(rolloutFiles(path), 'plain'),
   publishIn: (db: StoreDb<'machine'>, unit: WriteUnit<'machine'>, threadId: string, canonical: string, source: PublishedSource) =>

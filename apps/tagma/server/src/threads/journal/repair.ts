@@ -166,6 +166,7 @@ export const makeThreadRolloutRepair = Effect.fnUntraced(function* ({
         Effect.provideService(ThreadEntryKinds, kinds),
         Effect.onError(() => (replacement.pending(threadId) ? Effect.void : Effect.promise(() => rm(rewritten, { force: true })))),
         Effect.mapError((cause) => new ThreadProjectionRefused({ reason: 'io', threadId, message: cause.message })),
+        (held) => publication.using(threadId, held),
       ),
   );
 

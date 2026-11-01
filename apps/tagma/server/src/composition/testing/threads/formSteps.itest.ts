@@ -18,6 +18,7 @@ import {
   rehydrateThreadRecords,
   restedReads,
   rolloutForms,
+  rolloutSourceRetention,
   threadProjection,
 } from '../../../threads/testing/doubles.js';
 import { dated, datedKinds } from './formStepsReader.js';
@@ -185,7 +186,7 @@ it.live(
 );
 
 it.live(
-  'a read of an offloaded thread whose mark lags answers in the current form, opens its compressed file unshaped and only queues the shaping',
+  'a read of an offloaded thread whose mark lags answers in the current form, leaves its compressed file as it stands and only queues the shaping',
   Effect.fnUntraced(function* () {
     const { runtime, raise, stored, home, projectId } = yield* setup();
     const files = Context.get(runtime, FileSystem.FileSystem);
@@ -193,8 +194,8 @@ it.live(
     expect(
       yield* Effect.provide(evictThreadProjection({ threadId: 't-read', path, parts: yield* nativeOnlyParts, returning: true }), runtime),
     ).toMatchObject({ outcome: 'evicted' });
-    const bytes = yield* files.readFileString(path);
     yield* Effect.provide(compressRollout(path), runtime);
+    const packed = yield* files.readFile(`${path}.zst`);
     const queued: string[] = [];
     const reads = yield* Effect.provide(
       restedReads(kinds, home, (yield* nativeOnlyParts).native.folds, (threadId) => queued.push(threadId)),
@@ -202,7 +203,7 @@ it.live(
     );
     const events = yield* Effect.provide(reads.events('t-read', { afterPosition: 0, head: 1, limit: 10 }), runtime);
     expect(events?.map((row) => row.payload.entry)).toEqual([message('t-read:m', 'current')]);
-    expect(yield* files.readFileString(path)).toBe(bytes);
+    expect([yield* files.exists(path), yield* files.readFile(`${path}.zst`)]).toEqual([false, packed]);
     expect((yield* stored('t-read')).step).toBeNull();
     expect(queued).toEqual(['t-read']);
   }),
@@ -294,6 +295,69 @@ it.live(
     const events = yield* Effect.provide(reads.events('t-republished', { afterPosition: 0, head: 1, limit: 10 }), runtime);
     expect(events?.map((row) => row.payload.entry)).toEqual([message('t-republished:m', 'current')]);
     expect((yield* published())[0]!.generation).toBe(after!.generation);
+  }),
+);
+
+it.live(
+  'a form step that changes no byte of an offloaded thread moves its published source to the new form, and a read answers',
+  Effect.fnUntraced(function* () {
+    const { runtime, raise, owner, home, projectId } = yield* setup();
+    const files = Context.get(runtime, FileSystem.FileSystem);
+    const path = yield* raise('t-unchanged', 'current', join(home, String(projectId)));
+    const parts = yield* nativeOnlyParts;
+    expect(yield* Effect.provide(evictThreadProjection({ threadId: 't-unchanged', path, parts, returning: true }), runtime)).toMatchObject({
+      outcome: 'evicted',
+    });
+    const bytes = yield* files.readFileString(path);
+    const forms = yield* owner();
+    const staged = yield* Effect.provide(forms.staged('t-unchanged', path), runtime);
+    expect((yield* Effect.provide(staged!.commit(false), runtime)).kind).toBe('formed');
+    expect(yield* files.readFileString(path)).toBe(bytes);
+    const { db } = yield* Effect.provide(MachineStore, runtime);
+    expect(yield* Effect.provide(db.all(sql`select form from thread_published_source where thread_id = 't-unchanged'`), runtime)).toEqual([
+      { form: dated.name },
+    ]);
+    const reads = yield* Effect.provide(restedReads(kinds, home, parts.native.folds), runtime);
+    const events = yield* Effect.provide(reads.events('t-unchanged', { afterPosition: 0, head: 1, limit: 10 }), runtime);
+    expect(events?.map((row) => row.payload.entry)).toEqual([message('t-unchanged:m', 'current')]);
+  }),
+);
+
+it.live(
+  'a boot sweep that lands while a form step stages its source keeps the generation the step publishes',
+  Effect.fnUntraced(function* () {
+    const { runtime, raise, home, projectId } = yield* setup();
+    const files = Context.get(runtime, FileSystem.FileSystem);
+    const path = yield* raise('t-raced', 'old', join(home, String(projectId)));
+    const parts = yield* nativeOnlyParts;
+    expect(yield* Effect.provide(evictThreadProjection({ threadId: 't-raced', path, parts, returning: true }), runtime)).toMatchObject({
+      outcome: 'evicted',
+    });
+    const { db } = yield* Effect.provide(MachineStore, runtime);
+    const published = Effect.provide(
+      Effect.map(
+        db.all<{ generation: string }>(sql`select generation from thread_published_source where thread_id = 't-raced'`),
+        (rows) => rows[0]?.generation ?? null,
+      ),
+      runtime,
+    );
+    const before = yield* published;
+    const retention = rolloutSourceRetention();
+    const swept: typeof parts.native.folds = {
+      ...parts.native.folds,
+      certify: (rollout) =>
+        Effect.andThen(Effect.orDie(retention.sweep('t-raced', `${path}.generations`, published)), parts.native.folds.certify(rollout)),
+    };
+    const forms = yield* Effect.provide(
+      rolloutForms((_threadId, work) => work, kinds, undefined, swept, retention),
+      runtime,
+    );
+    const staged = yield* Effect.provide(forms.staged('t-raced', path), runtime);
+    expect((yield* Effect.provide(staged!.commit(false), runtime)).kind).toBe('formed');
+    const after = yield* published;
+    expect(after).not.toBe(before);
+    expect(yield* files.exists(join(`${path}.generations`, `${after}.jsonl`))).toBe(true);
+    expect(yield* files.exists(join(`${path}.generations`, `${before}.jsonl`))).toBe(false);
   }),
 );
 

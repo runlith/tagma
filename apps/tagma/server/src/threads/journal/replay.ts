@@ -128,8 +128,26 @@ const keptInFile = Effect.fn('ThreadRollout.rehydrate.keep')(function* (
     sources: null,
     ...(published === undefined ? {} : { published }),
   };
+  const floor =
+    (yield* db
+      .select({ reached: threadRolloutCursor.nextPosition })
+      .from(threadRolloutCursor)
+      .where(eq(threadRolloutCursor.threadId, threadId))
+      .get())?.reached ?? 1;
+  const whole = (plan: Planned): Effect.Effect<Planned, RolloutSyncRefused> =>
+    plan.through + 1 >= floor
+      ? Effect.succeed(plan)
+      : Effect.andThen(
+          plan.drop,
+          Effect.fail(
+            new RolloutSyncRefused({
+              reason: 'record-shape',
+              message: `the rollout ${path} ends at position ${plan.through}, before position ${floor - 1} its rows consumed, so it does not return`,
+            }),
+          ),
+        );
   const first = yield* carried(folds, path, ask);
-  if (first.kind === 'planned') return first;
+  if (first.kind === 'planned') return yield* whole(first);
   const absent = new Set(first.absent);
   const positions = standing.filter((row) => absent.has(row.id)).map((row) => row.position);
   let last = first.last;
@@ -137,7 +155,7 @@ const keptInFile = Effect.fn('ThreadRollout.rehydrate.keep')(function* (
     yield* keepRows(threadId, path, positions.slice(at, at + KEPT_ROWS), last);
     last += Math.min(KEPT_ROWS, positions.length - at);
   }
-  const kept = yield* Effect.flatMap(carried(folds, path, ask), planned(path));
+  const kept = yield* Effect.flatMap(Effect.flatMap(carried(folds, path, ask), planned(path)), whole);
   const key = { nextByteOffset: kept.bytes, nextPosition: last + 1 };
   yield* store
     .transaction(writes('thread.rehydrate.keep', [threadRolloutCursor]), (unit) =>

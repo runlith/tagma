@@ -78,6 +78,9 @@ export const makeRolloutForms = Effect.fnUntraced(function* ({
       return true;
     }),
     discard: publication.discard,
+    restep: (unit, threadId, step) =>
+      Effect.asVoid(unit.run(db.update(threadPublishedSource).set({ form: step }).where(eq(threadPublishedSource.threadId, threadId)))),
+    using: publication.using,
   };
 
   const formedHere = (threadId: string, path: string): Effect.Effect<void, RolloutFormFailure> =>

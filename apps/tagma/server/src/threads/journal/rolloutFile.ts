@@ -249,16 +249,16 @@ export async function scanRolloutFile(
   path: string,
   visit: (item: RolloutRecord) => void,
   read: ReadRollout,
-  seen?: (line: string, end: number) => void,
+  seen?: (line: Buffer, end: number) => void,
 ): Promise<RolloutScan> {
   let meta: { readonly value: unknown } | null = null;
   let bytes = 0;
   let size: number;
   try {
     size = (await stat(path)).size;
-    for await (const { line, end } of wholeLinesAfter(path, 0, read)) {
+    for await (const { line, end, bytes: raw } of wholeLinesAfter(path, 0, read)) {
       bytes = end;
-      seen?.(line, end);
+      seen?.(raw, end);
       if (line === '') continue;
       const reason = meta === null ? 'meta-json' : 'item-json';
       let value: unknown;
@@ -318,7 +318,7 @@ export async function* wholeLinesAfter(
   offset: number,
   read: ReadRollout,
   through?: number,
-): AsyncGenerator<{ readonly line: string; readonly end: number }> {
+): AsyncGenerator<{ readonly line: string; readonly end: number; readonly bytes: Buffer }> {
   const actual = (await stat(path)).size;
   if (through !== undefined && through > actual) throw new Error(`${path} ends before its published prefix`);
   const size = through ?? actual;
@@ -335,7 +335,8 @@ export async function* wholeLinesAfter(
       let from = 0;
       for (let newline = block.indexOf(0x0a); newline !== -1; newline = block.indexOf(0x0a, from)) {
         parts.push(block.subarray(from, newline));
-        yield { line: decoder.decode(joined(parts)), end: at + newline + 1 };
+        const bytes = joined(parts);
+        yield { line: decoder.decode(bytes), end: at + newline + 1, bytes };
         parts = [];
         from = newline + 1;
       }
