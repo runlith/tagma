@@ -13,9 +13,9 @@ edges:
     to: 01a18cde-5f93-73e8-aa31-64572afe6fec
 sources:
   - kind: file
-    ref: apps/tagma/server/src/native-harness/transcript/history.ts
-  - kind: file
     ref: apps/tagma/server/src/native-harness/transcript/heldHistories.ts
+  - kind: file
+    ref: apps/tagma/server/src/native-harness/transcript/history.ts
 ---
 Section F of [[2afe6fec]].
 
