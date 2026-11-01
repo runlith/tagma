@@ -542,6 +542,7 @@ layer(Layer.effectDiscard(seeded).pipe(Layer.provideMerge(machineLayers), Layer.
           reason: 'overlap',
           team: null,
           digest: null,
+          commandLine: null,
           at: 4_000,
         };
         const sessionRows = [observation, { ...observation, checkout: 'other' }];

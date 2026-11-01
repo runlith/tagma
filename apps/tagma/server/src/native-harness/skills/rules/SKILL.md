@@ -8,8 +8,8 @@ description: A project's rules end to end — `#rule` law in the graph, the chec
 A project's rules have one surface in three parts:
 
 - **`#rule` blocks** in the project's graph — the law's text, delivered to agents.
-- **`tagma.config.ts`** at the repository root — what each check judges, under `inspections` by key, and the `format` commands that format the commits Tagma lands (the `format` reference). Each judgement reads the file from the version it judges.
-- **`@runlith/tagma/rules`** and **`@runlith/tagma/rules/effect`** — the functions that describe inspections and format commands in that file. Tagma carries the package; the project installs nothing.
+- **`tagma.config.ts`** at the repository root — what each check judges, under `inspections` by key, the `format` commands that format the commits Tagma lands (the `format` reference), and the `derive` commands that regenerate derived files. Each judgement reads the file from the version it judges.
+- **`@runlith/tagma/rules`** and **`@runlith/tagma/rules/effect`** — the functions that describe inspections, format commands and derive commands in that file. Tagma carries the package; the project installs nothing.
 
 An enforced rule joins them: its enforcement document names a key of `tagma.config.ts`, a strictness, its triggers and its debt.
 
@@ -64,7 +64,8 @@ export default defineConfig({
 });
 ```
 
-- The default export is `defineConfig({ inspections, format })`. A key is lowercase letters, digits and `-`, starting with a letter.
+- The default export is `defineConfig({ inspections, format, derive })`. A key is lowercase letters, digits and `-`, starting with a letter.
+- Declare output regeneration under `derive` with `Derive.command({ paths, run })`. `paths` are non-empty root-relative output globs without `.` or `..` segments; `run` is argv run from the commit tree's root without appended file operands. A partial landing with excluded working changes runs matching declarations over its committed inputs; the caller may supply `submit_work.derive` entries instead. Only declared outputs enter the commit, outputs equal to HEAD drop from its diff, and working output bytes and recorded holders stay unchanged. Selected program-origin or `linguist-generated` content without a matching command refuses `derive-required`, naming excluded changes and recorded commands as hints; choose a derivation or leave that output out. Recorded commands are not replayed. Missing, failed and cut commands refuse with their output. `read_config` answers declared keys, paths and argv.
 - `Files.tests` supplies the shared test-file globs, including e2e, benchmark and `.fixture` files; `Imports.modules` takes the corresponding filename infixes in `tests`.
 - The file is plain synchronous data: it imports only `@runlith/tagma/*` and relative files of the same version, without the clock, randomness, the network, the environment or the file system. A function, a class instance or a promise in the value refuses. A config that does not build or evaluate refuses `config-invalid` with its file, line and reason.
 - Every judgement reads the config of the version it judges: a landing its own commit's, enforce_rule and the re-measure HEAD's, check_rules over the change HEAD's with this session's lines. Editing the file is a change the gate judges, and a branch changes its checks with its code.

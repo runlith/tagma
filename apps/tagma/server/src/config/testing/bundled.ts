@@ -34,7 +34,11 @@ const world = configsLayer.pipe(
 const root = process.argv[2]!;
 const answer = await Effect.runPromise(
   Effect.flatMap(Configs, (configs) => configs.read({ projectId: 1, actor: { _tag: 'Operator' }, root, tree: 'HEAD' })).pipe(
-    Effect.map((config) => ({ inspections: Object.fromEntries(config?.inspections ?? []), format: config?.format ?? [] })),
+    Effect.map((config) => ({
+      inspections: Object.fromEntries(config?.inspections ?? []),
+      format: config?.format ?? [],
+      derive: config?.derive ?? [],
+    })),
     Effect.catchTag('GateRefusal', (refused) => Effect.succeed({ refused: refused.code, reason: refused.reason })),
     Effect.provide(world),
   ),

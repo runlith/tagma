@@ -3,7 +3,16 @@ import { commitStepsSection } from './doctrine.js';
 
 export const commitSteps = manifest({
   id: 'commit-steps',
-  title: 'The format commands a repository declares to shape every commit Tagma lands',
+  title: 'The commands that shape and derive the tree of a commit',
+  operations: async () => ({
+    declarations: {},
+    refusals: {
+      'derive-required': 'Derived output needs a command',
+      'derive-missing': 'Derivation program not found',
+      'derive-failed': 'Derivation failed',
+      'derive-cut': 'Derivation ran too long',
+    },
+  }),
   sections: [
     {
       id: 'commit-steps',

@@ -5,7 +5,9 @@ import { join } from 'node:path';
 import { Effect, Fiber } from 'effect';
 import { contentDigest } from '@runlith/files/content';
 import { makeWalks } from '../../../change-record/lines/walks.js';
+import { observedPrograms } from '../../../change-record/record/programOrigins.js';
 import { collectReleased, sweepVersions } from '../../../change-record/record/versions.js';
+import { workspaceChange } from '../../../change-record/store/tables.js';
 import { spawnedEffect } from '../../../platform/testing/spawn.js';
 import { call, FILE, MINE, THEIRS } from '../checkoutFixture.js';
 import { base, commandLayer, commandWorld, fileReady } from './commandWorld.js';
@@ -36,6 +38,39 @@ layer(commandLayer, { excludeTestServices: true })('command writes', (it) => {
         expect(yield* s.held('src/a.ts')).toEqual([[MINE, contentDigest(base), contentDigest('rewritten\n')]]);
       }),
     );
+
+  it.effect('a row a command wrote keeps the raw line of that command, and a typed row keeps none', () =>
+    Effect.gen(function* () {
+      const s = yield* commandWorld();
+      const command = printed(['const one = 100;', ...FILE.slice(1)]);
+      yield* call(s.mine.bash, { command, description: 'Rewrite the file' });
+      yield* s.decided(MINE);
+      yield* call(s.theirs.write, { path: 'src/typed.ts', content: 'typed\n' });
+
+      const rows = yield* s.w.store.db
+        .select({ holder: workspaceChange.holder, commandLine: workspaceChange.commandLine })
+        .from(workspaceChange);
+      expect(rows.filter((row) => row.holder === MINE).map((row) => row.commandLine)).toEqual([command]);
+      expect(rows.filter((row) => row.holder === THEIRS).map((row) => row.commandLine)).toEqual([null]);
+    }),
+  );
+
+  it.effect('a file an opaque program writes stays nobody’s row yet is observed with the program’s line and the bytes it left', () =>
+    Effect.gen(function* () {
+      const s = yield* commandWorld();
+      const command = `bun -e 'require("node:fs").writeFileSync("src/made.ts", "made\\n")'`;
+      yield* call(s.mine.bash, { command, description: 'Make a file with a program' });
+      yield* s.decided(MINE);
+
+      expect(yield* s.held('src/made.ts')).toEqual([]);
+      expect(reasons(s, MINE)).toEqual([['src/made.ts', 'unproven']]);
+      const observed = yield* observedPrograms(
+        { git: s.w.git, root: s.w.root, store: s.w.store, units: s.w.units, checkout: 'repo-root' },
+        ['src/made.ts', 'src/other.ts'],
+      );
+      expect([...observed]).toEqual([['src/made.ts', [{ digest: contentDigest('made\n'), commandLine: command }]]]);
+    }),
+  );
 
   it.effect('a file the write tool makes keeps its row, and a script of the same step changing it after is unproven', () =>
     Effect.gen(function* () {

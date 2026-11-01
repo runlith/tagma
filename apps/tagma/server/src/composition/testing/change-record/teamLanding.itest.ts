@@ -143,6 +143,7 @@ layer(commandLayer, { excludeTestServices: true })('team command landing', (it) 
           reason: OVERLAP_REASON,
           team: null,
           digest: null,
+          commandLine: null,
           at,
         },
       ]);

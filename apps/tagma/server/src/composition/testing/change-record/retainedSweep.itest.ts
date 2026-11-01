@@ -24,6 +24,7 @@ layer(commandLayer, { excludeTestServices: true })('retained command paths', (it
         reason: OVERLAP_REASON,
         team: null,
         digest: null,
+        commandLine: null,
         at,
       });
       s.commands.remembered([entry(THEIRS, 'standing.txt'), entry(THEIRS, 'src/a.ts'), entry(ENDED, 'standing.txt')]);

@@ -50,9 +50,15 @@ export type FormatCommand = {
   readonly on?: 'commit';
 };
 
+export type DeriveCommand = {
+  readonly paths: readonly string[];
+  readonly run: Argv;
+};
+
 export type Config = {
   readonly inspections?: { readonly [key: string]: Inspection };
   readonly format?: { readonly [key: string]: FormatCommand };
+  readonly derive?: { readonly [key: string]: DeriveCommand };
 };
 
 export const defineConfig = (config: Config): Config => config;
@@ -110,6 +116,10 @@ export const Linters = {
 
 export const Format = {
   command: (command: FormatCommand): FormatCommand => command,
+};
+
+export const Derive = {
+  command: (command: DeriveCommand): DeriveCommand => command,
 };
 
 export type ProgramDeclaration = {

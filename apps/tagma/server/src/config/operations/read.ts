@@ -28,6 +28,7 @@ const inspectionOf = (key: string, descriptor: Descriptor): ConfiguredInspection
 const readingOf = (config: Config): ConfigReading => ({
   inspections: [...config.inspections].map(([key, descriptor]) => inspectionOf(key, descriptor)),
   format: config.format.map(({ key, command }) => ({ key, run: command.run, files: command.files })),
+  derive: config.derive.map(({ key, command }) => ({ key, paths: command.paths, run: command.run })),
 });
 
 const actorOf = (caller: Caller): TerminalActor => {

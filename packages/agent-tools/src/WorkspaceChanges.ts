@@ -108,6 +108,7 @@ export type CommandPart = {
 export type CommandFacts = {
   readonly readsOnly: boolean;
   readonly parts: readonly CommandPart[];
+  readonly line?: string;
 };
 
 const directoriesOf = (name: string): readonly string[] => name.split('/').slice(0, -1);

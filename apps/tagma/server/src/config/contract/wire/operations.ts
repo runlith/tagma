@@ -23,9 +23,19 @@ export const ConfiguredFormat = Schema.Struct({
 });
 export type ConfiguredFormat = typeof ConfiguredFormat.Type;
 
+export const ConfiguredDerive = Schema.Struct({
+  key: Schema.String,
+  paths: Schema.Array(Schema.String),
+  run: Schema.Array(Schema.String),
+});
+export type ConfiguredDerive = typeof ConfiguredDerive.Type;
+
 export const ConfigReading = Schema.Struct({
   inspections: Schema.Array(ConfiguredInspection),
   format: Schema.Array(ConfiguredFormat).annotate({ description: 'The format commands in the order they run on a commit.' }),
+  derive: Schema.Array(ConfiguredDerive).annotate({
+    description: 'The derivation commands: each regenerates the files matching its globs, relative to the repository root.',
+  }),
 });
 export type ConfigReading = typeof ConfigReading.Type;
 
@@ -49,7 +59,7 @@ export const CONFIG_OPERATIONS = {
       },
     }),
     meaning:
-      "Read what the tagma.config.ts at HEAD of the project's main checkout declares: its inspection keys with what judges each and its concern, and its format commands with their argv and globs.",
+      "Read what the tagma.config.ts at HEAD of the project's main checkout declares: its inspection keys with what judges each and its concern, its format commands with their argv and globs, and its derivation commands with the output globs they regenerate and their argv.",
     grammar:
       'The config of HEAD is the one the next landing from a clean checkout meets: a landing is judged and formatted by the config of its own version, so an uncommitted edit of tagma.config.ts counts only once it lands. A config that does not build or evaluate refuses `config-invalid` with its file, line and reason. The rules naming a key are answered by read_inspections with that key.',
     input: Schema.Struct({ project: projectField }),

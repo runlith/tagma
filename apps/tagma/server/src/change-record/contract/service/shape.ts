@@ -5,6 +5,14 @@ import type { GateRefusal } from '../../../platform/contract/wire/refusal.js';
 import type { ActorRef } from '../../../platform/contract/wire/actor.js';
 import type { Reshaped } from '../wire/reshape.js';
 import type { ShapeRefusal } from '../wire/shape.js';
+import type { DeriveCommand } from '../wire/derivation.js';
+
+export type DerivationNeed = {
+  readonly paths: readonly string[];
+  readonly recognized: readonly string[];
+  readonly excluded: readonly { readonly path: string; readonly holders: readonly string[] }[];
+  readonly commands: readonly string[];
+};
 
 export type ShapeAct = ActorRef;
 
@@ -19,6 +27,9 @@ export type ShapeAsk = {
   readonly tree: string;
   readonly job: string;
   readonly skipping: boolean;
+  readonly merging?: boolean;
+  readonly derive?: readonly DeriveCommand[];
+  readonly derivation?: (declared: boolean) => Effect.Effect<DerivationNeed | undefined, OwnGitFailed | GateRefusal<'walk-cut'>>;
 };
 
 export type Shaped = {
@@ -26,6 +37,7 @@ export type Shaped = {
   readonly reshaped: readonly Reshaped[];
   readonly skipped: boolean;
   readonly declaration: readonly string[];
+  readonly derived?: readonly string[];
 };
 
 export class CommitShape extends Context.Service<

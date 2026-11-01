@@ -41,6 +41,7 @@ export const commandWindow = sqliteTable(
     role: text('role', { mode: 'json' }).$type<Role>().notNull().default(WRITER),
     signatures: text('signatures', { mode: 'json' }).$type<readonly (string | null)[]>().notNull().default([]),
     team: text('team'),
+    line: text('line'),
   },
   (table) => [index('command_window_project_idx').on(table.projectId), index('command_window_opened_idx').on(table.openedAt)],
 );
@@ -75,6 +76,7 @@ export const commandUnattributed = sqliteTable(
     reason: text('reason').notNull(),
     team: text('team'),
     digest: text('digest'),
+    commandLine: text('command_line'),
     at: integer('at').notNull(),
   },
   (table) => [
