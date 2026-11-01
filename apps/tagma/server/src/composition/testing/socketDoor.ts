@@ -8,6 +8,7 @@ import { frozenBuildsLayer } from '../../installation/testing/doubles.js';
 import { doorServing, doorServicesOf } from './doorServices.js';
 import { liveServing } from '../socketBinding.js';
 import { ASSEMBLY } from './composed.js';
+import type { Assembly } from '../manifest.js';
 
 export const socketDoorLayer = (runtime: ServerRuntime, data: string) =>
   doorServing(socketOperationsLayer, runtime, data).pipe(
@@ -18,8 +19,8 @@ export const socketDoorLayer = (runtime: ServerRuntime, data: string) =>
     Layer.provideMerge(BunFileSystem.layer),
   );
 
-export const liveDoorLayer = (runtime: ServerRuntime, data: string) =>
-  liveServing(ASSEMBLY, null).pipe(
+export const liveDoorLayer = (runtime: ServerRuntime, data: string, assembly: Assembly = ASSEMBLY) =>
+  liveServing(assembly, null).pipe(
     Layer.provide(socketDoorLayer(runtime, data)),
     Layer.provide(Layer.effectContext(doorServicesOf(runtime, data))),
   );
