@@ -166,8 +166,22 @@ it.effect('an answer a grant never asks for is declined rather than believed', (
   }),
 );
 
-const standingAt = (phase: RuntimeStatus['phase']): RuntimeStatus =>
-  ({ installation, incarnation: 7, phase, custody: { revision: 0, epoch: 0 } }) as unknown as RuntimeStatus;
+const standingAt = (phase: RuntimeStatus['phase'], holder: RuntimeStatus['holder'] = { _tag: 'Standing' }): RuntimeStatus =>
+  ({ installation, incarnation: 7, phase, holder, custody: { revision: 0, epoch: 0 } }) as unknown as RuntimeStatus;
+
+it.effect('a generation whose holder is gone is read as ending, one whose channel broke is not', () =>
+  Effect.gen(function* () {
+    const gone = { _tag: 'Lost', loss: { reason: 'gone', detail: 'the holder closed its end of the channel' } } as const;
+    const broken = { _tag: 'Lost', loss: { reason: 'broken', detail: 'the holder sent a frame of 0 bytes' } } as const;
+    expect(yield* hostAdmission(Effect.succeed(standingAt('open', gone)))).toEqual({
+      _tag: 'Orphaned',
+      incarnation: 7,
+      detail: 'the holder closed its end of the channel',
+    });
+    expect(yield* hostAdmission(Effect.succeed(standingAt('open', broken)))).toEqual({ _tag: 'Standing', incarnation: 7, phase: 'open' });
+    expect(yield* hostAdmission(Effect.succeed(standingAt('stopping', gone)))).toEqual({ _tag: 'Closing', incarnation: 7, phase: 'stopping' });
+  }),
+);
 
 it.effect('only a generation a shutdown has entered is read as ending, never one fenced for a hand-over', () =>
   Effect.gen(function* () {

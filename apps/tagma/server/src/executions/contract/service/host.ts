@@ -57,6 +57,7 @@ export class HostManagement extends Context.Service<
   {
     readonly standing: Effect.Effect<HostStanding>;
     readonly connection: HostConnection;
+    readonly successor: Effect.Effect<boolean>;
   }
 >()('tagma/executions/HostManagement') {}
 

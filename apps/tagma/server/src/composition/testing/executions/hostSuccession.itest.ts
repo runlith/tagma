@@ -1,6 +1,7 @@
 import { describe, expect } from 'bun:test';
 import { layer } from '@runlith/effect-test';
 import { kind, own } from '@runlith/testbed/worlds';
+import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
 import * as BunServices from '@effect/platform-bun/BunServices';
 import { Context, Effect, Exit, Fiber, FileSystem, Layer, Schedule, Scope } from 'effect';
@@ -107,6 +108,22 @@ const started = Effect.fnUntraced(function* (
 const until = <A, E, R>(read: Effect.Effect<A, E, R>, done: (value: A) => boolean) =>
   Effect.repeat(read, { until: done, schedule: Schedule.spaced('50 millis') });
 
+const logicOf = (state: string) =>
+  Effect.flatMap(FileSystem.FileSystem, (files) =>
+    Effect.map(
+      files.readFileString(join(state, REGISTRATION_FILE)),
+      (text) => (JSON.parse(text) as { readonly logic?: { readonly pid: number } }).logic?.pid,
+    ),
+  );
+
+const signalled = (pid: number): void => {
+  try {
+    process.kill(pid, 'SIGKILL');
+  } catch (cause) {
+    if (!(cause instanceof Error && 'code' in cause && cause.code === 'ESRCH')) throw cause;
+  }
+};
+
 describe('a running server whose execution host left', () => {
   layer(fixture, { excludeTestServices: true })('host', (it) => {
     it.effect('raises a successor on the next start and runs it there, under a later generation', () =>
@@ -128,36 +145,47 @@ describe('a running server whose execution host left', () => {
       }),
     );
 
-    it.effect('ends a host whose logic came back into a shutdown it never finished, then raises a successor for the start', () =>
+    it.effect('replaces, with nothing started, a host whose logic came back into a shutdown it never finished', () =>
       Effect.gen(function* () {
         const { boot } = yield* Fixture;
-        const files = yield* FileSystem.FileSystem;
         const server = yield* boot;
         const host = Context.get(server.executions, HostManagement);
         yield* until(host.standing, (now) => now.custodian);
         const wedged = yield* started(server.executions, 'wedged', 'trap "" INT TERM; sleep 600');
-        const state = host.connection.address.state;
         const direct = host.connection.direct;
-        const logicOf = Effect.map(
-          files.readFileString(join(state, REGISTRATION_FILE)),
-          (text) => (JSON.parse(text) as { readonly logic?: { readonly pid: number } }).logic?.pid,
-        );
         const sweeping = yield* Effect.forkScoped(
           direct.shutdown({ installation: host.connection.installation, operation: HostRequestKey.make('succession-sweep') }),
         );
         yield* until(Effect.result(direct.status()), (seen) => seen._tag === 'Success' && seen.success.phase === 'stopping');
-        const killed = yield* logicOf;
+        const killed = yield* logicOf(host.connection.address.state);
         if (killed === undefined) return yield* Effect.die(new Error('the host registration names no logic'));
-        process.kill(killed, 'SIGKILL');
-        yield* until(logicOf, (pid) => pid !== undefined && pid !== killed);
-        const reopened = yield* until(
-          Effect.result(direct.status()),
-          (seen) => seen._tag === 'Success' && seen.success.incarnation === wedged.incarnation,
-        );
-        expect(reopened._tag === 'Success' ? reopened.success.phase : undefined).toBe('stopping');
+        signalled(killed);
         yield* Fiber.interrupt(sweeping);
+        yield* until(Effect.result(direct.status()), (seen) => seen._tag === 'Success' && seen.success.incarnation > wedged.incarnation);
         const after = yield* started(server.executions, 'after-stopping');
         expect(after.incarnation).toBeGreaterThan(wedged.incarnation);
+        expect((yield* host.standing).custodian).toBe(true);
+        yield* server.leave;
+      }),
+    );
+
+    it.effect('replaces, with nothing started, a host whose holder was killed while a command still ran in it', () =>
+      Effect.gen(function* () {
+        const { boot } = yield* Fixture;
+        const server = yield* boot;
+        const host = Context.get(server.executions, HostManagement);
+        yield* until(host.standing, (now) => now.custodian);
+        const running = yield* started(server.executions, 'running', 'sleep 600');
+        const direct = host.connection.direct;
+        const logic = yield* logicOf(host.connection.address.state);
+        if (logic === undefined) return yield* Effect.die(new Error('the host registration names no logic'));
+        const holder = Number(execFileSync('ps', ['-o', 'ppid=', '-p', String(logic)]).toString().trim());
+        expect(holder).toBeGreaterThan(1);
+        signalled(holder);
+        yield* until(Effect.result(direct.status()), (seen) => seen._tag === 'Success' && seen.success.incarnation > running.incarnation);
+        expect(yield* host.successor).toBe(true);
+        const after = yield* started(server.executions, 'after-holder');
+        expect(after.incarnation).toBeGreaterThan(running.incarnation);
         expect((yield* host.standing).custodian).toBe(true);
         yield* server.leave;
       }),

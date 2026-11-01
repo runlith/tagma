@@ -10,6 +10,7 @@ import { ThreadId } from '../../platform/contract/wire/thread.js';
 import type { WorldPreferences } from '../contract/service/worlds.js';
 import { commandInspection } from '../contract/wire/commands.js';
 import type { StoreFailure } from '../../platform/contract/service/store.js';
+import { endingDetail, hostAdmission } from '../host/boot.js';
 import type { HostConnection } from '../host/connection.js';
 import { executionWireLimits } from '../host/policy.js';
 import { makeTerminalExecutions } from '../terminals/executionPort.js';
@@ -37,6 +38,7 @@ export type CheckoutWorldServices = {
   readonly managed: ManagedCommands['Service'];
   readonly targets: TerminalTargets['Service'];
   readonly host: HostConnection;
+  readonly successor: Effect.Effect<boolean>;
   readonly access: CommandAccess['Service'];
   readonly scratch: (threadId: string) => string;
   readonly world: World;
@@ -71,17 +73,18 @@ export const checkoutWorldFor = Effect.fnUntraced(function* (
     ),
   );
   if (setting !== 'managed') return platform();
-  const standing = yield* Effect.result(deps.host.port.status());
-  if (standing._tag === 'Failure') {
-    if (standing.failure._tag === 'WireUnavailable' && standing.failure.kind === 'absent') {
-      yield* Effect.logInfo('no execution host is installed, so the thread works in the platform world', {
+  const admission = yield* hostAdmission(deps.host.port.status());
+  if (admission._tag !== 'Standing' && !(yield* deps.successor)) {
+    const detail = admission._tag === 'Unread' ? admission.detail : endingDetail(admission);
+    if (admission._tag === 'Unread' && admission.absent) {
+      yield* Effect.logInfo('no execution host answers and none could be brought up, so the thread works in the platform world', {
         threadId: thread.id,
-        failure: standing.failure,
+        detail,
       });
     } else {
-      yield* Effect.logWarning('the execution host did not answer its status, so the thread works in the platform world', {
+      yield* Effect.logWarning('the execution host admits no work and no successor came up, so the thread works in the platform world', {
         threadId: thread.id,
-        failure: standing.failure,
+        detail,
       });
     }
     return platform();

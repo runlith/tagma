@@ -52,6 +52,7 @@ const host = Layer.succeed(
     get connection(): never {
       throw new Error('headless account commands do not connect to the terminal host');
     },
+    successor: unused(),
   }),
 );
 const endings = Layer.succeed(TerminalEndings, TerminalEndings.of({ decided: unused, watch: unused, resume: unused, attend: unused }));

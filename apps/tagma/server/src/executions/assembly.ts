@@ -20,6 +20,7 @@ import {
   PubSub,
   Queue,
   Ref,
+  Schedule,
   Scope,
   Semaphore,
   Stream,
@@ -79,11 +80,11 @@ import { endStanding, firstEnable } from './host/firstEnable.js';
 import { shutdownMsOf } from '@runlith/executions/protocol/capacity';
 import {
   endingDetail,
+  endingOf,
   grantHostShare,
   holdHostShare,
   hostBundle,
   hostAdmission,
-  hostPresence,
   hostShareDetail,
   signalClaimHolder,
   stateClaim,
@@ -333,7 +334,8 @@ export const executionsLayer: Layer.Layer<
       if (replaced?._tag === 'Refused') yield* Effect.logWarning(replaced.detail);
       const standing = replaced?._tag === 'Enabled' ? null : yield* standingAfter(arrival, files, address.state);
       const admission = replaced?._tag === 'Enabled' ? undefined : yield* hostAdmission(executions.status());
-      const retired = admission?._tag === 'Closing' ? yield* endStanding(ending, endingDetail(admission)) : undefined;
+      const over = admission === undefined ? undefined : endingOf(admission);
+      const retired = over === undefined ? undefined : yield* endStanding(ending, endingDetail(over));
       if (retired?._tag === 'Enabled') {
         yield* tellReplaced(units, terminalRows, displaced, yield* Ref.get(heldAtFence)).pipe(Effect.orDie);
       }
@@ -423,17 +425,23 @@ export const executionsLayer: Layer.Layer<
     const layerScope = yield* Effect.scope;
     const succeeding = yield* Semaphore.make(1);
     const admitting = Effect.map(hostAdmission(executions.status()), (read) => read._tag === 'Standing' && read.phase === 'open');
-    const unheld = Effect.gen(function* () {
-      if ((yield* hostPresence(executions.status()))._tag !== 'Absent') return false;
-      return (yield* claim)._tag === 'Free';
-    });
+    const returning = admitting.pipe(
+      Effect.repeat({ until: (open) => open, schedule: Schedule.spaced(Duration.millis(100)) }),
+      Effect.timeoutOrElse({ duration: Duration.millis(executionHandshakeMs), orElse: () => Effect.succeed(false) }),
+    );
     const bringUp = succeeding.withPermits(1)(
       Effect.gen(function* () {
-        if ((yield* Ref.get(yielding)) !== 'idle') return false;
+        if (offer._tag === 'Unoffered' || (yield* Ref.get(yielding)) !== 'idle') return false;
         const admission = yield* hostAdmission(executions.status());
-        if (admission._tag !== 'Closing' && !(yield* unheld)) return yield* admitting;
+        if (admission._tag === 'Standing') return admission.phase === 'open';
+        if (admission._tag === 'Unread') {
+          if (!admission.absent) return false;
+          const held = yield* claim;
+          if (held._tag === 'Held') return yield* returning;
+          if (held._tag !== 'Free') return false;
+        }
         yield* Effect.logWarning(
-          `bringing up a successor in place of ${admission._tag === 'Closing' ? endingDetail(admission) : 'the execution host that left this installation'}`,
+          `bringing up a successor in place of ${admission._tag === 'Unread' ? 'the execution host that left this installation' : endingDetail(admission)}`,
         );
         yield* stood(yield* broughtUp(undefined, offer));
         const share = yield* Effect.result(settings.value(hostMemoryShare));
@@ -578,6 +586,10 @@ export const executionsLayer: Layer.Layer<
         'terminal-disposition',
         Effect.forever(Effect.sleep(Duration.millis(executionHandshakeMs)).pipe(Effect.andThen(dispose))),
       );
+      const kept = Effect.flatMap(Ref.get(live), (now) =>
+        now.boot._tag === 'Adopted' || now.boot._tag === 'Raised' ? Effect.asVoid(successor) : Effect.void,
+      );
+      yield* drive('host-succession', Effect.forever(Effect.sleep(Duration.millis(executionHandshakeMs)).pipe(Effect.andThen(kept))));
     });
     if (takenAfter === undefined) yield* booted;
     else {
@@ -609,7 +621,7 @@ export const executionsLayer: Layer.Layer<
         layerScope,
       );
     }
-    const hostState = HostManagement.of({ standing: Ref.get(live), connection: host });
+    const hostState = HostManagement.of({ standing: Ref.get(live), connection: host, successor });
     const feeds = yield* makeCommandFeed({
       terminals,
       evidence: terminals,

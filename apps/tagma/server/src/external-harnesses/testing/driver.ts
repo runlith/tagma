@@ -195,6 +195,7 @@ export const keyboardSession = Effect.fnUntraced(function* ({
         get connection() {
           return uncalled();
         },
+        successor: Effect.succeed(false),
       }),
       Layer.mock(ScratchAreas, { root: '/scratch', directory: uncalled, scope: uncalled }),
       Layer.mock(Settings, { value: (key) => Effect.succeed(key.fallback) }),

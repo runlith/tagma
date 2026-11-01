@@ -72,6 +72,7 @@ it.effect('a plain CLI reaches the host with its chosen permission mode, verbati
           get connection() {
             return uncalled();
           },
+          successor: Effect.succeed(false),
         }),
         Layer.mock(Settings, { value: (key) => Effect.succeed(key.fallback) }),
         Layer.mock(GrantSigner, { grantFor: uncalled, threadOf: uncalled }),

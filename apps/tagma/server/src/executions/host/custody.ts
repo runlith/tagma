@@ -305,7 +305,7 @@ export const makeTerminalHostCustody = Effect.fnUntraced(function* ({
       return succeeding && gone(sent.failure) && (yield* successor) ? yield* starting(operation, launch, false) : yield* sent.failure;
     }
     const answered = sent.success;
-    if (succeeding && answered._tag === 'Refused' && answered.refusal._tag === 'AdmissionClosed' && (yield* successor)) {
+    if (succeeding && answered._tag === 'Refused' && admitsNothing(answered.refusal) && (yield* successor)) {
       return yield* starting(operation, launch, false);
     }
     if (answered._tag !== 'Refused' || answered.refusal._tag !== 'Unauthorized') return answered;
@@ -387,8 +387,10 @@ export const makeTerminalHostCustody = Effect.fnUntraced(function* ({
 const gone = (failure: ExecutionsFailure): boolean =>
   failure._tag === 'WireUnavailable' && !failure.sent && (failure.kind === 'absent' || failure.kind === 'unreachable');
 
+const admitsNothing = (refusal: Refusal): boolean => refusal._tag === 'AdmissionClosed' || refusal._tag === 'HolderLost';
+
 const unserved = (reason: CustodyDeferral): boolean =>
-  (reason._tag === 'TakeRefused' && reason.refusal._tag === 'AdmissionClosed') || (reason._tag === 'HostUnreachable' && gone(reason.failure));
+  (reason._tag === 'TakeRefused' && admitsNothing(reason.refusal)) || (reason._tag === 'HostUnreachable' && gone(reason.failure));
 
 const refusalOf = (reason: CustodyDeferral, detail: string): Refusal =>
   reason._tag === 'HostUnreachable'

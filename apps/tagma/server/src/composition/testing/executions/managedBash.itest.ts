@@ -98,6 +98,7 @@ const makeFixture = Effect.gen(function* () {
       managed: floor.terminals.commands,
       targets: floor.targets,
       host: connection,
+      successor: Effect.succeed(false),
       access,
       scratch: () => join(raised.caseHome, 'scratch'),
       world: machine,

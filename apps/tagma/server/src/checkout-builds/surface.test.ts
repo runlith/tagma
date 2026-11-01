@@ -73,6 +73,7 @@ const surfaceOf = Effect.fnUntraced(function* (scene: Scene) {
       get connection(): never {
         throw new Error('serving the dev surface reads no host connection');
       },
+      successor: Effect.succeed(false),
     }),
     Layer.mock(Projects, { resolve: () => Effect.succeed({ id: 5, name: 'runlith' } as unknown as ProjectRow) }),
     Layer.mock(ProjectIdentification, { identify: (path) => Effect.succeed({ rootPath: path } as unknown as ProjectIdentity) }),

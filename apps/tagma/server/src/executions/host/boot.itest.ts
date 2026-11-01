@@ -20,50 +20,16 @@ import {
 import { Schema } from 'effect';
 import { bootPath, HostBoot as HostBootFile } from '@runlith/executions/protocol/boot';
 import { existsSync, readFileSync } from 'node:fs';
-import { WireFailed, WireUnreadable, WireUnavailable } from '@runlith/executions/Executions';
+import { WireUnavailable } from '@runlith/executions/Executions';
 import { fixtureRoot } from '../../platform/testing/roots.js';
-import { hostPresence, raiseHost, type StateClaim } from './boot.js';
+import { raiseHost, type StateClaim } from './boot.js';
 import { executionPolicy } from './policy.js';
 
 const unreachable = new WireUnavailable({ kind: 'unreachable', reason: 'the socket could not be opened', sent: false });
-const unreadable = new WireUnreadable({ detail: 'Expected "granted" in profile' });
-const refusedHello = new WireFailed({ fault: { kind: 'malformed', detail: 'v: expected 1' } });
 
 const services = HostRegistration.layer.pipe(Layer.provideMerge(BunServices.layer));
 
 const free: Effect.Effect<StateClaim> = Effect.succeed({ _tag: 'Free' });
-
-describe('hostPresence', () => {
-  it.effect('a decoded answer is a host answering', () =>
-    Effect.gen(function* () {
-      expect((yield* hostPresence(Effect.succeed({})))._tag).toBe('Answering');
-    }),
-  );
-
-  it.effect('a socket nothing listens on is absent, with what the socket said', () =>
-    Effect.gen(function* () {
-      const presence = yield* hostPresence(Effect.fail(unreachable));
-      expect(presence._tag).toBe('Absent');
-      if (presence._tag !== 'Absent') return;
-      expect(presence.detail).toContain('unreachable');
-    }),
-  );
-
-  it.effect('an invalid registered endpoint is no vacant address to start over', () =>
-    Effect.gen(function* () {
-      const invalid = new WireUnavailable({ kind: 'invalid', reason: 'unsupported transport', sent: false });
-      expect((yield* hostPresence(Effect.fail(invalid)))._tag).toBe('Unsettled');
-    }),
-  );
-
-  it.effect('a welcome this server cannot read, and a hello the host refused, are a host that is there', () =>
-    Effect.gen(function* () {
-      for (const failure of [unreadable, refusedHello]) {
-        expect((yield* hostPresence(Effect.fail(failure)))._tag).toBe('Unspoken');
-      }
-    }),
-  );
-});
 
 const launchRoot = fixtureRoot('host-launch', '');
 afterAll(() => rmSync(launchRoot, { recursive: true, force: true }));

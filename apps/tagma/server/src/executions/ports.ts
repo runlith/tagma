@@ -72,6 +72,7 @@ export const executionWorlds = Effect.fnUntraced(function* (input: {
         managed: Context.get(input.executions, ManagedCommands),
         targets: Context.get(input.executions, TerminalTargets),
         host: Context.get(input.executions, HostManagement).connection,
+        successor: Context.get(input.executions, HostManagement).successor,
         access: Context.get(input.executions, CommandAccess),
         scratch: input.scratch,
         world: input.world,

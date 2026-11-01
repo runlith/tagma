@@ -440,6 +440,30 @@ it.live('a start that finds no host answering brings up a successor and starts t
   ),
 );
 
+it.live('a start the host refuses because its holder is lost brings up a successor and starts there once', () =>
+  run(
+    Effect.gen(function* () {
+      const registration = registrar(Effect.succeed(registered(publishedStamp())));
+      const orphaned: StartAnswer = {
+        _tag: 'Refused',
+        operation: keyOf('orphaned'),
+        refusal: { _tag: 'HolderLost', reason: 'the holder of this host was lost; none starts before the host is raised again' },
+      };
+      const host = scripted({
+        status: [Effect.succeed(statusOf(vacant(0, 0), 0))],
+        take: [Effect.succeed(takeHeld(heldBy('floor-1', 0, 1, 1)))],
+        start: [Effect.succeed(orphaned), Effect.succeed(started('orphaned'))],
+      });
+      const raised = counted(true);
+      const custody = yield* owner(registration, host, { successor: raised.successor });
+      const answer = yield* custody.guarded().start(keyOf('orphaned'), launch);
+      expect(answer._tag).toBe('Started');
+      expect(raised.asked()).toBe(1);
+      expect(host.asked()).toEqual(['status', 'take:0', 'start', 'start']);
+    }),
+  ),
+);
+
 it.live.each([false, true])('conditional prevention never widens into a stop across custody assurance (refresh %s)', (refresh) =>
   run(
     Effect.gen(function* () {

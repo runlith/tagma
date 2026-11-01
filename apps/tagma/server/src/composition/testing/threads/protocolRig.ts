@@ -392,6 +392,7 @@ export const protocolRig = Effect.fn('testing.protocolRig')(function* (fixture: 
         notice: null,
       }),
       connection,
+      successor: Effect.succeed(false),
     });
     let opening = options.opening;
     const sessionStore = yield* sessionStoreOver(

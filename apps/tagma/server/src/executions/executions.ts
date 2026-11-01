@@ -91,7 +91,7 @@ export const executions = manifest({
       path: 'src/executions/doctrine/heldProcesses.ts',
     },
   ],
-  drivers: [{ id: 'request-key-retention' }, { id: 'terminal-grant-closes' }, { id: 'terminal-disposition' }],
+  drivers: [{ id: 'request-key-retention' }, { id: 'terminal-grant-closes' }, { id: 'terminal-disposition' }, { id: 'host-succession' }],
   lifetimes: {
     installation: lazyLayer(
       () => import('./assembly.js'),

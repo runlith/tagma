@@ -49,7 +49,7 @@ export const hostBootDetail = (boot: HostBoot): string => {
   }
 };
 
-export type HostPresence =
+type HostPresence =
   | { readonly _tag: 'Answering' }
   | { readonly _tag: 'Unspoken'; readonly detail: string }
   | { readonly _tag: 'Unsettled'; readonly detail: string }
@@ -71,32 +71,45 @@ const failureDetail = (failure: ExecutionsFailure): string => {
   }
 };
 
+const absentOn = (failure: ExecutionsFailure): boolean =>
+  failure._tag === 'WireUnavailable' && (failure.kind === 'absent' || failure.kind === 'unreachable');
+
 type HostAdmission =
   | { readonly _tag: 'Standing'; readonly incarnation: Incarnation; readonly phase: AdmissionPhase }
   | { readonly _tag: 'Closing'; readonly incarnation: Incarnation; readonly phase: AdmissionPhase }
-  | { readonly _tag: 'Unread'; readonly detail: string };
+  | { readonly _tag: 'Orphaned'; readonly incarnation: Incarnation; readonly detail: string }
+  | { readonly _tag: 'Unread'; readonly absent: boolean; readonly detail: string };
+
+type HostEnding = Extract<HostAdmission, { readonly _tag: 'Closing' | 'Orphaned' }>;
+
+const admissionOf = (seen: RuntimeStatus): HostAdmission => {
+  if (closing(seen.phase)) return { _tag: 'Closing', incarnation: seen.incarnation, phase: seen.phase };
+  if (seen.holder._tag === 'Lost' && seen.holder.loss.reason === 'gone') {
+    return { _tag: 'Orphaned', incarnation: seen.incarnation, detail: seen.holder.loss.detail };
+  }
+  return { _tag: 'Standing', incarnation: seen.incarnation, phase: seen.phase };
+};
 
 export const hostAdmission = (status: Effect.Effect<RuntimeStatus, ExecutionsFailure>): Effect.Effect<HostAdmission> =>
   Effect.match(status, {
-    onSuccess: (seen): HostAdmission => ({
-      _tag: closing(seen.phase) ? 'Closing' : 'Standing',
-      incarnation: seen.incarnation,
-      phase: seen.phase,
-    }),
-    onFailure: (failure): HostAdmission => ({ _tag: 'Unread', detail: failureDetail(failure) }),
+    onSuccess: admissionOf,
+    onFailure: (failure): HostAdmission => ({ _tag: 'Unread', absent: absentOn(failure), detail: failureDetail(failure) }),
   });
 
-export const endingDetail = (ending: Extract<HostAdmission, { readonly _tag: 'Closing' }>): string =>
-  `the execution host whose generation ${ending.incarnation} is ${ending.phase} and admits no more work`;
+export const endingOf = (admission: HostAdmission): HostEnding | undefined =>
+  admission._tag === 'Closing' || admission._tag === 'Orphaned' ? admission : undefined;
 
-export const hostPresence = (probe: Effect.Effect<unknown, ExecutionsFailure>): Effect.Effect<HostPresence> =>
+export const endingDetail = (ending: HostEnding): string =>
+  ending._tag === 'Closing'
+    ? `the execution host whose generation ${ending.incarnation} is ${ending.phase} and admits no more work`
+    : `the execution host of generation ${ending.incarnation}, whose holder is gone (${ending.detail}), so it starts nothing again`;
+
+const hostPresence = (probe: Effect.Effect<unknown, ExecutionsFailure>): Effect.Effect<HostPresence> =>
   Effect.match(probe, {
     onSuccess: (): HostPresence => ({ _tag: 'Answering' }),
     onFailure: (failure): HostPresence => {
       if (failure._tag === 'HostRefused') return { _tag: 'Answering' };
-      if (failure._tag === 'WireUnavailable' && (failure.kind === 'absent' || failure.kind === 'unreachable')) {
-        return { _tag: 'Absent', detail: failureDetail(failure) };
-      }
+      if (absentOn(failure)) return { _tag: 'Absent', detail: failureDetail(failure) };
       if (failure._tag === 'WireUnavailable' || failure._tag === 'WireLost') return { _tag: 'Unsettled', detail: failureDetail(failure) };
       return { _tag: 'Unspoken', detail: failureDetail(failure) };
     },
