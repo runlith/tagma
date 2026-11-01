@@ -47,7 +47,8 @@ fields:
       {
         "at": "src/core/files.ts",
         "for": [
-          "48c1dabd"
+          "48c1dabd",
+          "a287d79f"
         ]
       },
       {
