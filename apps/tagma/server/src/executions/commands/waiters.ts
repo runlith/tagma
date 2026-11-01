@@ -3,7 +3,8 @@ import type { ExecutionRef } from '@runlith/executions/protocol/execution';
 import type { StoreFailure } from '../../platform/contract/service/store.js';
 import { MachineUnits, type WriteUnit } from '../../platform/contract/service/units.js';
 import { writes } from '../../platform/contract/service/writes.js';
-import { command, commandDelivery, commandWait } from '../store/terminal.js';
+import { command, commandWait } from '../store/terminal.js';
+import { deliveryRows } from '../contract/service/commands.js';
 import type { ThreadId } from '../../platform/contract/wire/thread.js';
 import type { ExecutionStoreFailure } from '../store/rows.js';
 import type { NoticeTakeBack } from '../contract/service/notices.js';
@@ -58,19 +59,17 @@ export const makeCommandWaiters = Effect.fnUntraced(function* ({
     }),
     accepted: deliveries.acceptDelivery,
     delivered: Effect.fn('CommandWaiters.delivered')(function* (execution) {
-      yield* units.write(writes('CommandWaiters.delivered', [commandDelivery]), (unit) => deliveries.settleDelivery(unit, execution));
+      yield* units.write(writes('CommandWaiters.delivered', [deliveryRows]), (unit) => deliveries.settleDelivery(unit, execution));
     }),
     take: Effect.fn('CommandWaiters.take')(function* (execution, thread) {
-      return yield* units.write(writes('CommandWaiters.take', [commandDelivery]), (unit) =>
-        deliveries.takeDelivery(unit, execution, thread),
-      );
+      return yield* units.write(writes('CommandWaiters.take', [deliveryRows]), (unit) => deliveries.takeDelivery(unit, execution, thread));
     }),
     seen: Effect.fn('CommandWaiters.seen')(function* (execution, thread, signalId) {
       yield* answered(execution, thread, signalId, () => Effect.void);
     }),
     answered,
     unread: Effect.fn('CommandWaiters.unread')(function* (execution) {
-      if (yield* units.write(writes('CommandWaiters.unread', [commandDelivery]), (unit) => deliveries.releaseDelivery(unit, execution))) {
+      if (yield* units.write(writes('CommandWaiters.unread', [deliveryRows]), (unit) => deliveries.releaseDelivery(unit, execution))) {
         yield* Queue.offer(ended, execution);
       }
     }),
@@ -78,7 +77,7 @@ export const makeCommandWaiters = Effect.fnUntraced(function* ({
     debts: takeBack,
     background: Effect.fn('CommandWaiters.background')(function* (execution, expected, owed, call) {
       const notices = yield* takeBack;
-      return yield* units.write(writes('CommandWaiters.background', [commandWait, commandDelivery], notices.calls), (unit) =>
+      return yield* units.write(writes('CommandWaiters.background', [commandWait, deliveryRows], notices.calls), (unit) =>
         Effect.gen(function* () {
           const move = yield* deliveries.moveCommandWait(unit, execution, expected, 'background');
           if (move._tag !== 'Moved') return move;
@@ -94,7 +93,7 @@ export const makeCommandWaiters = Effect.fnUntraced(function* ({
     }),
     measurement: (execution) => units.read((unit) => deliveries.measurement(unit, execution)),
     recover: Effect.fn('CommandWaiters.recover')(function* () {
-      yield* units.write(writes('CommandWaiters.recover', [commandDelivery, command]), (unit) =>
+      yield* units.write(writes('CommandWaiters.recover', [deliveryRows, command]), (unit) =>
         Effect.andThen(deliveries.releaseClaims(unit), deliveries.unmeasured(unit, UNMEASURED_AT_RESTART)),
       );
     }),

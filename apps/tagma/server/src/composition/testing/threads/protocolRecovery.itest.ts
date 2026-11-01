@@ -86,8 +86,8 @@ layer(protocolFixture('protocol-recovery'), { excludeTestServices: true })('ACP 
             refuses: false,
             runs: (runs) => ({
               ...runs,
-              writeHeartbeats: (ids, at) =>
-                Effect.tap(runs.writeHeartbeats(ids, at), () =>
+              writeHeartbeats: (ids, at, unit) =>
+                Effect.tap(runs.writeHeartbeats(ids, at, unit), () =>
                   queued !== null && ids.includes(queued) ? Deferred.succeed(heartbeat, undefined) : Effect.void,
                 ),
             }),

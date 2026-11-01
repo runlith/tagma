@@ -177,6 +177,7 @@ export const threads = manifest({
       ],
     };
   },
+  rowFacts: async () => (await import('./list/inputs.js')).threadRowDeclarations,
   drivers: [{ id: 'thread-sweeps' }, { id: 'rollout-shelving' }, { id: 'rollout-reconciling' }, { id: 'said-backfill' }],
   lifetimes: {
     installation: lazyLayer(

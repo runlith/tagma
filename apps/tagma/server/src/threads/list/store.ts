@@ -7,8 +7,8 @@ import { MachineStore, type StoreFailure } from '../../platform/contract/service
 import { MachineUnits, type Unit } from '../../platform/contract/service/units.js';
 import { writes } from '../../platform/contract/service/writes.js';
 import { thread, threadRun, threadRunTally } from '../store/kernel.js';
-import { threadRecord } from '../../thread-record/store/table.js';
-import { threadSeen } from '../store/tables.js';
+import { recordRows, threadRecord } from '../../thread-record/store/table.js';
+import { seenRows, threadSeen } from '../store/tables.js';
 import { threadMandate } from '../store/mandate.js';
 import { assignmentSelection } from '../../workspace/store/tables.js';
 import { lineageOf, subtreeOf } from '../../thread-record/lineage.js';
@@ -139,9 +139,66 @@ export const makeThreadListReads = Effect.gen(function* () {
     );
 
   const archive = (ids: readonly string[], at: Date | null, call: string) =>
-    units.write(writes(call, [threadRecord, threadSubscription]), (unit) =>
+    units.write(writes(call, [recordRows, threadSubscription]), (unit) =>
       Effect.tap(records.setArchived(unit, ids, at), (moved) => (at === null ? Effect.void : endSubscriptions(db, unit, moved))),
     );
+
+  const windowOf = Effect.fnUntraced(function* (
+    unit: Unit<'machine'>,
+    ownerId: string,
+    homes: readonly number[],
+    page: { readonly limit: number; readonly before?: Date },
+    owing: ReadonlySet<string>,
+  ) {
+    const roots = and(selected(ownerId, homes, { view: 'live' }), liveRoot(ownerId, homes));
+    const cut = page.before === undefined ? roots : and(roots, sql`${recordFacts.readerOrderAt} < ${page.before.getTime()}`);
+    const working = yield* unit.run(
+      db
+        .select({ id: recordFacts.id })
+        .from(recordFacts)
+        .where(
+          and(
+            roots,
+            or(
+              sql`${recordFacts.id} in ${runningRoots(ownerId, homes)}`,
+              owing.size === 0 ? undefined : sql`${recordFacts.id} in ${rootsOf(ownerId, homes, [...owing])}`,
+            ),
+          ),
+        ),
+    );
+    const workingIds = working.map((row) => row.id);
+    const pinned = yield* unit.run(
+      db
+        .select({ id: recordFacts.id })
+        .from(recordFacts)
+        .where(
+          and(
+            roots,
+            or(isNotNull(recordFacts.pinnedAt), isNotNull(recordFacts.folderId), sql`${recordFacts.id} in ${pinnedRoots(ownerId, homes)}`),
+          ),
+        ),
+    );
+    const heldIds = [...new Set([...workingIds, ...pinned.map((row) => row.id)])];
+    const idleLimit = Math.max(1, page.limit - workingIds.length);
+    const idleCut = heldIds.length === 0 ? cut : and(cut, not(inArray(recordFacts.id, heldIds)));
+    const newest = yield* unit.run(
+      db
+        .select({ id: recordFacts.id, readerOrderAt: recordFacts.readerOrderAt })
+        .from(recordFacts)
+        .where(idleCut)
+        .orderBy(desc(recordFacts.readerOrderAt), desc(recordFacts.id))
+        .limit(idleLimit + 1),
+    );
+    const idle = newest.slice(0, idleLimit);
+    const counted = yield* unit.run(db.select({ total: count() }).from(recordFacts).where(roots).get());
+    const admitted = [...heldIds, ...idle.map((row) => row.id)];
+    const last = idle.at(-1);
+    return {
+      admitted: sql`${recordFacts.id} in ${liveFamilyOf(ownerId, admitted)}`,
+      roots: counted?.total ?? 0,
+      windowBefore: last === undefined || newest.length <= idleLimit ? null : last.readerOrderAt,
+    };
+  });
 
   const runningRun = (threadId: string, unit: Unit<'machine'>) =>
     Effect.map(
@@ -269,73 +326,40 @@ export const makeThreadListReads = Effect.gen(function* () {
     pin: selections.pin,
     page: selections.page,
 
+    rootIds: Effect.fn('ThreadListReads.rootIds')(function* (
+      ownerId: string,
+      homes: readonly number[],
+      page: { readonly limit: number; readonly before?: Date },
+    ) {
+      yield* Effect.annotateCurrentSpan({ projects: homes.join(','), limit: page.limit });
+      const owing = yield* owingOf();
+      return yield* units.read((unit) =>
+        Effect.gen(function* () {
+          const window = yield* windowOf(unit, ownerId, homes, page, owing);
+          const ids = yield* unit.run(
+            db
+              .select({ id: recordFacts.id })
+              .from(recordFacts)
+              .where(window.admitted)
+              .orderBy(desc(recordFacts.readerOrderAt), desc(recordFacts.id)),
+          );
+          return { ids: ids.map((row) => row.id), roots: window.roots, windowBefore: window.windowBefore };
+        }),
+      );
+    }),
+
     rootWindow: Effect.fn('ThreadListReads.rootWindow')(function* (
       ownerId: string,
       homes: readonly number[],
       page: { readonly limit: number; readonly before?: Date },
     ) {
       yield* Effect.annotateCurrentSpan({ projects: homes.join(','), limit: page.limit });
-      const roots = and(selected(ownerId, homes, { view: 'live' }), liveRoot(ownerId, homes));
-      const cut = page.before === undefined ? roots : and(roots, sql`${recordFacts.readerOrderAt} < ${page.before.getTime()}`);
       const owing = yield* owingOf();
       const window = yield* units.read((unit) =>
         Effect.gen(function* () {
-          const working = yield* unit.run(
-            db
-              .select({ id: recordFacts.id })
-              .from(recordFacts)
-              .where(
-                and(
-                  roots,
-                  or(
-                    sql`${recordFacts.id} in ${runningRoots(ownerId, homes)}`,
-                    owing.size === 0 ? undefined : sql`${recordFacts.id} in ${rootsOf(ownerId, homes, [...owing])}`,
-                  ),
-                ),
-              ),
-          );
-          const workingIds = working.map((row) => row.id);
-          const pinned = yield* unit.run(
-            db
-              .select({ id: recordFacts.id })
-              .from(recordFacts)
-              .where(
-                and(
-                  roots,
-                  or(
-                    isNotNull(recordFacts.pinnedAt),
-                    isNotNull(recordFacts.folderId),
-                    sql`${recordFacts.id} in ${pinnedRoots(ownerId, homes)}`,
-                  ),
-                ),
-              ),
-          );
-          const heldIds = [...new Set([...workingIds, ...pinned.map((row) => row.id)])];
-          const idleLimit = Math.max(1, page.limit - workingIds.length);
-          const idleCut = heldIds.length === 0 ? cut : and(cut, not(inArray(recordFacts.id, heldIds)));
-          const newest = yield* unit.run(
-            db
-              .select({ id: recordFacts.id, readerOrderAt: recordFacts.readerOrderAt })
-              .from(recordFacts)
-              .where(idleCut)
-              .orderBy(desc(recordFacts.readerOrderAt), desc(recordFacts.id))
-              .limit(idleLimit + 1),
-          );
-          const idle = newest.slice(0, idleLimit);
-          const counted = yield* unit.run(db.select({ total: count() }).from(recordFacts).where(roots).get());
-          const admitted = [...heldIds, ...idle.map((row) => row.id)];
-          const rows = yield* unit.run(
-            summariesOf(db, sql`${recordFacts.id} in ${liveFamilyOf(ownerId, admitted)}`).orderBy(
-              desc(recordFacts.readerOrderAt),
-              desc(recordFacts.id),
-            ),
-          );
-          const last = idle.at(-1);
-          return {
-            rows: yield* summarized('rootWindow', rows),
-            roots: counted?.total ?? 0,
-            windowBefore: last === undefined || newest.length <= idleLimit ? null : last.readerOrderAt,
-          };
+          const held = yield* windowOf(unit, ownerId, homes, page, owing);
+          const rows = yield* unit.run(summariesOf(db, held.admitted).orderBy(desc(recordFacts.readerOrderAt), desc(recordFacts.id)));
+          return { rows: yield* summarized('rootWindow', rows), roots: held.roots, windowBefore: held.windowBefore };
         }),
       );
       return { ...window, rows: marked(owing, window.rows) };
@@ -387,7 +411,7 @@ export const makeThreadListReads = Effect.gen(function* () {
     setArchived: (threadId, at) => archive([threadId], at, 'ThreadListReads.setArchived'),
 
     setPinned: (threadId, at) =>
-      units.write(writes('ThreadListReads.setPinned', [threadRecord]), (unit) => records.setPinned(unit, threadId, at)),
+      units.write(writes('ThreadListReads.setPinned', [recordRows]), (unit) => records.setPinned(unit, threadId, at)),
 
     heldUpMatching: (ownerId, homes, selection, spared) =>
       units.read((unit) =>
@@ -623,7 +647,7 @@ export const makeThreadListReads = Effect.gen(function* () {
     see: (threadId, runId) =>
       markedOne(
         [threadId],
-        units.write(writes('ThreadListReads.see', [threadSeen, threadRunTally]), (unit) =>
+        units.write(writes('ThreadListReads.see', [seenRows, threadRunTally]), (unit) =>
           Effect.gen(function* () {
             const read = summaryIn(unit, 'see', threadId);
             const before = yield* read;
@@ -653,7 +677,7 @@ export const makeThreadListReads = Effect.gen(function* () {
 
     advanceReaderOrder: Effect.fn('ThreadListReads.advanceReaderOrder')(function* (threadId, at) {
       const when = at ?? new Date(yield* Clock.currentTimeMillis);
-      yield* units.write(writes('ThreadListReads.advanceReaderOrder', [threadRecord]), (unit) =>
+      yield* units.write(writes('ThreadListReads.advanceReaderOrder', [recordRows]), (unit) =>
         records.advanceReaderOrder(unit, threadId, when),
       );
     }),

@@ -12,7 +12,7 @@ import { writes } from '../../platform/contract/service/writes.js';
 import { Settings } from '../../settings/contract/service/values.js';
 import { ThreadRecords } from '../../thread-record/contract/service/records.js';
 import type { ThreadRecap } from '../../thread-record/contract/wire/recap.js';
-import { threadRecord } from '../../thread-record/store/table.js';
+import { recordRows, threadRecord } from '../../thread-record/store/table.js';
 import { ThreadJournal } from '../contract/service/engine.js';
 import { CacheWarmth } from '../contract/service/evidence.js';
 import { ThreadRecaps } from '../contract/service/recaps.js';
@@ -219,7 +219,7 @@ export const makeRecapSchedule = Effect.fnUntraced(function* ({
   const publish = Effect.fnUntraced(function* (threadId: string, slot: Pending, selected: ModelSelection, written: ThreadRecap) {
     const held = slot.capture;
     const enabled = slot.manual ? () => true : yield* settings.held(recapKey, held.basis.projectId);
-    return yield* units.write(writes('ThreadRecap.publish', [threadRecord]), (unit) =>
+    return yield* units.write(writes('ThreadRecap.publish', [recordRows]), (unit) =>
       Effect.gen(function* () {
         const facts = yield* records.facts(threadId, unit);
         if (facts === undefined || facts.projectId !== held.basis.projectId || facts.status === 'running' || facts.runningRunId !== null)

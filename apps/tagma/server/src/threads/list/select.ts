@@ -68,6 +68,8 @@ export type ThreadWindow = {
   readonly windowBefore: Date | null;
 };
 
+export type ThreadWindowIds = Omit<ThreadWindow, 'rows'> & { readonly ids: readonly string[] };
+
 const homesSql = (homes: readonly number[]): SQL =>
   sql`(${sql.join(
     homes.map((home) => sql`${home}`),
@@ -98,7 +100,7 @@ export type ThreadSelectionPage = {
 
 const ASKING = sql.raw('n.pending_interaction');
 
-export const outcomeRunOf = (threadId: SQLiteColumn): SQL<string | null> => sql<string | null>`(
+export const outcomeRunOf = (threadId: SQLiteColumn | SQL): SQL<string | null> => sql<string | null>`(
   select ${threadRun.id}
   from ${threadRun}
   where ${and(eq(threadRun.threadId, threadId), inArray(threadRun.status, RUN_ENDINGS), not(keepWarmRun(threadRun.id)))}

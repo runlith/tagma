@@ -14,15 +14,16 @@ import type { ThreadArchiveSweep } from '../contract/wire/sweep.js';
 import { admitThreadFailures } from '../refusals.js';
 import { ThreadInputRefused, ThreadWriteConflict, type HarnessFailure } from '../contract/service/failure.js';
 import { THREAD_OPERATIONS } from '../contract/wire/operations/catalog.js';
-import { phaseChanges, ThreadPhaseFeed } from './phase.js';
-import { standingSignal } from '../events/standing.js';
+import { phaseChanges, ThreadPhaseFeed, type PhaseSeed } from './phase.js';
+import { standingOf, standingSignal } from '../events/standing.js';
+import { type ThreadLineage, ThreadRows } from '../contract/service/rows.js';
 import { ThreadAudience } from './audience.js';
 import { ThreadRollouts } from '../contract/service/rollouts.js';
 import {
   ThreadList,
   type ArchiveWork,
   type AttentionEvent,
-  type OpenCalls,
+  type ThreadCut,
   type ThreadProjectionPage,
   type ThreadProjectionWindow,
   type ThreadsEvent,
@@ -75,6 +76,7 @@ export const makeThreadList = Effect.gen(function* () {
   const releasing = yield* ThreadReleasing;
   const groups = yield* ProjectGroups;
   const folders = yield* ThreadFolders;
+  const facts = yield* ThreadRows;
   let membership = membershipOf(yield* groups.list());
   const homesOf = (listId: number): readonly number[] => membership.members.get(listId) ?? [listId];
   const listsOf = (home: number): readonly number[] => {
@@ -83,7 +85,7 @@ export const makeThreadList = Effect.gen(function* () {
   };
   const listened = (home: number): boolean => listsOf(home).some((listId) => listeners.has(listId));
   let archiving: ArchiveWork | null = null;
-  let openCalls: OpenCalls | null = null;
+  let cuts: ThreadCut | null = null;
   const closeWork: ArchiveWork = (ids, work) =>
     archiving === null
       ? Effect.fail(
@@ -149,38 +151,28 @@ export const makeThreadList = Effect.gen(function* () {
   };
 
   const phases = new ThreadPhaseFeed({
-    watch: (threadId, listener) => live.subscribe(threadId, (event) => listener(phaseChanges(event))),
-    view: (threadId) => live.view(threadId),
-    journal: (threadId, runId, deliver) => {
-      if (openCalls === null) {
-        deliver([]);
+    watch: (threadId, listener) => live.subscribe(threadId, (event) => listener(phaseChanges(event), event)),
+    cut: (threadId, deliver) => {
+      if (cuts === null) {
+        deliver(null);
         return;
       }
       runFork(
-        Effect.map(Effect.exit(openCalls(threadId, runId)), (exit) => {
+        Effect.map(Effect.exit(cuts(threadId, (unit) => facts.readIn(unit, [threadId]))), (exit) => {
           if (Exit.isSuccess(exit)) {
-            deliver(exit.value);
+            const seed: PhaseSeed = { activeRunId: exit.value.activeRunId, storedOpen: exit.value.storedOpen, live: exit.value.live };
+            deliver(seed);
             return;
           }
-          deliver([]);
-          console.error('[tagma] open calls of a followed run could not be read', { threadId, runId }, Cause.squash(exit.cause));
+          deliver(null);
+          console.error('[tagma] the open calls of a followed thread could not be cut', { threadId }, Cause.squash(exit.cause));
         }),
       );
     },
     onChanged: (threadId) => {
       if (listeners.size === 0) return;
-      runFork(
-        watchedSummary(threadId).pipe(
-          Effect.map((row) => {
-            if (row !== undefined) announce(row, false);
-          }),
-          Effect.catchCause((cause) =>
-            Effect.sync(() => {
-              console.error('[tagma] thread phase projection failed', { threadId }, Cause.squash(cause));
-            }),
-          ),
-        ),
-      );
+      const row = facts.current(threadId);
+      if (row !== undefined && shown(row)) announce(row, false);
     },
   });
 
@@ -190,8 +182,30 @@ export const makeThreadList = Effect.gen(function* () {
       const reading = heldPaths.get(id);
       if (reading !== undefined && !listened(reading.projectId) && !audience.has(id)) heldPaths.delete(id);
     }
+    untrack(ids);
+    facts.release(ids);
+  };
+  const track = (row: ThreadSummary): void =>
+    phases.follow(row.id, row.archivedAt === null && shown(row) ? (row.activeRun?.id ?? null) : null);
+  const lives = new Map<string, ThreadSummary['life']>();
+  const untrack = (ids: readonly string[]): void => {
+    for (const id of ids) {
+      const row = facts.current(id);
+      if (row !== undefined && shown(row)) continue;
+      phases.follow(id, null);
+      lives.delete(id);
+    }
   };
   const followed = (row: ThreadSummary): boolean => listened(row.projectId) || audience.has(row.id);
+  const standing = new Set<string>();
+  const shown = (row: ThreadSummary): boolean =>
+    followed(row) || (row.parentThreadId !== null && audience.has(row.parentThreadId)) || (everyone.size > 0 && standing.has(row.id));
+  const stood = (row: ThreadSummary): boolean => {
+    const was = standing.has(row.id);
+    if (everyone.size > 0 && standingOf(row) !== null) standing.add(row.id);
+    else standing.delete(row.id);
+    return was;
+  };
 
   const counted = (
     rows: readonly ThreadSummary[],
@@ -215,26 +229,58 @@ export const makeThreadList = Effect.gen(function* () {
     return rows.map((row) => (fresh.has(row.id) ? listRow(row, counts.get(row.id) ?? NONE_HELD) : listRow(row)));
   });
 
-  const watchedSummary = Effect.fnUntraced(function* (threadId: string, attention = false) {
-    if (listeners.size === 0) return attention ? yield* threads.summary(threadId) : undefined;
-    const member = yield* threads.summary(threadId);
-    if (member === undefined) return undefined;
-    if (followed(member) || (member.parentThreadId !== null && audience.has(member.parentThreadId))) return member;
-    const lists = [...listeners.keys()].map((id) => ({ id, projects: homesOf(id) }));
-    const families = yield* threads.families(OPERATOR_PRINCIPAL, member, lists);
-    let found: ThreadSummary | undefined;
-    for (const family of families) {
-      audience.include(
-        family.listId,
-        family.rows.map((row) => row.id),
-      );
-      for (const row of family.rows) {
-        if (row.id === threadId) found = row;
-        else reach(family.listId, { kind: 'row', row: listRow(row) }, false);
+  const reachFamily = Effect.fnUntraced(
+    function* (threadId: string) {
+      if (listeners.size === 0) return;
+      const member = yield* threads.summary(threadId);
+      if (member === undefined || shown(member)) return;
+      const lists = [...listeners.keys()].map((id) => ({ id, projects: homesOf(id) }));
+      const families = yield* threads.families(OPERATOR_PRINCIPAL, member, lists);
+      let found: ThreadSummary | undefined;
+      for (const family of families) {
+        audience.include(
+          family.listId,
+          family.rows.map((row) => row.id),
+        );
+        for (const row of yield* facts.read(family.rows.map((row) => row.id))) {
+          if (row.id === threadId) found = row;
+          else reach(family.listId, { kind: 'row', row: listRow(row) }, false);
+        }
       }
-    }
-    return found ?? (attention ? member : undefined);
-  });
+      if (found !== undefined) announce(found, false);
+    },
+    (effect, threadId) =>
+      Effect.catchCause(effect, (cause) =>
+        Effect.sync(() => {
+          console.error('[tagma] a thread family could not join its list; the lists resync', { threadId }, Cause.squash(cause));
+          resync();
+        }),
+      ),
+  );
+
+  const wants = (place: ThreadLineage): boolean => {
+    if (listeners.size === 0) return false;
+    if (audience.has(place.threadId)) return true;
+    if (place.home !== null && listened(place.home)) return true;
+    if (place.parentThreadId !== null && audience.has(place.parentThreadId)) return true;
+    if (place.ancestry.slice(1).some((entry) => entry.home !== null && listened(entry.home))) runFork(reachFamily(place.threadId));
+    return false;
+  };
+
+  const attended = (threadId: string): Effect.Effect<void> =>
+    facts.read([threadId]).pipe(
+      Effect.map(([row]) => {
+        if (row === undefined) return;
+        stood(row);
+        if (shown(row)) announce(row, false);
+      }),
+      Effect.catchCause((cause) =>
+        Effect.sync(() => {
+          console.error('[tagma] an attention row could not be read; the lists resync', { threadId }, Cause.squash(cause));
+          resync();
+        }),
+      ),
+    );
 
   const listRow = (row: ThreadSummary, given?: ThreadHeld): ThreadListProjection => {
     const held = given ?? heldPaths.get(row.id)?.held ?? NONE_HELD;
@@ -247,6 +293,9 @@ export const makeThreadList = Effect.gen(function* () {
   };
 
   const announce = (row: ThreadSummary, observed = true): ThreadListProjection => {
+    track(row);
+    if (row.archivedAt === null) lives.set(row.id, row.life);
+    else lives.delete(row.id);
     const projected = listRow(row);
     const event: ThreadsEvent = row.archivedAt === null ? { kind: 'row', row: projected } : { kind: 'removed', threadId: row.id };
     const own = listsOf(row.projectId);
@@ -280,14 +329,14 @@ export const makeThreadList = Effect.gen(function* () {
   };
 
   const recounted = Effect.fnUntraced(function* (rows: readonly ThreadSummary[], reading: 'counts' | 'moved' = 'counts') {
-    const shown = new Map(rows.map((row) => [row.id, heldPaths.get(row.id)?.held ?? NONE_HELD] as const));
+    const prior = new Map(rows.map((row) => [row.id, heldPaths.get(row.id)?.held ?? NONE_HELD] as const));
     yield* counted(rows, reading);
     for (const row of rows) {
       const now = heldPaths.get(row.id)?.held ?? NONE_HELD;
-      const was = shown.get(row.id) ?? NONE_HELD;
+      const was = prior.get(row.id) ?? NONE_HELD;
       if (now.paths === was.paths && now.unproven === was.unproven) continue;
-      const current = yield* watchedSummary(row.id);
-      if (current !== undefined) announce(current);
+      const current = facts.current(row.id);
+      if (current !== undefined && shown(current)) announce(current);
     }
   });
 
@@ -298,12 +347,18 @@ export const makeThreadList = Effect.gen(function* () {
       }),
     );
 
+  const windowRows = Effect.fnUntraced(function* (listId: number, before?: Date) {
+    const window = yield* threads.rootIds(OPERATOR_PRINCIPAL, homesOf(listId), { limit: LIST_WINDOW_ROWS, before });
+    return { ...window, rows: yield* facts.read(window.ids) };
+  });
+
   const openWindow = (listId: number): Effect.Effect<ThreadProjectionWindow, HarnessFailure> =>
     Effect.suspend(() => {
       const opening = audience.opening(listId, true);
-      return Effect.map(threads.rootWindow(OPERATOR_PRINCIPAL, homesOf(listId), { limit: LIST_WINDOW_ROWS }), (window) => {
+      return Effect.map(windowRows(listId), (window) => {
         const opened = { rows: window.rows.map((row) => listRow(row)), roots: window.roots, windowBefore: window.windowBefore };
-        releaseCounts(opening.install(window.rows.map((row) => row.id)));
+        releaseCounts(opening.install(window.ids));
+        for (const row of window.rows) track(row);
         runFork(projectedHeld(recounted(window.rows)));
         return opened;
       }).pipe(Effect.ensuring(Effect.sync(opening.close)));
@@ -311,10 +366,11 @@ export const makeThreadList = Effect.gen(function* () {
 
   const listWindow = Effect.fnUntraced(function* (listId: number, before?: Date) {
     const opening = audience.opening(listId, before === undefined);
-    const window = yield* threads.rootWindow(OPERATOR_PRINCIPAL, homesOf(listId), { limit: LIST_WINDOW_ROWS, before }).pipe(
-      Effect.tap((window) => Effect.sync(() => releaseCounts(opening.install(window.rows.map((row) => row.id))))),
+    const window = yield* windowRows(listId, before).pipe(
+      Effect.tap((window) => Effect.sync(() => releaseCounts(opening.install(window.ids)))),
       Effect.ensuring(Effect.sync(opening.close)),
     );
+    for (const row of window.rows) track(row);
     return { rows: yield* withHeld(window.rows), roots: window.roots, windowBefore: window.windowBefore };
   });
 
@@ -332,7 +388,10 @@ export const makeThreadList = Effect.gen(function* () {
       Effect.gen(function* () {
         for (;;) {
           yield* projectedHeld(
-            Effect.flatMap(watchedSummary(threadId), (row) => (row === undefined ? Effect.void : recounted([row], 'moved'))),
+            Effect.suspend(() => {
+              const row = facts.current(threadId);
+              return row === undefined || !shown(row) ? Effect.void : recounted([row], 'moved');
+            }),
           );
           if (!state.again) {
             recounting.delete(threadId);
@@ -399,12 +458,16 @@ export const makeThreadList = Effect.gen(function* () {
     return true;
   };
 
-  const announceThread = (threadId: string, projectId?: number) =>
+  const announceThread = (threadId: string, _projectId?: number) =>
     Effect.suspend(() => {
       if (unwatched()) return Effect.void;
-      return watchedSummary(threadId, everyone.size > 0).pipe(
+      const held = facts.current(threadId);
+      const row = held === undefined ? Effect.map(facts.read([threadId]), ([read]) => read) : Effect.succeed(held);
+      return row.pipe(
         Effect.map((row) => {
-          if (row !== undefined) announce(row);
+          if (row === undefined) return;
+          stood(row);
+          if (shown(row) || everyone.size > 0) announce(row);
         }),
         Effect.catchCause((cause) =>
           Effect.sync(() => {
@@ -415,7 +478,6 @@ export const makeThreadList = Effect.gen(function* () {
       );
     });
 
-  const detachBirths = records.birthRecorded(({ threadId, projectId }) => announceThread(threadId, projectId));
   const removeRow = (threadId: string, home: number): void => {
     const reached = [...audience.projects(threadId)];
     const own = listsOf(home);
@@ -429,31 +491,34 @@ export const makeThreadList = Effect.gen(function* () {
       if (home !== undefined && home !== null) removeRow(id, home);
     }
   });
-  const detachRemovals = records.removalRecorded(({ threadId, projectId }) => Effect.sync(() => removeRow(threadId, projectId)));
+  const detachRows = facts.subscribe((batch) => {
+    if (batch.reset) resync();
+    for (const gone of batch.removed) {
+      standing.delete(gone.threadId);
+      untrack([gone.threadId]);
+      if (gone.projectId !== null) removeRow(gone.threadId, gone.projectId);
+    }
+    for (const { summary, observed } of batch.rows) {
+      if (stood(summary) || shown(summary)) announce(summary, observed);
+      else untrack([summary.id]);
+    }
+  });
+  const detachRetainer = facts.retain({ wants, keeps: (row) => shown(row) || (everyone.size > 0 && standingOf(row) !== null) });
   const detach = live.subscribeStates((state) => {
-    phases.follow(state.thread.id, state.activeRun?.id ?? null);
-    const moved = attentionMoved(state);
-    if (listeners.size === 0 && !moved) return;
-    runFork(
-      watchedSummary(state.thread.id, moved).pipe(
-        Effect.map((row) => {
-          if (row !== undefined) announce(row, false);
-        }),
-        Effect.catchCause((cause) =>
-          Effect.sync(() => {
-            console.error('[tagma] thread list projection failed', { threadId: state.thread.id }, Cause.squash(cause));
-            resync();
-          }),
-        ),
-      ),
-    );
+    const held = facts.current(state.thread.id);
+    if (held !== undefined && lives.has(held.id) && lives.get(held.id) !== held.life && shown(held)) announce(held, false);
+    if (!attentionMoved(state) || facts.current(state.thread.id) !== undefined) return;
+    runFork(attended(state.thread.id));
   });
   const detachRegroups = folders.regrouped(regrouped);
-  const detachGate = gate.subscribe((change: LaunchBlock) => runFork(announceThread(change.threadId)));
+  const detachGate = gate.subscribe((change: LaunchBlock) => {
+    const row = facts.current(change.threadId);
+    if (row !== undefined && shown(row)) announce(row);
+  });
   yield* Effect.addFinalizer(() =>
     Effect.sync(() => {
-      detachBirths();
-      detachRemovals();
+      detachRows();
+      detachRetainer();
       detachRegroups();
       detachGate();
       detach();
@@ -510,6 +575,7 @@ export const makeThreadList = Effect.gen(function* () {
         if (held.size === 0 && listeners.get(listId) === held) {
           listeners.delete(listId);
           releaseCounts(audience.close(listId));
+          untrack(phases.watched());
         }
       };
     },
@@ -539,10 +605,10 @@ export const makeThreadList = Effect.gen(function* () {
         (beyond) => (beyond ? ('beyond' as const) : ('subtree' as const)),
       ),
 
-    serveOpenCalls: (read) => {
-      openCalls = read;
+    serveCuts: (cut) => {
+      cuts = cut;
       return () => {
-        if (openCalls === read) openCalls = null;
+        if (cuts === cut) cuts = null;
       };
     },
 

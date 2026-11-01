@@ -78,6 +78,7 @@ export const executions = manifest({
       history: [command, commandDelivery, commandFence, commandWait, custodyNotice, terminalIntent, terminalRequestKey],
     };
   },
+  rowFacts: async () => ({ rows: [(await import('./contract/service/commands.js')).deliveryRows.raw], selections: [] }),
   live,
   settings: [...EXECUTION_SETTING_KEYS],
   settingSections: EXECUTION_SETTING_SECTIONS,

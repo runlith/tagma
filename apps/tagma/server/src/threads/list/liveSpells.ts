@@ -3,7 +3,7 @@ import { Effect } from 'effect';
 import { MachineStore } from '../../platform/contract/service/store.js';
 import { writes } from '../../platform/contract/service/writes.js';
 import { WorkSpells } from '../../thread-record/contract/service/spells.js';
-import { threadLiveSpell } from '../store/mandate.js';
+import { spellRows, threadLiveSpell } from '../store/mandate.js';
 import { liveRootOf } from '../../thread-record/lineage.js';
 import { recordsAs } from '../../thread-record/facts.js';
 import { activeSessions } from './select.js';
@@ -11,7 +11,7 @@ import { activeSessions } from './select.js';
 export const makeThreadLiveSpells = Effect.gen(function* () {
   const { db } = yield* MachineStore;
   return WorkSpells.of({
-    writes: writes('ThreadLiveSpells', [threadLiveSpell]),
+    writes: writes('ThreadLiveSpells', [spellRows]),
     begin: (threadId, at, tx) =>
       Effect.asVoid(
         tx.run(

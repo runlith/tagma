@@ -7,7 +7,6 @@ import { MachineUnits } from '../../platform/contract/service/units.js';
 import { writes } from '../../platform/contract/service/writes.js';
 import {
   command,
-  commandDelivery,
   commandWait,
   openTerminal,
   terminal,
@@ -15,6 +14,7 @@ import {
   terminalRequestKey,
   terminalRequestKeyTally,
 } from '../store/terminal.js';
+import { deliveryRows } from '../contract/service/commands.js';
 import { ThreadId } from '../../platform/contract/wire/thread.js';
 import { actorOfPrincipal } from './principals.js';
 import { type TerminalIntent, type TerminalQuarantine, type TerminalRecord } from '../contract/wire/terminals.js';
@@ -49,7 +49,7 @@ export const makeTerminalReconciliation = Effect.fnUntraced(function* ({ install
     if (summary.state.lifetime === 'command') {
       const origin = yield* units.read((unit) => intents.commandOrigin(unit, key.projectId, key.operationId));
       if (origin === null) return null;
-      const record = yield* units.write(writes('TerminalReconciliation.record', [command, commandWait, commandDelivery]), (unit) =>
+      const record = yield* units.write(writes('TerminalReconciliation.record', [command, commandWait, deliveryRows]), (unit) =>
         commandRows.admitCommand(unit, key, execution),
       );
       return { _tag: 'Command', record } as const;

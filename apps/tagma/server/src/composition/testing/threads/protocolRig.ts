@@ -23,7 +23,7 @@ import { TerminalWriting } from '../../../executions/contract/service/writing.js
 import { MachineStore } from '../../../platform/contract/service/store.js';
 import { shippedChain } from '../../../platform/store/chain.js';
 import { MachineUnits } from '../../../platform/contract/service/units.js';
-import { writes } from '../../../platform/contract/service/writes.js';
+import { kernelWrites } from '../../../native-harness/testing/doubles.js';
 import { unitsLayer } from '../../../platform/store/units.js';
 import { runGit } from '../../../platform/git/ownGit.js';
 import { machineFileLayer } from '../../../platform/store/open.js';
@@ -316,7 +316,7 @@ export const protocolRig = Effect.fn('testing.protocolRig')(function* (fixture: 
       Effect.flatMap(threadStore(records, ENTRY_KINDS), (threads) => nativeThreadRows(threads, records)),
       world.context,
     );
-    yield* units.write(writes(`${fixture}.birth`, []), (unit) =>
+    yield* units.write(kernelWrites(), (unit) =>
       rows.attachFacet(
         {
           threadId: id,
@@ -634,7 +634,7 @@ export const protocolRig = Effect.fn('testing.protocolRig')(function* (fixture: 
         pictures,
         held,
         providers,
-        writes(`${fixture}.turns`, []),
+        kernelWrites(),
       );
       return {
         harness,

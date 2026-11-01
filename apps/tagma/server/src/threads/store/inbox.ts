@@ -27,7 +27,7 @@ import { and, asc, desc, eq, gt, gte, inArray, isNotNull, isNull, lt, lte, max, 
 import { threadRecord } from '../../thread-record/store/table.js';
 import { MachineStore } from '../../platform/contract/service/store.js';
 import { MachineUnits, type Unit } from '../../platform/contract/service/units.js';
-import { threadInbox, threadInboxWake } from './tables.js';
+import { inboxRows, threadInbox, threadInboxWake } from './tables.js';
 import { threadCall } from './calls.js';
 import { inUnit, stored, trusted, type StoredFailure } from '../../platform/store/crossing.js';
 import { among } from '../../platform/store/rows.js';
@@ -54,7 +54,7 @@ import {
 import type { HarnessExecutionRef } from '../contract/wire/harness/observation.js';
 import type { ThreadAttachmentRef } from '@runlith/agent/transcript/attachments';
 
-const inboxing = writes('ThreadInbox.write', [threadInbox, threadInboxWake, threadCall]);
+const inboxing = writes('ThreadInbox.write', [inboxRows, threadInboxWake, threadCall]);
 
 const READER_WORDS_KINDS = ['turn', 'signal'] as const;
 const READER_WORDS_ROWS = 256;

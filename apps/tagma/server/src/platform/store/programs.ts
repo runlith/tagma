@@ -244,7 +244,12 @@ const submitted = Effect.fnUntraced(function* <Brand extends StoreBrand, A, E>(
               Effect.provideService(
                 programs.submit({
                   operation: set.operation,
-                  program: { statements: building.statements.map(({ set: _set, ...statement }) => statement) },
+                  program: {
+                    statements: building.statements.map(({ set: _set, ...statement }) => statement),
+                    projections: building.sets.some((set) => set.projections === 'effects')
+                      ? 'effects'
+                      : [...new Set(building.sets.flatMap((set) => (set.projections === 'effects' ? [] : [...(set.projections ?? [])])))],
+                  },
                   synchronous: classed ? (building.sets.every((each) => each.durability === 'relaxed') ? 'normal' : 'full') : null,
                 }),
                 CurrentWriter,

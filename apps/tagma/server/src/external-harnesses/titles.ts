@@ -7,7 +7,7 @@ import type { StoredFailure } from '../platform/store/crossing.js';
 import type { HarnessBinding } from '../threads/contract/wire/harness/observation.js';
 import type { ThreadRecords } from '../thread-record/contract/service/records.js';
 import type { TitleProvenance } from '../thread-record/contract/wire/title.js';
-import { threadRecord } from '../thread-record/store/table.js';
+import { recordRows, threadRecord } from '../thread-record/store/table.js';
 import { externalSession } from '../threads/store/harnessFacet.js';
 import type { Settings } from '../settings/contract/service/values.js';
 import { autoTitle } from '../threads/contract/wire/settings.js';
@@ -33,7 +33,7 @@ export const adoptSessionTitle = (
   const key = binding.rootKey ?? binding.workKey ?? null;
   if (title.trim() === '' || binding.sessionId === null || binding.execution === null || key === null) return Effect.succeed(false);
   const execution = binding.execution;
-  return units.write(writes('external.adoptSessionTitle', [threadRecord]), (unit) =>
+  return units.write(writes('external.adoptSessionTitle', [recordRows]), (unit) =>
     Effect.gen(function* () {
       const record = yield* records.facts(threadId, unit);
       if (record === undefined || record.parentId !== null) return false;

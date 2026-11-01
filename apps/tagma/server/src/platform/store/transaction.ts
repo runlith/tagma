@@ -59,6 +59,7 @@ export class WriterTimings {
     if (timing.source === 'reader') return;
     for (const frame of this.open) {
       frame.statements += 1;
+      if (timing.enclosed === true) continue;
       frame.execMs += timing.execMs;
       frame.queueMs += timing.queueMs;
       frame.totalMs += timing.totalMs;

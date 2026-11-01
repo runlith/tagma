@@ -34,6 +34,21 @@ import type { BytesOptions } from './records.js';
 import type { TerminalFailure } from './terminals.js';
 import type { TerminalAdopters } from './adopters.js';
 import type { CallDebt, CallDebts } from './notices.js';
+import { sql, type SQL } from 'drizzle-orm';
+import { commandDelivery } from '../../store/terminal.js';
+import { projectRows } from '../../../platform/contract/service/projections.js';
+
+export const deliveryRows = projectRows({
+  id: 'executions.delivery',
+  table: commandDelivery,
+  keys: ['executionId'],
+  address: 'threadId',
+  columns: { executionId: commandDelivery.executionId, threadId: commandDelivery.threadId },
+});
+
+export const commandOwedThreads: SQL = sql`select ${commandDelivery.threadId} as id from ${commandDelivery}`;
+export const commandOwing = (thread: SQL): SQL<number> =>
+  sql<number>`exists (select 1 from (${commandOwedThreads}) debt where debt.id = ${thread})`;
 
 export type CommandAuthority<TPrepared> = {
   readonly prepared: TPrepared;

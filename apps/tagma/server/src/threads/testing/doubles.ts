@@ -5,7 +5,7 @@ import { makeSqliteThreadJournal, planHead, type SqliteThreadJournal } from '../
 import { makeBaseReach, type LayerSources } from '../journal/base.js';
 import type { ThreadEventInsert } from '@runlith/agent/thread/storage/eventLog';
 import { programWriteUnit } from '../../platform/store/programs.js';
-import { threadRecord } from '../../thread-record/store/table.js';
+import { recordRows } from '../../thread-record/store/table.js';
 import { RestedRollouts } from '../contract/service/rested.js';
 import { makeConversationReads } from '../journal/conversationReads.js';
 import { makeModelChanges } from '../events/modelChanges.js';
@@ -67,7 +67,7 @@ import {
 import { foldedToolFact as foldedToolFactOver } from '../journal/foldedFacts.js';
 import { evictThreadProjection as evictThreadProjectionOver } from '../journal/rest.js';
 import { compressRollout as compressRolloutOver } from '../journal/rolloutForms.js';
-import { thread as threadTable, threadEntry as threadEntryTable, threadRun as threadRunTable } from '../store/kernel.js';
+import { nativeRows, thread as threadTable, threadEntry as threadEntryTable, threadRun as threadRunTable } from '../store/kernel.js';
 import {
   conversationWrites,
   threadBase as threadBaseTable,
@@ -168,6 +168,7 @@ import {
 } from '../collaboration/signals.js';
 import type { IdleDelivery } from '../collaboration/signals.js';
 import { makeOwnWork } from '../collaboration/ownWork.js';
+import { makeThreadRows } from '../list/rows.js';
 import { makeEventReads } from '../events/reads.js';
 import { OwnWork } from '../contract/service/ownWork.js';
 import { standingOf } from '../events/standing.js';
@@ -417,7 +418,7 @@ export const appendedInProgram = (
   events: readonly ThreadEventInsert[],
 ) =>
   units.program(
-    writes('testing.appendedInProgram', [threadEventTable, threadTable, threadRecord], conversationWrites),
+    writes('testing.appendedInProgram', [threadEventTable, nativeRows, recordRows], conversationWrites),
     `testing:${threadId}:${head}`,
     (program) => {
       planHead(program, threadId, head);
@@ -644,6 +645,8 @@ export const asCommandSignalSend = (value: CommandSignalSend): CommandSignalSend
 export const asIdleDelivery = (value: IdleDelivery): IdleDelivery => value;
 
 export const ownWork = () => makeOwnWork;
+
+export const threadRows = (kinds: ThreadEntryReader) => Effect.provideService(makeThreadRows, ThreadEntryKinds, kinds);
 
 export const eventReads = () => makeEventReads;
 

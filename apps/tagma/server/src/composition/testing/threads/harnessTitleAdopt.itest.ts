@@ -13,9 +13,7 @@ import {
   modelChanges,
 } from '../../../threads/testing/doubles.js';
 import type { ThreadRecords } from '../../../thread-record/contract/service/records.js';
-import { threadRecord } from '../../../thread-record/testing/doubles.js';
 import { makeThreadRecords } from '../../../thread-record/layer.js';
-import { writes } from '../../../platform/contract/service/writes.js';
 import { adoptSessionTitle } from '../../../external-harnesses/titles.js';
 import { threadStack, type ThreadParts } from '../threadParts.js';
 import { HarnessObservations, terminalArgv } from '../../../external-harnesses/testing/doubles.js';
@@ -137,16 +135,10 @@ const setup = Effect.fnUntraced(function* () {
       return yield* meta({ model: { _tag: 'NotRead' }, effort: { _tag: 'NotRead' }, title: titleValue(value, minute) });
     });
     const identity = () => titleIdentity(records, threadId);
-    const setTitle = (title: string) =>
-      demo.graph.units.write(writes('harnessTitleAdopt.setTitle', [threadRecord()]), (unit) =>
-        records.setTitle(unit, threadId, title, 'manual'),
-      );
+    const setTitle = (title: string) => demo.graph.units.write(records.writes, (unit) => records.setTitle(unit, threadId, title, 'manual'));
     const name = (title: string, revision: number) =>
-      demo.graph.units.write(writes('harnessTitleAdopt.name', [threadRecord()]), (unit) =>
-        records.nameTitle(unit, threadId, title, revision),
-      );
-    const claim = (input: string) =>
-      demo.graph.units.write(writes('harnessTitleAdopt.claim', [threadRecord()]), (unit) => records.claimTitleInput(unit, threadId, input));
+      demo.graph.units.write(records.writes, (unit) => records.nameTitle(unit, threadId, title, revision));
+    const claim = (input: string) => demo.graph.units.write(records.writes, (unit) => records.claimTitleInput(unit, threadId, input));
     const adopt = (title: string, revision: number, binding: ReturnType<typeof asHarnessBinding>) =>
       adoptSessionTitle(demo.graph.store.db, demo.graph.units, records, threadId, title, revision, binding);
     const order = Effect.fnUntraced(function* () {

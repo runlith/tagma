@@ -10,12 +10,14 @@ import { type CopyEvent, ServedGraphs } from '../../../graph/contract/service/se
 import { CopyKeeping } from '../../../graph/serving/copies.js';
 import { graphPool, machineGraphOf } from '../../../graph/testing/doubles.js';
 import { Projects } from '../../../projects/contract/service/registry.js';
-import { ThreadLive } from '../../../threads/contract/service/engine.js';
+import { type ThreadActivity, type ThreadRowBatch, ThreadRows } from '../../../threads/contract/service/rows.js';
 import { ThreadPlacement } from '../../../threads/contract/service/placement.js';
-import type { NativeThreadState } from '../../../threads/contract/service/state.js';
 import type { FileRoot } from '../../../workspace/contract/wire/roots.js';
 import { threadCopiesLayer } from '../../threadCopies.js';
-import { makeThreadLiveFeed } from '@runlith/agent/thread/run/ThreadLiveFeed';
+
+const unread = (): never => {
+  throw new Error('graph copies read only running activity');
+};
 
 const next = Effect.fnUntraced(function* (events: Queue.Queue<CopyEvent>, kind: CopyEvent['kind'], treeRoot: string) {
   for (;;) {
@@ -49,7 +51,8 @@ layer(demoGraphLayer({ repos: ['alpha'] }).pipe(Layer.provideMerge(BunFileSystem
             const events = yield* Queue.unbounded<CopyEvent>();
             const unsubscribe = pool.copies.subscribe((event) => Queue.offerUnsafe(events, event));
             yield* Effect.addFinalizer(() => Effect.sync(unsubscribe));
-            const live = yield* makeThreadLiveFeed<NativeThreadState>();
+            const running = new Map<string, ThreadActivity>();
+            const listeners = new Set<(batch: ThreadRowBatch) => void>();
             const roots: { current: readonly FileRoot[] } = { current: [] };
             yield* Layer.build(
               threadCopiesLayer.pipe(
@@ -61,23 +64,28 @@ layer(demoGraphLayer({ repos: ['alpha'] }).pipe(Layer.provideMerge(BunFileSystem
                       ThreadPlacement,
                       ThreadPlacement.of({ rootOf: () => Effect.succeed(null), rootsOf: () => Effect.succeed(roots.current) }),
                     ),
-                    Layer.succeed(ThreadLive, live),
+                    Layer.mock(ThreadRows, {
+                      current: unread,
+                      latest: unread,
+                      retain: unread,
+                      release: unread,
+                      waiting: unread,
+                      waitingIds: unread,
+                      activities: () => running,
+                      subscribe: (listener) => {
+                        listeners.add(listener);
+                        return () => void listeners.delete(listener);
+                      },
+                    }),
                   ),
                 ),
               ),
             );
-            const state = (running: boolean, rootId: string | null) =>
-              live.publishState({
-                state: {
-                  thread: { id: 'runner', projectId: alpha.id },
-                  position: 0,
-                  activeRun: running ? { id: 'run' } : null,
-                  latestRun: { id: 'run' },
-                  place: rootId === null ? null : { rootId, branch: null },
-                } as unknown as NativeThreadState,
-                from: 0,
-                deltas: [],
-              });
+            const state = (active: boolean, rootId: string | null) => {
+              if (active) running.set('runner', { threadId: 'runner', projectId: alpha.id, parentThreadId: null, rootId, runId: 'run' });
+              else running.delete('runner');
+              for (const listener of listeners) listener({ rows: [], removed: [], activity: true, reset: false });
+            };
 
             state(true, null);
             const main = yield* pool.resolve({ projectId: alpha.id });

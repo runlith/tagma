@@ -2,6 +2,7 @@ import { check, index, integer, primaryKey, sqliteTable, text } from 'drizzle-or
 import { sql } from 'drizzle-orm';
 import type { AgentThreadRef, PendingRuntimeGuide } from '@runlith/agent/contracts';
 import { threadRecord } from '../../thread-record/store/table.js';
+import { projectRows } from '../../platform/contract/service/projections.js';
 
 export const threadCall = sqliteTable(
   'thread_call',
@@ -44,6 +45,14 @@ export const owedCall = sqliteTable(
     index('owed_call_opened_idx').on(table.openedAt, table.runId, table.toolCallId),
   ],
 );
+
+export const owedRows = projectRows({
+  id: 'threads.owed',
+  table: owedCall,
+  keys: ['runId', 'toolCallId'],
+  address: 'threadId',
+  columns: { runId: owedCall.runId, toolCallId: owedCall.toolCallId, threadId: owedCall.threadId },
+});
 
 export const spentCallKey = sqliteTable(
   'spent_call_key',

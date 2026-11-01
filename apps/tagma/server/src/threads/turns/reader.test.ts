@@ -153,7 +153,7 @@ const setup = Effect.gen(function* () {
           announceFolders: unused,
           resync: unused,
           serveArchiving: unused,
-          serveOpenCalls: unused,
+          serveCuts: unused,
           setPinned: () => Effect.die(new Error('the store refused the pin')),
         }),
       ),

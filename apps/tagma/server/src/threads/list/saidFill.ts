@@ -3,12 +3,12 @@ import type { StoreDb, StoreFailure } from '../../platform/contract/service/stor
 import type { MachineUnits } from '../../platform/contract/service/units.js';
 import { writes } from '../../platform/contract/service/writes.js';
 import type { ThreadList } from '../contract/service/list.js';
-import { threadRun } from '../store/kernel.js';
+import { runRows, threadRun } from '../store/kernel.js';
 import { saidOfShown, unsaidThreads } from './said.js';
 
 const PORTION_MS = 25;
 
-const filling = writes('thread.said.fill', [threadRun]);
+const filling = writes('thread.said.fill', [runRows]);
 
 export const fillSaid = Effect.fn('ThreadList.said.fill')(function* (
   db: StoreDb<'machine'>,

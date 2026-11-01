@@ -5,7 +5,7 @@ import { threadRecord } from '../../thread-record/store/table.js';
 import type { StoreDb, StoreFailure } from '../../platform/contract/service/store.js';
 import type { MachineUnits, Unit } from '../../platform/contract/service/units.js';
 import { writes } from '../../platform/contract/service/writes.js';
-import { thread } from '../../threads/store/kernel.js';
+import { nativeRows, thread } from '../../threads/store/kernel.js';
 import { declareCapabilities, type DeclaredByAgent } from '../../threads/store/seat.js';
 import { GateRefusal } from '../../platform/contract/wire/refusal.js';
 import { ProtocolRow } from '../protocol/row.js';
@@ -32,7 +32,7 @@ export class ProtocolRows {
   ) {}
 
   declare(threadId: string, declared: DeclaredByAgent): Effect.Effect<void, StoreFailure> {
-    return this.units.write(writes('ProtocolRows.declare', [thread]), (unit) => declareCapabilities(this.db, unit, threadId, declared));
+    return this.units.write(writes('ProtocolRows.declare', [nativeRows]), (unit) => declareCapabilities(this.db, unit, threadId, declared));
   }
 
   load(threadId: string): Effect.Effect<ProtocolRow | null, StoreFailure | GateRefusal> {

@@ -36,8 +36,8 @@ import { currentEffort, currentModel } from '../contract/wire/harness/observatio
 import { harnessSessionActive } from '../contract/wire/harness/session.js';
 import { nativeCapabilities, servedSelection, type KernelSeat } from '../contract/wire/harness/seat.js';
 import { mandateFacts } from '../mandate.js';
-import { deleteSession, externalSession, insertSession, recoverableSession } from '../store/harnessFacet.js';
-import { thread, threadRun } from '../store/kernel.js';
+import { deleteSession, externalSession, insertSession, recoverableSession, sessionFacts } from '../store/harnessFacet.js';
+import { nativeRows, thread, threadRun } from '../store/kernel.js';
 import { bindingOf, capabilitiesOf, switchesOf } from '../store/seat.js';
 import { keptSwitches } from '@runlith/llm/models/description';
 
@@ -80,7 +80,7 @@ export const makeHarnessMoves = Effect.fnUntraced(function* ({
   const runs = yield* ThreadRunning;
   const rebinding = yield* ThreadRebinding;
   const admission = yield* RunAdmission;
-  const handing = writes('HarnessMoves.handover', [thread, externalSession], records.writes, rebinding.writes);
+  const handing = writes('HarnessMoves.handover', [nativeRows, sessionFacts], records.writes, rebinding.writes);
 
   const handover = Effect.fn('HarnessMoves.handover')(function* (
     threadId: string,

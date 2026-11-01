@@ -11,7 +11,8 @@ import * as Client from 'effect/sql/SqlClient';
 import * as Statement from 'effect/sql/Statement';
 import { classifySqliteError, SqlError } from 'effect/sql/SqlError';
 import * as Exit from 'effect/Exit';
-import type { Synchronous } from './channel.js';
+import * as Option from 'effect/Option';
+import type { ProjectionWrite, RowCommit, RowProjection, RowSelection, Synchronous } from './channel.js';
 import { openConnection, type ProcessConnection, type SpawnedChild, type StatementTiming } from './connection.js';
 import { makePrograms, Programs } from './programs.js';
 import { makeReaderPool, type OpenReader, type PoolState, type ReaderPool } from './ReaderPool.js';
@@ -29,7 +30,17 @@ export type SqliteProcessConfig = SqliteClientConfig & {
   readonly checkStatement?: ((sql: string) => Effect.Effect<void, SqlError>) | undefined;
   readonly synchronous?: Synchronous | undefined;
   readonly fullfsync?: boolean | undefined;
+  readonly projectionWrite?: (context: Context.Context<never>) => ProjectionWrite;
 };
+
+export class RowCommits extends Context.Service<
+  RowCommits,
+  {
+    readonly install: (projections: readonly RowProjection[], selections?: readonly RowSelection[]) => Effect.Effect<void, SqlError>;
+    readonly reset: (projections: readonly RowProjection[]) => Effect.Effect<void, SqlError>;
+    readonly listen: (listener: (commit: RowCommit) => void) => () => void;
+  }
+>()('@runlith/sqlite-process/RowCommits') {}
 
 export type ReaderEvent =
   | { readonly _tag: 'ReaderLost'; readonly reason: string }
@@ -92,15 +103,16 @@ export const synchronously =
 export const sqliteProcessLayer = (
   config: SqliteProcessConfig,
   processes: ProcessPool,
-): Layer.Layer<SqliteClient | Client.SqlClient | Readers | Connections | Programs> =>
+): Layer.Layer<SqliteClient | Client.SqlClient | Readers | Connections | Programs | RowCommits> =>
   Layer.effectContext(
     Effect.orDie(
-      Effect.map(make(processes, config), ({ client, readers, connections, programs }) =>
+      Effect.map(make(processes, config), ({ client, readers, connections, programs, rows }) =>
         Context.make(SqliteClient, client).pipe(
           Context.add(Client.SqlClient, client),
           Context.add(Readers, readers),
           Context.add(Connections, connections),
           Context.add(Programs, programs),
+          Context.add(RowCommits, rows),
         ),
       ),
     ),
@@ -137,11 +149,23 @@ const make = Effect.fnUntraced(function* (processes: ProcessPool, options: Sqlit
   const transformRows = options.transformResultNames ? Statement.defaultTransforms(options.transformResultNames).array : undefined;
 
   const report = options.onStatement;
+  const listeners = new Set<(commit: RowCommit) => void>();
+  yield* Effect.addFinalizer(() => Effect.sync(() => listeners.clear()));
   const writer = yield* openConnection(processes, {
     ...options,
     durable: options.synchronous !== 'off',
     checkConnection: live,
     onStatement: report === undefined ? undefined : (timing) => report({ ...timing, source: 'writer' }),
+    onCommit: (commits) => {
+      for (const commit of commits)
+        for (const listener of listeners) {
+          try {
+            listener(commit);
+          } catch (cause) {
+            console.error('a committed row listener failed', cause);
+          }
+        }
+    },
   });
   if (options.fullfsync === true) {
     yield* writer.executeRaw('PRAGMA fullfsync = ON', []);
@@ -330,5 +354,22 @@ const make = Effect.fnUntraced(function* (processes: ProcessPool, options: Sqlit
   yield* Effect.addFinalizer(() =>
     Effect.flatMap(handingOver, (requested) => (requested ? connections.handover.pipe(Effect.orDie) : Effect.void)),
   );
-  return { client, readers: Readers.of({ state: Effect.sync(() => pool?.state) }), connections, programs };
+  const rows = RowCommits.of({
+    install: (projections, selections = []) => Effect.scoped(Effect.andThen(permit.exclusive, writer.project(projections, selections))),
+    reset: (projections) =>
+      Effect.withFiber((fiber) =>
+        Option.match(Context.getOption(fiber.context, client.transactionService), {
+          onNone: () => Effect.fail(snapshotRefused('A row reset requires the original writer transaction.')),
+          onSome: ([connection, depth]) =>
+            connection !== writer || depth !== 0
+              ? Effect.fail(snapshotRefused('A row reset belongs to the outermost original writer transaction.'))
+              : writer.project(projections, [], true),
+        }),
+      ),
+    listen: (listener) => {
+      listeners.add(listener);
+      return () => void listeners.delete(listener);
+    },
+  });
+  return { client, readers: Readers.of({ state: Effect.sync(() => pool?.state) }), connections, programs, rows };
 });

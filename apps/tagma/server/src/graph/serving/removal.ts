@@ -13,7 +13,7 @@ import type { Act } from '../contract/service/acts.js';
 import type { Tags } from '../contract/service/vocabulary.js';
 import { ActState } from '../contract/service/transaction.js';
 import type { GateRefusal } from '../../platform/contract/wire/refusal.js';
-import { writes } from '../../platform/contract/service/writes.js';
+import { projectedEffects, writes } from '../../platform/contract/service/writes.js';
 import { projecting, referencing } from '../store/actWrites.js';
 import { setting } from '../../settings/store/table.js';
 import type { policyRows } from './policy.js';
@@ -54,15 +54,17 @@ export const projectRemoval = (input: {
   });
 
   const takeBack = (row: ProjectRow): Effect.Effect<void, StoreFailure | GateRefusal> =>
-    machine.transaction(writes('project.rollback', [threadRecord, project, groupMember, projectRoot, projectRootCover]), (unit) =>
-      act.unit(
-        purging,
-        Effect.gen(function* () {
-          yield* purgeGraph(row.id);
-          yield* db.delete(event).where(eq(event.projectId, row.id));
-          yield* projects.forget(unit, row);
-        }),
-      ),
+    machine.transaction(
+      projectedEffects(writes('project.rollback', [threadRecord, project, groupMember, projectRoot, projectRootCover])),
+      (unit) =>
+        act.unit(
+          purging,
+          Effect.gen(function* () {
+            yield* purgeGraph(row.id);
+            yield* db.delete(event).where(eq(event.projectId, row.id));
+            yield* projects.forget(unit, row);
+          }),
+        ),
     );
 
   const remove = Effect.fn('ProjectLifecycle.remove')(function* (input: { ref: string }) {

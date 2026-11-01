@@ -106,6 +106,12 @@ export const makePrograms = Effect.fnUntraced(function* (input: ProgramWriter) {
         member.cost.counts.writerWaitMs += queueMs;
         member.cost.counts.writerHoldMs += heldMs;
         member.cost.counts.responseBytes += programOutcomeBytes(outcome);
+        for (const work of said.projectionWork ?? [])
+          if (work.program === index) {
+            member.cost.counts.statements++;
+            member.cost.counts.statementMs += work.execMs;
+            member.cost.counts.statementExecMs += work.execMs;
+          }
       }
       if (member.frame !== null) {
         member.frame.waitMs += queueMs;
@@ -131,8 +137,14 @@ export const makePrograms = Effect.fnUntraced(function* (input: ProgramWriter) {
       input.settled(undefined);
       const cost = batch[0]?.cost;
       if (cost !== null && cost !== undefined) cost.counts.responseBytes += thrownBytes(said.thrown);
-      for (const member of batch) {
+      for (const [index, member] of batch.entries()) {
         if (member.cost !== null) {
+          for (const work of said.projectionWork ?? [])
+            if (work.program === index) {
+              member.cost.counts.statements++;
+              member.cost.counts.statementMs += work.execMs;
+              member.cost.counts.statementExecMs += work.execMs;
+            }
           member.cost.counts.writerWaitMs += said.queueMs;
           member.cost.counts.writerHoldMs += said.execMs / batch.length;
         }
@@ -233,7 +245,7 @@ export const makePrograms = Effect.fnUntraced(function* (input: ProgramWriter) {
         const observed = Context.get(fiber.context, CurrentWriter);
         const frame = observed !== null && (observed.owner === null || observed.owner === input.writer) ? observed : null;
         if (frame !== null) frame.owner = input.writer;
-        let bytes = 0;
+        let bytes = submission.program.projections === 'effects' ? 7 : parameterBytes(submission.program.projections ?? []);
         for (const statement of submission.program.statements)
           bytes += Buffer.byteLength(statement.sql, 'utf8') + parameterBytes(statement.params);
         if (cost !== null) {

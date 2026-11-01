@@ -1948,6 +1948,27 @@ export const ALLOWED: SwallowedFailuresParams['allow'] = [
     why: 'A badge push off the request path; a failed recount is logged and the next held change or list read counts again.',
   },
   {
+    path: 'apps/tagma/server/src/threads/list/threadList.ts',
+    symbol: 'makeThreadList.reachFamily',
+    form: 'catchCause',
+    site: 'fe4ec998',
+    why: 'A family joining a list off the commit path; a failed family read is logged and resyncs the lists, which re-read their windows exactly.',
+  },
+  {
+    path: 'apps/tagma/server/src/threads/list/threadList.ts',
+    symbol: 'makeThreadList.attended',
+    form: 'catchCause',
+    site: '989812ee',
+    why: 'An attention row read off the commit path; a failed read is logged and resyncs the lists and attention listeners, which re-read exactly.',
+  },
+  {
+    path: 'apps/tagma/server/src/threads/list/rows.ts',
+    symbol: 'makeThreadRows.hydrate',
+    form: 'catchCause',
+    site: 'de61a595',
+    why: 'A background hydration of wanted rows; a failure is logged and replaced by one exact recovery cut of every held row.',
+  },
+  {
     path: 'apps/tagma/server/src/threads/turns/adjustments.ts',
     symbol: 'makeThreadAdjustments.setDelegation',
     form: 'catch',

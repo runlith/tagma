@@ -62,7 +62,7 @@ import { type AssemblyInvalid, type Started, start } from './start.js';
 import { MachineUnits, GraphUnits } from '../platform/contract/service/units.js';
 import type { GraphSteps } from '../graph/contract/service/steps.js';
 import { platform } from '../platform/platform.js';
-import { lazyLayer, manifests } from '../platform/contract/service/manifest.js';
+import { lazyLayer, manifests, rowFactsOf } from '../platform/contract/service/manifest.js';
 import { remote } from '../remote/remote.js';
 import { Exposure } from '../remote/contract/service/exposure.js';
 import { Sender } from '../push/contract/service/sender.js';
@@ -416,7 +416,9 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
       options.seedPath ?? seedDirectory(),
       harnessIdentity(adapters),
       options.grants,
-      yield* snapshotAssembly(assembly.snapshotParticipants, storePath, dirname(options.tokensPath), processes),
+      yield* snapshotAssembly(assembly.snapshotParticipants, storePath, dirname(options.tokensPath), processes, () =>
+        rowFactsOf(assembly.modules),
+      ),
     ),
     (started) => Scope.close(started.scope, Exit.void),
   );

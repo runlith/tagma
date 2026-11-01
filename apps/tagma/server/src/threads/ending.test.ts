@@ -74,7 +74,7 @@ const stand = Effect.fnUntraced(function* (
       announceFolders: unexpected,
       resync: unexpected,
       serveArchiving: unexpected,
-      serveOpenCalls: unexpected,
+      serveCuts: unexpected,
     }),
     Layer.succeed(McpForgetting, {
       forget: (id) => {

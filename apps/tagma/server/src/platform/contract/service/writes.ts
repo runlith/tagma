@@ -1,11 +1,13 @@
 import { getTableName, type Table } from 'drizzle-orm';
 import { Context, Data } from 'effect';
 import type { DurabilityClass } from './durability.js';
+import type { RowProjection } from './projections.js';
 
 export type WriteSet = {
   readonly operation: string;
   readonly durability: DurabilityClass;
   readonly reach: ReadonlyMap<string, ReadonlySet<string> | 'all'>;
+  readonly projections?: ReadonlySet<string> | 'effects';
 };
 
 const reachOf = (tables: readonly Table[], joined: readonly WriteSet[]): ReadonlyMap<string, ReadonlySet<string> | 'all'> => {
@@ -19,11 +21,25 @@ const reachOf = (tables: readonly Table[], joined: readonly WriteSet[]): Readonl
   return reach;
 };
 
-export const writes = (operation: string, tables: readonly Table[], ...joined: readonly WriteSet[]): WriteSet => ({
-  operation,
-  durability: 'durable',
-  reach: reachOf(tables, joined),
-});
+export const writes = (operation: string, targets: readonly (Table | RowProjection)[], ...joined: readonly WriteSet[]): WriteSet => {
+  const projections = targets.filter((target): target is RowProjection => 'raw' in target);
+  return {
+    operation,
+    durability: 'durable',
+    reach: reachOf(
+      targets.map((target) => ('raw' in target ? target.table : target)),
+      joined,
+    ),
+    projections: joined.some((set) => set.projections === 'effects')
+      ? 'effects'
+      : new Set([
+          ...joined.flatMap((set) => (set.projections === 'effects' ? [] : [...(set.projections ?? [])])),
+          ...projections.map((projection) => projection.raw.id),
+        ]),
+  };
+};
+
+export const projectedEffects = (set: WriteSet): WriteSet => ({ ...set, projections: 'effects' });
 
 export type WriteSetMode = 'report' | 'refuse';
 

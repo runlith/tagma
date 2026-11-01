@@ -224,7 +224,10 @@ export const commandDelivery = sqliteTable(
     openedAt: integer('opened_at', { mode: 'timestamp_ms' }).notNull(),
     readers: integer('readers').notNull().default(0),
   },
-  (table) => [index('command_delivery_page_idx').on(table.openedAt, table.executionId)],
+  (table) => [
+    index('command_delivery_page_idx').on(table.openedAt, table.executionId),
+    index('command_delivery_thread_idx').on(table.threadId),
+  ],
 );
 
 export const custodyNotice = sqliteTable(

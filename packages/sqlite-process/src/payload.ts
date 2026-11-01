@@ -1,4 +1,4 @@
-import type { ProgramOutcome, ThrownShape } from './channel.js';
+import type { ProgramOutcome, RowCommit, ThrownShape } from './channel.js';
 
 const scalarBytes = (value: unknown): number => {
   if (value === null) return 1;
@@ -29,6 +29,7 @@ export const programOutcomeBytes = (outcome: ProgramOutcome): number => {
     case 'Applied': {
       let bytes = 'Applied'.length;
       for (const rows of outcome.returned ?? []) bytes += rowBytes(rows);
+      if (outcome.rows !== undefined) bytes += rowCommitBytes(outcome.rows);
       return bytes;
     }
     case 'Conflict':
@@ -43,6 +44,22 @@ const recordBytes = (record: object): number => {
   for (const key in record) {
     if (Object.hasOwn(record, key)) bytes += Buffer.byteLength(key, 'utf8') + scalarBytes((record as Record<string, unknown>)[key]);
   }
+  return bytes;
+};
+
+export const rowCommitBytes = (commit: RowCommit): number => {
+  let bytes = scalarBytes(commit.incarnation) + 16 + commit._tag.length;
+  if (commit._tag === 'Gap') return bytes;
+  for (const change of commit.changes)
+    bytes +=
+      scalarBytes(change.projection) +
+      change.kind.length +
+      parameterBytes(change.key) +
+      scalarBytes(change.address) +
+      scalarBytes(change.before) +
+      recordBytes(change.values);
+  for (const selected of commit.selected)
+    bytes += scalarBytes(selected.selection) + scalarBytes(selected.key) + (selected.values === null ? 1 : recordBytes(selected.values));
   return bytes;
 };
 

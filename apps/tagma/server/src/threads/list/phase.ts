@@ -2,9 +2,24 @@ import { entryOf } from '@runlith/agent/transcript/kinds';
 import { standingWork, toolStanding, type StandingSource } from '@runlith/agent/transcript/entries';
 import type { ThreadLiveEvent } from '@runlith/agent/thread/run/ThreadLiveFeed';
 import type { ThreadStateShape } from '@runlith/agent/thread/state';
-import type { ThreadOpenChange, ThreadOpenView } from '@runlith/agent/transcript/live';
+import type { ThreadLivePosition, ThreadLiveView, ThreadOpenChange, ThreadOpenView } from '@runlith/agent/transcript/live';
 import type { ThreadTranscriptEntry } from '@runlith/agent/transcript/rows';
 import type { ThreadPhase } from '../contract/wire/list.js';
+
+export type PhaseSeed = {
+  readonly activeRunId: string | null;
+  readonly storedOpen: readonly ThreadTranscriptEntry[];
+  readonly live: ThreadLiveView;
+};
+
+type Heard = { readonly changes: readonly ThreadOpenChange[]; readonly at: ThreadLivePosition };
+
+type Retained = {
+  readonly runId: string;
+  readonly view: ThreadOpenView | null;
+  readonly stored: readonly ThreadTranscriptEntry[];
+  readonly heard: Heard[];
+};
 
 type LiveWork = {
   phase: ThreadPhase['phase'];
@@ -26,13 +41,14 @@ export function phaseChanges<TState extends ThreadStateShape>(event: ThreadLiveE
 export class ThreadPhaseFeed {
   private readonly live = new Map<string, LiveWork>();
   private readonly watching = new Map<string, () => void>();
-  private readonly sowing = new Map<string, ThreadOpenChange[]>();
+  private readonly followed = new Map<string, string>();
+  private readonly cutting = new Map<string, Heard[]>();
+  private readonly retained = new Map<string, Retained>();
 
   constructor(
     private readonly options: {
-      watch(threadId: string, listener: (change: readonly ThreadOpenChange[]) => void): () => void;
-      view(threadId: string): ThreadOpenView;
-      journal(threadId: string, runId: string, deliver: (entries: readonly ThreadTranscriptEntry[]) => void): void;
+      watch(threadId: string, listener: (changes: readonly ThreadOpenChange[], at: ThreadLivePosition) => void): () => void;
+      cut(threadId: string, deliver: (seed: PhaseSeed | null) => void): void;
       onChanged(threadId: string): void;
     },
   ) {}
@@ -46,19 +62,29 @@ export class ThreadPhaseFeed {
       this.release(threadId);
       return;
     }
-    if (this.watching.has(threadId)) return;
-    const waiting: ThreadOpenChange[] = [];
-    this.sowing.set(threadId, waiting);
-    this.watching.set(
-      threadId,
-      this.options.watch(threadId, (changes) => this.hear(threadId, changes)),
-    );
-    const open = this.options.view(threadId);
-    this.take(threadId, [
-      ...open.open.map((entry): ThreadOpenChange => ({ op: 'put', entry })),
-      { op: 'progress', progress: open.progress },
-    ]);
-    this.options.journal(threadId, runId, (entries) => this.sow(threadId, waiting, entries));
+    const standing = this.followed.get(threadId);
+    if (standing === runId) return;
+    this.followed.set(threadId, runId);
+    if (!this.watching.has(threadId)) {
+      this.watching.set(
+        threadId,
+        this.options.watch(threadId, (changes, at) => this.hear(threadId, changes, at)),
+      );
+    }
+    if (standing !== undefined && this.live.delete(threadId)) this.options.onChanged(threadId);
+    const kept = this.retained.get(threadId);
+    this.retained.delete(threadId);
+    if (kept?.runId === runId) {
+      this.seed(threadId, kept.view, kept.stored, kept.heard);
+      return;
+    }
+    const heard: Heard[] = [];
+    this.cutting.set(threadId, heard);
+    this.options.cut(threadId, (seed) => this.settle(threadId, heard, seed));
+  }
+
+  watched(): readonly string[] {
+    return [...this.watching.keys()];
   }
 
   dispose(): void {
@@ -68,22 +94,62 @@ export class ThreadPhaseFeed {
   private release(threadId: string): void {
     this.watching.get(threadId)?.();
     this.watching.delete(threadId);
-    this.sowing.delete(threadId);
+    this.followed.delete(threadId);
+    this.cutting.delete(threadId);
+    this.retained.delete(threadId);
     if (this.live.delete(threadId)) this.options.onChanged(threadId);
   }
 
-  private hear(threadId: string, changes: readonly ThreadOpenChange[]): void {
-    const waiting = this.sowing.get(threadId);
-    if (waiting === undefined) this.take(threadId, changes);
-    else waiting.push(...changes);
+  private hear(threadId: string, changes: readonly ThreadOpenChange[], at: ThreadLivePosition): void {
+    const heard = this.cutting.get(threadId);
+    if (heard !== undefined) {
+      heard.push({ changes, at });
+      return;
+    }
+    if (at.runId === null || at.runId === this.followed.get(threadId)) {
+      this.take(threadId, changes);
+      return;
+    }
+    const kept = this.retained.get(threadId);
+    if (kept?.runId === at.runId) kept.heard.push({ changes, at });
   }
 
-  private sow(threadId: string, waiting: readonly ThreadOpenChange[], entries: readonly ThreadTranscriptEntry[]): void {
-    if (this.sowing.get(threadId) !== waiting) return;
-    this.sowing.delete(threadId);
+  private settle(threadId: string, heard: readonly Heard[], seed: PhaseSeed | null): void {
+    if (this.cutting.get(threadId) !== heard) return;
+    this.cutting.delete(threadId);
+    const runId = this.followed.get(threadId);
+    const after =
+      seed === null ? heard : heard.filter(({ at }) => at.incarnation !== seed.live.incarnation || at.at.seq > seed.live.at.seq);
+    if (seed === null || seed.activeRunId === runId) {
+      this.seed(threadId, seed !== null && seed.live.runId === runId ? seed.live : null, seed?.storedOpen ?? [], after);
+      return;
+    }
+    if (seed.activeRunId !== null) {
+      this.retained.set(threadId, {
+        runId: seed.activeRunId,
+        view: seed.live.runId === seed.activeRunId ? seed.live : null,
+        stored: seed.storedOpen,
+        heard: after.filter(({ at }) => at.runId === seed.activeRunId),
+      });
+    }
+    this.take(
+      threadId,
+      after.filter(({ at }) => at.runId === null || at.runId === runId).flatMap(({ changes }) => changes),
+    );
+  }
+
+  private seed(threadId: string, view: ThreadOpenView | null, stored: readonly ThreadTranscriptEntry[], heard: readonly Heard[]): void {
+    const runId = this.followed.get(threadId);
+    if (view !== null) {
+      this.take(threadId, [
+        ...view.open.map((entry): ThreadOpenChange => ({ op: 'put', entry })),
+        { op: 'progress', progress: view.progress },
+      ]);
+    }
     const known = this.live.get(threadId)?.tools;
-    const fresh = entries.filter((entry) => !known?.has(entry.id)).map((entry): ThreadOpenChange => ({ op: 'put', entry }));
-    this.take(threadId, [...fresh, ...waiting]);
+    const fresh = stored.filter((entry) => !known?.has(entry.id)).map((entry): ThreadOpenChange => ({ op: 'put', entry }));
+    const later = heard.filter(({ at }) => at.runId === null || at.runId === runId).flatMap(({ changes }) => changes);
+    this.take(threadId, [...fresh, ...later]);
   }
 
   private take(threadId: string, changes: readonly ThreadOpenChange[]): void {

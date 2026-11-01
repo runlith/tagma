@@ -12,7 +12,7 @@ import { readApproves, type ApprovesReading } from '../approvers.js';
 import { gated } from '../projectGate.js';
 import type { Delegation } from '../contract/wire/birth.js';
 import { ThreadMandate } from '../contract/service/mandate.js';
-import { threadRecord } from '../../thread-record/store/table.js';
+import { recordRows } from '../../thread-record/store/table.js';
 import { ThreadRecords } from '../../thread-record/contract/service/records.js';
 import { ThreadInputRefused, type HarnessFailure } from '../contract/service/failure.js';
 import { ThreadRollouts } from '../contract/service/rollouts.js';
@@ -58,7 +58,7 @@ export const makeThreadAdjustments = Effect.gen(function* () {
               ]),
             );
           }
-          yield* units.write(writes('ThreadAdjustments.setTitle', [threadRecord]), (unit) =>
+          yield* units.write(writes('ThreadAdjustments.setTitle', [recordRows]), (unit) =>
             records.setTitle(unit, threadId, trimmed, 'manual'),
           );
           const snapshot = yield* harness.reads.snapshot(threadId);

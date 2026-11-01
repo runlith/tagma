@@ -2,12 +2,12 @@ import type { ThreadEventPayloadValue, ThreadEventRow } from '@runlith/agent/thr
 import type { ThreadProjectionRefusalReason } from '../contract/wire/projection.js';
 import { sql, type SQL, type SQLWrapper } from 'drizzle-orm';
 import { type AnySQLiteColumn, index, integer, primaryKey, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
-import { threadRecord } from '../../thread-record/store/table.js';
+import { recordRows, threadRecord } from '../../thread-record/store/table.js';
 import { writes, type WriteSet } from '../../platform/contract/service/writes.js';
-import { MESSAGE_FTS, threadConversation, threadMessage, threadMessageGap, threadQuietRun } from './conversation.js';
+import { MESSAGE_FTS, messageRows, threadConversation, threadMessageGap, threadQuietRun } from './conversation.js';
 import { payloadField } from './fields.js';
 
-const conversationTables = writes('ConversationIndex', [threadMessage, threadConversation, threadQuietRun, threadMessageGap, threadRecord]);
+const conversationTables = writes('ConversationIndex', [messageRows, threadConversation, threadQuietRun, threadMessageGap, recordRows]);
 
 export const conversationWrites: WriteSet = {
   ...conversationTables,

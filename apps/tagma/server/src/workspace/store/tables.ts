@@ -3,6 +3,7 @@ import { index, integer, primaryKey, sqliteTable, text, uniqueIndex } from 'driz
 import { threadRecord } from '../../thread-record/store/table.js';
 import { project } from '../../projects/store/table.js';
 import { EnvironmentKind, EnvironmentUseStatus } from '../contract/wire/environments.js';
+import { projectRows } from '../../platform/contract/service/projections.js';
 
 export const assignmentMembership = sqliteTable(
   'assignment_membership',
@@ -25,6 +26,14 @@ export const assignmentSelection = sqliteTable('assignment_selection', {
   rootId: text('root_id').references(() => fileRoot.rootId),
   provenance: text('provenance', { enum: ['inherited', 'explicit', 'cleared'] }).notNull(),
   revision: integer('revision').notNull(),
+});
+
+export const placementRows = projectRows({
+  id: 'workspace.placement',
+  table: assignmentSelection,
+  keys: ['threadId'],
+  address: 'threadId',
+  columns: { threadId: assignmentSelection.threadId, rootId: assignmentSelection.rootId, provenance: assignmentSelection.provenance },
 });
 
 export const environment = sqliteTable(

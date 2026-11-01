@@ -1,20 +1,28 @@
 import { expect, test } from 'bun:test';
 import type { ThreadToolEntry, ThreadToolState } from '@runlith/agent/transcript/entries';
-import type { ThreadOpenChange, ThreadOpenView } from '@runlith/agent/transcript/live';
+import type { ThreadLivePosition, ThreadOpenChange, ThreadOpenView } from '@runlith/agent/transcript/live';
 import type { ThreadLiveEvent } from '@runlith/agent/thread/run/ThreadLiveFeed';
 import type { ThreadStateShape } from '@runlith/agent/thread/state';
 import type { ThreadTranscriptEntry } from '@runlith/agent/transcript/rows';
-import { phaseChanges, ThreadPhaseFeed } from './phase.js';
+import { phaseChanges, ThreadPhaseFeed, type PhaseSeed } from './phase.js';
 
 const NO_VIEW: ThreadOpenView = { at: { position: 0, seq: 0 }, open: [], progress: null };
 
 type Journal = 'none' | readonly ThreadTranscriptEntry[] | 'pending';
 
+const at = (seq: number, runId = 'run-1'): ThreadLivePosition => ({ incarnation: 'phase-test', runId, at: { position: 1, seq } });
+
 function feed(view: ThreadOpenView = NO_VIEW, journal: Journal = 'none') {
   const changed: string[] = [];
-  let emit: ((changes: readonly ThreadOpenChange[]) => void) | null = null;
+  let emit: ((changes: readonly ThreadOpenChange[], at: ThreadLivePosition) => void) | null = null;
   let released = 0;
-  let deliver: ((entries: readonly ThreadTranscriptEntry[]) => void) | null = null;
+  let seq = view.at.seq;
+  let deliver: ((seed: PhaseSeed | null) => void) | null = null;
+  const seedOf = (stored: readonly ThreadTranscriptEntry[], activeRunId = 'run-1', liveRun = activeRunId): PhaseSeed => ({
+    activeRunId,
+    storedOpen: stored,
+    live: { ...view, incarnation: 'phase-test', runId: liveRun },
+  });
   const phases = new ThreadPhaseFeed({
     watch: (_threadId, listener) => {
       emit = listener;
@@ -23,10 +31,9 @@ function feed(view: ThreadOpenView = NO_VIEW, journal: Journal = 'none') {
         emit = null;
       };
     },
-    view: () => view,
-    journal: (_threadId, _runId, delivery) => {
+    cut: (_threadId, delivery) => {
       if (journal === 'pending') deliver = delivery;
-      else delivery(journal === 'none' ? [] : journal);
+      else delivery(seedOf(journal === 'none' ? [] : journal));
     },
     onChanged: (threadId) => changed.push(threadId),
   });
@@ -34,19 +41,20 @@ function feed(view: ThreadOpenView = NO_VIEW, journal: Journal = 'none') {
     phases,
     changed,
     releases: () => released,
-    send: (change: ThreadOpenChange) => emit?.([change]),
+    send: (change: ThreadOpenChange, runId = 'run-1') => emit?.([change], at(++seq, runId)),
+    sendAt: (change: ThreadOpenChange, position: ThreadLivePosition) => emit?.([change], position),
     sendState: (...entries: readonly ThreadTranscriptEntry[]) =>
       emit?.(
         phaseChanges({
           type: 'state',
-          incarnation: 'phase-test',
-          runId: 'run-1',
-          at: { position: 1, seq: 1 },
+          ...at(++seq),
           frame: stateOf(entries),
           weight: 0,
         }),
+        at(seq),
       ),
-    read: (entries: readonly ThreadTranscriptEntry[]) => deliver?.(entries),
+    read: (entries: readonly ThreadTranscriptEntry[], activeRunId?: string, liveRun?: string) =>
+      deliver?.(seedOf(entries, activeRunId, liveRun)),
   };
 }
 
@@ -220,6 +228,28 @@ test('a run released before its journal answers takes nothing from the answer', 
   world.phases.follow('thread-1', null);
   world.read([entry('call-1', 'bash', 'input-available', undefined, started)]);
   expect(world.phases.phaseOf('thread-1')).toBeNull();
+});
+
+test('a live change the cut already covers is not taken again; one after it is', () => {
+  const world = feed(
+    { at: { position: 4, seq: 5 }, open: [], progress: { phase: { phase: 'tools', since: 3 }, estimate: null } },
+    'pending',
+  );
+  world.phases.follow('thread-1', 'run-1');
+  world.sendAt(tool('call-1', 'bash', 'input-available', undefined, started), at(3));
+  world.sendAt(tool('call-2', 'read', 'input-available', undefined, started), at(6));
+  world.read([]);
+  expect(world.phases.phaseOf('thread-1')?.calls.map((call) => call.name)).toEqual(['read']);
+});
+
+test('a successor run the cut finds waits until the row facts name it, keeping what was heard of it', () => {
+  const world = feed(NO_VIEW, 'pending');
+  world.phases.follow('thread-1', 'run-1');
+  world.read([entry('call-9', 'bash', 'input-available', undefined, started)], 'run-2', 'run-2');
+  world.send(tool('call-10', 'read', 'input-available', undefined, started), 'run-2');
+  expect(world.phases.phaseOf('thread-1')).toBeNull();
+  world.phases.follow('thread-1', 'run-2');
+  expect(world.phases.phaseOf('thread-1')?.calls.map((call) => call.name)).toEqual(['bash', 'read']);
 });
 
 test('the phase a run opens on is announced', () => {

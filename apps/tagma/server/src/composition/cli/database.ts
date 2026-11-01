@@ -13,6 +13,7 @@ import { DATABASE_FILE, dataDirectory } from '../../installation/contract/wire/l
 import { migrationsFolder } from '../../installation/closure/read.js';
 import type { Build } from '../build.js';
 import { participantsOf } from '../manifest.js';
+import { rowFactsOf } from '../../platform/contract/service/manifest.js';
 
 const inStore = Effect.fnUntraced(function* <A, E>(
   build: Build,
@@ -48,7 +49,7 @@ const inStore = Effect.fnUntraced(function* <A, E>(
   }
   const processes = new ProcessPool(undefined, 'stop', undefined, childHosting);
   const { modules } = yield* Effect.promise(build.parts);
-  const snapshots = yield* snapshotAssembly(participantsOf(modules), machine, root, processes);
+  const snapshots = yield* snapshotAssembly(participantsOf(modules), machine, root, processes, () => rowFactsOf(modules));
   return yield* Effect.acquireUseRelease(
     lockDataDirectory(root).pipe(Effect.mapError((cause) => new SnapshotFailed({ path, reason: cause.message }))),
     (lock) => run(path, snapshots, invocation.env.TAGMA_SEED_DIRECTORY?.trim() || invocation.temporary, lock, processes),

@@ -9,7 +9,7 @@ import { ThreadHarness } from '../contract/service/engine.js';
 import { writes } from '../../platform/contract/service/writes.js';
 import type { ThreadId } from '../../platform/contract/wire/thread.js';
 import type { Unblock } from '../../platform/contract/wire/refusal.js';
-import { threadRecord } from '../../thread-record/store/table.js';
+import { recordRows, threadRecord } from '../../thread-record/store/table.js';
 import { ThreadRecords } from '../../thread-record/contract/service/records.js';
 import type { ThreadRecordFacts } from '../../thread-record/contract/wire/record.js';
 import { ThreadInputRefused, ThreadWriteConflict, type HarnessFailure } from '../contract/service/failure.js';
@@ -17,7 +17,7 @@ import { ThreadList } from '../contract/service/list.js';
 import { ThreadRollouts } from '../contract/service/rollouts.js';
 import type { NativeThreadState } from '../contract/service/state.js';
 import { gated } from '../projectGate.js';
-import { threadInbox } from '../store/tables.js';
+import { inboxRows, threadInbox } from '../store/tables.js';
 import { workflowRun } from '../store/workflow.js';
 import { ThreadInbox } from '../store/inbox.js';
 
@@ -34,8 +34,8 @@ export class ThreadDetachment extends Context.Service<
   }
 >()('tagma/threads/ThreadDetachment') {}
 
-const detaching = writes('ThreadDetachment.detach', [threadRecord, threadInbox]);
-const reattaching = writes('ThreadDetachment.reattach', [threadRecord]);
+const detaching = writes('ThreadDetachment.detach', [recordRows, inboxRows]);
+const reattaching = writes('ThreadDetachment.reattach', [recordRows]);
 
 const named = (facts: ThreadRecordFacts | undefined, id: string): string => (facts?.name ? `${facts.name} (${id})` : id);
 

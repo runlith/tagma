@@ -5,7 +5,7 @@ import type { ThreadContextUse } from '@runlith/agent/thread/agents/ThreadAgent'
 import type { StoreFailure } from '../../platform/contract/service/store.js';
 import { MachineUnits, type WriteUnit } from '../../platform/contract/service/units.js';
 import { writes } from '../../platform/contract/service/writes.js';
-import { assignmentMembership, assignmentSelection } from '../../workspace/store/tables.js';
+import { assignmentMembership, assignmentSelection, placementRows } from '../../workspace/store/tables.js';
 import { makeThreadTargetOperationStore } from '../store/targetIntents.js';
 import { threadTargetOperation } from '../store/tables.js';
 import { Projects } from '../../projects/contract/service/registry.js';
@@ -250,7 +250,7 @@ export const makeTargetContexts = Effect.gen(function* () {
     if (standing !== undefined && standing.generation <= generation) prepared.delete(preparedKey(at));
   };
   return TargetPreparation.of({
-    writes: writes('TargetContexts.commit', [assignmentMembership, assignmentSelection, threadTargetOperation], targets.writes),
+    writes: writes('TargetContexts.commit', [assignmentMembership, placementRows, threadTargetOperation], targets.writes),
     of,
     prepare,
     standing,

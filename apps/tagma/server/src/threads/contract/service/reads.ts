@@ -4,7 +4,15 @@ import { Context, type Effect } from 'effect';
 import type { StoreFailure } from '../../../platform/contract/service/store.js';
 import type { Unit } from '../../../platform/contract/service/units.js';
 import type { HarnessId } from '../../../platform/contract/wire/session.js';
-import type { ListHomes, ThreadSelection, ThreadPage, ThreadWindow, ThreadFamily, ThreadSelectionPage } from '../../list/select.js';
+import type {
+  ListHomes,
+  ThreadSelection,
+  ThreadPage,
+  ThreadWindow,
+  ThreadWindowIds,
+  ThreadFamily,
+  ThreadSelectionPage,
+} from '../../list/select.js';
 import type { PlacedEntry, SubtreeMember, ThreadGate, ThreadMetadata } from '../../list/store.js';
 import type { ThreadListMove, ThreadSummary } from '../../list/summary.js';
 import type { ArchiveWork } from './list.js';
@@ -52,6 +60,11 @@ export class ThreadWindows extends Context.Service<
       homes: readonly number[],
       page: { readonly limit: number; readonly before?: Date },
     ): Effect.Effect<ThreadWindow, StoreFailure | ThreadStorageFailed>;
+    rootIds(
+      ownerId: string,
+      homes: readonly number[],
+      page: { readonly limit: number; readonly before?: Date },
+    ): Effect.Effect<ThreadWindowIds, StoreFailure>;
     heldUpMatching(
       ownerId: string,
       homes: readonly number[],

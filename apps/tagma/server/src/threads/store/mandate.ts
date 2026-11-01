@@ -3,6 +3,8 @@ import type { TeamLayer } from '@runlith/agent/collaboration/team';
 import type { ThreadAuthority } from '@runlith/agent/thread/rows';
 import { index, integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 import { threadRecord } from '../../thread-record/store/table.js';
+import { getTableColumns } from 'drizzle-orm';
+import { projectRows } from '../../platform/contract/service/projections.js';
 
 export const threadMandate = sqliteTable(
   'thread_mandate',
@@ -30,4 +32,19 @@ export const threadLiveSpell = sqliteTable('thread_live_spell', {
     .primaryKey()
     .references(() => threadRecord.id, { onDelete: 'cascade' }),
   startedAt: integer('started_at', { mode: 'timestamp_ms' }).notNull(),
+});
+
+export const mandateRows = projectRows({
+  id: 'threads.mandate',
+  table: threadMandate,
+  keys: ['id'],
+  address: 'id',
+  columns: getTableColumns(threadMandate),
+});
+export const spellRows = projectRows({
+  id: 'threads.spell',
+  table: threadLiveSpell,
+  keys: ['threadId'],
+  address: 'threadId',
+  columns: getTableColumns(threadLiveSpell),
 });

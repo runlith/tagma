@@ -9,7 +9,7 @@ import { COMMAND_RESULT_SIGNAL } from '../../executions/contract/wire/commands.j
 import { TerminalUnavailable } from '../../executions/contract/wire/refusals.js';
 import type { CallDebts, NoticeTakeBack } from '../../executions/contract/service/notices.js';
 import { writes } from '../../platform/contract/service/writes.js';
-import { owedCall } from '../store/calls.js';
+import { owedRows } from '../store/calls.js';
 import type { OwedCallRows } from '../store/owedCalls.js';
 import type { CommandSignalSend } from './commandEndings.js';
 import type { NativeThreadState } from '../contract/service/state.js';
@@ -35,7 +35,7 @@ export const wakeUnlessStopped = (threads: ThreadLookup['Service']): IdleDeliver
   );
 
 export const callDebts = (owed: OwedCallRows): CallDebts => ({
-  calls: writes('OwedCalls.carried', [owedCall]),
+  calls: writes('OwedCalls.carried', [owedRows]),
   release: (unit, debt) => owed.carried(unit, debt.thread, { runId: debt.run, toolCallId: debt.toolCall }),
 });
 

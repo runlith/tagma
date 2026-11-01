@@ -1,3 +1,52 @@
+export type RowValue = string | number | null;
+export type ProjectionWrite = readonly string[] | 'effects';
+
+export type RowProjection = {
+  readonly id: string;
+  readonly table: string;
+  readonly keys: readonly string[];
+  readonly columns: readonly string[];
+  readonly address?: string;
+  readonly context?: readonly string[];
+};
+
+export type RowChange = {
+  readonly projection: string;
+  readonly kind: 'insert' | 'update' | 'delete';
+  readonly key: readonly RowValue[];
+  readonly address: RowValue;
+  readonly before: RowValue;
+  readonly values: Readonly<Record<string, RowValue>>;
+};
+
+export type RowSelection = {
+  readonly id: string;
+  readonly sql: string;
+  readonly columns: readonly string[];
+  readonly sources: readonly { readonly projection: string; readonly columns: readonly string[]; readonly when?: string }[];
+};
+
+export type RowDeclarations = { readonly rows: readonly RowProjection[]; readonly selections: readonly RowSelection[] };
+
+export type SelectedRow = {
+  readonly selection: string;
+  readonly key: RowValue;
+  readonly values: Readonly<Record<string, RowValue>> | null;
+};
+export type SelectionWork = { readonly selection: string; readonly execMs: number; readonly rows: number; readonly program?: number };
+
+export type RowCommit = {
+  readonly incarnation: string;
+  readonly cursor: number;
+  readonly bytes: number;
+} & (
+  | { readonly _tag: 'Complete'; readonly changes: readonly RowChange[]; readonly selected: readonly SelectedRow[] }
+  | { readonly _tag: 'Gap' }
+);
+
+export const PROJECTION_CLOCK = '__row_projection_clock';
+export const PROJECTION_BYTES = 1_048_576;
+
 export type SqliteRequest = { readonly connection: number; readonly ask: SqliteAsk };
 export type SqliteReply = { readonly connection: number; readonly said: SqliteSaid };
 
@@ -11,6 +60,14 @@ export type SqliteAsk =
       readonly params: ReadonlyArray<unknown>;
       readonly safeIntegers: boolean;
       readonly sentAt: number;
+      readonly projections?: ProjectionWrite;
+    }
+  | {
+      readonly _tag: 'Project';
+      readonly id: number;
+      readonly projections: readonly RowProjection[];
+      readonly selections: readonly RowSelection[];
+      readonly reset?: boolean;
     }
   | { readonly _tag: 'Export'; readonly id: number }
   | { readonly _tag: 'LoadExtension'; readonly id: number; readonly path: string }
@@ -37,12 +94,15 @@ type ProgramStatement = {
   readonly safeIntegers?: boolean;
 };
 
-export type SqliteProgram = { readonly statements: ReadonlyArray<ProgramStatement> };
+export type SqliteProgram = {
+  readonly statements: ReadonlyArray<ProgramStatement>;
+  readonly projections?: ProjectionWrite;
+};
 
 export type ReturnedRows = ReadonlyArray<ReadonlyArray<unknown>>;
 
 export type ProgramOutcome =
-  | { readonly _tag: 'Applied'; readonly execMs: number; readonly returned?: ReadonlyArray<ReturnedRows> }
+  | { readonly _tag: 'Applied'; readonly execMs: number; readonly returned?: ReadonlyArray<ReturnedRows>; readonly rows?: RowCommit }
   | {
       readonly _tag: 'Conflict';
       readonly statement: number;
@@ -60,6 +120,8 @@ export type SqliteSaid =
       readonly queueMs: number;
       readonly execMs: number;
       readonly commitReturnedAt?: number;
+      readonly commits?: readonly RowCommit[];
+      readonly projectionWork?: readonly SelectionWork[];
     }
   | { readonly _tag: 'Exported'; readonly id: number; readonly bytes: Uint8Array }
   | { readonly _tag: 'Did'; readonly id: number }
@@ -74,8 +136,16 @@ export type SqliteSaid =
       readonly queueMs: number;
       readonly execMs: number;
       readonly commitReturnedAt: number;
+      readonly projectionWork?: readonly SelectionWork[];
     }
-  | { readonly _tag: 'Failed'; readonly id: number; readonly thrown: ThrownShape; readonly queueMs: number; readonly execMs: number };
+  | {
+      readonly _tag: 'Failed';
+      readonly id: number;
+      readonly thrown: ThrownShape;
+      readonly queueMs: number;
+      readonly execMs: number;
+      readonly projectionWork?: readonly SelectionWork[];
+    };
 
 export type OpenConfig = {
   readonly filename: string;

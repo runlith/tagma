@@ -63,7 +63,7 @@ function rig(rows: readonly ThreadSummary[], window: number) {
     working: unused,
     sweepRelation: unused,
     serveArchiving: unused,
-    serveOpenCalls: unused,
+    serveCuts: unused,
     setArchived: unused,
     setArchivedMatching: unused,
     setPinned: unused,

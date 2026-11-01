@@ -23,7 +23,6 @@ import type { WriteUnit } from '../../platform/contract/service/units.js';
 import { writes } from '../../platform/contract/service/writes.js';
 import {
   command as commandTable,
-  commandDelivery,
   commandWait,
   openTerminal,
   terminal,
@@ -31,6 +30,7 @@ import {
   terminalRequestKey,
   terminalRequestKeyTally,
 } from '../store/terminal.js';
+import { deliveryRows } from '../contract/service/commands.js';
 import { rootUse, rootUseHold } from '../../workspace/store/tables.js';
 import { isRegistryChanged } from '../../workspace/contract/wire/roots.js';
 import { environmentUse as environmentUseTable } from '../../workspace/store/tables.js';
@@ -474,7 +474,7 @@ export const makeTerminalStart = Effect.fnUntraced(function* ({
         const record = yield* units.write(
           writes(
             'start.record',
-            [commandTable, commandWait, commandDelivery, terminalRequestKey, terminalRequestKeyTally, terminalIntent],
+            [commandTable, commandWait, deliveryRows, terminalRequestKey, terminalRequestKeyTally, terminalIntent],
             ...(debts === null ? [] : [debts.calls]),
           ),
           (unit) =>

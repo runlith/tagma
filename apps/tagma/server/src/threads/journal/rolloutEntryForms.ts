@@ -14,7 +14,7 @@ import {
   type ThreadFormBase,
   type ThreadFormStep,
 } from '@runlith/agent/transcript/kinds';
-import { thread, threadRun } from '../store/kernel.js';
+import { nativeRows, runRows, thread, threadRun } from '../store/kernel.js';
 import { RolloutUnreadable, rolloutStream } from './rolloutFile.js';
 import type { NativeFolds } from './rolloutMeta.js';
 import { eventless } from './rolloutStaging.js';
@@ -94,7 +94,7 @@ export type RolloutFormWrite = <A, E>(
   body: (unit: WriteUnit<'machine'>) => Effect.Effect<A, E>,
 ) => Effect.Effect<A, E | StoreFailure>;
 
-const FORMING = writes('ThreadRollout.form', [threadRolloutCursor, threadRolloutRefusal, threadRolloutForm, threadRun, thread]);
+const FORMING = writes('ThreadRollout.form', [threadRolloutCursor, threadRolloutRefusal, threadRolloutForm, runRows, nativeRows]);
 
 const steppedWith = (kinds: ThreadEntryReader, steps: readonly ThreadFormStep[]) => (record: 'entry' | 'reading', value: unknown) =>
   Effect.try({

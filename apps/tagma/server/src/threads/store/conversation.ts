@@ -1,6 +1,7 @@
 import { index, integer, primaryKey, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
 import { threadRecord } from '../../thread-record/store/table.js';
 import type { ConversationRole } from '../contract/wire/conversation.js';
+import { projectRows } from '../../platform/contract/service/projections.js';
 
 export const threadMessage = sqliteTable(
   'thread_message',
@@ -56,5 +57,13 @@ export const threadQuietRun = sqliteTable(
   },
   (table) => [primaryKey({ columns: [table.threadId, table.runId] })],
 );
+
+export const messageRows = projectRows({
+  id: 'threads.message',
+  table: threadMessage,
+  keys: ['key'],
+  address: 'threadId',
+  columns: { key: threadMessage.key, threadId: threadMessage.threadId, appeared: threadMessage.appeared, rewound: threadMessage.rewound },
+});
 
 export const MESSAGE_FTS = 'thread_message_fts';
