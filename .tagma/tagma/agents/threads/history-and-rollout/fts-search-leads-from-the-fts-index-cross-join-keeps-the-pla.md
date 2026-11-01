@@ -8,9 +8,9 @@ edges:
     to: 01a131c7-7066-7782-84b6-278a389eaa72
 sources:
   - kind: file
-    ref: apps/tagma/server/src/graph/search/ranking.ts
-  - kind: file
     ref: apps/tagma/server/src/calls/store/matches.ts
+  - kind: file
+    ref: apps/tagma/server/src/graph/search/ranking.ts
   - kind: file
     ref: apps/tagma/server/src/threads/journal/conversationReads.ts
 ---
