@@ -24,6 +24,18 @@ fields:
       },
       {
         "at": "release/channel.ts"
+      },
+      {
+        "at": "developer/catalog.ts"
+      },
+      {
+        "at": "release/catalog.ts"
+      },
+      {
+        "at": "developer/operations.ts"
+      },
+      {
+        "at": "release/operations.ts"
       }
     ],
     "id": "composition",
