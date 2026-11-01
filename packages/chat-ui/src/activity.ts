@@ -372,14 +372,20 @@ export type ChatStepMoment = {
   readonly still: boolean;
   readonly live: boolean;
   readonly clock: ChatLiveStatus | null;
+  readonly standing?: boolean;
 };
 
-export function chatToolActivity(entry: ToolActivityEntry, identity: ChatActivityIdentity | undefined, still: boolean): ChatToolActivity {
-  const settled = toolSettled(entry);
+export function chatToolActivity(
+  entry: ToolActivityEntry,
+  identity: ChatActivityIdentity | undefined,
+  still: boolean,
+  standing = false,
+): ChatToolActivity {
+  const settled = toolSettled(entry) && !standing;
   const done = settled && !toolOperationRefused(entry);
   return {
     toolName: entry.toolName,
-    state: done ? 'done' : still && !settled ? 'unknown' : 'running',
+    state: done ? 'done' : standing ? 'running' : still && !settled ? 'unknown' : 'running',
     title: identity?.title ?? entry.display?.title ?? null,
     alone: identity?.title === undefined && entry.display?.alone === true,
     verb: (done || !settled ? entry.display?.verb : undefined) ?? null,
@@ -396,7 +402,8 @@ export function chatStepLine(
   strings: ChatStrings,
   plain = false,
 ): ChatStepLine {
-  if (entry.kind === 'tool') return chatToolActivityLine(chatToolActivity(entry, identity, moment.still), strings);
+  if (entry.kind === 'tool')
+    return chatToolActivityLine(chatToolActivity(entry, identity, moment.still, moment.standing === true), strings);
   if (entry.kind === 'signal') {
     const from = entry.signalType === KEEP_WARM_SIGNAL_TYPE ? null : (identity?.title ?? (entry.title?.trim() || null));
     return { lead: strings.signal(entry.signalType, from !== null), subject: from, join: 'phrase' };

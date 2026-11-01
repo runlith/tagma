@@ -83,6 +83,7 @@ export type ChatToolStatusHold = 'status' | 'marked';
 export type ChatToolStatus = {
   readonly held: (entry: ChatEntryOf<'tool'>) => ChatToolStatusHold | null;
   readonly dot?: (entry: ChatEntryOf<'tool'>) => string | null;
+  readonly standing?: (entry: ChatEntryOf<'tool'>) => boolean;
   readonly mark: Snippet<[ChatEntryOf<'tool'>]>;
   readonly status: Snippet<[ChatEntryOf<'tool'>]>;
   readonly detail: Snippet<[ChatEntryOf<'tool'>]>;

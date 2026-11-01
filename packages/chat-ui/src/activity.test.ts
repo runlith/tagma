@@ -4,6 +4,7 @@ import { describe, expect, test } from 'vitest';
 import {
   type ActivityGroup,
   activityRows,
+  chatToolActivity,
   chatToolActivityLine,
   foldedToolCounts,
   groupDurationSeconds,
@@ -232,6 +233,13 @@ describe('tool step status', () => {
     const group = activityGroup([tool('t1'), reasoning('r1'), tool('t2', { toolState: 'output-error' })]);
     expect(groupFailureCount(group)).toBe(1);
   });
+});
+
+test('a settled receipt whose call still stands is work in flight, whether or not its run is alive', () => {
+  const receipt = tool('t1', { toolOutput: { status: 'background' }, display: { form: 'none', title: 'Task' } }) as ToolActivityEntry;
+  expect(chatToolActivity(receipt, undefined, false)).toMatchObject({ state: 'done', title: 'Task' });
+  expect(chatToolActivity(receipt, undefined, false, true)).toMatchObject({ state: 'running', title: 'Task' });
+  expect(chatToolActivity(receipt, undefined, true, true).state).toBe('running');
 });
 
 test('an answered call with no display body reads through its tool text, and a failed one does not', () => {
