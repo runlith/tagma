@@ -1,4 +1,5 @@
 import { Clock, Deferred, Effect, Result, Schema, type Scope } from 'effect';
+import { AgentFault, FAULT } from '@runlith/acp/agent';
 import type { ToolCall } from '@runlith/acp/toolCalls';
 import type { AgentPhase } from '@runlith/agent/AgentPhase';
 import type { TransportFailure } from '@runlith/agent/transcript/entries';
@@ -130,10 +131,16 @@ export const sum = (a: Spent, b: Spent): Spent => ({
 
 const SEVERITY: Readonly<Record<string, number>> = { completed: 0, cancelled: 1 };
 
+const doubtedOf = (command: string, reason: string) =>
+  new AgentFault({ code: FAULT.internal, message: `Muse Code may hold the words of ${command}, but cannot show it: ${reason}` });
+
 export class Feed {
   started = false;
   readonly unread = new Set<string>();
+  readonly doubted = new Set<string>();
   private step = 0;
+  private settling = false;
+  private failure: string | null = null;
   private closed = false;
   private attempt = 0;
   private modelStarted = false;
@@ -146,8 +153,9 @@ export class Feed {
   private whole: Spent = NOTHING;
   private readonly owned: Set<string>;
   private readonly open: Set<string>;
-  private readonly reading = new Map<string, Deferred.Deferred<boolean>>();
+  private readonly reading = new Map<string, Deferred.Deferred<boolean, AgentFault>>();
   private readonly items = new Set<string>();
+  private readonly finished = new Set<string>();
   private readonly announced = new Set<string>();
   private readonly written = new Map<string, number>();
   private readonly thought = new Map<string, number[]>();
@@ -183,10 +191,10 @@ export class Feed {
     yield* this.ports.began;
   });
 
-  steering(command: string): Deferred.Deferred<boolean> {
+  steering(command: string): Deferred.Deferred<boolean, AgentFault> {
     this.owned.add(command);
     this.unread.add(command);
-    const read = Deferred.makeUnsafe<boolean>();
+    const read = Deferred.makeUnsafe<boolean, AgentFault>();
     this.reading.set(command, read);
     return read;
   }
@@ -220,16 +228,21 @@ export class Feed {
 
   private readonly lost = Effect.fnUntraced(function* (this: Feed, reason: string): Effect.fn.Return<void> {
     this.ports.stderr(`${reason}\n`);
-    for (const read of this.reading.values()) yield* Deferred.succeed(read, false);
+    for (const [command, read] of this.reading) {
+      this.doubted.add(command);
+      yield* Deferred.fail(read, doubtedOf(command, reason));
+    }
     this.reading.clear();
     yield* Deferred.succeed(this.done, { status: 'error', detail: reason, turn: this.ports.turn });
     yield* this.ports.abandon;
   });
 
-  private readonly undecided = Effect.fnUntraced(function* (this: Feed, turn: string, reason: string) {
+  private readonly undecided = Effect.fnUntraced(function* (this: Feed, reason: string) {
     this.ports.stderr(`${reason}\n`);
-    yield* Deferred.succeed(this.done, { status: 'error', detail: reason, turn: this.ports.turn });
-    yield* this.interrupt(turn);
+    this.failure ??= reason;
+    this.stopping = true;
+    for (const turn of this.open) yield* this.interrupt(turn);
+    yield* this.settle();
   });
 
   private readonly settle = Effect.fnUntraced(function* (this: Feed): Effect.fn.Return<void> {
@@ -242,7 +255,15 @@ export class Feed {
       yield* Effect.forkIn(this.relinquish(), this.ports.scope);
       return;
     }
-    yield* Deferred.succeed(this.done, this.outcome(last));
+    if (this.settling) return;
+    this.settling = true;
+    yield* Effect.forkIn(
+      Effect.andThen(
+        this.ports.host.drained,
+        Effect.suspend(() => Deferred.succeed(this.done, this.outcome(this.last ?? last))),
+      ),
+      this.ports.scope,
+    );
   });
 
   private readonly heard = Effect.fnUntraced(function* (this: Feed, command: string, read: boolean) {
@@ -265,12 +286,14 @@ export class Feed {
       if (this.unread.size > 0) {
         const held = reads(yield* host.request('session/read', { sessionId: session, excludeItems: false }));
         if (held === null) return yield* this.lost(`Muse Code answered session/read for ${session} in a shape Tagma cannot read`);
-        const state = held.history.snapshot?.state;
-        const said = new Set(
-          (state?.items ?? held.history.items ?? []).flatMap((item) =>
-            item.kind === 'userMessage' && item.commandId ? [item.commandId] : [],
-          ),
-        );
+        const { mode, noneReason } = held.history;
+        const state = mode === 'snapshot' || mode === 'anchoredSnapshot' ? held.history.snapshot?.state : undefined;
+        const items = state?.items ?? (mode === 'inline' ? held.history.items : null);
+        if (items === null)
+          return yield* this.lost(
+            `Muse Code served no history of ${session} (${mode}${noneReason === undefined ? '' : `: ${noneReason}`}), so what it holds of the words it accepted is unknown`,
+          );
+        const said = new Set(items.flatMap((item) => (item.kind === 'userMessage' && item.commandId ? [item.commandId] : [])));
         const running = [...(state?.activeTurn === null || state === undefined ? [] : [state.activeTurn]), ...(state?.queuedTurns ?? [])];
         for (const command of [...this.unread]) {
           const turn = running.find((ref) => ref.commandId === command || ref.turnId === command);
@@ -313,13 +336,14 @@ export class Feed {
       case 'item/updated':
       case 'item/completed': {
         const event = items(frame.params);
-        if (event === null || !this.owned.has(event.item.turnId ?? '')) return;
+        if (event === null || !this.owned.has(event.item.turnId ?? '') || this.finished.has(event.item.itemId)) return;
         this.items.add(event.item.itemId);
+        if (frame.method === 'item/completed') this.finished.add(event.item.itemId);
         return yield* this.item(event.item, frame.method === 'item/started', frame.method === 'item/completed');
       }
       case 'item/delta': {
         const delta = deltas(frame.params);
-        if (delta === null || !this.items.has(delta.itemId)) return;
+        if (delta === null || !this.items.has(delta.itemId) || this.finished.has(delta.itemId)) return;
         return yield* this.delta(delta.itemId, delta.field ?? 'text', delta.delta);
       }
       case 'session/tokenUsage': {
@@ -385,6 +409,7 @@ export class Feed {
       priced === null || pricedBefore === null || priced.usd < pricedBefore
         ? undefined
         : { amount: priced.usd - pricedBefore, currency: 'USD', basis: priced.partial ? 'estimate-partial' : 'estimate' };
+    if (this.failure !== null) return { status: 'error', usage, turn, cost, detail: this.failure };
     if (ended.terminal === 'completed') return { status: 'finished', usage, turn, cost };
     if (ended.terminal === 'cancelled') return { status: 'cancelled', usage, turn, cost };
     const signedOut = ended.error?.kind === 'authRequired';
@@ -561,7 +586,7 @@ export class Feed {
     const decide = (allow: boolean) => {
       const choice = choose(allow);
       if (choice === undefined)
-        return this.undecided(asked.turnId, `Muse Code offered no ${allow ? 'allow-once' : 'refusing'} choice for ${asked.toolName}`);
+        return this.undecided(`Muse Code offered no ${allow ? 'allow-once' : 'refusing'} choice for ${asked.toolName}`);
       return host
         .command('approval/decide', {
           sessionId: asked.sessionId,
@@ -572,7 +597,7 @@ export class Feed {
         .pipe(
           Effect.asVoid,
           Effect.catchTag('MuseRefused', (refused) =>
-            this.undecided(asked.turnId, `Muse Code refused the decision on ${asked.toolName}: ${refused.message}`),
+            this.undecided(`Muse Code refused the decision on ${asked.toolName}: ${refused.message}`),
           ),
         );
     };

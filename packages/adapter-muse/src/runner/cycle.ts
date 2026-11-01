@@ -1,4 +1,4 @@
-import { Clock, Deferred, Effect, Exit, FileSystem, Predicate, Result, Schema, Scope } from 'effect';
+import { Clock, Deferred, Effect, Exit, FileSystem, Option, Predicate, Result, Schema, Scope } from 'effect';
 import { AgentFault, FAULT, type Outlet } from '@runlith/acp/agent';
 import type { ContentBlock } from '@runlith/acp/content';
 import { QuotaObservation, QuotaWindow } from '@runlith/llm/schema/quota';
@@ -51,11 +51,19 @@ type Live = {
 };
 type Compacting = { readonly session: string; readonly output: Output; readonly done: Deferred.Deferred<Item, AgentFault> };
 type Asking = {
-  readonly session: string;
+  session: string | null;
+  turn: string | null;
   readonly done: Deferred.Deferred<AsideAnswer, AgentFault>;
   readonly said: string[];
   spent: Spent;
   usd: number | null;
+};
+type Reaching = { host: boolean; feed: Feed | null };
+type Acquired = {
+  readonly standing: Live;
+  readonly running: Feed;
+  readonly turn: string;
+  readonly done: Deferred.Deferred<ClientOutcome>;
 };
 type AsideAnswer = { readonly text: string; readonly usage?: Spent; readonly _meta?: Readonly<Record<string, unknown>> };
 
@@ -213,15 +221,11 @@ export const makeMuseCycle = Effect.fnUntraced(function* (door: HostedDoor, proc
     return true;
   });
 
-  const orphan = Effect.fnUntraced(function* (frame: Frame) {
-    const read = Schema.decodeUnknownResult(TurnStarted)(frame.params);
-    const host = live?.host;
-    if (Result.isFailure(read) || host === undefined) return;
-    const { sessionId, turnId } = read.success;
-    process.stderr(`Muse Code started turn ${turnId}, which no Tagma turn holds; it is interrupted\n`);
+  const interrupt = Effect.fnUntraced(function* (sessionId: string, turnId: string) {
     const standing = live;
+    if (standing === null) return;
     yield* Effect.forkIn(
-      host.command('turn/interrupt', { sessionId, turnId }).pipe(
+      standing.host.command('turn/interrupt', { sessionId, turnId }).pipe(
         Effect.asVoid,
         Effect.catchTag('MuseRefused', (refused) =>
           refused.kind === 'commandRejected' || live !== standing
@@ -234,6 +238,14 @@ export const makeMuseCycle = Effect.fnUntraced(function* (door: HostedDoor, proc
       ),
       scope,
     );
+  });
+
+  const orphan = Effect.fnUntraced(function* (frame: Frame) {
+    const read = Schema.decodeUnknownResult(TurnStarted)(frame.params);
+    if (Result.isFailure(read) || live === null) return;
+    const { sessionId, turnId } = read.success;
+    process.stderr(`Muse Code started turn ${turnId}, which no Tagma turn holds; it is interrupted\n`);
+    yield* interrupt(sessionId, turnId);
   });
 
   const aside = Effect.fnUntraced(function* (frame: Frame, side: Asking) {
@@ -251,7 +263,11 @@ export const makeMuseCycle = Effect.fnUntraced(function* (door: HostedDoor, proc
       return;
     }
     if (frame.request) {
-      process.stderr(`Muse Code asked ${frame.method} inside a side question; it stays unanswered\n`);
+      const reason = `Muse Code asked ${frame.method} inside a side question, which takes no answer back; the side question is stopped`;
+      process.stderr(`${reason}\n`);
+      yield* Deferred.fail(side.done, new AgentFault({ code: FAULT.internal, message: reason }));
+      const turn = typeof frame.params.turnId === 'string' ? frame.params.turnId : side.turn;
+      if (side.session !== null && turn !== null) yield* interrupt(side.session, turn);
       return;
     }
     if (frame.method !== 'turn/completed') return;
@@ -273,7 +289,7 @@ export const makeMuseCycle = Effect.fnUntraced(function* (door: HostedDoor, proc
   const route = Effect.fnUntraced(function* (frame: Frame) {
     if (frame.method === 'usage/changed') return yield* quota(frame);
     const side = asking;
-    if (side !== null && frame.params.sessionId === side.session) return yield* aside(frame, side);
+    if (side !== null && side.session !== null && frame.params.sessionId === side.session) return yield* aside(frame, side);
     const standing = compacting;
     if (standing !== null && frame.method.startsWith('item/') && (yield* compacted(frame, standing))) return;
     const turn = feed;
@@ -301,6 +317,9 @@ export const makeMuseCycle = Effect.fnUntraced(function* (door: HostedDoor, proc
     if (standing === null) return;
     live = null;
     applied = null;
+    const side = asking;
+    if (side !== null)
+      yield* Deferred.fail(side.done, new AgentFault({ code: FAULT.internal, message: 'Muse Code was replaced under the side question' }));
     yield* Scope.close(standing.scope, Exit.void);
   });
 
@@ -347,6 +366,7 @@ export const makeMuseCycle = Effect.fnUntraced(function* (door: HostedDoor, proc
         })
         .pipe(Effect.mapError(faultOf));
       seat.fresh = false;
+      priced.set(seat.id, 0);
       applied = model === null ? null : { session: seat.id, model };
     } else {
       const resumed = yield* standing.host
@@ -390,73 +410,85 @@ export const makeMuseCycle = Effect.fnUntraced(function* (door: HostedDoor, proc
         configure: options.configure.bind(options),
         handed,
         queued: (named) => Effect.forEach(named, (input) => Effect.flatMap(slot(input), Deferred.await), { discard: true }),
-        send: Effect.fnUntraced(function* ({ input, prepared, output: out, permitted, cancelled }) {
+        send: Effect.fnUntraced(function* ({ input, prepared, output: out, permitted, halted }) {
           output = out;
           yield* report();
-          const prompt = prepared.opened.prompt ?? (yield* door.agent()).prompt;
-          const standing = yield* attach(seat, {
-            prompt: servedPrompt(prompt, prepared.listed.dispatch),
-            web: prepared.opened.web,
-            listed: prepared.listed,
-          });
-          const blocks: ContentBlock[] = [...history];
-          if (input.context !== null) blocks.push({ type: 'text', text: input.context });
-          blocks.push(...input.prompt);
-          const parts = yield* partsOf(blocks);
-          if (cancelled()) return unsent;
-          const turn = UUID_V7.test(input.id) ? input.id : runner.mint();
-          const done = yield* Deferred.make<ClientOutcome>();
-          const { effort, parameters } = options.read();
-          const running = new Feed(
-            {
-              session: seat.id,
-              turn,
-              output: out,
-              host: standing.host,
-              scope,
-              thoughts: parameters.reasoningDisplay !== 'omitted',
-              window: windowOf,
-              measured: (size) => {
-                window = size;
-              },
-              permitted,
-              callOf: (tool, input) => bridge.callOf(tool, input),
-              stderr: process.stderr,
-              began: Effect.andThen(
-                input.taken,
-                Effect.sync(() => {
-                  history = [];
-                }),
-              ),
-              abandon: Effect.suspend(() => (live === standing ? drop() : Effect.void)),
-              pricedBefore: priced.get(seat.id) ?? null,
-              priced: (usd) => void priced.set(seat.id, usd),
-            },
-            done,
-          );
-          feed = running;
-          const admitted = yield* standing.host
-            .command(
-              'turn/start',
+          const reaching: Reaching = { host: false, feed: null };
+          const acquire = Effect.gen(function* () {
+            const prompt = prepared.opened.prompt ?? (yield* door.agent()).prompt;
+            reaching.host = true;
+            const standing = yield* attach(seat, {
+              prompt: servedPrompt(prompt, prepared.listed.dispatch),
+              web: prepared.opened.web,
+              listed: prepared.listed,
+            });
+            const blocks: ContentBlock[] = [...history];
+            if (input.context !== null) blocks.push({ type: 'text', text: input.context });
+            blocks.push(...input.prompt);
+            const parts = yield* partsOf(blocks);
+            const turn = UUID_V7.test(input.id) ? input.id : runner.mint();
+            const done = yield* Deferred.make<ClientOutcome>();
+            const { effort, parameters } = options.read();
+            const running = new Feed(
               {
-                sessionId: seat.id,
-                input: said(parts),
-                ...(effort === null ? {} : { reasoningEffort: effort }),
+                session: seat.id,
+                turn,
+                output: out,
+                host: standing.host,
+                scope,
+                thoughts: parameters.reasoningDisplay !== 'omitted',
+                window: windowOf,
+                measured: (size) => {
+                  window = size;
+                },
+                permitted,
+                callOf: (tool, input) => bridge.callOf(tool, input),
+                stderr: process.stderr,
+                began: Effect.andThen(
+                  input.taken,
+                  Effect.sync(() => {
+                    history = [];
+                  }),
+                ),
+                abandon: Effect.suspend(() => (live === standing ? drop() : Effect.void)),
+                pricedBefore: priced.get(seat.id) ?? null,
+                priced: (usd) => void priced.set(seat.id, usd),
               },
-              turn,
-            )
-            .pipe(
-              Effect.mapError(faultOf),
-              Effect.flatMap(decoded(Started, 'turn/start')),
-              Effect.onError(() =>
-                Effect.sync(() => {
-                  if (feed === running) feed = null;
-                }),
-              ),
+              done,
             );
-          if (admitted.turnId !== turn)
-            return yield* new AgentFault({ code: FAULT.internal, message: `Muse Code admitted turn ${admitted.turnId} for ${turn}` });
-          if (admitted.disposition === 'started') yield* running.begin();
+            reaching.feed = running;
+            feed = running;
+            const admitted = yield* standing.host
+              .command(
+                'turn/start',
+                {
+                  sessionId: seat.id,
+                  input: said(parts),
+                  ...(effort === null ? {} : { reasoningEffort: effort }),
+                },
+                turn,
+              )
+              .pipe(
+                Effect.mapError(faultOf),
+                Effect.flatMap(decoded(Started, 'turn/start')),
+                Effect.onError(() =>
+                  Effect.sync(() => {
+                    if (feed === running) feed = null;
+                  }),
+                ),
+              );
+            if (admitted.turnId !== turn)
+              return yield* new AgentFault({ code: FAULT.internal, message: `Muse Code admitted turn ${admitted.turnId} for ${turn}` });
+            if (admitted.disposition === 'started') yield* running.begin();
+            return Option.some({ standing, running, turn, done });
+          });
+          const acquired = yield* Effect.raceFirst(acquire, Effect.as(halted, Option.none<Acquired>()));
+          if (Option.isNone(acquired)) {
+            if (reaching.feed !== null && feed === reaching.feed) feed = null;
+            if (reaching.host) yield* drop();
+            return unsent;
+          }
+          const { standing, running, turn, done } = acquired.value;
           const finish = Effect.andThen(
             Effect.sync(() => {
               if (feed === running) feed = null;
@@ -523,30 +555,42 @@ export const makeMuseCycle = Effect.fnUntraced(function* (door: HostedDoor, proc
               if (sent === undefined || !sent.feed.cancelled) return { withdrawn: false } satisfies Withdrawn;
               steers.delete(word);
               yield* Deferred.await(sent.feed.done);
+              if (sent.feed.doubted.has(sent.command))
+                return yield* new AgentFault({
+                  code: FAULT.internal,
+                  message: `Muse Code cannot show whether it still holds the words of ${sent.command}`,
+                });
               return { withdrawn: sent.feed.unread.has(sent.command) } satisfies Withdrawn;
             }),
           } satisfies ClientRun;
         }),
-        compact: Effect.fnUntraced(function* (_instructions, out) {
+        compact: Effect.fnUntraced(function* (_instructions, out, halted) {
           output = out;
-          const standing = live ?? (yield* attach(seat, yield* wanted()));
-          yield* load(standing, seat);
           const done = yield* Deferred.make<Item, AgentFault>();
-          compacting = { session: seat.id, output: out, done };
-          const asked = yield* standing.host.command('session/compact', { sessionId: seat.id }).pipe(
-            Effect.mapError(faultOf),
-            Effect.flatMap(decoded(Compact, 'session/compact')),
-            Effect.onError(() =>
-              Effect.sync(() => {
-                compacting = null;
-              }),
-            ),
-          );
-          if (asked.status !== 'accepted') {
-            compacting = null;
+          const release = Effect.sync(() => {
+            if (compacting?.done === done) compacting = null;
+          });
+          const admit = Effect.gen(function* () {
+            const standing = live ?? (yield* attach(seat, yield* wanted()));
+            yield* load(standing, seat);
+            compacting = { session: seat.id, output: out, done };
+            const asked = yield* standing.host
+              .command('session/compact', { sessionId: seat.id })
+              .pipe(Effect.mapError(faultOf), Effect.flatMap(decoded(Compact, 'session/compact')));
+            return Option.some(asked);
+          }).pipe(Effect.onError(() => release));
+          const asked = yield* Effect.raceFirst(admit, Effect.as(halted, Option.none<typeof Compact.Type>()));
+          if (Option.isNone(asked)) {
+            yield* drop();
+            yield* Deferred.fail(
+              done,
+              new AgentFault({ code: -32800, message: 'the compaction was cancelled while Muse Code was admitting it' }),
+            );
+          } else if (asked.value.status !== 'accepted') {
+            yield* release;
             return yield* new AgentFault({
               code: FAULT.invalidRequest,
-              message: `Muse Code had nothing to compact${asked.reason === undefined ? '' : ` (${asked.reason})`}`,
+              message: `Muse Code had nothing to compact${asked.value.reason === undefined ? '' : ` (${asked.value.reason})`}`,
             });
           }
           return {
@@ -570,11 +614,7 @@ export const makeMuseCycle = Effect.fnUntraced(function* (door: HostedDoor, proc
                       }),
                     ),
               ),
-              Effect.ensuring(
-                Effect.sync(() => {
-                  compacting = null;
-                }),
-              ),
+              Effect.ensuring(release),
             ),
             cancel: Effect.andThen(
               drop(),
@@ -585,38 +625,49 @@ export const makeMuseCycle = Effect.fnUntraced(function* (door: HostedDoor, proc
         aside: Effect.fnUntraced(function* (question: string) {
           if (asking !== null)
             return yield* new AgentFault({ code: FAULT.invalidRequest, message: 'a side question is already being answered' });
-          const standing = live ?? (yield* attach(seat, yield* wanted()));
-          yield* load(standing, seat);
-          const opened = yield* standing.host
-            .command('session/sideChat', { sessionId: seat.id })
-            .pipe(Effect.mapError(faultOf), Effect.flatMap(decoded(Opened, 'session/sideChat')));
-          const side = opened.session.sessionId;
-          const { model, effort } = options.read();
-          if (model !== null)
+          const mine: Asking = {
+            session: null,
+            turn: null,
+            done: Deferred.makeUnsafe<AsideAnswer, AgentFault>(),
+            said: [],
+            spent: NOTHING,
+            usd: null,
+          };
+          asking = mine;
+          return yield* Effect.gen(function* () {
+            const standing = live ?? (yield* attach(seat, yield* wanted()));
+            yield* load(standing, seat);
+            const opened = yield* standing.host
+              .command('session/sideChat', { sessionId: seat.id })
+              .pipe(Effect.mapError(faultOf), Effect.flatMap(decoded(Opened, 'session/sideChat')));
+            const side = opened.session.sessionId;
+            mine.session = side;
+            const { model, effort } = options.read();
+            if (model !== null)
+              yield* standing.host
+                .command('session/setModel', { sessionId: side, model: { modelId: model, providerId: PROVIDER_ID } })
+                .pipe(Effect.mapError(faultOf));
+            if (effort !== null)
+              yield* standing.host
+                .command('session/setReasoningEffort', { sessionId: side, reasoningEffort: effort })
+                .pipe(Effect.mapError(faultOf));
+            const turn = runner.mint();
+            mine.turn = turn;
             yield* standing.host
-              .command('session/setModel', { sessionId: side, model: { modelId: model, providerId: PROVIDER_ID } })
+              .command(
+                'turn/start',
+                { sessionId: side, input: [{ type: 'text', text: question }], ...(effort === null ? {} : { reasoningEffort: effort }) },
+                turn,
+              )
               .pipe(Effect.mapError(faultOf));
-          if (effort !== null)
-            yield* standing.host
-              .command('session/setReasoningEffort', { sessionId: side, reasoningEffort: effort })
-              .pipe(Effect.mapError(faultOf));
-          const done = yield* Deferred.make<AsideAnswer, AgentFault>();
-          asking = { session: side, done, said: [], spent: NOTHING, usd: null };
-          return yield* standing.host
-            .command(
-              'turn/start',
-              { sessionId: side, input: [{ type: 'text', text: question }], ...(effort === null ? {} : { reasoningEffort: effort }) },
-              runner.mint(),
-            )
-            .pipe(
-              Effect.mapError(faultOf),
-              Effect.andThen(Deferred.await(done)),
-              Effect.ensuring(
-                Effect.sync(() => {
-                  asking = null;
-                }),
-              ),
-            );
+            return yield* Deferred.await(mine.done);
+          }).pipe(
+            Effect.ensuring(
+              Effect.sync(() => {
+                if (asking === mine) asking = null;
+              }),
+            ),
+          );
         }),
         close: Effect.suspend(() => (live?.loaded.has(seat.id) === true ? drop() : Effect.void)),
       },

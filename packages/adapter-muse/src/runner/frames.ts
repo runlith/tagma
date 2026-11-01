@@ -115,6 +115,8 @@ const Held = Schema.Struct({ kind: Schema.String, commandId: Schema.optional(Sch
 const Ref = Schema.Struct({ turnId: Schema.String, commandId: Schema.String });
 export const SessionRead = Schema.Struct({
   history: Schema.Struct({
+    mode: Schema.String,
+    noneReason: Schema.optional(Schema.String),
     items: Schema.NullOr(Schema.Array(Held)),
     snapshot: Schema.NullOr(
       Schema.Struct({

@@ -5,7 +5,7 @@ import type { Outlet } from '@runlith/acp/agent';
 import { hostedAgent } from '@runlith/hosted-runner/agent';
 import type { HostedDoor } from '@runlith/hosted-runner/door';
 import type { McpServerInput } from '@runlith/mcp/server';
-import { MuseRefused, MuseSdk, type Frame } from './channel.js';
+import { MuseRefused, MuseSdk, type Frame, type Host } from './channel.js';
 import { makeMuseCycle } from './cycle.js';
 
 const TURN = '01a19573-1cea-7c2e-90b4-2854e4328409';
@@ -17,50 +17,63 @@ type Script = (
   emit: (frame: Omit<Frame, 'request'> & { request?: boolean }) => Effect.Effect<void>,
 ) => Effect.Effect<Record<string, unknown>, MuseRefused>;
 
-const world = Effect.fnUntraced(function* (script: Script, prompt: () => string = () => 'the frozen prompt') {
+const world = Effect.fnUntraced(function* (
+  script: Script,
+  prompt: () => string = () => 'the frozen prompt',
+  drained: Effect.Effect<void> = Effect.void,
+) {
   const scope = yield* Effect.scope;
   const sent: Sent[] = [];
   const launches: Parameters<MuseSdk['Service']['open']>[0][] = [];
   const settings: string[] = [];
   const seen: { readonly kind: string; readonly body: unknown }[] = [];
+  const hosts = { closed: 0 };
   let minted = 0;
   let mcp: McpServerInput | null = null;
   const called: string[] = [];
   const catalog = { description: 'echo', dispatch: false, names: ['echo'] };
   const sdk = MuseSdk.of({
     open: (launch) =>
-      Effect.sync(() => {
-        launches.push(launch);
-        const emit = (frame: Omit<Frame, 'request'> & { request?: boolean }) => launch.frame({ request: false, ...frame });
-        return {
-          home: '/home/.local/share/muse',
-          command: (method, params, id) => {
-            const one = { method, params, id };
-            sent.push(one);
-            return script(one, emit);
-          },
-          request: (method, params) => {
-            sent.push({ method, params });
-            return method === 'model/list'
-              ? Effect.succeed({
-                  providerId: 'meta',
-                  models: [
-                    {
-                      modelId: 'muse-spark-1.2',
-                      displayLabel: 'Spark',
-                      providerId: 'meta',
-                      isDefault: true,
-                      contextLimit: 1_000_000,
-                      outputLimit: 128_000,
-                    },
-                  ],
-                })
-              : script({ method, params }, emit);
-          },
-          mint: () => `00000000-0000-7000-8000-${String(++minted).padStart(12, '0')}`,
-          ended: Effect.never,
-        };
-      }),
+      Effect.andThen(
+        Effect.addFinalizer(() =>
+          Effect.sync(() => {
+            hosts.closed += 1;
+          }),
+        ),
+        Effect.sync((): Host => {
+          launches.push(launch);
+          const emit = (frame: Omit<Frame, 'request'> & { request?: boolean }) => launch.frame({ request: false, ...frame });
+          return {
+            home: '/home/.local/share/muse',
+            command: (method, params, id) => {
+              const one = { method, params, id };
+              sent.push(one);
+              return script(one, emit);
+            },
+            request: (method, params) => {
+              sent.push({ method, params });
+              return method === 'model/list'
+                ? Effect.succeed({
+                    providerId: 'meta',
+                    models: [
+                      {
+                        modelId: 'muse-spark-1.2',
+                        displayLabel: 'Spark',
+                        providerId: 'meta',
+                        isDefault: true,
+                        contextLimit: 1_000_000,
+                        outputLimit: 128_000,
+                      },
+                    ],
+                  })
+                : script({ method, params }, emit);
+            },
+            mint: () => `00000000-0000-7000-8000-${String(++minted).padStart(12, '0')}`,
+            drained,
+            ended: Effect.never,
+          };
+        }),
+      ),
   });
   const door: HostedDoor = {
     agent: () => Effect.sync(() => ({ prompt: prompt(), web: 'none' as const })),
@@ -118,8 +131,11 @@ const world = Effect.fnUntraced(function* (script: Script, prompt: () => string 
     if (mcp === null) throw new Error('the cycle served no MCP door');
     return mcp;
   };
-  return { agent, sent, launches, settings, seen, catalog, served, called };
+  return { agent, sent, launches, settings, seen, catalog, served, called, hosts };
 });
+
+const kindOf = (one: { readonly kind: string; readonly body: unknown }) =>
+  one.kind === 'update' ? (one.body as { update: { sessionUpdate: string } }).update.sessionUpdate : one.kind;
 
 const ok = (sent: Sent, extra: Record<string, unknown> = {}) => Effect.succeed({ commandId: sent.id ?? 'c', status: 'accepted', ...extra });
 
@@ -332,26 +348,6 @@ it.effect('a stop before the follow-up of an unread steer ends the turn and hand
   }),
 );
 
-it.effect('a stop while the host is still opening ends the turn cancelled without handing its words to Muse', () =>
-  Effect.gen(function* () {
-    const opening = yield* Deferred.make<void>();
-    const { agent, sent } = yield* world((one) => {
-      if (one.method === 'session/start')
-        return Effect.andThen(Deferred.await(opening), ok(one, { session: { sessionId: one.params.sessionId } }));
-      return ok(one, { turnId: TURN, disposition: 'started' });
-    });
-    const session = yield* agent.newSession({ cwd: '/work', mcpServers: [] });
-    const running = yield* Effect.forkChild(
-      agent.prompt({ sessionId: session.sessionId, prompt: [{ type: 'text', text: 'go' }], _meta: { 'tagma/turn': TURN } }),
-    );
-    while (!sent.some((one) => one.method === 'session/start')) yield* Effect.yieldNow;
-    yield* agent.cancel({ sessionId: session.sessionId });
-    yield* Deferred.succeed(opening, undefined);
-    expect(yield* Fiber.join(running)).toMatchObject({ stopReason: 'cancelled' });
-    expect(sent.filter((one) => one.method === 'turn/start')).toEqual([]);
-  }),
-);
-
 it.effect('a turn Muse only queued and a stop reclaimed leaves its opening unheard', () =>
   Effect.gen(function* () {
     const { agent, sent } = yield* world((one, emit) => {
@@ -375,12 +371,14 @@ it.effect('a turn Muse only queued and a stop reclaimed leaves its opening unhea
   }),
 );
 
-it.effect('a decision Muse refuses on a Tagma call fails the turn and stops it instead of leaving it waiting', () =>
+it.effect('a decision Muse refuses fails the turn only once Muse stopped it, and answers the steer it accepted meanwhile', () =>
   Effect.gen(function* () {
+    const STEER = '01a19573-2e48-708d-9b8c-9be329a9e7ec';
     const { agent, sent } = yield* world((one, emit) => {
       const sessionId = one.params.sessionId;
       if (one.method === 'session/start') return ok(one, { session: { sessionId } });
-      if (one.method === 'turn/start')
+      if (one.method === 'turn/start') return ok(one, { turnId: TURN, disposition: 'started' });
+      if (one.method === 'turn/steer')
         return Effect.as(
           Effect.forkDetach(
             emit({
@@ -399,18 +397,38 @@ it.effect('a decision Muse refuses on a Tagma call fails the turn and stops it i
               },
             }),
           ),
-          { commandId: one.id, status: 'accepted', turnId: TURN, disposition: 'started' },
+          { commandId: one.id, status: 'accepted', turnId: TURN },
         );
       if (one.method === 'approval/decide')
         return Effect.fail(new MuseRefused({ method: one.method, kind: 'overloaded', code: -32050, message: 'host overloaded' }));
+      if (one.method === 'turn/interrupt')
+        return Effect.as(emit({ method: 'turn/completed', params: { sessionId, turnId: TURN, terminal: 'cancelled' } }), {
+          commandId: one.id,
+        });
+      if (one.method === 'turn/unqueue')
+        return Effect.fail(new MuseRefused({ method: one.method, kind: 'commandRejected', code: -32030, message: 'missing_run' }));
+      if (one.method === 'session/read')
+        return Effect.succeed({
+          history: {
+            mode: 'snapshot',
+            items: null,
+            snapshot: { state: { items: [], activeTurn: null, queuedTurns: [] } },
+          },
+        });
       return ok(one);
     });
     const session = yield* agent.newSession({ cwd: '/work', mcpServers: [] });
-    const failed = yield* Effect.flip(
+    const running = yield* Effect.forkChild(
       agent.prompt({ sessionId: session.sessionId, prompt: [{ type: 'text', text: 'go' }], _meta: { 'tagma/turn': TURN } }),
     );
+    while (!sent.some((one) => one.method === 'turn/start')) yield* Effect.yieldNow;
+    const steered = yield* Effect.forkChild(
+      agent.extensions!['_tagma/steer']!({ sessionId: session.sessionId, prompt: [{ type: 'text', text: 'late' }], input: STEER }),
+    );
+    const failed = yield* Effect.flip(Fiber.join(running));
     expect(failed.message).toContain('refused the decision');
-    while (!sent.some((one) => one.method === 'turn/interrupt')) yield* Effect.yieldNow;
+    expect(sent.some((one) => one.method === 'turn/interrupt')).toBe(true);
+    expect(yield* Fiber.join(steered)).toEqual({ outcome: 'promptRequired' });
   }),
 );
 
@@ -430,7 +448,7 @@ it.effect('a stopped turn answers an accepted steer by what Muse holds of it, ne
         return Effect.fail(new MuseRefused({ method: one.method, kind: 'commandRejected', code: -32030, message: 'missing_run' }));
       if (one.method === 'session/read')
         return Effect.succeed({
-          history: { items: [{ itemId: 'u2', kind: 'userMessage', commandId: STEER, steered: true }], snapshot: null },
+          history: { mode: 'inline', items: [{ itemId: 'u2', kind: 'userMessage', commandId: STEER, steered: true }], snapshot: null },
         });
       return ok(one);
     });
@@ -450,12 +468,45 @@ it.effect('a stopped turn answers an accepted steer by what Muse holds of it, ne
   }),
 );
 
-it.effect('a stop while Muse is still admitting a compaction ends it cancelled at once, and the session reads busy until then', () =>
+it.effect('a stopped turn whose history Muse cannot serve leaves an accepted steer of unknown fate, never handed back as unread', () =>
   Effect.gen(function* () {
-    const admitting = yield* Deferred.make<void>();
-    const { agent, sent } = yield* world((one) => {
+    const STEER = '01a19573-2e48-708d-9b8c-9be329a9e7ed';
+    const { agent, sent } = yield* world((one, emit) => {
+      const sessionId = one.params.sessionId;
+      if (one.method === 'session/start') return ok(one, { session: { sessionId } });
+      if (one.method === 'turn/start') return ok(one, { turnId: TURN, disposition: 'started' });
+      if (one.method === 'turn/steer') return ok(one, { turnId: TURN });
+      if (one.method === 'turn/interrupt')
+        return Effect.as(emit({ method: 'turn/completed', params: { sessionId, turnId: TURN, terminal: 'cancelled' } }), {
+          commandId: one.id,
+        });
+      if (one.method === 'turn/unqueue')
+        return Effect.fail(new MuseRefused({ method: one.method, kind: 'commandRejected', code: -32030, message: 'missing_run' }));
+      if (one.method === 'session/read')
+        return Effect.succeed({ history: { mode: 'none', noneReason: 'historyBudget', items: null, snapshot: null } });
+      return ok(one);
+    });
+    const session = yield* agent.newSession({ cwd: '/work', mcpServers: [] });
+    const running = yield* Effect.forkChild(
+      agent.prompt({ sessionId: session.sessionId, prompt: [{ type: 'text', text: 'go' }], _meta: { 'tagma/turn': TURN } }),
+    );
+    while (!sent.some((one) => one.method === 'turn/start')) yield* Effect.yieldNow;
+    const steered = yield* Effect.forkChild(
+      agent.extensions!['_tagma/steer']!({ sessionId: session.sessionId, prompt: [{ type: 'text', text: 'late' }], input: STEER }),
+    );
+    while (!sent.some((one) => one.method === 'turn/steer')) yield* Effect.yieldNow;
+    yield* agent.cancel({ sessionId: session.sessionId });
+    expect(yield* Fiber.join(running)).toMatchObject({ stopReason: 'cancelled' });
+    const doubted = yield* Effect.flip(Fiber.join(steered));
+    expect(doubted.message).toContain('historyBudget');
+  }),
+);
+
+it.effect('a stop while Muse is still admitting a compaction replaces its host, so a compaction Muse admitted cannot go on unseen', () =>
+  Effect.gen(function* () {
+    const { agent, sent, hosts } = yield* world((one) => {
       if (one.method === 'session/start') return ok(one, { session: { sessionId: one.params.sessionId } });
-      if (one.method === 'session/compact') return Effect.andThen(Deferred.await(admitting), ok(one));
+      if (one.method === 'session/compact') return Effect.never;
       return ok(one);
     });
     const session = yield* agent.newSession({ cwd: '/work', mcpServers: [] });
@@ -466,6 +517,41 @@ it.effect('a stop while Muse is still admitting a compaction ends it cancelled a
     expect(second.message).toContain('busy');
     yield* agent.cancel({ sessionId: session.sessionId });
     expect((yield* Effect.flip(Fiber.join(compacting))).code).toBe(-32800);
+    expect(hosts.closed).toBe(1);
+  }),
+);
+
+it.effect('a stop while Muse never answers the opening ends the turn cancelled and replaces the host, sending none of its words', () =>
+  Effect.gen(function* () {
+    const { agent, sent, hosts } = yield* world((one) => (one.method === 'session/start' ? Effect.never : ok(one)));
+    const session = yield* agent.newSession({ cwd: '/work', mcpServers: [] });
+    const running = yield* Effect.forkChild(
+      agent.prompt({ sessionId: session.sessionId, prompt: [{ type: 'text', text: 'go' }], _meta: { 'tagma/turn': TURN } }),
+    );
+    while (!sent.some((one) => one.method === 'session/start')) yield* Effect.yieldNow;
+    yield* agent.cancel({ sessionId: session.sessionId });
+    expect(yield* Fiber.join(running)).toMatchObject({ stopReason: 'cancelled' });
+    expect([sent.filter((one) => one.method === 'turn/start'), hosts.closed]).toEqual([[], 1]);
+  }),
+);
+
+it.effect('a stop while Muse holds back its answer to the turn start ends the turn cancelled and replaces the host it may run on', () =>
+  Effect.gen(function* () {
+    const { agent, sent, hosts } = yield* world((one) => {
+      if (one.method === 'session/start') return ok(one, { session: { sessionId: one.params.sessionId } });
+      if (one.method === 'turn/start') return Effect.never;
+      return ok(one);
+    });
+    const session = yield* agent.newSession({ cwd: '/work', mcpServers: [] });
+    const running = yield* Effect.forkChild(
+      agent.prompt({ sessionId: session.sessionId, prompt: [{ type: 'text', text: 'go' }], _meta: { 'tagma/turn': TURN } }),
+    );
+    while (!sent.some((one) => one.method === 'turn/start')) yield* Effect.yieldNow;
+    yield* agent.cancel({ sessionId: session.sessionId });
+    const answer = yield* Fiber.join(running);
+    expect(answer).toMatchObject({ stopReason: 'cancelled' });
+    expect(answer._meta).not.toHaveProperty('tagma/opened');
+    expect(hosts.closed).toBe(1);
   }),
 );
 
@@ -532,48 +618,55 @@ it.effect('a prompt that changed between runs restarts the host and resumes the 
   }),
 );
 
-it.effect('blank words never reach Muse, and a turn costs what Muse priced the session above the turn before', () =>
-  Effect.gen(function* () {
-    const turns = ['01a19573-1cea-7c2e-90b4-000000000021', '01a19573-1cea-7c2e-90b4-000000000022'];
-    let usd = 0;
-    const { agent, sent } = yield* world((one, emit) => {
-      if (one.method === 'session/start') return ok(one, { session: { sessionId: one.params.sessionId } });
-      if (one.method === 'turn/start') {
-        usd += 0.25;
-        const sessionId = one.params.sessionId;
-        const usage = { inputTokens: 10, outputTokens: 1, cachedTokens: 0, reasoningTokens: 0 };
-        return Effect.as(
-          Effect.forkDetach(
-            Effect.andThen(
-              emit({
-                method: 'session/tokenUsage',
-                params: {
-                  sessionId,
-                  turnId: one.id,
-                  modelId: null,
-                  usage,
-                  promptTokens: 10,
-                  cumulative: { cost: { usd, partial: false } },
-                },
-              }),
-              emit({ method: 'turn/completed', params: { sessionId, turnId: one.id, terminal: 'completed' } }),
+it.effect(
+  'blank words never reach Muse, and a turn costs what Muse priced the session above the turn before, from zero on a new session',
+  () =>
+    Effect.gen(function* () {
+      const turns = ['01a19573-1cea-7c2e-90b4-000000000021', '01a19573-1cea-7c2e-90b4-000000000022'];
+      let usd = 0;
+      const { agent, sent } = yield* world((one, emit) => {
+        if (one.method === 'session/start') return ok(one, { session: { sessionId: one.params.sessionId } });
+        if (one.method === 'turn/start') {
+          usd += 0.25;
+          const sessionId = one.params.sessionId;
+          const usage = { inputTokens: 10, outputTokens: 1, cachedTokens: 0, reasoningTokens: 0 };
+          return Effect.as(
+            Effect.forkDetach(
+              Effect.andThen(
+                emit({
+                  method: 'session/tokenUsage',
+                  params: {
+                    sessionId,
+                    turnId: one.id,
+                    modelId: null,
+                    usage,
+                    promptTokens: 10,
+                    cumulative: { cost: { usd, partial: false } },
+                  },
+                }),
+                emit({ method: 'turn/completed', params: { sessionId, turnId: one.id, terminal: 'completed' } }),
+              ),
             ),
-          ),
-          { commandId: one.id, status: 'accepted', turnId: one.id, disposition: 'started' },
-        );
-      }
-      return ok(one);
-    });
-    const session = yield* agent.newSession({ cwd: '/work', mcpServers: [] });
-    yield* agent.prompt({ sessionId: session.sessionId, prompt: [{ type: 'text', text: 'one' }], _meta: { 'tagma/turn': turns[0] } });
-    const second = yield* agent.prompt({
-      sessionId: session.sessionId,
-      prompt: [{ type: 'text', text: '  ' }],
-      _meta: { 'tagma/turn': turns[1] },
-    });
-    expect(sent.filter((one) => one.method === 'turn/start').at(-1)?.params.input).toEqual([{ type: 'text', text: 'turn context' }]);
-    expect(second._meta).toMatchObject({ 'tagma/cost': { amount: 0.25, currency: 'USD', basis: 'estimate' } });
-  }),
+            { commandId: one.id, status: 'accepted', turnId: one.id, disposition: 'started' },
+          );
+        }
+        return ok(one);
+      });
+      const session = yield* agent.newSession({ cwd: '/work', mcpServers: [] });
+      const first = yield* agent.prompt({
+        sessionId: session.sessionId,
+        prompt: [{ type: 'text', text: 'one' }],
+        _meta: { 'tagma/turn': turns[0] },
+      });
+      expect(first._meta).toMatchObject({ 'tagma/cost': { amount: 0.25, currency: 'USD', basis: 'estimate' } });
+      const second = yield* agent.prompt({
+        sessionId: session.sessionId,
+        prompt: [{ type: 'text', text: '  ' }],
+        _meta: { 'tagma/turn': turns[1] },
+      });
+      expect(sent.filter((one) => one.method === 'turn/start').at(-1)?.params.input).toEqual([{ type: 'text', text: 'turn context' }]);
+      expect(second._meta).toMatchObject({ 'tagma/cost': { amount: 0.25, currency: 'USD', basis: 'estimate' } });
+    }),
 );
 
 it.effect('a side question runs in a side session on the thread model and answers with its text and spend', () =>
@@ -611,6 +704,121 @@ it.effect('a side question runs in a side session on the thread model and answer
     expect(sent.find((one) => one.method === 'session/setModel' && one.params.sessionId === 'side-1')?.params).toMatchObject({
       model: { modelId: 'muse-spark-1.2' },
     });
+  }),
+);
+
+it.effect('a second side question asked while the first is still opening its side session is refused, and the first is answered', () =>
+  Effect.gen(function* () {
+    const opening = yield* Deferred.make<void>();
+    const { agent, sent } = yield* world((one, emit) => {
+      if (one.method === 'session/start') return ok(one, { session: { sessionId: one.params.sessionId } });
+      if (one.method === 'session/sideChat') return Effect.andThen(Deferred.await(opening), ok(one, { session: { sessionId: 'side-1' } }));
+      if (one.method === 'turn/start' && one.params.sessionId === 'side-1')
+        return Effect.as(
+          Effect.forkDetach(
+            Effect.andThen(
+              emit({
+                method: 'item/completed',
+                params: {
+                  sessionId: 'side-1',
+                  item: { itemId: 'a', kind: 'agentMessage', status: 'completed', turnId: one.id, text: 'FIRST' },
+                },
+              }),
+              emit({ method: 'turn/completed', params: { sessionId: 'side-1', turnId: one.id, terminal: 'completed' } }),
+            ),
+          ),
+          { commandId: one.id, status: 'accepted', turnId: one.id, disposition: 'started' },
+        );
+      return ok(one);
+    });
+    const session = yield* agent.newSession({ cwd: '/work', mcpServers: [] });
+    const aside = agent.extensions!['_tagma/aside']!;
+    const first = yield* Effect.forkChild(aside({ sessionId: session.sessionId, question: 'first?' }));
+    while (!sent.some((one) => one.method === 'session/sideChat')) yield* Effect.yieldNow;
+    const second = yield* Effect.flip(aside({ sessionId: session.sessionId, question: 'second?' }));
+    expect(second.message).toContain('already being answered');
+    yield* Deferred.succeed(opening, undefined);
+    expect(yield* Fiber.join(first)).toMatchObject({ text: 'FIRST' });
+    expect(sent.filter((one) => one.method === 'session/sideChat')).toHaveLength(1);
+  }),
+);
+
+it.effect('a side question that asks Tagma back is stopped and refused instead of waiting for an answer', () =>
+  Effect.gen(function* () {
+    const { agent, sent } = yield* world((one, emit) => {
+      if (one.method === 'session/start') return ok(one, { session: { sessionId: one.params.sessionId } });
+      if (one.method === 'session/sideChat') return ok(one, { session: { sessionId: 'side-1' } });
+      if (one.method === 'turn/start' && one.params.sessionId === 'side-1')
+        return Effect.as(
+          Effect.forkDetach(
+            emit({
+              method: 'userInput/request',
+              request: true,
+              params: { sessionId: 'side-1', turnId: one.id, userInputId: 'q1', questions: [{ text: 'Which one?' }] },
+            }),
+          ),
+          { commandId: one.id, status: 'accepted', turnId: one.id, disposition: 'started' },
+        );
+      if (one.method === 'turn/interrupt')
+        return Effect.as(
+          emit({ method: 'turn/completed', params: { sessionId: one.params.sessionId, turnId: one.params.turnId, terminal: 'cancelled' } }),
+          { commandId: one.id },
+        );
+      return ok(one);
+    });
+    const session = yield* agent.newSession({ cwd: '/work', mcpServers: [] });
+    const refused = yield* Effect.flip(agent.extensions!['_tagma/aside']!({ sessionId: session.sessionId, question: 'What now?' }));
+    expect(refused.message).toContain('userInput/request');
+    while (!sent.some((one) => one.method === 'turn/interrupt')) yield* Effect.yieldNow;
+    expect(sent.find((one) => one.method === 'turn/interrupt')?.params).toMatchObject({ sessionId: 'side-1' });
+  }),
+);
+
+it.effect('a turn answers only once its host delivered what it holds, so events paged back after the completion still land in it', () =>
+  Effect.gen(function* () {
+    const drained = yield* Deferred.make<void>();
+    const ended = yield* Deferred.make<void>();
+    const paged = yield* Deferred.make<void>();
+    const landed = yield* Deferred.make<void>();
+    const { agent, seen } = yield* world(
+      (one, emit) => {
+        const sessionId = one.params.sessionId;
+        if (one.method === 'session/start') return ok(one, { session: { sessionId } });
+        if (one.method === 'turn/start')
+          return Effect.as(
+            Effect.forkDetach(
+              Effect.gen(function* () {
+                yield* emit({ method: 'turn/completed', params: { sessionId, turnId: TURN, terminal: 'completed' } });
+                yield* Deferred.succeed(ended, undefined);
+                yield* Deferred.await(paged);
+                yield* emit({
+                  method: 'item/completed',
+                  params: {
+                    sessionId,
+                    item: { itemId: 'm1', kind: 'agentMessage', status: 'completed', turnId: TURN, text: 'PAGED-BACK' },
+                  },
+                });
+                yield* Deferred.succeed(landed, undefined);
+              }),
+            ),
+            { commandId: one.id, status: 'accepted', turnId: TURN, disposition: 'started' },
+          );
+        return ok(one);
+      },
+      undefined,
+      Deferred.await(drained),
+    );
+    const session = yield* agent.newSession({ cwd: '/work', mcpServers: [] });
+    const running = yield* Effect.forkChild(
+      agent.prompt({ sessionId: session.sessionId, prompt: [{ type: 'text', text: 'go' }], _meta: { 'tagma/turn': TURN } }),
+    );
+    yield* Deferred.await(ended);
+    for (let step = 0; step < 20; step += 1) yield* Effect.yieldNow;
+    yield* Deferred.succeed(paged, undefined);
+    yield* Deferred.await(landed);
+    yield* Deferred.succeed(drained, undefined);
+    expect(yield* Fiber.join(running)).toMatchObject({ stopReason: 'end_turn' });
+    expect(seen.some((one) => kindOf(one) === 'agent_message_chunk' && JSON.stringify(one.body).includes('PAGED-BACK'))).toBe(true);
   }),
 );
 
