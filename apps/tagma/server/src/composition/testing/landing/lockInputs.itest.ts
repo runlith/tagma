@@ -186,6 +186,38 @@ it.live('a declared derivation needs no origin marker and drops an output it ret
   }).pipe(Effect.provide(BunFileSystem.layer)),
 );
 
+it.live('a derivation reaches ignored dependencies of the whole checkout, not only those beside its outputs', () =>
+  Effect.gen(function* () {
+    const fixture = yield* nativeLanding({
+      '.gitignore': 'node_modules/\n',
+      'artifact.txt': 'base\n',
+      'input.txt': 'base\n',
+      'peer.txt': 'base\n',
+      'tools/gen/package.json': '{}\n',
+    });
+    yield* fixture.files.makeDirectory(join(fixture.root, 'tools/gen/node_modules'), { recursive: true });
+    yield* fixture.files.writeFileString(join(fixture.root, 'tools/gen/node_modules/dep.txt'), 'dependency\n');
+    const actor = yield* fixture.born();
+    const peer = yield* fixture.born();
+    yield* fixture.write(peer.threadId, 'peer.txt', 'unfinished\n');
+    yield* fixture.write(actor.threadId, 'input.txt', 'changed\n');
+    yield* fixture.write(actor.threadId, 'artifact.txt', 'working output\n');
+    const result = yield* fixture.doors.atNative(
+      'submit_work',
+      {
+        subject: 'derive over a dependency outside the output directory',
+        paths: ['input.txt', 'artifact.txt'],
+        derive: [{ paths: ['artifact.txt'], run: ['sh', '-c', 'cat tools/gen/node_modules/dep.txt input.txt > artifact.txt'] }],
+        tasks: [],
+      },
+      actor,
+    );
+    expect(result).toMatchObject({ class: 'answer', value: { submitted: { status: 'landed' } } });
+    expect(yield* fixture.read('artifact.txt')).toBe('dependency\nchanged\n');
+    expect(yield* fixture.files.readFileString(join(fixture.root, 'peer.txt'))).toBe('unfinished\n');
+  }).pipe(Effect.provide(BunFileSystem.layer)),
+);
+
 it.live(
   'derivation output capture ignores generator staging and graph writes, keeps caller precedence and discovers first glob outputs',
   () =>

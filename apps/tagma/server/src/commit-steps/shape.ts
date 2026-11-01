@@ -4,7 +4,7 @@ import { GateRefusal } from '../platform/contract/wire/refusal.js';
 import { CommitShape, type DerivationNeed, type ShapeAsk, type Shaped } from '../change-record/contract/service/shape.js';
 import { ProgramRoad } from '../executions/contract/service/programs.js';
 import { GraphDirectory } from '../workspace/contract/service/checkouts.js';
-import { CommitTrees, type TreeReach } from '../workspace/contract/service/commitTrees.js';
+import { CommitTrees, WHOLE_TREE, type TreeReach } from '../workspace/contract/service/commitTrees.js';
 import { Configs } from '../config/contract/service/configs.js';
 import { CONFIG_FILE, type FormatEntry } from '../config/contract/wire/config.js';
 import { candidatesOf, filtered, globbed, outsideGraph, selectorOf } from './selection.js';
@@ -78,7 +78,11 @@ export const makeCommitShape = Effect.gen(function* () {
       if (reach.length === 0 && derivations.length === 0) return UNCHANGED(ask, declaration);
       const original = new Map(candidates.map((one) => [one.path, one.entry] as const));
       const nearby = derivations.length === 0 && steps.every((step) => step.command.reads === 'nearby');
-      const scope: TreeReach = nearby ? { _tag: 'nearby', paths: reach, uses: usesOf(steps) } : { _tag: 'along', paths: reach };
+      const scope: TreeReach = nearby
+        ? { _tag: 'nearby', paths: reach, uses: usesOf(steps) }
+        : derivations.length > 0
+          ? WHOLE_TREE
+          : { _tag: 'along', paths: reach };
       let phase: 'format' | 'derive' = steps.length === 0 ? 'derive' : 'format';
       const deriving = () => phase === 'derive';
       return yield* trees
