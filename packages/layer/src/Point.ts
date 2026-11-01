@@ -57,17 +57,13 @@ export class Point<Item> {
     };
   }
 
-  static over<Item>(id: string, definition: PointDefinition<Item>, cell: Cell<readonly Item[]>, settled?: Promise<void>): Point<Item> {
+  static over<Item>(id: string, definition: PointDefinition<Item>, cell: Cell<readonly Item[]>, starting?: () => boolean): Point<Item> {
     const subject = (key: string): string => `Point "${id}" item "${key}"`;
-    let starting = true;
-    void settled?.then(() => {
-      starting = false;
-    });
     const admits =
-      settled === undefined
+      starting === undefined
         ? definition.admits
         : (item: Item): string | null =>
-            starting ? (definition.admits?.(item) ?? null) : 'this point takes members only while its scope starts';
+            starting() ? (definition.admits?.(item) ?? null) : 'this point takes members only while its scope starts';
     return new Point<Item>(id, definition.key, new Roster(subject, definition.key, cell, { ...definition, admits }));
   }
 
@@ -82,7 +78,7 @@ export class Point<Item> {
             id,
             definition,
             cellOf<readonly Item[]>(scope),
-            definition.joins === 'start' ? settledOf(scope) : undefined,
+            definition.joins === 'start' ? startingOf(scope) : undefined,
           );
         }
 
@@ -111,6 +107,8 @@ function cellOf<T>(scope: Scope): Cell<T> {
   return graphOf(scope).cell<T>();
 }
 
-function settledOf(scope: Scope): Promise<void> {
-  return graphOf(scope).settled(scope.home);
+function startingOf(scope: Scope): () => boolean {
+  const graph = graphOf(scope);
+  const home = scope.home;
+  return () => graph.starting(home);
 }

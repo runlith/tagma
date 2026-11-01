@@ -192,7 +192,7 @@ export class Graph {
   private readonly chunks = new Map<LayerItem, Promise<AnyLayer>>();
   private readonly loaded = new Map<LayerItem, AnyLayer>();
   private readonly started = new Set<Scope>();
-  private readonly settling = new WeakMap<Scope, { readonly settled: Promise<void>; readonly settle: () => void }>();
+  private readonly opening = new Set<Scope>();
   private readonly conditioned = new WeakMap<Scope, Map<WhenItem, Reading>>();
   private readonly requires = new WeakMap<Scope, Map<string, Set<string>>>();
   private readonly lasting = new WeakMap<Scope, Definition[]>();
@@ -387,27 +387,15 @@ export class Graph {
     return { scope, ready: this.open(scope, [{ kind: 'value', key: rung.Current, instance: input }], start) };
   }
 
-  settled(scope: Scope): Promise<void> {
-    return this.settlingOf(scope).settled;
-  }
-
-  private settlingOf(scope: Scope): { readonly settled: Promise<void>; readonly settle: () => void } {
-    const known = this.settling.get(scope);
-    if (known) return known;
-    let settle: () => void = () => undefined;
-    const settled = new Promise<void>((resolve) => {
-      settle = resolve;
-    });
-    const made = { settled, settle };
-    this.settling.set(scope, made);
-    return made;
+  starting(scope: Scope): boolean {
+    return this.opening.has(scope);
   }
 
   start(scope: Scope): Promise<void> {
     if (this.started.has(scope)) return Promise.resolve();
     this.started.add(scope);
     scope.defer(() => void this.started.delete(scope));
-    const { settle } = this.settlingOf(scope);
+    this.opening.add(scope);
     try {
       const pending: Promise<void>[] = [];
       for (const item of this.conditional) this.startCondition(item, scope, pending);
@@ -421,13 +409,12 @@ export class Graph {
       const inherited: Definition[] = [];
       for (let at = scope.parent; at; at = at.parent) inherited.push(...(this.lasting.get(at) ?? []));
       this.wake(scope, [...this.definitions.values(), ...(this.local.get(scope)?.values() ?? []), ...inherited]);
-      const done = pending.length > 0 ? Promise.all(pending).then(() => undefined) : Promise.resolve();
-      void done.then(settle, settle);
-      return done;
+      return pending.length > 0 ? Promise.all(pending).then(() => undefined) : Promise.resolve();
     } catch (error) {
-      settle();
       void scope.close();
       throw error;
+    } finally {
+      this.opening.delete(scope);
     }
   }
 
