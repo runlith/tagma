@@ -1,7 +1,7 @@
 ---
 id: 01a19943-1ab6-72a2-bcb1-1169f3b1a676
 title: A group member's skills are walked per member and composed into the home catalog at every read
-ord: 70
+ord: 3
 tags: ["explanation"]
 edges:
   - kind: relates

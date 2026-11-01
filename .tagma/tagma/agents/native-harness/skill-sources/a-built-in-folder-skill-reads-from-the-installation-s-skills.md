@@ -1,7 +1,7 @@
 ---
 id: 01a159db-b9ca-7ff1-9921-9a3a675af09a
 title: A built-in folder skill reads from the installation's `skills/` next to the server bundle, while a server from sources reads it in native-harness
-ord: 57
+ord: 1
 tags: ["explanation"]
 sources:
   - kind: file

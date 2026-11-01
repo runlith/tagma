@@ -1,7 +1,7 @@
 ---
 id: 01a16477-6565-70f7-a2e4-f3faff94d8f9
 title: A capability setting changes its offer on the next step, keeping it in the definition grant
-ord: 27
+ord: 7
 tags: ["explanation"]
 sources:
   - kind: file

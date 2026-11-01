@@ -1,7 +1,7 @@
 ---
 id: 01a18919-94f6-740b-a54e-20e8fe6dbfb8
 title: "Plugin agents are a floor of declared agents: `<plugin>-<agent>`, read from the enabled plugins at every catalog read, offered to the operator alone, born in the thread's own mode"
-ord: 63
+ord: 2
 tags: ["explanation"]
 edges:
   - kind: relates

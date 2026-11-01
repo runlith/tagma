@@ -1,7 +1,7 @@
 ---
 id: 01a12337-6301-77ae-ac03-d842871ec3c6
 title: "App agents are the third floor of declared agents: `<app>.<agent>`, only in projects where the app is enabled, always with its `app:<id>` capability"
-ord: 6
+ord: 1
 tags: ["explanation"]
 sources:
   - kind: file

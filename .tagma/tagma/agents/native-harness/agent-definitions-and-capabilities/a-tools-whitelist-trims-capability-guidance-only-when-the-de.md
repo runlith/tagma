@@ -1,7 +1,7 @@
 ---
 id: 01a18458-1bc4-7369-ae0c-c675c7432228
 title: A tools whitelist trims capability guidance only when the declared inventory proves no tool survives
-ord: 59
+ord: 6
 tags: ["explanation"]
 edges:
   - kind: relates

@@ -1,7 +1,7 @@
 ---
 id: 01a16e64-91a1-74c9-88e8-8840dbfd4044
 title: The skill catalog points at the removed ag-no-shit-tests
-ord: 39
+ord: 4
 tags: ["reflection"]
 fields:
   {

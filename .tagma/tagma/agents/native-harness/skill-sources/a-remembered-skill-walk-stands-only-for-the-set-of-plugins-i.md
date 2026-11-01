@@ -1,7 +1,7 @@
 ---
 id: 01a18919-ce13-775e-b899-80a72b04abc7
 title: A remembered skill walk stands only for the set of plugins it was walked with
-ord: 64
+ord: 2
 tags: ["explanation"]
 edges:
   - kind: relates

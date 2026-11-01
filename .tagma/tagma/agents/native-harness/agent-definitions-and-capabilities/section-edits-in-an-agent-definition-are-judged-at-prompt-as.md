@@ -1,7 +1,7 @@
 ---
 id: 01a1469e-35ac-7306-b96e-049f79e579a1
 title: "Section edits in an agent definition are judged at prompt assembly: a stale edit is an agent-invalid refusal, never a silent skip"
-ord: 16
+ord: 3
 tags: ["explanation"]
 edges:
   - kind: relates

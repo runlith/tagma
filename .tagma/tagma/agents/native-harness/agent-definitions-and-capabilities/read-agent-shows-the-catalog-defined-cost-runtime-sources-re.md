@@ -1,7 +1,7 @@
 ---
 id: 01a1477f-329b-76e3-b9af-21e08646b12c
 title: read_agent shows the catalog-defined cost; runtime sources resolve at thread birth
-ord: 19
+ord: 4
 tags: ["explanation"]
 sources:
   - kind: file

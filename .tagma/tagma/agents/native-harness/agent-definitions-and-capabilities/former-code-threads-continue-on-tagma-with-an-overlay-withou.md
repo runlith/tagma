@@ -1,7 +1,7 @@
 ---
 id: 01a14aaa-f6e0-7c98-9b30-35991073a31c
 title: "Former `code` threads continue on tagma with an overlay without graph and speech: steps rename the agent, keep the overlay narrowing"
-ord: 21
+ord: 5
 tags: ["explanation"]
 sources:
   - kind: file
