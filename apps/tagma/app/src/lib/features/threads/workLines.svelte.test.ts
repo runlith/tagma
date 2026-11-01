@@ -18,7 +18,7 @@ class FakeClock {
 const input = (phase: WorkInput['phase'], ...calls: readonly string[]): WorkInput => ({
   phase,
   since: null,
-  calls: calls.map((name) => ({ name, title: `${name} a.ts`, since: 0 })),
+  calls: calls.map((name) => ({ id: name, name, title: `${name} a.ts`, since: 0 })),
   queued: 0,
 });
 

@@ -36,13 +36,13 @@ const EFFECT_TEST_FILES = {
 const styled = (forms: EffectStyleParams['forms'], files: EffectStyleParams['files'] = EFFECT_FILES) =>
   effectStyle({ base: '', files, forms, region: ['apps/tagma/server/src/', 'apps/tagma/app/', 'packages/'] });
 
-const APP_RUNTIME = 'apps/tagma/app/src/lib/app/runtime.ts';
+const APP_WINDOW = 'apps/tagma/app/src/lib/app/window.ts';
 
 const SERVICE_WORKER = 'apps/tagma/app/src/service-worker.ts';
 
 const WIRE = { path: 'apps/tagma/app/src/lib/wire/', why: 'The server doors the rule names.' };
 
-const HOST = { path: APP_RUNTIME, why: 'The composition fills `Host`.' };
+const HOST = { path: APP_WINDOW, why: 'The composition fills `Host`.' };
 
 const WORKERS = { path: 'apps/tagma/app/src/lib/shared/workers/BrowserWorkers.ts', why: 'The browser filler of `ServiceWorkers`.' };
 
@@ -220,7 +220,7 @@ export default defineConfig({
       },
       globals: [
         {
-          allow: [{ path: APP_RUNTIME, why: 'The composition fills the desktop ports from the bridge.' }],
+          allow: [{ path: APP_WINDOW, why: 'The composition fills the desktop ports from the bridge.' }],
           instead: 'the desktop ports in `lib/shared/desktop` (`DesktopLayer`)',
           name: 'tagmaDesktop',
         },
@@ -261,7 +261,7 @@ export default defineConfig({
         },
         {
           allow: [
-            { path: APP_RUNTIME, why: "The composition fills `ServerOrigin` from the window's origin." },
+            { path: APP_WINDOW, why: "The composition fills `ServerOrigin` from the window's origin." },
             { path: SERVICE_WORKER, why: 'The worker runs without the graph.' },
           ],
           instead: '`Router` or `ServerOrigin`',
@@ -270,7 +270,7 @@ export default defineConfig({
         { allow: [], instead: '`ServerOrigin`', name: 'origin' },
         { allow: [], instead: '`Router`', name: 'history' },
         {
-          allow: [{ path: APP_RUNTIME, why: 'The composition fills `ExternalLinks`.' }],
+          allow: [{ path: APP_WINDOW, why: 'The composition fills `ExternalLinks`.' }],
           instead: '`ExternalLinks`',
           name: 'open',
         },
@@ -296,7 +296,7 @@ export default defineConfig({
         { allow: [], instead: '`Router`', specifier: '$app/navigation' },
         { allow: [], instead: '`Router`', specifier: '$app/stores' },
         {
-          allow: [{ path: APP_RUNTIME, why: 'The composition fills `ClientBuild` from `updated`.' }],
+          allow: [{ path: APP_WINDOW, why: 'The composition fills `ClientBuild` from `updated`.' }],
           instead: '`Router`, or `ClientBuild` for `updated`',
           specifier: '$app/state',
         },

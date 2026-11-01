@@ -1,4 +1,5 @@
 import type { Message } from '@runlith/llm/schema/messages';
+import { agentOriginOf } from '@runlith/agent/AgentSignal';
 import { includeInstructions } from '../../graph/orientation/tagPrompts.js';
 import { type InstructionSet, instructionSetSchema } from '../../graph/contract/wire/instructions.js';
 import type { GraphOrigin } from '../../threads/contract/wire/target.js';
@@ -37,9 +38,30 @@ export const informedPlaces = (places: WorkPlaces['Service'], threads: NativeThr
   }),
 });
 
+export const touchedTagsTold = (projectId: number): string => `touch-tags@${projectId}`;
+
 export function instructionTags(messages: readonly Message[], projectId: number): Set<string> {
-  const delivered = new Set<string>();
-  const snapshot = instructionSnapshot(messages, projectId);
-  if (snapshot !== undefined) includeInstructions(delivered, snapshot);
-  return delivered;
+  const delivered = new Map<string, string>();
+  const include = (identities: Iterable<string>) => {
+    for (const identity of identities) {
+      const key = identity.slice(0, identity.lastIndexOf('@'));
+      if (!delivered.has(key)) delivered.set(key, identity);
+    }
+  };
+  for (let at = messages.length - 1; at >= 0; at -= 1) {
+    const message = messages[at]!;
+    if (message.compaction !== undefined) break;
+    if (agentOriginOf(message) !== 'guidance' || message.metadata?.runtimeState === undefined) continue;
+    const state = Schema.decodeUnknownSync(Schema.Record(Schema.String, Schema.Unknown))(message.metadata.runtimeState);
+    const touched = touchedTagsTold(projectId);
+    if (Object.hasOwn(state, touched)) include(Schema.decodeUnknownSync(Schema.Array(Schema.String))(state[touched]));
+    const key = instructionsTold(projectId);
+    if (Object.hasOwn(state, key)) {
+      const snapshot = new Set<string>();
+      includeInstructions(snapshot, Schema.decodeUnknownSync(instructionSetSchema)(state[key]));
+      include(snapshot);
+      break;
+    }
+  }
+  return new Set(delivered.values());
 }

@@ -28,10 +28,7 @@ import { BirthPlace, placeOfBirth } from './BirthPlace.svelte.js';
 import { BirthSettings } from './BirthSettings.svelte.js';
 import { BirthTeam } from './BirthTeam.svelte.js';
 
-type Threads = ReturnType<typeof ThreadsRepo.use>;
-type Settings = ReturnType<typeof SettingsRepo.use>;
-type Teams = ReturnType<typeof TeamRepo.use>;
-type CreatePayload = Parameters<Threads['create']['run']>[0]['payload'];
+type CreatePayload = Parameters<ThreadsRepo['create']['run']>[0]['payload'];
 
 const STARTERS = ['What changed in this project today?', 'Which tasks are ready to start?', 'How is this codebase organised?'];
 
@@ -54,17 +51,17 @@ export class ThreadBirth implements ChatBirth {
     private readonly scope: Scope,
     private readonly draft: ThreadDraft,
     private readonly shelf: DraftShelf,
-    private readonly threads: Threads,
+    private readonly threads: ThreadsRepo,
     private readonly projectId: number,
     private readonly list: ThreadList,
     places: Worktrees,
     readonly types: AgentTypes,
-    private readonly sources: Settings,
+    private readonly sources: SettingsRepo,
     private readonly defaults: ModelDefaults,
     accounts: UsageAccounts,
     favorites: Favorites,
     catalog: ProviderCatalog,
-    teams: Teams,
+    teams: TeamRepo,
     notices: Notices,
     private readonly restart: () => void,
   ) {

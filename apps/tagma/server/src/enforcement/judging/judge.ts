@@ -231,6 +231,7 @@ export const judgement = Effect.fn('enforcement.judgement')(function* (
     ),
     subject.caller ?? null,
     laneOf(op),
+    subject.workdir,
   );
   let inspected = 0;
   const judging = Effect.gen(function* () {

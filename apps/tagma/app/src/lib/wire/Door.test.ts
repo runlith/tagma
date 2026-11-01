@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { ThreadId } from '@tagma/server/platform/contract/wire/thread';
 import { ThreadEntryUnreadable } from '@runlith/agent/transcript/kinds';
 import { testWireKinds } from '$lib/features/threads/native/testing.js';
@@ -5,7 +6,13 @@ import { Effect, Schema } from 'effect';
 import { PAIRING_ENDPOINT, PairedAnswer } from '@tagma/server/remote/contract/wire/access';
 import { expect, test } from 'vitest';
 import { THREADS_ENTRY_KINDS } from '@tagma/server/threads/contract/wire/entryKinds';
-import { makePoint, makeRouter } from '@runlith/layer/testing';
+import { makePlatform, makePoint, makeRouter } from '@runlith/layer/testing';
+import { Service } from '@runlith/layer/key';
+import { Layer } from '@runlith/layer/Layer';
+import { Platform } from '@runlith/layer/Platform';
+import { Router } from '@runlith/layer/Router';
+import { test as mountApp } from '@runlith/layer/svelte/test.svelte';
+import { CATALOG_MODULES } from '@tagma/server/composition/catalog';
 import { Refusal } from './refusal.js';
 import { Door } from './Door.js';
 import { OperationTable } from './operation.js';
@@ -101,6 +108,30 @@ test('an operation of an extra catalog entry contributed after the door was buil
   catalog.register('fixture', FIXTURE_MODULE);
   expect(await door.perform('fixture_stamp', {}, {})).toEqual({ status: 'stamped', at: new Date('2026-10-31T12:00:00.000Z') });
   expect(sent).toBe(1);
+});
+
+test('a call a service makes while the window starts, before the core catalog joined, is sent once the start is done', async () => {
+  class Starter extends Service<Starter>()('DoorTest.Starter', { tier: 'app', eager: true }) {
+    static *make() {
+      return new Starter((yield* Door).perform('list_projects', {}, {}));
+    }
+    constructor(readonly first: Promise<unknown>) {
+      super();
+    }
+  }
+  answer = () => Response.json({ status: 'ok', projects: [] });
+  const app = mountApp(
+    Layer.mergeAll(
+      WireCatalog,
+      OperationTable,
+      Door,
+      Layer.when(() => true, Starter),
+      WireCatalog.contribute('core', ...CATALOG_MODULES),
+    ),
+    Layer.mergeAll(Layer.of(Platform, makePlatform({ fetch })), ServerOrigin.of('http://tagma.test'), Layer.of(Router, makeRouter())),
+  );
+  expect(await app.get(Starter).first).toEqual({ status: 'ok', projects: [] });
+  await app.unmount();
 });
 
 test('an operation input with an undefined optional reaches the server without that key', async () => {
@@ -273,8 +304,8 @@ test('the final keepalive request completes after cancellation while an earlier 
 
 test('a declared binary route is addressed on the server door, and its bytes or its refusal reach the reader', async () => {
   const door = doorOf();
-  const address = door.address((routes) => routes.speech.peaks({ params: { id: 'call 1', track: 'mic' }, query: { project: '7' } }));
-  expect(address).toBe('http://tagma.test/api/speech/listenings/call%201/tracks/mic/peaks?project=7');
+  const address = door.address((routes) => routes.checkouts.preview({ query: { path: 'a.png', full: 'true' } }));
+  expect(address).toBe('http://tagma.test/api/files/preview?path=a.png&full=true');
   expect(door.address('/api/threads/t1/attachments/a.png', { project: '7' })).toBe(
     'http://tagma.test/api/threads/t1/attachments/a.png?project=7',
   );

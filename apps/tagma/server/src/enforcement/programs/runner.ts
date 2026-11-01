@@ -111,7 +111,7 @@ for (const key of input.keys) {
   const sides = new Map(input.sides.map((side) => [side.side, side]));
   const tree = sideOf(sides.get('tree')!, key);
   const base = sides.has('base') ? sideOf(sides.get('base')!, key) : null;
-  const answer: unknown = await (program as Program<object>)({ params: key.params, tree, base });
+  const answer: unknown = await (program as Program<object>)({ params: key.params, tree, base, mode: input.mode });
   if (!answered(answer)) failed(`${key.id} of ${module} answered no { tree: { findings }, base? } reading`);
   for (const side of input.sides) {
     const reading = side.side === 'tree' ? answer.tree : answer.base;
@@ -119,6 +119,7 @@ for (const key of input.keys) {
     readings.push({
       key: key.key,
       side: side.side,
+      remeasure: reading?.remeasure,
       covered:
         reading?.covered === 'reach' || judged.whole
           ? { scope: 'reach' }

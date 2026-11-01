@@ -257,14 +257,6 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "repeated-declarations repeated object:56362fadaf83556b:aee7d4b13f7c packages/adapter-cursor/src/runner/channel.ts",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "repeated-declarations repeated object:56362fadaf83556b:aee7d4b13f7c packages/adapter-opencode/src/runner/channel.ts",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "repeated-declarations repeated alias:ThreadPartGrowth packages/agent/src/thread/run/ThreadStreamParts.ts",
           "owner": "5a3bed29"
         },

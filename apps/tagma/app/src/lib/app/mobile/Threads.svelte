@@ -26,6 +26,7 @@
   import Sheet from './Sheet.svelte';
   import Swipe from './Swipe.svelte';
   import Tabs from './Tabs.svelte';
+  import HomeHold from '$lib/features/threads/HomeHold.svelte';
   import ThreadRow from './ThreadRow.svelte';
 
   let { project, onNew }: { project: string; onNew: () => void } = $props();
@@ -175,7 +176,7 @@
 <div class="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-4">
   {#if filtered !== null}
     {#each filtered as node (node.row.id)}
-      <ThreadRow {node} {project} />
+      <HomeHold projectId={node.row.projectId}><ThreadRow {node} {project} /></HomeHold>
     {:else}
       <p class="px-4 pt-6 text-body text-muted-foreground">Nothing here now.</p>
     {/each}
@@ -269,35 +270,37 @@
 
 {#snippet root(node: ThreadTreeNode)}
   {@const pinned = node.row.pinnedAt !== null}
-  <ThreadRow {node} {project}>
-    {#snippet frame(line)}
-      <Swipe width={ACTIONS_PX} onHold={() => (holdingId = node.row.id)}>
-        {#snippet actions(close)}
-          <button
-            type="button"
-            class="flex flex-1 flex-col items-center justify-center gap-1 bg-status-open text-small font-medium text-primary-foreground disabled:opacity-60"
-            disabled={list.busy(node.row.id, 'pin')}
-            onclick={() => {
-              close();
-              void (pinned ? list.setPinned(node.row.id, false) : filing.pin([node.row.id]));
-            }}
-          >
-            {#if pinned}<PinOff class="size-4" />Unpin{:else}<Pin class="size-4" />Pin{/if}
-          </button>
-          <button
-            type="button"
-            class="flex flex-1 flex-col items-center justify-center gap-1 bg-status-none text-small font-medium text-primary-foreground disabled:opacity-60"
-            disabled={list.busy(node.row.id, 'archive')}
-            onclick={() => {
-              close();
-              void filing.archive([node.row.id]);
-            }}
-          >
-            <Archive class="size-4" />Archive
-          </button>
-        {/snippet}
-        {@render line()}
-      </Swipe>
-    {/snippet}
-  </ThreadRow>
+  <HomeHold projectId={node.row.projectId}>
+    <ThreadRow {node} {project}>
+      {#snippet frame(line)}
+        <Swipe width={ACTIONS_PX} onHold={() => (holdingId = node.row.id)}>
+          {#snippet actions(close)}
+            <button
+              type="button"
+              class="flex flex-1 flex-col items-center justify-center gap-1 bg-status-open text-small font-medium text-primary-foreground disabled:opacity-60"
+              disabled={list.busy(node.row.id, 'pin')}
+              onclick={() => {
+                close();
+                void (pinned ? list.setPinned(node.row.id, false) : filing.pin([node.row.id]));
+              }}
+            >
+              {#if pinned}<PinOff class="size-4" />Unpin{:else}<Pin class="size-4" />Pin{/if}
+            </button>
+            <button
+              type="button"
+              class="flex flex-1 flex-col items-center justify-center gap-1 bg-status-none text-small font-medium text-primary-foreground disabled:opacity-60"
+              disabled={list.busy(node.row.id, 'archive')}
+              onclick={() => {
+                close();
+                void filing.archive([node.row.id]);
+              }}
+            >
+              <Archive class="size-4" />Archive
+            </button>
+          {/snippet}
+          {@render line()}
+        </Swipe>
+      {/snippet}
+    </ThreadRow>
+  </HomeHold>
 {/snippet}

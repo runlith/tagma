@@ -4,6 +4,7 @@
   import LauncherHost from '@runlith/primitives/LauncherHost.svelte';
   import type { Component, Snippet } from 'svelte';
   import { Router } from '@runlith/layer/Router';
+  import FormerRoutes from './FormerRoutes.svelte';
   import { App } from '@runlith/layer/svelte/App.svelte';
   import LinkMenu from '$lib/features/opening/LinkMenu.svelte';
   import { Opening } from '$lib/features/opening/Opening.svelte.js';
@@ -64,6 +65,7 @@
 </script>
 
 <svelte:window ondragover={refuseStrayFiles} ondrop={refuseStrayFiles} />
+<FormerRoutes />
 
 {#if router.routeId === '/_desktop/dictation' || router.routeId === '/pair'}
   {@render children()}

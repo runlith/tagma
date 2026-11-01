@@ -29,7 +29,7 @@ export class AgentTypes extends Service<AgentTypes>()('AgentTypes', { tier: 'pro
   private asked = 0;
 
   constructor(
-    private readonly threads: ReturnType<typeof ThreadsRepo.use>,
+    private readonly threads: ThreadsRepo,
     private readonly projectId: number,
     private readonly notices: Notices,
     private readonly scope: Scope,

@@ -7,16 +7,13 @@ import { PROMOTED_WORDS, restoreProject } from '../team/ThreadTeam.svelte.js';
 import type { TeamPromoted, TeamRead, TeamRepo } from '../team/TeamRepo.js';
 import type { TeamView } from '../team/view.js';
 
-type Teams = ReturnType<typeof TeamRepo.use>;
-type Settings = ReturnType<typeof SettingsRepo.use>;
-
 export class BirthTeam implements TeamView {
   private held = $state.raw<{ readonly key: string; readonly read: TeamRead } | null>(null);
 
   constructor(
     private readonly draft: ThreadDraft,
-    private readonly teams: Teams,
-    private readonly settings: Settings,
+    private readonly teams: TeamRepo,
+    private readonly settings: SettingsRepo,
     private readonly notices: Notices,
     private readonly projectId: number,
     private readonly bornOf: (draftKey: string) => string | null,

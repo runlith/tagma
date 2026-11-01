@@ -31,7 +31,7 @@ export abstract class RoutedShell implements ShellPort {
     protected readonly visits: Visits,
     protected readonly registry: SurfaceRegistry,
     protected readonly addresses: Addresses,
-    protected readonly threads: ReturnType<typeof ThreadsRepo.use>,
+    protected readonly threads: ThreadsRepo,
     protected readonly prefetch: ProjectPrefetch,
   ) {}
 

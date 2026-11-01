@@ -1,7 +1,9 @@
 import { expect } from 'bun:test';
 import { it } from '@runlith/effect-test';
 import { Deferred, Effect, Fiber } from 'effect';
+import { FAULT } from '@runlith/acp/agent';
 import { hostedAgent } from '@runlith/hosted-runner/agent';
+import { COMPACT, COMPACTED } from '@runlith/hosted-runner/wire/extensions';
 import type { HostedDoor } from '@runlith/hosted-runner/door';
 import { OpenCodeSdk } from './channel.js';
 import { makeOpenCodeCycle } from './cycle.js';
@@ -11,12 +13,15 @@ it.effect('restored history survives a cancelled submission and leaves only afte
     const submitted = yield* Deferred.make<void>();
     const cancelled = yield* Deferred.make<void>();
     const received: string[] = [];
+    const boundaries: unknown[] = [];
     let first = true;
     const sdk = OpenCodeSdk.of({
       open: (_, replacing) =>
         Effect.as(replacing, {
           id: 'session',
           close: Effect.void,
+          compact: () => Effect.succeed({ summary: 'ENGINE_SUMMARY' }),
+          cancelCompaction: Effect.void,
           send: Effect.fnUntraced(function* (input) {
             if (first) {
               first = false;
@@ -52,15 +57,35 @@ it.effect('restored history survives a cancelled submission and leaves only afte
     const agent = hostedAgent(
       cycle,
       door,
-    )({ update: () => Effect.void, notify: () => Effect.void, request: () => Effect.die('no requests') });
+    )({
+      update: () => Effect.void,
+      notify: (method, params) =>
+        Effect.sync(() => {
+          if (method === COMPACTED) boundaries.push(params);
+        }),
+      request: () => Effect.die('no requests'),
+    });
     const session = yield* agent.newSession({ cwd: '/work', mcpServers: [] });
     const prompt = (text: string) => agent.prompt({ sessionId: session.sessionId, prompt: [{ type: 'text', text }] });
+    const compact = agent.extensions[COMPACT]!;
+    expect(yield* Effect.result(compact({ sessionId: session.sessionId, at: 'end' }))).toMatchObject({
+      _tag: 'Failure',
+      failure: { code: FAULT.invalidRequest },
+    });
+    expect(boundaries).toEqual([]);
     const abandoned = yield* Effect.forkChild(prompt('cancel before acceptance'));
     yield* Deferred.await(submitted);
     yield* agent.cancel({ sessionId: session.sessionId });
     expect(yield* Fiber.join(abandoned)).toMatchObject({ stopReason: 'cancelled' });
+    expect(yield* Effect.result(compact({ sessionId: session.sessionId, at: 'end' }))).toMatchObject({
+      _tag: 'Failure',
+      failure: { code: FAULT.invalidRequest },
+    });
+    expect(boundaries).toEqual([]);
     expect(yield* prompt('first accepted prompt')).toMatchObject({ stopReason: 'end_turn' });
     expect(received[0]).toContain('RESTORED_JOURNAL');
+    expect(yield* compact({ sessionId: session.sessionId, at: 'end' })).toMatchObject({ summary: 'ENGINE_SUMMARY' });
+    expect(boundaries).toEqual([{ sessionId: session.sessionId, trigger: 'manual', summary: 'ENGINE_SUMMARY' }]);
     expect(yield* prompt('next accepted prompt')).toMatchObject({ stopReason: 'end_turn' });
     expect(received[1]).not.toContain('RESTORED_JOURNAL');
     yield* agent.ended;

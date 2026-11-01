@@ -456,8 +456,7 @@ export function agentTurn(deps: AgentTurnDeps): AgentTurn {
     awaitingReader = !tools.everyCallSettled;
     const finishReason = call.finishReason === 'length' ? 'tool-calls' : (call.finishReason ?? 'stop');
     const closing = textOnly && unsuccessfulFinish(finishReason) === null;
-    const unread =
-      deps.signals && !tools.everyCallSettled && (closing || !textOnly) ? yield* deps.stop.cut(deps.signals.hasPending(), null) : false;
+    const unread = deps.signals && closing ? yield* deps.stop.cut(deps.signals.hasPending(), null) : false;
     if (unread === null) return yield* halted();
     const needsFollowUp = tools.everyCallSettled || unread;
     const followUp = { kind: 'continue', messages: [...call.callMessages, ...(assembled.response?.messages ?? [])] } as const;

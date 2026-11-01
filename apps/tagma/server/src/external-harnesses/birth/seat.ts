@@ -17,7 +17,7 @@ export const acpCapabilities = (profile: AcpProfile): TransportCapabilities => (
   steer: profile.midTurn === 'steer' ? 'step' : 'none',
   withdraw: profile.midTurn === 'steer',
   history: profile.proves.fork && profile.proves.rewind ? 'session' : 'none',
-  compaction: profile.proves.compaction === 'foreign' ? 'foreign' : profile.proves.compaction ? 'session' : 'none',
+  compaction: profile.proves.compaction === true ? 'session' : profile.proves.compaction === false ? 'none' : profile.proves.compaction,
   toolCatalog: profile.toolCatalog,
   modelMove: 'live',
   openings: 'core',

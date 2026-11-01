@@ -25,6 +25,8 @@ export const PENDING_RETRY = '2 minutes';
 
 const SETTLE = '500 millis';
 
+type Seen = { readonly head: string | null; readonly staged: ReadonlySet<string> };
+
 export const makeMergeQueue = Effect.fnUntraced(function* (input: { readonly retry?: Duration.Input } = {}) {
   const units = yield* MachineUnits;
   const { store, moves } = yield* PendingBoard;
@@ -190,10 +192,13 @@ export const makeMergeQueue = Effect.fnUntraced(function* (input: { readonly ret
         checkouts.subscribe(root).pipe(
           Stream.debounce(SETTLE),
           Stream.mapAccum(
-            (): string | null | undefined => undefined,
+            (): Seen | undefined => undefined,
             (last, state) => {
-              const freed = free && state.operation === 'none' && state.entries.staged.entries.length === 0;
-              return [state.head, [state.head !== last || freed ? ('move' as const) : ('change' as const)]] as const;
+              const staged = new Set(state.entries.staged.entries.map((entry) => entry.path));
+              const unstaged = last !== undefined && [...last.staged].some((path) => !staged.has(path));
+              const freed = free && state.operation === 'none' && (staged.size === 0 || unstaged);
+              const moved = state.head !== last?.head || freed;
+              return [{ head: state.head, staged }, [moved ? ('move' as const) : ('change' as const)]] as const;
             },
           ),
           Stream.catch((failure) =>

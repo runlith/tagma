@@ -10,7 +10,7 @@ const REACHED = `Claude Code and Codex stop reaching ${CHANNEL.name} until you o
 
 const stopping = (work: Work | null): string => {
   if (work === null)
-    return `${CHANNEL.name} couldn't tell what is running. Stopping ends all of it: agents at work, terminals and commands, and a call being recorded.\n${REACHED}`;
+    return `${CHANNEL.name} couldn't tell what is running. Stopping ends all of it: agents at work, terminals and commands, and anything it records.\n${REACHED}`;
   const ran = (work.terminals ?? 0) + (work.commands ?? 0);
   const lines = [
     work.agents === 0 ? null : `${counted(work.agents, 'agent at work stops', 'agents at work stop')}.`,
@@ -19,11 +19,9 @@ const stopping = (work: Work | null): string => {
       : ran === 0
         ? null
         : `${counted(ran, 'terminal or command ends', 'terminals and commands end')}.`,
-    work.calls === null
-      ? 'A call being recorded ends.'
-      : work.calls === 0
-        ? null
-        : `${counted(work.calls, 'call being recorded ends', 'calls being recorded end')}.`,
+    ...(work.live === null
+      ? ['Anything it records ends.']
+      : work.live.filter((one) => one.count > 0).map((one) => `${counted(one.count, one.one, one.many)}.`)),
     REACHED,
   ];
   return lines.filter((line) => line !== null).join('\n');

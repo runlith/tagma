@@ -117,6 +117,8 @@ edges:
     to: 01a174f2-3d97-7315-8204-34ae9103ad03
   - kind: imports
     to: 01a1892f-19c3-73c9-ae5e-7d7993106e20
+  - kind: imports
+    to: 01a195ea-554e-7314-b91a-ea8b75634f54
   - kind: imports-tests
     to: 01a0c704-a612-7c4c-9f81-5089acc2829b
   - kind: imports-tests
@@ -130,5 +132,7 @@ edges:
 sources:
   - kind: dir
     ref: apps/tagma/app/src/lib/app
+  - kind: file
+    ref: apps/tagma/app/src/manifest.ts
 ---
 The app is features brought together, and they are brought together here: layers of services by level, feature contributions — surfaces, tab kinds, settings sections, link kinds, section columns, palette actions — gathered into lower-module registry ports (`SurfaceRegistry`, `PaneRegistry`, `SectionRegistry`, `LinkRegistry`, `ColumnRegistry`, `ActionRegistry`), lower-module ports that upper ones fill (`ThreadPlaces`, `PickScreen`, `CheckoutScreen`, `MarkdownPreview`, `ModelChoices`, `PageTeams`), server admission, the root component, shell choice, and test rigs from real modules. No domain logic lives here: it lives in the features.

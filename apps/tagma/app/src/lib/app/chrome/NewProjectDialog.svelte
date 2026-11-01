@@ -24,7 +24,6 @@
   let draftPath = $state('');
   let draftStorage = $state<StorageMode>('stealth');
   let draftCatalogs = $state<readonly string[] | undefined>();
-  let draftRemote = $state('');
   let contributed = $state.raw<Readonly<Record<string, unknown>>>({});
   let refused = $state.raw<Refused | null>(null);
 
@@ -59,12 +58,10 @@
     const catalogs = draftCatalogs;
     if (catalogs === undefined) return;
     refused = null;
-    const graphRemote = draftStorage === 'stealth' && draftRemote.trim() !== '' ? draftRemote.trim() : undefined;
     try {
       await creation.create({
         ...draft,
         catalogs,
-        graphRemote,
         contributed: Object.fromEntries(Object.entries(contributed).filter(([id]) => drawn(id))),
       });
     } catch (error) {
@@ -76,7 +73,6 @@
     draftPath = '';
     draftStorage = 'stealth';
     draftCatalogs = undefined;
-    draftRemote = '';
     contributed = {};
   }
 </script>
@@ -119,15 +115,6 @@
           </label>
         {/each}
       </div>
-      {#if draftStorage === 'stealth'}
-        <label class="grid gap-1.5">
-          <span class="eyebrow text-muted-foreground">Graph remote</span>
-          <Input placeholder="git@github.com:you/graph.git" bind:value={draftRemote} class="font-mono text-small" />
-          <span class="text-small text-muted-foreground">
-            Optional. A private git repository Tagma keeps the graph in: a graph it holds comes back here, an empty one receives this graph.
-          </span>
-        </label>
-      {/if}
       <NewProjectCatalogs bind:value={draftCatalogs} />
       <PointView
         point={fields}

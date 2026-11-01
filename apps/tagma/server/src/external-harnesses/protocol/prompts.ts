@@ -32,6 +32,7 @@ import { negotiating, prompting, type OpenedTurn, type ProtocolRow } from './row
 import { IDLE, type Issued, type Persisted, type ProtocolSteps } from './steps.js';
 import type { AccountSelection } from '../sessions/launch.js';
 import { servingProvider } from '../contract/service/table.js';
+import { acpCapabilities } from '../birth/seat.js';
 
 const merged = (first: Persisted, second: Persisted): Persisted => ({
   events: [...first.events, ...second.events],
@@ -455,7 +456,10 @@ export class ProtocolPrompts {
     const provider = servingProvider(link.adapter, 'acp');
     if (measured === null || provider === null || link.profile.proves.compaction === false) return Effect.succeed(false);
     const model = currentModel(link.facet.observation);
-    return Effect.map(this.planning.threshold(link.threadId, provider, model, measured.size), (threshold) => measured.used >= threshold);
+    return Effect.map(
+      this.planning.threshold(link.threadId, provider, model, measured.size, acpCapabilities(link.profile).compaction),
+      (threshold) => threshold !== null && measured.used >= threshold,
+    );
   }
 
   private instructionsOf(requests: readonly ThreadCompactionRequest[]): string {

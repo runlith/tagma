@@ -41,6 +41,12 @@ fields:
       },
       {
         "at": "src/profile.ts"
+      },
+      {
+        "at": "src/bridge.ts"
+      },
+      {
+        "at": "src/question.ts"
       }
     ],
     "id": "@runlith/hosted-runner",
@@ -53,6 +59,8 @@ edges:
     to: 01a0c83b-81fb-7929-bac8-0429249ce587
   - kind: imports
     to: 01a0c944-8aa1-7e16-b225-ddc5d1caad35
+  - kind: imports
+    to: 01a0ca5d-3b72-7529-8b88-94c413756ad0
   - kind: imports
     to: 01a108bd-5060-7141-819c-dd4dad88de8a
   - kind: imports

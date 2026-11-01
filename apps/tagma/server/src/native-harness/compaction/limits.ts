@@ -29,14 +29,15 @@ export type LimitInput = {
 };
 
 export function contextLimitOf(catalog: ProviderCatalog, policy: ThreadCompactionPolicy, input: LimitInput): ThreadContextLimit | null {
-  const session = input.compaction === 'session';
-  const provider = session ? contextProvider(catalog, input.provider) : input.provider;
-  const model = input.model ?? (session || !catalog.models.registered(provider) ? null : catalog.models.defaultTextModelId(provider));
+  const hosted = input.compaction === 'session' || input.compaction === 'foreign' || input.compaction === 'vendor';
+  const provider = hosted ? contextProvider(catalog, input.provider) : input.provider;
+  const model = input.model ?? (hosted || !catalog.models.registered(provider) ? null : catalog.models.defaultTextModelId(provider));
   const option = model === null ? undefined : textModelOf(catalog.models, provider, model);
   const declared = option?.capacity?.context ?? null;
   const window = input.compaction === 'core' ? (declared ?? input.measured) : (input.measured ?? declared);
   if (window === null) return null;
-  const automatic = session || (input.compaction === 'core' && !input.off && option !== undefined);
+  const automatic =
+    input.compaction === 'session' || input.compaction === 'foreign' || (input.compaction === 'core' && !input.off && option !== undefined);
   return { window, compaction: automatic ? thresholdAt(catalog, policy, provider, model, option, window) : null };
 }
 
@@ -100,12 +101,12 @@ export const makeCompactionPlanning = Effect.gen(function* () {
   const registry = yield* ProviderRegistry;
   return CompactionPlanning.of({
     instructions: `${COMPACTION_PROMPT.instructions}\n\n${COMPACTION_PROMPT.template}`,
-    threshold: Effect.fnUntraced(function* (threadId, harness, model, window) {
+    threshold: Effect.fnUntraced(function* (threadId, harness, model, window, compaction) {
       const policy = yield* compactionPolicy(records, settings, threadId);
       const catalog = yield* registry.catalog;
-      const provider = contextProvider(catalog, harness);
-      const option = model === null ? undefined : textModelOf(catalog.models, provider, model);
-      return thresholdAt(catalog, policy, provider, model, option, window).at;
+      return (
+        contextLimitOf(catalog, policy, { provider: harness, model, compaction, measured: window, off: false })?.compaction?.at ?? null
+      );
     }, Effect.mapError(threadCallFailed)),
   });
 });

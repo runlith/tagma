@@ -1,14 +1,15 @@
 import { Cause, Deferred, Effect, Exit, Fiber, Scope, Stream, type Semaphore } from 'effect';
 import type { Options, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 import type { AgentFault } from '@runlith/acp/agent';
-import { Bridge, servedPrompt } from './bridge.js';
+import { Bridge, TAGMA_SERVER, servedPrompt } from '@runlith/hosted-runner/bridge';
+import { claudeConfig, claudeVendor } from './bridge.js';
 import { failed, said } from './calls.js';
 import type { Channel, ClaudeSdk, Said } from './channel.js';
 import type { HostedToolWire } from '@runlith/hosted-runner/wire/messages';
 import type { HostedAgent, HostedDoor, HostedOpened } from '@runlith/hosted-runner/door';
 import type { Fetching } from './fetching.js';
 import type { Handed } from '@runlith/hosted-runner/handed';
-import { TAGMA_SERVER, type Names } from './names.js';
+import type { Names } from './names.js';
 import type { Opening, Origin } from './opening.js';
 import type { Runner } from './runner.js';
 import { MODE, type Settings } from './settings.js';
@@ -123,9 +124,10 @@ export class Lifecycle {
       runner.stderr,
       (reason) => this.fall(reason),
       (words) => this.listener.queued(words),
+      claudeVendor,
     );
     const compacting = this.compacting;
-    const options: Options = { ...this.options(origin), mcpServers: { ...opening.servers, [TAGMA_SERVER]: bridge.config } };
+    const options: Options = { ...this.options(origin), mcpServers: { ...opening.servers, [TAGMA_SERVER]: claudeConfig(bridge) } };
     const driving = yield* Effect.acquireRelease(sdk.open(options), (channel) => channel.close()).pipe(
       Scope.provide(scope),
       Effect.flatMap((channel) =>

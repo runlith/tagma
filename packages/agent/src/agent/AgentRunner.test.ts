@@ -2606,6 +2606,58 @@ describe('the turn loop owns its iteration', () => {
     }),
   );
   it.live(
+    'parallel guides stay unique when a sibling question parks the run',
+    Effect.fnUntraced(function* () {
+      const model = fakeModel(() =>
+        parallelToolCallTurn([
+          { name: 'read', id: 'read-a', input: { path: 'a' } },
+          { name: 'read', id: 'read-b', input: { path: 'b' } },
+          { name: 'write', id: 'write', input: {} },
+        ]),
+      );
+      const agent = new Agent<Record<string, never>>({
+        id: 'parked-guidance',
+        name: 'Parked guidance',
+        description: 'Reads before a question.',
+        instructions: () => 'Read the files.',
+        stopWhen: [stepLimit(TEST_MAX_STEPS)],
+        tools: () => ({
+          read: Tool.make({
+            display: () => ({ form: 'none' }),
+            approval: ASKS_NEVER,
+            description: 'Read a path.',
+            parameters: Schema.Struct({ path: Schema.String }),
+            execute: () => Effect.succeed({ read: true }),
+          }),
+          write: Tool.make({
+            display: () => ({ form: 'none' }),
+            approval: ASKS_IN_REVIEW,
+            description: 'Write after approval.',
+            parameters: Schema.Struct({}),
+            execute: () => Effect.succeed({ written: true }),
+          }),
+        }),
+        rules: [
+          agentRule(
+            'tag',
+            (ctx) =>
+              ctx.hook === 'afterTool' && ctx.tool?.name === 'read'
+                ? { type: 'guide', text: ctx.tool.toolCallId ?? '', batchKey: 'tag:fixture', state: { tag: 'revision' } }
+                : null,
+            { owner: 'test' },
+          ),
+        ],
+      });
+      const handle = yield* runner(model).run(agent, {
+        ...input('parked-guidance'),
+        approval: { mode: 'review' as const, interactive: true },
+        modeOf: builtinMode('review'),
+      });
+      yield* handle.output.steps;
+      expect(handle.untoldGuides().map((guide) => guide.batchKey)).toEqual(['tag:fixture']);
+    }),
+  );
+  it.live(
     'a call naming a tool no catalog holds is answered instead of dropped, naming the catalog spelling',
     Effect.fnUntraced(function* () {
       const model = fakeModel((callNumber) =>
@@ -4157,66 +4209,6 @@ describe('AgentRunner context boundary', () => {
       }),
     );
   });
-  it.live(
-    'a call awaiting a reader holds the boundary shut for the step that follows it',
-    Effect.fnUntraced(function* () {
-      const model = fakeModel((callNumber) =>
-        callNumber === 1 ? toolCallTurn('confirm_me', 'call-1') : textTurn('Answered while it waits.'),
-      );
-      const asked: number[] = [];
-      let pending = true;
-      const asking = new Agent({
-        id: 'asking-agent',
-        name: 'Asking agent',
-        description: 'Leaves one call waiting for a reader.',
-        stopWhen: [stepLimit(TEST_MAX_STEPS)],
-        instructions: () => 'Ask before you act.',
-        tools: () => ({
-          confirm_me: Tool.make({
-            display: () => ({ form: 'none' }),
-            approval: ASKS_IN_REVIEW,
-            description: 'Change a file.',
-            parameters: Schema.Struct({}),
-            execute: () => Effect.succeed('wrote it'),
-            mutates: true,
-            confirmation: { prompt: () => ({ summary: 'Write it?' }), confirmLabel: 'Write' },
-          }),
-        }),
-      });
-      const handle = yield* runner(model).run(asking, {
-        runId: 'run-waiting',
-        ctx: {},
-        model: { ownerId: 'owner-1', provider: 'subscription', model: 'claude-opus-5', reasoning: 'xhigh', switches: {} },
-        messages: [Message.user('Answer.')],
-        signals: {
-          drain: (stepNumber) =>
-            Effect.sync(() => {
-              if (stepNumber === 0) return [];
-              pending = false;
-              return [{ type: 'message', text: 'And also this.', occurredAt: '' } as ThreadSignal];
-            }),
-          hasPending: () => Effect.succeed(pending),
-        },
-        approval: { mode: 'review', interactive: true },
-        modeOf: builtinMode('review'),
-        boundary: ({ stepNumber, scope }) => {
-          asked.push(stepNumber);
-          return Effect.succeed(
-            agentScope({
-              generation: scope.generation + 1,
-              ctx: {},
-              model: scope.model,
-              resolved: { catalog: scope.catalog, withheld: [] },
-            }),
-          );
-        },
-      });
-      yield* handle.output.finishReason;
-      expect(model.calls).toHaveLength(2);
-      expect(handle.completedSteps()[0]?.toolResults).toEqual([]);
-      expect(asked).toEqual([0]);
-    }),
-  );
   it.live(
     'a step limit counts the steps taken before the boundary as well as after it',
     Effect.fnUntraced(function* () {

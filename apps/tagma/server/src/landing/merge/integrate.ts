@@ -34,6 +34,17 @@ import { takeBase, uncommittedOn } from './update.js';
 
 const ATTEMPTS = 3;
 
+const dirsOf = (path: string): readonly string[] => {
+  const dirs: string[] = [];
+  for (let at = path.lastIndexOf('/'); at > 0; at = path.lastIndexOf('/', at - 1)) dirs.push(path.slice(0, at));
+  return dirs;
+};
+
+const crossing = (written: ReadonlySet<string>): ((path: string) => boolean) => {
+  const above = new Set([...written].flatMap(dirsOf));
+  return (path) => written.has(path) || above.has(path) || dirsOf(path).some((dir) => written.has(dir));
+};
+
 const undelivered = (failure: Effect.Error<ReturnType<TreeSync>>): FinishFailure =>
   failure._tag === 'GateRefusal'
     ? new WorktreeFinishRefused({
@@ -94,6 +105,7 @@ type Judging = {
   readonly paths: readonly string[];
   readonly caller: TerminalActor | undefined;
   readonly parted: boolean;
+  readonly workdir: string;
 };
 
 const judged = (rules: ActChecks, { caller, parted, ...subject }: Judging): Effect.Effect<Checked, WorktreeFinishRefused> =>
@@ -209,17 +221,6 @@ export const integrate = (
               .pipe(Effect.mapError((failure) => (isRootFailure(failure) ? failure : gitFailed(failure))));
             const holders = yield* stored(rowHolders(reading, holdings));
             yield* still(reading, 'base-mid-operation');
-            const staged = reading.entries.staged.entries;
-            if (staged.length > 0) {
-              return yield* refused(
-                'base-staged',
-                `the checkout of ${baseBranch} at ${base.root.path} holds staged entries, and a merge there would carry them: ${staged
-                  .slice(0, 8)
-                  .map((entry) => entry.path)
-                  .join(', ')}`,
-                ['commit or unstage what the index of the base holds, then merge', 'merge when the base is free'],
-              );
-            }
             const head = yield* git.head(base.root.path);
             const baseTip = head.commit;
             if (baseTip === null || head.ref !== `${HEADS}${baseBranch}`) {
@@ -236,6 +237,20 @@ export const integrate = (
               ]);
             }
             const guarded = (paths: ReadonlySet<string>): Effect.Effect<void, WorktreeFinishRefused> => {
+              const crossed = crossing(paths);
+              const staged = reading.entries.staged.entries.filter(
+                (entry) => crossed(entry.path) || (entry.oldPath !== undefined && crossed(entry.oldPath)),
+              );
+              if (staged.length > 0) {
+                return refused(
+                  'base-staged',
+                  `the index of the checkout of ${baseBranch} at ${base.root.path} holds staged entries on paths the merge writes, and bringing the checkout to the merge would overwrite them: ${staged
+                    .slice(0, 8)
+                    .map((entry) => entry.path)
+                    .join(', ')}`,
+                  ['commit or unstage those entries in the base checkout, then merge', 'merge when the base is free'],
+                );
+              }
               const { dirty, held } = uncommittedOn(reading, holders, ['unstaged', 'untracked'], paths);
               if (held.length > 0) {
                 const named = [...new Set(held.map(({ holder }) => holderName(holder)))];
@@ -311,6 +326,7 @@ export const integrate = (
                 debtBase: source,
                 paths,
                 caller: request.caller,
+                workdir: record.path,
               };
               if (!carries || !paths.some(inGraphTree)) return judged(rules, { ...subject, rulesAt: base.root.path, parted: false });
               return Effect.flatMap(git.changed(base.root.path, source, built), (behind) =>

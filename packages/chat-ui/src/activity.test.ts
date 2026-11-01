@@ -4,6 +4,7 @@ import { describe, expect, test } from 'vitest';
 import {
   type ActivityGroup,
   activityRows,
+  chatToolActivity,
   chatToolActivityLine,
   foldedToolCounts,
   groupDurationSeconds,
@@ -234,6 +235,13 @@ describe('tool step status', () => {
   });
 });
 
+test('a settled receipt whose call still stands is work in flight, whether or not its run is alive', () => {
+  const receipt = tool('t1', { toolOutput: { status: 'background' }, display: { form: 'none', title: 'Task' } }) as ToolActivityEntry;
+  expect(chatToolActivity(receipt, undefined, false)).toMatchObject({ state: 'done', title: 'Task' });
+  expect(chatToolActivity(receipt, undefined, false, true)).toMatchObject({ state: 'running', title: 'Task' });
+  expect(chatToolActivity(receipt, undefined, true, true).state).toBe('running');
+});
+
 test('an answered call with no display body reads through its tool text, and a failed one does not', () => {
   const text = (_name: string, output: unknown) => (typeof output === 'string' ? output : null);
   const answered = tool('t1', { display: { form: 'none', title: 'threads' }, toolOutput: 'thread-1 · working' });
@@ -386,6 +394,16 @@ describe('activityRows', () => {
       { name: 'read', count: 2 },
       { name: 'grep', count: 1 },
     ]);
+  });
+
+  test('a receipt for a call the thread still holds never folds away, a read-only one included', () => {
+    const receipt: ToolActivityEntry = {
+      ...read('x'),
+      toolOutput: { status: 'background', runId: 'run-1', toolCallId: 'x', tool: 'read' },
+    };
+    expect(activityRows([read('a'), receipt, read('c')]).map((row) => row.kind)).toEqual(['step', 'step', 'step']);
+    const settledLate: ToolActivityEntry = { ...read('x'), toolOutput: 'file text' };
+    expect(activityRows([read('a'), settledLate, read('c')]).map((row) => row.kind)).toEqual(['folded']);
   });
 
   test('a failed call breaks the fold: its message is an answer, not material', () => {

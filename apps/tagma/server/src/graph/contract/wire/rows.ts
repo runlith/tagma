@@ -23,7 +23,6 @@ export const projectSchema = Schema.Struct({
       'folder: a project registered by its folder; global: the shared graph; group: the graph of a group of projects, which carries no code.',
   }),
   storage: Schema.Literals(STORAGE_MODES),
-  graphRemote: Schema.NullOr(Schema.String),
   servesFrom: Schema.Literals(SERVES_FROM),
   createdAt: Schema.String,
 });

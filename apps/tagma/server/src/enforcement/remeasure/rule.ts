@@ -89,6 +89,7 @@ const kept = (tracing: Tracing, law: Law) =>
       ms: tracing.measured.ms,
       at: tracing.at,
       sources: ledgerSources(law, tracing.measured.found, tracing.previous?.sources),
+      remeasure: tracing.measured.remeasure,
       identity: { tree: tracing.tree, declaration: declarationOf(law, tracing.places), implementation: tracing.code },
     },
     tracing.shelf,
@@ -384,10 +385,13 @@ export const remeasureRule = Effect.fn('enforcement.remeasureRule')(function* (
   carried: readonly Carried[],
   refresh = true,
 ) {
+  yield* Effect.annotateCurrentSpan({ 'enforcement.rule': rule, 'project.id': projectId });
   const snapshot = yield* ruleSnapshot(projectId);
+  yield* Effect.annotateCurrentSpan('checkout.root', snapshot.root);
   const ruled = snapshot.ruled.find((one) => one.name === rule);
   if (ruled === undefined || !RUNS.has(ruled.document.strictness)) return SKIPPED;
   const { document } = ruled;
+  yield* Effect.annotateCurrentSpan('inspection.key', document.inspection);
   const inspection = document.check;
   if (isUnrun(inspection)) return SKIPPED;
   const places = yield* ruled.reach(inspectionBase(inspection));
@@ -419,7 +423,7 @@ export const remeasureRule = Effect.fn('enforcement.remeasureRule')(function* (
       : (yield* treePresentAt(actingGit(yield* Git, 'enforcement-remeasure'), snapshot.root, candidate).pipe(Effect.mapError(gitUnread)))
         ? candidate
         : undefined;
-  const paths =
+  let paths =
     basis !== undefined
       ? [
           ...new Set([
@@ -432,8 +436,18 @@ export const remeasureRule = Effect.fn('enforcement.remeasureRule')(function* (
         ].filter(covers(places))
       : undefined;
   if (isProgrammed(inspection) && paths?.length === 0) return SKIPPED;
+  let comparison = isProgrammed(inspection) && basis !== undefined && previous?.remeasure === 'delta' ? previous.commit : undefined;
+  if (
+    comparison !== undefined &&
+    !(yield* commitsAt(actingGit(yield* Git, 'enforcement-remeasure'), snapshot.root, [comparison]).pipe(Effect.mapError(gitUnread))).has(
+      comparison,
+    )
+  ) {
+    comparison = undefined;
+    paths = undefined;
+  }
   const measured: Measured = isProgrammed(inspection)
-    ? yield* measureBound(projectId, snapshot.root, head, rule, inspection, places, { _tag: 'Operator' }, paths, 'background')
+    ? yield* measureBound(projectId, snapshot.root, head, rule, inspection, places, { _tag: 'Operator' }, paths, 'background', comparison)
     : yield* measureReach(
         yield* (yield* Projects).byId(projectId),
         inspection,

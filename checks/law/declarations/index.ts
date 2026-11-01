@@ -203,7 +203,7 @@ const packageRows = (packages: readonly Package[]): (readonly [string, unknown])
 
 const KEPT_INDEXED = 256;
 
-const isIndexed = (root: string, tree: string): boolean =>
+export const indexedAt = (root: string, tree: string): boolean =>
   (settled.has(`${root}\0${tree}`) || databaseAt(root).query('SELECT 1 FROM indexed WHERE tree = ?').get(tree) !== null) &&
   rootAt(root, PACKAGES, tree) !== undefined;
 
@@ -222,15 +222,17 @@ export const GOOD_ENOUGH = 50;
 
 export const FAR = 5000;
 
+export class WholeRequired extends Error {}
+
 const ensure = (root: string, tree: string, hint: string | null, populate: boolean): void => {
-  if (isIndexed(root, tree)) return;
+  if (indexedAt(root, tree)) return;
   const recent = databaseAt(root)
     .query<{ tree: string }, [number]>('SELECT tree FROM indexed ORDER BY at DESC LIMIT ?')
     .all(NEARBY)
     .map((one) => one.tree);
   let best: { readonly source: string; readonly changes: readonly TreeDifference[] } | undefined;
-  for (const source of [...new Set([...(hint !== null && isIndexed(root, hint) ? [hint] : []), ...recent])].filter((one) =>
-    isIndexed(root, one),
+  for (const source of [...new Set([...(hint !== null && indexedAt(root, hint) ? [hint] : []), ...recent])].filter((one) =>
+    indexedAt(root, one),
   )) {
     const changes = changesBetween(root, source, tree);
     if (best === undefined || changes.length < best.changes.length) best = { source, changes };
@@ -238,7 +240,7 @@ const ensure = (root: string, tree: string, hint: string | null, populate: boole
   }
   if (best === undefined || best.changes.length > FAR) {
     if (!populate)
-      throw new Error(
+      throw new WholeRequired(
         `the declaration index holds no revision within ${FAR} changed files of ${tree}; run check_rules with inspection "dead-code" over "change", using the same paths, whole and taking selection as the refused landing, to prepare the candidate before judging it again`,
       );
     populated(root, tree);

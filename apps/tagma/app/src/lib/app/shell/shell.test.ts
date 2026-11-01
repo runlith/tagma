@@ -85,7 +85,7 @@ function world(standing: readonly string[] = ['t1', 't9'], goto: (href: string) 
         refresh: async () => ({ status: 'rows', rows: standing.filter((id) => id === aim.selection.ids).map((id) => ({ id })) }),
       }),
     },
-  } as unknown as ReturnType<typeof ThreadsRepo.use>;
+  } as unknown as ThreadsRepo;
   const { panes } = testArea([testKind(THREAD_PANE)]);
   const seats = new ThreadSeats(panes);
   panes.showSection('chat');

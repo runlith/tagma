@@ -70,7 +70,7 @@ const built = Effect.fnUntraced(
     yield* files.makeDirectory(home, { recursive: true });
     const routes = doorServing(
       Layer.mergeAll(
-        doorLayer({ status: { ...world.runtime.status, sandboxOrigin: null }, appDist }),
+        doorLayer({ status: { ...world.runtime.status, sandboxOrigin: null }, routes: world.runtime.routes, appDist }),
         liveServing(ASSEMBLY, null).pipe(Layer.provide(socketOperationsLayer)),
         artifactRoutes(world.runtime.artifacts, { index: ARTIFACT_PREFIX, sandboxed: true }),
       ),

@@ -3,7 +3,9 @@ import { layer } from '@runlith/effect-test';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, relative } from 'node:path';
+import { createHash } from 'node:crypto';
+import { agentRuntimeGuidanceMessage } from '@runlith/agent/AgentSignal';
 import { type AgentRunner, makeAgentRunner, type AgentSink } from '@runlith/agent/AgentRunner';
 import { RunStop } from '@runlith/agent/RunStop';
 import type { AgentRuntimeGuidance } from '@runlith/agent/contracts';
@@ -42,6 +44,8 @@ import {
   promptDocument,
   mcpBoundTools,
   instructionSnapshot,
+  instructionsTold,
+  touchedTagsTold,
   capabilitySections,
   agentLibrary,
   asAgentDeclaration,
@@ -104,6 +108,7 @@ import { makeMachineWorld } from '../../../executions/testing/doubles.js';
 import type { ThreadWorld, WorldFacts } from '../../../executions/contract/service/worlds.js';
 import { GateRefusal } from '../../../platform/contract/wire/refusal.js';
 import type { InstructionSet } from '../../../graph/contract/wire/instructions.js';
+import { Orientation } from '../../../graph/contract/service/orientation.js';
 import { BEHAVIOUR_REGISTRY } from '../composed.js';
 import { ENTRY_KINDS, NATIVE_AGENT_RULES } from '../composed.js';
 import { AgentRuleRegistry } from '@runlith/agent/AgentRuntimePolicy';
@@ -156,7 +161,8 @@ const makeComposition = Effect.fnUntraced(function* (instructionWorld: EffectDem
       rows,
       mandate,
       teamLess,
-      (thread, use) => Effect.map(context(thread, use), (ctx) => ({ ...ctx, execution, offers: capabilityOffers, places: homeOnly })),
+      (thread, use) =>
+        Effect.map(context(thread, use), (ctx) => ({ ...ctx, execution, offers: capabilityOffers, places: ctx.places ?? homeOnly })),
       sections ?? DOCTRINE.contributed,
       ...hooks,
     );
@@ -636,6 +642,219 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
       ),
     ),
   );
+  it.effect('parallel file reads deliver each changed tag declaration once beside each file’s law', () =>
+    withDemo((demo) =>
+      Effect.scoped(
+        Effect.gen(function* () {
+          const {
+            composeAgent,
+            scriptedRunner,
+            sandboxWorld,
+            context,
+            input,
+            thread,
+            tree,
+            call,
+            answer,
+            undelegatedThreads,
+            namesOnly,
+            launch,
+          } = yield* makeComposition(demo);
+          const { graph, projectId } = demo;
+          const files = yield* FileSystem.FileSystem;
+          const copy = join(demo.demoRoot, 'worktree');
+          yield* files.makeDirectory(copy);
+          const names = ['first.ts', 'second.ts', 'third.ts'];
+          const paths = names.map((name, index) => join(index === 2 ? copy : demo.demoRoot, name));
+          const initial = 'The declaration for these fixture rules.';
+          const revised = 'A revised declaration for these fixture rules.';
+          const declaration = yield* graph.blocks.create({
+            projectId,
+            parentId: demo.root,
+            tags: ['tag'],
+            title: 'Parallel case',
+            body: initial,
+            fields: { id: 'parallel-case', fields: { second: 'number', third: 'boolean', first: 'string' } },
+          });
+          const laws: string[] = [];
+          for (const [index, path] of paths.entries()) {
+            yield* files.writeFileString(path, 'export {};\n');
+            const law = yield* graph.blocks.create({
+              projectId,
+              parentId: demo.root,
+              tags: ['rule', 'parallel-case'],
+              title: `Fixture law for ${names[index]}`,
+              sources: [{ kind: 'file', ref: names[index]! }],
+            });
+            laws.push(yield* demo.nameOf(law.id));
+          }
+          const prepared = yield* graph.orientation.instructions({ projectId, audience: 'graph' });
+          const original = (yield* demo.table()).tagById('parallel-case');
+          if (original === null) return yield* Effect.die('the declaration was not compiled');
+          const legacy = {
+            ...prepared,
+            root: copy,
+            entries: prepared.entries.map((entry) =>
+              entry.source === '#parallel-case'
+                ? { ...entry, revision: createHash('sha256').update(JSON.stringify(original)).digest('hex') }
+                : entry,
+            ),
+          };
+          const offered: { tools: string[]; messages: readonly Message[] }[] = [];
+          const runner = yield* scriptedRunner(
+            (turn) =>
+              turn > 6
+                ? answer(turn, 'Done.')
+                : Effect.gen(function* () {
+                    if (turn === 1) {
+                      yield* graph.blocks.update({
+                        id: declaration.id,
+                        body: revised,
+                        fields: { fields: { third: 'boolean', first: 'string', second: 'number' } },
+                      });
+                      yield* graph.blocks.update({ id: declaration.id, body: initial });
+                    } else if (turn === 2) yield* graph.blocks.update({ id: declaration.id, body: revised });
+                    else if (turn === 6)
+                      yield* graph.blocks.update({
+                        id: declaration.id,
+                        fields: { fields: { third: 'boolean', first: 'string', second: 'number', fourth: 'boolean' } },
+                      });
+                    const frame = call(1, 'read', { path: paths[0] });
+                    return [
+                      frame[0]!,
+                      ...paths.flatMap((path, index) => call(turn * 10 + index, 'read', { path }).slice(1, 3)),
+                      ...frame.slice(3),
+                    ];
+                  }).pipe(Effect.orDie),
+            offered,
+          );
+          const agent = asAgentDeclaration({ ...tree, capabilities: ['files', 'graph'] });
+          const view: ThreadView = { ...thread, id: 'parallel-guidance', agentId: agent.id };
+          const world = { ...sandboxWorld(), root: copy, facts: { ...sandboxWorld().facts, shared: true }, world: machineWorld };
+          const placeOf = (path: string) => {
+            const root = path === copy || path.startsWith(`${copy}/`) ? copy : demo.demoRoot;
+            return { projectId, root, path: relative(root, path) };
+          };
+          const places = {
+            ...homeOnly,
+            locate: (path: string) => Effect.succeed(placeOf(path)),
+            resource: (path: string) => Effect.succeed(placeOf(path)),
+            checkoutOf: (path: string) => Effect.succeed(placeOf(path)),
+            graphAt: () => Effect.succeed({ context: demo.context }),
+          } as unknown as ReturnType<typeof asThreadContext>['places'];
+          const execution: ThreadExecution['Service'] = {
+            ...namesOnly,
+            touched: (ctx, at, shown) =>
+              graph.touches.touch({ projectId: at.projectId, shown }).pipe(signedBy(ctx.session), Effect.provide(at.graph)),
+          };
+          const home = Context.add(demo.context, Orientation, { ...graph.orientation, instructions: () => Effect.succeed(legacy) });
+          const composed = composeAgent(agent, runner, undelegatedThreads.rows, undelegatedThreads.mandate, execution, () =>
+            Effect.succeed(
+              asThreadContext({
+                ...context(world),
+                thread: view,
+                target: { graph: { projectId, root: copy } },
+                graph: Effect.succeed(home),
+                graphRoot: copy,
+                places,
+                changeRecord: { changes: () => ({}) },
+                checkoutFlights: new CheckoutFlights(),
+                session: { harness: 'tagma', key: view.id },
+              }),
+            ),
+          );
+          const guidance: AgentRuntimeGuidance[] = [];
+          const initialMessages = [
+            agentRuntimeGuidanceMessage('Project instructions', { [instructionsTold(projectId)]: legacy }),
+            Message.user('Read the files.'),
+          ];
+          const given = input(composed, view.id, initialMessages, view);
+          const run = yield* launch(composed, {
+            ...given,
+            context: {
+              ...given.context,
+              project: ({ messages }) => {
+                const kept =
+                  offered.length === 3
+                    ? messages.filter((message) => !Object.hasOwn(message.metadata?.runtimeState ?? {}, touchedTagsTold(projectId)))
+                    : messages;
+                const reset = new Message({
+                  role: 'user',
+                  content: [{ type: 'text', text: 'Summary.' }],
+                  compaction: { id: 'touch-reset', mode: 'manual', transcriptLocation: demo.demoRoot, preservedCount: 0 },
+                });
+                return Effect.succeed({ messages: offered.length === 4 ? [...kept, reset] : kept });
+              },
+            },
+            sink: {
+              push: (event) =>
+                Effect.sync(() => {
+                  if (event.type === 'runtime-guidance') guidance.push(event.entry);
+                }),
+            },
+          });
+          yield* run.output.response;
+          const received = (calls: readonly string[]) =>
+            guidance
+              .flatMap((entry) => entry.texts.filter((_, index) => calls.includes(entry.sources[index]?.toolCallId ?? '')))
+              .join('\n');
+          const first = received(paths.map((_, index) => `call-${10 + index}`));
+          const second = received(paths.map((_, index) => `call-${20 + index}`));
+          const continued = received(paths.map((_, index) => `call-${30 + index}`));
+          const lost = received(paths.map((_, index) => `call-${40 + index}`));
+          const reset = received(paths.map((_, index) => `call-${50 + index}`));
+          const reshaped = received(paths.map((_, index) => `call-${60 + index}`));
+          expect(first.split(initial).length - 1).toBe(0);
+          for (const law of laws) expect(first).toContain(law);
+          expect(second.split(revised).length - 1).toBe(1);
+          expect(continued.split(revised).length - 1).toBe(0);
+          expect(lost.split(revised).length - 1).toBe(1);
+          expect(reset.split(revised).length - 1).toBe(1);
+          expect(reshaped.split(revised).length - 1).toBe(1);
+          const localText = 'A declaration changed in the home checkout.';
+          const localOffered: { tools: string[]; messages: readonly Message[] }[] = [];
+          const localRunner = yield* scriptedRunner(
+            (turn) =>
+              turn === 1
+                ? Effect.as(graph.blocks.update({ id: declaration.id, body: localText }), call(1, 'read', { path: paths[0] })).pipe(
+                    Effect.orDie,
+                  )
+                : answer(turn, 'Done.'),
+            localOffered,
+          );
+          const localView = { ...view, id: 'local-guidance' };
+          const localWorld = { ...sandboxWorld(), root: demo.demoRoot, world: machineWorld };
+          const localAgent = composeAgent(agent, localRunner, undelegatedThreads.rows, undelegatedThreads.mandate, execution, () =>
+            Effect.succeed(
+              asThreadContext({
+                ...context(localWorld),
+                thread: localView,
+                graphRoot: demo.demoRoot,
+                session: { harness: 'tagma', key: localView.id },
+              }),
+            ),
+          );
+          const localGuidance: AgentRuntimeGuidance[] = [];
+          const local = yield* launch(localAgent, {
+            ...input(localAgent, localView.id, [Message.user('Read the file.')], localView),
+            sink: {
+              push: (event) =>
+                Effect.sync(() => {
+                  if (event.type === 'runtime-guidance') localGuidance.push(event.entry);
+                }),
+            },
+          });
+          yield* local.output.response;
+          expect(
+            localGuidance
+              .flatMap((entry) => entry.texts)
+              .join('\n')
+              .split(localText).length - 1,
+          ).toBe(1);
+        }),
+      ),
+    ),
+  );
   it.effect(
     'a thread born with navigation on carries its guide in the prompt and hears it once after grepping a member call; off, neither',
     () =>
@@ -830,7 +1049,7 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
             Effect.provideService(Settings, demo.graph.settings),
           );
           const sourceCache = Context.get(
-            yield* Layer.build(workspaceInputsLayer(() => [])).pipe(
+            yield* Layer.build(workspaceInputsLayer(() => [], [])).pipe(
               Effect.provideService(EnabledPlugins, (yield* enabledPlugins()).service),
             ),
             WorkspaceInputs,

@@ -236,14 +236,14 @@ const built = Effect.fnUntraced(
       Layer.mergeAll(
         successionLayer(undefined, join(data, 'install'), join(data, 'serve.log')),
         checkoutBuildsLayer({ checkout: undefined, log: join(data, 'build.log'), worktrees: join(data, 'build') }),
-        devSurfaceLayer({ checkout: undefined, port: 5642 }).pipe(
+        devSurfaceLayer({ checkout: undefined, app: { root: 'apps/tagma/app', config: null }, port: 5642 }).pipe(
           Layer.provide(Layer.mergeAll(Layer.succeedContext(runtime.door), FetchHttpClient.layer)),
         ),
       ),
     );
     const born = { startedAt: new Date(yield* Clock.currentTimeMillis).toISOString(), replacedPid: null };
     const routes = yield* HttpRouter.toHttpEffect(
-      doorLayer({ status: runtime.status }).pipe(
+      doorLayer({ status: runtime.status, routes: runtime.routes }).pipe(
         Layer.provide(doorCompositionLayer),
         Layer.provide(
           Layer.succeedContext(

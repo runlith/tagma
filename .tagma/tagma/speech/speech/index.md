@@ -45,6 +45,8 @@ edges:
   - kind: imports
     to: 01a106db-b8b2-7b23-bc99-c3d1eaabfb41
   - kind: imports
+    to: 01a1237e-b7b0-70ab-98b0-c0c63d78b068
+  - kind: imports
     to: 01a137a5-2cdd-7e99-892d-41b3e3acacf3
   - kind: imports
     to: 01a13b34-f692-7514-aced-482bdbf8f243
@@ -52,4 +54,4 @@ sources:
   - kind: dir
     ref: apps/tagma/server/src/speech
 ---
-Tagma hears and speaks on the server machine, and this module is speech as a product: project listenings (capture, recognition, the transcript the agent reads, per-track audio in the recordings directory, and re-recognition of that audio by a model that hears the whole recording), recording-free recognition for the check run and future dictation, synthesis with playback, speech settings, and the answer of what is available here and why. Sessions, the model catalog and synthesis come from the `Speech` service of `@runlith/speech`, audio from the `AudioDevices` port, keys from `providers`; composition binds vendor adapters, the native helper and the Whisper engine. The module does not know the threads in which an agent following a call receives fragments: it declares the `CallThreads` port, and composition fills it with threads.
+Tagma hears and speaks on the server machine, and this module is speech as a product: recording-free recognition for dictation, the check run and an app view, synthesis with playback, local models, speech settings, and the answer of what is available here and why. It also offers a capture kit — the track chain, recognizer choice, utterance conversion and a capture registry whose one stop ends any capture — to a module that keeps what it captures. Sessions, the model catalog and synthesis come from the `Speech` service of `@runlith/speech`, audio from the `AudioDevices` port, keys from `providers`; composition binds vendor adapters, the native helper and the Whisper engine.

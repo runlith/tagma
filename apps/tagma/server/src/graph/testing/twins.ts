@@ -11,6 +11,7 @@ import { encodeBlockFile } from '../tree/blockFile.js';
 import { markerText } from '../tree/marker.js';
 import { shippedSteps } from '../steps/sequence.js';
 import { ShadowGit } from '../tree/shadow.js';
+import { NO_SIDE } from '../contract/service/exchange.js';
 import { syncTopology, type TreeHold } from '../tree/topology.js';
 import { stealthTreeName } from '../storage/layout.js';
 
@@ -41,7 +42,7 @@ export const twinWorldLayer = Layer.effect(
     yield* fs.writeFileString(join(project, 'README.md'), 'the project');
     yield* runGit(git, 'test', ['-C', project, 'add', '-A']);
     yield* runGit(git, 'test', ['-C', project, 'commit', '-m', 'project born'], { env: IDENTITY });
-    yield* ShadowGit.open(join(root, 'tagma/graph.git'), git, null);
+    yield* ShadowGit.open(join(root, 'tagma/graph.git'), git, NO_SIDE);
     return root;
   }),
 ).pipe(Layer.provideMerge(Layer.merge(platform, git)));
@@ -53,7 +54,7 @@ export const twinWorld = Effect.fnUntraced(function* () {
   yield* fs.copy(yield* Template, base, { overwrite: true });
   const project = join(base, 'project');
   const sh = (args: string[], cwd?: string) => runGit(git, 'test', args, { cwd, env: IDENTITY });
-  const shadow = yield* ShadowGit.open(join(base, 'tagma/graph.git'), git, null);
+  const shadow = yield* ShadowGit.open(join(base, 'tagma/graph.git'), git, NO_SIDE);
   const treeOf = (checkout: string) => join(base, 'tagma/trees', stealthTreeName(checkout));
   const sync = (checkout: string) => syncTopology(shadow, checkout, treeOf(checkout), shippedSteps, { treeHold: unheld });
   const checkout = Effect.fnUntraced(function* (branch: string, from: string) {

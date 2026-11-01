@@ -169,6 +169,7 @@ export const makeChoiceReader = Effect.fnUntraced(function* ({ rows }: { readonl
     { thread, rule, configured }: Settled,
     running: boolean | null,
     runId?: string,
+    foreign = thread.capabilities.compaction === 'foreign',
   ): Effect.fn.Return<Standing, HarnessFailure> {
     const table = yield* quota.table();
     const now = yield* Clock.currentTimeMillis;
@@ -180,7 +181,8 @@ export const makeChoiceReader = Effect.fnUntraced(function* ({ rows }: { readonl
             const verdict = cacheWarmthOf(thread, false, basis);
             return { state: verdict?.state ?? 'unknown', invalidatedBy: verdict?.invalidatedBy ?? null };
           });
-    const chain = summarizerChain(catalog, configured, table, now, summarized(catalog.models, thread));
+    const subject = summarized(catalog.models, thread);
+    const chain = summarizerChain(catalog, configured, table, now, foreign ? { ...subject, compaction: 'foreign' } : subject);
     return {
       catalog,
       thread,
@@ -189,7 +191,7 @@ export const makeChoiceReader = Effect.fnUntraced(function* ({ rows }: { readonl
       chain,
       table,
       now,
-      answer: summarizersOf(rule, chain, isWarm(warm), thread.capabilities.compaction === 'foreign'),
+      answer: summarizersOf(rule, chain, isWarm(warm), foreign),
     };
   });
 
@@ -197,9 +199,9 @@ export const makeChoiceReader = Effect.fnUntraced(function* ({ rows }: { readonl
     summarizers: Effect.fnUntraced(
       function* (ask: ThreadSummarizerAsk) {
         const chosen = yield* settled(ask.threadId);
-        if (chosen.thread.capabilities.compaction !== 'foreign' && (chosen.rule === 'never' || chosen.configured.length === 0))
-          return summarizersOf(chosen.rule, [], false);
-        return (yield* standing(chosen, ask.running, ask.runId)).answer;
+        const foreign = ask.foreign === true || chosen.thread.capabilities.compaction === 'foreign';
+        if (!foreign && (chosen.rule === 'never' || chosen.configured.length === 0)) return summarizersOf(chosen.rule, [], false);
+        return (yield* standing(chosen, ask.running, ask.runId, foreign)).answer;
       },
       Effect.mapError((failure): ThreadNotFoundError | ThreadStorageFailed =>
         failure instanceof ThreadNotFoundError ? failure : new ThreadStorageFailed({ call: 'summarizers', cause: failure }),
@@ -221,6 +223,13 @@ export const makeChoiceReader = Effect.fnUntraced(function* ({ rows }: { readonl
         return yield* new GateRefusal('harness-contract', 'This thread does not compact its context, so no summarizer is chosen.', [
           'read the thread; its context stands as it is',
         ]);
+      }
+      if (chosen.thread.capabilities.compaction === 'vendor') {
+        return yield* new GateRefusal(
+          'harness-contract',
+          "The vendor owns this session's compaction and exposes no compaction API; choosing a summarizer would replace the session and lose its warm cache.",
+          ['continue the thread; its vendor owns the compaction boundary'],
+        );
       }
       const state = yield* standing(chosen, null);
       const { thread, catalog } = state;

@@ -1,6 +1,6 @@
 import { mkdirSync, realpathSync, rmSync } from 'node:fs';
 import { totalmem } from 'node:os';
-import { basename, dirname, join, resolve } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { liveAttempt } from '../installation/closure/attempt.js';
 import { fileURLToPath } from 'node:url';
 import { Cause, Context, Effect, Exit, FileSystem, Layer, Result, Scope, Stream } from 'effect';
@@ -40,10 +40,10 @@ import { doorCompositionLayer } from './http/handlers.js';
 import { requestLine } from '../http/door.js';
 import { routedContext } from '../graph/serving/routing.js';
 import { makeRuntime, type ServerRuntime } from './runtime.js';
-import { RECORDINGS } from '../speech/contract/service/recording.js';
 import { SHIPPED_PRESETS } from '../marketplaces/contract/wire/presets.js';
 import { assemble } from './manifest.js';
 import type { Build } from './build.js';
+import { appOf } from './next.js';
 import { RolloutReads } from '../threads/contract/service/rolloutReads.js';
 import {
   type DataDirectoryConflict,
@@ -198,13 +198,13 @@ export const serve = async (build: Build): Promise<void> => {
     told: (line) => console.log(`[tagma] ${line}`),
   });
   const standing: Installation | undefined = read.success.handsOut;
-  const executionHostPath = installation === undefined ? resolve(serverPath, '..', '..', '..', 'packages', 'execution-host') : undefined;
+  const executionHostPath = installation === undefined ? join(build.cut.roots.packages, 'execution-host') : undefined;
   const source =
     installation === undefined
       ? await Effect.runPromise(
           phase(
             'source measured',
-            Effect.promise(() => measureProvenance(serverPath)),
+            Effect.promise(() => measureProvenance(build.cut.roots.checkout)),
           ),
         )
       : undefined;
@@ -218,7 +218,7 @@ export const serve = async (build: Build): Promise<void> => {
     installation === undefined
       ? {
           _tag: 'Checkout',
-          path: resolve(serverPath, '..', '..', '..', 'packages', 'execution-host'),
+          path: join(build.cut.roots.packages, 'execution-host'),
           build:
             source?.revision === null || source?.revision === undefined
               ? (source?.startedAt ?? startedAt)
@@ -424,7 +424,6 @@ export const serve = async (build: Build): Promise<void> => {
             tokensPath: join(dataPath, 'tokens.json'),
             attachmentsPath: join(dataPath, 'attachments'),
             artifactsPath: join(dataPath, 'artifacts'),
-            recordingsPath: join(dataPath, RECORDINGS),
             artifactOrigin: `http://localhost:${artifactPort}`,
             sandboxPort,
             sites: localSites,
@@ -443,7 +442,7 @@ export const serve = async (build: Build): Promise<void> => {
             opened: attempt.opened,
             hostTakenAfter: attempt.trial === null ? undefined : attempt.opened,
             tagmaAppServer: `http://${LOOPBACK_HOST}:${port}`,
-            localOrigin: `http://${LOOPBACK_HOST}:${port}`,
+            localOrigin: HttpServer.formatAddress(Context.get(localContext, HttpServer.HttpServer).address),
             marketplaces: SHIPPED_PRESETS,
             commitGate:
               installation === undefined
@@ -496,7 +495,7 @@ export const serve = async (build: Build): Promise<void> => {
           Layer.build(
             parts.bindings
               .nextInstallation({
-                serverPath,
+                checkout: build.cut.roots.checkout,
                 dataPath,
                 installations,
                 installation,
@@ -535,7 +534,7 @@ export const serve = async (build: Build): Promise<void> => {
       Scope.provide(
         Layer.build(
           parts.bindings
-            .door({ serverPath, installation, port })
+            .door({ checkout: build.cut.roots.checkout, app: appOf(build.cut), installation, port })
             .pipe(Layer.provide(Layer.mergeAll(Layer.succeedContext(tagma.door), FetchHttpClient.layer))),
         ),
         localScope,
@@ -557,7 +556,7 @@ export const serve = async (build: Build): Promise<void> => {
 
   const localConnections = new Connections(false);
   const app = Layer.mergeAll(
-    doorLayer({ status: tagma.status, appDist: surfaceRoot(dataPath, standing) }),
+    doorLayer({ status: tagma.status, routes: assembly.routes, appDist: surfaceRoot(dataPath, standing) }),
     liveServing(assembly, localConnections).pipe(Layer.provide(socketOperationsLayer)),
   ).pipe(Layer.provide(doorCompositionLayer), Layer.provide(Layer.succeedContext(doorServices)));
 

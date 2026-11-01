@@ -1,6 +1,7 @@
 import type { Assembled } from '@tagma/inspection/builtins';
 import type { Footprint } from '@tagma/inspection/node/reading';
 import type { Unjudged } from '@tagma/inspection/verdict';
+import type { ProgramRemeasure } from '@tagma/inspection/program';
 import { commitOf, runEnded, troubleOf } from '@runlith/git/repository';
 import { Git } from '@runlith/git/Git';
 import { Effect, Result } from 'effect';
@@ -118,6 +119,7 @@ export const indexViolations = (violations: readonly RuleViolation[]): Violation
 
 export type Measured = Reading &
   ViolationIndex & {
+    readonly remeasure?: ProgramRemeasure;
     readonly root: string;
     readonly head: string;
     readonly coverage?: readonly InspectionCoverage[];
@@ -152,7 +154,7 @@ export const measureAt = Effect.fn('enforcement.measureAt')(function* (
 ) {
   const inspected: Reading = yield* (yield* Inspections).reach({ root, commit: head, inspection, places, previous, paths }, priority);
   const { found, counts } = indexViolations(inspected.verdict.violations);
-  return {
+  const measured: Measured = {
     verdict: inspected.verdict,
     read: inspected.read,
     ms: inspected.ms,
@@ -161,7 +163,8 @@ export const measureAt = Effect.fn('enforcement.measureAt')(function* (
     head,
     found,
     counts,
-  } satisfies Measured;
+  };
+  return measured;
 });
 
 export const reachRefusal = (name: string, base: string) =>

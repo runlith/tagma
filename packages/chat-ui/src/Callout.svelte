@@ -3,9 +3,10 @@
   import type { Snippet } from 'svelte';
   import type { ClassValue } from 'svelte/elements';
   import { clampFade } from './clipFade';
+  import Waiting from './Waiting.svelte';
 
   type Props = {
-    tone: 'error' | 'plain';
+    tone: 'error' | 'plain' | 'pending';
     title: string;
     note?: string | undefined;
     onDismiss?: (() => void) | undefined;
@@ -52,10 +53,14 @@
     {@attach clamp ? clampFade((value) => (clipped = value)) : undefined}
   >
     <p class="font-medium break-words text-foreground">
-      <span
-        class={['mr-2 inline-block size-1.5 align-middle', tone === 'error' ? 'bg-chat-failure' : 'bg-muted-foreground']}
-        aria-hidden="true"
-      ></span>{title}
+      {#if tone === 'pending'}
+        <Waiting class="mr-2 inline-block size-3 align-middle text-muted-foreground" />
+      {:else}
+        <span
+          class={['mr-2 inline-block size-1.5 align-middle', tone === 'error' ? 'bg-chat-failure' : 'bg-muted-foreground']}
+          aria-hidden="true"
+        ></span>
+      {/if}{title}
     </p>
     {#if note !== undefined && note !== ''}
       <p class="text-small wrap-anywhere text-muted-foreground">{note}</p>

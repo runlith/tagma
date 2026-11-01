@@ -79,7 +79,16 @@ export class MigrationStatementUnresolved extends Data.TaggedError('MigrationSta
   }
 }
 
+export class SetAsideFailed extends Data.TaggedError('SetAsideFailed')<{ readonly path: string; readonly reason: string }> {
+  override get message(): string {
+    return `the tables a migration sets aside could not be kept at ${this.path}: ${this.reason}`;
+  }
+}
+
+export type Adopting = { readonly files: readonly string[]; readonly after: Effect.Effect<void> };
+
 export type StoreOpenFailure =
+  | SetAsideFailed
   | MigrationStatementUnresolved
   | MigrationChainInvalid
   | BaselineNotReached
@@ -117,6 +126,7 @@ export type Store<Brand extends StoreBrand> = {
   ) => Effect.Effect<A, E | StoreFailure | ProgramConflict>;
   readonly readOnly: <A, E, R>(work: (db: StoreDb<Brand>) => Effect.Effect<A, E, R>) => Effect.Effect<A, E | StoreFailure, R>;
   readonly vacuum: () => Effect.Effect<VacuumVerdict, StoreFailure>;
+  readonly adopted: Effect.Effect<boolean>;
   readonly freeing: <A, E, R>(work: Effect.Effect<A, E, R>) => Effect.Effect<readonly [A, number], E | StoreFailure, R>;
   readonly moves: TableMoves;
   readonly stalled: Effect.Effect<WriterStall | null>;

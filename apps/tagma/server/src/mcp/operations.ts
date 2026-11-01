@@ -2,7 +2,8 @@ import type { McpServerDeclaration } from '@runlith/mcp/declaration';
 import { Effect } from 'effect';
 import { body, pair } from '../platform/contract/service/body.js';
 import { CurrentProject } from '../projects/contract/service/caller.js';
-import { callbackOf, McpSignInDoor, servedCallback } from './contract/service/door.js';
+import { DoorAddress } from '../platform/contract/service/door.js';
+import { callbackOf, servedCallback } from './contract/service/door.js';
 import { McpServers } from './contract/service/servers.js';
 import {
   MCP_APP_OPERATIONS as APPS,
@@ -12,7 +13,7 @@ import {
 } from './contract/wire/operations.js';
 import { mcpRowsAt, type McpServerRow } from './contract/wire/servers.js';
 
-const callback = Effect.map(McpSignInDoor, callbackOf);
+const callback = Effect.map(DoorAddress, callbackOf);
 
 const answer = (rows: readonly McpServerRow[]) => Effect.map(callback, (at) => ({ status: 'ok' as const, mcp: mcpRowsAt(rows, at) }));
 

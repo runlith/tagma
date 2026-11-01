@@ -1,16 +1,17 @@
 <script lang="ts">
   import AlertTriangle from '@lucide/svelte/icons/triangle-alert';
-  import MergeFact from './MergeFact.svelte';
-  import FactStamp from './FactStamp.svelte';
   import GitMerge from '@lucide/svelte/icons/git-merge';
   import GitPullRequest from '@lucide/svelte/icons/git-pull-request';
-  import Waiting from '@runlith/chat-ui/Waiting.svelte';
+  import Callout from '@runlith/chat-ui/Callout.svelte';
   import type { WorktreePlace } from '@tagma/server/worktrees/contract/wire/rows';
   import { Button } from '$lib/shared/ui/button/index.js';
+  import Working from '$lib/shared/ui/Working.svelte';
   import ActLine from './ActLine.svelte';
   import { Worktrees } from './BoardState.svelte.js';
   import { baseName } from './BaseReading.svelte.js';
+  import FactStamp from './FactStamp.svelte';
   import { Finishing } from './Finishing.svelte.js';
+  import MergeFact from './MergeFact.svelte';
   import OutcomeLine from './OutcomeLine.svelte';
 
   let { row }: { row: WorktreePlace } = $props();
@@ -29,64 +30,112 @@
   const pullRequest = $derived(finishing.pullRequests.get(row.rootId) ?? null);
   const named = $derived(row.base?.branch != null);
   const busy = $derived(row.agents.working + row.agents.waiting);
+  const uncommitted = $derived(facts?.uncommitted ?? 0);
+
+  const reason = $derived(pending?.refusal?.message ?? null);
+  const pendingKey = $derived(pending === null ? null : `${pending.state}:${pending.queuedAt}`);
+  let openedKey = $state<string | null>(null);
+  let clipped = $state(false);
+  const opened = $derived(pendingKey !== null && openedKey === pendingKey);
+
+  const agentWords = $derived(
+    row.agents.working > 0
+      ? busy === 1
+        ? '1 agent is still working here'
+        : `${busy} agents are still working here`
+      : busy === 1
+        ? '1 agent here waits for you'
+        : `${busy} agents here wait for you`,
+  );
+
+  function toggle(): void {
+    openedKey = opened ? null : pendingKey;
+  }
+
+  function cancel(): void {
+    if (acting === null) void finishing.cancelMerge(row);
+  }
 </script>
 
-<div
-  class="grid shrink-0 gap-1.5 border-t bg-chrome px-3 py-2 text-small"
-  data-finish-strip={row.name}
-  {@attach reading.observe(row.rootId)}
->
+{#snippet waitingActs()}
+  <Button size="xs" variant="outline" disabled={acting !== null} onclick={cancel}>Stop</Button>
+  {#if reason !== null}
+    <Button size="xs" variant="ghost" class="text-muted-foreground" aria-expanded={opened} onclick={toggle}>
+      {opened ? 'Hide details' : 'Details'}
+    </Button>
+  {/if}
+{/snippet}
+
+{#snippet stoppedActs()}
+  <Button size="xs" variant="ghost" class="text-muted-foreground" aria-expanded={opened} onclick={toggle}>
+    {opened ? 'Show less' : 'Show all'}
+  </Button>
+{/snippet}
+
+<div class="grid shrink-0 gap-2 border-t bg-chrome px-3 py-2 text-small" data-finish-strip={row.name} {@attach reading.observe(row.rootId)}>
   {#if flight !== null}
     <ActLine {flight} class="text-small" />
   {:else if outcome !== null}
     <OutcomeLine {outcome} class="text-small" />
   {/if}
   {#if reading.unread !== null}<span class="text-destructive">Updates stopped: {reading.unread}</span>{/if}
-  <div class="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-muted-foreground">
-    <span>Merge into {into}</span>
-    {#if facts !== null}<MergeFact row={facts} />{:else}<span>not taken</span>{/if}
-  </div>
-  {#if (facts?.uncommitted ?? 0) > 0}
-    <span class="flex items-center gap-1.5 text-muted-foreground">
-      <AlertTriangle class="size-3.5 text-status-stale" />{facts?.uncommitted} uncommitted {facts?.uncommitted === 1 ? 'path' : 'paths'} in the
-      worktree
-      {#if facts !== null}<FactStamp fact={facts.stateFact} head={row.head} />{/if}
-    </span>
-  {/if}
-  {#if busy > 0}
-    <span class="flex items-center gap-1.5 text-status-in-work" data-finish-strip-busy={busy}>
-      <span class="ml-1 size-1.5 rounded-full bg-status-in-work"></span>
-      {busy === 1 ? '1 agent is still working here' : `${busy} agents are still working here`}
-    </span>
-  {/if}
-  {#if pending !== null}
-    <div class="grid gap-0.5" data-finish-strip-pending={pending.state}>
-      <span class="flex items-center gap-1.5 text-muted-foreground">
-        {#if waiting}
-          <Waiting class="size-3.5" />Merges when {into} is free
-        {:else}
-          <AlertTriangle class="size-3.5 text-status-stale" />The merge waiting for {into} stopped
-        {/if}
-        <button
-          type="button"
-          class="text-foreground underline-offset-4 hover:underline"
-          disabled={acting !== null}
-          onclick={() => void finishing.cancelMerge(row)}
-        >
-          {waiting ? 'Stop' : 'Dismiss'}
-        </button>
+
+  <div class="grid gap-1">
+    <div class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
+      <GitMerge class="size-3.5 shrink-0 text-muted-foreground" />
+      <span class="text-ui text-muted-foreground">Merge into <span class="font-medium text-foreground">{into}</span></span>
+      <span class="ml-auto flex items-center">
+        {#if facts !== null}<MergeFact row={facts} />{:else}<span class="text-muted-foreground">not taken</span>{/if}
       </span>
-      {#if pending.refusal !== null}
-        <span class="pl-5 text-small text-muted-foreground">{pending.refusal.message}</span>
+    </div>
+    {#if busy > 0}
+      <span class="flex items-center gap-2 text-muted-foreground" data-finish-strip-busy={busy}>
+        <span class="grid size-3.5 shrink-0 place-items-center">
+          {#if row.agents.working > 0}<Working />{:else}<span class="block size-1.75 bg-status-open"></span>{/if}
+        </span>
+        {agentWords}
+      </span>
+    {/if}
+    {#if uncommitted > 0}
+      <span class="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-muted-foreground">
+        <AlertTriangle class="size-3.5 shrink-0 text-status-stale" />
+        <span>{uncommitted} uncommitted {uncommitted === 1 ? 'path stays' : 'paths stay'} out of the merge</span>
+        {#if facts !== null}<FactStamp fact={facts.stateFact} head={row.head} />{/if}
+      </span>
+    {/if}
+  </div>
+
+  {#if pending !== null}
+    <div data-finish-strip-pending={pending.state}>
+      {#if waiting}
+        <Callout
+          tone="pending"
+          title={`Merges when ${into} is free`}
+          note={opened ? (reason ?? undefined) : undefined}
+          class="bg-background"
+          actions={waitingActs}
+        />
+      {:else}
+        <Callout
+          tone="error"
+          title={`The merge into ${into} stopped`}
+          note={reason ?? undefined}
+          clamp={!opened}
+          bind:clipped
+          onDismiss={cancel}
+          class="bg-background"
+          actions={clipped || opened ? stoppedActs : undefined}
+        />
       {/if}
     </div>
   {/if}
+
   <div class="flex items-center gap-1.5">
-    {#if !conflicts}
+    {#if !conflicts && !waiting}
       <Button
         size="sm"
         class="h-7 gap-1.5 text-small"
-        disabled={acting !== null || waiting || !named}
+        disabled={acting !== null || !named}
         onclick={() => finishing.askMerge(row)}
         data-finish-merge
       >

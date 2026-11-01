@@ -1,7 +1,10 @@
 import { Effect, Layer } from 'effect';
 import { prepareSqlite } from './sqlite.js';
 import type { CheckSubjectKind, FeedDeclaration, Operation, OperationDeclaration } from '../platform/contract/wire/operation.js';
-import { type DeclaredOperations, type Manifest, manifests, operationsOf } from '../platform/contract/service/manifest.js';
+import { checkManifests, type DeclaredOperations, type Manifest, operationsOf } from '../platform/contract/service/manifest.js';
+import type { Route } from '../platform/contract/service/route.js';
+import { DOOR_PATHS } from '../http/door.js';
+import { SOCKET_PATHS } from './socketBinding.js';
 import type { Machine } from '../platform/contract/service/capacity.js';
 import type { PoolDeclaration } from '@runlith/held/Capacity';
 import type { SubjectKind } from '../platform/contract/wire/place.js';
@@ -21,8 +24,11 @@ import { entryKinds } from './entryKinds.js';
 import { BUILTIN_NOTES, type BuiltinNote } from '../threads/contract/service/notes.js';
 import { NATIVE_RULES } from '../native-harness/contract/service/rules.js';
 import { HOME_FOLLOWERS, type HomeFollower } from '../thread-record/contract/service/homes.js';
+import { LIVE_WORK, type LiveWork } from '../platform/contract/service/live.js';
 import { PROJECT_CREATION, type CreationStep } from '../graph/contract/service/creation.js';
 import type { NamedRight } from '../platform/contract/service/access.js';
+import { BRIDGE_METHODS } from '../views/contract/service/bridge.js';
+import type { BridgeMethod } from '../views/contract/wire/bridge.js';
 import type { ServerParts } from './build.js';
 import { type LiveGroup, liveRpc } from './rpc.js';
 import type { CORE_MODULES } from './core.js';
@@ -62,6 +68,8 @@ export type Assembly = {
   readonly notes: readonly BuiltinNote[];
   readonly nativeRules: ReturnType<typeof NATIVE_RULES.collect>;
   readonly homeFollowers: readonly HomeFollower[];
+  readonly liveWork: readonly LiveWork[];
+  readonly bridgeMethods: readonly BridgeMethod[];
   readonly creationSteps: readonly CreationStep[];
   readonly rights: readonly NamedRight[];
   readonly entryKinds: ThreadEntryReader;
@@ -69,6 +77,7 @@ export type Assembly = {
   readonly snapshotParticipants: (home: SnapshotHome) => Effect.Effect<Readonly<Record<string, SnapshotParticipant>>>;
   readonly drivers: ReadonlySet<string>;
   readonly feeds: readonly FeedDeclaration[];
+  readonly routes: readonly Route[];
   readonly live: LiveGroup;
   readonly socketVerbs: Readonly<Record<string, OperationId>>;
   readonly subjectPlaces: Effect.Effect<ReadonlyMap<SubjectKind, SubjectPlace>>;
@@ -130,7 +139,7 @@ export const participantsOf =
     );
 
 export const assemble = async ({ modules, rested }: ServerParts): Promise<Assembly> => {
-  manifests(...modules);
+  checkManifests(modules, [...DOOR_PATHS, ...SOCKET_PATHS]);
   const operations = collect(await Effect.runPromise(operationsOf(modules)));
   const registry = operationRegistry<OperationId>(
     projectedOperations(Object.fromEntries(operations.declarations.map((declaration) => [declaration.id, declaration]))),
@@ -149,9 +158,11 @@ export const assemble = async ({ modules, rested }: ServerParts): Promise<Assemb
   );
   const feeds = modules.flatMap((module) => module.live?.feeds ?? []);
   const creationSteps = PROJECT_CREATION.collect(modules).map(({ entry }) => entry);
-  const rights = [...operations.declarations, ...feeds, ...creationSteps].flatMap(({ id, right }): NamedRight[] =>
-    right === undefined ? [] : [{ key: right, by: id }],
-  );
+  const routes = modules.flatMap((module) => module.routes ?? []);
+  const rights = [
+    ...[...operations.declarations, ...feeds, ...creationSteps].map(({ id, right }) => ({ by: id, right })),
+    ...routes.map(({ path, right }) => ({ by: path, right })),
+  ].flatMap(({ by, right }): NamedRight[] => (right === undefined ? [] : [{ key: right, by }]));
   return {
     modules,
     operations,
@@ -172,6 +183,8 @@ export const assemble = async ({ modules, rested }: ServerParts): Promise<Assemb
     notes: BUILTIN_NOTES.collect(modules).map(({ entry }) => entry),
     nativeRules: NATIVE_RULES.collect(modules),
     homeFollowers: HOME_FOLLOWERS.collect(modules).map(({ entry }) => entry),
+    liveWork: LIVE_WORK.collect(modules).map(({ entry }) => entry),
+    bridgeMethods: BRIDGE_METHODS.collect(modules).map(({ entry }) => entry),
     creationSteps,
     rights,
     entryKinds: entryKinds(modules, rested),
@@ -182,6 +195,7 @@ export const assemble = async ({ modules, rested }: ServerParts): Promise<Assemb
     snapshotParticipants: participantsOf(modules),
     drivers: new Set(modules.flatMap((module) => (module.drivers ?? []).map(({ id }) => id))),
     feeds,
+    routes,
     live: liveRpc(feeds),
     socketVerbs: Object.fromEntries(
       feeds.flatMap((declared) => (declared.performs === undefined ? [] : [[declared.id, OperationId.make(declared.performs)] as const])),

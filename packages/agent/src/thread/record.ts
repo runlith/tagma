@@ -89,7 +89,7 @@ export const transportCapabilitiesSchema = Schema.Struct({
   withdraw: Schema.Boolean,
   history: Schema.Literals(['journal', 'session', 'none']),
   copies: Schema.optional(transportCopiesSchema),
-  compaction: Schema.Literals(['core', 'session', 'foreign', 'none']),
+  compaction: Schema.Literals(['core', 'session', 'foreign', 'vendor', 'none']),
   toolCatalog: Schema.optional(Schema.Literal('turn')),
   modelMove: Schema.Literals(['live', 'relaunch', 'pinned']),
   openings: Schema.Literals(['core', 'core-and-observed']),
@@ -136,9 +136,10 @@ export class TransportCannotError extends Data.TaggedError('TransportCannot')<{
   readonly threadId: string;
   readonly capability: TransportCapabilityName;
   readonly adapter: string;
+  readonly reason?: string;
 }> {
   override get message(): string {
-    return transportCannotReason(this.capability, this.adapter);
+    return this.reason ?? transportCannotReason(this.capability, this.adapter);
   }
 }
 

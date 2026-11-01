@@ -8,6 +8,7 @@ import { ProjectPolicy, ServingSwitch } from '../contract/service/serving.js';
 import type { GraphRecovery, RecoveryAim, RecoveryNotice } from '../contract/wire/recovery.js';
 import { resolveStorageLayout, storageHomes } from '../storage/layout.js';
 import { ShadowGit } from '../tree/shadow.js';
+import type { GraphSide } from '../contract/service/exchange.js';
 import { TreeMerges } from '../tree/merges.js';
 import { resolveCheckout } from '../tree/conflicts.js';
 import { type TreeWatch, type WatchEvent, watchAll } from '../../platform/watch/tree.js';
@@ -20,9 +21,11 @@ const REOPEN = '1 second';
 export const makeRecoveries = Effect.fnUntraced(function* ({
   gates,
   storePath,
+  side,
 }: {
   readonly gates: (key: string) => Semaphore.Semaphore;
   readonly storePath: string;
+  readonly side: (projectId: number) => GraphSide;
 }) {
   const switching = yield* ServingSwitch;
   const policy = yield* ProjectPolicy;
@@ -40,7 +43,7 @@ export const makeRecoveries = Effect.fnUntraced(function* ({
     );
     if (layout.mode === 'team') return { checkout, readOnly, permit: overRepositoryAndTree(gates, layout) };
     if (layout.mode !== 'stealth') return null;
-    const shadow = yield* refused(ShadowGit.open(layout.gitDir, git, row.graphRemote));
+    const shadow = yield* refused(ShadowGit.open(layout.gitDir, git, side(row.id)));
     return {
       readOnly,
       merges: TreeMerges.at(shadow, layout.treeRoot),
@@ -156,9 +159,7 @@ export const makeRecoveries = Effect.fnUntraced(function* ({
           Effect.acquireRelease(
             Effect.sync(() =>
               policy.subscribe((event) =>
-                event.projectId === projectId && (event.field === 'storage' || event.field === 'graphRemote')
-                  ? Effect.asVoid(Queue.offer(queue, undefined))
-                  : Effect.void,
+                event.projectId === projectId && event.field === 'storage' ? Effect.asVoid(Queue.offer(queue, undefined)) : Effect.void,
               ),
             ),
             (detach) => Effect.sync(detach),

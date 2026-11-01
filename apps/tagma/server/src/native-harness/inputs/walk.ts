@@ -19,7 +19,9 @@ import {
   skillsDisabled,
 } from '../contract/wire/sourceSettings.js';
 import { Settings } from '../../settings/contract/service/values.js';
+import { withBridgeMethods } from '../skills/bridgeMethods.js';
 import { SHIPPED_SKILLS } from '../skills/shipped.js';
+import type { BridgeMethod } from '../../views/contract/wire/bridge.js';
 import type { PluginLoaded } from '../../plugins/contract/service/plugins.js';
 import { readPluginSkills } from './plugins.js';
 
@@ -28,6 +30,7 @@ export const readWorkspaceInputs = Effect.fn('workspaceInputs.read')(function* (
   projectRoot: string;
   own: readonly string[];
   plugins: readonly PluginLoaded[];
+  bridge: readonly BridgeMethod[];
   cwd?: string;
 }): Effect.fn.Return<WorkspaceInputSet, StoreFailure | GateRefusal<'source-unreadable'>, Settings> {
   const settings = yield* Settings;
@@ -111,7 +114,7 @@ export const readWorkspaceInputs = Effect.fn('workspaceInputs.read')(function* (
 
   return {
     contextFiles,
-    shipped: asAgentSkills<unknown>(shipped.skills),
+    shipped: withBridgeMethods(asAgentSkills<unknown>(shipped.skills), input.bridge),
     skills: [
       ...plugins.skills.filter((skill) => !standing.has(skill.id)),
       ...asAgentSkills<unknown>(discovered.skills.filter((skill) => offered(skill.path))),

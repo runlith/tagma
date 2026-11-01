@@ -1,0 +1,42 @@
+---
+id: 01a190c6-9088-7be5-8efe-8b03a3cb3d23
+title: Thread state is a versioned projection its owner keeps exact; consumers take typed changes and narrow events instead of re-reading
+ord: 6
+tags: ["task"]
+fields:
+  {
+    "holder": "tagma:01a194e7-71c1-7fa0-8aa8-0a7696d9c507",
+    "status": "in_work"
+  }
+edges:
+  - kind: implements
+    to: 01a18cde-5f93-73e8-aa31-64572afe6fec
+sources:
+  - kind: file
+    ref: apps/tagma/server/src/threads/list/threadList.ts
+  - kind: file
+    ref: packages/agent/src/thread/run/ThreadSnapshots.ts
+---
+Section A of [[2afe6fec]]: thread state becomes a versioned projection its owner keeps exact, and consumers subscribe to typed changes and narrow events instead of re-reading whole state per publication.
+
+Measured at 5× on `815ad556` (one machine, after writer programs): the serving thread was near its CPU ceiling at 0.96 core, with throughput near 10 calls/s and a growing backlog; the CPU profile adds overhead. Its sampled self time is Effect runtime 31.6%, Drizzle SQL building 18.8%, Effect schema 7.7%, tracer and ledger 4.5%, and native parse/stringify 3.5%. That is per-statement and per-operation overhead, so statement count is the lever. A hosted `read` in this sample carried 158 standalone SQLite sends: 73 own, 62 from `ThreadSnapshots.publish` re-reading the whole thread, 16 from `ThreadList.project`, and 7 from activity; these figures exclude SQL inside programs. A later count run recorded 157.95 standalone sends plus 34 statements and guards carried by two programs. Thread open under that load reached p99 ≤2,048 ms; its exact cause (writer retry versus projection) is unproved, but A removes both from the open path.
+
+What stands when done, as section A specifies:
+- the three clocks per thread: change revision, journal position, live sequence;
+- typed changes emitted by every program and unit that changes readable thread state, completeness enforced against declared write sets;
+- one owner per projection applying changes in revision order;
+- snapshot and `attachFrom` served from the projection at its cut, with bounded resident open entries and chunked transfer;
+- hydration in one read snapshot;
+- transient inputs on the same lane;
+- the thread list, keep-warm and graph-copy holding on narrow events;
+- the imperative `publish` calls gone.
+
+Done when, in the bench's 5× run, `ThreadSnapshots.publish` and `ThreadList.project` carry no storage reads for changes applied incrementally, and A's correctness tests in the spec's Proof pass:
+- shadow equality under random operation sequences;
+- snapshot and `attachFrom` exactness under concurrent appends;
+- hydration during commits and rewinds;
+- several changes at one journal head across reconnect;
+- an oversized open entry;
+- refusal of undeclared writes.
+
+Delivery `ac74a52989` restores revisioned heartbeats and collected ACP step facts, with corrections for skipped heartbeat candidates, owned journal-form tails and stable display identity; [[546133ca]] describes its actual boundary. An isolated `b723b203d8` / all-eight-restored / `b723b203d8` A/B/A on one 12-core, 32 GB macOS machine with Bun 1.4.4 (50 agents, 5×, 15 s warm-up and 90 s measurement) completed 259 / 869 / 555 calls, with loop p99 154.66 / 127.93 / 185.99 ms. Saved ACP steps carried 79.50 / 50.67 / 79.82 combined standalone and program statements; hosted reads carried 148.62 / 131.98 / 139.54. The probe ledger had no evictions or detected gaps but still followed 1,718 / 1,137 / 1,464 roots, so those per-root figures describe the selected ended roots. The restored arm predates the delivery's correctness follow-ups. The historical regression was not reproduced and no individual culprit was established; the full A contract and the follow-ups' load result remain unproved. The thread list still re-reads its joined row and owed-work tables per state/phase event. Main delivery `9dbe113ae2` carries committed phase facts through ordered tails, starts detached writers on their owner's lifetime context, and orders their unit and handoff in the journal lane. Main integration passed 19 memory/projection tests, 83 SQLite storage cases and both package typechecks; the author's broader seeds and sole-review evidence were reused. Its corrected-control / phase / corrected-control bracket completed 368 / 292 / 51 calls per 90 s with loop p99 67.01 / 104.53 / 215.22 ms as machine contention increased, so the bracket supports no phase causality or nonregression verdict. At 10 agents and 1×, the control and phase arms completed 72 and 69 of 72 calls; their 48 and 47 selected ended hosted reads carried 100.65 and 103.68 standalone statements plus 38 in two programs. Own work stayed near 73.26 statements and list reads stayed at 16, while snapshot reads totaled 32 and 96; activity batching also differed. Probe losses and gaps were zero, with one and four unfinished roots. This count sample is no aggregate phase improvement. The 32→96 statements are hosted-root attribution, not a global publication count: global `ThreadSnapshots.reading` was 155→149, and retained aggregates cannot identify the individual revision/fallback reasons. A real SQLite regression confirmed that a later committed phase patch could overtake an older journal writer's blocked revision tail; a separate public projection case then forced the next append into a whole read. The phase producer now enters the existing per-thread journal lane through its unit and handoff. Both cases are green in the projection worktree: the whole-read probe stays at one, the position-one delta appears once, and reasoning state equals a fresh read. This fixes a real ordering path without identifying the individual earlier hosted-bucket publications. The corrected isolated arm (`8697e633d6`) then completed 72/72 at 10 agents and 1×, with no probe losses, gaps or unfinished roots. Its 48 ended hosted reads carried 98 standalone statements plus 38 in two programs; snapshot reads were zero and list reads remained 16. Its 649 saved ACP roots likewise carried no snapshot reads. Load was 4.96→5.09 and loop p99 2.02 ms, so those timings are not a causal comparison with the earlier contended arms. Full A and the 5× performance acceptance remain open. Main delivery `a34c42f899` integrates the reviewed pooled-reader prerequisite `9225c3b339` and worker-completion prerequisite `b6c72a665a`. A snapshot fixes its SQL view at the first read on a borrowed reader, with no writer fallback; joined worker requests retain their caller-owned resources through the remote reply or worker close. Main's server, sqlite-process and utils typechecks and 20 targeted cases passed; the authors' seeds and sole-review evidence were reused. These are prerequisites: certified journal-source publication, retention and one-cut SQL/file/live hydration remain unwired, and full A remains open.

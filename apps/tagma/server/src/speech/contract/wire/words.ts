@@ -26,18 +26,6 @@ export const captureWords = (source: Source, code: RefusalCode): Words => {
 
 export const NO_MODEL_WORDS: Words = { text: 'No speech recognizer is ready. Choose one in Settings → Speech.' };
 
-export const CALL_WORDS = {
-  unknown: { text: 'This call is not here any more; it may have been deleted.' },
-  ended: { text: 'This call has ended, so it cannot be changed this way any more.' },
-  stillRecording: { text: 'This call is still being recorded. End it first, then recognize it again.' },
-  noSound: {
-    text: 'The sound of this call was not kept, so it cannot be recognized again. Turn on Call sound in Settings → Speech for new calls.',
-  },
-  againRunning: { text: 'This call is already being recognized again. Wait until it finishes.' },
-  threadsUnread: { text: 'The agent could not be reached right now. Try again in a moment.' },
-  shortQuery: { text: 'Search for a word of at least three letters.' },
-} as const satisfies Readonly<Record<string, Words>>;
-
 export const VOICE_WORDS = {
   failed: { text: 'Tagma could not speak this. Try again, or choose another voice in Settings → Speech.' },
   noPlayer: { text: 'Tagma could not play the sound. Check the sound output of this Mac.' },

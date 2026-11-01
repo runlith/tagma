@@ -286,17 +286,22 @@ export const makeThreadCompaction = <TWrite = unknown>(options: {
       const port = options.summarizers;
       if (port === undefined)
         return ask.compaction === 'foreign' ? Effect.fail(new ThreadNoSummarizerError(ask.threadId, [])) : Effect.succeed(OWN_SUMMARIZING);
-      return Effect.flatMap(port({ threadId: ask.threadId, runId: ask.runId, running: ask.running }), (answered) => {
-        const resolved = summarizingOf(
-          ask.threadId,
-          answered,
-          ask.compaction === 'session' ? { provider: ask.provider, model: modelOf(models, ask.provider, ask.model, ask.runId) } : undefined,
-        );
-        if (resolved instanceof ThreadNoSummarizerError) return Effect.fail(resolved);
-        return ask.compaction === 'foreign' && resolved.kind === 'own'
-          ? Effect.fail(new ThreadNoSummarizerError(ask.threadId, []))
-          : Effect.succeed(resolved);
-      });
+      return Effect.flatMap(
+        port({ threadId: ask.threadId, runId: ask.runId, running: ask.running, foreign: ask.compaction === 'foreign' }),
+        (answered) => {
+          const resolved = summarizingOf(
+            ask.threadId,
+            answered,
+            ask.compaction === 'session'
+              ? { provider: ask.provider, model: modelOf(models, ask.provider, ask.model, ask.runId) }
+              : undefined,
+          );
+          if (resolved instanceof ThreadNoSummarizerError) return Effect.fail(resolved);
+          return ask.compaction === 'foreign' && resolved.kind === 'own'
+            ? Effect.fail(new ThreadNoSummarizerError(ask.threadId, []))
+            : Effect.succeed(resolved);
+        },
+      );
     },
 
     intended: (

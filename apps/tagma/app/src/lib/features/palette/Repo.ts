@@ -1,6 +1,7 @@
 import type { HistoryCommit } from '@tagma/server/workspace/contract/wire/history';
 import type { ConversationHit } from '@tagma/server/threads/contract/wire/conversation';
 import type { SearchHit } from '@tagma/server/graph/contract/wire/reads';
+import type { InstanceOf } from '@runlith/layer/key';
 import type { KeyedLoaderContext } from '@runlith/query/types';
 import { Repo } from '@runlith/query/repo';
 import { Door } from '$lib/wire/Door.js';
@@ -110,3 +111,5 @@ export const PaletteRepo = Repo.define(
   }),
   { tier: 'app', door: Door },
 );
+
+export type PaletteRepo = InstanceOf<typeof PaletteRepo>;

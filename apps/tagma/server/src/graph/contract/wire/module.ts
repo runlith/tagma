@@ -1,5 +1,5 @@
 import { mergeOperations, type WireModule } from '../../../platform/contract/wire/manifest.js';
-import { GRAPH_FEED, GRAPH_RECOVERY_FEED, GRAPH_REMOTE_FEED, GRAPH_WORK_FEED } from './feed.js';
+import { GRAPH_FEED, GRAPH_RECOVERY_FEED, GRAPH_WORK_FEED } from './feed.js';
 
 const UNJOURNALED: ReadonlySet<string> = new Set(['touch_path', 'rewrite_graph_files', 'resolve_graph_conflict']);
 
@@ -49,5 +49,5 @@ export const graph = {
     );
     return { declarations, journaled: Object.keys(declarations).filter((id) => !UNJOURNALED.has(id)), refusals: REFUSAL_WORDS } as const;
   },
-  feeds: [GRAPH_FEED, GRAPH_WORK_FEED, GRAPH_RECOVERY_FEED, GRAPH_REMOTE_FEED],
+  feeds: [GRAPH_FEED, GRAPH_WORK_FEED, GRAPH_RECOVERY_FEED],
 } as const satisfies WireModule;

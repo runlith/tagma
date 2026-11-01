@@ -15,6 +15,12 @@ export const externalHarnessBindings = (channel: Channel): readonly VerbBinding[
       return { ask, here };
     },
     async () => (await import('./harnessCatalog.js')).HARNESS_CATALOG,
-    async () => (await import('../adapters.js')).BUILTIN_HOSTED_RUNNERS,
+    async () => {
+      const [{ BUILTIN_HOSTED_RUNNERS }, { dataDirectory }] = await Promise.all([
+        import('../adapters.js'),
+        import('../../installation/contract/wire/layout.js'),
+      ]);
+      return { runners: BUILTIN_HOSTED_RUNNERS, data: (env: NodeJS.ProcessEnv) => dataDirectory(channel, env) };
+    },
   ];
 };

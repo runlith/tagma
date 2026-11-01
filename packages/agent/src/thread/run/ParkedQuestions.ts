@@ -10,7 +10,7 @@ import { answerOf, transitionDeps, transitionNow } from '../transition/kernel';
 import { ThreadActReusedError, ThreadActSpentError, type Decision } from '../transition/port';
 import { runTransition, ThreadRunSequences } from '../transition/sequence';
 import { threadGuidanceEvent, threadQuestionEvent } from '../events';
-import { AgentGuidanceJournal, pendingRuntimeGuides } from '../../agent/AgentGuidanceJournal';
+import { AgentGuidanceJournal, coalesceGuides, pendingRuntimeGuides } from '../../agent/AgentGuidanceJournal';
 import type { AgentRuntimeGuidance, PendingRuntimeGuide } from '../../agent/contracts';
 import { sealThreadEvents } from '../ThreadEventDoor';
 import type { ThreadWriteTx } from '../ThreadPorts';
@@ -432,7 +432,7 @@ export const makeParkedQuestions = Effect.fnUntraced(function* (runMaintenance: 
           updatedAt: new Date(yield* Clock.currentTimeMillis).toISOString(),
         };
         const toolMessage = toolMessageFromResults(results);
-        const told = new AgentGuidanceJournal(run.id).emit(door.runState.stepNumber, guides);
+        const told = new AgentGuidanceJournal(run.id).emit(door.runState.stepNumber, coalesceGuides(guides));
         yield* Effect.flatMap(
           transitionNow<string, ThreadWriteTx>(
             kernel,
@@ -618,7 +618,7 @@ export const makeParkedQuestions = Effect.fnUntraced(function* (runMaintenance: 
     door: AgentToolDoor | null,
     untold: readonly PendingRuntimeGuide[] = [],
   ): Effect.fn.Return<RunParked | null, ThreadBorderFailed> {
-    const told = new AgentGuidanceJournal(run.id).emit(door?.runState.stepNumber ?? 0, untold);
+    const told = new AgentGuidanceJournal(run.id).emit(door?.runState.stepNumber ?? 0, coalesceGuides(untold));
     const routed =
       asked === null
         ? null

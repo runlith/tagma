@@ -9,8 +9,6 @@ import { Workspace } from '$lib/features/workspace/Selection.svelte.js';
 import { SPEECH } from '../values.js';
 import { chordOf, DEFAULT_CHORD } from './chord.js';
 
-type Settings = ReturnType<typeof SettingsRepo.use>;
-
 export class Global extends Service<Global>()('GlobalDictation', { tier: 'app' }) {
   static *make() {
     return new Global(yield* SettingsRepo, yield* Workspace, yield* DesktopDictation.optional(), yield* Scope);
@@ -20,7 +18,7 @@ export class Global extends Service<Global>()('GlobalDictation', { tier: 'app' }
   private sent: string | undefined;
 
   constructor(
-    private readonly settings: Settings,
+    private readonly settings: SettingsRepo,
     private readonly workspace: Workspace,
     readonly desktop: Bridge | undefined,
     scope: Scope,

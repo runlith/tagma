@@ -626,6 +626,35 @@ layer(Layer.effect(Remote, setup).pipe(Layer.provideMerge(BunFileSystem.layer)),
     }),
   );
 
+  it.effect('a GET to a route declared pre-admitted reaches that route alone, at its path in any case, encoding or slashes', () =>
+    Effect.gen(function* () {
+      for (const path of ['/mcp/oauth/callback', '/MCP/OAuth/Callback', '/mcp/oauth/%63allback', '//mcp//oauth//callback/']) {
+        const back = yield* remote(`${path}?state=unknown&code=forged`, { origin: null });
+        expect([path, back.status, ...framing(back), yield* Effect.promise(() => back.text())]).toEqual([
+          path,
+          400,
+          'DENY',
+          ["frame-ancestors 'none'"],
+          expect.stringContaining('Sign-in refused'),
+        ]);
+      }
+      for (const path of ['/mcp/oauth/callback/more', '/mcp/oauth', '/mcp/oauth/callbacks', '/mcp/oauth/callback;x']) {
+        const shell = yield* remote(`${path}?state=unknown`, { origin: null, headers: { accept: 'text/html' } });
+        expect([path, shell.status, yield* Effect.promise(() => shell.text())]).toEqual([
+          path,
+          200,
+          expect.stringContaining('<title>Tagma</title>'),
+        ]);
+      }
+      const posted = yield* remote('/mcp/oauth/callback?state=unknown', { method: 'POST', body: {} });
+      expect(yield* refusal(posted)).toEqual([401, 'device-unpaired']);
+      const head = yield* remote('/mcp/oauth/callback?state=unknown', { method: 'HEAD', headers: { accept: 'text/html' } });
+      expect([head.status, head.headers.get('content-type')]).toEqual([200, expect.stringContaining('text/html')]);
+      const upgrade = yield* remote('/mcp/oauth/callback?state=unknown', { headers: { upgrade: 'websocket', connection: 'upgrade' } });
+      expect(yield* refusal(upgrade)).toEqual([401, 'device-unpaired']);
+    }),
+  );
+
   it.effect('the pairing exchange refuses another origin before it reads the body, and a body past one kilobyte', () =>
     Effect.gen(function* () {
       const unread = yield* remote(PAIRING_ENDPOINT.path, { method: 'POST', body: 'not a code', origin: ELSEWHERE });

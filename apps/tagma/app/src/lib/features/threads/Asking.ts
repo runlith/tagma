@@ -15,7 +15,7 @@ export class Asking extends Service<Asking>()('Asking', { tier: 'app' }) {
   }
 
   constructor(
-    private readonly threads: ReturnType<typeof ThreadsRepo.use>,
+    private readonly threads: ThreadsRepo,
     private readonly chats: ThreadChats,
     private readonly shelf: DraftShelf,
     private readonly shell: ShellActs,

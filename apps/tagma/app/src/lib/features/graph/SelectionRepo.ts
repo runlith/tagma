@@ -1,4 +1,5 @@
 import type { BlockAnswer } from '@tagma/server/graph/contract/wire/answers';
+import type { InstanceOf } from '@runlith/layer/key';
 import type { KeyedLoaderContext } from '@runlith/query/types';
 import { Repo } from '@runlith/query/repo';
 import { Door, type Lens } from '$lib/wire/Door.js';
@@ -69,3 +70,5 @@ export const SelectionRepo = Repo.define(
   }),
   { tier: 'app', door: Door },
 );
+
+export type SelectionRepo = InstanceOf<typeof SelectionRepo>;

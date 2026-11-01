@@ -28,15 +28,13 @@ import { ServedGraphs } from '../../graph/contract/service/serving.js';
 import type { JudgingServices } from '../../enforcement/serving.js';
 import type { OperationChecks } from '../../invocation/contract/service/operationChecks.js';
 import { threadsHandler } from './threads.js';
-import { speechHandler } from './speech.js';
-import type { Listenings } from '../../speech/contract/service/listenings.js';
 import type { Attachments } from '../../threads/contract/service/attachments.js';
 import type { ScratchAreas } from '../../threads/contract/service/scratch.js';
 import type { SessionResolution } from '../../external-harnesses/contract/service/sessionResolution.js';
 import type { GrantSigner } from '../../platform/contract/service/grantSigner.js';
 import { healthHandler } from './health.js';
 import type { McpServers } from '../../mcp/contract/service/servers.js';
-import type { McpSignInDoor } from '../../mcp/contract/service/door.js';
+import type { DoorAddress } from '../../platform/contract/service/door.js';
 import { operationsHandler } from './operations.js';
 import type { OwnerContext } from '../../invocation/contract/service/performer.js';
 import type { SocketDoor, RuntimeSocketDoor } from '../socketBinding.js';
@@ -87,8 +85,7 @@ export type HandlerOwners =
   | TargetPreparation
   | Worlds
   | ThreadLookup
-  | OwedCalls
-  | Listenings;
+  | OwedCalls;
 
 export type DoorLifetime = GraphDirectory | OperationCatalog;
 
@@ -110,7 +107,7 @@ export type RuntimeDoor =
   | DowngradeSteps
   | ServedGraphs
   | McpServers
-  | McpSignInDoor
+  | DoorAddress
   | AccountQuota
   | SignIns
   | ArtifactStore
@@ -197,7 +194,6 @@ export const handlers = (status: RuntimeStatus) =>
         health: healthHandler(status, Context.get(door, Succession), Context.get(door, MachineStore)),
         operations: operationsHandler(performById, catalog, invocationAssembly.detaching(Context.get(door, OwedCalls))),
         threads: threadsHandler(),
-        speech: speechHandler(),
         checkouts: checkoutsHandler(Context.get(door, CheckoutPlaces), {
           roots: Context.get(door, FileRoots),
           git: Context.get(door, Git),

@@ -137,8 +137,8 @@ layer(Layer.effect(Place, setup).pipe(Layer.provide(doorFixture()), Layer.provid
         yield* suiteGit(destination, 'add', '-A');
         yield* suiteGit(destination, 'commit', '-qm', name);
         if (name === 'queued') {
-          yield* files.writeFileString(join(root, 'busy.txt'), 'staged work\n');
-          yield* suiteGit(root, 'add', 'busy.txt');
+          yield* files.writeFileString(join(root, 'src', 'queued.ts'), 'staged work\n');
+          yield* suiteGit(root, 'add', 'src/queued.ts');
         }
         const input = { rootId, whenBaseFree: name === 'queued' };
         let merged = yield* op('merge_worktree', input, true);
@@ -147,8 +147,8 @@ layer(Layer.effect(Place, setup).pipe(Layer.provide(doorFixture()), Layer.provid
         }
         expect(merged).toMatchObject({ status: 200, body: { status: name === 'queued' ? 'queued' : 'merged' } });
         if (name === 'queued') {
-          yield* suiteGit(root, 'restore', '--staged', 'busy.txt');
-          yield* files.remove(join(root, 'busy.txt'));
+          yield* suiteGit(root, 'restore', '--staged', 'src/queued.ts');
+          yield* files.remove(join(root, 'src', 'queued.ts'));
         }
         const reading = yield* enforcementWhen(index + 1);
         expect(reading.escaped?.rows.map((escape) => escape.path).sort()).toEqual(

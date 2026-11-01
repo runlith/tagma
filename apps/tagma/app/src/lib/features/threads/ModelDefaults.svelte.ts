@@ -24,7 +24,7 @@ export class ModelDefaults extends Service<ModelDefaults>()('ModelDefaults', { t
   private generation = 0;
 
   constructor(
-    private readonly threads: ReturnType<typeof ThreadsRepo.use>,
+    private readonly threads: ThreadsRepo,
     private readonly notices: Notices,
     catalog: ProviderCatalog,
     accounts: UsageAccounts,

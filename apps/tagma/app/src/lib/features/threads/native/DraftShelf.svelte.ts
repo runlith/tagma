@@ -13,7 +13,7 @@ import { randomThreadName } from '@tagma/server/thread-record/contract/wire/name
 import { DraftFiles, type KeptFile } from './DraftFiles.js';
 import { DraftStore, type StoredDraft } from './DraftStore.js';
 import { type Draft, type DraftDocument, type DraftMention, type DraftPlace, MAIN_CHECKOUT } from '../Draft.svelte.js';
-import type { Piece } from '@tagma/server/speech/contract/wire/listening';
+import { type StagedItem, StagedKinds } from '$lib/shared/threads/staged.js';
 
 const NO_NAMES = (): ReadonlySet<string> => new Set();
 
@@ -23,7 +23,7 @@ export class DraftSlot {
   images = $state<readonly ChatDraftImage[]>([]);
   files = $state<readonly ChatDraftFile[]>([]);
   mentions: readonly DraftMention[];
-  pieces: readonly Piece[];
+  items: readonly StagedItem[];
   documents: readonly DraftDocument[];
   type: string | null;
   account: string | null;
@@ -44,7 +44,7 @@ export class DraftSlot {
     this.place = $state.raw(stored?.place ?? MAIN_CHECKOUT);
     this.text = $state(stored?.text ?? '');
     this.mentions = $state(stored?.mentions ?? []);
-    this.pieces = $state(stored?.pieces ?? []);
+    this.items = $state(stored?.items ?? []);
     this.documents = $state(stored?.documents ?? []);
     this.type = $state(stored?.type ?? null);
     this.account = $state(stored?.account ?? null);
@@ -58,7 +58,8 @@ export class DraftSlot {
 export class DraftShelf extends Service<DraftShelf>()('DraftShelf', { tier: 'app' }) {
   static *make() {
     const platform = yield* Platform;
-    return new DraftShelf(platform.storage.local, new DraftFiles(platform.databases));
+    const kinds = yield* StagedKinds;
+    return new DraftShelf(platform.storage.local, new DraftFiles(platform.databases), (kind) => kinds.find(kind) !== undefined);
   }
 
   private readonly slots = new ChatDraftShelf<DraftSlot>((key) => this.hydrate(key));
@@ -67,9 +68,10 @@ export class DraftShelf extends Service<DraftShelf>()('DraftShelf', { tier: 'app
   constructor(
     storage: PlatformStorage,
     private readonly staged: DraftFiles,
+    known: (kind: string) => boolean,
   ) {
     super();
-    this.store = new DraftStore(storage);
+    this.store = new DraftStore(storage, known);
     void staged
       .prune((key, id) => {
         const draft = this.store.read(key);
@@ -141,7 +143,7 @@ export class DraftShelf extends Service<DraftShelf>()('DraftShelf', { tier: 'app
     const images = new Set(draft.images.map((image) => image.id));
     const files = new Set(draft.files.map((file) => file.id));
     const mentions = new Set(draft.mentions.map((mention) => mention.name));
-    const pieces = new Set(draft.pieces.map((piece) => piece.listening));
+    const items = new Set(draft.items.map(itemKey));
     const documents = new Set(draft.documents.map((document) => document.id));
     slot.text = ahead(draft.text, slot.text);
     slot.images = [...draft.images.map((image) => ({ ...image })), ...slot.images.filter((image) => !images.has(image.id))];
@@ -150,7 +152,7 @@ export class DraftShelf extends Service<DraftShelf>()('DraftShelf', { tier: 'app
       ...draft.mentions.map((mention) => ({ ...mention })),
       ...slot.mentions.filter((mention) => !mentions.has(mention.name)),
     ];
-    slot.pieces = [...draft.pieces, ...slot.pieces.filter((piece) => !pieces.has(piece.listening))];
+    slot.items = [...draft.items, ...slot.items.filter((item) => !items.has(itemKey(item)))];
     slot.documents = [...draft.documents, ...slot.documents.filter((document) => !documents.has(document.id))];
     slot.restoring = null;
     this.keep(key);
@@ -163,7 +165,7 @@ export class DraftShelf extends Service<DraftShelf>()('DraftShelf', { tier: 'app
     slot.images = draft.images.map((image) => ({ ...image }));
     slot.files = draft.files.map((file) => ({ ...file }));
     slot.mentions = draft.mentions.map((mention) => ({ ...mention }));
-    slot.pieces = [...draft.pieces];
+    slot.items = [...draft.items];
     slot.documents = [...draft.documents];
     this.keep(key);
   }
@@ -178,7 +180,7 @@ export class DraftShelf extends Service<DraftShelf>()('DraftShelf', { tier: 'app
       images: stashed.images,
       files: stashed.files,
       mentions: stashed.mentions,
-      pieces: stashed.pieces,
+      items: stashed.items,
       documents: stashed.documents,
     };
     this.give(into, storedDraft(stashed) === null ? { ...draft, text } : draft);
@@ -305,6 +307,10 @@ function ahead(returned: string, standing: string): string {
     .join('\n\n');
 }
 
+function itemKey(item: StagedItem): string {
+  return JSON.stringify([item.kind, item.key]);
+}
+
 function outboxKey(inputId: string): string {
   return `outbox:${inputId}`;
 }
@@ -323,7 +329,7 @@ function storedDraft(slot: DraftSlot): StoredDraft | null {
   const carries =
     slot.text !== '' ||
     slot.mentions.length > 0 ||
-    slot.pieces.length > 0 ||
+    slot.items.length > 0 ||
     slot.documents.length > 0 ||
     images.length > 0 ||
     files.length > 0 ||
@@ -340,7 +346,7 @@ function storedDraft(slot: DraftSlot): StoredDraft | null {
     name: slot.name,
     text: slot.text,
     mentions: slot.mentions,
-    pieces: slot.pieces,
+    items: slot.items,
     documents: slot.documents,
     type: slot.type,
     account: slot.account,

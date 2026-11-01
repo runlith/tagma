@@ -1,4 +1,5 @@
 import type { PresenceMissingReason, PresenceRow } from '@tagma/server/threads/contract/wire/presence';
+import { capabilityOf, HOST_BRIDGE, type HostMethod, THREAD_CHANGED } from '@tagma/server/views/contract/wire/bridge';
 import { Cause, Effect, Exit } from 'effect';
 import type { LinkPort } from '$lib/shared/ExternalLinks.js';
 import type { ThreadPresence } from '$lib/features/presence/Presence.svelte.js';
@@ -6,10 +7,10 @@ import type { ShellPort } from '$lib/features/workspace/ShellOps.js';
 import type { Door } from '$lib/wire/Door.js';
 import type { LiveConnection } from '$lib/wire/Live.js';
 import type { SoundChannel } from '$lib/wire/SoundChannel.js';
-import { speechMethod } from '../speech/viewSpeech.js';
 import { argumentsOf, needed, openLink } from '../views/params.js';
 import { resourceSubscription } from '../views/resourceFeed.js';
-import { INVALID_PARAMS, type ViewCall, type ViewHost, type ViewParams, ViewRefusal } from '../views/ViewBridge.js';
+import { INVALID_PARAMS, type ViewCall, type ViewHost, type ViewMethod, type ViewParams, ViewRefusal } from '../views/ViewBridge.js';
+import type { TagmaMethod } from './methods.js';
 import { sectionOpening } from './sectionOpen.js';
 import type { ViewSets } from './ViewSets.svelte.js';
 
@@ -29,9 +30,8 @@ export type TagmaAppHostOwners = {
   readonly shell: ShellPort;
   readonly sets: ViewSets;
   readonly links: LinkPort;
+  readonly methods: readonly TagmaMethod[];
 };
-
-export const THREAD_CHANGED = 'tagma/notifications/thread';
 
 export type ThreadReading =
   | {
@@ -128,12 +128,39 @@ const answered = <A extends { readonly status: string }>(answer: A): Extract<A, 
 };
 
 export function tagmaAppHost(owners: TagmaAppHostOwners, mount: TagmaAppMount): ViewHost {
-  const { door, live, sound, presence, shell, sets, links } = owners;
+  const { door, live, sound, presence, shell, sets, links, methods } = owners;
   const lens = { project: String(mount.projectId) };
   const at = { app: mount.tagmaApp, view: mount.view };
   const keyOf = (params: ViewParams): string => needed(params, 'key');
+  const own: Record<HostMethod, ViewMethod> = {
+    open: async (params) => {
+      const place = sectionOpening(shell, sets, mount.tagmaApp, params);
+      if (place !== null) return shellAct(place);
+      const threadId = needed(params, 'threadId');
+      if (params.beside !== undefined && typeof params.beside !== 'boolean') throw new ViewRefusal(INVALID_PARAMS, 'beside is a boolean');
+      if (!navigator.userActivation.isActive) throw new Error('a thread opens only from a click in the view');
+      return shellAct(shell.openThread({ projectId: mount.projectId, threadId }, params.beside === true ? 'beside' : 'main'));
+    },
+    'storage/get': async (params, { signal }) => {
+      const read = answered(await door.perform('read_view_storage', { ...at, key: keyOf(params) }, lens, { signal }));
+      return read.stored ? { stored: true, value: read.value } : { stored: false };
+    },
+    'storage/set': async (params, { signal }) => {
+      const written = answered(
+        await door.perform('write_view_storage', { ...at, key: keyOf(params), value: params.value }, lens, { signal }),
+      );
+      return { stored: written.stored };
+    },
+    thread: async (params, call) => watchThread(presence, needed(params, 'threadId'), call),
+    'thread/unwatch': async (params, call) => unwatchThread(needed(params, 'threadId'), call),
+  };
+  const tagma: readonly (readonly [string, ViewMethod])[] = [
+    ...HOST_BRIDGE.map(({ id }) => [id, own[id]] as const),
+    ...methods.map(({ declaration, method }) => [declaration.id, method({ door, live, sound }, mount)] as const),
+  ];
   return {
     methods: {
+      ...Object.fromEntries(tagma.map(([name, method]) => [`tagma/${name}`, method])),
       'tools/call': async (params, { signal }) =>
         answered(
           await door.perform(
@@ -154,29 +181,8 @@ export function tagmaAppHost(owners: TagmaAppHostOwners, mount: TagmaAppMount): 
       },
       'ui/open-link': openLink(links),
       'ui/request-display-mode': async () => ({ mode: 'inline' }),
-      'tagma/open': async (params) => {
-        const place = sectionOpening(shell, sets, mount.tagmaApp, params);
-        if (place !== null) return shellAct(place);
-        const threadId = needed(params, 'threadId');
-        if (params.beside !== undefined && typeof params.beside !== 'boolean') throw new ViewRefusal(INVALID_PARAMS, 'beside is a boolean');
-        if (!navigator.userActivation.isActive) throw new Error('a thread opens only from a click in the view');
-        return shellAct(shell.openThread({ projectId: mount.projectId, threadId }, params.beside === true ? 'beside' : 'main'));
-      },
-      'tagma/storage/get': async (params, { signal }) => {
-        const read = answered(await door.perform('read_view_storage', { ...at, key: keyOf(params) }, lens, { signal }));
-        return read.stored ? { stored: true, value: read.value } : { stored: false };
-      },
-      'tagma/storage/set': async (params, { signal }) => {
-        const written = answered(
-          await door.perform('write_view_storage', { ...at, key: keyOf(params), value: params.value }, lens, { signal }),
-        );
-        return { stored: written.stored };
-      },
-      'tagma/thread': async (params, call) => watchThread(presence, needed(params, 'threadId'), call),
-      'tagma/thread/unwatch': async (params, call) => unwatchThread(needed(params, 'threadId'), call),
-      'tagma/speech': speechMethod(door, live, sound, mount.projectId),
     },
-    capabilities: { 'tagma/open': {}, 'tagma/storage': {}, 'tagma/thread': {}, 'tagma/speech': {} },
+    capabilities: Object.fromEntries(tagma.map(([name]) => [capabilityOf(name), {}])),
     subscribe: resourceSubscription(
       live,
       (uri) => (client) => client['views.resource.subscribe']({ projectId: mount.projectId, ...at, uri }),

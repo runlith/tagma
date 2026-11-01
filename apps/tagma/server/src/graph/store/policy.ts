@@ -11,17 +11,15 @@ export const projectPolicy = sqliteTable('project_policy', {
   strictProvenance: integer('strict_provenance', { mode: 'boolean' }).notNull().default(false),
   private: integer('private', { mode: 'boolean' }).notNull().default(false),
   storage: text('storage', { enum: STORAGE_MODES }).notNull().default('stealth'),
-  graphRemote: text('graph_remote'),
 });
 
-export type PolicyFields = Partial<Pick<typeof projectPolicy.$inferInsert, 'strictProvenance' | 'private' | 'storage' | 'graphRemote'>>;
+export type PolicyFields = Partial<Pick<typeof projectPolicy.$inferInsert, 'strictProvenance' | 'private' | 'storage'>>;
 
 const POLICY_ROW = {
   ...getTableColumns(project),
   strictProvenance: sql<boolean>`coalesce(${projectPolicy.strictProvenance}, 0)`.mapWith(projectPolicy.strictProvenance),
   private: sql<boolean>`coalesce(${projectPolicy.private}, 0)`.mapWith(projectPolicy.private),
   storage: sql<StorageMode>`coalesce(${projectPolicy.storage}, 'stealth')`,
-  graphRemote: sql<string | null>`${projectPolicy.graphRemote}`,
 };
 
 export const projectsWithPolicy = <Brand extends StoreBrand>(db: StoreDb<Brand>) =>

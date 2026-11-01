@@ -46,6 +46,7 @@ export const TransportFailure = Schema.Struct({
   httpStatus: Schema.optional(Schema.Number),
   retryable: Schema.NullOr(Schema.Boolean),
   modelStarted: Schema.NullOr(Schema.Boolean),
+  contextOverflow: Schema.optional(Schema.Boolean),
   detail: Schema.optional(Schema.String),
   rateLimit: Schema.optional(HttpRateLimitDetails),
   reason: Schema.optional(WireFailureRecord),
@@ -249,25 +250,43 @@ export function toolStanding(entry: {
   return { state: 'running', since: Number.isNaN(started) ? null : started };
 }
 
+export function toolReceipt(entry: { readonly toolState: ThreadToolState; readonly toolOutput?: unknown }): boolean {
+  if (entry.toolState !== 'output-available') return false;
+  const output = entry.toolOutput;
+  if (typeof output !== 'object' || output === null || Array.isArray(output)) return false;
+  const receipt = output as Record<string, unknown>;
+  return (
+    (receipt['status'] === 'background' || receipt['status'] === 'running') &&
+    typeof receipt['runId'] === 'string' &&
+    typeof receipt['toolCallId'] === 'string'
+  );
+}
+
 export type StandingSource = {
+  readonly toolCallId: string;
   readonly toolName: string;
   readonly title: string | null;
   readonly toolState: ThreadToolState;
   readonly execution?: ThreadToolExecution;
 };
 
-export type StandingCall = { readonly name: string; readonly title: string | null; readonly since: number | null };
+export type StandingCall = {
+  readonly id: string;
+  readonly name: string;
+  readonly title: string | null;
+  readonly since: number | null;
+};
 
-export type StandingWork = { readonly calls: readonly StandingCall[]; readonly queued: number };
+export type StandingWork = { readonly calls: readonly StandingCall[]; readonly queued: readonly string[] };
 
 export function standingWork(tools: Iterable<StandingSource>): StandingWork {
   const calls: StandingCall[] = [];
-  let queued = 0;
+  const queued: string[] = [];
   for (const tool of tools) {
     const standing = toolStanding(tool);
     if (standing === null) continue;
-    if (standing.state === 'queued') queued += 1;
-    else calls.push({ name: tool.toolName, title: tool.title, since: standing.since });
+    if (standing.state === 'queued') queued.push(tool.toolCallId);
+    else calls.push({ id: tool.toolCallId, name: tool.toolName, title: tool.title, since: standing.since });
   }
   return { calls: calls.sort(oldestFirst), queued };
 }

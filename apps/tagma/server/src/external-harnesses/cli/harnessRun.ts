@@ -8,7 +8,12 @@ import { ServerDoor } from './serverDoor.js';
 
 export type HostedRunners = ReadonlyMap<string, () => Promise<HostedRunner>>;
 
-export const harnessRun = (server: ServerCli, runners: HostedRunners) =>
+export type HostedPlaces = {
+  readonly runners: HostedRunners;
+  readonly data: (env: Readonly<Record<string, string | undefined>>) => string | null;
+};
+
+export const harnessRun = (server: ServerCli, { runners, data }: HostedPlaces) =>
   Command.make(
     'harness-run',
     {
@@ -37,7 +42,7 @@ export const harnessRun = (server: ServerCli, runners: HostedRunners) =>
           if (ask) {
             if (runner.ask === undefined) return Effect.die(`${harness} offers no fresh ask`);
             if (Option.isNone(model)) return Effect.die('--ask requires --model');
-            return runner.ask(at, { model: model.value, effort: reasoning, system });
+            return runner.ask(at, { model: model.value, effort: reasoning, system, data: data(at.env) });
           }
           if (!cut)
             return runner.run(at, new ServerDoor(server, at), {
@@ -45,6 +50,7 @@ export const harnessRun = (server: ServerCli, runners: HostedRunners) =>
               effort: reasoning,
               version: PROGRAM_RELEASE,
               titled: !untitled,
+              data: data(at.env),
             });
           return runner.cut === null ? Effect.die(`${harness} offers no offline cut`) : runner.cut(at);
         });

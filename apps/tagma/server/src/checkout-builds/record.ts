@@ -1,5 +1,5 @@
 import { Schema } from 'effect';
-import { nextIssueSchema, thenSchema } from '../installation/contract/wire/next.js';
+import { installRefusalSchema, nextIssueSchema, thenSchema } from '../installation/contract/wire/next.js';
 
 export const checkoutRunsSchema = Schema.Literals(['tree', 'head', 'other-edits', 'unmeasured-edits', 'other-commit']);
 export type CheckoutRuns = typeof checkoutRunsSchema.Type;
@@ -55,5 +55,6 @@ export const buildEndedSchema = Schema.Struct({
   tail: Schema.Array(Schema.String),
   then: Schema.NullOr(thenSchema),
   restartRefused: Schema.NullOr(Schema.String),
+  refused: Schema.optional(installRefusalSchema),
 });
 export type BuildEnded = typeof buildEndedSchema.Type;

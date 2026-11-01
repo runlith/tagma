@@ -18,7 +18,6 @@ import { writes } from '../../platform/contract/service/writes.js';
 
 const policySetting = writes('Projects.set', [projectPolicy]);
 const storageSetting = writes('ProjectPolicy.setStorage', [projectPolicy]);
-const remoteSetting = writes('ProjectPolicy.setRemote', [projectPolicy]);
 
 export const OtherGraphs = Context.Reference<
   ((projectId: number) => Effect.Effect<Context.Context<GraphServices | GraphStore>, GateRefusal<OpenRefusal>>) | null
@@ -133,33 +132,6 @@ export const servedPolicy = (input: {
           yield* act.record('project_set_storage', null, { projectId: current.id, from: current.storage, to: input.mode });
           yield* changed;
           yield* policyChanged({ projectId: current.id, field: 'storage' });
-          return row;
-        }),
-      );
-    }),
-
-    setRemote: Effect.fn('ProjectPolicy.setRemote')(function* (input: { id: number; remote: string | null }) {
-      const current = yield* projectsWithPolicy(db)
-        .where(and(eq(project.id, input.id), isNull(project.removedAt)))
-        .get();
-      if (!current) {
-        return yield* new GateRefusal('not-found', `project ${input.id} does not exist`, [
-          'the registry names the registered roots and their ids',
-        ]);
-      }
-      return yield* act.unit(
-        remoteSetting,
-        Effect.gen(function* () {
-          yield* writePolicy(db, current.id, { graphRemote: input.remote });
-          const row: ProjectPolicyRow = { ...current, graphRemote: input.remote };
-          yield* act.record('project_set', null, {
-            projectId: current.id,
-            field: 'graphRemote',
-            from: current.graphRemote,
-            to: input.remote,
-          });
-          yield* changed;
-          yield* policyChanged({ projectId: current.id, field: 'graphRemote' });
           return row;
         }),
       );

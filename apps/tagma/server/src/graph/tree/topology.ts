@@ -11,7 +11,7 @@ import type { GraphSteps } from '../contract/service/steps.js';
 import { OwnGitFailed } from '../../platform/git/ownGit.js';
 import { type TreeCaptureFailed, treeBranch } from './batch.js';
 import type { CopyFailure } from '../contract/wire/answers.js';
-import { REMOTE, trackingRef } from '../storage/remote.js';
+import { trackedLabel, trackingRef } from '../storage/tracking.js';
 
 type Stranded = {
   readonly branch: string;
@@ -65,8 +65,17 @@ export type TopologyMemory = {
 const remoteDue = (shadow: ShadowGit, treeRoot: string, memory: TopologyMemory, branch: string, tip: string | null): boolean =>
   tip !== null && memory.remote.get(branch) !== tip && !TreeMerges.standing(shadow, treeRoot);
 
-const remoteTip = (shadow: ShadowGit, branch: string) =>
-  shadow.quiet('remote-tip', ['--git-dir', shadow.gitDir, 'rev-parse', '--verify', '-q', `${trackingRef(branch)}^{commit}`]);
+const remoteTip = (shadow: ShadowGit, branch: string): Effect.Effect<string | null, OwnGitFailed> =>
+  shadow.tracking === null
+    ? Effect.succeed(null)
+    : shadow.quiet('remote-tip', [
+        '--git-dir',
+        shadow.gitDir,
+        'rev-parse',
+        '--verify',
+        '-q',
+        `${trackingRef(shadow.tracking, branch)}^{commit}`,
+      ]);
 
 const markerAt = Effect.fnUntraced(function* (shadow: ShadowGit, commit: string) {
   const marked = yield* shadow.run('their-marker', ['--git-dir', shadow.gitDir, 'ls-tree', '--name-only', commit, '--', FORMAT_FILE]);
@@ -108,14 +117,15 @@ const absorbRemote = Effect.fnUntraced(function* (
   level: TwinLevel | undefined,
   reached: string | null,
 ): Effect.fn.Return<RemoteAbsorbed, OwnGitFailed> {
+  const tracking = shadow.tracking;
   const tip = yield* remoteTip(shadow, branch);
-  if (tip === null) return { merge: null, stranded: null, remote: undefined, reached };
+  if (tracking === null || tip === null) return { merge: null, stranded: null, remote: undefined, reached };
   const seen = { merge: null, stranded: null, remote: { branch, tip }, reached };
   const head = yield* shadow.run('remote-head', ['-C', treeRoot, 'rev-parse', 'HEAD']);
   if (head === tip) return seen;
   const base = yield* shadow.quiet('remote-base', ['--git-dir', shadow.gitDir, 'merge-base', head, tip]);
   if (base === null || base === tip) return seen;
-  const label = `${REMOTE}/${branch}`;
+  const label = trackedLabel(tracking, branch);
   const carried = base === head || level === undefined ? tip : yield* levelled(level, tip);
   const brought = yield* markerAt(shadow, carried);
   const older = olderThanBase(steps, brought);
@@ -124,7 +134,7 @@ const absorbRemote = Effect.fnUntraced(function* (
     yield* shadow.run('remote-forward', ['-C', treeRoot, 'merge', '--ff-only', '--no-edit', tip]);
     return { ...seen, merge: { branch: label, merged: tip, conflicts: [] }, reached: brought };
   }
-  const outcome = yield* recovery.merge(trackingRef(branch), carried);
+  const outcome = yield* recovery.merge(trackingRef(tracking, branch), carried);
   if (outcome.merged === null) return { merge: { ...outcome, branch: label }, stranded: null, remote: undefined, reached };
   return {
     ...seen,
@@ -171,6 +181,7 @@ export const readTopology = Effect.fnUntraced(function* (
   const tips = new Map(refs.map(([, name, tip]) => [name, tip] as const));
   const twins = new Set<string>();
   let remote: string | null = null;
+  const tracked = shadow.tracking === null ? null : trackingRef(shadow.tracking, branch);
   for (const line of lines(
     yield* shadow.run('shadow-branches', [
       '--git-dir',
@@ -178,12 +189,12 @@ export const readTopology = Effect.fnUntraced(function* (
       'for-each-ref',
       '--format=%(refname)%00%(objectname)',
       'refs/heads',
-      trackingRef(branch),
+      ...(tracked === null ? [] : [tracked]),
     ]),
   )) {
     const [ref = '', tip = ''] = line.split('\0');
     if (ref.startsWith('refs/heads/')) twins.add(ref.slice('refs/heads/'.length));
-    else if (ref === trackingRef(branch)) remote = tip;
+    else if (ref === tracked) remote = tip;
   }
   const standing = yield* treeBranch(treeRoot);
   const merged = new Map<string, string>();
@@ -428,8 +439,8 @@ export const syncTopology = Effect.fnUntraced(function* (
       tracked !== null &&
       (yield* shadow.quiet('remote-shared', ['--git-dir', shadow.gitDir, 'merge-base', tracked, `refs/heads/${shadowBranches[0]}`])) !==
         null;
-    if (tracked !== null && shared) {
-      forkedFrom = `${REMOTE}/${branch}`;
+    if (tracked !== null && shared && shadow.tracking !== null) {
+      forkedFrom = trackedLabel(shadow.tracking, branch);
       yield* shadow.branch(branch, tracked);
     } else {
       const candidates = shadowBranches.filter((name) => projectBranches.includes(name));

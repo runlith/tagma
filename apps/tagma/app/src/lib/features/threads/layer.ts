@@ -46,6 +46,8 @@ import { PaletteActions } from '$lib/features/workspace/action.js';
 import { Columns } from '$lib/features/workspace/column.js';
 import { Surfaces } from '$lib/features/workspace/surface.js';
 import { Panes } from '$lib/shared/panes/pane.js';
+import { StagedKinds } from '$lib/shared/threads/staged.js';
+import { Staging } from './staging.js';
 import { actions } from './actions.js';
 import { columns } from './columns.js';
 import { items, links } from './links.js';
@@ -86,6 +88,8 @@ export const HarnessLayer = Layer.mergeAll(
   ThreadPlace,
   ThreadContext,
   CallActivity,
+  StagedKinds,
+  Staging,
   DraftShelf,
   PageDraft,
   ThreadList,

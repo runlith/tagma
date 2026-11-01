@@ -1568,50 +1568,6 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead apps/tagma/app/src/lib/features/speech/calls/Calls.svelte.ts#Followed",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/app/src/lib/features/speech/calls/Calls.svelte.ts#CallChords",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/app/src/lib/features/speech/calls/cast.ts#Voice",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/app/src/lib/features/speech/calls/playhead.ts#Spot",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/app/src/lib/features/speech/calls/playhead.ts#Cues",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/app/src/lib/features/speech/calls/turns.ts#PAUSE_MS",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/app/src/lib/features/speech/calls/turns.ts#LOST_MS",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/app/src/lib/features/speech/calls/turns.ts#SAID_PER_ROW",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/app/src/lib/features/speech/calls/turns.ts#Turn",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/app/src/lib/features/speech/calls/turns.ts#Cut",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/app/src/lib/features/speech/calls/turns.ts#turnsOf",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "dead-code dead apps/tagma/app/src/lib/features/speech/check.ts#FRAMES_MS",
           "owner": "5a3bed29"
         },
@@ -1640,35 +1596,7 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead apps/tagma/app/src/lib/features/speech/dictation/Sender.ts#SenderFailure",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "dead-code dead apps/tagma/app/src/lib/features/speech/dictation/take.ts#Utterance",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/app/src/lib/features/speech/library/Repo.ts#CALLS_PAGE",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/app/src/lib/features/speech/library/Repo.ts#ShelfKey",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/app/src/lib/features/speech/library/Repo.ts#FoundKey",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/app/src/lib/features/speech/library/Repo.ts#DetailKey",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/app/src/lib/features/speech/library/Repo.ts#Describing",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/app/src/lib/features/speech/library/Shelf.svelte.ts#Ask",
           "owner": "5a3bed29"
         },
         {
@@ -1685,10 +1613,6 @@ fields:
         },
         {
           "fingerprint": "dead-code dead apps/tagma/app/src/lib/features/tagma-apps/tagmaAppHost.svelte.ts#TagmaAppHostOwners",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/app/src/lib/features/tagma-apps/tagmaAppHost.svelte.ts#THREAD_CHANGED",
           "owner": "5a3bed29"
         },
         {
@@ -3532,10 +3456,6 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead apps/tagma/server/src/composition/callThreads.ts#CallThreadOwners",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "dead-code dead apps/tagma/server/src/composition/fileWatcher.ts#makeFileWatcher",
           "owner": "5a3bed29"
         },
@@ -3569,10 +3489,6 @@ fields:
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/composition/http/handlers.ts#DoorOwners",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/composition/http/ranged.ts#Span",
           "owner": "5a3bed29"
         },
         {
@@ -4811,10 +4727,6 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead apps/tagma/server/src/external-harnesses/birth/seat.ts#acpCapabilities",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "dead-code dead apps/tagma/server/src/external-harnesses/birth/seat.ts#terminalCapabilities",
           "owner": "5a3bed29"
         },
@@ -5314,10 +5226,6 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead apps/tagma/server/src/graph/contract/service/remote.ts#RemoteSet",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "dead-code dead apps/tagma/server/src/graph/contract/service/serving.ts#DetachedCheckout",
           "owner": "5a3bed29"
         },
@@ -5647,14 +5555,6 @@ fields:
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/graph/contract/wire/references.ts#BlockAddress",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/graph/contract/wire/remote.ts#REMOTE_BRANCH_STATES",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/graph/contract/wire/remote.ts#REMOTE_HOLDINGS",
           "owner": "5a3bed29"
         },
         {
@@ -6102,14 +6002,6 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead apps/tagma/server/src/graph/serving/remotes.ts#RemoteBindings",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/graph/serving/remotes.ts#GraphRemoteDriver",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "dead-code dead apps/tagma/server/src/graph/serving/routing.ts#ROUTED",
           "owner": "5a3bed29"
         },
@@ -6147,10 +6039,6 @@ fields:
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/graph/storage/move.ts#LayerMove",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/graph/storage/remote.ts#PushOutcome",
           "owner": "5a3bed29"
         },
         {
@@ -9203,14 +9091,6 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead apps/tagma/server/src/speech/contract/service/callThreads.ts#Delivery",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/speech/contract/service/listenings.ts#Refused",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "dead-code dead apps/tagma/server/src/speech/contract/service/models.ts#LocalModel",
           "owner": "5a3bed29"
         },
@@ -9227,14 +9107,6 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead apps/tagma/server/src/speech/contract/wire/feeds.ts#LISTENING_FEED",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/speech/contract/wire/feeds.ts#TRANSCRIPT_FEED",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "dead-code dead apps/tagma/server/src/speech/contract/wire/feeds.ts#RECOGNIZE_FEED",
           "owner": "5a3bed29"
         },
@@ -9248,25 +9120,6 @@ fields:
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/speech/contract/wire/feeds.ts#SYNTHESIS_FEED",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/speech/contract/wire/listening.ts#AGAIN_STATES",
-          "owner": "5a3bed29"
-        },
-        {
-          "count": 2,
-          "fingerprint": "dead-code dead apps/tagma/server/src/speech/contract/wire/listening.ts#ListeningAudio",
-          "owner": "5a3bed29"
-        },
-        {
-          "count": 2,
-          "fingerprint": "dead-code dead apps/tagma/server/src/speech/contract/wire/listening.ts#Again",
-          "owner": "5a3bed29"
-        },
-        {
-          "count": 2,
-          "fingerprint": "dead-code dead apps/tagma/server/src/speech/contract/wire/listening.ts#Given",
           "owner": "5a3bed29"
         },
         {
@@ -9294,31 +9147,7 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead apps/tagma/server/src/speech/keys.ts#callKeys",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/speech/listening/booth.ts#unknownListening",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "dead-code dead apps/tagma/server/src/speech/listening/choice.ts#Chosen",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/speech/listening/detail.ts#gistOf",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/speech/listening/echo.ts#Unechoing",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/speech/listening/echo.ts#Linking",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/speech/listening/following.ts#Following",
           "owner": "5a3bed29"
         },
         {
@@ -9326,115 +9155,7 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead apps/tagma/server/src/speech/listening/hearing.ts#Hearings",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/speech/listening/recorder.ts#Lose",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/speech/listening/recorder.ts#Repaired",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/speech/listening/rehearing.ts#Rehearing",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/speech/listening/run.ts#RunAsk",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/speech/listening/run.ts#RunTrack",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/speech/listening/search.ts#Search",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "dead-code dead apps/tagma/server/src/speech/listening/sending.ts#Senders",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/speech/listening/sweep.ts#swept",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/speech/listening/text.ts#CLOCK",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/speech/listening/track.ts#Muting",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/speech/listening/watchers.ts#Watchers",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/speech/store/entries.ts#Unindexed",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/speech/store/entries.ts#Carried",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/speech/store/entries.ts#Behind",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/speech/store/followers.ts#Seat",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/speech/store/followers.ts#Handed",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/speech/store/followers.ts#Followers",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/speech/store/matches.ts#Window",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/speech/store/matches.ts#Shown",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/speech/store/matches.ts#Matches",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/speech/store/staged.ts#Voiced",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/speech/store/staged.ts#Staged",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/speech/store/transcripts.ts#Opening",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/speech/store/transcripts.ts#Stored",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/speech/store/transcripts.ts#Giving",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/speech/store/transcripts.ts#Description",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/speech/store/transcripts.ts#GivenRow",
           "owner": "5a3bed29"
         },
         {
@@ -17236,10 +16957,6 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead packages/layer/src/door.ts#Manifest",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "dead-code dead packages/layer/src/door.ts#Ground",
           "owner": "5a3bed29"
         },
@@ -17944,18 +17661,6 @@ fields:
         },
         {
           "fingerprint": "dead-code dead packages/mcp/src/sdk.ts#McpTransportHooks",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead packages/mcp/src/sdkServer.ts#McpServedMedia",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead packages/mcp/src/sdkServer.ts#McpServerInput",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead packages/mcp/src/sdkServer.ts#StdioServerInput",
           "owner": "5a3bed29"
         },
         {
@@ -19911,19 +19616,178 @@ fields:
         {
           "fingerprint": "dead-code dead packages/window-behavior/src/runtime-core/presentation.ts#createDefaultWindowBehaviorPresentation",
           "owner": "5a3bed29"
+        },
+        {
+          "fingerprint": "dead-code dead packages/mcp/src/sdkServer.ts#serveMcpOverHttp",
+          "owner": "7761ae92"
+        },
+        {
+          "fingerprint": "dead-code dead apps/tagma/server/src/calls/contract/service/callThreads.ts#Delivery",
+          "owner": "5a3bed29"
+        },
+        {
+          "fingerprint": "dead-code dead apps/tagma/server/src/calls/contract/wire/feeds.ts#LISTENING_FEED",
+          "owner": "5a3bed29"
+        },
+        {
+          "fingerprint": "dead-code dead apps/tagma/server/src/calls/contract/wire/feeds.ts#TRANSCRIPT_FEED",
+          "owner": "5a3bed29"
+        },
+        {
+          "fingerprint": "dead-code dead apps/tagma/server/src/calls/contract/wire/listening.ts#AGAIN_STATES",
+          "owner": "5a3bed29"
+        },
+        {
+          "count": 2,
+          "fingerprint": "dead-code dead apps/tagma/server/src/calls/contract/wire/listening.ts#ListeningAudio",
+          "owner": "5a3bed29"
+        },
+        {
+          "count": 2,
+          "fingerprint": "dead-code dead apps/tagma/server/src/calls/contract/wire/listening.ts#Again",
+          "owner": "5a3bed29"
+        },
+        {
+          "count": 2,
+          "fingerprint": "dead-code dead apps/tagma/server/src/calls/contract/wire/listening.ts#Given",
+          "owner": "5a3bed29"
+        },
+        {
+          "fingerprint": "dead-code dead apps/tagma/server/src/calls/keys.ts#callKeys",
+          "owner": "5a3bed29"
+        },
+        {
+          "fingerprint": "dead-code dead apps/tagma/server/src/calls/listening/booth.ts#unknownListening",
+          "owner": "5a3bed29"
+        },
+        {
+          "fingerprint": "dead-code dead apps/tagma/server/src/calls/listening/detail.ts#gistOf",
+          "owner": "5a3bed29"
+        },
+        {
+          "fingerprint": "dead-code dead apps/tagma/server/src/calls/listening/echo.ts#Unechoing",
+          "owner": "5a3bed29"
+        },
+        {
+          "fingerprint": "dead-code dead apps/tagma/server/src/calls/listening/echo.ts#Linking",
+          "owner": "5a3bed29"
+        },
+        {
+          "fingerprint": "dead-code dead apps/tagma/server/src/calls/listening/following.ts#Following",
+          "owner": "5a3bed29"
+        },
+        {
+          "fingerprint": "dead-code dead apps/tagma/server/src/calls/listening/recorder.ts#Lose",
+          "owner": "5a3bed29"
+        },
+        {
+          "fingerprint": "dead-code dead apps/tagma/server/src/calls/listening/recorder.ts#Repaired",
+          "owner": "5a3bed29"
+        },
+        {
+          "fingerprint": "dead-code dead apps/tagma/server/src/calls/listening/rehearing.ts#Rehearing",
+          "owner": "5a3bed29"
+        },
+        {
+          "fingerprint": "dead-code dead apps/tagma/server/src/calls/listening/run.ts#RunAsk",
+          "owner": "5a3bed29"
+        },
+        {
+          "fingerprint": "dead-code dead apps/tagma/server/src/calls/listening/run.ts#RunTrack",
+          "owner": "5a3bed29"
+        },
+        {
+          "fingerprint": "dead-code dead apps/tagma/server/src/calls/listening/search.ts#Search",
+          "owner": "5a3bed29"
+        },
+        {
+          "fingerprint": "dead-code dead apps/tagma/server/src/calls/listening/sweep.ts#swept",
+          "owner": "5a3bed29"
+        },
+        {
+          "fingerprint": "dead-code dead apps/tagma/server/src/calls/listening/text.ts#CLOCK",
+          "owner": "5a3bed29"
+        },
+        {
+          "fingerprint": "dead-code dead apps/tagma/server/src/calls/listening/watchers.ts#Watchers",
+          "owner": "5a3bed29"
+        },
+        {
+          "fingerprint": "dead-code dead apps/tagma/server/src/calls/store/entries.ts#Unindexed",
+          "owner": "5a3bed29"
+        },
+        {
+          "fingerprint": "dead-code dead apps/tagma/server/src/calls/store/entries.ts#Carried",
+          "owner": "5a3bed29"
+        },
+        {
+          "fingerprint": "dead-code dead apps/tagma/server/src/calls/store/entries.ts#Behind",
+          "owner": "5a3bed29"
+        },
+        {
+          "fingerprint": "dead-code dead apps/tagma/server/src/calls/store/followers.ts#Seat",
+          "owner": "5a3bed29"
+        },
+        {
+          "fingerprint": "dead-code dead apps/tagma/server/src/calls/store/followers.ts#Handed",
+          "owner": "5a3bed29"
+        },
+        {
+          "fingerprint": "dead-code dead apps/tagma/server/src/calls/store/followers.ts#Followers",
+          "owner": "5a3bed29"
+        },
+        {
+          "fingerprint": "dead-code dead apps/tagma/server/src/calls/store/matches.ts#Window",
+          "owner": "5a3bed29"
+        },
+        {
+          "fingerprint": "dead-code dead apps/tagma/server/src/calls/store/matches.ts#Shown",
+          "owner": "5a3bed29"
+        },
+        {
+          "fingerprint": "dead-code dead apps/tagma/server/src/calls/store/matches.ts#Matches",
+          "owner": "5a3bed29"
+        },
+        {
+          "fingerprint": "dead-code dead apps/tagma/server/src/calls/store/staged.ts#Voiced",
+          "owner": "5a3bed29"
+        },
+        {
+          "fingerprint": "dead-code dead apps/tagma/server/src/calls/store/staged.ts#Staged",
+          "owner": "5a3bed29"
+        },
+        {
+          "fingerprint": "dead-code dead apps/tagma/server/src/calls/store/transcripts.ts#Opening",
+          "owner": "5a3bed29"
+        },
+        {
+          "fingerprint": "dead-code dead apps/tagma/server/src/calls/store/transcripts.ts#Stored",
+          "owner": "5a3bed29"
+        },
+        {
+          "fingerprint": "dead-code dead apps/tagma/server/src/calls/store/transcripts.ts#Giving",
+          "owner": "5a3bed29"
+        },
+        {
+          "fingerprint": "dead-code dead apps/tagma/server/src/calls/store/transcripts.ts#Description",
+          "owner": "5a3bed29"
+        },
+        {
+          "fingerprint": "dead-code dead apps/tagma/server/src/calls/store/transcripts.ts#GivenRow",
+          "owner": "5a3bed29"
         }
       ],
       "escaped": [
         {
-          "commit": "973b7b0028add9837dca04668dc5ea94f5c6fb3c",
+          "commit": "18ddb3d39142cac45f89198a91bd2774e349db95",
           "fingerprint": "dead-code dead apps/tagma/app/src/lib/features/threads/ThreadSlot.svelte.ts#SlotOptions",
           "fix": "Delete it; drop `export` when its own file uses it. A test-only consumer is not a reason to export it.",
-          "line": 67,
+          "line": 69,
           "path": "apps/tagma/app/src/lib/features/threads/ThreadSlot.svelte.ts",
           "said": "exported type `SlotOptions` is imported by no production file"
         },
         {
-          "commit": "973b7b0028add9837dca04668dc5ea94f5c6fb3c",
+          "commit": "18ddb3d39142cac45f89198a91bd2774e349db95",
           "fingerprint": "dead-code dead apps/tagma/server/src/threads/journal/rolloutCarry.ts#CarryOpening",
           "fix": "Delete it; drop `export` when its own file uses it. A test-only consumer is not a reason to export it.",
           "line": 21,
@@ -19931,15 +19795,15 @@ fields:
           "said": "exported type `CarryOpening` is imported by no production file"
         },
         {
-          "commit": "973b7b0028add9837dca04668dc5ea94f5c6fb3c",
+          "commit": "18ddb3d39142cac45f89198a91bd2774e349db95",
           "fingerprint": "dead-code dead packages/agent/src/transcript/kinds.ts#ThreadReaderWorker",
           "fix": "Delete it; drop `export` when its own file uses it. A test-only consumer is not a reason to export it.",
-          "line": 157,
+          "line": 159,
           "path": "packages/agent/src/transcript/kinds.ts",
           "said": "exported type `ThreadReaderWorker` is imported by no production file"
         },
         {
-          "commit": "973b7b0028add9837dca04668dc5ea94f5c6fb3c",
+          "commit": "18ddb3d39142cac45f89198a91bd2774e349db95",
           "fingerprint": "dead-code dead packages/chrome-for-testing/src/build.ts#cachedExecutable",
           "fix": "Delete it; drop `export` when its own file uses it. A test-only consumer is not a reason to export it.",
           "line": 23,
@@ -19947,7 +19811,7 @@ fields:
           "said": "exported function `cachedExecutable` is imported by no production file"
         },
         {
-          "commit": "973b7b0028add9837dca04668dc5ea94f5c6fb3c",
+          "commit": "18ddb3d39142cac45f89198a91bd2774e349db95",
           "fingerprint": "dead-code dead packages/e2e/src/lanes/inspector.ts#bootstrap",
           "fix": "Delete it; drop `export` when its own file uses it. A test-only consumer is not a reason to export it.",
           "line": 12,
@@ -19955,7 +19819,7 @@ fields:
           "said": "exported function `bootstrap` is imported by no production file"
         },
         {
-          "commit": "973b7b0028add9837dca04668dc5ea94f5c6fb3c",
+          "commit": "18ddb3d39142cac45f89198a91bd2774e349db95",
           "fingerprint": "dead-code dead packages/e2e/src/lanes/iosTools.ts#COMPANION_VERSION",
           "fix": "Delete it; drop `export` when its own file uses it. A test-only consumer is not a reason to export it.",
           "line": 12,
@@ -19963,7 +19827,7 @@ fields:
           "said": "exported const `COMPANION_VERSION` is imported by no production file"
         },
         {
-          "commit": "973b7b0028add9837dca04668dc5ea94f5c6fb3c",
+          "commit": "18ddb3d39142cac45f89198a91bd2774e349db95",
           "fingerprint": "dead-code dead packages/e2e/src/lanes/iosTools.ts#CLIENT_VERSION",
           "fix": "Delete it; drop `export` when its own file uses it. A test-only consumer is not a reason to export it.",
           "line": 13,
@@ -19971,7 +19835,7 @@ fields:
           "said": "exported const `CLIENT_VERSION` is imported by no production file"
         },
         {
-          "commit": "973b7b0028add9837dca04668dc5ea94f5c6fb3c",
+          "commit": "18ddb3d39142cac45f89198a91bd2774e349db95",
           "fingerprint": "dead-code dead packages/e2e/src/lanes/iosTools.ts#PYTHON_VERSION",
           "fix": "Delete it; drop `export` when its own file uses it. A test-only consumer is not a reason to export it.",
           "line": 14,
@@ -19979,7 +19843,7 @@ fields:
           "said": "exported const `PYTHON_VERSION` is imported by no production file"
         },
         {
-          "commit": "973b7b0028add9837dca04668dc5ea94f5c6fb3c",
+          "commit": "18ddb3d39142cac45f89198a91bd2774e349db95",
           "fingerprint": "dead-code dead packages/e2e/src/lanes/iosTools.ts#cacheDirectory",
           "fix": "Delete it; drop `export` when its own file uses it. A test-only consumer is not a reason to export it.",
           "line": 49,
@@ -19987,7 +19851,7 @@ fields:
           "said": "exported function `cacheDirectory` is imported by no production file"
         },
         {
-          "commit": "973b7b0028add9837dca04668dc5ea94f5c6fb3c",
+          "commit": "18ddb3d39142cac45f89198a91bd2774e349db95",
           "fingerprint": "dead-code dead packages/e2e/src/lanes/iosTools.ts#cachedTools",
           "fix": "Delete it; drop `export` when its own file uses it. A test-only consumer is not a reason to export it.",
           "line": 148,
@@ -19995,7 +19859,7 @@ fields:
           "said": "exported const `cachedTools` is imported by no production file"
         },
         {
-          "commit": "973b7b0028add9837dca04668dc5ea94f5c6fb3c",
+          "commit": "18ddb3d39142cac45f89198a91bd2774e349db95",
           "fingerprint": "dead-code dead packages/e2e/src/lanes/template.ts#TemplateParams",
           "fix": "Delete it; drop `export` when its own file uses it. A test-only consumer is not a reason to export it.",
           "line": 22,
@@ -20003,7 +19867,7 @@ fields:
           "said": "exported type `TemplateParams` is imported by no production file"
         },
         {
-          "commit": "973b7b0028add9837dca04668dc5ea94f5c6fb3c",
+          "commit": "18ddb3d39142cac45f89198a91bd2774e349db95",
           "fingerprint": "dead-code dead packages/e2e/src/lanes/template.ts#Preparation",
           "fix": "Delete it; drop `export` when its own file uses it. A test-only consumer is not a reason to export it.",
           "line": 38,
@@ -20011,7 +19875,7 @@ fields:
           "said": "exported type `Preparation` is imported by no production file"
         },
         {
-          "commit": "973b7b0028add9837dca04668dc5ea94f5c6fb3c",
+          "commit": "18ddb3d39142cac45f89198a91bd2774e349db95",
           "fingerprint": "dead-code dead packages/e2e/src/lanes/template.ts#resolve",
           "fix": "Delete it; drop `export` when its own file uses it. A test-only consumer is not a reason to export it.",
           "line": 140,
@@ -20019,7 +19883,7 @@ fields:
           "said": "exported function `resolve` is imported by no production file"
         },
         {
-          "commit": "973b7b0028add9837dca04668dc5ea94f5c6fb3c",
+          "commit": "18ddb3d39142cac45f89198a91bd2774e349db95",
           "fingerprint": "dead-code dead packages/e2e/src/lanes/template.ts#prepare",
           "fix": "Delete it; drop `export` when its own file uses it. A test-only consumer is not a reason to export it.",
           "line": 177,
@@ -20027,7 +19891,7 @@ fields:
           "said": "exported const `prepare` is imported by no production file"
         },
         {
-          "commit": "973b7b0028add9837dca04668dc5ea94f5c6fb3c",
+          "commit": "18ddb3d39142cac45f89198a91bd2774e349db95",
           "fingerprint": "dead-code dead packages/e2e/src/pageErrors.ts#PageException",
           "fix": "Delete it; drop `export` when its own file uses it. A test-only consumer is not a reason to export it.",
           "line": 3,
@@ -20035,7 +19899,7 @@ fields:
           "said": "exported const `PageException` is imported by no production file"
         },
         {
-          "commit": "973b7b0028add9837dca04668dc5ea94f5c6fb3c",
+          "commit": "18ddb3d39142cac45f89198a91bd2774e349db95",
           "fingerprint": "dead-code dead packages/e2e/src/pageErrors.ts#PageFailed",
           "fix": "Delete it; drop `export` when its own file uses it. A test-only consumer is not a reason to export it.",
           "line": 4,
@@ -20043,7 +19907,7 @@ fields:
           "said": "exported class `PageFailed` is imported by no production file"
         },
         {
-          "commit": "973b7b0028add9837dca04668dc5ea94f5c6fb3c",
+          "commit": "18ddb3d39142cac45f89198a91bd2774e349db95",
           "fingerprint": "dead-code dead packages/e2e/src/pageErrors.ts#pageFailure",
           "fix": "Delete it; drop `export` when its own file uses it. A test-only consumer is not a reason to export it.",
           "line": 6,
@@ -20051,7 +19915,7 @@ fields:
           "said": "exported function `pageFailure` is imported by no production file"
         },
         {
-          "commit": "973b7b0028add9837dca04668dc5ea94f5c6fb3c",
+          "commit": "18ddb3d39142cac45f89198a91bd2774e349db95",
           "fingerprint": "dead-code dead packages/e2e/src/pageErrors.ts#errorScript",
           "fix": "Delete it; drop `export` when its own file uses it. A test-only consumer is not a reason to export it.",
           "line": 11,
@@ -20059,7 +19923,7 @@ fields:
           "said": "exported function `errorScript` is imported by no production file"
         },
         {
-          "commit": "973b7b0028add9837dca04668dc5ea94f5c6fb3c",
+          "commit": "18ddb3d39142cac45f89198a91bd2774e349db95",
           "fingerprint": "dead-code dead packages/e2e/src/pageErrors.ts#flushErrors",
           "fix": "Delete it; drop `export` when its own file uses it. A test-only consumer is not a reason to export it.",
           "line": 29,
@@ -20067,7 +19931,7 @@ fields:
           "said": "exported const `flushErrors` is imported by no production file"
         },
         {
-          "commit": "973b7b0028add9837dca04668dc5ea94f5c6fb3c",
+          "commit": "18ddb3d39142cac45f89198a91bd2774e349db95",
           "fingerprint": "dead-code dead packages/effect-test/src/runtime.ts#testServices",
           "fix": "Delete it; drop `export` when its own file uses it. A test-only consumer is not a reason to export it.",
           "line": 4,
@@ -20075,7 +19939,7 @@ fields:
           "said": "exported const `testServices` is imported by no production file"
         },
         {
-          "commit": "973b7b0028add9837dca04668dc5ea94f5c6fb3c",
+          "commit": "18ddb3d39142cac45f89198a91bd2774e349db95",
           "fingerprint": "dead-code dead packages/effect-test/src/runtime.ts#runTest",
           "fix": "Delete it; drop `export` when its own file uses it. A test-only consumer is not a reason to export it.",
           "line": 11,
@@ -20083,7 +19947,7 @@ fields:
           "said": "exported function `runTest` is imported by no production file"
         },
         {
-          "commit": "973b7b0028add9837dca04668dc5ea94f5c6fb3c",
+          "commit": "18ddb3d39142cac45f89198a91bd2774e349db95",
           "fingerprint": "dead-code dead packages/effect-test/src/runtime.ts#makeFixture",
           "fix": "Delete it; drop `export` when its own file uses it. A test-only consumer is not a reason to export it.",
           "line": 29,
@@ -20091,7 +19955,7 @@ fields:
           "said": "exported function `makeFixture` is imported by no production file"
         },
         {
-          "commit": "973b7b0028add9837dca04668dc5ea94f5c6fb3c",
+          "commit": "18ddb3d39142cac45f89198a91bd2774e349db95",
           "fingerprint": "dead-code dead packages/layer/src/App.ts#Sources",
           "fix": "Delete it; drop `export` when its own file uses it. A test-only consumer is not a reason to export it.",
           "line": 44,
@@ -20099,7 +19963,7 @@ fields:
           "said": "exported type `Sources` is imported by no production file"
         },
         {
-          "commit": "973b7b0028add9837dca04668dc5ea94f5c6fb3c",
+          "commit": "18ddb3d39142cac45f89198a91bd2774e349db95",
           "fingerprint": "dead-code dead packages/layer/src/App.ts#Closed",
           "fix": "Delete it; drop `export` when its own file uses it. A test-only consumer is not a reason to export it.",
           "line": 65,
@@ -20107,7 +19971,7 @@ fields:
           "said": "exported type `Closed` is imported by no production file"
         },
         {
-          "commit": "973b7b0028add9837dca04668dc5ea94f5c6fb3c",
+          "commit": "18ddb3d39142cac45f89198a91bd2774e349db95",
           "fingerprint": "dead-code dead packages/layer/src/Rung.ts#RungName",
           "fix": "Delete it; drop `export` when its own file uses it. A test-only consumer is not a reason to export it.",
           "line": 74,
@@ -20115,7 +19979,23 @@ fields:
           "said": "exported type `RungName` is imported by no production file"
         },
         {
-          "commit": "973b7b0028add9837dca04668dc5ea94f5c6fb3c",
+          "commit": "18ddb3d39142cac45f89198a91bd2774e349db95",
+          "fingerprint": "dead-code dead packages/mcp/src/sdkServer.ts#McpServedMedia",
+          "fix": "Delete it; drop `export` when its own file uses it. A test-only consumer is not a reason to export it.",
+          "line": 19,
+          "path": "packages/mcp/src/sdkServer.ts",
+          "said": "exported type `McpServedMedia` is imported by no production file"
+        },
+        {
+          "commit": "18ddb3d39142cac45f89198a91bd2774e349db95",
+          "fingerprint": "dead-code dead packages/mcp/src/sdkServer.ts#StdioServerInput",
+          "fix": "Delete it; drop `export` when its own file uses it. A test-only consumer is not a reason to export it.",
+          "line": 42,
+          "path": "packages/mcp/src/sdkServer.ts",
+          "said": "exported type `StdioServerInput` is imported by no production file"
+        },
+        {
+          "commit": "18ddb3d39142cac45f89198a91bd2774e349db95",
           "fingerprint": "dead-code dead packages/testbed/src/core/bed.ts#diskContinuity",
           "fix": "Delete it; drop `export` when its own file uses it. A test-only consumer is not a reason to export it.",
           "line": 174,
@@ -20123,7 +20003,7 @@ fields:
           "said": "exported function `diskContinuity` is imported by no production file"
         },
         {
-          "commit": "973b7b0028add9837dca04668dc5ea94f5c6fb3c",
+          "commit": "18ddb3d39142cac45f89198a91bd2774e349db95",
           "fingerprint": "dead-code dead packages/testbed/src/core/run.ts#worldHome",
           "fix": "Delete it; drop `export` when its own file uses it. A test-only consumer is not a reason to export it.",
           "line": 57,
@@ -20131,7 +20011,7 @@ fields:
           "said": "exported function `worldHome` is imported by no production file"
         },
         {
-          "commit": "973b7b0028add9837dca04668dc5ea94f5c6fb3c",
+          "commit": "18ddb3d39142cac45f89198a91bd2774e349db95",
           "fingerprint": "dead-code dead packages/testbed/src/core/run.ts#PathLocation",
           "fix": "Delete it; drop `export` when its own file uses it. A test-only consumer is not a reason to export it.",
           "line": 66,
@@ -20139,7 +20019,7 @@ fields:
           "said": "exported type `PathLocation` is imported by no production file"
         },
         {
-          "commit": "973b7b0028add9837dca04668dc5ea94f5c6fb3c",
+          "commit": "18ddb3d39142cac45f89198a91bd2774e349db95",
           "fingerprint": "dead-code dead packages/testbed/src/core/run.ts#locate",
           "fix": "Delete it; drop `export` when its own file uses it. A test-only consumer is not a reason to export it.",
           "line": 70,
@@ -20147,7 +20027,7 @@ fields:
           "said": "exported function `locate` is imported by no production file"
         },
         {
-          "commit": "973b7b0028add9837dca04668dc5ea94f5c6fb3c",
+          "commit": "18ddb3d39142cac45f89198a91bd2774e349db95",
           "fingerprint": "dead-code dead packages/testbed/src/core/run.ts#runLiveness",
           "fix": "Delete it; drop `export` when its own file uses it. A test-only consumer is not a reason to export it.",
           "line": 110,
@@ -20155,7 +20035,7 @@ fields:
           "said": "exported function `runLiveness` is imported by no production file"
         },
         {
-          "commit": "973b7b0028add9837dca04668dc5ea94f5c6fb3c",
+          "commit": "18ddb3d39142cac45f89198a91bd2774e349db95",
           "fingerprint": "dead-code dead packages/testbed/src/core/started.ts#STARTED",
           "fix": "Delete it; drop `export` when its own file uses it. A test-only consumer is not a reason to export it.",
           "line": 5,
@@ -20163,7 +20043,7 @@ fields:
           "said": "exported const `STARTED` is imported by no production file"
         },
         {
-          "commit": "973b7b0028add9837dca04668dc5ea94f5c6fb3c",
+          "commit": "18ddb3d39142cac45f89198a91bd2774e349db95",
           "fingerprint": "dead-code dead packages/utils/src/worker.ts#WorkerLink",
           "fix": "Delete it; drop `export` when its own file uses it. A test-only consumer is not a reason to export it.",
           "line": 23,

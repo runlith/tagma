@@ -13,6 +13,7 @@
   import Working from '$lib/shared/ui/Working.svelte';
   import { cn } from '$lib/shared/utils.js';
   import { AgentsColumn } from './AgentsColumn.svelte.js';
+  import HomeHold from './HomeHold.svelte';
   import { ThreadList } from './List.svelte.js';
   import TeamMember from './TeamMember.svelte';
   import { crewOf } from './team.js';
@@ -73,7 +74,7 @@
         {#if made}<DropdownMenu.Separator />{/if}
         <DropdownMenu.Label>Agents working</DropdownMenu.Label>
         {#each crew.running as node (node.row.id)}
-          <TeamMember {node} {here} />
+          <HomeHold projectId={node.row.projectId}><TeamMember {node} {here} /></HomeHold>
         {/each}
         {#if crew.total > working}
           <DropdownMenu.Item icon={ListTree} onSelect={showAll}>Show all {crew.total} agents</DropdownMenu.Item>

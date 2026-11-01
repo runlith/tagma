@@ -36,10 +36,34 @@ const expandedSource = async (door: RulesDoor): Promise<ts.SourceFile> => {
     for (const binding of bindings.elements) imported.set(binding.name.text, exports[(binding.propertyName ?? binding.name).text]);
     edits.push({ start: statement.getFullStart(), end: statement.end, text: '' });
   }
-  const refers = (node: ts.Node): boolean => (ts.isIdentifier(node) && imported.has(node.text)) || ts.forEachChild(node, refers) === true;
+  const named = (node: ts.Identifier): boolean => {
+    const parent = node.parent as ts.Node & { readonly name?: ts.Node };
+    return parent.name === node || (ts.isQualifiedName(parent) && parent.right === node);
+  };
+  const privateName = (node: ts.Node, shadowed: ReadonlySet<string>): string | null =>
+    ts.isIdentifier(node) && imported.has(node.text) && !shadowed.has(node.text) && !named(node) ? node.text : null;
+  const bound = (node: ts.Node): readonly string[] => {
+    const holder = node as {
+      readonly typeParameters?: readonly ts.TypeParameterDeclaration[];
+      readonly parameters?: readonly ts.ParameterDeclaration[];
+    };
+    return [...(holder.typeParameters ?? []), ...(holder.parameters ?? [])].flatMap((one) =>
+      ts.isIdentifier(one.name) ? [one.name.text] : [],
+    );
+  };
+  const expandable = (node: ts.TypeNode, shadowed: ReadonlySet<string>): boolean =>
+    ts.isParenthesizedTypeNode(node)
+      ? expandable(node.type, shadowed)
+      : ts.isTypeQueryNode(node)
+        ? privateName(node.exprName, shadowed) !== null
+        : ts.isIndexedAccessTypeNode(node)
+          ? expandable(node.objectType, shadowed)
+          : ts.isTypeReferenceNode(node) && privateName(node.typeName, shadowed) !== null;
   const valueOf = (node: ts.TypeNode): unknown => {
     if (ts.isParenthesizedTypeNode(node)) return valueOf(node.type);
     if (ts.isTypeQueryNode(node) && ts.isIdentifier(node.exprName)) return imported.get(node.exprName.text);
+    if (ts.isTypeReferenceNode(node) && ts.isIdentifier(node.typeName) && node.typeArguments === undefined)
+      return imported.get(node.typeName.text);
     if (ts.isIndexedAccessTypeNode(node)) {
       const value = valueOf(node.objectType);
       if (ts.isLiteralTypeNode(node.indexType) && ts.isStringLiteral(node.indexType.literal))
@@ -50,12 +74,27 @@ const expandedSource = async (door: RulesDoor): Promise<ts.SourceFile> => {
     }
     throw new Error(`${door.source}: cannot expand ${node.getText()}`);
   };
-  for (const statement of source.statements) {
-    if (!ts.isTypeAliasDeclaration(statement) || !refers(statement.type)) continue;
-    const value = valueOf(statement.type);
-    const expanded = Array.isArray(value) ? value.map((one) => JSON.stringify(one)).join(' | ') : signatureOf(value as Schema.Top);
-    edits.push({ start: statement.type.getStart(source), end: statement.type.end, text: expanded });
-  }
+  const expansionOf = (node: ts.TypeNode): string => {
+    const value = valueOf(node);
+    return Array.isArray(value) ? value.map((one) => JSON.stringify(one)).join(' | ') : signatureOf(value as Schema.Top);
+  };
+  const expand = (node: ts.Node, whole: boolean, shadowed: ReadonlySet<string>): void => {
+    if (ts.isTypeNode(node) && expandable(node, shadowed)) {
+      const text = expansionOf(node);
+      edits.push({ start: node.getStart(source), end: node.end, text: whole ? text : `(${text})` });
+      return;
+    }
+    if (privateName(node, shadowed) !== null) throw new Error(`${door.source}: cannot expand ${node.parent.getText()}`);
+    const binds = bound(node);
+    const inner = binds.length === 0 ? shadowed : new Set([...shadowed, ...binds]);
+    if (ts.isTypeAliasDeclaration(node)) {
+      for (const parameter of node.typeParameters ?? []) expand(parameter, false, inner);
+      expand(node.type, true, inner);
+      return;
+    }
+    ts.forEachChild(node, (child) => expand(child, false, inner));
+  };
+  for (const statement of source.statements) if (!ts.isImportDeclaration(statement)) expand(statement, false, new Set());
   const expanded = edits
     .sort((left, right) => right.start - left.start)
     .reduce((at, edit) => at.slice(0, edit.start) + edit.text + at.slice(edit.end), text);

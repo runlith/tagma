@@ -62,7 +62,13 @@
       {/if}
     </Popover.Trigger>
   </Tooltip>
-  <Popover.Content side="right" align="end" collisionPadding={12} class="max-h-104 w-96 gap-0 overflow-hidden p-0">
+  <Popover.Content
+    side="right"
+    align="end"
+    collisionPadding={12}
+    class="w-96 gap-0 overflow-hidden p-0"
+    style="max-height: min(26rem, var(--float-available-height, 100dvh));"
+  >
     <div class="flex shrink-0 items-center justify-between gap-2 border-b px-2 py-1.5">
       <div class="flex items-center gap-0.5 rounded-md bg-hover p-0.5" role="radiogroup" aria-label="Projects">
         <button

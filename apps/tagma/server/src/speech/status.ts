@@ -19,12 +19,14 @@ type Judged = (provider: string, model: string) => Availability;
 const recognitionOf = (provider: string, model: RecognitionModel, judged: Judged): ModelStatus => {
   const capabilities = model.recognition;
   const file = capabilities.kind === 'file';
+  const recorded = capabilities.kind !== 'stream';
   return {
     provider,
     model: model.id,
     label: model.label,
     kind: file ? 'file' : 'recognition',
-    again: capabilities.kind !== 'stream',
+    recorded,
+    again: recorded,
     speakers: capabilities.speakers,
     availability: judged(provider, model.id),
     turns: file ? [] : [...offeredTurns(model)],
@@ -39,6 +41,7 @@ const synthesisOf = (provider: string, model: SynthesisModel, judged: Judged): M
   model: model.id,
   label: model.label,
   kind: 'synthesis',
+  recorded: false,
   again: false,
   speakers: false,
   availability: judged(provider, model.id),

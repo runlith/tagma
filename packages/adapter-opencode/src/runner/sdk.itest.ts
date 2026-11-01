@@ -2,11 +2,11 @@ import { expect } from 'bun:test';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { it } from '@runlith/effect-test';
 import { Deferred, Effect, Exit, Fiber, FileSystem, Schema, Scope } from 'effect';
-import { FAULT, type Outlet } from '@runlith/acp/agent';
+import { AgentFault, FAULT, type Outlet } from '@runlith/acp/agent';
 import type { SessionUpdate } from '@runlith/acp/updates';
 import { accountEnvironment } from '../environment.js';
 import { installedProgram } from '../host.js';
-import { SAID, Said } from '@runlith/hosted-runner/wire/extensions';
+import { COMPACT, COMPACTED, SAID, Said } from '@runlith/hosted-runner/wire/extensions';
 import { hostedAgent } from '@runlith/hosted-runner/agent';
 import type { HostedDoor } from '@runlith/hosted-runner/door';
 import { OpenCodeSdk } from './channel.js';
@@ -33,6 +33,9 @@ it.live(
       const root = yield* files.makeTempDirectoryScoped({ prefix: 'opencode-boundary-' });
       const requests: (typeof RequestBody.Type)[] = [];
       const waiting = yield* Deferred.make<void>();
+      const summarizing = yield* Deferred.make<void>();
+      let summaryMode: 'finish' | 'fail' | 'hold' = 'finish';
+      let overflow = false;
       const chunks = (delta: unknown, finish: string | null = null) =>
         `data: ${JSON.stringify({
           id: 'chat_probe',
@@ -51,6 +54,34 @@ it.live(
             async fetch(request) {
               const body = Schema.decodeUnknownSync(RequestBody)(await request.json());
               requests.push(body);
+              if ((body.tools?.length ?? 0) === 0) {
+                if (summaryMode === 'fail')
+                  return Response.json(
+                    { error: { message: 'Compaction authorization rejected', type: 'invalid_api_key' } },
+                    { status: 401 },
+                  );
+                if (summaryMode === 'hold') {
+                  Deferred.doneUnsafe(summarizing, Effect.void);
+                  return new Response(
+                    new ReadableStream<Uint8Array>({
+                      start(controller) {
+                        controller.enqueue(new TextEncoder().encode(chunks({ content: '## Objective\n' })));
+                      },
+                    }),
+                    { headers: { 'content-type': 'text/event-stream' } },
+                  );
+                }
+                return new Response(chunks({ content: '## Objective\n\nCOMPACTED_CHECKPOINT' }) + chunks({}, 'stop') + 'data: [DONE]\n\n', {
+                  headers: { 'content-type': 'text/event-stream' },
+                });
+              }
+              if (overflow) {
+                overflow = false;
+                return Response.json(
+                  { error: { message: 'Maximum context length exceeded', type: 'invalid_request_error', code: 'context_length_exceeded' } },
+                  { status: 400 },
+                );
+              }
               if (JSON.stringify(body.messages.filter((message) => message.role === 'user').at(-1)?.content).includes('WAIT_FOR_CANCEL')) {
                 const delta = {
                   tool_calls: [
@@ -114,6 +145,7 @@ it.live(
       let listed = [tool];
       const called: { id: string; name: string; input: unknown }[] = [];
       const updates: SessionUpdate[] = [];
+      const boundaries: unknown[] = [];
       const seal = yield* Deferred.make<void>();
       const door: HostedDoor = {
         agent: () => Effect.succeed({ prompt: system, web: 'none' }),
@@ -157,7 +189,9 @@ it.live(
                 Effect.orDie,
                 Effect.flatMap((said) => (said.toolCallIds.length === 2 ? Effect.asVoid(Deferred.succeed(seal, undefined)) : Effect.void)),
               )
-            : Effect.void,
+            : Effect.sync(() => {
+                if (method === COMPACTED) boundaries.push(params);
+              }),
         request: () => Effect.die('No vendor permission loop'),
       };
       const cycle = yield* makeOpenCodeCycle(door, process, { model: 'probe/probe', effort: null, parameters: {}, version: 'test' }).pipe(
@@ -182,11 +216,45 @@ it.live(
       ]);
       expect(updates.filter((update) => update.sessionUpdate === 'usage_update')).toHaveLength(2);
       expect(result.usage).toBeUndefined();
+      const compact =
+        agent.extensions[COMPACT] ??
+        (() => Effect.fail(new AgentFault({ code: FAULT.methodNotFound, message: 'OpenCode did not declare in-session compaction' })));
+      expect(yield* compact({ sessionId: session.sessionId, at: 'end', instructions: 'Preserve the recorded markers' })).toMatchObject({
+        summary: '## Objective\n\nCOMPACTED_CHECKPOINT',
+        usage: { inputTokens: 10, outputTokens: 2, totalTokens: 12 },
+      });
+      expect(boundaries).toEqual([{ sessionId: session.sessionId, trigger: 'manual', summary: '## Objective\n\nCOMPACTED_CHECKPOINT' }]);
+      expect(requests.at(-1)!.messages.filter((message) => message.role === 'system')).toEqual([
+        { role: 'system', content: `${system}\n\nPreserve the recorded markers` },
+      ]);
       system = 'NEXT_EXACT_SYSTEM';
       listed = [{ ...tool, name: 'replacement' }];
       yield* agent.prompt({ sessionId: session.sessionId, prompt: [{ type: 'text', text: 'Next turn' }] });
       expect(requests.at(-1)!.messages.filter((message) => message.role === 'system')).toEqual([{ role: 'system', content: system }]);
       expect(requests.at(-1)!.tools?.map((item) => item.function.name)).toEqual(['replacement']);
+      expect(JSON.stringify(requests.at(-1)!.messages)).toContain('COMPACTED_CHECKPOINT');
+      summaryMode = 'fail';
+      expect(yield* Effect.flip(compact({ sessionId: session.sessionId, at: 'end' }))).toMatchObject({
+        code: FAULT.authRequired,
+        message: 'Compaction authorization rejected',
+      });
+      summaryMode = 'hold';
+      const folding = yield* Effect.forkChild(Effect.flip(compact({ sessionId: session.sessionId, at: 'end' })));
+      yield* Deferred.await(summarizing);
+      yield* agent.cancel({ sessionId: session.sessionId });
+      expect((yield* Fiber.join(folding)).code).toBe(-32800);
+      expect(boundaries).toHaveLength(1);
+      summaryMode = 'finish';
+      overflow = true;
+      expect(
+        (yield* agent.prompt({ sessionId: session.sessionId, prompt: [{ type: 'text', text: 'Recover from context overflow' }] }))
+          .stopReason,
+      ).toBe('end_turn');
+      expect(boundaries.at(-1)).toEqual({ sessionId: session.sessionId, trigger: 'auto', summary: '## Objective\n\nCOMPACTED_CHECKPOINT' });
+      expect(yield* compact({ sessionId: session.sessionId, at: 'step' })).toMatchObject({
+        summary: '## Objective\n\nCOMPACTED_CHECKPOINT',
+      });
+      expect(updates.filter((update) => update.sessionUpdate === 'usage_update').at(-1)).toMatchObject({ used: 12 });
       const turning = yield* Effect.forkChild(
         agent.prompt({ sessionId: session.sessionId, prompt: [{ type: 'text', text: 'WAIT_FOR_CANCEL' }] }),
       );

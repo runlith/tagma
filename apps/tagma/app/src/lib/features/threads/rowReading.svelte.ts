@@ -3,8 +3,10 @@ import type { WallClock } from '$lib/features/workspace/WallClock.svelte.js';
 import type { ProviderCatalog } from '$lib/features/providers/Catalog.svelte.js';
 import { timeCompact } from '$lib/shared/time.js';
 import { threadMark, type ThreadMark } from './Life.svelte';
+import type { CallActivity } from './CallActivity.svelte.js';
 import { failedRowDetail } from './native/runEndingLine.js';
 import { runningSinceOf } from './rowKind.js';
+import { queuedCalls } from './workWords.js';
 import { TEAM_NAMED, type ThreadTreeNode } from './forest.js';
 import type { WorkInput } from './workLine.js';
 import type { WorkLines } from './workLines.svelte.js';
@@ -34,12 +36,20 @@ export class RowReading {
     private readonly clock: WallClock,
     private readonly lines: WorkLines,
     private readonly catalog: ProviderCatalog,
+    private readonly calls: CallActivity,
   ) {
     const row = $derived(node().row);
     this.mark = $derived(threadMark(row));
+    const waiting = $derived(this.calls.waitingOf(row));
     const work = $derived<WorkInput | null>(
       this.mark.state === 'working' && row.phase !== null
-        ? { phase: row.phase.phase, since: row.phase.since, waiting: row.phase.waiting, calls: row.phase.calls, queued: row.phase.queued }
+        ? {
+            phase: row.phase.phase,
+            since: row.phase.since,
+            waiting: row.phase.waiting,
+            calls: row.phase.calls,
+            queued: row.phase.queued.length + waiting,
+          }
         : null,
     );
     const doing = $derived(work === null ? null : this.lines.shown(row.id));
@@ -53,6 +63,9 @@ export class RowReading {
       const id = untrack(() => row.id);
       return () => this.lines.release(id);
     });
+
+    const waitingLine = (): RowLine | null =>
+      waiting === 0 ? null : { text: queuedCalls(waiting), tone: 'text-muted-foreground', elapsed: null };
 
     this.own = $derived.by<RowLine | null>(() => {
       if (row.launchBlocked === true) {
@@ -69,7 +82,7 @@ export class RowReading {
           return { text: 'no movement for a long time', tone: 'text-destructive', elapsed: null };
         case 'working':
           return doing === null
-            ? null
+            ? waitingLine()
             : {
                 text: doing.text,
                 tone: doing.view.kind === 'phase' || doing.view.kind === 'opening' ? 'text-muted-foreground/70' : 'text-muted-foreground',
@@ -98,7 +111,7 @@ export class RowReading {
         }
         case 'owes':
         case 'quiet':
-          return null;
+          return waitingLine();
       }
     });
 

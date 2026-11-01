@@ -137,7 +137,7 @@ export const makeServingSwitch = Effect.gen(function* () {
           return yield* new GateRefusal(
             'group-graph',
             `"${row.name}" is the graph of a group of projects, which has no repository to carry it`,
-            ['set_graph_remote — a group’s graph leaves this machine through its own private remote'],
+            ['keep the group’s graph stealth: it lives in Tagma’s data directory, beside no checkout'],
           );
         }
         const homes = storageHomes(machineStore.path);
@@ -169,7 +169,7 @@ export const makeServingSwitch = Effect.gen(function* () {
         const kept = keep.length === 0 ? new Set<string>() : yield* bindings.kept(row.id, keep);
         yield* bindings.releaseProject(row.id);
         const reshaped = yield* refused(
-          moveStorage({ git, from, to, checkout: row.rootPath, origin: row.graphRemote, layers: { layer, kept } }),
+          moveStorage({ git, from, to, checkout: row.rootPath, side: bindings.side, layers: { layer, kept } }),
         );
         yield* refused(builder.travelMirror(from.mirrorPath, to.mirrorPath, reshaped ? null : to.treeRoot));
         const moved = yield* refused(policy.setStorage({ id: row.id, mode: input.mode }));

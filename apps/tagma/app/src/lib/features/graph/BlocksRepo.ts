@@ -1,6 +1,7 @@
 import { type BatchOp, batchDocument } from '@tagma/server/graph/contract/wire/batch';
 import type { Delivery } from '@tagma/server/graph/contract/wire/tags/law';
 import type { StorageMode } from '@tagma/server/projects/contract/wire/project';
+import type { InstanceOf } from '@runlith/layer/key';
 import type { KeyedLoaderContext } from '@runlith/query/types';
 import { Repo } from '@runlith/query/repo';
 import type { OperationInput } from '$lib/wire/operation.js';
@@ -133,3 +134,5 @@ export const BlocksRepo = Repo.define(
   }),
   { tier: 'graph', door: GraphDoor },
 );
+
+export type BlocksRepo = InstanceOf<typeof BlocksRepo>;

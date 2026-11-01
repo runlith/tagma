@@ -1,11 +1,10 @@
-import { Layer } from 'effect';
 import { CHANNEL } from './channel.js';
 import { PROGRAM_RELEASE } from '../../platform/contract/wire/program.js';
 import { applications } from '../../mac-applications/placement.js';
 import { releasePlaces } from '../../release-channel/places.js';
 import { releaseChannelLayer } from '../../release-channel/runner.js';
 import { macPlatform } from '../../installation/setup/macos.js';
-import type { Bindings, NextPlace } from '../next.js';
+import type { BindingChoice, NextPlace } from '../next.js';
 
 const nextInstallation = (place: NextPlace) =>
   releaseChannelLayer({
@@ -22,4 +21,4 @@ const nextInstallation = (place: NextPlace) =>
     env: process.env,
   });
 
-export const BINDINGS: Bindings = { nextInstallation, door: () => Layer.empty };
+export const BINDINGS: BindingChoice = { nextInstallation };

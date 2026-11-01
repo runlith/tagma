@@ -138,6 +138,7 @@ export class ThreadPhaseFeed {
       work.waiting = undefined;
     }
     work.tools.set(call.id, {
+      toolCallId: call.toolCallId,
       toolName: call.toolName,
       title: call.toolDisplay?.title ?? held?.title ?? null,
       toolState: call.toolState,
@@ -161,11 +162,15 @@ function samePhase(held: ThreadPhase, next: ThreadPhase): boolean {
     held.since === next.since &&
     held.waiting?.reason === next.waiting?.reason &&
     held.waiting?.place === next.waiting?.place &&
-    held.queued === next.queued &&
+    held.queued.length === next.queued.length &&
+    held.queued.every((id, index) => id === next.queued[index]) &&
     held.calls.length === next.calls.length &&
     held.calls.every(
       (call, index) =>
-        call.name === next.calls[index]?.name && call.title === next.calls[index]?.title && call.since === next.calls[index]?.since,
+        call.id === next.calls[index]?.id &&
+        call.name === next.calls[index]?.name &&
+        call.title === next.calls[index]?.title &&
+        call.since === next.calls[index]?.since,
     )
   );
 }

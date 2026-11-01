@@ -1,6 +1,6 @@
 import { expect } from 'bun:test';
 import { it } from '@runlith/effect-test';
-import { Effect, Stream } from 'effect';
+import { Deferred, Effect, Stream } from 'effect';
 import { Agent } from '../../agent/Agent';
 import { makeAgentRunner } from '../../agent/AgentRunner';
 import { RunStop } from '../../agent/RunStop';
@@ -17,6 +17,8 @@ import { openMemoryStorage } from './memoryStorage';
 import { OWNER, SCOPE, scriptedWorld, startedTurn } from './runLog/world';
 import { dyingToolTurn, reportTurn } from './runLog/toolScripts';
 import { until } from './runLog/support';
+import { compactionWorld, hold } from './compactionWorld';
+import type { ApprovalNotice, ApproversPort } from '../Approvers';
 const usage = new Usage({
   inputTokens: 1,
   outputTokens: 1,
@@ -132,6 +134,86 @@ it.live.each(cases)(
       events.filter((event) => event.type === `data-${THREAD_QUESTION_PART}` || event.type === `data-${THREAD_READY_ANSWERS_PART}`),
     ).toEqual([]);
     expect(yield* run.output.finishReason).toBe('stop');
+  }),
+);
+it.live(
+  'a command ending during a child question waits until the parent answers both prompts',
+  Effect.fnUntraced(function* () {
+    const storage = yield* Effect.acquireRelease(openMemoryStorage(), (store) => store.dispose());
+    const parent = yield* storage.createThread({ ownerId: OWNER, scope: SCOPE });
+    const child = yield* storage.aggregate.transaction((tx) =>
+      storage.aggregate.insertChild(parent.id, { ownerId: OWNER, agentId: parent.agentId }, tx),
+    );
+    const notices: ApprovalNotice[] = [];
+    const approvers: ApproversPort = {
+      route: () => Effect.succeed({ approver: parent.id, why: 'parent' }),
+      grantOf: () => Effect.succeed(['*']),
+      notify: (_approver, notice) => Effect.sync(() => void notices.push(notice)),
+    };
+    const world = yield* compactionWorld(storage, child.agentId, { approvers, collaboration: true });
+    const handle = world.harness.threads.handle(child.id, OWNER);
+    yield* handle.setAuthorityMode('trust');
+    const model = hold();
+    world.answers.push(
+      {
+        call: 'ask_user',
+        input: {
+          questions: [
+            { prompt: 'First choice?', allowFreeform: true },
+            { prompt: 'Second choice?', allowFreeform: true },
+          ],
+        },
+        held: model,
+      },
+      { text: 'Done.' },
+    );
+    const sent = yield* handle.send('Choose both.');
+    if (sent.status !== 'started') return yield* Effect.die(`Expected a started run, got ${sent.status}.`);
+    yield* model.reached;
+    const signal = { id: 'command:exec-1:1:call-1', type: 'command-result', addressee: 'transport', text: 'command completed' } as const;
+    expect(yield* handle.sendSignal(signal, { ifActive: 'deliver', ifIdle: 'wake-completed' })).toMatchObject({
+      status: 'delivered',
+      runId: sent.runId,
+    });
+    const parked = yield* Deferred.make<void>();
+    const finished = yield* Deferred.make<void>();
+    yield* Effect.acquireRelease(
+      Effect.sync(() =>
+        world.harness.reads.subscribe(child.id, (event) => {
+          if (event.type !== 'state') return;
+          const state = event.frame.state;
+          if (state.activeRun?.id === sent.runId && state.status.life === 'awaiting') Deferred.doneUnsafe(parked, Effect.void);
+          if (state.latestRun?.id === sent.runId && state.latestRun.status !== 'running') {
+            Deferred.doneUnsafe(parked, Effect.void);
+            if (state.latestRun.settledNotifiedAt !== null) Deferred.doneUnsafe(finished, Effect.void);
+          }
+        }),
+      ),
+      (detach) => Effect.sync(detach),
+    );
+    model.release();
+    yield* Deferred.await(parked);
+    const [question] = yield* world.harness.runs.questions().open(child.id);
+    expect(question).toMatchObject({ approver: parent.id, status: 'open' });
+    if (question === undefined) return yield* Effect.die('The child did not park its question.');
+    expect(question.questions).toHaveLength(2);
+    expect(notices).toMatchObject([
+      { threadId: child.id, questionId: question.questionId, prompts: question.questions.map(({ id }) => ({ id })) },
+    ]);
+    expect(world.requests).toHaveLength(1);
+    expect(yield* storage.inbox.receipt(signal.id)).toMatchObject({ state: 'queued' });
+    const answers = question.questions.map((prompt, index) => ({ questionId: prompt.id, values: [`choice-${index + 1}`] }));
+    expect(
+      yield* world.harness.collaboration.collaborate(parent.id, OWNER, (verbs) =>
+        verbs.approvals.answer({ threadId: child.id, questionId: question.questionId, choice: { answers } }),
+      ),
+    ).toMatchObject({ status: 'answered' });
+    yield* Deferred.await(finished);
+    const resumed = world.requests[1] ?? [];
+    const result = resumed.flatMap((message) => message.content.filter((part) => part.type === 'tool-result'));
+    expect(result).toMatchObject([{ id: question.questionId, result: { type: 'json', value: { status: 'answered', answers } } }]);
+    expect(JSON.stringify(resumed)).toContain(signal.text);
+    expect(yield* storage.inbox.receipt(signal.id)).toMatchObject({ state: 'acknowledged', deliveredToRunId: sent.runId });
   }),
 );
 it.effect(

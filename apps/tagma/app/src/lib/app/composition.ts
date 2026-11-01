@@ -5,6 +5,7 @@ import { Router } from '@runlith/layer/Router';
 import { Cache } from '@runlith/query/repo';
 import { AccountsLayer } from '$lib/features/providers/layer.js';
 import { SpeechLayer } from '$lib/features/speech/layer.js';
+import { CallsLayer } from '$lib/features/calls/layer.js';
 import { CheckoutLayer } from '$lib/features/checkout/layer.js';
 import { FilesLayer } from '$lib/features/checkout/files/layer.js';
 import { MarkdownPreview } from '$lib/features/checkout/files/MarkdownPreview.js';
@@ -14,6 +15,8 @@ import { PageTeams } from '$lib/features/pages/team.js';
 import { ThreadList } from '$lib/features/threads/List.svelte.js';
 import { pageTeam } from '$lib/features/threads/team.js';
 import { FrameLayer } from '$lib/app/chrome/layer.js';
+import { CreationFields } from '$lib/app/chrome/creation.js';
+import RemoteField from '$lib/features/graph/RemoteField.svelte';
 import { GraphLayer } from '$lib/features/graph/layer.js';
 import { HarnessLayer } from '$lib/features/threads/layer.js';
 import { ThreadRung } from '$lib/features/workspace/ThreadRung.js';
@@ -60,7 +63,6 @@ import { CATALOG_MODULES } from '@tagma/server/composition/catalog';
 import type { CollectedDeclarations, CollectedFeeds } from '@tagma/server/platform/contract/wire/manifest';
 import { PickScreen, type PickDraft } from '$lib/features/browser/pick/PickScreen.js';
 import { CheckoutScreen } from '$lib/features/checkout/CheckoutScreen.js';
-import { CallScreen, type CallDraft } from '$lib/features/speech/calls/CallScreen.js';
 import { ThreadOnScreen } from '$lib/features/threads/OnScreen.svelte.js';
 import { ThreadsRepo } from '$lib/features/threads/Repo.js';
 import { ShellOps } from '$lib/features/workspace/ShellOps.js';
@@ -163,9 +165,11 @@ export function appLayers(desktop: DesktopApi | undefined) {
     NoticesLayer,
     ReadingLayer,
     GraphLayer,
+    CreationFields.contribute('graph-remote', { id: 'graph-remote', order: 10, payload: { component: RemoteField } }),
     TerminalsLayer,
     AccountsLayer,
     SpeechLayer,
+    CallsLayer,
     SettingsLayer,
     ActivityLayer,
     PowerLayer,
@@ -216,25 +220,6 @@ export function appLayers(desktop: DesktopApi | undefined) {
       const addresses = yield* Addresses;
       if ((yield* Host).kind === 'mobile') return new MobileShell(router, workspace, visits, surfaces, addresses, threads, prefetch);
       return new DesktopShell(router, workspace, visits, surfaces, addresses, threads, prefetch, yield* SidePanes, yield* ThreadSeats);
-    }),
-    Layer.provide(CallScreen, function* () {
-      const screen = yield* ThreadOnScreen;
-      return {
-        get host(): CallDraft | null {
-          const host = screen.host;
-          if (host === null) return null;
-          return {
-            get canSend() {
-              return host.canSend;
-            },
-            get thread() {
-              return host.activeId === null ? null : { id: host.activeId, projectId: host.projectId };
-            },
-            stage: (piece) => host.draft.stagePiece(piece),
-            send: () => host.writes.send(),
-          };
-        },
-      };
     }),
     Layer.provide(CheckoutScreen, function* () {
       const screen = yield* ThreadOnScreen;

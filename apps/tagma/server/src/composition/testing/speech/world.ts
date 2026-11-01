@@ -14,30 +14,13 @@ import { type ScriptedLink, scriptedTransport } from '@runlith/speech/testing/Sc
 import { credentials } from '@runlith/speech/testing/world';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { type Cause, Clock, Context, Deferred, Effect, Exit, FileSystem, Layer, Queue, Scope, Stream } from 'effect';
-import { fixtureMigrations } from '../migrations.js';
-
-import { RecordingsPlace } from '../../../speech/contract/service/recording.js';
-import { MachineStore } from '../../../platform/contract/service/store.js';
-import { MachineUnits } from '../../../platform/contract/service/units.js';
-import { writes } from '../../../platform/contract/service/writes.js';
-import { seededStoreLayer } from '../../../platform/store/open.js';
-import { sharedPool } from '@runlith/sqlite-process/testing/pool';
-import { unitsLayer } from '../../../platform/store/units.js';
-import { projectsLayer } from '../../../projects/registration.js';
-import { project } from '../../../projects/store/table.js';
-import { Projects } from '../../../projects/contract/service/registry.js';
-import { ProjectChanges } from '../../../projects/contract/service/changes.js';
 import { Settings } from '../../../settings/contract/service/values.js';
-import { CallThreads } from '../../../speech/contract/service/callThreads.js';
-import { Echo } from '../../../speech/contract/service/echo.js';
-import { Handoff } from '../../../speech/contract/service/handoff.js';
-import { Listenings } from '../../../speech/contract/service/listenings.js';
+import { Captures } from '../../../speech/contract/service/captures.js';
+import { Recognitions } from '../../../speech/contract/service/recognitions.js';
 import { LocalModels, Models } from '../../../speech/contract/service/models.js';
 import { Speaking } from '../../../speech/contract/service/speaking.js';
-import type { Line } from '../../../speech/contract/wire/listening.js';
-import { speechLayer } from '../../../speech/layer.js';
+import { speechLayer, type SpeechServices } from '../../../speech/layer.js';
 import { statusOf } from '../../../speech/status.js';
-import { makeTranscripts } from '../../../speech/store/transcripts.js';
 
 export const silence = new Int16Array(320);
 export const voice = new Int16Array(320).fill(2_000);
@@ -60,7 +43,8 @@ const scripted = scriptedProvider({ id: 'scripted', recognition: [streaming('liv
 export const separating = scriptedProvider({ id: 'scripted', recognition: [streaming('live', { speakers: true })] });
 
 export type World = {
-  readonly listenings: Listenings['Service'];
+  readonly recognitions: Recognitions['Service'];
+  readonly captures: Captures['Service'];
   readonly speaking: Speaking['Service'];
   readonly models: Models['Service'];
   readonly status: ReturnType<typeof statusOf>;
@@ -80,21 +64,13 @@ export type Opening = {
   readonly settings?: Settings['Service'];
   readonly local?: LocalModels['Service'];
   readonly provider?: SpeechProvider<Key, DuplexTransport>;
-  readonly recordings?: string;
-  readonly threads?: CallThreads['Service'];
-  readonly door?: Effect.Effect<void>;
   readonly output?: OutputKind;
-  readonly echo?: Echo['Service'];
   readonly ending?: EndReason;
 };
 
-const noEcho: Echo['Service'] = { open: () => Effect.die(new Error('no echo canceller opens in this world')) };
-
-const noThreads: CallThreads['Service'] = {
-  knows: () => Effect.succeed(false),
-  attach: () => Effect.die(new Error('no thread takes a call piece in this world')),
-  deliver: () => Effect.die(new Error('no thread takes a call piece in this world')),
-  withdraw: () => Effect.succeed(false),
+export type Heard = {
+  readonly world: World;
+  readonly built: Context.Context<SpeechServices | Speech | AudioDevices | Settings>;
 };
 
 export const awaited = Effect.fnUntraced(function* <A, E, R>(read: Effect.Effect<A, E, R>, check: (value: A) => boolean, _what: string) {
@@ -113,156 +89,91 @@ export const sentFinish = (link: ScriptedLink) => () =>
 
 export const codeOf = (failure: { readonly _tag: string; readonly code?: string }): string => failure.code ?? failure._tag;
 
-export const spoken = (lines: readonly Line[]) =>
-  lines.flatMap((line) =>
-    line.kind === 'utterance' ? [{ track: line.track, segment: line.segment, seq: line.seq, text: line.text }] : [],
-  );
-
-const makeStand = Effect.gen(function* () {
-  const context = Context.make(MachineStore, yield* MachineStore).pipe(
-    Context.add(MachineUnits, yield* MachineUnits),
-    Context.add(FileSystem.FileSystem, yield* FileSystem.FileSystem),
-    Context.add(Projects, yield* Projects),
-    Context.add(ProjectChanges, yield* ProjectChanges),
-  );
-  const { root: recordings } = yield* RecordingsPlace;
-  const openedWith = Effect.fnUntraced(function* (opening: Opening = {}) {
-    const settings = opening.settings ?? fallbacks;
-    const transport = yield* scriptedTransport;
-    const queues = yield* Effect.forEach([0, 1, 2], () => Queue.unbounded<ReturnType<typeof chunk> | Gap, Cause.Done>());
-    const pulled = yield* Effect.forEach(queues, () => Deferred.make<void>());
-    const devices = makeFakeDevices({
-      output: opening.output,
-      capture: (_request, index) => ({
-        sounds: Stream.fromQueue(queues[index]!).pipe(Stream.tap(() => Deferred.succeed(pulled[index]!, undefined))),
-        ending: opening.ending,
-      }),
-    });
-    const clock = yield* Clock.Clock;
-    const at = [0n, 0n, 0n];
-    let handing = false;
-    const scope = yield* Scope.fork(yield* Effect.scope);
-    const heard = yield* Layer.buildWithScope(
-      Speech.layer([opening.provider ?? scripted]).pipe(Layer.provide(Layer.mergeAll(transport.layer, credentials, fakeDetector()))),
-      scope,
-    );
-    const audio = yield* Layer.buildWithScope(devices.layer, scope);
-    const deps = Layer.mergeAll(
-      Layer.succeedContext(heard),
-      Layer.succeedContext(audio),
-      Layer.succeed(LocalModels, opening.local ?? noModels),
-      Layer.succeed(Settings, settings),
-      Layer.succeed(Handoff, { leaving: Effect.sync(() => handing), opened: opening.door ?? Effect.void }),
-      Layer.succeed(RecordingsPlace, { root: opening.recordings ?? recordings }),
-      Layer.succeed(CallThreads, opening.threads ?? noThreads),
-      Layer.succeed(Echo, opening.echo ?? noEcho),
-      Layer.succeedContext(context),
-    );
-    const built = yield* Layer.buildWithScope(speechLayer.pipe(Layer.provide(deps)), scope);
-    const next = (capture: number): bigint => {
-      const now = at[capture] === 0n ? clock.monotonicTimeNanosUnsafe() : at[capture]!;
-      at[capture] = now + 20_000_000n;
-      return now;
-    };
-    const world: World = {
-      listenings: Context.get(built, Listenings),
-      speaking: Context.get(built, Speaking),
-      models: Context.get(built, Models),
-      status: statusOf(Context.get(heard, Speech), Context.get(audio, AudioDevices), Context.get(built, Models), settings, 'server'),
-      devices,
-      links: transport.next,
-      play: (capture, chunks) =>
-        Effect.forEach(
-          Array.from({ length: chunks }),
-          (_, index) => Queue.offer(queues[capture]!, chunk(captureFormat, next(capture), index === 0 ? silence : voice)),
-          { discard: true },
-        ),
-      sound: (capture, moment, pcm) => Effect.asVoid(Queue.offer(queues[capture]!, chunk(captureFormat, moment, pcm))),
-      pulled: (capture) => Deferred.await(pulled[capture]!),
-      overflow: (capture, from, to) => Effect.asVoid(Queue.offer(queues[capture]!, gap(from, to, 'overflow'))),
-      drain: (capture) => Effect.asVoid(Queue.end(queues[capture]!)),
-      now: () => clock.monotonicTimeNanosUnsafe(),
-      skip: (capture, ms) =>
-        Effect.asVoid(
-          Effect.suspend(() => {
-            const from = next(capture);
-            at[capture] = from + BigInt(ms) * 1_000_000n;
-            return Queue.offer(queues[capture]!, gap(from, at[capture], 'device-change'));
-          }),
-        ),
-      close: (leaving) =>
-        Effect.suspend(() => {
-          handing = leaving;
-          return Scope.close(scope, Exit.void);
-        }),
-    };
-    return world;
+export const heardIn = Effect.fnUntraced(function* (opening: Opening, scope: Scope.Closeable, closing: (handing: boolean) => void) {
+  const settings = opening.settings ?? fallbacks;
+  const transport = yield* scriptedTransport;
+  const queues = yield* Effect.forEach([0, 1, 2], () => Queue.unbounded<ReturnType<typeof chunk> | Gap, Cause.Done>());
+  const pulled = yield* Effect.forEach(queues, () => Deferred.make<void>());
+  const devices = makeFakeDevices({
+    output: opening.output,
+    capture: (_request, index) => ({
+      sounds: Stream.fromQueue(queues[index]!).pipe(Stream.tap(() => Deferred.succeed(pulled[index]!, undefined))),
+      ending: opening.ending,
+    }),
   });
-
-  const registered = Effect.fnUntraced(function* (name: string) {
-    const { db } = yield* MachineStore;
-    const row = yield* (yield* MachineUnits).write(writes('test.project', [project]), (unit) =>
-      unit.run(
-        db
-          .insert(project)
-          .values({ name, repoKey: `repo-${name}`, rootPath: `/tmp/${name}`, createdAt: new Date(0) })
-          .returning({ id: project.id })
-          .get(),
+  const clock = yield* Clock.Clock;
+  const at = [0n, 0n, 0n];
+  const heard = yield* Layer.buildWithScope(
+    Speech.layer([opening.provider ?? scripted]).pipe(Layer.provide(Layer.mergeAll(transport.layer, credentials, fakeDetector()))),
+    scope,
+  );
+  const audio = yield* Layer.buildWithScope(devices.layer, scope);
+  const deps = Layer.mergeAll(
+    Layer.succeedContext(heard),
+    Layer.succeedContext(audio),
+    Layer.succeed(LocalModels, opening.local ?? noModels),
+    Layer.succeed(Settings, settings),
+    Layer.succeed(FileSystem.FileSystem, yield* FileSystem.FileSystem),
+  );
+  const spoken = yield* Layer.buildWithScope(speechLayer.pipe(Layer.provide(deps)), scope);
+  const next = (capture: number): bigint => {
+    const now = at[capture] === 0n ? clock.monotonicTimeNanosUnsafe() : at[capture]!;
+    at[capture] = now + 20_000_000n;
+    return now;
+  };
+  const world: World = {
+    recognitions: Context.get(spoken, Recognitions),
+    captures: Context.get(spoken, Captures),
+    speaking: Context.get(spoken, Speaking),
+    models: Context.get(spoken, Models),
+    status: statusOf(Context.get(heard, Speech), Context.get(audio, AudioDevices), Context.get(spoken, Models), settings, 'server'),
+    devices,
+    links: transport.next,
+    play: (capture, chunks) =>
+      Effect.forEach(
+        Array.from({ length: chunks }),
+        (_, index) => Queue.offer(queues[capture]!, chunk(captureFormat, next(capture), index === 0 ? silence : voice)),
+        { discard: true },
       ),
-    );
-    return row!.id;
-  });
-  const transcripts = yield* makeTranscripts;
-
-  return {
-    transcripts: Effect.succeed(transcripts),
-    recordings,
-    opened: openedWith(),
-    openedWith,
-    registered,
-    reader: (world: World, projectId: number, id: string) =>
-      Effect.fnUntraced(function* (after: number, waitMs?: number, bytes = 50_000) {
-        for (;;) {
-          const page = yield* world.listenings.read({ projectId, id, after, limit: 50, bytes, waitMs: waitMs ?? 5_000 });
-          if (waitMs !== undefined || page.lines.length > 0 || page.state !== 'live') return page;
-        }
+    sound: (capture, moment, pcm) => Effect.asVoid(Queue.offer(queues[capture]!, chunk(captureFormat, moment, pcm))),
+    pulled: (capture) => Deferred.await(pulled[capture]!),
+    overflow: (capture, from, to) => Effect.asVoid(Queue.offer(queues[capture]!, gap(from, to, 'overflow'))),
+    drain: (capture) => Effect.asVoid(Queue.end(queues[capture]!)),
+    now: () => clock.monotonicTimeNanosUnsafe(),
+    skip: (capture, ms) =>
+      Effect.asVoid(
+        Effect.suspend(() => {
+          const from = next(capture);
+          at[capture] = from + BigInt(ms) * 1_000_000n;
+          return Queue.offer(queues[capture]!, gap(from, at[capture], 'device-change'));
+        }),
+      ),
+    close: (handing) =>
+      Effect.suspend(() => {
+        closing(handing);
+        return Scope.close(scope, Exit.void);
       }),
   };
+  const built: Heard['built'] = Context.merge(Context.merge(heard, audio), spoken).pipe(Context.add(Settings, settings));
+  return { world, built } satisfies Heard;
 });
 
-export type Stand = Effect.Success<typeof makeStand>;
-export class SpeechFixture extends Context.Service<
-  SpeechFixture,
-  {
-    readonly stand: Stand;
-    readonly projectId: number;
-    readonly elsewhere: number;
-    readonly ids: Readonly<Record<string, number>>;
-  }
->()('testing/SpeechFixture') {}
+const makeStand = Effect.gen(function* () {
+  const files = yield* FileSystem.FileSystem;
+  const openedWith = Effect.fnUntraced(function* (opening: Opening = {}) {
+    const scope = yield* Scope.fork(yield* Effect.scope);
+    const { world } = yield* heardIn(opening, scope, () => undefined).pipe(Effect.provideService(FileSystem.FileSystem, files));
+    return world;
+  });
+  return { opened: openedWith(), openedWith };
+});
 
-const storage = projectsLayer.pipe(
-  Layer.provideMerge(unitsLayer(MachineUnits, MachineStore)),
-  Layer.provideMerge(Layer.unwrap(Effect.map(sharedPool, (pool) => seededStoreLayer(MachineStore, fixtureMigrations, {}, pool)))),
-  Layer.provideMerge(BunFileSystem.layer),
-);
-const recordingPlace = Layer.effect(
-  RecordingsPlace,
-  Effect.gen(function* () {
-    return { root: yield* (yield* FileSystem.FileSystem).makeTempDirectoryScoped({ prefix: 'tagma-speech-' }) };
-  }),
-).pipe(Layer.provideMerge(storage));
+export class SpeechFixture extends Context.Service<SpeechFixture, { readonly stand: Effect.Success<typeof makeStand> }>()(
+  'testing/SpeechFixture',
+) {}
 
-export const speechFixture = (names: { readonly projectId?: string; readonly elsewhere?: string; readonly ids?: readonly string[] } = {}) =>
+export const speechFixture = () =>
   Layer.effect(
     SpeechFixture,
-    Effect.gen(function* () {
-      const stand = yield* makeStand;
-      const projectId = names.projectId === undefined ? 0 : yield* stand.registered(names.projectId);
-      const elsewhere = names.elsewhere === undefined ? 0 : yield* stand.registered(names.elsewhere);
-      const ids = Object.fromEntries(
-        yield* Effect.forEach(names.ids ?? [], (name) => Effect.map(stand.registered(`search-${name}`), (id) => [name, id])),
-      );
-      return { stand, projectId, elsewhere, ids };
-    }),
-  ).pipe(Layer.provideMerge(recordingPlace));
+    Effect.map(makeStand, (stand) => ({ stand })),
+  ).pipe(Layer.provideMerge(BunFileSystem.layer));

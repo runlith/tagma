@@ -39,7 +39,13 @@ function tiersOf(keys: readonly AnyKeyClass[]): readonly Tier[] {
 export type LayerItem =
   | { readonly kind: 'key'; readonly key: AnySelfMadeKeyClass }
   | { readonly kind: 'value'; readonly key: AnyKeyClass; readonly instance: object }
-  | { readonly kind: 'make'; readonly key: AnyKeyClass; readonly make: Recipe; readonly fallback?: true }
+  | {
+      readonly kind: 'make';
+      readonly key: AnyKeyClass;
+      readonly make: Recipe;
+      readonly fallback?: true;
+      readonly joins?: () => AnyKeyClass;
+    }
   | { readonly kind: 'deferred'; readonly key: AnyKeyClass; readonly load: LayerLoader }
   | {
       readonly kind: 'when';
@@ -163,14 +169,18 @@ export class Layer<ROut extends Out, RIn extends Want> {
   static member<O extends AnyKeyClass, M>(owner: () => O, join: (owner: InstanceOf<O>, member: M, key: AnyKeyClass) => () => void) {
     return <L extends MemberLayer<M>>(member: L): Layer<OutOf<L>, InOf<L> | ReachableFrom<OutOf<L>, Provided<O>>> => {
       const { key, make } = memberOf(member);
-      return Layer.provide(key, function* () {
+      const recipe = function* () {
         const host = (yield owner().key as unknown as Provided<O>) as InstanceOf<O>;
         const scope = yield* Scope;
         const made = make();
         const built = isGenerator<unknown>(made) ? yield* made : made;
         scope.defer(join(host, built as M, key));
         return built;
-      }) as Layer<OutOf<L>, InOf<L> | ReachableFrom<OutOf<L>, Provided<O>>>;
+      };
+      return new Layer([{ kind: 'make', key, make: recipe as Recipe, joins: owner }]) as unknown as Layer<
+        OutOf<L>,
+        InOf<L> | ReachableFrom<OutOf<L>, Provided<O>>
+      >;
     };
   }
 

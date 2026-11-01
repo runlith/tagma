@@ -268,14 +268,6 @@ fields:
           "owner": "02c71a0d"
         },
         {
-          "fingerprint": "S4 speech:Voiced @ speech/contract/wire/speaking.ts",
-          "owner": "02c71a0d"
-        },
-        {
-          "fingerprint": "S4 speech:Voiced @ speech/store/staged.ts",
-          "owner": "02c71a0d"
-        },
-        {
           "fingerprint": "S4 threads:ThreadLive @ threads/cli/turnVerbs.ts",
           "owner": "02c71a0d"
         },

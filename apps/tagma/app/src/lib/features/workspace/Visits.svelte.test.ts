@@ -15,7 +15,6 @@ const project = (id: number, name: string): Project => ({
   private: false,
   kind: 'folder',
   storage: 'stealth',
-  graphRemote: null,
   servesFrom: 'rows',
   createdAt: '2026-09-05T00:00:00Z',
 });
@@ -49,4 +48,23 @@ test('a project resumes on the surface it was left on, with that surface’s pla
   expect(reloaded.resume(project(5, 'renamed'))).toBe('/renamed/chat/thread-2?branch=main');
   reloaded.remember(project(5, 'renamed'), 'outline', 'beta', 'main');
   expect(new Visits(storage, surfaces).resume(project(5, 'renamed'))).toBe('/renamed?branch=main');
+});
+
+test('the entry project opens at the place its root names until the window has a visit of its own', () => {
+  const storage = makeStorage();
+  const visits = new Visits(storage, surfaces, { project: 'five', at: { surface: 'chat', place: 'thread-1' } });
+  expect(visits.resume(project(5, 'five'))).toBe('/five/chat/thread-1');
+  expect(visits.resume(project(7, 'seven'))).toBe(surfaces.pathOf('seven', surfaces.home));
+
+  visits.remember(project(5, 'five'), 'graph', 'alpha', null);
+  expect(visits.resume(project(5, 'five'))).toBe(surfaces.pathOf('five', 'graph', 'alpha'));
+});
+
+test('a visit or entry naming a surface this build lacks resumes at home', () => {
+  const storage = makeStorage();
+  storage.setItem('tagma.visits', JSON.stringify({ 5: { surface: 'elsewhere', elsewhere: 'x', branch: null } }));
+  const home = (name: string) => surfaces.pathOf(name, surfaces.home);
+  expect(new Visits(storage, surfaces).resume(project(5, 'five'))).toBe(home('five'));
+  const entered = new Visits(makeStorage(), surfaces, { project: 'seven', at: { surface: 'elsewhere', place: 'x' } });
+  expect(entered.resume(project(7, 'seven'))).toBe(home('seven'));
 });

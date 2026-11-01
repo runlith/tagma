@@ -18,6 +18,7 @@
   import { Restart } from '$lib/wire/Restart.svelte.js';
   import { LIVE_TROUBLE } from './liveTrouble.js';
   import { Standing } from './Standing.svelte.js';
+  import InstallFailed from './InstallFailed.svelte';
   import NewHostCard from './NewHostCard.svelte';
   import { shortBuild } from './newHost.js';
   import SurfaceRow from './SurfaceRow.svelte';
@@ -526,16 +527,11 @@
     {:else if standing.quietSince === null && (rows.length > 0 || backRow !== null || standing.ready !== null || standing.newHost !== null || failed !== null)}
       <div class="grid grid-cols-1 gap-2 border-t border-border p-3" data-standing-update>
         {#if failed !== null}
-          <div class="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2" data-standing-built>
-            <Told
-              told={{
-                text: `${failed.title} ${short(failed.target)} was not installed ${ago(failed.endedAt, now)} ago; the version you have keeps working.`,
-                act:
-                  standing.offer(failed.offer)?.disabled === null
-                    ? { label: 'Try again', run: () => retry(failed.offer, failed.then !== null) }
-                    : undefined,
-                details: [failed.detail, ...failed.tail],
-              }}
+          <div data-standing-built>
+            <InstallFailed
+              {failed}
+              title={`${failed.title} ${short(failed.target)} was not installed ${ago(failed.endedAt, now)} ago; the version you have keeps working.`}
+              retry={standing.offer(failed.offer)?.disabled === null ? () => retry(failed.offer, failed.then !== null) : undefined}
             />
           </div>
         {/if}

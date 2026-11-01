@@ -10,8 +10,6 @@ import { type Refusal, refusalOf } from '$lib/wire/refusal.js';
 import { systemLanguage } from './languages.js';
 import { TranslationsRepo } from './Repo.js';
 
-type Repo = ReturnType<typeof TranslationsRepo.use>;
-
 export type TranslateAsk = {
   readonly model?: string | undefined;
   readonly reasoning?: string | undefined;
@@ -39,7 +37,7 @@ export class Translations extends Service<Translations>()('Translations', { tier
   private readonly starting = new SvelteSet<string>();
 
   constructor(
-    private readonly repo: Repo,
+    private readonly repo: TranslationsRepo,
     live: LiveConnection,
     feed: GraphFeed,
     aim: GraphAim,

@@ -95,7 +95,8 @@
   const moment: ChatStepMoment = $derived({ still, live, clock });
 
   function stepLine(entry: ActivityEntry, identity: ChatActivityIdentity | undefined, plain = false): ChatStepLine {
-    return chatStepLine(entry, identity, moment, strings, plain);
+    const standing = entry.kind === 'tool' && rendering.kinds.toolStatus(entry)?.standing?.(entry) === true;
+    return chatStepLine(entry, identity, standing ? { ...moment, standing } : moment, strings, plain);
   }
 
   function foldedLabels(entries: readonly ToolActivityEntry[]): readonly string[] {

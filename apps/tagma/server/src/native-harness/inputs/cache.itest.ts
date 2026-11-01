@@ -27,7 +27,7 @@ const setup = Effect.fnUntraced(function* (demo: EffectDemo, plugins?: EnabledPl
     yield* demo.graph.settings.write({ scope: 'project', projectId: demo.projectId, key, value });
   const enabled = plugins ?? (yield* enabledPlugins()).service;
   return Context.get(
-    yield* Layer.build(workspaceInputsLayer(() => [])).pipe(Effect.provideService(EnabledPlugins, enabled)),
+    yield* Layer.build(workspaceInputsLayer(() => [], [])).pipe(Effect.provideService(EnabledPlugins, enabled)),
     WorkspaceInputs,
   );
 });

@@ -52,12 +52,7 @@ export function transportOffer(row: ThreadListRow): TransportOffer | null {
   };
 }
 
-export async function moveTransport(
-  threads: ReturnType<typeof ThreadsRepo.use>,
-  projectId: number,
-  threadId: string,
-  to: Transport,
-): Promise<string | null> {
+export async function moveTransport(threads: ThreadsRepo, projectId: number, threadId: string, to: Transport): Promise<string | null> {
   try {
     const moved = await threads.setTransport.run({ id: threadId, projectId, transport: to }, { throwOnError: true });
     return moved !== undefined && 'unstarted' in moved && moved.unstarted !== null

@@ -22,6 +22,6 @@ sources:
 
 **How.** The native agent's `ask_user` tool; the answer — right in the feed, via the `answer_question` operation or `tagma answer`.
 
-**Behaviour.** A question comes with choices and multiple selection, with a bundle of several questions, or with a secret value. The run pauses at the question, and the answer starts a new run to continue from it. A child's question goes to its parent, which answers with `answer_approval`; a question with a secret always goes to the operator. The agent asks a simple single-choice question as plain text, not with this tool. A feed answer is delivered as a sent message: under its own key, exactly once, with resend on a broken connection and after a reload; until the server confirms it, the card shows the answer is being sent.
+**Behaviour.** A question comes with choices and multiple selection, with a bundle of several questions, or with a secret value. The run pauses at the question and resumes after the answer. A child's question goes to its parent, which answers with `answer_approval`; a question with a secret always goes to the operator. The agent asks a simple single-choice question as plain text, not with this tool. A feed answer is delivered as a sent message: under its own key, exactly once, with resend on a broken connection and after a reload; until the server confirms it, the card shows the answer is being sent.
 
 **Limits.** Native agents only: another CLI's own questions are read from its screen and answered under the approval rules.

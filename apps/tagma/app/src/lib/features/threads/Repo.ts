@@ -1,5 +1,4 @@
 import type { ThreadSelectionQuery } from '@tagma/server/threads/contract/wire/selection';
-import type { Piece } from '@tagma/server/speech/contract/wire/listening';
 import type { FavoriteModels, ModelDefaults, ModelDefaultsWrite } from '@tagma/server/native-harness/contract/wire/modelSelection';
 import { ThreadId } from '@tagma/server/platform/contract/wire/thread';
 import type { HarnessTransport } from '@tagma/server/threads/contract/wire/harness/names';
@@ -7,6 +6,7 @@ import type { AgentApprovalMode } from '@runlith/agent/contracts';
 import type { TeamLayer } from '@runlith/agent/collaboration/team';
 import type { NameProvenance } from '@tagma/server/thread-record/contract/wire/name';
 import type { ThreadRewindScope } from '@runlith/agent/transcript/eventFold';
+import type { InstanceOf } from '@runlith/layer/key';
 import type { KeyedLoaderContext } from '@runlith/query/types';
 import { Repo } from '@runlith/query/repo';
 import { Door } from '$lib/wire/Door.js';
@@ -388,30 +388,6 @@ export const ThreadsRepo = Repo.define(
           .then(bare),
     }),
 
-    pieceText: mutation({
-      mutator: async (input: { piece: Piece }, { signal }, door) =>
-        (
-          await door.perform(
-            'read_transcript_text',
-            { listening: input.piece.listening, through: input.piece.through, span: input.piece.span ?? undefined },
-            at(input.piece.projectId),
-            { signal },
-          )
-        ).piece,
-    }),
-
-    givePiece: mutation({
-      mutator: async (input: { piece: Piece; thread: { readonly id: string; readonly projectId: number } }, { signal }, door) =>
-        (
-          await door.perform(
-            'give_transcript_piece',
-            { listening: input.piece.listening, through: input.piece.through, span: input.piece.span ?? undefined, thread: input.thread },
-            at(input.piece.projectId),
-            { signal },
-          )
-        ).givenThrough,
-    }),
-
     upload: mutation({
       mutator: (input: { id: string; projectId: number; mediaType: string; bytes: Uint8Array; name?: string }, { signal }, door) =>
         door.ask(
@@ -442,3 +418,5 @@ export const ThreadsRepo = Repo.define(
   }),
   { tier: 'app', door: Door },
 );
+
+export type ThreadsRepo = InstanceOf<typeof ThreadsRepo>;

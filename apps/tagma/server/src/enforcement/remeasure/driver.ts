@@ -1,6 +1,6 @@
 import { existsSync } from 'node:fs';
 import { carryCost } from '@runlith/performance/CostLedger';
-import { Cause, Context, Deferred, Effect, Exit, type Fiber, FiberSet, FileSystem, type Result, type Scope, Stream } from 'effect';
+import { Cause, Context, Deferred, Effect, Exit, type Fiber, FiberSet, FileSystem, type Scope, Stream } from 'effect';
 import { Projects } from '../../projects/contract/service/registry.js';
 import { enforcingAt } from './memory.js';
 import { editChecks } from './edits.js';
@@ -8,17 +8,10 @@ import { landingSettlements } from './settlements.js';
 import { CheckoutRows } from '../../workspace/contract/service/checkouts.js';
 import { Coverage } from '../../workspace/contract/service/roots.js';
 import { GateRefusal } from '../../platform/contract/wire/refusal.js';
-import type { StoreFailure } from '../../platform/contract/service/store.js';
 import type { AfterDelivery, EscapeNotice } from '../contract/wire/checks.js';
-import {
-  type EscapeTell,
-  type JournalPosition,
-  type JournaledLanding,
-  type JournalRow,
-  type LandingJournal,
-  Remeasure,
-} from '../contract/service/remeasure.js';
+import { type EscapeTell, type JournaledLanding, type LandingJournal, Remeasure } from '../contract/service/remeasure.js';
 import { landingEntry } from './journal.js';
+import { replayLandings } from './replay.js';
 import { type Checkout, checkoutKey } from '../checkout.js';
 import {
   type Aim,
@@ -48,8 +41,6 @@ export type RemeasureGraph = (
 export const REMEASURE_DELAY_MS = 2_000;
 
 const FAILED_RUNS_KEPT = 3;
-
-const JOURNAL_PAGE = 64;
 
 type Journaled = JournaledLanding & { readonly journal?: string };
 
@@ -166,7 +157,27 @@ export const remeasures = Effect.fn('enforcement.remeasures')(function* (options
   const refused = (asks: readonly Ask[], refusal: GateRefusal<'inspection-failed'>): Effect.Effect<void> =>
     Effect.forEach(asks, (ask) => Deferred.fail(ask.done, refusal), { discard: true });
 
+  const forgotten = (projectId: number, checkouts: readonly Checkout[]) =>
+    enforcing.forget(checkouts).pipe(
+      Effect.catchTag('GateRefusal', (failure) =>
+        Effect.logWarning('departed checkouts stopped being observed but could not be removed from remeasurement memory', {
+          projectId,
+          reason: failure.reason,
+        }),
+      ),
+    );
+
+  const departed = (slot: Slot, owes: readonly string[]): Effect.Effect<void> =>
+    Effect.suspend(() => {
+      observe(slot.checkout, false);
+      if (slots.get(slot.key) === slot) slots.delete(slot.key);
+      return Effect.all([forgotten(slot.checkout.projectId, [slot.checkout]), answered(slot), settlements.vacated(slot.checkout, owes)], {
+        discard: true,
+      });
+    });
+
   const failedPass = (slot: Slot, cause: Cause.Cause<unknown>, owes: readonly string[], again: Again) => {
+    if (!existsSync(slot.checkout.root)) return departed(slot, owes);
     if (Cause.hasInterruptsOnly(cause)) {
       if (slots.get(slot.key) === slot) slots.delete(slot.key);
       return parkedAll(owes, `the re-measurement of ${slot.checkout.root} was interrupted`).pipe(Effect.andThen(Effect.interrupt));
@@ -210,6 +221,7 @@ export const remeasures = Effect.fn('enforcement.remeasures')(function* (options
     slot.owes.clear();
     slot.covered = slot.asked;
     slot.asked = [];
+    if (!existsSync(slot.checkout.root)) return Effect.as(departed(slot, owes), undefined);
     const again: Again = (withOwes, urgent) => {
       slot.hints = [...hints, ...slot.hints];
       slot.refresh ||= refresh;
@@ -394,7 +406,7 @@ export const remeasures = Effect.fn('enforcement.remeasures')(function* (options
     if (!enforcing || closed.has(key)) {
       watched.get(key)?.fiber.interruptUnsafe();
       watched.delete(key);
-    } else if (!watched.has(key)) {
+    } else if (watched.get(key)?.fiber.pollUnsafe() !== undefined || !watched.has(key)) {
       watched.set(key, {
         checkout,
         fiber: fork(
@@ -434,10 +446,12 @@ export const remeasures = Effect.fn('enforcement.remeasures')(function* (options
       attempts = 0,
       started?: Starting,
     ) {
-      if (aim._tag === 'Start' && checkout.root !== null && !existsSync(checkout.root)) {
+      if (checkout.root !== null && !existsSync(checkout.root)) {
         const missing = { projectId: checkout.projectId, root: checkout.root };
         observe(missing, false);
-        return yield* enforcing.keep(missing, false);
+        yield* enforcing.keep(missing, false);
+        if (landed?.journal !== undefined && !settlements.owes(landed.journal)) yield* settlements.vacated(missing, [landed.journal]);
+        return;
       }
       const context = yield* options.graphOf(checkout.projectId, checkout.root);
       const snapshot = aim._tag === 'Start' ? yield* Effect.provide(ruleSnapshot(checkout.projectId), context) : undefined;
@@ -620,14 +634,7 @@ export const remeasures = Effect.fn('enforcement.remeasures')(function* (options
       checkout.projectId === projectId && ((standing !== null && !standing.has(key)) || !existsSync(checkout.root)) ? [checkout] : [],
     );
     for (const checkout of departed) close(checkout.projectId, checkout.root);
-    yield* enforcing.forget(departed).pipe(
-      Effect.catchTag('GateRefusal', (failure) =>
-        Effect.logWarning('departed checkouts stopped being observed but could not be removed from remeasurement memory', {
-          projectId,
-          reason: failure.reason,
-        }),
-      ),
-    );
+    yield* forgotten(projectId, departed);
   });
 
   yield* Effect.acquireRelease(
@@ -670,28 +677,7 @@ export const remeasures = Effect.fn('enforcement.remeasures')(function* (options
     );
   };
 
-  const replay = Effect.fnUntraced(function* (journal: LandingJournal) {
-    let after: JournalPosition | null = null;
-    for (;;) {
-      const rows: Result.Result<readonly JournalRow[], StoreFailure> = yield* Effect.result(journal.page(after, JOURNAL_PAGE));
-      if (rows._tag === 'Failure')
-        return yield* Effect.logWarning('the landings still owed to re-measurement could not be read, so they wait for the next start', {
-          reason: rows.failure.message,
-        });
-      for (const { key, landing } of rows.success) {
-        if (settlements.has(key)) continue;
-        settlements.remember(key);
-        if (landing === null) {
-          yield* parked(key, 'its journaled payload no longer decodes');
-          continue;
-        }
-        if (yield* open(landing.projectId, landing.root)) placeLanding({ ...landing, journal: key });
-      }
-      const last = rows.success.at(-1);
-      if (last === undefined || rows.success.length < JOURNAL_PAGE) return;
-      after = { at: last.at, key: last.key };
-    }
-  });
+  const replay = (journal: LandingJournal) => replayLandings(journal, { settlements, open, place: placeLanding });
 
   const remeasure = Remeasure.of({
     opened,

@@ -8,6 +8,7 @@ import { layer } from '@runlith/effect-test';
 import { Context, Deferred, Effect, Fiber, FileSystem, Layer } from 'effect';
 import { ownGitLayer, runGit } from '../../platform/git/ownGit.js';
 import { ShadowGit } from './shadow.js';
+import { NO_SIDE } from '../contract/service/exchange.js';
 
 const platform = Layer.merge(BunFileSystem.layer, BunPath.layer);
 const spawning = BunChildProcessSpawner.layer.pipe(Layer.provide(platform));
@@ -21,7 +22,7 @@ const template = Layer.effect(
     const fs = yield* FileSystem.FileSystem;
     const root = yield* fs.makeTempDirectoryScoped({ prefix: 'shadow-template-' });
     const gitDir = join(root, 'graph.git');
-    yield* ShadowGit.open(gitDir, yield* Git, null);
+    yield* ShadowGit.open(gitDir, yield* Git, NO_SIDE);
     return gitDir;
   }),
 ).pipe(Layer.provideMerge(Layer.merge(platform, git)));
@@ -32,7 +33,7 @@ const world = Effect.fnUntraced(function* (store = 'graph.git') {
   const gitDir = join(base, store);
   const tree = join(base, 'trees', 'main');
   yield* fs.copy(yield* Template, gitDir, { overwrite: true });
-  const shadow = yield* ShadowGit.open(gitDir, yield* Git, null);
+  const shadow = yield* ShadowGit.open(gitDir, yield* Git, NO_SIDE);
   yield* shadow.attach(tree, 'main');
   return { base, gitDir, tree, shadow };
 });
@@ -63,7 +64,7 @@ layer(template, { excludeTestServices: true })('shadow git', (it) => {
           }),
         });
         const open = (given: Git['Service']) =>
-          kind === 'bare' ? ShadowGit.open(gitDir, given, null) : ShadowGit.openInPlace(tree, given);
+          kind === 'bare' ? ShadowGit.open(gitDir, given, NO_SIDE) : ShadowGit.openInPlace(tree, given);
         const opening = yield* Effect.forkScoped(open(pausing));
         yield* Deferred.await(entered);
         yield* Effect.sync(() => opening.interruptUnsafe());

@@ -5,6 +5,7 @@
   import { Workspace } from '$lib/features/workspace/Selection.svelte.js';
   import { BlocksRepo } from './BlocksRepo.js';
   import { refusalOf } from '$lib/wire/refusal.js';
+  import Absent from '$lib/shared/Absent.svelte';
 
   let { name }: { name: string } = $props();
 
@@ -37,19 +38,12 @@
   });
 </script>
 
-<div class="grid h-full place-items-center px-6">
-  <div class="max-w-sm text-center">
-    <h1 class="text-page">
-      {lookup.isFetching ? 'Looking for this block' : problem ? 'Could not locate this block' : 'No such block'}
-    </h1>
-    <p class="mt-2 text-body leading-relaxed text-muted-foreground">
-      {#if problem}
-        {String(problem)}
-      {:else if lookup.isFetching || found !== undefined}
-        Finding <span class="font-mono">{name}</span> in the project's graph copies.
-      {:else}
-        The project's available graph copies hold no block named <span class="font-mono">{name}</span>.
-      {/if}
-    </p>
-  </div>
-</div>
+<Absent title={lookup.isFetching ? 'Looking for this block' : problem ? 'Could not locate this block' : 'No such block'}>
+  {#if problem}
+    {String(problem)}
+  {:else if lookup.isFetching || found !== undefined}
+    Finding <span class="font-mono">{name}</span> in the project's graph copies.
+  {:else}
+    The project's available graph copies hold no block named <span class="font-mono">{name}</span>.
+  {/if}
+</Absent>

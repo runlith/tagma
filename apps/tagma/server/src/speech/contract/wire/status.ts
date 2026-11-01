@@ -18,11 +18,12 @@ export const ModelStatus = Schema.Struct({
   model: Schema.String,
   label: Schema.String,
   kind: Schema.Literals(['recognition', 'file', 'synthesis']).annotate({
-    description: '`recognition` hears live sound, `file` only the recorded sound of an ended call, `synthesis` speaks.',
+    description: '`recognition` hears live sound, `file` only a recorded file, `synthesis` speaks.',
   }),
-  again: Schema.Boolean.annotate({
-    description: 'Whether it recognizes the recorded sound of an ended call again: a file model, or a batch model faster than real time.',
+  recorded: Schema.Boolean.annotate({
+    description: 'Whether it hears a recorded file: a file model, or a batch model faster than real time.',
   }),
+  again: Schema.Boolean.annotate({ description: 'The same answer as `recorded`, kept for clients of earlier releases.' }),
   speakers: Schema.Boolean,
   availability: Availability,
   turns: Schema.Array(TurnMode),

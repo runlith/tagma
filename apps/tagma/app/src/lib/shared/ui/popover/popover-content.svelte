@@ -55,7 +55,7 @@
         data-side={popover.float.side}
         data-align={popover.float.align}
         class={cn(
-          'flex w-72 origin-(--float-origin) flex-col gap-4 rounded-lg border bg-popover p-4 text-ui text-popover-foreground shadow-raised outline-hidden',
+          'flex max-h-(--float-available-height) w-72 origin-(--float-origin) flex-col gap-4 overflow-y-auto rounded-lg border bg-popover p-4 text-ui text-popover-foreground shadow-raised outline-hidden',
           className,
         )}
         style={`${popover.float.style}${style ?? ''}`}

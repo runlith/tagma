@@ -6,6 +6,7 @@ import type { TargetAt } from '../../workspace/contract/wire/place.js';
 import { rescanPolicy } from '../contract/wire/sourceSettings.js';
 import { Settings } from '../../settings/contract/service/values.js';
 import { WorkspaceInputs, type WorkspaceInputAim, type WorkspaceInputSet } from '../contract/service/inputs.js';
+import type { BridgeMethod } from '../../views/contract/wire/bridge.js';
 import { readWorkspaceInputs } from './walk.js';
 
 type Bound = { readonly at: TargetAt; readonly root: string; readonly sources: WorkspaceInputSet };
@@ -26,6 +27,7 @@ const signatureOf = (enabled: readonly PluginLoaded[]): string => JSON.stringify
 
 export const workspaceInputsLayer = (
   own: (projectRoot: string) => readonly string[],
+  bridge: readonly BridgeMethod[],
 ): Layer.Layer<WorkspaceInputs | SourceForgetting, never, Settings | EnabledPlugins> =>
   Layer.effectContext(
     Effect.map(
@@ -56,7 +58,7 @@ export const workspaceInputsLayer = (
               ),
             );
         const walkWith = (projectId: number, root: string, enabled: readonly PluginLoaded[]) =>
-          readWorkspaceInputs({ projectId, projectRoot: root, own: own(root), plugins: enabled });
+          readWorkspaceInputs({ projectId, projectRoot: root, own: own(root), plugins: enabled, bridge });
         const walk = (projectId: number, root: string) =>
           Effect.flatMap(enabledIn(projectId), (enabled) => walkWith(projectId, root, enabled));
         const read = Effect.fn('WorkspaceInputs.read')(function* (input: WorkspaceInputAim) {

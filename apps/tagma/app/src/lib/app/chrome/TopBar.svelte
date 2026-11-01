@@ -12,15 +12,11 @@
   import * as DropdownMenu from '$lib/shared/ui/dropdown-menu/index.js';
   import Tooltip from '$lib/shared/ui/tooltip/Tooltip.svelte';
   import CaptureChip from '$lib/features/speech/CaptureChip.svelte';
-  import CallChip from '$lib/features/speech/calls/CallChip.svelte';
-  import type { CallTarget } from '$lib/features/speech/calls/Calls.svelte.js';
-  import { callPane } from '$lib/features/speech/panes.js';
-  import { Notices } from '$lib/features/notices/Service.svelte.js';
-  import { ShellOps, shellActs } from '$lib/features/workspace/ShellOps.js';
+  import PointView from '@runlith/layer/svelte/PointView.svelte';
+  import { TopBarParts } from '$lib/shared/window/parts.js';
   import AreaToggle from '$lib/app/panes/AreaToggle.svelte';
   import { AreaFrame } from '$lib/app/panes/AreaFrame.svelte.js';
   import { SidePanes } from '$lib/app/panes/SidePanes.svelte.js';
-  import { ThreadSeats } from '$lib/features/threads/seats/ThreadSeats.svelte.js';
   import TabStrip from '$lib/app/panes/TabStrip.svelte';
   import SeamHandle from '@runlith/seam/SeamHandle.svelte';
   import { App } from '@runlith/layer/svelte/App.svelte';
@@ -48,10 +44,9 @@
 
   const overlay = Overlay.use();
   const panes = SidePanes.use();
-  const seats = ThreadSeats.use();
   const frame = AreaFrame.use();
   const bar = Bar.use();
-  const shell = shellActs(ShellOps.use(), Notices.use());
+  const parts = TopBarParts.use();
   const workspace = Workspace.use();
   const strip = ProjectStrip.use();
   const tabs = $derived(strip.visible && strip.view === 'tabs');
@@ -87,12 +82,6 @@
   const areaSeam = $derived(docked ? frame.area : null);
 
   const ZONE = 'flex h-full min-w-0 items-center gap-1';
-
-  function openCall(target: CallTarget): void {
-    const content = callPane(target);
-    if (panes.holds(content)) panes.toggle(content);
-    else void shell.openPane(content.kind, content.id);
-  }
 
   function openPalette(): void {
     overlay.open(Palette, {});
@@ -179,10 +168,7 @@
     {/if}
     <div class="no-drag-region flex shrink-0 items-center gap-1">
       <CaptureChip />
-      <CallChip
-        beside={(piece) => seats.ask({ kind: 'piece', piece })}
-        transcript={{ holds: (target) => panes.holds(callPane(target)), toggle: openCall }}
-      />
+      <PointView point={parts} props={{}} />
       {#if inProject && !docked}
         {#key projectKey}<AreaToggle />{/key}
       {/if}

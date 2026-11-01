@@ -19,8 +19,6 @@ import { PendingArchive } from './PendingArchive.svelte.js';
 import { ThreadForest, type ThreadTreeNode } from './forest.js';
 import { mergeRow } from './mergeRow.js';
 
-type Threads = ReturnType<typeof ThreadsRepo.use>;
-
 const titleOutcome = {
   'no-topic': 'There is nothing to name this thread after yet.',
   superseded: 'The thread was renamed while the name was being written; the rename stands.',
@@ -84,7 +82,7 @@ export class ThreadList extends Service<ThreadList>()('ThreadList', { tier: 'til
   constructor(
     readonly aim: TileAim,
     private readonly workspace: Workspace,
-    private readonly repo: Threads,
+    private readonly repo: ThreadsRepo,
     private readonly folderActs: FolderActs,
     private readonly live: LiveConnection,
     private readonly onScreen: ScreenThreads,

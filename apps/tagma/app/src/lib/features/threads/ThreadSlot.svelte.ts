@@ -35,7 +35,8 @@ import { type ProductRecord, ProductRecords, recordOf } from './native/records.j
 import type { Point } from '@runlith/layer/Point';
 import { pickedSummarizer } from './native/compactionWords.js';
 import { PromptStore } from './native/PromptStore.js';
-import { CallPieces } from './native/CallPieces.js';
+import { type StagedKind, StagedKinds } from '$lib/shared/threads/staged.js';
+import { StagedItems } from './native/StagedItems.js';
 import { ThreadUploads, attachmentHandlers } from './native/ThreadUploads.js';
 import { Door } from '$lib/wire/Door.js';
 import { SkillCatalog } from './native/SkillCatalog.svelte.js';
@@ -73,7 +74,7 @@ export type SlotArgs = SlotOptions & {
   readonly context?: SlotContext;
 };
 
-export class ThreadSlot extends Process<ThreadSlot, SlotArgs>()('ThreadSlot') implements SlotNavigation {
+export class ThreadSlot extends Process<ThreadSlot, SlotArgs>()('ThreadSlot', { tier: 'project' }) implements SlotNavigation {
   readonly draft: ThreadDraft;
   readonly chat: ChatHold;
   readonly history: PromptHistory;
@@ -120,6 +121,7 @@ export class ThreadSlot extends Process<ThreadSlot, SlotArgs>()('ThreadSlot') im
       new SkillCatalog(library.skills, projectId, scope),
       yield* Door,
       yield* ProductRecords,
+      yield* StagedKinds,
       (yield* Platform).storage.local,
       scope,
       app,
@@ -134,7 +136,7 @@ export class ThreadSlot extends Process<ThreadSlot, SlotArgs>()('ThreadSlot') im
     readonly projectId: number,
     chats: ThreadChat,
     private readonly shelf: DraftShelf,
-    threads: ReturnType<typeof ThreadsRepo.use>,
+    threads: ThreadsRepo,
     private readonly list: ThreadList,
     readonly places: Worktrees,
     types: AgentTypes,
@@ -142,15 +144,16 @@ export class ThreadSlot extends Process<ThreadSlot, SlotArgs>()('ThreadSlot') im
     accounts: UsageAccounts,
     favorites: Favorites,
     private readonly catalog: ProviderCatalog,
-    selection: ReturnType<typeof SelectionRepo.use>,
+    selection: SelectionRepo,
     tags: TagCatalog,
-    settings: ReturnType<typeof SettingsRepo.use>,
+    settings: SettingsRepo,
     choices: SurfaceChoices,
-    teams: ReturnType<typeof TeamRepo.use>,
+    teams: TeamRepo,
     notices: Notices,
     readonly skills: SkillCatalog,
     door: Door,
     records: Point<ProductRecord>,
+    kinds: Point<StagedKind>,
     storage: ConstructorParameters<typeof PromptStore>[0],
     private readonly scope: Scope,
     private readonly app: MountedApp,
@@ -163,7 +166,7 @@ export class ThreadSlot extends Process<ThreadSlot, SlotArgs>()('ThreadSlot') im
     this.selection = new SlotSelection(projectId, options.pane);
     this.writer = writer;
     this.opens = new ThreadOpenWatch(runner, (threadId) => this.showing(threadId));
-    this.draft = new ThreadDraft(shelf, new ThreadUploads(threads, door, projectId), new CallPieces(threads, projectId), () =>
+    this.draft = new ThreadDraft(shelf, new ThreadUploads(threads, door, projectId), new StagedItems(kinds, app, projectId), () =>
       list.titles(),
     );
     this.draft.useKey(this.selection.draftKey(null));

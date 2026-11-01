@@ -61,6 +61,23 @@ it.live('a thread answers the nearest switch in its spawn lineage, and the machi
   }),
 );
 
+it.live('a thread answers the nearest approved set in its spawn lineage, and its own over it', () =>
+  Effect.gen(function* () {
+    const { threads, root, child, grandchild } = yield* standing;
+    const lineage = (id: string) => threads.mandate.approvesLineage(id).pipe(Effect.orDie);
+    const set = (id: string, approves: readonly string[] | null) => threads.mandate.setApproves(id, approves).pipe(Effect.orDie);
+    expect(yield* lineage(grandchild)).toEqual({ own: null, nearest: null, depth: 2 });
+    yield* set(root, ['bash']);
+    expect(yield* lineage(grandchild)).toEqual({ own: null, nearest: { approves: ['bash'], setAt: root }, depth: 2 });
+    yield* set(child, ['read']);
+    yield* set(grandchild, ['grep']);
+    expect(yield* lineage(grandchild)).toEqual({ own: ['grep'], nearest: { approves: ['grep'], setAt: grandchild }, depth: 2 });
+    expect((yield* lineage(child)).nearest).toEqual({ approves: ['read'], setAt: child });
+    yield* set(grandchild, null);
+    expect((yield* lineage(grandchild)).nearest).toEqual({ approves: ['read'], setAt: child });
+  }),
+);
+
 it.live('a working agent hears a changed delegation once, and after compaction only when it is off', () =>
   Effect.gen(function* () {
     const { settings, threads, child, machine } = yield* standing;

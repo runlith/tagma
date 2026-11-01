@@ -1,22 +1,27 @@
 <script lang="ts">
+  import type { Capture } from '@tagma/server/speech/contract/wire/feeds';
   import Mic from '@lucide/svelte/icons/mic';
   import Square from '@lucide/svelte/icons/square';
   import Volume2 from '@lucide/svelte/icons/volume-2';
   import Tooltip from '$lib/shared/ui/tooltip/Tooltip.svelte';
-  import { Calls } from './calls/Calls.svelte.js';
   import { Captures } from './Captures.svelte.js';
 
   const captures = Captures.use();
-  const calls = Calls.use();
   const TICK_MS = 1_000;
 
   let now = $state(Date.now());
 
-  const open = $derived(captures.open.filter((capture) => capture.id !== calls.call?.id));
+  const open = $derived(captures.unclaimed);
   const since = $derived(open.length === 0 ? null : Math.min(...open.map((capture) => Date.parse(capture.startedAt))));
   const sources = $derived(new Set(open.flatMap((capture) => capture.sources)));
-  const listenings = $derived(open.filter((capture) => capture.kind === 'listening').length);
-  const recognitions = $derived(open.length - listenings);
+  const counted = $derived.by(() => {
+    const kinds = new Map<string, { count: number; noun: Capture['noun'] }>();
+    for (const capture of open) {
+      const standing = kinds.get(capture.kind);
+      kinds.set(capture.kind, { count: (standing?.count ?? 0) + 1, noun: capture.noun });
+    }
+    return [...kinds.values()];
+  });
   const clock = $derived.by(() => {
     if (since === null) return '';
     const seconds = Math.max(0, Math.floor((now - since) / 1000));
@@ -24,14 +29,7 @@
     const rest = String(seconds % 60).padStart(2, '0');
     return minutes >= 60 ? `${Math.floor(minutes / 60)}:${String(minutes % 60).padStart(2, '0')}:${rest}` : `${minutes}:${rest}`;
   });
-  const what = $derived(
-    [
-      listenings > 0 && `${listenings} listening${listenings === 1 ? '' : 's'}`,
-      recognitions > 0 && `${recognitions} recognition${recognitions === 1 ? '' : 's'}`,
-    ]
-      .filter((part) => part !== false)
-      .join(' · '),
-  );
+  const what = $derived(counted.map(({ count, noun }) => `${count} ${count === 1 ? noun.one : noun.many}`).join(', '));
   const where = $derived(
     open.every((capture) => capture.at === 'caller')
       ? 'on a paired device'

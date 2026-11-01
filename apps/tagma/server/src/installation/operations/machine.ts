@@ -3,7 +3,7 @@ import { body, pair } from '../../platform/contract/service/body.js';
 import { NextInstallation } from '../contract/service/next.js';
 import { MachineHost } from '../contract/service/machineHost.js';
 import { MachineAgents } from '../contract/service/agents.js';
-import { MachineCalls } from '../contract/service/calls.js';
+import { LiveWorks } from '../../platform/contract/service/live.js';
 import { ServerProcess, Succession } from '../contract/service/succession.js';
 import { RestartRecords } from '../contract/service/restarts.js';
 import { INSTALLATION_OPERATIONS as OPS } from '../contract/wire/operations.js';
@@ -26,8 +26,15 @@ export const readMachineState = pair(
       const current = standing._tag === 'Success' ? standing.success : null;
       const runs = source.installation;
       const waiting = waitingOf(current, runs, yield* succession.refused);
-      const [host, next, agents, calls] = yield* Effect.all(
-        [machineHost.standing, nextInstallation.reading, (yield* MachineAgents).working, (yield* MachineCalls).live],
+      const [host, next, agents, work] = yield* Effect.all(
+        [
+          machineHost.standing,
+          nextInstallation.reading,
+          (yield* MachineAgents).working,
+          Effect.forEach((yield* LiveWorks).all, (one) =>
+            Effect.map(one.count, (count) => ({ id: one.id, count, one: one.ends.one, many: one.ends.many })),
+          ),
+        ],
         { concurrency: 3 },
       );
       const records = yield* RestartRecords;
@@ -43,7 +50,8 @@ export const readMachineState = pair(
             pid: process.pid,
             startedAt: born.startedAt,
             agents,
-            calls,
+            calls: work.reduce((sum, one) => sum + one.count, 0),
+            work,
             born: { replacedPid: born.replacedPid },
             installation: runs,
             cut: source.cut,

@@ -73,6 +73,12 @@ export class ToolActivity {
     return { call, line: command === undefined || this.view === null ? null : this.view.line(terminalKey(command.execution)) };
   }
 
+  pending(entry: ChatEntry): CallRecord | null {
+    if (entry.kind !== 'tool' || !toolSettled(entry)) return null;
+    const call = this.calls.callAt(this.shown.id, entry.runId, entry.toolCallId);
+    return call !== null && call.mode === 'background' ? call : null;
+  }
+
   callTitle(address: CallAddress): string | null {
     return this.calls.callAt(this.shown.id, address.runId, address.toolCallId)?.name ?? null;
   }

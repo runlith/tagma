@@ -2,6 +2,7 @@ import { Layer } from '@runlith/layer/Layer';
 import { SettingSections } from '$lib/features/settings/section.js';
 import { Surfaces } from '$lib/features/workspace/surface.js';
 import { Panes } from '$lib/shared/panes/pane.js';
+import { TagmaMethods } from './methods.js';
 import { panes } from './panes.js';
 import { Sections } from './Sections.svelte.js';
 import { sections } from './settings.js';
@@ -14,6 +15,7 @@ export const TagmaAppsLayer = Layer.mergeAll(
   Surfaces.contribute('tagma-apps', ...surfaces),
   Panes.contribute('tagma-apps', ...panes),
   SettingSections.contribute('tagma-apps', ...sections),
+  TagmaMethods,
   ViewSets,
   Sections,
   TagmaAppActions,

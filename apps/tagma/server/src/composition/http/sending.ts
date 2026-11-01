@@ -4,14 +4,14 @@ import * as Socket from 'effect/socket/Socket';
 import { CallDevice } from '../../invocation/contract/service/admission.js';
 import { GateRefusal } from '../../platform/contract/wire/refusal.js';
 import type { Connections } from '../../socket/connections.js';
-import type { Listenings } from '../../speech/contract/service/listenings.js';
+import type { Recognitions } from '../../speech/contract/service/recognitions.js';
 import { SENDING_PATH } from '../../speech/contract/wire/listening.js';
 
 const POLICY_CLOSE = 1008;
 
 const closing = (code: number, reason: string) => new Socket.CloseEvent(code, reason.slice(0, 120));
 
-export const sendingRoute = (listenings: Listenings['Service'], connections: Connections | null) =>
+export const sendingRoute = (recognitions: Recognitions['Service'], connections: Connections | null) =>
   HttpRouter.add('GET', SENDING_PATH, (request) =>
     Effect.gen(function* () {
       const asked = new URL(request.url, 'http://localhost').searchParams;
@@ -25,7 +25,9 @@ export const sendingRoute = (listenings: Listenings['Service'], connections: Con
         const leave = yield* connections.add(device, (code, reason) => write(new Socket.CloseEvent(code, reason)));
         yield* Effect.addFinalizer(() => Effect.sync(leave));
       }
-      const sent = yield* Effect.exit(listenings.send(id, asked.get('track') ?? 'mic', Stream.flattenArray(Stream.fromEffectRepeat(pull))));
+      const sent = yield* Effect.exit(
+        recognitions.send(id, asked.get('track') ?? 'mic', Stream.flattenArray(Stream.fromEffectRepeat(pull))),
+      );
       const failure = Exit.isFailure(sent) ? Cause.findErrorOption(sent.cause) : Option.none();
       const close = Exit.isSuccess(sent)
         ? closing(1000, sent.value)

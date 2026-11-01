@@ -1,8 +1,10 @@
 import type { Context, Layer, ManagedRuntime } from 'effect';
 import type { Manifest } from '../platform/contract/service/manifest.js';
+import type { Route } from '../platform/contract/service/route.js';
+import type { DoorServices } from './http/handlers.js';
 import type { Channel } from '../installation/contract/wire/channel.js';
 import type { Distribution } from '../installation/cut/descriptor.js';
-import type { Bindings } from './next.js';
+import { type BindingChoice, type Bindings, boundOf } from './next.js';
 import type { CoreBindings, VerbBindings, VerbModule } from './cli/binding.js';
 import type { LiveDoorOf, SocketDoor } from './socketBinding.js';
 import type { ControlServices, SettingControlNeeds } from './settings.js';
@@ -27,8 +29,17 @@ type Stored<M> = M extends { readonly stores: readonly (infer S)[] }
 
 type Extension<Modules extends readonly Manifest[]> = Exclude<Modules[number], (typeof CORE_MODULES)[number]>;
 
+type RouteDoorOf<M> = M extends { readonly routes: readonly (infer Declared)[] }
+  ? Declared extends Route<infer R>
+    ? unknown extends R
+      ? never
+      : R
+    : never
+  : never;
+
 type Unserved<Modules extends readonly Manifest[], E = Extension<Modules>> =
   | Exclude<LiveDoorOf<Modules[number]>, SocketDoor | Stored<E> | Gives<E, 'installation'> | Gives<E, 'serving'>>
+  | Exclude<RouteDoorOf<Modules[number]>, DoorServices | Stored<E> | Gives<E, 'installation'> | Gives<E, 'serving'>>
   | Exclude<ControlServices<Modules[number]>, SettingControlNeeds>
   | Exclude<Needs<E, 'installation'>, Installed | Stored<E>>
   | Exclude<Needs<E, 'serving'>, Served | Installed | Stored<E> | Gives<E, 'installation'>>
@@ -46,9 +57,15 @@ export type ServerParts<Modules extends readonly Manifest[] = readonly Manifest[
   readonly rested: () => Worker;
 };
 
+type PartsChoice<Modules extends readonly Manifest[]> = {
+  readonly modules: Modules;
+  readonly bindings?: BindingChoice;
+  readonly rested: () => Worker;
+};
+
 export const serverParts = <const Modules extends readonly Manifest[]>(
-  parts: ServerParts<Modules> & ([Unserved<Modules>] extends [never] ? unknown : { readonly unserved: Unserved<Modules> }),
-): CheckedParts => parts as unknown as CheckedParts;
+  parts: PartsChoice<Modules> & ([Unserved<Modules>] extends [never] ? unknown : { readonly unserved: Unserved<Modules> }),
+): CheckedParts => ({ modules: parts.modules, bindings: boundOf(parts.bindings ?? {}), rested: parts.rested }) as unknown as CheckedParts;
 
 export type Build = {
   readonly channel: Channel;

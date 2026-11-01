@@ -2,6 +2,7 @@ import { Deferred, Effect, Schema } from 'effect';
 import { AgentFault, FAULT } from '@runlith/acp/agent';
 import type { TransportFailure } from '@runlith/agent/transcript/entries';
 import { familyRetries, type WireFailureFamily } from '@runlith/llm/schema/errors';
+import { isContextOverflow } from '@runlith/llm/provider-error';
 import type { InteractionUpdate, SDKCustomTool, SDKJsonValue, TokenUsage } from '@cursor/sdk';
 import { CursorSdk, type Sending } from './channel.js';
 import type { ClientOutcome } from '@runlith/hosted-runner/client';
@@ -49,6 +50,7 @@ export const cursorSdk = (module: typeof import('@cursor/sdk')): CursorSdk['Serv
       httpStatus: error?.status,
       retryable: familyRetries(family),
       modelStarted,
+      contextOverflow: isContextOverflow(error?.message ?? ''),
       reason: { family, status: error?.status },
     };
   };
@@ -117,7 +119,6 @@ export const cursorSdk = (module: typeof import('@cursor/sdk')): CursorSdk['Serv
           let step = 0;
           let listed: number | null = null;
           let sealed = false;
-          let summary = '';
           let latestUsage: TokenUsage | undefined;
           let modelStarted = false;
           const calls = new Set<string>();
@@ -200,17 +201,6 @@ export const cursorSdk = (module: typeof import('@cursor/sdk')): CursorSdk['Serv
               }
               case 'step-completed':
                 yield* seal();
-                break;
-              case 'summary-started':
-                summary = '';
-                yield* input.event({ type: 'phase', phase: 'compacting' });
-                break;
-              case 'summary':
-                summary = update.summary;
-                break;
-              case 'summary-completed':
-                yield* input.event({ type: 'compacted', summary, trigger: 'auto' });
-                yield* input.event({ type: 'phase', phase: 'calling' });
                 break;
               case 'turn-ended':
                 latestUsage =

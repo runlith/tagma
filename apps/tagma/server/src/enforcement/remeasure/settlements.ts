@@ -37,6 +37,11 @@ export const landingSettlements = (journal: LandingJournal | undefined) => {
     );
   };
   return {
+    vacated: (checkout: { readonly projectId: number; readonly root: string }, keys: Iterable<string>): Effect.Effect<void> =>
+      Effect.logInfo('a checkout is gone from disk, so the landings it owed to re-measurement are settled unmeasured', {
+        projectId: checkout.projectId,
+        checkout: checkout.root,
+      }).pipe(Effect.andThen(Effect.forEach([...keys], acknowledge, { discard: true }))),
     has: (key: string): boolean => journaled.has(key),
     remember: (key: string): void => {
       journaled.add(key);

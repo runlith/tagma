@@ -12,13 +12,15 @@ import { ownGitLayer } from '../platform/git/ownGit.js';
 import {
   BUILD_COMMAND,
   BUILD_HOME_ENV,
+  BUILD_REFUSED_ENV,
   BUILD_SWAPPED_ENV,
   BUILD_WORKTREE_ENV,
   revisionLabel,
 } from '../installation/contract/wire/layout.js';
 import { currentVersion, releasesNewestFirst } from '../installation/closure/versions.js';
+import { declaredSubmodules, SUBMODULE_PATHS } from '../installation/cut/source.js';
 import { type InstallRefused, NextInstallation, type StopRefused } from '../installation/contract/service/next.js';
-import type { NextFrame } from '../installation/contract/wire/next.js';
+import { type InstallRefusal, installRefusalSchema, type NextFrame } from '../installation/contract/wire/next.js';
 import {
   type BuildEnded,
   buildEndedSchema,
@@ -33,10 +35,36 @@ import { commandOf, endGroup } from './group.js';
 
 const HOST = BunChildProcessSpawner.layer.pipe(Layer.provide(Layer.mergeAll(BunFileSystem.layer, BunPath.layer)));
 
+const submoduleRepositories = async (repository: string, env: Record<string, string | undefined>): Promise<readonly string[]> => {
+  if (!existsSync(join(repository, '.gitmodules'))) return [];
+  const listed = Bun.spawn(['git', '-C', repository, ...SUBMODULE_PATHS], { env, stdin: 'ignore', stdout: 'pipe', stderr: 'ignore' });
+  const [output, code] = await Promise.all([new Response(listed.stdout).text(), listed.exited]);
+  if (code !== 0) return [];
+  const direct = declaredSubmodules(output).map((path) => join(repository, path));
+  return [...direct, ...(await Promise.all(direct.map((nested) => submoduleRepositories(nested, env)))).flat()];
+};
+
 const TAIL_BYTES = 4096;
 const TAIL_LINES = 20;
 
 const SWAPPED_NOTE = 'build.swapped';
+
+const REFUSED_NOTE = 'build.refused';
+
+const decodeRefusal = Schema.decodeUnknownResult(Schema.fromJsonString(installRefusalSchema));
+
+const refusedIn = (note: string): InstallRefusal | undefined => {
+  if (!existsSync(note)) return undefined;
+  const said = readFileSync(note, 'utf8')
+    .split('\n')
+    .flatMap((line) => {
+      const read = line === '' ? null : decodeRefusal(line);
+      return read !== null && read._tag === 'Success' ? [read.success] : [];
+    });
+  const cause = said[0];
+  if (cause === undefined) return undefined;
+  return { code: cause.code, reason: cause.reason, unblock: [...new Set(said.flatMap((one) => one.unblock))] };
+};
 
 const heldSchema = Schema.Struct({ pid: Schema.Int, command: Schema.String });
 type Held = typeof heldSchema.Type;
@@ -204,12 +232,13 @@ export const makeCheckoutBuilds = Effect.fnUntraced(function* (options: Checkout
       stderr: 'ignore',
     }).exited.catch(() => undefined);
     await rm(worktree, { recursive: true, force: true }).catch(() => undefined);
-    await Bun.spawn(['git', '-C', checkout, 'worktree', 'prune'], {
-      env,
-      stdin: 'ignore',
-      stdout: 'ignore',
-      stderr: 'ignore',
-    }).exited.catch(() => undefined);
+    for (const repository of [checkout, ...(await submoduleRepositories(checkout, env))])
+      await Bun.spawn(['git', '-C', repository, 'worktree', 'prune'], {
+        env,
+        stdin: 'ignore',
+        stdout: 'ignore',
+        stderr: 'ignore',
+      }).exited.catch(() => undefined);
   };
 
   const halt = async (building: BuildRunning): Promise<BuildEnded | null> => {
@@ -224,6 +253,7 @@ export const makeCheckoutBuilds = Effect.fnUntraced(function* (options: Checkout
     build: string | null,
     detail: string,
     tail: readonly string[],
+    refused?: InstallRefusal,
   ): BuildEnded => ({
     from: started.from,
     revision: started.revision,
@@ -236,6 +266,7 @@ export const makeCheckoutBuilds = Effect.fnUntraced(function* (options: Checkout
     tail,
     then: started.then,
     restartRefused: null,
+    refused,
   });
 
   const stepped = (step: BuildStep): void => {
@@ -313,7 +344,8 @@ export const makeCheckoutBuilds = Effect.fnUntraced(function* (options: Checkout
     const sink = await open(options.log, 'a');
     const runtime = options.runtime ?? process.execPath;
     const inherited = options.env ?? process.env;
-    const env = { ...inherited, HOME: inherited[BUILD_HOME_ENV] ?? inherited.HOME };
+    const refusedNote = join(dirname(options.log), `${REFUSED_NOTE}-${started.since.replace(/[^0-9A-Za-z]/g, '')}`);
+    const env = { ...inherited, HOME: inherited[BUILD_HOME_ENV] ?? inherited.HOME, [BUILD_REFUSED_ENV]: refusedNote };
     const say = (line: string) => sink.write(`${line}\n`);
     const note = join(dirname(options.log), SWAPPED_NOTE);
     const step = async (title: string, command: readonly string[], cwd: string, more: Record<string, string> = {}): Promise<number> => {
@@ -376,18 +408,21 @@ export const makeCheckoutBuilds = Effect.fnUntraced(function* (options: Checkout
       const decision = await decided();
       const stoppedAt = running?.record.step ?? started.step;
       const [outcome, build, detail] = decision[0] !== 'failed' || stopping === null ? decision : await stoppedAs(stoppedAt);
+      const failed = outcome === 'failed';
       const last = endedAs(
         started,
         outcome,
         build,
         detail,
-        outcome === 'failed' ? tailOf(options.log, running?.offset ?? 0, TAIL_LINES) : [],
+        failed ? tailOf(options.log, running?.offset ?? 0, TAIL_LINES) : [],
+        failed ? refusedIn(refusedNote) : undefined,
       );
       await say(`=== tagma build ${started.from} ${started.revision} ${outcome} ${last.endedAt}: ${detail} ===`);
       return last;
     } finally {
       if (cut !== null && existsSync(cut)) await reap(null, cut);
       cut = null;
+      await rm(refusedNote, { force: true });
       await sink.close();
     }
   };

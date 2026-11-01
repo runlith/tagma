@@ -12,7 +12,7 @@ import type { Settings } from '../../settings/contract/service/values.js';
 import type { DictationReadiness } from '../contract/wire/status.js';
 import type { ModelAsk, Recognizer, RecognizerAsk } from '../contract/wire/listening.js';
 import { NO_MODEL_WORDS } from '../contract/wire/words.js';
-import { callAgain, dictationRecognizer, languages, type RecognizerPick, recognizerChoice, segmenter, tuning } from '../keys.js';
+import { dictationRecognizer, languages, type RecognizerPick, recognizerChoice, segmenter, tuning } from '../keys.js';
 
 export type Chosen = { readonly choice: RecognitionChoice; readonly recognizer: Recognizer };
 
@@ -88,15 +88,20 @@ export const chosen = Effect.fn('Listenings.chosen')(function* (
   return { choice: yield* again(speech, recognizer), recognizer };
 });
 
+type ModelPick = { readonly provider?: string | undefined; readonly model?: string | undefined };
+
 export const recordedChoice = Effect.fn('Listenings.recordedChoice')(function* (
   speech: Speech['Service'],
-  settings: Settings['Service'],
   ask: ModelAsk | undefined,
+  standing: ModelPick,
   spoken: readonly string[],
-): Effect.fn.Return<RecognitionChoice, GateRefusal<'no-model'> | StoreFailure> {
+): Effect.fn.Return<RecognitionChoice, GateRefusal<'no-model'>> {
   const named = ask?.provider !== undefined || ask?.model !== undefined;
-  const standing = named ? {} : yield* settings.value(callAgain);
-  const need: RecognitionNeed = { kinds: RECORDED, provider: ask?.provider ?? standing.provider, model: ask?.model ?? standing.model };
+  const need: RecognitionNeed = {
+    kinds: RECORDED,
+    provider: ask?.provider ?? (named ? undefined : standing.provider),
+    model: ask?.model ?? (named ? undefined : standing.model),
+  };
   const open = need.provider === undefined && need.model === undefined;
   const first = yield* (
     open

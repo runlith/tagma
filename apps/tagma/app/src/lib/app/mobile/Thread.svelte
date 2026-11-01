@@ -20,6 +20,7 @@
   import Header from './Header.svelte';
   import Options from './Options.svelte';
   import Sheet from './Sheet.svelte';
+  import HomeHold from '$lib/features/threads/HomeHold.svelte';
   import ThreadRow from './ThreadRow.svelte';
 
   let { host, project }: { host: ThreadSlot; project: string } = $props();
@@ -146,7 +147,7 @@
 {#if mates}
   <Sheet label="Team" title="Team" onClose={() => (mates = false)}>
     {#each team as mate (mate.row.id)}
-      <ThreadRow node={{ ...mate, children: [] }} {project} />
+      <HomeHold projectId={mate.row.projectId}><ThreadRow node={{ ...mate, children: [] }} {project} /></HomeHold>
     {/each}
   </Sheet>
 {/if}

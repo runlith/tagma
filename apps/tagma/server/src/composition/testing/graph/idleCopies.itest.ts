@@ -103,7 +103,7 @@ const started = (place: Place) => Effect.tap(booted(place), (runtime) => runtime
 
 const doors = Effect.fnUntraced(function* (runtime: ServerRuntime, data: string) {
   const handler = yield* HttpRouter.toHttpEffect(
-    doorServing(doorLayer({ status: runtime.status }), runtime, data).pipe(
+    doorServing(doorLayer({ status: runtime.status, routes: runtime.routes }), runtime, data).pipe(
       Layer.provide(frozenBuildsLayer({ dataPath: data })),
       Layer.provide(Layer.succeedContext(routedContext(runtime.graph, runtime.pool))),
       Layer.provide(Layer.succeedContext(runtime.bindings)),

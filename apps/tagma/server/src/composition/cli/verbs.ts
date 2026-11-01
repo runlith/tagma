@@ -31,8 +31,12 @@ export const bindingsOf = (build: Build): VerbBindings => {
       Effect.promise(async () => doctrineText(await assembled())),
     );
   });
+  const operations = once(async () => {
+    const [{ here }, performed] = await Promise.all([door(), perform()]);
+    return { perform: performed, here };
+  });
   return {
-    ...build.verbBindings({ installation }),
+    ...build.verbBindings({ installation, operations }),
     installation: [
       installation,
       async () => (await import('./setupSteps.js')).mcpDeclarationSteps(channel),
@@ -41,12 +45,7 @@ export const bindingsOf = (build: Build): VerbBindings => {
         return worldParts(modules);
       },
     ],
-    providers: [
-      async () => {
-        const [{ here }, performed] = await Promise.all([door(), perform()]);
-        return { perform: performed, here };
-      },
-    ],
+    providers: [operations],
     projects: [
       async () => {
         const [{ here }, { policy, renderGroups, renderProjects }, performed, { groupRegistry, projectRegistry }] = await Promise.all([

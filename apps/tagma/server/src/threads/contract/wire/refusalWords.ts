@@ -77,6 +77,7 @@ export const REFUSAL_WORDS = {
   'parent-archived': 'Parent thread is archived',
   'placement-refused': 'Thread could not be placed',
   'placement-unreadable': 'Thread placement unreadable',
+  'query-too-short': 'Search words too short',
   'app-thread-mismatch': 'Thread not bound to this app',
   'read-failed': 'Reading failed',
   'read-inaccessible': 'Reading cannot be opened',

@@ -32,6 +32,8 @@ export type ThreadCompactionRunInput = {
   readonly mode?: ThreadCompactionEntry['mode'];
   readonly summarizing?: ThreadSummarizing;
   readonly releases?: Effect.Effect<void, ThreadBorderFailed>;
+  readonly recovery?: true;
+  readonly continuation?: ThreadInboxItemValues;
   readonly requests?: { readonly ids: readonly string[]; readonly alone: boolean };
   readonly accepting?: readonly ThreadInboxItemValues[];
   readonly startKey?: ThreadRunStartKey;

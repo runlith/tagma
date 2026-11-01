@@ -31,7 +31,7 @@ type OpenAlways<R, Seen = never> = R extends 'app'
         : false
     : false;
 
-export type AlwaysOpen = 'app' | { [R in Rungs]: OpenAlways<R> extends true ? R : never }[Rungs];
+type AlwaysOpen = 'app' | { [R in Rungs]: OpenAlways<R> extends true ? R : never }[Rungs];
 
 export type DeepestOpen = Exclude<AlwaysOpen, Above<AlwaysOpen>>;
 
@@ -104,7 +104,7 @@ export function optionalOf(asked: unknown): AnyKeyClass | undefined {
 export interface KeyDoors<Self> {
   use<K>(this: K & UseDoor<K>): Self;
   find<K>(this: K & FindDoor<K>): Self | undefined;
-  optional<K>(this: K & FindDoor<K>): Generator<Optional<Provided<K>>, Self | undefined, unknown>;
+  optional<K>(this: K): Generator<Optional<Provided<K>>, Self | undefined, unknown>;
 }
 
 export interface SelfMade<Self> {

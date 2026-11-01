@@ -431,9 +431,9 @@ export type AcpProves = {
   readonly authorship: NonNullable<TransportCapabilities['authorship']>;
   readonly fork: boolean;
   readonly rewind: boolean;
-  readonly compaction: boolean | 'foreign';
+  readonly compaction: boolean | 'foreign' | 'vendor';
   readonly continue: boolean;
-  readonly usage: Exclude<TransportCapabilities['usage'], 'partial'>;
+  readonly usage: TransportCapabilities['usage'];
   readonly aside: Exclude<TransportCapabilities['aside'], 'request'>;
 };
 

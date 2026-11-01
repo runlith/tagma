@@ -93,7 +93,8 @@ fields:
           "287a4906",
           "2243eda2",
           "af373f07",
-          "b6853ec2"
+          "b6853ec2",
+          "3c2426a1"
         ]
       },
       {
@@ -144,4 +145,4 @@ sources:
   - kind: dir
     ref: packages/mcp
 ---
-Tools living in other processes reach agents through this package: one MCP server pool per process, whose tools become kernel-contract tools. It owns the form a server declaration is stored in, pool sessions, the naming dictionary, the failure language every crash answers in, and the serving side offering the embedder's own tools over stdio. Tool classification, values resolved into a declaration, grants and secrets are handed by the embedding product at the boundary, and are not stored here; a server's bearer arrives the same way, through a two-call contract, and the kit runs the OAuth steps over the SDK without keeping a token.
+Tools living in other processes reach agents through this package: one MCP server pool per process, whose tools become kernel-contract tools. It owns the form a server declaration is stored in, pool sessions, the naming dictionary, the failure language every crash answers in, and the serving side offering the embedder's own tools over stdio or, behind a bearer header, over loopback HTTP. Tool classification, values resolved into a declaration, grants and secrets are handed by the embedding product at the boundary, and are not stored here; a server's bearer arrives the same way, through a two-call contract, and the kit runs the OAuth steps over the SDK without keeping a token.

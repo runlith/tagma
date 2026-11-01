@@ -10,6 +10,7 @@ import { statfs } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import {
+  type Adopting,
   GraphStore,
   MachineStore,
   type MigrationChain,
@@ -30,6 +31,7 @@ import { seedDatabase } from './seed.js';
 import { storeTransaction, UnitStore, WriterTimings } from './transaction.js';
 import { storeProgram } from './programs.js';
 import { type Freeing, reclaiming, vacuumStore } from './vacuum.js';
+import { adopting, setAside } from './aside.js';
 import { checkStatement, readConsequences } from './writes.js';
 import { WriteSetMode } from '../contract/service/writes.js';
 import { TableMoves } from './moves.js';
@@ -47,6 +49,7 @@ export type StoreOptions = {
   readonly readers?: number;
   readonly withoutSnapshot?: boolean;
   readonly durable?: boolean;
+  readonly adopting?: Adopting;
 };
 
 const appliedAt =
@@ -94,6 +97,7 @@ const fileLayer = <I, Brand extends StoreBrand, A>(
         options.readers,
         options.withoutSnapshot,
         options.durable,
+        options.adopting,
       );
     }),
   ).pipe(Layer.provide(BunFileSystem.layer));
@@ -176,6 +180,7 @@ function connection<Brand extends StoreBrand, A>(
   readers?: number,
   withoutSnapshot = false,
   durable = true,
+  adoptions?: Adopting,
 ): Layer.Layer<A, StoreOpenFailure> {
   return Layer.unwrap(
     Effect.map(Effect.all([WriteSetMode, ChildLedger]), ([mode, ledger]) => {
@@ -183,7 +188,7 @@ function connection<Brand extends StoreBrand, A>(
       const identity = { path, generation: ++generations };
       const classed = durable && mode === 'refuse';
       return Layer.effectContext(
-        Effect.map(open<Brand>(identity, migrations, processes, freeBytes, timings, withoutSnapshot, classed), (opened) =>
+        Effect.map(open<Brand>(identity, migrations, processes, freeBytes, timings, withoutSnapshot, classed, adoptions), (opened) =>
           mint({ ...opened, processes, durable }),
         ),
       ).pipe(
@@ -242,6 +247,7 @@ type Opened = {
   readonly programs: Programs['Service'];
   readonly connections: Connections['Service'];
   readonly stalled: Effect.Effect<WriterStall | null>;
+  readonly adopted: Effect.Effect<boolean>;
 };
 
 const storeOf = <Brand extends StoreBrand>({
@@ -258,6 +264,7 @@ const storeOf = <Brand extends StoreBrand>({
   stalled,
   processes,
   durable,
+  adopted,
 }: Opened): Store<Brand> => ({
   processes,
   connections,
@@ -290,6 +297,7 @@ const storeOf = <Brand extends StoreBrand>({
       ),
     ),
   vacuum: () => vacuumStore(db, identity.path, freeBytes),
+  adopted,
   freeing,
   moves,
   stalled,
@@ -303,18 +311,22 @@ const open = <Brand extends StoreBrand>(
   timings: WriterTimings,
   withoutSnapshot = false,
   classed = false,
+  adoptions?: Adopting,
 ) =>
   Effect.flatMap(
     Effect.tap(migrated(identity.path, migrations, processes, withoutSnapshot), ({ db }) => readConsequences(identity, db)),
     ({ db, schema }) => {
       const moves = new TableMoves();
+      const transaction = storeTransaction<'machine'>(db, timings, identity, moves, classed, processes.writerMetrics);
       return Effect.map(
         Effect.all([
-          reclaiming(db, storeTransaction<'machine'>(db, timings, identity, moves, classed, processes.writerMetrics)),
+          reclaiming(db, transaction),
           Connections,
           Programs,
+          adopting(db, storeTransaction<StoreBrand>(db, timings, identity, moves, classed, processes.writerMetrics), adoptions),
         ]),
-        ([freeing, connections, programs]) => ({
+        ([freeing, connections, programs, adopted]) => ({
+          adopted,
           db,
           schema,
           identity,
@@ -380,6 +392,7 @@ const migrated = Effect.fn('Store.open')(function* (
     console.log(`[tagma] migration ${index + 1}/${pending.length} ${migration.name} …`);
     const startedAt = yield* Clock.currentTimeMillis;
     yield* observe({ phase: 'migration', path, at: startedAt, name: migration.name, index: index + 1, total: pending.length });
+    yield* setAside(db, path, migrations.folder, migration.name);
     const checked = yield* applyMigration(db, migration);
     console.log(
       `[tagma] migration ${index + 1}/${pending.length} ${migration.name} landed, foreign keys checked, in ${elapsed(startedAt, yield* Clock.currentTimeMillis)}`,

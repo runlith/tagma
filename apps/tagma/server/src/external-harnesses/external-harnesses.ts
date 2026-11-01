@@ -14,6 +14,7 @@ import { terminalSteerForm } from './steps/terminalSteer.js';
 import { terminalHistoryForm } from './steps/terminalHistory.js';
 import { terminalContinueForm } from './steps/terminalContinue.js';
 import { harnessPresentationForm } from './steps/harnessPresentation.js';
+import { hostedCompactionForm } from './steps/hostedCompaction.js';
 
 export const externalHarnesses = manifest({
   ...declaration,
@@ -37,6 +38,7 @@ export const externalHarnesses = manifest({
     terminalHistoryForm,
     terminalContinueForm,
     harnessPresentationForm,
+    hostedCompactionForm,
   ],
   bodies: async () => {
     const [{ HOOK_PAIRS }, { HOSTED_PAIRS }, { HARNESS_PAIRS }, { installationStatusRead }] = await Promise.all([

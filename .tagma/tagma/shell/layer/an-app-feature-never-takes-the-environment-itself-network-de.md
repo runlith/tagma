@@ -29,4 +29,4 @@ sources:
   - kind: dir
     ref: packages/chat-ui/src
 ---
-Only composition (`runtime.ts`), `wire` and the `Platform`, `Host`, `Router` and environment-service fillers may read them directly. Clipboard, user gesture, microphone and the facts of the document the app renders into are allowed everywhere.
+Only composition (the window fillers in `app/window.ts`), `wire` and the `Platform`, `Host`, `Router` and environment-service fillers may read them directly. Clipboard, user gesture, microphone and the facts of the document the app renders into are allowed everywhere.

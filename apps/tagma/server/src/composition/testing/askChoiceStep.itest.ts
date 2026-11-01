@@ -45,7 +45,7 @@ const booted = Effect.fnUntraced(function* (home: string) {
   ).pipe(Scope.provide(scope), Effect.orDie);
   const routed = routedContext(runtime.graph, runtime.pool);
   const handler = yield* HttpRouter.toHttpEffect(
-    doorServing(doorLayer({ status: runtime.status }), runtime, home).pipe(
+    doorServing(doorLayer({ status: runtime.status, routes: runtime.routes }), runtime, home).pipe(
       Layer.provide(frozenBuildsLayer({ dataPath: home })),
       Layer.provide(Layer.succeedContext(routed)),
       Layer.provide(Layer.succeedContext(runtime.bindings)),

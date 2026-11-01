@@ -5,8 +5,6 @@ import { Service } from '@runlith/layer/key';
 import { TileRung, type TileAim } from '$lib/features/workspace/TileRung.js';
 import { ThreadsRepo } from './Repo.js';
 
-type Threads = ReturnType<typeof ThreadsRepo.use>;
-
 export type FolderRemoved = {
   readonly removed: readonly string[];
   readonly released: readonly { readonly threadId: string; readonly folderId: string }[];
@@ -21,7 +19,7 @@ export class FolderActs extends Service<FolderActs>()('FolderActs', { tier: 'til
 
   constructor(
     private readonly aim: TileAim,
-    private readonly repo: Threads,
+    private readonly repo: ThreadsRepo,
     life: Scope,
     private readonly failure: Failure,
   ) {

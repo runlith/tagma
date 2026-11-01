@@ -20,7 +20,7 @@ function linksWith(refused: Refusal) {
   const settings = {
     catalog: { key: () => ({ data: { entries: [{ id: openLinks.id, value: true }] } }) },
     write: { data: undefined },
-  } as unknown as ReturnType<typeof SettingsRepo.use>;
+  } as unknown as SettingsRepo;
   const { panes } = testArea([testKind('browser')]);
   const seats = new ThreadSeats(panes);
   const links = new Links(

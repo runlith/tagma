@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { liveMark } from '@runlith/chat-ui/activity';
   import type { ChatEntryOf, ChatToolStatus } from '@runlith/chat-ui/renderers';
   import { CallActivity } from '../CallActivity.svelte.js';
   import CallControls from '../CallControls.svelte';
@@ -28,12 +29,15 @@
       if (activity.launchedLine(entry) !== null) return 'marked';
       const awaited = activity.awaited(entry);
       if (awaited !== null && awaited.budgetMs !== null) return 'status';
-      return activity.ended(entry) !== null ? 'status' : null;
+      return activity.pending(entry) !== null || activity.ended(entry) !== null ? 'status' : null;
     },
     dot: (entry) => {
       const line = activity.launchedLine(entry);
-      return line === null || activity.view === null ? null : commandDot(line, activity.view);
+      if (line !== null && activity.view !== null) return commandDot(line, activity.view);
+      const pending = activity.pending(entry);
+      return pending === null ? null : liveMark(pending.phase === 'running');
     },
+    standing: (entry) => activity.launchedLine(entry) === null && activity.pending(entry) !== null,
     mark: commandMark,
     status: commandStatus,
     detail: targetDetail,
@@ -61,12 +65,16 @@
     />
   {:else}
     {@const awaited = activity.awaited(entry)}
-    {@const ended = awaited === null || awaited.budgetMs === null ? activity.ended(entry) : null}
+    {@const waited = awaited !== null && awaited.budgetMs !== null}
+    {@const pending = waited ? null : activity.pending(entry)}
+    {@const ended = waited || pending !== null ? null : activity.ended(entry)}
     {#if awaited !== null && awaited.budgetMs !== null}
       <WaitStatus admittedAt={awaited.admittedAt} budgetMs={awaited.budgetMs} />
       {#if awaited.target !== null}
         <CallStatus call={awaited.target} />
       {/if}
+    {:else if pending !== null}
+      <CallStatus call={pending} />
     {:else if ended !== null}
       <EndedCallStatus call={ended.call} line={ended.line} />
     {/if}

@@ -7,6 +7,8 @@ import { expect, test } from 'vitest';
 import { DraftFiles } from './DraftFiles.js';
 import { DraftShelf } from './DraftShelf.svelte.js';
 
+const ANY_KIND = (): boolean => true;
+
 function pictures(): DraftFiles {
   return new DraftFiles(new IDBFactory());
 }
@@ -22,7 +24,7 @@ async function bytesOf(image: ChatDraftImage): Promise<number[]> {
 test('what was typed and staged at an address stands after the page ends', () => {
   const storage = makeStorage();
   const kept = pictures();
-  const first = new DraftShelf(storage, kept);
+  const first = new DraftShelf(storage, kept, ANY_KIND);
   const slot = first.at('new:47');
   slot.text = 'the prompt nobody sent yet';
   slot.mentions = [{ name: 'a1b2c3d4', title: 'The Composer', tag: 'claim' }];
@@ -32,7 +34,7 @@ test('what was typed and staged at an address stands after the page ends', () =>
   slot.place = { kind: 'new', base: 'tagma/sidebar' };
   first.keep('new:47');
 
-  const reloaded = new DraftShelf(storage, kept).at('new:47');
+  const reloaded = new DraftShelf(storage, kept, ANY_KIND).at('new:47');
   expect(reloaded.place).toEqual({ kind: 'new', base: 'tagma/sidebar' });
   expect(reloaded.text).toBe('the prompt nobody sent yet');
   expect(reloaded.mentions).toEqual([{ name: 'a1b2c3d4', title: 'The Composer', tag: 'claim' }]);
@@ -42,9 +44,25 @@ test('what was typed and staged at an address stands after the page ends', () =>
   expect(reloaded.name).toBe(slot.name);
 });
 
+test('a restored draft keeps the staged items of kinds this build declares and drops the rest, and the pieces of a release before kinds', () => {
+  const storage = makeStorage();
+  const kept = pictures();
+  const first = new DraftShelf(storage, kept, ANY_KIND);
+  first.at('new:9').items = [
+    { kind: 'note', key: 'n1', title: 'Note', data: { through: 3 } },
+    { kind: 'gone', key: 'g1', title: 'Gone', data: null },
+  ];
+  first.keep('new:9');
+  const stored = JSON.parse(storage.getItem('tagma.draft.new:9')!) as Record<string, unknown>;
+  storage.setItem('tagma.draft.new:9', JSON.stringify({ ...stored, pieces: [{ listening: 'l1', title: 'Call' }] }));
+
+  const reloaded = new DraftShelf(storage, kept, (kind) => kind === 'note').at('new:9');
+  expect(reloaded.items).toEqual([{ kind: 'note', key: 'n1', title: 'Note', data: { through: 3 } }]);
+});
+
 test('a draft emptied by its send leaves nothing for the next page to restore', () => {
   const storage = makeStorage();
-  const shelf = new DraftShelf(storage, pictures());
+  const shelf = new DraftShelf(storage, pictures(), ANY_KIND);
   const slot = shelf.at('thread:t1');
   slot.text = 'sent';
   shelf.keep('thread:t1');
@@ -52,29 +70,29 @@ test('a draft emptied by its send leaves nothing for the next page to restore', 
   slot.text = '';
   shelf.keep('thread:t1');
 
-  expect(new DraftShelf(storage, pictures()).at('thread:t1').text).toBe('');
+  expect(new DraftShelf(storage, pictures(), ANY_KIND).at('thread:t1').text).toBe('');
 });
 
 test('the record follows the draft to the address its thread got, and a forgotten thread takes it', () => {
   const storage = makeStorage();
   const kept = pictures();
-  const shelf = new DraftShelf(storage, kept);
+  const shelf = new DraftShelf(storage, kept, ANY_KIND);
   shelf.at('new:47').text = 'typed before the thread existed';
   shelf.keep('new:47');
 
   shelf.rename('new:47', 'thread:t9');
-  const afterBirth = new DraftShelf(storage, kept);
+  const afterBirth = new DraftShelf(storage, kept, ANY_KIND);
   expect(afterBirth.at('thread:t9').text).toBe('typed before the thread existed');
   expect(afterBirth.at('new:47').text).toBe('');
 
   shelf.forget('thread:t9');
-  expect(new DraftShelf(storage, kept).at('thread:t9').text).toBe('');
+  expect(new DraftShelf(storage, kept, ANY_KIND).at('thread:t9').text).toBe('');
 });
 
 test('a draft carried to another project moves whole into its main checkout, or joins the draft parked there ahead of it with its own model', async () => {
   const storage = makeStorage();
   const kept = pictures();
-  const shelf = new DraftShelf(storage, kept);
+  const shelf = new DraftShelf(storage, kept, ANY_KIND);
   const moving = shelf.at('new:1');
   moving.text = 'the words being written';
   moving.type = 'code';
@@ -84,7 +102,7 @@ test('a draft carried to another project moves whole into its main checkout, or 
   shelf.keep('new:1');
 
   await shelf.carry('new:1', 'new:2');
-  const moved = new DraftShelf(storage, kept).at('new:2');
+  const moved = new DraftShelf(storage, kept, ANY_KIND).at('new:2');
   await moved.restored;
   expect([moved.text, moved.type, moved.switches, moved.place]).toEqual([
     'the words being written',
@@ -102,7 +120,7 @@ test('a draft carried to another project moves whole into its main checkout, or 
   shelf.keep('new:3');
   await shelf.carry('new:2', 'new:3');
 
-  const joined = new DraftShelf(storage, kept);
+  const joined = new DraftShelf(storage, kept, ANY_KIND);
   const both = joined.at('new:3');
   await both.restored;
   expect([both.text, both.type, both.switches, both.place]).toEqual([
@@ -118,15 +136,15 @@ test('a draft carried to another project moves whole into its main checkout, or 
 test('two tabs parking drafts at different addresses both find theirs after a reload', () => {
   const storage = makeStorage();
   const kept = pictures();
-  const first = new DraftShelf(storage, kept);
-  const second = new DraftShelf(storage, kept);
+  const first = new DraftShelf(storage, kept, ANY_KIND);
+  const second = new DraftShelf(storage, kept, ANY_KIND);
 
   first.at('thread:a').text = 'typed in the first tab';
   first.keep('thread:a');
   second.at('thread:b').text = 'typed in the second tab';
   second.keep('thread:b');
 
-  const reloaded = new DraftShelf(storage, kept);
+  const reloaded = new DraftShelf(storage, kept, ANY_KIND);
   expect(reloaded.at('thread:a').text).toBe('typed in the first tab');
   expect(reloaded.at('thread:b').text).toBe('typed in the second tab');
 });
@@ -134,14 +152,14 @@ test('two tabs parking drafts at different addresses both find theirs after a re
 test('staged pictures and PDFs come back after the page ends, in their order, at the address their thread got', async () => {
   const storage = makeStorage();
   const kept = pictures();
-  const shelf = new DraftShelf(storage, kept);
+  const shelf = new DraftShelf(storage, kept, ANY_KIND);
   const slot = shelf.at('new:47');
   slot.images = [await picture('i1', 'a.png', [1, 2]), await picture('i2', 'b.png', [3])];
   slot.files = [chatDraftFile('f1', 'Договор.pdf', 'application/pdf', new File([new Uint8Array([37, 80])], 'Договор.pdf'))];
   shelf.keep('new:47');
   shelf.rename('new:47', 'thread:t9');
 
-  const reloaded = new DraftShelf(storage, kept).at('thread:t9');
+  const reloaded = new DraftShelf(storage, kept, ANY_KIND).at('thread:t9');
   await reloaded.restored;
   expect(reloaded.images.map((image) => [image.id, image.filename, image.mediaType])).toEqual([
     ['i1', 'a.png', 'image/png'],
@@ -156,7 +174,7 @@ test('staged pictures and PDFs come back after the page ends, in their order, at
 test('a picture taken out of the draft leaves the store, and a sent draft leaves none', async () => {
   const storage = makeStorage();
   const kept = pictures();
-  const shelf = new DraftShelf(storage, kept);
+  const shelf = new DraftShelf(storage, kept, ANY_KIND);
   const slot = shelf.at('thread:t1');
   const [first, second] = [await picture('i1', 'a.png', [1]), await picture('i2', 'b.png', [2])];
   slot.images = [first, second];
@@ -172,13 +190,13 @@ test('a picture taken out of the draft leaves the store, and a sent draft leaves
 
 test('pictures the store no longer holds are counted as lost, not shown', async () => {
   const storage = makeStorage();
-  const shelf = new DraftShelf(storage, pictures());
+  const shelf = new DraftShelf(storage, pictures(), ANY_KIND);
   const slot = shelf.at('new:47');
   slot.text = 'look at this';
   slot.images = [await picture('i1', 'a.png', [1]), await picture('i2', 'b.png', [2])];
   shelf.keep('new:47');
 
-  const reloaded = new DraftShelf(storage, pictures()).at('new:47');
+  const reloaded = new DraftShelf(storage, pictures(), ANY_KIND).at('new:47');
   await reloaded.restored;
   expect(reloaded.images).toEqual([]);
   expect(reloaded.lostAttachments).toBe(2);
@@ -187,13 +205,13 @@ test('pictures the store no longer holds are counted as lost, not shown', async 
 test('past the ceiling the oldest record falls off and the newest stands', () => {
   const storage = makeStorage();
   const kept = pictures();
-  const shelf = new DraftShelf(storage, kept);
+  const shelf = new DraftShelf(storage, kept, ANY_KIND);
   for (let index = 0; index < 60; index += 1) {
     shelf.at(`thread:t${index}`).text = `draft ${index}`;
     shelf.keep(`thread:t${index}`);
   }
 
-  const reloaded = new DraftShelf(storage, kept);
+  const reloaded = new DraftShelf(storage, kept, ANY_KIND);
   expect(reloaded.at('thread:t59').text).toBe('draft 59');
   expect(reloaded.at('thread:t0').text).toBe('');
 });

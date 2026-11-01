@@ -84,3 +84,27 @@ describe('a call the feed still shows open', () => {
     expect(activity.ended(open)).toEqual({ call: ended, line });
   });
 });
+
+describe('a receipt the feed shows settled', () => {
+  const waiting: CallRecord = { ...ended, phase: 'waiting', mode: 'background', admittedAt: null, endedAt: null, executions: [] };
+  const receipt: ChatEntry = { ...open, toolState: 'output-available', toolOutput: { status: 'background' } };
+
+  const feedOf = (call: CallRecord | null) =>
+    new ToolActivity(
+      { id: 'thread', projectId: 1 } as ShownThread,
+      { of: () => ({ label: 'Thread', archived: false, harness: false }) } as unknown as ThreadNames,
+      { forThread: () => ({ line: () => null }) } as unknown as CommandActivity,
+      { callAt: () => call } as unknown as CallActivity,
+      () => new Map(),
+    );
+
+  test('stands as pending while its background call still waits its turn, and not once the call is gone', () => {
+    expect(feedOf(waiting).pending(receipt)).toBe(waiting);
+    expect(feedOf(null).pending(receipt)).toBeNull();
+  });
+
+  test('is not pending for a foreground call or for a call still shown open by its own state', () => {
+    expect(feedOf({ ...waiting, mode: 'foreground' }).pending(receipt)).toBeNull();
+    expect(feedOf(waiting).pending(open)).toBeNull();
+  });
+});

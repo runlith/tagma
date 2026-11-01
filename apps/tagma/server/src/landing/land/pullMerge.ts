@@ -1,7 +1,8 @@
 import { Effect } from 'effect';
 import type { Git } from '@runlith/git/Git';
 import type { PullMerge } from '@runlith/git/porcelain';
-import { gitAnswer, OwnGitFailed, runGit } from '../../platform/git/ownGit.js';
+import { OwnGitFailed, runGit } from '../../platform/git/ownGit.js';
+import { bringCheckout } from './bring.js';
 import { GateRefusal } from '../../platform/contract/wire/refusal.js';
 import type { StoreFailure } from '../../platform/contract/service/store.js';
 import { indexWrites } from '../../platform/git/index.js';
@@ -11,7 +12,7 @@ import { commitHooks, type Committing, HookRefused, landedHook, MERGING } from '
 import type { CheckoutLanes } from './lanes.js';
 import { laneFailed } from './commit.js';
 import { advanced, makeCommit } from './publish.js';
-import { standingOf } from '../../platform/git/places.js';
+import { type GitPlaces, standingOf } from '../../platform/git/places.js';
 import type { IndexCommitRefusal } from './indexCommit.js';
 
 export type PullAsk = { readonly root: string; readonly head: string; readonly merge: PullMerge; readonly job: string };
@@ -33,29 +34,26 @@ const fits = (git: Git['Service'], root: string, head: string, tree: string): Ef
 const brought = (
   git: Git['Service'],
   root: string,
-  index: string,
+  places: GitPlaces,
+  ref: string,
   head: string,
   commit: string,
   paths: readonly string[],
 ): Effect.Effect<readonly string[]> =>
-  Effect.flatMap(
-    Effect.result(
-      indexWrites.hold(
-        index,
-        Effect.gen(function* () {
-          yield* gitAnswer(git, 'pull-merge-refresh', ['-C', root, 'update-index', '-q', '--refresh']);
-          yield* runGit(git, 'pull-merge-checkout', ['-C', root, 'read-tree', '-m', '-u', head, commit]);
-        }),
-      ),
-    ),
-    (done) =>
-      done._tag === 'Success'
-        ? Effect.succeed([])
-        : Effect.as(
-            Effect.logWarning('a pulled merge landed and the checkout was not brought to it', { root, reason: done.failure.message }),
-            paths,
-          ),
-  );
+  Effect.flatMap(Effect.result(indexWrites.hold(places.index, bringCheckout(git, root, places, ref, head, commit))), (done) => {
+    if (done._tag === 'Failure')
+      return Effect.as(
+        Effect.logWarning('a pulled merge landed and the checkout was not brought to it', { root, reason: done.failure.message }),
+        paths,
+      );
+    const reason = done.success.failure ?? done.success.stale;
+    if (reason !== null)
+      return Effect.as(
+        Effect.logWarning('a pulled merge landed and the checkout was not wholly brought to it', { root, reason }),
+        done.success.kept,
+      );
+    return Effect.succeed(done.success.kept);
+  });
 
 export const mergePulled = Effect.fn('landing.mergePulled')(function* (
   git: Git['Service'],
@@ -85,7 +83,7 @@ export const mergePulled = Effect.fn('landing.mergePulled')(function* (
   const landed = Effect.gen(function* () {
     const sent = yield* advanced(git, git, { root, places, ref, base: head, job: ask.job }, commit);
     if (sent._tag === 'moved') return null;
-    return yield* brought(git, root, places.index, head, commit, paths);
+    return yield* brought(git, root, places, ref, head, commit, paths);
   });
   const unsynced = yield* hooked(
     lanes.commits.enter(root, landed).pipe(

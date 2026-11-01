@@ -11,6 +11,7 @@ import { Catalogs, NO_CATALOGS } from '../../graph/contract/wire/catalogs.js';
 import { FORMAT_FILE } from '../../graph/contract/wire/storage.js';
 import { storageHomes, resolveStorageLayout } from '../../graph/storage/layout.js';
 import { ShadowGit } from '../../graph/tree/shadow.js';
+import { NO_SIDE } from '../../graph/contract/service/exchange.js';
 import { markerText } from '../../graph/tree/marker.js';
 import { shippedSteps } from '../../graph/steps/sequence.js';
 import { writeBlockTree, readBlockTree } from '../../graph/tree/layout.js';
@@ -36,7 +37,7 @@ export const servedTree = Effect.fnUntraced(function* (
     worktree: checkout,
   });
   if (current.mode !== 'stealth') return yield* Effect.die('the fixture requires a stealth tree');
-  const shadow = yield* ShadowGit.open(current.gitDir, graph.git, null);
+  const shadow = yield* ShadowGit.open(current.gitDir, graph.git, NO_SIDE);
   const main = yield* runGit(graph.git, 'test-topology', ['-C', checkout, 'symbolic-ref', '--short', 'HEAD']);
   if (main !== 'main') yield* shadow.branch(main, 'main');
   yield* shadow.attach(current.treeRoot, main);

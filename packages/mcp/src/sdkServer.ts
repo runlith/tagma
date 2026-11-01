@@ -1,8 +1,9 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
-import { Effect, Stream } from 'effect';
+import { Effect, type Scope, Stream } from 'effect';
 import { McpServeFailed } from './McpFailure';
 
 export type McpServedTool = {
@@ -71,6 +72,45 @@ export function mcpToolServer(input: McpServerInput): McpServer {
   handled(server.server, input);
   return server;
 }
+
+type HttpServerInput = McpServerInput & { readonly bearer: string };
+
+type McpHttpServing = { readonly url: string };
+
+const MCP_PATH = '/mcp';
+
+const answerHttp = async (input: HttpServerInput, request: Request): Promise<Response> => {
+  if (request.headers.get('authorization') !== `Bearer ${input.bearer}`) return new Response('unauthorized', { status: 401 });
+  if (new URL(request.url).pathname !== MCP_PATH) return new Response('not found', { status: 404 });
+  if (request.method !== 'POST') return new Response('method not allowed', { status: 405, headers: { allow: 'POST' } });
+  const server = mcpToolServer(input);
+  const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
+  await server.connect(transport);
+  const gone = Promise.withResolvers<Response>();
+  const dropped = () => {
+    void server.close();
+    gone.resolve(new Response(null, { status: 499 }));
+  };
+  request.signal.addEventListener('abort', dropped, { once: true });
+  try {
+    return await Promise.race([transport.handleRequest(request), gone.promise]);
+  } finally {
+    request.signal.removeEventListener('abort', dropped);
+    await server.close();
+  }
+};
+
+export const serveMcpOverHttp = (input: HttpServerInput): Effect.Effect<McpHttpServing, McpServeFailed, Scope.Scope> =>
+  Effect.map(
+    Effect.acquireRelease(
+      Effect.try({
+        try: () => Bun.serve({ hostname: '127.0.0.1', port: 0, idleTimeout: 0, fetch: (request) => answerHttp(input, request) }),
+        catch: (error) => new McpServeFailed({ transport: 'http', reason: reasonOf(error) }),
+      }),
+      (served) => Effect.promise(() => served.stop(true)),
+    ),
+    (served) => ({ url: `http://127.0.0.1:${served.port}${MCP_PATH}` }),
+  );
 
 export const serveMcpOverStdio = Effect.fnUntraced(function* (input: StdioServerInput) {
   yield* Effect.scoped(

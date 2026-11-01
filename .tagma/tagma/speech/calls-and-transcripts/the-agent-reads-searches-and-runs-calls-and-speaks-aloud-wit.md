@@ -18,11 +18,11 @@ sources:
   - kind: file
     ref: apps/tagma/server/src/speech/contract/wire/capability.ts
   - kind: file
-    ref: apps/tagma/server/src/speech/listening/page.ts
+    ref: apps/tagma/server/src/calls/listening/page.ts
   - kind: file
     ref: apps/tagma/server/src/speech/operations.ts
   - kind: symbol
-    ref: apps/tagma/server/src/speech/contract/wire/operations.ts
+    ref: apps/tagma/server/src/calls/contract/wire/operations.ts
     symbol: LISTENING_OPERATIONS
 ---
 **Value.** The agent itself works with calls and voice: reads past conversations, searches them, names speakers, puts marks, writes summaries, starts and ends recording, speaks aloud.

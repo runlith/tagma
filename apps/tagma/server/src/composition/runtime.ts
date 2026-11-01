@@ -32,8 +32,9 @@ import type { WatchLifetime } from '@runlith/watch/client';
 import { fileWatcherLayer } from './fileWatcher.js';
 import { PROGRAM_RELEASE } from '../platform/contract/wire/program.js';
 import { MachineAgents } from '../installation/contract/service/agents.js';
-import { MachineCalls } from '../installation/contract/service/calls.js';
-import { Listenings } from '../speech/contract/service/listenings.js';
+import { LiveWorks } from '../platform/contract/service/live.js';
+import { BridgeMethods } from '../views/contract/service/bridge.js';
+import { Handoff } from '../platform/contract/service/handoff.js';
 import { ThreadRunning } from '../threads/contract/service/reads.js';
 import type { TokenStore } from '@runlith/llm/oauth/FileTokenStore';
 import { artifacts } from '../artifacts/artifacts.js';
@@ -44,19 +45,13 @@ import { AccountCredentials, ModelAccess } from '../providers/contract/service/a
 import { DefaultAccounts } from '../providers/contract/service/accounts.js';
 import { CredentialFiles, KeyedProviders, ProviderCredentials, QuotaProviders } from '../providers/contract/service/credentials.js';
 import { credentialsLayer } from '../speech/credentials.js';
-import { speech } from '../speech/speech.js';
-import { RECORDINGS, RecordingsPlace } from '../speech/contract/service/recording.js';
-import { KEYED_SPEECH, speechBindings, speechPlace } from './speech.js';
-import { callThreads } from './callThreads.js';
+import { KEYED_SPEECH, speechInstallation, speechPlace } from './speech.js';
 import { browserBindings, browserRuns, cookieSourcesLayer } from './browser.js';
 import { browser } from '../browser/browser.js';
 import { images } from '../images/images.js';
 import { managedBrowser } from '../managed-browser/managed-browser.js';
 import { pageRender } from '../page-render/page-render.js';
 import { desktopBrowser } from '../desktop-browser/desktop-browser.js';
-import { CallThreads } from '../speech/contract/service/callThreads.js';
-import { Attachments } from '../threads/contract/service/attachments.js';
-import { ThreadTurns } from '../threads/turns/acts.js';
 import { providers } from '../providers/providers.js';
 import type { VendorWire } from '../providers/accounts/signIns.js';
 import { SignIns, VendorWires } from '../providers/contract/service/signIns.js';
@@ -144,7 +139,7 @@ import { databasePath, seedDirectory } from '../installation/paths.js';
 import { InstalledChannel } from '../installation/contract/service/channel.js';
 import type { Channel } from '../installation/contract/wire/channel.js';
 import type { Assembly, DriverId } from './manifest.js';
-import { installedIn, servedIn } from './extensions.js';
+import { type ExtensionOwners, installedIn, servedIn } from './extensions.js';
 import { makeDrives } from './drives.js';
 import { Drives } from '../platform/contract/service/drives.js';
 import { Capacity, serverCapacity, thisMachine } from '../platform/contract/service/capacity.js';
@@ -191,8 +186,9 @@ import { ARTIFACT_PREFIX } from '../http/contract/wire/served.js';
 import { type LocalSites, makeLocalSites } from './http/sites.js';
 import { localEndpoint } from './http/endpoint.js';
 import { LaneEndpoint } from '../executions/contract/service/views.js';
-import { localSignInDoor } from './http/signInDoor.js';
-import { McpSignInDoor } from '../mcp/contract/service/door.js';
+import { localAddress } from './http/address.js';
+import { DoorAddress } from '../platform/contract/service/door.js';
+import type { Route } from '../platform/contract/service/route.js';
 import { McpServers } from '../mcp/contract/service/servers.js';
 import { mcp } from '../mcp/mcp.js';
 import { tagmaApps } from '../tagma-apps/tagma-apps.js';
@@ -226,6 +222,7 @@ import { ThreadLineage } from '../workspace/contract/service/assignments.js';
 
 export type ServerRuntime = {
   liveGroup: LiveGroup;
+  routes: readonly Route[];
   runtime: ManagedRuntime.ManagedRuntime<
     | GraphServices
     | GraphSteps
@@ -254,7 +251,8 @@ export type ServerRuntime = {
     | AwakePolicy
     | InspectionsInstalled
     | InstalledHarnesses
-    | HarnessAdapters,
+    | HarnessAdapters
+    | ExtensionOwners,
     never
   >;
   graph: Context.Context<GraphServices | GraphStore | GraphUnits | MachineStore | MachineUnits>;
@@ -328,7 +326,6 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
     toolOutputsPath?: string;
     scratchPath?: string;
     artifactsPath?: string;
-    recordingsPath?: string;
     artifactOrigin?: string;
     sandboxPort?: number;
     sites?: LocalSites;
@@ -456,7 +453,6 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
     Layer.provide(options.vendorWire === undefined ? Layer.empty : Layer.succeed(VendorWires, { wire: options.vendorWire })),
   );
   const machine = machineWorld(() => presentCarried(CARRIED_RIPGREP));
-  const calls = callThreads();
   const browserThreads = browserRuns();
   const mcpPlacesPort = mcpPlaces();
   const sandboxInstallation = Layer.effect(
@@ -622,6 +618,7 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
                 Layer.provide(
                   Layer.succeed(ToolOutputsPlace, options.toolOutputsPath === undefined ? {} : { path: options.toolOutputsPath }),
                 ),
+                Layer.provide(Layer.succeed(BridgeMethods, { all: assembly.bridgeMethods })),
                 Layer.provide(BunFileSystem.layer),
               ),
             ),
@@ -655,18 +652,10 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
               : Layer.succeed(Sender, options.sender),
             closing(
               'speech',
-              speech.lifetimes.installation.pipe(
-                Layer.provideMerge(
-                  speechBindings(speechPlace(channel, options.sourcePath, options.installation, storeDirectory(storePath)), {
-                    leaving: options.leaving ?? Effect.succeed(false),
-                    opened: options.opened ?? Effect.void,
-                  }).pipe(Layer.provide(credentialsLayer)),
-                ),
-                Layer.provide(Layer.succeed(CallThreads, calls.port)),
-                Layer.provide(Layer.succeed(RecordingsPlace, { root: options.recordingsPath ?? join(dirname(storePath), RECORDINGS) })),
-                Layer.provide(readyProviders),
-                Layer.provide(BunFileSystem.layer),
-              ),
+              speechInstallation({
+                place: speechPlace(channel, options.sourcePath, options.installation, storeDirectory(storePath)),
+                credentials: credentialsLayer,
+              }).pipe(Layer.provide(readyProviders), Layer.provide(BunFileSystem.layer)),
             ),
             browsers,
             images.lifetimes.installation.pipe(Layer.provide(readyProviders)),
@@ -747,7 +736,12 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
             ),
 
             Layer.provideMerge(approvalModesLayer),
-            Layer.provideMerge(Layer.succeed(Handover, options.leaving ?? Effect.succeed(false))),
+            Layer.provideMerge(
+              Layer.merge(
+                Layer.succeed(Handover, options.leaving ?? Effect.succeed(false)),
+                Layer.succeed(Handoff, { leaving: options.leaving ?? Effect.succeed(false), opened: options.opened ?? Effect.void }),
+              ),
+            ),
             Layer.provideMerge(Layer.succeed(Drives, driving.drives)),
             Layer.provideMerge(childLedgerLayer(options.hostSourcePath, carriedBundle)),
             Layer.provide(Layer.succeedContext(prepared)),
@@ -811,7 +805,7 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
     Context.make(HarnessOwner, { id: owner, build: options.installation?.manifest.identity.digest ?? owner }),
     Context.make(ViewSites, options.sites ?? (yield* Scope.provide(makeLocalSites(sandboxPort), stackScope))),
     Context.make(LaneEndpoint, localEndpoint),
-    Context.make(McpSignInDoor, localSignInDoor(options.localOrigin)),
+    Context.make(DoorAddress, localAddress(options.localOrigin)),
   );
   const stack = yield* Scope.provide(
     Layer.build(servingOf(assembly).pipe(Layer.provide(Layer.merge(Layer.succeedContext(servingInputs), BunFileSystem.layer)))),
@@ -851,14 +845,6 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
     mcpPlacesPort.bind({ coverage: Context.get(owners, Coverage), bases: [scratch.root, options.attachmentsPath] }),
     stackScope,
   );
-  yield* Scope.provide(
-    calls.bind({
-      turns: Context.get(owners, ThreadTurns),
-      attachments: Context.get(owners, Attachments),
-      records: Context.get(built, ThreadRecords),
-    }),
-    stackScope,
-  );
   const resolution = sessionResolution(store, Context.get(built, Terminals), Context.get(built, ThreadRecords));
   const steps = Context.make(ConsoleKeyRollback, consoleKeyRollback(dirname(options.tokensPath), processes)).pipe(
     Context.add(DowngradeSteps, Context.get(owners, CommitQueue)),
@@ -870,7 +856,7 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
     Context.make(ServedGraphs, pool),
     Context.make(SessionResolution, resolution),
     Context.make(MachineAgents, { working: Context.get(owners, ThreadRunning).working }),
-    Context.make(MachineCalls, { live: Context.get(owners, Listenings).live }),
+    Context.make(LiveWorks, { all: assembly.liveWork }),
   );
   return {
     runtime,
@@ -878,6 +864,7 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
     graph: machineGraph,
     enforcement: judging,
     liveGroup: assembly.live,
+    routes: assembly.routes,
     pool,
     tokens,
     consoleKeys,

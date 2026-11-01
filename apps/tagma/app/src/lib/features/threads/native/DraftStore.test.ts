@@ -16,7 +16,7 @@ describe('a draft’s own sub-agent team', () => {
   test('a draft saved before spend had ten steps reads its spend on the ten-step scale; one saved after reads as written', () => {
     const storage = makeStorage();
     storage.setItem('tagma.draft.old', JSON.stringify({ ...draft(4), spendSteps: undefined }));
-    const store = new DraftStore(storage);
+    const store = new DraftStore(storage, () => true);
     store.write('new', { ...store.read('old')!, team: team(4) as StoredDraft['team'] });
 
     expect(store.read('old')?.team?.models).toEqual([
@@ -34,7 +34,7 @@ describe('a draft’s own sub-agent team', () => {
     const pooled = { ...team(4), review: { reviewers: 2, pool: [row], split: 'same', lenses: ['tests'] } };
     storage.setItem('tagma.draft.pooled', JSON.stringify({ ...draft(4), team: pooled }));
 
-    expect(new DraftStore(storage).read('pooled')?.team).toEqual({
+    expect(new DraftStore(storage, () => true).read('pooled')?.team).toEqual({
       models: [
         { ...row, spend: 4 },
         { provider: 'a', on: false },

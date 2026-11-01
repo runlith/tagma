@@ -7,6 +7,8 @@ export const AgentGuideSource = Schema.Struct({
   hook: AgentHook,
   ruleId: Schema.optional(Schema.String),
   state: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
+  batchKey: Schema.optional(Schema.String),
+  covers: Schema.optional(Schema.Array(Schema.String)),
   retell: Schema.optional(Schema.Literal(false)),
   toolName: Schema.optional(Schema.String),
   toolCallId: Schema.optional(Schema.String),

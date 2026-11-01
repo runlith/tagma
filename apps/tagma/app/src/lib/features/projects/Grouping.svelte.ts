@@ -4,8 +4,6 @@ import { ProjectsRepo } from '../workspace/ProjectsRepo.js';
 import { Workspace } from '../workspace/Selection.svelte.js';
 import { ProjectStrip } from './Strip.svelte.js';
 
-type Projects = ReturnType<typeof ProjectsRepo.use>;
-
 export type GroupPair = { readonly first: Project; readonly second: Project };
 
 export class ProjectGrouping extends Service<ProjectGrouping>()('ProjectGrouping', { tier: 'app' }) {
@@ -17,7 +15,7 @@ export class ProjectGrouping extends Service<ProjectGrouping>()('ProjectGrouping
   pending = $state(false);
 
   constructor(
-    private readonly projects: Projects,
+    private readonly projects: ProjectsRepo,
     private readonly workspace: Workspace,
     private readonly strip: ProjectStrip,
   ) {

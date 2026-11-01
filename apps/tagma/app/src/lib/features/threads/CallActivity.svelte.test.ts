@@ -1,5 +1,6 @@
 import type { CallEvent, CallRecord } from '@runlith/agent/callProgress';
 import { Scope } from '@runlith/layer/Scope';
+import type { ThreadListRow } from '@tagma/server/threads/contract/wire/list';
 import { expect, test } from 'vitest';
 import type { Door } from '$lib/wire/Door.js';
 import type { LiveConnection } from '$lib/wire/Live.js';
@@ -27,6 +28,9 @@ const call = (thread: string, id: string, over: Partial<CallRecord> = {}): CallR
     executions: [],
     ...over,
   }) as CallRecord;
+
+const row = (id: string, over: Partial<ThreadListRow> = {}): ThreadListRow =>
+  ({ id, activeRunId: null, phase: null, ...over }) as ThreadListRow;
 
 const ended = (thread: string, id: string, at: number): CallRecord =>
   call(thread, id, { phase: 'completed', startedAt: at - 10, endedAt: at });
@@ -69,6 +73,42 @@ test('a call that moves changes its own thread’s calls, and every other thread
   });
   expect(calls.callsOf('b')).toBe(before.b);
   expect(calls.callsOf('c').map((held) => held.phase)).toEqual(['stopping']);
+});
+
+test('only a background call still waiting its turn counts as waiting work of its thread', () => {
+  const { calls, send } = activity();
+  const waiting = (id: string, over: Partial<CallRecord> = {}) =>
+    call('a', id, { mode: 'background', phase: 'waiting', admittedAt: null, ...over });
+  send({
+    type: 'snapshot',
+    calls: [
+      waiting('w-1'),
+      waiting('w-2', { phase: 'preparing' }),
+      waiting('w-3', { phase: 'running', admittedAt: 1_000 }),
+      waiting('w-4', { phase: 'completed', endedAt: 2_000 }),
+      call('a', 'f-1', { phase: 'waiting', admittedAt: null }),
+      waiting('o-1', { threadId: 'b' }),
+    ],
+  });
+  expect(calls.waitingOf(row('a'))).toBe(2);
+  expect(calls.waitingOf(row('c'))).toBe(0);
+});
+
+test('a waiting call the active run’s phase already stands is not waiting work again, whichever list keeps it, and another run’s call of the same id is', () => {
+  const { calls, send } = activity();
+  const waiting = (id: string, runId = 'run-now') => call('a', id, { runId, mode: 'background', phase: 'waiting', admittedAt: null });
+  send({
+    type: 'snapshot',
+    calls: [waiting('w-1'), waiting('w-2'), waiting('w-3'), waiting('w-1', 'run-before'), waiting('w-2', 'run-before')],
+  });
+  const phase = {
+    phase: 'tools',
+    since: null,
+    calls: [{ id: 'w-1', name: 'bash', title: null, since: null }],
+    queued: ['w-2'],
+  } as const;
+  expect(calls.waitingOf(row('a', { activeRunId: 'run-now', phase }))).toBe(3);
+  expect(calls.waitingOf(row('a', { activeRunId: null }))).toBe(5);
 });
 
 test('the window keeps every standing call and the newest endings, and what a pruned call was told is forgotten with it', async () => {

@@ -17,7 +17,7 @@ import type { Message } from '@runlith/llm/schema/messages';
 import type { AgentEvent } from './AgentEvent';
 import type { AgentRuntimeGuidance, ToolCaller } from './contracts';
 import { agentSpan } from './spans';
-import { AgentGuidanceJournal, pendingRuntimeGuides } from './AgentGuidanceJournal';
+import { AgentGuidanceJournal, coalesceGuides, pendingRuntimeGuides } from './AgentGuidanceJournal';
 import type { PendingRuntimeGuide } from './contracts';
 import { AgentRunState, type AgentToolRecord } from './AgentRunState';
 import { AgentRuntimePolicy, type AgentRule } from './policy/AgentRuntimePolicy';
@@ -303,7 +303,7 @@ const startAgentRun = Effect.fnUntraced(function* <TCtx>(
             door,
             runState: door.runState,
             completedSteps: turn.completedSteps,
-            untoldGuides: () => stepGuides.splice(0),
+            untoldGuides: () => coalesceGuides(stepGuides.splice(0)),
             output: turn.output,
             stop: (reason) => Effect.sync(() => void stop.stop(reason)),
             close: () => Effect.andThen(Fiber.interrupt(turning), close),

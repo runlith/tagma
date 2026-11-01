@@ -1,9 +1,8 @@
 import { graph as declaration } from './contract/wire/module.js';
 import { Context, Layer } from 'effect';
 import { graphVerbs } from './cli.js';
-import { GRAPH_FEED, GRAPH_RECOVERY_FEED, GRAPH_REMOTE_FEED, GRAPH_WORK_FEED } from './contract/wire/feed.js';
+import { GRAPH_FEED, GRAPH_RECOVERY_FEED, GRAPH_WORK_FEED } from './contract/wire/feed.js';
 import { GraphRecoveries } from './contract/service/recovery.js';
-import { GraphRemotes } from './contract/service/remote.js';
 import { HolderCopies } from './contract/service/holders.js';
 import { ServedGraphs } from './contract/service/serving.js';
 import { BEHAVIOURS } from './contract/service/behaviours.js';
@@ -28,14 +27,13 @@ import { whatItIs } from './doctrine/whatItIs.js';
 import { operationContextForm, ruleOperationContextForm } from './steps/operationContexts.js';
 import { graphPools } from './contract/service/lanes.js';
 
-const FEEDS = [GRAPH_FEED, GRAPH_WORK_FEED, GRAPH_RECOVERY_FEED, GRAPH_REMOTE_FEED] as const;
+const FEEDS = [GRAPH_FEED, GRAPH_WORK_FEED, GRAPH_RECOVERY_FEED] as const;
 
 const live: GraphLive = liveOf(FEEDS, async (door) =>
   (await import('./journal/channel.js')).graphChannel(
     Context.get(door, ServedGraphs),
     Context.get(door, GraphRecoveries),
     Context.get(door, HolderCopies),
-    Context.get(door, GraphRemotes),
   ),
 );
 

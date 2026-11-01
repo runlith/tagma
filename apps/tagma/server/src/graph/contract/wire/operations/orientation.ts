@@ -24,7 +24,14 @@ export const touchBriefSchema = Schema.Struct({
   as: shownAs,
   rules: Schema.Array(Schema.Struct({ ...touchText.fields, reach: Schema.String })),
   explanations: Schema.Array(touchText),
-  tagPrompts: Schema.Array(Schema.Struct({ id: Schema.String, prompt: Schema.String, identity: Schema.String })),
+  tagPrompts: Schema.Array(
+    Schema.Struct({
+      id: Schema.String,
+      prompt: Schema.String,
+      identity: Schema.String,
+      aliases: Schema.optional(Schema.Array(Schema.String)),
+    }),
+  ),
   touches: Schema.Array(
     Schema.Struct({ writer: writerSchema, agentName: Schema.NullOr(Schema.String), task: named, wrote: Schema.Boolean }),
   ),

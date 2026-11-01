@@ -1,5 +1,6 @@
 import { Layer } from 'effect';
 import { HttpRouter, HttpServerResponse } from 'effect/http';
+import type { DoorPath } from '../platform/contract/service/route.js';
 
 type Method = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
@@ -216,6 +217,8 @@ const gone = (path: string, operation: string) =>
     },
     { status: 410 },
   );
+
+export const RETIRED_PATHS: readonly DoorPath[] = RETIRED.map(([, path]) => ({ path, prefix: false }));
 
 const [first, ...rest] = RETIRED.map(([method, path, operation]) => HttpRouter.add(method, path, () => gone(path, operation)));
 

@@ -4,7 +4,7 @@ import { type GapCause, gap } from '@runlith/audio/sound/gap';
 import { type EndReason, ended, type Sound, type Track } from '@runlith/audio/sound/track';
 import { type Cause, Clock, Deferred, Effect, Exit, Fiber, Queue, type Scope, Stream } from 'effect';
 import { GateRefusal } from '../../platform/contract/wire/refusal.js';
-import type { Sent } from '../contract/service/listenings.js';
+import type { Sent } from '../contract/service/recognitions.js';
 import { type ListeningTrack, SENT_FRAME_SAMPLES as FRAME_SAMPLES, SENT_HEADER_BYTES as HEADER_BYTES } from '../contract/wire/listening.js';
 import { VOICE_WORDS } from '../contract/wire/words.js';
 import type { Captured } from './track.js';

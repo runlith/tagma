@@ -14,6 +14,7 @@ import type { StoredFailure } from '../../platform/store/crossing.js';
 import { MachineStore } from '../../platform/contract/service/store.js';
 import { MachineUnits, type ProgramUnit, type Unit } from '../../platform/contract/service/units.js';
 import { unplannable } from '../../platform/store/programs.js';
+import { bindQuery } from '../../platform/store/queries.js';
 import { runIdOf, threadLog, typeOf } from '../store/thread.js';
 import { ENTRY_OPEN_QUESTION_INDEX, threadEntry } from '../../threads/store/kernel.js';
 import { threadBase, threadEvent, threadEventIdentity } from '../../threads/store/journal.js';
@@ -49,6 +50,92 @@ export const makeTranscriptRows = Effect.gen(function* () {
 
   const layered = makeLayeredEntries(db);
   const edge = layered.edge;
+
+  const threadId = sql.placeholder('threadId');
+  const based = sql`exists (select 1 from ${threadBase} where ${threadBase.threadId} = ${threadId} or ${threadBase.sourceId} = ${threadId})`;
+  const lowest = sql<number>`coalesce((select min(${threadEntry.ord}) from ${threadEntry} where ${threadEntry.threadId} = ${threadId}), 0)`;
+  const highest = sql<number>`coalesce((select max(${threadEntry.ord}) from ${threadEntry} where ${threadEntry.threadId} = ${threadId}), -1)`;
+  const planned = {
+    bounds: db.all<{ low: number; high: number; layered: number }>(sql`select ${lowest} as low, ${highest} as high, ${based} as layered`),
+    guard: db
+      .select({ id: threadLog.threadId })
+      .from(threadLog)
+      .where(
+        and(
+          eq(threadLog.threadId, threadId),
+          eq(threadLog.entriesThrough, sql.placeholder('through')),
+          sql`not ${based}`,
+          sql`${lowest} = ${sql.placeholder('low')}`,
+          sql`${highest} = ${sql.placeholder('high')}`,
+        ),
+      )
+      .prepare(),
+    insert: db
+      .insert(threadEntry)
+      .values({
+        threadId,
+        ord: sql.placeholder('ord'),
+        entryId: sql.placeholder('entryId'),
+        runId: sql.placeholder('runId'),
+        type: sql.placeholder('type'),
+        entry: sql.placeholder('entry'),
+      })
+      .prepare(),
+    replace: db
+      .update(threadEntry)
+      .set({ entry: sql.placeholder('entry'), runId: sql.placeholder('runId'), type: sql.placeholder('type') })
+      .where(and(eq(threadEntry.threadId, threadId), eq(threadEntry.entryId, sql.placeholder('entryId'))))
+      .prepare(),
+    folded: db
+      .update(threadEvent)
+      .set({ payload: sql.placeholder('payload') })
+      .where(and(eq(threadEvent.threadId, threadId), eq(threadEvent.position, sql.placeholder('position'))))
+      .prepare(),
+    identity: db
+      .select({ position: threadEvent.position, payload: threadEvent.payload })
+      .from(threadEvent)
+      .where(
+        and(
+          eq(threadEvent.threadId, threadId),
+          lte(threadEvent.position, sql.placeholder('through')),
+          sql`${payloadField(threadEvent.payload, 'entry.id')} is not null`,
+          sql`${threadEventIdentity(threadEvent.payload)} = ${sql.placeholder('identity')}`,
+          bodyInFold(threadEvent.payload),
+        ),
+      )
+      .orderBy(desc(threadEvent.position))
+      .prepare(),
+    restored: db
+      .update(threadEvent)
+      .set({ payload: sql.placeholder('payload') })
+      .where(
+        and(
+          eq(threadEvent.threadId, threadId),
+          eq(threadEvent.position, sql.placeholder('position')),
+          eq(threadEvent.payload, sql.param(sql.placeholder('held'), threadEvent.payload)),
+        ),
+      )
+      .prepare(),
+    cursor: db
+      .update(threadLog)
+      .set({ entriesThrough: sql.placeholder('through') })
+      .where(eq(threadLog.threadId, threadId))
+      .prepare(),
+    suffix: db
+      .select({ kind: threadEvent.kind, payload: threadEvent.payload })
+      .from(threadEvent)
+      .where(
+        and(
+          eq(threadEvent.threadId, threadId),
+          gt(
+            threadEvent.position,
+            sql<number>`coalesce((select ${threadLog.entriesThrough} from ${threadLog} where ${threadLog.threadId} = ${threadId}), 0)`,
+          ),
+        ),
+      )
+      .orderBy(asc(threadEvent.position))
+      .prepare(),
+  };
 
   const entriesWhere = Effect.fnUntraced(function* (unit: Unit<'machine'>, id: string, where: SQL | undefined) {
     const rows = yield* layered.rows(unit, id, where);
@@ -102,22 +189,7 @@ export const makeTranscriptRows = Effect.gen(function* () {
         if (!moved.has(entry.id)) continue;
         const identity = toolEventIdentity(entry);
         if (identity === null) continue;
-        const held = yield* unit.run(
-          db
-            .select({ position: threadEvent.position, payload: threadEvent.payload })
-            .from(threadEvent)
-            .where(
-              and(
-                eq(threadEvent.threadId, id),
-                lte(threadEvent.position, through),
-                sql`${payloadField(threadEvent.payload, 'entry.id')} is not null`,
-                sql`${threadEventIdentity(threadEvent.payload)} = ${identity}`,
-                bodyInFold(threadEvent.payload),
-              ),
-            )
-            .orderBy(desc(threadEvent.position))
-            .get(),
-        );
+        const held = yield* unit.run(planned.identity.get({ threadId: id, through, identity }));
         if (held === undefined) continue;
         const heldEntryId = foldedEntryId(held.payload);
         if (heldEntryId !== entry.id) {
@@ -265,36 +337,16 @@ export const makeTranscriptRows = Effect.gen(function* () {
       if (placements.some((placement) => placement.kind === 'mark' || placement.kind === 'withdraw'))
         return yield* unplannable(program, 'a withdrawal or a rewind mark');
       const replaced = placements.flatMap((placement) => (placement.kind === 'replace' ? [placement.entry.id] : []));
-      const based = sql`exists (select 1 from ${threadBase} where ${threadBase.threadId} = ${id} or ${threadBase.sourceId} = ${id})`;
-      const lowest = sql<number>`coalesce((select min(${threadEntry.ord}) from ${threadEntry} where ${threadEntry.threadId} = ${id}), 0)`;
-      const highest = sql<number>`coalesce((select max(${threadEntry.ord}) from ${threadEntry} where ${threadEntry.threadId} = ${id}), -1)`;
       const read = yield* units.read((unit) =>
         Effect.gen(function* () {
-          const [span] = yield* unit.run(
-            db.all<{ low: number; high: number; layered: number }>(sql`select ${lowest} as low, ${highest} as high, ${based} as layered`),
-          );
+          const [span] = yield* unit.run(planned.bounds.execute({ threadId: id }));
           const old = replaced.length === 0 ? [] : yield* chunkedRows(unit, id, threadEntry.entryId, replaced);
           const held: { readonly entry: ThreadTranscriptEntry; readonly position: number; readonly payload: ThreadEventPayloadValue }[] =
             [];
           for (const entry of old) {
             const identity = toolEventIdentity(entry);
             if (identity === null) continue;
-            const event = yield* unit.run(
-              db
-                .select({ position: threadEvent.position, payload: threadEvent.payload })
-                .from(threadEvent)
-                .where(
-                  and(
-                    eq(threadEvent.threadId, id),
-                    lte(threadEvent.position, through),
-                    sql`${payloadField(threadEvent.payload, 'entry.id')} is not null`,
-                    sql`${threadEventIdentity(threadEvent.payload)} = ${identity}`,
-                    bodyInFold(threadEvent.payload),
-                  ),
-                )
-                .orderBy(desc(threadEvent.position))
-                .get(),
-            );
+            const event = yield* unit.run(planned.identity.get({ threadId: id, through, identity }));
             if (event !== undefined) held.push({ entry, ...event });
           }
           return { span, held };
@@ -302,28 +354,11 @@ export const makeTranscriptRows = Effect.gen(function* () {
       );
       if (read.span === undefined || read.span.layered === 1) return yield* unplannable(program, 'a layered transcript');
       const { low, high } = read.span;
-      yield* program.guard(
-        db
-          .select({ id: threadLog.threadId })
-          .from(threadLog)
-          .where(
-            and(
-              eq(threadLog.threadId, id),
-              eq(threadLog.entriesThrough, through),
-              sql`not ${based}`,
-              sql`${lowest} = ${low}`,
-              sql`${highest} = ${high}`,
-            ),
-          ),
-        1,
-      );
+      yield* program.guard(bindQuery(planned.guard, { threadId: id, through, low, high }), 1);
       for (const { entry, position, payload } of read.held) {
         if (foldedEntryId(payload) !== entry.id) return yield* unplannable(program, `folded event ${position} names another entry`);
         yield* program.write(
-          db
-            .update(threadEvent)
-            .set({ payload: restoredFact(payload, entry) })
-            .where(and(eq(threadEvent.threadId, id), eq(threadEvent.position, position), eq(threadEvent.payload, payload))),
+          bindQuery(planned.restored, { threadId: id, position, payload: restoredFact(payload, entry), held: payload }),
           1,
         );
       }
@@ -337,18 +372,26 @@ export const makeTranscriptRows = Effect.gen(function* () {
         if (runId !== null && movesSaid(placement.entry, appended)) said.add(runId);
         if (placement.kind === 'replace') {
           yield* program.write(
-            db
-              .update(threadEntry)
-              .set({ entry: placement.entry, runId, type: typeOf(placement.entry) })
-              .where(and(eq(threadEntry.threadId, id), eq(threadEntry.entryId, placement.entry.id))),
+            bindQuery(planned.replace, {
+              threadId: id,
+              entryId: placement.entry.id,
+              entry: placement.entry,
+              runId,
+              type: typeOf(placement.entry),
+            }),
             1,
           );
         } else {
           const ord = appended ? next++ : first--;
           yield* program.write(
-            db
-              .insert(threadEntry)
-              .values({ threadId: id, ord, entryId: placement.entry.id, runId, type: typeOf(placement.entry), entry: placement.entry }),
+            bindQuery(planned.insert, {
+              threadId: id,
+              ord,
+              entryId: placement.entry.id,
+              runId,
+              type: typeOf(placement.entry),
+              entry: placement.entry,
+            }),
             1,
           );
         }
@@ -357,17 +400,17 @@ export const makeTranscriptRows = Effect.gen(function* () {
         );
         if (fact !== undefined && placement.entry.type === 'tool' && foldedEntryId(fact.payload) === null)
           yield* program.write(
-            db
-              .update(threadEvent)
-              .set({ payload: foldedToolFact(fact.payload, placement.entry as ThreadToolEntry) })
-              .where(and(eq(threadEvent.threadId, id), eq(threadEvent.position, fact.position))),
+            bindQuery(planned.folded, {
+              threadId: id,
+              position: fact.position,
+              payload: foldedToolFact(fact.payload, placement.entry as ThreadToolEntry),
+            }),
             1,
           );
       }
       if (said.size > 0) yield* program.write(saidOfRuns(db, id, [...said]));
       const last = facts.at(-1);
-      if (last !== undefined)
-        yield* program.write(db.update(threadLog).set({ entriesThrough: last.position }).where(eq(threadLog.threadId, id)), 1);
+      if (last !== undefined) yield* program.write(bindQuery(planned.cursor, { threadId: id, through: last.position }), 1);
     }),
     seed: (unit: Unit<'machine'>, id: string, transcript: ThreadTranscript): Effect.Effect<void, StoredFailure> =>
       transcript.length === 0
@@ -387,21 +430,7 @@ export const makeTranscriptRows = Effect.gen(function* () {
             ),
           ),
     suffix: Effect.fnUntraced(function* (unit: Unit<'machine'>, id: string) {
-      const rows = yield* unit.run(
-        db
-          .select({ kind: threadEvent.kind, payload: threadEvent.payload })
-          .from(threadEvent)
-          .where(
-            and(
-              eq(threadEvent.threadId, id),
-              gt(
-                threadEvent.position,
-                sql<number>`coalesce((select ${threadLog.entriesThrough} from ${threadLog} where ${threadLog.threadId} = ${id}), 0)`,
-              ),
-            ),
-          )
-          .orderBy(asc(threadEvent.position)),
-      );
+      const rows = yield* unit.run(planned.suffix.all({ threadId: id }));
       const facts = yield* Effect.forEach(rows, (row) => factOf(kinds, row.kind, row.payload));
       return facts.filter(
         (fact) => fact.entry !== undefined || fact.withdrawn !== undefined || fact.rewound !== undefined || fact.restored !== undefined,

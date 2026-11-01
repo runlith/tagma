@@ -6,6 +6,7 @@ import type { Message } from '@runlith/llm/schema/messages';
 import type { ThreadCompactionEntry } from '../../transcript/entries';
 import { compactionEntryId } from '../../transcript/entryNames';
 import type { ThreadRunRow } from '../rows';
+import type { ThreadInboxItemValues } from '../storage/inbox';
 import { sealThreadEvents } from '../ThreadEventDoor';
 import { actDigest } from '../keyed';
 import { answerOf, transitionDeps, transitionNow } from '../transition/kernel';
@@ -98,6 +99,7 @@ export const threadCompactionRunsLayer = Layer.effect(
       settlement: ThreadCompactionSettlement,
       compaction: ThreadCompactionEntry,
       taken?: ThreadCompactionTaken,
+      continuation?: ThreadInboxItemValues,
     ): Effect.fn.Return<boolean, ThreadBorderFailed> {
       const outcome = yield* transitionNow<boolean, ThreadWriteTx>(
         kernel,
@@ -114,6 +116,7 @@ export const threadCompactionRunsLayer = Layer.effect(
                     participants: Effect.fnUntraced(function* (unit) {
                       yield* compactor.settleIn(settlement, unit);
                       if (taken) yield* inbox.acknowledge(taken.ids, taken.runId, unit);
+                      if (continuation !== undefined) yield* inbox.put(continuation, unit);
                     }),
                   },
             ),
@@ -164,6 +167,7 @@ export const threadCompactionRunsLayer = Layer.effect(
       mode: input.mode ?? 'manual',
       status: 'running',
       occurredAt: run.startedAt.toISOString(),
+      receipt: input.recovery === true ? { cause: 'overflow' } : undefined,
     });
     const intendedBy = (
       input: ThreadCompactionRunInput,
@@ -244,7 +248,7 @@ export const threadCompactionRunsLayer = Layer.effect(
                 provider: input.thread.provider,
                 model: input.thread.model,
                 running: false,
-                compaction: input.thread.capabilities.compaction,
+                compaction: input.recovery === true ? 'foreign' : input.thread.capabilities.compaction,
                 named: namedSummarizerOf(held),
               });
               yield* recordEntry(input.thread.id, intended(summarizing));
@@ -303,6 +307,7 @@ export const threadCompactionRunsLayer = Layer.effect(
                     updatedAt: new Date(yield* Clock.currentTimeMillis).toISOString(),
                   },
                   taken,
+                  input.continuation,
                 )
               : false;
             if (!settled) {

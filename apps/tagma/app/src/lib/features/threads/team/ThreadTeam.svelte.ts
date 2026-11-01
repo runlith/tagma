@@ -8,14 +8,11 @@ import { withEdit } from './edits.js';
 import { type TeamPromoted, type TeamRead, TeamRepo } from './TeamRepo.js';
 import type { TeamView } from './view.js';
 
-type Teams = ReturnType<typeof TeamRepo.use>;
-type Settings = ReturnType<typeof SettingsRepo.use>;
-
 type Unsent = { readonly layer: TeamLayer | null };
 
 export const PROMOTED_WORDS = 'Every thread of the project now uses this.';
 
-export async function restoreProject(settings: Settings, projectId: number, previous: TeamPromoted['previous']): Promise<void> {
+export async function restoreProject(settings: SettingsRepo, projectId: number, previous: TeamPromoted['previous']): Promise<void> {
   const project = { projectId, scope: 'project' as const };
   await settings.write.run({ ...project, key: 'agent.models', value: previous.models ?? undefined }, { throwOnError: true });
   await settings.write.run({ ...project, key: 'agent.review', value: previous.review ?? undefined }, { throwOnError: true });
@@ -39,8 +36,8 @@ export class ThreadTeam extends Service<ThreadTeam>()('ThreadTeam', { tier: 'thr
   constructor(
     readonly threadId: string,
     readonly projectId: number,
-    private readonly teams: Teams,
-    private readonly settings: Settings,
+    private readonly teams: TeamRepo,
+    private readonly settings: SettingsRepo,
     private readonly notices: Notices,
   ) {
     super();

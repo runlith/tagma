@@ -1,4 +1,4 @@
-import { access, mkdir, readFile, realpath, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { access, mkdir, readFile, readdir, realpath, rename, rm, rmdir, stat, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { Effect } from 'effect';
 import type { Git } from '@runlith/git/Git';
@@ -8,7 +8,7 @@ import { unmergedPaths } from '../../platform/git/unmerged.js';
 import { TREE_ORIGINS, TREE_SERVED, TREE_RETIRED } from '../contract/wire/storage.js';
 import { STAGING_PATHSPEC } from './atomicFile.js';
 import { gitdirOf, treeGitDir } from './batch.js';
-import { adoptHeads, fetchRemote, pointRemote, readSides } from '../storage/remote.js';
+import type { Birth, GraphSide } from '../contract/service/exchange.js';
 
 export type ShadowCommit = {
   readonly commit: string;
@@ -74,7 +74,7 @@ export const stagedSides = Effect.fnUntraced(function* (git: Git['Service'], roo
   return sides;
 });
 
-const shadowAt = (gitDir: string, git: Git['Service']) => {
+const shadowAt = (gitDir: string, git: Git['Service'], tracking: string | null) => {
   const run = (op: string, args: readonly string[], options?: RunGitOptions) => runGit(git, op, args, options);
   const worktreeOn = (branch: string) =>
     Effect.map(
@@ -141,8 +141,11 @@ const shadowAt = (gitDir: string, git: Git['Service']) => {
         yield* run('worktree-prune', ['--git-dir', gitDir, 'worktree', 'prune']);
       }
       if (yield* present(treeRoot)) {
-        yield* heal(treeRoot, branch, marker, options?.createFrom);
-        return;
+        if ((yield* fsDone(() => readdir(treeRoot))).length > 0) {
+          yield* heal(treeRoot, branch, marker, options?.createFrom);
+          return;
+        }
+        yield* fsDone(() => rmdir(treeRoot));
       }
       const args = options?.createFrom
         ? ['--git-dir', gitDir, 'worktree', 'add', '-b', branch, treeRoot, options.createFrom]
@@ -171,6 +174,7 @@ const shadowAt = (gitDir: string, git: Git['Service']) => {
 
   return {
     gitDir,
+    tracking,
     run,
     unmergedPaths: (treeRoot: string) => unmergedPaths(git, treeRoot),
     attach,
@@ -313,15 +317,11 @@ const bornEmpty = Effect.fnUntraced(function* (gitDir: string, git: Git['Service
   yield* runGit(git, 'update-ref', ['--git-dir', gitDir, 'update-ref', 'refs/heads/main', commit]);
 });
 
-const bornFrom = Effect.fnUntraced(function* (gitDir: string, git: Git['Service'], origin: string) {
+const bornBy = Effect.fnUntraced(function* (gitDir: string, git: Git['Service'], birth: Birth) {
   const draft = `${gitDir}.born-${crypto.randomUUID()}`;
   yield* Effect.gen(function* () {
     yield* runGit(git, 'init', ['init', '--bare', '--initial-branch=main', draft]);
-    yield* pointRemote(git, draft, origin);
-    yield* fetchRemote(git, draft);
-    const sides = yield* readSides(git, draft);
-    if (sides.remote.size === 0) yield* bornEmpty(draft, git);
-    else yield* adoptHeads(git, draft, sides);
+    if (!(yield* birth(draft))) yield* bornEmpty(draft, git);
     const placed = yield* fsDone(() =>
       rename(draft, gitDir).then(
         () => true,
@@ -333,21 +333,21 @@ const bornFrom = Effect.fnUntraced(function* (gitDir: string, git: Git['Service'
 });
 
 export const ShadowGit = {
-  open: Effect.fnUntraced(function* (gitDir: string, git: Git['Service'], origin: string | null) {
+  open: Effect.fnUntraced(function* (gitDir: string, git: Git['Service'], side: GraphSide) {
     if (!(yield* present(gitDir))) {
-      if (origin !== null) yield* bornFrom(gitDir, git, origin);
+      if (side.birth !== null) yield* bornBy(gitDir, git, side.birth);
       else {
         yield* runGit(git, 'init', ['init', '--bare', '--initial-branch=main', gitDir]);
         yield* bornEmpty(gitDir, git);
       }
     }
-    return shadowAt(gitDir, git);
+    return shadowAt(gitDir, git, side.tracking);
   }, Effect.uninterruptible),
   openInPlace: Effect.fnUntraced(function* (treeRoot: string, git: Git['Service']) {
     if (!(yield* present(join(treeRoot, '.git')))) {
       yield* fsDone(() => mkdir(treeRoot, { recursive: true }));
       yield* runGit(git, 'init', ['init', '-b', 'main', treeRoot]);
     }
-    return shadowAt(join(treeRoot, '.git'), git);
+    return shadowAt(join(treeRoot, '.git'), git, null);
   }, Effect.uninterruptible),
 };

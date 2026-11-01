@@ -9,10 +9,16 @@
       "types": "./scripts/surfaceConfig.ts",
       "default": "./scripts/surfaceConfig.ts"
     },
+    "./compilerOptions": "./compilerOptions.js",
     "./composition": {
       "types": "./src/lib/app/composition.ts",
       "browser": "./src/lib/app/composition.ts",
       "default": "./src/lib/app/composition.ts"
+    },
+    "./window": {
+      "types": "./src/lib/app/window.ts",
+      "browser": "./src/lib/app/window.ts",
+      "default": "./src/lib/app/window.ts"
     },
     "./tsconfig.json": "./root.tsconfig.json",
     "./package.json": "./package.json",
@@ -61,6 +67,26 @@
       "browser": "./src/lib/app/chrome/creation.ts",
       "default": "./src/lib/app/chrome/creation.ts"
     },
+    "./points/parts": {
+      "types": "./src/lib/shared/window/parts.ts",
+      "browser": "./src/lib/shared/window/parts.ts",
+      "default": "./src/lib/shared/window/parts.ts"
+    },
+    "./points/staged": {
+      "types": "./src/lib/shared/threads/staged.ts",
+      "browser": "./src/lib/shared/threads/staged.ts",
+      "default": "./src/lib/shared/threads/staged.ts"
+    },
+    "./points/methods": {
+      "types": "./src/lib/features/tagma-apps/methods.ts",
+      "browser": "./src/lib/features/tagma-apps/methods.ts",
+      "default": "./src/lib/features/tagma-apps/methods.ts"
+    },
+    "./speech/captures": {
+      "types": "./src/lib/features/speech/Captures.svelte.ts",
+      "browser": "./src/lib/features/speech/Captures.svelte.ts",
+      "default": "./src/lib/features/speech/Captures.svelte.ts"
+    },
     "./points/wire": {
       "types": "./src/lib/wire/WireEntryKinds.ts",
       "browser": "./src/lib/wire/WireEntryKinds.ts",
@@ -85,6 +111,71 @@
       "types": "./src/lib/wire/access.ts",
       "browser": "./src/lib/wire/access.ts",
       "default": "./src/lib/wire/access.ts"
+    },
+    "./wire/door": {
+      "types": "./src/lib/wire/Door.ts",
+      "browser": "./src/lib/wire/Door.ts",
+      "default": "./src/lib/wire/Door.ts"
+    },
+    "./wire/live": {
+      "types": "./src/lib/wire/Live.ts",
+      "browser": "./src/lib/wire/Live.ts",
+      "default": "./src/lib/wire/Live.ts"
+    },
+    "./wire/refusal": {
+      "types": "./src/lib/wire/refusal.ts",
+      "browser": "./src/lib/wire/refusal.ts",
+      "default": "./src/lib/wire/refusal.ts"
+    },
+    "./ports/links": {
+      "types": "./src/lib/shared/ExternalLinks.ts",
+      "browser": "./src/lib/shared/ExternalLinks.ts",
+      "default": "./src/lib/shared/ExternalLinks.ts"
+    },
+    "./ports/saver": {
+      "types": "./src/lib/shared/FileSaver.ts",
+      "browser": "./src/lib/shared/FileSaver.ts",
+      "default": "./src/lib/shared/FileSaver.ts"
+    },
+    "./ports/offer": {
+      "types": "./src/lib/features/notices/Offer.ts",
+      "browser": "./src/lib/features/notices/Offer.ts",
+      "default": "./src/lib/features/notices/Offer.ts"
+    },
+    "./ports/build": {
+      "types": "./src/lib/wire/ClientBuild.ts",
+      "browser": "./src/lib/wire/ClientBuild.ts",
+      "default": "./src/lib/wire/ClientBuild.ts"
+    },
+    "./ports/workers": {
+      "types": "./src/lib/shared/workers/ServiceWorkers.ts",
+      "browser": "./src/lib/shared/workers/ServiceWorkers.ts",
+      "default": "./src/lib/shared/workers/ServiceWorkers.ts"
+    },
+    "./ports/origin": {
+      "types": "./src/lib/wire/ServerOrigin.svelte.ts",
+      "browser": "./src/lib/wire/ServerOrigin.svelte.ts",
+      "default": "./src/lib/wire/ServerOrigin.svelte.ts"
+    },
+    "./ports/entry": {
+      "types": "./src/lib/features/workspace/EntryProject.ts",
+      "browser": "./src/lib/features/workspace/EntryProject.ts",
+      "default": "./src/lib/features/workspace/EntryProject.ts"
+    },
+    "./host/os": {
+      "types": "./src/lib/app/hostOs.ts",
+      "browser": "./src/lib/app/hostOs.ts",
+      "default": "./src/lib/app/hostOs.ts"
+    },
+    "./theme": {
+      "types": "./src/lib/shared/Theme.svelte.ts",
+      "browser": "./src/lib/shared/Theme.svelte.ts",
+      "default": "./src/lib/shared/Theme.svelte.ts"
+    },
+    "./files/opener": {
+      "types": "./src/lib/features/checkout/files/FileOpener.svelte.ts",
+      "browser": "./src/lib/features/checkout/files/FileOpener.svelte.ts",
+      "default": "./src/lib/features/checkout/files/FileOpener.svelte.ts"
     },
     "./ui/*.svelte": {
       "types": "./src/lib/shared/ui/*.svelte",

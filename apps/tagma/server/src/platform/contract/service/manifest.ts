@@ -14,6 +14,7 @@ import type { OwnStore } from './ownStore.js';
 import type { Machine } from './capacity.js';
 import type { ThreadEntryKind, ThreadFormStep } from '@runlith/agent/transcript/kinds';
 import type { PoolDeclaration } from '@runlith/held/Capacity';
+import { type DoorPath, overlaps, type Route, routedPath } from './route.js';
 
 import { journaledOf, type OperationSet, type RefusalWords } from '../wire/manifest.js';
 import type { ModulePresentation } from './presentation.js';
@@ -38,6 +39,7 @@ export type Manifest = {
     readonly handlers: (door: Context.Context<any>) => Effect.Effect<object>;
   };
   readonly endpoints?: readonly EndpointDeclaration[];
+  readonly routes?: readonly Route[];
   readonly settings?: readonly SettingKey<any>[];
   readonly settingSections?: readonly SettingSectionDeclaration[];
   readonly settingControls?: readonly SettingControlSource<any>[];
@@ -147,17 +149,47 @@ type UniqueManifests<Modules extends readonly Manifest[]> = ([UnknownFields<Modu
   ([RepeatedManifests<Modules>] extends [never] ? unknown : { readonly duplicateId: RepeatedManifests<Modules> });
 
 export class ManifestConflict extends Data.TaggedError('ManifestConflict')<{
-  readonly collection: Collection | 'modules' | 'operations' | 'contributions' | 'refusals';
+  readonly collection: Collection | 'modules' | 'operations' | 'contributions' | 'refusals' | 'routes';
   readonly id: string;
   readonly point?: string;
   readonly owners: readonly [string, string];
 }> {}
 
-function checkManifests(modules: readonly Manifest[]): void {
+class RouteInexact extends Data.TaggedError('RouteInexact')<{ readonly module: string; readonly path: string }> {
+  override get message(): string {
+    return `${this.module} declares the route ${this.path}, which is not a module path: two or more segments, the first of lowercase letters, digits, ".", "_", "~" and "-" beginning with a letter or digit, each later one such a segment or a ":name" parameter; a route declared pre-admitted takes no parameter and no right`;
+  }
+}
+
+const PLAIN_SEGMENT = '[a-z0-9][a-z0-9._~-]*';
+
+const MODULE_ROUTE = new RegExp(`^/${PLAIN_SEGMENT}(?:/(?:${PLAIN_SEGMENT}|:[a-zA-Z][a-zA-Z0-9]*))+$`, 'u');
+
+const DOOR = 'door';
+
+const doorOwns = (path: string, module: string, door: readonly DoorPath[]): boolean =>
+  door.some((served) => overlaps(path, served) && !(served.modules === true && path.startsWith(`${routedPath(served.path)}/${module}/`)));
+
+const checkRoutes = (module: Manifest, owners: Map<string, string>, door: readonly DoorPath[]): void => {
+  for (const { path, preAdmitted, right } of module.routes ?? []) {
+    if (!MODULE_ROUTE.test(path) || (preAdmitted && (path.includes(':') || right !== undefined))) {
+      throw new RouteInexact({ module: module.id, path });
+    }
+    const owner =
+      [...owners].find(([other]) => overlaps(path, { path: other, prefix: false }))?.[1] ??
+      (doorOwns(path, module.id, door) ? DOOR : undefined);
+    if (owner !== undefined) throw new ManifestConflict({ collection: 'routes', id: path, owners: [owner, module.id] });
+    owners.set(path, module.id);
+  }
+};
+
+export function checkManifests(modules: readonly Manifest[], door: readonly DoorPath[] = []): void {
   const names = new Set<string>();
   const entries = new Map<Collection, Map<string, string>>(COLLECTIONS.map((collection) => [collection, new Map()]));
   const contributed = new Map<string, Map<string, string>>();
+  const routes = new Map<string, string>();
   for (const module of modules) {
+    checkRoutes(module, routes, door);
     for (const { point, id } of module.contributions ?? []) {
       const owners = contributed.get(point) ?? new Map<string, string>();
       contributed.set(point, owners);
@@ -197,7 +229,7 @@ function servesDeclared(module: string, declared: readonly FeedDeclaration[], se
   if (unserved.length > 0 || undeclared.length > 0) throw new LiveFeedsUnmatched({ module, unserved, undeclared });
 }
 
-type Kept = 'id' | 'title' | 'journaled' | 'verbs' | 'live' | 'lifetimes' | Exclude<Collection, 'feeds'>;
+type Kept = 'id' | 'title' | 'journaled' | 'verbs' | 'live' | 'routes' | 'lifetimes' | Exclude<Collection, 'feeds'>;
 
 export function manifest<const M extends Manifest>(
   declaration: M & UniqueManifest<M> & Record<Exclude<keyof M, keyof Manifest>, never>,

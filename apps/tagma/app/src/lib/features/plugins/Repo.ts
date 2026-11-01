@@ -1,5 +1,6 @@
 import type { SettableScope } from '@tagma/server/platform/contract/wire/setting';
 import type { PluginPreview, PluginRow } from '@tagma/server/plugins/contract/wire/rows';
+import type { InstanceOf } from '@runlith/layer/key';
 import type { KeyedLoaderContext } from '@runlith/query/types';
 import { Repo } from '@runlith/query/repo';
 import { Door, type Lens } from '$lib/wire/Door.js';
@@ -99,3 +100,5 @@ export const PluginsRepo = Repo.define(
   }),
   { tier: 'app', door: Door },
 );
+
+export type PluginsRepo = InstanceOf<typeof PluginsRepo>;

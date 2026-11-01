@@ -169,7 +169,7 @@ test('a discarded first thread returns its words to the project draft and frees 
     ],
     files: [],
     mentions: [],
-    pieces: [],
+    items: [],
     documents: [],
   };
   host.draft.restore(unsent);
@@ -184,7 +184,7 @@ test('a discarded first thread returns its words to the project draft and frees 
 
   host.open(discardedId);
   commitRoute(host);
-  expect(host.draft.current).toEqual({ text: '', images: [], files: [], mentions: [], pieces: [], documents: [] });
+  expect(host.draft.current).toEqual({ text: '', images: [], files: [], mentions: [], items: [], documents: [] });
 });
 
 test('a draft states the mode its thread is born with, and cycling it moves the pick the birth carries', async () => {

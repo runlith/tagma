@@ -208,4 +208,5 @@ export const installedOf = (ended: BuildEnded): Installed => ({
   tail: ended.tail,
   then: ended.then,
   restartRefused: ended.restartRefused,
+  refused: ended.refused,
 });

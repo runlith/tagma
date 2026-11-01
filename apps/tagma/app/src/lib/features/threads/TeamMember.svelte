@@ -6,6 +6,7 @@
   import { WallClock } from '$lib/features/workspace/WallClock.svelte.js';
   import ProjectMark from '$lib/features/workspace/ProjectMark.svelte';
   import { ProviderCatalog } from '$lib/features/providers/Catalog.svelte.js';
+  import { CallActivity } from './CallActivity.svelte.js';
   import ThreadLife from './Life.svelte';
   import { RowReading } from './rowReading.svelte.js';
   import { WorkLines } from './workLines.svelte.js';
@@ -14,7 +15,7 @@
 
   let { node, here }: { node: ThreadTreeNode; here: number } = $props();
 
-  const reading = new RowReading(() => node, WallClock.use(), WorkLines.use(), ProviderCatalog.use());
+  const reading = new RowReading(() => node, WallClock.use(), WorkLines.use(), ProviderCatalog.use(), CallActivity.use());
   const opening = Opening.use();
   const surface = App.current();
   const row = $derived(node.row);

@@ -120,8 +120,8 @@ export const compact: Answering & Noticing = {
         boundaries: [closed(standing, started ? 'running' : 'unchanged', at)],
       };
     }
-    if (standing === null) {
-      const vendor = decodeVendor(event.params);
+    const vendor = decodeVendor(event.params);
+    if (standing === null || (standing.inTurn === undefined && vendor._tag === 'Success' && vendor.success.trigger === 'auto')) {
       if (vendor._tag === 'Failure') return handled(row);
       const read = vendor.success;
       const summary = { ...read, postTokens: typeof read.postTokens === 'number' ? read.postTokens : null };

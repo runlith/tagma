@@ -2,6 +2,23 @@ import { Effect, Exit, Option } from 'effect';
 import { HttpMiddleware, HttpRouter, HttpServerError, HttpServerRequest, HttpServerResponse } from 'effect/http';
 import { MCP_SESSION_HEADER, parseSessionToken, SESSION_HEADER } from '../platform/contract/wire/session.js';
 import { OUTCOME_HEADER, type Outcome } from '../invocation/contract/wire/headers.js';
+import type { DoorPath } from '../platform/contract/service/route.js';
+import { API_PREFIX, ARTIFACT_PREFIX, HEALTH_PATH, STARTUP_PATH } from './contract/wire/served.js';
+import { RETIRED_PATHS } from './retired.js';
+import { Api } from './contract/wire/Api.js';
+
+const API_PATHS: readonly DoorPath[] = Object.values(Api.groups).flatMap((group) =>
+  Object.values(group.endpoints).map((endpoint) => ({ path: endpoint.path, prefix: false })),
+);
+
+export const DOOR_PATHS: readonly DoorPath[] = [
+  { path: API_PREFIX, prefix: true, modules: true },
+  ...API_PATHS,
+  { path: ARTIFACT_PREFIX, prefix: true },
+  { path: HEALTH_PATH, prefix: false },
+  { path: STARTUP_PATH, prefix: false },
+  ...RETIRED_PATHS,
+];
 
 const OPERATION_PATH = '/api/op/';
 

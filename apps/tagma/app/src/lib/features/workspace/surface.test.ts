@@ -17,7 +17,6 @@ const project: Project = {
   private: false,
   kind: 'folder',
   storage: 'stealth',
-  graphRemote: null,
   servesFrom: 'rows',
   createdAt: '2026-09-05T00:00:00Z',
 };
@@ -120,6 +119,22 @@ test('a surface carrying its page answers its route and the paths below it under
   expect(surfaces.portable('notes')).toBe(true);
   expect(() => of(declared('stray', { payload: page }))).toThrow(RegistryRefusal);
   expect(() => of(declared('bare', { route: 'p/bare' }))).toThrow(RegistryRefusal);
+});
+
+test('an address under a former route of a surface carrying its page moves to its p address with the rest of the path and the query', () => {
+  const surfaces = of(
+    declared('mail', { rail: 10, home: true }),
+    declared('notes', { route: 'p/notes', payload: page, formerRoutes: ['memos', 'old/memos'] }),
+  );
+
+  expect(surfaces.moved(new URL('https://tagma.test/runlith/memos/42?at=5&word=3'))).toBe('/runlith/p/notes/42?at=5&word=3');
+  expect(surfaces.moved(new URL('https://tagma.test/runlith/old/memos'))).toBe('/runlith/p/notes');
+  expect(surfaces.moved(new URL('https://tagma.test/runlith/memosx/1'))).toBeNull();
+  expect(surfaces.moved(new URL('https://tagma.test/runlith/mail'))).toBeNull();
+  expect(() => of(declared('mail', { home: true, rail: 1 }), declared('memo', { formerRoutes: ['memos'] }))).toThrow(RegistryRefusal);
+  expect(() =>
+    of(declared('memos', { home: true, rail: 1 }), declared('notes', { route: 'p/notes', payload: page, formerRoutes: ['memos'] })),
+  ).toThrow('Route "memos" is contributed by both');
 });
 
 test('a visit remembers a place only on the surfaces that declared it', () => {

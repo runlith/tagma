@@ -277,6 +277,14 @@ test('a base nobody judged before is derived from the nearest indexed tree; with
   await expect(
     programs(root)['dead-code']({ params: dead, tree: side(tree, ['src/lib.ts']), base: side(skipped, ['src/lib.ts']) }),
   ).rejects.toThrow('the declaration index holds no revision');
+  const measured = await programs(root)['dead-code']({
+    mode: 'measure',
+    params: dead,
+    tree: side(tree, ['src/lib.ts']),
+    base: side(skipped, ['src/lib.ts']),
+  });
+  expect(measured.tree.covered).toBe('reach');
+  expect(fingerprints(measured.tree)).toEqual(['dead src/lib.ts#more', 'dead src/other.ts#other']);
   await index(first);
   const { commit, whole } = await judged('dead-code', skipped, tree, ['src/lib.ts']);
   expect(fingerprints(commit.tree)).toEqual(fingerprints(whole.tree));
@@ -406,6 +414,30 @@ test('a glob load that spans the repository root cannot be judged on a commit an
   await expect(
     programs(root)['dead-code']({ params: dead, tree: side(tree, ['src/loader.ts']), base: side(base, ['src/loader.ts']) }),
   ).rejects.toThrow('check_rules over "all"');
+  const measured = await programs(root)['dead-code']({
+    mode: 'measure',
+    params: dead,
+    tree: side(tree, ['src/loader.ts']),
+    base: side(base, ['src/loader.ts']),
+  });
+  const whole = await programs(root)['dead-code']({ params: dead, tree: side(tree, null), base: null });
+  expect(measured.tree.covered).toBe('reach');
+  expect(fingerprints(measured.tree)).toEqual(fingerprints(whole.tree));
+});
+
+test('a root package change requires whole preparation on a landing and is measured over the whole reach', async () => {
+  const base = treeWith({
+    ...initial,
+    'package.json': JSON.stringify({ name: 'before', exports: './src/entry.ts' }),
+    'src/orphan.ts': 'export const orphan = 1;\n',
+  });
+  await index(base);
+  const tree = treeWith({ 'package.json': JSON.stringify({ name: 'after', exports: './src/entry.ts' }) });
+  const input = { params: dead, tree: side(tree, ['package.json']), base: side(base, ['package.json']) };
+  await expect(programs(root)['dead-code'](input)).rejects.toThrow('check_rules over "all"');
+  const measured = await programs(root)['dead-code']({ ...input, mode: 'measure' });
+  expect(measured.tree.covered).toBe('reach');
+  expect(fingerprints(measured.tree)).toEqual(['dead src/orphan.ts#orphan']);
 });
 
 test('a change outside every production file costs nothing and finds nothing', async () => {

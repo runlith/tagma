@@ -1,76 +1,82 @@
-import type { Piece } from '@tagma/server/speech/contract/wire/listening';
+import type { Resolver } from '@runlith/layer/key';
+import { makePoint } from '@runlith/layer/testing';
 import { Effect } from 'effect';
 import { expect } from 'vitest';
 import { it } from '@runlith/effect-test/vitest';
+import { type StagedItem, type StagedKind, StagedKinds } from '$lib/shared/threads/staged.js';
 import { testShelf } from './native/testing.js';
-import type { CallPieces } from './native/CallPieces.js';
+import { StagedItems } from './native/StagedItems.js';
 import type { ThreadUploads } from './native/ThreadUploads.js';
 import { ThreadDraft } from './Draft.svelte.js';
 
 const NO_TRANSPORT = {} as ThreadUploads;
-const NO_CALLS = {} as CallPieces;
 
-const piece = (through: number, title: string, span: Piece['span'] = null): Piece => ({
-  listening: 'l1',
-  projectId: 4,
-  through,
-  span,
-  from: 0,
-  to: 4_000,
-  utterances: 3,
-  lines: 3,
+type Note = { readonly through: number };
+
+const note = (key: string, through: number, title: string): StagedItem => ({
+  kind: 'note',
+  key,
   title,
+  data: { through } satisfies Note,
 });
 
-it.live('a call piece goes out as a document the thread reads, once per thread, and its mark moves only when the message is accepted', () =>
-  Effect.gen(function* () {
-    const read: string[] = [];
-    const uploaded: string[] = [];
-    const given: string[] = [];
-    const transport = {
-      upload: async (_threadId: string, file: File) => {
-        uploaded.push(file.type);
-        return { status: 'uploaded' as const, attachment: { id: `doc-${uploaded.length}` } };
-      },
-    } as unknown as ThreadUploads;
-    const calls = {
-      file: async (one: Piece) => {
-        read.push(one.title);
-        return one.lines === 0 ? null : new File([`# ${one.title}`], 'call.md', { type: 'text/markdown' });
-      },
-      give: async (one: Piece, threadId: string) => void given.push(`${threadId}:${one.through}:${one.span === null ? 'new' : 'span'}`),
-    } as unknown as CallPieces;
-    const draft = new ThreadDraft(testShelf(), transport, calls);
-    draft.useKey('thread:call');
-    draft.stagePiece(piece(9, 'Call 14:02 · 00:00–00:04'));
-    draft.stagePiece(piece(12, 'Call 14:02 · 00:00–00:06'));
-    draft.stagePiece(piece(12, 'Call 14:02 · 00:01–00:02', { from: 1_000, to: 2_000 }));
+const staged = (kind: Partial<StagedKind> = {}): StagedItems =>
+  new StagedItems(
+    makePoint(StagedKinds, { kind: 'note', card: (() => undefined) as unknown as StagedKind['card'], file: async () => null, ...kind }),
+    {} as Resolver,
+    4,
+  );
 
-    expect(draft.pieces.map((one) => [one.through, one.span === null])).toEqual([
-      [12, true],
-      [12, false],
-    ]);
-    expect(draft.attached(draft.current)).toBe(true);
-    expect(draft.opening(draft.current).previews?.map((one) => one.filename)).toEqual([
-      'Call 14:02 · 00:00–00:06',
-      'Call 14:02 · 00:01–00:02',
-    ]);
-    expect(yield* draft.compose('t1', draft.current)).toEqual({
-      status: 'composed',
-      attachments: [{ id: 'doc-1' }, { id: 'doc-2' }],
-    });
-    expect(yield* draft.compose('t1', draft.current)).toEqual({
-      status: 'composed',
-      attachments: [{ id: 'doc-1' }, { id: 'doc-2' }],
-    });
-    expect([read.length, uploaded]).toEqual([2, ['text/markdown', 'text/markdown']]);
-    expect(given).toEqual([]);
-    yield* draft.accepted('t1', draft.current);
-    expect(given).toEqual(['t1:12:new', 't1:12:span']);
-  }),
+const NO_KINDS = staged();
+
+it.live(
+  'a staged item goes out as the file its kind resolves, once per thread, and its kind hears of it only when the message is accepted',
+  () =>
+    Effect.gen(function* () {
+      const read: string[] = [];
+      const uploaded: string[] = [];
+      const sent: string[] = [];
+      const transport = {
+        upload: async (_threadId: string, file: File) => {
+          uploaded.push(file.type);
+          return { status: 'uploaded' as const, attachment: { id: `doc-${uploaded.length}` } };
+        },
+      } as unknown as ThreadUploads;
+      const items = staged({
+        file: async (_app, item) => {
+          read.push(item.title);
+          return new File([`# ${item.title}`], 'note.md', { type: 'text/markdown' });
+        },
+        sent: async (_app, item, thread) => void sent.push(`${thread.projectId}/${thread.id}:${item.key}:${(item.data as Note).through}`),
+      });
+      const draft = new ThreadDraft(testShelf(), transport, items);
+      draft.useKey('thread:note');
+      draft.stage(note('l1:new', 9, 'Note 00:00–00:04'));
+      draft.stage(note('l1:new', 12, 'Note 00:00–00:06'));
+      draft.stage(note('l1:1-2', 12, 'Note 00:01–00:02'));
+
+      expect(draft.items.map((one) => [one.key, (one.data as Note).through])).toEqual([
+        ['l1:new', 12],
+        ['l1:1-2', 12],
+      ]);
+      expect(draft.attached(draft.current)).toBe(true);
+      expect(draft.opening(draft.current).previews?.map((one) => one.filename)).toEqual(['Note 00:00–00:06', 'Note 00:01–00:02']);
+      expect(yield* draft.compose('t1', draft.current)).toEqual({
+        status: 'composed',
+        attachments: [{ id: 'doc-1' }, { id: 'doc-2' }],
+      });
+      expect(yield* draft.compose('t1', draft.current)).toEqual({
+        status: 'composed',
+        attachments: [{ id: 'doc-1' }, { id: 'doc-2' }],
+      });
+      expect([read.length, uploaded]).toEqual([2, ['text/markdown', 'text/markdown']]);
+      expect(sent).toEqual([]);
+      yield* draft.accepted('t1', draft.current);
+      expect(sent).toEqual(['4/t1:l1:new:12', '4/t1:l1:1-2:12']);
+    }),
 );
 
-it.live('a rewound message brings its call document back as a document of the draft, and sending it uploads the same text', () =>
+it.live('a rewound message brings its markdown document back as a document of the draft, and sending it uploads the same text', () =>
   Effect.gen(function* () {
     const uploaded: string[] = [];
     const transport = {
@@ -80,7 +86,7 @@ it.live('a rewound message brings its call document back as a document of the dr
         return { status: 'uploaded' as const, attachment: { id: 'doc-1' } };
       },
     } as unknown as ThreadUploads;
-    const draft = new ThreadDraft(testShelf(), transport, NO_CALLS);
+    const draft = new ThreadDraft(testShelf(), transport, NO_KINDS);
     draft.useKey('thread:back-doc');
 
     yield* draft.takeBack('thread:back-doc', [
@@ -106,7 +112,7 @@ it.live('a PDF dropped on the draft goes out as an upload under its own name; a 
         return { status: 'uploaded' as const, attachment: { id: 'pdf-1' } };
       },
     } as unknown as ThreadUploads;
-    const draft = new ThreadDraft(testShelf(), transport, NO_CALLS);
+    const draft = new ThreadDraft(testShelf(), transport, NO_KINDS);
     draft.useKey('thread:pdf');
 
     const refused = yield* Effect.promise(() => draft.attach([new File(['x'], 'notes.zip', { type: 'application/zip' })]));
@@ -119,41 +125,40 @@ it.live('a PDF dropped on the draft goes out as an upload under its own name; a 
   }),
 );
 
-it.live('a mark that will not move after acceptance is told as a notice once the attempts are spent', () =>
+it.live('a kind that cannot record the sending after acceptance is told as a notice once the attempts are spent', () =>
   Effect.gen(function* () {
     let tries = 0;
-    const failing = {
-      give: () => {
+    const failing = staged({
+      sent: () => {
         tries += 1;
         return Promise.reject(new Error('down'));
       },
-    } as unknown as CallPieces;
+    });
     const draft = new ThreadDraft(testShelf(), NO_TRANSPORT, failing);
     draft.useKey('thread:late');
-    draft.stagePiece(piece(5, 'Call 14:02'));
+    draft.stage(note('l1:new', 5, 'Note 14:02'));
 
     const notice = yield* draft.accepted('t1', draft.current);
     expect(tries).toBe(3);
-    expect(notice?.message).toContain('Call 14:02');
+    expect(notice?.message).toContain('Note 14:02');
   }),
 );
 
-it.live('a piece that holds no lines when it is sent attaches nothing', () =>
+it.live('an item its kind resolves to nothing when it is sent attaches nothing and leaves the draft', () =>
   Effect.gen(function* () {
-    const calls = { file: async () => null } as unknown as CallPieces;
-    const draft = new ThreadDraft(testShelf(), NO_TRANSPORT, calls);
+    const draft = new ThreadDraft(testShelf(), NO_TRANSPORT, NO_KINDS);
     draft.useKey('thread:empty');
-    draft.stagePiece({ ...piece(4, 'Call 14:02'), from: null, to: null, utterances: 0, lines: 0 });
+    draft.stage(note('l1:new', 4, 'Note 14:02'));
     const refused = yield* draft.compose('t1', draft.current);
     expect(refused.status).toBe('failed');
-    expect(draft.pieces).toEqual([]);
+    expect(draft.items).toEqual([]);
   }),
 );
 
 it.live('a message taken back returns its words and its mentions as the draft that sent it, ahead of what the field held', () =>
   Effect.gen(function* () {
     const shelf = testShelf();
-    const draft = new ThreadDraft(shelf, NO_TRANSPORT, NO_CALLS);
+    const draft = new ThreadDraft(shelf, NO_TRANSPORT, NO_KINDS);
     draft.useKey('thread:sent');
     draft.setText('Why did the plan stall?');
     draft.stageMentions([

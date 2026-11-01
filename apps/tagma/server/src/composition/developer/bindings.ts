@@ -1,4 +1,3 @@
-import { resolve } from 'node:path';
 import { Layer } from 'effect';
 import { checkoutBuildsLayer } from '../../checkout-builds/runner.js';
 import { devSurfaceLayer } from '../../checkout-builds/surface.js';
@@ -6,7 +5,7 @@ import { SourceChanges } from '../../checkout-builds/contract/service/changes.js
 import { buildPlaces } from '../../checkout-builds/places.js';
 import type { RunningRevision } from '../../checkout-builds/reading.js';
 import { labelRevision } from '../../installation/contract/wire/layout.js';
-import type { Bindings, DoorPlace, NextPlace, SourcePlace } from '../next.js';
+import type { BindingChoice, DoorPlace, NextPlace, SourcePlace } from '../next.js';
 import { sourceChanges } from './sourceChanges.js';
 
 const runningRevision = ({ installation, source }: NextPlace): RunningRevision | null => {
@@ -19,7 +18,7 @@ const runningRevision = ({ installation, source }: NextPlace): RunningRevision |
 };
 
 const checkoutOf = (place: SourcePlace): string | undefined =>
-  place.installation === undefined ? resolve(place.serverPath, '..', '..', '..') : place.installation.manifest.origin?.checkout;
+  place.installation === undefined ? place.checkout : place.installation.manifest.origin?.checkout;
 
 const nextInstallation = (place: NextPlace) => {
   const { log, record, worktrees } = buildPlaces(place.dataPath);
@@ -35,6 +34,6 @@ const nextInstallation = (place: NextPlace) => {
   }).pipe(Layer.provide(Layer.succeed(SourceChanges, sourceChanges(place.roots, place.watch))));
 };
 
-const door = (place: DoorPlace) => devSurfaceLayer({ checkout: checkoutOf(place), port: place.port });
+const door = (place: DoorPlace) => devSurfaceLayer({ checkout: checkoutOf(place), app: place.app, port: place.port });
 
-export const BINDINGS: Bindings = { nextInstallation, door };
+export const BINDINGS: BindingChoice = { nextInstallation, door };

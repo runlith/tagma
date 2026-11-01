@@ -10,8 +10,8 @@ import { builtinMode } from '../modes.js';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { Context, Effect, FileSystem, Layer } from 'effect';
 import { McpServers } from '../../../mcp/contract/service/servers.js';
-import { McpSignInDoor } from '../../../mcp/contract/service/door.js';
-import { localSignInDoor } from '../../http/signInDoor.js';
+import { DoorAddress } from '../../../platform/contract/service/door.js';
+import { localAddress } from '../../http/address.js';
 import { mcpServersLayer } from '../../../mcp/testing/doubles.js';
 import { Tags } from '../../../graph/contract/service/vocabulary.js';
 import { type EffectDemo, graphFixture, tempRootEffect, zoneDeclared } from '../graphFixture.js';
@@ -106,7 +106,7 @@ const graphCatalog = Effect.fnUntraced(function* (context: GraphToolContext) {
     Context.merge(Context.add(context.graph, RoutedGraphs, pool), routedSeams(context.graph, pool)),
     Context.empty().pipe(
       Context.add(McpServers, context.mcpServers),
-      Context.add(McpSignInDoor, localSignInDoor(undefined)),
+      Context.add(DoorAddress, localAddress(undefined)),
       Context.add(CpuProfiles, context.profiles),
       Context.add(PerformanceReports, context.performance),
       Context.add(WorldFiles, { files: BunFileSystem.layer }),
