@@ -236,27 +236,32 @@ export function refusedModelRequest(failure: LLMError, asked: ModelCallAttrs): M
 }
 
 export function wireToolDefinitions(catalog: ToolCatalog, active: readonly string[] | undefined): readonly ToolDefinition[] {
-  const held = wireFootprints.get(catalog) ?? { narrowed: new Map<string, readonly ToolDefinition[]>() };
-  const known = active === undefined ? held.all : held.narrowed.get(selectionKey(active));
-  if (known) return known;
-  const definitions = Object.entries(catalog)
-    .filter(([name]) => active === undefined || active.includes(name))
-    .map(([name, tool]) =>
-      ToolDefinition.make({
-        name,
-        description: describedTool(tool),
-        inputSchema: tool.inputSchema,
-        deferred: tool.exposure === 'deferred' ? (true as const) : undefined,
-        vendorWire: tool.vendor,
-      }),
-    );
-  if (active === undefined) held.all = definitions;
-  else held.narrowed.set(selectionKey(active), definitions);
-  wireFootprints.set(catalog, held);
+  let held = wireFootprints.get(catalog);
+  if (held === undefined) {
+    held = {
+      all: Object.entries(catalog).map(([name, tool]) =>
+        ToolDefinition.make({
+          name,
+          description: describedTool(tool),
+          inputSchema: tool.inputSchema,
+          deferred: tool.exposure === 'deferred' ? (true as const) : undefined,
+          vendorWire: tool.vendor,
+        }),
+      ),
+    };
+    wireFootprints.set(catalog, held);
+  }
+  if (active === undefined) return held.all;
+  const key = selectionKey(active);
+  if (held.selected?.key === key) return held.selected.definitions;
+  const names = new Set(active);
+  const definitions = held.all.filter((definition) => names.has(definition.name));
+  held.selected = { key, definitions };
   return definitions;
 }
 
-type WireFootprints = { all?: readonly ToolDefinition[]; narrowed: Map<string, readonly ToolDefinition[]> };
+type WireSelection = { readonly key: string; readonly definitions: readonly ToolDefinition[] };
+type WireFootprints = { readonly all: readonly ToolDefinition[]; selected?: WireSelection };
 const wireFootprints = new WeakMap<ToolCatalog, WireFootprints>();
 
 function selectionKey(active: readonly string[]): string {
