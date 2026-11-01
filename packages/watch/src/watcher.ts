@@ -32,6 +32,8 @@ const COOKIE = '.watch-cookie-';
 
 const COOKIE_EVERY_MS = 20;
 
+const COOKIE_HEARD_MS = 3_000;
+
 let cookies = 0;
 
 type Connection = {
@@ -272,17 +274,33 @@ const settled = async (at: string, ignore: readonly string[]): Promise<boolean> 
   const native = recording(at, ignore);
   if (native === null) return false;
   const name = `${COOKIE}${process.pid}-${++cookies}`;
-  const seen = new Promise<boolean>((resolve) => native.awaited.set(name, resolve));
+  let unheard = false;
+  let deadline: ReturnType<typeof setTimeout> | undefined;
+  const seen = new Promise<boolean>((resolve) => {
+    native.awaited.set(name, resolve);
+    deadline = setTimeout(() => {
+      unheard = true;
+      resolve(false);
+    }, COOKIE_HEARD_MS);
+  });
   try {
     writeFileSync(join(native.root, name), '');
   } catch (cause) {
+    clearTimeout(deadline);
     native.awaited.delete(name);
     console.error(`[watch] ${native.root} took no cookie, so its delivery cannot be settled: ${reasonOf(cause)}`);
     return false;
   }
   try {
-    return await seen;
+    const heard = await seen;
+    if (unheard) {
+      native.awaited.delete(name);
+      console.error(`[watch] ${native.root} delivered no event for its cookie within ${COOKIE_HEARD_MS} ms, so its watch is ended`);
+      end(native, `its watch heard nothing for ${COOKIE_HEARD_MS} ms, so it no longer proves what changed`);
+    }
+    return heard;
   } finally {
+    clearTimeout(deadline);
     rmSync(join(native.root, name), { force: true });
   }
 };
@@ -310,11 +328,16 @@ const settledSince = async (root: string, snapshot: string, ignore: readonly str
     console.error(`[watch] ${root} took no cookie, so what changed since its snapshot is unknown: ${reasonOf(cause)}`);
     return null;
   }
+  const until = Date.now() + COOKIE_HEARD_MS;
   try {
     for (;;) {
       const changes = await engine.since(root, ignore, snapshot);
       if (changes === null) return null;
       if (changes.some((change) => change.path === name)) return uncookied(changes);
+      if (Date.now() >= until) {
+        console.error(`[watch] ${root} showed no cookie in its snapshot within ${COOKIE_HEARD_MS} ms, so what changed since it is unknown`);
+        return null;
+      }
       await Bun.sleep(COOKIE_EVERY_MS);
     }
   } finally {

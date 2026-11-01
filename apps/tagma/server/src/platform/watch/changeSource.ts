@@ -17,11 +17,18 @@ type Held = {
 
 export const watchedChanges = Effect.fnUntraced(function* (watcher: FileWatcher['Service']) {
   const services = yield* Effect.context<never>();
-  const turns = yield* Semaphore.make(1);
+  const turns = new Map<string, Semaphore.Semaphore>();
+  const turnOf = (root: string): Semaphore.Semaphore => {
+    const standing = turns.get(root);
+    if (standing !== undefined) return standing;
+    const made = Semaphore.makeUnsafe(1);
+    turns.set(root, made);
+    return made;
+  };
   const held = new Map<string, Held>();
 
   const close = (root: string, entry: Held): Effect.Effect<void> =>
-    turns.withPermits(1)(
+    turnOf(root).withPermits(1)(
       Effect.suspend(() => {
         if (entry.count > 0 || held.get(root) !== entry) return Effect.void;
         held.delete(root);
@@ -60,7 +67,7 @@ export const watchedChanges = Effect.fnUntraced(function* (watcher: FileWatcher[
   });
 
   const rulesMoved = (root: string): Effect.Effect<void> =>
-    turns.withPermits(1)(
+    turnOf(root).withPermits(1)(
       Effect.gen(function* () {
         const entry = held.get(root);
         if (entry === undefined || entry.gone) return;
@@ -82,7 +89,7 @@ export const watchedChanges = Effect.fnUntraced(function* (watcher: FileWatcher[
     );
 
   const hold = (root: string): Effect.Effect<() => void> =>
-    turns.withPermits(1)(
+    turnOf(root).withPermits(1)(
       Effect.gen(function* () {
         const standing = held.get(root);
         const opening = standing !== undefined && !standing.gone ? null : yield* Effect.result(opened(root));

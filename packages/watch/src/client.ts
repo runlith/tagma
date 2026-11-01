@@ -19,6 +19,18 @@ const RETAIN_FLOOR = 1024;
 
 const RETAIN_CEILING = 65_536;
 
+const ANSWER_MS: { readonly [K in WatchAsk['t']]: number } = {
+  subscribe: 120_000,
+  unsubscribe: 30_000,
+  snapshot: 120_000,
+  since: 30_000,
+  cursor: 10_000,
+  settle: 10_000,
+  moved: 10_000,
+  retire: 10_000,
+  shutdown: 10_000,
+};
+
 export class WatchRefused extends Data.TaggedError('WatchRefused')<{ readonly message: string }> {}
 
 export class WatchLost extends Data.TaggedError('WatchLost')<{ readonly message: string }> {}
@@ -268,7 +280,25 @@ export const makeWatchClient = Effect.fnUntraced(function* (place: WatchPlace): 
 
   const asked = (held: Link, ask: Asked, waiting: Waiting): number => {
     const id = ++next;
-    wrote(held, { ...ask, id }, waiting);
+    const within = ANSWER_MS[ask.t];
+    const deadline = setTimeout(() => {
+      if (held.waiting.has(id)) lose(held, `the watch process did not answer ${ask.t} within ${within} ms`);
+    }, within);
+    deadline.unref();
+    wrote(
+      held,
+      { ...ask, id },
+      {
+        answer: (said) => {
+          clearTimeout(deadline);
+          waiting.answer(said);
+        },
+        lost: (reason) => {
+          clearTimeout(deadline);
+          waiting.lost(reason);
+        },
+      },
+    );
     return id;
   };
 
