@@ -6,7 +6,7 @@ import { isRootFailure } from '../../workspace/contract/wire/roots.js';
 import type { CheckoutHoldings, CheckoutRows } from '../../workspace/contract/service/checkouts.js';
 import type { TerminalActor } from '../../executions/contract/wire/terminals.js';
 import { principalOf } from '../../executions/terminals/principals.js';
-import type { Checked, JudgedPlacing } from '../../enforcement/contract/wire/checks.js';
+import type { Checked } from '../../enforcement/contract/wire/checks.js';
 import type { ActChecks } from '../../enforcement/contract/service/ruleChecks.js';
 import type { HoldCut, HoldStalled } from '@runlith/held/failures';
 import type { GateRefusal } from '../../platform/contract/wire/refusal.js';
@@ -94,7 +94,7 @@ type Judging = {
   readonly paths: readonly string[];
   readonly caller: TerminalActor | undefined;
   readonly parted: boolean;
-  readonly within: JudgedPlacing;
+  readonly workdir: string;
 };
 
 const judged = (rules: ActChecks, { caller, parted, ...subject }: Judging): Effect.Effect<Checked, WorktreeFinishRefused> =>
@@ -312,7 +312,7 @@ export const integrate = (
                 debtBase: source,
                 paths,
                 caller: request.caller,
-                within: git.within(base.root.path, built),
+                workdir: record.path,
               };
               if (!carries || !paths.some(inGraphTree)) return judged(rules, { ...subject, rulesAt: base.root.path, parted: false });
               return Effect.flatMap(git.changed(base.root.path, source, built), (behind) =>

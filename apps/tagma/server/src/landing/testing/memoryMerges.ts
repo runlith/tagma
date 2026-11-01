@@ -199,7 +199,6 @@ export const memoryMerges = () => {
       if (checkout.hook !== null && '_tag' in checkout.hook) return yield* checkout.hook;
       return checkout.hook ?? { tree: built, left: built, message, sign: checkout.sign };
     }),
-    within: () => () => Effect.die('the memory merge adapter sets out no tree'),
     create: (_path, made) => Effect.sync(() => commit(made)),
     replay: Effect.fnUntraced(function* (_path, onto, tip) {
       const replayed = replays.get(`${onto}|${tip}`);
