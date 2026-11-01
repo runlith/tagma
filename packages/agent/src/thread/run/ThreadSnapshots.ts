@@ -112,7 +112,7 @@ export const makeThreadSnapshots = Effect.gen(function* () {
   const projections = new Map<string, Projection>();
   const queues = new Map<string, Work[]>();
   const draining = yield* FiberSet.make<void>();
-  const lifetime = yield* Effect.context<never>();
+  const lifetime = Context.omit(Tracer.ParentSpan, References.CurrentStackFrame)(yield* Effect.context<never>());
   const deadlines = yield* FiberMap.make<string>();
   const reconsiderations = yield* FiberMap.make<string, void, ThreadBorderFailed>();
   const shown = new Map<string, string>();
@@ -289,16 +289,19 @@ export const makeThreadSnapshots = Effect.gen(function* () {
         })
       : Effect.gen(function* () {
           shown.set(threadId, standing(status));
+          const cause = yield* CurrentCost;
           const now = yield* Clock.currentTimeMillis;
           const wait = Effect.sleep(Duration.millis(Math.max(0, changesAt.getTime() - now)));
           const armed = FiberMap.run(
             deadlines,
             threadId,
-            Effect.andThen(wait, FiberMap.run(reconsiderations, threadId, reconsider(threadId), { onlyIfMissing: true })),
+            Effect.provideService(
+              Effect.andThen(wait, FiberMap.run(reconsiderations, threadId, reconsider(threadId), { onlyIfMissing: true })),
+              CurrentCost,
+              cause,
+            ),
           );
-          yield* Effect.updateContext(armed, (context: Context.Context<never>) =>
-            Context.omit(Tracer.ParentSpan, References.CurrentStackFrame)(context),
-          );
+          yield* Effect.updateContext(armed, (_context: Context.Context<never>) => lifetime);
         });
   const reconsider = Effect.fnUntraced(
     function* (threadId: string): Effect.fn.Return<void, ThreadBorderFailed> {
@@ -472,7 +475,7 @@ export const makeThreadSnapshots = Effect.gen(function* () {
     );
   const asked = <A, E>(work: Effect.Effect<A, E>, by: Asked): Effect.Effect<A, E> =>
     Effect.provideService(by.parent === null ? work : Effect.withParentSpan(work, by.parent), CurrentCost, by.cause);
-  const drain = Effect.fnUntraced(function* (threadId: string, queue: Work[]) {
+  const drain = Effect.fnUntraced(function* (threadId: string, queue: Work[]): Effect.fn.Return<void> {
     for (;;) {
       const next = queues.get(threadId) === queue ? queue.shift() : undefined;
       if (next === undefined) {
@@ -523,9 +526,8 @@ export const makeThreadSnapshots = Effect.gen(function* () {
         }
         const started: Work[] = [{ ...by, change }];
         queues.set(change.threadId, started);
-        return Effect.asVoid(
-          FiberSet.run(draining, Effect.provideContext(drain(change.threadId, started), lifetime), { startImmediately: false }),
-        );
+        const forked = FiberSet.run(draining, drain(change.threadId, started), { startImmediately: false });
+        return Effect.asVoid(Effect.updateContext(forked, (_context: Context.Context<never>) => lifetime));
       }),
     );
   (yield* ThreadChanges).project(committed);
