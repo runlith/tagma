@@ -79,7 +79,12 @@ const partsOf = (blocks: readonly ContentBlock[]): Effect.Effect<readonly Part[]
         : Effect.fail(new AgentFault({ code: FAULT.invalidParams, message: `Muse Code cannot receive ${block.type} content` })),
   );
 
-const keyOf = (want: Want): string => JSON.stringify([want.web, want.tools.map((tool) => tool.name), want.prompt]);
+const keyOf = (want: Want): string =>
+  JSON.stringify([
+    want.web,
+    want.tools.toSorted((left, right) => (left.name < right.name ? -1 : left.name > right.name ? 1 : 0)),
+    want.prompt,
+  ]);
 
 const toolsetOf = (web: Want['web']): readonly string[] => ['mcp__tagma__*', ...(web === 'vendor' ? ['web_search', 'web_fetch'] : [])];
 

@@ -23,6 +23,7 @@ const world = Effect.fnUntraced(function* (script: Script, prompt: () => string 
   const settings: string[] = [];
   const seen: { readonly kind: string; readonly body: unknown }[] = [];
   let minted = 0;
+  const catalog = { description: 'echo' };
   const sdk = MuseSdk.of({
     open: (launch) =>
       Effect.sync(() => {
@@ -61,7 +62,11 @@ const world = Effect.fnUntraced(function* (script: Script, prompt: () => string 
   const door: HostedDoor = {
     agent: () => Effect.sync(() => ({ prompt: prompt(), web: 'none' as const })),
     turn: () => Effect.sync(() => ({ prompt: prompt(), context: 'turn context', web: 'none' as const })),
-    tools: () => Effect.succeed({ names: ['echo'], tools: [{ name: 'echo', description: 'echo', inputSchema: {}, mutates: false }] }),
+    tools: () =>
+      Effect.sync(() => ({
+        names: ['echo'],
+        tools: [{ name: 'echo', description: catalog.description, inputSchema: {}, mutates: false }],
+      })),
     history: () => Effect.succeed([]),
     call: () => Effect.succeed({ status: 'called', content: [{ type: 'text', text: 'echoed' }], failed: false, offered: false, words: [] }),
   };
@@ -91,7 +96,7 @@ const world = Effect.fnUntraced(function* (script: Script, prompt: () => string 
     { model: 'muse-spark-1.2', effort: 'minimal', parameters: {}, version: 'test' },
   ).pipe(Effect.provideService(MuseSdk, sdk), Effect.provideService(FileSystem.FileSystem, files), Scope.provide(scope));
   const agent = hostedAgent(cycle, door)(outlet);
-  return { agent, sent, launches, settings, seen };
+  return { agent, sent, launches, settings, seen, catalog };
 });
 
 const ok = (sent: Sent, extra: Record<string, unknown> = {}) => Effect.succeed({ commandId: sent.id ?? 'c', status: 'accepted', ...extra });
@@ -501,6 +506,30 @@ it.effect('a prompt that changed between runs restarts the host and resumes the 
     yield* agent.prompt({ sessionId: session.sessionId, prompt: [{ type: 'text', text: 'three' }], _meta: { 'tagma/turn': turns[2] } });
     expect(launches).toHaveLength(2);
     expect(JSON.parse(settings.at(-1)!).run.system_prompt).toStartWith('second prompt');
+    expect(sent.filter((one) => one.method === 'session/resume').map((one) => one.params.sessionId)).toEqual([session.sessionId]);
+  }),
+);
+
+it.effect('a tool whose definition changed under the same name restarts the host and resumes the same session', () =>
+  Effect.gen(function* () {
+    const turns = ['01a19573-1cea-7c2e-90b4-000000000011', '01a19573-1cea-7c2e-90b4-000000000012'];
+    const { agent, sent, launches, catalog } = yield* world((one, emit) => {
+      if (one.method === 'session/start' || one.method === 'session/resume')
+        return ok(one, { session: { sessionId: one.params.sessionId, approvalMode: { mode: 'promptUnmatched' } } });
+      if (one.method === 'turn/start')
+        return Effect.as(
+          Effect.forkDetach(
+            emit({ method: 'turn/completed', params: { sessionId: one.params.sessionId, turnId: one.id, terminal: 'completed' } }),
+          ),
+          { commandId: one.id, status: 'accepted', turnId: one.id, disposition: 'started' },
+        );
+      return ok(one);
+    });
+    const session = yield* agent.newSession({ cwd: '/work', mcpServers: [] });
+    yield* agent.prompt({ sessionId: session.sessionId, prompt: [{ type: 'text', text: 'one' }], _meta: { 'tagma/turn': turns[0] } });
+    catalog.description = 'echo, now with a new contract';
+    yield* agent.prompt({ sessionId: session.sessionId, prompt: [{ type: 'text', text: 'two' }], _meta: { 'tagma/turn': turns[1] } });
+    expect(launches).toHaveLength(2);
     expect(sent.filter((one) => one.method === 'session/resume').map((one) => one.params.sessionId)).toEqual([session.sessionId]);
   }),
 );
