@@ -20,6 +20,14 @@
       "types": "./src/composition/testing/storageHarness.ts",
       "default": "./src/composition/testing/storageHarness.ts"
     },
+    "./composition/testing/assembled": {
+      "types": "./src/composition/testing/assembled.ts",
+      "default": "./src/composition/testing/assembled.ts"
+    },
+    "./executions/testing/doubles": {
+      "types": "./src/executions/testing/doubles.ts",
+      "default": "./src/executions/testing/doubles.ts"
+    },
     "./threads/testing/doubles": {
       "types": "./src/threads/testing/doubles.ts",
       "default": "./src/threads/testing/doubles.ts"
@@ -2631,6 +2639,7 @@
     "@runlith/audio-darwin": "workspace:*",
     "@runlith/audio-file": "workspace:*",
     "@runlith/browser-cookies": "workspace:*",
+    "@runlith/builtin-catalog": "workspace:*",
     "@runlith/bundle": "workspace:*",
     "@runlith/cdp": "workspace:*",
     "@runlith/chrome-for-testing": "workspace:*",
@@ -2662,6 +2671,7 @@
     "@runlith/speech-whisper": "workspace:*",
     "@runlith/sqlite-process": "workspace:*",
     "@runlith/tagma": "workspace:*",
+    "@runlith/testbed": "workspace:*",
     "@runlith/utils": "workspace:*",
     "@runlith/watch": "workspace:*",
     "@sanity/diff-match-patch": "catalog:",
@@ -2677,11 +2687,9 @@
     "web-push": "3.6.7"
   },
   "devDependencies": {
-    "@runlith/builtin-catalog": "workspace:*",
     "@runlith/chat-ui": "workspace:*",
     "@runlith/e2e": "workspace:*",
     "@runlith/effect-test": "workspace:*",
-    "@runlith/testbed": "workspace:*",
     "@types/bun": "catalog:",
     "@types/web-push": "3.6.4",
     "drizzle-kit": "1.0.0-rc.5-ab785fc",
