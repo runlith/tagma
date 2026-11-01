@@ -34,6 +34,17 @@ import { takeBase, uncommittedOn } from './update.js';
 
 const ATTEMPTS = 3;
 
+const dirsOf = (path: string): readonly string[] => {
+  const dirs: string[] = [];
+  for (let at = path.lastIndexOf('/'); at > 0; at = path.lastIndexOf('/', at - 1)) dirs.push(path.slice(0, at));
+  return dirs;
+};
+
+const crossing = (written: ReadonlySet<string>): ((path: string) => boolean) => {
+  const above = new Set([...written].flatMap(dirsOf));
+  return (path) => written.has(path) || above.has(path) || dirsOf(path).some((dir) => written.has(dir));
+};
+
 const undelivered = (failure: Effect.Error<ReturnType<TreeSync>>): FinishFailure =>
   failure._tag === 'GateRefusal'
     ? new WorktreeFinishRefused({
@@ -226,8 +237,9 @@ export const integrate = (
               ]);
             }
             const guarded = (paths: ReadonlySet<string>): Effect.Effect<void, WorktreeFinishRefused> => {
+              const crossed = crossing(paths);
               const staged = reading.entries.staged.entries.filter(
-                (entry) => paths.has(entry.path) || (entry.oldPath !== undefined && paths.has(entry.oldPath)),
+                (entry) => crossed(entry.path) || (entry.oldPath !== undefined && crossed(entry.oldPath)),
               );
               if (staged.length > 0) {
                 return refused(
