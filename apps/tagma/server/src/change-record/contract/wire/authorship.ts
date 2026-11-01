@@ -16,12 +16,33 @@ export const AuthoredLine = Schema.Struct({
 });
 export type AuthoredLine = typeof AuthoredLine.Type;
 
+export const SubmoduleEnd = Schema.Union([
+  Schema.Struct({ kind: Schema.Literal('commit'), oid: Schema.String }),
+  Schema.Struct({ kind: Schema.Literal('file') }),
+  Schema.Struct({ kind: Schema.Literal('absent') }),
+]);
+export type SubmoduleEnd = typeof SubmoduleEnd.Type;
+
+export const SubmoduleDiff = Schema.Struct({
+  before: SubmoduleEnd,
+  after: SubmoduleEnd,
+  working: Schema.optional(
+    Schema.Struct({
+      state: Schema.Literals(['ready', 'uninitialized', 'missing']),
+      trackedChanges: Schema.Boolean,
+      untrackedChanges: Schema.Boolean,
+    }),
+  ),
+});
+export type SubmoduleDiff = typeof SubmoduleDiff.Type;
+
 export const PathAuthorship = Schema.Struct({
   rootId: RootId,
   path: Schema.NonEmptyString,
   lines: Schema.Array(AuthoredLine),
   binary: Schema.Boolean,
   timedOut: Schema.Boolean,
+  submodule: Schema.optional(SubmoduleDiff),
   sides: Schema.Struct({ before: Schema.NullOr(Schema.String), after: Schema.NullOr(Schema.String) }),
 });
 export type PathAuthorship = typeof PathAuthorship.Type;

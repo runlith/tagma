@@ -1,6 +1,6 @@
 import { Effect, type Context, type FileSystem } from 'effect';
 import { renamedFromAt } from '@runlith/git/history';
-import { blobPrefixAt, fileAt, treeEntriesAt } from '@runlith/git/entries';
+import { blobPrefixAt, fileAt } from '@runlith/git/entries';
 import { commitOf, type GitAnswerInvalid, type GitUnreadable } from '@runlith/git/repository';
 import type { Git } from '@runlith/git/Git';
 import { PATCH_CONTEXT_LINES } from '@runlith/utils/patch';
@@ -28,6 +28,7 @@ import { BINARY_PROBE, looksBinary } from '@runlith/files/content';
 import { binary, digestOf, NUL, PAST_BINARY, pastBinary, sameText, type End } from './patch.js';
 import { COMMIT_RECORD } from '../changes/commits.js';
 import { headBlob, normalizedOne, stagedBlob, working } from './sides.js';
+import { entryAt, pastSubmodule, submoduleAnswer, workingSubmodule } from './submodules.js';
 
 const KEPT_BYTES_PER_LINE = 213;
 
@@ -287,6 +288,20 @@ const committedAuthorship = (
     const kept = cache.keptAt(at, key, width, opens);
     if (kept !== null) return kept;
     const parent = since ?? (yield* Effect.catchTag(commitOf(git, dir, `${sha}^`, { capture: COMMIT_RECORD }), 'GitRefused', refusedByGit));
+    const before = yield* entryAt(git, dir, parent, named);
+    const after = yield* entryAt(git, dir, sha, named);
+    const submodule = pastSubmodule(before, after);
+    if (submodule !== null) {
+      const source =
+        before !== null || after === null || parent === null
+          ? null
+          : yield* Effect.catchTag(renamedFromAt(git, dir, parent, sha, named, { capture: READING_CAPTURE }), 'GitRefused', refusedByGit);
+      const change = source === null ? submodule : pastSubmodule(yield* entryAt(git, dir, parent, source), after);
+      const reading = submoduleAnswer(rootId, named, change ?? submodule);
+      const answer = source === null ? reading : { ...reading, sides: { ...reading.sides, before: source } };
+      cache.keep(at, { key, context: width, answer });
+      return answer;
+    }
     const side = (revision: string | null, at: string): Effect.Effect<End, GitUnreadable | GitAnswerInvalid> =>
       revision === null || at === ''
         ? Effect.succeed(null)
@@ -365,6 +380,9 @@ export const authorshipAt = (
         asked,
       );
     }
+    const head = yield* entryAt(actingGit(readers.git, 'thread-files-object'), root.path, 'HEAD', named);
+    const submodule = yield* workingSubmodule(readers.git, readers.files, root.path, named, head, side);
+    if (submodule !== null) return submoduleAnswer(rootId, named, submodule);
     const bytes = yield* workingEnd(readers.files, root.path, named);
     let headRead: { readonly text: End } | null = null;
     if (side !== undefined) {
@@ -374,15 +392,7 @@ export const authorshipAt = (
     }
     yield* readers.commands.settled({ checkout: rootId, paths: [named] });
     const judged = (yield* readers.holdings.judged(rootId, [named])).get(named);
-    const head = yield* treeEntriesAt(actingGit(readers.git, 'thread-files-object'), root.path, 'HEAD', [named], {
-      capture: READING_CAPTURE,
-    });
-    if (head.unread.has(named)) {
-      return yield* new GateRefusal('git-unreadable', `git could not say what HEAD holds for ${named}`, [
-        'run it inside a readable checkout of this project',
-      ]);
-    }
-    const object = head.entries.get(named)?.object ?? null;
+    const object = head?.object ?? null;
     if (object === null && bytes === null) {
       return yield* new GateRefusal('not-found', `${named} stands in neither HEAD nor the working tree of this checkout`, [
         'name a path the branch carries, or one a session has written',

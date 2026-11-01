@@ -8,6 +8,7 @@
   import FileQuestion from '@lucide/svelte/icons/file-question-mark';
   import FileText from '@lucide/svelte/icons/file-text';
   import History from '@lucide/svelte/icons/history';
+  import FolderGit2 from '@lucide/svelte/icons/folder-git-2';
   import X from '@lucide/svelte/icons/x';
   import type { AuthorshipSide } from '@tagma/server/change-record/contract/wire/authorship';
   import type { CheckoutLines } from '@tagma/server/workspace/contract/wire/checkout';
@@ -37,6 +38,7 @@
   import LineCount from './LineCount.svelte';
   import type { CommitRange } from './opened.js';
   import PictureDiff from './PictureDiff.svelte';
+  import SubmoduleDiff from './SubmoduleDiff.svelte';
   import ReadingFailed from '$lib/shared/ReadingFailed.svelte';
   import { SHORT_SHA } from './reading.js';
   import ViewMenu from './ViewMenu.svelte';
@@ -256,7 +258,11 @@
         {side === 'staged' ? 'Staged' : 'Unstaged'}
       </span>
     {/if}
-    <FileIcon {path} class="ml-1" />
+    {#if reading.submodule !== null}
+      <FolderGit2 class="ml-1 size-3.5 shrink-0 text-muted-foreground" />
+    {:else}
+      <FileIcon {path} class="ml-1" />
+    {/if}
     <PathText
       {path}
       directory="after"
@@ -279,7 +285,7 @@
           <button type="button" class={ICON} aria-label="Next file" onclick={() => onStep(1)}><ChevronDown class="size-3.5" /></button>
         </Tooltip>
       {/if}
-      {#if !history}
+      {#if !history && reading.submodule === null}
         <DiffWidthSwitch
           width={reading.width}
           tooWide={reading.tooWide}
@@ -287,7 +293,7 @@
           onWidth={(next: DiffWidth) => marks.widths.set(DIFF_WIDTH, next)}
         />
       {/if}
-      {#if onOpenFile !== undefined && commit === null && !reading.binary}
+      {#if onOpenFile !== undefined && commit === null && !reading.binary && (reading.submodule === null || reading.submodule.after.kind === 'file')}
         <Tooltip text="Open the file at this change">
           <button
             type="button"
@@ -339,6 +345,8 @@
         <span class="block h-2 animate-pulse rounded-sm bg-selected" style:width="{width}%"></span>
       {/each}
     </div>
+  {:else if reading.submodule !== null}
+    <SubmoduleDiff change={reading.submodule} {ends} />
   {:else if reading.binary && isPicture(path)}
     {@const sides = reading.sides}
     <PictureDiff

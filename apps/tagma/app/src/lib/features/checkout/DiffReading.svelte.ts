@@ -48,6 +48,7 @@ export class DiffReading {
 
   answer = $derived<PathAuthorship | null>(this.query?.data ?? null);
 
+  submodule = $derived(this.answer?.submodule ?? null);
   binary = $derived(this.answer?.binary ?? false);
   timedOut = $derived(this.answer?.timedOut ?? false);
   sides = $derived(this.answer?.sides ?? { before: null, after: null });
