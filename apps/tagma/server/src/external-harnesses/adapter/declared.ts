@@ -36,7 +36,7 @@ const acpOnly = (provider: HarnessProvider, acp: AcpProfile): HarnessAdapter => 
   label: labelOf(provider),
   mark: markOf(provider),
   prefix: provider.id,
-  binary: acp.argv(undefined)[0] ?? provider.id,
+  binary: acp.program ?? acp.argv(undefined)[0] ?? provider.id,
   ...ACP_ONLY,
   launch: null,
   acp,

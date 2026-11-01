@@ -46,7 +46,7 @@ type ClientCompacted = {
   readonly usage?: PromptResult['usage'];
 };
 
-interface ClientCompaction {
+export interface ClientCompaction {
   readonly wait: Effect.Effect<ClientCompacted, AgentFault>;
   readonly cancel: Effect.Effect<void, AgentFault>;
 }

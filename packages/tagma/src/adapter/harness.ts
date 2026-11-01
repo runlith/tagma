@@ -444,6 +444,7 @@ export type AcpProfile = {
   readonly reportedModel: string | null;
   readonly hosts: string | null;
   readonly serves: string | null;
+  readonly program?: string;
   readonly web: TransportWeb;
   readonly mode: string;
   readonly proves: AcpProves;
