@@ -1,6 +1,7 @@
 import type { DeclaredCancellationCause } from '@runlith/executions/protocol/call';
 import type { ByteOffset, Stream } from '@runlith/executions/protocol/record';
 import type { CommandOrder } from '@tagma/server/executions/contract/wire/commands';
+import type { InstanceOf } from '@runlith/layer/key';
 import type { KeyedLoaderContext } from '@runlith/query/types';
 import { Repo } from '@runlith/query/repo';
 import { ProjectDoor } from '$lib/features/workspace/ProjectDoor.js';
@@ -186,18 +187,18 @@ export const ExecutionsRepo = Repo.define(
   { tier: 'project', door: ProjectDoor },
 );
 
-type Repo = ReturnType<typeof ExecutionsRepo.use>;
+export type ExecutionsRepo = InstanceOf<typeof ExecutionsRepo>;
 
 type Refreshed<Q> = Q extends { readonly key: (key: never) => { readonly refresh: (...args: never[]) => Promise<infer A> } } ? A : never;
 
 export type RecordReads = {
-  readonly terminalBytes: (window: ByteWindow) => Promise<Refreshed<Repo['bytes']>>;
-  readonly commandBytes: (window: CommandByteWindow) => Promise<Refreshed<Repo['commandBytes']>>;
-  readonly terminal: (address: ExecutionAddress) => Promise<Refreshed<Repo['record']>>;
-  readonly command: (address: ExecutionAddress) => Promise<Refreshed<Repo['command']>>;
+  readonly terminalBytes: (window: ByteWindow) => Promise<Refreshed<ExecutionsRepo['bytes']>>;
+  readonly commandBytes: (window: CommandByteWindow) => Promise<Refreshed<ExecutionsRepo['commandBytes']>>;
+  readonly terminal: (address: ExecutionAddress) => Promise<Refreshed<ExecutionsRepo['record']>>;
+  readonly command: (address: ExecutionAddress) => Promise<Refreshed<ExecutionsRepo['command']>>;
 };
 
-export const repoReads = (repo: Repo): RecordReads => ({
+export const repoReads = (repo: ExecutionsRepo): RecordReads => ({
   terminalBytes: (window) => repo.bytes.key(window).refresh({ throwOnError: true }),
   commandBytes: (window) => repo.commandBytes.key(window).refresh({ throwOnError: true }),
   terminal: (address) => repo.record.key(address).refresh({ throwOnError: true }),

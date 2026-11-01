@@ -16,8 +16,6 @@ import { DROP, LaneEndpoint } from './testing/endpoint.js';
 import { repoReads } from '../Repo.js';
 import type { ExecutionsRepo, RecordReads } from '../Repo.js';
 
-type Repo = ReturnType<typeof ExecutionsRepo.use>;
-
 const address = { execution: 'exec-1', incarnation: 0 };
 const text = (bytes: Uint8Array) => new TextDecoder().decode(bytes);
 const base64 = (value: string) => Buffer.from(value).toString('base64');
@@ -37,7 +35,7 @@ const chunk = (from: number, value: string, durableThrough: number, gap = false,
   bytes: base64(value),
 });
 
-const repoOver = (reads: Record<string, unknown>, state?: unknown): Repo & { readonly asked: string[] } => {
+const repoOver = (reads: Record<string, unknown>, state?: unknown): ExecutionsRepo & { readonly asked: string[] } => {
   const asked: string[] = [];
   return {
     asked,
@@ -51,7 +49,7 @@ const repoOver = (reads: Record<string, unknown>, state?: unknown): Repo & { rea
       }),
     },
     record: { key: () => ({ refresh: () => Promise.resolve({ record: {}, state: state ?? null, occupancy: null }) }) },
-  } as unknown as Repo & { readonly asked: string[] };
+  } as unknown as ExecutionsRepo & { readonly asked: string[] };
 };
 
 const commandRepoOver = (reads: Record<string, unknown>, live?: unknown) => {
@@ -76,7 +74,7 @@ const commandRepoOver = (reads: Record<string, unknown>, live?: unknown) => {
         },
       }),
     },
-  } as unknown as Repo;
+  } as unknown as ExecutionsRepo;
   return { repo, asked, terminal };
 };
 
@@ -973,7 +971,7 @@ test('a command pipe replays and follows through the command door, and resumes a
         },
       }),
     },
-  } as unknown as Repo;
+  } as unknown as ExecutionsRepo;
   const client = {
     'command.bytes.subscribe': (payload: { readonly stream: string; readonly offset: string }) => {
       opened.push({ stream: payload.stream, offset: payload.offset });

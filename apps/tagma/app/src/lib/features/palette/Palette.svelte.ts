@@ -47,9 +47,6 @@ export type Section = {
 
 export const ASK_VALUE = 'ask';
 
-type Repo = ReturnType<typeof PaletteRepo.use>;
-type Settings = ReturnType<typeof SettingsRepo.use>;
-
 type Parsed = { readonly aim: GroupId | 'ask' | null; readonly words: Narrowed };
 
 export interface FilesPort {
@@ -108,8 +105,8 @@ export class PaletteModel {
   constructor(
     private readonly workspace: Workspace,
     private readonly tags: () => TagCatalog | null,
-    repo: Repo,
-    private readonly settings: Settings,
+    repo: PaletteRepo,
+    private readonly settings: SettingsRepo,
     private readonly declared: () => readonly PaletteAction[],
     private readonly env: () => ActionEnv,
     private readonly place: FilesPort,

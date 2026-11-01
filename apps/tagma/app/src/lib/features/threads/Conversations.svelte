@@ -4,7 +4,7 @@
   import ConversationHit from './ConversationHit.svelte';
   import { ThreadsRepo } from './Repo.js';
 
-  type Found = NonNullable<ReturnType<ReturnType<typeof ThreadsRepo.use>['conversations']['key']>['data']>;
+  type Found = NonNullable<ReturnType<ThreadsRepo['conversations']['key']>['data']>;
 
   let { query, projectId }: { query: string; projectId: number } = $props();
 

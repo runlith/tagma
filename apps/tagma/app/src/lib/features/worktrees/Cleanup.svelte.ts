@@ -8,8 +8,6 @@ import { ProjectRung, type ProjectAim } from '$lib/features/workspace/ProjectRun
 import { Finishing } from './Finishing.svelte.js';
 import { WorktreesRepo } from './Repo.js';
 
-type Repo = ReturnType<typeof WorktreesRepo.use>;
-
 export const CLEANUP_THRESHOLDS = [7, CLEANUP_IDLE_DAYS, 30] as const;
 
 const CLEANUP_PAGE = 100;
@@ -38,7 +36,7 @@ export class Cleanup extends Service<Cleanup>()('Cleanup', { tier: 'project' }) 
 
   constructor(
     readonly aim: ProjectAim,
-    private readonly repo: Repo,
+    private readonly repo: WorktreesRepo,
     private readonly finishing: Finishing,
     private readonly notices: Notices,
     private readonly scope: Scope,

@@ -6,8 +6,6 @@ import { SessionsRepo } from './SessionsRepo.js';
 
 export type SessionHandle = { id: number; harness: string; key: string };
 
-type Sessions = ReturnType<typeof SessionsRepo.use>;
-
 export class SessionRegistry extends Service<SessionRegistry>()('SessionRegistry', { tier: 'graph', eager: true }) {
   static *make() {
     return new SessionRegistry(yield* SessionsRepo, yield* GraphFeed, yield* Scope, yield* Failure);
@@ -16,7 +14,7 @@ export class SessionRegistry extends Service<SessionRegistry>()('SessionRegistry
   private byId = $state(new Map<number, SessionHandle>());
 
   constructor(
-    private readonly repo: Sessions,
+    private readonly repo: SessionsRepo,
     feed: GraphFeed,
     scope: Scope,
     private readonly failure: Failure,

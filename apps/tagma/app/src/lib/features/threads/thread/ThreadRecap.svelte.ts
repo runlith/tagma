@@ -7,8 +7,6 @@ import { ThreadEffects } from './ThreadEffects.js';
 import { ThreadFeed } from './ThreadFeed.svelte.js';
 import { ThreadRefused } from './ThreadRefused.js';
 
-type Threads = ReturnType<typeof ThreadsRepo.use>;
-
 export class ThreadRecap extends Service<ThreadRecap>()('ThreadRecap', { tier: 'thread' }) {
   static *make() {
     return new ThreadRecap(yield* ThreadFeed, yield* ThreadEffects, yield* ThreadsRepo, (yield* ProjectRung.Current).projectId);
@@ -19,7 +17,7 @@ export class ThreadRecap extends Service<ThreadRecap>()('ThreadRecap', { tier: '
   constructor(
     private readonly feed: ThreadFeed,
     private readonly effects: ThreadEffects,
-    private readonly threads: Threads,
+    private readonly threads: ThreadsRepo,
     private readonly projectId: number,
   ) {
     super();

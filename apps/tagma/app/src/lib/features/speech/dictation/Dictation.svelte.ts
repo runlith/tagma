@@ -30,8 +30,6 @@ const INSERTED_UNSENT = 'What was heard was inserted and not sent.';
 
 export type Phase = 'idle' | 'recording' | 'finishing';
 
-type Settings = ReturnType<typeof SettingsRepo.use>;
-type Speech = ReturnType<typeof SpeechRepo.use>;
 type Failure = {
   readonly code: string;
   readonly reason: string;
@@ -83,8 +81,8 @@ export class Dictation extends Service<Dictation>()('Dictation', { tier: 'app' }
     private readonly door: Door,
     private readonly channel: SoundChannel,
     private readonly notices: Notices,
-    private readonly settings: Settings,
-    private readonly speech: Speech,
+    private readonly settings: SettingsRepo,
+    private readonly speech: SpeechRepo,
     private readonly workspace: Workspace,
     scope: Scope,
   ) {

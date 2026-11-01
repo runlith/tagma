@@ -42,8 +42,6 @@ const NONE: readonly SettingEntry[] = [];
 
 const STORED_UNAPPLIED = 'setting-unapplied';
 
-type Settings = ReturnType<typeof SettingsRepo.use>;
-
 export type SettingsCatalogOptions = { projectId: number };
 
 export class SettingsCatalog extends Process<SettingsCatalog, SettingsCatalogOptions>()('SettingsCatalog') {
@@ -69,7 +67,7 @@ export class SettingsCatalog extends Process<SettingsCatalog, SettingsCatalogOpt
   private readonly fading = new Set<ReturnType<typeof setTimeout>>();
 
   constructor(
-    private readonly repo: Settings,
+    private readonly repo: SettingsRepo,
     private readonly registry: SectionRegistry,
     private readonly scope: Scope,
     options: SettingsCatalogOptions,

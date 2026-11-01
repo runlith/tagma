@@ -47,8 +47,6 @@ import { ViewGrid } from './ViewGrid.js';
 import { ExecutionsRepo, repoReads, terminalKey, type ExecutionAddress, type InputAct } from '../Repo.js';
 import { openShell, readOperation, servable } from './Tab.svelte.js';
 
-type Repo = ReturnType<typeof ExecutionsRepo.use>;
-
 export type PaneGround = {
   readonly projectId: number;
   readonly root: string;
@@ -87,7 +85,7 @@ export interface PaneLifecycleClock {
   every(ms: number, run: () => Promise<void>): () => void;
 }
 
-export class TerminalPane extends Process<TerminalPane, PaneBirth>()('TerminalPane') {
+export class TerminalPane extends Process<TerminalPane, PaneBirth>()('TerminalPane', { tier: 'project' }) {
   static override *make(birth: PaneBirth) {
     return new TerminalPane(
       birth.id,
@@ -186,7 +184,7 @@ export class TerminalPane extends Process<TerminalPane, PaneBirth>()('TerminalPa
     readonly id: string,
     private readonly ground: PaneGround,
     private readonly program: string,
-    private readonly repo: Repo,
+    private readonly repo: ExecutionsRepo,
     private readonly live: LiveConnection,
     private readonly sockets: LaneSockets,
     private readonly roads: PathRoads,

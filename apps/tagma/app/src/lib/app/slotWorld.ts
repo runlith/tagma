@@ -187,7 +187,7 @@ export function slotWorld(over: Partial<SlotParts>, scope: Scope) {
   const settings = over.settings ?? ({ reloadSources: stubMutation(), catalog: stubFamily() } as unknown as SlotParts['settings']);
   const choices = new SurfaceChoices(settings);
   const places = over.places ?? testPlaces();
-  const teams = { read: stubFamily(), set: stubMutation(), promote: stubMutation() } as unknown as ReturnType<typeof TeamRepo.use>;
+  const teams = { read: stubFamily(), set: stubMutation(), promote: stubMutation() } as unknown as TeamRepo;
   const live = over.live ?? testLive();
   const layer = Layer.mergeAll(
     Notices,

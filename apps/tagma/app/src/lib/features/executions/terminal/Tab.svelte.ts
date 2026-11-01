@@ -27,8 +27,6 @@ import {
   type SplitPath,
 } from './paneLayout.js';
 
-type Repo = ReturnType<typeof ExecutionsRepo.use>;
-
 export type TabBirth = {
   readonly key: string;
   readonly execution: ExecutionAddress;
@@ -64,7 +62,7 @@ const MAX_QUEUED_SPLITS = 32;
 
 const MENU_GESTURE_MS = 100;
 
-export class TerminalTab extends Process<TerminalTab, TabBirth>()('TerminalTab') {
+export class TerminalTab extends Process<TerminalTab, TabBirth>()('TerminalTab', { tier: 'project' }) {
   static override *make(birth: TabBirth) {
     return new TerminalTab(
       birth,
@@ -122,7 +120,7 @@ export class TerminalTab extends Process<TerminalTab, TabBirth>()('TerminalTab')
 
   constructor(
     birth: TabBirth,
-    private readonly repo: Repo,
+    private readonly repo: ExecutionsRepo,
     private readonly policy: TerminalRenderPolicy,
     private readonly appearance: TerminalAppearance,
     private readonly notices: Notices,
@@ -519,7 +517,7 @@ export type OperationOutcome =
   | { readonly _tag: 'Free' }
   | { readonly _tag: 'Unread'; readonly problem: string };
 
-export async function readOperation(repo: Repo, operationId: string): Promise<OperationOutcome> {
+export async function readOperation(repo: ExecutionsRepo, operationId: string): Promise<OperationOutcome> {
   let answer;
   try {
     answer = await repo.operation.key(operationId).refresh({ throwOnError: true });
@@ -547,7 +545,12 @@ export type StartOutcome =
   | { readonly _tag: 'Unanswered'; readonly problem: string; readonly retain: string }
   | { readonly _tag: 'Refused'; readonly error: unknown; readonly retain: null };
 
-export async function openShell(repo: Repo, cwd: string, retained: string | null, grid: FitGrid | null = null): Promise<StartOutcome> {
+export async function openShell(
+  repo: ExecutionsRepo,
+  cwd: string,
+  retained: string | null,
+  grid: FitGrid | null = null,
+): Promise<StartOutcome> {
   if (retained !== null) {
     const stood = await readOperation(repo, retained);
     const answered = shellOf(stood, retained);
@@ -618,4 +621,4 @@ export function startedAt(answer: StartAnswer): ExecutionAddress | undefined {
   return state._tag === 'Settled' ? state.execution : undefined;
 }
 
-type StartAnswer = Exclude<Awaited<ReturnType<Repo['start']['run']>>, undefined>;
+type StartAnswer = Exclude<Awaited<ReturnType<ExecutionsRepo['start']['run']>>, undefined>;

@@ -1,11 +1,8 @@
-import type { Holding, HoldingGit, Nobody, NobodyWhy, UnprovenReason } from '../contract/wire/holdings.js';
+import type { Holding, HoldingGit, Nobody, UnprovenReason } from '../contract/wire/holdings.js';
 import { holderAt } from '../../workspace/contract/wire/checkout.js';
 import type { Unknown } from '../lines/folding.js';
-import { owedOf } from '../lines/owed.js';
-import type { Proven, Verdict } from '../lines/projection.js';
-import { releasedOf } from '../lines/released.js';
-import { standingOf, type Probe, type Unattributed } from './inputs.js';
-import { NO_WITNESSES, type Witnesses } from './witnesses.js';
+import type { Verdict } from '../lines/projection.js';
+import { standingOf, type Probe } from './inputs.js';
 
 const reasonOf = (unknown: Unknown): UnprovenReason => {
   switch (unknown.reason) {
@@ -22,31 +19,7 @@ const reasonOf = (unknown: Unknown): UnprovenReason => {
   }
 };
 
-const nobodyOf = (verdict: Proven, unattributed: Unattributed | null, witnesses: Witnesses): readonly Nobody[] => {
-  const external: NobodyWhy = unattributed === null ? { kind: 'external' } : { kind: 'unattributed', ...unattributed };
-  const { added, removed } = verdict.nobody;
-  if (added + removed === 0) return verdict.existence === 'external' ? [{ added: 0, removed: 0, why: external }] : [];
-  if (verdict.lines === 'unweighed' || (witnesses.released.length === 0 && witnesses.debts.length === 0))
-    return [{ added, removed, why: external }];
-  const released = releasedOf(verdict, witnesses.released);
-  const owed = owedOf(verdict, witnesses.debts);
-  const groups = new Map<string, { why: NobodyWhy; added: number; removed: number }>();
-  for (const [index, line] of verdict.lines.entries()) {
-    if (line.mark !== 'external') continue;
-    const release = released.get(index);
-    const commit = owed.get(index);
-    const why: NobodyWhy =
-      release !== undefined ? { kind: 'released', ...release } : commit !== undefined ? { kind: 'steps', commit } : external;
-    const key = JSON.stringify(why);
-    const group = groups.get(key) ?? { why, added: 0, removed: 0 };
-    if (line.kind === 'added') group.added += 1;
-    else group.removed += 1;
-    groups.set(key, group);
-  }
-  return [...groups.values()].map(({ why, added: plus, removed: minus }) => ({ added: plus, removed: minus, why }));
-};
-
-export const holdingOf = (probe: Probe, git: HoldingGit, verdict: Verdict, witnesses: Witnesses = NO_WITNESSES): Holding => {
+export const holdingOf = (probe: Probe, git: HoldingGit, verdict: Verdict, nobody: readonly Nobody[]): Holding => {
   const base = { path: probe.path, from: probe.from, git };
   if (verdict.verdict === 'unknown')
     return {
@@ -69,7 +42,7 @@ export const holdingOf = (probe: Probe, git: HoldingGit, verdict: Verdict, witne
         writing: false,
         retired: false,
       })),
-      nobody: nobodyOf(verdict, probe.unattributed, witnesses),
+      nobody,
     },
     lines: verdict.counts,
   };

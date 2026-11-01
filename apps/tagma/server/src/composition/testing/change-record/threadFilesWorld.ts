@@ -153,7 +153,7 @@ const fileFixtures = kind(FileFixtures, (_params: null, home) =>
   Effect.gen(function* () {
     const template = yield* bornRepository(yield* Git, yield* FileSystem.FileSystem, yield* Path.Path, home);
     const walks = yield* Effect.acquireRelease(
-      Effect.sync(() => makeWalks({ size: 1 })),
+      Effect.sync(() => makeWalks({ size: 1, memory: 1 << 26 })),
       (walks) => walks.close,
     );
     return { template, walks };

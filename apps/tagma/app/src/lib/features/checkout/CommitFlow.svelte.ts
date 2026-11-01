@@ -2,8 +2,6 @@ import type { RootId } from '@tagma/server/workspace/contract/wire/ids';
 import { Refusal } from '$lib/wire/refusal.js';
 import type { CheckoutRepo, PushAim } from './Repo.js';
 
-type Checkouts = ReturnType<typeof CheckoutRepo.use>;
-
 export type CommitAttempt = {
   readonly rootId: RootId;
   readonly message: string;
@@ -16,7 +14,7 @@ const formatRefusal = (error: unknown): boolean => error instanceof Refusal && e
 export class CommitFlow {
   refused = $state<CommitAttempt | null>(null);
 
-  constructor(private readonly repo: Checkouts) {}
+  constructor(private readonly repo: CheckoutRepo) {}
 
   async run(attempt: CommitAttempt, withoutFormat: boolean, landed: () => void): Promise<void> {
     this.refused = null;

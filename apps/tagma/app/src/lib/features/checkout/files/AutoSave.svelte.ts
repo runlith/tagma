@@ -9,8 +9,6 @@ import {
 import { Service } from '@runlith/layer/key';
 import { SettingsRepo, writtenCatalog } from '$lib/features/settings/SettingsRepo.js';
 
-type Settings = ReturnType<typeof SettingsRepo.use>;
-
 export type AutoSavePolicy = { readonly mode: AutoSaveMode; readonly delay: number };
 
 const isMode = (value: unknown): value is AutoSaveMode => AUTO_SAVE_MODES.some((mode) => mode === value);
@@ -22,7 +20,7 @@ export class AutoSave extends Service<AutoSave>()('AutoSave', { tier: 'app' }) {
 
   private readonly policies = new Map<number, AutoSavePolicy>();
 
-  constructor(private readonly settings: Settings) {
+  constructor(private readonly settings: SettingsRepo) {
     super();
   }
 

@@ -1,5 +1,6 @@
 import type { AuthorshipSide } from '@tagma/server/change-record/contract/wire/authorship';
 import type { RootId } from '@tagma/server/workspace/contract/wire/ids';
+import type { InstanceOf } from '@runlith/layer/key';
 import type { KeyedLoaderContext } from '@runlith/query/types';
 import { Repo } from '@runlith/query/repo';
 import { GraphDoor } from '$lib/features/workspace/GraphDoor.js';
@@ -194,3 +195,5 @@ export const CheckoutRepo = Repo.define(
   }),
   { tier: 'graph', door: GraphDoor },
 );
+
+export type CheckoutRepo = InstanceOf<typeof CheckoutRepo>;

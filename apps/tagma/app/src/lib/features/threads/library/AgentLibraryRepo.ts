@@ -1,5 +1,6 @@
 import type { AgentPreviewInput, AgentSave, AgentSkillAim } from '@tagma/server/threads/contract/wire/agentLibrary';
 import { ThreadId } from '@tagma/server/platform/contract/wire/thread';
+import type { InstanceOf } from '@runlith/layer/key';
 import { Repo } from '@runlith/query/repo';
 import type { KeyedLoaderContext } from '@runlith/query/types';
 import { Door } from '$lib/wire/Door.js';
@@ -63,3 +64,5 @@ export const AgentLibraryRepo = Repo.define(
   }),
   { tier: 'app', door: Door },
 );
+
+export type AgentLibraryRepo = InstanceOf<typeof AgentLibraryRepo>;

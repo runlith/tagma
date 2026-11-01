@@ -3,8 +3,6 @@ import { Service } from '@runlith/layer/key';
 import { Live, type LiveConnection } from '$lib/wire/Live.js';
 import { McpRepo } from './Repo.js';
 
-type Mcp = ReturnType<typeof McpRepo.use>;
-
 type Held = { holders: number; readonly release: () => void };
 
 export class McpFeed extends Service<McpFeed>()('McpFeed', { tier: 'app' }) {
@@ -16,7 +14,7 @@ export class McpFeed extends Service<McpFeed>()('McpFeed', { tier: 'app' }) {
 
   constructor(
     private readonly live: LiveConnection,
-    private readonly repo: Mcp,
+    private readonly repo: McpRepo,
     private readonly failure: Failure,
   ) {
     super();

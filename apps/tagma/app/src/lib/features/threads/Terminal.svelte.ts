@@ -9,8 +9,6 @@ import type { LiveConnection } from '$lib/wire/Live.js';
 import { refusalOf } from '$lib/wire/refusal.js';
 import type { HarnessOpenAttempt } from './OpenWatch.js';
 
-type Repo = ReturnType<typeof ExecutionsRepo.use>;
-
 export type PaneSettings = {
   writeGrid(projectId: number, grid: { readonly cols: number; readonly rows: number }): Promise<void>;
 };
@@ -60,7 +58,7 @@ export class ThreadTerminal {
     aim: ExecutionAddress | null,
     private readonly harness: () => HarnessRowDetail | null,
     private readonly timed: HarnessOpenAttempt | null,
-    private readonly repo: Repo,
+    private readonly repo: ExecutionsRepo,
     private readonly panes: TerminalViews,
     live: LiveConnection,
     commands: CommandActivity,

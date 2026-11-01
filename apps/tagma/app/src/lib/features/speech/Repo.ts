@@ -1,3 +1,4 @@
+import type { InstanceOf } from '@runlith/layer/key';
 import { Repo } from '@runlith/query/repo';
 import { Door } from '$lib/wire/Door.js';
 
@@ -35,3 +36,5 @@ export const SpeechRepo = Repo.define(
   }),
   { tier: 'app', door: Door },
 );
+
+export type SpeechRepo = InstanceOf<typeof SpeechRepo>;

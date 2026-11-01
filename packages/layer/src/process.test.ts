@@ -116,6 +116,16 @@ describe('Process', () => {
     expect(order).toEqual(['root', 'finalizer']);
   });
 
+  it('a process of a rung refuses a scope under no scope of that rung', () => {
+    const { app } = open();
+    class Greeting extends Process<Greeting>()('Greeting', { tier: 'visitor' }) {
+      static override make(): Greeting {
+        return new Greeting();
+      }
+    }
+    expect(() => Greeting.start(app.child('hall'))).toThrow(/Process "Greeting" stands at the visitor tier/);
+  });
+
   it('a scope no graph opened refuses by name', () => {
     expect(() => Countdown.start(Scope.make('loose'), { seconds: 1 })).toThrow(/Process "Countdown" needs a scope the graph opened/);
   });

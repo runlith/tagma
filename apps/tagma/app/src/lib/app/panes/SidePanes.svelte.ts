@@ -3,6 +3,7 @@ import { type Resolver, Service } from '@runlith/layer/key';
 import { untrack } from 'svelte';
 import { SvelteMap } from 'svelte/reactivity';
 import { Claims } from '$lib/shared/Claims.svelte.js';
+import { Access, AccessHint, type AccessHintShape, type Gate, gateOf } from '$lib/wire/access.js';
 import { draftHolder, type Holder, sectionHolder, threadHolder } from '$lib/shared/panes/holder.js';
 import { type PaneContent, type PaneOpening, sameContent, type SidePane } from '$lib/shared/panes/pane.js';
 import { PaneRegistry } from './PaneRegistry.js';
@@ -18,7 +19,7 @@ type Shown = { readonly layouts: TabLayouts; readonly app: Resolver };
 
 export class SidePanes extends Service<SidePanes>()('SidePanes', { tier: 'app' }) {
   static *make() {
-    const panes = new SidePanes(yield* PaneRegistry);
+    const panes = new SidePanes(yield* PaneRegistry, gateOf(yield* Access.optional(), 'read'), yield* AccessHint.optional());
     (yield* Scope).defer(panes.watch());
     return panes;
   }
@@ -56,7 +57,11 @@ export class SidePanes extends Service<SidePanes>()('SidePanes', { tier: 'app' }
 
   readonly showing: boolean = $derived(this.layout.open && this.active !== null);
 
-  constructor(readonly kinds: PaneRegistry) {
+  constructor(
+    readonly kinds: PaneRegistry,
+    readonly gate: Gate,
+    readonly hints?: AccessHintShape,
+  ) {
     super();
   }
 

@@ -1,3 +1,4 @@
+import type { InstanceOf } from '@runlith/layer/key';
 import type { KeyedLoaderContext } from '@runlith/query/types';
 import { Repo } from '@runlith/query/repo';
 import type { OperationInput } from '$lib/wire/operation.js';
@@ -24,3 +25,5 @@ export const TranslationsRepo = Repo.define(
   }),
   { tier: 'graph', door: GraphDoor },
 );
+
+export type TranslationsRepo = InstanceOf<typeof TranslationsRepo>;

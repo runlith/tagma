@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { workspaceChangeHunk } from '@runlith/files/hunk';
 import { stepsIn } from '@runlith/utils/sequenceDiff';
-import { foldPath, type FoldInput, type Folded } from './fold.js';
+import { foldPath, type FoldInput } from './fold.js';
 import {
   contentOf,
   hunkWork,
@@ -16,6 +16,8 @@ import {
 import { FoldMemory } from './memory.js';
 import { alignBase, projectFold, type Proven, type Verdict } from './projection.js';
 import { selectFold } from './selection.js';
+
+type Folded = ReturnType<typeof foldPath>;
 
 const A = 'holder-a';
 const B = 'holder-b';

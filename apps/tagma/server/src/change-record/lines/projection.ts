@@ -37,12 +37,14 @@ export type MarkedLine = {
 export type Region = Change & { readonly lines: readonly MarkedLine[] };
 export type Counts = { readonly added: number; readonly removed: number };
 export type Hand = Counts & { readonly holder: string };
+type WriterCounts = Counts & Writer;
 export type Proven = {
   readonly verdict: 'proven';
   readonly lines: readonly MarkedLine[] | 'unweighed';
   readonly counts: Counts | 'unweighed';
   readonly regions: readonly Region[];
   readonly hands: readonly Hand[];
+  readonly writers: readonly WriterCounts[];
   readonly nobody: Counts;
   readonly unheld: boolean;
   readonly standing: ReadonlySet<string>;
@@ -281,6 +283,7 @@ export function summarize(
   present: readonly Mark[] = [],
 ): Proven {
   const hands = new Map<string, { holder: string; added: number; removed: number }>();
+  const writers = new Map<string, { row: string; holder: string; added: number; removed: number }>();
   const nobody = { added: 0, removed: 0 };
   const counts = { added: 0, removed: 0 };
   const standing = new Set<string>();
@@ -297,6 +300,14 @@ export function summarize(
   for (const line of lines) {
     counts[line.kind] += 1;
     note(line.mark)[line.kind] += 1;
+    if (line.mark !== 'external') {
+      let writer = writers.get(line.mark.row);
+      if (writer === undefined) {
+        writer = { ...line.mark, added: 0, removed: 0 };
+        writers.set(line.mark.row, writer);
+      }
+      writer[line.kind] += 1;
+    }
   }
   for (const mark of present) note(mark);
   if (existence !== null) note(existence);
@@ -307,6 +318,7 @@ export function summarize(
     counts,
     regions,
     hands: [...hands.values()],
+    writers: [...writers.values()],
     nobody,
     unheld,
     standing,

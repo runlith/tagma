@@ -12,9 +12,10 @@ import type { FileRoot } from '../../workspace/contract/wire/roots.js';
 import { HeldFeed } from '../contract/service/held.js';
 import { Holdings } from '../contract/service/holdings.js';
 import type { Folder } from '../holdings/judge.js';
-import { stepsIn } from '@runlith/utils/sequenceDiff';
-import { foldPath } from '../lines/fold.js';
-import { type Judges, foldMemoryBudget, makeJudges } from '../holdings/judges.js';
+import { FoldResidence, payloadOf } from '../lines/residence.js';
+import { unpackVerdict } from '../lines/packed.js';
+import { type Judges, makeJudges } from '../holdings/judges.js';
+import { foldMemoryBudget } from '../lines/memory.js';
 import { FoldMemory } from '../lines/memory.js';
 import type { Walks } from '../lines/walks.js';
 import { testWalks } from './walks.js';
@@ -25,9 +26,13 @@ import { LineWrites } from '../contract/service/lineWrites.js';
 import { idleCommands } from './doubles.js';
 import type { CommandWrites } from '../record/commands.js';
 
-const FOLD_STEPS = 2_000_000;
+const inline = new FoldResidence(64 * 1024 * 1024);
 
-export const foldInline: Folder = (input, cached, alignment) => Effect.sync(() => foldPath(input, stepsIn(FOLD_STEPS), cached, alignment));
+export const foldInline: Folder = (input, cached, alignment) =>
+  Effect.sync(() => {
+    const answer = inline.judge(payloadOf(input), cached, alignment);
+    return { ...answer, result: unpackVerdict(answer.packed) };
+  });
 
 const unused = (what: string) => () => Effect.die(`the test checkout double does not answer ${what}`);
 

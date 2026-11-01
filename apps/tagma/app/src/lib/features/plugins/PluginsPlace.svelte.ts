@@ -13,10 +13,6 @@ import { hereOf } from './here.js';
 import { PLUGINS, placeOf } from './place.js';
 import { PluginsRepo } from './Repo.js';
 
-type Plugins = ReturnType<typeof PluginsRepo.use>;
-type Mcp = ReturnType<typeof McpRepo.use>;
-type Secrets = ReturnType<typeof SecretsRepo.use>;
-
 export class PluginsPlace extends Service<PluginsPlace>()('PluginsPlace', { tier: 'project' }) {
   static *make() {
     return new PluginsPlace(
@@ -35,9 +31,9 @@ export class PluginsPlace extends Service<PluginsPlace>()('PluginsPlace', { tier
   adding = $state(false);
 
   constructor(
-    private readonly plugins: Plugins,
-    private readonly mcp: Mcp,
-    private readonly secrets: Secrets,
+    private readonly plugins: PluginsRepo,
+    private readonly mcp: McpRepo,
+    private readonly secrets: SecretsRepo,
     readonly feed: MarketplacesFeed,
     private readonly serversFeed: McpFeed,
     private readonly workspace: Workspace,

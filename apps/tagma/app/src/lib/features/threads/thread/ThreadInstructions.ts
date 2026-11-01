@@ -8,8 +8,6 @@ import { ThreadEffects } from './ThreadEffects.js';
 import { ThreadFeed } from './ThreadFeed.svelte.js';
 import { answered, type ThreadRefused } from './ThreadRefused.js';
 
-type Threads = ReturnType<typeof ThreadsRepo.use>;
-
 const STATUS = {
   updated: 'Instructions updated — this thread runs them from its next turn.',
   current: 'Instructions are already current.',
@@ -23,7 +21,7 @@ export class ThreadInstructions extends Service<ThreadInstructions>()('ThreadIns
   constructor(
     private readonly feed: ThreadFeed,
     private readonly effects: ThreadEffects,
-    private readonly threads: Threads,
+    private readonly threads: ThreadsRepo,
     private readonly projectId: number,
   ) {
     super();

@@ -86,6 +86,56 @@
       "browser": "./src/lib/wire/access.ts",
       "default": "./src/lib/wire/access.ts"
     },
+    "./ports/links": {
+      "types": "./src/lib/shared/ExternalLinks.ts",
+      "browser": "./src/lib/shared/ExternalLinks.ts",
+      "default": "./src/lib/shared/ExternalLinks.ts"
+    },
+    "./ports/saver": {
+      "types": "./src/lib/shared/FileSaver.ts",
+      "browser": "./src/lib/shared/FileSaver.ts",
+      "default": "./src/lib/shared/FileSaver.ts"
+    },
+    "./ports/offer": {
+      "types": "./src/lib/features/notices/Offer.ts",
+      "browser": "./src/lib/features/notices/Offer.ts",
+      "default": "./src/lib/features/notices/Offer.ts"
+    },
+    "./ports/build": {
+      "types": "./src/lib/wire/ClientBuild.ts",
+      "browser": "./src/lib/wire/ClientBuild.ts",
+      "default": "./src/lib/wire/ClientBuild.ts"
+    },
+    "./ports/workers": {
+      "types": "./src/lib/shared/workers/ServiceWorkers.ts",
+      "browser": "./src/lib/shared/workers/ServiceWorkers.ts",
+      "default": "./src/lib/shared/workers/ServiceWorkers.ts"
+    },
+    "./ports/origin": {
+      "types": "./src/lib/wire/ServerOrigin.svelte.ts",
+      "browser": "./src/lib/wire/ServerOrigin.svelte.ts",
+      "default": "./src/lib/wire/ServerOrigin.svelte.ts"
+    },
+    "./ports/entry": {
+      "types": "./src/lib/features/workspace/EntryProject.ts",
+      "browser": "./src/lib/features/workspace/EntryProject.ts",
+      "default": "./src/lib/features/workspace/EntryProject.ts"
+    },
+    "./host/os": {
+      "types": "./src/lib/app/hostOs.ts",
+      "browser": "./src/lib/app/hostOs.ts",
+      "default": "./src/lib/app/hostOs.ts"
+    },
+    "./theme": {
+      "types": "./src/lib/shared/Theme.svelte.ts",
+      "browser": "./src/lib/shared/Theme.svelte.ts",
+      "default": "./src/lib/shared/Theme.svelte.ts"
+    },
+    "./files/opener": {
+      "types": "./src/lib/features/checkout/files/FileOpener.svelte.ts",
+      "browser": "./src/lib/features/checkout/files/FileOpener.svelte.ts",
+      "default": "./src/lib/features/checkout/files/FileOpener.svelte.ts"
+    },
     "./ui/*.svelte": {
       "types": "./src/lib/shared/ui/*.svelte",
       "browser": "./src/lib/shared/ui/*.svelte",

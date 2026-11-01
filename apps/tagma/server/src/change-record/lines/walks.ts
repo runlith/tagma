@@ -2,25 +2,19 @@ import { availableParallelism } from 'node:os';
 import { Clock, Data, Effect, Exit, type Tracer } from 'effect';
 import { eventReason, workerGone } from '@runlith/utils/worker';
 import type { LineHunk } from '@runlith/files/hunk';
-import { foldWork, type FoldInput, type Folded } from './fold.js';
-import {
-  contentFrom,
-  contentOf,
-  type CachedFold,
-  type Content,
-  type PreparedBytes,
-  type PreparedText,
-  type TextContent,
-} from './folding.js';
-import type { BaseAlignment, Verdict } from './projection.js';
-import type { FoldJob, FoldResponse } from './jobs.js';
+import type { FoldInput } from './fold.js';
+import { payloadOf, type FoldPayload, type FoldHandle, type FoldRecall, type JudgedFold, type ResidentFold } from './residence.js';
+import { foldMemoryBudget } from './memory.js';
+import { WorkLanes, type Lane } from './lanes.js';
+import { unpackVerdict } from './packed.js';
+import { contentFrom, contentOf, type Content, type PreparedBytes, type PreparedText, type TextContent } from './folding.js';
+import type { BaseAlignment } from './projection.js';
 import type { ReleasedSpan } from './released.js';
 import type { DebtWindow } from './owed.js';
 import type { DependencyAnswer, DependencyInput, DependencyProbe, ImportProbe, PlacementInput } from '../prepared/dependencyWalk.js';
 import { GateRefusal } from '../../platform/contract/wire/refusal.js';
 import type { Authoring, Placed } from '../threadFiles/authored.js';
 import type { LineTally, Tallied } from './tally.js';
-import type { PackedVerdict } from './packed.js';
 
 export type Version = { readonly text: string } | { readonly bytes: Uint8Array } | { readonly file: string; readonly digest: string };
 
@@ -36,8 +30,14 @@ export type Hunked = {
 };
 
 export type WalkQuestion =
-  | { readonly kind: 'fold'; readonly job: FoldJob; readonly limit: number }
-  | { readonly kind: 'pack'; readonly verdict: Verdict; readonly limit: number }
+  | {
+      readonly kind: 'fold';
+      readonly input: FoldPayload;
+      readonly cached: FoldHandle | undefined;
+      readonly alignment: BaseAlignment | undefined;
+      readonly memory: number;
+      readonly selected: ReadonlySet<string> | undefined;
+    }
   | { readonly kind: 'text'; readonly text: string; readonly digest: string | undefined }
   | { readonly kind: 'bytes'; readonly bytes: Uint8Array }
   | { readonly kind: 'authored'; readonly authoring: Authoring }
@@ -53,8 +53,7 @@ export type WalkQuestion =
 export type WalkAsk = { readonly id: number } & WalkQuestion;
 
 export type WalkAnswer = { readonly id: number } & (
-  | { readonly kind: 'fold'; readonly answer: FoldResponse }
-  | { readonly kind: 'pack'; readonly answer: PackedVerdict | null }
+  | { readonly kind: 'fold'; readonly answer: ResidentFold }
   | { readonly kind: 'text'; readonly answer: PreparedText }
   | { readonly kind: 'bytes'; readonly answer: PreparedBytes }
   | { readonly kind: 'authored'; readonly answer: Placed }
@@ -79,9 +78,12 @@ export const walkCut = (path: string, unfinished: WalkUnfinished, ...ways: reado
     ...ways,
   ]);
 
-export type Lane = 'now' | 'later';
-
-type Queued = { readonly ask: WalkAsk; readonly started: (worker: number) => void; readonly answer: (answer: WalkAnswer) => void };
+type Queued = {
+  readonly ask: WalkAsk;
+  readonly preferred: Worker | undefined;
+  readonly started: (worker: number) => void;
+  readonly answer: (answer: WalkAnswer) => void;
+};
 
 type Running = { readonly queued: Queued; readonly lane: Lane; readonly bound: ReturnType<typeof setTimeout> };
 
@@ -91,19 +93,28 @@ const poolSize = (): number => Math.min(3, Math.max(1, Math.floor(availableParal
 
 export type Walks = ReturnType<typeof makeWalks>;
 
-export const makeWalks = ({ size = poolSize(), wall = WALL_MS }: { readonly size?: number; readonly wall?: number } = {}) => {
+export const makeWalks = ({
+  size = poolSize(),
+  wall = WALL_MS,
+  memory = foldMemoryBudget(),
+}: { readonly size?: number; readonly wall?: number; readonly memory?: number } = {}) => {
   const idle: Worker[] = [];
   const alive = new Set<Worker>();
   const identities = new WeakMap<Worker, number>();
+  const routes = new WeakMap<FoldRecall, Worker>();
+  const retained = new Map<Worker, number>();
   let workers = 0;
   const running = new Map<Worker, Running>();
-  const lanes: Record<Lane, Queued[]> = { now: [], later: [] };
+  const lanes = new WorkLanes<Queued>((one) =>
+    one.preferred !== undefined && alive.has(one.preferred) ? idle.includes(one.preferred) : idle.length > 0 || running.size < size,
+  );
   const backgroundWidth = Math.max(1, size - 1);
   let asked = 0;
   let closed = false;
 
   const failed = (thread: Worker, reason: string): void => {
     if (!alive.delete(thread)) return;
+    retained.delete(thread);
     const reported = closed ? reason : workerGone('walk worker', reason).message;
     const run = running.get(thread);
     running.delete(thread);
@@ -121,6 +132,10 @@ export const makeWalks = ({ size = poolSize(), wall = WALL_MS }: { readonly size
     if (run === undefined || run.queued.ask.id !== answer.id) return;
     clearTimeout(run.bound);
     running.delete(thread);
+    if (answer.kind === 'fold') {
+      retained.set(thread, answer.answer.retained);
+      if (answer.answer.record !== null) routes.set(answer.answer.record, thread);
+    }
     thread.unref();
     idle.push(thread);
     run.queued.answer(answer);
@@ -133,7 +148,7 @@ export const makeWalks = ({ size = poolSize(), wall = WALL_MS }: { readonly size
       thread = new Worker(new URL('./walk.worker.ts', import.meta.url), { type: 'module' });
     } catch (cause) {
       const gone = workerGone('walk worker', `it could not start: ${String(cause)}`);
-      const queued = [...lanes.now.splice(0), ...lanes.later.splice(0)];
+      const queued = lanes.drain();
       for (const one of queued) one.answer({ id: one.ask.id, kind: 'failed', reason: gone.message });
       return undefined;
     }
@@ -154,12 +169,13 @@ export const makeWalks = ({ size = poolSize(), wall = WALL_MS }: { readonly size
 
   const dispatch = (): void => {
     for (;;) {
-      const lane: Lane | undefined =
-        lanes.now.length > 0 ? 'now' : lanes.later.length > 0 && behind() < backgroundWidth ? 'later' : undefined;
-      if (lane === undefined) return;
-      const thread = idle.pop() ?? (running.size < size ? started() : undefined);
+      const ready = lanes.first(behind() < backgroundWidth);
+      if (ready === undefined) return;
+      const { lane, value: one } = ready;
+      const preferred = one.preferred === undefined ? -1 : idle.indexOf(one.preferred);
+      const thread = preferred >= 0 ? idle.splice(preferred, 1)[0] : (idle.pop() ?? (running.size < size ? started() : undefined));
       if (thread === undefined) return;
-      const one = lanes[lane].shift() as Queued;
+      lanes.remove(one);
       const bound = setTimeout(() => failed(thread, `the walk ran past its ${wall} ms wall bound`), wall);
       running.set(thread, { queued: one, lane, bound });
       thread.ref();
@@ -173,7 +189,7 @@ export const makeWalks = ({ size = poolSize(), wall = WALL_MS }: { readonly size
     }
   };
 
-  const queued = Effect.fnUntraced(function* (question: WalkQuestion, lane: Lane) {
+  const queued = Effect.fnUntraced(function* (question: WalkQuestion, lane: Lane, preferred: Worker | undefined) {
     const clock = yield* Clock.clockWith(Effect.succeed);
     const tracer = yield* Effect.tracer;
     return yield* Effect.acquireUseRelease(
@@ -184,6 +200,7 @@ export const makeWalks = ({ size = poolSize(), wall = WALL_MS }: { readonly size
           let worker: Tracer.Span | undefined;
           const one: Queued = {
             ask: { id, ...question } as WalkAsk,
+            preferred,
             started: (identity) => {
               const now = clock.currentTimeNanosUnsafe();
               queue.end(now, Exit.void);
@@ -222,11 +239,10 @@ export const makeWalks = ({ size = poolSize(), wall = WALL_MS }: { readonly size
             one.answer({ id, kind: 'failed', reason: 'the walk workers closed with the server' });
             return;
           }
-          lanes[lane].push(one);
+          lanes.offer(lane, one);
           dispatch();
           return Effect.sync(() => {
-            const waiting = lanes[lane].indexOf(one);
-            if (waiting >= 0) lanes[lane].splice(waiting, 1);
+            lanes.remove(one);
           });
         }),
       (queue, exit) =>
@@ -239,23 +255,40 @@ export const makeWalks = ({ size = poolSize(), wall = WALL_MS }: { readonly size
   const ask = <K extends WalkQuestion['kind']>(
     question: Extract<WalkQuestion, { readonly kind: K }>,
     lane: Lane,
+    preferred?: Worker,
   ): Effect.Effect<Answered<K>, WalkUnfinished> =>
-    Effect.flatMap(queued(question, lane), (answer) =>
+    Effect.flatMap(queued(question, lane, preferred), (answer) =>
       answer.kind === question.kind
         ? Effect.succeed(answer.answer as Answered<K>)
         : Effect.fail(new WalkUnfinished({ reason: answer.kind === 'failed' ? answer.reason : `the walk answered ${answer.kind}` })),
     );
 
+  const fold = Effect.fnUntraced(function* (
+    input: FoldInput,
+    cached?: FoldRecall,
+    alignment?: BaseAlignment,
+    lane: Lane = 'now',
+    selected?: ReadonlySet<string>,
+  ): Effect.fn.Return<JudgedFold, WalkUnfinished> {
+    const payload = yield* Effect.sync(() => payloadOf(input)).pipe(
+      Effect.withSpan('Walks.inputs', { attributes: { rows: input.rows.length } }),
+    );
+    const handle = cached === undefined ? undefined : { token: cached.token, revision: cached.revision };
+    const answer = yield* ask(
+      { kind: 'fold', input: payload, cached: handle, alignment, memory: Math.floor(memory / size), selected },
+      lane,
+      cached === undefined ? undefined : routes.get(cached),
+    );
+    return { ...answer, result: unpackVerdict(answer.packed) };
+  });
+
   return {
-    pack: (verdict: Verdict, limit: number, lane: Lane) =>
-      ask(
-        {
-          kind: 'pack',
-          verdict: verdict.verdict === 'proven' ? { ...verdict, overwritten: new Map(verdict.overwritten) } : verdict,
-          limit,
-        },
-        lane,
-      ),
+    get retained(): number {
+      return [...retained.values()].reduce((sum, bytes) => sum + bytes, 0);
+    },
+    limit: Math.floor(memory / size) * size,
+    fold,
+    restore: (input: FoldInput, selected: ReadonlySet<string>, lane: Lane) => fold(input, undefined, undefined, lane, selected),
     authored: (authoring: Authoring) => ask({ kind: 'authored', authoring }, 'now'),
     hunks: (pairs: readonly HunkPair[]) => ask({ kind: 'hunks', pairs }, 'later'),
     digests: (contents: readonly Uint8Array[], lane: Lane = 'later') => ask({ kind: 'digests', contents }, lane),
@@ -265,23 +298,7 @@ export const makeWalks = ({ size = poolSize(), wall = WALL_MS }: { readonly size
     dependencies: (input: DependencyInput) => ask({ kind: 'dependencies', input }, 'now'),
     dependencyImports: (input: DependencyProbe) => ask({ kind: 'dependencyImports', input }, 'now'),
     placements: (input: PlacementInput) => ask({ kind: 'placements', input }, 'now'),
-    fold: Effect.fnUntraced(function* (
-      input: FoldInput,
-      cached?: CachedFold,
-      alignment?: BaseAlignment,
-      lane: Lane = 'now',
-    ): Effect.fn.Return<Folded, WalkUnfinished> {
-      let left = 1 << 23;
-      const budget = { expired: (amount: number) => (left -= amount) < 0 };
-      const work = foldWork(input, budget, cached, alignment);
-      let next = work.next();
-      while (!next.done) {
-        const response = yield* ask({ kind: 'fold', job: next.value, limit: Math.max(0, left) }, lane);
-        budget.expired(response.used);
-        next = work.next(response.answer);
-      }
-      return next.value;
-    }),
+
     content: (text: string | null, digest?: string, lane: Lane = 'now'): Effect.Effect<TextContent, WalkUnfinished> =>
       text === null
         ? Effect.succeed(contentOf(null))
@@ -292,9 +309,8 @@ export const makeWalks = ({ size = poolSize(), wall = WALL_MS }: { readonly size
       ),
     close: Effect.sync(() => {
       closed = true;
-      const queued = [...lanes.now, ...lanes.later];
-      lanes.now = [];
-      lanes.later = [];
+      retained.clear();
+      const queued = lanes.drain();
       for (const one of queued) one.answer({ id: one.ask.id, kind: 'failed', reason: 'the walk workers closed with the server' });
       for (const thread of [...running.keys()]) failed(thread, 'the walk workers closed with the server');
       for (const thread of idle.splice(0)) {

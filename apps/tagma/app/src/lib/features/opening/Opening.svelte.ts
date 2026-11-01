@@ -14,8 +14,6 @@ import type { Link, LinkAct, LinkHow, LinkIcon, LinkKind, LinkPlace, LinkWords }
 import { LinkRegistry } from './LinkRegistry.js';
 import { pointed } from './linkTarget.js';
 
-type Settings = ReturnType<typeof SettingsRepo.use>;
-
 export type LinkAim = {
   readonly link: Link;
   readonly x: number;
@@ -54,7 +52,7 @@ export class Opening extends Service<Opening>()('Opening', { tier: 'app' }) {
 
   constructor(
     private readonly kinds: LinkRegistry,
-    private readonly settings: Settings,
+    private readonly settings: SettingsRepo,
     private readonly workspace: Workspace,
     private readonly notices: Notices,
     private readonly host: Host,

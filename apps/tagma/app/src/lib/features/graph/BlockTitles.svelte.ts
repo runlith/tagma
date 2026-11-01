@@ -11,8 +11,6 @@ import type { BlockLens } from '$lib/features/workspace/address.js';
 import { Addresses } from '$lib/features/workspace/Addresses.js';
 import { GraphRung, type GraphAim } from '$lib/features/workspace/GraphRung.js';
 
-type Blocks = ReturnType<typeof BlocksRepo.use>;
-
 type Title = { title: string; projectId: number; branch?: string | null } | BlockRefFailure | null;
 
 export class BlockTitles extends Service<BlockTitles>()('BlockTitles', { tier: 'graph' }) implements BlockRefs {
@@ -37,7 +35,7 @@ export class BlockTitles extends Service<BlockTitles>()('BlockTitles', { tier: '
   private canon = 0;
 
   constructor(
-    private readonly repo: Blocks,
+    private readonly repo: BlocksRepo,
     feed: GraphFeed,
     private readonly workspace: Workspace,
     private readonly aim: GraphAim,

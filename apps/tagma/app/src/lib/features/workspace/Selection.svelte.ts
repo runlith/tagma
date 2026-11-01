@@ -10,8 +10,6 @@ import { Refusal } from '$lib/wire/refusal.js';
 
 const LAST_PROJECT_KEY = 'tagma.lastProjectId';
 
-type Projects = ReturnType<typeof ProjectsRepo.use>;
-
 export class Workspace extends Service<Workspace>()('Workspace', { tier: 'app' }) {
   static *make() {
     return new Workspace(yield* ProjectsRepo, yield* Router, yield* Platform, yield* Failure, yield* EntryProject.optional());
@@ -33,7 +31,7 @@ export class Workspace extends Service<Workspace>()('Workspace', { tier: 'app' }
   private readonly sought = new Set<number>();
 
   constructor(
-    private readonly repo: Projects,
+    private readonly repo: ProjectsRepo,
     private readonly router: Router,
     private readonly platform: Platform,
     private readonly failure: Failure,

@@ -9,7 +9,7 @@ export type CliInstall = { readonly label: string; readonly command: string };
 export type Installing = { readonly href: string; readonly ended: Promise<void> };
 
 export async function installInTerminal(
-  executions: ReturnType<typeof ExecutionsRepo.use>,
+  executions: ExecutionsRepo,
   addresses: Addresses,
   project: Project,
   install: CliInstall,
@@ -31,7 +31,7 @@ export async function installInTerminal(
   return { href: addresses.terminal(terminalKey(at), project.name), ended: ended(executions, at) };
 }
 
-async function ended(executions: ReturnType<typeof ExecutionsRepo.use>, at: NonNullable<ReturnType<typeof startedAt>>): Promise<void> {
+async function ended(executions: ExecutionsRepo, at: NonNullable<ReturnType<typeof startedAt>>): Promise<void> {
   for (;;) {
     const waited = await executions.wait.run({ ...at, waitMs: LONGEST_ACT_MS }, { throwOnError: true });
     if (waited === undefined || waited._tag !== 'Undecided') return;

@@ -32,7 +32,7 @@ export class SurfaceChoices extends Service<SurfaceChoices>()('SurfaceChoices', 
 
   private readonly chosen = new SvelteMap<string, SurfaceKind>();
 
-  constructor(private readonly settings: ReturnType<typeof SettingsRepo.use>) {
+  constructor(private readonly settings: SettingsRepo) {
     super();
   }
 
