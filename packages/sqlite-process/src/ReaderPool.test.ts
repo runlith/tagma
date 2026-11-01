@@ -207,6 +207,17 @@ describe('a reader is opened only when the work needs one', () => {
     ),
   );
 
+  it.effect('a discarded reader cannot return to the next borrower', () =>
+    pooled(1, (pool) =>
+      Effect.gen(function* () {
+        const discarded = yield* Effect.scoped(Effect.tap(pool.take, pool.discard));
+        const next = yield* Effect.scoped(pool.take);
+        expect(next).not.toBe(discarded);
+        expect(pool.connections).toEqual([next]);
+      }),
+    ),
+  );
+
   it.effect('a reader that cannot be opened parks nobody, and the pool counts what it could not give', () =>
     pooled(1, (pool, mirror) =>
       Effect.gen(function* () {

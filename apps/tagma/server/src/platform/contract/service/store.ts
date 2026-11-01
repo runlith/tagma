@@ -1,6 +1,7 @@
 import { dirname } from 'node:path';
 import { Context, Data, type Effect } from 'effect';
 import type { ProcessPool } from '@runlith/sqlite-process/ProcessPool';
+import type { Connections } from '@runlith/sqlite-process/SqliteProcess';
 import type { PlatformError } from 'effect/PlatformError';
 import type { SqlError } from 'effect/sql/SqlError';
 import type { EffectDrizzleQueryError, MigratorInitError } from 'drizzle-orm/effect-core/errors';
@@ -98,6 +99,7 @@ export type MigrationChain<Brand extends StoreBrand> = {
 
 export type Store<Brand extends StoreBrand> = {
   readonly processes: ProcessPool;
+  readonly connections: Connections['Service'];
   readonly durable: boolean;
   readonly db: StoreDb<Brand>;
   readonly path: string;

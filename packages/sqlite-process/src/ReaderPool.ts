@@ -35,6 +35,7 @@ export const bulkCeiling = (ceiling: number): number => (ceiling < 2 ? ceiling :
 export type ReaderPool = {
   readonly take: Effect.Effect<ProcessConnection, SqlError>;
   readonly takeBulk: Effect.Effect<ProcessConnection, SqlError>;
+  readonly discard: (reader: ProcessConnection) => Effect.Effect<void>;
   readonly connections: readonly ProcessConnection[];
   readonly state: PoolState;
   readonly noteStatement: (timing: StatementTiming) => void;
@@ -233,6 +234,12 @@ export const makeReaderPool = Effect.fnUntraced(function* ({
   return {
     take: taking('point'),
     takeBulk: taking('bulk'),
+    discard: (reader) =>
+      Effect.suspend(() => {
+        const entry = standing.get(reader);
+        drop(reader);
+        return entry === undefined ? Effect.void : Scope.close(entry.scope, Exit.void);
+      }),
     get connections() {
       return [...standing.keys()];
     },
