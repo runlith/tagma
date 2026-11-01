@@ -138,8 +138,9 @@ export const adopting = Effect.fnUntraced(function* (
   transaction: Store<StoreBrand>['transaction'],
   plan: Adopting | undefined,
 ) {
-  if (plan === undefined || plan.files.length === 0) return Effect.void;
-  const ended = yield* Deferred.make<void>();
+  if (plan === undefined || plan.files.length === 0) return Effect.succeed(true);
+  const ended = yield* Deferred.make<boolean>();
+  let landed = true;
   const adopt = (file: string) =>
     watched(
       `store.adopt ${file}`,
@@ -152,8 +153,17 @@ export const adopting = Effect.fnUntraced(function* (
   yield* Effect.forkScoped(
     Effect.andThen(
       plan.after,
-      Effect.forEach(plan.files, (file) => Effect.exit(adopt(file)), { discard: true }),
-    ).pipe(Effect.ensuring(Deferred.succeed(ended, undefined))),
+      Effect.forEach(
+        plan.files,
+        (file) =>
+          Effect.tap(Effect.exit(adopt(file)), (exit) =>
+            Effect.sync(() => {
+              if (exit._tag === 'Failure') landed = false;
+            }),
+          ),
+        { discard: true },
+      ),
+    ).pipe(Effect.onExit((exit) => Deferred.succeed(ended, exit._tag === 'Success' && landed))),
   );
   return Deferred.await(ended);
 });
