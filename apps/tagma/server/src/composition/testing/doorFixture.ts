@@ -243,7 +243,7 @@ const built = Effect.fnUntraced(
     );
     const born = { startedAt: new Date(yield* Clock.currentTimeMillis).toISOString(), replacedPid: null };
     const routes = yield* HttpRouter.toHttpEffect(
-      doorLayer({ status: runtime.status }).pipe(
+      doorLayer({ status: runtime.status, routes: runtime.routes }).pipe(
         Layer.provide(doorCompositionLayer),
         Layer.provide(
           Layer.succeedContext(

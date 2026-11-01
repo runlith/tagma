@@ -32,7 +32,7 @@ import { retiredRoutes } from '../../http/retired.js';
 import { Devices } from '../../remote/contract/service/devices.js';
 import { ConnectionHeaders } from '../../invocation/contract/service/admission.js';
 import { OperationCatalog } from '../../invocation/contract/service/catalog.js';
-import { mcpCallbackRoute } from '../../mcp/callback.js';
+import type { Route } from '../../platform/contract/service/route.js';
 
 const callerCheckout = HttpMiddleware.make((app) =>
   Effect.gen(function* () {
@@ -48,8 +48,21 @@ const contractStamp = (contract: string) =>
 
 export type DoorOptions = {
   readonly status: RuntimeStatus;
+  readonly routes: readonly Route[];
   readonly appDist?: string;
 };
+
+const moduleRoutes = (routes: readonly Route[]) =>
+  Layer.unwrap(
+    Effect.flatMap(Effect.context<DoorServices>(), (door) =>
+      Effect.map(
+        Effect.forEach(routes, (declared) =>
+          Effect.map(declared.handler(door), (handler) => HttpRouter.add('GET', declared.path, handler)),
+        ),
+        (added) => Layer.mergeAll(Layer.empty, ...added),
+      ),
+    ),
+  );
 
 export const admissionOf = (door: Context.Context<DoorServices>) =>
   invocationAssembly.admission({
@@ -80,7 +93,7 @@ export const doorLayer = (options: DoorOptions) => {
     Layer.provide(callLogLayer),
   );
   const app = options.appDist === undefined ? Layer.empty : HttpStaticServer.layer({ root: options.appDist, spa: true });
-  return Layer.mergeAll(api, retiredRoutes, unknownApiPath, mcpCallbackRoute, app, doorMiddleware);
+  return Layer.mergeAll(api, retiredRoutes, unknownApiPath, moduleRoutes(options.routes), app, doorMiddleware);
 };
 
 export const doorMiddleware = HttpRouter.middleware<{ provides: never; handles: never }>()(

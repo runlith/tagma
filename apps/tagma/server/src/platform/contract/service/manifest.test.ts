@@ -13,11 +13,13 @@ import {
   ManifestConflict,
   RefusalsUnphrased,
   bodiesOf,
+  checkManifests,
   manifest,
   manifests,
   operationsOf,
   refusalWordsOf,
 } from './manifest.js';
+import { route } from './route.js';
 
 const readValue = operation('read_value', {
   approval: ASKS_NEVER,
@@ -99,6 +101,32 @@ describe('manifest registration', () => {
     expect(() => manifests(...modules, manifest({ id: 'three', contributions: shelves.of({ id: 'oak', size: 1 }) }))).toThrow(
       ManifestConflict,
     );
+  });
+
+  it('refuses, naming both owners, one route path declared by two modules or overlapping a path the door serves itself', () => {
+    const answering = (path: `/${string}`) => route({ path, handler: () => () => Effect.die('never answered') });
+    const door = [
+      { path: '/api/', prefix: true },
+      { path: '/health', prefix: false },
+    ];
+    const owners = (modules: readonly Manifest[]) => {
+      try {
+        checkManifests(modules, door);
+        return null;
+      } catch (refused) {
+        return refused instanceof ManifestConflict ? [refused.collection, refused.id, ...refused.owners] : refused;
+      }
+    };
+    expect(
+      owners([
+        { id: 'one', routes: [answering('/back')] },
+        { id: 'two', routes: [answering('/back')] },
+      ]),
+    ).toEqual(['routes', '/back', 'one', 'two']);
+    expect(owners([{ id: 'one', routes: [answering('/api/back')] }])).toEqual(['routes', '/api/back', 'door', 'one']);
+    expect(owners([{ id: 'one', routes: [answering('/health')] }])).toEqual(['routes', '/health', 'door', 'one']);
+    expect(owners([{ id: 'one', routes: [answering('/healthy'), answering('/apis')] }])).toBeNull();
+    expect(owners([{ id: 'one', routes: [answering('/Back/')] }])).toMatchObject({ _tag: 'RouteInexact', path: '/Back/' });
   });
 
   it('rejects a repeated module even when it contributes no operations', () => {

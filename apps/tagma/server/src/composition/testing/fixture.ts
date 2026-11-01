@@ -62,7 +62,10 @@ export const terminalRuntime = (dataHome: string, host: RuntimeHost, processes: 
 
 export const servedRuntime = Effect.fnUntraced(function* (runtime: TerminalRuntime, dataHome: string) {
   const served = HttpRouter.serve(
-    Layer.mergeAll(doorServing(doorLayer({ status: runtime.status }), runtime, dataHome), liveDoorLayer(runtime, dataHome)),
+    Layer.mergeAll(
+      doorServing(doorLayer({ status: runtime.status, routes: runtime.routes }), runtime, dataHome),
+      liveDoorLayer(runtime, dataHome),
+    ),
     { disableListenLog: true, disableLogger: true },
   ).pipe(
     Layer.provide(frozenBuildsLayer({ dataPath: dataHome })),

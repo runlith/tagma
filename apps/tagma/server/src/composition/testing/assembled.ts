@@ -1,8 +1,8 @@
 import { join } from 'node:path';
-import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
+import * as BunHttpServer from '@effect/platform-bun/BunHttpServer';
 import { sharedPool } from '@runlith/sqlite-process/testing/pool';
-import { Effect, FileSystem, Layer } from 'effect';
-import { HttpPlatform, HttpRouter, HttpServer } from 'effect/http';
+import { Context, Effect, Layer } from 'effect';
+import { HttpRouter, HttpServer } from 'effect/http';
 import { routedContext } from '../../graph/testing/doubles.js';
 import { frozenBuildsLayer } from '../../installation/testing/doubles.js';
 import { testGrantSigner } from '../../platform/testing/grants.js';
@@ -13,12 +13,11 @@ import { makeRuntime } from '../runtime.js';
 import { TESTING_ADAPTERS } from './adapters.js';
 import { doorServing } from './doorServices.js';
 import { hostBundleRoot } from './hostBundle.js';
-import { requestEffect } from './httpRequest.js';
-
-const ORIGIN = 'http://tagma';
+import type { HttpAnswer } from './httpRequest.js';
 
 export const servedAssembly = Effect.fnUntraced(function* (home: string, assembly: Assembly) {
-  const files = yield* FileSystem.FileSystem;
+  const listening = yield* Layer.build(BunHttpServer.layer({ hostname: '127.0.0.1', port: 0, gracefulShutdownTimeout: '20 millis' }));
+  const origin = HttpServer.formatAddress(Context.get(listening, HttpServer.HttpServer).address);
   const runtime = yield* makeRuntime(
     {
       assembly,
@@ -31,32 +30,29 @@ export const servedAssembly = Effect.fnUntraced(function* (home: string, assembl
       sourcePath: join(home, 'source'),
       hostBundlePath: yield* Effect.orDie(hostBundleRoot),
       drivers: [],
-      localOrigin: ORIGIN,
+      localOrigin: origin,
     },
     Layer.empty,
     yield* sharedPool,
   ).pipe(Effect.orDie);
-  const routed = routedContext(runtime.graph, runtime.pool);
-  const handler = yield* HttpRouter.toHttpEffect(
-    doorServing(doorLayer({ status: runtime.status }), runtime, home).pipe(
+  yield* Layer.build(
+    HttpRouter.serve(doorServing(doorLayer({ status: runtime.status, routes: runtime.routes }), runtime, home), {
+      disableListenLog: true,
+      disableLogger: true,
+    }).pipe(
       Layer.provide(frozenBuildsLayer({ dataPath: home })),
-      Layer.provide(Layer.succeedContext(routed)),
+      Layer.provide(Layer.succeedContext(routedContext(runtime.graph, runtime.pool))),
       Layer.provide(Layer.succeedContext(runtime.bindings)),
-      Layer.provide(HttpServer.layerServices),
-      Layer.provideMerge(HttpPlatform.layer),
-      Layer.provideMerge(BunFileSystem.layer),
+      Layer.provide(Layer.succeedContext(listening)),
     ),
   );
   const request = (path: string, sent?: unknown) =>
-    Effect.provide(
-      requestEffect(
-        Effect.provideService(handler, FileSystem.FileSystem, files),
-        new Request(
-          `${ORIGIN}${path}`,
-          sent === undefined ? {} : { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(sent) },
-        ),
-      ),
-      routed,
-    );
-  return { runtime, request };
+    Effect.promise(async (): Promise<HttpAnswer> => {
+      const response = await fetch(
+        `${origin}${path}`,
+        sent === undefined ? {} : { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(sent) },
+      );
+      return { status: response.status, body: await response.json().catch(() => null) };
+    });
+  return { runtime, origin, request };
 });

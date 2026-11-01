@@ -22,9 +22,9 @@ import { Access } from '../../remote/contract/service/access.js';
 import { PlacedSites, TerminalSite } from '../../remote/contract/service/sites.js';
 import { LaneEndpoint, type ViewLanes } from '../../executions/contract/service/views.js';
 import { remoteEndpoint } from './endpoint.js';
-import { remoteSignInDoor } from './signInDoor.js';
-import { McpSignInDoor } from '../../mcp/contract/service/door.js';
-import { MCP_CALLBACK_PATH } from '../../mcp/contract/wire/callback.js';
+import { remoteAddress } from './address.js';
+import { DoorAddress } from '../../platform/contract/service/door.js';
+import { type Route, type RouteHandler, routedPath } from '../../platform/contract/service/route.js';
 import type { Devices } from '../../remote/contract/service/devices.js';
 import {
   DEVICE_COOKIE,
@@ -36,15 +36,13 @@ import {
 } from '../../remote/contract/wire/access.js';
 import { liveServing } from '../socketBinding.js';
 import type { Assembly } from '../manifest.js';
-import { API_PREFIX, ARTIFACT_PREFIX } from '../../http/contract/wire/served.js';
+import { API_PREFIX, ARTIFACT_PREFIX, HEALTH_PATH, STARTUP_PATH } from '../../http/contract/wire/served.js';
 import { artifactRoutes } from './artifacts.js';
 import { admissionOf, doorLayer, socketOperationsLayer } from './door.js';
 import { doorCompositionLayer, type DoorServices } from './handlers.js';
 import type { RuntimeStatus } from './status.js';
 import { ViewSites } from '../../views/contract/service/views.js';
 import { remoteSites } from './sites.js';
-
-const HEALTH_PATH = '/health';
 
 const PAIRING_BODY_BYTES = 1024;
 
@@ -76,24 +74,12 @@ const framed =
     });
   };
 
-const routedPath = (url: string): string | null => {
-  const cut = url.search(/[?#]/u);
-  let decoded: string;
-  try {
-    decoded = decodeURIComponent(cut === -1 ? url : url.slice(0, cut));
-  } catch {
-    return null;
-  }
-  const collapsed = decoded.toLowerCase().replace(/\/+/gu, '/');
-  return collapsed.length > 1 ? collapsed.replace(/\/$/u, '') : collapsed;
-};
-
 const reading = (method: string): boolean => method === 'GET' || method === 'HEAD';
 
 const gated = (path: string | null): boolean =>
   path === null ||
   path === HEALTH_PATH ||
-  path === '/startup' ||
+  path === STARTUP_PATH ||
   path === ARTIFACT_PREFIX.slice(0, -1) ||
   path.startsWith(ARTIFACT_PREFIX) ||
   path === API_PREFIX.slice(0, -1) ||
@@ -148,7 +134,16 @@ const renewing = (credential: string) =>
     ),
   );
 
-export const remoteGate = (admission: Admission['Service'], shell: Shell | null) =>
+const preAdmittedOf = (routes: readonly Route[], door: Context.Context<DoorServices>) =>
+  Effect.map(
+    Effect.forEach(
+      routes.filter((declared) => declared.preAdmitted),
+      (declared) => Effect.map(declared.handler(door), (handler) => [declared.path, handler] as const),
+    ),
+    (entries): ReadonlyMap<string, RouteHandler> => new Map(entries),
+  );
+
+export const remoteGate = (admission: Admission['Service'], shell: Shell | null, preAdmitted: ReadonlyMap<string, RouteHandler>) =>
   HttpMiddleware.make((app) =>
     Effect.gen(function* () {
       const request = yield* HttpServerRequest.HttpServerRequest;
@@ -158,7 +153,8 @@ export const remoteGate = (admission: Admission['Service'], shell: Shell | null)
       yield* HttpEffect.appendPreResponseHandler((_request, response) => Effect.succeed(frame(response)));
       return yield* Effect.gen(function* () {
         if (request.method === PAIRING_ENDPOINT.method && path === PAIRING_ENDPOINT.path) return yield* pairing(admission);
-        if (request.method === 'GET' && !upgrade && path === MCP_CALLBACK_PATH) return yield* app;
+        const admitted = request.method === 'GET' && !upgrade && path !== null ? preAdmitted.get(path) : undefined;
+        if (admitted !== undefined) return yield* admitted(request);
         if (reading(request.method) && !upgrade && !gated(path)) return yield* shellOf(shell);
         const credential = request.cookies[DEVICE_COOKIE];
         return yield* admission.remote(
@@ -201,22 +197,16 @@ export const remoteServing = (remote: RemoteDoor) =>
         },
       };
       const shell = remote.appDist === undefined ? null : yield* HttpStaticServer.make({ root: remote.appDist, spa: true });
+      const door = Context.add(remote.door, ViewSites, remoteSites(Context.get(remote.door, PlacedSites))).pipe(
+        Context.add(LaneEndpoint, remoteEndpoint(Context.get(remote.door, TerminalSite))),
+        Context.add(DoorAddress, remoteAddress(access)),
+      );
       const app = Layer.mergeAll(
-        doorLayer({ status }),
+        doorLayer({ status, routes: remote.assembly.routes }),
         liveServing(remote.assembly, remote.connections).pipe(Layer.provide(socketOperationsLayer)),
         artifactRoutes(remote.artifacts, { index: ARTIFACT_PREFIX, sandboxed: true }),
-      ).pipe(
-        Layer.provide(doorCompositionLayer),
-        Layer.provide(
-          Layer.succeedContext(
-            Context.add(remote.door, ViewSites, remoteSites(Context.get(remote.door, PlacedSites))).pipe(
-              Context.add(LaneEndpoint, remoteEndpoint(Context.get(remote.door, TerminalSite))),
-              Context.add(McpSignInDoor, remoteSignInDoor(access)),
-            ),
-          ),
-        ),
-      );
-      const gate = remoteGate(admission, shell);
+      ).pipe(Layer.provide(doorCompositionLayer), Layer.provide(Layer.succeedContext(door)));
+      const gate = remoteGate(admission, shell, yield* preAdmittedOf(remote.assembly.routes, door));
       return HttpRouter.serve(app, { disableLogger: true, middleware: (served) => requestLine(gate(served)) });
     }),
   );

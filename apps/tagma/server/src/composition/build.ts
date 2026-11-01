@@ -1,5 +1,7 @@
 import type { Context, Layer, ManagedRuntime } from 'effect';
 import type { Manifest } from '../platform/contract/service/manifest.js';
+import type { Route } from '../platform/contract/service/route.js';
+import type { DoorServices } from './http/handlers.js';
 import type { Channel } from '../installation/contract/wire/channel.js';
 import type { Distribution } from '../installation/cut/descriptor.js';
 import { type BindingChoice, type Bindings, boundOf } from './next.js';
@@ -27,8 +29,17 @@ type Stored<M> = M extends { readonly stores: readonly (infer S)[] }
 
 type Extension<Modules extends readonly Manifest[]> = Exclude<Modules[number], (typeof CORE_MODULES)[number]>;
 
+type RouteDoorOf<M> = M extends { readonly routes: readonly (infer Declared)[] }
+  ? Declared extends Route<infer R>
+    ? unknown extends R
+      ? never
+      : R
+    : never
+  : never;
+
 type Unserved<Modules extends readonly Manifest[], E = Extension<Modules>> =
   | Exclude<LiveDoorOf<Modules[number]>, SocketDoor | Stored<E> | Gives<E, 'installation'> | Gives<E, 'serving'>>
+  | Exclude<RouteDoorOf<Modules[number]>, DoorServices | Stored<E> | Gives<E, 'installation'> | Gives<E, 'serving'>>
   | Exclude<ControlServices<Modules[number]>, SettingControlNeeds>
   | Exclude<Needs<E, 'installation'>, Installed | Stored<E>>
   | Exclude<Needs<E, 'serving'>, Served | Installed | Stored<E> | Gives<E, 'installation'>>

@@ -444,7 +444,7 @@ export const serve = async (build: Build): Promise<void> => {
             opened: attempt.opened,
             hostTakenAfter: attempt.trial === null ? undefined : attempt.opened,
             tagmaAppServer: `http://${LOOPBACK_HOST}:${port}`,
-            localOrigin: `http://${LOOPBACK_HOST}:${port}`,
+            localOrigin: HttpServer.formatAddress(Context.get(localContext, HttpServer.HttpServer).address),
             marketplaces: SHIPPED_PRESETS,
             commitGate:
               installation === undefined
@@ -558,7 +558,7 @@ export const serve = async (build: Build): Promise<void> => {
 
   const localConnections = new Connections(false);
   const app = Layer.mergeAll(
-    doorLayer({ status: tagma.status, appDist: surfaceRoot(dataPath, standing) }),
+    doorLayer({ status: tagma.status, routes: assembly.routes, appDist: surfaceRoot(dataPath, standing) }),
     liveServing(assembly, localConnections).pipe(Layer.provide(socketOperationsLayer)),
   ).pipe(Layer.provide(doorCompositionLayer), Layer.provide(Layer.succeedContext(doorServices)));
 

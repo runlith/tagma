@@ -191,8 +191,9 @@ import { ARTIFACT_PREFIX } from '../http/contract/wire/served.js';
 import { type LocalSites, makeLocalSites } from './http/sites.js';
 import { localEndpoint } from './http/endpoint.js';
 import { LaneEndpoint } from '../executions/contract/service/views.js';
-import { localSignInDoor } from './http/signInDoor.js';
-import { McpSignInDoor } from '../mcp/contract/service/door.js';
+import { localAddress } from './http/address.js';
+import { DoorAddress } from '../platform/contract/service/door.js';
+import type { Route } from '../platform/contract/service/route.js';
 import { McpServers } from '../mcp/contract/service/servers.js';
 import { mcp } from '../mcp/mcp.js';
 import { tagmaApps } from '../tagma-apps/tagma-apps.js';
@@ -226,6 +227,7 @@ import { ThreadLineage } from '../workspace/contract/service/assignments.js';
 
 export type ServerRuntime = {
   liveGroup: LiveGroup;
+  routes: readonly Route[];
   runtime: ManagedRuntime.ManagedRuntime<
     | GraphServices
     | GraphSteps
@@ -812,7 +814,7 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
     Context.make(HarnessOwner, { id: owner, build: options.installation?.manifest.identity.digest ?? owner }),
     Context.make(ViewSites, options.sites ?? (yield* Scope.provide(makeLocalSites(sandboxPort), stackScope))),
     Context.make(LaneEndpoint, localEndpoint),
-    Context.make(McpSignInDoor, localSignInDoor(options.localOrigin)),
+    Context.make(DoorAddress, localAddress(options.localOrigin)),
   );
   const stack = yield* Scope.provide(
     Layer.build(servingOf(assembly).pipe(Layer.provide(Layer.merge(Layer.succeedContext(servingInputs), BunFileSystem.layer)))),
@@ -879,6 +881,7 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
     graph: machineGraph,
     enforcement: judging,
     liveGroup: assembly.live,
+    routes: assembly.routes,
     pool,
     tokens,
     consoleKeys,

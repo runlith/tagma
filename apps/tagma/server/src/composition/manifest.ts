@@ -1,7 +1,9 @@
 import { Effect, Layer } from 'effect';
 import { prepareSqlite } from './sqlite.js';
 import type { CheckSubjectKind, FeedDeclaration, Operation, OperationDeclaration } from '../platform/contract/wire/operation.js';
-import { type DeclaredOperations, type Manifest, manifests, operationsOf } from '../platform/contract/service/manifest.js';
+import { checkManifests, type DeclaredOperations, type Manifest, operationsOf } from '../platform/contract/service/manifest.js';
+import type { Route } from '../platform/contract/service/route.js';
+import { DOOR_PATHS } from '../http/door.js';
 import type { Machine } from '../platform/contract/service/capacity.js';
 import type { PoolDeclaration } from '@runlith/held/Capacity';
 import type { SubjectKind } from '../platform/contract/wire/place.js';
@@ -71,6 +73,7 @@ export type Assembly = {
   readonly snapshotParticipants: (home: SnapshotHome) => Effect.Effect<Readonly<Record<string, SnapshotParticipant>>>;
   readonly drivers: ReadonlySet<string>;
   readonly feeds: readonly FeedDeclaration[];
+  readonly routes: readonly Route[];
   readonly live: LiveGroup;
   readonly socketVerbs: Readonly<Record<string, OperationId>>;
   readonly subjectPlaces: Effect.Effect<ReadonlyMap<SubjectKind, SubjectPlace>>;
@@ -132,7 +135,7 @@ export const participantsOf =
     );
 
 export const assemble = async ({ modules, rested }: ServerParts): Promise<Assembly> => {
-  manifests(...modules);
+  checkManifests(modules, DOOR_PATHS);
   const operations = collect(await Effect.runPromise(operationsOf(modules)));
   const registry = operationRegistry<OperationId>(
     projectedOperations(Object.fromEntries(operations.declarations.map((declaration) => [declaration.id, declaration]))),
@@ -185,6 +188,7 @@ export const assemble = async ({ modules, rested }: ServerParts): Promise<Assemb
     snapshotParticipants: participantsOf(modules),
     drivers: new Set(modules.flatMap((module) => (module.drivers ?? []).map(({ id }) => id))),
     feeds,
+    routes: modules.flatMap((module) => module.routes ?? []),
     live: liveRpc(feeds),
     socketVerbs: Object.fromEntries(
       feeds.flatMap((declared) => (declared.performs === undefined ? [] : [[declared.id, OperationId.make(declared.performs)] as const])),

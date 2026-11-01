@@ -1,15 +1,14 @@
-import { Context, Effect } from 'effect';
+import { Effect } from 'effect';
+import { DoorAddress } from '../../../platform/contract/service/door.js';
 import { GateRefusal } from '../../../platform/contract/wire/refusal.js';
 import { MCP_CALLBACK_PATH } from '../wire/callback.js';
 
-export class McpSignInDoor extends Context.Service<McpSignInDoor, { readonly origin: () => string | null }>()('tagma/mcp/McpSignInDoor') {}
-
-export const callbackOf = (door: McpSignInDoor['Service']): string | null => {
+export const callbackOf = (door: DoorAddress['Service']): string | null => {
   const origin = door.origin();
   return origin === null ? null : `${origin}${MCP_CALLBACK_PATH}`;
 };
 
-export const servedCallback = Effect.flatMap(McpSignInDoor, (door) => {
+export const servedCallback = Effect.flatMap(DoorAddress, (door) => {
   const callback = callbackOf(door);
   return callback === null
     ? Effect.fail(

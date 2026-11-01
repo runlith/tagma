@@ -6,8 +6,17 @@ import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { it, layer } from '@runlith/effect-test';
 import { sql } from 'drizzle-orm';
 import * as BunHttpServer from '@effect/platform-bun/BunHttpServer';
-import { Context, Effect, Exit, FileSystem, Layer, Schema, Scope, Stream } from 'effect';
-import { HttpRouter, HttpServer } from 'effect/http';
+import { chunk } from '@runlith/audio/sound/chunk';
+import { captureFormat } from '@runlith/audio/sound/format';
+import { ended, type Track } from '@runlith/audio/sound/track';
+import { Clock, Context, Effect, Exit, FileSystem, Layer, Schema, Scope, Stream } from 'effect';
+import { CHECKOUT_FACTS } from '../../executions/contract/service/worlds.js';
+import { CapabilityOffers } from '../../native-harness/contract/service/execution.js';
+import { Settings } from '../../settings/contract/service/values.js';
+import { ThreadRecords } from '../../thread-record/contract/service/records.js';
+import { Captures } from '../../speech/contract/service/captures.js';
+import { listened, named } from '../../speech/listening/track.js';
+import { HttpRouter, HttpServer, HttpServerResponse } from 'effect/http';
 import { RpcClient, RpcGroup } from 'effect/rpc';
 import { Socket } from 'effect/socket';
 import { liveSerialization, rpcOf } from '../../platform/contract/wire/live.js';
@@ -35,6 +44,14 @@ import { PARTS } from '../developer/parts.js';
 import { assemble } from '../manifest.js';
 import { servedAssembly as served } from './assembled.js';
 import { ASSEMBLY } from './composed.js';
+import { DoorAddress } from '../../platform/contract/service/door.js';
+import { route } from '../../platform/contract/service/route.js';
+import { remoteServing } from '../http/remote.js';
+import { Connections } from '../../socket/connections.js';
+import { websocketHttpTracing } from '../../socket/live.js';
+import { frozenBuildsLayer } from '../../installation/testing/doubles.js';
+import { routedContext } from '../../graph/testing/doubles.js';
+import { doorServicesOf } from './doorServices.js';
 
 class Greeting extends Context.Service<Greeting, { readonly of: (name: string) => Effect.Effect<string> }>()('testing/Greeting') {}
 
@@ -87,6 +104,26 @@ const GREETING_OPERATIONS = {
     presentation: { running: 'Greeting', done: 'Greeted' },
     subjects: () => [],
   }),
+  greet_aloud: operation('greet_aloud', {
+    approval: ASKS_NEVER,
+    doors: { http: true },
+    callers: 'any',
+    tool: { capability: 'speech' } as const,
+    subject: 'none',
+    place: 'machine',
+    waits: [],
+    lifetimes: [],
+    effect: 'write',
+    identity: { key: 'request' },
+    meaning: 'Hear a greeting tone through the speech track chain and keep it as a capture until it is stopped.',
+    input: Schema.Struct({ name: Schema.String }),
+    answer: arms({ heard: { levels: Schema.Int } }),
+    refusals: [],
+    confirmation: (input: { readonly name: string }) => ({ summary: `Hear ${input.name}?` }),
+    confirmLabel: 'Hear',
+    presentation: { running: 'Hearing', done: 'Heard' },
+    subjects: () => [],
+  }),
   greet_warmly: operation('greet_warmly', {
     approval: ASKS_NEVER,
     doors: { http: true },
@@ -120,6 +157,67 @@ const greetingWord = settingKey({
   merge: 'replace',
 });
 
+const greetingTone = settingKey({
+  id: 'speech.greetingTone',
+  order: 1,
+  title: 'Greeting tone',
+  description: 'How loud a greeting tone is heard.',
+  schema: Schema.Int,
+  fallback: 8_000,
+  scopes: ['user'],
+  merge: 'replace',
+});
+
+class Pieces extends Context.Service<Pieces, { readonly home: (thread: string) => Effect.Effect<number | undefined> }>()(
+  'testing/Pieces',
+) {}
+
+const piecesLayer = Layer.effect(
+  Pieces,
+  Effect.map(ThreadRecords, (records) => Pieces.of({ home: (thread) => Effect.orDie(records.projectOf(thread)) })),
+);
+
+class Tones extends Context.Service<Tones, { readonly hear: (name: string) => Effect.Effect<number> }>()('testing/Tones') {}
+
+const tonesLayer = Layer.effect(
+  Tones,
+  Effect.gen(function* () {
+    const captures = yield* Captures;
+    const settings = yield* Settings;
+    const clock = yield* Clock.Clock;
+    return Tones.of({
+      hear: Effect.fnUntraced(function* (name) {
+        const loudness = yield* Effect.orDie(settings.value(greetingTone));
+        const [track] = named([{ source: 'mic' }], null);
+        const sound: Track = {
+          format: captureFormat,
+          chunks: Stream.fromIterable([chunk(captureFormat, 0n, new Int16Array(3_200).fill(loudness)), ended('drained')]),
+          end: Effect.void,
+        };
+        let levels = 0;
+        const heard = listened({ track: track!, capture: sound }, 0n, {
+          spoken: () => Effect.void,
+          heard: (one) => Effect.sync(() => (one.kind === 'level' ? (levels += 1) : levels)),
+        });
+        yield* Stream.runDrain(heard.capture.chunks);
+        yield* captures.open(
+          {
+            kind: 'tone',
+            noun: { one: 'tone', many: 'tones' },
+            id: name,
+            projectId: null,
+            sources: ['mic'],
+            at: 'server',
+            startedAt: new Date(clock.currentTimeMillisUnsafe()).toISOString(),
+          },
+          captures.end('tone', name),
+        );
+        return levels;
+      }),
+    });
+  }),
+);
+
 const GREETING_FEED = feed('greeting.said', {
   input: Schema.Struct({ name: Schema.String }),
   event: Schema.Struct({ text: Schema.String }),
@@ -130,7 +228,7 @@ const GREETING_FEED = feed('greeting.said', {
 const greeting = manifest({
   id: 'greeting',
   title: 'Greeting',
-  settings: [greetingWord],
+  settings: [greetingWord, greetingTone],
   feeds: [GREETING_FEED],
   live: liveOf([GREETING_FEED], (door: Context.Context<Greeting>) => ({
     'greeting.said': ({ name }: { readonly name: string }) =>
@@ -144,6 +242,14 @@ const greeting = manifest({
       body(GREETING_OPERATIONS.greet, {
         execute: Effect.fnUntraced(function* (input) {
           return { status: 'greeted' as const, text: yield* (yield* Greeting).of(input.name) };
+        }),
+      }),
+    ),
+    pair(
+      GREETING_OPERATIONS.greet_aloud,
+      body(GREETING_OPERATIONS.greet_aloud, {
+        execute: Effect.fnUntraced(function* (input) {
+          return { status: 'heard' as const, levels: yield* (yield* Tones).hear(input.name) };
         }),
       }),
     ),
@@ -182,43 +288,62 @@ const greeting = manifest({
   ),
   lifetimes: {
     installation: Layer.mergeAll(
+      tonesLayer,
       Layer.succeed(Salutation, { word: 'Hello' }),
       Layer.sync(Marks, () => new Map<number, Mark>()),
       accessLayer.pipe(Layer.provideMerge(grantsLayer)),
     ),
-    serving: Layer.effect(
-      Greeting,
-      Effect.map(Effect.all([Salutation, GreetingStore]), ([salutation, store]) => ({
-        of: (name: string) =>
-          store
-            .transaction('greet', () =>
-              Effect.gen(function* () {
-                yield* store.db.run(
-                  sql`insert into greeting (name, times) values (${name}, 1) on conflict (name) do update set times = times + 1`,
-                );
-                const [row] = yield* store.db.all<{ times: number }>(sql`select times from greeting where name = ${name}`);
-                return row?.times ?? 0;
-              }),
-            )
-            .pipe(
-              Effect.map((times) => `${salutation.word} ${name}, greeted ${times} time in ${basename(store.path)}`),
-              Effect.orDie,
-            ),
-      })),
+    serving: Layer.mergeAll(
+      piecesLayer,
+      Layer.effect(
+        Greeting,
+        Effect.map(Effect.all([Salutation, GreetingStore]), ([salutation, store]) => ({
+          of: (name: string) =>
+            store
+              .transaction('greet', () =>
+                Effect.gen(function* () {
+                  yield* store.db.run(
+                    sql`insert into greeting (name, times) values (${name}, 1) on conflict (name) do update set times = times + 1`,
+                  );
+                  const [row] = yield* store.db.all<{ times: number }>(sql`select times from greeting where name = ${name}`);
+                  return row?.times ?? 0;
+                }),
+              )
+              .pipe(
+                Effect.map((times) => `${salutation.word} ${name}, greeted ${times} time in ${basename(store.path)}`),
+                Effect.orDie,
+              ),
+        })),
+      ),
     ),
   },
 });
 
-const extended = serverParts({ ...PARTS, modules: [...MODULES, greeting] });
+const answeringAddress = (door: Context.Context<DoorAddress>) => () =>
+  Effect.succeed(HttpServerResponse.text(Context.get(door, DoorAddress).origin() ?? 'no address'));
+
+const doorway = manifest({
+  id: 'doorway',
+  routes: [
+    route({ path: '/doorway/address', handler: answeringAddress }),
+    route({ path: '/doorway/returned', preAdmitted: true, handler: answeringAddress }),
+  ],
+});
+
+const extended = serverParts({ ...PARTS, modules: [...MODULES, greeting, doorway] });
 
 class Root extends Context.Service<
   Root,
   {
-    readonly op: (id: string, input: unknown) => Effect.Effect<{ readonly status: number; readonly body: unknown }>;
+    readonly origin: string;
+    readonly door: (path: string, at?: 'remote') => Effect.Effect<{ readonly status: number; readonly text: string }>;
+    readonly op: (id: string, input: unknown, query?: string) => Effect.Effect<{ readonly status: number; readonly body: unknown }>;
     readonly said: (name: string) => Effect.Effect<string>;
     readonly folder: (label: string) => Effect.Effect<string>;
     readonly marks: Map<number, Mark>;
     readonly grants: Grants['Service'];
+    readonly offered: (capability: string) => readonly string[];
+    readonly pieces: Pieces['Service'];
   }
 >()('testing/Root') {}
 
@@ -229,7 +354,7 @@ const root = Layer.effect(
     const home = yield* files.makeTempDirectoryScoped({ prefix: 'extension-root-' });
     yield* Effect.addFinalizer(() => Effect.orDie(endHosts(home)));
     const assembly = yield* Effect.promise(() => assemble(extended));
-    const { runtime, request } = yield* served(home, assembly);
+    const { runtime, request, origin } = yield* served(home, assembly);
     const socket = Layer.unwrap(
       Effect.map(HttpServer.HttpServer, (server) =>
         Socket.layerWebSocket(`ws://127.0.0.1:${(server.address as { port: number }).port}${TAGMA_SOCKET_PATH}`),
@@ -245,13 +370,40 @@ const root = Layer.effect(
       ),
     );
     const live = yield* Effect.provide(RpcClient.make(RpcGroup.make(rpcOf(GREETING_FEED))), protocol);
+    const remote = yield* Layer.build(
+      remoteServing({
+        assembly,
+        door: yield* doorServicesOf(runtime, home),
+        status: runtime.status,
+        artifacts: runtime.artifacts,
+        connections: new Connections(),
+      }).pipe(
+        Layer.provide(websocketHttpTracing),
+        Layer.provideMerge(BunHttpServer.layer({ hostname: '127.0.0.1', port: 0, gracefulShutdownTimeout: '20 millis' })),
+        Layer.provide(frozenBuildsLayer({ dataPath: home })),
+        Layer.provide(Layer.succeedContext(routedContext(runtime.graph, runtime.pool))),
+        Layer.provide(Layer.succeedContext(runtime.bindings)),
+      ),
+    );
+    const remoteOrigin = HttpServer.formatAddress(Context.get(remote, HttpServer.HttpServer).address);
     return Root.of({
-      op: (id, input) => request(`/api/op/${id}`, input),
+      origin,
+      door: (path, at) =>
+        Effect.promise(async () => {
+          const response = await fetch(`${at === 'remote' ? remoteOrigin : origin}${path}`);
+          return { status: response.status, text: await response.text() };
+        }),
+      op: (id, input, query) => request(`/api/op/${id}${query === undefined ? '' : `?${query}`}`, input),
       said: (name) =>
         Effect.orDie(Effect.map(Stream.runHead(live['greeting.said']({ name })), (head) => (head._tag === 'Some' ? head.value.text : ''))),
       folder: (label) => Effect.orDie(files.makeTempDirectory({ directory: home, prefix: `${label}-` })),
       marks: Context.getUnsafe(runtime.owners, Marks),
       grants: Context.getUnsafe(runtime.owners, Grants),
+      pieces: Context.getUnsafe(runtime.owners, Pieces),
+      offered: (capability) =>
+        Context.get(runtime.owners, CapabilityOffers)
+          .offers(capability, { world: CHECKOUT_FACTS, comments: 'allowed', images: true })
+          .map((offer) => offer.id),
     });
   }),
 ).pipe(Layer.provide(BunFileSystem.layer));
@@ -264,6 +416,28 @@ layer(root, { excludeTestServices: true })('a root composing the core with a mod
       });
       expect(ASSEMBLY.registry.named('greet')).toBeNull();
     }),
+  );
+
+  it.effect(
+    "reaches speech's owners and a thread's: its key, tool and capture join speech, live work is listed, and its serving lifetime reads thread homes",
+    () =>
+      Effect.gen(function* () {
+        const world = yield* Root;
+        const rootPath = yield* world.folder('tones');
+        const added = yield* world.op('add_project', { name: 'tones', rootPath, storage: 'stealth' });
+        const project = (added.body as { project: { id: number } }).project.id;
+        expect(JSON.stringify((yield* world.op('read_settings', { project, section: 'speech' })).body)).toContain(greetingTone.id);
+        expect(world.offered('speech')).toContain('greet_aloud');
+        const heard = yield* world.op('greet_aloud', { name: 'tone-1' });
+        expect(heard.body).toMatchObject({ status: 'heard' });
+        expect((heard.body as { levels: number }).levels).toBeGreaterThan(0);
+        expect((yield* world.op('stop_capture', { kind: 'tone', id: 'tone-1' })).body).toMatchObject({ status: 'stopped', stopped: 1 });
+        expect((yield* world.op('stop_capture', { kind: 'tone', id: 'tone-1' })).body).toMatchObject({ code: 'unknown-capture' });
+        expect((yield* world.op('read_machine_state', {})).body).toMatchObject({
+          machine: { server: { calls: 0, work: [{ id: 'speech/listenings', count: 0 }] } },
+        });
+        expect(yield* world.pieces.home('no-such-thread')).toBeUndefined();
+      }),
   );
 
   it.effect('serves its feed over the live socket from what its serving lifetime provides', () =>
@@ -341,6 +515,18 @@ layer(root, { excludeTestServices: true })('a root composing the core with a mod
       expect(listed.projects.map((one) => one.name)).not.toContain('read-sealed');
     }),
   );
+
+  it.effect(
+    "serves its route on the port its door listens on, reading that door's address, and the remote door serves before device admission only a route declared pre-admitted",
+    () =>
+      Effect.gen(function* () {
+        const world = yield* Root;
+        expect(new URL(world.origin).port).not.toBe('0');
+        expect(yield* world.door('/doorway/address')).toEqual({ status: 200, text: world.origin });
+        expect(yield* world.door('/doorway/address', 'remote')).toEqual({ status: 404, text: '' });
+        expect(yield* world.door('/doorway/returned', 'remote')).toEqual({ status: 200, text: 'no address' });
+      }),
+  );
 });
 
 it.live('the core alone opens a data directory written by modules it lacks, and serves its own operations over it', () =>
@@ -375,6 +561,7 @@ it.live('the core alone opens a data directory written by modules it lacks, and 
     const { request: alone } = yield* Scope.provide(served(home, core), second);
     expect((yield* alone('/health')).status).toBe(200);
     expect((yield* alone('/api/op/greet', { name: 'Ada' })).body).toMatchObject({ code: 'unknown-operation' });
+    expect((yield* alone('/doorway/address')).status).toBe(404);
     const settings = yield* alone('/api/op/read_settings', { project });
     expect(settings.status).toBe(200);
     expect(JSON.stringify(settings.body)).not.toContain(greetingWord.id);

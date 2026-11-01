@@ -14,6 +14,7 @@ import type { OwnStore } from './ownStore.js';
 import type { Machine } from './capacity.js';
 import type { ThreadEntryKind, ThreadFormStep } from '@runlith/agent/transcript/kinds';
 import type { PoolDeclaration } from '@runlith/held/Capacity';
+import { type DoorPath, overlaps, type Route, routedPath } from './route.js';
 
 import { journaledOf, type OperationSet, type RefusalWords } from '../wire/manifest.js';
 import type { ModulePresentation } from './presentation.js';
@@ -38,6 +39,7 @@ export type Manifest = {
     readonly handlers: (door: Context.Context<any>) => Effect.Effect<object>;
   };
   readonly endpoints?: readonly EndpointDeclaration[];
+  readonly routes?: readonly Route[];
   readonly settings?: readonly SettingKey<any>[];
   readonly settingSections?: readonly SettingSectionDeclaration[];
   readonly settingControls?: readonly SettingControlSource<any>[];
@@ -147,17 +149,36 @@ type UniqueManifests<Modules extends readonly Manifest[]> = ([UnknownFields<Modu
   ([RepeatedManifests<Modules>] extends [never] ? unknown : { readonly duplicateId: RepeatedManifests<Modules> });
 
 export class ManifestConflict extends Data.TaggedError('ManifestConflict')<{
-  readonly collection: Collection | 'modules' | 'operations' | 'contributions' | 'refusals';
+  readonly collection: Collection | 'modules' | 'operations' | 'contributions' | 'refusals' | 'routes';
   readonly id: string;
   readonly point?: string;
   readonly owners: readonly [string, string];
 }> {}
 
-function checkManifests(modules: readonly Manifest[]): void {
+class RouteInexact extends Data.TaggedError('RouteInexact')<{ readonly module: string; readonly path: string }> {
+  override get message(): string {
+    return `${this.module} declares the route ${this.path}, which is not one exact path in the form the router sees: lowercase, decoded, without repeated or trailing slashes, wildcards or parameters`;
+  }
+}
+
+const DOOR = 'door';
+
+const checkRoutes = (module: Manifest, owners: Map<string, string>, door: readonly DoorPath[]): void => {
+  for (const { path } of module.routes ?? []) {
+    if (routedPath(path) !== path || /[*:]/u.test(path)) throw new RouteInexact({ module: module.id, path });
+    const owner = owners.get(path) ?? (door.some((served) => overlaps(path, served)) ? DOOR : undefined);
+    if (owner !== undefined) throw new ManifestConflict({ collection: 'routes', id: path, owners: [owner, module.id] });
+    owners.set(path, module.id);
+  }
+};
+
+export function checkManifests(modules: readonly Manifest[], door: readonly DoorPath[] = []): void {
   const names = new Set<string>();
   const entries = new Map<Collection, Map<string, string>>(COLLECTIONS.map((collection) => [collection, new Map()]));
   const contributed = new Map<string, Map<string, string>>();
+  const routes = new Map<string, string>();
   for (const module of modules) {
+    checkRoutes(module, routes, door);
     for (const { point, id } of module.contributions ?? []) {
       const owners = contributed.get(point) ?? new Map<string, string>();
       contributed.set(point, owners);
@@ -197,7 +218,7 @@ function servesDeclared(module: string, declared: readonly FeedDeclaration[], se
   if (unserved.length > 0 || undeclared.length > 0) throw new LiveFeedsUnmatched({ module, unserved, undeclared });
 }
 
-type Kept = 'id' | 'title' | 'journaled' | 'verbs' | 'live' | 'lifetimes' | Exclude<Collection, 'feeds'>;
+type Kept = 'id' | 'title' | 'journaled' | 'verbs' | 'live' | 'routes' | 'lifetimes' | Exclude<Collection, 'feeds'>;
 
 export function manifest<const M extends Manifest>(
   declaration: M & UniqueManifest<M> & Record<Exclude<keyof M, keyof Manifest>, never>,
