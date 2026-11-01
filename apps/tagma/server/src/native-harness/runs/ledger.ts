@@ -8,6 +8,8 @@ import {
   ThreadRunConflictError,
   ThreadRunKeyReusedError,
   type ThreadRunStorage,
+  type ThreadRunHeartbeat,
+  type ThreadRunStopAsked,
 } from '@runlith/agent/thread/storage/runs';
 import { parseThreadRunStopRequest, parseThreadRunUsage, type ThreadStorageFailed } from '@runlith/agent/thread/persisted';
 import { mergedStopRequest, seedThreadNotification } from '@runlith/agent/thread/storage/settlement';
@@ -87,7 +89,7 @@ export const makeRunStores = Effect.gen(function* () {
               unit.run(
                 db
                   .update(threadRun)
-                  .set({ ...patch, updatedAt: new Date(clock.currentTimeMillisUnsafe()) })
+                  .set({ ...patch, updatedAt: patch.heartbeatAt })
                   .where(owned(runId)),
               ),
             ),
@@ -546,26 +548,57 @@ export const makeRunStores = Effect.gen(function* () {
             tx,
           ),
         ),
-      writeHeartbeats: (runIds, heartbeatAt) =>
+      writeHeartbeats: (runIds, heartbeatAt, tx) =>
         runIds.length === 0
-          ? Effect.succeed([])
+          ? Effect.succeed({ written: [], asked: [] })
           : stored('writeHeartbeats')(
-              units.write(writes('ThreadRunStore.writeHeartbeats', [threadRun]), (unit) =>
-                Effect.map(
-                  unit.run(
-                    db
+              writing(
+                writes('ThreadRunStore.writeHeartbeats', [threadRun]),
+                (unit) =>
+                  Effect.gen(function* () {
+                    const statement = db
                       .update(threadRun)
-                      .set({ heartbeatAt, updatedAt: new Date(clock.currentTimeMillisUnsafe()) })
+                      .set({ heartbeatAt, updatedAt: heartbeatAt })
                       .where(ownedRows(inArray(threadRun.id, among(runIds))))
-                      .returning({ id: threadRun.id, stopRequest: threadRun.stopRequest })
-                      .all(),
-                  ),
-                  (beaten) =>
-                    beaten.flatMap((row) => {
-                      const request = parseThreadRunStopRequest(row.stopRequest);
-                      return request === null ? [] : [{ runId: row.id, by: request.by }];
-                    }),
-                ),
+                      .returning({
+                        id: threadRun.id,
+                        threadId: threadRun.threadId,
+                        heartbeatAt: threadRun.heartbeatAt,
+                        updatedAt: threadRun.updatedAt,
+                        stopRequest: threadRun.stopRequest,
+                      });
+                    const written: ThreadRunHeartbeat[] = [];
+                    const asked: ThreadRunStopAsked[] = [];
+                    const program = programOf(unit);
+                    if (program !== null) {
+                      yield* program.returning(statement, (rows) =>
+                        Effect.sync(() => {
+                          for (const [id, threadId, heartbeat, updated, value] of rows) {
+                            const runId = String(id);
+                            written.push({
+                              id: runId,
+                              threadId: String(threadId),
+                              heartbeatAt: threadRun.heartbeatAt.mapFromDriverValue(Number(heartbeat)),
+                              updatedAt: threadRun.updatedAt.mapFromDriverValue(Number(updated)),
+                            });
+                            const request = parseThreadRunStopRequest(
+                              value === null ? null : threadRun.stopRequest.mapFromDriverValue(String(value)),
+                            );
+                            if (request !== null) asked.push({ runId, by: request.by });
+                          }
+                        }),
+                      );
+                    } else {
+                      const beaten = yield* unit.run(statement.all());
+                      for (const { stopRequest, ...run } of beaten) {
+                        written.push(run);
+                        const request = parseThreadRunStopRequest(stopRequest);
+                        if (request !== null) asked.push({ runId: run.id, by: request.by });
+                      }
+                    }
+                    return { written, asked };
+                  }),
+                tx,
               ),
             ),
       requestStop: (runId, intent, at, tx) => {

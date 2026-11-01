@@ -78,7 +78,16 @@ const setup = Effect.gen(function* () {
                 };
               }),
           },
-          threads: { handle: unused, create: unused, duplicate: unused, deleteByHost: unused, publish: unused },
+          threads: {
+            handle: unused,
+            create: unused,
+            duplicate: unused,
+            deleteByHost: unused,
+            publish: unused,
+            stepping: unused,
+            unseen: unused,
+            stepped: unused,
+          },
           runs: {
             recover: unused,
             recoverNow: unused,

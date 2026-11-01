@@ -2,6 +2,7 @@ import type { ToolDisplay } from '../../tool/display';
 import type { ThreadInterruptedInput } from '../../transcript/entries';
 import type { ThreadTranscriptEntry } from '../../transcript/rows';
 import { threadMessageEntry } from '../events';
+import { toJson } from '@runlith/utils/json';
 
 export type OpenStream = 'message' | 'reasoning';
 
@@ -135,7 +136,7 @@ export class OpenParts {
 
   showInput(callId: string, display: ToolDisplay | undefined): void {
     const part = this.inputPart(callId);
-    if (part !== undefined) part.display = display;
+    if (part !== undefined) part.display = display === undefined ? undefined : (toJson(display) as ToolDisplay);
   }
 
   input(callId: string): OpenInputView | undefined {
@@ -194,7 +195,7 @@ export class OpenParts {
         occurredAt: part.occurredAt,
       });
     }
-    return entries;
+    return toJson(entries) as unknown as readonly ThreadTranscriptEntry[];
   }
 
   private textEntry(part: OpenText, state: 'streaming' | 'done'): ThreadTranscriptEntry {

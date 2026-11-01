@@ -3,7 +3,8 @@ import type { Tester } from '@runlith/effect-test';
 import { Clock, Deferred, Effect, type Scope } from 'effect';
 import { Message } from '@runlith/llm/schema/messages';
 import { Usage } from '@runlith/llm/schema/events';
-import { assistantMessageEntryId, retryEntryId } from '../../transcript/entryNames';
+import { assistantMessageEntryId, hostedToolEntryId, retryEntryId } from '../../transcript/entryNames';
+import type { ThreadOpenChange } from '../../transcript/live';
 import { coreEntry, entryOf } from '../../transcript/kinds';
 import type { ThreadRunRef } from '../run/ThreadRunLedger';
 import { readThreadEvents, threadSignalOpening, threadSpokenToolEvent, threadUserMessageEvent, type ThreadEventBody } from '../events';
@@ -255,6 +256,39 @@ export function describeTransportContract<TTx, TWrite extends TTx = TTx, R = nev
         expect(shown()).toEqual([[second, 'World']]);
         yield* report(world, reports.ended(run, { kind: 'completed' }));
         expect(shown()).toEqual([]);
+      }),
+    );
+    test(
+      'refreshing other open parts preserves a titled input and only sends its new characters',
+      Effect.fnUntraced(function* () {
+        const world = yield* lifecycleWorld(open);
+        const run = yield* opened(world);
+        const reports = world.reports.of(ADAPTER, {
+          display: () => ({
+            form: 'none',
+            title: 'a.ts',
+            alone: undefined,
+            subtitle: undefined,
+            reference: undefined,
+            awaitsMs: undefined,
+          }),
+        });
+        const inputId = hostedToolEntryId(run.id, 'call-1');
+        const changes: ThreadOpenChange[] = [];
+        world.feed.subscribe(run.threadId, (event) => {
+          if (event.type !== 'open') return;
+          const change = event.change;
+          if ((change.op === 'put' ? change.entry.id : 'id' in change ? change.id : null) === inputId) changes.push(change);
+        });
+        yield* reports.live(run, { op: 'tool-input', callId: 'call-1', name: 'read', text: '{"path":"a.ts","rest":' });
+        yield* reports.live(run, { op: 'append', stream: 'message', part: 0, text: 'One moment.' });
+        yield* reports.live(run, { op: 'tool-input', callId: 'call-1', name: 'read', text: '1' });
+        expect(changes.map((change) => change.op)).toEqual(['put', 'append']);
+        expect(changes[1]).toEqual({ op: 'append', id: inputId, text: '1' });
+        expect(world.feed.view(run.threadId).open.find((entry) => entry.id === inputId)).toMatchObject({
+          toolDisplay: { form: 'none', title: 'a.ts' },
+          toolInputRaw: { text: '{"path":"a.ts","rest":1' },
+        });
       }),
     );
     test(

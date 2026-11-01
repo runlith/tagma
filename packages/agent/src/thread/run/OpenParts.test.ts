@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { Schema } from 'effect';
 import { OpenParts } from './OpenParts';
 
 test('a part shows from its first visible text, stays shown sealed until it lands, and an input shows its raw text', () => {
@@ -6,8 +7,11 @@ test('a part shows from its first visible text, stays shown sealed until it land
   parts.open('message', 'a', () => 'message-0');
   expect(parts.append('a', '  ')).toBeNull();
   expect(parts.append('a', 'Hel')).toEqual({ id: 'message-0', text: 'Hel', opened: true });
-  expect(parts.append('a', 'lo \r')).toEqual({ id: 'message-0', text: 'lo', opened: false });
   parts.appendInput('call-1', 'read', 'tool-1', '{"pa');
+  const saved = parts.tail();
+  expect(Schema.is(Schema.Json)(saved)).toBe(true);
+  expect(parts.append('a', 'lo \r')).toEqual({ id: 'message-0', text: 'lo', opened: false });
+  expect(saved).toMatchObject([{ text: 'Hel' }, { toolInputRaw: { text: '{"pa' } }]);
   expect(parts.seal('a')).toMatchObject({ type: 'message', id: 'message-0', text: 'Hello' });
   expect(parts.tail()).toMatchObject([
     { type: 'message', id: 'message-0', text: 'Hello' },

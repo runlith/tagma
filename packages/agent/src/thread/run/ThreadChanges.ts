@@ -1,17 +1,46 @@
 import { Context, Deferred, Effect, Layer, type Scope } from 'effect';
+import type { ThreadEventRecord } from '../events';
+import { ThreadChangeCollector } from '../transition/port';
+import type { ThreadChangePart, ThreadChangeRevision, ThreadMetadataChange, ThreadRunChange, ThreadStateChange } from '../state';
 
 export class ThreadChanges extends Context.Service<
   ThreadChanges,
   {
     watch(threadIds: readonly string[]): Effect.Effect<Effect.Effect<readonly string[]>, never, Scope.Scope>;
     publish(threadId: string): Effect.Effect<void>;
+    deliver(change: ThreadStateChange): Effect.Effect<void>;
+    project(projector: (change: ThreadStateChange) => Effect.Effect<void>): void;
+    claim(threadId: string, unit: object): void;
+    claimed(threadId: string, unit: object): boolean;
+    note(threadId: string, unit: object, part: ThreadChangePart): void;
+    settle(threadId: string, unit: object, revision: ThreadChangeRevision | undefined): Effect.Effect<void>;
   }
 >()('@runlith/agent/ThreadChanges') {}
 
 type Subscription = { readonly moved: Set<string>; wake: Deferred.Deferred<void> | null };
 
-export const threadChangesLayer = Layer.sync(ThreadChanges, () => {
+type Collected = {
+  from: number | null;
+  readonly records: ThreadEventRecord[];
+  thread: ThreadMetadataChange;
+  readonly runs: Map<string, ThreadRunChange>;
+  unseen: boolean;
+};
+
+export const threadChangesLayer = Layer.effectContext(
+  Effect.sync(() => {
+    const changes = makeThreadChanges();
+    return Context.make(ThreadChanges, changes).pipe(Context.add(ThreadChangeCollector, changes));
+  }),
+);
+
+const makeThreadChanges = (): ThreadChanges['Service'] => {
   const subscribed = new Map<string, Set<Subscription>>();
+  let projector: ((change: ThreadStateChange) => Effect.Effect<void>) | null = null;
+  const units = new WeakMap<object, Map<string, Collected>>();
+  const collected = (threadId: string, unit: object): Collected | undefined => units.get(unit)?.get(threadId);
+  const deliver = (change: ThreadStateChange): Effect.Effect<void> =>
+    Effect.suspend(() => (projector === null ? Effect.void : projector(change)));
 
   const drain = Effect.fnUntraced(function* (subscription: Subscription): Effect.fn.Return<readonly string[]> {
     const wake = yield* Deferred.make<void>();
@@ -61,5 +90,40 @@ export const threadChangesLayer = Layer.sync(ThreadChanges, () => {
           { discard: true },
         ),
       ),
+    deliver,
+    project: (next) => {
+      projector = next;
+    },
+    claim: (threadId, unit) => {
+      const held = units.get(unit) ?? new Map<string, Collected>();
+      units.set(unit, held);
+      if (!held.has(threadId)) held.set(threadId, { from: null, records: [], thread: {}, runs: new Map(), unseen: false });
+    },
+    claimed: (threadId, unit) => collected(threadId, unit) !== undefined,
+    note: (threadId, unit, part) => {
+      const held = collected(threadId, unit);
+      if (held === undefined) return;
+      if (part.kind === 'unseen') held.unseen = true;
+      else if (part.kind === 'run') held.runs.set(part.run.id, { ...held.runs.get(part.run.id), ...part.run });
+      else {
+        if (held.from === null) held.from = part.from;
+        else if (part.from !== held.from + held.records.length) held.unseen = true;
+        held.records.push(...part.records);
+        held.thread = { ...held.thread, ...part.thread };
+      }
+    },
+    settle: (threadId, unit, revision) =>
+      Effect.suspend(() => {
+        const held = collected(threadId, unit);
+        units.get(unit)?.delete(threadId);
+        if (held === undefined) return Effect.void;
+        if (revision === undefined || held.unseen) return deliver({ kind: 'moved', threadId });
+        const runs = [...held.runs.values()];
+        return deliver(
+          held.from === null
+            ? { kind: 'ran', threadId, revision, runs }
+            : { kind: 'appended', threadId, revision, from: held.from, records: held.records, thread: held.thread, runs },
+        );
+      }),
   });
-});
+};

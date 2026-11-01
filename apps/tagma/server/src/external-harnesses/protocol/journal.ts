@@ -6,6 +6,7 @@ import { Usage } from '@runlith/llm/schema/events';
 import { ThreadStorageFailed } from '@runlith/agent/thread/persisted';
 import type { ThreadContextReading } from '@runlith/agent/thread/rows';
 import type { ThreadBorderFailed } from '@runlith/agent/thread/ThreadBorder';
+import type { HarnessThreads } from '@runlith/agent/thread/AgentHarness';
 import type { ThreadWriteTx } from '@runlith/agent/thread/ThreadPorts';
 import type { ThreadRunRef } from '@runlith/agent/thread/run/ThreadRunLedger';
 import type { ThreadTranscript } from '@runlith/agent/transcript/rows';
@@ -25,9 +26,10 @@ import type { ThreadCompactionEntry, ThreadEntry, ThreadQuestionEntry, ThreadToo
 import { entryOf } from '@runlith/agent/transcript/kinds';
 import type { ModelCatalog } from '@runlith/llm/models/catalog';
 import type { ProviderRegistry } from '../../providers/contract/service/registry.js';
-import type { WriteUnit } from '../../platform/contract/service/units.js';
+import type { Unit, WriteUnit } from '../../platform/contract/service/units.js';
 import type { WriteSet } from '../../platform/contract/service/writes.js';
 import type { NativeStorage } from '../../threads/contract/service/engine.js';
+import type { NativeThreadState } from '../../threads/contract/service/state.js';
 import type { ThreadAttachmentStore } from '../../threads/resources/attachments.js';
 import type { ThreadInbox } from '../../threads/store/inbox.js';
 import { type HarnessTurnBegun, type HarnessTurnContext, type HarnessTurnEnded, type HarnessTurnStep } from './turns.js';
@@ -174,6 +176,7 @@ export class ProtocolJournal {
     private readonly reports: AdapterReports,
     private readonly threads: NativeStorage['Service']['threads'],
     private readonly publishing: (threadId: string) => Effect.Effect<void, ThreadBorderFailed>,
+    private readonly projecting: HarnessThreads<NativeThreadState, Unit<'machine'>, WriteUnit<'machine'>>,
     private readonly inbox: ThreadInbox['Service'],
     private readonly pictures: ThreadAttachmentStore,
     private readonly asides: ThreadAsides,
@@ -263,6 +266,18 @@ export class ProtocolJournal {
 
   publish(threadId: string) {
     return this.publishing(threadId);
+  }
+
+  claim(threadId: string, unit: WriteUnit<'machine'>) {
+    return this.projecting.stepping(threadId, unit).pipe(Effect.mapError(storage('protocolJournal.claim')));
+  }
+
+  unseen(threadId: string, unit: WriteUnit<'machine'>) {
+    return this.projecting.unseen(threadId, unit);
+  }
+
+  settle(threadId: string, unit: WriteUnit<'machine'>) {
+    return this.projecting.stepped(threadId, unit).pipe(Effect.mapError(storage('protocolJournal.settle')));
   }
 
   readonly prepare = Effect.fnUntraced(
