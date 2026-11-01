@@ -13,7 +13,7 @@ sources:
 ---
 The column loads a window — the newest roots by the reader's last word, plus working, pinned and filed ones — and pages older roots behind "more". The palette, links and notifications open any thread of any age, so being on screen is a reason to hold a thread, like working or pinned; without it a thread opened from search had no row and the operator could not see where he stood.
 
-Holding costs one read of the thread's family per opening, whatever the project's thread count. A live thread joins at its place in the order, below the loaded part; an archived one joins the Archived rows. It is let go once no seat shows it: opening reorders nothing, only the operator's word moves a thread up.
+Holding costs one read of the thread's family per opening, whatever the project's thread count. That read names the thread without an explicit project: the server resolves its home, which can differ from the column's group tile even before the list has seen the thread. A live thread joins at its place in the order, below the loaded part; an archived one joins the Archived rows. It is let go once no seat shows it: opening reorders nothing, only the operator's word moves a thread up.
 
 A list frame from the server keeps a held family and reads it again, since events may have been lost before it. The column's own window refresh keeps the held family and every root "more" loaded, since its buffered frames lose nothing; dropping them made loaded rows vanish at the next root birth.
 
