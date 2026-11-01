@@ -35,6 +35,7 @@ import {
   sqliteThreadJournal,
   threadEvent,
   threadProjection,
+  threadRolloutCursor,
 } from '../../../threads/testing/doubles.js';
 import { Conversations, type ConversationSearch } from '../../../threads/contract/service/conversations.js';
 import { EvidenceReads, type EvidenceReader } from '../../../threads/contract/service/evidence.js';
@@ -129,7 +130,9 @@ const registered = Effect.fnUntraced(function* (name: string) {
 });
 const journal = Effect.fnUntraced(function* () {
   const { home, context } = yield* World;
-  return yield* Effect.flatMap(restedReads(ENTRY_KINDS, home), sqliteThreadJournal).pipe(Effect.provide(context));
+  return yield* Effect.flatMap(restedReads(ENTRY_KINDS, home, (yield* nativeOnlyParts).native.folds), sqliteThreadJournal).pipe(
+    Effect.provide(context),
+  );
 });
 const backfilled = Effect.fn('testing.backfillConversations')(function* () {
   const { context } = yield* World;
@@ -152,6 +155,11 @@ const rested = Effect.fn('testing.restConversation')(function* (
     outcome: 'evicted',
   });
   return path;
+});
+const legacy = Effect.fn('testing.legacyRestedSource')(function* (threadId: string, path: string) {
+  const { db, files } = yield* World;
+  yield* db.run(sql`delete from thread_published_source where thread_id = ${threadId}`);
+  yield* files.remove(`${path}.generations`, { recursive: true });
 });
 const forget = Effect.fn('testing.forgetConversationIndex')(function* (threadId: string) {
   const { db } = yield* World;
@@ -535,12 +543,16 @@ describe('conversation index and journal', () => {
       expect(yield* db.select().from(threadEvent()).where(eq(threadEvent().threadId, 't-before'))).toHaveLength(3);
     }).pipe(Effect.provide(fixture)),
   );
-  it.live('backfill reads an evicted journal from compression without reopening its rows or unpacking its file', () =>
+  it.live('backfill reads the rested source when its consumed cursor is at zero', () =>
     Effect.gen(function* () {
       const { files, db, context } = yield* World;
       const own = yield* registered('installed');
       const path = yield* rested('t-installed', own, message({ id: 'i-1', text: 'Budva by the sea', at: '2026-09-26T10:00:00.000Z' }));
       yield* compressRollout(path).pipe(Effect.provide(context));
+      yield* db
+        .update(threadRolloutCursor())
+        .set({ nextByteOffset: 0, nextPosition: 1 })
+        .where(eq(threadRolloutCursor().threadId, 't-installed'));
       yield* forget('t-installed');
       expect((yield* search({ query: 'Budva', scope: { kind: 'projects', ids: [own] } })).coverage).toEqual({
         complete: false,
@@ -577,12 +589,14 @@ describe('conversation index and journal', () => {
       expect(yield* files.readFileString(path)).toContain('"id":"p-e2"');
     }).pipe(Effect.provide(fixture)),
   );
-  it.live('missing and broken files keep coverage open until a repaired file is indexed', () =>
+  it.live('missing and broken files of an unpublished rested thread keep coverage open until a repaired file is adopted', () =>
     Effect.gen(function* () {
       const { files } = yield* World;
       const own = yield* registered('broken');
       const missing = yield* rested('t-missing', own, message({ id: 'x-1', text: 'Ulcinj notes', at: '2026-09-28T10:00:00.000Z' }));
       const broken = yield* rested('t-broken', own, message({ id: 'y-1', text: 'Ulcinj again', at: '2026-09-28T11:00:00.000Z' }));
+      yield* legacy('t-missing', missing);
+      yield* legacy('t-broken', broken);
       const kept = yield* files.readFile(missing);
       yield* files.remove(missing);
       yield* files.writeFileString(broken, '{"kind":"event","row":\n', { flag: 'a' });
@@ -599,7 +613,7 @@ describe('conversation index and journal', () => {
       expect([repaired.matches.map((hit) => hit.threadId), repaired.coverage]).toEqual([['t-missing'], { complete: false, unindexed: 1 }]);
     }).pipe(Effect.provide(fixture)),
   );
-  it.live('a truncated rollout indexes its surviving prefix without claiming complete coverage', () =>
+  it.live('a truncated rollout adopted without a published source indexes its surviving prefix without claiming complete coverage', () =>
     Effect.gen(function* () {
       const { files } = yield* World;
       const own = yield* registered('cut');
@@ -609,6 +623,7 @@ describe('conversation index and journal', () => {
         message({ id: 'c-1', text: 'Sveti Stefan first', at: '2026-09-29T10:00:00.000Z' }),
         message({ id: 'c-2', text: 'Sveti Stefan second', at: '2026-09-29T10:01:00.000Z' }),
       );
+      yield* legacy('t-cut', path);
       const lines = (yield* files.readFileString(path)).split('\n');
       yield* files.writeFileString(
         path,
@@ -625,7 +640,7 @@ describe('conversation index and journal', () => {
       expect([cut.matches.map((hit) => hit.match.entryId), cut.coverage]).toEqual([['c-1'], { complete: false, unindexed: 1 }]);
     }).pipe(Effect.provide(fixture)),
   );
-  it.live('a headless rollout is not accepted as whole history', () =>
+  it.live('a headless rollout is not adopted as whole history', () =>
     Effect.gen(function* () {
       const { files, db } = yield* World;
       const own = yield* registered('headless');
@@ -635,6 +650,7 @@ describe('conversation index and journal', () => {
         message({ id: 'h-1', text: 'Tivat first', at: '2026-09-29T12:00:00.000Z' }),
         message({ id: 'h-2', text: 'Tivat second', at: '2026-09-29T12:01:00.000Z' }),
       );
+      yield* legacy('t-headless', path);
       yield* db.insert(threadEvent()).values({
         threadId: 't-headless',
         position: 2,
@@ -691,11 +707,12 @@ describe('conversation index and journal', () => {
       ]).toEqual([['g-2', 'g-1'], { complete: true, unindexed: 0 }]);
     }).pipe(Effect.provide(fixture)),
   );
-  it.live('a missing rested file is not replaced by its database suffix during backfill', () =>
+  it.live('a missing unpublished rested file is not replaced by its database suffix during backfill', () =>
     Effect.gen(function* () {
       const { files, db } = yield* World;
       const own = yield* registered('suffix');
       const path = yield* rested('t-suffix', own, message({ id: 'u-1', text: 'Perast first', at: '2026-09-30T10:00:00.000Z' }));
+      yield* legacy('t-suffix', path);
       yield* db.insert(threadEvent()).values({
         threadId: 't-suffix',
         position: 2,

@@ -1,4 +1,5 @@
 import { Cause, Context, Effect } from 'effect';
+import { eq } from 'drizzle-orm';
 import type { ThreadResourceKind } from '@runlith/agent/resources/ResourcesConfig';
 import type { ThreadResourceStorage } from '@runlith/agent/thread/storage/resources';
 import type { Lane } from '@runlith/held/Lane';
@@ -16,6 +17,7 @@ import { ThreadRollouts } from '../contract/service/rollouts.js';
 import { ThreadRunning, ThreadShelving } from '../contract/service/reads.js';
 import { ScratchAreas } from '../contract/service/scratch.js';
 import { ThreadResources } from '../store/resources.js';
+import { threadPublishedSource } from '../store/journal.js';
 import { NativeRolloutPart, ExternalRolloutPart } from '../contract/service/parts.js';
 import { threadRolloutMeta, type RolloutParts } from './rolloutMeta.js';
 import { releaseRollout } from './rolloutForms.js';
@@ -23,7 +25,7 @@ import type { ThreadProjection } from './projection.js';
 import type { ThreadRolloutReport } from './report.js';
 import type { ThreadRolloutRepair } from './repair.js';
 import { RolloutWriting } from './rolloutWriter.js';
-import { rolloutContext } from './rolloutContext.js';
+import { journalEntry, rolloutContext } from './rolloutContext.js';
 import { rolloutEvicting } from './rolloutEviction.js';
 import { rolloutExporting } from './rolloutExporting.js';
 import { rolloutReconciling } from './rolloutReconciling.js';
@@ -33,6 +35,9 @@ import { rolloutRepairing } from './rolloutRepairing.js';
 import { rolloutWhole } from './rolloutWhole.js';
 import { rolloutShelf } from './rolloutShelf.js';
 import { threadUses } from './uses.js';
+import type { SourceRetention } from './sourceRetention.js';
+import type { SourcePublication } from './sourceFiles.js';
+import type { SourceReplacement } from './sourceReplacement.js';
 import { ThreadEntryKinds } from '@runlith/agent/transcript/kinds';
 
 export class JournalOrder extends Context.Service<JournalOrder, Lane>()('tagma/threads/JournalOrder') {}
@@ -43,8 +48,14 @@ export const makeThreadRollouts = Effect.fnUntraced(function* ({
   repair,
   runAppend,
   forms,
+  retention,
+  publication,
+  replacement,
   home: rolloutHome,
 }: {
+  readonly retention: SourceRetention;
+  readonly publication: SourcePublication;
+  readonly replacement: SourceReplacement;
   readonly projection: ThreadProjection;
   readonly rollout: ThreadRolloutReport;
   readonly repair: ThreadRolloutRepair;
@@ -65,7 +76,19 @@ export const makeThreadRollouts = Effect.fnUntraced(function* ({
   const parts: RolloutParts = { native: yield* NativeRolloutPart, external: yield* ExternalRolloutPart };
   const journal = yield* JournalOrder;
   const kinds = yield* ThreadEntryKinds;
-  const ctx = rolloutContext({ records, floor, projection, graph, parts, kinds, journal, home: rolloutHome });
+  const ctx = rolloutContext({
+    records,
+    floor,
+    retention,
+    publication,
+    replacement,
+    projection,
+    graph,
+    parts,
+    kinds,
+    journal,
+    home: rolloutHome,
+  });
   const { rehydrate, wake } = rolloutRehydrating(ctx, forms, scratch);
   const uses = threadUses((threadId) => {
     shelve([threadId]);
@@ -73,7 +96,18 @@ export const makeThreadRollouts = Effect.fnUntraced(function* ({
   });
   const exporting = rolloutExporting(ctx);
   const { ensure, behind, owed, exportStanding, written, rewrite } = exporting;
-  const { evict, rest, sweep } = rolloutEvicting(ctx, threads, ledger, resourceKinds, settings, uses, rewrite, exporting.whole);
+  const { evict, rest, sweep } = rolloutEvicting(
+    ctx,
+    threads,
+    ledger,
+    resourceKinds,
+    settings,
+    uses,
+    retention,
+    publication,
+    rewrite,
+    exporting.whole,
+  );
   const { repair: repaired, report } = rolloutRepairing(ctx, forms, repair, rollout, rehydrate);
   const whole = rolloutWhole(ctx, forms, rest, wake, runAppend, uses);
   const { shelve, shelving } = rolloutShelf(ctx, evict);
@@ -155,10 +189,31 @@ export const makeThreadRollouts = Effect.fnUntraced(function* ({
     }),
 
     release: Effect.fnUntraced(function* (projectId, threadId) {
-      const path = ctx.pathOf(projectId, threadId);
-      if (path !== undefined) yield* releaseRollout(path);
-      floor.forget(threadId);
-      yield* floor.unmark(threadId);
+      yield* journalEntry(journal)(
+        threadId,
+        Effect.gen(function* () {
+          const path = ctx.pathOf(projectId, threadId);
+          if (path !== undefined) {
+            if (replacement.pending(threadId)) yield* replacement.settle(threadId, path).pipe(Effect.orDie);
+            yield* releaseRollout(path);
+            const { db } = Context.get(graph, MachineStore);
+            const current = units
+              .read((unit) =>
+                unit.run(
+                  db
+                    .select({ generation: threadPublishedSource.generation })
+                    .from(threadPublishedSource)
+                    .where(eq(threadPublishedSource.threadId, threadId))
+                    .get(),
+                ),
+              )
+              .pipe(Effect.map((row) => row?.generation ?? null));
+            yield* retention.sweep(threadId, `${path}.generations`, current).pipe(Effect.orDie);
+          }
+          floor.forget(threadId);
+          yield* floor.unmark(threadId);
+        }),
+      ).pipe(Effect.orDie);
     }),
   });
 });

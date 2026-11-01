@@ -1,9 +1,11 @@
 import type { ThreadEventPayloadValue, ThreadEventRow } from '@runlith/agent/thread/storage/eventLog';
 import type { ThreadProjectionRefusalReason } from '../contract/wire/projection.js';
+import type { SourceOrigin } from '../contract/service/rested.js';
 import { sql, type SQL, type SQLWrapper } from 'drizzle-orm';
 import { type AnySQLiteColumn, index, integer, primaryKey, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
 import { recordRows, threadRecord } from '../../thread-record/store/table.js';
 import { writes, type WriteSet } from '../../platform/contract/service/writes.js';
+import { projectRows } from '../../platform/contract/service/projections.js';
 import { MESSAGE_FTS, messageRows, threadConversation, threadMessageGap, threadQuietRun } from './conversation.js';
 import { payloadField } from './fields.js';
 
@@ -22,6 +24,46 @@ export const threadRolloutCursor = sqliteTable('thread_rollout_cursor', {
   nextPosition: integer('next_position').notNull().default(1),
   generation: integer('generation').notNull().default(0),
   restedAt: integer('rested_at', { mode: 'timestamp_ms' }),
+});
+
+export const threadPublishedSource = sqliteTable('thread_published_source', {
+  threadId: text('thread_id')
+    .primaryKey()
+    .references(() => threadRecord.id, { onDelete: 'cascade' }),
+  generation: text('generation').notNull(),
+  bytes: integer('bytes').notNull(),
+  position: integer('position').notNull(),
+  form: text('form'),
+  fingerprint: text('fingerprint').notNull(),
+  factFingerprint: text('fact_fingerprint').notNull(),
+  origin: text('origin').$type<SourceOrigin>().notNull(),
+});
+
+export const publishedSourceRows = projectRows({
+  id: 'threads.published-source',
+  table: threadPublishedSource,
+  keys: ['threadId'],
+  address: 'threadId',
+  columns: {
+    threadId: threadPublishedSource.threadId,
+    generation: threadPublishedSource.generation,
+    bytes: threadPublishedSource.bytes,
+    position: threadPublishedSource.position,
+    form: threadPublishedSource.form,
+    fingerprint: threadPublishedSource.fingerprint,
+    factFingerprint: threadPublishedSource.factFingerprint,
+  },
+});
+
+export const threadSourceIntent = sqliteTable('thread_source_intent', {
+  threadId: text('thread_id').primaryKey(),
+  operation: text('operation').notNull(),
+  place: text('place').notNull(),
+  stage: text('stage').notNull(),
+  digest: text('digest').notNull(),
+  previous: text('previous').$type<'plain' | 'compressed'>(),
+  previousDigest: text('previous_digest'),
+  target: text('target').$type<'plain' | 'compressed'>().notNull(),
 });
 
 export const threadJournalPlace = sqliteTable('thread_journal_place', {

@@ -111,7 +111,7 @@ it.live(
       runtime,
     );
 
-    const reads = yield* Effect.provide(restedReads(ENTRY_KINDS, home), runtime);
+    const reads = yield* Effect.provide(restedReads(ENTRY_KINDS, home, (yield* nativeOnlyParts).native.folds), runtime);
     const rested = yield* Effect.provide(
       Effect.flatMap(Effect.all([makeThreadRecords, restedFolds(reads, ENTRY_KINDS)]), ([records, folds]) =>
         threadStore(records, ENTRY_KINDS, folds),

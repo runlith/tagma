@@ -1,6 +1,7 @@
 import { Effect } from 'effect';
 import type { WorkerUnavailable } from '@runlith/utils/worker';
 import type { ThreadEventPayload } from '@runlith/agent/thread/events';
+import { parseThreadRunUsage } from '@runlith/agent/thread/persisted';
 import type { ThreadEntryKinds } from '@runlith/agent/transcript/kinds';
 import { and, asc, eq, lt, sql } from 'drizzle-orm';
 import { threadResource } from '../store/tables.js';
@@ -14,14 +15,54 @@ import { threadRecord } from '../../thread-record/store/table.js';
 import { threadMandate } from '../store/mandate.js';
 import { carriedRecap } from '../../thread-record/contract/wire/recap.js';
 import type { RecordBirth, ThreadRecords } from '../../thread-record/contract/service/records.js';
-import type { RolloutFiles, TranscriptKey } from '../contract/service/rested.js';
+import type { RolloutFiles, SourceFrontier, TranscriptKey } from '../contract/service/rested.js';
 import type { RolloutUnreadable } from './rolloutFile.js';
 import type { RolloutStage, StagedFile } from './rolloutStaging.js';
 import type { CarryAsk, Carrying } from './rolloutCarry.js';
 
-import type { WriteUnit } from '../../platform/contract/service/units.js';
+import type { Unit, WriteUnit } from '../../platform/contract/service/units.js';
 
 export type Row = Record<string, unknown>;
+
+export const sourceEventText = (event: {
+  readonly position: number;
+  readonly id: string;
+  readonly kind: string;
+  readonly payload: ThreadEventPayload;
+}) => `${JSON.stringify([event.position, event.id, event.kind, event.payload])}\n`;
+
+export type SourceCheckpoint = {
+  readonly id: string;
+  readonly sourceRunId: string | null;
+  readonly coveredMessageCount: number;
+  readonly coveredPrefixHash: string;
+  readonly summary: string;
+  readonly usage: unknown;
+  readonly createdAt: Date;
+};
+
+export const sourceRecordsText = (checkpoints: Iterable<SourceCheckpoint>, pruned: Iterable<readonly [string, number]>) => {
+  const lines: string[] = [];
+  for (const row of checkpoints) {
+    lines.push(
+      JSON.stringify([
+        'checkpoint',
+        row.id,
+        row.sourceRunId,
+        row.coveredMessageCount,
+        row.coveredPrefixHash,
+        row.summary,
+        parseThreadRunUsage(row.usage),
+        row.createdAt.toISOString(),
+      ]),
+    );
+  }
+  for (const [toolCallId, tokens] of pruned) lines.push(JSON.stringify(['pruned', toolCallId, tokens]));
+  return lines
+    .sort()
+    .map((line) => `${line}\n`)
+    .join('');
+};
 
 const DATE_FIELDS = [
   'createdAt',
@@ -68,6 +109,7 @@ export type FoldRow = { readonly kind: string; readonly row: Row; readonly weigh
 
 export type NativeFolds = {
   readonly present: (threadId: string) => Effect.Effect<boolean, StoreFailure, MachineStore>;
+  readonly revision: (threadId: string, unit?: Unit<'machine'>) => Effect.Effect<number | null, StoreFailure, MachineStore>;
   readonly bodies: (
     threadId: string,
     entryIds: readonly string[],
@@ -92,6 +134,11 @@ export type NativeFolds = {
     files: RolloutFiles,
     stage: RolloutStage,
   ) => Effect.Effect<StagedFile, RolloutUnreadable | WorkerUnavailable, ThreadEntryKinds>;
+  readonly certify: (files: RolloutFiles) => Effect.Effect<SourceFrontier, RolloutUnreadable | WorkerUnavailable, ThreadEntryKinds>;
+  readonly digest: (
+    files: RolloutFiles,
+    form: 'plain' | 'compressed',
+  ) => Effect.Effect<string, RolloutUnreadable | WorkerUnavailable, ThreadEntryKinds>;
   readonly carry: (files: RolloutFiles, ask: CarryAsk) => Effect.Effect<Carrying, RolloutUnreadable | WorkerUnavailable, ThreadEntryKinds>;
   readonly layers: (files: RolloutFiles) => Effect.Effect<readonly RolloutLayer[], RolloutUnreadable | WorkerUnavailable, ThreadEntryKinds>;
   readonly writes: WriteSet;

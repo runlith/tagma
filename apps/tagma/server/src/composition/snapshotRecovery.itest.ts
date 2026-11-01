@@ -21,6 +21,9 @@ layer(BunFileSystem.layer, { excludeTestServices: true })('snapshot recovery', (
       const before = '{"before":true}\n';
       const after = '{"afterSnapshot":true}\n';
       const later = '{"afterFailure":true}\n';
+      const operation = '8fbd785b-d4d1-4abe-b3e2-63020387764b';
+      const backup = `${rollout}.source-backup-${operation}`;
+      const staged = `${rollout}.partial`;
       const pending = [
         {
           name: 'next',
@@ -59,13 +62,21 @@ layer(BunFileSystem.layer, { excludeTestServices: true })('snapshot recovery', (
           yield* db.run(sql`insert into fact values ('before')`);
           yield* db.run(sql`create table thread_event(thread_id text, position integer, id text, kind text, payload text)`);
           yield* db.run(sql`create table thread_rollout_home(path text primary key, imported_at integer not null)`);
+          yield* db.run(sql`create table thread_published_source(thread_id text primary key, generation text not null)`);
+          yield* db.run(
+            sql`create table thread_source_intent(thread_id text primary key, operation text not null, place text not null, stage text not null)`,
+          );
           yield* db.run(sql`insert into thread_rollout_home values (${home}, 1)`);
           yield* snapshots.take({ path, db }, pending);
           yield* db.run(sql`insert into thread_event values ('1', 1, 'evt-1', 'message', '{}')`);
+          yield* db.run(sql`insert into thread_published_source values ('a', 'old-generation')`);
+          yield* db.run(sql`insert into thread_source_intent values ('a', ${operation}, '1/a.jsonl', '.partial')`);
           yield* db.run(sql`update fact set value='after'`);
         }),
       );
       yield* FileSystem.FileSystem.use((files) => files.writeFileString(rollout, after));
+      yield* FileSystem.FileSystem.use((files) => files.writeFileString(backup, '{"previous":true}\n'));
+      yield* FileSystem.FileSystem.use((files) => files.writeFileString(staged, '{"staged":true}\n'));
       yield* FileSystem.FileSystem.use((files) => files.writeFileString(join(home, '1', 'born.jsonl'), '{"born":true}\n'));
       expect((yield* Effect.result(snapshots.restore(path)))._tag).toBe('Failure');
       const intent = JSON.parse(yield* FileSystem.FileSystem.use((files) => files.readFileString(`${path}.restore.json`))) as {
@@ -77,6 +88,8 @@ layer(BunFileSystem.layer, { excludeTestServices: true })('snapshot recovery', (
       try {
         expect(live.query('select value from fact').get()).toEqual({ value: 'after' });
         expect(live.query('select path from thread_rollout_home').all()).toEqual([{ path: home }]);
+        expect(live.query('select generation from thread_published_source').all()).toEqual([{ generation: 'old-generation' }]);
+        expect(live.query('select operation from thread_source_intent').all()).toEqual([{ operation }]);
         expect(live.query("select name from sqlite_master where name = '__row_projection_clock'").all()).toEqual([]);
       } finally {
         live.close();
@@ -88,6 +101,8 @@ layer(BunFileSystem.layer, { excludeTestServices: true })('snapshot recovery', (
       try {
         expect(restored.query('select value from fact').get()).toEqual({ value: 'before' });
         expect(restored.query('select path from thread_rollout_home').all()).toEqual([]);
+        expect(restored.query('select generation from thread_published_source').all()).toEqual([]);
+        expect(restored.query('select operation from thread_source_intent').all()).toEqual([]);
         expect(restored.query("select cursor from __row_projection_clock where id = ''").get()).toEqual({ cursor: 1 });
       } finally {
         restored.close();
@@ -100,6 +115,15 @@ layer(BunFileSystem.layer, { excludeTestServices: true })('snapshot recovery', (
       const copies = (yield* FileSystem.FileSystem.use((files) => files.readDirectory(kept))).filter((name) => name.startsWith('a.jsonl.'));
       expect(copies).toHaveLength(1);
       expect(yield* FileSystem.FileSystem.use((files) => files.readFileString(join(kept, copies[0]!)))).toBe(later);
+      const pendingKept = join(answer.quarantine, 'rollouts', 'pending', '1');
+      expect(
+        yield* FileSystem.FileSystem.use((files) => files.readFileString(join(pendingKept, `a.jsonl.source-backup-${operation}`))),
+      ).toBe('{"previous":true}\n');
+      expect(yield* FileSystem.FileSystem.use((files) => files.readFileString(join(pendingKept, 'a.jsonl.partial')))).toBe(
+        '{"staged":true}\n',
+      );
+      expect(yield* FileSystem.FileSystem.use((files) => files.exists(backup))).toBe(false);
+      expect(yield* FileSystem.FileSystem.use((files) => files.exists(staged))).toBe(false);
       expect(answer.losses.some((loss) => loss.key === '1/a' && loss.reason.includes(copies[0]!))).toBe(true);
       expect(yield* snapshots.release(path)).toEqual([intent.id]);
       expect(yield* snapshots.standing(path)).toBe(false);

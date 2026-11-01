@@ -1,11 +1,19 @@
-import { copyFile, open, rename, rm, stat, type FileHandle } from 'node:fs/promises';
+import { copyFile, open, rm, stat, type FileHandle } from 'node:fs/promises';
+import { eq } from 'drizzle-orm';
 import { Clock, Effect } from 'effect';
 import { decodeThreadEventPayload } from '@runlith/agent/thread/events';
 import { ThreadEntryKinds } from '@runlith/agent/transcript/kinds';
 import { MachineStore } from '../../platform/contract/service/store.js';
-import { MachineUnits } from '../../platform/contract/service/units.js';
 import { writes } from '../../platform/contract/service/writes.js';
-import { threadRolloutCursor } from '../store/journal.js';
+import {
+  conversationWrites,
+  publishedSourceRows,
+  threadPublishedSource,
+  threadRolloutCursor,
+  threadRolloutForm,
+} from '../store/journal.js';
+import type { SourcePublication } from './sourceFiles.js';
+import type { SourceReplacement } from './sourceReplacement.js';
 import { ROLLOUT_BLOCK, fileSize, readRolloutLine, rolloutEventOf, wholeLinesAfter } from './rolloutFile.js';
 import { ThreadProjectionRefused } from './projection.js';
 import { rolloutReplacedIn } from './rolloutGeneration.js';
@@ -22,11 +30,18 @@ const onDisk = <A>(threadId: string, what: string, act: () => Promise<A>) =>
       }),
   });
 
-export type ThreadRolloutRepair = Effect.Success<typeof makeThreadRolloutRepair>;
+export type ThreadRolloutRepair = Effect.Success<ReturnType<typeof makeThreadRolloutRepair>>;
 
-export const makeThreadRolloutRepair = Effect.gen(function* () {
+const repairing = writes('ThreadRolloutRepair.repair', [threadRolloutCursor, publishedSourceRows], conversationWrites);
+
+export const makeThreadRolloutRepair = Effect.fnUntraced(function* ({
+  publication,
+  replacement,
+}: {
+  readonly publication: SourcePublication;
+  readonly replacement: SourceReplacement;
+}) {
   const { db } = yield* MachineStore;
-  const units = yield* MachineUnits;
   const kinds = yield* ThreadEntryKinds;
 
   const rewrite = (threadId: string, path: string, into: string) =>
@@ -101,6 +116,59 @@ export const makeThreadRolloutRepair = Effect.gen(function* () {
       }),
     );
 
+  const replaced = Effect.fnUntraced(
+    function* (threadId: string, path: string, rewritten: string) {
+      const digest = yield* publication.digest(rewritten);
+      const prior = yield* db
+        .select({ generation: threadPublishedSource.generation })
+        .from(threadPublishedSource)
+        .where(eq(threadPublishedSource.threadId, threadId))
+        .get();
+      const form = yield* db
+        .select({ step: threadRolloutForm.step })
+        .from(threadRolloutForm)
+        .where(eq(threadRolloutForm.threadId, threadId))
+        .get();
+      const source =
+        prior === undefined
+          ? null
+          : yield* publication.stage({
+              canonical: path,
+              candidate: { kind: 'staged', path: rewritten, representation: 'plain', replaces: true },
+              form: form?.step ?? null,
+              origin: 'repair',
+            });
+      yield* replacement
+        .replace({ threadId, canonical: path, staged: rewritten, target: 'plain', digest }, repairing, (unit) =>
+          Effect.gen(function* () {
+            yield* rolloutReplacedIn(db, unit, threadId, path);
+            if (source !== null) yield* publication.publishIn(db, unit, threadId, path, source);
+          }),
+        )
+        .pipe(
+          Effect.onError(() =>
+            Effect.suspend(() => {
+              if (replacement.pending(threadId) || source === null) return Effect.void;
+              return Effect.gen(function* () {
+                const current = yield* db
+                  .select({ generation: threadPublishedSource.generation })
+                  .from(threadPublishedSource)
+                  .where(eq(threadPublishedSource.threadId, threadId))
+                  .get();
+                if (current?.generation !== source.generation) yield* publication.discard(threadId, path, source);
+              }).pipe(Effect.catchCause((cause) => Effect.logError(`The staged source of ${threadId} could not be removed`, cause)));
+            }),
+          ),
+        );
+    },
+    (effect, threadId, _path, rewritten) =>
+      effect.pipe(
+        Effect.provideService(ThreadEntryKinds, kinds),
+        Effect.onError(() => (replacement.pending(threadId) ? Effect.void : Effect.promise(() => rm(rewritten, { force: true })))),
+        Effect.mapError((cause) => new ThreadProjectionRefused({ reason: 'io', threadId, message: cause.message })),
+      ),
+  );
+
   return {
     repair: Effect.fn('ThreadRolloutRepair.repair')(function* ({ threadId, path }: { readonly threadId: string; readonly path: string }) {
       if ((yield* onDisk(threadId, `reading ${path}`, () => fileSize(path))) === null) {
@@ -110,13 +178,8 @@ export const makeThreadRolloutRepair = Effect.gen(function* () {
       const kept = `${path}.${stamp}.original`;
       const rewritten = `${path}.${stamp}.repair`;
       const counted = yield* rewrite(threadId, path, rewritten);
-      yield* units
-        .write(writes('ThreadRolloutRepair.repair', [threadRolloutCursor]), (unit) => rolloutReplacedIn(db, unit, threadId, path))
-        .pipe(Effect.mapError((cause) => new ThreadProjectionRefused({ reason: 'io', threadId, message: cause.message })));
-      yield* onDisk(threadId, `keeping the original beside ${path}`, async () => {
-        await copyFile(path, kept);
-        await rename(rewritten, path);
-      });
+      yield* onDisk(threadId, `keeping the original beside ${path}`, () => copyFile(path, kept));
+      yield* replaced(threadId, path, rewritten);
       return { threadId, path, kept, ...counted };
     }),
   };

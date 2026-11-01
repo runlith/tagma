@@ -8,7 +8,16 @@ import { setRested } from '../rest.js';
 import { mandateRows } from '../store/mandate.js';
 import { session } from '../../platform/store/writers.js';
 import { basename, dirname } from 'node:path';
-import { conversationWrites, threadBase, threadEvent, threadJournalPlace, threadRolloutCursor } from '../store/journal.js';
+import {
+  conversationWrites,
+  publishedSourceRows,
+  threadBase,
+  threadEvent,
+  threadJournalPlace,
+  threadPublishedSource,
+  threadRolloutCursor,
+} from '../store/journal.js';
+import type { SourcePublication } from './sourceFiles.js';
 import { threadResource } from '../store/tables.js';
 import { type FoldRow, importRolloutMeta, type NativeFolds, type RolloutMeta, type RolloutParts } from './rolloutMeta.js';
 import type { ThreadRecords } from '../../thread-record/contract/service/records.js';
@@ -107,7 +116,18 @@ const keptInFile = Effect.fn('ThreadRollout.rehydrate.keep')(function* (
     .from(threadEvent)
     .where(eq(threadEvent.threadId, threadId))
     .orderBy(asc(threadEvent.position));
-  const ask: CarryAsk = { threadId, native, standing: standing.map((row) => row.id), sources: null };
+  const published = yield* db
+    .select({ bytes: threadPublishedSource.bytes, fingerprint: threadPublishedSource.fingerprint })
+    .from(threadPublishedSource)
+    .where(eq(threadPublishedSource.threadId, threadId))
+    .get();
+  const ask: CarryAsk = {
+    threadId,
+    native,
+    standing: standing.map((row) => row.id),
+    sources: null,
+    ...(published === undefined ? {} : { published }),
+  };
   const first = yield* carried(folds, path, ask);
   if (first.kind === 'planned') return first;
   const absent = new Set(first.absent);
@@ -151,11 +171,12 @@ const keepRows = Effect.fnUntraced(function* (threadId: string, path: string, po
   }
 });
 
-export const rehydrateThreadRecords = Effect.fn('ThreadRollout.rehydrate.carry')(function* (input: {
-  readonly threadId: string;
-  readonly path: string;
-  readonly parts: RolloutParts;
-}) {
+type RehydrateInput = { readonly threadId: string; readonly path: string; readonly parts: RolloutParts };
+
+export const rehydrateThreadRecords = Effect.fn('ThreadRollout.rehydrate.carry')(function* (
+  input: RehydrateInput,
+  publication: SourcePublication,
+) {
   yield* Effect.annotateCurrentSpan({ threadId: input.threadId });
   const store = yield* MachineStore;
   const { db } = store;
@@ -174,7 +195,7 @@ export const rehydrateThreadRecords = Effect.fn('ThreadRollout.rehydrate.carry')
         writeBatch(input.threadId, batch, native ? folds : null, unit, retained),
       );
     }
-    yield* store.transaction(writes('thread.rehydrate.finish', [threadRolloutCursor], folds.writes), (unit) =>
+    yield* store.transaction(writes('thread.rehydrate.finish', [threadRolloutCursor, publishedSourceRows], folds.writes), (unit) =>
       Effect.gen(function* () {
         if (native) yield* folds.settle(input.threadId, plan.through);
         yield* db
@@ -184,6 +205,7 @@ export const rehydrateThreadRecords = Effect.fn('ThreadRollout.rehydrate.carry')
             target: threadRolloutCursor.threadId,
             set: { nextByteOffset: plan.bytes, nextPosition: plan.through + 1 },
           });
+        yield* publication.withdrawIn(db, unit, input.threadId, input.path);
         yield* setRested(db, unit, input.threadId, null);
       }),
     );

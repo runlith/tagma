@@ -11,6 +11,7 @@ import { inboxRows, seenRows, threadInbox, threadSeen, KEEP_WARM_PING_IDS } from
 import { mandateRows, spellRows, threadLiveSpell, threadMandate } from '../store/mandate.js';
 import { externalSession, sessionFacts } from '../store/harnessFacet.js';
 import { messageRows, threadMessage } from '../store/conversation.js';
+import { publishedSourceRows } from '../store/journal.js';
 import { owedCall, owedRows } from '../store/calls.js';
 import { commandOwing, commandOwedThreads, deliveryRows } from '../../executions/contract/service/commands.js';
 import { assignmentSelection, placementRows } from '../../workspace/store/tables.js';
@@ -74,7 +75,10 @@ export const recapInput = selectRows({
   columns: { appeared: nullableColumn(threadMessage.appeared) },
   query: (key) => sql`select max(${threadMessage.appeared}) as appeared from ${threadMessage}
     where ${threadMessage.threadId} = ${key} and ${threadMessage.rewound} is null`,
-  sources: [{ rows: messageRows, columns: ['thread_id', 'appeared', 'rewound'] }],
+  sources: [
+    { rows: messageRows, columns: ['thread_id', 'appeared', 'rewound'] },
+    { rows: publishedSourceRows, columns: publishedSourceRows.raw.columns },
+  ],
 });
 
 export const owingInput = selectRows({
@@ -188,7 +192,9 @@ export const placeInput = selectRows({
 });
 
 export const threadRowDeclarations = {
-  rows: [nativeRows, runRows, inboxRows, seenRows, mandateRows, spellRows, sessionFacts, owedRows, messageRows].map((rows) => rows.raw),
+  rows: [nativeRows, runRows, inboxRows, seenRows, mandateRows, spellRows, sessionFacts, owedRows, messageRows, publishedSourceRows].map(
+    (rows) => rows.raw,
+  ),
   selections: [outcomeInput, latestInput, recapInput, owingInput, ancestryInput, activityInput, placeInput].map((input) => input.raw),
 };
 

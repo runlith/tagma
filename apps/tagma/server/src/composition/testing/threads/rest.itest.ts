@@ -17,6 +17,7 @@ import {
   threadRolloutCursor,
   exportThreadRollout,
   rehydrateThreadRecords,
+  journalSources,
 } from '../../../threads/testing/doubles.js';
 import { project } from '../../../projects/testing/doubles.js';
 import { bornThread } from '../../../native-harness/testing/born.js';
@@ -81,7 +82,8 @@ const raise = Effect.fn('testing.restedThread')(function* (threadId: string) {
   yield* db.run(
     sql`insert into thread_entry (thread_id, ord, entry_id, type, entry) values (${threadId}, 0, ${'m-1'}, ${'message'}, ${JSON.stringify({ type: 'message', id: 'm-1', role: 'user', text: 'hello' })})`,
   );
-  const path = join(yield* files.makeTempDirectoryScoped({ prefix: 'evict-' }), `${threadId}.jsonl`);
+  const home = yield* files.makeTempDirectoryScoped({ prefix: 'evict-' });
+  const path = join(home, String(registered.id), `${threadId}.jsonl`);
   const parts = yield* nativeOnlyParts;
   yield* exportThreadRollout({ threadId, path, parts });
   const projection = yield* threadProjection(ENTRY_KINDS);
@@ -110,6 +112,7 @@ const raise = Effect.fn('testing.restedThread')(function* (threadId: string) {
   return {
     db,
     files,
+    home,
     path,
     projected,
     parts,
@@ -183,6 +186,101 @@ it.live('a rollout holding a record the carry cannot read keeps the thread whole
       reason: 'records-unreadable',
     });
     expect((yield* world.projected).events).toHaveLength(1);
+  }).pipe(Effect.provide(storeLayer)),
+);
+
+it.live('a file with a changed event at the same position keeps the SQL authority', () =>
+  Effect.gen(function* () {
+    const world = yield* raise('t-conflict');
+    const rows = yield* world.projected;
+    const original = yield* world.files.readFileString(world.path);
+    const changed = original.replaceAll('"hello"', '"world"');
+    expect(changed).not.toBe(original);
+    expect(Buffer.byteLength(changed)).toBe(Buffer.byteLength(original));
+    yield* world.files.writeFileString(world.path, changed);
+    expect(yield* evictThreadProjection({ threadId: 't-conflict', path: world.path, parts: world.parts })).toEqual({
+      outcome: 'kept',
+      reason: 'records-missing',
+    });
+    expect((yield* world.projected).events).toEqual(rows.events);
+    expect(yield* world.rest).toBeNull();
+    expect(yield* world.files.readFileString(world.path)).toBe(changed);
+  }).pipe(Effect.provide(storeLayer)),
+);
+
+it.live('a changed checkpoint with the same id keeps the SQL authority', () =>
+  Effect.gen(function* () {
+    const world = yield* raise('t-checkpoint-conflict');
+    const rows = yield* world.projected;
+    const original = yield* world.files.readFileString(world.path);
+    const changed = original.replace('the past, folded', 'the past, forged');
+    expect(changed).not.toBe(original);
+    expect(Buffer.byteLength(changed)).toBe(Buffer.byteLength(original));
+    yield* world.files.writeFileString(world.path, changed);
+    expect(yield* evictThreadProjection({ threadId: 't-checkpoint-conflict', path: world.path, parts: world.parts })).toEqual({
+      outcome: 'kept',
+      reason: 'records-missing',
+    });
+    expect((yield* world.projected).checkpoints).toEqual(rows.checkpoints);
+    expect(yield* world.rest).toBeNull();
+    expect(yield* world.files.readFileString(world.path)).toBe(changed);
+  }).pipe(Effect.provide(storeLayer)),
+);
+
+it.live('a return refuses a journal that no longer begins with its published source, and the thread stays rested', () =>
+  Effect.gen(function* () {
+    const world = yield* raise('t-diverged');
+    expect(yield* evictThreadProjection({ threadId: 't-diverged', path: world.path, parts: world.parts })).toMatchObject({
+      outcome: 'evicted',
+    });
+    const original = yield* world.files.readFileString(world.path);
+    const changed = original.replace('"text":"hello"', '"text":"jello"');
+    expect(changed).not.toBe(original);
+    yield* world.files.writeFileString(world.path, changed);
+    const returned = yield* Effect.result(rehydrateThreadRecords({ threadId: 't-diverged', path: world.path, parts: world.parts }));
+    expect(returned._tag === 'Failure' && returned.failure._tag).toBe('RolloutSyncRefused');
+    expect(yield* world.rest).toBeInstanceOf(Date);
+    expect((yield* world.projected).events).toEqual([]);
+    expect(yield* world.db.all(sql`select origin from thread_published_source where thread_id = 't-diverged'`)).toEqual([
+      { origin: 'offload' },
+    ]);
+  }).pipe(Effect.provide(storeLayer)),
+);
+
+it.live('an export refuses a rested thread, whose journal and source stand as they were', () =>
+  Effect.gen(function* () {
+    const world = yield* raise('t-rested-export');
+    expect(yield* evictThreadProjection({ threadId: 't-rested-export', path: world.path, parts: world.parts })).toMatchObject({
+      outcome: 'evicted',
+    });
+    const bytes = yield* world.files.readFileString(world.path);
+    const source = () => world.db.all(sql`select generation, bytes from thread_published_source where thread_id = 't-rested-export'`);
+    const before = yield* source();
+    const exported = yield* Effect.result(exportThreadRollout({ threadId: 't-rested-export', path: world.path, parts: world.parts }));
+    expect(exported._tag === 'Failure' && exported.failure._tag).toBe('RolloutSyncRefused');
+    expect(yield* world.files.readFileString(world.path)).toBe(bytes);
+    expect(yield* source()).toEqual(before);
+  }).pipe(Effect.provide(storeLayer)),
+);
+
+it.live('a boot keeps only the generation SQL publishes, on either side of a commit a crash left unconfirmed', () =>
+  Effect.gen(function* () {
+    const world = yield* raise('t-swept');
+    expect(yield* evictThreadProjection({ threadId: 't-swept', path: world.path, parts: world.parts })).toMatchObject({
+      outcome: 'evicted',
+    });
+    const generations = `${world.path}.generations`;
+    const [published] = yield* world.db.all<{ generation: string }>(
+      sql`select generation from thread_published_source where thread_id = 't-swept'`,
+    );
+    const unlanded = join(generations, '00000000-0000-4000-8000-000000000001.jsonl');
+    const superseded = join(generations, '00000000-0000-4000-8000-000000000002.jsonl');
+    yield* world.files.writeFileString(unlanded, 'staged before a commit that never landed\n');
+    yield* world.files.writeFileString(superseded, 'retired by a commit whose tail never ran\n');
+    const sources = yield* journalSources(ENTRY_KINDS, world.home, world.parts.native.folds);
+    yield* sources.recover;
+    expect([yield* world.files.exists(unlanded), yield* world.files.exists(superseded)]).toEqual([false, false]);
+    expect(yield* world.files.exists(join(generations, `${published!.generation}.jsonl`))).toBe(true);
   }).pipe(Effect.provide(storeLayer)),
 );
 

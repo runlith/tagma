@@ -7,14 +7,13 @@ import { join } from 'node:path';
 import { Effect, Layer, Result } from 'effect';
 import { sharedPool } from '@runlith/sqlite-process/testing/pool';
 import { sql } from 'drizzle-orm';
-import { ThreadEntryKinds, makeThreadEntryReader, type ThreadEntryReader, type ThreadFormStep } from '@runlith/agent/transcript/kinds';
+import { makeThreadEntryReader, type ThreadEntryReader, type ThreadFormStep } from '@runlith/agent/transcript/kinds';
 import { fixtureMigrations } from '../../composition/testing/migrations.js';
 import { MachineStore } from '../../platform/contract/service/store.js';
 import { MachineUnits } from '../../platform/contract/service/units.js';
 import { unitsLayer } from '../../platform/store/units.js';
 import { storeLayer } from '../../platform/store/open.js';
-import { makeRolloutForms } from './rolloutForming.js';
-import { stagedHere } from '../testing/doubles.js';
+import { rolloutForms } from '../testing/doubles.js';
 
 const root = mkdtempSync(join(tmpdir(), 'rollout-publication-'));
 afterAll(() => rmSync(root, { recursive: true, force: true }));
@@ -53,10 +52,7 @@ const plant = Effect.fnUntraced(function* (id: string, bytes: number, publishing
     );
 });
 const formed = (kinds: ThreadEntryReader, id: string, path: string) =>
-  makeRolloutForms({ journal: (_id, work) => work, stage: stagedHere }).pipe(
-    Effect.provideService(ThreadEntryKinds, kinds),
-    Effect.flatMap((forms) => forms.formedHere(id, path)),
-  );
+  rolloutForms((_id, work) => work, kinds).pipe(Effect.flatMap((forms) => forms.formedHere(id, path)));
 
 layer(machine)('rollout publication', (it) => {
   it.effect('a baseline file without a mark is current when the step list is empty and is not rewritten', () =>
@@ -109,8 +105,7 @@ layer(machine)('rollout publication', (it) => {
       });
       yield* plant(id, Buffer.byteLength(before), publishing);
       const folded = makeThreadEntryReader({ products: [], base: { step: step.name, release: '0.2.0' } });
-      const read = yield* makeRolloutForms({ journal: (_id, work) => work, stage: stagedHere }).pipe(
-        Effect.provideService(ThreadEntryKinds, folded),
+      const read = yield* rolloutForms((_id, work) => work, folded).pipe(
         Effect.flatMap((forms) => Effect.result(forms.readable(id, path))),
       );
       expect(Result.isFailure(read) && read.failure._tag === 'RolloutUnformable' && read.failure.older).toEqual({

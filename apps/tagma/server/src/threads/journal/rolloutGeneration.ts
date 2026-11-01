@@ -47,30 +47,23 @@ export const rolloutReplacedIn = (
     )
     .pipe(Effect.asVoid, Effect.mapError(unreadable(path)));
 
-const exported = writes('ThreadRollout.exported', [threadRolloutCursor, threadRolloutForm]);
-
 export const rolloutReplaced = Effect.fn('ThreadRollout.replaced')(function* (
-  store: MachineStore['Service'],
+  db: StoreDb<'machine'>,
+  unit: WriteUnit<'machine'>,
   threadId: string,
   path: string,
 ) {
-  yield* store
-    .transaction(exported, (unit) =>
-      Effect.gen(function* () {
-        const formedAt = new Date(yield* Clock.currentTimeMillis);
-        yield* rolloutReplacedIn(store.db, unit, threadId, path);
-        yield* unit
-          .run(
-            store.db
-              .insert(threadRolloutForm)
-              .values({ threadId, formedAt })
-              .onConflictDoUpdate({
-                target: threadRolloutForm.threadId,
-                set: { formedAt, refusal: null, publishing: null },
-              }),
-          )
-          .pipe(Effect.mapError(unreadable(path)));
-      }),
+  const formedAt = new Date(yield* Clock.currentTimeMillis);
+  yield* rolloutReplacedIn(db, unit, threadId, path);
+  yield* unit
+    .run(
+      db
+        .insert(threadRolloutForm)
+        .values({ threadId, formedAt })
+        .onConflictDoUpdate({
+          target: threadRolloutForm.threadId,
+          set: { formedAt, refusal: null, publishing: null },
+        }),
     )
-    .pipe(Effect.mapError((cause) => (cause._tag === 'RolloutUnreadable' ? cause : unreadable(path)(cause))));
+    .pipe(Effect.mapError(unreadable(path)));
 });

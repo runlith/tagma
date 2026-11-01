@@ -5,7 +5,7 @@ import { expect } from 'bun:test';
 import { it } from '@runlith/effect-test';
 import { dirname, join } from 'node:path';
 import { eq } from 'drizzle-orm';
-import { Context, Clock, Effect, FileSystem, Layer } from 'effect';
+import { Context, Clock, Deferred, Effect, Fiber, FileSystem, Layer } from 'effect';
 import type { ThreadTranscriptEntry } from '@runlith/agent/transcript/rows';
 import type { ThreadEventPayload } from '@runlith/agent/thread/events';
 import type { ThreadToolState } from '@runlith/agent/transcript/entries';
@@ -22,7 +22,13 @@ import { makeThreadRecords } from '../../../thread-record/layer.js';
 import { restFor } from '../../../threads/testing/rest.js';
 import { nativeOnlyParts } from '../../../native-harness/testing/rollout.js';
 import { threadEvent } from '../../../threads/testing/doubles.js';
-import { exportThreadRollout } from '../../../threads/testing/doubles.js';
+import {
+  appendedInProgram,
+  exportThreadRollout,
+  filedThreadJournal,
+  rolloutSourceRetention,
+  rolloutWriter,
+} from '../../../threads/testing/doubles.js';
 import { rehydrateThreadRecords } from '../../../threads/testing/doubles.js';
 import { restedReads } from '../../../threads/testing/doubles.js';
 
@@ -130,7 +136,13 @@ it.live(
         return units.write(operation, work);
       },
     };
-    const reads = yield* Effect.provide(restedReads(ENTRY_KINDS, home).pipe(Effect.provideService(MachineUnits, counted)), runtime);
+    const retention = rolloutSourceRetention();
+    const reads = yield* Effect.provide(
+      restedReads(ENTRY_KINDS, home, (yield* nativeOnlyParts).native.folds, undefined, undefined, retention).pipe(
+        Effect.provideService(MachineUnits, counted),
+      ),
+      runtime,
+    );
     const rested = yield* Effect.provide(
       Effect.flatMap(Effect.all([makeThreadRecords, restedFolds(reads, ENTRY_KINDS)]), ([records, folds]) =>
         threadStore(records, ENTRY_KINDS, folds),
@@ -138,6 +150,8 @@ it.live(
       runtime,
     );
 
+    yield* Effect.provide(reads.readable(row.id), runtime);
+    const preparedWrites = writes;
     const fromFile = yield* Effect.provide(rested.transcriptWindow(row.id, { limit: 2, bytes: 10_000_000 }), runtime);
     const olderFromFile = yield* Effect.provide(
       rested.transcriptWindow(row.id, { limit: 2, bytes: 10_000_000, before: fromFile?.before ?? 0 }),
@@ -151,15 +165,18 @@ it.live(
       runtime,
     );
     const pinned = yield* Effect.provide(
-      rested.readCut(
+      reads.reading(
         row.id,
-        Effect.fnUntraced(function* (cut) {
-          yield* store.db
-            .insert(threadRolloutForm())
-            .values({ threadId: row.id, formedAt: new Date(yield* Clock.currentTimeMillis), refusal: 'a later refusal' })
-            .onConflictDoUpdate({ target: threadRolloutForm().threadId, set: { refusal: 'a later refusal' } });
-          return yield* rested.transcriptWindow(row.id, { limit: 2, bytes: 10_000_000 }, cut.tx);
-        }),
+        rested.readCut(
+          row.id,
+          Effect.fnUntraced(function* (cut) {
+            yield* store.db
+              .insert(threadRolloutForm())
+              .values({ threadId: row.id, formedAt: new Date(yield* Clock.currentTimeMillis), refusal: 'a later refusal' })
+              .onConflictDoUpdate({ target: threadRolloutForm().threadId, set: { refusal: 'a later refusal' } });
+            return yield* rested.transcriptWindow(row.id, { limit: 2, bytes: 10_000_000 }, cut.tx);
+          }),
+        ),
       ),
       runtime,
     );
@@ -180,13 +197,13 @@ it.live(
       ),
     ).toEqual(eventsFromRows);
     yield* Effect.provide(
-      rehydrateThreadRecords({ threadId: row.id, path, parts: yield* nativeOnlyParts }).pipe(
+      rehydrateThreadRecords({ threadId: row.id, path, parts: yield* nativeOnlyParts }, retention).pipe(
         Effect.provideService(ThreadEntryKinds, ENTRY_KINDS),
       ),
       runtime,
     );
     expect(yield* Effect.provide(rows.transcriptWindow(row.id, { limit: 2, bytes: 10_000_000 }), runtime)).toEqual(fromFile);
-    expect(writes).toBe(0);
+    expect(writes).toBe(preparedWrites);
     const empty = yield* Effect.provide(rows.insert({ ownerId: 'operator', agentId: 'tagma' }), runtime);
     yield* Effect.provide(scopeRecord(store.db, empty.id, { projectId }), runtime);
     const emptyPath = join(home, String(projectId), `${empty.id}.jsonl`);
@@ -198,12 +215,132 @@ it.live(
       runtime,
     );
     yield* Effect.provide(restFor(store.db, empty.id, new Date(yield* Clock.currentTimeMillis)), runtime);
+    yield* Effect.provide(reads.readable(empty.id), runtime);
     expect(
       yield* Effect.provide(
-        rested.readCut(empty.id, (cut) => Effect.succeed(cut.position)),
+        reads.reading(
+          empty.id,
+          rested.readCut(empty.id, (cut) => Effect.succeed(cut.position)),
+        ),
         runtime,
       ),
     ).toBe(0);
+    const racing = yield* Effect.provide(rows.insert({ ownerId: 'operator', agentId: 'tagma' }), runtime);
+    yield* Effect.provide(scopeRecord(store.db, racing.id, { projectId }), runtime);
+    yield* Effect.provide(
+      store.db
+        .insert(threadEvent())
+        .values({ threadId: racing.id, position: 1, id: 'before-cut', kind: 'entry', payload: { entry: text('before-cut', 'before') } }),
+      runtime,
+    );
+    const racingPath = join(home, String(projectId), `${racing.id}.jsonl`);
+    const parts = yield* nativeOnlyParts;
+    yield* Effect.provide(exportThreadRollout({ threadId: racing.id, path: racingPath, parts }), runtime);
+    yield* Effect.provide(restFor(store.db, racing.id, new Date(yield* Clock.currentTimeMillis)), runtime);
+    yield* Effect.provide(reads.readable(racing.id), runtime);
+    const resume = yield* Deferred.make<void>();
+    const late = yield* Effect.provide(
+      reads.reading(racing.id, Effect.forkScoped(Deferred.await(resume).pipe(Effect.andThen(reads.restedRollout(racing.id))))),
+      runtime,
+    );
+    yield* Deferred.succeed(resume, undefined);
+    const expired = yield* Effect.result(Fiber.join(late));
+    expect(expired._tag).toBe('Failure');
+    if (expired._tag === 'Failure') expect(expired.failure).toMatchObject({ _tag: 'ThreadStorageFailed', call: 'rolloutReads.source' });
+    const files = Context.get(runtime, FileSystem.FileSystem);
+    const generationDir = `${racingPath}.generations`;
+    const [generation] = yield* files.readDirectory(generationDir);
+    if (generation === undefined) return yield* Effect.die('The published source is missing.');
+    const generationPath = join(generationDir, generation);
+    const writer = rolloutWriter(() => racingPath, null);
+    const journal = yield* Effect.provide(filedThreadJournal(writer), runtime);
+    const started = yield* Deferred.make<void>();
+    const finish = yield* Deferred.make<void>();
+    const reading = yield* Effect.provide(
+      reads.reading(
+        racing.id,
+        Effect.gen(function* () {
+          const child = yield* Effect.forkScoped(
+            reads.retaining(
+              racing.id,
+              rested.readCut(
+                racing.id,
+                Effect.fnUntraced(function* (at) {
+                  yield* Deferred.succeed(started, undefined);
+                  yield* Deferred.await(finish);
+                  return { position: at.position, page: yield* rested.transcriptWindow(racing.id, { limit: 2, bytes: 10_000_000 }, at.tx) };
+                }),
+              ),
+            ),
+          );
+          yield* Deferred.await(started);
+          return child;
+        }),
+      ),
+      runtime,
+    );
+    yield* Effect.provide(rehydrateThreadRecords({ threadId: racing.id, path: racingPath, parts }, retention), runtime);
+    expect(yield* files.exists(generationPath)).toBe(true);
+    yield* Effect.provide(journal.open(racing.id), runtime);
+    yield* Effect.provide(
+      appendedInProgram(units, journal, racing.id, 1, [
+        { threadId: racing.id, id: 'after-cut', kind: 'entry', payload: { entry: text('after-cut', 'after') } },
+      ]),
+      runtime,
+    );
+    yield* Deferred.succeed(finish, undefined);
+    const cut = yield* Fiber.join(reading);
+    expect({ position: cut.position, entries: cut.page?.entries.map((entry) => entry.id) }).toEqual({
+      position: 1,
+      entries: ['before-cut'],
+    });
+    expect(yield* files.exists(generationPath)).toBe(false);
+    const replaced = yield* Effect.provide(rows.insert({ ownerId: 'operator', agentId: 'tagma' }), runtime);
+    yield* Effect.provide(scopeRecord(store.db, replaced.id, { projectId }), runtime);
+    yield* Effect.provide(
+      store.db.insert(threadEvent()).values({
+        threadId: replaced.id,
+        position: 1,
+        id: 'replace-event',
+        kind: 'entry',
+        payload: { entry: text('replace-entry', 'first') },
+      }),
+      runtime,
+    );
+    const replacedPath = join(home, String(projectId), `${replaced.id}.jsonl`);
+    yield* Effect.provide(exportThreadRollout({ threadId: replaced.id, path: replacedPath, parts }), runtime);
+    yield* Effect.provide(restFor(store.db, replaced.id, new Date(yield* Clock.currentTimeMillis)), runtime);
+    const replacement = yield* Effect.provide(
+      reads.reading(
+        replaced.id,
+        rested.readCut(
+          replaced.id,
+          Effect.fnUntraced(function* (old) {
+            yield* Effect.provide(
+              Effect.gen(function* () {
+                yield* rehydrateThreadRecords({ threadId: replaced.id, path: replacedPath, parts }, retention);
+                yield* store.db
+                  .update(threadEvent())
+                  .set({ payload: { entry: text('replace-entry', 'later') } })
+                  .where(eq(threadEvent().threadId, replaced.id));
+                yield* exportThreadRollout({ threadId: replaced.id, path: replacedPath, parts });
+                yield* restFor(store.db, replaced.id, new Date(yield* Clock.currentTimeMillis));
+              }),
+              runtime,
+            );
+            const next = yield* reads.reading(
+              replaced.id,
+              rested.readCut(replaced.id, (cut) => rested.transcriptWindow(replaced.id, { limit: 1, bytes: 10_000_000 }, cut.tx)),
+            );
+            const previous = yield* rested.transcriptWindow(replaced.id, { limit: 1, bytes: 10_000_000 }, old.tx);
+            return { previous, next };
+          }),
+        ),
+      ),
+      runtime,
+    );
+    expect(replacement.previous?.entries).toEqual([text('replace-entry', 'first')]);
+    expect(replacement.next?.entries).toEqual([text('replace-entry', 'later')]);
   }),
 );
 
@@ -321,14 +458,22 @@ it.live(
     });
     expect((yield* fs.readDirectory(dirname(path))).filter((file) => file.endsWith('.partial'))).toEqual([]);
     const records = yield* Effect.provide(makeThreadRecords, runtime);
-    const reads = yield* Effect.provide(restedReads(ENTRY_KINDS, home), runtime);
+    const reads = yield* Effect.provide(restedReads(ENTRY_KINDS, home, (yield* nativeOnlyParts).native.folds), runtime);
     const rested = Effect.flatMap(restedFolds(reads, ENTRY_KINDS), (folds) => threadStore(records, ENTRY_KINDS, folds));
     expect(yield* Effect.provide(Effect.flatMap(rested, answers), runtime)).toEqual(fromFold);
 
     yield* Effect.provide(compressRollout(path), runtime);
-    const files = yield* Effect.provide(reads.restedRollout(row.id), runtime);
-    if (files == null) return yield* Effect.die(new Error('the rested thread has no transcript files'));
-    yield* fs.remove(files.transcript, { force: true });
+    yield* Effect.provide(
+      reads.reading(
+        row.id,
+        Effect.gen(function* () {
+          const files = yield* reads.restedRollout(row.id);
+          if (files == null) return yield* Effect.die(new Error('the rested thread has no transcript files'));
+          yield* fs.remove(files.transcript, { force: true });
+        }),
+      ),
+      runtime,
+    );
     expect(yield* Effect.provide(Effect.flatMap(rested, answers), runtime)).toEqual(fromFold);
   }),
 );
@@ -393,13 +538,16 @@ it.live(
       }),
       runtime,
     );
-    const reads = yield* Effect.provide(restedReads(ENTRY_KINDS, home), runtime);
+    const reads = yield* Effect.provide(restedReads(ENTRY_KINDS, home, (yield* nativeOnlyParts).native.folds), runtime);
     const rested = yield* Effect.provide(
       Effect.flatMap(restedFolds(reads, ENTRY_KINDS), (folds) => threadStore(records, ENTRY_KINDS, folds)),
       runtime,
     );
     const opening = yield* Effect.provide(
-      rested.readCut(row.id, (cut) => Effect.map(rested.metadata(row.id, cut.tx), (thread) => ({ thread, position: cut.position }))),
+      reads.reading(
+        row.id,
+        rested.readCut(row.id, (cut) => Effect.map(rested.metadata(row.id, cut.tx), (thread) => ({ thread, position: cut.position }))),
+      ),
       runtime,
     );
     expect(opening.thread?.id).toBe(row.id);
@@ -413,19 +561,27 @@ it.live(
     expect(yield* open.pipe(Effect.provideService(RolloutReads, (read) => void (bytes += read.bytes)))).toEqual(['q2', 'q4']);
     expect([bytes > 0, bytes < 10_000]).toEqual([true, true]);
 
-    const files = yield* Effect.provide(reads.restedRollout(row.id), runtime);
-    if (files == null) return yield* Effect.die(new Error('the rested thread has no transcript files'));
-    const built = Buffer.from(yield* fs.readFile(files.transcript));
-    const footer = built.subarray(built.length - 48);
-    const [entries, bodies] = [footer.readDoubleLE(0), footer.readDoubleLE(8)];
-    const older = Buffer.alloc(32);
-    older.writeDoubleLE(entries, 0);
-    older.writeDoubleLE(bodies, 8);
-    older.writeDoubleLE(footer.readDoubleLE(24), 16);
-    older.writeDoubleLE(footer.readDoubleLE(32), 24);
-    yield* fs.writeFile(files.transcript, Buffer.concat([built.subarray(0, bodies + entries * 16), older]));
-    expect(yield* open).toEqual(['q2', 'q4']);
-    expect((yield* fs.readFile(files.transcript)).length).toBe(built.length);
+    yield* Effect.provide(
+      reads.reading(
+        row.id,
+        Effect.gen(function* () {
+          const files = yield* reads.restedRollout(row.id);
+          if (files == null) return yield* Effect.die(new Error('the rested thread has no transcript files'));
+          const built = Buffer.from(yield* fs.readFile(files.transcript));
+          const footer = built.subarray(built.length - 48);
+          const [entries, bodies] = [footer.readDoubleLE(0), footer.readDoubleLE(8)];
+          const older = Buffer.alloc(32);
+          older.writeDoubleLE(entries, 0);
+          older.writeDoubleLE(bodies, 8);
+          older.writeDoubleLE(footer.readDoubleLE(24), 16);
+          older.writeDoubleLE(footer.readDoubleLE(32), 24);
+          yield* fs.writeFile(files.transcript, Buffer.concat([built.subarray(0, bodies + entries * 16), older]));
+          expect(yield* open).toEqual(['q2', 'q4']);
+          expect((yield* fs.readFile(files.transcript)).length).toBe(built.length);
+        }),
+      ),
+      runtime,
+    );
   }),
 );
 
@@ -516,7 +672,7 @@ it.live(
       runtime,
     );
     const fromFile = yield* Effect.provide(
-      Effect.flatMap(Effect.flatMap(restedReads(ENTRY_KINDS, home), sqliteThreadJournal), answers),
+      Effect.flatMap(Effect.flatMap(restedReads(ENTRY_KINDS, home, (yield* nativeOnlyParts).native.folds), sqliteThreadJournal), answers),
       runtime,
     );
 

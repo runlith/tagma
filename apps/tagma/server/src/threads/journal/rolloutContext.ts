@@ -15,12 +15,18 @@ import type { ThreadProjection } from './projection.js';
 import { ROLLOUT_SUFFIX } from './rolloutForms.js';
 import type { RolloutParts } from './rolloutMeta.js';
 import type { RolloutWriter } from './rolloutWriter.js';
+import type { SourceRetention } from './sourceRetention.js';
+import type { SourcePublication } from './sourceFiles.js';
+import type { SourceReplacement } from './sourceReplacement.js';
 
 const providing = (store: MachineStore['Service']) => Effect.provideService(MachineStore, store);
 
 export type RolloutContext = {
   readonly records: ThreadRecords['Service'];
   readonly floor: RolloutWriter;
+  readonly retention: SourceRetention;
+  readonly publication: SourcePublication;
+  readonly replacement: SourceReplacement;
   readonly projection: ThreadProjection;
   readonly graph: Context.Context<GraphServices | MachineStore>;
   readonly parts: RolloutParts;
@@ -58,6 +64,9 @@ export const journalEntry =
 export const rolloutContext = (input: {
   readonly records: ThreadRecords['Service'];
   readonly floor: RolloutWriter;
+  readonly retention: SourceRetention;
+  readonly publication: SourcePublication;
+  readonly replacement: SourceReplacement;
   readonly projection: ThreadProjection;
   readonly graph: Context.Context<GraphServices | MachineStore>;
   readonly parts: RolloutParts;
@@ -78,9 +87,32 @@ export const rolloutContext = (input: {
         .get(),
       (row) => row?.journal ?? undefined,
     );
+  const locate = (threadId: string) =>
+    Effect.map(journalOf(threadId), (journal) => (journal === undefined ? undefined : pathOf(journal, threadId)));
+  const enter = journalEntry(journal);
+  const inJournal: JournalEntry = (threadId, work) =>
+    enter(
+      threadId,
+      Effect.gen(function* () {
+        if (!input.replacement.pending(threadId)) return yield* work;
+        const path = yield* locate(threadId).pipe(Effect.mapError((cause) => new ThreadStorageFailed({ call: 'source.recover', cause })));
+        if (path === undefined)
+          return yield* new ThreadStorageFailed({
+            call: 'source.recover',
+            cause: new Error(`The journal place of ${threadId} is unavailable.`),
+          });
+        yield* input.replacement
+          .settle(threadId, path)
+          .pipe(Effect.mapError((cause) => new ThreadStorageFailed({ call: 'source.recover', cause })));
+        return yield* work;
+      }),
+    );
   return {
     records: input.records,
     floor: input.floor,
+    retention: input.retention,
+    publication: input.publication,
+    replacement: input.replacement,
     projection: input.projection,
     graph: input.graph,
     parts: input.parts,
@@ -89,7 +121,7 @@ export const rolloutContext = (input: {
     machineStore: providing(store),
     pathOf,
     journalOf,
-    locate: (threadId) => Effect.map(journalOf(threadId), (journal) => (journal === undefined ? undefined : pathOf(journal, threadId))),
-    inJournal: journalEntry(journal),
+    locate,
+    inJournal,
   };
 };

@@ -4,7 +4,7 @@ import type { ThreadCompactionCheckpointRow, ThreadHistory } from '@runlith/agen
 import type { ThreadPrunedVolume } from '@runlith/agent/thread/storage/compaction';
 import type { ThreadEntryReader, ThreadReaderWorker } from '@runlith/agent/transcript/kinds';
 import { RolloutUnreadable } from '../../threads/journal/rolloutFile.js';
-import type { RolloutFiles, TranscriptKey } from '../../threads/contract/service/rested.js';
+import type { RolloutBoundary, RolloutFiles, SourceFrontier, TranscriptKey } from '../../threads/contract/service/rested.js';
 import { RolloutReads, type RolloutRead } from '../../threads/contract/service/rolloutReads.js';
 import type { RolloutStage, StagedFile } from '../../threads/journal/rolloutStaging.js';
 import type { CarryAsk, Carrying, CarryOpening } from '../../threads/journal/rolloutCarry.js';
@@ -24,9 +24,11 @@ export type RestedCompaction = {
 };
 
 export type RestedAsk = { readonly id: number; readonly rollout: RolloutFiles } & (
-  | { readonly kind: 'transcribe'; readonly key: TranscriptKey }
-  | { readonly kind: 'history' }
-  | { readonly kind: 'compaction' }
+  | { readonly kind: 'transcribe'; readonly key: TranscriptKey; readonly boundary: RolloutBoundary }
+  | { readonly kind: 'history'; readonly boundary: RolloutBoundary }
+  | { readonly kind: 'certify' }
+  | { readonly kind: 'digest'; readonly form: 'plain' | 'compressed' }
+  | { readonly kind: 'compaction'; readonly boundary: RolloutBoundary }
   | { readonly kind: 'stage'; readonly stage: RolloutStage }
   | { readonly kind: 'carry'; readonly carry: CarryAsk }
   | { readonly kind: 'carry-take'; readonly plan: number; readonly unit: number }
@@ -38,6 +40,8 @@ export type RestedTell = { readonly kind: 'carry-drop'; readonly plan: number };
 export type RestedAnswer = { readonly id: number } & (
   | { readonly kind: 'transcribed'; readonly entries: number }
   | { readonly kind: 'history'; readonly history: ThreadHistory; readonly bytes: number }
+  | { readonly kind: 'certified'; readonly frontier: SourceFrontier }
+  | { readonly kind: 'digest'; readonly digest: string }
   | { readonly kind: 'compaction'; readonly summary: RestedCompaction }
   | { readonly kind: 'staged'; readonly file: StagedFile }
   | { readonly kind: 'carrying'; readonly plan: number; readonly opening: CarryOpening }
@@ -55,14 +59,22 @@ type FoldFailure = RolloutUnreadable | WorkerUnavailable;
 export class RestedWork extends Context.Service<
   RestedWork,
   {
-    transcribe(kinds: ThreadEntryReader, rollout: RolloutFiles, key: TranscriptKey): Effect.Effect<number, FoldFailure>;
+    transcribe(
+      kinds: ThreadEntryReader,
+      rollout: RolloutFiles,
+      key: TranscriptKey,
+      boundary: RolloutBoundary,
+    ): Effect.Effect<number, FoldFailure>;
     stage(kinds: ThreadEntryReader, rollout: RolloutFiles, stage: RolloutStage): Effect.Effect<StagedFile, FoldFailure>;
+    certify(kinds: ThreadEntryReader, rollout: RolloutFiles): Effect.Effect<SourceFrontier, FoldFailure>;
+    digest(kinds: ThreadEntryReader, rollout: RolloutFiles, form: 'plain' | 'compressed'): Effect.Effect<string, FoldFailure>;
     carry(kinds: ThreadEntryReader, rollout: RolloutFiles, ask: CarryAsk): Effect.Effect<Carrying, FoldFailure>;
     layers(kinds: ThreadEntryReader, rollout: RolloutFiles): Effect.Effect<readonly RolloutLayer[], FoldFailure>;
-    compaction(kinds: ThreadEntryReader, rollout: RolloutFiles): Effect.Effect<RestedCompaction, FoldFailure>;
+    compaction(kinds: ThreadEntryReader, rollout: RolloutFiles, boundary: RolloutBoundary): Effect.Effect<RestedCompaction, FoldFailure>;
     history(
       kinds: ThreadEntryReader,
       rollout: RolloutFiles,
+      boundary: RolloutBoundary,
     ): Effect.Effect<{ readonly history: ThreadHistory; readonly bytes: number }, FoldFailure>;
     readonly shutdown: Effect.Effect<void>;
   }
@@ -118,9 +130,10 @@ export const makeRestedWork = Effect.gen(function* () {
     kinds: ThreadEntryReader,
     rollout: RolloutFiles,
     key: TranscriptKey,
+    boundary: RolloutBoundary,
   ): Effect.Effect<number, RolloutUnreadable | WorkerUnavailable> =>
     Effect.flatMap(
-      ask(kinds, rollout, (id) => ({ id, rollout, kind: 'transcribe', key })),
+      ask(kinds, rollout, (id) => ({ id, rollout, kind: 'transcribe', key, boundary })),
       (answer) => (answer.kind === 'transcribed' ? Effect.succeed(answer.entries) : Effect.fail(unreadable(rollout, answer))),
     );
 
@@ -175,18 +188,20 @@ export const makeRestedWork = Effect.gen(function* () {
   const readRolloutCompaction = (
     kinds: ThreadEntryReader,
     rollout: RolloutFiles,
+    boundary: RolloutBoundary,
   ): Effect.Effect<RestedCompaction, RolloutUnreadable | WorkerUnavailable> =>
     Effect.flatMap(
-      ask(kinds, rollout, (id) => ({ id, rollout, kind: 'compaction' })),
+      ask(kinds, rollout, (id) => ({ id, rollout, kind: 'compaction', boundary })),
       (answer) => (answer.kind === 'compaction' ? Effect.succeed(answer.summary) : Effect.fail(unreadable(rollout, answer))),
     );
 
   const foldRolloutHistory = (
     kinds: ThreadEntryReader,
     rollout: RolloutFiles,
+    boundary: RolloutBoundary,
   ): Effect.Effect<{ readonly history: ThreadHistory; readonly bytes: number }, RolloutUnreadable | WorkerUnavailable> =>
     Effect.flatMap(
-      ask(kinds, rollout, (id) => ({ id, rollout, kind: 'history' })),
+      ask(kinds, rollout, (id) => ({ id, rollout, kind: 'history', boundary })),
       (answer) =>
         answer.kind === 'history'
           ? Effect.succeed({ history: answer.history, bytes: answer.bytes })
@@ -196,6 +211,16 @@ export const makeRestedWork = Effect.gen(function* () {
   return RestedWork.of({
     transcribe: transcribeRollout,
     stage: stageRollout,
+    certify: (kinds, rollout) =>
+      Effect.flatMap(
+        ask(kinds, rollout, (id) => ({ id, rollout, kind: 'certify' }), 'ThreadRollout.certify'),
+        (answer) => (answer.kind === 'certified' ? Effect.succeed(answer.frontier) : Effect.fail(unreadable(rollout, answer))),
+      ),
+    digest: (kinds, rollout, form) =>
+      Effect.flatMap(
+        ask(kinds, rollout, (id) => ({ id, rollout, kind: 'digest', form }), 'ThreadRollout.digest'),
+        (answer) => (answer.kind === 'digest' ? Effect.succeed(answer.digest) : Effect.fail(unreadable(rollout, answer))),
+      ),
     carry: carryRollout,
     layers: readRolloutLayers,
     compaction: readRolloutCompaction,

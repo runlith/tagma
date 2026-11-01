@@ -86,9 +86,11 @@ const setup = Effect.fnUntraced(function* () {
     return path;
   });
   const owner = (reader: ThreadEntryReader = kinds) =>
-    Effect.provide(
-      rolloutForms((_threadId, work) => work, reader),
-      runtime,
+    Effect.flatMap(nativeOnlyParts, (parts) =>
+      Effect.provide(
+        rolloutForms((_threadId, work) => work, reader, undefined, parts.native.folds),
+        runtime,
+      ),
     );
   const returned = Effect.fnUntraced(function* (forms: Effect.Success<ReturnType<typeof owner>>, threadId: string, path: string) {
     expect(
@@ -195,7 +197,7 @@ it.live(
     yield* Effect.provide(compressRollout(path), runtime);
     const queued: string[] = [];
     const reads = yield* Effect.provide(
-      restedReads(kinds, home, (threadId) => queued.push(threadId)),
+      restedReads(kinds, home, (yield* nativeOnlyParts).native.folds, (threadId) => queued.push(threadId)),
       runtime,
     );
     const events = yield* Effect.provide(reads.events('t-read', { afterPosition: 0, head: 1, limit: 10 }), runtime);
@@ -244,6 +246,54 @@ it.live(
       message('t-written:m2', 'current'),
     ]);
     expect(yield* files.exists(`${path}.staging`)).toBe(false);
+  }),
+);
+
+it.live(
+  'forming an offloaded thread publishes its source in the new form, and a read answers from that source',
+  Effect.fnUntraced(function* () {
+    const { runtime, raise, owner, home, projectId } = yield* setup();
+    const path = yield* raise('t-republished', 'old', join(home, String(projectId)));
+    const parts = yield* nativeOnlyParts;
+    expect(
+      yield* Effect.provide(evictThreadProjection({ threadId: 't-republished', path, parts, returning: true }), runtime),
+    ).toMatchObject({ outcome: 'evicted' });
+    const { db } = yield* Effect.provide(MachineStore, runtime);
+    const published = () =>
+      Effect.provide(
+        db.all<{ generation: string; form: string | null; origin: string }>(
+          sql`select generation, form, origin from thread_published_source where thread_id = 't-republished'`,
+        ),
+        runtime,
+      );
+    const [before] = yield* published();
+    yield* Effect.provide(
+      db.run(sql`insert into thread_message (thread_id, entry_id, position, appeared, role, occurred_at, text)
+        values ('t-republished', 't-republished:m', 1, 0, 'user', 0, 'hello')`),
+      runtime,
+    );
+    yield* Effect.provide(
+      db.run(sql`insert into thread_conversation (thread_id, through, seen) values ('t-republished', 1, 1)
+        on conflict (thread_id) do update set through = 1, seen = 1`),
+      runtime,
+    );
+    const forms = yield* owner();
+    const staged = yield* Effect.provide(forms.staged('t-republished', path), runtime);
+    expect((yield* Effect.provide(staged!.commit(false), runtime)).kind).toBe('formed');
+    const [after] = yield* published();
+    expect(after).toMatchObject({ form: dated.name, origin: 'form' });
+    expect(
+      yield* Effect.provide(
+        db.all(sql`select (select count(*) from thread_message where thread_id = 't-republished') as indexed, through, seen
+          from thread_conversation where thread_id = 't-republished'`),
+        runtime,
+      ),
+    ).toEqual([{ indexed: 1, through: 1, seen: 1 }]);
+    expect(after!.generation).not.toBe(before!.generation);
+    const reads = yield* Effect.provide(restedReads(kinds, home, parts.native.folds), runtime);
+    const events = yield* Effect.provide(reads.events('t-republished', { afterPosition: 0, head: 1, limit: 10 }), runtime);
+    expect(events?.map((row) => row.payload.entry)).toEqual([message('t-republished:m', 'current')]);
+    expect((yield* published())[0]!.generation).toBe(after!.generation);
   }),
 );
 

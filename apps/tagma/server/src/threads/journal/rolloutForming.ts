@@ -7,9 +7,10 @@ import { GateRefusal } from '../../platform/contract/wire/refusal.js';
 import { ReentrantCall } from '@runlith/held/failures';
 import { ThreadStorageFailed } from '@runlith/agent/thread/persisted';
 import { ThreadEntryKinds } from '@runlith/agent/transcript/kinds';
-import { threadRolloutForm } from '../store/journal.js';
+import { threadPublishedSource, threadRolloutForm } from '../store/journal.js';
 import {
   formRollout,
+  type FormSource,
   olderRollout,
   rolloutFormOf,
   RolloutUnformable,
@@ -20,7 +21,8 @@ import {
   type StageRollout,
 } from './rolloutEntryForms.js';
 import { eventless } from './rolloutStaging.js';
-import type { RolloutUnreadable } from './rolloutFile.js';
+import { RolloutUnreadable } from './rolloutFile.js';
+import type { SourcePublication } from './sourceFiles.js';
 import { openRollout, rolloutStateOf } from './rolloutForms.js';
 import type { JournalEntry } from './rolloutContext.js';
 
@@ -44,18 +46,42 @@ export type RolloutForms = Effect.Success<ReturnType<typeof makeRolloutForms>>;
 export const makeRolloutForms = Effect.fnUntraced(function* ({
   journal,
   stage,
+  publication,
 }: {
   readonly journal: JournalEntry;
   readonly stage: StageRollout;
+  readonly publication: SourcePublication;
 }) {
   const { db } = yield* MachineStore;
   const units = yield* MachineUnits;
   const kinds = yield* ThreadEntryKinds;
 
   const write: RolloutFormWrite = (operation, body) => units.write(operation, body);
+  const publishedOf = (threadId: string) =>
+    db
+      .select({ generation: threadPublishedSource.generation })
+      .from(threadPublishedSource)
+      .where(eq(threadPublishedSource.threadId, threadId))
+      .get();
+  const sources: FormSource = {
+    stage: Effect.fnUntraced(function* (threadId, path) {
+      if ((yield* publishedOf(threadId)) === undefined) return null;
+      const step = (yield* rolloutFormOf(db, threadId))?.step ?? null;
+      return yield* publication.stage({ canonical: path, candidate: { kind: 'current' }, form: step, origin: 'form' }).pipe(
+        Effect.provideService(ThreadEntryKinds, kinds),
+        Effect.catchTag('WorkerUnavailable', (cause) => Effect.fail(new RolloutUnreadable({ reason: 'io', path, message: cause.message }))),
+      );
+    }),
+    publishIn: Effect.fnUntraced(function* (unit, threadId, path, source) {
+      if ((yield* unit.run(publishedOf(threadId))) === undefined) return false;
+      yield* publication.publishIn(db, unit, threadId, path, source);
+      return true;
+    }),
+    discard: publication.discard,
+  };
 
   const formedHere = (threadId: string, path: string): Effect.Effect<void, RolloutFormFailure> =>
-    Effect.flatMap(formRollout(db, write, threadId, path, kinds, stage), (outcome) =>
+    Effect.flatMap(formRollout(db, write, threadId, path, kinds, stage, sources), (outcome) =>
       outcome.kind === 'refused' ? Effect.fail(outcome.refusal) : Effect.void,
     );
 
@@ -113,10 +139,10 @@ export const makeRolloutForms = Effect.fnUntraced(function* ({
           call: 'rolloutReads.form',
           cause: new Error(`The prepared rollout ${path} needs preparation again.`),
         });
-      yield* within(threadId, settledRollout(db, write, threadId, path, kinds).pipe(Effect.andThen(openRollout(path))));
+      yield* within(threadId, settledRollout(db, write, threadId, path, kinds, sources).pipe(Effect.andThen(openRollout(path))));
     }),
     staged: (threadId: string, path: string): Effect.Effect<RolloutStaged | null, RolloutFormFailure> =>
-      Effect.flatMap(stagedRollout(db, write, threadId, path, kinds, stage, true), (outcome) =>
+      Effect.flatMap(stagedRollout(db, write, threadId, path, kinds, stage, sources, true), (outcome) =>
         outcome.kind === 'refused' ? Effect.fail(outcome.refusal) : Effect.succeed(outcome.kind === 'staged' ? outcome : null),
       ),
     formedOpen: Effect.fnUntraced(function* (threadId: string, path: string) {

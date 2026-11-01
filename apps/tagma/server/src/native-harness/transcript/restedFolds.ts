@@ -9,7 +9,7 @@ import type { StoredFailure } from '../../platform/store/crossing.js';
 import type { Unit } from '../../platform/contract/service/units.js';
 import { wholeLinesAfter } from '../../threads/journal/rolloutFile.js';
 import { lineRead } from '../../threads/journal/restedReads.js';
-import { type RestedRollout, RestedRollouts, type TranscriptKey } from '../../threads/contract/service/rested.js';
+import { type PublishedSource, type RestedRollout, RestedRollouts, type TranscriptKey } from '../../threads/contract/service/rested.js';
 import type { Placed, Weighed } from './rows.js';
 import { takeTranscriptPage } from './rows.js';
 import { entryOf, ThreadEntryKinds, type ThreadEntryReader } from '@runlith/agent/transcript/kinds';
@@ -27,7 +27,7 @@ export type RestedTranscript = { readonly path: string; readonly entries: number
 
 const FOLD_CEILING_BYTES = 128 * 1024 * 1024;
 
-type Held = { readonly bytes: number; readonly key: TranscriptKey; touched: number } & (
+type Held = { readonly bytes: number; readonly source: PublishedSource; touched: number } & (
   | { readonly kind: 'history'; readonly history: ThreadHistory }
   | { readonly kind: 'compaction'; readonly summary: RestedCompaction }
 );
@@ -53,7 +53,7 @@ export const makeRestedFolds = Effect.gen(function* () {
         const done = yield* Deferred.make<void, StoredFailure>();
         building.set(key, done);
         const exit = yield* Effect.exit(
-          work.transcribe(kinds, rollout, rollout.key).pipe(
+          work.transcribe(kinds, rollout, rollout.key, { kind: 'published', source: rollout.source }).pipe(
             Effect.asVoid,
             Effect.mapError((cause) => new ThreadStorageFailed({ call: 'restedTranscript.build', cause })),
           ),
@@ -92,35 +92,41 @@ export const makeRestedFolds = Effect.gen(function* () {
 
   return {
     head: reads.head,
-    compaction: Effect.fn('ThreadTranscript.rested.compaction')(function* (threadId: string) {
-      const rollout = yield* reads.restedRollout(threadId);
-      if (rollout === null) return null;
-      const slot = `compaction:${threadId}`;
-      const cached = held.get(slot);
-      if (cached?.kind === 'compaction' && sameKey(cached.key, rollout.key)) {
-        cached.touched = clock += 1;
-        return cached.summary;
-      }
-      return yield* Effect.uninterruptible(
+    reading: reads.reading,
+    retaining: reads.retaining,
+    compaction: (threadId: string) =>
+      reads.reading(
+        threadId,
         Effect.gen(function* () {
-          const key = `${rollout.path}:${rollout.key.bytes}:${rollout.key.position}`;
-          const standing = compactions.get(key);
-          if (standing !== undefined) return yield* Deferred.await(standing);
-          const done = yield* Deferred.make<RestedCompaction, StoredFailure>();
-          compactions.set(key, done);
-          const exit = yield* Effect.exit(
-            work
-              .compaction(kinds, rollout)
-              .pipe(Effect.mapError((cause) => new ThreadStorageFailed({ call: 'restedCompaction.read', cause }))),
+          const rollout = yield* reads.restedRollout(threadId);
+          if (rollout === null) return null;
+          const slot = `compaction:${threadId}`;
+          const cached = held.get(slot);
+          if (cached?.kind === 'compaction' && sameSource(cached.source, rollout.source)) {
+            cached.touched = clock += 1;
+            return cached.summary;
+          }
+          return yield* Effect.uninterruptible(
+            Effect.gen(function* () {
+              const key = `${rollout.path}:${rollout.key.bytes}:${rollout.key.position}`;
+              const standing = compactions.get(key);
+              if (standing !== undefined) return yield* Deferred.await(standing);
+              const done = yield* Deferred.make<RestedCompaction, StoredFailure>();
+              compactions.set(key, done);
+              const exit = yield* Effect.exit(
+                work
+                  .compaction(kinds, rollout, { kind: 'published', source: rollout.source })
+                  .pipe(Effect.mapError((cause) => new ThreadStorageFailed({ call: 'restedCompaction.read', cause }))),
+              );
+              compactions.delete(key);
+              yield* Deferred.done(done, exit);
+              const summary = yield* exit;
+              keep(slot, { kind: 'compaction', summary, bytes: summary.bytes, source: rollout.source, touched: (clock += 1) });
+              return summary;
+            }),
           );
-          compactions.delete(key);
-          yield* Deferred.done(done, exit);
-          const summary = yield* exit;
-          keep(slot, { kind: 'compaction', summary, bytes: summary.bytes, key: rollout.key, touched: (clock += 1) });
-          return summary;
         }),
-      );
-    }),
+      ),
     transcript: Effect.fnUntraced(function* (threadId: string, tx?: Unit<'machine'>) {
       const rollout = yield* reads.restedRollout(threadId, tx);
       if (rollout === null) return null;
@@ -185,25 +191,30 @@ export const makeRestedFolds = Effect.gen(function* () {
         'restedTranscript.byId',
         async (observe) => (await scanned(kinds, transcript, JSON.stringify(entryId), (entry) => entry.id === entryId, true, observe))[0],
       ),
-    history: Effect.fnUntraced(function* (threadId: string, tx?: Unit<'machine'>) {
-      const rollout = yield* reads.restedRollout(threadId, tx);
-      if (rollout === null) return null;
-      const slot = `history:${threadId}`;
-      const cached = held.get(slot);
-      if (cached?.kind === 'history' && sameKey(cached.key, rollout.key)) {
-        cached.touched = clock += 1;
-        return cached.history;
-      }
-      const folded = yield* work
-        .history(kinds, rollout)
-        .pipe(Effect.mapError((cause) => new ThreadStorageFailed({ call: 'rolloutReads.history', cause })));
-      keep(slot, { kind: 'history', history: folded.history, bytes: folded.bytes, key: rollout.key, touched: (clock += 1) });
-      return folded.history;
-    }),
+    history: (threadId: string, tx?: Unit<'machine'>) => {
+      const readHistory = Effect.gen(function* () {
+        const rollout = yield* reads.restedRollout(threadId, tx);
+        if (rollout === null) return null;
+        const slot = `history:${threadId}`;
+        const cached = held.get(slot);
+        if (cached?.kind === 'history' && sameSource(cached.source, rollout.source)) {
+          cached.touched = clock += 1;
+          return cached.history;
+        }
+        const folded = yield* work
+          .history(kinds, rollout, { kind: 'published', source: rollout.source })
+          .pipe(Effect.mapError((cause) => new ThreadStorageFailed({ call: 'rolloutReads.history', cause })));
+        keep(slot, { kind: 'history', history: folded.history, bytes: folded.bytes, source: rollout.source, touched: (clock += 1) });
+        return folded.history;
+      });
+      return tx === undefined ? reads.reading(threadId, readHistory) : readHistory;
+    },
   };
 });
 
 const sameKey = (one: TranscriptKey, other: TranscriptKey): boolean => one.bytes === other.bytes && one.position === other.position;
+const sameSource = (one: PublishedSource, other: PublishedSource): boolean =>
+  one.generation === other.generation && one.form === other.form && one.fingerprint === other.fingerprint && sameKey(one, other);
 
 async function readAt(handle: FileHandle, path: string, start: number, length: number, observe: ReadRollout): Promise<Buffer> {
   const buffer = Buffer.alloc(length);
