@@ -15,7 +15,14 @@ export const rebasePrepared = Effect.fn('prepared.rebase')(function* <Caller>(
   head: string,
 ): Effect.fn.Return<PreparedLanding<Caller> | null, OwnGitFailed> {
   const { built } = prepared;
-  if (prepared.merge !== undefined || prepared.beside !== undefined || built.base === null || built.base === head) return null;
+  if (
+    prepared.merge !== undefined ||
+    prepared.beside !== undefined ||
+    built.base === null ||
+    built.base === head ||
+    (built.derived?.length ?? 0) > 0
+  )
+    return null;
   const base = built.base;
   const between = (to: string) =>
     Effect.map(

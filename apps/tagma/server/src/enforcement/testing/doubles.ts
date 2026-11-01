@@ -23,7 +23,7 @@ export const NO_RULES: RuleChecks['Service'] = {
 
 export const describedBy = (inspections: ReadonlyMap<string, Descriptor>): Configs['Service'] =>
   Configs.of({
-    read: () => Effect.succeed({ inspections, format: [], footprint: [] }),
+    read: () => Effect.succeed({ inspections, format: [], derive: [], footprint: [] }),
     carried: ({ commits }) => Effect.succeed(new Set(commits)),
   });
 

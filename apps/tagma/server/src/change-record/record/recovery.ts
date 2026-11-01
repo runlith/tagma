@@ -115,7 +115,7 @@ export const recoverCommands = Effect.fn('ChangeRecord.recoverCommands')(functio
             lives.restore(
               one.checkout,
               one.threadId,
-              { id: one.id, role: one.role, signatures: one.signatures, team: one.team },
+              { id: one.id, role: one.role, signatures: one.signatures, team: one.team, line: one.line },
               one.startedAt ?? one.openedAt,
               one.endedAt ?? restartAt,
             ),
@@ -165,6 +165,7 @@ export const recoverCommands = Effect.fn('ChangeRecord.recoverCommands')(functio
             reason: RESTART_REASON,
             team: null,
             digest: now.present ? now.digest : ABSENT_DIGEST,
+            commandLine: window.line,
             at: restartAt,
           });
         }

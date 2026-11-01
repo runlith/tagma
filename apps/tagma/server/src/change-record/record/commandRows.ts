@@ -473,6 +473,7 @@ const written = Effect.fn('CommandRows.written')(function* (
             projectId: target.projectId,
             origin: deleted ? 'delete' : 'write',
             provenance: !deleted && ready.rewritten ? 'command-whole' : 'command',
+            commandLine: entry.life.command.line,
             mode: transition.tail ? modeOf(move) : null,
             movedFrom: transition.tail && !deleted ? (renames.get(move.name) ?? null) : null,
             hunk: ready.hunk,

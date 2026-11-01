@@ -42,6 +42,7 @@ export type WindowOpening = {
   readonly role: Role;
   readonly signatures: readonly (string | null)[];
   readonly team: string | null;
+  readonly line?: string | null;
 };
 
 export type LifeSpan = { readonly start: number | null; readonly end: number | null };
@@ -321,6 +322,7 @@ export const makeCommandJournal = Effect.fnUntraced(function* ({ walks }: { read
               reason: commandUnattributed.reason,
               team: commandUnattributed.team,
               digest: commandUnattributed.digest,
+              commandLine: commandUnattributed.commandLine,
               at: commandUnattributed.at,
             })
             .from(commandUnattributed)

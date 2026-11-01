@@ -9,6 +9,7 @@ export type Command = {
   readonly role: Role;
   readonly signatures: readonly (string | null)[];
   readonly team: string | null;
+  readonly line: string | null;
 };
 
 export type Life = {
@@ -30,7 +31,7 @@ export type Claim = (
   | { readonly kind: 'team'; readonly root: string }
 ) & { readonly basis: Basis; readonly counted: boolean; readonly sole: boolean };
 
-export const UNKNOWN_COMMAND: Command = { id: null, role: WRITER, signatures: [], team: null };
+export const UNKNOWN_COMMAND: Command = { id: null, role: WRITER, signatures: [], team: null, line: null };
 
 type Instant = { readonly threadId: string; readonly after: string; readonly from: number; to: number | null };
 

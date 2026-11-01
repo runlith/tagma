@@ -112,10 +112,7 @@ export const prepareChange = Effect.fn('prepared.prepare')(function* <Row extend
           yield* releaseIndex(index);
           return { _tag: 'idle' } as const;
         }
-        const shaping =
-          merge === undefined
-            ? yield* shapeBuilt(landing, built, shape)
-            : { _tag: 'shaped' as const, finished: { ...built, from: built.tree, reshaped: [], formatSkipped: false, declaration: [] } };
+        const shaping = yield* shapeBuilt(landing, built, shape, merge !== undefined);
         if (shaping._tag === 'emptied') {
           yield* releaseIndex(index);
           return shaping;
@@ -140,6 +137,7 @@ export const prepareChange = Effect.fn('prepared.prepare')(function* <Row extend
               reshaped: finished.reshaped,
               formatSkipped: finished.formatSkipped,
               declaration: finished.declaration,
+              derived: finished.derived,
             },
             index,
             places,

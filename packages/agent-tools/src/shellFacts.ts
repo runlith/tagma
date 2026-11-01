@@ -607,7 +607,7 @@ function partOf(one: ShellCommand, cwd: string | null): CommandPart {
 
 export function shellFacts(command: string, cwd: string): CommandFacts {
   const commands = shellCommands(command);
-  if (commands === null || commands.length === 0) return { readsOnly: false, parts: [UNKNOWN] };
+  if (commands === null || commands.length === 0) return { readsOnly: false, parts: [UNKNOWN], line: command };
   const parts: CommandPart[] = [];
   let at: string | null = cwd;
   for (const [index, one] of commands.entries()) {
@@ -625,5 +625,5 @@ export function shellFacts(command: string, cwd: string): CommandFacts {
     }
     parts.push(partOf(one, at));
   }
-  return { readsOnly: !RUNS.test(command) && commands.every(shellPartReads), parts };
+  return { readsOnly: !RUNS.test(command) && commands.every(shellPartReads), parts, line: command };
 }

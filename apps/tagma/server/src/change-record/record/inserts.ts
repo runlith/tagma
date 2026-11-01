@@ -18,6 +18,7 @@ export type RowFact = {
   readonly projectId: number;
   readonly origin: 'edit' | 'write' | 'delete';
   readonly provenance?: NonNullable<typeof workspaceChange.$inferSelect.provenance>;
+  readonly commandLine?: string | null;
   readonly mode: string | null;
   readonly hunk: LineHunk | null;
   readonly beforeHash: string | null;
@@ -59,6 +60,7 @@ const ROW_COLUMNS = [
   workspaceChange.state,
   workspaceChange.origin,
   workspaceChange.provenance,
+  workspaceChange.commandLine,
   workspaceChange.mode,
   workspaceChange.firstLine,
   workspaceChange.lines,
@@ -86,6 +88,7 @@ const valuesOf = (work: RowHolder, runId: string | null, head: string | null, st
   state,
   row.origin,
   row.provenance ?? 'typed',
+  row.commandLine ?? null,
   row.mode,
   row.hunk?.firstLine ?? null,
   row.hunk?.newLines ?? null,

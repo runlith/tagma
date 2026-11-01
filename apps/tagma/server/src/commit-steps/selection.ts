@@ -11,6 +11,8 @@ const REGULAR = new Set(['100644', '100755']);
 
 const ABSENT = '000000';
 
+export const outsideGraph = (path: string, directory: string): boolean => path !== directory && !path.startsWith(`${directory}/`);
+
 const nul = (paths: readonly string[]): string => paths.map((path) => `${path}\0`).join('');
 
 export const candidatesOf = Effect.fn('commitSteps.candidates')(function* (
@@ -45,7 +47,7 @@ export const candidatesOf = Effect.fn('commitSteps.candidates')(function* (
   for (const [entry, path] of raw) {
     const [, newMode = '', , sha = ''] = entry.slice(1).split(' ');
     if (path === '' || newMode === ABSENT || !REGULAR.has(newMode) || binary.has(path)) continue;
-    if (path === graphDirectory || path.startsWith(`${graphDirectory}/`)) continue;
+    if (!outsideGraph(path, graphDirectory)) continue;
     found.push({ path, entry: { sha, mode: newMode === '100755' ? '100755' : '100644' } });
   }
   return found;
@@ -55,15 +57,20 @@ type Pattern = { readonly glob: Bun.Glob; readonly base: boolean };
 
 export type Selector = { readonly kept: readonly Pattern[]; readonly dropped: readonly Pattern[] };
 
-const patternOf = (text: string): Pattern => ({ glob: new Bun.Glob(text), base: !text.includes('/') });
+const patternOf = (text: string, rooted: boolean): Pattern => ({ glob: new Bun.Glob(text), base: !rooted && !text.includes('/') });
 
 const hits = (patterns: readonly Pattern[], path: string): boolean =>
   patterns.some((pattern) => pattern.glob.match(pattern.base ? path.slice(path.lastIndexOf('/') + 1) : path));
 
-export const selectorOf = (command: FormatCommand): Selector => ({
-  kept: command.files.filter((text) => !text.startsWith('!')).map(patternOf),
-  dropped: command.files.filter((text) => text.startsWith('!')).map((text) => patternOf(text.slice(1))),
+export const selectionOf = (files: readonly string[], rooted = false): Selector => ({
+  kept: files.filter((text) => !text.startsWith('!')).map((text) => patternOf(text, rooted)),
+  dropped: files.filter((text) => text.startsWith('!')).map((text) => patternOf(text.slice(1), rooted)),
 });
+
+export const selectorOf = (command: FormatCommand): Selector => selectionOf(command.files);
+
+export const selectedPaths = (selector: Selector, paths: readonly string[]): readonly string[] =>
+  paths.filter((path) => hits(selector.kept, path) && !hits(selector.dropped, path));
 
 export const globbed = (selector: Selector, candidates: readonly Candidate[]): readonly string[] =>
   candidates.filter((one) => hits(selector.kept, one.path) && !hits(selector.dropped, one.path)).map((one) => one.path);

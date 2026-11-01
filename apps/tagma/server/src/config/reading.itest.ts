@@ -55,11 +55,15 @@ layer(world, { excludeTestServices: true })('the config of a judged version', (i
           'checks/shared.ts': `import { names } from './names';\nexport const refused = names;\n`,
           'checks/names.ts': `export const names = ['react'];\n`,
           'tagma.config.ts': [
-            `import { defineConfig, Format, Loading } from '@runlith/tagma/rules';`,
+            `import { defineConfig, Derive, Format, Loading } from '@runlith/tagma/rules';`,
             `import { refused } from './checks/shared';`,
             `export default defineConfig({`,
             `  inspections: { 'domain-no-ui': Loading.forbid({ from: ['packages/domain'], refuses: refused }) },`,
             `  format: { oxfmt: Format.command({ run: ['oxfmt'], files: ['**/*.ts'] }) },`,
+            `  derive: {`,
+            `    lock: Derive.command({ paths: ['bun.lock'], run: ['bun', 'install'] }),`,
+            `    docs: Derive.command({ paths: ['site/dist/**', 'site/*.generated.ts'], run: ['bun', 'run', 'build'] }),`,
+            `  },`,
             `});`,
           ].join('\n'),
         });
@@ -71,6 +75,10 @@ layer(world, { excludeTestServices: true })('the config of a judged version', (i
         });
         expect(first?.format).toEqual([
           { key: 'oxfmt', command: { run: ['oxfmt'], files: ['**/*.ts'], ok: [0], reads: 'tree', on: 'commit' } },
+        ]);
+        expect(first?.derive).toEqual([
+          { key: 'lock', command: { paths: ['bun.lock'], run: ['bun', 'install'] } },
+          { key: 'docs', command: { paths: ['site/dist/**', 'site/*.generated.ts'], run: ['bun', 'run', 'build'] } },
         ]);
         expect(spans.count()).toBe(1);
         yield* reading(root).pipe(Effect.withTracer(spans.tracer));
@@ -115,6 +123,10 @@ layer(world, { excludeTestServices: true })('the config of a judged version', (i
       yield* land({
         'checks/declared.ts': `export const declared = {\n  format: {\n    fmt: { run: [], files: ['**'] },\n  },\n};\n`,
         'tagma.config.ts': `import { declared } from './checks/declared';\nexport default declared;\n`,
+      });
+      expect((yield* Effect.flip(reading(root))).message).toStartWith('config-invalid: checks/declared.ts:3:');
+      yield* land({
+        'checks/declared.ts': `export const declared = {\n  derive: {\n    lock: { paths: ['../bun.lock'], run: ['bun', 'install'] },\n  },\n};\n`,
       });
       expect((yield* Effect.flip(reading(root))).message).toStartWith('config-invalid: checks/declared.ts:3:');
     }),

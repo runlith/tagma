@@ -16,6 +16,7 @@ import type { Judged } from './holdings.js';
 import type { ChangeTaking } from '../wire/handover.js';
 import type { Walks } from '../../lines/walks.js';
 import type { Landed } from '../../lines/landed.js';
+import type { DeriveCommand } from '../wire/derivation.js';
 
 type StoreShape = Context.Service.Shape<typeof MachineStore>;
 
@@ -27,6 +28,7 @@ export type ChangeInput = {
   readonly paths?: readonly string[];
   readonly whole?: readonly string[];
   readonly withoutFormat?: boolean;
+  readonly derive?: readonly DeriveCommand[];
   readonly taking: readonly ChangeTaking[];
 };
 
@@ -63,6 +65,7 @@ export type PreparedBuilt = {
   readonly reshaped: readonly Reshaped[];
   readonly formatSkipped: boolean;
   readonly declaration: readonly string[];
+  readonly derived?: readonly string[];
 };
 
 export type PreparedMerge = {

@@ -338,6 +338,7 @@ layer(Layer.mergeAll(commandWalksLayer, BunFileSystem.layer, checkoutFixture), {
             role: WRITER,
             signatures: [],
             team: 'tree',
+            line: 'bun install',
           });
           const move = {
             name: 'src/a.ts',
@@ -360,10 +361,10 @@ layer(Layer.mergeAll(commandWalksLayer, BunFileSystem.layer, checkoutFixture), {
           yield* restarted.restart();
           yield* restarted.commands.decided({ projectId: w.projectId, threadId: THEIRS });
           expect(restarted.record.unattributed({ projectId: w.projectId, threadId: THEIRS })).toMatchObject([
-            { path: 'src/a.ts', reason: 'team', team: 'tree', digest: contentDigest(after) },
+            { path: 'src/a.ts', reason: 'team', team: 'tree', digest: contentDigest(after), commandLine: 'bun install' },
           ]);
           expect((yield* journal.unattributed()).filter((row) => row.threadId === THEIRS)).toMatchObject([
-            { path: 'src/a.ts', reason: 'team', team: 'tree', digest: contentDigest(after) },
+            { path: 'src/a.ts', reason: 'team', team: 'tree', digest: contentDigest(after), commandLine: 'bun install' },
           ]);
         }),
       ),
@@ -385,6 +386,7 @@ layer(Layer.mergeAll(commandWalksLayer, BunFileSystem.layer, checkoutFixture), {
               reason: OVERLAP_REASON,
               team: null,
               digest: null,
+              commandLine: null,
               at,
             });
             const names = Array.from({ length: 5000 }, (_, at) => `gen/${at}.ts`);

@@ -81,6 +81,8 @@ sources:
     ref: apps/tagma/server/drizzle/20261028212635_command_observed_digest/migration.sql
   - kind: file
     ref: apps/tagma/server/drizzle/20261028212635_command_observed_digest/snapshot.json
+  - kind: file
+    ref: apps/tagma/server/drizzle/20261101160000_change_command_line/migration.sql
 ---
 Line authorship in a checkout.
 
