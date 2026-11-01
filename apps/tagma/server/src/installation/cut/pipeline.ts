@@ -178,7 +178,9 @@ export const cutRelease = Effect.fn('installation.cutRelease')(function* ({
       Effect.mapError((trouble) => refusal('runtime', trouble.detail, trouble.unblock)),
     ),
   );
-  const signer = yield* releaseIdentity.pipe(Effect.mapError((failure) => refusal('signing', failure.detail, failure.unblock)));
+  const signer = yield* releaseIdentity(composition.signing.team).pipe(
+    Effect.mapError((failure) => refusal('signing', failure.detail, failure.unblock)),
+  );
 
   const manifests = [
     ...(yield* files.readDirectory(packages).pipe(Effect.mapError(unreadable(packages)))).map((name) =>

@@ -318,6 +318,7 @@ export const makeReleaseChannel = Effect.fnUntraced(function* (place: ChannelPla
     const url = feedUrl;
     if (url === null) return;
     const read = yield* Effect.result(readFeed(client, url));
+    if (feedUrl !== url) return;
     readAt = stamp();
     readFrom = url;
     if (read._tag === 'Success') {
@@ -534,11 +535,14 @@ export const makeReleaseChannel = Effect.fnUntraced(function* (place: ChannelPla
     Stream.runForEach(Stream.changes(feeds), (url) => {
       feedUrl = url.trim() === '' ? null : url;
       if (feedUrl !== null) return refresh();
-      feed = null;
-      issue = null;
-      readFrom = null;
-      keep();
-      return shift();
+      return Effect.gen(function* () {
+        feed = null;
+        issue = null;
+        readFrom = null;
+        yield* measureBack;
+        keep();
+        yield* shift();
+      });
     }),
   );
   yield* Effect.forkScoped(Effect.forever(Effect.andThen(Effect.sleep(FEED_EVERY), refresh())));

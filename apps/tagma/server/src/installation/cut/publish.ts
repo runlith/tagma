@@ -5,7 +5,7 @@ import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import * as BunPath from '@effect/platform-bun/BunPath';
 import { Git, gitLayer } from '@runlith/git/Git';
 import { refusalLines } from '@runlith/agent/tool/refusal';
-import { compareReleases, type Feed, FEED_FILE, tagOf } from '../contract/wire/feed.js';
+import { compareReleases, type Feed, FEED_FILE, type FeedRelease, newestOf, tagOf } from '../contract/wire/feed.js';
 import { dataDirectory } from '../contract/wire/layout.js';
 import { developerTeam, releaseIdentity } from '../setup/signing.js';
 import type { Composition, CutMachine, Publisher, PublishTrouble } from './descriptor.js';
@@ -55,6 +55,13 @@ const unreadableIn = (step: string) => (path: string) => (error: PlatformError.P
   refused(step, `${path} could not be read: ${error.reason._tag}`);
 
 type Standing = { readonly record: ReleaseRecord; readonly home: string };
+
+const sameArchives = (offered: FeedRelease['platforms'], cut: FeedRelease['platforms']): boolean =>
+  Object.keys(offered).length === Object.keys(cut).length &&
+  Object.entries(cut).every(([platform, one]) => {
+    const there = offered[platform];
+    return there?.archive === one.archive && there.sha256 === one.sha256 && there.size === one.size;
+  });
 
 const cutStanding = Effect.fnUntraced(function* (cut: string): Effect.fn.Return<Standing, PublishRefused, FileSystem.FileSystem> {
   const files = yield* FileSystem.FileSystem;
@@ -161,12 +168,13 @@ export const publishRelease = (
       const { commit, tagged } = yield* checkoutCommit(checkout, stood.record);
       const latest = yield* publishedBy(publisher).pipe(Effect.mapError(troubled('feed')));
       const tags = yield* checkoutTags(checkout).pipe(Effect.mapError(troubled('tag')));
-      const placed = latest?.releases.some((one) => one.release === release) ?? false;
-      if (!placed) {
+      const newest = latest === null ? null : newestOf(latest);
+      const placed = newest !== null && newest.release === release ? newest : null;
+      if (placed === null) {
         if (tagged) {
           return yield* refused(
             'version',
-            `${tag} stands in ${checkout}, so ${release} was published from it once, and ${publisher.place} offers no ${release} now; a number is published once`,
+            `${tag} stands in ${checkout}, so ${release} was published from it once, and ${publisher.place} does not offer it as its newest release now; a number is published once`,
             [RECUT],
           );
         }
@@ -186,8 +194,16 @@ export const publishRelease = (
 
       const { record, home } = yield* notarizedCut(notary, cut, stood);
       const address = (name: string): string => publisher.address(release, name);
+      const entry = feedEntry(record, address);
+      if (placed !== null && !sameArchives(placed.platforms, entry.platforms)) {
+        return yield* refused(
+          'feed',
+          `${publisher.place} already offers ${release} with other archives than this cut carries, and bytes under a published number are never swapped`,
+          [RECUT],
+        );
+      }
       const feed: Feed = {
-        releases: [feedEntry(record, address), ...(latest?.releases ?? []).filter((one) => compareReleases(one.release, release) < 0)],
+        releases: [entry, ...(latest?.releases ?? []).filter((one) => compareReleases(one.release, release) < 0)],
       };
       const shipped = [...Object.values(record.platforms).map((one) => one.archive), ...Object.values(record.images)];
       const landed = yield* publisher.publish({ record, home, files: shipped, feed, notes }).pipe(Effect.mapError(troubled('publish')));
@@ -223,7 +239,7 @@ const machine = Layer.mergeAll(gitLayer.pipe(Layer.provide(spawning)), spawning,
 type Told = (code: string, reason: string, unblock?: readonly string[]) => never;
 
 const notaryOf = Effect.fnUntraced(function* (composition: Composition, told: Told): Effect.fn.Return<Notary> {
-  const signer = yield* Effect.result(releaseIdentity.pipe(Effect.provide(machine)));
+  const signer = yield* Effect.result(releaseIdentity(composition.signing.team).pipe(Effect.provide(machine)));
   if (signer._tag === 'Failure') return told('signing-refused', signer.failure.detail, signer.failure.unblock);
   const team = developerTeam(signer.success);
   if (team === null) return told('signing-refused', `"${signer.success.name}" names no Developer ID team`);

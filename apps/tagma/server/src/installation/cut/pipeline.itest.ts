@@ -86,7 +86,7 @@ it.live(
         entries: { cli: join(source, 'src/composition/release/cli.ts'), server: join(source, 'src/composition/release/server.ts') },
         client: { root: join(checkout, 'apps/tagma/app'), config: null },
         brand: { assets: join(checkout, 'apps/tagma/desktop/assets') },
-        signing: { notary: 'test' },
+        signing: { team: null, notary: 'test' },
         plugins: [],
         feed: null,
         publisher,

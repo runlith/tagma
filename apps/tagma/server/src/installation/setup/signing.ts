@@ -261,9 +261,13 @@ const DEVELOPER_ID = /^Developer ID Application: .+ \(([A-Z0-9]{10})\)$/;
 
 export const developerTeam = (identity: SigningIdentity): string | null => DEVELOPER_ID.exec(identity.name)?.[1] ?? null;
 
-export const releaseIdentity: Effect.Effect<SigningIdentity, SigningRefused, Machine> = Effect.gen(function* () {
+export const releaseIdentity = Effect.fn('installation.releaseIdentity')(function* (
+  team: string | null,
+): Effect.fn.Return<SigningIdentity, SigningRefused, Machine> {
   const keychain = yield* loginKeychain;
-  const rows = (yield* identities(keychain)).filter((row) => DEVELOPER_ID.test(row.name));
+  const rows = (yield* identities(keychain)).filter(
+    (row) => DEVELOPER_ID.test(row.name) && (team === null || DEVELOPER_ID.exec(row.name)?.[1] === team),
+  );
   const usable = rows.filter((row) => row.trouble === null);
   const create = 'Xcode → Settings → Apple Accounts → the team → Manage Certificates → + → Developer ID Application';
   if (usable.length === 0) {
@@ -271,7 +275,7 @@ export const releaseIdentity: Effect.Effect<SigningIdentity, SigningRefused, Mac
     return yield* Effect.fail(
       refused(
         broken.length === 0
-          ? `no "Developer ID Application" identity stands in '${keychain}', and a release is signed with Developer ID so macOS opens it once Apple notarizes it`
+          ? `no "Developer ID Application" identity${team === null ? '' : ` of team ${team}`} stands in '${keychain}', and a release is signed with Developer ID so macOS opens it once Apple notarizes it`
           : `no "Developer ID Application" identity in '${keychain}' can sign: ${broken.join('; ')}`,
         [`import the backup .p12 of the Developer ID Application identity into '${keychain}' with Keychain Access`, create],
       ),
@@ -282,7 +286,10 @@ export const releaseIdentity: Effect.Effect<SigningIdentity, SigningRefused, Mac
     return yield* Effect.fail(
       refused(
         `Developer ID identities of ${teams.size} teams stand in '${keychain}' (${usable.map((row) => `"${row.name}"`).join(', ')}), and every release is signed by one team — another one makes macOS ask again for every permission it gave Tagma`,
-        [`keep the identity of the team that signs Tagma and remove the others from '${keychain}' with Keychain Access`],
+        [
+          'name the team that signs this distribution in its descriptor’s signing',
+          `keep the identity of the team that signs Tagma and remove the others from '${keychain}' with Keychain Access`,
+        ],
       ),
     );
   }

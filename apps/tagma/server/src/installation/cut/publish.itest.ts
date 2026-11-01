@@ -25,12 +25,12 @@ const git = (args: readonly string[]) => Bun.spawnSync(['git', ...args], { stdou
 const said = (args: readonly string[]) => git(args).stdout.toString().trim();
 const sha = (bytes: Uint8Array): string => createHash('sha256').update(bytes).digest('hex');
 
-const cutInto = (at: string, commit: string, release: string): void => {
+const cutInto = (at: string, commit: string, release: string, made = 'the archive'): void => {
   rmSync(at, { recursive: true, force: true });
   mkdirSync(join(at, MAPS), { recursive: true });
   writeFileSync(join(at, MAPS, 'http.js.map'), `{"release":"${release}"}`);
   const archive = `tagma-${release}-darwin-arm64.tar.gz`;
-  const bytes = new TextEncoder().encode(`the archive of ${release}\n`);
+  const bytes = new TextEncoder().encode(`${made} of ${release}\n`);
   writeFileSync(join(at, archive), bytes);
   writeFileSync(join(at, `Tagma-${release}-arm64.dmg`), `the dmg of ${release}\n`);
   const record: ReleaseRecord = {
@@ -73,7 +73,7 @@ const shelf = () => {
 };
 
 it.live(
-  'a descriptor publisher receives the notarized files and the feed with the release first, the checkout is tagged, and a number not above the published is refused',
+  'a descriptor publisher receives the notarized files and the feed with the release first, the checkout is tagged, a repeat of the newest is placed again, and other bytes under it, an older or a lower number are refused',
   () =>
     Effect.gen(function* () {
       const checkout = join(scratch, 'checkout');
@@ -92,16 +92,32 @@ it.live(
       const first = commit('feat: first');
       cutInto(place.cut, first, '0.2.0');
       expect((yield* publish())._tag).toBe('Success');
-      cutInto(place.cut, commit('fix: second'), '0.2.1');
+      const secondCommit = commit('fix: second');
+      cutInto(place.cut, secondCommit, '0.2.1');
       const second = yield* publish();
+      const again = yield* publish();
+      cutInto(place.cut, secondCommit, '0.2.1', 'other bytes');
+      const swapped = yield* publish();
+      cutInto(place.cut, first, '0.2.0');
+      const older = yield* publish();
       cutInto(place.cut, commit('fix: behind'), '0.1.9');
       const behind = yield* publish();
 
       expect(placed.map(({ present }) => present)).toEqual([
         [true, true],
         [true, true],
+        [true, true],
       ]);
-      expect(placed.map(({ publication }) => publication.record.notarized)).toEqual([true, true]);
+      expect(placed.map(({ publication }) => [publication.record.release, publication.record.notarized])).toEqual([
+        ['0.2.0', true],
+        ['0.2.1', true],
+        ['0.2.1', true],
+      ]);
+      expect([again._tag, swapped._tag === 'Failure' && swapped.failure.step, older._tag === 'Failure' && older.failure.step]).toEqual([
+        'Success',
+        'feed',
+        'version',
+      ]);
       expect(placed[1]?.publication.feed.releases.map((one) => [one.release, one.platforms['darwin-arm64']?.archive])).toEqual([
         ['0.2.1', 'https://shelf.test/0.2.1/tagma-0.2.1-darwin-arm64.tar.gz'],
         ['0.2.0', 'https://shelf.test/0.2.0/tagma-0.2.0-darwin-arm64.tar.gz'],

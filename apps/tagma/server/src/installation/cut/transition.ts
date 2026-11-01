@@ -206,7 +206,7 @@ export const transitionCommand = Effect.fnUntraced(function* (given: readonly st
   const staged = yield* Effect.gen(function* () {
     const stores = yield* storesOf(composition);
     const irreversible = irreversibleOf(number, stores, { stores: before.success.stores, changes: before.success.irreversible });
-    const signer = yield* releaseIdentity.pipe(
+    const signer = yield* releaseIdentity(composition.signing.team).pipe(
       Effect.mapError((failure) => new ReleaseRefused({ step: 'signing', detail: failure.detail, log: '', unblock: failure.unblock })),
     );
     const target = machineTarget();

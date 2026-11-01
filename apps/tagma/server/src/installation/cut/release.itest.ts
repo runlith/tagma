@@ -106,7 +106,7 @@ const refusalOf = (where: ReturnType<typeof checkout>) =>
       },
       client: { root: join(where.root, 'apps/tagma/app'), config: null },
       brand: { assets: join(where.root, 'apps/tagma/desktop/assets') },
-      signing: { notary: 'test' },
+      signing: { team: null, notary: 'test' },
       plugins: [],
       feed: null,
       publisher: null,

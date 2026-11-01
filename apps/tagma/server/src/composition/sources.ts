@@ -14,7 +14,7 @@ export const sourceDistribution = (entries: Distribution['entries'], conditions:
   entries,
   client: { root: join(product, 'app'), config: null },
   brand: { assets: join(product, 'desktop', 'assets') },
-  signing: { notary: 'tagma-notary' },
+  signing: { team: null, notary: 'tagma-notary' },
   plugins: [],
   feed: null,
   publisher: null,

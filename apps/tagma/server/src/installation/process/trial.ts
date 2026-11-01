@@ -1,5 +1,5 @@
 import { Database } from 'bun:sqlite';
-import { constants, copyFileSync, existsSync, mkdtempSync, realpathSync, rmSync, statSync } from 'node:fs';
+import { constants, copyFileSync, existsSync, mkdtempSync, readdirSync, realpathSync, rmSync, statSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 import { Data, Effect, Option, Predicate, Result, Schema } from 'effect';
 import { type Words, wordsSchema } from '../../platform/contract/wire/refusal.js';
@@ -24,7 +24,22 @@ export type TrialPlace = {
   readonly installRoot: string;
   readonly release: string | undefined;
   readonly files: readonly string[];
+  readonly stores: string | null;
 };
+
+const DATABASE = '.sqlite';
+
+const databasesIn = (directory: string | null, suffix: string): readonly string[] =>
+  directory === null || !existsSync(directory)
+    ? []
+    : readdirSync(directory)
+        .filter((name) => name.endsWith(`${DATABASE}${suffix}`))
+        .sort()
+        .map((name) => join(directory, name.slice(0, name.length - suffix.length)));
+
+const covered = (place: TrialPlace): readonly string[] => [...place.files, ...databasesIn(place.stores, KEPT)];
+
+const standing = (place: TrialPlace): readonly string[] => [...place.files, ...databasesIn(place.stores, '')];
 
 export class TrialRefused extends Data.TaggedError('TrialRefused')<{ readonly detail: string; readonly words?: Words }> {}
 
@@ -90,7 +105,7 @@ export const arrive = Effect.fn('Trial.arrive')(function* (place: TrialPlace) {
   if (record === null) return 'serve' as const;
   const current = currentVersion(installRoot);
   if (record.to !== version) {
-    if (record.ended !== null && current !== record.to) yield* droppedAll(place.files);
+    if (record.ended !== null && current !== record.to) yield* droppedAll(covered(place));
     return 'serve' as const;
   }
   if (current !== version) return 'serve' as const;
@@ -101,7 +116,7 @@ export const arrive = Effect.fn('Trial.arrive')(function* (place: TrialPlace) {
 });
 
 const returnedAll = (place: TrialPlace): Effect.Effect<AttemptEnd['data']> =>
-  Effect.map(Effect.result(forEachFile(place.files, returned)), (result) => {
+  Effect.map(Effect.result(forEachFile(covered(place), returned)), (result) => {
     if (Result.isSuccess(result)) return 'restored';
     console.error(`[tagma] the data of the failed attempt could not be returned: ${result.failure.path}: ${result.failure.reason}`);
     return 'unrestored';
@@ -154,7 +169,7 @@ const settledOn = Effect.fnUntraced(function* (place: TrialPlace, record: Attemp
   const { installRoot } = place;
   if (end.data !== 'unrestored' && record.from !== null && currentVersion(installRoot) === record.to) swapCurrent(installRoot, record.from);
   writeAttempt(installRoot, { ...record, ended: end });
-  if (end.data !== 'unrestored') yield* droppedAll(place.files);
+  if (end.data !== 'unrestored') yield* droppedAll(covered(place));
   console.error(`[tagma] the attempt on ${record.to} ended before its door opened (${end.data}): ${end.detail}`);
 });
 
@@ -164,19 +179,19 @@ export const rollBack = Effect.fn('Trial.rollBack')(function* (place: TrialPlace
   if (version === null || record === null || record.to !== version || currentVersion(place.installRoot) !== version) return;
   if (record.ended === null) {
     const data = record.copied ? yield* returnedAll(place) : 'untouched';
-    return yield* settledOn(place, record, { detail, data, words, left: data === 'unrestored' ? leftAs(place.files) : undefined });
+    return yield* settledOn(place, record, { detail, data, words, left: data === 'unrestored' ? leftAs(covered(place)) : undefined });
   }
   if (record.ended.data !== 'unrestored') return;
   const ended = { detail: record.ended.detail, words: record.ended.words };
-  if (record.ended.left !== leftAs(place.files) && (yield* servedByFrom(place.files)))
+  if (record.ended.left !== leftAs(covered(place)) && (yield* servedByFrom(covered(place))))
     return yield* settledOn(place, record, { ...ended, data: 'kept' });
   const data = yield* returnedAll(place);
   if (data === 'restored') yield* settledOn(place, record, { ...ended, data });
-  else writeAttempt(place.installRoot, { ...record, ended: { ...ended, data, left: leftAs(place.files) } });
+  else writeAttempt(place.installRoot, { ...record, ended: { ...ended, data, left: leftAs(covered(place)) } });
 });
 
 const copiedAll = (place: TrialPlace): Effect.Effect<void, TrialRefused> =>
-  forEachFile(place.files, kept).pipe(
+  forEachFile(standing(place), kept).pipe(
     Effect.mapError(
       (failure) =>
         new TrialRefused({
@@ -193,7 +208,7 @@ export const enterTrial = Effect.fn('Trial.enter')(function* (place: TrialPlace)
   if (version === null || record === null || record.to !== version || record.ended !== null || currentVersion(installRoot) !== version)
     return null;
   if (record.copied)
-    yield* forEachFile(place.files, returned).pipe(
+    yield* forEachFile(covered(place), returned).pipe(
       Effect.mapError(
         (failure) => new TrialRefused({ detail: `the data of the earlier start was not returned: ${failure.path}: ${failure.reason}` }),
       ),
@@ -207,7 +222,7 @@ export const enterTrial = Effect.fn('Trial.enter')(function* (place: TrialPlace)
     passed: Effect.suspend(() => {
       settled = true;
       passAttempt(installRoot, version);
-      return droppedAll(place.files);
+      return droppedAll(covered(place));
     }),
     closing: (close) => {
       closings.push(close);

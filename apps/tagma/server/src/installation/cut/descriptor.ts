@@ -43,7 +43,7 @@ export type Distribution = {
   readonly entries: { readonly cli: string; readonly server: string };
   readonly client: Client;
   readonly brand: { readonly assets: string };
-  readonly signing: { readonly notary: string };
+  readonly signing: { readonly team: string | null; readonly notary: string };
   readonly plugins: readonly BunPlugin[];
   readonly feed: string | null;
   readonly publisher: Publisher | null;

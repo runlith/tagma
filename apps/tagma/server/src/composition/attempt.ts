@@ -6,7 +6,7 @@ import { databasePathIn, installationRootIn } from '../installation/paths.js';
 import { arrive, enterTrial, rollBack, type Trial, type TrialPlace, wordsOf } from '../installation/process/trial.js';
 import { ATTEMPT_STARTS } from '../installation/contract/wire/attempt.js';
 import { PERFORMANCE_DATABASE } from '../performance/contract/service/place.js';
-import { ownStoreFiles } from '../platform/contract/service/ownStore.js';
+import { ownStoreDirectory } from '../platform/contract/service/ownStore.js';
 import { storeDirectory } from '../platform/contract/service/store.js';
 import { lockDataDirectory } from '../platform/lock/dataDirectory.js';
 import type { Channel } from '../installation/contract/wire/channel.js';
@@ -20,12 +20,8 @@ export type AttemptPlace = {
 const trialPlace = ({ installRoot, release, storePath }: AttemptPlace): TrialPlace => ({
   installRoot,
   release,
-  files: [
-    storePath,
-    join(storeDirectory(storePath), ACTIVITY_DATABASE),
-    join(storeDirectory(storePath), PERFORMANCE_DATABASE),
-    ...ownStoreFiles(storePath),
-  ],
+  files: [storePath, join(storeDirectory(storePath), ACTIVITY_DATABASE), join(storeDirectory(storePath), PERFORMANCE_DATABASE)],
+  stores: ownStoreDirectory(storePath),
 });
 
 export type Arrival = {
