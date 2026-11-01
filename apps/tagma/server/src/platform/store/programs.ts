@@ -151,7 +151,7 @@ const joined = <Brand extends StoreBrand>(
     returning: (statement, after) =>
       Effect.suspend(() => {
         next++;
-        return Effect.flatMap(db.values(statement), (rows) =>
+        return Effect.flatMap('rows' in statement ? statement.rows() : db.values(statement), (rows) =>
           Effect.sync(() => void tails.push(carryCost(Effect.suspend(() => after(rows))))),
         );
       }),

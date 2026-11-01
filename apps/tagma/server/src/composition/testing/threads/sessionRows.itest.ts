@@ -67,7 +67,6 @@ it.effect('a planned session change commits against the facet it read and is ref
   Effect.gen(function* () {
     const { store, id } = yield* fixture();
     yield* store.open(id, '', 'first', () => Effect.succeed(null));
-    yield* store.change(id, (facet) => Effect.succeed({ facet: { ...facet, sessionKey: 'read' }, value: undefined }));
     const held = (yield* store.read(id))!;
     const landed = yield* store.planned(id, held, 'test:session:planned', () =>
       Effect.succeed({ facet: { ...held, sessionKey: 'planned' }, value: 'ok' }),

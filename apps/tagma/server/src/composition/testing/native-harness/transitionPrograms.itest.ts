@@ -7,6 +7,7 @@ import { CostLedger, costLedgerLayer, rootCost } from '@runlith/performance/Cost
 import { readThreadEvents, threadEntryEvent, threadStepMessagesEvent } from '@runlith/agent/thread/events';
 import type { ThreadToolEntry } from '@runlith/agent/transcript/entries';
 import type { ThreadContextReading } from '@runlith/agent/thread/rows';
+import type { ThreadChangeRevision } from '@runlith/agent/thread/state';
 import { callKey, type Evidence, REPORT_OPERATION, REPORT_WINDOW, reportKey } from '@runlith/agent/thread/keyed';
 import { sealThreadEvents } from '@runlith/agent/thread/ThreadEventDoor';
 import { type TransitionDeps, transitionNow } from '@runlith/agent/thread/transition/kernel';
@@ -426,5 +427,29 @@ it.live('a program whose thread changed its transport after the read is refused 
     expect(refusal).toBeInstanceOf(ProgramConflict);
     const { statement, expected, actual } = refusal as ProgramConflict;
     expect({ statement, expected, actual }).toEqual({ statement: 0, expected: 1, actual: 0 });
+  }),
+);
+
+it.live('thread revisions opened and revised by a program are named from the committed rows, alone and joined to an open unit', () =>
+  Effect.gen(function* () {
+    const { storage, thread } = yield* opened;
+    const named: ReadonlyMap<string, ThreadChangeRevision>[] = [];
+    const bumped = (identity: string) =>
+      storage.aggregate.program!(identity, (tx) =>
+        Effect.andThen(
+          storage.transitions.opened([thread.id], tx),
+          storage.transitions.revised([thread.id], tx, (revisions) => Effect.sync(() => void named.push(revisions))),
+        ),
+      );
+    const before = yield* storage.transitions.revision(thread.id);
+    yield* bumped('test:revisions:alone');
+    yield* storage.aggregate.transaction(() => bumped('test:revisions:joined'));
+    expect({ named: named.map((revisions) => revisions.get(thread.id)), now: yield* storage.transitions.revision(thread.id) }).toEqual({
+      named: [
+        { from: before, to: before + 1 },
+        { from: before + 1, to: before + 2 },
+      ],
+      now: before + 2,
+    });
   }),
 );

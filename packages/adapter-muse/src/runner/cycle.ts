@@ -18,6 +18,7 @@ import { Feed, NOTHING, spentOf, sum, type Spent } from './feed.js';
 import { Compact, ItemEvent, Models, Opened, Quota, Started, TokenUsage, TurnCompleted, TurnStarted, type Item } from './frames.js';
 import { keepPriced, keptPriced, writeSettings, type MusePlace } from './home.js';
 import { observationOf } from './quota.js';
+import { Compactions } from './compactions.js';
 
 const PROVIDER_ID = 'meta';
 const PROFILE = ':ask-me';
@@ -145,6 +146,7 @@ export const makeMuseCycle = Effect.fnUntraced(function* (door: HostedDoor, proc
   const refused = new Set<string>();
   const steers = new Map<string, { readonly command: string; readonly feed: Feed }>();
   const priced = new Map<string, number>();
+  const compactions = new Compactions();
   const stored = <A>(work: Effect.Effect<A, AgentFault, FileSystem.FileSystem>, none: A) =>
     work.pipe(
       Effect.provideService(FileSystem.FileSystem, files),
@@ -288,15 +290,24 @@ export const makeMuseCycle = Effect.fnUntraced(function* (door: HostedDoor, proc
       const id = frame.params.turnId;
       if (typeof id === 'string' && (turn === null || !turn.owns(id))) return yield* orphan(frame);
     }
-    if (turn !== null && frame.params.sessionId === turn.session) return yield* turn.frame(frame);
+    if (turn !== null && frame.params.sessionId === turn.session) {
+      compactions.delivered(frame);
+      return yield* turn.frame(frame);
+    }
     if (frame.request) process.stderr(`Muse Code asked ${frame.method} with no turn running; it stays unanswered\n`);
   });
+
+  const reconcile = (standing: Live, session: string, out: Output) =>
+    compactions.reconcile(standing.host, session, out, process.stderr).pipe(Effect.mapError(faultOf));
 
   const died = Effect.fnUntraced(function* (reason: string) {
     const turn = feed;
     if (turn !== null) yield* Deferred.succeed(turn.done, { status: 'error', detail: reason });
     const standing = compacting;
-    if (standing !== null) yield* Deferred.fail(standing.done, new AgentFault({ code: FAULT.internal, message: reason }));
+    if (standing !== null) {
+      compactions.doubt(standing.session);
+      yield* Deferred.fail(standing.done, new AgentFault({ code: FAULT.internal, message: reason }));
+    }
     const side = asking;
     if (side !== null) yield* Deferred.fail(side.done, new AgentFault({ code: FAULT.internal, message: reason }));
     yield* settleWords();
@@ -308,6 +319,7 @@ export const makeMuseCycle = Effect.fnUntraced(function* (door: HostedDoor, proc
     if (standing === null) return;
     live = null;
     applied = null;
+    if (compacting !== null) compactions.doubt(compacting.session);
     const side = asking;
     if (side !== null)
       yield* Deferred.fail(side.done, new AgentFault({ code: FAULT.internal, message: 'Muse Code was replaced under the side question' }));
@@ -415,6 +427,7 @@ export const makeMuseCycle = Effect.fnUntraced(function* (door: HostedDoor, proc
               web: prepared.opened.web,
               listed: prepared.listed,
             });
+            yield* reconcile(standing, seat.id, out);
             const blocks: ContentBlock[] = [...history];
             if (input.context !== null) blocks.push({ type: 'text', text: input.context });
             blocks.push(...input.prompt);
@@ -566,6 +579,7 @@ export const makeMuseCycle = Effect.fnUntraced(function* (door: HostedDoor, proc
           const admit = Effect.gen(function* () {
             const standing = live ?? (yield* attach(seat, yield* wanted()));
             yield* load(standing, seat);
+            yield* reconcile(standing, seat.id, out);
             compacting = { session: seat.id, output: out, done };
             const asked = yield* standing.host
               .command('session/compact', { sessionId: seat.id })
@@ -574,6 +588,7 @@ export const makeMuseCycle = Effect.fnUntraced(function* (door: HostedDoor, proc
           }).pipe(Effect.onError(() => release));
           const asked = yield* Effect.raceFirst(admit, Effect.as(halted, Option.none<typeof Compact.Type>()));
           if (Option.isNone(asked)) {
+            compactions.doubt(seat.id);
             yield* drop();
             yield* Deferred.fail(
               done,
@@ -591,13 +606,16 @@ export const makeMuseCycle = Effect.fnUntraced(function* (door: HostedDoor, proc
               Effect.flatMap((item) =>
                 item.outcome === 'compacted'
                   ? Effect.as(
-                      out.event({
-                        type: 'compacted',
-                        summary: '',
-                        trigger: 'manual',
-                        preTokens: item.tokensBefore,
-                        postTokens: item.tokensAfter,
-                      }),
+                      Effect.andThen(
+                        Effect.sync(() => compactions.record(item.itemId)),
+                        out.event({
+                          type: 'compacted',
+                          summary: '',
+                          trigger: 'manual',
+                          preTokens: item.tokensBefore,
+                          postTokens: item.tokensAfter,
+                        }),
+                      ),
                       { summary: '', preTokens: item.tokensBefore, postTokens: item.tokensAfter ?? null },
                     )
                   : Effect.fail(

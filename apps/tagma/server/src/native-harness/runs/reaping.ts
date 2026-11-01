@@ -21,7 +21,7 @@ import {
   parseThreadStreamTail,
 } from '@runlith/agent/thread/persisted';
 import { seedThreadNotification, type ThreadNotificationRecord } from '@runlith/agent/thread/storage/settlement';
-import { and, asc, desc, eq, inArray, isNotNull, isNull, lt, ne, type SQL, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNotNull, isNull, lt, ne, type Placeholder, type SQL, sql } from 'drizzle-orm';
 import { MachineStore, type StoreFailure } from '../../platform/contract/service/store.js';
 import { type Unit, MachineUnits, type WriteUnit } from '../../platform/contract/service/units.js';
 import { type WriteSet, writes } from '../../platform/contract/service/writes.js';
@@ -48,10 +48,13 @@ export type LedgerParts = {
 
 export type Reaping = ReturnType<Effect.Success<typeof makeReaping>>;
 
-export const staged = (progress: ThreadRunStage): SQL => {
-  const stage = JSON.stringify({ stage: progress.stage, message: progress.message, halt: progress.halt });
-  return sql`case when ${threadRun.progress} -> '$.phase' is null then json(${stage}) else json_set(json(${stage}), '$.phase', ${threadRun.progress} -> '$.phase') end`;
-};
+export const stageText = (progress: ThreadRunStage): string =>
+  JSON.stringify({ stage: progress.stage, message: progress.message, halt: progress.halt });
+
+export const stagedFrom = (stage: string | Placeholder): SQL =>
+  sql`case when ${threadRun.progress} -> '$.phase' is null then json(${stage}) else json_set(json(${stage}), '$.phase', ${threadRun.progress} -> '$.phase') end`;
+
+export const staged = (progress: ThreadRunStage): SQL => stagedFrom(stageText(progress));
 
 export const makeReaping = Effect.gen(function* () {
   const { db } = yield* MachineStore;
