@@ -22,5 +22,5 @@ export const makeLaunchers = (input: { readonly changed: () => void }) => {
       input.changed();
     };
   });
-  return { register, of: (app: string): LauncherEntries => held.get(app) ?? [] };
+  return { point: LAUNCHERS, register, of: (app: string): LauncherEntries => held.get(app) ?? [] };
 };

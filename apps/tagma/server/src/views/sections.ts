@@ -21,5 +21,5 @@ export const makeSections = (input: { readonly point: AppFaced<SectionEntries>; 
       changed();
     };
   });
-  return { register, of: (app: string): SectionEntries => held.get(app) ?? [] };
+  return { point, register, of: (app: string): SectionEntries => held.get(app) ?? [] };
 };

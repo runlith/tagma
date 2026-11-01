@@ -203,12 +203,12 @@ export const makeShelf = Effect.gen(function* () {
       },
     }),
     mounted,
-    register: {
-      views: registerViews,
-      results: registerResults,
-      surfaces: surfaces.register,
-      panes: panes.register,
-      launchers: launchers.register,
+    contributions: {
+      views: { point: VIEWS, register: registerViews },
+      results: { point: RESULTS, register: registerResults },
+      surfaces,
+      panes,
+      launchers,
     },
   };
 });

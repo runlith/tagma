@@ -2,13 +2,12 @@ import { jsonCodec } from '@runlith/utils/codec';
 import type { McpToolDescriptor } from '@runlith/mcp/McpSession';
 import type { McpToolCaller } from '@runlith/mcp/mcpToolCatalog';
 import { Effect, Result, Schema } from 'effect';
-import type { AppFace, AppFaced } from '../platform/contract/service/contribution.js';
+import type { AppFaced } from '../platform/contract/service/contribution.js';
 import { TagmaAppPointRefused, TagmaAppPoints, type TagmaAppRef, type TagmaAppRegister } from './contract/service/points.js';
 import { TagmaAppEnvelope } from './contract/wire/manifest.js';
 
 type Declared = {
   readonly point: AppFaced<any>;
-  readonly face: AppFace<any>;
   readonly input: Schema.Codec<unknown, unknown>;
   readonly register: TagmaAppRegister<any>;
 };
@@ -16,7 +15,7 @@ type Declared = {
 export type Checked = readonly { readonly declared: Declared; readonly value: unknown }[];
 
 export const contributesOf = (checked: Checked): Readonly<Record<string, unknown>> =>
-  Object.fromEntries(checked.map(({ declared, value }) => [declared.face.name, value]));
+  Object.fromEntries(checked.map(({ declared, value }) => [declared.point.app.name, value]));
 
 export type PointRegistry = TagmaAppPoints['Service'] & {
   check(app: string, contributes: Readonly<Record<string, unknown>> | undefined): Result.Result<Checked, string>;
@@ -32,19 +31,19 @@ export const makeRegistry = (): PointRegistry => {
   const points = new Map<string, Declared>();
   const claimed = new Map<string, Map<string, string>>();
 
-  const taken = ({ point, face }: Declared, value: unknown, app: string): string | null => {
-    for (const key of face.claims?.(value) ?? []) {
-      const holder = claimed.get(point.id)?.get(key);
-      if (holder !== undefined && holder !== app) return `contributes.${face.name} claims ${key}, which the app ${holder} holds`;
+  const taken = ({ point }: Declared, value: unknown, app: string): string | null => {
+    for (const key of point.app.claims?.(value) ?? []) {
+      const holder = claimed.get(point.app.name)?.get(key);
+      if (holder !== undefined && holder !== app) return `contributes.${point.app.name} claims ${key}, which the app ${holder} holds`;
     }
     return null;
   };
 
-  const claim = ({ point, face }: Declared, value: unknown, app: string): (() => void) => {
-    const keys = face.claims?.(value) ?? [];
+  const claim = ({ point }: Declared, value: unknown, app: string): (() => void) => {
+    const keys = point.app.claims?.(value) ?? [];
     if (keys.length === 0) return () => undefined;
-    const held = claimed.get(point.id) ?? new Map<string, string>();
-    claimed.set(point.id, held);
+    const held = claimed.get(point.app.name) ?? new Map<string, string>();
+    claimed.set(point.app.name, held);
     for (const key of keys) held.set(key, app);
     return () => {
       for (const key of keys) if (held.get(key) === app) held.delete(key);
@@ -54,15 +53,15 @@ export const makeRegistry = (): PointRegistry => {
   return {
     ...TagmaAppPoints.of({
       declare: Effect.fnUntraced(function* (point, register) {
-        const face = point.app;
-        const standing = points.get(face.name);
+        const { name, schema } = point.app;
+        const standing = points.get(name);
         if (standing !== undefined) {
-          return yield* Effect.die(new Error(`the app point ${face.name} is declared by ${standing.point.id} and again by ${point.id}`));
+          return yield* Effect.die(new Error(`the app point ${name} is declared by ${standing.point.id} and again by ${point.id}`));
         }
-        const declared: Declared = { point, face, input: jsonCodec(Schema.optional(face.schema)), register };
-        points.set(face.name, declared);
+        const declared: Declared = { point, input: jsonCodec(Schema.optional(schema)), register };
+        points.set(name, declared);
         return () => {
-          if (points.get(face.name) === declared) points.delete(face.name);
+          if (points.get(name) === declared) points.delete(name);
         };
       }),
       schema: () => {
@@ -101,7 +100,7 @@ export const makeRegistry = (): PointRegistry => {
         const held = taken(declared, value, app.id);
         if (held !== null) {
           withdraw();
-          return yield* new TagmaAppPointRefused({ point: declared.face.name, reason: held });
+          return yield* new TagmaAppPointRefused({ point: declared.point.app.name, reason: held });
         }
         releases.push(claim(declared, value, app.id));
       }

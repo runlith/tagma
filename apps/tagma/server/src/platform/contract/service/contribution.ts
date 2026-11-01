@@ -4,7 +4,7 @@ import type { Manifest } from './manifest.js';
 
 type Identified = { readonly id: string };
 
-export type AppFace<W> = {
+type AppFace<W> = {
   readonly name: string;
   readonly schema: Schema.Codec<W, unknown>;
   readonly claims?: (value: W) => readonly string[];

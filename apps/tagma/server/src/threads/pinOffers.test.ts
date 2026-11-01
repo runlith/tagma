@@ -11,7 +11,7 @@ const contribution = (view: string): TagmaAppContribution<PinContributions> => (
   app: { id: 'poker', title: 'Poker', root: '/poker', data: null },
   value: [{ view }],
   sibling: <B>(point: AppFaced<B>) =>
-    point.id === VIEWS.id
+    Object.is(point, VIEWS)
       ? Schema.decodeUnknownSync(point.app.schema)([
           { id: 'table', entry: 'ui/table.html' },
           { id: 'hand', entry: 'ui/hand.html' },
