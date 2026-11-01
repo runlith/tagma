@@ -1568,50 +1568,6 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead apps/tagma/app/src/lib/features/speech/calls/Calls.svelte.ts#Followed",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/app/src/lib/features/speech/calls/Calls.svelte.ts#CallChords",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/app/src/lib/features/speech/calls/cast.ts#Voice",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/app/src/lib/features/speech/calls/playhead.ts#Spot",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/app/src/lib/features/speech/calls/playhead.ts#Cues",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/app/src/lib/features/speech/calls/turns.ts#PAUSE_MS",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/app/src/lib/features/speech/calls/turns.ts#LOST_MS",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/app/src/lib/features/speech/calls/turns.ts#SAID_PER_ROW",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/app/src/lib/features/speech/calls/turns.ts#Turn",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/app/src/lib/features/speech/calls/turns.ts#Cut",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/app/src/lib/features/speech/calls/turns.ts#turnsOf",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "dead-code dead apps/tagma/app/src/lib/features/speech/check.ts#FRAMES_MS",
           "owner": "5a3bed29"
         },
@@ -1640,35 +1596,7 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead apps/tagma/app/src/lib/features/speech/dictation/Sender.ts#SenderFailure",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "dead-code dead apps/tagma/app/src/lib/features/speech/dictation/take.ts#Utterance",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/app/src/lib/features/speech/library/Repo.ts#CALLS_PAGE",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/app/src/lib/features/speech/library/Repo.ts#ShelfKey",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/app/src/lib/features/speech/library/Repo.ts#FoundKey",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/app/src/lib/features/speech/library/Repo.ts#DetailKey",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/app/src/lib/features/speech/library/Repo.ts#Describing",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/app/src/lib/features/speech/library/Shelf.svelte.ts#Ask",
           "owner": "5a3bed29"
         },
         {
@@ -3525,10 +3453,6 @@ fields:
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/composition/callOwners.ts#CallLifetimes",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/composition/callThreads.ts#CallThreadOwners",
           "owner": "5a3bed29"
         },
         {
@@ -9167,10 +9091,6 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead apps/tagma/server/src/speech/contract/service/callThreads.ts#Delivery",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "dead-code dead apps/tagma/server/src/speech/contract/service/models.ts#LocalModel",
           "owner": "5a3bed29"
         },
@@ -9187,14 +9107,6 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead apps/tagma/server/src/speech/contract/wire/feeds.ts#LISTENING_FEED",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/speech/contract/wire/feeds.ts#TRANSCRIPT_FEED",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "dead-code dead apps/tagma/server/src/speech/contract/wire/feeds.ts#RECOGNIZE_FEED",
           "owner": "5a3bed29"
         },
@@ -9208,25 +9120,6 @@ fields:
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/speech/contract/wire/feeds.ts#SYNTHESIS_FEED",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/speech/contract/wire/listening.ts#AGAIN_STATES",
-          "owner": "5a3bed29"
-        },
-        {
-          "count": 2,
-          "fingerprint": "dead-code dead apps/tagma/server/src/speech/contract/wire/listening.ts#ListeningAudio",
-          "owner": "5a3bed29"
-        },
-        {
-          "count": 2,
-          "fingerprint": "dead-code dead apps/tagma/server/src/speech/contract/wire/listening.ts#Again",
-          "owner": "5a3bed29"
-        },
-        {
-          "count": 2,
-          "fingerprint": "dead-code dead apps/tagma/server/src/speech/contract/wire/listening.ts#Given",
           "owner": "5a3bed29"
         },
         {
@@ -9254,31 +9147,7 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead apps/tagma/server/src/speech/keys.ts#callKeys",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/speech/listening/booth.ts#unknownListening",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "dead-code dead apps/tagma/server/src/speech/listening/choice.ts#Chosen",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/speech/listening/detail.ts#gistOf",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/speech/listening/echo.ts#Unechoing",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/speech/listening/echo.ts#Linking",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/speech/listening/following.ts#Following",
           "owner": "5a3bed29"
         },
         {
@@ -9286,107 +9155,7 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead apps/tagma/server/src/speech/listening/recorder.ts#Lose",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/speech/listening/recorder.ts#Repaired",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/speech/listening/rehearing.ts#Rehearing",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/speech/listening/run.ts#RunAsk",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/speech/listening/run.ts#RunTrack",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/speech/listening/search.ts#Search",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "dead-code dead apps/tagma/server/src/speech/listening/sending.ts#Senders",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/speech/listening/sweep.ts#swept",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/speech/listening/text.ts#CLOCK",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/speech/listening/watchers.ts#Watchers",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/speech/store/entries.ts#Unindexed",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/speech/store/entries.ts#Carried",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/speech/store/entries.ts#Behind",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/speech/store/followers.ts#Seat",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/speech/store/followers.ts#Handed",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/speech/store/followers.ts#Followers",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/speech/store/matches.ts#Window",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/speech/store/matches.ts#Shown",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/speech/store/matches.ts#Matches",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/speech/store/staged.ts#Voiced",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/speech/store/staged.ts#Staged",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/speech/store/transcripts.ts#Opening",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/speech/store/transcripts.ts#Stored",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/speech/store/transcripts.ts#Giving",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/speech/store/transcripts.ts#Description",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/speech/store/transcripts.ts#GivenRow",
           "owner": "5a3bed29"
         },
         {
@@ -19854,309 +19623,157 @@ fields:
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/calls/contract/service/callThreads.ts#Delivery",
-          "held": {
-            "base": "18ddb3d39142cac45f89198a91bd2774e349db95",
-            "path": "apps/tagma/server/src/calls/contract/service/callThreads.ts"
-          },
           "owner": "5a3bed29"
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/calls/contract/wire/feeds.ts#LISTENING_FEED",
-          "held": {
-            "base": "18ddb3d39142cac45f89198a91bd2774e349db95",
-            "path": "apps/tagma/server/src/calls/contract/wire/feeds.ts"
-          },
           "owner": "5a3bed29"
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/calls/contract/wire/feeds.ts#TRANSCRIPT_FEED",
-          "held": {
-            "base": "18ddb3d39142cac45f89198a91bd2774e349db95",
-            "path": "apps/tagma/server/src/calls/contract/wire/feeds.ts"
-          },
           "owner": "5a3bed29"
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/calls/contract/wire/listening.ts#AGAIN_STATES",
-          "held": {
-            "base": "18ddb3d39142cac45f89198a91bd2774e349db95",
-            "path": "apps/tagma/server/src/calls/contract/wire/listening.ts"
-          },
           "owner": "5a3bed29"
         },
         {
           "count": 2,
           "fingerprint": "dead-code dead apps/tagma/server/src/calls/contract/wire/listening.ts#ListeningAudio",
-          "held": {
-            "base": "18ddb3d39142cac45f89198a91bd2774e349db95",
-            "path": "apps/tagma/server/src/calls/contract/wire/listening.ts"
-          },
           "owner": "5a3bed29"
         },
         {
           "count": 2,
           "fingerprint": "dead-code dead apps/tagma/server/src/calls/contract/wire/listening.ts#Again",
-          "held": {
-            "base": "18ddb3d39142cac45f89198a91bd2774e349db95",
-            "path": "apps/tagma/server/src/calls/contract/wire/listening.ts"
-          },
           "owner": "5a3bed29"
         },
         {
           "count": 2,
           "fingerprint": "dead-code dead apps/tagma/server/src/calls/contract/wire/listening.ts#Given",
-          "held": {
-            "base": "18ddb3d39142cac45f89198a91bd2774e349db95",
-            "path": "apps/tagma/server/src/calls/contract/wire/listening.ts"
-          },
           "owner": "5a3bed29"
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/calls/keys.ts#callKeys",
-          "held": {
-            "base": "18ddb3d39142cac45f89198a91bd2774e349db95",
-            "path": "apps/tagma/server/src/calls/keys.ts"
-          },
           "owner": "5a3bed29"
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/calls/listening/booth.ts#unknownListening",
-          "held": {
-            "base": "18ddb3d39142cac45f89198a91bd2774e349db95",
-            "path": "apps/tagma/server/src/calls/listening/booth.ts"
-          },
           "owner": "5a3bed29"
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/calls/listening/detail.ts#gistOf",
-          "held": {
-            "base": "18ddb3d39142cac45f89198a91bd2774e349db95",
-            "path": "apps/tagma/server/src/calls/listening/detail.ts"
-          },
           "owner": "5a3bed29"
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/calls/listening/echo.ts#Unechoing",
-          "held": {
-            "base": "18ddb3d39142cac45f89198a91bd2774e349db95",
-            "path": "apps/tagma/server/src/calls/listening/echo.ts"
-          },
           "owner": "5a3bed29"
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/calls/listening/echo.ts#Linking",
-          "held": {
-            "base": "18ddb3d39142cac45f89198a91bd2774e349db95",
-            "path": "apps/tagma/server/src/calls/listening/echo.ts"
-          },
           "owner": "5a3bed29"
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/calls/listening/following.ts#Following",
-          "held": {
-            "base": "18ddb3d39142cac45f89198a91bd2774e349db95",
-            "path": "apps/tagma/server/src/calls/listening/following.ts"
-          },
           "owner": "5a3bed29"
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/calls/listening/recorder.ts#Lose",
-          "held": {
-            "base": "18ddb3d39142cac45f89198a91bd2774e349db95",
-            "path": "apps/tagma/server/src/calls/listening/recorder.ts"
-          },
           "owner": "5a3bed29"
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/calls/listening/recorder.ts#Repaired",
-          "held": {
-            "base": "18ddb3d39142cac45f89198a91bd2774e349db95",
-            "path": "apps/tagma/server/src/calls/listening/recorder.ts"
-          },
           "owner": "5a3bed29"
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/calls/listening/rehearing.ts#Rehearing",
-          "held": {
-            "base": "18ddb3d39142cac45f89198a91bd2774e349db95",
-            "path": "apps/tagma/server/src/calls/listening/rehearing.ts"
-          },
           "owner": "5a3bed29"
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/calls/listening/run.ts#RunAsk",
-          "held": {
-            "base": "18ddb3d39142cac45f89198a91bd2774e349db95",
-            "path": "apps/tagma/server/src/calls/listening/run.ts"
-          },
           "owner": "5a3bed29"
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/calls/listening/run.ts#RunTrack",
-          "held": {
-            "base": "18ddb3d39142cac45f89198a91bd2774e349db95",
-            "path": "apps/tagma/server/src/calls/listening/run.ts"
-          },
           "owner": "5a3bed29"
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/calls/listening/search.ts#Search",
-          "held": {
-            "base": "18ddb3d39142cac45f89198a91bd2774e349db95",
-            "path": "apps/tagma/server/src/calls/listening/search.ts"
-          },
           "owner": "5a3bed29"
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/calls/listening/sweep.ts#swept",
-          "held": {
-            "base": "18ddb3d39142cac45f89198a91bd2774e349db95",
-            "path": "apps/tagma/server/src/calls/listening/sweep.ts"
-          },
           "owner": "5a3bed29"
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/calls/listening/text.ts#CLOCK",
-          "held": {
-            "base": "18ddb3d39142cac45f89198a91bd2774e349db95",
-            "path": "apps/tagma/server/src/calls/listening/text.ts"
-          },
           "owner": "5a3bed29"
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/calls/listening/watchers.ts#Watchers",
-          "held": {
-            "base": "18ddb3d39142cac45f89198a91bd2774e349db95",
-            "path": "apps/tagma/server/src/calls/listening/watchers.ts"
-          },
           "owner": "5a3bed29"
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/calls/store/entries.ts#Unindexed",
-          "held": {
-            "base": "18ddb3d39142cac45f89198a91bd2774e349db95",
-            "path": "apps/tagma/server/src/calls/store/entries.ts"
-          },
           "owner": "5a3bed29"
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/calls/store/entries.ts#Carried",
-          "held": {
-            "base": "18ddb3d39142cac45f89198a91bd2774e349db95",
-            "path": "apps/tagma/server/src/calls/store/entries.ts"
-          },
           "owner": "5a3bed29"
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/calls/store/entries.ts#Behind",
-          "held": {
-            "base": "18ddb3d39142cac45f89198a91bd2774e349db95",
-            "path": "apps/tagma/server/src/calls/store/entries.ts"
-          },
           "owner": "5a3bed29"
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/calls/store/followers.ts#Seat",
-          "held": {
-            "base": "18ddb3d39142cac45f89198a91bd2774e349db95",
-            "path": "apps/tagma/server/src/calls/store/followers.ts"
-          },
           "owner": "5a3bed29"
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/calls/store/followers.ts#Handed",
-          "held": {
-            "base": "18ddb3d39142cac45f89198a91bd2774e349db95",
-            "path": "apps/tagma/server/src/calls/store/followers.ts"
-          },
           "owner": "5a3bed29"
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/calls/store/followers.ts#Followers",
-          "held": {
-            "base": "18ddb3d39142cac45f89198a91bd2774e349db95",
-            "path": "apps/tagma/server/src/calls/store/followers.ts"
-          },
           "owner": "5a3bed29"
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/calls/store/matches.ts#Window",
-          "held": {
-            "base": "18ddb3d39142cac45f89198a91bd2774e349db95",
-            "path": "apps/tagma/server/src/calls/store/matches.ts"
-          },
           "owner": "5a3bed29"
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/calls/store/matches.ts#Shown",
-          "held": {
-            "base": "18ddb3d39142cac45f89198a91bd2774e349db95",
-            "path": "apps/tagma/server/src/calls/store/matches.ts"
-          },
           "owner": "5a3bed29"
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/calls/store/matches.ts#Matches",
-          "held": {
-            "base": "18ddb3d39142cac45f89198a91bd2774e349db95",
-            "path": "apps/tagma/server/src/calls/store/matches.ts"
-          },
           "owner": "5a3bed29"
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/calls/store/staged.ts#Voiced",
-          "held": {
-            "base": "18ddb3d39142cac45f89198a91bd2774e349db95",
-            "path": "apps/tagma/server/src/calls/store/staged.ts"
-          },
           "owner": "5a3bed29"
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/calls/store/staged.ts#Staged",
-          "held": {
-            "base": "18ddb3d39142cac45f89198a91bd2774e349db95",
-            "path": "apps/tagma/server/src/calls/store/staged.ts"
-          },
           "owner": "5a3bed29"
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/calls/store/transcripts.ts#Opening",
-          "held": {
-            "base": "18ddb3d39142cac45f89198a91bd2774e349db95",
-            "path": "apps/tagma/server/src/calls/store/transcripts.ts"
-          },
           "owner": "5a3bed29"
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/calls/store/transcripts.ts#Stored",
-          "held": {
-            "base": "18ddb3d39142cac45f89198a91bd2774e349db95",
-            "path": "apps/tagma/server/src/calls/store/transcripts.ts"
-          },
           "owner": "5a3bed29"
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/calls/store/transcripts.ts#Giving",
-          "held": {
-            "base": "18ddb3d39142cac45f89198a91bd2774e349db95",
-            "path": "apps/tagma/server/src/calls/store/transcripts.ts"
-          },
           "owner": "5a3bed29"
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/calls/store/transcripts.ts#Description",
-          "held": {
-            "base": "18ddb3d39142cac45f89198a91bd2774e349db95",
-            "path": "apps/tagma/server/src/calls/store/transcripts.ts"
-          },
           "owner": "5a3bed29"
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/calls/store/transcripts.ts#GivenRow",
-          "held": {
-            "base": "18ddb3d39142cac45f89198a91bd2774e349db95",
-            "path": "apps/tagma/server/src/calls/store/transcripts.ts"
-          },
           "owner": "5a3bed29"
         }
       ],
