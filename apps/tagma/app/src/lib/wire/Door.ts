@@ -12,6 +12,7 @@ import { Effect, Result, Schema, SchemaIssue } from 'effect';
 import { FetchHttpClient, HttpClient, HttpClientError } from 'effect/http';
 import { HttpApiClient } from 'effect/http-api';
 import { OperationCodecs, type HttpOperationId, type OperationAnswer, type OperationInput } from './operation.js';
+import { AccessHint, type AccessHintShape } from './access.js';
 import { Refusal, refusalOf } from './refusal.js';
 import { ServerOrigin } from './ServerOrigin.svelte.js';
 
@@ -97,7 +98,8 @@ export class Door extends Service<Door>()('Door', { tier: 'app' }) {
     const platform = yield* Platform;
     const operations = new OperationCodecs(yield* WireCatalog);
     const kinds = yield* WireEntryKinds.optional();
-    return new Door(platform.fetch, yield* ServerOrigin, yield* Router, operations, wireEntries(kinds));
+    const hints = yield* AccessHint.optional();
+    return new Door(platform.fetch, yield* ServerOrigin, yield* Router, operations, wireEntries(kinds), hints);
   }
 
   private client: ApiClient | null = null;
@@ -113,9 +115,13 @@ export class Door extends Service<Door>()('Door', { tier: 'app' }) {
     private readonly router: Router,
     private readonly operations: OperationCodecs,
     private readonly entries: ThreadEntryReader = wireEntries(undefined),
+    private readonly hints: AccessHintShape | undefined = undefined,
   ) {
     super();
   }
+
+  private readonly hinted = (refusal: Refusal): Refusal =>
+    this.hints === undefined || refusal.right === undefined ? refusal : refusal.hinted(this.hints.hint(refusal.right));
 
   private readonly reload = (): void => this.router.reload();
 
@@ -220,7 +226,7 @@ export class Door extends Service<Door>()('Door', { tier: 'app' }) {
           })
         : call(this.client),
     ).pipe(
-      Effect.catch((error) => Effect.flatMap(serverFault(error), Effect.fail)),
+      Effect.catch((error) => Effect.flatMap(serverFault(error), (refusal) => Effect.fail(this.hinted(refusal)))),
       Effect.catchDefect((defect) => Effect.fail(refusalOf(readableDefect(defect)))),
       Effect.provideService(FetchHttpClient.Fetch, this.fetch),
       Effect.provideService(ThreadEntryKinds, this.entries),

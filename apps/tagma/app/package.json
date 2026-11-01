@@ -81,6 +81,11 @@
       "browser": "./src/lib/wire/liveGroup.ts",
       "default": "./src/lib/wire/liveGroup.ts"
     },
+    "./wire/access": {
+      "types": "./src/lib/wire/access.ts",
+      "browser": "./src/lib/wire/access.ts",
+      "default": "./src/lib/wire/access.ts"
+    },
     "./ui/*.svelte": {
       "types": "./src/lib/shared/ui/*.svelte",
       "browser": "./src/lib/shared/ui/*.svelte",

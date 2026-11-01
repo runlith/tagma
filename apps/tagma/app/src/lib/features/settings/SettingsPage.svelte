@@ -23,6 +23,7 @@
   import type { SectionPlace } from '$lib/features/settings/section.js';
   import type { SettingsCatalog } from '$lib/features/settings/SettingsCatalog.svelte.js';
   import { Workspace } from '$lib/features/workspace/Selection.svelte.js';
+  import { Access, gateOf } from '$lib/wire/access.js';
 
   let {
     catalog,
@@ -45,6 +46,7 @@
   const host = Host.use();
   const router = Router.use();
   const registry = SectionRegistry.use();
+  const gate = gateOf(Access.find());
 
   const parts = new SettingsParts();
   standParts(parts);
@@ -278,6 +280,7 @@
           <PointView
             point={registry.contributions}
             only={(contribution) => contribution.section === activeId}
+            gate={gate.shown}
             props={{ catalog, scope: effective, project }}
           />
         {/if}

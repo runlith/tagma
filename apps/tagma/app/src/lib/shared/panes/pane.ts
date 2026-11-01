@@ -2,6 +2,7 @@ import { Data } from 'effect';
 import type { Component } from 'svelte';
 import type { Resolver } from '@runlith/layer/key';
 import { Point } from '@runlith/layer/Point';
+import type { RightKey } from '@tagma/server/platform/contract/wire/right';
 import type { Holder } from './holder.js';
 
 export type PaneContent = { readonly kind: string; readonly id: string | null };
@@ -36,6 +37,7 @@ export type PaneKind = {
   readonly hold?: PaneHold;
   readonly moves?: true;
   readonly offer?: PaneOffer;
+  readonly right?: RightKey;
 };
 
 export type PaneRefusal = 'undeclared' | 'inadmissible' | 'nowhere';
@@ -52,6 +54,7 @@ export class PaneUndeclared extends Data.TaggedError('PaneUndeclared')<{
 export const Panes = Point.define<PaneKind>()('Panes', {
   tier: 'app',
   key: (declared) => declared.kind,
+  joins: 'start',
   claims: (declared) => [`Pane kind "${declared.kind}"`, ...(declared.formerly === undefined ? [] : [`Pane kind "${declared.formerly}"`])],
 });
 
