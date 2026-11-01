@@ -7,6 +7,36 @@ export type UnitLife = { readonly identity: StoreIdentity; readonly operation: s
 
 export const UnitLife = Context.Reference<UnitLife | null>('tagma/platform/UnitLife', { defaultValue: () => null });
 
+const ends = new WeakMap<object, UnitEnd>();
+
+export class UnitEnd {
+  private readonly releases: (() => void)[] = [];
+  private closed = false;
+
+  static of(unit: object): UnitEnd | undefined {
+    return ends.get(unit);
+  }
+
+  bind<U extends object>(unit: U): U {
+    ends.set(unit, this);
+    return unit;
+  }
+
+  release(release: () => void): void {
+    if (this.closed) release();
+    else this.releases.push(release);
+  }
+
+  close(): void {
+    this.closed = true;
+    for (const release of this.releases.splice(0)) release();
+  }
+}
+
+export const atUnitEnd = (unit: object, release: () => void): void => {
+  ends.get(unit)?.release(release);
+};
+
 export type Returning = { rows: ReturnedRows | null };
 
 export type Building = {
@@ -15,6 +45,7 @@ export type Building = {
   readonly tails: Effect.Effect<void>[];
   readonly sets: WriteSet[];
   readonly returning: Returning[];
+  readonly end: UnitEnd;
 };
 
 export const ProgramOpen = Context.Reference<Building | null>('tagma/platform/ProgramOpen', { defaultValue: () => null });

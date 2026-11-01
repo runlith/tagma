@@ -184,6 +184,29 @@ it.live('a history read back from the store is metered by its stored measure, no
   }).pipe(Effect.provide(layer)),
 );
 
+it.live('a history folded inside a unit leaves memory when the unit ends, though something still holds the unit', () =>
+  Effect.gen(function* () {
+    const store = yield* MachineStore;
+    const units = yield* MachineUnits;
+    const kinds = makeThreadEntryReader({ products: [] });
+    const id = 'history-unit-end';
+    yield* bornThread(store.db, { id, ownerId: 'owner', agentId: 'agent', spawnRootId: id, authority: THREAD_AUTHORITY_DEFAULT });
+    yield* store.db.insert(threadLog).values({ threadId: id });
+    const writer = yield* historyOf(kinds);
+    yield* units.write(changed, (unit) => writer.write(unit, id, [Message.make({ role: 'user', content: 'kept' })], 0));
+    const reader = yield* historyOf(kinds);
+    const kept: object[] = [];
+    const loaded = yield* units.write(changed, (unit) => {
+      kept.push(unit);
+      return Effect.map(reader.read(unit, id), (history) => new WeakRef(history ?? []));
+    });
+    yield* Effect.promise(() => new Promise<void>((resolve) => setImmediate(resolve)));
+    Bun.gc(true);
+    expect(kept).toHaveLength(1);
+    expect(loaded.deref()).toBeUndefined();
+  }).pipe(Effect.provide(layer)),
+);
+
 it.live('a silent projection advances the cursor without re-reading retained messages', () => exercise(false).pipe(Effect.provide(layer)));
 
 it.live('a rolled-back silent projection preserves the prior cursor and history', () => exercise(true).pipe(Effect.provide(layer)));

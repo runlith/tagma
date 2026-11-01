@@ -43,7 +43,7 @@ type MeteredEnvelope = {
   readonly tools: readonly MeteredPiece[];
 };
 
-export type MessageMeasure = { readonly digest: string; readonly tokens: number | null };
+export type MessageMeasure = { readonly digest: string; readonly tokens: number | null; readonly bytes: number };
 
 const measuredMessages = new WeakMap<Message, MessageMeasure>();
 
@@ -55,20 +55,26 @@ export const measureMessages = (messages: readonly Message[]): Effect.Effect<rea
   Effect.suspend(() => {
     const fresh = [...new Set(messages.filter((message) => !measuredMessages.has(message)))];
     const values = fresh.flatMap((message): unknown[] => [{ ...message, content: [] }, ...message.content]);
+    let sizes: readonly number[] = [];
     return Effect.forEach(values, (value) => digestBytes(value)).pipe(
-      Effect.flatMap((bytes) => threadCall(() => sha256Batch(bytes))),
+      Effect.flatMap((encoded) => {
+        sizes = encoded.map((piece) => piece.byteLength);
+        return threadCall(() => sha256Batch(encoded));
+      }),
       Effect.flatMap((digests) => {
         if (digests.length !== values.length) return Effect.die(new Error('SHA-256 batch did not answer every message piece'));
         let at = 0;
         for (const message of fresh) {
-          const pieces = values.slice(at, at + message.content.length + 1);
+          const count = message.content.length + 1;
           let tokens: number | null = 0;
-          for (const piece of pieces) {
-            const price: number | null = tokens === null ? null : estimateImageFreeTokens(piece);
+          let bytes = 0;
+          for (let piece = at; piece < at + count; piece += 1) {
+            const price: number | null = tokens === null ? null : estimateImageFreeTokens(values[piece]);
             tokens = tokens === null || price === null ? null : tokens + price;
+            bytes += sizes[piece]!;
           }
-          measuredMessages.set(message, { digest: combine(digests.slice(at, at + pieces.length)), tokens });
-          at += pieces.length;
+          measuredMessages.set(message, { digest: combine(digests.slice(at, at + count)), tokens, bytes });
+          at += count;
         }
         return Effect.succeed(messages.map((message) => measuredMessages.get(message)!));
       }),

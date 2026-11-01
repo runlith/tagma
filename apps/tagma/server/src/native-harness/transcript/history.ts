@@ -3,7 +3,7 @@ import { ThreadEntryKinds } from '@runlith/agent/transcript/kinds';
 import { Message } from '@runlith/llm/schema/messages';
 import { ThreadStorageFailed } from '@runlith/agent/thread/persisted';
 import type { ThreadEventPayload } from '@runlith/agent/thread/events';
-import { HistoryFold, moveThreadHistory } from '@runlith/agent/thread/HistoryFold';
+import { HistoryFold, moveThreadHistory, type ThreadHistoryMove } from '@runlith/agent/thread/HistoryFold';
 import { measureMessages, type MessageMeasure, recallMessageMeasure } from '@runlith/agent/thread/compaction/ThreadRequestMeter';
 import type { ThreadHistory } from '@runlith/agent/thread/rows';
 import { and, asc, eq, gt, gte, sql } from 'drizzle-orm';
@@ -12,6 +12,7 @@ import type { StoredFailure } from '../../platform/store/crossing.js';
 import { MachineStore } from '../../platform/contract/service/store.js';
 import type { ProgramQuery, ProgramUnit, Unit, WriteUnit } from '../../platform/contract/service/units.js';
 import { unplannable } from '../../platform/store/programs.js';
+import { atUnitEnd } from '../../platform/store/life.js';
 import { threadHistoryItem, threadLog } from '../store/thread.js';
 import { threadEvent } from '../../threads/store/journal.js';
 import { messageFieldType } from '../../threads/store/fields.js';
@@ -32,7 +33,7 @@ export const makeHistoryStore = Effect.fnUntraced(function* ({ reads }: { readon
   const foldsByUnit = new WeakMap<Unit<'machine'>, Map<string, Held>>();
   const live = new HeldHistories();
   const suffixById = db
-    .select({ position: threadEvent.position, kind: threadEvent.kind, payload: threadEvent.payload })
+    .select({ position: threadEvent.position, kind: threadEvent.kind, body: sql<string>`${threadEvent.payload}` })
     .from(threadEvent)
     .where(and(eq(threadEvent.threadId, sql.placeholder('id')), gt(threadEvent.position, sql.placeholder('through'))))
     .orderBy(asc(threadEvent.position))
@@ -62,11 +63,18 @@ export const makeHistoryStore = Effect.fnUntraced(function* ({ reads }: { readon
     if (held) return held;
     const folds = new Map<string, Held>();
     foldsByUnit.set(unit, folds);
+    atUnitEnd(unit, () => foldsByUnit.delete(unit));
     return folds;
   };
 
   const forget = (unit: Unit<'machine'>, id: string): void => {
     foldsByUnit.get(unit)?.delete(id);
+  };
+
+  const weighMoved = (move: ThreadHistoryMove, bytes: number): void => {
+    const added: ThreadHistory =
+      move.kind === 'keep' ? EMPTY : move.kind === 'splice' ? move.edits.flatMap((edit) => edit.insert) : move.messages;
+    for (const message of added) live.weigh(message, Math.ceil(bytes / added.length));
   };
 
   const folded = (stored: ThreadHistory, through: number, suffix: readonly FoldedEvent[], initial: GuidanceIndex): Folded => {
@@ -76,6 +84,7 @@ export const makeHistoryStore = Effect.fnUntraced(function* ({ reads }: { readon
     for (const event of suffix) {
       const move = moveThreadHistory({ kind: event.kind, payload: event.payload }, event.position);
       if (move === null) continue;
+      weighMoved(move, event.bytes);
       fold ??= new HistoryFold(stored);
       fold.move(move);
       guidance = move.kind === 'append' ? guidance.append(move.messages) : new GuidanceIndex().append(fold.take());
@@ -89,9 +98,9 @@ export const makeHistoryStore = Effect.fnUntraced(function* ({ reads }: { readon
       yield* Effect.annotateCurrentSpan({ events: suffix.length });
       const events: FoldedEvent[] = [];
       for (const event of suffix) {
-        const payload = payloadOf(event.payload);
+        const payload = payloadOf(parsed(event.body));
         if (payload === null) return yield* unreadable(id, `event ${event.position}`);
-        events.push({ position: event.position, kind: event.kind, payload });
+        events.push({ position: event.position, kind: event.kind, payload, bytes: event.body.length });
       }
       return yield* Effect.try({
         try: () => folded(stored, through, events, guidance),
@@ -111,7 +120,7 @@ export const makeHistoryStore = Effect.fnUntraced(function* ({ reads }: { readon
         if (row.fact !== 1 || row.at === null || row.kind === null || row.body === null) continue;
         const payload = payloadOf(parsed(row.body));
         if (payload === null) return yield* unreadable(id, `event ${row.at}`);
-        suffix.push({ position: row.at, kind: row.kind, payload });
+        suffix.push({ position: row.at, kind: row.kind, payload, bytes: row.body.length });
       }
       yield* Effect.annotateCurrentSpan({ events: suffix.length });
       const caught = yield* Effect.try({
@@ -140,7 +149,7 @@ export const makeHistoryStore = Effect.fnUntraced(function* ({ reads }: { readon
       yield* Effect.annotateCurrentSpan({ rows: 0 });
       return kept;
     }
-    const seen = writing(unit) ? null : live.glimpse(id);
+    const seen = writing(unit) ? null : live.glimpse(id, unit);
     const rows = yield* unit.run(
       db.all<{
         fact: 0 | 1;
@@ -170,13 +179,14 @@ export const makeHistoryStore = Effect.fnUntraced(function* ({ reads }: { readon
         const body = parsed(row.body);
         const message = messageOf(body);
         if (message === null) return yield* unreadable(id, `history item ${row.at}`);
-        if (row.digest !== null && message === body) recallMessageMeasure(message, { digest: row.digest, tokens: row.tokens });
-        live.weigh(message, row.body.length * 2);
+        if (row.digest !== null && message === body)
+          recallMessageMeasure(message, { digest: row.digest, tokens: row.tokens, bytes: row.body.length });
+        live.weigh(message, row.body.length);
         stored.push(message);
       } else if (row.fact === 1 && row.at !== null && row.kind !== null && row.body !== null) {
         const payload = payloadOf(parsed(row.body));
         if (payload === null) return yield* unreadable(id, `event ${row.at}`);
-        suffix.push({ position: row.at, kind: row.kind, payload });
+        suffix.push({ position: row.at, kind: row.kind, payload, bytes: row.body.length });
       }
     }
     yield* Effect.annotateCurrentSpan({ rows: stored.length });
@@ -203,6 +213,10 @@ export const makeHistoryStore = Effect.fnUntraced(function* ({ reads }: { readon
     Effect.withSpan('ThreadStorage.checkpoint.load', (_unit, id) => ({ attributes: { threadId: id, fold: 'history' } })),
   );
 
+  const weighMeasured = (messages: ThreadHistory, measures: readonly MessageMeasure[]): void => {
+    for (let at = 0; at < messages.length; at += 1) live.weigh(messages[at]!, measures[at]!.bytes);
+  };
+
   const changedRows = Effect.fnUntraced(function* (id: string, stored: ThreadHistory, next: ThreadHistory) {
     let shared = 0;
     const common = Math.min(stored.length, next.length);
@@ -214,6 +228,7 @@ export const makeHistoryStore = Effect.fnUntraced(function* ({ reads }: { readon
       while (last >= shared && Object.is(stored[last], next[last])) last -= 1;
       const changed = next.slice(shared, last + 1);
       const measures = yield* measured(changed);
+      weighMeasured(changed, measures);
       for (let at = 0; at < changed.length; at += 1) {
         statements.push(
           db
@@ -231,6 +246,7 @@ export const makeHistoryStore = Effect.fnUntraced(function* ({ reads }: { readon
     }
     const added = next.slice(shared);
     const measures = yield* measured(added);
+    weighMeasured(added, measures);
     for (let at = 0; at < added.length; at += ROWS) {
       const rows = added.slice(at, at + ROWS);
       statements.push(
@@ -466,7 +482,7 @@ export const makeHistoryStore = Effect.fnUntraced(function* ({ reads }: { readon
       const warm = local === undefined ? live.held(id) : null;
       const held = local ?? (warm === null ? undefined : { ...warm.standing, history: warm.history });
       const current = held !== undefined && held.cursor === through;
-      const seen = current && warm !== null ? live.glimpse(id) : null;
+      const seen = current && warm !== null ? live.glimpse(id, unit) : null;
       const claim = current && local !== undefined ? live.claim(id, unit) : null;
       yield* unit.run(db.update(threadLog).set({ historyThrough: quiet }).where(eq(threadLog.threadId, id)));
       if (held === undefined || (claim === null && seen === null)) return forget(unit, id);
@@ -531,4 +547,4 @@ const writing = (unit: Unit<'machine'>): unit is WriteUnit<'machine'> => 'afterC
 type GuidanceState = Pick<HistoryState, 'cursor' | 'through' | 'guidance'>;
 type Held = HistoryState & { readonly history: ThreadHistory };
 type Folded = { readonly history: ThreadHistory; readonly through: number; readonly guidance: GuidanceIndex };
-type FoldedEvent = { readonly position: number; readonly kind: string; readonly payload: ThreadEventPayload };
+type FoldedEvent = { readonly position: number; readonly kind: string; readonly payload: ThreadEventPayload; readonly bytes: number };

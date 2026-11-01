@@ -18,7 +18,7 @@ import {
   writeUnitOf,
 } from '../contract/service/units.js';
 import { UnitWriteRefused, type WriteSet } from '../contract/service/writes.js';
-import { type Building, ProgramOpen, type Returning, UnitLife } from './life.js';
+import { type Building, ProgramOpen, type Returning, UnitEnd, UnitLife } from './life.js';
 import type { TableMoves } from './moves.js';
 import { withinCommit } from './transaction.js';
 import { breach, checkStatement, movedTables, UnitDurability, UnitWrites } from './writes.js';
@@ -45,17 +45,20 @@ const plainWrite = (query: Effect.Effect<unknown, StoreFailure>): ProgramQuery |
       );
 };
 
-export const programWriteUnit = <Brand extends StoreBrand>(program: ProgramUnit<Brand>): ProgramWrite<Brand> => ({
-  ...writeUnitOf<Brand>({
-    store: program.store,
-    run: <A>(query: Effect.Effect<A, StoreFailure>): Effect.Effect<A, StoreFailure> => {
-      const statement = plainWrite(query);
-      return statement === null ? unplannable(program, 'a read through the program unit') : Effect.as(program.write(statement), [] as A);
-    },
-    afterCommit: program.afterCommit,
-  }),
-  program,
-});
+export const programWriteUnit = <Brand extends StoreBrand>(program: ProgramUnit<Brand>): ProgramWrite<Brand> => {
+  const unit: ProgramWrite<Brand> = {
+    ...writeUnitOf<Brand>({
+      store: program.store,
+      run: <A>(query: Effect.Effect<A, StoreFailure>): Effect.Effect<A, StoreFailure> => {
+        const statement = plainWrite(query);
+        return statement === null ? unplannable(program, 'a read through the program unit') : Effect.as(program.write(statement), [] as A);
+      },
+      afterCommit: program.afterCommit,
+    }),
+    program,
+  };
+  return UnitEnd.of(program)?.bind(unit) ?? unit;
+};
 
 export const programOf = <Brand extends StoreBrand>(unit: Unit<Brand>): ProgramUnit<Brand> | null =>
   'program' in unit ? (unit as ProgramWrite<Brand>).program : null;
@@ -87,7 +90,7 @@ const built = <Brand extends StoreBrand>(building: Building, set: WriteSet): Pro
     const { sql, params } = 'toSQL' in statement ? statement.toSQL() : statement.getQuery();
     building.statements.push({ sql, params, counts, expect, set, ...(safeIntegers === undefined ? {} : { safeIntegers }) });
   };
-  return programUnitOf<Brand>({
+  const unit = programUnitOf<Brand>({
     store: building.store,
     write: (statement, changes) => Effect.sync(() => added(statement, 'changes', changes ?? null)),
     guard: (statement, rows) => Effect.sync(() => added(statement, 'rows', rows)),
@@ -110,6 +113,7 @@ const built = <Brand extends StoreBrand>(building: Building, set: WriteSet): Pro
       ),
     afterCommit: (effect) => Effect.sync(() => void building.tails.push(carryCost(effect))),
   });
+  return building.end.bind(unit);
 };
 
 const joined = <Brand extends StoreBrand>(
@@ -118,13 +122,14 @@ const joined = <Brand extends StoreBrand>(
   set: WriteSet,
   key: string,
   tails: Effect.Effect<void>[],
+  end: UnitEnd,
 ): ProgramUnit<Brand> => {
   let next = 0;
   const counted = (statement: number, expected: number, actual: number) =>
     expected === actual
       ? Effect.void
       : Effect.die(new ProgramConflict({ store: identity.path, operation: set.operation, identity: key, statement, expected, actual }));
-  return programUnitOf<Brand>({
+  const unit = programUnitOf<Brand>({
     store: identity,
     write: (statement, changes) =>
       Effect.suspend(() => {
@@ -150,6 +155,7 @@ const joined = <Brand extends StoreBrand>(
       }),
     afterCommit: (effect) => Effect.sync(() => void tails.push(carryCost(effect))),
   });
+  return end.bind(unit);
 };
 
 const refusedBy = (thrown: { readonly name: string; readonly message: string; readonly code: string | number | undefined }) =>
@@ -195,10 +201,10 @@ const submitted = Effect.fnUntraced(function* <Brand extends StoreBrand, A, E>(
         new UnitWriteRefused({ store: identity.path, operation: set.operation, table: null, reason: 'durable-in-relaxed' }),
       );
     const writing = new Map(yield* UnitWrites).set(identity, set);
-    return yield* withinCommit(movedTables(identity, set), (tails) =>
+    return yield* withinCommit(movedTables(identity, set), (tails, end) =>
       Effect.acquireUseRelease(
         db.run(sql`savepoint program`),
-        () => Effect.provideService(work(joined<Brand>(db, identity, set, key, tails)), UnitWrites, writing),
+        () => Effect.provideService(work(joined<Brand>(db, identity, set, key, tails, end)), UnitWrites, writing),
         (_, exit) =>
           Effect.orDie(
             Exit.isSuccess(exit)
@@ -218,9 +224,10 @@ const submitted = Effect.fnUntraced(function* <Brand extends StoreBrand, A, E>(
   return yield* rootCost(
     set.operation,
     Effect.uninterruptibleMask((restore) =>
-      Effect.useSpan('Store.program', { attributes: { opKind: set.operation, 'db.program.key': key } }, () =>
-        Effect.gen(function* () {
-          const building: Building = { store: identity, statements: [], tails: [], sets: [set], returning: [] };
+      Effect.useSpan('Store.program', { attributes: { opKind: set.operation, 'db.program.key': key } }, () => {
+        const end = new UnitEnd();
+        return Effect.gen(function* () {
+          const building: Building = { store: identity, statements: [], tails: [], sets: [set], returning: [], end };
           const value = yield* restore(Effect.provideService(work(built<Brand>(building, set)), ProgramOpen, building));
           for (const statement of building.statements) {
             if (statement.counts !== 'rows')
@@ -276,8 +283,8 @@ const submitted = Effect.fnUntraced(function* <Brand extends StoreBrand, A, E>(
           }
           if (lost.reasons.length > 0) return yield* Effect.failCause(lost);
           return value;
-        }),
-      ),
+        }).pipe(Effect.ensuring(Effect.sync(() => end.close())));
+      }),
     ),
   );
 });
