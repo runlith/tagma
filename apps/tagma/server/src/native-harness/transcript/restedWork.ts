@@ -69,7 +69,7 @@ const ask = (
   Effect.flatMap(RolloutReads, (read) => {
     const start = kinds.worker;
     if (start === null) return Effect.fail(workerGone(WORKER, 'its entry reader names no worker that folds with it'));
-    return linkOf(start).ask(asking, [], (note) => {
+    return linkOf(start).run(asking, [], (note) => {
       for (const one of note.reads) read(one);
     });
   }).pipe(Effect.withSpan(span, { attributes: { rollout: rollout.path } }));

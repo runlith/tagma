@@ -155,6 +155,9 @@
     "uuid": "catalog:",
     "uuidv7": "1.2.1"
   },
+  "devDependencies": {
+    "@runlith/effect-test": "workspace:*"
+  },
   "tagma": {
     "host": [
       "./object"

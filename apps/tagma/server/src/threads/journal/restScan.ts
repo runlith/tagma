@@ -30,7 +30,7 @@ const link = workerLink<RestScanAsk, RestScanAnswer, RestScanRead>(
 
 export const scanForRest = (path: string): Effect.Effect<RestScan | null, WorkerUnavailable> =>
   Effect.flatMap(RolloutReads, (read) =>
-    link.ask(
+    link.run(
       (id) => ({ id, path }),
       [],
       (note) => {
