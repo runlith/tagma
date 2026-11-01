@@ -28,6 +28,8 @@ export type AgentDirective =
       readonly text: string;
       readonly ruleId?: string;
       readonly state?: Readonly<Record<string, unknown>>;
+      readonly batchKey?: string;
+      readonly covers?: readonly string[];
       readonly retell?: false;
     }
   | { readonly type: 'restrict'; readonly tools: readonly string[]; readonly ruleId?: string }

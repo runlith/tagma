@@ -2606,6 +2606,58 @@ describe('the turn loop owns its iteration', () => {
     }),
   );
   it.live(
+    'parallel guides stay unique when a sibling question parks the run',
+    Effect.fnUntraced(function* () {
+      const model = fakeModel(() =>
+        parallelToolCallTurn([
+          { name: 'read', id: 'read-a', input: { path: 'a' } },
+          { name: 'read', id: 'read-b', input: { path: 'b' } },
+          { name: 'write', id: 'write', input: {} },
+        ]),
+      );
+      const agent = new Agent<Record<string, never>>({
+        id: 'parked-guidance',
+        name: 'Parked guidance',
+        description: 'Reads before a question.',
+        instructions: () => 'Read the files.',
+        stopWhen: [stepLimit(TEST_MAX_STEPS)],
+        tools: () => ({
+          read: Tool.make({
+            display: () => ({ form: 'none' }),
+            approval: ASKS_NEVER,
+            description: 'Read a path.',
+            parameters: Schema.Struct({ path: Schema.String }),
+            execute: () => Effect.succeed({ read: true }),
+          }),
+          write: Tool.make({
+            display: () => ({ form: 'none' }),
+            approval: ASKS_IN_REVIEW,
+            description: 'Write after approval.',
+            parameters: Schema.Struct({}),
+            execute: () => Effect.succeed({ written: true }),
+          }),
+        }),
+        rules: [
+          agentRule(
+            'tag',
+            (ctx) =>
+              ctx.hook === 'afterTool' && ctx.tool?.name === 'read'
+                ? { type: 'guide', text: ctx.tool.toolCallId ?? '', batchKey: 'tag:fixture', state: { tag: 'revision' } }
+                : null,
+            { owner: 'test' },
+          ),
+        ],
+      });
+      const handle = yield* runner(model).run(agent, {
+        ...input('parked-guidance'),
+        approval: { mode: 'review' as const, interactive: true },
+        modeOf: builtinMode('review'),
+      });
+      yield* handle.output.steps;
+      expect(handle.untoldGuides().map((guide) => guide.batchKey)).toEqual(['tag:fixture']);
+    }),
+  );
+  it.live(
     'a call naming a tool no catalog holds is answered instead of dropped, naming the catalog spelling',
     Effect.fnUntraced(function* () {
       const model = fakeModel((callNumber) =>

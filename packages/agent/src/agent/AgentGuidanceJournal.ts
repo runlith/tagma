@@ -4,6 +4,20 @@ import { type AgentDirective, agentGuides } from './policy/AgentRuntimePolicy';
 
 type AgentRuntimeGuidanceSource = AgentRuntimeGuidance['sources'][number];
 
+export function coalesceGuides(guides: readonly PendingRuntimeGuide[], held: readonly PendingRuntimeGuide[] = []): PendingRuntimeGuide[] {
+  const identity = (guide: PendingRuntimeGuide) =>
+    guide.batchKey === undefined ? JSON.stringify(['content', guide.text, guide.state]) : JSON.stringify(['batch', guide.batchKey]);
+  const seen = new Set(held.map(identity));
+  const covered = new Set([...held, ...guides].flatMap((guide) => guide.covers ?? []));
+  return guides.filter((guide) => {
+    if (guide.batchKey !== undefined && covered.has(guide.batchKey)) return false;
+    const key = identity(guide);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 export class AgentGuidanceJournal {
   private readonly runId: string;
   private closed = false;
@@ -51,6 +65,8 @@ export function pendingRuntimeGuides(
     text: directive.text,
     ruleId: directive.ruleId,
     state: directive.state,
+    batchKey: directive.batchKey,
+    covers: directive.covers,
     retell: directive.retell,
     toolName: context.toolName,
     toolCallId: context.toolCallId,
@@ -63,6 +79,8 @@ function runtimeGuidanceSource(guide: PendingRuntimeGuide): AgentRuntimeGuidance
     hook: guide.hook,
     ruleId: guide.ruleId,
     state: guide.state,
+    batchKey: guide.batchKey,
+    covers: guide.covers,
     retell: guide.retell,
     toolName: guide.toolName,
     toolCallId: guide.toolCallId,

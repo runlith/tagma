@@ -51,7 +51,11 @@ import { builtInSkills as builtInSkillsOver } from '../skills/pool.js';
 import type { PublishingContext } from '../skills/artifacts.js';
 import { mcpServerTools as mcpServerToolsOver } from '../tools/mcpServers.js';
 import { RETRIEVAL_WORDS as RETRIEVAL_WORDS_OVER } from '../tools/outputWords.js';
-import { instructionSnapshot as instructionSnapshotOver, instructionsTold as instructionsToldOver } from '../turns/instructions.js';
+import {
+  instructionSnapshot as instructionSnapshotOver,
+  instructionsTold as instructionsToldOver,
+  touchedTagsTold as touchedTagsToldOver,
+} from '../turns/instructions.js';
 import { delegationRule as delegationRuleOver } from '../turns/delegationRule.js';
 import { teamRule as teamRuleOver } from '../turns/teamRule.js';
 import { workspaceInputsLayer as workspaceInputsLayerOver } from '../inputs/cache.js';
@@ -190,6 +194,8 @@ export const instructionSnapshot = (...input: Parameters<typeof instructionSnaps
   instructionSnapshotOver(...input);
 
 export const instructionsTold = (projectId: number): string => instructionsToldOver(projectId);
+
+export const touchedTagsTold = (projectId: number): string => touchedTagsToldOver(projectId);
 
 export const workspaceInputsLayer = (...input: Parameters<typeof workspaceInputsLayerOver>): ReturnType<typeof workspaceInputsLayerOver> =>
   workspaceInputsLayerOver(...input);

@@ -1,7 +1,7 @@
 import { Context, Effect } from 'effect';
 import { agentRule, type AgentRule } from '@runlith/agent/AgentRuntimePolicy';
 import { Orientation } from '../../graph/contract/service/orientation.js';
-import { instructionText } from '../../graph/orientation/Instructions.js';
+import { instructionChanges, instructionText } from '../../graph/orientation/Instructions.js';
 import type { InstructionSet } from '../../graph/contract/wire/instructions.js';
 import type { GraphServices } from '../../graph/contract/service/services.js';
 import type { GraphStore } from '../../platform/contract/service/store.js';
@@ -25,13 +25,19 @@ export function instructionRule(audienceOf: (ctx: ThreadContext) => InstructionS
         if (ctx.hook !== 'beforeStep' || ctx.graphRefused !== undefined) return null;
         const audience = audienceOf(ctx);
         const told: string[] = [];
+        const covers: string[] = [];
         const state: Record<string, InstructionSet> = {};
         const deliver = Effect.fnUntraced(function* (projectId: number, graph: Context.Context<GraphServices | GraphStore>) {
           const previous = instructionSnapshot(ctx.modelMessages, projectId);
           const current = yield* Context.get(graph, Orientation).instructions({ projectId, audience }).pipe(Effect.provide(graph));
-          const text = instructionText(current, previous);
+          const changes = instructionChanges(current, previous);
+          const text = instructionText(current, previous, changes);
           if (text.length === 0) return;
           told.push(text);
+          for (const entry of changes.pending) {
+            if (entry.kind === 'tag' && entry.source.startsWith('#'))
+              covers.push(`tag:${projectId}:${entry.source.slice(1)}@${entry.revision}`);
+          }
           state[instructionsTold(projectId)] = current;
         });
         yield* deliver(ctx.projectId, yield* ctx.graph);
@@ -47,7 +53,7 @@ export function instructionRule(audienceOf: (ctx: ThreadContext) => InstructionS
             `The law of project ${place.projectId} (${place.root}) cannot be read now: ${served.failure.code}: ${served.failure.reason}. The next change there is held again until its law arrives.`,
           );
         }
-        return told.length === 0 ? null : { type: 'guide' as const, text: told.join('\n\n'), state };
+        return told.length === 0 ? null : { type: 'guide' as const, text: told.join('\n\n'), state, covers };
       }),
     { owner: 'graph', hook: 'beforeStep', priority: -60, critical: true },
   );

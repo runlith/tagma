@@ -6,7 +6,7 @@ import { PROJECTION } from '../activities';
 import type { AgentContext, AgentContextProjection } from '../AgentContext';
 import type { AgentHostFailed } from '../AgentFailure';
 import type { AgentGuidanceJournal } from '../AgentGuidanceJournal';
-import { pendingRuntimeGuides } from '../AgentGuidanceJournal';
+import { coalesceGuides, pendingRuntimeGuides } from '../AgentGuidanceJournal';
 import type { PendingRuntimeGuide } from '../contracts';
 import type { AgentSink } from '../AgentRunner';
 import { type AgentDirective, type AgentStepToolPolicy, agentStepToolPolicy } from '../policy/AgentRuntimePolicy';
@@ -116,16 +116,8 @@ const injection = Effect.fn(function* (
   held: AgentStepInjection,
   directives: readonly AgentDirective[],
 ): Effect.fn.Return<AgentStepInjection> {
-  const identity = (guide: { readonly text: string; readonly state?: Readonly<Record<string, unknown>> }) =>
-    JSON.stringify([guide.text, guide.state]);
-  const seen = new Set(held.guides.map(identity));
   const queued = [...input.stepGuides.splice(0), ...pendingRuntimeGuides('beforeStep', directives)];
-  const pending = queued.filter((guide) => {
-    const key = identity(guide);
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
+  const pending = coalesceGuides(queued, held.guides);
   if (pending.length === 0) return held;
   const entry = input.guidance.emit(input.stepNumber, pending);
   if (entry) yield* input.feed.push({ type: 'runtime-guidance', entry });

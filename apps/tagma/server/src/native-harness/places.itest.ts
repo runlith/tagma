@@ -44,8 +44,14 @@ const lawOf = (set: unknown): string[] =>
 const told = Effect.fnUntraced(function* (directive: Effect.Effect<AgentRuleAnswer, unknown>) {
   const answered = yield* directive;
   if (answered === null) return null;
-  if (!('type' in answered) || answered.type !== 'guide') return yield* Effect.die('the rule answered no single guide');
-  return answered;
+  const directives = 'type' in answered ? [answered] : answered;
+  const guides = directives.filter((directive) => directive.type === 'guide');
+  if (guides.length !== directives.length) return yield* Effect.die('the rule answered a non-guide directive');
+  return {
+    type: 'guide' as const,
+    text: guides.map((guide) => guide.text).join('\n'),
+    state: Object.assign({}, ...guides.map((guide) => guide.state)),
+  };
 });
 
 const setup = Effect.fnUntraced(function* (demo: EffectDemo, copies: readonly GraphOrigin[] = []) {

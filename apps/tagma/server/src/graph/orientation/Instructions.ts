@@ -11,6 +11,7 @@ import { measuredRoot } from '../contract/service/serving.js';
 import { ProjectGroups, Projects } from '../../projects/contract/service/registry.js';
 import { type LawEntry, type LawReads, ruleLine } from './law.js';
 import { reachLabel } from './reach.js';
+import { tagRevision } from './tagPrompts.js';
 
 export function instructionOf(kind: Instruction['kind'], source: string, scope: string, text: string, value: unknown = text): Instruction {
   return { kind, source, scope, text, revision: createHash('sha256').update(JSON.stringify(value)).digest('hex') };
@@ -35,7 +36,13 @@ const vocabularyInstructions = deriveLaw(
     }
     for (const tag of table.tags) {
       const key = tag.name !== undefined && tag.name !== tag.id ? ` · key #${tag.id}` : '';
-      entries.push(instructionOf('tag', `#${tag.id}`, scope, tagText(table, tag, ` [${scope}${key}]`), tag));
+      entries.push({
+        kind: 'tag',
+        source: `#${tag.id}`,
+        scope,
+        text: tagText(table, tag, ` [${scope}${key}]`),
+        revision: tagRevision(tag),
+      });
     }
     for (const unread of table.unreadable) {
       const named = unread.id === '' ? '' : ` #${unread.id}`;
@@ -66,8 +73,7 @@ export function instructionChanges(set: InstructionSet, previous?: InstructionSe
   };
 }
 
-export function instructionText(set: InstructionSet, previous?: InstructionSet): string {
-  const changes = instructionChanges(set, previous);
+export function instructionText(set: InstructionSet, previous?: InstructionSet, changes = instructionChanges(set, previous)): string {
   const parts = [
     changes.basis === 'none'
       ? `Project instructions — ${set.root}. Prompt rules bind their labelled project; code rules arrive when their sources are read or written.`

@@ -10,7 +10,7 @@ import type { Tag } from '../wire/tags/declaration.js';
 import type { ActState } from './transaction.js';
 import type { BlockRecord } from './acts.js';
 
-export type TagPrompt = Pick<Tag, 'id' | 'name' | 'prompt'> & { readonly identity: string };
+export type TagPrompt = Pick<Tag, 'id' | 'name' | 'prompt'> & { readonly identity: string; readonly aliases?: readonly string[] };
 
 export class Orientation extends Context.Service<
   Orientation,
