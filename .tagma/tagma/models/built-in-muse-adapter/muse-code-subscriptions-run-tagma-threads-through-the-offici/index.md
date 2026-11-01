@@ -98,8 +98,8 @@ The cached prefix of a Muse request is the base instructions, the tool list, the
 
 - Linux and Windows logins, read from the official builds' strings only: no Linux or Windows machine with a signed-in Muse Code was at hand.
 - How late a `view/gap` can arrive after its turn's drain barrier: MSP promises no order between a gap and its neighbours, and no live session produced a gap to measure.
-
-Proven live on a trial server (Muse Code 1.4.14, `muse-spark-1.3`, minimal, 2026-11-01): a thread that ran a turn on a native model (an `openai-compatible` provider over a local endpoint) and was moved onto Muse Code named the word said only on the native road; in review mode a vendor `web_fetch` asked the operator in the thread, an allowed fetch answered and a denied one failed with `network access denied`; "Generate title" and recap asked the Muse side session.
+- A completed compaction lost to a host death is reconciled by contract test only: no live host was killed mid-compaction.
+- The cache lifetime's exact end between 20 and 30 minutes, and whether it moves with prefix size or load: one session was measured per gap.
 
 ## Out of scope
 
@@ -132,4 +132,4 @@ Live means a trial server on macOS with Muse Code 1.4.14 and `muse-spark-1.3` at
 8. Live: signed out, the turn ended `authRequired` naming `muse login`. Contract and the version-probe itest: an inherited `META_API_KEY` never reaches a Muse process.
 9. The Claude runner's tests run unchanged on the shared bridge; the Muse cycle and SDK adapter tests run on fakes.
 10. Done: [[d7d24be1]], the module card, [[4c4cc041]].
-11. Live: a title asked within the cache lifetime came from the Muse side session (`source: captured`), and an automatic recap was written five minutes after the second exchange, on `muse-code` / `muse-spark-1.3`.
+11. Live: a title asked within the cache lifetime came from the Muse side session (`source: captured`), and an automatic recap was written five minutes after the second exchange, on `muse-code` / `muse-spark-1.3`. Past the 1200 s lifetime a manual recap refused `not-warm` and a title took the fresh road (`no-prefix`).
