@@ -13,6 +13,7 @@ import { test as mountApp } from './test.svelte.js';
 import Broken from './test-utils/point/Broken.svelte';
 import ComponentsHost from './test-utils/point/ComponentsHost.svelte';
 import Labelled from './test-utils/point/Labelled.svelte';
+import Offered from './test-utils/point/Offered.svelte';
 import PanelsHost from './test-utils/point/PanelsHost.svelte';
 
 type Entry = { readonly id: string; readonly order: number };
@@ -70,6 +71,31 @@ describe('Point', () => {
     const clash = (failures[0] as ServiceStartError).cause;
     expect(clash).toMatchObject({ name: 'RegistryClash', holders: ['features/a', 'features/b'] });
     expect(rt.get(Menu).items).toEqual([{ id: 'x', order: 0 }]);
+    await rt.unmount();
+  });
+
+  it('takes members only while its scope starts when it joins at start: a later condition or run-time source is refused', async () => {
+    const Fixed = Point.define<Entry>()('PointTest.Fixed', { tier: 'app', key: (entry) => entry.id, joins: 'start' });
+    const gate = new Gate();
+    const failures: unknown[] = [];
+    const rt = mountApp(
+      Layer.mergeAll(
+        Fixed,
+        Fixed.contribute('core', { id: 'core', order: 0 }),
+        Layer.when(Gate, (open) => open.on, Fixed.contribute('late', { id: 'late', order: 1 })),
+      ),
+      Layer.of(Gate, gate),
+      { onFailure: (error) => failures.push(error) },
+    );
+    await flush();
+    const fixed = rt.get(Fixed);
+
+    gate.on = true;
+    flushSync();
+    await flush();
+    expect(fixed.items.map((entry) => entry.id)).toEqual(['core']);
+    expect((failures[0] as ServiceStartError).cause).toMatchObject({ name: 'RegistryRefusal', contributor: 'late' });
+    expect(() => fixed.register('views', { id: 'view', order: 2 })).toThrow(/only while its scope starts/);
     await rt.unmount();
   });
 
@@ -138,5 +164,22 @@ describe('PointView', () => {
     flushSync();
     expect(framed.target.querySelector('[data-frame]')).toBeNull();
     framed.remove();
+  });
+
+  it('draws what its gate answers for each item: the payload, another one in its place, or nothing', () => {
+    const components = pointOf<Shown<{ label: string }> & { readonly id: string }>();
+    components.register(
+      'core',
+      { id: 'open', payload: { component: Labelled } },
+      { id: 'offered', payload: { component: Labelled } },
+      { id: 'closed', payload: { component: Labelled } },
+    );
+    const gate = (item: { readonly id: string; readonly payload: Shown<{ label: string }>['payload'] }) =>
+      item.id === 'open' ? item.payload : item.id === 'offered' ? { component: Offered } : null;
+    const shown = show((target) => mount(ComponentsHost, { target, props: { point: components, gate } }));
+    flushSync();
+    expect(shown.target.querySelectorAll('[data-item]')).toHaveLength(1);
+    expect(shown.target.querySelectorAll('[data-offer]')).toHaveLength(1);
+    shown.remove();
   });
 });
