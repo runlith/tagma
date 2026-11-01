@@ -14020,10 +14020,6 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead packages/agent/src/tool/refusal.ts#ToldRefusal",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "dead-code dead packages/agent/src/tools/ReadyAnswers.ts#READY_ANSWERS_TOOL",
           "owner": "5a3bed29"
         },
