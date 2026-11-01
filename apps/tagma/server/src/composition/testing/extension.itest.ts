@@ -332,6 +332,9 @@ layer(root, { excludeTestServices: true })('a root composing the core with a mod
 
       world.grants.level = 'full';
       expect(yield* sealed('full-sealed')).toMatchObject({ status: 200 });
+      const listed = (yield* world.op('list_projects', {})).body as { projects: { name: string }[] };
+      expect(listed.projects.map((one) => one.name)).toEqual(expect.arrayContaining(['full-sealed']));
+      expect(listed.projects.map((one) => one.name)).not.toContain('read-sealed');
     }),
   );
 });

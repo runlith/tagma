@@ -38,6 +38,10 @@ export class GateRefusal<Code extends string = string> extends Data.TaggedError(
     return new GateRefusal(this.code, this.reason, this.unblock, this.inputFile, this.words, field, this.right);
   }
 
+  lacking(right: Right): GateRefusal<Code> {
+    return new GateRefusal(this.code, this.reason, this.unblock, this.inputFile, this.words, this.field, right);
+  }
+
   override get message(): string {
     return `${this.code}: ${this.reason}`;
   }
