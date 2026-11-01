@@ -12,4 +12,6 @@ sources:
 ---
 Before ending a successful one-text step the loop asks `signals.hasPending`. Waiting words continue the run: the next step takes them (`drain`) and answers, and `beforeClose` counts on the genuine end. A line marked to wait for the next turn (`waits`, [[fa4f58b1]]) does not continue the run: `hasPending` asks only about words demanding a step. Otherwise a word sent into the running turn (steer) would open a new run — becoming a follow-up.
 
+An unresolved interactive call parks the run before any waiting signal reaches the model; the answer resumes the run and its next step reads the signal.
+
 A step cut by the output limit continues the run by the continuation policy, and the next step takes the waiting words. The filter and the step bound (`stopWhen`) end the run: the words wait for the next turn.
