@@ -26,12 +26,12 @@ it.live('real rollout reads cross the fold worker boundary without sampling', ()
     const reads: RolloutRead[] = [];
     writeFileSync(path, '{"thread":{"id":"observed"}}\n');
     const rollout = { path, packed: `${path}.zst`, transcript: `${path}.entries` };
-    yield* work.history(core, rollout).pipe(Effect.provideService(RolloutReads, (read) => reads.push(read)));
+    yield* work.history(core, rollout, { kind: 'staged' }).pipe(Effect.provideService(RolloutReads, (read) => reads.push(read)));
     expect([...new Set(reads.map((read) => read.path))]).toEqual([path]);
     expect(reads.reduce((sum, read) => sum + read.bytes, 0)).toBe(statSync(path).size);
     reads.length = 0;
     const entries = yield* work
-      .transcribe(core, rollout, { bytes: statSync(path).size, position: 0 })
+      .transcribe(core, rollout, { bytes: statSync(path).size, position: 0 }, { kind: 'staged' })
       .pipe(Effect.provideService(RolloutReads, (read) => reads.push(read)));
     expect(entries).toBe(0);
     expect(reads.reduce((sum, read) => sum + read.bytes, 0)).toBe(statSync(path).size);
@@ -57,10 +57,14 @@ it.live('closing a rested runtime joins its idle worker before the source is rel
       },
     });
     const work = yield* Effect.scoped(
-      Effect.tap(makeRestedWork, (work) => work.history(reader, { path, packed: `${path}.zst`, transcript: `${path}.entries` })),
+      Effect.tap(makeRestedWork, (work) =>
+        work.history(reader, { path, packed: `${path}.zst`, transcript: `${path}.entries` }, { kind: 'staged' }),
+      ),
     );
     expect(closed).toBe(true);
-    expect(yield* Effect.flip(work.history(reader, { path, packed: `${path}.zst`, transcript: `${path}.entries` }))).toMatchObject({
+    expect(
+      yield* Effect.flip(work.history(reader, { path, packed: `${path}.zst`, transcript: `${path}.entries` }, { kind: 'staged' })),
+    ).toMatchObject({
       _tag: 'WorkerUnavailable',
     });
   }),
@@ -73,7 +77,7 @@ it.live('a rested history folds a message stored before a form step in its curre
     const path = join(root, 'formed.jsonl');
     const event = { position: 1, id: 'told', kind: 'message', payload: { messages: [{ role: 'user', content: 'law' }] } };
     writeFileSync(path, `${JSON.stringify({ thread: { id: 'formed' } })}\n${JSON.stringify({ kind: 'event', row: event })}\n`);
-    const folded = yield* work.history(formedKinds(), { path, packed: `${path}.zst`, transcript: `${path}.entries` });
+    const folded = yield* work.history(formedKinds(), { path, packed: `${path}.zst`, transcript: `${path}.entries` }, { kind: 'staged' });
     expect(folded.history).toEqual([{ role: 'user', content: [{ type: 'text', text: 'law' }] }]);
   }),
 );
@@ -86,7 +90,10 @@ it.live('a reader whose worker entry is missing fails as a worker failure, and t
     const missing = makeThreadEntryReader({ products: [], worker: () => new Worker(pathToFileURL(entry).href, { type: 'module' }) });
     const rollout = { path: join(root, 'absent.jsonl'), packed: join(root, 'absent.zst'), transcript: join(root, 'transcript') };
     const failed = yield* Effect.all(
-      [Effect.result(work.history(missing, rollout)), Effect.result(work.transcribe(missing, rollout, { bytes: 0, position: 0 }))],
+      [
+        Effect.result(work.history(missing, rollout, { kind: 'staged' })),
+        Effect.result(work.transcribe(missing, rollout, { bytes: 0, position: 0 }, { kind: 'staged' })),
+      ],
       { concurrency: 'unbounded' },
     );
     for (const answer of failed) {
@@ -100,7 +107,7 @@ it.live('a reader whose worker entry is missing fails as a worker failure, and t
     );
     expect(built.success ? [] : built.logs).toEqual([]);
     writeFileSync(entry, yield* Effect.promise(() => built.outputs[0]!.text()));
-    const read = yield* Effect.result(work.history(missing, rollout));
+    const read = yield* Effect.result(work.history(missing, rollout, { kind: 'staged' }));
     expect(read._tag === 'Failure' ? read.failure : read.success).toMatchObject({ _tag: 'RolloutUnreadable', path: rollout.path });
   }),
 );

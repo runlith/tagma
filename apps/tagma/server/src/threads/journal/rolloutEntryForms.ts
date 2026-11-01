@@ -6,7 +6,14 @@ import type { StoreDb, StoreFailure } from '../../platform/contract/service/stor
 import type { WriteUnit } from '../../platform/contract/service/units.js';
 import { writes, type WriteSet } from '../../platform/contract/service/writes.js';
 import { threadRecord } from '../../thread-record/store/table.js';
-import { threadRolloutCursor, threadRolloutForm, threadRolloutRefusal, type RolloutPublishing } from '../store/journal.js';
+import {
+  conversationWrites,
+  publishedSourceRows,
+  threadRolloutCursor,
+  threadRolloutForm,
+  threadRolloutRefusal,
+  type RolloutPublishing,
+} from '../store/journal.js';
 import {
   ThreadEntryKinds,
   ThreadFormRefused,
@@ -20,7 +27,7 @@ import type { NativeFolds } from './rolloutMeta.js';
 import { eventless } from './rolloutStaging.js';
 import { RolloutReads, type ReadRollout } from '../contract/service/rolloutReads.js';
 import { compressedRollout, rolloutFiles, rolloutStateOf, transcriptOf } from './rolloutForms.js';
-import type { RolloutFiles, TranscriptKey } from '../contract/service/rested.js';
+import type { PublishedSource, RolloutFiles, TranscriptKey } from '../contract/service/rested.js';
 
 export type StageRollout = NativeFolds['stage'];
 
@@ -183,37 +190,67 @@ export const rolloutFormOf = (db: StoreDb<'machine'>, threadId: string) =>
 const io = (path: string) => (error: unknown) =>
   new RolloutUnreadable({ reason: 'io', path, message: error instanceof Error ? error.message : String(error) });
 
-const settledWith = (db: StoreDb<'machine'>, write: RolloutFormWrite, threadId: string, publishing: RolloutPublishing) =>
-  write(
-    FORMING,
-    Effect.fnUntraced(function* (unit) {
-      const standing = yield* unit.run(
-        db
-          .select({ publishing: threadRolloutForm.publishing })
-          .from(threadRolloutForm)
-          .where(eq(threadRolloutForm.threadId, threadId))
-          .get(),
-      );
-      if (standing?.publishing?.sha256 !== publishing.sha256) return;
-      if (publishing.cursorBytes !== null) {
-        yield* unit.run(
+export type FormSource = {
+  readonly stage: (threadId: string, path: string) => Effect.Effect<PublishedSource | null, RolloutUnreadable | StoreFailure>;
+  readonly publishIn: (
+    unit: WriteUnit<'machine'>,
+    threadId: string,
+    path: string,
+    source: PublishedSource,
+  ) => Effect.Effect<boolean, StoreFailure>;
+  readonly discard: (threadId: string, path: string, source: PublishedSource) => Effect.Effect<void, RolloutUnreadable>;
+  readonly restep: (unit: WriteUnit<'machine'>, threadId: string, step: string | null) => Effect.Effect<void, StoreFailure>;
+  readonly using: <A, E, R>(threadId: string, work: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>;
+};
+
+const FORMING_SOURCE = writes('ThreadRollout.formSource', [publishedSourceRows], FORMING, conversationWrites);
+
+const settledWith = Effect.fnUntraced(
+  function* (
+    db: StoreDb<'machine'>,
+    write: RolloutFormWrite,
+    threadId: string,
+    path: string,
+    publishing: RolloutPublishing,
+    sources: FormSource,
+  ) {
+    const source = yield* sources.stage(threadId, path);
+    const settled = yield* write(
+      source === null ? FORMING : FORMING_SOURCE,
+      Effect.fnUntraced(function* (unit) {
+        const standing = yield* unit.run(
           db
-            .update(threadRolloutCursor)
-            .set({ nextByteOffset: publishing.cursorBytes, generation: sql`${threadRolloutCursor.generation} + 1` })
-            .where(eq(threadRolloutCursor.threadId, threadId)),
+            .select({ publishing: threadRolloutForm.publishing })
+            .from(threadRolloutForm)
+            .where(eq(threadRolloutForm.threadId, threadId))
+            .get(),
         );
-      }
-      if (publishing.refusalBytes !== null) {
-        yield* unit.run(
-          db
-            .update(threadRolloutRefusal)
-            .set({ nextByteOffset: publishing.refusalBytes })
-            .where(eq(threadRolloutRefusal.threadId, threadId)),
-        );
-      }
-      yield* unit.run(db.update(threadRolloutForm).set({ publishing: null }).where(eq(threadRolloutForm.threadId, threadId)));
-    }),
-  );
+        if (standing?.publishing?.sha256 !== publishing.sha256) return false;
+        if (source !== null && !(yield* sources.publishIn(unit, threadId, path, source))) return false;
+        if (publishing.cursorBytes !== null) {
+          yield* unit.run(
+            db
+              .update(threadRolloutCursor)
+              .set({ nextByteOffset: publishing.cursorBytes, generation: sql`${threadRolloutCursor.generation} + 1` })
+              .where(eq(threadRolloutCursor.threadId, threadId)),
+          );
+        }
+        if (publishing.refusalBytes !== null) {
+          yield* unit.run(
+            db
+              .update(threadRolloutRefusal)
+              .set({ nextByteOffset: publishing.refusalBytes })
+              .where(eq(threadRolloutRefusal.threadId, threadId)),
+          );
+        }
+        yield* unit.run(db.update(threadRolloutForm).set({ publishing: null }).where(eq(threadRolloutForm.threadId, threadId)));
+        return true;
+      }),
+    );
+    if (!settled && source !== null) yield* sources.discard(threadId, path, source);
+  },
+  (effect, _db, _write, threadId, _path, _publishing, sources) => sources.using(threadId, effect),
+);
 
 const publishedHere = Effect.fnUntraced(function* (path: string, publishing: RolloutPublishing) {
   const state = yield* rolloutStateOf(path);
@@ -228,11 +265,12 @@ export const settledRollout = Effect.fnUntraced(function* (
   threadId: string,
   path: string,
   kinds: ThreadEntryReader,
+  sources: FormSource,
 ): Effect.fn.Return<void, RolloutUnformable | RolloutUnreadable | StoreFailure> {
   const standing = yield* rolloutFormOf(db, threadId);
   const publishing = standing?.publishing;
   if (publishing == null) return;
-  if (yield* publishedHere(path, publishing)) return yield* settledWith(db, write, threadId, publishing);
+  if (yield* publishedHere(path, publishing)) return yield* settledWith(db, write, threadId, path, publishing, sources);
   if (kinds.base !== null && standing?.step === kinds.base.step) return yield* olderRollout(threadId, path, null, kinds.base);
 });
 
@@ -253,6 +291,7 @@ export const stagedRollout = Effect.fnUntraced(function* (
   path: string,
   kinds: ThreadEntryReader,
   stage: StageRollout,
+  sources: FormSource,
   aside: boolean,
 ): Effect.fn.Return<RolloutForm | RolloutStaged, RolloutUnreadable | StoreFailure> {
   const suffix = aside ? '.staging' : '.forming';
@@ -273,7 +312,7 @@ export const stagedRollout = Effect.fnUntraced(function* (
   let mark: string | null = null;
   if (done?.publishing != null) {
     if (yield* publishedHere(path, done.publishing)) {
-      yield* settledWith(db, write, threadId, done.publishing);
+      yield* settledWith(db, write, threadId, path, done.publishing, sources);
       if (!kinds.lags(done.step)) return FORMED;
     } else if (kinds.base !== null && done.step === kinds.base.step) {
       return { kind: 'refused', refusal: olderRollout(threadId, path, null, kinds.base) };
@@ -345,7 +384,7 @@ export const stagedRollout = Effect.fnUntraced(function* (
   const commit = Effect.fnUntraced(function* (transcribed: boolean) {
     const recording = yield* Effect.result(
       write(
-        FORMING,
+        FORMING_SOURCE,
         Effect.fnUntraced(function* (unit) {
           yield* unmarked(unit);
           if ((yield* heldThread(db, unit, threadId)) === undefined) return false;
@@ -353,6 +392,7 @@ export const stagedRollout = Effect.fnUntraced(function* (
             db.insert(threadRolloutForm).values({ threadId, formedAt: new Date(yield* Clock.currentTimeMillis), publishing, step }),
           );
           yield* formStoredIn(db, unit, threadId, kinds, pending);
+          if (publishing === null) yield* sources.restep(unit, threadId, step);
           return true;
         }),
       ),
@@ -379,7 +419,7 @@ export const stagedRollout = Effect.fnUntraced(function* (
     );
     yield* clear;
     if (Result.isFailure(renamed)) return yield* renamed.failure;
-    if (recorded) yield* settledWith(db, write, threadId, publishing);
+    if (recorded) yield* settledWith(db, write, threadId, path, publishing, sources);
     return FORMED;
   });
   return { kind: 'staged', commit: (transcribed) => unmoved(commit(transcribed)), discard: clear, transcript } satisfies RolloutStaged;
@@ -393,9 +433,10 @@ export const formRollout = Effect.fnUntraced(function* (
   path: string,
   kinds: ThreadEntryReader,
   stage: StageRollout,
+  sources: FormSource,
 ): Effect.fn.Return<RolloutForm, RolloutUnreadable | StoreFailure> {
   for (;;) {
-    const staging = yield* stagedRollout(db, write, threadId, path, kinds, stage, false);
+    const staging = yield* stagedRollout(db, write, threadId, path, kinds, stage, sources, false);
     if (staging.kind !== 'staged') return staging;
     const outcome = yield* staging.commit(false);
     if (outcome.kind !== 'moved') return outcome;

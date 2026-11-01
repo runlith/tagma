@@ -49,6 +49,8 @@ export const makeThreadStore = Effect.fnUntraced(function* (input: { readonly re
   const branching = yield* makeThreadBranching({ folds });
 
   const rowOf = <T extends ThreadMetadataRow>(row: T) => threadRowOf(kinds, row);
+  const sourceRead = <A>(id: string, tx: Unit<'machine'> | undefined, effect: Effect.Effect<A, ThreadStorageFailed>) =>
+    input.reads === undefined ? effect : tx === undefined ? input.reads.reading(id, effect) : input.reads.retaining(id, effect);
 
   const metadataWhere = (call: string, where: SQL | undefined, tx?: Unit<'machine'>) =>
     work.read(call, tx, (unit) =>
@@ -126,41 +128,84 @@ export const makeThreadStore = Effect.fnUntraced(function* (input: { readonly re
             .get(),
         ),
       ),
-    find: (id: string, tx?: Unit<'machine'>) => work.read('find', tx, (unit) => work.findIn(unit, id)),
+    find: (id: string, tx?: Unit<'machine'>) =>
+      sourceRead(
+        id,
+        tx,
+        work.read('find', tx, (unit) => work.findIn(unit, id)),
+      ),
     findOwned: (id: string, ownerId: string, tx?: Unit<'machine'>) =>
-      rowWhere('findOwned', and(eq(threadRow.id, id), eq(threadRow.ownerId, ownerId)), tx),
+      sourceRead(id, tx, rowWhere('findOwned', and(eq(threadRow.id, id), eq(threadRow.ownerId, ownerId)), tx)),
     logs: (id: string, tx?: Unit<'machine'>) =>
-      work.read('logs', tx, (unit) =>
-        Effect.gen(function* () {
-          const logged = yield* work.required(unit, id, history.read(unit, id));
-          if (logged === null) return null;
-          return { history: logged, transcript: yield* entries.transcript(unit, id) };
-        }),
+      sourceRead(
+        id,
+        tx,
+        work.read('logs', tx, (unit) =>
+          Effect.gen(function* () {
+            const logged = yield* work.required(unit, id, history.read(unit, id));
+            if (logged === null) return null;
+            return { history: logged, transcript: yield* entries.transcript(unit, id) };
+          }),
+        ),
       ),
     transcriptOf: (id: string, tx?: Unit<'machine'>) =>
-      work.read('transcriptOf', tx, (unit) =>
-        work
-          .required(
-            unit,
-            id,
-            Effect.map(work.hasLog(unit, id), (standing) => (standing ? id : null)),
-          )
-          .pipe(Effect.flatMap((present) => (present === null ? Effect.succeed(null) : entries.transcript(unit, id)))),
+      sourceRead(
+        id,
+        tx,
+        work.read('transcriptOf', tx, (unit) =>
+          work
+            .required(
+              unit,
+              id,
+              Effect.map(work.hasLog(unit, id), (standing) => (standing ? id : null)),
+            )
+            .pipe(Effect.flatMap((present) => (present === null ? Effect.succeed(null) : entries.transcript(unit, id)))),
+        ),
       ),
-    historyOf: (id: string, tx?: Unit<'machine'>) => work.read('historyOf', tx, (unit) => work.required(unit, id, history.read(unit, id))),
+    historyOf: (id: string, tx?: Unit<'machine'>) =>
+      sourceRead(
+        id,
+        tx,
+        work.read('historyOf', tx, (unit) => work.required(unit, id, history.read(unit, id))),
+      ),
     toldTailOf: (id: string, key: string) =>
-      work.read('toldTailOf', undefined, (unit) => work.required(unit, id, history.toldTail(unit, id, key))),
+      sourceRead(
+        id,
+        undefined,
+        work.read('toldTailOf', undefined, (unit) => work.required(unit, id, history.toldTail(unit, id, key))),
+      ),
     toldStateOf: (id: string, key: string, toolCallId?: string) =>
-      work.read('toldStateOf', undefined, (unit) => history.toldState(unit, id, key, toolCallId)),
+      sourceRead(
+        id,
+        undefined,
+        work.read('toldStateOf', undefined, (unit) => history.toldState(unit, id, key, toolCallId)),
+      ),
     entriesOfRun: (id: string, runId: string, tx?: Unit<'machine'>) =>
-      work.read('entriesOfRun', tx, (unit) => entries.ofRun(unit, id, runId)),
+      sourceRead(
+        id,
+        tx,
+        work.read('entriesOfRun', tx, (unit) => entries.ofRun(unit, id, runId)),
+      ),
     openToolsOfRun: (id: string, runId: string, tx?: Unit<'machine'>) =>
-      work.read('openToolsOfRun', tx, (unit) => entries.openToolsOfRun(unit, id, runId)),
+      sourceRead(
+        id,
+        tx,
+        work.read('openToolsOfRun', tx, (unit) => entries.openToolsOfRun(unit, id, runId)),
+      ),
     openQuestionsOfRun: (id: string, runId: string, tx?: Unit<'machine'>) =>
-      work.read('openQuestionsOfRun', tx, (unit) => entries.openQuestionsOfRun(unit, id, runId)),
+      sourceRead(
+        id,
+        tx,
+        work.read('openQuestionsOfRun', tx, (unit) => entries.openQuestionsOfRun(unit, id, runId)),
+      ),
     entryById: (id: string, entryId: string, tx?: Unit<'machine'>) => {
       const program = tx === undefined ? null : programOf(tx);
-      if (program === null) return work.read('entryById', tx, (unit) => entries.byId(unit, id, entryId));
+      if (program === null)
+        return sourceRead(
+          id,
+          tx,
+          work.read('entryById', tx, (unit) => entries.byId(unit, id, entryId)),
+        );
       const own = plannedFacts(program, id)?.findLast(
         (fact) => (fact.payload as { readonly entry?: { readonly id?: unknown } }).entry?.id === entryId,
       );
@@ -168,15 +213,23 @@ export const makeThreadStore = Effect.fnUntraced(function* (input: { readonly re
       return work.read('entryById', undefined, (unit) => entries.byId(unit, id, entryId));
     },
     questionById: (id: string, questionId: string, tx?: Unit<'machine'>) =>
-      work.read('questionById', tx, (unit) => entries.questionById(unit, id, questionId)),
+      sourceRead(
+        id,
+        tx,
+        work.read('questionById', tx, (unit) => entries.questionById(unit, id, questionId)),
+      ),
     transcriptWindow: (id: string, query: ThreadTranscriptQuery, tx?: Unit<'machine'>) =>
-      work.read('transcriptWindow', tx, (unit) =>
-        Effect.gen(function* () {
-          const page = yield* entries.window(unit, id, query);
-          if (page.entries.length > 0) return page;
-          const row = yield* unit.run(db.select({ id: threadRow.id }).from(threadRow).where(eq(threadRow.id, id)).get());
-          return row ? page : null;
-        }),
+      sourceRead(
+        id,
+        tx,
+        work.read('transcriptWindow', tx, (unit) =>
+          Effect.gen(function* () {
+            const page = yield* entries.window(unit, id, query);
+            if (page.entries.length > 0) return page;
+            const row = yield* unit.run(db.select({ id: threadRow.id }).from(threadRow).where(eq(threadRow.id, id)).get());
+            return row ? page : null;
+          }),
+        ),
       ),
     insert: (values: ThreadInsertValues, tx?: WriteUnit<'machine'>) => {
       if (values.parentThreadId) {

@@ -1,5 +1,6 @@
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { fixtureMigrations } from '../migrations.js';
+import { createHash, randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { describe, expect } from 'bun:test';
 import { it } from '@runlith/effect-test';
@@ -23,7 +24,7 @@ import { session } from '../../../platform/store/writers.js';
 import { thread, threadEntry } from '../../../threads/testing/doubles.js';
 import { threadRecord } from '../../../thread-record/testing/doubles.js';
 import { threadMandate } from '../../../threads/testing/doubles.js';
-import { threadEvent, threadRolloutCursor } from '../../../threads/testing/doubles.js';
+import { threadEvent, threadRolloutCursor, threadSourceIntent } from '../../../threads/testing/doubles.js';
 import { bornThread } from '../../../native-harness/testing/born.js';
 import { recordOf } from '../../../thread-record/testing/records.js';
 import { makeThreadRecords } from '../../../thread-record/layer.js';
@@ -306,7 +307,7 @@ describe('the thread rollout sync', () => {
   );
 
   it.live(
-    'republishing a rollout drops the cursor that described the bytes it replaced',
+    'republishing recovers an interrupted replacement before advancing its cursor',
     Effect.fnUntraced(function* () {
       const runtime = yield* Layer.build(storage);
 
@@ -352,6 +353,38 @@ describe('the thread rollout sync', () => {
       expect(
         yield* Effect.provide(db.select().from(threadRolloutCursor()).where(eq(threadRolloutCursor().threadId, 't-cursor')), runtime),
       ).toEqual([{ threadId: 't-cursor', nextByteOffset: 0, nextPosition: 1, generation: 1, restedAt: null }]);
+      const files = Context.get(runtime, FileSystem.FileSystem);
+      const prior = yield* files.readFileString(path);
+      const operation = randomUUID();
+      const backup = `${path}.source-backup-${operation}`;
+      const staged = `${path}.partial`;
+      const next = prior.replace('"text":"one"', '"text":"uncommitted"');
+      expect(next).not.toBe(prior);
+      yield* files.writeFileString(staged, next);
+      yield* Effect.provide(
+        db.insert(threadSourceIntent()).values({
+          threadId: 't-cursor',
+          operation,
+          place: 't-cursor.jsonl',
+          stage: '.partial',
+          digest: createHash('sha256').update(next).digest('hex'),
+          previous: 'plain',
+          previousDigest: createHash('sha256').update(prior).digest('hex'),
+          target: 'plain',
+        }),
+        runtime,
+      );
+      yield* files.rename(path, backup);
+      yield* files.rename(staged, path);
+      yield* Effect.provide(exportThreadRollout({ threadId: 't-cursor', path, parts: yield* nativeOnlyParts }), runtime);
+      expect(yield* files.readFileString(path)).toBe(prior);
+      expect(yield* files.exists(backup)).toBe(false);
+      expect(
+        yield* Effect.provide(db.select().from(threadSourceIntent()).where(eq(threadSourceIntent().threadId, 't-cursor')), runtime),
+      ).toEqual([]);
+      expect(
+        yield* Effect.provide(db.select().from(threadRolloutCursor()).where(eq(threadRolloutCursor().threadId, 't-cursor')), runtime),
+      ).toEqual([{ threadId: 't-cursor', nextByteOffset: 0, nextPosition: 1, generation: 2, restedAt: null }]);
     }),
   );
 

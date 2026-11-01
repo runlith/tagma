@@ -18,6 +18,11 @@ import { SnapshotFailed, type SnapshotParticipant, type SnapshotScope } from '..
 import { rolloutCut } from './rolloutPins.js';
 
 const relative = Schema.String.check(Schema.isPattern(/^\d+\/[A-Za-z0-9_-]+\.jsonl(?:\.zst)?$/u));
+const sourceIntentSchema = Schema.Struct({
+  place: Schema.String.check(Schema.isPattern(/^\d+\/[A-Za-z0-9_-]+\.jsonl$/u)),
+  operation: Schema.String.check(Schema.isPattern(/^[0-9a-f-]{36}$/u)),
+  stage: Schema.String.check(Schema.isPattern(/^\.[A-Za-z0-9._-]+$/u)),
+});
 const manifestSchema = Schema.Struct({
   version: Schema.Literal(2),
   cuts: Schema.Array(
@@ -173,15 +178,31 @@ export function rolloutParticipant(machine: string, home: string): SnapshotParti
             .pipe(Effect.mapError((cause) => failed(original.path, cause)));
           if (imported.length > 0)
             yield* original.db.run(sql`delete from thread_rollout_home`).pipe(Effect.mapError((cause) => failed(original.path, cause)));
+          const published = yield* original.db
+            .all<{ name: string }>(sql`select name from sqlite_master where type = 'table' and name = 'thread_published_source'`)
+            .pipe(Effect.mapError((cause) => failed(original.path, cause)));
+          if (published.length > 0)
+            yield* original.db.run(sql`delete from thread_published_source`).pipe(Effect.mapError((cause) => failed(original.path, cause)));
+          const intentTable = yield* original.db
+            .all<{ name: string }>(sql`select name from sqlite_master where type = 'table' and name = 'thread_source_intent'`)
+            .pipe(Effect.mapError((cause) => failed(original.path, cause)));
+          const rawIntents =
+            intentTable.length === 0
+              ? []
+              : yield* original.db
+                  .all<unknown>(sql`select place, operation, stage from thread_source_intent`)
+                  .pipe(Effect.mapError((cause) => failed(original.path, cause)));
+          const intents = yield* Schema.decodeUnknownEffect(Schema.Array(sourceIntentSchema))(rawIntents).pipe(
+            Effect.mapError((cause) => failed(original.path, cause)),
+          );
           const quarantine = join(store.quarantine, 'rollouts');
           yield* makeDirectory(quarantine).pipe(Effect.mapError((cause) => failed(quarantine, cause.reason)));
           yield* durable(
             quarantine,
             replaceFile(join(quarantine, 'provenance.json'), JSON.stringify({ snapshot: store.snapshot, ...manifest })),
           );
-          for (const file of yield* disk(home, () => rolloutFiles(home))) {
-            const path = join(home, file);
-            const kept = join(quarantine, file);
+          const preserve = Effect.fnUntraced(function* (path: string, kept: string) {
+            if (!(yield* disk(path, () => exists(path)))) return;
             yield* makeDirectory(dirname(kept)).pipe(Effect.mapError((cause) => failed(kept, cause.reason)));
             if (yield* disk(kept, () => exists(kept))) {
               const digest = yield* disk(path, (read) => fileHash(path, read));
@@ -193,6 +214,16 @@ export function rolloutParticipant(machine: string, home: string): SnapshotParti
               if (identical || repeated) yield* removeFile(path).pipe(Effect.mapError((cause) => failed(path, cause.reason)));
               else yield* durable(path, moveFile(path, later));
             } else yield* durable(path, moveFile(path, kept));
+          });
+          for (const intent of intents) {
+            for (const file of [`${intent.place}.source-backup-${intent.operation}`, `${intent.place}${intent.stage}`]) {
+              yield* preserve(join(home, file), join(quarantine, 'pending', file));
+            }
+          }
+          if (intentTable.length > 0)
+            yield* original.db.run(sql`delete from thread_source_intent`).pipe(Effect.mapError((cause) => failed(original.path, cause)));
+          for (const file of yield* disk(home, () => rolloutFiles(home))) {
+            yield* preserve(join(home, file), join(quarantine, file));
           }
           for (const cut of cuts) {
             const pin = join(store.directory, 'rollouts', `${cut.file}.gen-${cut.generation}`);

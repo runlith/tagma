@@ -20,6 +20,10 @@ import { makeThreadListReads } from './list/store.js';
 import { makeThreadLiveSpells } from './list/liveSpells.js';
 import { makeMandateRows } from './mandate.js';
 import { makeRestedReads } from './journal/restedReads.js';
+import { makeSourcePublisher } from './journal/sourcePublisher.js';
+import { makeSourceReplacement } from './journal/sourceReplacement.js';
+import { sourceRetention } from './journal/sourceRetention.js';
+import { sourcePublication } from './journal/sourceFiles.js';
 import { makeRolloutForms } from './journal/rolloutForming.js';
 import { journalEntry } from './journal/rolloutContext.js';
 import { RestedRollouts } from './contract/service/rested.js';
@@ -88,8 +92,20 @@ export const makeThreadsLifetime = Effect.fnUntraced(function* ({ rolloutHome }:
   const rows = yield* makeThreadRows;
   const own = yield* makeOwnWork.pipe(Effect.provideService(ThreadRows, rows));
   const reads = yield* makeThreadListReads.pipe(Effect.provideService(OwnWork, own));
-  const forms = yield* makeRolloutForms({ journal: journalEntry(order), stage: parts.native.folds.stage });
-  const rested = yield* makeRestedReads({ forms, home: rolloutHome, lagging: (threadId) => rollouts.formRested(threadId) });
+  const retention = sourceRetention();
+  const publication = sourcePublication(parts.native.folds, retention);
+  const forms = yield* makeRolloutForms({ journal: journalEntry(order), stage: parts.native.folds.stage, publication });
+  const replacement = yield* makeSourceReplacement(publication, rolloutHome);
+  const sources = yield* makeSourcePublisher({
+    home: rolloutHome,
+    journal: journalEntry(order),
+    forms,
+    publication,
+    replacement,
+    retention,
+  });
+  yield* Effect.forkScoped(sources.recover.pipe(Effect.catchCause((cause) => Effect.logError('Journal source cleanup stopped', cause))));
+  const rested = yield* makeRestedReads({ forms, sources, home: rolloutHome, lagging: (threadId) => rollouts.formRested(threadId) });
   const mandate = yield* makeMandateRows;
   const ledger = yield* makeThreadResourceStore;
   const writer = rolloutWriter({
@@ -108,9 +124,12 @@ export const makeThreadsLifetime = Effect.fnUntraced(function* ({ rolloutHome }:
   const rollouts = yield* makeThreadRollouts({
     projection,
     rollout: yield* makeThreadRolloutReport({ projection }),
-    repair: yield* makeThreadRolloutRepair,
+    repair: yield* makeThreadRolloutRepair({ publication, replacement }),
     runAppend: append,
     forms,
+    retention,
+    publication,
+    replacement,
     home: rolloutHome,
   }).pipe(
     Effect.provideService(ThreadRunning, reads),

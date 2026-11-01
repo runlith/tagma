@@ -2,6 +2,8 @@ import { Cause, Context, Effect } from 'effect';
 import { eq, isNotNull, sql } from 'drizzle-orm';
 import { journalProjectOf, threadEvent, threadRolloutCursor, threadRolloutRefusal } from '../store/journal.js';
 import { RolloutWriterFailed } from './rolloutWriter.js';
+import { ThreadStorageFailed } from '@runlith/agent/thread/persisted';
+import { ThreadEntryKinds } from '@runlith/agent/transcript/kinds';
 import { mkdir } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { MachineStore } from '../../platform/contract/service/store.js';
@@ -45,10 +47,17 @@ export const rolloutExporting = (ctx: RolloutContext) => {
   });
 
   const exportedWhole = Effect.fnUntraced(function* (threadId: string, path: string, prefix: boolean) {
-    floor.forget(threadId);
-    yield* machineStore(exportThreadRollout({ threadId, path, parts, prefix }));
-    floor.forget(threadId);
-    yield* filed(Context.get(graph, MachineStore), threadId);
+    yield* ctx.retention.using(
+      threadId,
+      Effect.gen(function* () {
+        floor.forget(threadId);
+        yield* machineStore(exportThreadRollout({ threadId, path, parts, prefix }, ctx.publication, ctx.replacement)).pipe(
+          Effect.provideService(ThreadEntryKinds, ctx.kinds),
+        );
+        floor.forget(threadId);
+        yield* filed(Context.get(graph, MachineStore), threadId);
+      }),
+    );
   });
 
   const written = (threadId: string, path: string) => exportedWhole(threadId, path, false);
@@ -76,6 +85,18 @@ export const rolloutExporting = (ctx: RolloutContext) => {
   });
 
   const owed = Effect.fnUntraced(function* (threadId: string) {
+    if (ctx.replacement.pending(threadId)) {
+      const path = yield* pathFor(threadId);
+      if (path === undefined)
+        return yield* new ThreadStorageFailed({
+          call: 'source.recover',
+          cause: new Error(`The journal place of ${threadId} is unavailable.`),
+        });
+      yield* ctx.replacement
+        .settle(threadId, path)
+        .pipe(Effect.mapError((cause) => new ThreadStorageFailed({ call: 'source.recover', cause })));
+      floor.forget(threadId);
+    }
     if (!floor.unopened(threadId)) return;
     const path = yield* pathFor(threadId);
     if (path === undefined) return;

@@ -332,6 +332,10 @@ export const makeSqliteThreadJournal = Effect.gen(function* () {
   });
 
   return {
+    rangingCut: <A, E>(threadId: string, work: (unit: Unit<'machine'>) => Effect.Effect<A, E>) => {
+      const snapshot = units.read(work, { snapshot: true });
+      return reads === undefined ? snapshot : reads.ranging(threadId, snapshot);
+    },
     open: (threadId: string): Effect.Effect<void, ThreadStorageFailed> =>
       floor === undefined || !floor.unopened(threadId) ? Effect.void : open(threadId, floor),
     append: (event: ThreadEventInsert, tx: WriteUnit<'machine'>) => stored('append')(append(event, tx)),
@@ -446,7 +450,7 @@ export const makeSqliteThreadJournal = Effect.gen(function* () {
       return filed(
         threadId,
         tx,
-        () => Effect.map(rested('head', reads?.head(threadId, tx)), (file) => file ?? 0),
+        () => Effect.flatMap(rested('head', reads?.head(threadId, tx)), (file) => present(threadId, file)),
         () => stored('headPosition')(tx ? work(tx) : units.read(work)),
       );
     },

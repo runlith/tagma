@@ -12,6 +12,7 @@ import { writes } from '../../../platform/contract/service/writes.js';
 import { nativeRows } from '../../../threads/store/kernel.js';
 import { bornThread } from '../../../native-harness/testing/born.js';
 import { nativeOnlyParts } from '../../../native-harness/testing/rollout.js';
+import { threadCompactionStore } from '../../../native-harness/testing/doubles.js';
 import {
   evictThreadProjection,
   rolloutBirth,
@@ -38,7 +39,7 @@ const setup = Effect.fnUntraced(function* () {
   const runtime = Context.merge(fixture.context, yield* Layer.build(BunFileSystem.layer));
   const pathOf = (_projectId: number, threadId: string) => join(home, `${threadId}.jsonl`);
   const parts = yield* nativeOnlyParts;
-  const journal = () => Effect.provide(filedThreadJournal(rolloutWriter(pathOf, rolloutBirth(store, parts))), runtime);
+  const journal = (writer = rolloutWriter(pathOf, rolloutBirth(store, parts))) => Effect.provide(filedThreadJournal(writer), runtime);
   const commit = (written: Journal, threadId: string, ids: readonly string[]) =>
     units.write(writes('journal-carry', [threadEvent(), nativeRows]), (unit) =>
       Effect.forEach(ids, (id) => written.append(fact(threadId, id), unit)),
@@ -61,7 +62,7 @@ const setup = Effect.fnUntraced(function* () {
       runtime,
     )).map((row) => [row.position, row.id] as const);
   });
-  const opened = Effect.fnUntraced(function* (id: string) {
+  const opened = Effect.fnUntraced(function* (id: string, writer?: Parameters<typeof journal>[0]) {
     yield* Effect.provide(
       bornThread(
         store.db,
@@ -70,7 +71,7 @@ const setup = Effect.fnUntraced(function* () {
       ),
       runtime,
     );
-    const written = yield* journal();
+    const written = yield* journal(writer);
     yield* Effect.provide(written.open(id), runtime);
     return written;
   });
@@ -120,6 +121,49 @@ it.live(
       [1, 'kept-1'],
       [2, 'kept-2'],
     ]);
+  }),
+);
+
+it.live(
+  'a pruning mark reaches the rollout when its unit commits, and never when the unit rolls back',
+  Effect.fnUntraced(function* () {
+    const { runtime, store, units, projectId, pathOf, opened } = yield* setup();
+    const id = 'pruned';
+    const writer = rolloutWriter(pathOf, rolloutBirth(store, yield* nativeOnlyParts));
+    yield* opened(id, writer);
+    const carried: unknown[] = [];
+    const compaction = yield* Effect.provide(
+      threadCompactionStore({ onRecords: (_threadId, record) => void carried.push(record) }),
+      runtime,
+    );
+    const prunedInFile = Effect.fnUntraced(function* () {
+      yield* Effect.forEach(carried.splice(0), (record) => writer.appendRecord(id, projectId, record), { discard: true });
+      const text = yield* Context.get(runtime, FileSystem.FileSystem).readFileString(pathOf(projectId, id));
+      return text
+        .trim()
+        .split('\n')
+        .map((line) => JSON.parse(line) as { kind?: string; row?: { toolCallId: string } })
+        .flatMap((line) => (line.kind === 'pruned' && line.row !== undefined ? [line.row.toolCallId] : []));
+    });
+    const turned = yield* Effect.provide(
+      Effect.result(
+        units.write('compaction-mark', (unit) =>
+          Effect.andThen(
+            compaction.markToolCallsPrunedIn(id, [{ toolCallId: 'rolled-back', tokens: 1 }], unit),
+            Effect.fail('turned back'),
+          ),
+        ),
+      ),
+      runtime,
+    );
+    expect(turned._tag).toBe('Failure');
+    expect(yield* prunedInFile()).toEqual([]);
+    yield* Effect.provide(
+      units.write('compaction-mark', (unit) => compaction.markToolCallsPrunedIn(id, [{ toolCallId: 'committed', tokens: 1 }], unit)),
+      runtime,
+    );
+    expect(yield* prunedInFile()).toEqual(['committed']);
+    expect(yield* Effect.provide(compaction.prunedToolCalls(id), runtime)).toEqual(new Set(['committed']));
   }),
 );
 

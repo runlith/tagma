@@ -1,12 +1,13 @@
 /// <reference types="bun" />
 
+import { createHash } from 'node:crypto';
 import { open, rename, rm, type FileHandle } from 'node:fs/promises';
 import { Schema } from 'effect';
-import type { Readable } from 'node:stream';
+import { Readable } from 'node:stream';
 import { createZstdDecompress } from 'node:zlib';
 import { decodeThreadEventPayloadResult, parseThreadRunUsage } from '@runlith/agent/thread/persisted';
 import type { ThreadCompactionCheckpointRow } from '@runlith/agent/thread/rows';
-import { revived } from '../../threads/journal/rolloutMeta.js';
+import { isMetaRecord, revived, sourceEventText, sourceRecordsText } from '../../threads/journal/rolloutMeta.js';
 import { HistoryFold } from '@runlith/agent/thread/HistoryFold';
 import { TranscriptFold } from '@runlith/agent/transcript/TranscriptFold';
 import { entryOf, type ThreadEntryReader } from '@runlith/agent/transcript/kinds';
@@ -15,7 +16,7 @@ import { stageRolloutFile } from '../../threads/journal/rolloutStaging.js';
 import { planCarry, rolloutLayers } from '../../threads/journal/rolloutCarry.js';
 import type { FoldRow } from '../../threads/journal/rolloutMeta.js';
 import { nativeRows } from '../rolloutFolds.js';
-import type { RolloutFiles, TranscriptKey } from '../../threads/contract/service/rested.js';
+import type { RolloutBoundary, RolloutFiles, TranscriptKey } from '../../threads/contract/service/rested.js';
 import { wireWeight } from './rows.js';
 import {
   TRANSCRIPT_FOOTER_BYTES,
@@ -36,7 +37,37 @@ const FLUSH_BYTES = 1024 * 1024;
 
 const missing = (cause: unknown): boolean => (cause as NodeJS.ErrnoException).code === 'ENOENT';
 
-async function source(rollout: RolloutFiles, read: ReadRollout, retried = false): Promise<Readable> {
+async function source(rollout: RolloutFiles, boundary: RolloutBoundary, read: ReadRollout, retried = false): Promise<Readable> {
+  if (boundary.kind === 'published') {
+    const handle = await open(rollout.path, 'r');
+    try {
+      if ((await handle.stat()).size < boundary.source.bytes) throw new Error(`${rollout.path} ends before its published prefix`);
+      if (boundary.source.bytes === 0) {
+        await handle.close();
+        return Readable.from([]);
+      }
+      const bytes = boundary.source.bytes;
+      const stream = rolloutStream(rollout.path, read, handle, { start: 0, end: bytes - 1 });
+      return Readable.from(
+        (async function* () {
+          let seen = 0;
+          try {
+            for await (const chunk of stream) {
+              seen += (chunk as Buffer).length;
+              yield chunk;
+            }
+            if (seen !== bytes) throw new Error(`${rollout.path} ends before its published prefix`);
+          } finally {
+            stream.destroy();
+          }
+        })(),
+        { objectMode: false },
+      );
+    } catch (failure) {
+      await handle.close();
+      throw failure;
+    }
+  }
   try {
     return rolloutStream(rollout.path, read, await open(rollout.path, 'r'));
   } catch (cause) {
@@ -50,11 +81,12 @@ async function source(rollout: RolloutFiles, read: ReadRollout, retried = false)
   } catch (cause) {
     if (!missing(cause) || retried) throw cause;
   }
-  return source(rollout, read, true);
+  return source(rollout, boundary, read, true);
 }
 
 async function* facts(
   rollout: RolloutFiles,
+  boundary: RolloutBoundary,
   kinds: ThreadEntryReader,
   read: ReadRollout,
 ): AsyncGenerator<NonNullable<ReturnType<typeof factOf>>> {
@@ -63,7 +95,8 @@ async function* facts(
   let rest = '';
   let corrupt = 0;
   let first = '';
-  for await (const chunk of await source(rollout, read)) {
+  let position = 0;
+  for await (const chunk of await source(rollout, boundary, read)) {
     const lines = (rest + decoder.decode(chunk as Uint8Array, { stream: true })).split('\n');
     rest = lines.pop() ?? '';
     for (const line of lines) {
@@ -76,16 +109,100 @@ async function* facts(
         corrupt += 1;
         continue;
       }
-      if (fact !== null) yield fact;
+      if (fact !== null) {
+        if (boundary.kind === 'published' && (fact.position <= position || fact.position > boundary.source.position))
+          throw new RolloutLineUnreadable(`${rollout.path}: an event lies outside the published position`);
+        position = fact.position;
+        yield fact;
+      }
     }
   }
   if (corrupt > 0) throw new RolloutLineUnreadable(`${rollout.path}: ${corrupt} rollout line(s) cannot be read; ${first}`);
   if (rest + decoder.decode() !== '') throw new RolloutLineUnreadable(`${rollout.path}: the rollout ends inside a line`);
+  if (boundary.kind === 'published' && position !== boundary.source.position)
+    throw new RolloutLineUnreadable(`${rollout.path}: the published position is not in its prefix`);
 }
 
-async function transcribe(rollout: RolloutFiles, key: TranscriptKey, kinds: ThreadEntryReader, read: ReadRollout): Promise<number> {
+async function digest(path: string, read: ReadRollout): Promise<string> {
+  const hash = createHash('sha256');
+  for await (const chunk of rolloutStream(path, read)) hash.update(chunk as Buffer);
+  return hash.digest('hex');
+}
+
+async function certify(rollout: RolloutFiles, kinds: ThreadEntryReader, read: ReadRollout) {
+  const hash = createHash('sha256');
+  const content = createHash('sha256');
+  const checkpoints = new Map<string, ReturnType<typeof checkpointRow>>();
+  const pruned = new Map<string, number>();
+  let bytes = 0;
+  let position = 0;
+  let terminated = false;
+  let opening = true;
+  async function* hashed() {
+    for await (const chunk of rolloutStream(rollout.path, read)) {
+      const data = chunk as Buffer;
+      hash.update(data);
+      bytes += data.length;
+      terminated = data.length > 0 && data[data.length - 1] === 0x0a;
+      yield data;
+    }
+  }
+  const decode = (value: unknown) => decodeThreadEventPayloadResult(kinds, value);
+  for await (const line of wholeLinesOf(hashed())) {
+    if (line === '') continue;
+    if (opening) {
+      opening = false;
+      if (!isMetaRecord(JSON.parse(line))) throw new RolloutLineUnreadable(`${rollout.path}: the rollout has no meta record`);
+      continue;
+    }
+    const decoded = readRolloutLine(line);
+    if ('failure' in decoded) throw new RolloutLineUnreadable(`${rollout.path}: ${decoded.failure}`);
+    const verdict = recordVerdict(decoded.record);
+    if (verdict.kind === 'unreadable') throw new RolloutLineUnreadable(`${rollout.path}: ${verdict.reason}`);
+    if (verdict.kind === 'carried' && verdict.record === 'event') {
+      const fact = factOf(line, decode);
+      if (fact === null || !Number.isSafeInteger(fact.position) || fact.position <= position)
+        throw new RolloutLineUnreadable(`${rollout.path}: event positions do not advance`);
+      content.update(sourceEventText({ position: fact.position, id: String(fact.row.id), kind: fact.kind, payload: fact.payload }));
+      position = fact.position;
+    } else if (verdict.kind === 'carried') {
+      const row = verdict.row;
+      const record = verdict.record;
+      readable(rollout, () => {
+        if (record === 'checkpoint') {
+          const checkpoint = checkpointRow(revived(row));
+          if (!checkpoints.has(checkpoint.id)) checkpoints.set(checkpoint.id, checkpoint);
+        } else if (record === 'pruned') {
+          const call = prunedRow(row);
+          if (!pruned.has(call.toolCallId)) pruned.set(call.toolCallId, call.tokens);
+        } else pruned.delete(retiredRow(row).toolCallId);
+      });
+    }
+  }
+  if (opening || !terminated) throw new RolloutLineUnreadable(`${rollout.path}: the rollout does not end on a record boundary`);
+  content.update(sourceRecordsText(checkpoints.values(), pruned));
+  return { bytes, position, fingerprint: hash.digest('hex'), factFingerprint: content.digest('hex') };
+}
+
+function readable(rollout: RolloutFiles, decode: () => void): void {
+  try {
+    decode();
+  } catch (failure) {
+    throw new RolloutLineUnreadable(`${rollout.path}: a compaction record cannot be read; ${String(failure)}`);
+  }
+}
+
+async function transcribe(
+  rollout: RolloutFiles,
+  key: TranscriptKey,
+  boundary: RolloutBoundary,
+  kinds: ThreadEntryReader,
+  read: ReadRollout,
+): Promise<number> {
+  if (boundary.kind === 'published' && (key.bytes !== boundary.source.bytes || key.position !== boundary.source.position))
+    throw new RolloutLineUnreadable(`${rollout.path}: the transcript key does not name the published prefix`);
   const fold = new TranscriptFold([]);
-  for await (const fact of facts(rollout, kinds, read)) fold.place(fact.fact);
+  for await (const fact of facts(rollout, boundary, kinds, read)) fold.place(fact.fact);
   const entries = fold.take();
   const target = rollout.transcript;
   const partial = `${target}.partial`;
@@ -139,11 +256,12 @@ async function transcribe(rollout: RolloutFiles, key: TranscriptKey, kinds: Thre
 
 async function history(
   rollout: RolloutFiles,
+  boundary: RolloutBoundary,
   kinds: ThreadEntryReader,
   read: ReadRollout,
 ): Promise<{ readonly history: ReturnType<HistoryFold['take']>; readonly bytes: number }> {
   const fold = new HistoryFold();
-  for await (const fact of facts(rollout, kinds, read)) fold.fold({ kind: fact.kind, payload: fact.payload }, fact.position);
+  for await (const fact of facts(rollout, boundary, kinds, read)) fold.fold({ kind: fact.kind, payload: fact.payload }, fact.position);
   const folded = fold.take();
   return { history: folded, bytes: Buffer.byteLength(JSON.stringify(folded), 'utf8') };
 }
@@ -163,12 +281,12 @@ const checkpointRow = Schema.decodeUnknownSync(
 const prunedRow = Schema.decodeUnknownSync(Schema.Struct({ toolCallId: Schema.String, tokens: Schema.Number }));
 const retiredRow = Schema.decodeUnknownSync(Schema.Struct({ toolCallId: Schema.String }));
 
-async function compaction(rollout: RolloutFiles, read: ReadRollout): Promise<RestedCompaction> {
+async function compaction(rollout: RolloutFiles, boundary: RolloutBoundary, read: ReadRollout): Promise<RestedCompaction> {
   const checkpoints = new Set<string>();
   const pruned = new Map<string, number>();
   let latest: ThreadCompactionCheckpointRow | null = null;
   let opening = true;
-  for await (const line of wholeLinesOf(await source(rollout, read))) {
+  for await (const line of wholeLinesOf(await source(rollout, boundary, read))) {
     if (line === '') continue;
     const decoded = readRolloutLine(line);
     if ('failure' in decoded) throw new RolloutLineUnreadable(`${rollout.path}: ${decoded.failure}`);
@@ -203,11 +321,17 @@ async function compaction(rollout: RolloutFiles, read: ReadRollout): Promise<Res
 
 const writing = new Map<string, Promise<number>>();
 
-function transcribed(rollout: RolloutFiles, key: TranscriptKey, kinds: ThreadEntryReader, read: ReadRollout): Promise<number> {
+function transcribed(
+  rollout: RolloutFiles,
+  key: TranscriptKey,
+  boundary: RolloutBoundary,
+  kinds: ThreadEntryReader,
+  read: ReadRollout,
+): Promise<number> {
   const before = writing.get(rollout.transcript) ?? Promise.resolve(0);
   const turn = before.then(
-    () => transcribe(rollout, key, kinds, read),
-    () => transcribe(rollout, key, kinds, read),
+    () => transcribe(rollout, key, boundary, kinds, read),
+    () => transcribe(rollout, key, boundary, kinds, read),
   );
   writing.set(rollout.transcript, turn);
   const settled = (): void => {
@@ -239,14 +363,17 @@ async function answered(ask: RestedAsk, kinds: ThreadEntryReader): Promise<Reste
   const totals = totalledReads();
   const read = totals.observe;
   try {
-    if (ask.kind === 'compaction') return { id: ask.id, kind: 'compaction', summary: await compaction(ask.rollout, read) };
+    if (ask.kind === 'certify') return { id: ask.id, kind: 'certified', frontier: await certify(ask.rollout, kinds, read) };
+    if (ask.kind === 'digest')
+      return { id: ask.id, kind: 'digest', digest: await digest(ask.form === 'plain' ? ask.rollout.path : ask.rollout.packed, read) };
+    if (ask.kind === 'compaction') return { id: ask.id, kind: 'compaction', summary: await compaction(ask.rollout, ask.boundary, read) };
     if (ask.kind === 'transcribe')
-      return { id: ask.id, kind: 'transcribed', entries: await transcribed(ask.rollout, ask.key, kinds, read) };
+      return { id: ask.id, kind: 'transcribed', entries: await transcribed(ask.rollout, ask.key, ask.boundary, kinds, read) };
     if (ask.kind === 'stage') return { id: ask.id, kind: 'staged', file: await stageRolloutFile(ask.rollout, ask.stage, kinds, read) };
     if (ask.kind === 'carry') return await carried(ask, kinds, read);
     if (ask.kind === 'carry-take') return taken(ask);
     if (ask.kind === 'layers') return { id: ask.id, kind: 'layers', layers: await rolloutLayers(ask.rollout.path, read) };
-    return { id: ask.id, kind: 'history', ...(await history(ask.rollout, kinds, read)) };
+    return { id: ask.id, kind: 'history', ...(await history(ask.rollout, ask.boundary, kinds, read)) };
   } finally {
     const reads = totals.drain();
     if (reads.length > 0) self.postMessage({ id: ask.id, kind: 'read', reads } satisfies RestedRead);

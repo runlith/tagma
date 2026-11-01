@@ -245,14 +245,20 @@ class RolloutLineFailed extends Data.TaggedError('RolloutLineFailed')<{
   }
 }
 
-export async function scanRolloutFile(path: string, visit: (item: RolloutRecord) => void, read: ReadRollout): Promise<RolloutScan> {
+export async function scanRolloutFile(
+  path: string,
+  visit: (item: RolloutRecord) => void,
+  read: ReadRollout,
+  seen?: (line: Buffer, end: number) => void,
+): Promise<RolloutScan> {
   let meta: { readonly value: unknown } | null = null;
   let bytes = 0;
   let size: number;
   try {
     size = (await stat(path)).size;
-    for await (const { line, end } of wholeLinesAfter(path, 0, read)) {
+    for await (const { line, end, bytes: raw } of wholeLinesAfter(path, 0, read)) {
       bytes = end;
+      seen?.(raw, end);
       if (line === '') continue;
       const reason = meta === null ? 'meta-json' : 'item-json';
       let value: unknown;
@@ -311,20 +317,26 @@ export async function* wholeLinesAfter(
   path: string,
   offset: number,
   read: ReadRollout,
-): AsyncGenerator<{ readonly line: string; readonly end: number }> {
-  const size = (await stat(path)).size;
+  through?: number,
+): AsyncGenerator<{ readonly line: string; readonly end: number; readonly bytes: Buffer }> {
+  const actual = (await stat(path)).size;
+  if (through !== undefined && through > actual) throw new Error(`${path} ends before its published prefix`);
+  const size = through ?? actual;
   if (size <= offset) return;
   const handle = await open(path, 'r');
   try {
     let at = offset;
     let parts: Buffer[] = [];
     while (at < size) {
-      const block = await blockAt(handle, path, at, Math.min(ROLLOUT_BLOCK, size - at), read);
+      const length = Math.min(ROLLOUT_BLOCK, size - at);
+      const block = await blockAt(handle, path, at, length, read);
+      if (through !== undefined && block.length < length) throw new Error(`${path} ends before its published prefix`);
       if (block.length === 0) break;
       let from = 0;
       for (let newline = block.indexOf(0x0a); newline !== -1; newline = block.indexOf(0x0a, from)) {
         parts.push(block.subarray(from, newline));
-        yield { line: decoder.decode(joined(parts)), end: at + newline + 1 };
+        const bytes = joined(parts);
+        yield { line: decoder.decode(bytes), end: at + newline + 1, bytes };
         parts = [];
         from = newline + 1;
       }
@@ -351,7 +363,7 @@ export async function* wholeLinesBefore(
     while (at > 0) {
       const from = Math.max(0, at - ROLLOUT_BLOCK);
       const block = await blockAt(handle, path, from, at - from, read);
-      if (block.length < at - from) return;
+      if (block.length < at - from) throw new Error(`${path} changed during its read`);
       let upto = block.length;
       for (let newline = block.lastIndexOf(0x0a, upto - 1); newline !== -1; newline = upto > 0 ? block.lastIndexOf(0x0a, upto - 1) : -1) {
         if (closed) {
@@ -375,14 +387,18 @@ export async function* wholeLinesBefore(
   }
 }
 
-export async function lineStartFrom(path: string, offset: number, read: ReadRollout): Promise<number> {
+export async function lineStartFrom(path: string, offset: number, read: ReadRollout, through?: number): Promise<number> {
   if (offset <= 0) return 0;
-  const size = (await stat(path)).size;
+  const actual = (await stat(path)).size;
+  if (through !== undefined && through > actual) throw new Error(`${path} ends before its published prefix`);
+  const size = through ?? actual;
   if (offset >= size) return size;
   const handle = await open(path, 'r');
   try {
     for (let at = offset - 1; at < size; at += ROLLOUT_BLOCK) {
-      const block = await blockAt(handle, path, at, Math.min(ROLLOUT_BLOCK, size - at), read);
+      const length = Math.min(ROLLOUT_BLOCK, size - at);
+      const block = await blockAt(handle, path, at, length, read);
+      if (through !== undefined && block.length < length) throw new Error(`${path} ends before its published prefix`);
       if (block.length === 0) break;
       const newline = block.indexOf(0x0a);
       if (newline !== -1) return at + newline + 1;

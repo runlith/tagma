@@ -5,7 +5,8 @@ import { it } from '@runlith/effect-test';
 import { dirname, join } from 'node:path';
 import { Context, Effect, FileSystem, Layer, Schema } from 'effect';
 import { THREAD_AUTHORITY_DEFAULT } from '@runlith/agent/thread/rows';
-import { eq } from 'drizzle-orm';
+import { ThreadEntryKinds } from '@runlith/agent/transcript/kinds';
+import { eq, sql } from 'drizzle-orm';
 import { MachineStore } from '../../../platform/contract/service/store.js';
 import { bornThread } from '../../../native-harness/testing/born.js';
 import {
@@ -14,8 +15,12 @@ import {
   threadProjection,
   isThreadProjectionRefused,
   threadRolloutRepair,
+  evictThreadProjection,
+  journalSources,
 } from '../../../threads/testing/doubles.js';
+import { restFor } from '../../../threads/testing/rest.js';
 import { ENTRY_KINDS } from '../composed.js';
+import { nativeOnlyParts } from '../../../native-harness/testing/rollout.js';
 
 const threadId = 'thread-under-repair';
 const meta = () => `${JSON.stringify({ thread: { id: threadId }, facet: null, session: null })}\n`;
@@ -49,7 +54,7 @@ const stand = Effect.fn('testing.repairWorld')(function* () {
   yield* files.makeDirectory(dirname(path), { recursive: true });
   yield* files.writeFileString(path, meta());
   const projection = yield* Effect.provide(threadProjection(ENTRY_KINDS), runtime);
-  const repairs = yield* Effect.provide(threadRolloutRepair(ENTRY_KINDS), runtime);
+  const repairs = yield* Effect.provide(threadRolloutRepair(ENTRY_KINDS, home, (yield* nativeOnlyParts).native.folds), runtime);
   const records = Effect.gen(function* () {
     const text = yield* files.readFileString(path);
     const whole = text.split('\n');
@@ -78,6 +83,33 @@ const stand = Effect.fn('testing.repairWorld')(function* () {
         ),
         runtime,
       ),
+    evict: () =>
+      Effect.flatMap(nativeOnlyParts, (parts) =>
+        Effect.provide(
+          evictThreadProjection({ threadId, path, parts }).pipe(Effect.provideService(ThreadEntryKinds, ENTRY_KINDS)),
+          runtime,
+        ),
+      ),
+    source: () =>
+      db.all<{ generation: string; position: number; origin: string }>(
+        sql`select generation, position, origin from thread_published_source where thread_id = ${threadId}`,
+      ),
+    adopt: Effect.fnUntraced(function* () {
+      yield* restFor(db, threadId, new Date(0));
+      const sources = yield* Effect.provide(journalSources(ENTRY_KINDS, home, (yield* nativeOnlyParts).native.folds), runtime);
+      yield* Effect.provide(sources.using(threadId, sources.prepare(threadId)), runtime);
+    }),
+    index: Effect.fnUntraced(function* (positions: readonly number[]) {
+      for (const position of positions)
+        yield* db.run(sql`insert into thread_message (thread_id, entry_id, position, appeared, role, occurred_at, text)
+          values (${threadId}, ${`m-${position}`}, ${position}, 0, 'user', 0, 'said')`);
+      const through = Math.max(...positions);
+      yield* db.run(sql`insert into thread_conversation (thread_id, through, seen) values (${threadId}, ${through}, ${through})
+        on conflict (thread_id) do update set through = excluded.through, seen = excluded.seen`);
+    }),
+    conversation: () =>
+      db.all(sql`select (select count(*) from thread_message where thread_id = ${threadId}) as indexed, through, seen
+        from thread_conversation where thread_id = ${threadId}`),
     rows: () => db.select().from(threadEvent()).where(eq(threadEvent().threadId, threadId)),
     cursor: () => db.select().from(threadRolloutCursor()).where(eq(threadRolloutCursor().threadId, threadId)).get(),
   };
@@ -103,6 +135,37 @@ describe('repair renumbers the file and reruns the pass', () => {
       yield* world.boot();
       expect((yield* world.rows()).map((row) => row.position).sort((left, right) => left - right)).toEqual([1, 2, 3, 4]);
       expect((yield* world.rows()).map((row) => row.id)).toEqual(['a', 'b', 'b-again', 'c']);
+    }),
+  );
+  it.live('repairing an offloaded thread publishes its renumbered source with the cursor it resets', () =>
+    Effect.gen(function* () {
+      const world = yield* stand();
+      yield* world.append(`${event(1, 'a')}${event(2, 'b')}`);
+      yield* world.boot();
+      expect(yield* world.evict()).toMatchObject({ outcome: 'evicted' });
+      const [before] = yield* world.source();
+      yield* world.repair();
+      const [after] = yield* world.source();
+      expect(after).toMatchObject({ origin: 'repair', position: 2 });
+      expect(after!.generation).not.toBe(before!.generation);
+      expect(yield* world.cursor()).toMatchObject({ nextByteOffset: 0, nextPosition: 1 });
+    }),
+  );
+  it.live('repairing an adopted rested journal that skipped a position takes its conversation index off the old positions', () =>
+    Effect.gen(function* () {
+      const world = yield* stand();
+      const said = (position: number, id: string) =>
+        `${JSON.stringify({
+          kind: 'event',
+          row: { threadId, position, id, kind: 'message', payload: { entry: { type: 'message', id: `${id}:m`, role: 'user', text: id } } },
+        })}\n`;
+      yield* world.append(`${said(1, 'first')}${said(3, 'second')}`);
+      yield* world.adopt();
+      expect(yield* world.source()).toMatchObject([{ origin: 'adopted', position: 3 }]);
+      yield* world.index([1, 3]);
+      yield* world.repair();
+      expect(yield* world.source()).toMatchObject([{ origin: 'repair', position: 2 }]);
+      expect(yield* world.conversation()).toEqual([{ indexed: 0, through: 0, seen: 3 }]);
     }),
   );
   it.live('a corrupt line refuses repair without changing the file', () =>

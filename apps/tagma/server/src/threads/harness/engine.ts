@@ -337,7 +337,7 @@ export const threadEngineLayer = Layer.effectContext(
         },
         residence: {
           holding: (threadId, work) => rollouts.using(threadId, Effect.andThen(failedAs('resident', rollouts.rehydrate(threadId)), work)),
-          reading: (threadId, work) => rollouts.using(threadId, Effect.andThen(failedAs('readable', rested.readable(threadId)), work)),
+          reading: (threadId, work) => rollouts.using(threadId, rested.reading(threadId, work)),
         },
         modelMoves: { moved: (thread) => rollouts.appendMeta(thread.id) },
         standingSwitches: yield* NativeSwitches,

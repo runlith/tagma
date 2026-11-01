@@ -6,7 +6,15 @@ import { and, asc, eq, inArray, sql } from 'drizzle-orm';
 import { Effect } from 'effect';
 import { MachineStore, type StoreFailure } from '../platform/contract/service/store.js';
 import { writes } from '../platform/contract/service/writes.js';
-import { runIdOf, threadCompactionCheckpoint, threadHistoryItem, threadLog, threadPrunedToolCall, typeOf } from './store/thread.js';
+import {
+  runIdOf,
+  threadCompactionCheckpoint,
+  threadHistoryItem,
+  threadLog,
+  threadPrunedToolCall,
+  threadRev,
+  typeOf,
+} from './store/thread.js';
 import { thread, threadEntry } from '../threads/store/kernel.js';
 import { threadEvent } from '../threads/store/journal.js';
 import { frozen, type FoldRow, type NativeFolds } from '../threads/journal/rolloutMeta.js';
@@ -85,6 +93,12 @@ export const makeNativeFolds = Effect.gen(function* () {
     present: Effect.fnUntraced(function* (threadId) {
       const { db } = yield* MachineStore;
       return (yield* db.select({ id: thread.id }).from(thread).where(eq(thread.id, threadId)).get()) !== undefined;
+    }),
+    revision: Effect.fnUntraced(function* (threadId, unit) {
+      const { db } = yield* MachineStore;
+      const query = db.select({ revision: threadRev.changeRev }).from(threadRev).where(eq(threadRev.threadId, threadId)).get();
+      const row = yield* unit === undefined ? query : unit.run(query);
+      return row?.revision ?? null;
     }),
     bodies: Effect.fnUntraced(function* (threadId, entryIds) {
       const { db } = yield* MachineStore;
@@ -166,8 +180,11 @@ export const makeNativeFolds = Effect.gen(function* () {
       const { db } = yield* MachineStore;
       yield* db.insert(threadLog).values({ threadId, historyThrough: through, entriesThrough: through });
     }),
-    transcribe: (files, key) => Effect.flatMap(ThreadEntryKinds, (kinds) => Effect.asVoid(work.transcribe(kinds, files, key))),
+    transcribe: (files, key) =>
+      Effect.flatMap(ThreadEntryKinds, (kinds) => Effect.asVoid(work.transcribe(kinds, files, key, { kind: 'staged' }))),
     stage: (files, stage) => Effect.flatMap(ThreadEntryKinds, (kinds) => work.stage(kinds, files, stage)),
+    certify: (files) => Effect.flatMap(ThreadEntryKinds, (kinds) => work.certify(kinds, files)),
+    digest: (files, form) => Effect.flatMap(ThreadEntryKinds, (kinds) => work.digest(kinds, files, form)),
     carry: (files, ask) => Effect.flatMap(ThreadEntryKinds, (kinds) => work.carry(kinds, files, ask)),
     layers: (files) => Effect.flatMap(ThreadEntryKinds, (kinds) => work.layers(kinds, files)),
     writes: writes('rollout.native.folds', [threadEntry, threadHistoryItem, threadLog, threadPrunedToolCall, threadCompactionCheckpoint]),

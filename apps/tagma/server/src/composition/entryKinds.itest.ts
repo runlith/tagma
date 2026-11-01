@@ -39,7 +39,14 @@ it.live(
       writeFileSync(path, `${JSON.stringify({ thread: { id: 'told' } })}\n${JSON.stringify({ kind: 'event', row: event })}\n`);
       const transcript = `${path}.entries`;
       const work = yield* makeRestedWork;
-      expect(yield* work.transcribe(host.entryKinds(), { path, packed: `${path}.zst`, transcript }, { bytes: 0, position: 1 })).toBe(1);
+      expect(
+        yield* work.transcribe(
+          host.entryKinds(),
+          { path, packed: `${path}.zst`, transcript },
+          { bytes: 0, position: 1 },
+          { kind: 'staged' },
+        ),
+      ).toBe(1);
       const written = JSON.parse(readFileSync(transcript, 'utf8').split('\n')[0]!) as {
         readonly sources: readonly { readonly state: unknown }[];
       };

@@ -3,7 +3,7 @@ import { recordRows } from '../../thread-record/store/table.js';
 import { nativeRows, runRows, threadEntry, threadRunTally } from '../../threads/store/kernel.js';
 import { mandateRows, spellRows } from '../../threads/store/mandate.js';
 import { inboxRows, seenRows, threadResource } from '../../threads/store/tables.js';
-import { conversationWrites, threadBase, threadEvent, threadRolloutForm } from '../../threads/store/journal.js';
+import { conversationWrites, publishedSourceRows, threadBase, threadEvent, threadRolloutForm } from '../../threads/store/journal.js';
 import { sessionFacts } from '../../threads/store/harnessFacet.js';
 import { owedRows, spentCallKey, threadCall } from '../../threads/store/calls.js';
 import { assignmentMembership, placementRows } from '../../workspace/store/tables.js';
@@ -40,6 +40,7 @@ export const kernelStorageWrites = writes(
     threadResource,
     threadEvent,
     threadBase,
+    publishedSourceRows,
     threadRolloutForm,
     threadCall,
     owedRows,

@@ -8,7 +8,16 @@ import { setRested } from '../rest.js';
 import { mandateRows } from '../store/mandate.js';
 import { session } from '../../platform/store/writers.js';
 import { basename, dirname } from 'node:path';
-import { conversationWrites, threadBase, threadEvent, threadJournalPlace, threadRolloutCursor } from '../store/journal.js';
+import {
+  conversationWrites,
+  publishedSourceRows,
+  threadBase,
+  threadEvent,
+  threadJournalPlace,
+  threadPublishedSource,
+  threadRolloutCursor,
+} from '../store/journal.js';
+import type { SourcePublication } from './sourceFiles.js';
 import { threadResource } from '../store/tables.js';
 import { type FoldRow, importRolloutMeta, type NativeFolds, type RolloutMeta, type RolloutParts } from './rolloutMeta.js';
 import type { ThreadRecords } from '../../thread-record/contract/service/records.js';
@@ -107,9 +116,38 @@ const keptInFile = Effect.fn('ThreadRollout.rehydrate.keep')(function* (
     .from(threadEvent)
     .where(eq(threadEvent.threadId, threadId))
     .orderBy(asc(threadEvent.position));
-  const ask: CarryAsk = { threadId, native, standing: standing.map((row) => row.id), sources: null };
+  const published = yield* db
+    .select({ bytes: threadPublishedSource.bytes, fingerprint: threadPublishedSource.fingerprint })
+    .from(threadPublishedSource)
+    .where(eq(threadPublishedSource.threadId, threadId))
+    .get();
+  const ask: CarryAsk = {
+    threadId,
+    native,
+    standing: standing.map((row) => row.id),
+    sources: null,
+    ...(published === undefined ? {} : { published }),
+  };
+  const floor =
+    (yield* db
+      .select({ reached: threadRolloutCursor.nextPosition })
+      .from(threadRolloutCursor)
+      .where(eq(threadRolloutCursor.threadId, threadId))
+      .get())?.reached ?? 1;
+  const whole = (plan: Planned): Effect.Effect<Planned, RolloutSyncRefused> =>
+    plan.through + 1 >= floor
+      ? Effect.succeed(plan)
+      : Effect.andThen(
+          plan.drop,
+          Effect.fail(
+            new RolloutSyncRefused({
+              reason: 'record-shape',
+              message: `the rollout ${path} ends at position ${plan.through}, before position ${floor - 1} its rows consumed, so it does not return`,
+            }),
+          ),
+        );
   const first = yield* carried(folds, path, ask);
-  if (first.kind === 'planned') return first;
+  if (first.kind === 'planned') return yield* whole(first);
   const absent = new Set(first.absent);
   const positions = standing.filter((row) => absent.has(row.id)).map((row) => row.position);
   let last = first.last;
@@ -117,7 +155,7 @@ const keptInFile = Effect.fn('ThreadRollout.rehydrate.keep')(function* (
     yield* keepRows(threadId, path, positions.slice(at, at + KEPT_ROWS), last);
     last += Math.min(KEPT_ROWS, positions.length - at);
   }
-  const kept = yield* Effect.flatMap(carried(folds, path, ask), planned(path));
+  const kept = yield* Effect.flatMap(Effect.flatMap(carried(folds, path, ask), planned(path)), whole);
   const key = { nextByteOffset: kept.bytes, nextPosition: last + 1 };
   yield* store
     .transaction(writes('thread.rehydrate.keep', [threadRolloutCursor]), (unit) =>
@@ -151,11 +189,12 @@ const keepRows = Effect.fnUntraced(function* (threadId: string, path: string, po
   }
 });
 
-export const rehydrateThreadRecords = Effect.fn('ThreadRollout.rehydrate.carry')(function* (input: {
-  readonly threadId: string;
-  readonly path: string;
-  readonly parts: RolloutParts;
-}) {
+type RehydrateInput = { readonly threadId: string; readonly path: string; readonly parts: RolloutParts };
+
+export const rehydrateThreadRecords = Effect.fn('ThreadRollout.rehydrate.carry')(function* (
+  input: RehydrateInput,
+  publication: SourcePublication,
+) {
   yield* Effect.annotateCurrentSpan({ threadId: input.threadId });
   const store = yield* MachineStore;
   const { db } = store;
@@ -174,7 +213,7 @@ export const rehydrateThreadRecords = Effect.fn('ThreadRollout.rehydrate.carry')
         writeBatch(input.threadId, batch, native ? folds : null, unit, retained),
       );
     }
-    yield* store.transaction(writes('thread.rehydrate.finish', [threadRolloutCursor], folds.writes), (unit) =>
+    yield* store.transaction(writes('thread.rehydrate.finish', [threadRolloutCursor, publishedSourceRows], folds.writes), (unit) =>
       Effect.gen(function* () {
         if (native) yield* folds.settle(input.threadId, plan.through);
         yield* db
@@ -184,6 +223,7 @@ export const rehydrateThreadRecords = Effect.fn('ThreadRollout.rehydrate.carry')
             target: threadRolloutCursor.threadId,
             set: { nextByteOffset: plan.bytes, nextPosition: plan.through + 1 },
           });
+        yield* publication.withdrawIn(db, unit, input.threadId, input.path);
         yield* setRested(db, unit, input.threadId, null);
       }),
     );

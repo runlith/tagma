@@ -2,6 +2,8 @@ import { Clock, Context, Effect } from 'effect';
 import { eq } from 'drizzle-orm';
 import { restStamps } from '../rest.js';
 import type { ThreadUses } from './uses.js';
+import type { SourceRetention } from './sourceRetention.js';
+import type { SourcePublication } from './sourceFiles.js';
 import type { ThreadResourceKind } from '@runlith/agent/resources/ResourcesConfig';
 import { ThreadEntryKinds } from '@runlith/agent/transcript/kinds';
 import type { ThreadResourceStorage } from '@runlith/agent/thread/storage/resources';
@@ -35,6 +37,8 @@ export const rolloutEvicting = (
   resourceKinds: () => readonly ThreadResourceKind<Unit<'machine'>>[],
   settings: Context.Service.Shape<typeof Settings>,
   uses: ThreadUses,
+  retention: SourceRetention,
+  publication: SourcePublication,
   rewrite: (threadId: string) => Effect.Effect<void, HarnessFailure>,
   whole: (threadId: string, path: string) => Effect.Effect<void, RolloutSyncRefused | RolloutUnreadable | StoreFailure>,
 ) => {
@@ -44,7 +48,7 @@ export const rolloutEvicting = (
     const running = yield* threads.activeRunInSubtree(threadId);
     if (running !== null) return { outcome: 'kept', reason: 'running' } as const;
     const path = yield* locate(threadId);
-    const verdict = yield* machineStore(evictThreadProjection({ threadId, path, parts, returning, whole })).pipe(
+    const verdict = yield* machineStore(evictThreadProjection({ threadId, path, parts, returning, whole }, publication)).pipe(
       Effect.provideService(ThreadEntryKinds, kinds),
     );
     if (verdict.outcome === 'evicted') floor.forget(threadId);
@@ -60,7 +64,8 @@ export const rolloutEvicting = (
       }),
     );
 
-  const rest = (threadId: string): Effect.Effect<ThreadEvictionVerdict, HarnessFailure> => projected(threadId, true);
+  const rest = (threadId: string): Effect.Effect<ThreadEvictionVerdict, HarnessFailure> =>
+    retention.using(threadId, projected(threadId, true));
 
   const inherited = (threadId: string) =>
     machineStore(
@@ -89,56 +94,59 @@ export const rolloutEvicting = (
     still: Effect.Effect<boolean, HarnessFailure> = Effect.succeed(true),
   ): Effect.Effect<ThreadEvictionVerdict, HarnessFailure> =>
     gated(records, threadId, projectId, () =>
-      inJournal(
+      retention.using(
         threadId,
-        uses.rest(
+        inJournal(
           threadId,
-          Effect.gen(function* () {
-            if (!(yield* still)) return { verdict: { outcome: 'kept', reason: 'unarchived' } as const, heirs: [] };
-            const path = yield* locate(threadId);
-            const standing = !(yield* resting(threadId));
-            if (standing && (yield* threads.activeRunInSubtree(threadId)) !== null) {
-              return { verdict: { outcome: 'kept', reason: 'running' } as const, heirs: [] };
-            }
-            const heirs = standing ? yield* inherited(threadId) : [];
-            const carrying = standing && path !== undefined ? yield* carried(threadId, path) : false;
-            if (carrying === null) return { verdict: { outcome: 'kept', reason: 'unreadable' } as const, heirs };
-            if (path !== undefined && standing) {
-              const caught = yield* ctx.projection.run({ threadId, path }).pipe(
-                Effect.as(true),
-                Effect.catchTag('ThreadProjectionRefused', () => Effect.succeed(false)),
-              );
-              if (!caught) return { verdict: { outcome: 'kept', reason: 'cursor-behind' } as const, heirs };
-            }
-            const verdict = yield* projected(threadId, false, carrying);
-            if (verdict.outcome === 'evicted') {
-              const reached = yield* machineStore(Effect.flatMap(MachineStore, ({ db }) => referenced(db, threadId)));
-              if (!reached) yield* evictThreadResources(ledger, resourceKinds(), threadId);
-              if (path !== undefined) {
-                const standing = yield* rolloutStateOf(path);
-                yield* compressRollout(path, rolloutTransformed(Context.get(graph, MachineStore), threadId, path)).pipe(
-                  Effect.withSpan('ThreadRollout.evict.compress', {
-                    attributes: { threadId, bytes: standing?.bytes },
-                  }),
-                  Effect.catchTag('RolloutUnreadable', (failure) =>
-                    Effect.logWarning(`the rollout of ${threadId} stays plain`, { reason: failure.message }),
-                  ),
-                );
+          uses.rest(
+            threadId,
+            Effect.gen(function* () {
+              if (!(yield* still)) return { verdict: { outcome: 'kept', reason: 'unarchived' } as const, heirs: [] };
+              const path = yield* locate(threadId);
+              const standing = !(yield* resting(threadId));
+              if (standing && (yield* threads.activeRunInSubtree(threadId)) !== null) {
+                return { verdict: { outcome: 'kept', reason: 'running' } as const, heirs: [] };
               }
-            }
-            return { verdict, heirs };
-          }),
-          { verdict: { outcome: 'kept', reason: 'in-use' } as const, heirs: [] },
+              const heirs = standing ? yield* inherited(threadId) : [];
+              const carrying = standing && path !== undefined ? yield* carried(threadId, path) : false;
+              if (carrying === null) return { verdict: { outcome: 'kept', reason: 'unreadable' } as const, heirs };
+              if (path !== undefined && standing) {
+                const caught = yield* ctx.projection.run({ threadId, path }).pipe(
+                  Effect.as(true),
+                  Effect.catchTag('ThreadProjectionRefused', () => Effect.succeed(false)),
+                );
+                if (!caught) return { verdict: { outcome: 'kept', reason: 'cursor-behind' } as const, heirs };
+              }
+              const verdict = yield* projected(threadId, false, carrying);
+              if (verdict.outcome === 'evicted') {
+                const reached = yield* machineStore(Effect.flatMap(MachineStore, ({ db }) => referenced(db, threadId)));
+                if (!reached) yield* evictThreadResources(ledger, resourceKinds(), threadId);
+                if (path !== undefined) {
+                  const standing = yield* rolloutStateOf(path);
+                  yield* compressRollout(path, rolloutTransformed(Context.get(graph, MachineStore), threadId, path)).pipe(
+                    Effect.withSpan('ThreadRollout.evict.compress', {
+                      attributes: { threadId, bytes: standing?.bytes },
+                    }),
+                    Effect.catchTag('RolloutUnreadable', (failure) =>
+                      Effect.logWarning(`the rollout of ${threadId} stays plain`, { reason: failure.message }),
+                    ),
+                  );
+                }
+              }
+              return { verdict, heirs };
+            }),
+            { verdict: { outcome: 'kept', reason: 'in-use' } as const, heirs: [] },
+          ),
+        ).pipe(
+          Effect.flatMap(({ verdict, heirs }) => Effect.as(Effect.forEach(heirs, rewrite, { discard: true }), verdict)),
+          Effect.tap((verdict) =>
+            Effect.annotateCurrentSpan({
+              outcome: verdict.outcome,
+              reason: verdict.outcome === 'kept' ? verdict.reason : undefined,
+            }),
+          ),
+          Effect.withSpan('ThreadRollout.evict', { attributes: { threadId } }),
         ),
-      ).pipe(
-        Effect.flatMap(({ verdict, heirs }) => Effect.as(Effect.forEach(heirs, rewrite, { discard: true }), verdict)),
-        Effect.tap((verdict) =>
-          Effect.annotateCurrentSpan({
-            outcome: verdict.outcome,
-            reason: verdict.outcome === 'kept' ? verdict.reason : undefined,
-          }),
-        ),
-        Effect.withSpan('ThreadRollout.evict', { attributes: { threadId } }),
       ),
     );
 

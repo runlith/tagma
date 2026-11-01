@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { Result, type Effect } from 'effect';
 import { decodeThreadEventPayloadResult } from '@runlith/agent/thread/persisted';
 import type { ThreadEntryReader } from '@runlith/agent/transcript/kinds';
@@ -16,6 +17,7 @@ export type CarryAsk = {
   readonly native: boolean | null;
   readonly standing: readonly string[];
   readonly sources: readonly CarrySource[] | null;
+  readonly published?: { readonly bytes: number; readonly fingerprint: string };
 };
 
 export type CarryOpening =
@@ -44,17 +46,30 @@ export type Carrying =
 
 export type NativeRows = (threadId: string, records: readonly CarriedRecord[]) => readonly FoldRow[];
 
-type Read = { readonly meta: unknown; readonly items: readonly RolloutRecord[]; readonly bytes: number };
+type Read = { readonly meta: unknown; readonly items: readonly RolloutRecord[]; readonly bytes: number; readonly prefix: string | null };
 
 const refused = (reason: 'thread-missing' | 'record-shape', message: string): CarryPlan => ({
   opening: { kind: 'refused', reason, message },
   units: [],
 });
 
-async function readRollout(path: string, read: ReadRollout): Promise<Read> {
+async function readRollout(path: string, read: ReadRollout, through?: number): Promise<Read> {
   const items: RolloutRecord[] = [];
-  const scan = await scanRolloutFile(path, (item) => items.push(item), read);
-  return { meta: scan.meta, items, bytes: scan.bytes };
+  const hash = through === undefined ? null : createHash('sha256');
+  let reached = through === 0;
+  const scan = await scanRolloutFile(
+    path,
+    (item) => items.push(item),
+    read,
+    hash === null
+      ? undefined
+      : (line, end) => {
+          if (end > through!) return;
+          hash.update(line).update('\n');
+          reached = end === through;
+        },
+  );
+  return { meta: scan.meta, items, bytes: scan.bytes, prefix: hash === null || !reached ? null : hash.digest('hex') };
 }
 
 const metaOf = (rollout: Read): Partial<RolloutMeta> | null => {
@@ -145,7 +160,9 @@ export async function planCarry(
   read: ReadRollout,
   nativeRows: NativeRows,
 ): Promise<CarryPlan> {
-  const rollout = await readRollout(path, read);
+  const rollout = await readRollout(path, read, ask.published?.bytes);
+  if (ask.published !== undefined && rollout.prefix !== ask.published.fingerprint)
+    return refused('record-shape', `the rollout ${path} no longer begins with the source its readers were answered from`);
   if (ask.standing.length > 0) {
     const filed = new Set<string>();
     let last = 0;

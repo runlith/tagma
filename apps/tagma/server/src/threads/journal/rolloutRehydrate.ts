@@ -25,7 +25,10 @@ export const rolloutRehydrating = (ctx: RolloutContext, forms: RolloutForms, scr
         Effect.andThen(openRollout(path, rolloutTransformed(Context.get(graph, MachineStore), threadId, path))),
         Effect.withSpan('ThreadRollout.rehydrate.open', { attributes: { threadId, ...file } }),
         Effect.andThen(
-          rehydrateThreadRecords({ threadId, path, parts }).pipe(machineStore, Effect.provideService(ThreadEntryKinds, ctx.kinds)),
+          rehydrateThreadRecords({ threadId, path, parts }, ctx.publication).pipe(
+            machineStore,
+            Effect.provideService(ThreadEntryKinds, ctx.kinds),
+          ),
         ),
         Effect.catchTag(['RolloutUnreadable', 'RolloutSyncRefused'], (failure) =>
           Effect.fail(
