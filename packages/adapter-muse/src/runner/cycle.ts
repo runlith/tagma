@@ -1,23 +1,23 @@
-import { Clock, Deferred, Effect, Exit, FileSystem, Predicate, Result, Schema, Scope } from 'effect';
+import { Clock, Deferred, Effect, Exit, FileSystem, Option, Predicate, Result, Schema, Scope } from 'effect';
 import { AgentFault, FAULT, type Outlet } from '@runlith/acp/agent';
 import type { ContentBlock } from '@runlith/acp/content';
-import { QuotaObservation, QuotaWindow } from '@runlith/llm/schema/quota';
+import { QuotaObservation } from '@runlith/llm/schema/quota';
 import { Bridge, servedPrompt, type BridgeVendor } from '@runlith/hosted-runner/bridge';
 import { clientSession, type ClientCompaction, type ClientOutcome, type ClientRun } from '@runlith/hosted-runner/client';
 import type { Cycle, Process, Steered, Withdrawn } from '@runlith/hosted-runner/cycle';
-import type { HostedDoor } from '@runlith/hosted-runner/door';
+import type { HostedDoor, HostedListed } from '@runlith/hosted-runner/door';
 import { Handed } from '@runlith/hosted-runner/handed';
 import { historyBlocks } from '@runlith/hosted-runner/history';
 import { Options, type ClientLaunch } from '@runlith/hosted-runner/options';
 import type { Output } from '@runlith/hosted-runner/output';
-import { QUOTA } from '@runlith/hosted-runner/wire/extensions';
-import type { HostedToolWire } from '@runlith/hosted-runner/wire/messages';
+import { COST, QUOTA } from '@runlith/hosted-runner/wire/extensions';
 import { MUSE_CODE_EXTENSIONS } from '../harness/acp.js';
 import type { McpServerInput } from '@runlith/mcp/server';
 import { MuseSdk, type Frame, type Host, type MuseRefused } from './channel.js';
-import { Feed } from './feed.js';
-import { Compact, ItemEvent, Models, Opened, Quota, Started, TurnStarted, type Item } from './frames.js';
-import { writeSettings, type MusePlace } from './home.js';
+import { Feed, NOTHING, spentOf, sum, type Spent } from './feed.js';
+import { Compact, ItemEvent, Models, Opened, Quota, Started, TokenUsage, TurnCompleted, TurnStarted, type Item } from './frames.js';
+import { keepPriced, keptPriced, writeSettings, type MusePlace } from './home.js';
+import { observationOf } from './quota.js';
 
 const PROVIDER_ID = 'meta';
 const PROFILE = ':ask-me';
@@ -41,7 +41,7 @@ export type MuseRunner = {
   readonly serve: (input: McpServerInput & { readonly bearer: string }) => Effect.Effect<{ readonly url: string }, AgentFault, Scope.Scope>;
 };
 
-type Want = { readonly prompt: string; readonly web: 'vendor' | 'none'; readonly tools: readonly HostedToolWire[] };
+type Want = { readonly prompt: string; readonly web: 'vendor' | 'none'; readonly listed: HostedListed };
 type Seat = { readonly id: string; readonly cwd: string; fresh: boolean };
 type Live = {
   readonly host: Host;
@@ -51,6 +51,22 @@ type Live = {
   readonly windows: ReadonlyMap<string, number>;
 };
 type Compacting = { readonly session: string; readonly output: Output; readonly done: Deferred.Deferred<Item, AgentFault> };
+type Asking = {
+  session: string | null;
+  turn: string | null;
+  readonly done: Deferred.Deferred<AsideAnswer, AgentFault>;
+  readonly said: string[];
+  spent: Spent;
+  usd: number | null;
+};
+type Reaching = { host: boolean; feed: Feed | null };
+type Acquired = {
+  readonly standing: Live;
+  readonly running: Feed;
+  readonly turn: string;
+  readonly done: Deferred.Deferred<ClientOutcome>;
+};
+type AsideAnswer = { readonly text: string; readonly usage?: Spent; readonly _meta?: Readonly<Record<string, unknown>> };
 
 const faultOf = (refused: MuseRefused): AgentFault =>
   new AgentFault({
@@ -70,19 +86,42 @@ const decoded =
 
 type Part = Readonly<Record<string, string>>;
 
-const partsOf = (blocks: readonly ContentBlock[]): Effect.Effect<readonly Part[], AgentFault> =>
-  Effect.forEach(blocks, (block): Effect.Effect<Part, AgentFault> =>
-    block.type === 'text'
-      ? Effect.succeed({ type: 'text', text: block.text })
-      : block.type === 'image'
-        ? Effect.succeed({ type: 'image', base64Data: block.data, mediaType: block.mimeType })
-        : Effect.fail(new AgentFault({ code: FAULT.invalidParams, message: `Muse Code cannot receive ${block.type} content` })),
-  );
+const partOf = (block: ContentBlock): Effect.Effect<Part, AgentFault> => {
+  switch (block.type) {
+    case 'text':
+      return Effect.succeed({ type: 'text', text: block.text });
+    case 'image':
+      return Effect.succeed({ type: 'image', base64Data: block.data, mediaType: block.mimeType });
+    case 'resource_link':
+      return Effect.succeed({ type: 'text', text: `[${block.name}](${block.uri})` });
+    case 'resource':
+      if ('text' in block.resource)
+        return Effect.succeed({ type: 'text', text: `<context ref="${block.resource.uri}">\n${block.resource.text}\n</context>` });
+      if (block.resource.mimeType?.startsWith('image/') === true)
+        return Effect.succeed({ type: 'image', base64Data: block.resource.blob, mediaType: block.resource.mimeType });
+      return Effect.fail(
+        new AgentFault({
+          code: FAULT.invalidParams,
+          message: `Muse Code cannot receive a ${block.resource.mimeType ?? 'binary'} resource`,
+        }),
+      );
+    default:
+      return Effect.fail(new AgentFault({ code: FAULT.invalidParams, message: `Muse Code cannot receive ${block.type} content` }));
+  }
+};
+
+const partsOf = (blocks: readonly ContentBlock[]): Effect.Effect<readonly Part[], AgentFault> => Effect.forEach(blocks, partOf);
+
+const said = (parts: readonly Part[]): readonly Part[] => {
+  const kept = parts.filter((part) => part.type !== 'text' || (part.text ?? '').trim() !== '');
+  return kept.length === 0 ? [{ type: 'text', text: CONTINUE }] : kept;
+};
 
 const keyOf = (want: Want): string =>
   JSON.stringify([
     want.web,
-    want.tools.toSorted((left, right) => (left.name < right.name ? -1 : left.name > right.name ? 1 : 0)),
+    want.listed.dispatch,
+    want.listed.tools.toSorted((left, right) => (left.name < right.name ? -1 : left.name > right.name ? 1 : 0)),
     want.prompt,
   ]);
 
@@ -97,6 +136,7 @@ export const makeMuseCycle = Effect.fnUntraced(function* (door: HostedDoor, proc
   let live: Live | null = null;
   let feed: Feed | null = null;
   let compacting: Compacting | null = null;
+  let asking: Asking | null = null;
   let output: Output | null = null;
   let observed: unknown = null;
   let window: number | null = null;
@@ -104,6 +144,22 @@ export const makeMuseCycle = Effect.fnUntraced(function* (door: HostedDoor, proc
   const words = new Map<string, Deferred.Deferred<void>>();
   const refused = new Set<string>();
   const steers = new Map<string, { readonly command: string; readonly feed: Feed }>();
+  const priced = new Map<string, number>();
+  const stored = <A>(work: Effect.Effect<A, AgentFault, FileSystem.FileSystem>, none: A) =>
+    work.pipe(
+      Effect.provideService(FileSystem.FileSystem, files),
+      Effect.catchTag('AgentFault', (fault) =>
+        Effect.as(
+          Effect.sync(() => process.stderr(`${fault.message}\n`)),
+          none,
+        ),
+      ),
+    );
+  const price = (session: string, usd: number) =>
+    Effect.suspend(() => {
+      priced.set(session, usd);
+      return stored(keepPriced(runner.place, session, usd), undefined);
+    });
 
   const slot = (input: string) => {
     const standing = words.get(input);
@@ -141,34 +197,9 @@ export const makeMuseCycle = Effect.fnUntraced(function* (door: HostedDoor, proc
   const quota = Effect.fnUntraced(function* (frame: Frame) {
     const read = Schema.decodeUnknownResult(Quota)(frame.params);
     if (Result.isFailure(read)) return process.stderr(`Muse Code reported its quota in an unreadable shape: ${read.failure.message}\n`);
-    const { window: session, weekly, observedAtMs } = read.success;
-    const windows = [
-      ...(session === undefined
-        ? []
-        : [
-            new QuotaWindow({
-              kind: 'session',
-              usedPercent: session.usedPercent,
-              windowMinutes: session.windowDurationMins,
-              resetsAt: session.resetsAtMs === undefined ? undefined : session.resetsAtMs / 1000,
-            }),
-          ]),
-      ...(weekly === undefined
-        ? []
-        : [
-            new QuotaWindow({
-              kind: 'weekly',
-              usedPercent: weekly.usedPercent,
-              windowMinutes: 10_080,
-              resetsAt: weekly.resetsAtMs === undefined ? undefined : weekly.resetsAtMs / 1000,
-            }),
-          ]),
-    ];
-    if (windows.length === 0) return;
-    const observedAt = observedAtMs ?? (yield* Clock.currentTimeMillis);
-    observed = yield* Schema.encodeEffect(Schema.toCodecJson(QuotaObservation))(
-      new QuotaObservation({ observedAt: new Date(observedAt), source: 'usage', windows }),
-    ).pipe(Effect.orDie);
+    const observation = observationOf(read.success, yield* Clock.currentTimeMillis);
+    if (observation === null) return;
+    observed = yield* Schema.encodeEffect(Schema.toCodecJson(QuotaObservation))(observation).pipe(Effect.orDie);
     yield* report();
   });
 
@@ -181,15 +212,11 @@ export const makeMuseCycle = Effect.fnUntraced(function* (door: HostedDoor, proc
     return true;
   });
 
-  const orphan = Effect.fnUntraced(function* (frame: Frame) {
-    const read = Schema.decodeUnknownResult(TurnStarted)(frame.params);
-    const host = live?.host;
-    if (Result.isFailure(read) || host === undefined) return;
-    const { sessionId, turnId } = read.success;
-    process.stderr(`Muse Code started turn ${turnId}, which no Tagma turn holds; it is interrupted\n`);
+  const interrupt = Effect.fnUntraced(function* (sessionId: string, turnId: string) {
     const standing = live;
+    if (standing === null) return;
     yield* Effect.forkIn(
-      host.command('turn/interrupt', { sessionId, turnId }).pipe(
+      standing.host.command('turn/interrupt', { sessionId, turnId }).pipe(
         Effect.asVoid,
         Effect.catchTag('MuseRefused', (refused) =>
           refused.kind === 'commandRejected' || live !== standing
@@ -204,8 +231,56 @@ export const makeMuseCycle = Effect.fnUntraced(function* (door: HostedDoor, proc
     );
   });
 
+  const orphan = Effect.fnUntraced(function* (frame: Frame) {
+    const read = Schema.decodeUnknownResult(TurnStarted)(frame.params);
+    if (Result.isFailure(read) || live === null) return;
+    const { sessionId, turnId } = read.success;
+    process.stderr(`Muse Code started turn ${turnId}, which no Tagma turn holds; it is interrupted\n`);
+    yield* interrupt(sessionId, turnId);
+  });
+
+  const aside = Effect.fnUntraced(function* (frame: Frame, side: Asking) {
+    if (frame.method === 'item/completed') {
+      const read = Schema.decodeUnknownResult(ItemEvent)(frame.params);
+      if (Result.isSuccess(read) && read.success.item.kind === 'agentMessage' && read.success.item.text !== undefined)
+        side.said.push(read.success.item.text);
+      return;
+    }
+    if (frame.method === 'session/tokenUsage') {
+      const read = Schema.decodeUnknownResult(TokenUsage)(frame.params);
+      if (Result.isFailure(read)) return;
+      side.spent = sum(side.spent, spentOf(read.success.usage));
+      side.usd = read.success.cumulative?.cost?.usd ?? side.usd;
+      return;
+    }
+    if (frame.request) {
+      const reason = `Muse Code asked ${frame.method} inside a side question, which takes no answer back; the side question is stopped`;
+      process.stderr(`${reason}\n`);
+      yield* Deferred.fail(side.done, new AgentFault({ code: FAULT.internal, message: reason }));
+      const turn = typeof frame.params.turnId === 'string' ? frame.params.turnId : side.turn;
+      if (side.session !== null && turn !== null) yield* interrupt(side.session, turn);
+      return;
+    }
+    if (frame.method !== 'turn/completed') return;
+    const read = Schema.decodeUnknownResult(TurnCompleted)(frame.params);
+    if (Result.isFailure(read)) return;
+    if (read.success.terminal !== 'completed')
+      return yield* Deferred.fail(
+        side.done,
+        new AgentFault({
+          code: FAULT.internal,
+          message: read.success.error?.message ?? `Muse Code ended the side question ${read.success.terminal}`,
+        }),
+      );
+    const usage = side.spent === NOTHING ? undefined : side.spent;
+    const cost = side.usd === null ? undefined : { amount: side.usd, currency: 'USD', basis: 'estimate' };
+    yield* Deferred.succeed(side.done, { text: side.said.join('\n\n'), usage, _meta: cost === undefined ? undefined : { [COST]: cost } });
+  });
+
   const route = Effect.fnUntraced(function* (frame: Frame) {
     if (frame.method === 'usage/changed') return yield* quota(frame);
+    const side = asking;
+    if (side !== null && side.session !== null && frame.params.sessionId === side.session) return yield* aside(frame, side);
     const standing = compacting;
     if (standing !== null && frame.method.startsWith('item/') && (yield* compacted(frame, standing))) return;
     const turn = feed;
@@ -222,6 +297,8 @@ export const makeMuseCycle = Effect.fnUntraced(function* (door: HostedDoor, proc
     if (turn !== null) yield* Deferred.succeed(turn.done, { status: 'error', detail: reason });
     const standing = compacting;
     if (standing !== null) yield* Deferred.fail(standing.done, new AgentFault({ code: FAULT.internal, message: reason }));
+    const side = asking;
+    if (side !== null) yield* Deferred.fail(side.done, new AgentFault({ code: FAULT.internal, message: reason }));
     yield* settleWords();
     yield* process.died(reason);
   });
@@ -231,12 +308,15 @@ export const makeMuseCycle = Effect.fnUntraced(function* (door: HostedDoor, proc
     if (standing === null) return;
     live = null;
     applied = null;
+    const side = asking;
+    if (side !== null)
+      yield* Deferred.fail(side.done, new AgentFault({ code: FAULT.internal, message: 'Muse Code was replaced under the side question' }));
     yield* Scope.close(standing.scope, Exit.void);
   });
 
   const ensureHost = Effect.fnUntraced(function* (want: Want, cwd: string) {
     const key = keyOf(want);
-    yield* bridge.serve(want.tools);
+    yield* bridge.serve(want.listed);
     const standing = live;
     if (standing !== null && standing.key === key) return standing;
     yield* drop();
@@ -277,6 +357,7 @@ export const makeMuseCycle = Effect.fnUntraced(function* (door: HostedDoor, proc
         })
         .pipe(Effect.mapError(faultOf));
       seat.fresh = false;
+      yield* price(seat.id, 0);
       applied = model === null ? null : { session: seat.id, model };
     } else {
       const resumed = yield* standing.host
@@ -284,6 +365,8 @@ export const makeMuseCycle = Effect.fnUntraced(function* (door: HostedDoor, proc
         .pipe(Effect.mapError(faultOf), Effect.flatMap(decoded(Opened, 'session/resume')));
       if (resumed.session.approvalMode?.mode !== APPROVALS)
         yield* standing.host.command('session/setApprovalMode', { sessionId: seat.id, mode: APPROVALS }).pipe(Effect.mapError(faultOf));
+      const kept = priced.has(seat.id) ? null : yield* stored(keptPriced(runner.place, seat.id), null);
+      if (kept !== null) priced.set(seat.id, kept);
       applied = null;
     }
     standing.loaded.add(seat.id);
@@ -297,6 +380,7 @@ export const makeMuseCycle = Effect.fnUntraced(function* (door: HostedDoor, proc
       yield* standing.host
         .command('session/setModel', { sessionId: seat.id, model: { modelId: model, providerId: PROVIDER_ID } })
         .pipe(Effect.mapError(faultOf));
+      if (applied?.model !== model) window = null;
       applied = { session: seat.id, model };
     }
     return standing;
@@ -304,7 +388,7 @@ export const makeMuseCycle = Effect.fnUntraced(function* (door: HostedDoor, proc
 
   const wanted = Effect.fnUntraced(function* () {
     const [agent, listed] = yield* Effect.zip(door.agent(), door.tools());
-    return { prompt: servedPrompt(agent.prompt), web: agent.web, tools: listed.tools } satisfies Want;
+    return { prompt: servedPrompt(agent.prompt, listed.dispatch), web: agent.web, listed } satisfies Want;
   });
 
   const windowOf = () => window ?? (applied === null ? null : (live?.windows.get(applied.model) ?? null));
@@ -319,66 +403,85 @@ export const makeMuseCycle = Effect.fnUntraced(function* (door: HostedDoor, proc
         configure: options.configure.bind(options),
         handed,
         queued: (named) => Effect.forEach(named, (input) => Effect.flatMap(slot(input), Deferred.await), { discard: true }),
-        send: Effect.fnUntraced(function* ({ input, prepared, output: out, permitted, cancelled }) {
+        send: Effect.fnUntraced(function* ({ input, prepared, output: out, permitted, halted }) {
           output = out;
           yield* report();
-          const prompt = prepared.opened.prompt ?? (yield* door.agent()).prompt;
-          const standing = yield* attach(seat, { prompt: servedPrompt(prompt), web: prepared.opened.web, tools: prepared.listed.tools });
-          const blocks: ContentBlock[] = [...history];
-          if (input.context !== null) blocks.push({ type: 'text', text: input.context });
-          blocks.push(...input.prompt);
-          const parts = yield* partsOf(blocks);
-          if (cancelled()) return unsent;
-          const turn = UUID_V7.test(input.id) ? input.id : runner.mint();
-          const done = yield* Deferred.make<ClientOutcome>();
-          const { effort, parameters } = options.read();
-          const running = new Feed(
-            {
-              session: seat.id,
-              turn,
-              output: out,
-              host: standing.host,
-              scope,
-              thoughts: parameters.reasoningDisplay !== 'omitted',
-              window: windowOf,
-              measured: (size) => {
-                window = size;
-              },
-              permitted,
-              stderr: process.stderr,
-              began: Effect.andThen(
-                input.taken,
-                Effect.sync(() => {
-                  history = [];
-                }),
-              ),
-              abandon: Effect.suspend(() => (live === standing ? drop() : Effect.void)),
-            },
-            done,
-          );
-          feed = running;
-          const admitted = yield* standing.host
-            .command(
-              'turn/start',
+          const reaching: Reaching = { host: false, feed: null };
+          const acquire = Effect.gen(function* () {
+            const prompt = prepared.opened.prompt ?? (yield* door.agent()).prompt;
+            reaching.host = true;
+            const standing = yield* attach(seat, {
+              prompt: servedPrompt(prompt, prepared.listed.dispatch),
+              web: prepared.opened.web,
+              listed: prepared.listed,
+            });
+            const blocks: ContentBlock[] = [...history];
+            if (input.context !== null) blocks.push({ type: 'text', text: input.context });
+            blocks.push(...input.prompt);
+            const parts = yield* partsOf(blocks);
+            const turn = UUID_V7.test(input.id) ? input.id : runner.mint();
+            const done = yield* Deferred.make<ClientOutcome>();
+            const { effort, parameters } = options.read();
+            const running = new Feed(
               {
-                sessionId: seat.id,
-                input: parts.length === 0 ? [{ type: 'text', text: CONTINUE }] : parts,
-                ...(effort === null ? {} : { reasoningEffort: effort }),
+                session: seat.id,
+                turn,
+                output: out,
+                host: standing.host,
+                scope,
+                thoughts: parameters.reasoningDisplay !== 'omitted',
+                window: windowOf,
+                measured: (size) => {
+                  window = size;
+                },
+                permitted,
+                callOf: (tool, input) => bridge.callOf(tool, input),
+                stderr: process.stderr,
+                began: Effect.andThen(
+                  input.taken,
+                  Effect.sync(() => {
+                    history = [];
+                  }),
+                ),
+                abandon: Effect.suspend(() => (live === standing ? drop() : Effect.void)),
+                pricedBefore: priced.get(seat.id) ?? null,
+                priced: (usd) => price(seat.id, usd),
               },
-              turn,
-            )
-            .pipe(
-              Effect.mapError(faultOf),
-              Effect.flatMap(decoded(Started, 'turn/start')),
-              Effect.onError(() =>
-                Effect.sync(() => {
-                  if (feed === running) feed = null;
-                }),
-              ),
+              done,
             );
-          if (admitted.turnId !== turn)
-            return yield* new AgentFault({ code: FAULT.internal, message: `Muse Code admitted turn ${admitted.turnId} for ${turn}` });
-          if (admitted.disposition === 'started') yield* running.begin();
+            reaching.feed = running;
+            feed = running;
+            const admitted = yield* standing.host
+              .command(
+                'turn/start',
+                {
+                  sessionId: seat.id,
+                  input: said(parts),
+                  ...(effort === null ? {} : { reasoningEffort: effort }),
+                },
+                turn,
+              )
+              .pipe(
+                Effect.mapError(faultOf),
+                Effect.flatMap(decoded(Started, 'turn/start')),
+                Effect.onError(() =>
+                  Effect.sync(() => {
+                    if (feed === running) feed = null;
+                  }),
+                ),
+              );
+            if (admitted.turnId !== turn)
+              return yield* new AgentFault({ code: FAULT.internal, message: `Muse Code admitted turn ${admitted.turnId} for ${turn}` });
+            if (admitted.disposition === 'started') yield* running.begin();
+            return Option.some({ standing, running, turn, done });
+          });
+          const acquired = yield* Effect.raceFirst(acquire, Effect.as(halted, Option.none<Acquired>()));
+          if (Option.isNone(acquired)) {
+            if (reaching.feed !== null && feed === reaching.feed) feed = null;
+            if (reaching.host) yield* drop();
+            return unsent;
+          }
+          const { standing, running, turn, done } = acquired.value;
           const finish = Effect.andThen(
             Effect.sync(() => {
               if (feed === running) feed = null;
@@ -421,7 +524,7 @@ export const makeMuseCycle = Effect.fnUntraced(function* (door: HostedDoor, proc
               const read = running.steering(command);
               if (word !== undefined) steers.set(word, { command, feed: running });
               const admitted = yield* standing.host
-                .command('turn/steer', { sessionId: seat.id, expectedTurnId: turn, input: steering }, command)
+                .command('turn/steer', { sessionId: seat.id, expectedTurnId: running.current, input: steering }, command)
                 .pipe(
                   Effect.as(true),
                   Effect.catchTag('MuseRefused', (refusal) =>
@@ -445,30 +548,42 @@ export const makeMuseCycle = Effect.fnUntraced(function* (door: HostedDoor, proc
               if (sent === undefined || !sent.feed.cancelled) return { withdrawn: false } satisfies Withdrawn;
               steers.delete(word);
               yield* Deferred.await(sent.feed.done);
+              if (sent.feed.doubted.has(sent.command))
+                return yield* new AgentFault({
+                  code: FAULT.internal,
+                  message: `Muse Code cannot show whether it still holds the words of ${sent.command}`,
+                });
               return { withdrawn: sent.feed.unread.has(sent.command) } satisfies Withdrawn;
             }),
           } satisfies ClientRun;
         }),
-        compact: Effect.fnUntraced(function* (_instructions, out) {
+        compact: Effect.fnUntraced(function* (_instructions, out, halted) {
           output = out;
-          const standing = live ?? (yield* attach(seat, yield* wanted()));
-          yield* load(standing, seat);
           const done = yield* Deferred.make<Item, AgentFault>();
-          compacting = { session: seat.id, output: out, done };
-          const asked = yield* standing.host.command('session/compact', { sessionId: seat.id }).pipe(
-            Effect.mapError(faultOf),
-            Effect.flatMap(decoded(Compact, 'session/compact')),
-            Effect.onError(() =>
-              Effect.sync(() => {
-                compacting = null;
-              }),
-            ),
-          );
-          if (asked.status !== 'accepted') {
-            compacting = null;
+          const release = Effect.sync(() => {
+            if (compacting?.done === done) compacting = null;
+          });
+          const admit = Effect.gen(function* () {
+            const standing = live ?? (yield* attach(seat, yield* wanted()));
+            yield* load(standing, seat);
+            compacting = { session: seat.id, output: out, done };
+            const asked = yield* standing.host
+              .command('session/compact', { sessionId: seat.id })
+              .pipe(Effect.mapError(faultOf), Effect.flatMap(decoded(Compact, 'session/compact')));
+            return Option.some(asked);
+          }).pipe(Effect.onError(() => release));
+          const asked = yield* Effect.raceFirst(admit, Effect.as(halted, Option.none<typeof Compact.Type>()));
+          if (Option.isNone(asked)) {
+            yield* drop();
+            yield* Deferred.fail(
+              done,
+              new AgentFault({ code: -32800, message: 'the compaction was cancelled while Muse Code was admitting it' }),
+            );
+          } else if (asked.value.status !== 'accepted') {
+            yield* release;
             return yield* new AgentFault({
               code: FAULT.invalidRequest,
-              message: `Muse Code had nothing to compact${asked.reason === undefined ? '' : ` (${asked.reason})`}`,
+              message: `Muse Code had nothing to compact${asked.value.reason === undefined ? '' : ` (${asked.value.reason})`}`,
             });
           }
           return {
@@ -492,11 +607,7 @@ export const makeMuseCycle = Effect.fnUntraced(function* (door: HostedDoor, proc
                       }),
                     ),
               ),
-              Effect.ensuring(
-                Effect.sync(() => {
-                  compacting = null;
-                }),
-              ),
+              Effect.ensuring(release),
             ),
             cancel: Effect.andThen(
               drop(),
@@ -504,7 +615,54 @@ export const makeMuseCycle = Effect.fnUntraced(function* (door: HostedDoor, proc
             ),
           } satisfies ClientCompaction;
         }),
-        close: Effect.void,
+        aside: Effect.fnUntraced(function* (question: string) {
+          if (asking !== null)
+            return yield* new AgentFault({ code: FAULT.invalidRequest, message: 'a side question is already being answered' });
+          const mine: Asking = {
+            session: null,
+            turn: null,
+            done: Deferred.makeUnsafe<AsideAnswer, AgentFault>(),
+            said: [],
+            spent: NOTHING,
+            usd: null,
+          };
+          asking = mine;
+          return yield* Effect.gen(function* () {
+            const standing = live ?? (yield* attach(seat, yield* wanted()));
+            yield* load(standing, seat);
+            const opened = yield* standing.host
+              .command('session/sideChat', { sessionId: seat.id })
+              .pipe(Effect.mapError(faultOf), Effect.flatMap(decoded(Opened, 'session/sideChat')));
+            const side = opened.session.sessionId;
+            mine.session = side;
+            const { model, effort } = options.read();
+            if (model !== null)
+              yield* standing.host
+                .command('session/setModel', { sessionId: side, model: { modelId: model, providerId: PROVIDER_ID } })
+                .pipe(Effect.mapError(faultOf));
+            if (effort !== null)
+              yield* standing.host
+                .command('session/setReasoningEffort', { sessionId: side, reasoningEffort: effort })
+                .pipe(Effect.mapError(faultOf));
+            const turn = runner.mint();
+            mine.turn = turn;
+            yield* standing.host
+              .command(
+                'turn/start',
+                { sessionId: side, input: [{ type: 'text', text: question }], ...(effort === null ? {} : { reasoningEffort: effort }) },
+                turn,
+              )
+              .pipe(Effect.mapError(faultOf));
+            return yield* Deferred.await(mine.done);
+          }).pipe(
+            Effect.ensuring(
+              Effect.sync(() => {
+                if (asking === mine) asking = null;
+              }),
+            ),
+          );
+        }),
+        close: Effect.suspend(() => (live?.loaded.has(seat.id) === true ? drop() : Effect.void)),
       },
       door,
       process,
@@ -518,7 +676,11 @@ export const makeMuseCycle = Effect.fnUntraced(function* (door: HostedDoor, proc
     initialize: {
       protocolVersion: 1,
       agentInfo: { name: 'tagma-muse-code', version: launch.version },
-      agentCapabilities: { loadSession: true, promptCapabilities: { image: true }, sessionCapabilities: { resume: {}, close: {} } },
+      agentCapabilities: {
+        loadSession: true,
+        promptCapabilities: { image: true, embeddedContext: true },
+        sessionCapabilities: { resume: {}, close: {} },
+      },
     },
     modes: { currentModeId: 'agent', availableModes: [{ id: 'agent', name: 'Agent' }] },
     open: Effect.fnUntraced(function* (opening, outlet, replacing) {

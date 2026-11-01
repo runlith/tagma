@@ -2,7 +2,7 @@ import { Effect } from 'effect';
 import type { SourceRow, BlockRecord, BlockWrite } from '../contract/service/acts.js';
 import { departedBlock, type JournalPayloadUnreadable } from '../contract/wire/journalPayloads.js';
 import type { ProjectPolicyRow } from '../contract/wire/serving.js';
-import { blockName } from '../contract/wire/references.js';
+import { blockIdentity, blockName } from '../contract/wire/references.js';
 
 import type { ActEntry } from '../contract/service/acts.js';
 import type { JournalEvent } from '../contract/wire/journal.js';
@@ -33,11 +33,14 @@ export function wireBlock(row: BlockRecord): Block {
 }
 
 export function wireTreeBlock(row: Omit<BlockRecord, 'body'>): TreeBlock {
-  const parentUuid = (row as { parentUuid?: string | null }).parentUuid ?? null;
+  const parentUuid = row.parentUuid;
   return {
     name: blockName(row.uuid),
+    identity: blockIdentity(row.uuid),
+    rowKey: row.id,
     projectId: row.projectId,
     parentName: row.parentId === null ? null : blockName(parentUuid ?? ''),
+    parentIdentity: parentUuid === null ? null : blockIdentity(parentUuid),
     ord: row.ord,
     tags: row.tags,
     fields: row.fields,
@@ -59,6 +62,10 @@ export function wireEdge(row: DetailEdge): Edge {
   return {
     fromName: blockName(row.fromUuid ?? ''),
     toName: blockName(row.toUuid ?? ''),
+    fromIdentity: row.fromUuid === null ? null : blockIdentity(row.fromUuid),
+    toIdentity: row.toUuid === null ? null : blockIdentity(row.toUuid),
+    fromRowKey: row.fromId,
+    toRowKey: row.toId,
     kind: row.kind,
     createdBySessionId: row.createdBySessionId,
     createdAt: at(row.createdAt),
@@ -99,10 +106,12 @@ export function wireRead(row: BlockDetail): BlockRead {
     edgesIn: row.edgesIn.map(wireEdge),
     edgesInUnread: row.edgesInUnread.length === 0 ? undefined : row.edgesInUnread,
     refsOut: row.refsOut,
+    refsOutDetails: row.refsOutDetails,
     refsElsewhere: row.refsElsewhere.length === 0 ? undefined : row.refsElsewhere,
     refsAbsent: row.refsAbsent.length === 0 ? undefined : row.refsAbsent,
     refsIn: row.refsIn,
-    restingIn: { edges: row.restingIn.edges.map(wireEdge), refs: row.restingIn.refs },
+    refsInDetails: row.refsInDetails,
+    restingIn: { edges: row.restingIn.edges.map(wireEdge), refs: row.restingIn.refs, refsDetails: row.restingIn.refsDetails },
     sources: row.sources.map(wireSource),
     reach: row.reach,
     ending: row.ending === null ? null : { ...row.ending, at: at(row.ending.at) },

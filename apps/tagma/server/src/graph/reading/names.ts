@@ -3,7 +3,7 @@ import { and, eq, inArray, isNull } from 'drizzle-orm';
 import { GraphStore, type StoreDb, type StoreFailure } from '../../platform/contract/service/store.js';
 import { SPOKEN_LENGTH } from '../../platform/contract/wire/ids.js';
 import { block, spokenTail } from '../store/tables.js';
-import { blockName } from '../contract/wire/references.js';
+import { blockIdentity, blockName } from '../contract/wire/references.js';
 import { OtherGraphs } from '../serving/policy.js';
 import type { Projects } from '../../projects/contract/service/registry.js';
 import { RoutedGraphs } from '../contract/service/serving.js';
@@ -12,7 +12,7 @@ import type { RefElsewhere } from '../contract/wire/far.js';
 const AMBIGUOUS_LENGTH = 12;
 
 export type NameAnswer =
-  | { readonly kind: 'block'; readonly name: string }
+  | { readonly kind: 'block'; readonly name: string; readonly identity: string }
   | { readonly kind: 'absent' }
   | { readonly kind: 'ambiguous'; readonly candidates: readonly string[] };
 
@@ -40,7 +40,8 @@ export const answeredNames = Effect.fn('answeredNames')(function* (
   for (const name of wanted) {
     const hits = rows.filter((row) => row.uuid.replaceAll('-', '').endsWith(name));
     const only = hits[0];
-    if (hits.length === 1 && only !== undefined) answered.set(name, { kind: 'block', name: blockName(only.uuid) });
+    if (hits.length === 1 && only !== undefined)
+      answered.set(name, { kind: 'block', name: blockName(only.uuid), identity: blockIdentity(only.uuid) });
     else if (hits.length === 0) answered.set(name, { kind: 'absent' });
     else {
       answered.set(name, {
@@ -70,7 +71,10 @@ const machineGlobal = Effect.fnUntraced(function* (db: StoreDb<'graph'>, globalI
   const found = new Map<string, ElsewhereRef>();
   for (const [name, answer] of yield* answeredNames(db, globalId, names)) {
     if (answer.kind === 'block')
-      found.set(name, { ref: { name: answer.name, project: '', projectId: globalId, branch: null }, global: true });
+      found.set(name, {
+        ref: { name: answer.name, identity: answer.identity, project: '', projectId: globalId, branch: null },
+        global: true,
+      });
   }
   return { found, settled: new Set<string>() };
 });
@@ -110,6 +114,7 @@ export const elsewhereNames = Effect.fn('elsewhereNames')(function* (
     if (held.get(key)?.branch === null) continue;
     held.set(key, {
       name: blockName(row.uuid),
+      identity: blockIdentity(row.uuid),
       project: titled.get(row.projectId) ?? '',
       projectId: row.projectId,
       branch: row.canonical ? null : row.branch,

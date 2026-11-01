@@ -18,7 +18,12 @@ layer(MemoryFileSystem.layer)('Cursor hosted session', (it) => {
       const door: HostedDoor = {
         agent: () => Effect.succeed({ prompt, web: 'none' }),
         turn: () => Effect.succeed({ prompt, context: 'turn context', web: 'none' }),
-        tools: () => Effect.succeed({ names: ['read'], tools: [{ name: 'read', description: 'Read', inputSchema: {}, mutates: false }] }),
+        tools: () =>
+          Effect.succeed({
+            names: ['read'],
+            tools: [{ name: 'read', description: 'Read', inputSchema: {}, mutates: false }],
+            dispatch: false,
+          }),
         history: () =>
           Effect.succeed([
             {

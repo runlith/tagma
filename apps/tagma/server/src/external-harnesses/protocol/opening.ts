@@ -62,6 +62,7 @@ export class ProtocolOpening {
       pictures: agent.image,
       steer: steers ? 'step' : 'none',
       withdraw: steers && extensions.includes(WITHDRAW),
+      toolCatalog: link.profile.toolCatalog,
     });
     return yield* this.open(link, agent.resume ? 'resume' : agent.load ? 'load' : 'new');
   });

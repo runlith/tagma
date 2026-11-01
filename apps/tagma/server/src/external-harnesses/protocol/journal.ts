@@ -115,7 +115,7 @@ const eventsOf = (
       }
       if (entry.type === 'compaction' && entry.status === 'completed' && entry.summary === '') {
         length += 1;
-        return { kind: entry.type, payload: { entry, messages: [vendorBoundaryMessage()] } };
+        return { kind: entry.type, payload: { entry, messages: [vendorBoundaryMessage(foldedReferences(history))] } };
       }
       return { kind: entry.type, payload: { entry } };
     }),

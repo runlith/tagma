@@ -22,6 +22,37 @@ afterEach(async () => {
   for (const unmount of close.splice(0)) await unmount();
 });
 
+test('the graph door refuses a tree row without a complete identity', async () => {
+  const door = testDoor(async () =>
+    json({
+      status: 'ok',
+      blocks: [
+        {
+          name: '1234abcd',
+          identity: '1234abcd',
+          rowKey: 1,
+          projectId: 1,
+          parentName: null,
+          parentIdentity: null,
+          ord: 0,
+          tags: [],
+          fields: {},
+          actions: { moves: [], slots: [], offers: [], revision: 'test' },
+          title: 'Block',
+          superseded: false,
+          blocked: false,
+          building: false,
+          answered: false,
+          deletedAt: null,
+          createdAt: '2026-09-05T00:00:00Z',
+          updatedAt: '2026-09-05T00:00:00Z',
+        },
+      ],
+    }),
+  );
+  await expect(door.perform('read_tree', {}, { project: '1' })).rejects.toMatchObject({ code: 'contract-apart' });
+});
+
 test('creation on a branch leaves the canonical tree unchanged', async () => {
   const trees = new Map<string, TreeBlock[]>();
   answer = async (input, init) => {
@@ -33,8 +64,11 @@ test('creation on a branch leaves the canonical tree unchanged', async () => {
     const payload = (await request.json()) as { title: string; parentId: string };
     const row: WrittenBlock = {
       name: '1234abcd',
+      identity: '0000000000000000000000001234abcd',
+      rowKey: 1,
       projectId: 1,
       parentName: payload.parentId,
+      parentIdentity: '000000000000000000000000abcd1234',
       ord: 0,
       tags: ['task'],
       fields: { status: 'open' },

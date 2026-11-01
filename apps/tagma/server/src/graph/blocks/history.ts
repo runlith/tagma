@@ -10,7 +10,7 @@ import { blocksOf } from '../journal/eventLog.js';
 import { type ActEntry } from '../contract/service/acts.js';
 import { GraphJournal } from '../contract/service/journal.js';
 import { type HistoryRefusal, History, Selection } from '../contract/service/reads.js';
-import { blockName } from '../contract/wire/references.js';
+import { blockIdentity, blockName } from '../contract/wire/references.js';
 
 const ROLE_VERBS: readonly GraphEventOp[] = ['claim', 'release', 'done', 'close'];
 
@@ -141,7 +141,7 @@ export const historyLayer: Layer.Layer<History, never, Selection | GraphJournal>
           ...changes,
         ];
         const peerIds = [...new Set(raw.flatMap((change) => (change.peerId === null ? [] : [change.peerId])))];
-        const peerNames = new Map((yield* selection.records(peerIds)).map((row) => [row.id, blockName(row.uuid)] as const));
+        const peers = new Map((yield* selection.records(peerIds)).map((row) => [row.id, row.uuid] as const));
 
         return {
           blockName: blockName(self.uuid),
@@ -156,11 +156,15 @@ export const historyLayer: Layer.Layer<History, never, Selection | GraphJournal>
           title: titleFrom === null || titleTo === null ? null : { from: titleFrom, to: titleTo },
           status: statusTo === null ? null : { from: statusFrom, to: statusTo },
           tag: tagFrom !== null && tagTo !== null ? { from: tagFrom, to: tagTo } : yield* settledPair(entries),
-          changes: raw.map(({ kind, label, peerId }) => ({
-            kind,
-            label,
-            peerName: peerId === null ? null : (peerNames.get(peerId) ?? null),
-          })),
+          changes: raw.map(({ kind, label, peerId }) => {
+            const uuid = peerId === null ? undefined : peers.get(peerId);
+            return {
+              kind,
+              label,
+              peerName: uuid === undefined ? null : blockName(uuid),
+              peerIdentity: uuid === undefined ? null : blockIdentity(uuid),
+            };
+          }),
         };
       }),
 
@@ -207,7 +211,13 @@ export const historyLayer: Layer.Layer<History, never, Selection | GraphJournal>
           if (subtree !== undefined && !subtree.has(blockId) && !(row.parentId !== null && subtree.has(row.parentId))) {
             continue;
           }
-          marks.push({ blockName: blockName(row.uuid), mark: markOf(seen, row), entries: seen.entries, sessions: [...seen.sessions] });
+          marks.push({
+            blockName: blockName(row.uuid),
+            identity: blockIdentity(row.uuid),
+            mark: markOf(seen, row),
+            entries: seen.entries,
+            sessions: [...seen.sessions],
+          });
           blocks.push(row);
         }
         marks.sort((a, b) => MARK_RANK[a.mark] - MARK_RANK[b.mark] || a.blockName.localeCompare(b.blockName));

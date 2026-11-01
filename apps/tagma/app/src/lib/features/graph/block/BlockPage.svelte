@@ -146,12 +146,12 @@
   const translation = new TranslationLens(
     Translations.use(),
     TranslationsRepo.use(),
-    () => store.rootName ?? null,
+    () => subject.read?.identity ?? null,
     () => (lensParam() === null ? langParam() : null),
     (next) => showLanguage(next),
   );
   const read = $derived(subject.read);
-  const rootBlock = $derived<TreeBlock | undefined>(subject.root ?? (read !== null && read.name === store.rootName ? read : undefined));
+  const rootBlock = $derived<TreeBlock | undefined>(subject.root ?? read ?? undefined);
   const unavailable = $derived(subject.unavailable);
   const placed = $derived(subject.root !== undefined || store.rootAbsent);
   const readProject = $derived(read?.projectId);
@@ -199,29 +199,29 @@
   $effect(() => {
     const current = rootBlock;
     if (!current) return;
-    if (arrived !== current.name) {
-      arrived = current.name;
-      baseline = untrack(() => readState.seenAt(current.name));
-      if (blockName !== undefined) readState.visited(current.name);
+    if (arrived !== current.identity) {
+      arrived = current.identity;
+      baseline = untrack(() => readState.seenAt(current.identity));
+      if (blockName !== undefined) readState.visited(current.identity);
     }
-    readState.markRead(current.name, current.updatedAt);
+    readState.markRead(current.identity, current.updatedAt);
   });
 
   const ancestors = $derived.by(() => {
     if (!rootBlock) return [] as TreeBlock[];
     const chain: TreeBlock[] = [];
-    let cursor = rootBlock.parentName;
+    let cursor = rootBlock.parentIdentity;
     while (cursor !== null) {
       const parent = store.block(cursor);
       if (!parent) break;
       chain.unshift(parent);
-      cursor = parent.parentName;
+      cursor = parent.parentIdentity;
     }
     return chain;
   });
 
   function crumbHref(block: TreeBlock): string {
-    return block.parentName === null ? addresses.surface('outline') : addresses.block(block.name);
+    return block.parentIdentity === null ? addresses.surface('outline') : addresses.block(block.identity);
   }
 
   function crumbTitle(block: TreeBlock): string {
@@ -235,6 +235,10 @@
     const { block: name, project, branch } = element.dataset;
     if (name === undefined) return null;
     return project === undefined ? blockOf(name) : blockLink({ name, copy: { projectId: Number(project), branch: branch ?? null } });
+  };
+  const trashBlockAt = (element: HTMLElement): Link | null => {
+    const name = element.dataset['block'];
+    return name === undefined ? null : blockLink({ name, copy: graph });
   };
 
   const hasConnectivity = $derived(read !== null && (hasLinks(read, store) || read.sources.length > 0));
@@ -289,13 +293,13 @@
         : seen !== undefined
           ? { since: seen }
           : { from: journalLive.seenId };
-    const question = JSON.stringify({ name: root.name, ...asked });
+    const question = JSON.stringify({ name: root.identity, ...asked });
     if (question !== lensQuestion) {
       lensQuestion = question;
       lens = null;
     }
     void blocks.diff
-      .key({ name: root.name, ...asked })
+      .key({ name: root.identity, ...asked })
       .refresh({ throwOnError: true })
       .then((result) => {
         if (cancelled || !result) return;
@@ -318,8 +322,8 @@
     if (currentId == null) return;
     return feed.frames((event) => {
       if (event.type !== 'change' || diffRangeOf(lensParam()) !== null || translation.active) return;
-      if (event.blocks.some((row) => row.name === currentId && row.deletedAt !== null)) return;
-      const foreign = event.events.find((entry) => entry.blockName === currentId && entry.sessionId !== null);
+      if (event.blocks.some((row) => row.identity === currentId && row.deletedAt !== null)) return;
+      const foreign = event.events.find((entry) => entry.identity === currentId && entry.sessionId !== null);
       if (foreign === undefined) return;
       if (aside) lensAt = `${foreign.id - 1}..`;
       else void router.goto(diffLensHref(router, `${foreign.id - 1}..`), { replaceState: true, noScroll: true, keepFocus: true });
@@ -381,7 +385,9 @@
 {#if unavailable?.kind === 'absent'}
   <AbsentBlock name={unavailable.name} />
 {:else if unavailable?.kind === 'trashed'}
-  <TrashedBlock name={unavailable.name} {store} restored={() => subject.retry()} />
+  <div class="h-full" {@attach aside && linkWithin(opening, 'a[data-block]', trashBlockAt, here)}>
+    <TrashedBlock name={unavailable.name} {store} range={diffRange} restored={() => subject.retry()} />
+  </div>
 {:else if unavailable?.kind === 'failed'}
   <UnreadableBlock error={unavailable.error} retry={() => subject.retry()} />
 {:else if rootBlock && read && (appeared || (lensSettled && ready))}
@@ -396,7 +402,7 @@
       {#if ancestors.length > 0}
         <Trail steps={ancestors} class="mb-3 text-small text-muted-foreground">
           {#snippet step(block)}
-            <a href={crumbHref(block)} data-block={block.name} class="block transition-colors hover:text-foreground">
+            <a href={crumbHref(block)} data-block={block.identity} class="block transition-colors hover:text-foreground">
               <FadeText text={crumbTitle(block)} />
             </a>
           {/snippet}
@@ -411,12 +417,14 @@
                 </DropdownMenu.Trigger>
               </Tooltip>
               <DropdownMenu.Content align="start" class="min-w-56">
-                {#each blocks as block (block.name)}
+                {#each blocks as block (block.identity)}
                   <DropdownMenu.Item
                     onpointerup={(event: PointerEvent) => (crumbModified = opening.modified(event))}
                     onkeydown={(event: KeyboardEvent) => (crumbModified = opening.modified(event))}
                     onSelect={() =>
-                      void (aside ? opening.open(blockOf(block.name), opening.how(crumbModified), here) : router.goto(crumbHref(block)))}
+                      void (aside
+                        ? opening.open(blockOf(block.identity), opening.how(crumbModified), here)
+                        : router.goto(crumbHref(block)))}
                   >
                     {#snippet lead()}<TagIcon tag={tags.tagOf(block)} class="size-3.5" />{/snippet}
                     {crumbTitle(block)}
@@ -493,7 +501,7 @@
           <button
             type="button"
             class="group/copy flex items-center gap-1.5 rounded-sm text-muted-foreground/70 transition-colors hover:text-foreground"
-            onclick={() => copyName(rootBlock.name)}
+            onclick={() => copyName(rootBlock.identity)}
           >
             <BlockName name={rootBlock.name} class="text-inherit" />
             {#if copied}

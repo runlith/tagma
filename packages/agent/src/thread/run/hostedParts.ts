@@ -14,7 +14,8 @@ import type { HostedReplay } from './hostedReplay';
 import type { ThreadHostedHandle } from './assembly/RunAssembly';
 import type { ThreadPreparedRun } from '../agents/ThreadAgent';
 import type { ThreadWriteTx } from '../ThreadPorts';
-import { describedTool, toolExecute, type ToolOutcome } from '../../agent/tool';
+import { describedTool, toolExecute, type Tool, type ToolOutcome } from '../../agent/tool';
+import { DISPATCH_TOOL } from '../../agent/ToolCatalog';
 import type { ThreadToolExecution } from '../../transcript/entries';
 import { USER_QUESTION_TOOL_NAME } from '../../transcript/parts';
 import type { TransportCapabilities, TransportWeb } from '../record';
@@ -30,6 +31,7 @@ export type HostedTool = {
 export type HostedTools = {
   readonly tools: readonly HostedTool[];
   readonly names: readonly string[];
+  readonly dispatch: boolean;
 };
 
 export type HostedCall = {
@@ -94,18 +96,33 @@ export type Settled = {
   readonly execution?: ThreadToolExecution;
 };
 
+const withheld = (hosted: Hosted, name: string, tool: Tool): boolean => {
+  if (hosted.toolCatalog === 'dispatch') return tool.exposure === 'deferred';
+  return hosted.toolCatalog !== 'turn' && hosted.active !== null && !hosted.active.has(name);
+};
+
+const DISPATCHER: HostedTool = {
+  name: DISPATCH_TOOL,
+  description:
+    'Call a deferred Tagma tool that `tool_search` revealed. `name` is its name as the search answer gives it; `input` is its input, following the `inputSchema` that answer carries.',
+  inputSchema: {
+    type: 'object',
+    properties: { name: { type: 'string' }, input: { type: 'object' } },
+    required: ['name'],
+  },
+  mutates: true,
+};
+
 export const offeredBy = (hosted: Hosted | null): HostedTools => {
-  if (hosted === null) return { tools: [], names: [] };
+  if (hosted === null) return { tools: [], names: [], dispatch: false };
   const catalog = Object.entries(hosted.handle.catalog());
-  return {
-    names: catalog.map(([name]) => name),
-    tools: catalog.flatMap(([name, tool]) =>
-      (hosted.toolCatalog !== 'turn' && hosted.active !== null && !hosted.active.has(name)) ||
-      (toolExecute(tool) === null && name !== USER_QUESTION_TOOL_NAME)
-        ? []
-        : [{ name, description: describedTool(tool), inputSchema: tool.inputSchema, mutates: tool.mutates === true }],
-    ),
-  };
+  const dispatch = hosted.toolCatalog === 'dispatch';
+  const tools = catalog.flatMap(([name, tool]) =>
+    withheld(hosted, name, tool) || (toolExecute(tool) === null && name !== USER_QUESTION_TOOL_NAME)
+      ? []
+      : [{ name, description: describedTool(tool), inputSchema: tool.inputSchema, mutates: tool.mutates === true }],
+  );
+  return { names: catalog.map(([name]) => name), tools: dispatch ? [...tools, DISPATCHER] : tools, dispatch };
 };
 
 export const refused = (text: string, error: string = text): Settled => ({

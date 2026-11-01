@@ -40,7 +40,7 @@ it.effect('restored history survives a cancelled submission and leaves only afte
     const door: HostedDoor = {
       agent: () => Effect.succeed({ prompt: '', web: 'none' }),
       turn: () => Effect.succeed({ prompt: '', context: null, web: 'none' }),
-      tools: () => Effect.succeed({ tools: [], names: [] }),
+      tools: () => Effect.succeed({ tools: [], names: [], dispatch: false }),
       history: () => Effect.succeed([{ role: 'user', content: [{ type: 'text', text: 'RESTORED_JOURNAL' }] }]),
       call: () => Effect.die('no calls'),
     };

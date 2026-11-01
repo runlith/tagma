@@ -3,7 +3,7 @@ import type { Project } from '@tagma/server/graph/contract/wire/rows';
 import type { BlockLens } from '$lib/features/workspace/address.js';
 import type { Addresses } from '$lib/features/workspace/Addresses.js';
 import type { Refusal } from '$lib/wire/refusal.js';
-import type { GraphLens } from '$lib/features/workspace/GraphDoor.js';
+import type { GraphAim } from '$lib/features/workspace/GraphRung.js';
 
 export type BlockPlace = { readonly projectId: number; readonly checkout: string | null; readonly branch?: string | null };
 
@@ -20,10 +20,12 @@ export function placedHref(
   return place.checkout === project.rootPath ? addresses.block(name, { project: project.name, branch: null, diff }) : null;
 }
 
-export function placedLens(place: BlockPlace, project: Project | null): GraphLens | null {
-  if (place.branch !== undefined) return { project: String(place.projectId), branch: place.branch ?? undefined };
-  if (place.checkout === null) return { project: String(place.projectId) };
-  return project !== null && place.checkout === project.rootPath ? { project: String(place.projectId) } : null;
+export function placedAim(place: BlockPlace, project: Project | null): GraphAim | null {
+  if (place.branch !== undefined) return { projectId: place.projectId, branch: place.branch };
+  if (place.checkout === null || (project !== null && place.checkout === project.rootPath)) {
+    return { projectId: place.projectId, branch: null };
+  }
+  return null;
 }
 
 export type BlockRefFailure = { readonly error: Refusal };
@@ -37,10 +39,6 @@ export type BlockRefs = {
   readonly peer: (name: string) => BlockRefPeer;
   readonly open: (name: string, lens?: BlockLens) => Promise<void>;
 };
-
-export function lensOf(peer: BlockRefPeer): GraphLens | null {
-  return peer == null || 'error' in peer ? null : { project: peer.project, branch: peer.branch ?? undefined };
-}
 
 export type BlockRefView = {
   readonly text: string;

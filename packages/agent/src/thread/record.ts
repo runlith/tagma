@@ -90,7 +90,7 @@ export const transportCapabilitiesSchema = Schema.Struct({
   history: Schema.Literals(['journal', 'session', 'none']),
   copies: Schema.optional(transportCopiesSchema),
   compaction: Schema.Literals(['core', 'session', 'foreign', 'vendor', 'none']),
-  toolCatalog: Schema.optional(Schema.Literal('turn')),
+  toolCatalog: Schema.optional(Schema.Literals(['turn', 'dispatch'])),
   modelMove: Schema.Literals(['live', 'relaunch', 'pinned']),
   openings: Schema.Literals(['core', 'core-and-observed']),
   pictures: Schema.Boolean,

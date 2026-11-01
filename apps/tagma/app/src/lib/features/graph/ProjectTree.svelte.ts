@@ -9,7 +9,8 @@ import { GraphFeed } from './Feed.js';
 import type { GraphChange } from '$lib/wire/Live.js';
 import { SelectionRepo } from './SelectionRepo.js';
 
-const sibling = (a: TreeBlock, b: TreeBlock): number => a.ord - b.ord || a.name.localeCompare(b.name);
+const sibling = (a: TreeBlock, b: TreeBlock): number =>
+  a.ord - b.ord || a.name.localeCompare(b.name) || a.identity.localeCompare(b.identity);
 
 const newestDeleted = (a: TreeBlock, b: TreeBlock): number => (b.deletedAt ?? '').localeCompare(a.deletedAt ?? '');
 
@@ -32,6 +33,8 @@ export class ProjectTree extends Service<ProjectTree>()('ProjectTree', { tier: '
   loaded = $state(false);
 
   private readonly roots = new SvelteSet<string>();
+  private readonly identitiesByRow = new Map<number, string>();
+  private readonly identitiesByName = new SvelteMap<string, SvelteSet<string>>();
   readonly rootName = $derived<string | null>(this.roots.values().next().value ?? null);
 
   private pendingChanges: GraphChange[] | null = null;
@@ -48,8 +51,10 @@ export class ProjectTree extends Service<ProjectTree>()('ProjectTree', { tier: '
     super();
     scope.defer(
       feed.frames((frame) => {
-        if (frame.type === 'resync') void this.reload();
-        else this.applyChange(frame);
+        if (frame.type === 'resync') {
+          this.pendingChanges = [];
+          void this.reload();
+        } else this.applyChange(frame);
       }),
     );
   }
@@ -67,7 +72,7 @@ export class ProjectTree extends Service<ProjectTree>()('ProjectTree', { tier: '
       if (generation !== this.reloadGeneration) return;
       this.replaceAll(rows ?? []);
       this.readyNames.clear();
-      for (const task of ready ?? []) this.readyNames.add(task.name);
+      for (const task of ready ?? []) this.readyNames.add(task.identity);
       this.trashRoots = trashRows ?? [];
       this.loaded = true;
     } catch (error) {
@@ -82,18 +87,33 @@ export class ProjectTree extends Service<ProjectTree>()('ProjectTree', { tier: '
   }
 
   block(name: string): TreeBlock | undefined {
-    return this.blocks.get(name);
+    const direct = this.blocks.get(name);
+    if (direct !== undefined) return direct;
+    const matching = this.identitiesByName.get(name);
+    const identity = matching?.size === 1 ? matching.values().next().value : undefined;
+    return identity === undefined ? undefined : this.blocks.get(identity);
   }
 
   children(name: string): readonly string[] {
-    return this.childrenByParent.get(name) ?? [];
+    return this.childrenByParent.get(this.block(name)?.identity ?? name) ?? [];
+  }
+
+  trash(name: string): TreeBlock | undefined {
+    const exact = this.trashRoots.find((row) => row.identity === name);
+    if (exact !== undefined) return exact;
+    const matching = this.trashRoots.filter((row) => row.name === name);
+    return matching.length === 1 ? matching[0] : undefined;
   }
 
   writeFresh(next: TreeBlock): void {
-    const existing = this.blocks.get(next.name);
+    const former = this.identitiesByRow.get(next.rowKey);
+    if (former !== undefined && former !== next.identity) this.remove(former);
+    const existing = this.blocks.get(next.identity);
     if (existing !== undefined && existing.updatedAt > next.updatedAt) return;
-    this.blocks.set(next.name, next);
-    if (existing !== undefined && existing.parentName === next.parentName && existing.ord === next.ord) return;
+    this.blocks.set(next.identity, next);
+    this.identitiesByRow.set(next.rowKey, next.identity);
+    if (existing === undefined) this.addName(next);
+    if (existing !== undefined && existing.parentIdentity === next.parentIdentity && existing.ord === next.ord) return;
     if (existing !== undefined) this.unplace(existing);
     this.place(next);
   }
@@ -103,20 +123,24 @@ export class ProjectTree extends Service<ProjectTree>()('ProjectTree', { tier: '
       this.pendingChanges.push(change);
       return;
     }
-    const names = new Set<string>();
+    const identities = new Set<string>();
+    const rowKeys = new Set<number>();
     for (const row of change.blocks) {
-      names.add(row.name);
+      rowKeys.add(row.rowKey);
+      identities.add(row.identity);
+      const former = this.identitiesByRow.get(row.rowKey);
+      if (former !== undefined) identities.add(former);
       if (row.deletedAt === null) this.writeFresh(row);
-      else this.remove(row.name);
+      else if (former !== undefined) this.remove(former);
     }
-    for (const name of names) this.readyNames.delete(name);
-    for (const name of change.ready) this.readyNames.add(name);
+    for (const identity of identities) this.readyNames.delete(identity);
+    for (const identity of change.readyIdentities) this.readyNames.add(identity);
     const touchesTrash =
       change.trash.length > 0 ||
-      this.trashRoots.some((row) => names.has(row.name) || (row.parentName !== null && names.has(row.parentName)));
+      this.trashRoots.some((row) => rowKeys.has(row.rowKey) || (row.parentIdentity !== null && identities.has(row.parentIdentity)));
     if (!touchesTrash) return;
     this.trashRoots = [
-      ...this.trashRoots.filter((row) => !names.has(row.name) && (row.parentName === null || !names.has(row.parentName))),
+      ...this.trashRoots.filter((row) => !rowKeys.has(row.rowKey) && (row.parentIdentity === null || !identities.has(row.parentIdentity))),
       ...change.trash,
     ].sort(newestDeleted);
   }
@@ -125,38 +149,55 @@ export class ProjectTree extends Service<ProjectTree>()('ProjectTree', { tier: '
     this.blocks.clear();
     this.childrenByParent.clear();
     this.roots.clear();
+    this.identitiesByRow.clear();
+    this.identitiesByName.clear();
     const byParent = new Map<string, TreeBlock[]>();
     for (const row of rows) {
-      this.blocks.set(row.name, row);
-      if (row.parentName === null) {
-        this.roots.add(row.name);
+      this.blocks.set(row.identity, row);
+      this.identitiesByRow.set(row.rowKey, row.identity);
+      this.addName(row);
+      if (row.parentIdentity === null) {
+        this.roots.add(row.identity);
         continue;
       }
-      const siblings = byParent.get(row.parentName);
+      const siblings = byParent.get(row.parentIdentity);
       if (siblings) siblings.push(row);
-      else byParent.set(row.parentName, [row]);
+      else byParent.set(row.parentIdentity, [row]);
     }
-    for (const [parentName, siblings] of byParent) {
+    for (const [parentIdentity, siblings] of byParent) {
       this.childrenByParent.set(
-        parentName,
-        siblings.sort(sibling).map((row) => row.name),
+        parentIdentity,
+        siblings.sort(sibling).map((row) => row.identity),
       );
     }
   }
 
-  private remove(name: string): void {
-    const existing = this.blocks.get(name);
+  private addName(row: TreeBlock): void {
+    let names = this.identitiesByName.get(row.name);
+    if (names === undefined) {
+      names = new SvelteSet<string>();
+      this.identitiesByName.set(row.name, names);
+    }
+    names.add(row.identity);
+  }
+
+  private remove(identity: string): void {
+    const existing = this.blocks.get(identity);
     if (existing === undefined) return;
-    this.blocks.delete(name);
+    this.blocks.delete(identity);
+    this.identitiesByRow.delete(existing.rowKey);
+    const names = this.identitiesByName.get(existing.name);
+    names?.delete(identity);
+    if (names?.size === 0) this.identitiesByName.delete(existing.name);
     this.unplace(existing);
   }
 
   private place(row: TreeBlock): void {
-    if (row.parentName === null) {
-      this.roots.add(row.name);
+    if (row.parentIdentity === null) {
+      this.roots.add(row.identity);
       return;
     }
-    const siblings = this.childrenByParent.get(row.parentName) ?? [];
+    const siblings = this.childrenByParent.get(row.parentIdentity) ?? [];
     let low = 0;
     let high = siblings.length;
     while (low < high) {
@@ -165,18 +206,18 @@ export class ProjectTree extends Service<ProjectTree>()('ProjectTree', { tier: '
       if (other !== undefined && sibling(other, row) < 0) low = middle + 1;
       else high = middle;
     }
-    this.childrenByParent.set(row.parentName, [...siblings.slice(0, low), row.name, ...siblings.slice(low)]);
+    this.childrenByParent.set(row.parentIdentity, [...siblings.slice(0, low), row.identity, ...siblings.slice(low)]);
   }
 
   private unplace(row: TreeBlock): void {
-    if (row.parentName === null) {
-      this.roots.delete(row.name);
+    if (row.parentIdentity === null) {
+      this.roots.delete(row.identity);
       return;
     }
-    const siblings = this.childrenByParent.get(row.parentName);
+    const siblings = this.childrenByParent.get(row.parentIdentity);
     if (siblings === undefined) return;
-    const kept = siblings.filter((name) => name !== row.name);
-    if (kept.length === 0) this.childrenByParent.delete(row.parentName);
-    else this.childrenByParent.set(row.parentName, kept);
+    const kept = siblings.filter((identity) => identity !== row.identity);
+    if (kept.length === 0) this.childrenByParent.delete(row.parentIdentity);
+    else this.childrenByParent.set(row.parentIdentity, kept);
   }
 }

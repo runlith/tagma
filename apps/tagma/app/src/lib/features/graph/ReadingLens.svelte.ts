@@ -80,7 +80,7 @@ export class ReadingLens {
     const status = this.catalog.statusOf(row);
     for (const state of this.states) {
       if (state === 'ready') {
-        if (this.frontier.has(row.name)) return true;
+        if (this.frontier.has(row.identity)) return true;
         continue;
       }
       if (state === 'blocked') {

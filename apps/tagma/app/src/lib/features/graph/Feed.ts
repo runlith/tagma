@@ -12,7 +12,14 @@ import { JournalRepo } from './JournalRepo.js';
 import { SessionsRepo } from './SessionsRepo.js';
 import { TagCatalog } from './TagCatalog.svelte.js';
 
-type Pair = { readonly fromName: string; readonly toName: string };
+type Pair = {
+  readonly fromName: string;
+  readonly toName: string;
+  readonly fromIdentity: string | null;
+  readonly toIdentity: string | null;
+  readonly fromRowKey: number | null;
+  readonly toRowKey: number | null;
+};
 
 export class GraphFeed extends Service<GraphFeed>()('GraphFeed', { tier: 'graph', eager: true }) {
   static *make() {
@@ -64,6 +71,8 @@ export class GraphFeed extends Service<GraphFeed>()('GraphFeed', { tier: 'graph'
 
   private take(frame: GraphFrame): void {
     if (frame.type === 'resync') {
+      this.blocks.edges.reset();
+      this.blocks.refs.reset();
       void this.tags.retry();
       void Cache.invalidate(this.cache, this.scope);
     } else this.apply(frame);
@@ -72,22 +81,36 @@ export class GraphFeed extends Service<GraphFeed>()('GraphFeed', { tier: 'graph'
 
   private apply(change: GraphChange): void {
     const names = new Set(change.blocks.map((row) => row.name));
-    const near = new Set(names);
-    for (const row of change.blocks) if (row.parentName !== null) near.add(row.parentName);
-    for (const pair of [...change.edges, ...change.refs]) near.add(pair.fromName).add(pair.toName);
-    patch(this.blocks.edges, names, change.edges, near);
-    patch(this.blocks.refs, names, change.refs, near);
+    const identities = new Set(change.blocks.map((row) => row.identity));
+    const rowKeys = new Set(change.blocks.map((row) => row.rowKey));
+    const near = new Set([...names, ...identities]);
+    for (const row of change.blocks) {
+      if (row.parentName !== null) near.add(row.parentName);
+      if (row.parentIdentity !== null) near.add(row.parentIdentity);
+    }
+    for (const pair of [...change.edges, ...change.refs]) {
+      near.add(pair.fromName).add(pair.toName);
+      if (pair.fromIdentity !== null) near.add(pair.fromIdentity);
+      if (pair.toIdentity !== null) near.add(pair.toIdentity);
+    }
+    patch(this.blocks.edges, rowKeys, change.edges, near);
+    patch(this.blocks.refs, rowKeys, change.refs, near);
     void this.blocks.tree.invalidate();
     void this.blocks.block.where((key) => key.depth > 0 || near.has(key.name)).invalidate();
-    void this.blocks.titles.where((key) => key.some((name) => names.has(name))).invalidate();
-    void this.blocks.diff.where((key) => key.to === undefined && names.has(key.name)).invalidate();
+    void this.blocks.titles.where((key) => key.some((name) => names.has(name) || identities.has(name))).invalidate();
+    void this.blocks.diff.where((key) => key.to === undefined && (names.has(key.name) || identities.has(key.name))).invalidate();
     void this.journal.batches.where((key) => key.before === undefined).invalidate();
     void this.journal.vocabulary.all().invalidate();
     if (change.sessions.length > 0) void this.sessions.list.invalidate();
   }
 }
 
-function patch<T extends Pair>(query: SingleQuery<readonly T[]>, names: ReadonlySet<string>, fresh: readonly T[], near: Set<string>): void {
+function patch<T extends Pair>(
+  query: SingleQuery<readonly T[]>,
+  rowKeys: ReadonlySet<number>,
+  fresh: readonly T[],
+  near: Set<string>,
+): void {
   if (query.watchFetching()) {
     void query.invalidate();
     return;
@@ -95,8 +118,12 @@ function patch<T extends Pair>(query: SingleQuery<readonly T[]>, names: Readonly
   query.setCache((held) => {
     if (held === undefined) return undefined;
     const kept = held.filter((pair) => {
-      const touched = names.has(pair.fromName) || names.has(pair.toName);
-      if (touched) near.add(pair.fromName).add(pair.toName);
+      const touched = (pair.fromRowKey !== null && rowKeys.has(pair.fromRowKey)) || (pair.toRowKey !== null && rowKeys.has(pair.toRowKey));
+      if (touched) {
+        near.add(pair.fromName).add(pair.toName);
+        if (pair.fromIdentity !== null) near.add(pair.fromIdentity);
+        if (pair.toIdentity !== null) near.add(pair.toIdentity);
+      }
       return !touched;
     });
     return kept.length === held.length && fresh.length === 0 ? held : [...kept, ...fresh];

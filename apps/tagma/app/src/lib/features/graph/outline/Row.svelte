@@ -25,7 +25,7 @@
   const childCount = $derived(store.visibleChildren(name).length);
   const hasChildren = $derived(childCount > 0);
   const branchable = $derived(hasChildren && !store.readingLens.active);
-  const expanded = $derived(store.expanded.has(name));
+  const expanded = $derived(store.isExpanded(name));
   const resting = $derived(block !== undefined && tags.isResting(block));
   const off = $derived(block !== undefined && tags.switchedOff(block));
   const passthrough = $derived(store.readingLens.active && !store.matchesFilter(name));

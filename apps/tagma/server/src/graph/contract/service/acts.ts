@@ -6,6 +6,7 @@ import type { FloorRefusal, GateRefusal } from '../../../platform/contract/wire/
 import type { GraphEventOp } from '../wire/journal.js';
 import type { ActState } from './transaction.js';
 import type { NodeActions } from '../wire/tags/actions.js';
+import type { Ref } from '../wire/rows.js';
 
 export type ActEntry = typeof event.$inferSelect;
 
@@ -22,7 +23,10 @@ export type BlockMeasurement = {
   answered: boolean;
 };
 
-export type BlockRecord<TRow extends BlockRow = BlockRow> = TRow & BlockMeasurement & { readonly actions: NodeActions };
+export type MeasuredBlock<TRow, TFact extends keyof BlockMeasurement = keyof BlockMeasurement> = TRow &
+  Pick<BlockMeasurement, TFact> & { readonly actions: NodeActions; readonly parentUuid: string | null };
+
+export type BlockRecord<TRow extends BlockRow = BlockRow> = MeasuredBlock<TRow>;
 
 export const MEASURED_FACTS = ['superseded', 'blocked', 'building', 'answered'] as const;
 
@@ -90,6 +94,7 @@ export class BlockNames extends Context.Service<
     idsOfNames(names: readonly string[]): Effect.Effect<Map<string, number>, StoreFailure>;
     nameOf(id: number): Effect.Effect<string, StoreFailure>;
     namesOf(ids: readonly number[]): Effect.Effect<ReadonlyMap<number, string>, StoreFailure>;
+    identitiesOf(ids: readonly number[]): Effect.Effect<ReadonlyMap<number, string>, StoreFailure>;
     uuidOf(id: number): Effect.Effect<string | null, StoreFailure>;
   }
 >()('tagma/graph/BlockNames') {}
@@ -128,6 +133,6 @@ export class BlockReferences extends Context.Service<
   {
     refsIn(id: number): Effect.Effect<string[], StoreFailure>;
     syncRefs(blockId: number, body: string, born?: { readonly projectId: number }): Effect.Effect<void, StoreFailure, ActState>;
-    refsOf(projectId: number, within?: ReadonlySet<number>): Effect.Effect<{ fromName: string; toName: string }[], StoreFailure>;
+    refsOf(projectId: number, within?: ReadonlySet<number>): Effect.Effect<Ref[], StoreFailure>;
   }
 >()('tagma/graph/BlockReferences') {}

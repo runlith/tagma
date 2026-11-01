@@ -1,6 +1,6 @@
 import { Effect, Fiber } from 'effect';
 import { aliasedTable, and, eq, getTableColumns, inArray, isNull, or, sql } from 'drizzle-orm';
-import { blockName, blockRefTargets } from '../contract/wire/references.js';
+import { blockIdentity, blockName, blockRefTargets } from '../contract/wire/references.js';
 import { SPOKEN_LENGTH } from '../../platform/contract/wire/ids.js';
 import type { GraphStore } from '../../platform/contract/service/store.js';
 import { pagesOf } from '../../platform/store/binds.js';
@@ -205,7 +205,7 @@ export function blockReferences(db: Db): BlockReferences['Service'] {
     refsOf: (projectId: number, within?: ReadonlySet<number>) => {
       const target = aliasedTable(block, 'refTarget');
       return db
-        .select({ from: block.uuid, to: target.uuid })
+        .select({ from: block.uuid, to: target.uuid, fromRowKey: ref.fromId, toRowKey: ref.toId })
         .from(ref)
         .innerJoin(block, eq(block.id, ref.fromId))
         .innerJoin(target, eq(target.id, ref.toId))
@@ -217,7 +217,18 @@ export function blockReferences(db: Db): BlockReferences['Service'] {
             ...(within === undefined ? [] : [or(inArray(ref.fromId, [...within]), inArray(ref.toId, [...within]))]),
           ),
         )
-        .pipe(Effect.map((rows) => rows.map((row) => ({ fromName: blockName(row.from ?? ''), toName: blockName(row.to ?? '') }))));
+        .pipe(
+          Effect.map((rows) =>
+            rows.map((row) => ({
+              fromName: blockName(row.from),
+              toName: blockName(row.to),
+              fromIdentity: blockIdentity(row.from),
+              toIdentity: blockIdentity(row.to),
+              fromRowKey: row.fromRowKey,
+              toRowKey: row.toRowKey,
+            })),
+          ),
+        );
     },
   });
 }

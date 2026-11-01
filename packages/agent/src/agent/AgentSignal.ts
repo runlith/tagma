@@ -22,8 +22,8 @@ export function agentOriginOf(message: Message): AgentMessageOrigin | undefined 
 
 const BOUNDARY_KEY = 'vendorFolded';
 
-export function vendorBoundaryMessage(): Message {
-  return Message.make({ role: 'user', content: [], metadata: { [BOUNDARY_KEY]: true } });
+export function vendorBoundaryMessage(carried: Message['metadata']): Message {
+  return Message.make({ role: 'user', content: [], metadata: { ...carried, [BOUNDARY_KEY]: true } });
 }
 
 export function isVendorBoundary(message: Message): boolean {
@@ -32,7 +32,7 @@ export function isVendorBoundary(message: Message): boolean {
 
 export function vendorVisible(messages: readonly Message[]): readonly Message[] {
   const at = messages.findLastIndex(isVendorBoundary);
-  return at < 0 ? messages : messages.slice(at + 1);
+  return at < 0 ? messages : messages.slice(at);
 }
 
 const INPUT_KEY = 'readerInput';

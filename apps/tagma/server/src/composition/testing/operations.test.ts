@@ -34,6 +34,10 @@ it.effect('project-declared edge names cross operation, batch, query and read sc
         Schema.decodeUnknownResult(edgeSchema)({
           fromName: fromId,
           toName: toId,
+          fromIdentity: fromId.padStart(32, '0'),
+          toIdentity: toId.padStart(32, '0'),
+          fromRowKey: 1,
+          toRowKey: 2,
           kind,
           createdBySessionId: null,
           createdAt: '2026-09-19T00:00:00.000Z',

@@ -37,6 +37,11 @@ export const FAILURE = 'tagma/failure';
 
 export const OPENED = 'tagma/opened';
 
+export const COST = 'tagma/cost';
+
+export const Priced = Schema.Struct({ amount: Schema.Number, currency: Schema.String, basis: Schema.String });
+export type Priced = typeof Priced.Type;
+
 export const MEASURED = 'tagma/measured';
 
 export const Measured = Schema.Struct({

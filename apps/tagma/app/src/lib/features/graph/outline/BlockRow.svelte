@@ -49,7 +49,7 @@
   } = $props();
 
   const off = $derived(tags.switchedOff(block));
-  const unread = $derived(readState.isUnread(block.name, block.updatedAt));
+  const unread = $derived(readState.isUnread(block.identity, block.updatedAt));
   const holder = $derived(tags.holderOf(block));
   const lives = $derived(tags.supports(block, LIFECYCLE));
   const work = $derived(lives && !tags.isResting(block));
@@ -74,7 +74,7 @@
     {href}
     class="absolute inset-0 rounded-md"
     aria-label={block.title.trim() || 'Untitled'}
-    data-block={block.name}
+    data-block={block.identity}
   ></a>
 
   <div class={cn('flex min-w-0', layout === 'compact' ? 'items-center' : 'items-start', layout === 'stacked' ? 'w-full' : 'flex-1')}>

@@ -40,9 +40,11 @@ export const HOSTED_OPERATIONS = {
     approval: ASKS_NEVER,
     ...hostedDoor,
     meaning: 'Read the tools Tagma serves the running turn of a thread whose agent loop runs outside Tagma.',
-    grammar: `${PROVEN}\nThe tools are those the turn's current step offers, and \`names\` every tool its run holds, offered at this step or not; with no turn running both are empty.`,
+    grammar: `${PROVEN}\nThe tools are those the turn's current step offers, and \`names\` every tool its run holds, offered at this step or not; with no turn running both are empty. \`dispatch\` is true for a thread whose transport lists tools once: \`tools\` then holds every directly offered tool whatever the step, never a deferred one, and the agent calls a tool \`tool_search\` revealed through \`call_tool\`.`,
     input: Schema.Struct({}),
-    answer: arms({ ok: { tools: Schema.Array(hostedToolSchema), names: Schema.Array(Schema.String) } }),
+    answer: arms({
+      ok: { tools: Schema.Array(hostedToolSchema), names: Schema.Array(Schema.String), dispatch: Schema.Boolean },
+    }),
     refusals: HOSTED_REFUSALS,
     effect: 'read',
     identity: 'none',

@@ -437,6 +437,8 @@ export type AcpProves = {
   readonly aside: Exclude<TransportCapabilities['aside'], 'request'>;
 };
 
+export type AsideLife = 'cache' | 'session';
+
 export type AcpProfile = {
   readonly argv: (choice: HarnessModelChoice | undefined) => readonly string[];
   readonly untitled?: readonly string[];
@@ -448,7 +450,8 @@ export type AcpProfile = {
   readonly web: TransportWeb;
   readonly mode: string;
   readonly proves: AcpProves;
-  readonly toolCatalog?: 'turn';
+  readonly asideLife?: AsideLife;
+  readonly toolCatalog?: TransportCapabilities['toolCatalog'];
   readonly storage?: { readonly environment: string; readonly folder: string };
   readonly graceMs: number;
   readonly callEnvelopeMs: number | null;

@@ -4,7 +4,11 @@ import { transportWebSchema } from '@runlith/agent/thread/record';
 import { hostedContentSchema, hostedMessageSchema, hostedToolSchema, type HostedMessage } from './wire/messages.js';
 
 export const HostedAgentSchema = Schema.Struct({ prompt: Schema.String, web: transportWebSchema });
-export const HostedListedSchema = Schema.Struct({ tools: Schema.Array(hostedToolSchema), names: Schema.Array(Schema.String) });
+export const HostedListedSchema = Schema.Struct({
+  tools: Schema.Array(hostedToolSchema),
+  names: Schema.Array(Schema.String),
+  dispatch: Schema.Boolean,
+});
 export const HostedHeldSchema = Schema.Struct({ messages: Schema.Array(hostedMessageSchema) });
 export const HostedOpenedSchema = Schema.Struct({
   context: Schema.NullOr(Schema.String),

@@ -26,10 +26,19 @@ function json(body: unknown): Response {
   return new Response(JSON.stringify(body), { headers: { 'content-type': 'application/json' } });
 }
 
+const identityOf = (name: string) =>
+  [...name]
+    .reduce((key, char) => (key * 31 + char.charCodeAt(0)) >>> 0, 0)
+    .toString(16)
+    .padStart(32, '0');
+
 const block = (name: string, over: Partial<TreeBlock> = {}): TreeBlock => ({
   name,
+  identity: identityOf(name),
+  rowKey: [...name].reduce((key, char) => (key * 31 + char.charCodeAt(0)) >>> 0, 0),
   projectId: 1,
   parentName: null,
+  parentIdentity: over.parentName == null ? null : identityOf(over.parentName),
   ord: 0,
   tags: ['task'],
   fields: { status: 'open' },
@@ -56,6 +65,7 @@ const change = (over: Partial<Extract<GraphFrame, { type: 'change' }>> = {}): Gr
   edges: [],
   refs: [],
   ready: [],
+  readyIdentities: [],
   trash: [],
   ...over,
 });
@@ -188,10 +198,13 @@ test('a commit on one branch reaches that branch’s tree and no other', async (
   const mine = world.app.app.resolve(ProjectTree, here.scope);
   const other = world.app.app.resolve(ProjectTree, there.scope);
 
-  world.push('main', change({ blocks: [block('landed', { title: 'A block on main' })], ready: ['landed'] }));
+  world.push(
+    'main',
+    change({ blocks: [block('landed', { title: 'A block on main' })], ready: ['landed'], readyIdentities: [identityOf('landed')] }),
+  );
 
   expect(mine.block('landed')?.title).toBe('A block on main');
-  expect([...mine.readyNames]).toEqual(['landed']);
+  expect([...mine.readyNames]).toEqual([identityOf('landed')]);
   expect(other.block('landed')).toBeUndefined();
   expect([...other.readyNames]).toEqual([]);
 

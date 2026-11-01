@@ -53,6 +53,11 @@ export const BlocksRepo = Repo.define(
         door.perform('read_titles', { names: key }, { signal }),
     }),
 
+    trashRoot: keyed({
+      loader: async ({ key, signal }: KeyedLoaderContext<string>, door) =>
+        (await door.perform('list_trash', { name: key }, { signal })).blocks[0] ?? null,
+    }),
+
     edges: single({
       loader: async ({ signal }, door) => (await door.perform('read_edges', {}, { signal })).edges,
     }),

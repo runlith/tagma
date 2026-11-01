@@ -23,7 +23,7 @@ it.effect('macOS reaches the login file and the login keychain from the account 
       [join('/Users/me/.config', 'muse', 'auth.json'), join('/thread/config', 'muse', 'auth.json')],
       [join('/Users/me', 'Library', 'Keychains'), join('/data/muse-code', 'Library', 'Keychains')],
     ]);
-    expect(home).toMatchObject({ HOME: '/data/muse-code', XDG_CONFIG_HOME: '/thread/config', MUSE_NO_AUTO_UPDATE: '1' });
+    expect(home).toMatchObject({ HOME: '/data/muse-code', XDG_CONFIG_HOME: '/thread/config' });
   }),
 );
 
@@ -38,7 +38,7 @@ it.effect('Windows finds the user home by USERPROFILE and moves both home variab
   Effect.gen(function* () {
     const { home, links } = yield* prepared('win32', { USERPROFILE: 'C:/Users/me' });
     expect(links).toEqual([[join('C:/Users/me/.config', 'muse', 'auth.json'), join('/thread/config', 'muse', 'auth.json')]]);
-    expect(home).toMatchObject({ HOME: '/data/muse-code', USERPROFILE: '/data/muse-code', MUSE_NO_AUTO_UPDATE: '1' });
+    expect(home).toMatchObject({ HOME: '/data/muse-code', USERPROFILE: '/data/muse-code' });
   }),
 );
 

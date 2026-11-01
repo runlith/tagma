@@ -328,12 +328,14 @@ export const openConnection = Effect.fnUntraced(function* (processes: ProcessPoo
     operation: string,
     cost: CostCause | null = null,
     writer: WriterFrame | null = null,
+    labelled: ((statement: StatementCounts) => void) | null = null,
   ): Effect.Effect<Effect.Effect<SqliteSaid, SqlError>, SqlError> =>
     Effect.suspend(() => {
+      const statement = ask._tag === 'Run' ? processes.statements.query(ask.sql) : null;
+      if (statement !== null) labelled?.(statement);
       if (gone !== null) return Effect.fail(gone);
       const cell = Deferred.makeUnsafe<SqliteSaid, SqlError>();
       const sentAt = nowMs();
-      const statement = ask._tag === 'Run' ? processes.statements.query(ask.sql) : null;
       pending.set(ask.id, { cell, operation, ask, sentAt, cost, writer, statement, due: sentAt + SLOW_STATEMENT_MS });
       quietSince = null;
       try {
@@ -372,7 +374,8 @@ export const openConnection = Effect.fnUntraced(function* (processes: ProcessPoo
     operation: string,
     cost: CostCause | null = null,
     writer: WriterFrame | null = null,
-  ): Effect.Effect<SqliteSaid, SqlError> => Effect.flatten(sent(ask, operation, cost, writer));
+    labelled: ((statement: StatementCounts) => void) | null = null,
+  ): Effect.Effect<SqliteSaid, SqlError> => Effect.flatten(sent(ask, operation, cost, writer, labelled));
 
   const answeredWrong = (said: SqliteSaid, message: string, operation: string) =>
     said._tag === 'Failed'
@@ -395,11 +398,12 @@ export const openConnection = Effect.fnUntraced(function* (processes: ProcessPoo
           const observed = Context.get(fiber.context, CurrentWriter);
           const writer = lane === undefined && observed?.owner === connection ? observed : null;
           const measured = (span: Tracer.Span): Effect.Effect<Array<any>, SqlError> => {
-            if (span.sampled) {
-              const query = processes.statements.query(sql);
-              span.attribute('db.query.fingerprint', query.fingerprint);
-              span.attribute('db.query.summary', query.summary);
-            }
+            const labelled = span.sampled
+              ? (query: StatementCounts) => {
+                  span.attribute('db.query.fingerprint', query.fingerprint);
+                  span.attribute('db.query.summary', query.summary);
+                }
+              : null;
             return call(
               {
                 _tag: 'Run',
@@ -414,6 +418,7 @@ export const openConnection = Effect.fnUntraced(function* (processes: ProcessPoo
               operation,
               cost,
               writer,
+              labelled,
             ).pipe(
               Effect.flatMap((said) => {
                 if (span.sampled && (said._tag === 'Rows' || said._tag === 'Failed')) {

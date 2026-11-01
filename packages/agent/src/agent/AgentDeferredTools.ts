@@ -2,9 +2,9 @@ import { Effect, Schema } from 'effect';
 import type { Message, ToolResultPart } from '@runlith/llm/schema/messages';
 import type { DerivedContribution } from '../catalog/resolveCatalog';
 import { type AgentRule, agentRule } from './policy/AgentRuntimePolicy';
-import { type ToolCatalog, deferredToolNames } from './ToolCatalog';
+import { DISPATCH_TOOL, type ToolCatalog, deferredToolNames } from './ToolCatalog';
 import { TOOL_OUTPUT_MAX_LINES } from './ToolOutputSpool';
-import { ToolAnswer, ToolFailed, Tool } from './tool';
+import { ToolAnswer, ToolFailed, Tool, describedTool } from './tool';
 import { type PackedWorldStateSection, withdrawn, worldStateSection } from './WorldState';
 import { ASKS_IN_REVIEW, ASKS_NEVER } from '../permissions/vocabulary';
 
@@ -12,7 +12,7 @@ export const TOOL_SEARCH_TOOL = 'tool_search';
 
 export type ToolSearchResult = {
   readonly status: 'revealed';
-  readonly tools: readonly { readonly name: string; readonly description: string }[];
+  readonly tools: readonly { readonly name: string; readonly description: string; readonly inputSchema?: Tool['inputSchema'] }[];
   readonly direct: readonly string[];
   readonly missing: readonly string[];
   readonly truncated: readonly string[];
@@ -126,6 +126,49 @@ export function deferredToolsSection(catalog: ToolCatalog): PackedWorldStateSect
 
 function renderNames(names: readonly string[]): string {
   return ['Deferred tools:', ...names.map((name) => `- ${name}`)].join('\n');
+}
+
+const DISPATCH_NOTE = `Each revealed tool is called through \`${DISPATCH_TOOL}\` with its \`name\` and its \`input\`, which follows the \`inputSchema\` this answer carries.`;
+
+const definitionOf = (name: string, tool: Tool) => ({ name, description: describedTool(tool), inputSchema: tool.inputSchema });
+
+export function dispatchedSearch(value: unknown, catalog: ToolCatalog): ToolSearchResult | null {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return null;
+  const answer = value as ToolSearchResult;
+  if (answer.status !== 'revealed' || !Array.isArray(answer.tools)) return null;
+  return {
+    ...answer,
+    tools: answer.tools.map((shown) => {
+      const tool = catalog[shown.name];
+      return tool === undefined ? shown : definitionOf(shown.name, tool);
+    }),
+    note: answer.direct.length === 0 ? DISPATCH_NOTE : `${DISPATCH_NOTE} ${directNote(answer.direct)}`,
+  };
+}
+
+function renderDefinitions(names: readonly string[], catalog: ToolCatalog): string {
+  return [
+    `Tools revealed before this conversation was compacted, with their definitions; call each through \`${DISPATCH_TOOL}\` with its \`name\` and its \`input\`.`,
+    ...names.flatMap((name) => {
+      const tool = catalog[name];
+      return tool === undefined ? [] : [JSON.stringify(definitionOf(name, tool))];
+    }),
+  ].join('\n');
+}
+
+export function revealedDefinitionsSection(catalog: ToolCatalog, history: readonly Message[]): PackedWorldStateSection {
+  const head = history[0];
+  const deferred = deferredToolNames(catalog);
+  const carried = head === undefined ? [] : [...(head.compaction?.toolReferences ?? []), ...carriedReferences(head)];
+  const names = [...new Set(carried)].filter((name) => deferred.has(name)).toSorted();
+  return worldStateSection({
+    id: 'revealed-definitions',
+    codec: Schema.Array(Schema.String),
+    read: () => (names.length === 0 ? withdrawn : names),
+    baseline: (current) => renderDefinitions(current, catalog),
+    update: (_previous, current) => renderDefinitions(current, catalog),
+    removed: () => 'No tool revealed before the compaction is offered any more.',
+  });
 }
 
 export type UnrevealedDefinition = { readonly note: string; readonly schema: Tool['inputSchema'] };

@@ -23,6 +23,7 @@ import { CallerAim } from '../../platform/contract/service/place.js';
 import { CurrentGraph, RefusedGraph, RoutedGraphs, type ServedGraphs, type ServedGraph } from '../contract/service/serving.js';
 import type { GraphServices } from '../contract/service/services.js';
 import type { LocatedTitle, TitleReading, UnreadableCopy } from '../contract/wire/titles.js';
+import { blockIdentity, blockName } from '../contract/wire/references.js';
 import type { CopyFailure } from '../contract/wire/answers.js';
 import { refused } from './refusal.js';
 import { ambiguousAcross } from './ambiguity.js';
@@ -81,6 +82,9 @@ export const titlesAcross = Effect.fn('GraphPool.titlesAcross')(function* (
       const row = candidates.values().next().value!;
       found.push({
         name: row.name,
+        shortName: blockName(row.uuid),
+        identity: blockIdentity(row.uuid),
+        rowKey: row.rowKey,
         title: row.title,
         projectId: row.projectId,
         branch: row.branch,

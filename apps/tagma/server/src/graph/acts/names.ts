@@ -1,6 +1,6 @@
 import { Effect } from 'effect';
 import { eq, inArray } from 'drizzle-orm';
-import { blockAddress, blockName, distinctTails } from '../contract/wire/references.js';
+import { blockAddress, blockIdentity, blockName, distinctTails } from '../contract/wire/references.js';
 import { SPOKEN_LENGTH } from '../../platform/contract/wire/ids.js';
 import type { GraphStore } from '../../platform/contract/service/store.js';
 import { GateRefusal } from '../../platform/contract/wire/refusal.js';
@@ -12,14 +12,24 @@ import { rowsPerStatement } from '../../platform/store/binds.js';
 
 export function blockNames(db: GraphStore['Service']['db'], units: GraphUnits['Service']): BlockNames['Service'] {
   const reads = readsOf(units);
-  const namesOf: BlockNames['Service']['namesOf'] = reads(
-    Effect.fn('Act.namesOf')(function* (ids: readonly number[]) {
+  const identitiesOf: BlockNames['Service']['identitiesOf'] = reads(
+    Effect.fn('Act.identitiesOf')(function* (ids: readonly number[]) {
       const wanted = [...new Set(ids)];
       if (wanted.length === 0) return new Map<number, string>();
-      const rows = yield* db.select({ id: block.id, uuid: block.uuid }).from(block).where(inArray(block.id, wanted));
-      return new Map(rows.map((row) => [row.id, blockName(row.uuid)] as const));
+      const identities = new Map<number, string>();
+      const room = rowsPerStatement(1);
+      for (let at = 0; at < wanted.length; at += room) {
+        const rows = yield* db
+          .select({ id: block.id, uuid: block.uuid })
+          .from(block)
+          .where(inArray(block.id, wanted.slice(at, at + room)));
+        for (const row of rows) identities.set(row.id, blockIdentity(row.uuid));
+      }
+      return identities;
     }),
   );
+  const namesOf: BlockNames['Service']['namesOf'] = (ids) =>
+    Effect.map(identitiesOf(ids), (identities) => new Map([...identities].map(([id, identity]) => [id, blockName(identity)])));
 
   const hitsOfName = reads(
     Effect.fn('Act.candidatesOfName')(function* (name: string) {
@@ -101,6 +111,7 @@ export function blockNames(db: GraphStore['Service']['db'], units: GraphUnits['S
     }),
 
     namesOf,
+    identitiesOf,
 
     uuidOf: reads(
       Effect.fn('Act.uuidOf')(function* (id: number) {

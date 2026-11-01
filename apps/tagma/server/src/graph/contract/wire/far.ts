@@ -1,5 +1,5 @@
 import { Schema } from 'effect';
-import { BlockName } from './references.js';
+import { BlockIdentity, BlockName } from './references.js';
 
 const UUID = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
 
@@ -49,6 +49,7 @@ export type FarEnd = typeof farEndSchema.Type;
 
 export const refElsewhereSchema = Schema.Struct({
   name: BlockName,
+  identity: BlockIdentity,
   project: Schema.String,
   projectId: Schema.Number,
   branch: Schema.NullOr(Schema.String).annotate({ description: 'The worktree branch holding the block, null for the main checkout.' }),

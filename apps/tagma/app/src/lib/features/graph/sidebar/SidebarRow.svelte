@@ -29,7 +29,7 @@
     trailing?: Snippet;
   } = $props();
 
-  const href = $derived(addresses.block(block.name, { project }));
+  const href = $derived(addresses.block(block.identity, { project }));
   const label = $derived(block.title.trim() || 'Untitled');
 </script>
 

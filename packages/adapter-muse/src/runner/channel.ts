@@ -29,6 +29,7 @@ export interface Host {
   command(method: string, params: Record<string, unknown>, commandId?: string): Effect.Effect<Record<string, unknown>, MuseRefused>;
   request(method: string, params: Record<string, unknown>): Effect.Effect<Record<string, unknown>, MuseRefused>;
   mint(): string;
+  readonly drained: Effect.Effect<void>;
   readonly ended: Effect.Effect<string>;
 }
 

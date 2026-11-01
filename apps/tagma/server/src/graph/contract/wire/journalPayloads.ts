@@ -25,6 +25,7 @@ const ending = {
 const list = Schema.optional(Schema.Array(Schema.Unknown));
 
 const SHAPES = {
+  create: Schema.Struct({ renamed: Schema.optional(Schema.Array(Schema.Number)) }),
   update: Schema.Struct({
     status: Schema.optional(Schema.String),
     wasStatus: Schema.optional(Schema.NullOr(Schema.String)),
@@ -93,6 +94,7 @@ const reader = <S extends Schema.Decoder<unknown>>(schema: S) => {
 };
 
 export const readJournal = {
+  create: reader(SHAPES.create),
   update: reader(SHAPES.update),
   ending: reader(SHAPES.ending),
   link: reader(SHAPES.link),

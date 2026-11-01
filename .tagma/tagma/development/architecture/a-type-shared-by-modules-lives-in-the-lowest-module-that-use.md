@@ -221,10 +221,6 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "repeated-declarations repeated object:143ff8693d74a8e8: apps/tagma/server/src/translations/contract/service/translations.ts",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "repeated-declarations repeated union:9feea52989b24598:dfadf2f4aefc apps/tagma/server/src/workspace/checkouts/comparison.ts",
           "owner": "5a3bed29"
         },

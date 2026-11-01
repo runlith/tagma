@@ -1,8 +1,6 @@
-export type CallJournalRange = {
-  readonly from: number;
-  readonly to: number;
-  readonly chars?: { readonly from: number; readonly to: number };
-};
+import type { callJournalRangeSchema } from './answers.js';
+
+export type CallJournalRange = typeof callJournalRangeSchema.Type;
 
 export type JournalReading =
   | { readonly status: 'read'; readonly range: CallJournalRange | null }

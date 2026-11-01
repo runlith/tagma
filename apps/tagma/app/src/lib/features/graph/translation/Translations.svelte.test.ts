@@ -41,6 +41,66 @@ const projection: Projection = {
   titles: [],
 };
 
+test('a full-address lens follows translation and graph changes of the resolved block', async () => {
+  const identity = '019900000000700080000000abcd1234';
+  let state: Projection = projection;
+  let translationFrame: ((frame: { block: string; identity: string }) => void) | undefined;
+  let graphFrame: ((frame: { type: string; blocks: { name: string; identity: string }[] }) => void) | undefined;
+  const door = testDoor(async () => json({ status: 'read', block: 'abcd1234', preferred: 'ru', languages: [], projection: state }));
+  const aim = { projectId: 1, branch: null };
+  const mounted = mountRepo(TranslationsRepo, {
+    door: new GraphDoor(door, aim),
+    queryClient: new QueryClient({ defaultOptions: { queries: { retry: false } } }),
+    ladder: [TileRung, ProjectRung, GraphRung],
+    at: { tile: { tileId: 1 }, project: { projectId: 1 }, graph: aim },
+  });
+  close.push(mounted.unmount);
+  const translations = new Translations(
+    mounted.repo,
+    {
+      hold: (_open: unknown, receive: typeof translationFrame) => {
+        translationFrame = receive;
+        return { unsubscribe() {} };
+      },
+    } as never,
+    {
+      frames: (receive: typeof graphFrame) => {
+        graphFrame = receive;
+        return () => undefined;
+      },
+    } as never,
+    aim,
+    { languages: ['en'] } as never,
+    {
+      report: (error: unknown) => {
+        throw error;
+      },
+    } as never,
+    { defer: () => undefined } as never,
+  );
+  const lens = new TranslationLens(
+    translations,
+    mounted.repo,
+    () => identity,
+    () => 'ru',
+    () => undefined,
+  );
+  close.push(observe(() => lens.phase));
+  await waitUntil(() => lens.phase === 'translating');
+  state = {
+    ...projection,
+    state: 'done',
+    translated: 1,
+    pending: 0,
+    parts: [{ kind: 'title', source: 'Title', state: 'translated', text: 'Translated' }],
+  };
+  translationFrame?.({ block: 'abcd1234', identity });
+  await waitUntil(() => lens.phase === 'current');
+  state = { ...state, changed: 1, translated: 0, parts: [{ kind: 'title', source: 'Changed', state: 'changed', text: null }] };
+  graphFrame?.({ type: 'change', blocks: [{ name: 'abcd1234', identity }] });
+  await waitUntil(() => lens.phase === 'outdated');
+});
+
 test('a refused first act holds the lens on its refusal, and a retry with a model holds it until the new act reads', async () => {
   let started = false;
   const answered = Promise.withResolvers<void>();

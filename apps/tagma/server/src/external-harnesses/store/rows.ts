@@ -9,6 +9,7 @@ import { ModelChanges } from '../../threads/contract/service/modelChanges.js';
 import { externalSession, leased, sessionFacts, sessionValues } from '../../threads/store/harnessFacet.js';
 import { inProgram } from '../../platform/store/crossing.js';
 import { programOf, programWriteUnit } from '../../platform/store/programs.js';
+import { bindQuery } from '../../platform/store/queries.js';
 import { nativeRows, thread, threadRun, unparkedRun } from '../../threads/store/kernel.js';
 import { askedOf, bindingOf, capabilitiesOf, chooseModel, roadOf, switchesOf } from '../../threads/store/seat.js';
 import { parseExternalSession } from '../../threads/contract/wire/harness/externalSession.js';
@@ -27,6 +28,17 @@ export const makeSessionRows = Effect.fnUntraced(function* ({ db }: { readonly d
         .from(thread)
         .where(and(eq(thread.id, externalSession.id), sql`json_extract(${thread.transport}, '$.adapter') = ${transport}`)),
     );
+  const heldSession = db
+    .select({ id: externalSession.id })
+    .from(externalSession)
+    .where(
+      and(
+        eq(externalSession.id, sql.placeholder('id')),
+        eq(externalSession.facet, sql.param(sql.placeholder('facet'), externalSession.facet)),
+        sql`${externalSession.leaseOwner} is ${sql.placeholder('leaseOwner')}`,
+      ),
+    )
+    .prepare();
   const changing = writes('HarnessSessionStore.change', [sessionFacts], records.writes, spells.writes);
   const beating = writes('HarnessSessionStore.beat', [sessionFacts]);
   const choosing = writes('HarnessSessionStore.choose', [nativeRows]);
@@ -39,19 +51,7 @@ export const makeSessionRows = Effect.fnUntraced(function* ({ db }: { readonly d
       const program = programOf(unit);
       if (program === null) return Effect.void;
       const values = sessionValues(facet);
-      return program.guard(
-        db
-          .select({ id: externalSession.id })
-          .from(externalSession)
-          .where(
-            and(
-              eq(externalSession.id, id),
-              eq(externalSession.facet, values.facet),
-              sql`${externalSession.leaseOwner} is ${values.leaseOwner}`,
-            ),
-          ),
-        1,
-      );
+      return program.guard(bindQuery(heldSession, { id, facet: values.facet, leaseOwner: values.leaseOwner }), 1);
     },
     writes: changing,
     choosing,

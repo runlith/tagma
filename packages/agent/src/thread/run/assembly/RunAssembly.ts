@@ -20,7 +20,7 @@ import {
 } from '../../agents/ThreadAgent';
 import { ThreadAgentDoors } from '../../agents/ThreadAgentDoors';
 import { ThreadAgents } from '../../agents/ThreadAgents';
-import { compositionEntry } from '../../composition/entry';
+import { catalogTools, compositionEntry } from '../../composition/entry';
 import { threadCompositionEvent, threadContextEvent } from '../../events';
 import { ModeLaw } from '../../../modes/ModeLaw';
 import { agentOf, type ThreadRow, type ThreadRunRow } from '../../rows';
@@ -251,7 +251,13 @@ export const runAssemblyLayer = Layer.effect(
       const current = turned.thread;
       const transcript = turned.transcript;
 
-      const composition = compositionEntry(run.id, handle.instructions, handle.catalog, turned.context?.message ?? null, current.history);
+      const composition = compositionEntry(
+        run.id,
+        handle.instructions,
+        catalogTools(handle.catalog, current.history),
+        turned.context?.message ?? null,
+        current.history,
+      );
       const composed = sealThreadEvents([threadCompositionEvent(composition)]);
       yield* inRun<undefined>(
         current.id,

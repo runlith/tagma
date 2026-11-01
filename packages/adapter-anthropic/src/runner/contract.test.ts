@@ -298,7 +298,7 @@ class ScriptedDoor implements HostedDoor {
 
   agent: HostedDoor['agent'] = () => Effect.succeed({ prompt: this.prompted, web: this.web });
 
-  tools: HostedDoor['tools'] = () => Effect.succeed({ tools: this.offered, names: this.held });
+  tools: HostedDoor['tools'] = () => Effect.succeed({ tools: this.offered, names: this.held, dispatch: false });
 
   history: HostedDoor['history'] = () => Effect.succeed([]);
 
@@ -1674,7 +1674,7 @@ describe('a prompt of the run that changed when the turn opened', () => {
       expect(after!.channel.received).toHaveLength(1);
       expect(after!.options).toMatchObject({
         resume: session.sessionId,
-        systemPrompt: { type: 'custom', prompt: servedPrompt('v2'), snapshot: false },
+        systemPrompt: { type: 'custom', prompt: servedPrompt('v2', false), snapshot: false },
       });
     }),
   );
@@ -1690,7 +1690,7 @@ describe('a prompt of the run that changed when the turn opened', () => {
       expect(before!.channel.received).toHaveLength(0);
       expect(after!.options.sessionId).toBe(session.sessionId);
       expect(after!.options.resume).toBeUndefined();
-      expect(after!.options.systemPrompt).toMatchObject({ prompt: servedPrompt('v2'), snapshot: false });
+      expect(after!.options.systemPrompt).toMatchObject({ prompt: servedPrompt('v2', false), snapshot: false });
     }),
   );
 

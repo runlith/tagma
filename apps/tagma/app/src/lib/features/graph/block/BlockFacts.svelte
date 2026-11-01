@@ -65,7 +65,7 @@
 {/if}
 
 {#if lawful && enforcement}
-  {#key read.name}
+  {#key read.identity}
     {@render enforcement(read)}
   {/key}
 {/if}

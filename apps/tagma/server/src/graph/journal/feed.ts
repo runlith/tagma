@@ -11,7 +11,7 @@ import { journalSessions } from './writers.js';
 import { blocksOf } from './eventLog.js';
 import { Selection } from '../contract/service/reads.js';
 import { Edges, Trash } from '../contract/service/blocks.js';
-import { blockName } from '../contract/wire/references.js';
+import { blockIdentity, blockName } from '../contract/wire/references.js';
 import type { Edge } from '../contract/wire/rows.js';
 import type { TagTable } from '../contract/wire/tags/table.js';
 import { mirrorRevision } from '../tree/mirror.js';
@@ -72,9 +72,9 @@ export const graphFeedLayer: Layer.Layer<
       const ids = blocks.map((row) => row.id);
       const edgeRows =
         added.length === 0 ? near : distinct([...near, ...(yield* edges.of(projectId, new Set(added.map((row) => row.id))))]);
-      const [named, refs, sessions, ready, roots] = yield* Effect.all(
+      const [identities, refs, sessions, ready, roots] = yield* Effect.all(
         [
-          names.namesOf([...new Set(edgeRows.flatMap((row) => [row.fromId, row.toId]))]),
+          names.identitiesOf([...new Set(edgeRows.flatMap((row) => [row.fromId, row.toId]))]),
           references.refsOf(projectId, new Set(ids)),
           writers(projectId, group.events, blocks),
           selection.ready({ projectId, among: ids }),
@@ -85,19 +85,33 @@ export const graphFeedLayer: Layer.Layer<
       return {
         type: 'change' as const,
         projectId,
-        events: yield* Effect.forEach(group.events, (entry) => wireEvent(entry, uuidById.get(entry.blockId ?? -1) ?? null)),
+        events: yield* Effect.forEach(group.events, (entry) => {
+          const uuid = entry.blockId === null ? undefined : uuidById.get(entry.blockId);
+          return Effect.map(wireEvent(entry, uuid ?? null), (event) => ({
+            ...event,
+            identity: uuid === undefined ? null : blockIdentity(uuid),
+          }));
+        }),
         unreadable: group.unreadable.length === 0 ? undefined : group.unreadable,
         blocks: blocks.map(wireTreeBlock),
-        edges: edgeRows.flatMap((row) => wireNamed(row, named)),
+        edges: edgeRows.flatMap((row) => wireNamed(row, identities)),
         refs,
         sessions,
         ready: ready.map((row) => blockName(row.uuid)),
+        readyIdentities: ready.map((row) => blockIdentity(row.uuid)),
         trash: roots.map(wireTreeBlock),
       };
     });
 
     const deliver = Effect.fn('GraphFeed.deliver')(function* (slice: readonly ActEntry[], resynced: ReadonlySet<number>) {
-      const rows = yield* selection.records([...new Set(slice.flatMap((entry) => blocksOf(entry).ids))]);
+      const rows = yield* selection.records([
+        ...new Set(
+          slice.flatMap((entry) => {
+            const concerned = blocksOf(entry);
+            return [...concerned.ids, ...(concerned.renamed ?? [])];
+          }),
+        ),
+      ]);
       const projectOf = new Map(rows.map((row) => [row.id, row.projectId]));
       const uuidById = new Map(rows.map((row) => [row.id, row.uuid]));
       const grouped = new Map<number, Group>();
@@ -203,9 +217,21 @@ function distinct(rows: readonly EdgeRow[]): EdgeRow[] {
   return [...seen.values()];
 }
 
-function wireNamed(row: EdgeRow, names: ReadonlyMap<number, string>): Edge[] {
-  const fromName = names.get(row.fromId);
-  const toName = names.get(row.toId);
-  if (fromName === undefined || toName === undefined) return [];
-  return [{ fromName, toName, kind: row.kind, createdBySessionId: row.createdBySessionId, createdAt: row.createdAt.toISOString() }];
+function wireNamed(row: EdgeRow, identities: ReadonlyMap<number, string>): Edge[] {
+  const from = identities.get(row.fromId);
+  const to = identities.get(row.toId);
+  if (from === undefined || to === undefined) return [];
+  return [
+    {
+      fromName: blockName(from),
+      toName: blockName(to),
+      fromIdentity: from,
+      toIdentity: to,
+      fromRowKey: row.fromId,
+      toRowKey: row.toId,
+      kind: row.kind,
+      createdBySessionId: row.createdBySessionId,
+      createdAt: row.createdAt.toISOString(),
+    },
+  ];
 }

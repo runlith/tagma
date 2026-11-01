@@ -1,6 +1,7 @@
 import { Clock, Effect } from 'effect';
 import type { AgentAside } from '@runlith/agent/AgentAside';
 import { threadCacheWarmth } from '@runlith/agent/thread/cache/ThreadCacheWarmth';
+import type { ThreadContextReading } from '@runlith/agent/thread/rows';
 import type { ModelCacheLifetime } from '@runlith/llm/models/cacheLifetime';
 import { ModelID, ProviderID } from '@runlith/llm/schema/ids';
 import { ModelIdentity } from '@runlith/llm/schema/options';
@@ -9,16 +10,21 @@ import { SessionCopies, type SessionCapture } from '../contract/service/copies.j
 
 const UNPROMISED: ModelCacheLifetime = { promisedSeconds: null, prior: null };
 
-const sessionAside = ({ turn, aside, readerInput, reading }: SessionCapture, now: number): AgentAside | null => {
-  if (reading === null || reading.runId !== turn || reading.provider !== aside.served.provider) return null;
+const warmUntil = (reading: ThreadContextReading, provider: string, now: number): number | undefined => {
   const warmth = threadCacheWarmth({
     reading,
-    selection: { provider: reading.provider, model: reading.model, account: null },
+    selection: { provider, model: reading.model, account: null },
     lifetime: UNPROMISED,
     curve: null,
     now,
   });
-  if (warmth.state !== 'warm' || warmth.expiresAt === null) return null;
+  return warmth.state !== 'warm' || warmth.expiresAt === null ? undefined : Date.parse(warmth.expiresAt);
+};
+
+const sessionAside = ({ turn, aside, readerInput, reading }: SessionCapture, now: number): AgentAside | null => {
+  if (reading === null || reading.runId !== turn || reading.provider !== aside.served.provider) return null;
+  const expiresAt = aside.life === 'session' ? null : warmUntil(reading, aside.served.provider, now);
+  if (expiresAt === undefined) return null;
   const measuredAt = Date.parse(reading.measuredAt);
   return {
     source: 'session',
@@ -34,7 +40,7 @@ const sessionAside = ({ turn, aside, readerInput, reading }: SessionCapture, now
     reasoning: aside.served.reasoning,
     sentAt: reading.sentAt === undefined ? measuredAt : Date.parse(reading.sentAt),
     measuredAt,
-    expiresAt: Date.parse(warmth.expiresAt),
+    expiresAt,
     ask: aside.ask,
   };
 };

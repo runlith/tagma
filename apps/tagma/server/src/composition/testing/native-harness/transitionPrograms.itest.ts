@@ -7,7 +7,7 @@ import { CostLedger, costLedgerLayer, rootCost } from '@runlith/performance/Cost
 import { readThreadEvents, threadEntryEvent, threadStepMessagesEvent } from '@runlith/agent/thread/events';
 import type { ThreadToolEntry } from '@runlith/agent/transcript/entries';
 import type { ThreadContextReading } from '@runlith/agent/thread/rows';
-import { callKey, type Evidence } from '@runlith/agent/thread/keyed';
+import { callKey, type Evidence, REPORT_OPERATION, REPORT_WINDOW, reportKey } from '@runlith/agent/thread/keyed';
 import { sealThreadEvents } from '@runlith/agent/thread/ThreadEventDoor';
 import { type TransitionDeps, transitionNow } from '@runlith/agent/thread/transition/kernel';
 import type { Unit, WriteUnit } from '../../../platform/contract/service/units.js';
@@ -254,6 +254,69 @@ it.live('a program that read no running run is refused at commit once a run has 
     const { statement, expected, actual } = refusal as ProgramConflict;
     expect({ statement, expected, actual }).toEqual({ statement: 0, expected: 1, actual: 0 });
   }),
+);
+
+it.live('a program that read a run by id commits while that run stands and is refused once it moved', () =>
+  Effect.gen(function* () {
+    const { thread, run, runs, db, deps } = yield* opened;
+    const reading = (decidedBy: string, moved?: () => Effect.Effect<void, unknown>) =>
+      transitionNow(
+        deps,
+        thread.id,
+        {
+          declared: sealThreadEvents([threadStepMessagesEvent([Message.assistant(decidedBy)])!]),
+          decide: Effect.fnUntraced(function* (_view: unknown, tx: WriteUnit<'machine'>) {
+            const standing = yield* runs.runById(run.id, tx);
+            if (moved !== undefined) yield* Effect.orDie(moved());
+            return standing?.ownerId === OWNER ? { apply: true as const, result: 'applied' } : { refuse: 'refused' };
+          }),
+        },
+        { evidence: { decidedBy: `test:${decidedBy}` }, digest: decidedBy },
+      );
+    const standing = yield* rootCost('test.transition', reading('standing'), 'test-by-id');
+    const [row] = (yield* CostLedger).read({ rootId: 'test-by-id', limit: 1 }).rows;
+    let moves = 0;
+    const moved = yield* reading('moved', () =>
+      moves++ === 0 ? db.run(sql`update thread_run set owner_id = 'elsewhere' where id = ${run.id}`) : Effect.void,
+    );
+    expect({ standing, programs: row?.total.programs, units: row?.total.units, moved }).toEqual({
+      standing: { committed: 'applied' },
+      programs: 1,
+      units: 0,
+      moved: { refused: 'refused' },
+    });
+  }).pipe(Effect.provide(Layer.fresh(costLedgerLayer({ capacity: 16 })))),
+);
+
+it.live('planned report calls keep the newest window of their run and trim the older ones', () =>
+  Effect.gen(function* () {
+    const { db, thread, run, step } = yield* opened;
+    yield* db.run(
+      sql`with recursive n(i) as (select 0 union all select i + 1 from n where i < ${REPORT_WINDOW - 1})
+        insert into thread_call (actor, operation, key, thread_id, digest, result, at)
+        select ${run.id}, ${REPORT_OPERATION}, 'm' || i, ${thread.id}, 'seed', '{"answer":null}', 0 from n`,
+    );
+    const marks = ['m64', 'm65'];
+    const outcomes = yield* rootCost(
+      'test.transition',
+      Effect.forEach(marks, (mark) => step(mark, undefined, { call: reportKey(run.id, mark) })),
+      'test-reports',
+    );
+    const [row] = (yield* CostLedger).read({ rootId: 'test-reports', limit: 1 }).rows;
+    const kept = yield* db.all<{ key: string }>(
+      sql`select key from thread_call where actor = ${run.id} and operation = ${REPORT_OPERATION} order by rowid`,
+    );
+    expect({
+      applied: outcomes.every((outcome) => 'committed' in outcome),
+      programs: row?.total.programs,
+      units: row?.total.units,
+    }).toEqual({
+      applied: true,
+      programs: marks.length,
+      units: 0,
+    });
+    expect(kept.map((call) => call.key)).toEqual([...Array.from({ length: REPORT_WINDOW - 2 }, (_, index) => `m${index + 2}`), ...marks]);
+  }).pipe(Effect.provide(Layer.fresh(costLedgerLayer({ capacity: 16 })))),
 );
 
 it.live('a planned transcript entry is inserted, replaced and folded by its program, and the cursor follows the journal', () =>

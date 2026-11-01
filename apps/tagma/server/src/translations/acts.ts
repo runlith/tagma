@@ -6,6 +6,7 @@ import { sumUsage, type Usage } from '@runlith/llm/schema/events';
 import { Cause, Clock, Deferred, Effect, FiberMap, Option, PubSub, Semaphore, Stream } from 'effect';
 import type { StoreFailure } from '../platform/contract/service/store.js';
 import { GateRefusal } from '../platform/contract/wire/refusal.js';
+import { blockIdentity } from '../graph/contract/wire/references.js';
 import { ProjectChanges } from '../projects/contract/service/changes.js';
 import { askGate, ModelAsks, namedModel, type Answered, type AskRefused } from '../providers/contract/service/asks.js';
 import { Settings } from '../settings/contract/service/values.js';
@@ -93,7 +94,14 @@ export const makeTranslations = Effect.gen(function* () {
   const told = (key: ProjectionKey, state: ActState, live: Running) =>
     PubSub.publish(frames, {
       projectId: key.projectId,
-      frame: { block: live.name, language: key.language, state, landed: live.landed, sending: live.sending },
+      frame: {
+        block: live.name,
+        identity: blockIdentity(key.block),
+        language: key.language,
+        state,
+        landed: live.landed,
+        sending: live.sending,
+      },
     });
 
   const landed = Effect.fnUntraced(function* (key: ProjectionKey, live: Running, batch: Batch, text: string) {

@@ -18,15 +18,16 @@
     project: string;
     badge?: Snippet<[TreeBlock]>;
   } = $props();
+  const rows = $derived([...new Map(blocks.map((block) => [block.identity, block])).values()]);
 </script>
 
-{#if blocks.length > 0}
+{#if rows.length > 0}
   <section class="px-3 pt-4">
-    <SidebarHeading {heading} count={blocks.length} />
+    <SidebarHeading {heading} count={rows.length} />
 
     {#if sidebar.shelfOpen(heading)}
       <div class="mt-1">
-        {#each blocks as block (block.name)}
+        {#each rows as block (block.identity)}
           {#if badge}
             <SidebarRow {block} {project}>
               {#snippet trailing()}{@render badge(block)}{/snippet}

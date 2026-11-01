@@ -9,6 +9,7 @@ const isolatedUnit = [
   'src/lib/features/checkout/DiffStage.svelte.test.ts',
   'src/lib/features/executions/terminal/Divider.svelte.test.ts',
   'src/lib/features/graph/block/Body.svelte.test.ts',
+  'src/lib/features/graph/spatial/GraphView.svelte.test.ts',
   'src/lib/features/executions/terminal/Pane.svelte.test.ts',
   'src/lib/features/executions/terminal/PaneTree.close.svelte.test.ts',
   'src/lib/features/executions/terminal/Views.svelte.test.ts',

@@ -11,7 +11,10 @@ import type { BlockLens } from '$lib/features/workspace/address.js';
 import { Addresses } from '$lib/features/workspace/Addresses.js';
 import { GraphRung, type GraphAim } from '$lib/features/workspace/GraphRung.js';
 
-type Title = { title: string; projectId: number; branch?: string | null } | BlockRefFailure | null;
+type Title =
+  | { identity: string; shortName: string; rowKey?: number; title: string; projectId: number; branch?: string | null }
+  | BlockRefFailure
+  | null;
 
 export class BlockTitles extends Service<BlockTitles>()('BlockTitles', { tier: 'graph' }) implements BlockRefs {
   static *make() {
@@ -27,6 +30,8 @@ export class BlockTitles extends Service<BlockTitles>()('BlockTitles', { tier: '
   }
 
   private readonly titles = new SvelteMap<string, Title>();
+  private readonly byRow = new Map<number, Set<string>>();
+  private readonly byShort = new Map<string, Set<string>>();
   private readonly stale = new SvelteSet<string>();
   private readonly asking = new Set<string>();
   private readonly pending = new Map<string, symbol>();
@@ -55,26 +60,56 @@ export class BlockTitles extends Service<BlockTitles>()('BlockTitles', { tier: '
           this.repo.titles.all().reset();
           const inflight = [...this.pending.keys()];
           this.pending.clear();
+          this.byRow.clear();
           this.canon += 1;
           for (const name of this.titles.keys()) this.stale.add(name);
           for (const name of [...inflight, ...this.waiting.keys()]) this.ask(name);
           return;
         }
+        const refresh = new Set<string>();
         for (const row of frame.blocks) {
-          const known = this.titles.get(row.name);
-          if (known === undefined) {
-            if (this.pending.has(row.name)) void this.refresh(row.name);
-            continue;
+          for (const name of this.byShort.get(row.name) ?? []) {
+            const known = this.titles.get(name);
+            if (known == null || 'error' in known) {
+              refresh.add(name);
+              continue;
+            }
+            const branch = known.branch === undefined ? this.aim.branch : known.branch;
+            if (
+              (name !== known.identity && known.identity !== row.identity) ||
+              (known.identity === row.identity && (known.projectId !== this.aim.projectId || branch !== this.aim.branch))
+            )
+              refresh.add(name);
           }
-          if (known !== null && 'error' in known) continue;
-          const branch = known === null || known.branch === undefined ? this.aim.branch : known.branch;
-          if (known !== null && (known.projectId !== this.aim.projectId || branch !== this.aim.branch)) continue;
-          this.pending.delete(row.name);
-          this.settle(
-            row.name,
-            row.deletedAt === null ? { title: row.title, projectId: this.aim.projectId, branch: this.aim.branch } : null,
-          );
+          for (const name of new Set([row.name, row.identity, ...(this.byRow.get(row.rowKey) ?? [])])) {
+            const known = this.titles.get(name);
+            if (known === undefined) {
+              if (this.pending.has(name)) refresh.add(name);
+              continue;
+            }
+            if (known !== null && ('error' in known || known.identity !== row.identity)) {
+              refresh.add(name);
+              continue;
+            }
+            const branch = known === null || known.branch === undefined ? this.aim.branch : known.branch;
+            if (known !== null && (known.projectId !== this.aim.projectId || branch !== this.aim.branch)) continue;
+            this.pending.delete(name);
+            this.settle(
+              name,
+              row.deletedAt === null
+                ? {
+                    identity: row.identity,
+                    shortName: row.name,
+                    rowKey: row.rowKey,
+                    title: row.title,
+                    projectId: this.aim.projectId,
+                    branch: this.aim.branch,
+                  }
+                : null,
+            );
+          }
         }
+        for (const name of refresh) void this.refresh(name);
       }),
     );
   }
@@ -129,6 +164,40 @@ export class BlockTitles extends Service<BlockTitles>()('BlockTitles', { tier: '
   }
 
   private settle(name: string, title: Title): void {
+    const previous = this.titles.get(name);
+    if (
+      previous !== undefined &&
+      previous !== null &&
+      !('error' in previous) &&
+      title !== null &&
+      !('error' in title) &&
+      previous.shortName !== title.shortName
+    ) {
+      const names = this.byShort.get(previous.shortName);
+      names?.delete(name);
+      if (names?.size === 0) this.byShort.delete(previous.shortName);
+    }
+    if (previous !== undefined && previous !== null && !('error' in previous) && previous.rowKey !== undefined) {
+      const names = this.byRow.get(previous.rowKey);
+      names?.delete(name);
+      if (names?.size === 0) this.byRow.delete(previous.rowKey);
+    }
+    if (title !== null && !('error' in title)) {
+      const names = this.byShort.get(title.shortName) ?? new Set<string>();
+      names.add(name);
+      this.byShort.set(title.shortName, names);
+    }
+    if (
+      title !== null &&
+      !('error' in title) &&
+      title.rowKey !== undefined &&
+      title.projectId === this.aim.projectId &&
+      (title.branch === undefined ? this.aim.branch : title.branch) === this.aim.branch
+    ) {
+      const names = this.byRow.get(title.rowKey) ?? new Set<string>();
+      names.add(name);
+      this.byRow.set(title.rowKey, names);
+    }
     this.stale.delete(name);
     this.titles.set(name, title);
     const done = this.waiting.get(name);
@@ -162,7 +231,17 @@ export class BlockTitles extends Service<BlockTitles>()('BlockTitles', { tier: '
       const rows = answer.titles;
       await this.workspace.projectsOf([...new Set(rows.filter((row) => current(row.name)).map((row) => row.projectId))]);
       const answered = new Map<string, Title>(
-        rows.map((row) => [row.name, { title: row.title, projectId: row.projectId, branch: row.branch }]),
+        rows.map((row) => [
+          row.name,
+          {
+            identity: row.identity,
+            shortName: row.shortName,
+            rowKey: row.rowKey,
+            title: row.title,
+            projectId: row.projectId,
+            branch: row.branch,
+          },
+        ]),
       );
       for (const copy of answer.unreadable) {
         const failure = { error: refusalOf(copy.error) };

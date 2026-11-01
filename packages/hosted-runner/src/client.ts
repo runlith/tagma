@@ -1,4 +1,4 @@
-import { Cause, Deferred, Effect, Exit, Option, type Scope } from 'effect';
+import { Cause, Deferred, Effect, Exit, type Scope } from 'effect';
 import { AgentFault, FAULT, type Outlet } from '@runlith/acp/agent';
 import type { ContentBlock } from '@runlith/acp/content';
 import type { PromptResult } from '@runlith/acp/methods';
@@ -11,7 +11,7 @@ import { Handed } from './handed.js';
 import { Output } from './output.js';
 import { permitted } from './question.js';
 import { Relay } from './relay.js';
-import { UNSTEPPED } from './wire/extensions.js';
+import { COST, UNSTEPPED, type Priced } from './wire/extensions.js';
 
 const CANCELLED = -32800;
 
@@ -21,6 +21,7 @@ export type ClientOutcome = {
   readonly failure?: TransportFailure;
   readonly detail?: string;
   readonly turn?: string;
+  readonly cost?: Priced;
 };
 
 export interface ClientRun {
@@ -36,6 +37,7 @@ export type ClientSending = {
   readonly output: Output;
   readonly relay: Relay;
   readonly cancelled: () => boolean;
+  readonly halted: Effect.Effect<void>;
   readonly permitted: (call: ToolCall) => Effect.Effect<string | null>;
 };
 
@@ -59,13 +61,15 @@ export interface ClientDriver {
   send(sending: ClientSending): Effect.Effect<ClientRun, AgentFault>;
   readonly handed?: Handed;
   readonly queued?: (words: readonly string[]) => Effect.Effect<void>;
-  readonly compact?: (instructions: string, output: Output) => Effect.Effect<ClientCompaction, AgentFault>;
+  readonly compact?: (instructions: string, output: Output, halted: Effect.Effect<void>) => Effect.Effect<ClientCompaction, AgentFault>;
+  readonly aside?: (question: string) => Effect.Effect<unknown, AgentFault>;
   readonly close: Effect.Effect<void>;
 }
 
 type Running = {
   readonly done: Deferred.Deferred<PromptResult, AgentFault>;
   readonly sent: Deferred.Deferred<ClientRun | null>;
+  readonly halted: Deferred.Deferred<void>;
   run: ClientRun | null;
   cancelled: boolean;
 };
@@ -107,6 +111,7 @@ export const clientSession = Effect.fnUntraced(function* (
     const running = current;
     if (running === null) return;
     running.cancelled = true;
+    yield* Deferred.succeed(running.halted, undefined);
     if (running.run !== null) yield* running.run.cancel.pipe(Effect.catchTag('AgentFault', (cause) => process.died(cause.message)));
   });
   const compact = client.compact;
@@ -128,6 +133,7 @@ export const clientSession = Effect.fnUntraced(function* (
       const running: Running = {
         done: yield* Deferred.make<PromptResult, AgentFault>(),
         sent: yield* Deferred.make<ClientRun | null>(),
+        halted: yield* Deferred.make<void>(),
         run: null,
         cancelled: false,
       };
@@ -135,7 +141,15 @@ export const clientSession = Effect.fnUntraced(function* (
       const work = Effect.gen(function* () {
         if (running.cancelled) return { stopReason: 'cancelled' as const };
         const run = yield* client
-          .send({ input, prepared: frozen, output, relay, cancelled: () => running.cancelled, permitted: ask })
+          .send({
+            input,
+            prepared: frozen,
+            output,
+            relay,
+            cancelled: () => running.cancelled,
+            halted: Deferred.await(running.halted),
+            permitted: ask,
+          })
           .pipe(Effect.onExit((exit) => (Exit.isFailure(exit) ? Deferred.succeed(running.sent, null) : Effect.void)));
         running.run = run;
         yield* Deferred.succeed(running.sent, run);
@@ -143,7 +157,11 @@ export const clientSession = Effect.fnUntraced(function* (
         const outcome = yield* run.wait;
         if (outcome.detail !== undefined) process.stderr(`${outcome.detail}\n`);
         const turn = outcome.turn ?? input.id;
-        const meta = { 'tagma/turn': { prompt: turn, last: turn }, 'tagma/failure': outcome.failure };
+        const meta = {
+          'tagma/turn': { prompt: turn, last: turn },
+          'tagma/failure': outcome.failure,
+          ...(outcome.cost === undefined ? {} : { [COST]: outcome.cost }),
+        };
         if (outcome.status === 'error' && !running.cancelled)
           return yield* new AgentFault({
             code: outcome.failure?.reason?.family === 'auth' ? FAULT.authRequired : FAULT.internal,
@@ -189,23 +207,20 @@ export const clientSession = Effect.fnUntraced(function* (
               return yield* new AgentFault({ code: FAULT.invalidRequest, message: 'this session is busy; compaction runs between turns' });
             const halted = yield* Deferred.make<void>();
             acquiring = halted;
-            const acquired = yield* Effect.raceFirst(
-              Effect.map(compact(instructions, output), (compaction) => {
-                compacting = compaction;
-                acquiring = null;
-                return Option.some(compaction);
-              }),
-              Effect.as(Deferred.await(halted), Option.none<ClientCompaction>()),
-            ).pipe(
+            const compaction = yield* compact(instructions, output, Deferred.await(halted)).pipe(
+              Effect.tap((acquired) =>
+                Effect.sync(() => {
+                  compacting = acquired;
+                }),
+              ),
               Effect.ensuring(
                 Effect.sync(() => {
                   if (acquiring === halted) acquiring = null;
                 }),
               ),
             );
-            if (Option.isNone(acquired))
-              return yield* new AgentFault({ code: CANCELLED, message: 'the compaction was cancelled before the agent began it' });
-            const compaction = acquired.value;
+            if (yield* Deferred.isDone(halted))
+              yield* compaction.cancel.pipe(Effect.catchTag('AgentFault', (cause) => process.died(cause.message)));
             return yield* compaction.wait.pipe(
               Effect.ensuring(
                 Effect.sync(() => {
@@ -215,6 +230,7 @@ export const clientSession = Effect.fnUntraced(function* (
             );
           }),
     cancel,
+    aside: client.aside,
     close: Effect.fnUntraced(function* () {
       const running = current;
       yield* cancel();

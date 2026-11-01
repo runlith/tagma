@@ -277,6 +277,7 @@ export const WORK_OPERATIONS = {
       ok: {
         ...overviewFields,
         ids: Schema.Record(Schema.String, Schema.String),
+        identities: Schema.Record(Schema.String, Schema.String),
         specs: Schema.optional(Schema.Array(idleSpecSchema)),
         crowded: Schema.optional(Schema.Array(crowdedSchema)),
         start: Schema.optional(startPriceSchema),

@@ -247,6 +247,7 @@ export type OpOutcome = BlockWrite | BlockRecord | SourceRow | { ok: true };
 export type BatchAnswer = {
   ops: OpOutcome[];
   ids: Record<string, string>;
+  identities: Record<string, string>;
   bodyFiles?: Record<number, string>;
   specs?: readonly WorklessSpec[];
   crowded?: readonly Crowded[];

@@ -147,12 +147,17 @@ it.effect('the version probe of a harness carries the environment its adapter de
   Effect.gen(function* () {
     const { home, local } = homeOf('declared');
     yield* machine(home);
-    script(join(local, 'muse'), '#!/bin/sh\necho "muse updates:${MUSE_NO_AUTO_UPDATE:-allowed}"\n');
-    const users = isolatedUsers({ shell: shellFor(local, [], failedProfile), env: process.env, world: null, home });
+    script(join(local, 'muse'), '#!/bin/sh\necho "muse key:${META_API_KEY:-unset}"\n');
+    const users = isolatedUsers({
+      shell: shellFor(local, [], failedProfile),
+      env: { ...process.env, META_API_KEY: 'leaked' },
+      world: null,
+      home,
+    });
     yield* users.ready;
     const installs = yield* installsOver(users);
     yield* installs.program('muse');
-    expect((yield* installs.read).find((row) => row.harness === 'muse-code')).toMatchObject({ version: 'muse updates:1' });
+    expect((yield* installs.read).find((row) => row.harness === 'muse-code')).toMatchObject({ version: 'muse key:unset' });
   }),
 );
 

@@ -20,7 +20,7 @@ import { Edges } from '../contract/service/blocks.js';
 import { Act, BlockNames, BlockProjection, BlockReferences, Unborn } from '../contract/service/acts.js';
 import { BlockRows } from '../acts/rows.js';
 import { ActState } from '../contract/service/transaction.js';
-import { blockName } from '../contract/wire/references.js';
+import { blockIdentity, blockName } from '../contract/wire/references.js';
 import { Trash } from '../contract/service/blocks.js';
 import {
   Documents,
@@ -233,6 +233,7 @@ export const documentsLayer: Layer.Layer<
       };
       const results: BatchAnswer['ops'] = [];
       const named: Record<string, string> = {};
+      const identities: Record<string, string> = {};
       const graphIds = new Set<number>();
       let bodyBytes = 0;
       const written: Array<{
@@ -305,7 +306,11 @@ export const documentsLayer: Layer.Layer<
               },
             }),
           );
-          for (const [handle, id] of handles.declared) named[handle] = yield* blockNames.nameOf(id);
+          for (const [handle, id] of handles.declared) {
+            named[handle] = yield* blockNames.nameOf(id);
+            const uuid = handles.minted.get(handle);
+            if (uuid !== undefined) identities[handle] = blockIdentity(uuid);
+          }
         }),
       );
       const [graphId] = graphIds.size === 1 ? graphIds : [];
@@ -314,7 +319,7 @@ export const documentsLayer: Layer.Layer<
         writtenBlocks: written.length,
         bodyBytes,
       });
-      return { ops: results, ids: named };
+      return { ops: results, ids: named, identities };
     });
 
     const nameOfRef = Effect.fn('Documents.nameOfRef')(function* (

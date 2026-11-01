@@ -51,7 +51,7 @@
       <WriterBadge writer={sessions.writerOf(tags.holderOf(block))} />
     {/if}
     <span class="stamp tabular ml-auto shrink-0 text-muted-foreground/70">{timeAgo(block.updatedAt)}</span>
-    <Button variant="outline" size="xs" href={addresses.block(block.name)}>
+    <Button variant="outline" size="xs" href={addresses.block(block.identity)}>
       Open
       <ArrowUpRight class="size-3" data-icon="inline-end" />
     </Button>

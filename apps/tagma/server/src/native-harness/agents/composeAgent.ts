@@ -5,7 +5,7 @@ import type { RuleSetup } from '../contract/service/rules.js';
 import type { AgentRunner } from '@runlith/agent/AgentRunner';
 import type { CallHooks } from '@runlith/agent/AgentCalls';
 import { type ToolCatalog, mergeToolCatalogs } from '@runlith/agent/catalog';
-import { deferredToolsSection } from '@runlith/agent/AgentDeferredTools';
+import { deferredToolsSection, revealedDefinitionsSection } from '@runlith/agent/AgentDeferredTools';
 import { stepLimit } from '@runlith/agent/AgentStep';
 import { threadAgent, type ThreadAgent, type ThreadContextUse, type ThreadView } from '@runlith/agent/thread/agents/ThreadAgent';
 import type { ThreadAsides } from '@runlith/agent/thread/ThreadAsides';
@@ -83,6 +83,7 @@ export function composeAgent(
         sections: [
           ...holding.flatMap((capability) => capability.turnNote?.(ctx) ?? []),
           deferredToolsSection(input.catalog),
+          ...(ctx.thread.capabilities.toolCatalog === 'dispatch' ? [revealedDefinitionsSection(input.catalog, input.thread.history)] : []),
           capabilityLossSection(ctx.unavailableCapabilities, (id) => definitions.find(id)?.description ?? id),
         ],
         digest: holding.some((capability) => capability.id === 'graph'),

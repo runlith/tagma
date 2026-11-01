@@ -62,3 +62,23 @@ it.effect('a lease beat leaves the thread change revision where it stood and a f
     expect(yield* revision()).toBeGreaterThan(opened);
   }),
 );
+
+it.effect('a planned session change commits against the facet it read and is refused once the facet moved', () =>
+  Effect.gen(function* () {
+    const { store, id } = yield* fixture();
+    yield* store.open(id, '', 'first', () => Effect.succeed(null));
+    yield* store.change(id, (facet) => Effect.succeed({ facet: { ...facet, sessionKey: 'read' }, value: undefined }));
+    const held = (yield* store.read(id))!;
+    const landed = yield* store.planned(id, held, 'test:session:planned', () =>
+      Effect.succeed({ facet: { ...held, sessionKey: 'planned' }, value: 'ok' }),
+    );
+    const stale = yield* store.planned(id, held, 'test:session:stale', () =>
+      Effect.succeed({ facet: { ...held, sessionKey: 'stale' }, value: 'late' }),
+    );
+    expect({ landed: landed?.value, stale, key: (yield* store.read(id))?.sessionKey }).toEqual({
+      landed: 'ok',
+      stale: null,
+      key: 'planned',
+    });
+  }),
+);

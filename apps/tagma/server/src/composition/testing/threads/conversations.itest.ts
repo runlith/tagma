@@ -811,6 +811,11 @@ describe('conversation index and journal', () => {
       expect(yield* said('night')).toEqual([open, ['p-steer', 'operator', '2026-09-20T10:02:00.000Z', 'Tallinn by night']]);
       expect(yield* said('rebooked')).toEqual([open, ['p-2', 'agent', '2026-09-20T10:01:00.000Z', 'Tallinn rebooked']]);
       expect(yield* said('reserved')).toEqual([open]);
+      yield* planned(6, message({ id: 'p-3', text: 'Tallinn unkeyed', at: '2026-09-22T10:00:00.000Z' }));
+      expect(yield* said('unkeyed')).toEqual([
+        { complete: true, unindexed: 0 },
+        ['p-3', 'operator', '2026-09-22T10:00:00.000Z', 'Tallinn unkeyed'],
+      ]);
     }).pipe(Effect.provide(fixture)),
   );
 });

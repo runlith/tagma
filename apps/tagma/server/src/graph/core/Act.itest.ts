@@ -68,7 +68,7 @@ layer(demoGraphLayer(), { excludeTestServices: true })('body reference index', (
         const whole = yield* graph.reading.show(target, 0, true);
         expect([...whole.refsIn].sort()).toEqual([standingName, finishedName].sort());
         expect(whole.edgesIn).toHaveLength(2);
-        expect(whole.restingIn).toEqual({ edges: [], refs: [] });
+        expect(whole.restingIn).toEqual({ edges: [], refs: [], refsDetails: [] });
       }),
     ),
   );

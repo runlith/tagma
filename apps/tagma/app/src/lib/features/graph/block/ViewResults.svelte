@@ -124,7 +124,7 @@
   async function setLayout(next: ViewLayout): Promise<void> {
     saving = true;
     try {
-      const row = await blocks.update.run({ name: block.name, changes: { fields: { [VIEW_LAYOUT]: next } } }, { throwOnError: true });
+      const row = await blocks.update.run({ name: block.identity, changes: { fields: { [VIEW_LAYOUT]: next } } }, { throwOnError: true });
       if (row) saved = tags.layoutOf(row);
     } finally {
       saving = false;
@@ -207,7 +207,7 @@
           <span class="stamp tabular text-muted-foreground/60">{group.rows.length}</span>
         </div>
         <div class="mt-1.5">
-          {#each group.rows as row (row.name)}
+          {#each group.rows as row (row.identity)}
             {@render resultRow(row)}
           {/each}
         </div>
@@ -224,7 +224,7 @@
             <span class="stamp tabular text-muted-foreground/60">{column.rows.length}</span>
           </div>
           <div class="mt-1 flex flex-col gap-1">
-            {#each column.rows as row (row.name)}
+            {#each column.rows as row (row.identity)}
               {@render resultRow(row, true)}
             {/each}
           </div>
@@ -234,14 +234,14 @@
   </div>
 {:else}
   <div class="mt-3">
-    {#each shown as row (row.name)}
+    {#each shown as row (row.identity)}
       {@render resultRow(row)}
     {/each}
   </div>
 {/if}
 
 {#snippet resultRow(row: BlockListRow, boarded = false)}
-  <BlockRow block={row} href={addresses.block(row.name)} layout={boarded ? 'stacked' : 'line'}>
+  <BlockRow block={row} href={addresses.block(row.identity)} layout={boarded ? 'stacked' : 'line'}>
     {#snippet title()}
       <span
         class={cn(

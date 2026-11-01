@@ -150,7 +150,7 @@ it.live(
       const door: HostedDoor = {
         agent: () => Effect.succeed({ prompt: system, web: 'none' }),
         turn: () => Effect.succeed({ prompt: system, context: 'turn-context', web: 'none' }),
-        tools: () => Effect.succeed({ names: listed.map((item) => item.name), tools: listed }),
+        tools: () => Effect.succeed({ names: listed.map((item) => item.name), tools: listed, dispatch: false }),
         history: () =>
           Effect.succeed([
             {

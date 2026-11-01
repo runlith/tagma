@@ -12,6 +12,9 @@ export type ClientProfile = {
   readonly midTurn?: AcpProfile['midTurn'];
   readonly web?: AcpProfile['web'];
   readonly program?: string;
+  readonly aside?: AcpProfile['proves']['aside'];
+  readonly asideLife?: AcpProfile['asideLife'];
+  readonly toolCatalog?: AcpProfile['toolCatalog'];
 };
 
 export const clientProfile = ({
@@ -24,6 +27,9 @@ export const clientProfile = ({
   midTurn = 'after-turn',
   web = 'none',
   program,
+  aside = 'none',
+  asideLife,
+  toolCatalog = 'turn',
 }: ClientProfile): AcpProfile => ({
   ...(program === undefined ? {} : { program }),
   argv: (choice) => [
@@ -55,9 +61,10 @@ export const clientProfile = ({
     compaction: compaction === 'session' ? true : compaction,
     continue: true,
     usage,
-    aside: 'none',
+    aside,
   },
-  toolCatalog: 'turn',
+  asideLife,
+  toolCatalog,
   storage,
   graceMs: 5_000,
   callEnvelopeMs: CALL_ENVELOPE_MS,

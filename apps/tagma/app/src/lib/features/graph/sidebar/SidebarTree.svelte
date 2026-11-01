@@ -17,7 +17,7 @@
   const addresses = Addresses.use();
   const tree = SidebarTree.mount();
 
-  const current = $derived(addresses.scope);
+  const current = $derived(addresses.scope === null ? null : (tree.block(addresses.scope)?.identity ?? addresses.scope));
   let focused = $state<string | null>(null);
   let list = $state<HTMLElement | null>(null);
 
@@ -32,7 +32,7 @@
   const topLevel = $derived(tree.lines.filter((line) => line.depth === 1).length);
 
   async function onKeydown(event: KeyboardEvent): Promise<void> {
-    const step = treeStep(tree.lines, tabStop, event.key, tree.expanded);
+    const step = treeStep(tree.lines, tabStop, event.key, tree.openNames);
     if (step === null) return;
     event.preventDefault();
     if (step.kind === 'expand') tree.expand(step.name);
@@ -53,7 +53,7 @@
       <div bind:this={list} class="mt-1" role="tree" aria-label="Project blocks" tabindex="-1" onkeydown={onKeydown}>
         {#each tree.lines as line (line.name)}
           {@const block = tree.block(line.name)}
-          {@const open = tree.expanded.has(line.name)}
+          {@const open = tree.openNames.has(line.name)}
           {#if block}
             <div style:padding-left="calc(var(--spacing) * {(line.depth - 1) * 4})" onfocusin={() => (focused = line.name)}>
               <SidebarRow

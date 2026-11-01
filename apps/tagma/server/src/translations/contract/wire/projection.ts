@@ -1,4 +1,5 @@
 import { Schema } from 'effect';
+import { BlockIdentity } from '../../../graph/contract/wire/references.js';
 
 export const ACT_STATES = ['translating', 'done', 'failed', 'stopped'] as const;
 export type ActState = (typeof ACT_STATES)[number];
@@ -53,6 +54,7 @@ export type Projection = typeof projectionSchema.Type;
 
 export const translationFrameSchema = Schema.Struct({
   block: Schema.String.annotate({ description: 'The name of the block translated.' }),
+  identity: BlockIdentity,
   language: Schema.String,
   state: Schema.Literals(ACT_STATES),
   landed: Schema.Int.annotate({ description: 'Parts this act has landed so far.' }),

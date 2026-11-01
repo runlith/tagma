@@ -52,7 +52,7 @@
           { parentId: name, tags: [work], title: `Remove the ${plural(count, 'violation')} this rule found when it became a check` },
           { throwOnError: true },
         );
-        owner = task?.name;
+        owner = task?.identity;
       }
       await repo.enforce.run(
         { blockId: name, base: null, strictness: target, inspection: chosen, on: [{ op: 'submit_work', phase: 'before' }], owner },

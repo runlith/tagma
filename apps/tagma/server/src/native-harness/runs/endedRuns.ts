@@ -9,6 +9,7 @@ import { MachineUnits, type Unit, type WriteUnit } from '../../platform/contract
 import { among } from '../../platform/store/rows.js';
 import { stored, type StoredFailure } from '../../platform/store/crossing.js';
 import { programOf } from '../../platform/store/programs.js';
+import { bindQuery } from '../../platform/store/queries.js';
 import { ENDED_RUN, ENDINGS_LIST, threadRun, threadRunTally } from '../../threads/store/kernel.js';
 import { trustedRun } from './reaping.js';
 import { ThreadEntryKinds } from '@runlith/agent/transcript/kinds';
@@ -31,6 +32,17 @@ export const makeEndedRuns = Effect.gen(function* () {
     .from(threadRun)
     .where(and(eq(threadRun.threadId, sql.placeholder('threadId')), eq(threadRun.startKey, sql.placeholder('key'))))
     .prepare();
+  const heldRun = db
+    .select({ id: threadRun.id })
+    .from(threadRun)
+    .where(
+      and(
+        eq(threadRun.id, sql.placeholder('runId')),
+        eq(threadRun.status, sql.placeholder('status')),
+        sql`${threadRun.ownerId} is ${sql.placeholder('ownerId')}`,
+      ),
+    )
+    .prepare();
 
   const byNewest = (left: Ended, right: Ended) =>
     (right.finishedAt?.getTime() ?? 0) - (left.finishedAt?.getTime() ?? 0) || right.id.localeCompare(left.id);
@@ -44,13 +56,7 @@ export const makeEndedRuns = Effect.gen(function* () {
       Effect.tap(units.read(work), (row) =>
         row === null
           ? program.guard(db.select({ id: threadRun.id }).from(threadRun).where(where), 0)
-          : program.guard(
-              db
-                .select({ id: threadRun.id })
-                .from(threadRun)
-                .where(and(eq(threadRun.id, row.id), eq(threadRun.status, row.status), sql`${threadRun.ownerId} is ${row.ownerId}`)),
-              1,
-            ),
+          : program.guard(bindQuery(heldRun, { runId: row.id, status: row.status, ownerId: row.ownerId }), 1),
       ),
     );
   };

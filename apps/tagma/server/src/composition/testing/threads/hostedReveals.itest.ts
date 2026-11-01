@@ -1,6 +1,6 @@
 import { describe, expect } from 'bun:test';
 import { layer } from '@runlith/effect-test';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { Context, Effect, FileSystem, Schema, Stream } from 'effect';
 import type { ThreadCompactionEntry } from '@runlith/agent/transcript/entries';
 import { LLMResponse, Usage } from '@runlith/llm/schema/events';
@@ -13,7 +13,7 @@ import type { ModelAccess } from '../../../providers/contract/service/access.js'
 import { Compaction } from '../../../native-harness/contract/service/context.js';
 import { compactionChoicesSchema } from '../../../native-harness/contract/wire/compactionChoices.js';
 import { ThreadEvidence } from '../../../threads/contract/service/evidence.js';
-import { threadRun, turnsOf } from '../../../threads/testing/doubles.js';
+import { thread, threadRun, turnsOf } from '../../../threads/testing/doubles.js';
 import { claudeLogin, hostedDefaults } from '../claudeLogin.js';
 import { heard, until } from './protocolRig.js';
 import { ProtocolWorld, protocolWorld } from './protocolWorld.js';
@@ -97,20 +97,64 @@ describe('the tools Tagma serves a Claude Code thread over its MCP door', () => 
       return { world, projectId, threadId, report, runStatus, answered, served };
     });
 
+    const ownFold = Effect.fnUntraced(function* (label: string, keep?: string) {
+      const { world, projectId, threadId, report, runStatus, served } = yield* revealed(label);
+      const choices = yield* Schema.decodeUnknownEffect(compactionChoicesSchema)(
+        (yield* world.op('read_compaction_choices', { threadId }, `project=${projectId}`)).body,
+      );
+      if (choices.own === null) return yield* Effect.die('a Claude Code thread folds its own session');
+      const folded = yield* Context.get(world.runtime.owners, Compaction).compact(threadId, projectId, {
+        summarizer: { provider: choices.own.provider, model: choices.own.model, reasoning: choices.own.reasoning },
+        keep,
+      });
+      if (folded.status !== 'started') return yield* Effect.die(new Error(`the compaction answered ${folded.status}`));
+      yield* until(runStatus(folded.runId), 'Claude Code compacted its session', report);
+      return yield* served();
+    });
+
     it.effect('a deferred tool revealed before Claude Code compacts its session is still served on the next turn', () =>
       Effect.gen(function* () {
-        const { world, projectId, threadId, report, runStatus, served } = yield* revealed('own');
-        const choices = yield* Schema.decodeUnknownEffect(compactionChoicesSchema)(
-          (yield* world.op('read_compaction_choices', { threadId }, `project=${projectId}`)).body,
-        );
-        if (choices.own === null) return yield* Effect.die('a Claude Code thread folds its own session');
-        const folded = yield* Context.get(world.runtime.owners, Compaction).compact(threadId, projectId, {
-          summarizer: { provider: choices.own.provider, model: choices.own.model, reasoning: choices.own.reasoning },
-        });
-        if (folded.status !== 'started') return yield* Effect.die(new Error(`the compaction answered ${folded.status}`));
-        yield* until(runStatus(folded.runId), 'Claude Code compacted its session', report);
+        expect(yield* ownFold('own')).toContain(DEFERRED);
+      }),
+    );
 
-        expect(yield* served()).toContain(DEFERRED);
+    it.effect(
+      'a deferred tool revealed before a compaction whose retelling the agent keeps to itself is still served on the next turn',
+      () =>
+        Effect.gen(function* () {
+          expect(yield* ownFold('silent', 'SILENT')).toContain(DEFERRED);
+        }),
+    );
+
+    it.effect('a thread seated under a tool catalog its profile no longer declares takes the profile’s catalog when its agent opens', () =>
+      Effect.gen(function* () {
+        const { world, projectId, agent, birth } = yield* ProtocolWorld;
+        const report = yield* agent('reseated');
+        const threadId = yield* birth();
+        const db = Context.get(world.runtime.graph, MachineStore).db;
+        const units = Context.get(world.runtime.graph, MachineUnits);
+        yield* units.write('testing.staleCatalog', (unit) =>
+          unit.run(
+            db
+              .update(thread())
+              .set({ capabilities: sql`json_set(${thread().capabilities}, '$.toolCatalog', 'turn')` as never })
+              .where(eq(thread().id, threadId)),
+          ),
+        );
+        const catalog = Effect.map(
+          units.read((unit) =>
+            unit.run(db.select({ capabilities: thread().capabilities }).from(thread()).where(eq(thread().id, threadId)).get()),
+          ),
+          (row) => row?.capabilities.toolCatalog,
+        );
+        expect(yield* catalog).toBe('turn');
+        yield* turnsOf(world.runtime.owners).send(threadId, projectId, 'HOLD the turn');
+        yield* until(
+          Effect.map(heard(report), (lines) => (lines.some((line) => line.method === 'session/prompt') ? true : null)),
+          'the turn reached the agent',
+          report,
+        );
+        expect(yield* catalog).toBeUndefined();
       }),
     );
 

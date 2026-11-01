@@ -207,7 +207,7 @@
       const projectId = row.hit.project?.id ?? project?.id;
       if (projectId === undefined) return;
       void shell.openThread({ projectId, threadId: row.hit.threadId }, sideways ? 'beside' : 'main');
-    } else if (row.kind === 'block') void router.goto(addresses.block(row.hit.name, { project: where }));
+    } else if (row.kind === 'block') void router.goto(addresses.block(row.hit.identity, { project: where }));
     else if (row.kind === 'commit') void router.goto(addresses.commit(row.commit.sha, where));
     else void router.goto(settingsHref(router, sections.sectionOf(row.entry), landingScope(row.entry), row.entry.id));
   }

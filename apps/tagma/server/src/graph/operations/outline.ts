@@ -22,7 +22,8 @@ import { lawPricing } from './start.js';
 import { vocabularyOf } from '../vocabulary/served.js';
 import { farEndOf, farStates } from '../acts/far.js';
 import { farKey } from '../contract/wire/far.js';
-import { blockName } from '../contract/wire/references.js';
+import { addressed, blockAddress, blockIdentity, blockName } from '../contract/wire/references.js';
+import { GateRefusal } from '../../platform/contract/wire/refusal.js';
 import { LIFECYCLE } from '../contract/wire/tags/lifecycle.js';
 import { deliveryOf, FINDING_UNHEARD, reachesNobody } from '../contract/wire/tags/law.js';
 
@@ -52,9 +53,20 @@ export const OUTLINE_PAIRS = {
   list_trash: pair(
     OPS.list_trash,
     body(OPS.list_trash, {
-      execute: Effect.fnUntraced(function* () {
+      execute: Effect.fnUntraced(function* (input: In<'list_trash'>) {
         const call = yield* yield* GraphCall;
-        const blocks = (yield* (yield* Trash).roots(call.project.id)).map(wireBlock);
+        let wanted: number | undefined;
+        if (input.name !== undefined) {
+          const address = blockAddress(input.name);
+          if (address.projectId !== null && address.projectId !== call.project.id) {
+            return yield* new GateRefusal('place-mismatch', 'the requested block names another project', [
+              'list the trash of the named project',
+            ]);
+          }
+          wanted = yield* (yield* BlockNames).idOfName(addressed(call.project.id, address.name));
+        }
+        const rows = yield* (yield* Trash).roots(call.project.id, wanted === undefined ? undefined : [wanted]);
+        const blocks = rows.filter((row) => wanted === undefined || row.id === wanted).map(wireBlock);
         return { status: 'ok' as const, blocks };
       }),
     }),
@@ -67,28 +79,45 @@ export const OUTLINE_PAIRS = {
         const call = yield* yield* GraphCall;
         const names = yield* BlockNames;
         const graphEdges = yield* Edges;
-        const edges = yield* Effect.forEach(yield* graphEdges.of(call.project.id), (row) =>
-          Effect.gen(function* () {
-            return {
-              fromName: yield* names.nameOf(row.fromId),
-              toName: yield* names.nameOf(row.toId),
-              kind: row.kind,
-              createdBySessionId: row.createdBySessionId,
-              createdAt: row.createdAt.toISOString(),
-            };
-          }),
-        );
+        const near = yield* graphEdges.of(call.project.id);
         const far = yield* graphEdges.farOf(call.project.id);
+        const identities = yield* names.identitiesOf([
+          ...new Set([...near.flatMap((row) => [row.fromId, row.toId]), ...far.map((row) => row.fromId)]),
+        ]);
+        const edges = [];
+        for (const row of near) {
+          const from = identities.get(row.fromId);
+          const to = identities.get(row.toId);
+          if (from === undefined) return yield* Effect.die(`no block ${row.fromId} to name`);
+          if (to === undefined) return yield* Effect.die(`no block ${row.toId} to name`);
+          edges.push({
+            fromName: blockName(from),
+            toName: blockName(to),
+            fromIdentity: from,
+            toIdentity: to,
+            fromRowKey: row.fromId,
+            toRowKey: row.toId,
+            kind: row.kind,
+            createdBySessionId: row.createdBySessionId,
+            createdAt: row.createdAt.toISOString(),
+          });
+        }
         const states = yield* farStates(far, LIFECYCLE);
-        const farNames = yield* names.namesOf(far.map((row) => row.fromId));
-        const farRows = far.map((row) => ({
-          fromName: farNames.get(row.fromId) ?? '',
-          toName: blockName(row.uuid),
-          kind: row.kind,
-          createdBySessionId: row.createdBySessionId,
-          createdAt: row.createdAt.toISOString(),
-          graph: farEndOf(row, states.get(farKey(row)) ?? { kind: 'absent', reason: 'project', detail: null }),
-        }));
+        const farRows = far.map((row) => {
+          const from = identities.get(row.fromId);
+          return {
+            fromName: from === undefined ? '' : blockName(from),
+            toName: blockName(row.uuid),
+            fromIdentity: from ?? null,
+            toIdentity: blockIdentity(row.uuid),
+            fromRowKey: row.fromId,
+            toRowKey: null,
+            kind: row.kind,
+            createdBySessionId: row.createdBySessionId,
+            createdAt: row.createdAt.toISOString(),
+            graph: farEndOf(row, states.get(farKey(row)) ?? { kind: 'absent', reason: 'project', detail: null }),
+          };
+        });
         return { status: 'ok' as const, edges: [...edges, ...farRows] };
       }),
     }),

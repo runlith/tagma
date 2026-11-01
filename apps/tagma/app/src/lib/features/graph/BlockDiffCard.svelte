@@ -4,14 +4,13 @@
   import type { Block } from '@tagma/server/graph/contract/wire/rows';
   import { BlockTitles } from '$lib/features/graph/BlockTitles.svelte.js';
   import { CommitLinks } from '$lib/features/checkout/CommitLinks.svelte.js';
-  import type { GraphLens } from '$lib/features/workspace/GraphDoor.js';
   import BlockName from '$lib/features/graph/BlockName.svelte';
   import TagIcon from '$lib/features/graph/TagIcon.svelte';
   import MarkdownBody from '$lib/features/graph/MarkdownBody.svelte';
   import { CHANGE_TONE, MARK_LABEL, MARK_SIGN, MARK_TEXT } from '$lib/features/graph/diff.js';
   import { statusLabel, statusText } from '$lib/features/graph/status.js';
   import { TagCatalog } from '$lib/features/graph/TagCatalog.svelte.js';
-  import { GraphRung } from '$lib/features/workspace/GraphRung.js';
+  import { GraphRung, type GraphAim } from '$lib/features/workspace/GraphRung.js';
   import { Workspace } from '$lib/features/workspace/Selection.svelte.js';
   import { cn } from '$lib/shared/utils.js';
   import FadeText from '$lib/shared/FadeText.svelte';
@@ -23,7 +22,7 @@
     marks = [],
     blocks = [],
     there,
-  }: { diff: BlockDiff; body?: string; marks?: readonly BlockMark[]; blocks?: readonly Block[]; there?: GraphLens } = $props();
+  }: { diff: BlockDiff; body?: string; marks?: readonly BlockMark[]; blocks?: readonly Block[]; there?: GraphAim } = $props();
 
   const blockTitles = BlockTitles.use();
   const commitLinks = CommitLinks.use();
@@ -31,11 +30,11 @@
   const aim = GraphRung.Current.use();
   const workspace = Workspace.use();
   const addresses = Addresses.use();
-  const project = $derived(there?.project ?? workspace.find(aim.projectId)?.name ?? null);
-  const branch = $derived(there === undefined ? aim.branch : (there.branch ?? null));
+  const project = $derived(workspace.find((there ?? aim).projectId)?.name ?? null);
+  const branch = $derived((there ?? aim).branch);
   const hrefOf = (name: string): string | undefined => (project === null ? undefined : addresses.block(name, { project, branch }));
 
-  const rows = $derived(new Map(blocks.map((row) => [row.name, row])));
+  const rows = $derived(new Map(blocks.map((row) => [row.identity, row])));
   const text = $derived(diff.body ?? body);
   const facts = $derived(diff.title !== null || diff.status !== null || diff.tag !== null || diff.changes.length > 0 || marks.length > 0);
   const silent = $derived(!facts && !diff.bodyUnknown && !text.trim());
@@ -96,11 +95,11 @@
             {tone === 'add' ? '+' : tone === 'remove' ? '−' : '·'}
           </span>
           <FadeText class="min-w-0 flex-1 text-muted-foreground" text={change.label} />
-          {#if change.peerName !== null}
-            {@const peer = rows.get(change.peerName)}
+          {#if change.peerName !== null && change.peerIdentity !== null}
+            {@const peer = rows.get(change.peerIdentity)}
             <a
-              href={hrefOf(change.peerName)}
-              data-block={change.peerName}
+              href={hrefOf(change.peerIdentity)}
+              data-block={change.peerIdentity}
               class="max-w-56 min-w-0 shrink text-muted-foreground transition-colors hover:text-foreground"
             >
               {#if peer?.title.trim()}<FadeText text={peer.title.trim()} />{:else}<BlockName name={change.peerName} />{/if}
@@ -109,12 +108,12 @@
         </div>
       {/each}
 
-      {#each marks as mark (mark.blockName)}
-        {@const row = rows.get(mark.blockName)}
+      {#each marks as mark (mark.identity)}
+        {@const row = rows.get(mark.identity)}
         <Tooltip text={MARK_LABEL[mark.mark]} class="block min-w-0">
           <a
-            href={hrefOf(mark.blockName)}
-            data-block={mark.blockName}
+            href={hrefOf(mark.identity)}
+            data-block={mark.identity}
             class="-mx-1.5 flex items-center gap-2 rounded-md px-1.5 py-1 transition-colors hover:bg-hover"
           >
             <span class={cn('stamp w-3 shrink-0 text-center', MARK_TEXT[mark.mark])}>{MARK_SIGN[mark.mark] || '·'}</span>

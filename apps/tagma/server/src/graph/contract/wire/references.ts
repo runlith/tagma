@@ -4,6 +4,15 @@ import { SPOKEN_LENGTH, spokenId } from '../../../platform/contract/wire/ids.js'
 import { GateRefusal } from '../../../platform/contract/wire/refusal.js';
 
 export const BlockName = Schema.String.annotate(handle());
+export const BlockIdentity = Schema.String.check(Schema.isPattern(/^[0-9a-f]{32}$/u)).annotate({
+  description: 'The block’s full identity, scoped to its graph copy.',
+});
+export const blockReferenceSchema = Schema.Struct({ name: BlockName, identity: BlockIdentity });
+export type BlockReference = typeof blockReferenceSchema.Type;
+
+export function blockIdentity(uuid: string): string {
+  return uuid.replaceAll('-', '').toLowerCase();
+}
 
 const BLOCK_REF_SOURCE = String.raw`\[\[((?:[1-9][0-9]*/)?[0-9a-fA-F]{${SPOKEN_LENGTH},32})(?:\|([^\]\n]+))?\]\]`;
 export const BLOCK_REF = new RegExp(BLOCK_REF_SOURCE, 'g');

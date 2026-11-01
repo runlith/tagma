@@ -255,7 +255,7 @@ export class PaletteModel {
     if (group === 'threads') return this.threadShape();
     if (group === 'blocks') {
       const feed = this.blocks;
-      const rows = feed.rows.map((hit): Row => ({ kind: 'block', value: `block:${hit.name}`, hit }));
+      const rows = feed.rows.map((hit): Row => ({ kind: 'block', value: `block:${hit.identity}`, hit }));
       return {
         rows,
         total: feed.total,

@@ -59,8 +59,22 @@ layer(demoGraphLayer({ repos: ['alpha', 'beta'] }).pipe(Layer.provideMerge(BunFi
               );
             expect(pool.held().map((copy) => copy.treeRoot)).toEqual([current.layout.treeRoot]);
             expect(yield* read([blockName(mainUuid), blockName(branchUuid), 'ffffffff'])).toEqual([
-              { name: blockName(mainUuid), title: 'Main reference', projectId: beta.id, branch: null },
-              { name: blockName(branchUuid), title: 'Branch reference', projectId: beta.id, branch: 'subject' },
+              {
+                name: blockName(mainUuid),
+                shortName: blockName(mainUuid),
+                identity: mainUuid.replaceAll('-', ''),
+                title: 'Main reference',
+                projectId: beta.id,
+                branch: null,
+              },
+              {
+                name: blockName(branchUuid),
+                shortName: blockName(branchUuid),
+                identity: branchUuid.replaceAll('-', ''),
+                title: 'Branch reference',
+                projectId: beta.id,
+                branch: 'subject',
+              },
             ]);
             expect(pool.held().map((copy) => copy.treeRoot)).toEqual([current.layout.treeRoot]);
           }),

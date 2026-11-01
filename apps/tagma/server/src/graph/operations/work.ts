@@ -340,6 +340,7 @@ const WORK_ROUTED = {
           overview: lines.join('\n'),
           ops: result.ops,
           ids: result.ids,
+          identities: result.identities,
           specs: specAnswers(result.specs ?? []),
           crowded: result.crowded,
           start,
@@ -352,6 +353,7 @@ const WORK_ROUTED = {
       readonly overview: string;
       readonly ops: OpOutcome[];
       readonly ids: Record<string, string>;
+      readonly identities: Record<string, string>;
       readonly specs: readonly IdleSpecAnswer[] | undefined;
       readonly crowded: readonly Crowded[] | undefined;
       readonly start: StartPrice | undefined;
@@ -359,6 +361,7 @@ const WORK_ROUTED = {
       status: applied.status,
       overview: applied.overview,
       ids: applied.ids,
+      identities: applied.identities,
       specs: applied.specs,
       crowded: applied.crowded,
       start: applied.start,

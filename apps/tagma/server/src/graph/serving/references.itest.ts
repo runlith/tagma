@@ -48,8 +48,8 @@ layer(demoGraphLayer({ repos: ['beta'] }).pipe(Layer.provideMerge(BunFileSystem.
             const read = (names: readonly string[]) =>
               Effect.provide(onGraph(current)(titlesAcross(names)), routed).pipe(Effect.map((answer) => answer.titles));
             expect(yield* read([short, full])).toEqual([
-              { name: short, title: 'Foreign reference', projectId: beta.id, branch: null },
-              { name: full, title: 'Foreign reference', projectId: beta.id, branch: null },
+              { name: short, shortName: short, identity: full, title: 'Foreign reference', projectId: beta.id, branch: null },
+              { name: full, shortName: short, identity: full, title: 'Foreign reference', projectId: beta.id, branch: null },
             ]);
             const global = (yield* graph.projects.global())!;
             const canonical = yield* pool.resolve({ projectId: global.id });
@@ -66,9 +66,13 @@ layer(demoGraphLayer({ repos: ['beta'] }).pipe(Layer.provideMerge(BunFileSystem.
             const refused = yield* Effect.result(read([short]));
             expect(refused._tag).toBe('Failure');
             if (refused._tag === 'Failure') expect(refused.failure).toMatchObject({ code: 'ambiguous-name' });
-            expect(yield* read([full])).toEqual([{ name: full, title: 'Foreign reference', projectId: beta.id, branch: null }]);
+            expect(yield* read([full])).toEqual([
+              { name: full, shortName: short, identity: full, title: 'Foreign reference', projectId: beta.id, branch: null },
+            ]);
             const addressed = `${beta.id}/${short}`;
-            expect(yield* read([addressed])).toEqual([{ name: addressed, title: 'Foreign reference', projectId: beta.id, branch: null }]);
+            expect(yield* read([addressed])).toEqual([
+              { name: addressed, shortName: short, identity: full, title: 'Foreign reference', projectId: beta.id, branch: null },
+            ]);
 
             const worktree = yield* fixture.directory('branch-copy');
             yield* runGit(graph.git, 'worktree', ['worktree', 'add', '-b', 'subject', worktree], { cwd: beta.root });
@@ -86,7 +90,16 @@ layer(demoGraphLayer({ repos: ['beta'] }).pipe(Layer.provideMerge(BunFileSystem.
               ),
             ).pipe(Effect.provide(branch.context));
             const name = blockName(born.uuid);
-            expect(yield* read([name])).toEqual([{ name, title: 'Branch reference', projectId: beta.id, branch: 'subject' }]);
+            expect(yield* read([name])).toEqual([
+              {
+                name,
+                shortName: name,
+                identity: born.uuid.replaceAll('-', ''),
+                title: 'Branch reference',
+                projectId: beta.id,
+                branch: 'subject',
+              },
+            ]);
             yield* signed(
               globalBlocks.create({
                 projectId: global.id,

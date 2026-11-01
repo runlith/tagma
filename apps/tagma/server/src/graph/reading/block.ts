@@ -14,7 +14,7 @@ import { selectionOf } from '../contract/wire/tags/selection.js';
 import { OBSERVATION } from '../contract/wire/tags/observation.js';
 import type { BlockQuery } from '../contract/wire/query.js';
 import { readField } from '../vocabulary/declarationRules.js';
-import { blockName, blockRefTargets } from '../contract/wire/references.js';
+import { blockIdentity, blockName, blockRefTargets, type BlockReference } from '../contract/wire/references.js';
 import { GateRefusal } from '../../platform/contract/wire/refusal.js';
 import { readsOf } from '../acts/reads.js';
 import { GraphUnits } from '../../platform/contract/service/units.js';
@@ -221,6 +221,7 @@ export const blockReadsLayer: Layer.Layer<
       }
 
       const refsOut = new Map<number, string[]>();
+      const refsOutDetails = new Map<number, BlockReference[]>();
       const indexed = new Map<number, string[]>();
       const refTarget = aliasedTable(block, 'readRefTarget');
       for (const item of yield* db
@@ -231,6 +232,9 @@ export const blockReadsLayer: Layer.Layer<
         const grouped = refsOut.get(item.blockId) ?? [];
         grouped.push(blockName(item.uuid));
         refsOut.set(item.blockId, grouped);
+        const details = refsOutDetails.get(item.blockId) ?? [];
+        details.push({ name: blockName(item.uuid), identity: blockIdentity(item.uuid) });
+        refsOutDetails.set(item.blockId, details);
         const compact = indexed.get(item.blockId) ?? [];
         compact.push(item.uuid.replaceAll('-', ''));
         indexed.set(item.blockId, compact);
@@ -249,16 +253,21 @@ export const blockReadsLayer: Layer.Layer<
         const far = yield* elsewhereNames(db, projects, readProject, crossable(here));
         for (const [id, names] of written) {
           const reached: string[] = [];
+          const details = refsOutDetails.get(id) ?? [];
           const elsewhere: RefElsewhere[] = [];
           const absent: string[] = [];
           for (const name of names) {
             const found = far.found.get(name);
             if (found !== undefined) {
               reached.push(found.ref.name);
+              details.push({ name: found.ref.name, identity: found.ref.identity });
               if (!found.global) elsewhere.push(found.ref);
             } else if (here.get(name)?.kind === 'absent' && far.settled.has(name)) absent.push(name);
           }
-          if (reached.length > 0) refsOut.set(id, [...(refsOut.get(id) ?? []), ...reached]);
+          if (reached.length > 0) {
+            refsOut.set(id, [...(refsOut.get(id) ?? []), ...reached]);
+            refsOutDetails.set(id, details);
+          }
           if (elsewhere.length > 0) refsElsewhere.set(id, elsewhere);
           if (absent.length > 0) refsAbsent.set(id, absent);
         }
@@ -266,11 +275,17 @@ export const blockReadsLayer: Layer.Layer<
 
       const refsIn = new Map<number, string[]>();
       const restingRefs = new Map<number, string[]>();
+      const refsInDetails = new Map<number, BlockReference[]>();
+      const restingRefDetails = new Map<number, BlockReference[]>();
       for (const item of refRows) {
         const into = resting.has(item.farId) ? restingRefs : refsIn;
         const grouped = into.get(item.blockId) ?? [];
         grouped.push(blockName(item.uuid));
         into.set(item.blockId, grouped);
+        const detailInto = resting.has(item.farId) ? restingRefDetails : refsInDetails;
+        const details = detailInto.get(item.blockId) ?? [];
+        details.push({ name: blockName(item.uuid), identity: blockIdentity(item.uuid) });
+        detailInto.set(item.blockId, details);
       }
 
       const project = Effect.fnUntraced(function* (row: (typeof measured)[number], remainingDepth: number): Effect.fn.Return<BlockDetail> {
@@ -300,10 +315,16 @@ export const blockReadsLayer: Layer.Layer<
           edgesIn: [...(edgesIn.get(row.id) ?? [])],
           edgesInUnread: byUuid.has(row.uuid) ? edgesInUnread : [],
           refsOut: refsOut.get(row.id) ?? [],
+          refsOutDetails: refsOutDetails.get(row.id) ?? [],
           refsElsewhere: refsElsewhere.get(row.id) ?? [],
           refsAbsent: refsAbsent.get(row.id) ?? [],
           refsIn: refsIn.get(row.id) ?? [],
-          restingIn: { edges: restingEdges.get(row.id) ?? [], refs: restingRefs.get(row.id) ?? [] },
+          refsInDetails: refsInDetails.get(row.id) ?? [],
+          restingIn: {
+            edges: restingEdges.get(row.id) ?? [],
+            refs: restingRefs.get(row.id) ?? [],
+            refsDetails: restingRefDetails.get(row.id) ?? [],
+          },
         };
       });
 

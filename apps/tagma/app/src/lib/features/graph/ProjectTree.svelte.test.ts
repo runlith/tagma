@@ -29,10 +29,19 @@ const EARLIER = '2026-09-05T00:00:00Z';
 const NOW = '2026-09-05T01:00:00Z';
 const LATER = '2026-09-05T02:00:00Z';
 
+const identityOf = (name: string) =>
+  [...name]
+    .reduce((key, char) => (key * 31 + char.charCodeAt(0)) >>> 0, 0)
+    .toString(16)
+    .padStart(32, '0');
+
 const block = (name: string, over: Partial<TreeBlock> = {}): TreeBlock => ({
   name,
+  identity: identityOf(name),
+  rowKey: [...name].reduce((key, char) => (key * 31 + char.charCodeAt(0)) >>> 0, 0),
   projectId: 1,
   parentName: null,
+  parentIdentity: over.parentName == null ? null : identityOf(over.parentName),
   ord: 0,
   tags: ['task'],
   fields: { status: 'open' },
@@ -59,6 +68,7 @@ const change = (over: Partial<Extract<GraphFrame, { type: 'change' }>> = {}): Gr
   edges: [],
   refs: [],
   ready: [],
+  readyIdentities: [],
   trash: [],
   ...over,
 });
@@ -155,10 +165,10 @@ test('a resync reads the whole graph again: the rows, the frontier, the trash ro
   world.send({ type: 'resync' });
 
   await waitUntil(() => world.tree.loaded);
-  expect([...world.tree.blocks.keys()].sort()).toEqual(['first', 'root', 'second']);
-  expect(world.tree.children('root')).toEqual(['first', 'second']);
-  expect(world.tree.rootName).toBe('root');
-  expect([...world.tree.readyNames]).toEqual(['first']);
+  expect([...world.tree.blocks.keys()].sort()).toEqual(['first', 'root', 'second'].map(identityOf).sort());
+  expect(world.tree.children('root')).toEqual(['first', 'second'].map(identityOf));
+  expect(world.tree.rootName).toBe(identityOf('root'));
+  expect([...world.tree.readyNames]).toEqual([identityOf('first')]);
   expect(world.tree.trashRoots.map((row) => row.name)).toEqual(['dropped']);
   expect(world.failures).toEqual([]);
 });
@@ -171,7 +181,7 @@ test('a resync gathers every ready page before replacing the frontier', async ()
   world.send({ type: 'resync' });
   await waitUntil(() => world.tree.loaded);
   expect(world.tree.readyNames.size).toBe(101);
-  expect(world.tree.readyNames.has('task-100')).toBe(true);
+  expect(world.tree.readyNames.has(identityOf('task-100'))).toBe(true);
   expect(world.failures).toEqual([]);
 });
 
@@ -215,9 +225,54 @@ test('a change replaces the frontier, the trash and the sibling order only where
     }),
   );
 
-  expect([...world.tree.readyNames]).toEqual(['second']);
-  expect(world.tree.children('root')).toEqual(['second', 'first']);
+  expect([...world.tree.readyNames]).toEqual([identityOf('second')]);
+  expect(world.tree.children('root')).toEqual(['second', 'first'].map(identityOf));
   expect(world.tree.trashRoots.map((row) => row.name)).toEqual(['shelf', 'loose']);
+});
+
+test('a departure removes every former subtree identity, and restoring the renamed rows keeps their membership', async () => {
+  const parent = block('same-tail', {
+    identity: identityOf('old-parent'),
+    rowKey: 10,
+    parentName: 'root',
+    parentIdentity: identityOf('root'),
+  });
+  const child = block('child', {
+    identity: identityOf('old-child'),
+    rowKey: 11,
+    parentName: 'same-tail',
+    parentIdentity: identityOf('old-parent'),
+  });
+  const world = stand({ tree: [block('root'), parent, child] });
+  world.send({ type: 'resync' });
+  await waitUntil(() => world.tree.loaded);
+  expect(world.tree.children(identityOf('old-parent'))).toEqual([identityOf('old-child')]);
+
+  const trashedParent = { ...parent, identity: identityOf('new-parent'), deletedAt: LATER, updatedAt: LATER };
+  const trashedChild = {
+    ...child,
+    identity: identityOf('new-child'),
+    parentIdentity: identityOf('new-parent'),
+    deletedAt: LATER,
+    updatedAt: LATER,
+  };
+  world.send(change({ blocks: [trashedParent, trashedChild], trash: [trashedParent] }));
+  expect(world.tree.block(identityOf('old-parent'))).toBeUndefined();
+  expect(world.tree.block(identityOf('old-child'))).toBeUndefined();
+  expect(world.tree.trash(identityOf('new-parent'))?.rowKey).toBe(parent.rowKey);
+
+  world.send(
+    change({
+      blocks: [
+        { ...trashedParent, deletedAt: null },
+        { ...trashedChild, deletedAt: null },
+      ],
+    }),
+  );
+  expect(world.tree.block(identityOf('old-parent'))).toBeUndefined();
+  expect(world.tree.block(identityOf('new-parent'))?.rowKey).toBe(parent.rowKey);
+  expect(world.tree.children(identityOf('new-parent'))).toEqual([identityOf('new-child')]);
+  expect(world.tree.trashRoots).toEqual([]);
 });
 
 test('a commit landing while the whole-project read is in flight survives it', async () => {
@@ -230,13 +285,19 @@ test('a commit landing while the whole-project read is in flight survives it', a
   world.send({ type: 'resync' });
   await server.asked?.promise;
 
-  world.send(change({ blocks: [block('landed', { parentName: 'root', updatedAt: LATER })], ready: ['landed'] }));
+  world.send(
+    change({
+      blocks: [block('landed', { parentName: 'root', updatedAt: LATER })],
+      ready: ['landed'],
+      readyIdentities: [identityOf('landed')],
+    }),
+  );
   expect(world.tree.block('landed')).toBeUndefined();
 
   server.gate?.resolve();
 
   await waitUntil(() => world.tree.block('landed')?.name === 'landed');
-  expect([...world.tree.readyNames]).toEqual(['landed']);
-  expect(world.tree.rootName).toBe('root');
+  expect([...world.tree.readyNames]).toEqual([identityOf('landed')]);
+  expect(world.tree.rootName).toBe(identityOf('root'));
   expect(world.failures).toEqual([]);
 });

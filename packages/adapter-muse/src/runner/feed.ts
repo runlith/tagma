@@ -1,8 +1,10 @@
 import { Clock, Deferred, Effect, Result, Schema, type Scope } from 'effect';
+import { AgentFault, FAULT } from '@runlith/acp/agent';
 import type { ToolCall } from '@runlith/acp/toolCalls';
+import type { AgentPhase } from '@runlith/agent/AgentPhase';
 import type { TransportFailure } from '@runlith/agent/transcript/entries';
 import { familyRetries, type WireFailureFamily } from '@runlith/llm/schema/errors';
-import { SERVED } from '@runlith/hosted-runner/bridge';
+import { SERVED, type Dispatched } from '@runlith/hosted-runner/bridge';
 import type { ClientOutcome } from '@runlith/hosted-runner/client';
 import type { Output } from '@runlith/hosted-runner/output';
 import { MEASURED, RETRYING } from '@runlith/hosted-runner/wire/extensions';
@@ -82,9 +84,9 @@ export const spentOf = (usage: Tokens) => ({
   thoughtTokens: usage.reasoningTokens,
 });
 
-type Spent = ReturnType<typeof spentOf>;
+export type Spent = ReturnType<typeof spentOf>;
 
-const remainderOf = (whole: Spent, parts: Spent): Spent | undefined => {
+const remainderOf = (whole: Spent, parts: Spent): Spent | 'negative' | undefined => {
   const left = {
     inputTokens: whole.inputTokens - parts.inputTokens,
     outputTokens: whole.outputTokens - parts.outputTokens,
@@ -94,7 +96,8 @@ const remainderOf = (whole: Spent, parts: Spent): Spent | undefined => {
     thoughtTokens: whole.thoughtTokens - parts.thoughtTokens,
   };
   const values = Object.values(left);
-  return values.some((value) => value < 0) || values.every((value) => value === 0) ? undefined : left;
+  if (values.some((value) => value < 0)) return 'negative';
+  return values.every((value) => value === 0) ? undefined : left;
 };
 
 type FeedPorts = {
@@ -107,14 +110,17 @@ type FeedPorts = {
   readonly window: () => number | null;
   readonly measured: (window: number) => void;
   readonly permitted: (call: ToolCall) => Effect.Effect<string | null>;
+  readonly callOf: (tool: string, input: unknown) => Dispatched;
   readonly stderr: (text: string) => void;
   readonly began: Effect.Effect<void>;
   readonly abandon: Effect.Effect<void>;
+  readonly pricedBefore: number | null;
+  readonly priced: (usd: number) => Effect.Effect<void>;
 };
 
-const NOTHING: Spent = spentOf({ inputTokens: 0, outputTokens: 0, cachedTokens: 0, reasoningTokens: 0 });
+export const NOTHING: Spent = spentOf({ inputTokens: 0, outputTokens: 0, cachedTokens: 0, reasoningTokens: 0 });
 
-const sum = (a: Spent, b: Spent): Spent => ({
+export const sum = (a: Spent, b: Spent): Spent => ({
   inputTokens: a.inputTokens + b.inputTokens,
   outputTokens: a.outputTokens + b.outputTokens,
   totalTokens: a.totalTokens + b.totalTokens,
@@ -125,21 +131,31 @@ const sum = (a: Spent, b: Spent): Spent => ({
 
 const SEVERITY: Readonly<Record<string, number>> = { completed: 0, cancelled: 1 };
 
+const doubtedOf = (command: string, reason: string) =>
+  new AgentFault({ code: FAULT.internal, message: `Muse Code may hold the words of ${command}, but cannot show it: ${reason}` });
+
 export class Feed {
   started = false;
   readonly unread = new Set<string>();
+  readonly doubted = new Set<string>();
   private step = 0;
+  private settling = false;
+  private failure: string | null = null;
   private closed = false;
   private attempt = 0;
   private modelStarted = false;
   private stopping = false;
   private relinquishing = false;
+  private said: AgentPhase['phase'] | null = null;
+  private latest: string | null = null;
+  private priced: { readonly usd: number; readonly partial: boolean } | null = null;
   private last: TurnCompleted | null = null;
   private whole: Spent = NOTHING;
   private readonly owned: Set<string>;
   private readonly open: Set<string>;
-  private readonly reading = new Map<string, Deferred.Deferred<boolean>>();
+  private readonly reading = new Map<string, Deferred.Deferred<boolean, AgentFault>>();
   private readonly items = new Set<string>();
+  private readonly finished = new Set<string>();
   private readonly announced = new Set<string>();
   private readonly written = new Map<string, number>();
   private readonly thought = new Map<string, number[]>();
@@ -165,16 +181,20 @@ export class Feed {
     return this.owned.has(turn);
   }
 
+  get current(): string {
+    return this.latest !== null && this.open.has(this.latest) ? this.latest : this.ports.turn;
+  }
+
   readonly begin = Effect.fnUntraced(function* (this: Feed) {
     if (this.started) return;
     this.started = true;
     yield* this.ports.began;
   });
 
-  steering(command: string): Deferred.Deferred<boolean> {
+  steering(command: string): Deferred.Deferred<boolean, AgentFault> {
     this.owned.add(command);
     this.unread.add(command);
-    const read = Deferred.makeUnsafe<boolean>();
+    const read = Deferred.makeUnsafe<boolean, AgentFault>();
     this.reading.set(command, read);
     return read;
   }
@@ -208,16 +228,21 @@ export class Feed {
 
   private readonly lost = Effect.fnUntraced(function* (this: Feed, reason: string): Effect.fn.Return<void> {
     this.ports.stderr(`${reason}\n`);
-    for (const read of this.reading.values()) yield* Deferred.succeed(read, false);
+    for (const [command, read] of this.reading) {
+      this.doubted.add(command);
+      yield* Deferred.fail(read, doubtedOf(command, reason));
+    }
     this.reading.clear();
     yield* Deferred.succeed(this.done, { status: 'error', detail: reason, turn: this.ports.turn });
     yield* this.ports.abandon;
   });
 
-  private readonly undecided = Effect.fnUntraced(function* (this: Feed, turn: string, reason: string) {
+  private readonly undecided = Effect.fnUntraced(function* (this: Feed, reason: string) {
     this.ports.stderr(`${reason}\n`);
-    yield* Deferred.succeed(this.done, { status: 'error', detail: reason, turn: this.ports.turn });
-    yield* this.interrupt(turn);
+    this.failure ??= reason;
+    this.stopping = true;
+    for (const turn of this.open) yield* this.interrupt(turn);
+    yield* this.settle();
   });
 
   private readonly settle = Effect.fnUntraced(function* (this: Feed): Effect.fn.Return<void> {
@@ -230,7 +255,15 @@ export class Feed {
       yield* Effect.forkIn(this.relinquish(), this.ports.scope);
       return;
     }
-    yield* Deferred.succeed(this.done, this.outcome(last));
+    if (this.settling) return;
+    this.settling = true;
+    yield* Effect.forkIn(
+      Effect.andThen(
+        this.ports.host.drained,
+        Effect.suspend(() => Deferred.succeed(this.done, this.outcome(this.last ?? last))),
+      ),
+      this.ports.scope,
+    );
   });
 
   private readonly heard = Effect.fnUntraced(function* (this: Feed, command: string, read: boolean) {
@@ -253,12 +286,14 @@ export class Feed {
       if (this.unread.size > 0) {
         const held = reads(yield* host.request('session/read', { sessionId: session, excludeItems: false }));
         if (held === null) return yield* this.lost(`Muse Code answered session/read for ${session} in a shape Tagma cannot read`);
-        const state = held.history.snapshot?.state;
-        const said = new Set(
-          (state?.items ?? held.history.items ?? []).flatMap((item) =>
-            item.kind === 'userMessage' && item.commandId ? [item.commandId] : [],
-          ),
-        );
+        const { mode, noneReason } = held.history;
+        const state = mode === 'snapshot' || mode === 'anchoredSnapshot' ? held.history.snapshot?.state : undefined;
+        const items = state?.items ?? (mode === 'inline' ? held.history.items : null);
+        if (items === null)
+          return yield* this.lost(
+            `Muse Code served no history of ${session} (${mode}${noneReason === undefined ? '' : `: ${noneReason}`}), so what it holds of the words it accepted is unknown`,
+          );
+        const said = new Set(items.flatMap((item) => (item.kind === 'userMessage' && item.commandId ? [item.commandId] : [])));
         const running = [...(state?.activeTurn === null || state === undefined ? [] : [state.activeTurn]), ...(state?.queuedTurns ?? [])];
         for (const command of [...this.unread]) {
           const turn = running.find((ref) => ref.commandId === command || ref.turnId === command);
@@ -293,6 +328,7 @@ export class Feed {
         if (id === undefined || !this.owned.has(id)) return;
         if (id === turn) yield* this.begin();
         this.open.add(id);
+        this.latest = id;
         if (this.stopping) yield* this.interrupt(id);
         return;
       }
@@ -300,13 +336,14 @@ export class Feed {
       case 'item/updated':
       case 'item/completed': {
         const event = items(frame.params);
-        if (event === null || !this.owned.has(event.item.turnId ?? '')) return;
+        if (event === null || !this.owned.has(event.item.turnId ?? '') || this.finished.has(event.item.itemId)) return;
         this.items.add(event.item.itemId);
+        if (frame.method === 'item/completed') this.finished.add(event.item.itemId);
         return yield* this.item(event.item, frame.method === 'item/started', frame.method === 'item/completed');
       }
       case 'item/delta': {
         const delta = deltas(frame.params);
-        if (delta === null || !this.items.has(delta.itemId)) return;
+        if (delta === null || !this.items.has(delta.itemId) || this.finished.has(delta.itemId)) return;
         return yield* this.delta(delta.itemId, delta.field ?? 'text', delta.delta);
       }
       case 'session/tokenUsage': {
@@ -324,7 +361,7 @@ export class Feed {
         const retry = retries(frame.params);
         if (retry === null || !this.owned.has(retry.turnId)) return;
         this.attempt = retry.attempt;
-        yield* output.event({ type: 'phase', phase: 'retrying' });
+        yield* this.phase('retrying');
         return yield* output.event({
           type: 'notification',
           method: RETRYING,
@@ -360,15 +397,27 @@ export class Feed {
   });
 
   private outcome(ended: TurnCompleted): ClientOutcome {
-    const { turn } = this.ports;
-    const usage = this.whole === NOTHING ? undefined : remainderOf(this.whole, this.spent);
-    if (ended.terminal === 'completed') return { status: 'finished', usage, turn };
-    if (ended.terminal === 'cancelled') return { status: 'cancelled', usage, turn };
+    const { turn, stderr, pricedBefore } = this.ports;
+    const left = this.whole === NOTHING ? undefined : remainderOf(this.whole, this.spent);
+    if (left === 'negative')
+      stderr(
+        `Muse Code reported turn ${turn} spending ${JSON.stringify(this.whole)}, less than its requests measured ${JSON.stringify(this.spent)}; the request spend stands\n`,
+      );
+    const usage = left === 'negative' ? undefined : left;
+    const priced = this.priced;
+    const cost =
+      priced === null || pricedBefore === null || priced.usd < pricedBefore
+        ? undefined
+        : { amount: priced.usd - pricedBefore, currency: 'USD', basis: priced.partial ? 'estimate-partial' : 'estimate' };
+    if (this.failure !== null) return { status: 'error', usage, turn, cost, detail: this.failure };
+    if (ended.terminal === 'completed') return { status: 'finished', usage, turn, cost };
+    if (ended.terminal === 'cancelled') return { status: 'cancelled', usage, turn, cost };
     const signedOut = ended.error?.kind === 'authRequired';
     return {
       status: 'error',
       usage,
       turn,
+      cost,
       failure: failureOf(ended, this.modelStarted),
       detail: signedOut
         ? `Muse Code is not signed in: run \`${LOGIN}\`, or sign in to Muse Code on the Providers screen. ${ended.error?.message ?? ''}`.trim()
@@ -391,7 +440,7 @@ export class Feed {
         if (opened) {
           this.content();
           this.modelStarted = true;
-          yield* output.event({ type: 'phase', phase: 'reasoning' });
+          yield* this.phase('reasoning');
         }
         if (closed && this.ports.thoughts)
           for (const [part, text] of (item.summary ?? []).entries()) yield* this.delta(item.itemId, `summary.${part}`, text, true);
@@ -401,7 +450,7 @@ export class Feed {
         if (opened) {
           this.content();
           this.modelStarted = true;
-          yield* output.event({ type: 'phase', phase: 'writing' });
+          yield* this.phase('writing');
         }
         if (closed && item.text !== undefined) yield* this.delta(item.itemId, 'text', item.text, true);
         return;
@@ -421,10 +470,10 @@ export class Feed {
             content: text === '' ? undefined : [{ type: 'content', content: { type: 'text', text } }],
           },
         });
-        return yield* output.event({ type: 'phase', phase: 'calling' });
+        return yield* this.phase('calling');
       }
       case 'compaction': {
-        if (opened) return yield* output.event({ type: 'phase', phase: 'compacting' });
+        if (opened) return yield* this.phase('compacting');
         if (!closed) return;
         if (item.outcome === 'compacted')
           yield* output.event({
@@ -434,10 +483,16 @@ export class Feed {
             preTokens: item.tokensBefore,
             postTokens: item.tokensAfter,
           });
-        return yield* output.event({ type: 'phase', phase: 'calling' });
+        return yield* this.phase('calling');
       }
     }
   });
+
+  private phase(phase: AgentPhase['phase']) {
+    if (this.said === phase) return Effect.void;
+    this.said = phase;
+    return this.ports.output.event({ type: 'phase', phase });
+  }
 
   private readonly delta = Effect.fnUntraced(function* (this: Feed, itemId: string, field: string, text: string, whole = false) {
     const { output } = this.ports;
@@ -465,6 +520,11 @@ export class Feed {
     const spent = spentOf(usage.usage);
     this.spent = sum(this.spent, spent);
     this.modelStarted = true;
+    const cost = usage.cumulative?.cost;
+    if (cost !== undefined) {
+      this.priced = cost;
+      yield* this.ports.priced(cost.usd);
+    }
     yield* output.event({
       type: 'usage',
       update: {
@@ -488,7 +548,7 @@ export class Feed {
     });
     this.attempt = 0;
     this.closed = true;
-    return yield* output.event({ type: 'phase', phase: 'calling' });
+    return yield* this.phase('calling');
   });
 
   private readonly announce = Effect.fnUntraced(function* (this: Feed, id: string, tool: string, args: string | undefined) {
@@ -497,19 +557,19 @@ export class Feed {
     const { output } = this.ports;
     const hosted = tool.startsWith(SERVED);
     const web = tool === 'web_search' || tool === 'web_fetch' ? WEB[tool] : undefined;
-    const name = hosted ? tool.slice(SERVED.length) : (web ?? tool);
+    const call = hosted ? this.ports.callOf(tool.slice(SERVED.length), inputOf(args)) : { name: web ?? tool, input: inputOf(args) };
     this.modelStarted = true;
-    yield* output.event({ type: 'phase', phase: 'tools' });
+    yield* this.phase('tools');
     yield* output.event({
       type: 'call',
       hosted,
       call: {
         toolCallId: id,
-        title: name,
-        name,
+        title: call.name,
+        name: call.name,
         kind: web === undefined ? undefined : 'fetch',
         status: hosted || tool === 'web_fetch' ? 'pending' : 'in_progress',
-        rawInput: inputOf(args),
+        rawInput: call.input,
       },
     });
     yield* output.event({ type: 'said', said: { messageId: this.message(), toolCallIds: [id] } });
@@ -526,7 +586,7 @@ export class Feed {
     const decide = (allow: boolean) => {
       const choice = choose(allow);
       if (choice === undefined)
-        return this.undecided(asked.turnId, `Muse Code offered no ${allow ? 'allow-once' : 'refusing'} choice for ${asked.toolName}`);
+        return this.undecided(`Muse Code offered no ${allow ? 'allow-once' : 'refusing'} choice for ${asked.toolName}`);
       return host
         .command('approval/decide', {
           sessionId: asked.sessionId,
@@ -537,7 +597,7 @@ export class Feed {
         .pipe(
           Effect.asVoid,
           Effect.catchTag('MuseRefused', (refused) =>
-            this.undecided(asked.turnId, `Muse Code refused the decision on ${asked.toolName}: ${refused.message}`),
+            this.undecided(`Muse Code refused the decision on ${asked.toolName}: ${refused.message}`),
           ),
         );
     };

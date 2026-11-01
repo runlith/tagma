@@ -138,7 +138,9 @@ const joined = <Brand extends StoreBrand>(
           statement,
           changes === undefined
             ? Effect.void
-            : Effect.flatMap(db.get<{ n: number }>(sql`select changes() as n`), (row) => counted(at, changes, row?.n ?? 0)),
+            : Effect.flatMap(Effect.provideService(db.get<{ n: number }>(sql`select changes() as n`), SafeIntegers, false), (row) =>
+                counted(at, changes, row?.n ?? 0),
+              ),
         );
       }),
     guard: (statement, rows) =>
