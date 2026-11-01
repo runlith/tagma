@@ -116,6 +116,58 @@ it.live('native landing places an inherited member and a library type behind a s
   }).pipe(Effect.provide(BunFileSystem.layer)),
 );
 
+const WALKS = 'export const makeWalks = () => 1;\n';
+const PRIVATE_LANES =
+  'type ReadyJob<A> = { readonly lane: string; readonly value: A };\nexport class WorkLanes<A> {\n  first(): ReadyJob<A> | undefined {\n    return undefined;\n  }\n}\n';
+const SHAPE = [
+  'export type Some = { readonly _tag: "Some"; readonly value: { readonly kind: string } };',
+  'export const head = (_rows: unknown): Some | null => null;',
+  'export const headOf = <A>(_rows: A): Some | null => null;',
+  '',
+].join('\n');
+const SEARCH = ['declare const loose: any;', 'declare function pick(x: string): number;', 'declare function pick(x: number): string;'].join(
+  '\n',
+);
+const FEED = [
+  'import { head } from "./shape.ts";',
+  'import { makeWalks } from "./walks.ts";',
+  SEARCH,
+  'const first = head(pick(loose));',
+  'export const kind = first === null ? null : first.value.kind;',
+  'export const walks = makeWalks;',
+  '',
+].join('\n');
+
+it.live('native landing settles a receiver behind a fixed call and still refuses one behind a generic call', () =>
+  Effect.gen(function* () {
+    const { born, doors, write, read } = yield* nativeLanding(
+      { '.gitignore': 'node_modules/\n', 'walks.ts': WALKS, 'shape.ts': SHAPE, 'feed.ts': FEED },
+      { tools: ['submit_work'] },
+    );
+    const peer = yield* born();
+    const caller = yield* born();
+    yield* write(peer.threadId, 'walks.ts', WALKS + PRIVATE_LANES);
+    const grown = FEED + 'export const more = 1;\n';
+    yield* write(caller.threadId, 'feed.ts', grown);
+
+    expect(yield* doors.atNative('submit_work', { subject: 'grow the feed', paths: ['feed.ts'] }, caller)).toMatchObject({
+      class: 'answer',
+      value: { submitted: { status: 'landed', committed: ['feed.ts'] } },
+    });
+    expect(yield* read('feed.ts')).toBe(grown);
+    expect(yield* read('walks.ts')).toBe(WALKS);
+
+    const generic = grown
+      .replace('import { head }', 'import { head, headOf }')
+      .concat('const second = headOf(pick(loose));\nexport const other = second === null ? null : second.value.kind;\n');
+    yield* write(caller.threadId, 'feed.ts', generic);
+    const refused = yield* doors.atNative('submit_work', { subject: 'read through a generic', paths: ['feed.ts'] }, caller);
+    expect(refused).toMatchObject({ class: 'refusal', code: 'lines-held' });
+    if (refused.class === 'refusal') expect(refused.reason).toContain(`value in walks.ts:2, held by ${peer.threadId}`);
+    expect(yield* read('feed.ts')).toBe(grown);
+  }).pipe(Effect.provide(BunFileSystem.layer)),
+);
+
 const LIBRARY = JSON.stringify({ name: 'lib', exports: { '.': './src/server.ts', './compiler': './src/compiler.ts' } });
 const SERVER = 'export type Component = () => void;\n';
 const CLIENT = [
