@@ -140,6 +140,7 @@ const composed = Effect.fn('testing.rootPlacement')(function* (demo: EffectDemo)
       Layer.mergeAll(
         Layer.mock(ThreadHarness, {
           threads: {
+            readCut: unexpected,
             handle: unexpected,
             create: unexpected,
             duplicate: unexpected,

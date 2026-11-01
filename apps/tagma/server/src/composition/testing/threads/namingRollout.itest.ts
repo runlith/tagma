@@ -64,10 +64,10 @@ it.live(
     );
     const home = yield* Context.get(runtime, FileSystem.FileSystem).makeTempDirectoryScoped({ prefix: 'rollout-title-' });
     const path = join(home, 't-title.jsonl');
-    yield* Effect.provide(exportThreadRollout({ threadId: 't-title', path, parts: nativeOnlyParts }), runtime);
+    yield* Effect.provide(exportThreadRollout({ threadId: 't-title', path, parts: yield* nativeOnlyParts }), runtime);
     yield* Effect.provide(db.run(sql`delete from thread_log`), runtime);
     yield* Effect.provide(db.delete(threadRecord()), runtime);
-    yield* Effect.provide(replayThreadRollout({ path, parts: nativeOnlyParts, records }), runtime);
+    yield* Effect.provide(replayThreadRollout({ path, parts: yield* nativeOnlyParts, records }), runtime);
     const facet = yield* Effect.provide(recordOf(db, 't-title'), runtime);
     expect(facet === undefined ? [] : [[facet.id, facet.title, facet.titleOrigin]]).toEqual([['t-title', 'quiet harbor', 'random']]);
     yield* Context.get(runtime, FileSystem.FileSystem).writeFileString(
@@ -77,7 +77,7 @@ it.live(
     );
     yield* Effect.provide(db.run(sql`delete from thread_log`), runtime);
     yield* Effect.provide(db.delete(threadRecord()), runtime);
-    const refused = yield* Effect.exit(Effect.provide(replayThreadRollout({ path, parts: nativeOnlyParts, records }), runtime));
+    const refused = yield* Effect.exit(Effect.provide(replayThreadRollout({ path, parts: yield* nativeOnlyParts, records }), runtime));
     expect(refused._tag).toBe('Failure');
   }),
 );

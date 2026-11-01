@@ -18,13 +18,14 @@ export type ThreadKeptImage = {
   readonly height: number;
 };
 
-export interface ThreadAttachmentStorage<TWrite> {
+export interface ThreadAttachmentStorage<TTx> {
   keep(threadId: string, image: ThreadKeptImage): Effect.Effect<StoredThreadAttachment, ThreadPortFailure>;
 
   resolve(
     threadId: string,
     ownerId: string,
     refs: readonly ThreadAttachmentRef[],
+    tx?: TTx,
   ): Effect.Effect<readonly StoredThreadAttachment[], ThreadPortFailure>;
 
   addressed(threadId: string, refs: readonly ThreadAttachmentRef[]): Effect.Effect<readonly StoredThreadAttachment[], ThreadPortFailure>;

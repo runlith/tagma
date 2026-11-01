@@ -180,6 +180,8 @@ export const makeRacingThreadTransitions = Effect.gen(function* () {
     revised: offPath,
   };
   const store: ThreadAggregateStorage<undefined> = {
+    readCut: offPath,
+    openToolsOfRun: offPath,
     transaction: offPath,
     find: offPath,
     findOwned: offPath,

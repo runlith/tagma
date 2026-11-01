@@ -1,7 +1,7 @@
 import { Data, Effect } from 'effect';
 import { ThreadStorageFailed } from '@runlith/agent/thread/persisted';
 import type { StoreBrand, StoreFailure } from '../contract/service/store.js';
-import type { ProgramUnit, Units, WriteUnit } from '../contract/service/units.js';
+import type { ProgramUnit, ReadOptions, Unit, Units, WriteUnit } from '../contract/service/units.js';
 import type { WriteSet } from '../contract/service/writes.js';
 import { planned } from './programs.js';
 
@@ -27,6 +27,17 @@ export function inProgram<T, E, Brand extends StoreBrand>(
   return planned(units.program(set, identity, (unit) => Effect.mapError(work(unit), (failure) => new Carried({ failure })))).pipe(
     Effect.mapError((cause) => (cause instanceof Carried ? (cause.failure as E) : new ThreadStorageFailed({ call, cause }))),
   );
+}
+
+export function inRead<T, E, Brand extends StoreBrand>(
+  units: Units<Brand>,
+  call: string,
+  work: (unit: Unit<Brand>) => Effect.Effect<T, E>,
+  options?: ReadOptions,
+): Effect.Effect<T, E | ThreadStorageFailed> {
+  return units
+    .read((unit) => Effect.mapError(work(unit), (failure) => new Carried({ failure })), options)
+    .pipe(Effect.mapError((cause) => (cause instanceof Carried ? (cause.failure as E) : new ThreadStorageFailed({ call, cause }))));
 }
 
 export function inUnit<T, E, Brand extends StoreBrand>(

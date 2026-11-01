@@ -156,7 +156,7 @@ const floorLayer = Layer.effect(
             eventLog,
             transitions: storage.transitions,
             createRuns: (ownerId) => storage.runs({ ownerId, scope: 'scope-b' }),
-            attachments,
+            attachments: { ...attachments, resolve: (threadId, ownerId, refs) => attachments.resolve(threadId, ownerId, refs) },
             inbox: storage.inbox,
             toolOutputs: {
               scope: () => ({

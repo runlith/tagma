@@ -282,7 +282,7 @@ export interface ThreadRunStorage<TTx, TWrite extends TTx = TTx> {
   redeliverSettled(runId: string, maxAttempts: number): Effect.Effect<boolean, ThreadPortFailure>;
 
   settledRuns(input: ThreadSettledQuery): Effect.Effect<ThreadSettledPage, ThreadPortFailure>;
-  newestSettled(threadIds: readonly string[], depth: number): Effect.Effect<readonly ThreadRunRow[], ThreadPortFailure>;
+  newestSettled(threadIds: readonly string[], depth: number, tx?: TTx): Effect.Effect<readonly ThreadRunRow[], ThreadPortFailure>;
 }
 
 export class ThreadRunNotInterruptedError extends Data.TaggedError('ThreadRunNotInterrupted')<{

@@ -77,7 +77,7 @@ const setup = Effect.fnUntraced(function* () {
       runtime,
     );
     const path = join(dir, `${threadId}.jsonl`);
-    yield* Effect.provide(exportThreadRollout({ threadId, path, parts: nativeOnlyParts }), runtime);
+    yield* Effect.provide(exportThreadRollout({ threadId, path, parts: yield* nativeOnlyParts }), runtime);
     yield* Effect.provide(db.run(sql`update thread_rollout_form set step = null where thread_id = ${threadId}`), runtime);
     yield* Effect.provide(
       Effect.flatMap(threadProjection(kinds), (projection) => projection.run({ threadId, path })),
@@ -92,12 +92,12 @@ const setup = Effect.fnUntraced(function* () {
     );
   const returned = Effect.fnUntraced(function* (forms: Effect.Success<ReturnType<typeof owner>>, threadId: string, path: string) {
     expect(
-      yield* Effect.provide(evictThreadProjection({ threadId, path, parts: nativeOnlyParts, returning: true }), runtime),
+      yield* Effect.provide(evictThreadProjection({ threadId, path, parts: yield* nativeOnlyParts, returning: true }), runtime),
     ).toMatchObject({
       outcome: 'evicted',
     });
     const formed = yield* Effect.provide(Effect.result(forms.formedHere(threadId, path)), runtime);
-    if (Result.isSuccess(formed)) yield* Effect.provide(rehydrateThreadRecords({ threadId, path, parts: nativeOnlyParts }), runtime);
+    if (Result.isSuccess(formed)) yield* Effect.provide(rehydrateThreadRecords({ threadId, path, parts: yield* nativeOnlyParts }), runtime);
     return formed;
   });
   const stored = Effect.fnUntraced(function* (threadId: string) {
@@ -189,7 +189,7 @@ it.live(
     const files = Context.get(runtime, FileSystem.FileSystem);
     const path = yield* raise('t-read', 'old', join(home, String(projectId)));
     expect(
-      yield* Effect.provide(evictThreadProjection({ threadId: 't-read', path, parts: nativeOnlyParts, returning: true }), runtime),
+      yield* Effect.provide(evictThreadProjection({ threadId: 't-read', path, parts: yield* nativeOnlyParts, returning: true }), runtime),
     ).toMatchObject({ outcome: 'evicted' });
     const bytes = yield* files.readFileString(path);
     yield* Effect.provide(compressRollout(path), runtime);
@@ -213,7 +213,10 @@ it.live(
     const files = Context.get(runtime, FileSystem.FileSystem);
     const path = yield* raise('t-written', 'old');
     expect(
-      yield* Effect.provide(evictThreadProjection({ threadId: 't-written', path, parts: nativeOnlyParts, returning: true }), runtime),
+      yield* Effect.provide(
+        evictThreadProjection({ threadId: 't-written', path, parts: yield* nativeOnlyParts, returning: true }),
+        runtime,
+      ),
     ).toMatchObject({ outcome: 'evicted' });
     const forms = yield* owner();
     const written = `${JSON.stringify({

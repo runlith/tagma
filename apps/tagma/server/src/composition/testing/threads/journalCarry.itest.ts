@@ -36,7 +36,8 @@ const setup = Effect.fnUntraced(function* () {
   const fixture = yield* threadStoreFixture;
   const runtime = Context.merge(fixture.context, yield* Layer.build(BunFileSystem.layer));
   const pathOf = (_projectId: number, threadId: string) => join(home, `${threadId}.jsonl`);
-  const journal = () => Effect.provide(filedThreadJournal(rolloutWriter(pathOf, rolloutBirth(store, nativeOnlyParts))), runtime);
+  const parts = yield* nativeOnlyParts;
+  const journal = () => Effect.provide(filedThreadJournal(rolloutWriter(pathOf, rolloutBirth(store, parts))), runtime);
   const commit = (written: Journal, threadId: string, ids: readonly string[]) =>
     units.write(writes('journal-carry', [threadEvent()]), (unit) => Effect.forEach(ids, (id) => written.append(fact(threadId, id), unit)));
   const files = Context.get(runtime, FileSystem.FileSystem);
@@ -141,9 +142,10 @@ it.live(
     const id = 'interrupted';
     const written = yield* opened(id);
     const projection = yield* Effect.provide(threadProjection(ENTRY_KINDS), runtime);
+    const parts = yield* nativeOnlyParts;
     const evict = () =>
       Effect.provide(
-        evictThreadProjection({ threadId: id, path: pathOf(projectId, id), parts: nativeOnlyParts }).pipe(
+        evictThreadProjection({ threadId: id, path: pathOf(projectId, id), parts }).pipe(
           Effect.provideService(MachineStore, store),
           Effect.provideService(ThreadEntryKinds, ENTRY_KINDS),
         ),

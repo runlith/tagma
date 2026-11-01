@@ -789,7 +789,10 @@ describe('setAuthorityMode', () => {
     'a root declares bypass with its own provenance and returns that snapshot',
     Effect.fnUntraced(function* () {
       const h = yield* kernelOver();
-      expect((yield* h.aggregate.setAuthorityMode(ROOT, OWNER, 'bypass')).thread.authority).toEqual({ mode: 'bypass', bypassFrom: ROOT });
+      expect((yield* h.aggregate.setAuthorityMode(ROOT, OWNER, 'bypass', Effect.succeed)).thread.authority).toEqual({
+        mode: 'bypass',
+        bypassFrom: ROOT,
+      });
       expect((yield* h.store.find(ROOT))?.authority).toEqual({ mode: 'bypass', bypassFrom: ROOT });
     }),
   );
@@ -804,7 +807,7 @@ describe('setAuthorityMode', () => {
           tx,
         ),
       );
-      expect((yield* h.aggregate.setAuthorityMode(child.id, OWNER, 'bypass')).thread.authority).toEqual({
+      expect((yield* h.aggregate.setAuthorityMode(child.id, OWNER, 'bypass', Effect.succeed)).thread.authority).toEqual({
         mode: 'bypass',
         bypassFrom: child.id,
       });

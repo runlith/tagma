@@ -6,7 +6,7 @@ const NO_TAILS: readonly Effect.Effect<void>[] = [];
 
 export class MemoryUnitEndedError extends Data.TaggedError('MemoryUnitEnded')<{ readonly message: string }> {
   constructor() {
-    super({ message: 'A tail was queued on a write unit after it ended, from a fiber that outlived it.' });
+    super({ message: 'A memory unit was used after it ended, from a fiber that outlived it.' });
     this.name = 'MemoryUnitEndedError';
   }
 }
@@ -33,6 +33,10 @@ export class MemoryTx {
     return new Date(this.clock.currentTimeMillisUnsafe());
   }
 
+  assertOpen(): void {
+    if (this.ended) throw new MemoryUnitEndedError();
+  }
+
   afterCommit(effect: Effect.Effect<void>): Effect.Effect<void> {
     return Effect.suspend(() => {
       if (this.ended) return Effect.die(new MemoryUnitEndedError());
@@ -55,13 +59,20 @@ export class MemoryTx {
     this.changes.length = 0;
   }
 
-  committed<T>(work: () => T): T {
+  reverse(): () => void {
     const reinstate: (() => void)[] = [];
     for (let at = this.changes.length - 1; at >= 0; at -= 1) reinstate.push(this.changes[at]!());
+    return () => {
+      for (let at = reinstate.length - 1; at >= 0; at -= 1) reinstate[at]!();
+    };
+  }
+
+  committed<T>(work: () => T): T {
+    const restore = this.reverse();
     try {
       return work();
     } finally {
-      for (let at = reinstate.length - 1; at >= 0; at -= 1) reinstate[at]!();
+      restore();
     }
   }
 
@@ -128,9 +139,32 @@ export class MemoryUnits {
   private active: MemoryTx | null = null;
   private viewing = false;
   private commits = 0;
+  private readonly snapshots = new Map<MemoryTx, number>();
+  private readonly retained: { readonly revision: number; readonly tx: MemoryTx }[] = [];
 
-  revision(): number {
-    return this.commits;
+  snapshot<T, E>(use: (tx: MemoryTx) => Effect.Effect<T, E>): Effect.Effect<T, E> {
+    return Effect.acquireUseRelease(
+      Effect.map(Clock.Clock, (clock) => {
+        const tx = new MemoryTx({ clock, reads: true });
+        this.snapshots.set(tx, this.commits);
+        return tx;
+      }),
+      use,
+      (tx) =>
+        Effect.sync(() => {
+          this.snapshots.delete(tx);
+          tx.end();
+          let oldest = Number.POSITIVE_INFINITY;
+          for (const revision of this.snapshots.values()) oldest = Math.min(oldest, revision);
+          const first = this.retained.findIndex((held) => held.revision > oldest);
+          this.retained.splice(0, first < 0 ? this.retained.length : first);
+        }),
+    );
+  }
+
+  revision(tx?: MemoryTx): number {
+    if (tx?.reads) tx.assertOpen();
+    return (tx === undefined ? undefined : this.snapshots.get(tx)) ?? this.commits;
   }
 
   commit<T, E>(work: (tx: MemoryTx) => Effect.Effect<T, E>, joined?: MemoryTx): Effect.Effect<T, E> {
@@ -148,7 +182,10 @@ export class MemoryUnits {
                   Effect.sync(() => {
                     tails = own.end();
                     if (Exit.isFailure(exit)) own.rollback();
-                    else if (own.changed()) this.commits += 1;
+                    else if (own.changed()) {
+                      this.commits += 1;
+                      if (this.snapshots.size > 0) this.retained.push({ revision: this.commits, tx: own });
+                    }
                     this.active = null;
                   }),
                 ),
@@ -172,6 +209,21 @@ export class MemoryUnits {
   }
 
   read<T>(tx: MemoryTx | undefined, work: () => T): T {
-    return tx !== undefined && !tx.reads ? work() : this.committed(work);
+    if (tx?.reads) tx.assertOpen();
+    const at = tx === undefined ? undefined : this.snapshots.get(tx);
+    if (at === undefined) return tx !== undefined && !tx.reads ? work() : this.committed(work);
+    return this.committed(() => {
+      const restores: (() => void)[] = [];
+      for (let index = this.retained.length - 1; index >= 0; index -= 1) {
+        const held = this.retained[index]!;
+        if (held.revision <= at) break;
+        restores.push(held.tx.reverse());
+      }
+      try {
+        return work();
+      } finally {
+        for (let index = restores.length - 1; index >= 0; index -= 1) restores[index]!();
+      }
+    });
   }
 }

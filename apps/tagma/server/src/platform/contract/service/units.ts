@@ -43,6 +43,7 @@ export class ProgramConflict extends Data.TaggedError('ProgramConflict')<{
 
 export type Unit<Brand extends StoreBrand> = {
   readonly store: StoreIdentity;
+  readonly snapshot?: true;
   run<A>(query: Effect.Effect<A, StoreFailure>): Effect.Effect<A, StoreFailure>;
   readonly [unitBrand]: (brand: Brand) => Brand;
 };

@@ -104,7 +104,7 @@ export const restartDataset = Effect.fn('restart.dataset')(
       for (const place of places) {
         const path = rollouts.pathOf(place.projectId, place.threadId);
         if (path === undefined) return yield* Effect.die(`thread ${place.threadId} has no rollout place`);
-        yield* exportThreadRollout({ threadId: place.threadId, path, parts: nativeOnlyParts }).pipe(
+        yield* exportThreadRollout({ threadId: place.threadId, path, parts: yield* nativeOnlyParts }).pipe(
           Effect.provideService(MachineStore, store),
           Effect.provideService(ThreadEntryKinds, ENTRY_KINDS),
         );

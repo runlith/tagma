@@ -904,6 +904,7 @@ const spawnWorld = Effect.fnUntraced(function* (menu?: typeof shipped) {
     Layer.succeed(
       ThreadSnapshots,
       ThreadSnapshots.of({
+        readCut: unused,
         publish: () => Effect.void,
         state: unused,
         snapshot: unused,

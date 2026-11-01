@@ -196,11 +196,13 @@ layer(storageFixture, { excludeTestServices: true })('folded tool facts', (it) =
       const files = yield* FileSystem.FileSystem;
       const directory = yield* files.makeTempDirectoryScoped({ directory: fixtureHome(), prefix: 'folded-facts-' });
       const path = join(directory, `${thread.id}.jsonl`);
-      yield* exportThreadRollout({ threadId: thread.id, path, parts: nativeOnlyParts });
+      yield* exportThreadRollout({ threadId: thread.id, path, parts: yield* nativeOnlyParts });
       const projection = yield* threadProjection(ENTRY_KINDS);
       yield* projection.run({ threadId: thread.id, path });
-      expect(yield* evictThreadProjection({ threadId: thread.id, path, parts: nativeOnlyParts })).toMatchObject({ outcome: 'evicted' });
-      yield* rehydrateThreadRecords({ threadId: thread.id, path, parts: nativeOnlyParts });
+      expect(yield* evictThreadProjection({ threadId: thread.id, path, parts: yield* nativeOnlyParts })).toMatchObject({
+        outcome: 'evicted',
+      });
+      yield* rehydrateThreadRecords({ threadId: thread.id, path, parts: yield* nativeOnlyParts });
 
       expect(yield* entriesOf(stand, thread.id)).toEqual(before);
       expect(yield* readThreadEvents(stand.events, ENTRY_KINDS, thread.id, 0, 10)).toEqual(answered);
@@ -225,7 +227,7 @@ layer(storageFixture, { excludeTestServices: true })('folded tool facts', (it) =
       const files = yield* FileSystem.FileSystem;
       const directory = yield* files.makeTempDirectoryScoped({ directory: fixtureHome(), prefix: 'folded-hole-' });
       const path = join(directory, `${thread.id}.jsonl`);
-      expect(yield* Effect.flip(exportThreadRollout({ threadId: thread.id, path, parts: nativeOnlyParts }))).toMatchObject({
+      expect(yield* Effect.flip(exportThreadRollout({ threadId: thread.id, path, parts: yield* nativeOnlyParts }))).toMatchObject({
         _tag: 'RolloutSyncRefused',
         reason: 'record-shape',
       });

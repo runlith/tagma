@@ -122,7 +122,18 @@ export const makeThreadPins = Effect.gen(function* () {
         .pipe(Effect.flatMap((changed) => (Exit.isFailure(publication) ? Effect.failCause(publication.cause) : Effect.succeed(changed))));
     });
   return ThreadPins.of({
-    read: (threadId) => Effect.sync(() => held.get(threadId) ?? empty),
+    read: (threadId, unit) =>
+      unit === undefined
+        ? Effect.sync(() => held.get(threadId) ?? empty)
+        : Effect.map(
+            unit.run(
+              db
+                .select({ app: threadViewPin.app, view: threadViewPin.view, key: threadViewPin.key })
+                .from(threadViewPin)
+                .where(eq(threadViewPin.threadId, threadId)),
+            ),
+            (pins) => pins.sort(pinOrder),
+          ),
     pin: (threadId, projectId, pin) => change(threadId, projectId, pin, true),
     unpin: (threadId, projectId, pin) => change(threadId, projectId, pin, false),
     changed: (subscriber) => {

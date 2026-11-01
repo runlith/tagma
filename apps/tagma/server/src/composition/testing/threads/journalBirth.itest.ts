@@ -49,7 +49,8 @@ const setup = Effect.fnUntraced(function* () {
     const text = yield* files.readFileString(pathOf(projectId, threadId));
     return yield* Effect.forEach(text.trim().split('\n'), (line) => Schema.decodeUnknownEffect(lineSchema)(line));
   });
-  const journal = () => Effect.provide(filedThreadJournal(rolloutWriter(pathOf, rolloutBirth(store, nativeOnlyParts))), runtime);
+  const parts = yield* nativeOnlyParts;
+  const journal = () => Effect.provide(filedThreadJournal(rolloutWriter(pathOf, rolloutBirth(store, parts))), runtime);
   const append = (opened: Effect.Success<ReturnType<typeof journal>>, threadId: string, id: string) =>
     units.write(writes('journal-birth', [threadEvent()]), (unit) => opened.append(fact(threadId, id), unit));
   const born = Effect.fnUntraced(function* (id: string) {
@@ -103,7 +104,7 @@ it.live(
     yield* Effect.provide(
       replayThreadRollout({
         path: pathOf(projectId, 'unprepared'),
-        parts: nativeOnlyParts,
+        parts: yield* nativeOnlyParts,
         records: yield* Effect.provide(makeThreadRecords, runtime),
       }).pipe(Effect.provideService(MachineStore, store), Effect.provideService(ThreadEntryKinds, ENTRY_KINDS)),
       runtime,

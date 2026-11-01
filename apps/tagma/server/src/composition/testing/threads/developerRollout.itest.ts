@@ -86,11 +86,11 @@ layer(machine)('retired agent rollout recovery', (it) => {
           { projectId: scope!.id, title: id },
         );
         const path = join(root, `${id}.jsonl`);
-        yield* exportThreadRollout({ threadId: id, path, parts: nativeOnlyParts });
-        if (hosted) yield* appendRolloutItem(path, { kind: 'meta', meta: yield* threadRolloutMeta(id, nativeOnlyParts) });
+        yield* exportThreadRollout({ threadId: id, path, parts: yield* nativeOnlyParts });
+        if (hosted) yield* appendRolloutItem(path, { kind: 'meta', meta: yield* threadRolloutMeta(id, yield* nativeOnlyParts) });
         yield* db.delete(threadRecord()).where(eq(threadRecord().id, id));
         yield* forms.formedHere(id, path);
-        yield* replayThreadRollout({ path, parts: nativeOnlyParts, records });
+        yield* replayThreadRollout({ path, parts: yield* nativeOnlyParts, records });
         expect((yield* records.facts(id))?.agentId).toBe(hosted ? 'harness' : 'tagma');
         const native = yield* db.select().from(thread()).where(eq(thread().id, id)).get();
         expect(native?.transport).toEqual(

@@ -2,7 +2,8 @@ import { Context, Effect, Layer } from 'effect';
 import type { AgentApprovalMode } from '../../agent/contracts';
 import { ApprovalModes } from '../../modes/ApprovalModes';
 import type { ThreadRow } from '../rows';
-import type { ThreadSnapshot } from '../state';
+import type { ThreadState, ThreadStateProject } from '../state';
+import type { ThreadSnapshotOf } from '../../transcript/live';
 import { ThreadCallBroke, threadCauseOf, type ThreadBorderFailed } from '../ThreadBorder';
 import { ThreadStore } from '../ThreadPorts';
 import { Questions } from './Questions';
@@ -14,7 +15,11 @@ import { bypassedAnswers } from './ToolQuestion';
 export class ThreadModes extends Context.Service<
   ThreadModes,
   {
-    move(thread: ThreadRow, mode: AgentApprovalMode): Effect.Effect<ThreadSnapshot, ThreadBorderFailed>;
+    move<T extends ThreadState>(
+      thread: ThreadRow,
+      mode: AgentApprovalMode,
+      project: ThreadStateProject<T>,
+    ): Effect.Effect<ThreadSnapshotOf<T>, ThreadBorderFailed>;
   }
 >()('@runlith/agent/ThreadModes') {}
 
@@ -28,7 +33,11 @@ export const threadModesLayer: Layer.Layer<ThreadModes, never, Questions | ModeL
       const snapshots = yield* ThreadSnapshots;
       const store = yield* ThreadStore;
       return ThreadModes.of({
-        move: Effect.fnUntraced(function* (thread, id) {
+        move: Effect.fnUntraced(function* <T extends ThreadState>(
+          thread: ThreadRow,
+          id: AgentApprovalMode,
+          project: ThreadStateProject<T>,
+        ) {
           const mode = yield* modes.get(id).pipe(Effect.mapError((cause) => new ThreadCallBroke({ cause })));
           yield* store.update(thread.id, {
             authority: { ...thread.authority, mode: mode.id, bypassFrom: mode.elevated ? thread.id : null },
@@ -48,7 +57,7 @@ export const threadModesLayer: Layer.Layer<ThreadModes, never, Questions | ModeL
             }
           }
           yield* snapshots.publish(thread.id);
-          return yield* snapshots.snapshot(thread.id);
+          return yield* snapshots.snapshot(thread.id, project);
         }),
       });
     }),

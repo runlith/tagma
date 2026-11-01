@@ -65,6 +65,7 @@ import {
   modelChanges,
   threadInboxStore,
   sqliteThreadJournal,
+  baseReach,
   threadAttachmentStore,
   approvalPreferences,
   engineStates,
@@ -201,7 +202,7 @@ export const words = Effect.fnUntraced(function* (threadId: string, text: string
     occurredAt: new Date(yield* Clock.currentTimeMillis).toISOString(),
   };
 });
-export const protocolRig = Effect.fn('testing.protocolRig')(function* (fixture: string) {
+export const protocolRig = Effect.fn('testing.protocolRig')(function* (fixture: string, readers?: number) {
   const files = yield* FileSystem.FileSystem;
   const providers = yield* ProviderRegistry;
   const accounts = yield* HarnessAccounts;
@@ -276,7 +277,7 @@ export const protocolRig = Effect.fn('testing.protocolRig')(function* (fixture: 
       Layer.provideMerge(worktreeRecordsLayer),
       Layer.provideMerge(unitsLayer(MachineUnits, MachineStore)),
       Layer.provideMerge(fixtureGraph({ sourcePath: checkout }).pipe(Layer.provideMerge(projectsLayer()))),
-      Layer.provideMerge(Layer.orDie(machineFileLayer(join(home, 'db.sqlite'), fixtureMigrations, { durable: false }, processes))),
+      Layer.provideMerge(Layer.orDie(machineFileLayer(join(home, 'db.sqlite'), fixtureMigrations, { durable: false, readers }, processes))),
       Layer.provideMerge(sessionIdentityLayer),
     ),
   );
@@ -449,7 +450,8 @@ export const protocolRig = Effect.fn('testing.protocolRig')(function* (fixture: 
           );
         }),
     };
-    const pictures = yield* threadAttachmentStore(join(world.checkout, '.pictures'));
+    const bases = yield* Effect.provideContext(baseReach, context);
+    const pictures = yield* threadAttachmentStore(join(world.checkout, '.pictures'), bases.sources);
     const kernel = yield* Effect.provideContext(threadStore(records, ENTRY_KINDS), context);
     const log = yield* Effect.provideContext(sqliteThreadJournal(), context);
     const rows = new ProtocolRows(store.db, units);
@@ -917,5 +919,7 @@ const unattendedAccounts = Layer.succeed(
   }),
 );
 
-export const protocolFixture = (fixture: string) =>
-  Layer.effect(ProtocolRig, protocolRig(fixture)).pipe(Layer.provide(Layer.mergeAll(platform, builtinRegistry, unattendedAccounts)));
+export const protocolFixture = (fixture: string, readers?: number) =>
+  Layer.effect(ProtocolRig, protocolRig(fixture, readers)).pipe(
+    Layer.provide(Layer.mergeAll(platform, builtinRegistry, unattendedAccounts)),
+  );

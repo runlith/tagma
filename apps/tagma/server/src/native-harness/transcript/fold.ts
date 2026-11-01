@@ -3,7 +3,7 @@ import type { ThreadTranscript, ThreadTranscriptEntry } from '@runlith/agent/tra
 import type { ThreadEventPayloadValue } from '@runlith/agent/thread/storage/eventLog';
 import type { ThreadTranscriptQuery } from '@runlith/agent/thread/storage/aggregate';
 import { TranscriptFold } from '@runlith/agent/transcript/TranscriptFold';
-import type { ThreadQuestionEntry } from '@runlith/agent/transcript/entries';
+import { toolSettled, type ThreadQuestionEntry, type ThreadToolEntry } from '@runlith/agent/transcript/entries';
 import { entryOf, ThreadEntryKinds } from '@runlith/agent/transcript/kinds';
 import {
   markThreadEntry,
@@ -181,6 +181,37 @@ export const makeEntryFold = Effect.fnUntraced(function* ({ reads }: { readonly 
         if (mine) fold.place(fact);
       }
       return fold.take();
+    }),
+    openToolsOfRun: Effect.fnUntraced(function* (unit: Unit<'machine'>, id: string, runId: string) {
+      const held = yield* rested(unit, id);
+      if (held !== null)
+        return (yield* held.reads.ofRun(held.transcript, runId)).filter(
+          (entry): entry is ThreadToolEntry => entryOf('tool')(entry) && !toolSettled(entry.toolState),
+        );
+      const suffix = (yield* stored.suffix(unit, id)).filter((fact) =>
+        fact.withdrawn !== undefined
+          ? fact.withdrawn.runId === runId
+          : fact.rewound !== undefined || fact.restored !== undefined
+            ? (fact.rewound?.runIds ?? fact.restored?.runIds ?? []).includes(runId)
+            : fact.entry !== undefined && entryOf('tool')(fact.entry) && fact.entry.runId === runId,
+      );
+      const rows = yield* stored.layered.rows(
+        unit,
+        id,
+        and(
+          eq(threadEntry.runId, runId),
+          eq(threadEntry.type, 'tool'),
+          sql`json_extract(${threadEntry.entry}, '$.toolState') in ('input-streaming', 'input-available')`,
+        ),
+      );
+      const seed = new Map<string, ThreadTranscriptEntry>();
+      for (const row of rows) seed.set(row.entryId, yield* storedEntry(kinds, row.entry));
+      for (const entry of yield* stored.seedFor(unit, id, suffix)) seed.set(entry.id, entry);
+      const fold = new TranscriptFold([...seed.values()]);
+      for (const fact of suffix) fold.place(fact);
+      return fold
+        .take()
+        .filter((entry): entry is ThreadToolEntry => entryOf('tool')(entry) && entry.runId === runId && !toolSettled(entry.toolState));
     }),
     openQuestionsOfRun: Effect.fnUntraced(function* (unit: Unit<'machine'>, id: string, runId: string) {
       const held = yield* rested(unit, id);

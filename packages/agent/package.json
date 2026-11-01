@@ -679,6 +679,10 @@
       "types": "./src/thread/run/ThreadLiveFeed.ts",
       "default": "./src/thread/run/ThreadLiveFeed.ts"
     },
+    "./thread/run/ThreadSnapshots": {
+      "types": "./src/thread/run/ThreadSnapshots.ts",
+      "default": "./src/thread/run/ThreadSnapshots.ts"
+    },
     "./thread/run/ThreadQuestion": {
       "types": "./src/thread/run/ThreadQuestion.ts",
       "default": "./src/thread/run/ThreadQuestion.ts"

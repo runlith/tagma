@@ -4,7 +4,7 @@ import { ThreadCallBroke, type ThreadBorderFailed } from '@runlith/agent/thread/
 import { ThreadStorageFailed } from '@runlith/agent/thread/persisted';
 import { ApprovalModes } from '@runlith/agent/modes/ApprovalModes';
 import { spawnDepthAt } from '@runlith/agent/collaboration/ThreadSpawnAccess';
-import { MachineUnits } from '../../platform/contract/service/units.js';
+import { MachineUnits, type Unit } from '../../platform/contract/service/units.js';
 import { MachineStore } from '../../platform/contract/service/store.js';
 import { stored } from '../../platform/store/crossing.js';
 import { ThreadId } from '../../platform/contract/wire/thread.js';
@@ -29,10 +29,9 @@ export const makeSubAgentDepths = Effect.gen(function* () {
   const records = yield* ThreadRecords;
   const settings = yield* Settings;
   return {
-    of: Effect.fnUntraced(function* (spawnRootId: string) {
-      const projectId = yield* records.projectOf(spawnRootId).pipe(stored('projectOf'));
-      const resolved = yield* settings.read(subAgentDepth, projectId).pipe(Effect.mapError((cause) => new ThreadCallBroke({ cause })));
-      return resolved.value;
+    of: Effect.fnUntraced(function* (spawnRootId: string, unit?: Unit<'machine'>) {
+      const projectId = yield* records.projectOf(spawnRootId, unit).pipe(stored('projectOf'));
+      return yield* settings.value(subAgentDepth, projectId, unit).pipe(Effect.mapError((cause) => new ThreadCallBroke({ cause })));
     }),
   };
 });
@@ -55,10 +54,10 @@ export const makeEngineStates = Effect.fnUntraced(function* ({
   const worktrees = yield* WorktreeRecords;
   const pins = yield* ThreadPins;
 
-  const approving = Effect.fnUntraced(function* (threadId: string) {
-    const stand = yield* standingOf(threadId).pipe(Effect.mapError((cause) => new ThreadCallBroke({ cause })));
-    const projectId = (yield* records.projectOf(threadId).pipe(stored('projectOf'))) ?? 0;
-    const grant = yield* readApproves(mandate, settings, threadId, projectId).pipe(stored('approves'));
+  const approving = Effect.fnUntraced(function* (threadId: string, unit?: Unit<'machine'>) {
+    const stand = yield* standingOf(threadId, unit).pipe(Effect.mapError((cause) => new ThreadCallBroke({ cause })));
+    const projectId = (yield* records.projectOf(threadId, unit).pipe(stored('projectOf'))) ?? 0;
+    const grant = yield* readApproves(mandate, settings, threadId, projectId, unit).pipe(stored('approves'));
     return {
       approver: stand.approver,
       why: stand.why,
@@ -67,12 +66,18 @@ export const makeEngineStates = Effect.fnUntraced(function* ({
     };
   });
 
-  const standing = Effect.fnUntraced(function* (threadId: string) {
-    const { facts, harness } = yield* failedAs('title', Effect.all({ facts: records.facts(threadId), harness: sessionOf(threadId) }));
+  const standing = Effect.fnUntraced(function* (threadId: string, unit?: Unit<'machine'>) {
+    const { facts, harness } = yield* failedAs(
+      'title',
+      Effect.all({ facts: records.facts(threadId, unit), harness: sessionOf(threadId, unit) }),
+    );
     const ancestorId = facts?.parentId ?? facts?.detachedFrom;
-    const ancestor = ancestorId == null ? undefined : yield* failedAs('parent', records.facts(ancestorId));
+    const ancestor = ancestorId == null ? undefined : yield* failedAs('parent', records.facts(ancestorId, unit));
     const address = ancestor?.projectId == null ? undefined : { id: ancestor.id, projectId: ancestor.projectId, title: ancestor.title };
-    const recap = yield* failedAs('recap', recaps.reading({ id: threadId, projectId: facts?.projectId ?? null }, facts?.recap ?? null));
+    const recap = yield* failedAs(
+      'recap',
+      recaps.reading({ id: threadId, projectId: facts?.projectId ?? null }, facts?.recap ?? null, unit),
+    );
     return {
       home: facts?.projectId ?? null,
       title: facts?.title ?? DEFAULT_TITLE,
@@ -83,26 +88,28 @@ export const makeEngineStates = Effect.fnUntraced(function* ({
     };
   });
 
-  const placeOf = Effect.fnUntraced(function* (threadId: string) {
-    return yield* units.read((unit) =>
-      Effect.gen(function* () {
-        const selected = (yield* assignments.selection(ThreadId.make(threadId), unit)).rootId;
-        if (selected === null) return null;
-        const record = yield* worktrees.byRoot(selected, unit);
-        return { rootId: selected as string, branch: record?.branch ?? null };
-      }),
-    );
+  const placeOf = Effect.fnUntraced(function* (threadId: string, unit?: Unit<'machine'>) {
+    const read = Effect.fnUntraced(function* (tx: Unit<'machine'>) {
+      const selected = (yield* assignments.selection(ThreadId.make(threadId), tx)).rootId;
+      if (selected === null) return null;
+      const record = yield* worktrees.byRoot(selected, tx);
+      return { rootId: selected as string, branch: record?.branch ?? null };
+    });
+    return yield* unit === undefined ? units.read(read) : read(unit);
   });
 
   return {
-    of: Effect.fn('EngineStates.of')(function* (state: ThreadState): Effect.fn.Return<NativeThreadState, ThreadBorderFailed> {
+    of: Effect.fn('EngineStates.of')(function* (
+      state: ThreadState,
+      unit?: Unit<'machine'>,
+    ): Effect.fn.Return<NativeThreadState, ThreadBorderFailed> {
       return yield* Effect.all({
-        standing: standing(state.thread.id),
-        pins: pins.read(state.thread.id).pipe(stored('pins')),
-        delegation: readDelegation(mandate, settings, state.thread.id).pipe(stored('delegation')),
-        approving: approving(state.thread.id),
-        limit: depths.of(state.thread.spawnRootId),
-        place: Effect.mapError(placeOf(state.thread.id), (cause) => new ThreadStorageFailed({ call: 'place', cause })),
+        standing: standing(state.thread.id, unit),
+        pins: pins.read(state.thread.id, unit).pipe(stored('pins')),
+        delegation: readDelegation(mandate, settings, state.thread.id, unit).pipe(stored('delegation')),
+        approving: approving(state.thread.id, unit),
+        limit: depths.of(state.thread.spawnRootId, unit),
+        place: Effect.mapError(placeOf(state.thread.id, unit), (cause) => new ThreadStorageFailed({ call: 'place', cause })),
       }).pipe(
         Effect.map(({ standing, delegation, approving, limit, place, pins }) => ({
           pins,

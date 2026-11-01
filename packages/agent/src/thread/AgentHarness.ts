@@ -3,7 +3,7 @@ import { WorkflowEngine, workflowEngineLayer } from '../workflow/engine';
 import type { WorkflowPlan } from '../workflow/plan';
 import type { WorkflowArgumentsError, WorkflowRun } from '../workflow/run';
 import type { ThreadOpenView, ThreadResumeOf, ThreadSnapshotOf } from '../transcript/live';
-import type { ThreadState } from './state';
+import type { ThreadState, ThreadStateProject } from './state';
 import type { ThreadBindings } from '../agent/contracts';
 import type { ThreadHostBinding, ThreadRow } from './rows';
 import type { ThreadBornOf } from '../protocol/birth';
@@ -107,7 +107,8 @@ import {
 import { ThreadComposition, threadCompositionLayer } from './run/ThreadComposition';
 import type { ThreadRequestComposition } from './composition/requestComposition';
 import type { ThreadEventRecord } from './events';
-import { ThreadSnapshots, threadSnapshotsLayer } from './run/ThreadSnapshots';
+import { ThreadSnapshots, threadSnapshotsLayer, type ThreadHydrationCut } from './run/ThreadSnapshots';
+import type { ThreadReadCut } from './storage/aggregate';
 import { ThreadPlanes, threadPlanesLayer } from '../collaboration/ThreadPlanes';
 import { ThreadSpawnTree, threadSpawnTreeLayer } from '../collaboration/ThreadSpawnTree';
 import { DeclaredResources } from '../resources/ResourcesConfig';
@@ -131,8 +132,8 @@ import { ThreadStopping, threadStoppingLayer } from './run/ThreadStopping';
 import type { ThreadStop, ThreadStopOptions } from './ending';
 import { threadToolSettlementsLayer } from './ToolSettlements';
 
-export type AgentHarnessOptions<TState extends ThreadState> = {
-  readonly toState?: (state: ThreadState) => Effect.Effect<TState, ThreadBorderFailed>;
+export type AgentHarnessOptions<TState extends ThreadState, TTx = unknown> = {
+  readonly toState?: ThreadStateProject<TState, TTx>;
   readonly settled?: (event: ThreadRunSettled) => Effect.Effect<void, ThreadBorderFailed>;
   readonly subscribers?: readonly ThreadRunSettledSubscriber[];
   readonly fillers?: ThreadPortFillers;
@@ -346,6 +347,10 @@ type ThreadWorkflowStart = {
 };
 
 export type HarnessThreads<TState extends ThreadState, TTx, TWrite extends TTx> = {
+  readCut<T, E>(
+    threadId: string,
+    use: (cut: ThreadReadCut<TTx>) => Effect.Effect<T, E>,
+  ): Effect.Effect<ThreadHydrationCut<T>, E | ThreadBorderFailed>;
   handle(threadId: string, ownerId: string): ThreadHandle<TState, TTx, TWrite>;
   create(input: ThreadCreateInput): Effect.Effect<ThreadRow, ThreadBorderFailed>;
   create<T>(
@@ -432,9 +437,10 @@ export class AgentHarness<TState extends ThreadState = ThreadState, TTx = unknow
   static make = Effect.fnUntraced(function* <TState extends ThreadState = ThreadState, TTx = unknown, TWrite extends TTx = TTx>(
     ports: Layer.Layer<ThreadGivenPorts>,
     live: ThreadLiveFeed<TState>,
-    options: AgentHarnessOptions<TState> = {},
+    options: AgentHarnessOptions<TState, TTx> = {},
   ): Effect.fn.Return<AgentHarness<TState, TTx, TWrite>> {
-    const toState = options.toState ?? ((state) => Effect.succeed(state as TState));
+    const toState: ThreadStateProject<TState> =
+      options.toState === undefined ? (state) => Effect.succeed(state as TState) : (state, tx) => options.toState!(state, tx as TTx);
     const kernel = threadKernelLayer(Layer.merge(threadKernelPorts(ports), threadFeedLayer(live, toState)), options.fillers, options.gate);
     const scope = yield* Scope.make();
     const services = yield* Layer.buildWithScope(
@@ -448,7 +454,7 @@ export class AgentHarness<TState extends ThreadState = ThreadState, TTx = unknow
     services: Context.Context<HarnessServices>,
     private readonly scope: Scope.Closeable,
     live: ThreadLiveFeed<TState>,
-    toState: (state: ThreadState) => Effect.Effect<TState, ThreadBorderFailed>,
+    toState: ThreadStateProject<TState>,
   ) {
     const run: HarnessRun = (work) => Effect.provide(work, services);
     this.threads = harnessThreads<TState, TTx, TWrite>(run, toState);
@@ -519,7 +525,7 @@ export class AgentHarness<TState extends ThreadState = ThreadState, TTx = unknow
 
 function harnessThreads<TState extends ThreadState, TTx, TWrite extends TTx>(
   run: HarnessRun,
-  toState: (state: ThreadState) => Effect.Effect<TState, ThreadBorderFailed>,
+  toState: ThreadStateProject<TState>,
 ): HarnessThreads<TState, TTx, TWrite> {
   function create(input: ThreadCreateInput): Effect.Effect<ThreadRow, ThreadBorderFailed>;
   function create<T>(
@@ -558,6 +564,8 @@ function harnessThreads<TState extends ThreadState, TTx, TWrite extends TTx>(
       ),
     deleteByHost: (ownerId, hostKind, hostId) =>
       run(Effect.flatMap(ThreadAggregate, (aggregate) => aggregate.deleteByHost(ownerId, hostKind, hostId))),
+    readCut: (threadId, use) =>
+      run(Effect.flatMap(ThreadSnapshots, (snapshots) => snapshots.readCut(threadId, (cut) => use(cut as ThreadReadCut<TTx>)))),
     publish: (threadId) => run(Effect.flatMap(ThreadSnapshots, (snapshots) => snapshots.publish(threadId))),
     stepping: (threadId, tx) =>
       run(
@@ -581,30 +589,18 @@ function harnessThreads<TState extends ThreadState, TTx, TWrite extends TTx>(
 
 function harnessReads<TState extends ThreadState>(
   run: HarnessRun,
-  toState: (state: ThreadState) => Effect.Effect<TState, ThreadBorderFailed>,
+  toState: ThreadStateProject<TState>,
   services: Context.Context<HarnessServices>,
   live: ThreadLiveFeed<TState>,
 ): HarnessReads<TState> {
   return {
-    snapshot: (threadId) =>
-      run(Effect.flatMap(ThreadAggregate, (aggregate) => aggregate.snapshot(threadId))).pipe(
-        Effect.flatMap((base) => {
-          const { transcript, before, live: open, ...state } = base;
-          return Effect.map(toState(state), (projected) => ({ ...projected, transcript, before, live: open }));
-        }),
-      ),
+    snapshot: (threadId) => run(Effect.flatMap(ThreadSnapshots, (snapshots) => snapshots.snapshot(threadId, toState))),
     statuses: (ownerId, threadIds) => run(Effect.flatMap(ThreadSnapshots, (snapshots) => snapshots.statuses(ownerId, threadIds))),
     endings: (input) => run(Effect.flatMap(RunEndings, (endings) => endings.page(input))),
     newestEndings: (threadIds, depth) => run(Effect.flatMap(RunEndings, (endings) => endings.newest(threadIds, depth))),
     page: (threadId, before) => run(Effect.flatMap(ThreadAggregate, (aggregate) => aggregate.page(threadId, before))),
     attachFrom: (threadId, sincePosition) =>
-      run(Effect.flatMap(ThreadAggregate, (aggregate) => aggregate.attachFrom(threadId, sincePosition))).pipe(
-        Effect.flatMap((attached) =>
-          attached === null
-            ? Effect.succeed(null)
-            : toState(attached.state).pipe(Effect.map((state) => ({ state, deltas: attached.deltas, live: attached.live }))),
-        ),
-      ),
+      run(Effect.flatMap(ThreadSnapshots, (snapshots) => snapshots.attachFrom(threadId, sincePosition, toState))),
     shape: (threadId) => run(Effect.flatMap(ThreadIntrospection, (reads) => reads.shape(threadId))),
     composition: (threadId) => run(Effect.flatMap(ThreadComposition, (reads) => reads.of(threadId))),
     window: (threadId, input) => run(Effect.flatMap(ThreadIntrospection, (reads) => reads.window(threadId, input))),

@@ -476,7 +476,7 @@ function toolCallEvents(id: string, name: string, input: Record<string, unknown>
     { type: 'finish', reason: 'tool-calls', usage },
   ];
 }
-function inertAttachments<TTx, TWrite extends TTx = TTx>(): ThreadAttachmentStorage<TWrite> {
+function inertAttachments<TTx, TWrite extends TTx = TTx>(): ThreadAttachmentStorage<TTx> {
   return {
     keep: (_threadId, image) => Effect.succeed({ id: 'kept', mediaType: image.mediaType, url: 'test://kept' }),
     resolve: (_threadId, _ownerId, refs) =>

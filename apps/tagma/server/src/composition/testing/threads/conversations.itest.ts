@@ -146,9 +146,9 @@ const rested = Effect.fn('testing.restConversation')(function* (
   yield* append(threadId, ...events);
   const path = join(home, String(projectId), `${threadId}.jsonl`);
   yield* files.makeDirectory(join(home, String(projectId)), { recursive: true });
-  yield* exportThreadRollout({ threadId, path, parts: nativeOnlyParts }).pipe(Effect.provide(context));
+  yield* exportThreadRollout({ threadId, path, parts: yield* nativeOnlyParts }).pipe(Effect.provide(context));
   yield* Effect.flatMap(threadProjection(ENTRY_KINDS), (projection) => projection.run({ threadId, path })).pipe(Effect.provide(context));
-  expect(yield* evictThreadProjection({ threadId, path, parts: nativeOnlyParts }).pipe(Effect.provide(context))).toMatchObject({
+  expect(yield* evictThreadProjection({ threadId, path, parts: yield* nativeOnlyParts }).pipe(Effect.provide(context))).toMatchObject({
     outcome: 'evicted',
   });
   return path;
@@ -497,7 +497,7 @@ describe('conversation index and journal', () => {
         message({ id: 'r-2', role: 'assistant', text: 'other things now', at: '2026-09-20T10:01:00.000Z' }),
       );
       expect(yield* matchesOf('t-rested', 'Черногория')).toEqual(['r-1']);
-      yield* rehydrateThreadRecords({ threadId: 't-rested', path, parts: nativeOnlyParts }).pipe(Effect.provide(context));
+      yield* rehydrateThreadRecords({ threadId: 't-rested', path, parts: yield* nativeOnlyParts }).pipe(Effect.provide(context));
       expect(yield* matchesOf('t-rested', 'Черногория')).toEqual(['r-1']);
       expect(yield* db.all(sql`select entry_id from thread_message where thread_id = ${'t-rested'} order by position`)).toEqual([
         { entry_id: 'r-1' },
@@ -569,7 +569,7 @@ describe('conversation index and journal', () => {
       const before = (yield* (yield* journal()).recordsAsOf('t-prefix', window)).map((row) => row.id);
       expect(before).not.toContain('p-e2');
       expect(before).toHaveLength(1);
-      yield* rehydrateThreadRecords({ threadId: 't-prefix', path, parts: nativeOnlyParts }).pipe(Effect.provide(context));
+      yield* rehydrateThreadRecords({ threadId: 't-prefix', path, parts: yield* nativeOnlyParts }).pipe(Effect.provide(context));
       expect((yield* (yield* journal()).recordsAsOf('t-prefix', window)).map((row) => [row.position, row.id])).toEqual([
         [1, before[0]!],
         [2, 'p-e2'],

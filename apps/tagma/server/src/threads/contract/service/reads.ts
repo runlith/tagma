@@ -20,7 +20,7 @@ export type HeldSession = {
 export class ThreadLookup extends Context.Service<
   ThreadLookup,
   {
-    find(id: string, ownerId: string): Effect.Effect<ThreadMetadata | undefined, StoreFailure | ThreadPortFailure>;
+    find(id: string, ownerId: string, unit?: Unit<'machine'>): Effect.Effect<ThreadMetadata | undefined, StoreFailure | ThreadPortFailure>;
     summary(threadId: string): Effect.Effect<ThreadSummary | undefined, StoreFailure | ThreadStorageFailed>;
     summaries(ids: readonly string[]): Effect.Effect<readonly ThreadSummary[], StoreFailure | ThreadStorageFailed>;
     gateFacet(id: string): Effect.Effect<ThreadGate | undefined, StoreFailure>;

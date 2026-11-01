@@ -33,6 +33,7 @@ export type WorkerLink<Ask extends { readonly id: number }, Answer extends { rea
   ) => Effect.Effect<Answer, WorkerUnavailable>;
   readonly tell: (message: unknown) => void;
   readonly close: (reason: string) => void;
+  readonly shutdown: (reason: string) => Effect.Effect<void>;
 };
 
 type BunWorker = Worker & { ref(): void; unref(): void };
@@ -51,6 +52,15 @@ export const workerLink = <
   let worker: BunWorker | undefined;
   let asked = 0;
   const waiting = new Map<number, Waiting<Answer, Note>>();
+  const retiring = new Set<BunWorker>();
+  const shutdowns = new Set<() => void>();
+  let shutdownReason: string | null = null;
+
+  const quiescent = (): void => {
+    if (retiring.size > 0) return;
+    for (const done of shutdowns) done();
+    shutdowns.clear();
+  };
 
   const ended = (thread: BunWorker, gone: WorkerUnavailable, closed = false): void => {
     if (worker !== thread) return;
@@ -62,7 +72,16 @@ export const workerLink = <
     };
     if (closed) settled();
     else {
-      thread.addEventListener('close', settled, { once: true });
+      retiring.add(thread);
+      thread.addEventListener(
+        'close',
+        () => {
+          settled();
+          retiring.delete(thread);
+          quiescent();
+        },
+        { once: true },
+      );
       thread.terminate();
     }
   };
@@ -101,6 +120,10 @@ export const workerLink = <
     joined: boolean,
   ): Effect.Effect<Answer, WorkerUnavailable> =>
     Effect.callback<Answer, WorkerUnavailable>((resume) => {
+      if (shutdownReason !== null) {
+        resume(Effect.fail(new WorkerUnavailable(label, shutdownReason)));
+        return;
+      }
       const id = ++asked;
       let thread: BunWorker;
       try {
@@ -151,5 +174,16 @@ export const workerLink = <
     close: (reason) => {
       if (worker !== undefined) ended(worker, new WorkerUnavailable(label, reason));
     },
+    shutdown: (reason) =>
+      Effect.callback<void>((resume) => {
+        shutdownReason ??= reason;
+        if (worker !== undefined) ended(worker, new WorkerUnavailable(label, shutdownReason));
+        if (retiring.size === 0) return resume(Effect.void);
+        const done = () => resume(Effect.void);
+        shutdowns.add(done);
+        return Effect.sync(() => {
+          shutdowns.delete(done);
+        });
+      }).pipe(Effect.uninterruptible),
   };
 };

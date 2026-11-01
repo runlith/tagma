@@ -40,7 +40,7 @@ import type {
   ThreadSteerInput,
 } from './run/scheduler/inputs';
 import { RunScheduler } from './run/scheduler/RunScheduler';
-import type { ThreadSnapshot, ThreadState } from './state';
+import type { ThreadState, ThreadStateProject } from './state';
 import type { ThreadResourceSummary } from './storage/resources';
 import { bordered, ThreadCallBroke, type ThreadBorderFailed, type ThreadPortFailure } from './ThreadBorder';
 import { type ThreadResidency, ThreadResourceLedger, type ThreadToolOutputScopeFaces, type ThreadWriteTx } from './ThreadPorts';
@@ -65,14 +65,9 @@ export class ThreadHandle<TState extends ThreadState = ThreadState, TTx = unknow
   readonly threadId: string;
   readonly ownerId: string;
   private readonly run: ThreadHandleRun;
-  private readonly toState: (state: ThreadState) => Effect.Effect<TState, ThreadBorderFailed>;
+  private readonly toState: ThreadStateProject<TState>;
 
-  constructor(
-    run: ThreadHandleRun,
-    toState: (state: ThreadState) => Effect.Effect<TState, ThreadBorderFailed>,
-    threadId: string,
-    ownerId: string,
-  ) {
+  constructor(run: ThreadHandleRun, toState: ThreadStateProject<TState>, threadId: string, ownerId: string) {
     this.run = run;
     this.toState = toState;
     this.threadId = threadId;
@@ -250,8 +245,8 @@ export class ThreadHandle<TState extends ThreadState = ThreadState, TTx = unknow
   }
 
   setAuthorityMode(mode: AgentApprovalMode): Effect.Effect<ThreadSnapshotOf<TState>, ThreadBorderFailed> {
-    return this.run(Effect.flatMap(ThreadAggregate, (aggregate) => aggregate.setAuthorityMode(this.threadId, this.ownerId, mode))).pipe(
-      Effect.flatMap((base) => this.project(base)),
+    return this.run(
+      Effect.flatMap(ThreadAggregate, (aggregate) => aggregate.setAuthorityMode(this.threadId, this.ownerId, mode, this.toState)),
     );
   }
 
@@ -262,18 +257,13 @@ export class ThreadHandle<TState extends ThreadState = ThreadState, TTx = unknow
     reasoning: string | null;
     switches: ModelSwitches;
   }): Effect.Effect<ThreadSnapshotOf<TState>, ThreadBorderFailed> {
-    return this.run(Effect.flatMap(ThreadAggregate, (aggregate) => aggregate.setModelSettings(this.threadId, this.ownerId, settings))).pipe(
-      Effect.flatMap((base) => this.project(base)),
+    return this.run(
+      Effect.flatMap(ThreadAggregate, (aggregate) => aggregate.setModelSettings(this.threadId, this.ownerId, settings, this.toState)),
     );
   }
 
   carryModel<A extends CarriedMove, E>(ask: ModelCarryAsk<A, E>): Effect.Effect<ModelCarry<A>, E | ThreadModelRefused | ThreadRunsFailure> {
     return this.run(carryModelMove(ask));
-  }
-
-  private project(base: ThreadSnapshot): Effect.Effect<ThreadSnapshotOf<TState>, ThreadBorderFailed> {
-    const { transcript, before, live, ...state } = base;
-    return Effect.map(this.toState(state), (projected) => ({ ...projected, transcript, before, live }));
   }
 
   held(): Effect.Effect<readonly ThreadResourceSummary[], ThreadBorderFailed> {

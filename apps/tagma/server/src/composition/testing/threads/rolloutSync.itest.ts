@@ -143,7 +143,7 @@ describe('the thread rollout sync', () => {
         yield* Context.get(runtime, FileSystem.FileSystem).makeTempDirectoryScoped({ prefix: 'rollout-sync-' }),
         't-1.jsonl',
       );
-      const exported = yield* Effect.provide(exportThreadRollout({ threadId: 't-1', path, parts: nativeOnlyParts }), runtime);
+      const exported = yield* Effect.provide(exportThreadRollout({ threadId: 't-1', path, parts: yield* nativeOnlyParts }), runtime);
       expect(exported.records).toBe(5);
       yield* Effect.provide(db.delete(threadLog()), runtime);
       yield* Effect.provide(db.delete(threadResource()), runtime);
@@ -152,7 +152,7 @@ describe('the thread rollout sync', () => {
       yield* Effect.provide(db.delete(threadEvent()), runtime);
       yield* Effect.provide(db.delete(threadRecord()), runtime);
       const replayed = yield* Effect.provide(
-        replayThreadRollout({ path, parts: nativeOnlyParts, records: yield* Effect.provide(makeThreadRecords, runtime) }),
+        replayThreadRollout({ path, parts: yield* nativeOnlyParts, records: yield* Effect.provide(makeThreadRecords, runtime) }),
         runtime,
       );
       expect(replayed.threadId).toBe('t-1');
@@ -217,7 +217,7 @@ describe('the thread rollout sync', () => {
         yield* Context.get(runtime, FileSystem.FileSystem).makeTempDirectoryScoped({ prefix: 'rollout-retire-' }),
         't-1.jsonl',
       );
-      yield* Effect.provide(exportThreadRollout({ threadId: 't-1', path, parts: nativeOnlyParts }), runtime);
+      yield* Effect.provide(exportThreadRollout({ threadId: 't-1', path, parts: yield* nativeOnlyParts }), runtime);
       yield* Effect.provide(
         appendRolloutItem(path, { kind: 'pruned-retired', row: { threadId: 't-1', toolCallId: 'call-folded' } }),
         runtime,
@@ -226,7 +226,7 @@ describe('the thread rollout sync', () => {
       yield* Effect.provide(db.delete(threadLog()), runtime);
       yield* Effect.provide(db.delete(threadRecord()), runtime);
       yield* Effect.provide(
-        replayThreadRollout({ path, parts: nativeOnlyParts, records: yield* Effect.provide(makeThreadRecords, runtime) }),
+        replayThreadRollout({ path, parts: yield* nativeOnlyParts, records: yield* Effect.provide(makeThreadRecords, runtime) }),
         runtime,
       );
       expect((yield* Effect.provide(db.select().from(threadPrunedToolCall()), runtime)).map((row) => row.toolCallId)).toEqual([
@@ -274,7 +274,7 @@ describe('the thread rollout sync', () => {
         yield* Context.get(runtime, FileSystem.FileSystem).makeTempDirectoryScoped({ prefix: 'rollout-append-' }),
         't-grow.jsonl',
       );
-      yield* Effect.provide(exportThreadRollout({ threadId: 't-grow', path, parts: nativeOnlyParts }), runtime);
+      yield* Effect.provide(exportThreadRollout({ threadId: 't-grow', path, parts: yield* nativeOnlyParts }), runtime);
       const files = Context.get(runtime, FileSystem.FileSystem);
       const first = yield* files.readFileString(path);
       yield* Effect.provide(
@@ -285,7 +285,10 @@ describe('the thread rollout sync', () => {
         db.insert(threadEvent()).values({ threadId: 't-grow', position: 3, id: 'e-3', kind: 'message', payload: said('e-3', 'three') }),
         runtime,
       );
-      const appended = yield* Effect.provide(appendThreadRollout({ threadId: 't-grow', path, after: 1, parts: nativeOnlyParts }), runtime);
+      const appended = yield* Effect.provide(
+        appendThreadRollout({ threadId: 't-grow', path, after: 1, parts: yield* nativeOnlyParts }),
+        runtime,
+      );
       expect(appended.records).toBe(2);
       const grown = yield* files.readFileString(path);
       expect(grown.startsWith(first)).toBe(true);
@@ -295,7 +298,7 @@ describe('the thread rollout sync', () => {
       yield* Effect.provide(db.delete(threadEvent()), runtime);
       yield* Effect.provide(db.delete(threadRecord()), runtime);
       yield* Effect.provide(
-        replayThreadRollout({ path, parts: nativeOnlyParts, records: yield* Effect.provide(makeThreadRecords, runtime) }),
+        replayThreadRollout({ path, parts: yield* nativeOnlyParts, records: yield* Effect.provide(makeThreadRecords, runtime) }),
         runtime,
       );
       expect(yield* Effect.provide(db.select().from(threadEvent()), runtime)).toEqual(events);
@@ -345,7 +348,7 @@ describe('the thread rollout sync', () => {
         yield* Context.get(runtime, FileSystem.FileSystem).makeTempDirectoryScoped({ prefix: 'rollout-cursor-' }),
         't-cursor.jsonl',
       );
-      yield* Effect.provide(exportThreadRollout({ threadId: 't-cursor', path, parts: nativeOnlyParts }), runtime);
+      yield* Effect.provide(exportThreadRollout({ threadId: 't-cursor', path, parts: yield* nativeOnlyParts }), runtime);
       expect(
         yield* Effect.provide(db.select().from(threadRolloutCursor()).where(eq(threadRolloutCursor().threadId, 't-cursor')), runtime),
       ).toEqual([{ threadId: 't-cursor', nextByteOffset: 0, nextPosition: 1, generation: 1, restedAt: null }]);
@@ -398,11 +401,11 @@ describe('the thread rollout sync', () => {
         yield* Context.get(runtime, FileSystem.FileSystem).makeTempDirectoryScoped({ prefix: 'rollout-opener-' }),
         't-2.jsonl',
       );
-      yield* Effect.provide(exportThreadRollout({ threadId: 't-2', path, parts: nativeOnlyParts }), runtime);
+      yield* Effect.provide(exportThreadRollout({ threadId: 't-2', path, parts: yield* nativeOnlyParts }), runtime);
       yield* Effect.provide(db.delete(threadRecord()), runtime);
       yield* Effect.provide(db.delete(session), runtime);
       yield* Effect.provide(
-        replayThreadRollout({ path, parts: nativeOnlyParts, records: yield* Effect.provide(makeThreadRecords, runtime) }),
+        replayThreadRollout({ path, parts: yield* nativeOnlyParts, records: yield* Effect.provide(makeThreadRecords, runtime) }),
         runtime,
       );
       const facet = yield* Effect.provide(recordOf(db, 't-2'), runtime);
@@ -529,7 +532,7 @@ describe('the thread rollout sync', () => {
         yield* Context.get(runtime, FileSystem.FileSystem).makeTempDirectoryScoped({ prefix: 'rollout-evict-' }),
         't-evicted.jsonl',
       );
-      yield* Effect.provide(exportThreadRollout({ threadId: 't-evicted', path, parts: nativeOnlyParts }), runtime);
+      yield* Effect.provide(exportThreadRollout({ threadId: 't-evicted', path, parts: yield* nativeOnlyParts }), runtime);
       yield* Effect.provide(db.delete(threadEntry()), runtime);
       yield* Effect.provide(db.delete(threadHistoryItem()), runtime);
       yield* Effect.provide(db.delete(threadLog()), runtime);
@@ -537,7 +540,7 @@ describe('the thread rollout sync', () => {
       yield* Effect.provide(db.delete(threadCompactionCheckpoint()), runtime);
       yield* Effect.provide(db.delete(threadEvent()), runtime);
       yield* Effect.provide(restFor(db, 't-evicted', born), runtime);
-      yield* Effect.provide(rehydrateThreadRecords({ threadId: 't-evicted', path, parts: nativeOnlyParts }), runtime);
+      yield* Effect.provide(rehydrateThreadRecords({ threadId: 't-evicted', path, parts: yield* nativeOnlyParts }), runtime);
       expect(yield* projection()).toEqual(before);
       expect((yield* Effect.provide(db.select().from(threadResource()), runtime)).map((row) => [row.kind, row.id])).toEqual([
         ['scratch', 't-evicted'],
@@ -593,17 +596,20 @@ describe('the thread rollout sync', () => {
         yield* Context.get(runtime, FileSystem.FileSystem).makeTempDirectoryScoped({ prefix: 'rollout-stamped-' }),
         't-stamped.jsonl',
       );
-      yield* Effect.provide(exportThreadRollout({ threadId: 't-stamped', path, parts: nativeOnlyParts }), runtime);
+      yield* Effect.provide(exportThreadRollout({ threadId: 't-stamped', path, parts: yield* nativeOnlyParts }), runtime);
       yield* Effect.provide(restFor(db, 't-stamped', born), runtime);
       yield* Effect.provide(
-        appendRolloutItem(path, { kind: 'meta', meta: yield* Effect.provide(threadRolloutMeta('t-stamped', nativeOnlyParts), runtime) }),
+        appendRolloutItem(path, {
+          kind: 'meta',
+          meta: yield* Effect.provide(threadRolloutMeta('t-stamped', yield* nativeOnlyParts), runtime),
+        }),
         runtime,
       );
       yield* Effect.provide(db.delete(threadLog()), runtime);
       yield* Effect.provide(db.delete(threadEvent()), runtime);
       yield* Effect.provide(db.delete(threadRecord()), runtime);
       yield* Effect.provide(
-        replayThreadRollout({ path, parts: nativeOnlyParts, records: yield* Effect.provide(makeThreadRecords, runtime) }),
+        replayThreadRollout({ path, parts: yield* nativeOnlyParts, records: yield* Effect.provide(makeThreadRecords, runtime) }),
         runtime,
       );
       expect(yield* Effect.provide(restOf(db, 't-stamped'), runtime)).toBeNull();
@@ -619,7 +625,10 @@ describe('the thread rollout sync', () => {
         yield* Context.get(runtime, FileSystem.FileSystem).makeTempDirectoryScoped({ prefix: 'rollout-sync-' }),
         'ghost.jsonl',
       );
-      const error = yield* Effect.provide(Effect.flip(exportThreadRollout({ threadId: 'ghost', path, parts: nativeOnlyParts })), runtime);
+      const error = yield* Effect.provide(
+        Effect.flip(exportThreadRollout({ threadId: 'ghost', path, parts: yield* nativeOnlyParts })),
+        runtime,
+      );
       expect(error._tag === 'RolloutSyncRefused' && error.reason).toBe('thread-missing');
     }),
   );
@@ -692,7 +701,7 @@ describe('the thread rollout sync', () => {
         runtime,
       );
       const replayed = yield* Effect.provide(
-        replayThreadRollout({ path, parts: nativeOnlyParts, records: yield* Effect.provide(makeThreadRecords, runtime) }),
+        replayThreadRollout({ path, parts: yield* nativeOnlyParts, records: yield* Effect.provide(makeThreadRecords, runtime) }),
         runtime,
       );
       expect(replayed.threadId).toBe('t-old');

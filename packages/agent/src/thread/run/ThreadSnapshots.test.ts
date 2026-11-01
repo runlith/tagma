@@ -5,7 +5,7 @@ import { ThreadStorageFailed } from '../persisted';
 import { Usage } from '@runlith/llm/schema/events';
 import { TestClock } from 'effect/testing';
 import { ThreadEntryKinds, makeThreadEntryReader } from '../../transcript/kinds';
-import type { ThreadMessageEntry, ThreadQuestionEntry } from '../../transcript/entries';
+import type { ThreadMessageEntry, ThreadQuestionEntry, ThreadToolEntry } from '../../transcript/entries';
 import type { ThreadTranscriptEntry } from '../../transcript/rows';
 import { FeedView } from '../../transcript/testing/feedView';
 import { STALL_FLOOR_MS } from '../../agent/callProgress';
@@ -52,25 +52,59 @@ import { wordsInFlightLayer } from './WordsInFlight';
 import { transportsLayer } from '../transport/Transports';
 import { makeThreadLiveFeed, threadFeedLayer, type ThreadLiveEvent } from './ThreadLiveFeed';
 const RHYTHM: ThreadRunLeaseRhythm = { heartbeatIntervalMs: 30_000, staleRunningAfterMs: 30_000, takeoverAfterMs: 30_000 };
+it.effect('a hydration cut keeps its stored run and identifies a successor live view at completion', () =>
+  Effect.gen(function* () {
+    const world = yield* snapshotsOver();
+    const call: ThreadToolEntry = {
+      type: 'tool',
+      id: 'call-old',
+      runId: 'old',
+      toolName: 'read',
+      toolCallId: 'old-call',
+      toolState: 'input-available',
+    };
+    const other: ThreadToolEntry = { ...call, id: 'other-old', toolCallId: 'other-call' };
+    yield* world.rows.appendEntries('t', { transcript: [call, other] });
+    world.active.set('t', runRow('old', { threadId: 't', streamTail: [{ ...call, toolState: 'output-available', toolOutput: 'done' }] }));
+    const successor = { ...call, id: 'call-new', runId: 'new', toolCallId: 'new-call' };
+    const cut = yield* world.snapshots.readCut(
+      't',
+      Effect.fnUntraced(function* ({ tx }) {
+        yield* world.rows.transaction((writer) =>
+          Effect.andThen(
+            world.rows.update('t', { budgetTokens: 7 }, writer),
+            Effect.sync(() => writer.put(world.active, 't', runRow('new', { threadId: 't' }))),
+          ),
+        );
+        world.live.tail('t', 'new', [successor], []);
+        return yield* world.rows.metadata('t', tx as MemoryTx);
+      }),
+    );
+    expect(cut.value?.budgetTokens).toBeNull();
+    expect(cut.activeRunId).toBe('old');
+    expect(cut.storedOpen).toEqual([other]);
+    expect(cut.live).toEqual(world.live.view('t'));
+    expect(cut.live.runId).toBe('new');
+    expect(cut.live.open).toEqual([successor]);
+  }),
+);
 it.effect(
-  'a snapshot whose head moved under its read reads again where no writer lands',
+  'a snapshot keeps its opening cut while a writer commits during its page read',
   Effect.fnUntraced(function* () {
     const world = yield* snapshotsOver();
     yield* world.append(words('a', 'one'));
-    const scope = yield* Effect.scope;
-    const writers: Fiber.Fiber<unknown, ThreadPortFailure>[] = [];
-    world.rows.beforeWindow = Effect.gen(function* () {
-      const writer = yield* Effect.forkIn(world.append(words(`w${writers.length}`, 'more')), scope, { startImmediately: true });
-      writers.push(writer);
-      if (writers.length === 1) yield* Fiber.join(writer);
+    let written = false;
+    world.rows.beforeWindow = Effect.suspend(() => {
+      if (written) return Effect.void;
+      written = true;
+      return world.append(words('later', 'more'));
     });
     const snapshot = yield* world.snapshots.snapshot('t');
-    expect(snapshot.position).toBe(2);
-    expect(snapshot.live.at.position).toBe(2);
-    expect(snapshot.transcript.map((entry) => entry.id)).toEqual(['a', 'w0']);
+    expect(snapshot.position).toBe(1);
+    expect(snapshot.live.at.position).toBe(1);
+    expect(snapshot.transcript.map((entry) => entry.id)).toEqual(['a']);
     world.rows.beforeWindow = Effect.void;
-    yield* Fiber.join(writers[1]!);
-    expect((yield* world.snapshots.snapshot('t')).transcript.map((entry) => entry.id)).toEqual(['a', 'w0', 'w1']);
+    expect((yield* world.snapshots.snapshot('t')).transcript.map((entry) => entry.id)).toEqual(['a', 'later']);
   }),
 );
 it.effect(
@@ -86,14 +120,7 @@ it.effect(
     world.live.append('t', 'r', committed.id, ' words');
     const checked = yield* Deferred.make<void>();
     const resume = yield* Deferred.make<void>();
-    let heads = 0;
-    world.observed.head = Effect.fnUntraced(function* (head) {
-      if (++heads === 2) {
-        yield* Deferred.succeed(checked, undefined);
-        yield* Deferred.await(resume);
-      }
-      return head;
-    });
+    world.rows.beforeWindow = Effect.andThen(Deferred.succeed(checked, undefined), Deferred.await(resume));
     const opening = yield* Effect.forkScoped(world.snapshots.snapshot('t'), { startImmediately: true });
     yield* Deferred.await(checked);
     const landing = yield* Effect.forkScoped(
@@ -175,6 +202,53 @@ it.effect(
     yield* Fiber.join(older);
     yield* Fiber.join(newer);
     expect(sent).toEqual(['run-1', null]);
+  }),
+);
+it.effect('a failed host projection leaves unpublished journal facts for the next frame', () =>
+  Effect.gen(function* () {
+    let fail = false;
+    const world = yield* snapshotsOver({
+      project: (state) =>
+        fail ? Effect.fail(new ThreadStorageFailed({ call: 'host', cause: new Error('unavailable') })) : Effect.succeed(state),
+    });
+    yield* world.snapshots.publish('t');
+    const frames = yield* world.frames;
+    yield* world.append(words('a', 'one'));
+    fail = true;
+    expect((yield* Effect.flip(world.snapshots.publish('t')))._tag).toBe('ThreadStorageFailed');
+    fail = false;
+    yield* world.snapshots.publish('t');
+    expect((yield* frames.at(0)).deltas.map((delta) => delta.entry?.id)).toEqual(['a']);
+  }),
+);
+it.effect('a frame reopened without a live state projects host facts at its read cut', () =>
+  Effect.gen(function* () {
+    const entered = yield* Deferred.make<void>();
+    const resume = yield* Deferred.make<void>();
+    let waiting = false;
+    let readHost: (tx?: ThreadTx) => Effect.Effect<ThreadMetadataRow | undefined, ThreadBorderFailed> = () => Effect.die('host not ready');
+    const world = yield* snapshotsOver({
+      threads: ['t', 'host'],
+      project: Effect.fnUntraced(function* (state, tx) {
+        if (waiting) {
+          waiting = false;
+          yield* Deferred.succeed(entered, undefined);
+          yield* Deferred.await(resume);
+        }
+        const host = yield* readHost(tx);
+        return { ...state, thread: { ...state.thread, budgetTokens: host?.budgetTokens ?? null } };
+      }),
+    });
+    readHost = (tx) => world.rows.metadata('host', tx as MemoryTx | undefined);
+    world.active.set('t', runRow('r', { threadId: 't' }));
+    yield* world.snapshots.publish('t');
+    const frames = yield* world.frames;
+    waiting = true;
+    yield* world.transit([words('a', 'one')]);
+    yield* Deferred.await(entered);
+    yield* world.rows.transaction((tx) => world.rows.update('host', { budgetTokens: 7 }, tx));
+    yield* Deferred.succeed(resume, undefined);
+    expect((yield* frames.at(0)).state.thread.budgetTokens).toBeNull();
   }),
 );
 it.effect(
@@ -653,7 +727,7 @@ const snapshotsOver = Effect.fnUntraced(function* (
     readonly threads?: readonly string[];
     readonly rhythm?: ThreadRunLeaseRhythm;
     readonly residence?: ThreadResidence['Service'];
-    readonly project?: (state: ThreadState) => Effect.Effect<ThreadState, ThreadBorderFailed>;
+    readonly project?: (state: ThreadState, tx?: ThreadTx) => Effect.Effect<ThreadState, ThreadBorderFailed>;
   } = {},
 ) {
   const unused = () => Effect.die('Snapshots do not use this operation');
@@ -689,9 +763,6 @@ const snapshotsOver = Effect.fnUntraced(function* (
     latest: 0,
     head: 0,
   };
-  const observed: {
-    head: (head: number) => Effect.Effect<number>;
-  } = { head: (head) => Effect.succeed(head) };
   const inbox = inMemoryInboxStorage({ units: memory.units, calls: memory.records });
   const storage = threadStorageLayer({
     storage: rows,
@@ -703,7 +774,7 @@ const snapshotsOver = Effect.fnUntraced(function* (
       headPosition: (id, tx) =>
         Effect.flatMap(rawLog.headPosition(id, tx), (head) => {
           reads.head += 1;
-          return observed.head(head);
+          return Effect.succeed(head);
         }),
       positionOf: (id, recordId, tx) => rawLog.positionOf(id, recordId, tx),
     },
@@ -755,7 +826,7 @@ const snapshotsOver = Effect.fnUntraced(function* (
         runById: unused,
         isRunning: unused,
         runningHere: unused,
-        activeRunIn: unused,
+        activeRunIn: (id, tx) => Effect.sync(() => memory.read(tx as MemoryTx, () => active.get(id) ?? null)),
         runsOf: unused,
         latestRuns: unused,
         reapable: unused,
@@ -833,7 +904,6 @@ const snapshotsOver = Effect.fnUntraced(function* (
     ended,
     attachments,
     reads,
-    observed,
     inbox,
     append,
     transit,

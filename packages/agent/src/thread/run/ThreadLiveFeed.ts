@@ -5,7 +5,7 @@ import { appendedEntry } from '../../transcript/feedFold';
 import { wireWeight } from '../../transcript/cap';
 import { Effect, FiberSet, Layer, Semaphore } from 'effect';
 import type { ThreadBorderFailed } from '../ThreadBorder';
-import { ThreadFeed } from '../ThreadPorts';
+import { ThreadFeed, type ThreadTx } from '../ThreadPorts';
 import type { ThreadState, ThreadStateFrame, ThreadStateShape } from '../state';
 import { createEventEmitter, createKeyedEventEmitter } from '@runlith/utils/event';
 
@@ -269,11 +269,12 @@ function weigh(entry: ThreadTranscriptEntry | undefined): number {
 
 export function threadFeedLayer<TState extends ThreadStateShape>(
   live: ThreadLiveFeed<TState>,
-  toState: (state: ThreadState) => Effect.Effect<TState, ThreadBorderFailed>,
+  toState: (state: ThreadState, tx: ThreadTx) => Effect.Effect<TState, ThreadBorderFailed>,
 ): Layer.Layer<ThreadFeed> {
-  const publish = (frame: ThreadStateFrame<ThreadState>): Effect.Effect<void, ThreadBorderFailed> =>
-    Effect.map(toState(frame.state), (projected) => {
+  const publish = (frame: ThreadStateFrame<ThreadState>, tx: ThreadTx, published: () => void): Effect.Effect<void, ThreadBorderFailed> =>
+    Effect.map(toState(frame.state, tx), (projected) => {
       live.publishState({ ...frame, state: projected });
+      published();
     });
   return Layer.succeed(ThreadFeed, {
     atCut: (threadId, work) => live.atCut(threadId, work),
@@ -285,11 +286,15 @@ export function threadFeedLayer<TState extends ThreadStateShape>(
       return { at, open, progress };
     },
     liveView: live.view,
-    publish: (frame) => publish(frame),
-    carry: (frame) => {
+    publish,
+    carry: (frame, published) => {
       const last = live.stateOf(frame.state.thread.id);
-      if (last === null) return publish(frame);
-      return Effect.sync(() => live.publishState({ ...frame, state: { ...last, ...frame.state } }));
+      if (last === null) return Effect.succeed(false);
+      return Effect.sync(() => {
+        live.publishState({ ...frame, state: { ...last, ...frame.state } });
+        published();
+        return true;
+      });
     },
   });
 }

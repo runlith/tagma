@@ -20,6 +20,7 @@ import type { StoredThreadAttachment } from '@runlith/agent/thread/attachmentSto
 import { Message, type ContentPart, type MediaPart, type ToolResultPart } from '@runlith/llm/schema/messages';
 import type { ToolContent } from '@runlith/llm/schema/tool-content';
 import { uuidv7 } from 'uuidv7';
+import type { Unit } from '../../platform/contract/service/units.js';
 import type { AttachmentLocation } from '../contract/service/attachments.js';
 import { ThreadAttachmentMissing } from '../contract/service/failure.js';
 import type { LayerSources } from '../journal/base.js';
@@ -38,6 +39,7 @@ export class AttachmentFiles extends Context.Service<
       threadId: string,
       ownerId: string,
       refs: readonly ThreadAttachmentRef[],
+      unit?: Unit<'machine'>,
     ): Effect.Effect<readonly StoredThreadAttachment[], ThreadStorageFailed>;
     addressed(
       threadId: string,
@@ -98,10 +100,10 @@ export const makeThreadAttachments = Effect.fnUntraced(function* ({
     return (yield* files.exists(found.path)) ? found : null;
   });
 
-  const standing = Effect.fn('AttachmentFiles.standing')(function* (threadId: string, attachmentId: string) {
+  const standing = Effect.fn('AttachmentFiles.standing')(function* (threadId: string, attachmentId: string, unit?: Unit<'machine'>) {
     const own = yield* held(threadId, attachmentId);
     if (own !== null) return own;
-    for (const source of yield* sources(threadId).pipe(Effect.mapError((cause) => failed('sources')(cause)))) {
+    for (const source of yield* sources(threadId, unit).pipe(Effect.mapError((cause) => failed('sources')(cause)))) {
       const inherited = yield* held(source, attachmentId);
       if (inherited !== null) return inherited;
     }
@@ -197,10 +199,10 @@ export const makeThreadAttachments = Effect.fnUntraced(function* ({
       Effect.mapError(failed('drop')),
     ),
     resolve: Effect.fn('AttachmentFiles.resolve')(
-      function* (threadId, _ownerId, refs) {
+      function* (threadId, _ownerId, refs, unit) {
         const resolved: StoredThreadAttachment[] = [];
         for (const ref of refs) {
-          const held = yield* standing(threadId, ref.id);
+          const held = yield* standing(threadId, ref.id, unit);
           if (held === null) return yield* new ThreadAttachmentMissing(ref.id);
           const text = isThreadDocument(held.mediaType) ? decoder.decode(yield* files.readFile(held.path)) : undefined;
           resolved.push(stored(threadId, ref.id, held.mediaType, { name: held.name, text }));

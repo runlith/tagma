@@ -7,7 +7,8 @@ import { calibrationProfiles } from './compaction/calibration.js';
 import { evidenceReads } from './evidence/retained.js';
 import { evidenceReadsKind } from './resources/evidenceReads.js';
 import { toolOutputsKind } from './resources/toolOutputs.js';
-import { nativeRolloutPart } from './rollout.js';
+import { makeNativeRolloutPart } from './rollout.js';
+import { makeRestedWork, RestedWork } from './transcript/restedWork.js';
 import { makeThreadMetadata } from './rows/threadUnits.js';
 import { toolOutputStore } from './tools/outputStore.js';
 import { makeBaseReach } from '../threads/journal/base.js';
@@ -175,11 +176,14 @@ export const nativeStoresLayer = Layer.effectContext(
     const reach = yield* makeBaseReach;
     const toolOutputs = toolOutputStore((yield* ToolOutputsPlace).path ?? join(home ?? tmpdir(), 'tool-outputs'), reach.sources);
     const reads = yield* evidenceReads(join(home ?? tmpdir(), 'evidence-reads'));
+    const work = yield* makeRestedWork;
+    const rollout = yield* makeNativeRolloutPart.pipe(Effect.provideService(RestedWork, work));
     const stores = Context.make(ToolOutputs, { store: toolOutputs }).pipe(
       Context.add(HarnessToolOutputs, toolOutputs),
       Context.add(EvidenceReads, reads),
       Context.add(NativeResourceKinds, [toolOutputsKind(toolOutputs, reach), evidenceReadsKind(reads)]),
-      Context.add(NativeRolloutPart, nativeRolloutPart),
+      Context.add(NativeRolloutPart, rollout),
+      Context.add(RestedWork, work),
       Context.add(ThreadMetadataSource, yield* makeThreadMetadata),
     );
     return home === undefined ? stores : Context.add(stores, CalibrationProfiles, calibrationProfiles(join(home, 'calibration.json')));
@@ -189,6 +193,7 @@ export const nativeStoresLayer = Layer.effectContext(
 export const targetSnapshotsLayer = Layer.effect(TargetSnapshots, makeTargetSnapshots);
 
 export type NativeHarnessRequirements =
+  | NativeRolloutPart
   | Scope.Scope
   | ThreadEntryKinds
   | CapabilityOffers
@@ -351,7 +356,7 @@ export const assembleNativeHarness: Effect.Effect<NativeAssembly, never, NativeH
       Effect.catch((failure) => Effect.logWarning('external leftovers pass failed', { failure })),
     ),
   );
-  const parts: NativeHarnessParts['Service'] = { harness: nativeHarness(harness, threads, operatorRuns) };
+  const parts: NativeHarnessParts['Service'] = { harness: yield* nativeHarness(harness, threads, operatorRuns) };
   yield* (yield* HarnessRegistry).register(NATIVE_HARNESS as HarnessId, parts.harness);
   return { owners, parts, workflows: yield* workflows({ runs, dataPath: dataPathOf((yield* MachineStore).path) }) };
 });

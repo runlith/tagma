@@ -62,7 +62,8 @@ import { workspaceInputsLayer as workspaceInputsLayerOver } from '../inputs/cach
 import { evidenceReads as evidenceReadsOver } from '../evidence/retained.js';
 import { evidenceReadsKind as evidenceReadsKindOver } from '../resources/evidenceReads.js';
 import { toolOutputsKind as toolOutputsKindOver } from '../resources/toolOutputs.js';
-import { nativeRolloutPart as nativeRolloutPartOver } from '../rollout.js';
+import { makeNativeRolloutPart } from '../rollout.js';
+import { makeRestedWork, RestedWork } from '../transcript/restedWork.js';
 import { makeThreadMetadata } from '../rows/threadUnits.js';
 import { rowBirths as rowBirthsOver } from '../rows/births.js';
 import { makeTransitions } from '../runs/transitionStore.js';
@@ -129,7 +130,13 @@ export const mcpBoundTools = () => new McpBoundTools();
 export const callDelivery = (owed: OwedCalls['Service']) => makeCallDelivery.pipe(Effect.provideService(OwedCalls, owed));
 
 export const restedFolds = (rested: RestedRollouts['Service'], kinds: ThreadEntryReader) =>
-  makeRestedFolds.pipe(Effect.provideService(RestedRollouts, rested), Effect.provideService(ThreadEntryKinds, kinds));
+  Effect.flatMap(makeRestedWork, (work) =>
+    makeRestedFolds.pipe(
+      Effect.provideService(RestedWork, work),
+      Effect.provideService(RestedRollouts, rested),
+      Effect.provideService(ThreadEntryKinds, kinds),
+    ),
+  );
 
 export const threadEventStripping = (kinds: ThreadEntryReader) => makeEventStripping.pipe(Effect.provideService(ThreadEntryKinds, kinds));
 
@@ -257,7 +264,8 @@ export const threadPrunedToolCall = () => threadPrunedToolCallTable;
 
 export const SCOPED_RUN = () => SCOPED_RUN_OVER;
 
-export const nativeRolloutPart = () => nativeRolloutPartOver;
+export const nativeRolloutPart = () =>
+  Effect.flatMap(makeRestedWork, (work) => makeNativeRolloutPart.pipe(Effect.provideService(RestedWork, work)));
 
 export const COMPACTION_PROMPT = () => COMPACTION_PROMPT_OVER;
 

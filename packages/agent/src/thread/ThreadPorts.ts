@@ -68,7 +68,7 @@ export class ThreadEventJournal extends Context.Service<ThreadEventJournal, Thre
   '@runlith/agent/ThreadEventJournal',
 ) {}
 
-export class ThreadAttachments extends Context.Service<ThreadAttachments, ThreadAttachmentStorage<ThreadWriteTx>>()(
+export class ThreadAttachments extends Context.Service<ThreadAttachments, ThreadAttachmentStorage<ThreadTx>>()(
   '@runlith/agent/ThreadAttachments',
 ) {}
 
@@ -335,10 +335,11 @@ export class ThreadReadiness extends Context.Service<
   { ready(thread: ThreadRow): Effect.Effect<void, ThreadBorderFailed> } | null
 >()('@runlith/agent/ThreadReadiness') {}
 
-export class ThreadResting extends Context.Service<
-  ThreadResting,
-  { resting(threadId: string): Effect.Effect<boolean, ThreadBorderFailed> } | null
->()('@runlith/agent/ThreadResting') {}
+type ThreadRestingPort<TTx> = {
+  resting(threadId: string, tx?: TTx): Effect.Effect<boolean, ThreadBorderFailed>;
+};
+
+export class ThreadResting extends Context.Service<ThreadResting, ThreadRestingPort<ThreadTx> | null>()('@runlith/agent/ThreadResting') {}
 
 export class ThreadResidence extends Context.Service<
   ThreadResidence,
@@ -386,7 +387,7 @@ export type ThreadHostPorts =
   | ThreadModelMoves
   | StandingSwitches;
 
-export type ThreadHost<TWrite = ThreadWriteTx> = {
+export type ThreadHost<TWrite = ThreadWriteTx, TTx = ThreadTx> = {
   readonly rhythms: ThreadRhythms;
   readonly ownerId?: string;
   readonly approvers?: ApproversPort;
@@ -395,14 +396,14 @@ export type ThreadHost<TWrite = ThreadWriteTx> = {
   readonly owedCalls?: { owe(call: CallRecord, tx: TWrite): Effect.Effect<void, ThreadBorderFailed> };
   readonly ownWork?: NonNullable<Context.Service.Shape<typeof ThreadOwnWork>>;
   readonly readiness?: NonNullable<Context.Service.Shape<typeof ThreadReadiness>>;
-  readonly resting?: NonNullable<Context.Service.Shape<typeof ThreadResting>>;
+  readonly resting?: ThreadRestingPort<TTx>;
   readonly residence?: NonNullable<Context.Service.Shape<typeof ThreadResidence>>;
   readonly modelMoves?: NonNullable<Context.Service.Shape<typeof ThreadModelMoves>>;
   readonly standingSwitches?: NonNullable<Context.Service.Shape<typeof StandingSwitches>>;
   readonly sweep?: NonNullable<Context.Service.Shape<typeof RunSweep>>;
 };
 
-export function threadHostLayer<TWrite = ThreadWriteTx>(given: ThreadHost<TWrite>): Layer.Layer<ThreadHostPorts> {
+export function threadHostLayer<TWrite = ThreadWriteTx, TTx = ThreadTx>(given: ThreadHost<TWrite, TTx>): Layer.Layer<ThreadHostPorts> {
   const host = given as unknown as ThreadHost;
   return Layer.mergeAll(
     Layer.succeed(ThreadLeaseRhythm, host.rhythms.lease),
@@ -433,7 +434,7 @@ export class ThreadFeed extends Context.Service<
     progress(threadId: string, runId: string, progress: ThreadLiveProgress): void;
     view(threadId: string): ThreadOpenView;
     liveView(threadId: string): ThreadLiveView;
-    publish(frame: ThreadStateFrame<ThreadState>): Effect.Effect<void, ThreadBorderFailed>;
-    carry(frame: ThreadStateFrame<ThreadState>): Effect.Effect<void, ThreadBorderFailed>;
+    publish(frame: ThreadStateFrame<ThreadState>, tx: ThreadTx, published: () => void): Effect.Effect<void, ThreadBorderFailed>;
+    carry(frame: ThreadStateFrame<ThreadState>, published: () => void): Effect.Effect<boolean, ThreadBorderFailed>;
   }
 >()('@runlith/agent/ThreadFeed') {}

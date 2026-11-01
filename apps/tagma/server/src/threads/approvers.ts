@@ -10,7 +10,7 @@ import {
   type ApproverWhy,
 } from '@runlith/agent/thread/Approvers';
 import { MachineStore } from '../platform/contract/service/store.js';
-import { MachineUnits } from '../platform/contract/service/units.js';
+import { MachineUnits, type Unit } from '../platform/contract/service/units.js';
 import { SettingChanges } from '../settings/contract/service/changes.js';
 import { threadRecord } from '../thread-record/store/table.js';
 import { ENTRY_OPEN_QUESTION_INDEX, THREAD_OPEN_QUESTION_INDEX, thread, threadEntry } from './store/kernel.js';
@@ -42,8 +42,9 @@ export const readApproves = Effect.fnUntraced(function* (
   settings: Settings['Service'],
   threadId: string,
   projectId: number,
+  unit?: Unit<'machine'>,
 ): Effect.fn.Return<ApprovesReading, StoreFailure> {
-  const lineage = yield* mandate.approvesLineage(threadId);
+  const lineage = yield* mandate.approvesLineage(threadId, unit);
   if (lineage.nearest !== null) {
     return {
       own: lineage.own,
@@ -52,7 +53,7 @@ export const readApproves = Effect.fnUntraced(function* (
       origin: lineage.nearest.setAt === threadId ? 'own' : 'lineage',
     } as const;
   }
-  return { own: null, effective: yield* settings.value(approvesKey, projectId), setAt: null, origin: 'setting' } as const;
+  return { own: null, effective: yield* settings.value(approvesKey, projectId, unit), setAt: null, origin: 'setting' } as const;
 });
 
 export const followRoutes = Effect.fnUntraced(function* (harness: AgentHarness) {
@@ -163,7 +164,7 @@ export type ApproverStanding = {
   readonly grant: ReadonlySet<string>;
 };
 
-export type StandingOf = (threadId: string) => Effect.Effect<ApproverStanding, StoreFailure | ThreadPortFailure>;
+export type StandingOf = (threadId: string, unit?: Unit<'machine'>) => Effect.Effect<ApproverStanding, StoreFailure | ThreadPortFailure>;
 
 export function approverStanding(
   lookup: ThreadLookup['Service'],
@@ -175,13 +176,13 @@ export function approverStanding(
     why,
     grant,
   });
-  return Effect.fnUntraced(function* (threadId) {
-    const child = yield* lookup.find(threadId, OPERATOR_PRINCIPAL);
+  return Effect.fnUntraced(function* (threadId, unit) {
+    const child = yield* lookup.find(threadId, OPERATOR_PRINCIPAL, unit);
     if (child === undefined || child.parentThreadId === null) return none('no-parent');
-    if (yield* mandate.takenOver(threadId)) return none('taken-over');
-    const parent = yield* lookup.find(child.parentThreadId, OPERATOR_PRINCIPAL);
+    if (yield* mandate.takenOver(threadId, unit)) return none('taken-over');
+    const parent = yield* lookup.find(child.parentThreadId, OPERATOR_PRINCIPAL, unit);
     if (parent === undefined || parent.archivedAt != null) return none('no-parent');
-    const grant = new Set((yield* readApproves(mandate, settings, parent.id, parent.projectId)).effective);
+    const grant = new Set((yield* readApproves(mandate, settings, parent.id, parent.projectId, unit)).effective);
     return grant.size === 0 ? none('no-grant', grant) : { approver: parent.id, why: 'parent', grant };
   });
 }

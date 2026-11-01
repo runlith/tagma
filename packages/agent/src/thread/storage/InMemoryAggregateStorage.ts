@@ -3,7 +3,7 @@ import type { ThreadPortFailure } from '../ThreadBorder';
 import type { ThreadTx, ThreadWriteTx } from '../ThreadPorts';
 import { applyThreadEntryPlacements } from '../../transcript/eventFold';
 import type { ThreadContextReading, ThreadHistory, ThreadRow } from '../rows';
-import type { ThreadAggregateStorage, ThreadAtomicPatch } from './aggregate';
+import type { ThreadAggregateStorage, ThreadAtomicPatch, ThreadReadCut } from './aggregate';
 import { evidenceKey, type Evidence } from '../keyed';
 import type {
   RecordReading,
@@ -17,7 +17,7 @@ import type {
 import type { ThreadCacheObservation } from './cacheObservations';
 import { MemoryTx } from './memory/units';
 import { openQuestionsIn } from '../../transcript/questions';
-import type { ThreadQuestionEntry } from '../../transcript/entries';
+import { toolSettled, type ThreadQuestionEntry, type ThreadToolEntry } from '../../transcript/entries';
 import { coreEntry } from '../../transcript/kinds';
 import type { ThreadTranscript } from '../../transcript/rows';
 import { NATIVE_BINDING, NATIVE_CAPABILITIES } from '../record';
@@ -220,6 +220,7 @@ export const makeAggregateStorage = ({
         const from = commits;
         return tx.afterCommit(after(new Map(threadIds.map((threadId) => [threadId, { from, to: from + 1 }]))));
       }),
+    readCut: <T, E>(_threadId: string, _use: (cut: ThreadReadCut<ThreadTx>) => Effect.Effect<T, E>) => offPath('readCut'),
     transaction: <T, E>(body: (tx: ThreadWriteTx) => Effect.Effect<T, E>) => inUnit('', body),
     find: () => offPath('find'),
     findOwned: () => offPath('findOwned'),
@@ -244,6 +245,13 @@ export const makeAggregateStorage = ({
     systemPromptOf: () => Effect.succeed({ systemPrompt: state.systemPrompt, pendingSystemPrompt: state.pendingSystemPrompt }),
     entriesOfRun: (_id: string, runId: string) =>
       sliceReads === 'refuse' ? offPath('entriesOfRun') : Effect.succeed(state.transcript.filter((entry) => entry.runId === runId)),
+    openToolsOfRun: (_id: string, runId: string) =>
+      Effect.succeed(
+        state.transcript.filter(
+          (entry): entry is ThreadToolEntry =>
+            entry.runId === runId && coreEntry(entry) && entry.type === 'tool' && !toolSettled(entry.toolState),
+        ),
+      ),
     openQuestionsOfRun: (_id: string, runId: string) =>
       sliceReads === 'refuse'
         ? offPath('openQuestionsOfRun')
