@@ -92,6 +92,21 @@
       "browser": "./src/lib/wire/access.ts",
       "default": "./src/lib/wire/access.ts"
     },
+    "./wire/door": {
+      "types": "./src/lib/wire/Door.ts",
+      "browser": "./src/lib/wire/Door.ts",
+      "default": "./src/lib/wire/Door.ts"
+    },
+    "./wire/live": {
+      "types": "./src/lib/wire/Live.ts",
+      "browser": "./src/lib/wire/Live.ts",
+      "default": "./src/lib/wire/Live.ts"
+    },
+    "./wire/refusal": {
+      "types": "./src/lib/wire/refusal.ts",
+      "browser": "./src/lib/wire/refusal.ts",
+      "default": "./src/lib/wire/refusal.ts"
+    },
     "./ports/links": {
       "types": "./src/lib/shared/ExternalLinks.ts",
       "browser": "./src/lib/shared/ExternalLinks.ts",
