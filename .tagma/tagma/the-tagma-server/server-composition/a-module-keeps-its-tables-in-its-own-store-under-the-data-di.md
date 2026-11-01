@@ -13,6 +13,8 @@ sources:
     ref: apps/tagma/server/src/composition/extensions.ts
   - kind: file
     ref: apps/tagma/server/src/composition/attempt.ts
+  - kind: file
+    ref: apps/tagma/server/src/installation/process/trial.ts
 ---
 A module that keeps tables of its own declares `stores` in its manifest — an id, the service key the opened store answers to, and its migration folder — instead of adding tables to the machine database, whose one migration chain every build carries. Composition opens each declared store at `<data>/stores/<id>.sqlite` on the machine store's process pool and durability, before the installation lifetimes of modules outside the core, and the store's key joins the context those lifetimes, the serving tier and the doors take.
 
