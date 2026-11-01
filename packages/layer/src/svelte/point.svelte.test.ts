@@ -134,6 +134,22 @@ describe('Point', () => {
     void app.close();
   });
 
+  it('takes a member an entry brings while its scope has not started, though the point was built before the entry came', async () => {
+    const Early = Point.define<Entry>()('PointTest.Entered', { tier: 'app', key: (entry) => entry.id, joins: 'start' });
+    const entry = Layer.entry('PointTest.entry', () =>
+      Promise.resolve({ default: Early.contribute('entry', { id: 'entered', order: 1 }) }),
+    );
+    const app = new MountedApp(
+      App.define(Layer.mergeAll(Early, Early.contribute('core', { id: 'core', order: 0 }), entry)),
+      Layer.mergeAll(),
+      { effectRoot: (build) => (build(), () => undefined), cell: reactiveCell, start: 'mount' },
+    );
+    const point = app.resolve(Early);
+    await app.enter(entry, undefined);
+    expect(point.items.map((one) => one.id)).toEqual(['core', 'entered']);
+    void app.close();
+  });
+
   it('refuses two contributions under one name even when one condition admits both', () => {
     expect(() =>
       mountApp(

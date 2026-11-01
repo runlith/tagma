@@ -198,7 +198,8 @@ export class Graph {
   private readonly lasting = new WeakMap<Scope, Definition[]>();
   private readonly entries = new Set<EntryItem>();
   private readonly entered = new Map<EntryItem, { readonly staged: Staged; started: boolean }>();
-  private readonly members = new Map<AnyKeyClass, Definition[]>();
+  private readonly members = new Map<AnyKeyClass, Set<Definition>>();
+  private draining = false;
   private readonly refusedJoins = new WeakMap<Scope, Set<AnyKeyClass>>();
   private readonly joining: { readonly key: AnyKeyClass; readonly owner: Scope }[] = [];
   private constructing = 0;
@@ -249,6 +250,8 @@ export class Graph {
     if (!definition) throw new UnknownServiceError(key.id, this.unentered());
     if (definition.kind === 'value') {
       owner.instances.set(key, definition.instance);
+      this.owned(key, owner);
+      this.join();
       return definition.instance as Self;
     }
     if (definition.kind === 'deferred') throw new DeferredServiceError(key.id);
@@ -335,39 +338,50 @@ export class Graph {
     try {
       const instance = this.build(key, owner, recipe);
       owner.instances.set(key, instance as object);
-      if (this.members.has(key) && !this.started.has(owner)) this.joining.push({ key, owner });
+      this.owned(key, owner);
       return instance;
     } finally {
       owner.building.delete(key);
       this.constructing -= 1;
-      if (this.constructing === 0) this.join();
+      this.join();
     }
+  }
+
+  private owned(key: AnyKeyClass, owner: Scope): void {
+    if (this.members.has(key) && !this.started.has(owner) && owner.instances.has(key)) this.joining.push({ key, owner });
   }
 
   private join(): void {
-    for (let next = this.joining.shift(); next !== undefined; next = this.joining.shift()) {
-      const { key, owner } = next;
-      if (owner.closed || this.started.has(owner)) continue;
-      for (const definition of this.members.get(key) ?? []) {
-        if (this.data !== 'eager' && !definition.key.eager) continue;
-        if (!owner.hosts(definition.key.tier) || this.lookup(definition.key, owner) !== definition) continue;
-        if (this.attempt(definition.key, owner)) continue;
-        let refused = this.refusedJoins.get(owner);
-        if (refused === undefined) {
-          refused = new Set();
-          this.refusedJoins.set(owner, refused);
+    if (this.constructing > 0 || this.draining) return;
+    this.draining = true;
+    try {
+      for (let next = this.joining.shift(); next !== undefined; next = this.joining.shift()) {
+        const { key, owner } = next;
+        if (owner.closed || this.started.has(owner)) continue;
+        for (const definition of this.members.get(key) ?? []) {
+          if (this.data !== 'eager' && !definition.key.eager) continue;
+          if (!owner.hosts(definition.key.tier) || this.lookup(definition.key, owner) !== definition) continue;
+          if (owner.instances.has(definition.key) || this.attempt(definition.key, owner)) continue;
+          let refused = this.refusedJoins.get(owner);
+          if (refused === undefined) {
+            refused = new Set();
+            this.refusedJoins.set(owner, refused);
+          }
+          refused.add(definition.key);
         }
-        refused.add(definition.key);
       }
+    } finally {
+      this.draining = false;
     }
   }
 
-  private file(definition: Definition): void {
-    if (definition.kind !== 'make' || definition.joins === undefined) return;
+  private file(definition: Definition): AnyKeyClass | undefined {
+    if (definition.kind !== 'make' || definition.joins === undefined) return undefined;
     const host = definition.joins();
     const standing = this.members.get(host);
-    if (standing === undefined) this.members.set(host, [definition]);
-    else if (!standing.includes(definition)) standing.push(definition);
+    if (standing === undefined) this.members.set(host, new Set([definition]));
+    else standing.add(definition);
+    return host;
   }
 
   spawn<Self>(life: Scope, id: string, recipe: () => unknown, answers?: Answers): Self {
@@ -710,10 +724,11 @@ export class Graph {
         );
       else admitted.push(entry);
     }
-    for (const { definition, into } of admitted) {
+    for (const { definition, into, owner } of admitted) {
       into.set(definition.key, definition);
       this.ids.set(definition.key.id, definition.key);
-      this.file(definition);
+      const host = this.file(definition);
+      if (host !== undefined) this.owned(host, owner.owner(host.tier) ?? owner);
     }
     for (const [key, fallback] of fallbacks) this.fallbacks.set(key, fallback);
     if (source) {
@@ -735,6 +750,7 @@ export class Graph {
       }
       bySource.set(source, { keys: held, nested });
     }
+    this.join();
     return { admitted, nested, bound };
   }
 
