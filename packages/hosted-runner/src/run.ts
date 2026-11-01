@@ -17,12 +17,14 @@ export type HostedLaunch = {
   readonly effort: string | null;
   readonly version: string;
   readonly titled: boolean;
+  readonly data: string | null;
 };
 
 export type HostedAsk = {
   readonly model: string;
   readonly effort: string | null;
   readonly system: string;
+  readonly data: string | null;
 };
 
 export type HostedRunner = {

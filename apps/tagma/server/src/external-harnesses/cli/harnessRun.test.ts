@@ -13,7 +13,7 @@ const at = new Invocation({}, '/work', () => new Response('').body!, 'tagma');
 
 it.effect('a fresh ask resolves its builtin runner declaration and preserves the runner’s login refusal', () =>
   Effect.gen(function* () {
-    const command = harnessRun(server, new Map([['quill', async () => cursorRunner]]));
+    const command = harnessRun(server, { runners: new Map([['quill', async () => cursorRunner]]), data: () => null });
     const refused = yield* Effect.flip(
       Command.runWith(command, { version: 'test' })(['quill', '--ask', '--model', 'composer-test']).pipe(
         Effect.provideService(CurrentInvocation, at),

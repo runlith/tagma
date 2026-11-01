@@ -3,7 +3,7 @@ import type { Effect } from 'effect';
 import type { HookClient } from './hooks/door.js';
 import type { HarnessCatalog } from './hooks/rows.js';
 import type { ServerCli } from './cli/server.js';
-import type { HostedRunners } from './cli/harnessRun.js';
+import type { HostedPlaces } from './cli/harnessRun.js';
 
 type VerbSource = () => Promise<Record<string, unknown>>;
 
@@ -11,7 +11,7 @@ export const externalHarnessVerbs = (
   hookBinding: () => Promise<(at: Invocation) => Effect.Effect<HookClient>>,
   serverBinding: () => Promise<ServerCli>,
   catalogBinding: () => Promise<HarnessCatalog>,
-  runnersBinding: () => Promise<HostedRunners>,
+  runnersBinding: () => Promise<HostedPlaces>,
 ): Readonly<{ hook: VerbSource; 'harness-run': VerbSource }> => ({
   hook: async () => {
     const [{ hook }, connect] = await Promise.all([import('./cli/hook.js'), hookBinding()]);
@@ -19,7 +19,7 @@ export const externalHarnessVerbs = (
     return { hook: hook({ connect: hookConnectOver(connect), catalog: catalogBinding }) };
   },
   'harness-run': async () => {
-    const [{ harnessRun }, server, runners] = await Promise.all([import('./cli/harnessRun.js'), serverBinding(), runnersBinding()]);
-    return { harnessRun: harnessRun(server, runners) };
+    const [{ harnessRun }, server, places] = await Promise.all([import('./cli/harnessRun.js'), serverBinding(), runnersBinding()]);
+    return { harnessRun: harnessRun(server, places) };
   },
 });

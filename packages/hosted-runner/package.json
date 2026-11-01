@@ -45,6 +45,10 @@
       "types": "./src/output.ts",
       "default": "./src/output.ts"
     },
+    "./question": {
+      "types": "./src/question.ts",
+      "default": "./src/question.ts"
+    },
     "./relay": {
       "types": "./src/relay.ts",
       "default": "./src/relay.ts"
