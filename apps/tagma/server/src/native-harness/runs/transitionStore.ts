@@ -112,6 +112,16 @@ export const makeTransitions = Effect.fnUntraced(function* ({
       at: sql.placeholder('at'),
     })
     .prepare();
+  const reportMarks = and(eq(threadCall.actor, sql.placeholder('actor')), eq(threadCall.operation, REPORT_OPERATION));
+  const trimReports = db
+    .delete(threadCall)
+    .where(
+      and(
+        reportMarks,
+        sql`${threadCall.key} not in (select ${threadCall.key} from ${threadCall} where ${reportMarks} order by rowid desc limit ${REPORT_WINDOW})`,
+      ),
+    )
+    .prepare();
 
   const version = (unit: Unit<'machine'>, threadId: string): Effect.Effect<ThreadVersion | undefined, StoredFailure> =>
     unit.run(versionById.get({ threadId }));
@@ -316,17 +326,7 @@ export const makeTransitions = Effect.fnUntraced(function* ({
     if (program !== null) {
       yield* program.write(bindQuery(recordCall, recorded), 1);
       if (call.operation !== REPORT_OPERATION) return;
-      const marks = and(eq(threadCall.actor, call.actor), eq(threadCall.operation, REPORT_OPERATION));
-      return yield* program.write(
-        db
-          .delete(threadCall)
-          .where(
-            and(
-              marks,
-              sql`${threadCall.key} not in (select ${threadCall.key} from ${threadCall} where ${marks} order by rowid desc limit ${REPORT_WINDOW})`,
-            ),
-          ),
-      );
+      return yield* program.write(bindQuery(trimReports, { actor: call.actor }));
     }
     yield* unit.run(recordCall.run(recorded));
     if (call.operation !== REPORT_OPERATION) return;

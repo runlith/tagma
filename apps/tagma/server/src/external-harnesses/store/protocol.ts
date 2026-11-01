@@ -1,10 +1,12 @@
 import { eq, sql } from 'drizzle-orm';
 import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
-import { Effect, Schema } from 'effect';
+import { Clock, Effect, Schema } from 'effect';
 import { threadRecord } from '../../thread-record/store/table.js';
 import type { StoreDb, StoreFailure } from '../../platform/contract/service/store.js';
 import type { MachineUnits, Unit } from '../../platform/contract/service/units.js';
 import { writes } from '../../platform/contract/service/writes.js';
+import { programOf } from '../../platform/store/programs.js';
+import { bindQuery, prepareFor } from '../../platform/store/queries.js';
 import { nativeRows, thread } from '../../threads/store/kernel.js';
 import { declareCapabilities, type DeclaredByAgent } from '../../threads/store/seat.js';
 import { GateRefusal } from '../../platform/contract/wire/refusal.js';
@@ -19,6 +21,14 @@ export const protocolSession = sqliteTable('protocol_session', {
     .notNull()
     .$defaultFn(() => new Date()),
 });
+
+const protocolQueries = prepareFor((db: StoreDb<'machine'>) => ({
+  upsert: db
+    .insert(protocolSession)
+    .values({ id: sql.placeholder('id'), row: sql.placeholder('row'), updatedAt: sql.placeholder('updatedAt') })
+    .onConflictDoUpdate({ target: protocolSession.id, set: { row: sql`excluded.row`, updatedAt: sql`excluded.updated_at` } })
+    .prepare(),
+}));
 
 const decodeRow = Schema.decodeUnknownResult(ProtocolRow);
 const encodeRow = Schema.encodeSync(ProtocolRow);
@@ -56,14 +66,12 @@ export class ProtocolRows {
 
   write(unit: Unit<'machine'>, threadId: string, row: ProtocolRow): Effect.Effect<void, StoreFailure> {
     const encoded = encodeRow(row);
-    return Effect.asVoid(
-      unit.run(
-        this.db
-          .insert(protocolSession)
-          .values({ id: threadId, row: encoded })
-          .onConflictDoUpdate({ target: protocolSession.id, set: { row: sql`excluded.row`, updatedAt: sql`excluded.updated_at` } }),
-      ),
-    );
+    const { upsert } = protocolQueries(this.db);
+    return Effect.flatMap(Clock.currentTimeMillis, (now) => {
+      const values = { id: threadId, row: encoded, updatedAt: new Date(now) };
+      const program = programOf(unit);
+      return Effect.asVoid(program === null ? unit.run(upsert.execute(values)) : program.write(bindQuery(upsert, values)));
+    });
   }
 
   drop(unit: Unit<'machine'>, threadId: string): Effect.Effect<void, StoreFailure> {

@@ -368,6 +368,16 @@ const plannedQueries = prepareFor((db: Db) => ({
     .from(threadQuietRun)
     .where(and(eq(threadQuietRun.threadId, sql.placeholder('threadId')), eq(threadQuietRun.runId, sql.placeholder('runId'))))
     .prepare(),
+  closeGap: db
+    .delete(threadMessageGap)
+    .where(
+      and(
+        eq(threadMessageGap.threadId, sql.placeholder('threadId')),
+        eq(threadMessageGap.entryId, sql.placeholder('entryId')),
+        sql`exists (select 1 from ${threadConversation} where ${threadConversation.threadId} = ${sql.placeholder('threadId')} and ${threadConversation.through} = ${sql.placeholder('at')})`,
+      ),
+    )
+    .prepare(),
 }));
 
 const placing = new WeakMap<Program, Set<string>>();
@@ -381,10 +391,8 @@ const gapWhen = (db: Db, program: Program, threadId: string, entryId: string, ru
       on conflict (thread_id, entry_id) do update set run_id = excluded.run_id`),
   );
 
-const closeGapWhen = (db: Db, program: Program, threadId: string, entryId: string, when: SQL) =>
-  program.write(
-    db.delete(threadMessageGap).where(and(eq(threadMessageGap.threadId, threadId), eq(threadMessageGap.entryId, entryId), when)),
-  );
+const closeGapAt = (program: Program, queries: ReturnType<typeof plannedQueries>, threadId: string, entryId: string, at: number) =>
+  program.write(bindQuery(queries.closeGap, { threadId, entryId, at }));
 
 const dropWhen = (db: Db, program: Program, key: string, when: SQL) =>
   program.write(db.run(sql`delete from ${threadMessage} where key = cast(${key} as integer) and ${when}`));
@@ -444,10 +452,10 @@ const messagePlanned = Effect.fnUntraced(function* (
   const unkeyed = role !== null && !silent && text.trim() !== '' && !keyable(ms);
   if (dropped) {
     if (standing !== undefined) yield* dropWhen(db, program, standing.key, when);
-    yield* unkeyed ? gapWhen(db, program, threadId, entryId, runId, when) : closeGapWhen(db, program, threadId, entryId, when);
+    yield* unkeyed ? gapWhen(db, program, threadId, entryId, runId, when) : closeGapAt(program, queries, threadId, entryId, position);
     return;
   }
-  yield* closeGapWhen(db, program, threadId, entryId, when);
+  yield* closeGapAt(program, queries, threadId, entryId, position);
   const said = role as ConversationRole;
   if (standing !== undefined && standing.occurred_at === ms) {
     yield* program.write(
