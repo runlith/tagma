@@ -1,0 +1,19 @@
+---
+id: 01a196db-341a-7c0a-9804-2f599f4ffa55
+title: Signed relocation returns its source journal range after departure
+ord: 31
+tags: ["task"]
+fields:
+  {
+    "status": "open"
+  }
+edges:
+  - kind: discovered-from
+    to: 01a196c4-e242-7ea0-97a4-269b83c5b282
+sources:
+  - kind: file
+    ref: apps/tagma/server/src/graph/journal/callRange.ts
+  - kind: file
+    ref: apps/tagma/server/src/invocation/journaled.ts
+---
+A signed two-store move can return journalUnreadable although the source depart event was recorded: departure renames the source row, then call-range decoration resolves the returned former name in that source store. Confirm the full native-door chain and fix journal identity at its owning boundary while preserving source authority, destination provenance, resumption and ordinary per-block call filtering. Prove the actual signed response red before the fix and green afterward, including its source range and departure; assertions must observe the journal fields the existing generic door helper strips. Run only affected checks and one independent review after author checks.
