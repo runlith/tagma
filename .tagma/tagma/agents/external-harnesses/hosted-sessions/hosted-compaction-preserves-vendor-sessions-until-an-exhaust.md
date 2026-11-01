@@ -1,6 +1,6 @@
 ---
 id: 01a10a1a-ee85-7fd6-b885-d18d92391518
-title: Hosted compaction follows the session contract; vendor-owned compaction never resets the session
+title: Hosted compaction preserves vendor sessions until an exhausted context requires recovery
 ord: 2
 tags: ["explanation"]
 edges:
