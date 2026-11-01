@@ -25,6 +25,7 @@ import { hookFields } from '../contract/wire/receipt.js';
 import { CommitShape } from '../../change-record/contract/service/shape.js';
 import { COMMITTING, HookRefused } from '../land/hooks.js';
 import { cutRefusal } from '../land/commit.js';
+import { formingOver } from '../land/formed.js';
 import { commitIndex, type CommitRequest, type IndexCommitted, type IndexJudge } from '../land/indexCommit.js';
 import { LandingLanes } from '../land/lanes.js';
 import { mergePulled, type PullMerged } from '../land/pullMerge.js';
@@ -85,6 +86,7 @@ const committing = Effect.fn('checkout.commit')(function* (at: CheckoutAt, calle
   const rules = yield* RuleChecks;
   const retirement = yield* Retirement;
   const files = yield* FileSystem.FileSystem;
+  const carrying = yield* Effect.context<FileSystem.FileSystem | LineWrites>();
   const resolved = (yield* CheckoutActor).resolve(caller.actor, callerProject);
   const actor = resolved === null ? undefined : terminalActorOfRef(resolved);
   const checks = actChecks(rules, 'commit_checkout');
@@ -112,6 +114,7 @@ const committing = Effect.fn('checkout.commit')(function* (at: CheckoutAt, calle
                   projectId,
                   root,
                   judge,
+                  form: formingOver(changes, checkout, carrying),
                   job,
                   act: resolved ?? { kind: 'operator' },
                   landing: (commit, tree) =>

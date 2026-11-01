@@ -8,6 +8,19 @@ const UNHELD: ReshapeHolder = { _tag: 'unheld' };
 
 export type Forming = (reshaped: readonly Reshaped[]) => Effect.Effect<Effect.Effect<void>>;
 
+export const judgedInForm = <A, E, R>(
+  form: Forming,
+  reshaped: readonly Reshaped[],
+  judging: Effect.Effect<A, E, R>,
+): Effect.Effect<A, E, R> =>
+  reshaped.length === 0
+    ? judging
+    : Effect.acquireUseRelease(
+        form(reshaped),
+        () => judging,
+        (withdraw) => withdraw,
+      );
+
 export const formingOver = (
   changes: ChangeRecord['Service'],
   checkout: ChangeCheckout,
