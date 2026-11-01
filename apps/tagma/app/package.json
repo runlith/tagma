@@ -9,6 +9,7 @@
       "types": "./scripts/surfaceConfig.ts",
       "default": "./scripts/surfaceConfig.ts"
     },
+    "./compilerOptions": "./compilerOptions.js",
     "./composition": {
       "types": "./src/lib/app/composition.ts",
       "browser": "./src/lib/app/composition.ts",
