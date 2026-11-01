@@ -44,6 +44,9 @@ fields:
       },
       {
         "at": "src/bridge.ts"
+      },
+      {
+        "at": "src/question.ts"
       }
     ],
     "id": "@runlith/hosted-runner",
