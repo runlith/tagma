@@ -8,6 +8,6 @@ sources:
     ref: packages/layer/src/Point.ts
   - kind: symbol
     ref: packages/layer/src/Graph.ts
-    symbol: Graph.settled
+    symbol: Graph.starting
 ---
 The point admits a member only while `Graph.starting(scope)` holds, that is, during the synchronous part of the start of its tier's scope. The check reads the graph at admission, so a point first built after the start refuses at once. A member that arrives later refuses through the point's admission (`RegistryRefusal`, reported through `Failure`): one under a `Layer.when` that turns on later, a chunk, even one whose condition holds at start, and `register`. A chunk counts as late because rung scopes and the window are already drawn while it loads. A reader that judges stored references against the point and drops what it does not find, as a layout restore does, can therefore take the items it reads as final. A point that legitimately grows at run time, such as surfaces registered from app views, leaves `joins` unset.
