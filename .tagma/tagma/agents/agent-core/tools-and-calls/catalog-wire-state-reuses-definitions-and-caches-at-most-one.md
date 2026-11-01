@@ -8,4 +8,4 @@ sources:
     ref: packages/agent/src/agent/ModelRequests.ts
     symbol: wireToolDefinitions
 ---
-Each catalog owns one definition per tool and caches at most one subset array and key. Consecutive calls selecting the same subset reuse that array until another selection or a full-catalog call replaces it; definition identities remain shared across subsets. In-flight callers can keep the arrays they already received. The weak key lets cache-owned wire state become collectable with a catalog no caller holds.
+Each catalog owns one definition per tool and caches at most one subset array and key. The most recently requested subset reuses its array until a different subset replaces it; full-catalog projections do not evict it, so the native context read between model calls does not rebuild an unchanged selection. Definition identities remain shared across subsets. In-flight callers can keep the arrays they already received. The weak key lets cache-owned wire state become collectable with a catalog no caller holds.
