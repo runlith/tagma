@@ -22,6 +22,7 @@ const wordsOf = (row: Pick<ThreadListRow, 'name' | 'title' | 'archivedAt' | 'har
 export class ThreadWords {
   private readonly cache = new SvelteMap<string, OwnerWords | null>();
   private readonly asked = new Map<string, number>();
+  private readonly inFlight = new Map<string, Promise<readonly (OwnerWords | null)[] | undefined>>();
   private readonly own: string;
   private pending: Ask[] = [];
 
@@ -56,7 +57,7 @@ export class ThreadWords {
 
   async read(thread: string): Promise<OwnerWords | null | undefined> {
     if (!isThreadId(thread)) return null;
-    const words = (await this.fetchAt(null, [thread]))?.[0];
+    const words = (await this.fetchOne(thread))?.[0];
     return words == null || words.projectId === undefined ? words : { ...words, ...this.homeOf(words.projectId) };
   }
 
@@ -77,8 +78,16 @@ export class ThreadWords {
           asks.filter((ask) => ask.project === project).map((ask) => ask.thread),
         ),
       ),
-      ...asks.filter((ask) => ask.project === null).map((ask) => this.fetchAt(null, [ask.thread])),
+      ...asks.filter((ask) => ask.project === null).map((ask) => this.fetchOne(ask.thread)),
     ]);
+  }
+
+  private fetchOne(thread: string): Promise<readonly (OwnerWords | null)[] | undefined> {
+    const existing = this.inFlight.get(thread);
+    if (existing !== undefined) return existing;
+    const pending = this.fetchAt(null, [thread]).finally(() => this.inFlight.delete(thread));
+    this.inFlight.set(thread, pending);
+    return pending;
   }
 
   private async fetchAt(project: string | null, ids: readonly string[]): Promise<readonly (OwnerWords | null)[] | undefined> {

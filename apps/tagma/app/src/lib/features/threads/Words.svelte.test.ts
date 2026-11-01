@@ -17,7 +17,7 @@ const workspace = new (class {
 
 type Row = { id: string; projectId: number; name: string | null; title: string; harness: object | null; archivedAt: string | null };
 
-function wordsOver(rows: (ids: readonly string[]) => Promise<readonly Row[]>, roots: number | null = 1) {
+function wordsOver(rows: (ids: readonly string[], project: string | null) => Promise<readonly Row[]>, roots: number | null = 1) {
   const asked: Array<{ project: string | null; ids: string[] }> = [];
   const repo = {
     list: {
@@ -25,7 +25,7 @@ function wordsOver(rows: (ids: readonly string[]) => Promise<readonly Row[]>, ro
         refresh: () => {
           const ids = key.selection.ids.split(',');
           asked.push({ project: key.project, ids });
-          return rows(ids).then((found) => ({ status: 'rows', rows: found }));
+          return rows(ids, key.project).then((found) => ({ status: 'rows', rows: found }));
         },
       }),
     },
@@ -66,11 +66,15 @@ test('a thread outside the list is read by its id alone, and its words carry the
 
 test('an awaited identity read finds a holder home before the list loads and propagates failures', async () => {
   let failing = false;
-  const { words } = wordsOver(
-    (ids) =>
+  const { words, list } = wordsOver(
+    (ids, project) =>
       failing
         ? Promise.reject(new Error('down'))
-        : Promise.resolve(ids.map((id) => ({ id, projectId: 2, name: 'Holder', title: 't', harness: null, archivedAt: null }))),
+        : Promise.resolve(
+            project === null || project === '2'
+              ? ids.map((id) => ({ id, projectId: 2, name: 'Holder', title: 't', harness: null, archivedAt: null }))
+              : [],
+          ),
     null,
   );
   const names = new ThreadNames(
@@ -80,8 +84,34 @@ test('an awaited identity read finds a holder home before the list loads and pro
 
   expect(names.of(FAR)).toBeUndefined();
   expect(await names.read(FAR)).toEqual({ label: 'Holder', archived: false, harness: false, home: 'polygon', projectId: 2 });
+  list.roots = 1;
+  expect(await names.read(FAR)).toEqual({ label: 'Holder', archived: false, harness: false, home: 'polygon', projectId: 2 });
   failing = true;
   await expect(names.read(FAR)).rejects.toThrow('down');
+});
+
+test('overlapping identity and label reads share the holder answer', async () => {
+  const answer = Promise.withResolvers<readonly Row[]>();
+  let cancel: (() => void) | undefined;
+  const { words } = wordsOver(
+    () =>
+      new Promise<readonly Row[]>((resolve, reject) => {
+        cancel?.();
+        cancel = () => reject(new Error('cancelled'));
+        void answer.promise.then(resolve, reject);
+      }),
+  );
+  const names = new ThreadNames(
+    (thread, project) => words.of(thread, project),
+    (thread) => words.read(thread),
+  );
+  const reads = Promise.all([names.read(FAR), names.read(FAR)]);
+  names.of(FAR);
+  await Promise.resolve();
+  answer.resolve([{ id: FAR, projectId: 2, name: 'Holder', title: 't', harness: null, archivedAt: null }]);
+  const expected = { label: 'Holder', archived: false, harness: false, home: 'polygon', projectId: 2 };
+  expect(await reads).toEqual([expected, expected]);
+  expect(names.of(FAR)).toEqual(expected);
 });
 
 test('nothing is read before the list has loaded, and a holder that is not a thread id is never read', async () => {
