@@ -18,7 +18,7 @@ sources:
   - kind: file
     ref: apps/tagma/server/src/speech/contract/wire/capability.ts
   - kind: file
-    ref: apps/tagma/server/src/speech/listening/page.ts
+    ref: apps/tagma/server/src/calls/listening/page.ts
   - kind: file
     ref: apps/tagma/server/src/speech/operations.ts
   - kind: symbol
