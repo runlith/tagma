@@ -6,7 +6,7 @@ tags: ["task"]
 fields:
   {
     "holder": "tagma:01a16527-9b68-761b-bfaf-2cee657e2350",
-    "status": "in_work"
+    "status": "closed"
   }
 ---
 Operator's decision of 2026-10-22. Check against the code, the graph and `git log`, and close without asking everything whose work is confirmed done:
