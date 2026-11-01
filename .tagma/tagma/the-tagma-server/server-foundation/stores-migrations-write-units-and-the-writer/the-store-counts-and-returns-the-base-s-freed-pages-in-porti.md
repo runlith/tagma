@@ -1,7 +1,7 @@
 ---
 id: 01a13644-6c41-7ac3-a5a7-96757fa54394
 title: The store counts and returns the base's freed pages in portions with its own fiber; the deleter only wraps the deletion in Store.freeing
-ord: 14
+ord: 5
 tags: ["explanation"]
 edges:
   - kind: discovered-from

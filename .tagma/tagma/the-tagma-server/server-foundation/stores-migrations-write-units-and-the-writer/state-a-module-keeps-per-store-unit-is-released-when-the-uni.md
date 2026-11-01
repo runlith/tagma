@@ -1,7 +1,7 @@
 ---
 id: 01a19499-b57e-7aad-87ee-e1f6cd6c3a69
 title: State a module keeps per store unit is released when the unit ends, never at the unit object's collection
-ord: 41
+ord: 13
 tags: ["explanation"]
 sources:
   - kind: file

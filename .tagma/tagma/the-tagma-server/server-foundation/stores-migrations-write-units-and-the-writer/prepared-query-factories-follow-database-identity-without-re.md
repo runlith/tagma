@@ -1,7 +1,7 @@
 ---
 id: 01a1911d-b959-76c2-9eff-44f8a4d7335b
 title: Prepared query factories follow database identity without retaining a closed store
-ord: 39
+ord: 12
 tags: ["explanation"]
 sources:
   - kind: file

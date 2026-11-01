@@ -1,7 +1,7 @@
 ---
 id: 01a13c1b-244f-7763-a9fc-9624bc178383
 title: "A statement page is bounded by bound-value count and text: the synchronous write cost on the loop grows mainly with values"
-ord: 17
+ord: 7
 tags: ["explanation"]
 sources:
   - kind: file

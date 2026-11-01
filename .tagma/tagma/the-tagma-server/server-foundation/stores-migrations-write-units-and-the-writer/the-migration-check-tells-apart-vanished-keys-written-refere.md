@@ -1,7 +1,7 @@
 ---
 id: 01a126f1-0c2e-701a-af52-1f91f4f62e0f
 title: The migration check tells apart vanished keys, written references and unchanged defaults
-ord: 5
+ord: 3
 tags: ["explanation"]
 edges:
   - kind: discovered-from

@@ -1,7 +1,7 @@
 ---
 id: 01a16b34-aa7b-781a-b3d2-f39d3c17b3f1
 title: A store without durability writes with synchronous=OFF and no fsync in checkpoint, and graph mirrors take the durability of their machine store
-ord: 31
+ord: 9
 tags: ["explanation"]
 sources:
   - kind: file

@@ -1,7 +1,7 @@
 ---
 id: 01a1908c-f29c-774c-b61b-0afc05fffb8b
 title: A store write program is planned from guarded reads and falls back to an interactive unit when it cannot be planned or a guard refuses
-ord: 38
+ord: 11
 tags: ["explanation"]
 edges:
   - kind: discovered-from

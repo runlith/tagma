@@ -1,7 +1,7 @@
 ---
 id: 01a195b9-c52c-7da9-a023-4462899da1e8
 title: Rows of a removed machine table wait in stores/set-aside/<migration>.sqlite, rewritten whole by the migration, until a module store adopts them after the door
-ord: 44
+ord: 1
 tags: ["explanation"]
 edges:
   - kind: relates

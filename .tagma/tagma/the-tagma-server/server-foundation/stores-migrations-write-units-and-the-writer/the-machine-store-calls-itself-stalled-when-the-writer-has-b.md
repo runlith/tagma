@@ -1,7 +1,7 @@
 ---
 id: 01a14564-656e-7e40-9f43-ef37c352d5ea
 title: The machine store calls itself stalled when the writer has been held past WRITER_STALL_MS with no request, and /health serves that with the process pid
-ord: 23
+ord: 8
 tags: ["explanation"]
 sources:
   - kind: file

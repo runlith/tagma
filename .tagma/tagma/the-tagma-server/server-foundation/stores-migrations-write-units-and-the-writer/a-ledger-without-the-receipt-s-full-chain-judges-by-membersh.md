@@ -1,7 +1,7 @@
 ---
 id: 01a1318a-45eb-7b90-ad41-e7d9a6cf2de3
 title: "A ledger without the receipt's full chain judges by membership: a skip means \"base not reached\", only a foreign row corrupts the chain"
-ord: 9
+ord: 4
 tags: ["explanation"]
 sources:
   - kind: file

@@ -1,7 +1,7 @@
 ---
 id: 01a136cb-2848-7183-bbb1-472dbaf26b62
 title: "An answer held until tables shift trusts the unit's declared write set: a write past the declaration leaves it stale"
-ord: 16
+ord: 6
 tags: ["explanation"]
 sources:
   - kind: file

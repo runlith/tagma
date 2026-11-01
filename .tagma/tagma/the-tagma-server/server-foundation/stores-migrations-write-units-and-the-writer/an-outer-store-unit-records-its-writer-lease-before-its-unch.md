@@ -1,7 +1,7 @@
 ---
 id: 01a18f5e-76d6-72cc-93f4-b2bbc8bab01c
 title: An outer Store unit records its writer lease before its unchanged post-commit work
-ord: 37
+ord: 10
 tags: ["explanation"]
 sources:
   - kind: file
