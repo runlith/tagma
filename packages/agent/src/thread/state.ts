@@ -3,7 +3,9 @@ import type { ThreadEventDelta } from '../transcript/eventFold';
 import type { RunHalt, RunOwnership, RunStage, RunStatus, ThreadPendingInput, ThreadSnapshotOf } from '../transcript/live';
 import { THREAD_RUN_AWAITING_QUESTION_STAGE, THREAD_RUN_RESUMING_STAGE } from './storage/runs';
 import type { CurrentRun, TransportCapabilities } from './record';
-import type { ThreadRunLeaseRhythm } from './ThreadPorts';
+import type { ThreadRunLeaseRhythm, ThreadTx } from './ThreadPorts';
+import type { ThreadBorderFailed } from './ThreadBorder';
+import type { Effect } from 'effect';
 import type { ThreadMetadataRow, ThreadRunRow, ThreadRunStatus } from './rows';
 import type { ThreadEventRecord } from './events';
 
@@ -18,6 +20,11 @@ export type ThreadState = {
 };
 
 export type ThreadSnapshot = ThreadSnapshotOf<ThreadState>;
+
+export type ThreadStateProject<TState extends ThreadState, TTx = ThreadTx> = (
+  state: ThreadState,
+  tx: TTx,
+) => Effect.Effect<TState, ThreadBorderFailed>;
 
 export type ThreadStateShape = {
   readonly thread: { readonly id: string };

@@ -167,7 +167,7 @@ export const emptied = (db: StoreDb<'machine'>, unit: Unit<'machine'>, threadId:
     ),
   );
 
-export type LayerSources = (threadId: string) => Effect.Effect<readonly string[], StoreFailure>;
+export type LayerSources = (threadId: string, unit?: Unit<'machine'>) => Effect.Effect<readonly string[], StoreFailure>;
 
 export type BaseReach = {
   readonly sources: LayerSources;
@@ -178,10 +178,11 @@ export const makeBaseReach = Effect.gen(function* () {
   const { db } = yield* MachineStore;
   const units = yield* MachineUnits;
   return {
-    sources: (threadId) =>
-      units.read((unit) =>
-        Effect.map(layersOf(db, unit, threadId), (layers) => [...new Set(layers.map((layer) => layer.sourceId).reverse())]),
-      ),
+    sources: (threadId, unit) => {
+      const read = (tx: Unit<'machine'>) =>
+        Effect.map(layersOf(db, tx, threadId), (layers) => [...new Set(layers.map((layer) => layer.sourceId).reverse())]);
+      return unit === undefined ? units.read(read) : read(unit);
+    },
     referenced: (threadId) => units.read((unit) => Effect.map(referrersOf(db, unit, threadId), (layers) => layers.length > 0)),
   } satisfies BaseReach;
 });

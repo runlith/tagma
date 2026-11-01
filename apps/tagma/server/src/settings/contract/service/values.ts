@@ -1,5 +1,6 @@
 import { Context, type Effect, type Scope, type Stream } from 'effect';
 import type { StoreFailure } from '../../../platform/contract/service/store.js';
+import type { Unit } from '../../../platform/contract/service/units.js';
 import type { GateRefusal, OpenRefusal } from '../../../platform/contract/wire/refusal.js';
 import type { SessionRef } from '../../../platform/contract/wire/session.js';
 import type { SettableScope, SettingKey, SettingLayersOf, SettingScope } from '../../../platform/contract/wire/setting.js';
@@ -36,7 +37,7 @@ export class Settings extends Context.Service<
   Settings,
   {
     read<A>(key: SettingKey<A>, projectId?: number): Effect.Effect<Resolved<A>, StoreFailure>;
-    value<A>(key: SettingKey<A>, projectId?: number): Effect.Effect<A, StoreFailure>;
+    value<A>(key: SettingKey<A>, projectId?: number, unit?: Unit<'machine'>): Effect.Effect<A, StoreFailure>;
     chain(projectId?: number): Effect.Effect<<A>(key: SettingKey<A>) => A, StoreFailure>;
     live<A>(key: SettingKey<A>): Effect.Effect<() => A, StoreFailure, Scope.Scope>;
     held<A>(key: SettingKey<A>, projectId: number): Effect.Effect<() => A, StoreFailure>;

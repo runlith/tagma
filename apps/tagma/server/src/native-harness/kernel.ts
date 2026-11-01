@@ -90,6 +90,7 @@ import { makeRunStores, type ThreadRunStore } from './runs/ledger.js';
 import { makeTransitions } from './runs/transitionStore.js';
 import { McpBoundTools } from './tools/mcpRule.js';
 import { makeRestedFolds, type RestedFolds } from './transcript/restedFolds.js';
+import { RestedWork } from './transcript/restedWork.js';
 import { makeInputRecovery, type InputRecoveryInput } from './turns/inputRecovery.js';
 import { makeWorkflowRuns, type WorkflowRuns } from './workflows/runStorage.js';
 import { readWorkflowLibrary } from './workflows/sources.js';
@@ -112,6 +113,7 @@ export type NativeKernelRequirements =
   | CompactionAsks
   | ThreadRollouts
   | RestedRollouts
+  | RestedWork
   | WorkSpells
   | Projects
   | ScratchAreas

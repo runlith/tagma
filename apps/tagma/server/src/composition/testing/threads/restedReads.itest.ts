@@ -16,7 +16,7 @@ import { unitsLayer } from '../../../platform/store/units.js';
 import { seededStoreLayer } from '../../../platform/store/open.js';
 import { project } from '../../../projects/testing/doubles.js';
 import { threadLog, restedFolds, threadStore, type ThreadStore } from '../../../native-harness/testing/doubles.js';
-import { threadEntry } from '../../../threads/testing/doubles.js';
+import { threadEntry, threadRolloutForm } from '../../../threads/testing/doubles.js';
 import { scopeRecord } from '../../../thread-record/testing/records.js';
 import { makeThreadRecords } from '../../../thread-record/layer.js';
 import { restFor } from '../../../threads/testing/rest.js';
@@ -107,7 +107,7 @@ it.live(
     );
 
     const path = join(home, String(projectId), `${row.id}.jsonl`);
-    yield* Effect.provide(exportThreadRollout({ threadId: row.id, path, parts: nativeOnlyParts }), runtime);
+    yield* Effect.provide(exportThreadRollout({ threadId: row.id, path, parts: yield* nativeOnlyParts }), runtime);
     yield* Effect.provide(
       Effect.gen(function* () {
         yield* store.db.delete(threadEntry()).where(eq(threadEntry().threadId, row.id));
@@ -118,7 +118,7 @@ it.live(
 
     let writes = 0;
     const counted: MachineUnits['Service'] = {
-      read: (work) => units.read(work),
+      read: (work, options) => units.read(work, options),
       markReadOnly: (effect) => units.markReadOnly(effect),
       markWrite: (effect) => units.markWrite(effect),
       program: (operation, identity, work) => units.program(operation, identity, work),
@@ -145,6 +145,31 @@ it.live(
     );
     expect(fromFile?.entries.map((carried) => carried.id)).toEqual(fromRows?.entries.map((carried) => carried.id));
     expect(olderFromFile?.entries.map((carried) => carried.id)).toEqual(olderRows?.entries.map((carried) => carried.id));
+    yield* Effect.provide(reads.readable(row.id), runtime);
+    const previousForm = yield* Effect.provide(
+      store.db.select().from(threadRolloutForm()).where(eq(threadRolloutForm().threadId, row.id)).get(),
+      runtime,
+    );
+    const pinned = yield* Effect.provide(
+      rested.readCut(
+        row.id,
+        Effect.fnUntraced(function* (cut) {
+          yield* store.db
+            .insert(threadRolloutForm())
+            .values({ threadId: row.id, formedAt: new Date(yield* Clock.currentTimeMillis), refusal: 'a later refusal' })
+            .onConflictDoUpdate({ target: threadRolloutForm().threadId, set: { refusal: 'a later refusal' } });
+          return yield* rested.transcriptWindow(row.id, { limit: 2, bytes: 10_000_000 }, cut.tx);
+        }),
+      ),
+      runtime,
+    );
+    expect(pinned?.entries.map((carried) => carried.id)).toEqual(fromRows?.entries.map((carried) => carried.id));
+    yield* Effect.provide(
+      previousForm === undefined
+        ? store.db.delete(threadRolloutForm()).where(eq(threadRolloutForm().threadId, row.id))
+        : store.db.update(threadRolloutForm()).set(previousForm).where(eq(threadRolloutForm().threadId, row.id)),
+      runtime,
+    );
     expect(yield* Effect.provide(rested.transcriptOf(row.id), runtime)).toEqual([prompt, ...entries]);
     expect(
       yield* Effect.provide(
@@ -155,11 +180,30 @@ it.live(
       ),
     ).toEqual(eventsFromRows);
     yield* Effect.provide(
-      rehydrateThreadRecords({ threadId: row.id, path, parts: nativeOnlyParts }).pipe(Effect.provideService(ThreadEntryKinds, ENTRY_KINDS)),
+      rehydrateThreadRecords({ threadId: row.id, path, parts: yield* nativeOnlyParts }).pipe(
+        Effect.provideService(ThreadEntryKinds, ENTRY_KINDS),
+      ),
       runtime,
     );
     expect(yield* Effect.provide(rows.transcriptWindow(row.id, { limit: 2, bytes: 10_000_000 }), runtime)).toEqual(fromFile);
     expect(writes).toBe(0);
+    const empty = yield* Effect.provide(rows.insert({ ownerId: 'operator', agentId: 'tagma' }), runtime);
+    yield* Effect.provide(scopeRecord(store.db, empty.id, { projectId }), runtime);
+    const emptyPath = join(home, String(projectId), `${empty.id}.jsonl`);
+    yield* Effect.provide(exportThreadRollout({ threadId: empty.id, path: emptyPath, parts: yield* nativeOnlyParts }), runtime);
+    yield* Effect.provide(
+      store.db
+        .insert(threadEvent())
+        .values({ threadId: empty.id, position: 1, id: 'residue', kind: 'entry', payload: { entry: text('residue', 'residue') } }),
+      runtime,
+    );
+    yield* Effect.provide(restFor(store.db, empty.id, new Date(yield* Clock.currentTimeMillis)), runtime);
+    expect(
+      yield* Effect.provide(
+        rested.readCut(empty.id, (cut) => Effect.succeed(cut.position)),
+        runtime,
+      ),
+    ).toBe(0);
   }),
 );
 
@@ -265,14 +309,14 @@ it.live(
     ]);
 
     const path = join(home, String(projectId), `${row.id}.jsonl`);
-    yield* Effect.provide(exportThreadRollout({ threadId: row.id, path, parts: nativeOnlyParts }), runtime);
+    yield* Effect.provide(exportThreadRollout({ threadId: row.id, path, parts: yield* nativeOnlyParts }), runtime);
     yield* Effect.provide(
       Effect.flatMap(threadProjection(ENTRY_KINDS), (projection) => projection.run({ threadId: row.id, path })),
       runtime,
     );
     const fs = Context.get(runtime, FileSystem.FileSystem);
     yield* fs.writeFileString(`${path}.entries.partial`, 'a build that died before its rename');
-    expect(yield* Effect.provide(evictThreadProjection({ threadId: row.id, path, parts: nativeOnlyParts }), runtime)).toMatchObject({
+    expect(yield* Effect.provide(evictThreadProjection({ threadId: row.id, path, parts: yield* nativeOnlyParts }), runtime)).toMatchObject({
       outcome: 'evicted',
     });
     expect((yield* fs.readDirectory(dirname(path))).filter((file) => file.endsWith('.partial'))).toEqual([]);
@@ -341,7 +385,7 @@ it.live(
       runtime,
     );
     const path = join(home, String(projectId), `${row.id}.jsonl`);
-    yield* Effect.provide(exportThreadRollout({ threadId: row.id, path, parts: nativeOnlyParts }), runtime);
+    yield* Effect.provide(exportThreadRollout({ threadId: row.id, path, parts: yield* nativeOnlyParts }), runtime);
     yield* Effect.provide(
       Effect.gen(function* () {
         yield* store.db.delete(threadEvent()).where(eq(threadEvent().threadId, row.id));
@@ -354,6 +398,12 @@ it.live(
       Effect.flatMap(restedFolds(reads, ENTRY_KINDS), (folds) => threadStore(records, ENTRY_KINDS, folds)),
       runtime,
     );
+    const opening = yield* Effect.provide(
+      rested.readCut(row.id, (cut) => Effect.map(rested.metadata(row.id, cut.tx), (thread) => ({ thread, position: cut.position }))),
+      runtime,
+    );
+    expect(opening.thread?.id).toBe(row.id);
+    expect(opening.position).toBe(payloads.length);
     const open = Effect.provide(
       Effect.map(rested.openQuestionsOfRun(row.id, approvals), (entries) => entries.map((entry) => entry.id)),
       runtime,
@@ -457,7 +507,7 @@ it.live(
 
     const fromRows = yield* Effect.provide(Effect.flatMap(sqliteThreadJournal(), answers), runtime);
     const path = join(home, String(projectId), `${row.id}.jsonl`);
-    yield* Effect.provide(exportThreadRollout({ threadId: row.id, path, parts: nativeOnlyParts }), runtime);
+    yield* Effect.provide(exportThreadRollout({ threadId: row.id, path, parts: yield* nativeOnlyParts }), runtime);
     yield* Effect.provide(
       Effect.gen(function* () {
         yield* store.db.delete(threadEvent()).where(eq(threadEvent().threadId, row.id));

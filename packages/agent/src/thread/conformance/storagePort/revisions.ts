@@ -3,6 +3,9 @@ import type { Test } from '@runlith/effect-test';
 import { Clock, Effect, Exit, type Scope } from 'effect';
 import { inboxTurnValues } from '../../inboxItems';
 import type { ThreadChangeRevision } from '../../state';
+import type { ThreadMetadataRow } from '../../rows';
+import type { ThreadPortFailure } from '../../ThreadBorder';
+import { ThreadStorageFailed } from '../../persisted';
 import type { ThreadStorageFactory } from '../storagePort';
 import { appendEvent, entry, INSTANCE, OWNER, SCOPE, started, startInput } from './support';
 export function describeThreadRevisionPort<TTx, TWrite extends TTx = TTx, R = never>(
@@ -11,6 +14,36 @@ export function describeThreadRevisionPort<TTx, TWrite extends TTx = TTx, R = ne
   test: Test<Scope.Scope | R>,
 ): void {
   describe(`${name}: a thread's change revision`, () => {
+    test(
+      'one read cut retains metadata and inbox facts across a same-head committed write',
+      Effect.fnUntraced(function* () {
+        const harness = yield* open();
+        const thread = yield* harness.createThread({ ownerId: OWNER, scope: SCOPE });
+        let expired: Effect.Effect<ThreadMetadataRow | undefined, ThreadPortFailure> = Effect.die('No read cut was opened.');
+        yield* harness.aggregate.readCut(
+          thread.id,
+          Effect.fnUntraced(function* (cut) {
+            expired = harness.aggregate.metadata(thread.id, cut.tx);
+            expect((yield* harness.aggregate.metadata(thread.id, cut.tx))?.budgetTokens).toBeNull();
+            yield* harness.aggregate.transaction((tx) =>
+              Effect.andThen(
+                harness.aggregate.update(thread.id, { budgetTokens: 7 }, tx),
+                harness.inbox.put(inboxTurnValues(thread.id, { id: 'cut-turn', text: 'Next.' }), tx),
+              ),
+            );
+            expect((yield* harness.aggregate.metadata(thread.id, cut.tx))?.budgetTokens).toBeNull();
+            expect(yield* harness.inbox.pending(thread.id, cut.tx)).toEqual([]);
+            expect(yield* harness.transitions.revision(thread.id, cut.tx)).toBe(cut.revision);
+            expect(yield* harness.eventLog.headPosition(thread.id, cut.tx)).toBe(cut.position);
+          }),
+        );
+        expect((yield* harness.aggregate.metadata(thread.id))?.budgetTokens).toBe(7);
+        expect((yield* harness.inbox.pending(thread.id)).map((item) => item.id)).toEqual(['cut-turn']);
+        expect(yield* Effect.flip(expired)).toBeInstanceOf(ThreadStorageFailed);
+        const refused = { kind: 'declined' as const };
+        expect(yield* Effect.flip(harness.aggregate.readCut(thread.id, () => Effect.fail(refused)))).toBe(refused);
+      }),
+    );
     test(
       'a run start, a heartbeat, an arrival, a journal fact and a metadata write each advance it',
       Effect.fnUntraced(function* () {

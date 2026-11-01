@@ -294,7 +294,7 @@ export const threadEngineLayer = Layer.effectContext(
       Layer.succeed(ModelRuns, { admit: providers.pinRun, release: providers.releaseRun }),
       Layer.succeed(ThreadEntryKinds, yield* ThreadEntryKinds),
       threadCompactorLayer(compaction.compaction),
-      threadHostLayer<WriteUnit<'machine'>>({
+      threadHostLayer<WriteUnit<'machine'>, Unit<'machine'>>({
         rhythms: { lease: LEASE_RHYTHM, reaper: REAPER_RHYTHM, settlement: SETTLEMENT_RHYTHM, streamFlushIntervalMs: STREAM_FLUSH_MS },
         ownerId: owner.id,
         approvers,
@@ -329,9 +329,9 @@ export const threadEngineLayer = Layer.effectContext(
             ),
         },
         resting: {
-          resting: (threadId) =>
+          resting: (threadId, tx) =>
             Effect.map(
-              Effect.mapError(records.facts(threadId), (cause) => new ThreadStorageFailed({ call: 'resting', cause })),
+              Effect.mapError(records.facts(threadId, tx), (cause) => new ThreadStorageFailed({ call: 'resting', cause })),
               (facts) => facts?.archivedAt != null,
             ),
         },

@@ -18,10 +18,8 @@ import {
   TRANSCRIPT_FORM,
   TRANSCRIPT_OPEN_BYTES,
   TRANSCRIPT_SLOT_BYTES,
-  foldRolloutHistory,
-  readRolloutCompaction,
   type RestedCompaction,
-  transcribeRollout,
+  RestedWork,
 } from './restedWork.js';
 import type { ReadRollout } from '../../threads/contract/service/rolloutReads.js';
 
@@ -39,6 +37,7 @@ export type RestedFolds = Effect.Success<typeof makeRestedFolds>;
 export const makeRestedFolds = Effect.gen(function* () {
   const reads = yield* RestedRollouts;
   const kinds = yield* ThreadEntryKinds;
+  const work = yield* RestedWork;
   const held = new Map<string, Held>();
   const building = new Map<string, Deferred.Deferred<void, StoredFailure>>();
   const compactions = new Map<string, Deferred.Deferred<RestedCompaction, StoredFailure>>();
@@ -54,7 +53,7 @@ export const makeRestedFolds = Effect.gen(function* () {
         const done = yield* Deferred.make<void, StoredFailure>();
         building.set(key, done);
         const exit = yield* Effect.exit(
-          transcribeRollout(kinds, rollout, rollout.key).pipe(
+          work.transcribe(kinds, rollout, rollout.key).pipe(
             Effect.asVoid,
             Effect.mapError((cause) => new ThreadStorageFailed({ call: 'restedTranscript.build', cause })),
           ),
@@ -92,6 +91,7 @@ export const makeRestedFolds = Effect.gen(function* () {
   };
 
   return {
+    head: reads.head,
     compaction: Effect.fn('ThreadTranscript.rested.compaction')(function* (threadId: string) {
       const rollout = yield* reads.restedRollout(threadId);
       if (rollout === null) return null;
@@ -109,9 +109,9 @@ export const makeRestedFolds = Effect.gen(function* () {
           const done = yield* Deferred.make<RestedCompaction, StoredFailure>();
           compactions.set(key, done);
           const exit = yield* Effect.exit(
-            readRolloutCompaction(kinds, rollout).pipe(
-              Effect.mapError((cause) => new ThreadStorageFailed({ call: 'restedCompaction.read', cause })),
-            ),
+            work
+              .compaction(kinds, rollout)
+              .pipe(Effect.mapError((cause) => new ThreadStorageFailed({ call: 'restedCompaction.read', cause }))),
           );
           compactions.delete(key);
           yield* Deferred.done(done, exit);
@@ -194,9 +194,9 @@ export const makeRestedFolds = Effect.gen(function* () {
         cached.touched = clock += 1;
         return cached.history;
       }
-      const folded = yield* foldRolloutHistory(kinds, rollout).pipe(
-        Effect.mapError((cause) => new ThreadStorageFailed({ call: 'rolloutReads.history', cause })),
-      );
+      const folded = yield* work
+        .history(kinds, rollout)
+        .pipe(Effect.mapError((cause) => new ThreadStorageFailed({ call: 'rolloutReads.history', cause })));
       keep(slot, { kind: 'history', history: folded.history, bytes: folded.bytes, key: rollout.key, touched: (clock += 1) });
       return folded.history;
     }),

@@ -156,23 +156,23 @@ export const makeThreadListReads = Effect.gen(function* () {
     );
 
   const reads: ThreadListReads = {
-    find: (id, ownerId) =>
-      units.read((unit) =>
-        Effect.gen(function* () {
-          const facet = yield* placeOf(unit, id);
-          if (!facet) return undefined;
-          const row = yield* threads.metadata(id, unit);
-          return row && row.ownerId === ownerId
-            ? {
-                ...row,
-                projectId: facet.projectId,
-                scopeBlockUuid: facet.scopeBlockUuid,
-                harness: facet.harness,
-                archivedAt: facet.archivedAt,
-              }
-            : undefined;
-        }),
-      ),
+    find: (id, ownerId, unit) => {
+      const read = Effect.fnUntraced(function* (tx: Unit<'machine'>) {
+        const facet = yield* placeOf(tx, id);
+        if (!facet) return undefined;
+        const row = yield* threads.metadata(id, tx);
+        return row && row.ownerId === ownerId
+          ? {
+              ...row,
+              projectId: facet.projectId,
+              scopeBlockUuid: facet.scopeBlockUuid,
+              harness: facet.harness,
+              archivedAt: facet.archivedAt,
+            }
+          : undefined;
+      });
+      return unit === undefined ? units.read(read) : read(unit);
+    },
 
     summary: (threadId) =>
       markedOne(

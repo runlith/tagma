@@ -16,7 +16,7 @@ import type {
   ThreadRow,
   ThreadStatus,
 } from '../rows';
-import type { ThreadQuestionEntry } from '../../transcript/entries';
+import type { ThreadQuestionEntry, ThreadToolEntry } from '../../transcript/entries';
 import type { ThreadTranscript, ThreadTranscriptEntry } from '../../transcript/rows';
 import type { ThreadCacheObservationValues } from './cacheObservations';
 import type { TransportBinding } from '../record';
@@ -143,7 +143,14 @@ export class ThreadDeleteStillSettlingError extends Data.TaggedError('ThreadDele
   }
 }
 
+export type ThreadReadCut<TTx> = {
+  readonly tx: TTx;
+  readonly revision: number;
+  readonly position: number;
+};
+
 export interface ThreadAggregateStorage<TTx, TWrite extends TTx = TTx> {
+  readCut<T, E>(threadId: string, use: (cut: ThreadReadCut<TTx>) => Effect.Effect<T, E>): Effect.Effect<T, E | ThreadPortFailure>;
   transaction<T, E>(work: (tx: TWrite) => Effect.Effect<T, E>): Effect.Effect<T, E | ThreadPortFailure>;
   program?<T, E>(identity: string, work: (tx: TWrite) => Effect.Effect<T, E>): Effect.Effect<T | null, E | ThreadPortFailure>;
 
@@ -165,6 +172,7 @@ export interface ThreadAggregateStorage<TTx, TWrite extends TTx = TTx> {
   entryById(id: string, entryId: string, tx?: TTx): Effect.Effect<ThreadTranscriptEntry | undefined, ThreadPortFailure>;
   questionById(id: string, questionId: string, tx?: TTx): Effect.Effect<ThreadQuestionEntry | undefined, ThreadPortFailure>;
   openQuestionsOfRun(id: string, runId: string, tx?: TTx): Effect.Effect<readonly ThreadQuestionEntry[], ThreadPortFailure>;
+  openToolsOfRun(id: string, runId: string, tx?: TTx): Effect.Effect<readonly ThreadToolEntry[], ThreadPortFailure>;
 
   transcriptWindow(id: string, query: ThreadTranscriptQuery, tx?: TTx): Effect.Effect<ThreadTranscriptPage | null, ThreadPortFailure>;
 

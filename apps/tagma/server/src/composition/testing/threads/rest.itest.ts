@@ -82,7 +82,8 @@ const raise = Effect.fn('testing.restedThread')(function* (threadId: string) {
     sql`insert into thread_entry (thread_id, ord, entry_id, type, entry) values (${threadId}, 0, ${'m-1'}, ${'message'}, ${JSON.stringify({ type: 'message', id: 'm-1', role: 'user', text: 'hello' })})`,
   );
   const path = join(yield* files.makeTempDirectoryScoped({ prefix: 'evict-' }), `${threadId}.jsonl`);
-  yield* exportThreadRollout({ threadId, path, parts: nativeOnlyParts });
+  const parts = yield* nativeOnlyParts;
+  yield* exportThreadRollout({ threadId, path, parts });
   const projection = yield* threadProjection(ENTRY_KINDS);
   const carried = projection.run({ threadId, path });
   yield* carried;
@@ -111,6 +112,7 @@ const raise = Effect.fn('testing.restedThread')(function* (threadId: string) {
     files,
     path,
     projected,
+    parts,
     record: recordOf(db, threadId),
     rest: restOf(db, threadId),
     cursor: db.select().from(threadRolloutCursor()).where(eq(threadRolloutCursor().threadId, threadId)).get(),
@@ -123,7 +125,7 @@ it.live('the records leave, the file and the cursor stand, and the next boot pas
     const world = yield* raise('t-rested');
     const before = yield* world.projected;
     const bytes = yield* world.files.readFileString(world.path);
-    expect(yield* evictThreadProjection({ threadId: 't-rested', path: world.path, parts: nativeOnlyParts })).toMatchObject({
+    expect(yield* evictThreadProjection({ threadId: 't-rested', path: world.path, parts: world.parts })).toMatchObject({
       outcome: 'evicted',
     });
     const after = yield* world.projected;
@@ -133,7 +135,7 @@ it.live('the records leave, the file and the cursor stand, and the next boot pas
     expect((yield* world.record)?.title).toBe('the rested thread');
     expect((yield* world.cursor)?.nextByteOffset).toBe(Number((yield* world.files.stat(world.path)).size));
     expect((yield* world.carried).projected).toBe(0);
-    yield* rehydrateThreadRecords({ threadId: 't-rested', path: world.path, parts: nativeOnlyParts });
+    yield* rehydrateThreadRecords({ threadId: 't-rested', path: world.path, parts: world.parts });
     expect(yield* world.projected).toEqual(before);
     expect(yield* world.rest).toBeNull();
   }).pipe(Effect.provide(storeLayer)),
@@ -143,11 +145,11 @@ it.live('a return cut between its transactions is carried to the end by the next
   Effect.gen(function* () {
     const world = yield* raise('t-cut');
     const before = yield* world.projected;
-    yield* evictThreadProjection({ threadId: 't-cut', path: world.path, parts: nativeOnlyParts });
+    yield* evictThreadProjection({ threadId: 't-cut', path: world.path, parts: world.parts });
     yield* world.db.insert(threadEvent()).values(before.events);
     yield* world.db.run(sql`insert into thread_history_item (thread_id, ord, message) values (${'t-cut'}, 0, ${'{}'})`);
     expect(yield* world.rest).toBeInstanceOf(Date);
-    yield* rehydrateThreadRecords({ threadId: 't-cut', path: world.path, parts: nativeOnlyParts });
+    yield* rehydrateThreadRecords({ threadId: 't-cut', path: world.path, parts: world.parts });
     expect(yield* world.projected).toEqual(before);
     expect(yield* world.rest).toBeNull();
   }).pipe(Effect.provide(storeLayer)),
@@ -161,7 +163,7 @@ it.live('a thread whose rows have not caught up with its file is kept', () =>
       `${JSON.stringify({ kind: 'event', row: { threadId: 't-behind', position: 2, id: 'e-2', kind: 'message', payload: { text: 'later' } } })}\n`,
       { flag: 'a' },
     );
-    expect(yield* evictThreadProjection({ threadId: 't-behind', path: world.path, parts: nativeOnlyParts })).toEqual({
+    expect(yield* evictThreadProjection({ threadId: 't-behind', path: world.path, parts: world.parts })).toEqual({
       outcome: 'kept',
       reason: 'cursor-behind',
     });
@@ -176,7 +178,7 @@ it.live('a rollout holding a record the carry cannot read keeps the thread whole
       flag: 'a',
     });
     yield* world.carried;
-    expect(yield* evictThreadProjection({ threadId: 't-uncarried', path: world.path, parts: nativeOnlyParts })).toEqual({
+    expect(yield* evictThreadProjection({ threadId: 't-uncarried', path: world.path, parts: world.parts })).toEqual({
       outcome: 'kept',
       reason: 'records-unreadable',
     });
@@ -190,7 +192,7 @@ it.live('a checkpoint the rows hold and the file never recorded keeps the thread
     yield* world.db.run(
       sql`insert into thread_compaction_checkpoint (id, thread_id, covered_message_count, covered_prefix_hash, summary, created_at) values (${'c-2'}, ${'t-unrecorded'}, 2, ${'later'}, ${'folded again'}, ${rested.getTime()})`,
     );
-    expect(yield* evictThreadProjection({ threadId: 't-unrecorded', path: world.path, parts: nativeOnlyParts })).toEqual({
+    expect(yield* evictThreadProjection({ threadId: 't-unrecorded', path: world.path, parts: world.parts })).toEqual({
       outcome: 'kept',
       reason: 'records-missing',
     });

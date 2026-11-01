@@ -4,13 +4,13 @@ import { utf8ByteLength } from '@runlith/utils/utf8';
 import { attempt } from './attempt';
 import { THREAD_AUTHORITY_DEFAULT, type ThreadMetadataRow, type ThreadRow } from '../../rows';
 import { openQuestionsIn } from '../../../transcript/questions';
-import type { ThreadQuestionEntry } from '../../../transcript/entries';
+import { toolSettled, type ThreadQuestionEntry, type ThreadToolEntry } from '../../../transcript/entries';
 import { coreEntry } from '../../../transcript/kinds';
 import { WIRE_ENTRY_MAX_BYTES } from '../../../transcript/cap';
 import { ThreadStorageFailed } from '../../persisted';
 import { NATIVE_BINDING, NATIVE_CAPABILITIES } from '../../record';
 import { branchedFrom, ThreadNotFoundError, type ThreadAggregateStorage, type ThreadInsertValues } from '../aggregate';
-import { applyColumns, historyOf, project, transcriptOf } from './folds';
+import { applyColumns, headOf, historyOf, project, transcriptOf } from './folds';
 import type { HeldThread, MemoryStorageInput } from './state';
 import type { MemoryTx } from './units';
 
@@ -117,6 +117,15 @@ export const makeMemoryRows = ({ memory }: MemoryStorageInput): ThreadAggregateS
   };
 
   return {
+    readCut: (threadId, use) =>
+      memory.units.snapshot((tx) => {
+        const revision = memory.units.revision(tx);
+        const position = memory.read(tx, () => {
+          const held = memory.held(threadId);
+          return held === undefined ? 0 : headOf(held);
+        });
+        return use({ tx, revision, position });
+      }),
     transaction: (work) => memory.units.commit(work),
     find: (id, tx) =>
       attempt('find', () =>
@@ -174,6 +183,18 @@ export const makeMemoryRows = ({ memory }: MemoryStorageInput): ThreadAggregateS
         memory.read(tx, () => {
           const held = memory.held(id);
           return held ? transcriptOf(memory.kinds, held).filter((entry) => entry.runId === runId) : [];
+        }),
+      ),
+    openToolsOfRun: (id, runId, tx) =>
+      attempt('openToolsOfRun', () =>
+        memory.read(tx, () => {
+          const held = memory.held(id);
+          return held === undefined
+            ? []
+            : transcriptOf(memory.kinds, held).filter(
+                (entry): entry is ThreadToolEntry =>
+                  entry.runId === runId && coreEntry(entry) && entry.type === 'tool' && !toolSettled(entry.toolState),
+              );
         }),
       ),
     openQuestionsOfRun: (id, runId, tx) =>

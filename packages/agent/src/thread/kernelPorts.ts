@@ -46,7 +46,7 @@ export type ThreadStorageHost<TTx, TWrite extends TTx = TTx> = {
   readonly eventLog: ThreadEventLogStorage<TTx, TWrite>;
   readonly transitions: ThreadTransitionStorage<TTx, TWrite>;
   readonly createRuns: (ownerId: string) => ThreadRunStorage<TTx, TWrite>;
-  readonly attachments: ThreadAttachmentStorage<TWrite>;
+  readonly attachments: ThreadAttachmentStorage<TTx>;
   readonly inbox: ThreadInboxStorage<TTx, TWrite>;
   readonly toolOutputs: ThreadToolOutputFaces<TWrite>;
   readonly ownerSettings: ThreadOwnerSettingsStorage;

@@ -13,7 +13,8 @@ import { MachineUnits } from '../platform/contract/service/units.js';
 import { unitsLayer } from '../platform/store/units.js';
 import { seededStoreLayer } from '../platform/store/open.js';
 import { rolloutForms } from '../threads/testing/doubles.js';
-import { nativeFolds } from './rolloutFolds.js';
+import { makeNativeFolds } from './rolloutFolds.js';
+import { makeRestedWork, RestedWork } from './transcript/restedWork.js';
 
 const machine = Layer.orDie(
   unitsLayer(MachineUnits, MachineStore).pipe(Layer.provideMerge(seededStoreLayer(MachineStore, fixtureMigrations, {}, sharedPool))),
@@ -55,7 +56,9 @@ layer(machine)('native rollout folds', (it) => {
       yield* db.run(
         sql`insert into thread_rollout_cursor (thread_id, next_byte_offset, next_position, rested_at) values (${id}, ${Buffer.byteLength(bytes)}, 2, 0)`,
       );
-      const forms = yield* rolloutForms((_threadId, work) => work, onTheLoop, nativeFolds.stage);
+      const work = yield* makeRestedWork;
+      const folds = yield* makeNativeFolds.pipe(Effect.provideService(RestedWork, work));
+      const forms = yield* rolloutForms((_threadId, work) => work, onTheLoop, folds.stage);
       yield* forms.formedHere(id, path);
       const [, line] = readFileSync(path, 'utf8').split('\n');
       expect(JSON.parse(line!).row.payload.messages).toEqual([{ role: 'user', content: [{ type: 'text', text: 'law' }] }]);
@@ -68,7 +71,9 @@ layer(machine)('native rollout folds', (it) => {
       const path = join(yield* scratch, 'carried.jsonl');
       const event = { position: 1, id: 'told', kind: 'message', payload: { messages: [{ role: 'user', content: 'law' }] } };
       writeFileSync(path, `${JSON.stringify({ thread: { id: 'carried' } })}\n${JSON.stringify({ kind: 'event', row: event })}\n`);
-      const plan = yield* nativeFolds
+      const work = yield* makeRestedWork;
+      const folds = yield* makeNativeFolds.pipe(Effect.provideService(RestedWork, work));
+      const plan = yield* folds
         .carry(
           { path, packed: `${path}.zst`, transcript: `${path}.entries` },
           { threadId: 'carried', native: false, standing: [], sources: null },

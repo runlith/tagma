@@ -130,26 +130,28 @@ export const makeEndedRuns = Effect.gen(function* () {
           ),
         );
       },
-      newest: (threadIds: readonly string[], depth: number): Effect.Effect<readonly ThreadRunRow[], ThreadStorageFailed> => {
+      newest: (
+        threadIds: readonly string[],
+        depth: number,
+        tx?: Unit<'machine'>,
+      ): Effect.Effect<readonly ThreadRunRow[], ThreadStorageFailed> => {
         if (threadIds.length === 0) return Effect.succeed([]);
         const x = alias(threadRun, 'newest_run');
         const ids = sql`(select ${threadRun.id} from json_each(${JSON.stringify([...new Set(threadIds)])}) want
           join ${threadRun} on ${threadRun.id} in (
             select ${x.id} from ${threadRun} as "newest_run" where ${x.threadId} = want.value and ${x.status} in ${ENDINGS_LIST}
             order by ${x.finishedAt} desc, ${x.id} desc limit ${depth}))`;
-        return stored('newestSettled')(
-          units.read((unit) =>
-            Effect.flatMap(
-              unit.run(
-                db
-                  .select()
-                  .from(threadRun)
-                  .where(and(inArray(threadRun.id, ids), scope)),
-              ),
-              (rows) => Effect.forEach(rows.sort(byNewest), (row) => trustedRun(kinds, 'newestSettled', row)),
+        const read = (unit: Unit<'machine'>) =>
+          Effect.flatMap(
+            unit.run(
+              db
+                .select()
+                .from(threadRun)
+                .where(and(inArray(threadRun.id, ids), scope)),
             ),
-          ),
-        );
+            (rows) => Effect.forEach(rows.sort(byNewest), (row) => trustedRun(kinds, 'newestSettled', row)),
+          );
+        return stored('newestSettled')(tx === undefined ? units.read(read) : read(tx));
       },
     };
   };

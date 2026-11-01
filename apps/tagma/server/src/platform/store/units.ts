@@ -24,6 +24,7 @@ export const unitsLayer = <IU, IS, Brand extends StoreBrand>(
           const unit = end.bind(
             unitOf<Brand>({
               store: identity,
+              snapshot: reader === null ? undefined : true,
               run: (query) => {
                 const reading = Effect.provideService(mark(query), UnitStore, identity);
                 return reader === null ? reading : reader.run(reading);

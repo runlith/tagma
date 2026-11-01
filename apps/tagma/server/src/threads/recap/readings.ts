@@ -41,9 +41,10 @@ export const makeThreadRecaps = Effect.gen(function* () {
         rows.flatMap((row) => (row.recap === null || row.status === null ? [] : [[row.id, recapReading(row.recap, row.status)] as const])),
       );
     }),
-    reading: Effect.fnUntraced(function* (subject, stored) {
+    reading: Effect.fnUntraced(function* (subject, stored, unit) {
       if (stored === null) return null;
-      const status = (yield* units.read((unit) => statusesOf(db, unit, [subject.id]))).get(subject.id);
+      const read = (tx: NonNullable<typeof unit>) => statusesOf(db, tx, [subject.id]);
+      const status = (yield* unit === undefined ? units.read(read) : read(unit)).get(subject.id);
       return status === undefined ? null : recapReading(stored, status);
     }),
     attempt: (threadId) => attempts.get(threadId) ?? null,

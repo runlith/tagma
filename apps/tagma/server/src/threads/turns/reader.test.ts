@@ -79,6 +79,7 @@ const setup = Effect.gen(function* () {
               }),
           },
           threads: {
+            readCut: unused,
             handle: unused,
             create: unused,
             duplicate: unused,

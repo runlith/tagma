@@ -8,6 +8,7 @@ import {
   type ThreadPatch,
   type ThreadTeamAsk,
   type ThreadTranscriptQuery,
+  type ThreadReadCut,
 } from '@runlith/agent/thread/storage/aggregate';
 import { and, asc, desc, eq, inArray, lt, or, sql, type SQL } from 'drizzle-orm';
 import { uuidv7 } from 'uuidv7';
@@ -20,7 +21,7 @@ import { metadataColumns, rowColumns, threadRow } from '../row.js';
 import { makeFoldWriter } from '../transcript/foldWrite.js';
 import type { RestedFolds } from '../transcript/restedFolds.js';
 import { ThreadEntryKinds } from '@runlith/agent/transcript/kinds';
-import { inProgram, inUnit, stored } from '../../platform/store/crossing.js';
+import { inProgram, inRead, inUnit, stored } from '../../platform/store/crossing.js';
 import { among } from '../../platform/store/rows.js';
 import { failedAs } from '../../threads/contract/service/failure.js';
 import { capabilitiesOf } from '../../threads/store/seat.js';
@@ -31,6 +32,8 @@ import { plannedFacts } from '../../threads/journal/log.js';
 import type { ThreadTranscriptEntry } from '@runlith/agent/transcript/rows';
 
 import { EMPTY_HISTORY, EMPTY_TRANSCRIPT, makeThreadMetadata, makeThreadUnits, threadRowOf } from './threadUnits.js';
+import { threadRev } from '../store/thread.js';
+import { journalHead } from '../../threads/journal/base.js';
 
 export type ThreadStore = Effect.Success<ReturnType<typeof makeThreadStore>>;
 
@@ -72,6 +75,25 @@ export const makeThreadStore = Effect.fnUntraced(function* (input: { readonly re
     folds,
     kinds,
     metadata,
+    readCut: <T, E>(threadId: string, use: (cut: ThreadReadCut<Unit<'machine'>>) => Effect.Effect<T, E>) =>
+      inRead(
+        units,
+        'readCut',
+        Effect.fnUntraced(function* (tx) {
+          const row = yield* stored('readCut.revision')(
+            tx.run(db.select({ revision: threadRev.changeRev }).from(threadRev).where(eq(threadRev.threadId, threadId)).get()),
+          );
+          const filed = input.reads === undefined ? null : yield* stored('readCut.head')(input.reads.head(threadId, tx));
+          const head =
+            filed === null
+              ? yield* stored('readCut.position')(
+                  tx.run(db.get<{ position: number }>(sql`select ${journalHead(sql`${threadId}`)} as position`)),
+                )
+              : { position: filed };
+          return yield* use({ tx, revision: row?.revision ?? 0, position: Number(head?.position ?? 0) });
+        }),
+        { snapshot: true },
+      ),
     transaction: <T, E>(body: (tx: WriteUnit<'machine'>) => Effect.Effect<T, E>) => inUnit(units, kernelStorageWrites, 'transaction', body),
     program: <T, E>(identity: string, body: (tx: WriteUnit<'machine'>) => Effect.Effect<T, E>) =>
       inProgram(units, kernelStorageWrites, identity, 'program', (program) => body(programWriteUnit(program))),
@@ -132,6 +154,8 @@ export const makeThreadStore = Effect.fnUntraced(function* (input: { readonly re
       work.read('toldStateOf', undefined, (unit) => history.toldState(unit, id, key, toolCallId)),
     entriesOfRun: (id: string, runId: string, tx?: Unit<'machine'>) =>
       work.read('entriesOfRun', tx, (unit) => entries.ofRun(unit, id, runId)),
+    openToolsOfRun: (id: string, runId: string, tx?: Unit<'machine'>) =>
+      work.read('openToolsOfRun', tx, (unit) => entries.openToolsOfRun(unit, id, runId)),
     openQuestionsOfRun: (id: string, runId: string, tx?: Unit<'machine'>) =>
       work.read('openQuestionsOfRun', tx, (unit) => entries.openQuestionsOfRun(unit, id, runId)),
     entryById: (id: string, entryId: string, tx?: Unit<'machine'>) => {

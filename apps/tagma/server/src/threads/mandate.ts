@@ -64,6 +64,8 @@ export type ApprovesLineage = {
 export const makeMandateRows = Effect.gen(function* () {
   const { db } = yield* MachineStore;
   const units = yield* MachineUnits;
+  const read = <A, E>(unit: Unit<'machine'> | undefined, work: (unit: Unit<'machine'>) => Effect.Effect<A, E>) =>
+    unit === undefined ? units.read(work) : work(unit);
   const lineageOf = <Name extends string, Value>(column: SQL, name: Name) =>
     db.all<{ id: string; depth: number } & Record<Name, Value>>(sql`
         with recursive lineage(id, parent, depth) as (
@@ -77,8 +79,8 @@ export const makeMandateRows = Effect.gen(function* () {
   const approvals = lineageOf<'approves', string | null>(sql`${mandateFacts.approves}`, 'approves');
   const teams = lineageOf<'team', string | null>(sql`${mandateFacts.team}`, 'team');
   return ThreadMandate.of({
-    delegationLineage: Effect.fn('MandateRows.delegationLineage')(function* (id) {
-      const rows = yield* units.read((unit) => unit.run(delegations.execute({ id })));
+    delegationLineage: Effect.fn('MandateRows.delegationLineage')(function* (id, tx) {
+      const rows = yield* read(tx, (unit) => unit.run(delegations.execute({ id })));
       const nearest = rows.find((row) => row.delegation !== null);
       const own = rows.find((row) => row.depth === 0)?.delegation ?? null;
       return {
@@ -89,8 +91,8 @@ export const makeMandateRows = Effect.gen(function* () {
     }),
     setDelegation: (id, delegation) =>
       units.write(writes('MandateRows.setDelegation', [threadMandate]), (unit) => writeMandate(db, unit, id, { delegation })),
-    approvesLineage: Effect.fn('MandateRows.approvesLineage')(function* (id) {
-      const rows = yield* units.read((unit) => unit.run(approvals.execute({ id })));
+    approvesLineage: Effect.fn('MandateRows.approvesLineage')(function* (id, tx) {
+      const rows = yield* read(tx, (unit) => unit.run(approvals.execute({ id })));
       const listed = (raw: string | null): readonly string[] | null => (raw === null ? null : (JSON.parse(raw) as readonly string[]));
       const nearest = rows.find((row) => row.approves !== null);
       return {
@@ -111,8 +113,8 @@ export const makeMandateRows = Effect.gen(function* () {
       };
     }),
     setTeam: (id, team) => units.write(writes('MandateRows.setTeam', [threadMandate]), (unit) => writeMandate(db, unit, id, { team })),
-    takenOver: (id) =>
-      units.read((unit) =>
+    takenOver: (id, tx) =>
+      read(tx, (unit) =>
         unit
           .run(db.select({ takenOver: threadMandate.takenOver }).from(threadMandate).where(eq(threadMandate.id, id)).limit(1))
           .pipe(Effect.map((rows) => rows[0]?.takenOver ?? false)),

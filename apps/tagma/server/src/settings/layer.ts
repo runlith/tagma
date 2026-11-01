@@ -1,6 +1,6 @@
 import { Context, Effect, Layer } from 'effect';
-import { GraphStore } from '../platform/contract/service/store.js';
-import { GraphUnits } from '../platform/contract/service/units.js';
+import { GraphStore, StoreIdentityConflict } from '../platform/contract/service/store.js';
+import { GraphUnits, type Unit } from '../platform/contract/service/units.js';
 import { WriterRegister } from '../platform/contract/service/writers.js';
 import type { SettingKey } from '../platform/contract/wire/setting.js';
 import { unitsLayer } from '../platform/store/units.js';
@@ -47,9 +47,13 @@ export const settingsLayer: Layer.Layer<
       read: reads(<A>(key: SettingKey<A>, projectId?: number) =>
         Effect.map(layers(db, sessions, projectId, key.id), (chain) => resolveSetting(key, chain)),
       ),
-      value: reads(<A>(key: SettingKey<A>, projectId?: number) =>
-        Effect.map(valueRows(projectId, key.id), (chain) => resolveSetting(key, chain).value),
-      ),
+      value: reads(<A>(key: SettingKey<A>, projectId?: number, unit?: Unit<'machine'>) => {
+        const resolved = Effect.map(valueRows(projectId, key.id), (chain) => resolveSetting(key, chain).value);
+        if (unit === undefined) return resolved;
+        return unit.store === store.identity
+          ? unit.run(resolved)
+          : Effect.die(new StoreIdentityConflict({ expected: store.identity, actual: unit.store }));
+      }),
       chain: reads((projectId?: number) =>
         Effect.map(
           valueRows(projectId),

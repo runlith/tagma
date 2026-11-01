@@ -86,7 +86,7 @@ export const makeRestedReads = Effect.fnUntraced(function* ({
     if (standing === null || !standing.evicted || home === undefined) return null;
     const path = `${home}/${standing.journal}/${threadId}${ROLLOUT_SUFFIX}`;
     if ((yield* rolloutStateOf(path)) === null) return null;
-    yield* forms.readable(threadId, path).pipe(Effect.mapError(formFailed));
+    yield* forms.readable(threadId, path, tx).pipe(Effect.mapError(formFailed));
     lagging(threadId);
     return path;
   });
@@ -206,7 +206,7 @@ export const makeRestedReads = Effect.fnUntraced(function* ({
       if (standing === null || home === undefined) return null;
       const path = `${home}/${standing.journal}/${threadId}${ROLLOUT_SUFFIX}`;
       if ((yield* rolloutStateOf(path)) !== null) {
-        yield* forms.checked(threadId, path).pipe(Effect.mapError(formFailed));
+        yield* forms.checked(threadId, path, tx).pipe(Effect.mapError(formFailed));
         if (standing.evicted) lagging(threadId);
       }
       return yield* lineRead('rolloutReads.range', async (read) => {
@@ -228,8 +228,13 @@ export const makeRestedReads = Effect.fnUntraced(function* ({
       return path === null ? null : yield* lineRead('rolloutReads.position', (read) => positionIn(decode, path, recordId, read));
     }),
     head: Effect.fnUntraced(function* (threadId, tx) {
-      const path = yield* formedPath(threadId, tx);
-      return path === null ? null : yield* lastPosition(path);
+      if (tx === undefined) {
+        const path = yield* formedPath(threadId);
+        return path === null ? null : ((yield* lastPosition(path)) ?? 0);
+      }
+      const standing = yield* facet(threadId, tx);
+      if (standing === null || !standing.evicted || home === undefined) return null;
+      return (yield* lastPosition(`${home}/${standing.journal}/${threadId}${ROLLOUT_SUFFIX}`)) ?? 0;
     }),
     rested: (threadId, tx) => Effect.map(facet(threadId, tx), (standing) => standing !== null && standing.evicted),
   });

@@ -7,8 +7,8 @@ import type { ThreadAttachmentRef } from '../../transcript/attachments';
 import type { ThreadInteractionAnswer, ThreadRestartEntry } from '../../transcript/entries';
 import { ThreadRunConflictError, ThreadRunNotInterruptedError } from '../storage/runs';
 import { unsettledEffects } from './ThreadEffectSettlement';
-import type { ThreadResumeOf } from '../../transcript/live';
-import type { ThreadSnapshot, ThreadState } from '../state';
+import type { ThreadResumeOf, ThreadSnapshotOf } from '../../transcript/live';
+import type { ThreadSnapshot, ThreadState, ThreadStateProject } from '../state';
 import { ATTACHED_CONTEXT_SIGNAL_TYPE, type ThreadSignal } from '../../transcript/parts';
 import { isReaderWordsItem } from '../inboxItems';
 import type { ThreadInboxItem } from '../storage/inbox';
@@ -199,8 +199,18 @@ export class ThreadAggregate extends Context.Service<
     release(threadId: string, ownerId: string): Effect.Effect<'stopped' | 'not-running', ThreadBorderFailed>;
     restart(threadId: string, ownerId: string, byThreadId?: string): Effect.Effect<ThreadRestarted, ThreadBorderFailed>;
     seat(threadId: string, ownerId: string): Effect.Effect<void, ThreadBorderFailed>;
-    setModelSettings(threadId: string, ownerId: string, settings: ThreadModelSettings): Effect.Effect<ThreadSnapshot, ThreadBorderFailed>;
-    setAuthorityMode(threadId: string, ownerId: string, mode: AgentApprovalMode): Effect.Effect<ThreadSnapshot, ThreadBorderFailed>;
+    setModelSettings<T extends ThreadState>(
+      threadId: string,
+      ownerId: string,
+      settings: ThreadModelSettings,
+      project: ThreadStateProject<T>,
+    ): Effect.Effect<ThreadSnapshotOf<T>, ThreadBorderFailed>;
+    setAuthorityMode<T extends ThreadState>(
+      threadId: string,
+      ownerId: string,
+      mode: AgentApprovalMode,
+      project: ThreadStateProject<T>,
+    ): Effect.Effect<ThreadSnapshotOf<T>, ThreadBorderFailed>;
   }
 >()('@runlith/agent/ThreadAggregate') {}
 export const threadAggregateLayer = Layer.effect(
@@ -588,13 +598,19 @@ export const threadAggregateLayer = Layer.effect(
         Effect.flatMap(ownedMetadata(threadId, ownerId), (thread) => stopping.byReader(thread, expectedRunId, options)),
       release: (threadId, ownerId) => Effect.flatMap(owned(threadId, ownerId), (thread) => stopping.release(thread)),
       seat: (threadId, ownerId) => Effect.flatMap(ownedMetadata(threadId, ownerId), seated),
-      setModelSettings: Effect.fnUntraced(function* (threadId, ownerId, chosen) {
+      setModelSettings: Effect.fnUntraced(function* <T extends ThreadState>(
+        threadId: string,
+        ownerId: string,
+        chosen: ThreadModelSettings,
+        project: ThreadStateProject<T>,
+      ) {
         const thread = yield* ownedMetadata(threadId, ownerId);
         yield* models.set(thread, chosen);
         yield* snapshots.publish(thread.id);
-        return yield* snapshots.snapshot(thread.id);
+        return yield* snapshots.snapshot(thread.id, project);
       }),
-      setAuthorityMode: (threadId, ownerId, mode) => Effect.flatMap(owned(threadId, ownerId), (thread) => modes.move(thread, mode)),
+      setAuthorityMode: (threadId, ownerId, mode, project) =>
+        Effect.flatMap(owned(threadId, ownerId), (thread) => modes.move(thread, mode, project)),
     });
   }),
 );

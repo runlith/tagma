@@ -5,6 +5,7 @@ import { Message } from '@runlith/llm/schema/messages';
 import { Usage } from '@runlith/llm/schema/events';
 import type { ThreadContextReading } from '../../rows';
 import type { ThreadTranscriptEntry } from '../../../transcript/rows';
+import type { ThreadToolEntry } from '../../../transcript/entries';
 import type { ThreadStorageFactory } from '../storagePort';
 import { INSTANCE, OWNER, SCOPE, appendEvent, entry, folding, started, startInput } from './support';
 import { threadBranchEvent } from '../../events';
@@ -17,6 +18,33 @@ export function describeThreadTranscriptPort<TTx, TWrite extends TTx = TTx, R = 
   test: Test<Scope.Scope | R>,
 ): void {
   describe(`${name}: thread transcript port`, () => {
+    test(
+      'stored open tools belong to one run and a later journal settlement removes its call',
+      Effect.fnUntraced(function* () {
+        const harness = yield* open();
+        const thread = yield* harness.createThread({ ownerId: OWNER, scope: SCOPE });
+        const call: ThreadToolEntry = {
+          type: 'tool',
+          id: 'tool-a',
+          runId: 'run-a',
+          toolName: 'read',
+          toolCallId: 'call-a',
+          toolState: 'input-available',
+        };
+        yield* harness.aggregate.appendEntries(thread.id, {
+          transcript: [call, { ...call, id: 'tool-b', runId: 'run-b', toolCallId: 'call-b' }],
+        });
+        expect(yield* harness.aggregate.openToolsOfRun(thread.id, 'run-a')).toEqual([call]);
+        yield* appendEvent(harness, {
+          threadId: thread.id,
+          id: 'settle-a',
+          kind: 'tool',
+          payload: { entry: { ...call, toolState: 'output-available', toolOutput: 'done' } },
+        });
+        expect(yield* harness.aggregate.openToolsOfRun(thread.id, 'run-a')).toEqual([]);
+        expect((yield* harness.aggregate.openToolsOfRun(thread.id, 'run-b')).map((entry) => entry.id)).toEqual(['tool-b']);
+      }),
+    );
     test(
       'the context reading patched inside a running run is in every snapshot before the run settles',
       Effect.fnUntraced(function* () {

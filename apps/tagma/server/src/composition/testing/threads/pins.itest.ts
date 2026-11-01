@@ -60,6 +60,23 @@ it.live('pins form a durable published set, reject foreign projects, and forget 
   }),
 );
 
+it.live('a pin read at a snapshot stays at its cut after a later pin commit', () =>
+  Effect.gen(function* () {
+    const { fixture, pins, threadId } = yield* setup;
+    const atCut = yield* fixture.units.read(
+      (unit) =>
+        Effect.gen(function* () {
+          yield* fixture.records.facts(threadId, unit);
+          yield* pins.pin(threadId, fixture.projectId, pin);
+          return yield* pins.read(threadId, unit);
+        }),
+      { snapshot: true },
+    );
+    expect(atCut).toEqual([]);
+    expect(yield* pins.read(threadId)).toEqual([pin]);
+  }),
+);
+
 it.live('removing a project retains its thread pins for the current owner and a fresh owner', () =>
   Effect.gen(function* () {
     const { fixture, owners, pins, threadId } = yield* setup;

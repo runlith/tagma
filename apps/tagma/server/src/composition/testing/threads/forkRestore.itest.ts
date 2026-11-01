@@ -75,8 +75,9 @@ it.live('rollouts restore a branch and its descendant after row loss, with a liv
       const events = yield* log.eventsAfter(id, 0, 20);
       return { transcript, events: events.map(({ position, kind, payload }) => ({ position, kind, payload })) };
     });
+    const parts = yield* nativeOnlyParts;
     const filed = (id: string, prefix = false) =>
-      Effect.provide(exportThreadRollout({ threadId: id, path: pathOf(id), parts: nativeOnlyParts, prefix }), context);
+      Effect.provide(exportThreadRollout({ threadId: id, path: pathOf(id), parts, prefix }), context);
     const branched = Effect.fnUntraced(function* () {
       const source = yield* born();
       yield* append(source, [...turn(1), ...turn(2)]);
@@ -97,7 +98,7 @@ it.live('rollouts restore a branch and its descendant after row loss, with a liv
     yield* units.write(records.writes, (unit) => records.remove(unit, ids));
     expect(yield* records.facts(kept.child)).toBeUndefined();
     const restored = yield* Effect.forEach(ids, (id) =>
-      Effect.provide(replayThreadRollout({ path: pathOf(id), parts: nativeOnlyParts, records, sources }), context),
+      Effect.provide(replayThreadRollout({ path: pathOf(id), parts, records, sources }), context),
     );
     expect(restored.map((row) => row.threadId)).toEqual(ids);
     expect(restored.find((row) => row.threadId === kept.child)?.inherited).toBeGreaterThan(0);

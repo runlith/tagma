@@ -121,9 +121,9 @@ export function makeMemorySettledRuns({ memory, ownerId, scope }: MemoryRunsInpu
           return { rows: pages.sort(newestSettled).slice(0, input.limit).map(viewOf), total };
         }),
       ),
-    newestSettled: (threadIds: readonly string[], depth: number) =>
+    newestSettled: (threadIds: readonly string[], depth: number, tx?: MemoryTx) =>
       attempt('newestSettled', () =>
-        memory.read(undefined, () => [...new Set(threadIds)].flatMap((threadId) => endedOf(threadId).slice(0, depth).map(viewOf))),
+        memory.read(tx, () => [...new Set(threadIds)].flatMap((threadId) => endedOf(threadId).slice(0, depth).map(viewOf))),
       ),
     writeSettledNotification: (runId: string, record: ThreadNotificationRecord, expectedId: string | null) => {
       if (record.id !== expectedId) return Effect.succeed(false);

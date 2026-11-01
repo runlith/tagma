@@ -7,7 +7,7 @@ import type { RunTerminalStatus } from '../../../transcript/live';
 import type { WithdrawnWords } from '../../../transcript/entries';
 import { threadNotification, type ThreadNotification } from '../../storage/settlement';
 import type { ThreadPortFailure } from '../../ThreadBorder';
-import { ThreadOwner, ThreadSettlementRhythm, ThreadRunStoreFactory, type ThreadWriteTx } from '../../ThreadPorts';
+import { ThreadOwner, ThreadSettlementRhythm, ThreadRunStoreFactory, type ThreadWriteTx, type ThreadTx } from '../../ThreadPorts';
 import { controlIfPresent, transitionDeps } from '../../transition/kernel';
 import type { Decision } from '../../transition/port';
 import { runEnded } from './closing';
@@ -38,7 +38,7 @@ export class RunEndings extends Context.Service<
       readonly limit: number;
       readonly cursor?: Cursor;
     }): Effect.Effect<RunEndingsPage, ThreadPortFailure | ThreadCursorRefused>;
-    newest(threadIds: readonly string[], depth: number): Effect.Effect<readonly RunEnding[], ThreadPortFailure>;
+    newest(threadIds: readonly string[], depth: number, tx?: ThreadTx): Effect.Effect<readonly RunEnding[], ThreadPortFailure>;
     redeliver(threadId: string, runId: string): Effect.Effect<Redelivery, ThreadPortFailure>;
     restore(threadId: string, runId: string): Effect.Effect<void, ThreadPortFailure>;
   }
@@ -85,9 +85,9 @@ export const runEndingsLayer = Layer.effect(
           cursor: settled.rows.length > input.limit && last ? mintCursor(question, [last.finishedAt.getTime(), last.runId]) : null,
         };
       }),
-      newest: Effect.fn('RunEndings.newest')(function* (threadIds, depth) {
+      newest: Effect.fn('RunEndings.newest')(function* (threadIds, depth, tx) {
         if (threadIds.length === 0) return [];
-        const rows = yield* runs.newestSettled(threadIds, depth);
+        const rows = yield* runs.newestSettled(threadIds, depth, tx);
         const now = new Date(yield* Clock.currentTimeMillis);
         return rows.map((row) => ending(row, now));
       }),

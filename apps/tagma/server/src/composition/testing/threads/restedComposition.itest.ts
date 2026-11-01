@@ -76,7 +76,7 @@ it.live('reading compaction choices preserves a rested journal and its compactio
     ]);
     yield* db.insert(threadPrunedToolCall()).values({ threadId: id, toolCallId: 'retained', tokens: 17 });
     const path = join(world.dataHome, 'threads', String(projectId), `${id}.jsonl`);
-    yield* exportThreadRollout({ threadId: id, path, parts: nativeOnlyParts }).pipe(
+    yield* exportThreadRollout({ threadId: id, path, parts: yield* nativeOnlyParts }).pipe(
       Effect.provideService(MachineStore, store),
       Effect.provideService(ThreadEntryKinds, ENTRY_KINDS),
     );

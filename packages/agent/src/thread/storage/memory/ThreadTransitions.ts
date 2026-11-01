@@ -191,7 +191,7 @@ export const inMemoryThreadTransitions = ({ memory }: MemoryStorageInput): Threa
         }
       }),
 
-    revision: () => Effect.sync(() => memory.units.revision()),
+    revision: (_threadId, tx) => attempt('revision', () => memory.units.revision(tx)),
 
     opened: () => Effect.void,
 

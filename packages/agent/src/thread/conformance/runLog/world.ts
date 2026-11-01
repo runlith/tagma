@@ -412,7 +412,7 @@ export const steeredWords = Effect.fnUntraced(function* (
   return { runId: said.runId };
 });
 
-export function inertAttachments<TTx, TWrite extends TTx = TTx>(): ThreadAttachmentStorage<TWrite> {
+export function inertAttachments<TTx, TWrite extends TTx = TTx>(): ThreadAttachmentStorage<TTx> {
   return {
     keep: (_threadId, image) => Effect.succeed({ id: 'kept', mediaType: image.mediaType, url: 'test://kept' }),
     resolve: (_threadId, _ownerId, refs) =>

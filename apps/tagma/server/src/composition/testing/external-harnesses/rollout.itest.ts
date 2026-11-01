@@ -34,7 +34,7 @@ import { harnessFacet } from '../../../threads/contract/wire/harness/types.js';
 import { harnessPresentation } from '../../../external-harnesses/contract/service/table.js';
 import { builtinHarness } from '../../../external-harnesses/testing/builtin.js';
 
-const parts = { native: nativeOnlyParts.native, external: externalRolloutPart };
+const parts = Effect.map(nativeOnlyParts, ({ native }) => ({ native, external: externalRolloutPart }));
 
 const fixture = Layer.mergeAll(
   BunFileSystem.layer,
@@ -46,7 +46,7 @@ const fixture = Layer.mergeAll(
 
 const imported = Effect.fnUntraced(function* (threadId: string, path: string, records: ThreadRecords['Service']) {
   yield* (yield* rolloutForms((_id, work) => work, ENTRY_KINDS)).formedHere(threadId, path);
-  return yield* replayThreadRollout({ path, parts, records });
+  return yield* replayThreadRollout({ path, parts: yield* parts, records });
 });
 
 const endedFacet = (failure: string | null): ReturnType<typeof asExternalSession> =>
@@ -284,7 +284,7 @@ describe('the external rollout part', () => {
 
         for (const id of ['t-acp-now', 't-term-live']) {
           const path = join(yield* files.makeTempDirectoryScoped({ prefix: 'rollout-ext-form-' }), `${id}.jsonl`);
-          yield* exportThreadRollout({ threadId: id, path, parts });
+          yield* exportThreadRollout({ threadId: id, path, parts: yield* parts });
           yield* db.delete(threadRecord).where(eq(threadRecord.id, id));
           yield* imported(id, path, records);
         }
@@ -352,11 +352,11 @@ describe('the external rollout part', () => {
       };
 
       const path = join(yield* files.makeTempDirectoryScoped({ prefix: 'rollout-ext-new-' }), 't-ext-new.jsonl');
-      const exported = yield* exportThreadRollout({ threadId: 't-ext-new', path, parts });
+      const exported = yield* exportThreadRollout({ threadId: 't-ext-new', path, parts: yield* parts });
       expect(exported.records).toBe(0);
 
       yield* db.delete(threadRecord);
-      yield* replayThreadRollout({ path, parts, records });
+      yield* replayThreadRollout({ path, parts: yield* parts, records });
       expect(yield* db.select().from(threadRecord).where(eq(threadRecord.id, 't-ext-new'))).toEqual(before.record);
       expect(yield* db.select().from(externalSession()).where(eq(externalSession().id, 't-ext-new'))).toEqual(before.stored);
       expect(
@@ -414,11 +414,11 @@ describe('the external rollout part', () => {
         .values([event(1, 'ext-roll-event-1', 'ext-roll-entry-1', 'first'), event(2, 'ext-roll-event-2', 'ext-roll-entry-2', 'second')]);
 
       const path = join(yield* files.makeTempDirectoryScoped({ prefix: 'rollout-ext-journal-' }), 't-ext-journal.jsonl');
-      const exported = yield* exportThreadRollout({ threadId: 't-ext-journal', path, parts });
+      const exported = yield* exportThreadRollout({ threadId: 't-ext-journal', path, parts: yield* parts });
       expect(exported.records).toBe(2);
 
       yield* db.delete(threadEvent()).where(eq(threadEvent().threadId, 't-ext-journal'));
-      yield* rehydrateThreadRecords({ threadId: 't-ext-journal', path, parts });
+      yield* rehydrateThreadRecords({ threadId: 't-ext-journal', path, parts: yield* parts });
 
       const events = yield* db
         .select()

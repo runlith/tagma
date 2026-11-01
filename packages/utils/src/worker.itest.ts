@@ -4,11 +4,32 @@ import { join } from 'node:path';
 import { expect } from 'bun:test';
 import { it } from '@runlith/effect-test';
 import { Deferred, Effect, Fiber } from 'effect';
-import { workerLink } from './worker.js';
+import { workerLink, WorkerUnavailable } from './worker.js';
 
 type ReadAsk = { readonly id: number; readonly kind: 'read'; readonly path: string };
 type ReadAnswer = { readonly id: number; readonly kind: 'read' } & ({ readonly text: string } | { readonly failure: string });
 type ReadyNote = { readonly id: number; readonly kind: 'ready' };
+
+it.live('owner shutdown joins an idle worker close and refuses new work without a replacement', () =>
+  Effect.gen(function* () {
+    let closed = false;
+    const link = workerLink<{ readonly id: number }, { readonly id: number }>('owned reader', () => {
+      const worker = new Worker(
+        `data:text/javascript,${encodeURIComponent("self.addEventListener('message', ({ data }) => self.postMessage({ id: data.id }));")}`,
+        { type: 'module' },
+      );
+      worker.addEventListener('close', () => {
+        closed = true;
+      });
+      return worker;
+    });
+    yield* Effect.addFinalizer(() => link.shutdown('test ended'));
+    yield* link.run((id) => ({ id }));
+    yield* link.shutdown('owner ended');
+    expect(closed).toBe(true);
+    expect(yield* Effect.flip(link.run((id) => ({ id })))).toBeInstanceOf(WorkerUnavailable);
+  }),
+);
 
 it.live('a joined request keeps its resources through interruption and settles failure only after the worker closes', () =>
   Effect.gen(function* () {

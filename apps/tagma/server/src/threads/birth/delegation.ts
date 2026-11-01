@@ -1,5 +1,6 @@
 import { Cause, Effect, PubSub, type Scope, Stream } from 'effect';
 import type { StoreFailure } from '../../platform/contract/service/store.js';
+import type { Unit } from '../../platform/contract/service/units.js';
 import type { SettingChanges } from '../../settings/contract/service/changes.js';
 import type { Settings } from '../../settings/contract/service/values.js';
 import { delegation as delegationKey, subAgentDepth } from '../contract/wire/settings.js';
@@ -12,9 +13,10 @@ export const readDelegation = Effect.fnUntraced(function* (
   threads: ThreadMandate['Service'],
   settings: Settings['Service'],
   threadId: string,
+  unit?: Unit<'machine'>,
 ): Effect.fn.Return<DelegationReading, StoreFailure> {
-  const lineage = yield* threads.delegationLineage(threadId);
-  const decided = lineage.nearest ?? { allowed: yield* settings.value(delegationKey), setAt: null };
+  const lineage = yield* threads.delegationLineage(threadId, unit);
+  const decided = lineage.nearest ?? { allowed: yield* settings.value(delegationKey, undefined, unit), setAt: null };
   return { delegation: { own: lineage.own, ...decided }, depth: lineage.depth };
 });
 

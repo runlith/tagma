@@ -1194,6 +1194,7 @@ const recorderWorld = Effect.fnUntraced(function* ({ transcript: initialTranscri
       Layer.succeed(
         ThreadSnapshots,
         ThreadSnapshots.of({
+          readCut: unused,
           state: unused,
           snapshot: unused,
           attachFrom: unused,

@@ -2,7 +2,7 @@ import { and, eq, isNotNull } from 'drizzle-orm';
 import { Effect, Result } from 'effect';
 import { writes } from '../../platform/contract/service/writes.js';
 import { MachineStore, type StoreFailure } from '../../platform/contract/service/store.js';
-import { MachineUnits } from '../../platform/contract/service/units.js';
+import { MachineUnits, type Unit } from '../../platform/contract/service/units.js';
 import { GateRefusal } from '../../platform/contract/wire/refusal.js';
 import { ReentrantCall } from '@runlith/held/failures';
 import { ThreadStorageFailed } from '@runlith/agent/thread/persisted';
@@ -59,8 +59,9 @@ export const makeRolloutForms = Effect.fnUntraced(function* ({
       outcome.kind === 'refused' ? Effect.fail(outcome.refusal) : Effect.void,
     );
 
-  const checked = Effect.fnUntraced(function* (threadId: string, path: string) {
-    const standing = yield* rolloutFormOf(db, threadId);
+  const checked = Effect.fnUntraced(function* (threadId: string, path: string, unit?: Unit<'machine'>) {
+    const query = rolloutFormOf(db, threadId);
+    const standing = yield* unit === undefined ? query : unit.run(query);
     if (standing?.refusal != null) return yield* new RolloutUnformable({ threadId, path, reason: standing.refusal });
     const step = standing?.step ?? null;
     if (kinds.base !== null && kinds.below(step)) return yield* olderRollout(threadId, path, step, kinds.base);
@@ -101,12 +102,17 @@ export const makeRolloutForms = Effect.fnUntraced(function* ({
           kinds.lags(standing.step) &&
           eventless(kinds.after(standing.step)),
       ),
-    checked: (threadId: string, path: string): Effect.Effect<void, RolloutUnformable | StoreFailure> =>
-      Effect.asVoid(checked(threadId, path)),
-    readable: Effect.fnUntraced(function* (threadId: string, path: string) {
-      const standing = yield* checked(threadId, path);
+    checked: (threadId: string, path: string, unit?: Unit<'machine'>): Effect.Effect<void, RolloutUnformable | StoreFailure> =>
+      Effect.asVoid(checked(threadId, path, unit)),
+    readable: Effect.fnUntraced(function* (threadId: string, path: string, unit?: Unit<'machine'>) {
+      const standing = yield* checked(threadId, path, unit);
       const state = yield* rolloutStateOf(path);
       if (standing?.publishing == null && state?.form !== 'compressed') return;
+      if (unit?.snapshot === true)
+        return yield* new ThreadStorageFailed({
+          call: 'rolloutReads.form',
+          cause: new Error(`The prepared rollout ${path} needs preparation again.`),
+        });
       yield* within(threadId, settledRollout(db, write, threadId, path, kinds).pipe(Effect.andThen(openRollout(path))));
     }),
     staged: (threadId: string, path: string): Effect.Effect<RolloutStaged | null, RolloutFormFailure> =>

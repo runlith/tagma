@@ -2,6 +2,7 @@ import { Context, Effect, Layer } from 'effect';
 import { NamespaceId } from '@runlith/files/namespace';
 import { ThreadRollouts as ThreadRolloutsTag } from '../contract/service/rollouts.js';
 import { makeSqliteThreadJournal, planHead, type SqliteThreadJournal } from '../journal/log.js';
+import { makeBaseReach, type LayerSources } from '../journal/base.js';
 import type { ThreadEventInsert } from '@runlith/agent/thread/storage/eventLog';
 import { programWriteUnit } from '../../platform/store/programs.js';
 import { threadRecord } from '../../thread-record/store/table.js';
@@ -69,6 +70,7 @@ import { compressRollout as compressRolloutOver } from '../journal/rolloutForms.
 import { thread as threadTable, threadEntry as threadEntryTable, threadRun as threadRunTable } from '../store/kernel.js';
 import {
   conversationWrites,
+  threadBase as threadBaseTable,
   threadEvent as threadEventTable,
   threadRolloutCursor as threadRolloutCursorTable,
   threadRolloutForm as threadRolloutFormTable,
@@ -372,7 +374,11 @@ export const threadTargets = (...input: Parameters<typeof makeThreadTargets>) =>
 
 export const targetContexts = () => makeTargetContexts;
 
-export const threadAttachmentStore = (root: string) => makeThreadAttachments({ root });
+export const threadAttachmentStore = (root: string, sources?: LayerSources) => makeThreadAttachments({ root, sources });
+
+export const baseReach = makeBaseReach;
+
+export const threadBase = () => threadBaseTable;
 
 export const threadScratch = (root: string) => makeThreadScratch({ root });
 

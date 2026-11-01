@@ -102,7 +102,7 @@ it.live(
       runtime,
     );
     const path = join(home, String(projectId), `${row.id}.jsonl`);
-    yield* Effect.provide(exportThreadRollout({ threadId: row.id, path, parts: nativeOnlyParts }), runtime);
+    yield* Effect.provide(exportThreadRollout({ threadId: row.id, path, parts: yield* nativeOnlyParts }), runtime);
     yield* Effect.provide(
       Effect.gen(function* () {
         yield* store.db.delete(threadEntry()).where(eq(threadEntry().threadId, row.id));
@@ -122,7 +122,7 @@ it.live(
 
     yield* Effect.provide(
       Effect.gen(function* () {
-        const wake = yield* Effect.forkChild(rehydrateThreadRecords({ threadId: row.id, path, parts: nativeOnlyParts }));
+        const wake = yield* Effect.forkChild(rehydrateThreadRecords({ threadId: row.id, path, parts: yield* nativeOnlyParts }));
         yield* Effect.gen(function* () {
           yield* Deferred.await(entered);
           const page = yield* rested.transcriptWindow(row.id, { limit: 2, bytes: 10_000_000 });
