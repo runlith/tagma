@@ -25,6 +25,8 @@ sources:
     ref: apps/tagma/app/src/lib/features/graph/spatial/NodeCard.svelte
   - kind: file
     ref: apps/tagma/app/src/routes/[project]/graph/[[id]]/+page.svelte
+  - kind: file
+    ref: apps/tagma/app/src/lib/features/graph/spatial/Page.svelte
 ---
 **Value.** The operator sees the knowledge structure and links between blocks on one canvas, which a list never gives: what depends on what, what references what, where work piled up.
 
