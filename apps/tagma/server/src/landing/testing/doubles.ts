@@ -4,7 +4,7 @@ import { makeMergeGit } from '../merge/git.js';
 import { Context, Effect, FileSystem } from 'effect';
 import { Git } from '@runlith/git/Git';
 import { MachineUnits } from '../../platform/contract/service/units.js';
-import { ChangeRecord } from '../../change-record/contract/service/record.js';
+import { type ChangeCheckout, ChangeRecord } from '../../change-record/contract/service/record.js';
 import { CommitTrees } from '../../workspace/contract/service/commitTrees.js';
 import { CheckoutHoldings, CheckoutRows } from '../../workspace/contract/service/checkouts.js';
 import { WorkingOrigins } from '../../workspace/contract/service/places.js';
@@ -17,6 +17,11 @@ import { worktreePendingMerge } from '../store/tables.js';
 import { writes } from '../../platform/contract/service/writes.js';
 import { checkoutLanes, LandingLanes } from '../land/lanes.js';
 import { submitWork } from '../land/submit.js';
+import { formingOver } from '../land/formed.js';
+import { COMMITTING } from '../land/hooks.js';
+import { commitIndex, type IndexJudge } from '../land/indexCommit.js';
+import { readDelta } from '../land/reshaping.js';
+import type { CommitShape } from '../../change-record/contract/service/shape.js';
 import { Holdings } from '../../change-record/contract/service/holdings.js';
 import { LineWrites } from '../../change-record/contract/service/lineWrites.js';
 import { Retirement } from '../../change-record/contract/service/retirement.js';
@@ -56,6 +61,36 @@ export const submitOver = Effect.fnUntraced(function* (
   return yield* submitWork(git, git, root, store, units, origin, caller, ...rest).pipe(
     Effect.provideService(Holdings, rig.holdings),
     Effect.provideService(Retirement, rig.retirement),
+  );
+});
+
+export const indexCommitOver = Effect.fnUntraced(function* (
+  git: Git['Service'],
+  trees: CommitTrees['Service'],
+  shape: CommitShape['Service'],
+  checkout: ChangeCheckout,
+  judge: IndexJudge,
+  message: string,
+) {
+  const changes = yield* ChangeRecord;
+  const carrying = yield* Effect.context<FileSystem.FileSystem | LineWrites>();
+  return yield* Effect.scoped(
+    Effect.flatMap(checkoutLanes, (lanes) =>
+      commitIndex(git, trees, lanes, shape, {
+        message,
+        amend: false,
+        kind: COMMITTING,
+        withoutFormat: false,
+        projectId: checkout.projectId,
+        root: checkout.root,
+        judge,
+        form: formingOver(changes, checkout, carrying),
+        job: 'index-over',
+        act: { kind: 'operator' },
+        landing: () => Effect.void,
+        read: (delta) => Effect.orDie(Effect.provide(readDelta(changes, checkout, delta), carrying)),
+      }),
+    ),
   );
 });
 
