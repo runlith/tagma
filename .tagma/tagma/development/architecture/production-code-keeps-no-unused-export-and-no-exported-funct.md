@@ -2324,18 +2324,6 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead apps/tagma/app/src/lib/wire/liveGroup.ts#UsedRpcs",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/app/src/lib/wire/operation.ts#loadedOperations",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/app/src/lib/wire/operation.ts#loadOperations",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "dead-code dead apps/tagma/server/scripts/baseline.ts#generateBaseline",
           "owner": "5a3bed29"
         },
