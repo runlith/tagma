@@ -33,9 +33,7 @@ type Gate = {
   readonly shown: <Payload>(item: { readonly payload: Payload } & Gated<Payload>) => Payload | null;
 };
 
-type GatedItem = { readonly payload: unknown; readonly right?: RightKey; readonly offer?: unknown };
-
-export const gatedBy = <Item extends GatedItem>(use: Use) =>
+export const gatedBy = <Item extends { readonly payload: unknown } & Gated<unknown>>(use: Use) =>
   function* (): Generator<Optional, (item: Item) => Item | null, unknown> {
     const gate = gateOf(yield* Access.optional(), use);
     return (item) => {

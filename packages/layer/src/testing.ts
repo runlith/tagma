@@ -27,8 +27,16 @@ export function makeHost(at: Partial<HostInput> = {}): Host {
 
 type PointKey<Item> = { readonly id: string; readonly definition: Parameters<typeof Point.over<Item>>[1] };
 
+export function drawingAlone<Item>(definition: PointKey<Item>['definition']): ((item: Item) => Item | null) | undefined {
+  if (definition.draws === undefined) return undefined;
+  const asking = definition.draws();
+  let step = asking.next();
+  while (step.done !== true) step = asking.next(undefined);
+  return step.value;
+}
+
 export function makePoint<Item>(key: PointKey<Item>, ...items: readonly NoInfer<Item>[]): Point<Item> {
-  const point = Point.over<Item>(key.id, key.definition, { current: undefined });
+  const point = Point.over<Item>(key.id, key.definition, { current: undefined }, undefined, drawingAlone(key.definition));
   if (items.length > 0) point.register('test', ...items);
   return point;
 }
