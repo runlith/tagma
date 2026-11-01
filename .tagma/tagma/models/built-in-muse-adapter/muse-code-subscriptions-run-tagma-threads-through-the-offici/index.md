@@ -95,7 +95,8 @@ The cached prefix of a Muse request is the base instructions, the tool list, the
 ## Not proven
 
 - A vendor `web_fetch` asking in review mode was not driven live: the trial server's thread mode moves only over the live thread channel the CLI does not expose. The road is the Claude runner's (`session/request_permission` judged as the vendor question `webfetch`); in trust mode a live `web_fetch` ran.
-- A thread moved onto Muse Code from a native model: the trial server holds no native account, and no road itest drives a native-to-hosted move.
+- A thread moved onto Muse Code from a native model: the trial server holds no native account. A move from another provider is proven live: a thread whose word was said only under Claude Code (haiku) answered it after `set_thread_model` moved it onto Muse Code.
+- A side question end to end through Tagma: no operation or CLI verb asks one, and thread titles take a native-prefix road; the aside is proven at the MSP level (three answers from the main conversation) and by the runner's contract test.
 - Linux and Windows logins, read from the official builds' strings only.
 
 ## Out of scope
