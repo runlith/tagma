@@ -1,4 +1,4 @@
-import { Console, Data, Effect, FileSystem, Result } from 'effect';
+import { Console, Data, Effect, FileSystem, Result, type Scope } from 'effect';
 import { ChildProcess } from 'effect/process';
 import { dirname, join } from 'node:path';
 import { Git } from '@runlith/git/Git';
@@ -33,8 +33,45 @@ export const buildHead = Effect.fn('installation.buildHead')(function* (
   const files = yield* FileSystem.FileSystem;
   const at = yield* CurrentInvocation;
   const failed = (message: string) => new SourceRefused({ message, unblock });
-  const command = (args: readonly string[]) =>
-    run(git, checkout, args, undefined).pipe(Effect.mapError((failure) => failed(troubleOf(failure))));
+  const commandIn = (cwd: string, args: readonly string[]) =>
+    run(git, cwd, args, undefined).pipe(Effect.mapError((failure) => failed(troubleOf(failure))));
+  const detached: (source: string, place: string, commit: string) => Effect.Effect<void, SourceRefused, Scope.Scope> = Effect.fn(
+    'installation.headWorktree',
+  )(function* (source: string, place: string, commit: string) {
+    yield* Effect.acquireRelease(commandIn(source, ['worktree', 'add', '--detach', '--end-of-options', place, commit]), () =>
+      Effect.matchEffect(commandIn(source, ['worktree', 'remove', '--force', '--force', place]), {
+        onSuccess: () => Effect.void,
+        onFailure: (failure) => Console.error(`[tagma] HEAD source cleanup failed: ${failure.message}; remove the worktree ${place}`),
+      }),
+    );
+    for (const { path, pinned } of yield* submodulesOf(place)) {
+      const repository = join(source, path);
+      const unchecked = failed(`the submodule ${path} of ${source} is not checked out, so its pinned ${pinned} cannot be built`);
+      yield* Effect.all([commandIn(repository, ['rev-parse', '--show-toplevel']), files.realPath(repository)]).pipe(
+        Effect.mapError(() => unchecked),
+        Effect.filterOrFail(
+          ([top, real]) => top.trim() === real,
+          () => unchecked,
+        ),
+      );
+      yield* detached(repository, join(place, path), pinned);
+    }
+  });
+  const submodulesOf = Effect.fn('installation.headSubmodules')(function* (place: string) {
+    const declared = yield* files.exists(join(place, '.gitmodules')).pipe(Effect.mapError((failure) => failed(failure.message)));
+    if (!declared) return [];
+    const paths = yield* commandIn(place, ['config', '--file', '.gitmodules', '--get-regexp', '^submodule\\..*\\.path$']);
+    const named = paths.split('\n').flatMap((line) => {
+      const path = line.trim().split(' ').slice(1).join(' ');
+      return path === '' ? [] : [path];
+    });
+    if (named.length === 0) return [];
+    const staged = yield* commandIn(place, ['ls-files', '--stage', '--', ...named]);
+    return staged.split('\n').flatMap((line) => {
+      const linked = /^160000 ([0-9a-f]+) 0\t(.+)$/u.exec(line);
+      return linked?.[1] === undefined || linked[2] === undefined ? [] : [{ pinned: linked[1], path: linked[2] }];
+    });
+  });
   const [head, status] = yield* Effect.all([
     commitOf(git, checkout, 'HEAD'),
     statusAt(git, checkout, { untracked: 'all', monitor: false }),
@@ -77,12 +114,7 @@ export const buildHead = Effect.fn('installation.buildHead')(function* (
       'source',
     );
   yield* files.makeDirectory(dirname(root), { recursive: true }).pipe(Effect.mapError((failure) => failed(failure.message)));
-  yield* Effect.acquireRelease(command(['worktree', 'add', '--detach', '--end-of-options', root, head]), () =>
-    Effect.matchEffect(command(['worktree', 'remove', '--force', '--force', root]), {
-      onSuccess: () => Effect.void,
-      onFailure: (failure) => Console.error(`[tagma] HEAD source cleanup failed: ${failure.message}; remove the worktree ${root}`),
-    }),
-  );
+  yield* detached(checkout, root, head);
   const snapshot = yield* files.realPath(root).pipe(Effect.mapError((failure) => failed(failure.message)));
   const runBuild = Effect.fn('installation.sourceCommand')(function* (args: readonly string[]) {
     const child = yield* ChildProcess.make(process.execPath, args, {
