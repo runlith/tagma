@@ -9179,10 +9179,6 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead apps/tagma/server/src/speech/contract/service/listenings.ts#Refused",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "dead-code dead apps/tagma/server/src/speech/contract/service/models.ts#LocalModel",
           "owner": "5a3bed29"
         },
@@ -9298,10 +9294,6 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead apps/tagma/server/src/speech/listening/hearing.ts#Hearings",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "dead-code dead apps/tagma/server/src/speech/listening/recorder.ts#Lose",
           "owner": "5a3bed29"
         },
@@ -9335,10 +9327,6 @@ fields:
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/speech/listening/text.ts#CLOCK",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/speech/listening/track.ts#Muting",
           "owner": "5a3bed29"
         },
         {
