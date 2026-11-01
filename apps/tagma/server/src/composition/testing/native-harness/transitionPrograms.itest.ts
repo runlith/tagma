@@ -1,7 +1,7 @@
 import { expect } from 'bun:test';
 import { it } from '@runlith/effect-test';
 import { sql } from 'drizzle-orm';
-import { Effect, Layer } from 'effect';
+import { Cause, Effect, Exit, Layer } from 'effect';
 import { Message } from '@runlith/llm/schema/messages';
 import { CostLedger, costLedgerLayer, rootCost } from '@runlith/performance/CostLedger';
 import { readThreadEvents, threadEntryEvent, threadStepMessagesEvent } from '@runlith/agent/thread/events';
@@ -12,6 +12,11 @@ import { type TransitionDeps, transitionNow } from '@runlith/agent/thread/transi
 import type { Unit, WriteUnit } from '../../../platform/contract/service/units.js';
 import { OWNER, SCOPE } from '@runlith/agent/thread/conformance/runLog/world';
 import { openThreadStore } from '../storageHarness.js';
+import { programWriteUnit } from '../../../platform/store/programs.js';
+import { ProgramConflict } from '../../../platform/contract/service/units.js';
+import { writes } from '../../../platform/contract/service/writes.js';
+import { thread as threadTable } from '../../../threads/testing/doubles.js';
+import { threadMetadata } from '../../../native-harness/testing/doubles.js';
 
 const CALL: ThreadToolEntry = {
   type: 'tool',
@@ -178,4 +183,48 @@ it.live('a planned transcript entry is inserted, replaced and folded by its prog
       { position: 2, entry: SETTLED },
     ]);
   }).pipe(Effect.provide(Layer.fresh(costLedgerLayer({ capacity: 16 })))),
+);
+
+const reading = writes('test.metadata', [threadTable()]);
+
+const bare = Effect.gen(function* () {
+  const { storage, db, context, units } = yield* openThreadStore();
+  const thread = yield* storage.createThread({ ownerId: OWNER, scope: SCOPE });
+  const metadata = yield* threadMetadata(storage.kinds).pipe(Effect.provide(context));
+  return { db, units, metadata, thread };
+});
+
+it.live('a program guarded on a thread row it read commits while the row stands and while it is still absent', () =>
+  Effect.gen(function* () {
+    const { units, metadata, thread } = yield* bare;
+    const guarded = (id: string) =>
+      units.program(reading, `test:metadata:${id}`, (program) =>
+        Effect.map(metadata.metadata(id, programWriteUnit(program)), (row) => row?.id ?? null),
+      );
+    expect({ standing: yield* guarded(thread.id), absent: yield* guarded('no-such-thread') }).toEqual({
+      standing: thread.id,
+      absent: null,
+    });
+  }),
+);
+
+it.live('a program whose thread changed its transport after the read is refused at commit', () =>
+  Effect.gen(function* () {
+    const { units, metadata, db, thread } = yield* bare;
+    const outcome = yield* Effect.exit(
+      units.program(reading, 'test:metadata:moved', (program) =>
+        Effect.gen(function* () {
+          const row = yield* metadata.metadata(thread.id, programWriteUnit(program));
+          yield* Effect.orDie(
+            db.run(sql`update native_thread set transport = json_set(transport, '$.adapter', 'elsewhere') where id = ${thread.id}`),
+          );
+          return row?.transport.adapter;
+        }),
+      ),
+    );
+    const refusal = Exit.isFailure(outcome) ? Cause.squash(outcome.cause) : null;
+    expect(refusal).toBeInstanceOf(ProgramConflict);
+    const { statement, expected, actual } = refusal as ProgramConflict;
+    expect({ statement, expected, actual }).toEqual({ statement: 0, expected: 1, actual: 0 });
+  }),
 );

@@ -13,6 +13,7 @@ import {
 } from '@runlith/agent/thread/persisted';
 import { and, eq, sql } from 'drizzle-orm';
 import { programOf } from '../../platform/store/programs.js';
+import { bindQuery } from '../../platform/store/queries.js';
 import { ThreadEntryKinds, type ThreadEntryReader } from '@runlith/agent/transcript/kinds';
 import { ProviderRegistry } from '../../providers/contract/service/registry.js';
 import { MachineStore } from '../../platform/contract/service/store.js';
@@ -134,6 +135,18 @@ export const makeThreadMetadata = Effect.gen(function* () {
     .from(threadRow)
     .where(eq(threadRow.id, sql.placeholder('id')))
     .prepare();
+  const absent = db
+    .select({ id: threadRow.id })
+    .from(threadRow)
+    .where(eq(threadRow.id, sql.placeholder('id')))
+    .prepare();
+  const sameTransport = db
+    .select({ id: threadRow.id })
+    .from(threadRow)
+    .where(
+      and(eq(threadRow.id, sql.placeholder('id')), sql`json_extract(${threadRow.transport}, '$.adapter') is ${sql.placeholder('adapter')}`),
+    )
+    .prepare();
   return ThreadMetadataSource.of({
     metadata: (id, tx) => {
       const read = (unit: Unit<'machine'>) =>
@@ -142,17 +155,9 @@ export const makeThreadMetadata = Effect.gen(function* () {
       if (program === null) return stored('metadata')(tx ? read(tx) : units.read(read));
       return stored('metadata')(
         Effect.tap(units.read(read), (row) =>
-          program.guard(
-            db
-              .select({ id: threadRow.id })
-              .from(threadRow)
-              .where(
-                row === undefined
-                  ? eq(threadRow.id, id)
-                  : and(eq(threadRow.id, id), sql`json_extract(${threadRow.transport}, '$.adapter') is ${row.transport.adapter}`),
-              ),
-            row === undefined ? 0 : 1,
-          ),
+          row === undefined
+            ? program.guard(bindQuery(absent, { id }), 0)
+            : program.guard(bindQuery(sameTransport, { id, adapter: row.transport.adapter }), 1),
         ),
       );
     },
