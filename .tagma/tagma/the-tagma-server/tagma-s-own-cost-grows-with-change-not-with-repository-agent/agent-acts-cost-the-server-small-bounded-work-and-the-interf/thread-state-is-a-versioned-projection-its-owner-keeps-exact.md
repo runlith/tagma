@@ -38,3 +38,5 @@ Done when, in the bench's 5× run, `ThreadSnapshots.publish` and `ThreadList.pro
 - several changes at one journal head across reconnect;
 - an oversized open entry;
 - refusal of undeclared writes.
+
+State on 2026-11-01: typed changes stand for kernel transitions and the change revision orders them ([[546133ca]]). A wider attempt — eight commits, among them the ACP saved step as one typed change (`695b4037`) and prepared program writes — was reverted in `78b66892`, because at 5× it dropped completed hosted calls from 1,177 to 742 per 90 s and raised loop p99 from 11 to 63 ms; which commit caused it was not isolated. Whether [[546133ca]] still matches the code after that revert is unchecked. The thread list still re-reads per event: in the live sample `ThreadList.project` ran 4–5 statements per projection.

@@ -26,3 +26,5 @@ What stands when done:
 - unsampled statement spans cost no attribute projection or byte sizing.
 
 Done when the bench's 5× profile shows Drizzle SQL building and per-statement span cost at a small fraction of their `815ad556` shares, with per-act statement counts unchanged by this work, and the affected owners' tests green.
+
+State on 2026-11-01: prepared program writes and guards (`d1c68f36`, `1073960f`) landed and were reverted with six other commits in `78b66892`, after a 5× run lost throughput (1,177 → 742 completed calls per 90 s) and loop p99 rose from 11 to 63 ms; the regression was not traced to a single commit, so preparation itself is not shown to be the cause. A live 23 s profile on 2026-11-01 still shows drizzle SQL building (`collectSQL`, `escapeName`, entity checks) on the serving loop.
