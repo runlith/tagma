@@ -18,6 +18,7 @@ import { Births, type ForkSource } from './Births.svelte.js';
 import { PendingArchive } from './PendingArchive.svelte.js';
 import { ThreadForest, type ThreadTreeNode } from './forest.js';
 import { mergeRow } from './mergeRow.js';
+import { ShownFamilies, type ShownFamily } from './shownFamilies.svelte.js';
 
 const titleOutcome = {
   'no-topic': 'There is nothing to name this thread after yet.',
@@ -64,12 +65,15 @@ export class ThreadList extends Service<ThreadList>()('ThreadList', { tier: 'til
   refused = $state<string | null>(null);
   private feed: { unsubscribe: () => void } | null = null;
   private olderBefore = $state<string | null>(null);
+  private deep = false;
   readonly births: Births;
+  private readonly shown: ShownFamilies;
   readonly more: number;
   private shelved = $state.raw<readonly ThreadListRow[] | null>(null);
   private shelvedTotal = $state<number | null>(null);
   private shelfReads = 0;
   private readonly pending = new PendingArchive((id) => this.byId.get(id));
+  private readonly archivedPage: readonly ThreadListRow[] | null;
   readonly archived: readonly ThreadListRow[] | null;
   readonly archivedTotal: number | null;
   private inFlight = $state<readonly string[]>([]);
@@ -104,9 +108,16 @@ export class ThreadList extends Service<ThreadList>()('ThreadList', { tier: 'til
         this.publish();
       },
     );
+    this.shown = new ShownFamilies(
+      (id) => this.readFamily(id),
+      (id) => this.forest.has(id),
+      (family) => this.placeShown(family),
+      (error) => this.failure.report(error),
+    );
     this.more = $derived(this.olderBefore === null || this.roots === null ? 0 : Math.max(0, this.roots - (this.tree.length - this.unheld)));
-    this.archived = $derived(this.pending.shelved(this.shelved));
-    this.archivedTotal = $derived(this.pending.shelvedTotal(this.shelvedTotal, this.shelved, this.archived));
+    this.archivedPage = $derived(this.pending.shelved(this.shelved));
+    this.archived = $derived(this.pending.shelved(this.shown.over(this.shelved)));
+    this.archivedTotal = $derived(this.pending.shelvedTotal(this.shelvedTotal, this.shelved, this.archivedPage));
     this.subscribe();
     life.defer(() => {
       this.era += 1;
@@ -115,9 +126,17 @@ export class ThreadList extends Service<ThreadList>()('ThreadList', { tier: 'til
       this.feed = null;
     });
     $effect(() => {
-      for (const host of this.onScreen.shown) void host.activeId;
-      untrack(() => this.seeOpenOutcome());
+      const shown = this.onScreen.shown.flatMap((host) => (host.activeId !== null && this.covers(host.projectId) ? [host.activeId] : []));
+      untrack(() => {
+        this.letGo(this.shown.show(shown));
+        if (this.roots !== null) this.shown.fill(false);
+        this.seeOpenOutcome();
+      });
     });
+  }
+
+  get archivedRead(): number {
+    return this.archivedPage?.length ?? 0;
   }
 
   private subscribe(): void {
@@ -145,21 +164,30 @@ export class ThreadList extends Service<ThreadList>()('ThreadList', { tier: 'til
     }
     if (frame.type === 'list') {
       this.refused = null;
+      this.deep = false;
       if (frame.folders !== undefined) this.folders = frame.folders;
-    }
+    } else this.shown.caught(frame);
     this.landing?.frames.push(frame);
     const moved = this.apply(frame);
     this.publish();
     if (moved) this.refreshWindow();
     this.births.land(frame.type === 'list');
     if (frame.type !== 'removed') this.seeOpenOutcome(frame.type === 'row' ? frame.row : undefined);
+    if (this.roots !== null) this.shown.fill(frame.type === 'list');
   }
 
   private held(root: ThreadListRow): boolean {
     if (root.archivedAt !== null) return false;
     if (root.activeRunId !== null || root.pinnedAt !== null || root.folderId != null) return true;
     if ((this.forest.node(root.id)?.team.pinned ?? 0) > 0) return true;
-    return this.olderBefore === null || root.readerOrderAt >= this.olderBefore;
+    return this.olderBefore === null || root.readerOrderAt >= this.olderBefore || this.shownHolds(root.id);
+  }
+
+  private shownHolds(rootId: string): boolean {
+    return this.shown.ids.some((id) => {
+      const row = this.byId.get(id);
+      return row !== undefined && this.rootOf(row).id === rootId;
+    });
   }
 
   private admits(row: ThreadListRow): boolean {
@@ -192,7 +220,10 @@ export class ThreadList extends Service<ThreadList>()('ThreadList', { tier: 'til
     return loosened && !this.held(this.rootOf(row));
   }
 
-  private apply(frame: Exclude<ThreadsFeedEvent, { type: 'folders' }>): boolean {
+  private apply(
+    frame: Exclude<ThreadsFeedEvent, { type: 'folders' }>,
+    keep: (root: ThreadListRow) => boolean = (root) => this.shownHolds(root.id),
+  ): boolean {
     if (frame.type === 'list') {
       const listed = new Set<string>();
       for (const row of frame.rows) {
@@ -201,8 +232,12 @@ export class ThreadList extends Service<ThreadList>()('ThreadList', { tier: 'til
         this.byId.set(row.id, held === undefined ? row : mergeRow(held, row));
         this.draw(row.id);
       }
-      for (const id of [...this.byId.keys()]) {
-        if (listed.has(id)) continue;
+      const gone = [...this.byId.values()].filter((held) => {
+        if (listed.has(held.id)) return false;
+        const root = this.rootOf(held);
+        return listed.has(root.id) || !keep(root);
+      });
+      for (const { id } of gone) {
         this.byId.delete(id);
         this.draw(id);
         this.pending.gone(id);
@@ -344,7 +379,15 @@ export class ThreadList extends Service<ThreadList>()('ThreadList', { tier: 'til
             if (landing.asked) this.refreshWindow();
             return;
           }
-          this.apply({ type: 'list', ...window });
+          const depth = this.deep ? this.olderBefore : undefined;
+          this.apply(
+            { type: 'list', ...window },
+            (root) => this.shownHolds(root.id) || (depth !== undefined && (depth === null || root.readerOrderAt >= depth)),
+          );
+          if (depth !== undefined) {
+            if (window.windowBefore === null) this.deep = false;
+            else if (depth === null || depth < window.windowBefore) this.olderBefore = depth;
+          }
           let moved = false;
           for (const frame of landing.frames) moved = this.apply(frame) || moved;
           this.publish();
@@ -376,9 +419,56 @@ export class ThreadList extends Service<ThreadList>()('ThreadList', { tier: 'til
       this.publish();
       this.roots = page.roots;
       this.olderBefore = page.windowBefore;
+      this.deep = true;
     } catch (error) {
       if (era === this.era) this.failure.report(error);
     }
+  }
+
+  private async readFamily(id: string): Promise<readonly ThreadListRow[] | undefined> {
+    const era = this.era;
+    try {
+      const rows = await this.repo.family.key({ projectId: this.aim.tileId, threadId: id }).refresh({ throwOnError: true });
+      return era === this.era ? rows : undefined;
+    } catch (error) {
+      if (era === this.era) throw error;
+      return undefined;
+    }
+  }
+
+  private placeShown({ live, caught }: ShownFamily): void {
+    const answered = new Set(live.map((row) => row.id));
+    for (const row of live) {
+      if (this.pending.hides(row.id, row)) continue;
+      const held = this.byId.get(row.id);
+      this.byId.set(row.id, held === undefined ? row : mergeRow(held, row));
+      this.draw(row.id);
+    }
+    const top = live[0];
+    if (top !== undefined) {
+      for (const id of this.subtreeIds(top.id)) {
+        if (answered.has(id) || !this.byId.delete(id)) continue;
+        this.draw(id);
+      }
+    }
+    for (const frame of caught) this.apply(frame);
+    this.publish();
+  }
+
+  private letGo(ids: readonly string[]): void {
+    let moved = false;
+    for (const id of ids) {
+      const row = this.byId.get(id);
+      if (row === undefined) continue;
+      const root = this.rootOf(row);
+      if (this.held(root)) continue;
+      for (const gone of this.subtreeIds(root.id)) {
+        if (!this.byId.delete(gone)) continue;
+        this.draw(gone);
+        moved = true;
+      }
+    }
+    if (moved) this.publish();
   }
 
   async readArchived(): Promise<void> {

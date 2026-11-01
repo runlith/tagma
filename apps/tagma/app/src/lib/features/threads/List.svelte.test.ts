@@ -542,3 +542,81 @@ test('an act on a team member homed in another project is addressed to that proj
     ['parent', 1],
   ]);
 });
+
+function onScreen(family: (key: { projectId: number; threadId: string }) => Promise<readonly ThreadListRow[]>) {
+  const screen = $state<{ page: null; host: null; shown: { activeId: string; projectId: number }[] }>({
+    page: null,
+    host: null,
+    shown: [],
+  });
+  app = mountShell(
+    Layer.mergeAll(ThreadList, FolderActs, Notices),
+    Layer.mergeAll(
+      Layer.of(ThreadsRepo, threadsRepo({ roots: keyedBy(roots), family: keyedBy(family as never) })),
+      Layer.of(ExecutionsRepo, {} as never),
+      Layer.of(Live, feed.live),
+      Layer.of(Workspace, soloWorkspace()),
+      Layer.of(ThreadOnScreen, screen as never),
+      Layer.of(Failure, new Failure((reason) => void reported.push(reason))),
+    ),
+  );
+  return { list: app.app.resolve(ThreadList), screen };
+}
+
+const ids = (rows: readonly ThreadListRow[] | null): string[] => (rows ?? []).map((entry) => entry.id).sort();
+
+test('a thread opened below the window joins the list with its live family while on screen, and leaves with it', async () => {
+  const fresh = row('fresh', 10);
+  const old = row('old', 1);
+  const child = row('old-child', 2, old.id);
+  const shelvedSibling = { ...row('old-shelved', 3, old.id), archivedAt: '2026-01-02T00:00:00.000Z' };
+  const family = vi.fn(async () => [old, child, shelvedSibling, row('elsewhere', 4)]);
+  const { list, screen } = onScreen(family);
+  feed.frame?.({ type: 'list', rows: [fresh], roots: 3, windowBefore: fresh.readerOrderAt });
+
+  screen.shown = [{ activeId: child.id, projectId: 1 }];
+  await waitFor(() => expect(ids(list.threads)).toEqual(['fresh', 'old', 'old-child']));
+  expect(family).toHaveBeenCalledWith({ projectId: 1, threadId: child.id });
+  expect(list.node(old.id)?.children.map((node) => node.row.id)).toEqual([child.id]);
+
+  feed.frame?.({ type: 'row', row: { ...child, title: 'renamed' } });
+  expect(list.row(child.id)?.title).toBe('renamed');
+  feed.frame?.({ type: 'list', rows: [fresh], roots: 3, windowBefore: fresh.readerOrderAt });
+  expect(ids(list.threads)).toEqual(['fresh', 'old', 'old-child']);
+  await waitFor(() => expect(family).toHaveBeenCalledTimes(2));
+
+  screen.shown = [];
+  await waitFor(() => expect(ids(list.threads)).toEqual(['fresh']));
+});
+
+test('an archived thread on screen stands among the archived rows until it leaves the screen', async () => {
+  const shelved = { ...row('shelved', 1), archivedAt: '2026-01-02T00:00:00.000Z' };
+  const { list, screen } = onScreen(async () => [shelved]);
+  feed.frame?.({ type: 'list', rows: [row('fresh', 10)], roots: 1, windowBefore: null });
+
+  screen.shown = [{ activeId: shelved.id, projectId: 1 }];
+  await waitFor(() => expect(ids(list.archived)).toEqual(['shelved']));
+  expect(ids(list.threads)).toEqual(['fresh']);
+  expect(list.archivedRead).toBe(0);
+
+  screen.shown = [];
+  await waitFor(() => expect(list.archived).toBeNull());
+});
+
+test('roots read past the window survive the window refresh a root birth asks for', async () => {
+  const window = [row('root-1', 11), row('root-0', 10)];
+  const older = row('older', 1);
+  const newborn = row('newborn', 20);
+  roots
+    .mockResolvedValueOnce({ rows: [older], roots: 3, windowBefore: null })
+    .mockResolvedValueOnce({ rows: [newborn, ...window], roots: 4, windowBefore: window[1]?.readerOrderAt });
+  const list = open();
+  feed.frame?.({ type: 'list', rows: window, roots: 3, windowBefore: window[1]?.readerOrderAt });
+  await list.readMore();
+  expect(ids(list.threads)).toEqual(['older', 'root-0', 'root-1']);
+
+  feed.frame?.({ type: 'row', row: newborn });
+  await waitFor(() => expect(list.roots).toBe(4));
+  expect(ids(list.threads)).toEqual(['newborn', 'older', 'root-0', 'root-1']);
+  expect(list.more).toBe(0);
+});

@@ -1,3 +1,4 @@
+import type { ThreadListRow } from '@tagma/server/threads/contract/wire/list';
 import type { ThreadSelectionQuery } from '@tagma/server/threads/contract/wire/selection';
 import type { FavoriteModels, ModelDefaults, ModelDefaultsWrite } from '@tagma/server/native-harness/contract/wire/modelSelection';
 import { ThreadId } from '@tagma/server/platform/contract/wire/thread';
@@ -23,6 +24,7 @@ export type AskedAction = {
 };
 
 export const ARCHIVED_PAGE = 50;
+const FAMILY_PAGE = 50;
 export const CONVERSATION_AROUND = 3;
 //! A filter list is scanned, not paged: past twenty hits the reader narrows the query, and the count says there are more.
 export const CONVERSATION_HITS_SHOWN = 20;
@@ -72,6 +74,29 @@ export const ThreadsRepo = Repo.define(
     archived: keyed({
       loader: ({ key, signal }: KeyedLoaderContext<number>, door) =>
         door.perform('list_threads', { set: 'archived', limit: ARCHIVED_PAGE, shape: 'rows' }, at(key), { signal }),
+    }),
+
+    family: keyed({
+      gcTime: 0,
+      loader: async (
+        { key, signal }: KeyedLoaderContext<{ projectId: number; threadId: string }>,
+        door,
+      ): Promise<readonly ThreadListRow[]> => {
+        const rows: ThreadListRow[] = [];
+        let cursor: string | undefined;
+        do {
+          const page = await door.perform(
+            'list_threads',
+            { of: ThreadId.make(key.threadId), reach: 'tree', set: 'all', limit: FAMILY_PAGE, cursor, shape: 'rows' },
+            at(key.projectId),
+            { signal },
+          );
+          if (page.status !== 'rows') throw new Error('a thread family answered without rows');
+          rows.push(...page.rows);
+          cursor = page.before ?? undefined;
+        } while (cursor !== undefined);
+        return rows;
+      },
     }),
 
     askedActions: keyed({

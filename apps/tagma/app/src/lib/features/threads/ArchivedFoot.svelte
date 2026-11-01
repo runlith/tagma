@@ -72,9 +72,9 @@
         {#each lines as line (line.key)}
           {@render draw(line)}
         {/each}
-        {#if list.archived !== null && list.archivedTotal !== null && list.archivedTotal > list.archived.length}
+        {#if list.archivedTotal !== null && list.archivedTotal > list.archivedRead}
           <p class="px-2 py-1 text-small text-muted-foreground">
-            The newest {list.archived.length} of {list.archivedTotal}.
+            The newest {list.archivedRead} of {list.archivedTotal}.
           </p>
         {/if}
       </div>

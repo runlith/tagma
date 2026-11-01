@@ -114,6 +114,8 @@ export class ColumnState {
   readonly placed = $derived.by(() => this.win.mounted(this.kept));
   readonly quietPins = $derived.by(() => this.shown.filter((node) => rootBand(node) === 'pinned' && isQuiet(node)));
   private lastWaiting: string | null = null;
+  private arrived: string | null = null;
+  private unfollowed: string | null = null;
 
   get host(): ThreadSlot {
     return this.slot();
@@ -151,6 +153,17 @@ export class ColumnState {
     });
     $effect(() => {
       if (this.host.activeId !== null) untrack(() => this.list.aimBirth(null));
+    });
+    $effect(() => {
+      const id = this.host.activeId;
+      if (id !== this.arrived) {
+        this.arrived = id;
+        this.unfollowed = id;
+      }
+      const target = this.unfollowed;
+      if (target === null || this.nodeOf(target) === undefined) return;
+      this.unfollowed = null;
+      untrack(() => void this.follow(target));
     });
     $effect(() => {
       if (this.listEl === null || this.asideEl === null) return;
@@ -297,7 +310,7 @@ export class ColumnState {
     await this.reveal(path);
   }
 
-  async revealThread(id: string): Promise<void> {
+  async revealThread(id: string, focus = true): Promise<void> {
     if (this.filtering && this.win.indexFor(id) < 0) this.filter = '';
     const group = this.grouping?.groupOf.get(id);
     if (group !== undefined && this.closedGroups.has(group)) this.toggleGroup(group);
@@ -315,18 +328,50 @@ export class ColumnState {
       this.openFold(parent, nodes.get(parent), nodes.get(path[depth + 1] as string));
     }
     await tick();
-    await this.focusThread(id);
+    await this.focusThread(id, focus);
+  }
+
+  private async follow(id: string): Promise<void> {
+    await tick();
+    const index = this.win.indexFor(id);
+    if (index >= 0) this.win.scrollTo(index);
+    else if (this.list.node(id) !== undefined)
+      await this.reveal(
+        this.pathTo(id, (at) => this.list.node(at)),
+        false,
+      );
+    else await this.revealArchived(id);
+  }
+
+  private pathTo(id: string, nodeOf: (id: string) => ThreadTreeNode | undefined): readonly ThreadTreeNode[] {
+    const path: ThreadTreeNode[] = [];
+    for (let node = nodeOf(id); node !== undefined && path.length <= this.list.size + this.archivedNodes.size;) {
+      path.unshift(node);
+      node = node.row.parentThreadId === null ? undefined : nodeOf(node.row.parentThreadId);
+    }
+    return path;
+  }
+
+  private async revealArchived(id: string): Promise<void> {
+    const path = this.pathTo(id, (at) => this.archivedNodes.get(at));
+    if (path.length === 0) return;
+    if (!this.archived.open) this.archived.toggle();
+    for (let depth = 0; depth < path.length - 1; depth += 1) {
+      this.openFold((path[depth] as ThreadTreeNode).row.id, path[depth], path[depth + 1]);
+    }
+    await tick();
+    this.asideEl?.querySelector(`a[data-thread="${CSS.escape(id)}"]`)?.scrollIntoView({ block: 'nearest' });
   }
 
   private groupIndex(grouping: NonNullable<ColumnState['grouping']>): ReadonlyMap<string, ThreadTreeNode> {
     return nodeIndex(grouping.groups.map((group) => group.trees).flat(), grouping.nowhere, ...grouping.creating.values());
   }
 
-  private async reveal(path: readonly ThreadTreeNode[]): Promise<void> {
+  private async reveal(path: readonly ThreadTreeNode[], focus = true): Promise<void> {
     const target = path[path.length - 1];
     if (target === undefined) return;
     if (this.grouping !== null) {
-      await this.revealThread(target.row.id);
+      await this.revealThread(target.row.id, focus);
       return;
     }
     if (this.filtering && this.win.indexFor(target.row.id) < 0) this.filter = '';
@@ -338,7 +383,7 @@ export class ColumnState {
       this.openFold((path[depth] as ThreadTreeNode).row.id, path[depth], path[depth + 1]);
     }
     await tick();
-    await this.focusThread(target.row.id);
+    await this.focusThread(target.row.id, focus);
   }
 
   private openFold(parentId: string, parent: ThreadTreeNode | undefined, child: ThreadTreeNode | undefined): void {
@@ -480,9 +525,11 @@ export class ColumnState {
     this.lineElement(line.key)?.querySelector<HTMLElement>(ROW_FOCUS)?.focus();
   }
 
-  private async focusThread(id: string): Promise<void> {
+  private async focusThread(id: string, focus = true): Promise<void> {
     const index = this.win.indexFor(id);
-    if (index >= 0) await this.focusIndex(index);
+    if (index < 0) return;
+    if (focus) await this.focusIndex(index);
+    else this.win.scrollTo(index);
   }
 
   private step(target: HTMLElement, delta: 1 | -1): void {

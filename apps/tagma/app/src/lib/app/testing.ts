@@ -215,6 +215,7 @@ export function threadsRepo(over: Record<string, unknown> = {}): never {
   return {
     roots: stubFamily(),
     archived: stubFamily(),
+    family: stubFamily(),
     see: stubMutation(),
     setArchived: stubMutation(),
     setPinned: stubMutation(),
