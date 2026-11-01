@@ -27,6 +27,6 @@ sources:
 - The working diff runs from HEAD to the on-disk file, and every changed line carries its holder: a thread, the operator ("You"), or nobody. Holders are listed in the header with line counts, each with its own gutter shade; a thread opens by click.
 - The halves separately: staged — HEAD vs index, unstaged — index vs file. A single commit's diff and a revision range's diff are read from git alone and carry no authors.
 - Collapsed unchanged chunks open one by one without expanding the rest; symbols shifted inside a line are highlighted.
-- Images compare as images; the diff width can be switched.
+- Images compare as images; the diff width can be switched. Submodules compare repository commit references, including staged halves and history, without reading their directories as files. The working view distinguishes local changes from a changed reference and an uninitialized or missing checkout.
 
 **Limits.** Lines HEAD already carries get no authors: this is no history blame. A too-wide answer refuses and asks to narrow context; a binary file arrives without lines.
