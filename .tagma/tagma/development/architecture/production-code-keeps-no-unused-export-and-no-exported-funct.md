@@ -4307,14 +4307,6 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead apps/tagma/server/src/executions/host/boot.ts#hostShareDetail",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/executions/host/boot.ts#grantHostShare",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "dead-code dead apps/tagma/server/src/executions/host/connection.ts#HostExecutions",
           "owner": "5a3bed29"
         },
