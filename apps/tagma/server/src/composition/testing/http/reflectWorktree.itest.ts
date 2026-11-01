@@ -138,11 +138,28 @@ layer(Layer.effect(Place, setup).pipe(Layer.provideMerge(BunFileSystem.layer)), 
         'answer_reflection',
         'unanswer_reflection',
         'create_block',
+        'update_block',
+        'finish_block',
       ]);
       const placed = yield* doors.doorsFor(thread.id, thread.ownerId);
       expect(placed.root).toBe(destination);
       const asThread = (id: string, input: unknown, aim = '') =>
         world.op(id, input, `project=${project}${aim}`, { [GRANT_HEADER]: placed.grant });
+      const mainOnly = yield* answered(
+        yield* doors.atNative(
+          'create_block',
+          { checkout: mainCheckout, parentId: parent, tags: ['task'], title: 'A task held only in main', claim: true },
+          placed,
+        ),
+      );
+      const mainTask = (mainOnly.block as { name: string }).name;
+      const renamed = yield* answered(yield* doors.atNative('update_block', { blockId: mainTask, title: 'Updated in main' }, placed));
+      const finished = yield* answered(yield* doors.atNative('finish_block', { blockId: mainTask }, placed));
+      expect(yield* read(mainTask)).toMatchObject({ title: 'Updated in main', fields: { status: 'done' } });
+      expect(yield* asThread('search_blocks', { query: mainTask, history: true })).toMatchObject({ status: 200, body: { blocks: [] } });
+      const mainCopy = { projectId: project, checkout: mainCheckout, tree: main.layout.treeRoot, branch: null };
+      expect(renamed).toMatchObject({ graphCopy: mainCopy });
+      expect(finished).toMatchObject({ graphCopy: mainCopy });
       expect(yield* asThread('read_block', { blockIds: [inheritedTask] })).toMatchObject({
         status: 200,
         body: { reads: [{ name: inheritedTask, fields: { status: 'open' } }] },

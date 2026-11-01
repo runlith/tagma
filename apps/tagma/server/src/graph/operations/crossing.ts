@@ -14,13 +14,13 @@ import { Tags } from '../contract/service/vocabulary.js';
 import { OtherGraphs } from '../serving/policy.js';
 import { Projects } from '../../projects/contract/service/registry.js';
 import { SourceProject } from '../contract/service/source.js';
-import { CurrentGraph, GraphCall, MeasuredCheckout, RoutedGraphs } from '../contract/service/serving.js';
+import { CurrentGraph, GraphCall, MeasuredCheckout, RoutedGraphs, ServedTree } from '../contract/service/serving.js';
 import { CallerAim } from '../../platform/contract/service/place.js';
 import type { Place } from '../../platform/contract/wire/place.js';
 import { OBSERVATION } from '../contract/wire/tags/observation.js';
 import type { SelectorRefusal } from '../serving/selector.js';
 import { projectOrNone } from '../serving/current.js';
-import type { CopyFailure, UnreachableProject } from '../contract/wire/answers.js';
+import type { CopyFailure, GraphCopy, UnreachableProject } from '../contract/wire/answers.js';
 import { refusal } from '../serving/refusal.js';
 import { ambiguousAcross } from '../serving/ambiguity.js';
 import type { DocumentScope } from '../contract/service/work.js';
@@ -352,6 +352,7 @@ export const atTarget = <A, E, R>(target: GraphTarget, work: Effect.Effect<A, E,
   );
 
 type PreparedTargets<F> = {
+  readonly targeted: true;
   readonly resolution: Result.Result<
     { readonly targets: readonly Target[]; readonly selected: GraphTarget | null },
     GateRefusal<CrossingRefusal> | StoreFailure
@@ -359,6 +360,18 @@ type PreparedTargets<F> = {
   readonly facts: F | null;
   readonly unreachable: readonly UnreachableProject[];
   readonly copyFailures: readonly CopyFailure[];
+};
+
+export const targetCopy = (prepared: unknown): GraphCopy | null | undefined => {
+  if (typeof prepared !== 'object' || prepared === null || !('targeted' in prepared) || prepared.targeted !== true) return undefined;
+  const { resolution } = prepared as PreparedTargets<unknown>;
+  if (Result.isFailure(resolution)) return undefined;
+  const target = resolution.success.selected;
+  if (target === null || target.graph === null) return undefined;
+  const checkout = Context.get(target.graph, MeasuredCheckout);
+  const tree = Context.get(target.graph, ServedTree);
+  if (checkout === null || checkout.projectId !== target.projectId || tree === null) return null;
+  return { projectId: target.projectId, checkout: checkout.path, tree: tree.treeRoot };
 };
 
 export const targeted = <Input, A, E, R, F = null, EF = never, RF = never>(
@@ -386,6 +399,7 @@ export const targeted = <Input, A, E, R, F = null, EF = never, RF = never>(
     const first = Result.isSuccess(resolution) ? resolution.success.targets[0] : undefined;
     const frame = yield* CurrentGraph;
     return {
+      targeted: true,
       resolution,
       facts: facts === undefined || first === undefined ? null : yield* atTarget(first, facts(first.row)),
       copyFailures: frame === null ? [] : yield* frame.copyFailures(),
