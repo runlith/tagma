@@ -1,6 +1,8 @@
 import { describe, expect } from 'bun:test';
 import type { Tester } from '@runlith/effect-test';
-import { Effect, type Scope } from 'effect';
+import { Deferred, Effect, type Exit, type Scope } from 'effect';
+import type { AgentToolFailure } from '../../agent/AgentFailure';
+import type { AgentToolOutcome } from '../../agent/door/types';
 import { threadReportEnvelopeId } from '../../collaboration/envelopeKeys';
 import type { ThreadChildCompacted } from '../../collaboration/ThreadPlaneAccess';
 import { spawnRequestId } from '../../collaboration/births';
@@ -72,6 +74,29 @@ export function describeThreadCompactionParent<TTx, TWrite extends TTx = TTx, R 
         yield* quiet(world, childId);
         yield* reportRead(stack, call.runId);
         expect(world.summarized).toBe(0);
+      }),
+    );
+    test(
+      'a background call compacts an idle child and delivers the outcome',
+      Effect.fnUntraced(function* () {
+        const delivered = yield* Deferred.make<Exit.Exit<AgentToolOutcome, AgentToolFailure>>();
+        const stack = yield* opened(open, {
+          collaboration: true,
+          callHooks: () => ({
+            retain: () => Effect.succeed({ release: Effect.void }),
+            detaching: () => Effect.void,
+            asking: () => Effect.die('This call needs no reader.'),
+            completed: (_call, exit) => Effect.asVoid(Deferred.succeed(delivered, exit)),
+          }),
+        });
+        const childId = yield* spawnedChild(stack, { text: EARLIER }, { text: 'Read the report.' });
+        yield* quiet(stack.world, childId);
+        yield* quiet(stack.world, stack.threadId);
+        stack.world.summarizers = { kind: 'chain', reason: 'cold', members: [PAID_SUMMARIZER], skipped: [] };
+        yield* compactAgentCall(stack, { threadId: childId, background: true, keep: 'the file list' });
+        const outcome = yield* Deferred.await(delivered);
+        expect(outcome).toMatchObject({ _tag: 'Success', value: { output: { status: 'completed' } } });
+        expect(onlyCompactionRun(yield* transcriptOf(stack.storage, childId))).toMatchObject({ status: 'completed' });
       }),
     );
     test(

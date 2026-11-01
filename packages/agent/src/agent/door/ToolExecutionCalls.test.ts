@@ -6,6 +6,7 @@ import { Cause, Deferred, Effect, Exit, Fiber, Schema, Scope, Stream } from 'eff
 import { type AgentCalls, makeAgentCalls, type CallHooks } from '../AgentCalls';
 import { RUN_STOPPED, WORDS_ENDED_WAIT } from '../AgentCall';
 import { RunStop } from '../RunStop';
+import { agentSpan } from '../spans';
 import { type CallAdmission, type CallControl, type CallRecord, CallExecution, callEnded, LONGEST_ACT_MS } from '../callProgress';
 import type { AgentToolDoor } from './AgentToolDoor';
 import { openToolDoor, ToolJudge } from './openToolDoor';
@@ -589,7 +590,7 @@ describe('the door under the run’s call owner', () => {
         approval: ASKS_NEVER,
         description: 'Return a retained source.',
         parameters: Schema.Struct({}),
-        execute: () => Effect.succeed('source address'),
+        execute: () => Effect.succeed('source address').pipe(agentSpan({ type: 'directory', threadId: 'thread-1' })),
         settled: () => {
           source = '';
         },
@@ -614,7 +615,12 @@ describe('the door under the run’s call owner', () => {
         },
       });
       const call = { name: 'retained', tool, input: {}, toolCallId: 'call-1' };
-      const adoption = yield* door.adopt({ ...call, options: { toolCallId: call.toolCallId, messages: [] } }, yield* door.approved(call));
+      const adoption = yield* Effect.gen(function* () {
+        return yield* door.adopt({ ...call, options: { toolCallId: call.toolCallId, messages: [] } }, yield* door.approved(call));
+      }).pipe(
+        agentSpan({ type: 'tool-call', runId: 'run-2', toolName: 'control_call', toolCallId: 'control', executedBy: 'host' }),
+        agentSpan({ type: 'run', runId: 'run-2' }),
+      );
       if ('refused' in adoption) return yield* Effect.die(adoption.refused);
       settlements.recorded('run-1', 'call-1');
       yield* adoption.live;
@@ -1396,6 +1402,37 @@ describe('a call taken to the background before it runs', () => {
       yield* Deferred.succeed(held, undefined);
       expect(outcomeOf(yield* Deferred.await(landed))).toMatchObject({ executed: true, output: { done: true } });
       expect(log).toEqual(['owed', 'began', 'body', 'released', 'completed', 'settled']);
+    }),
+  );
+  it.effect(
+    'a call moved during preparation keeps its own run context when the move is requested by another call',
+    Effect.fnUntraced(function* () {
+      const calls = yield* makeCalls();
+      const log: string[] = [];
+      const landed = yield* Deferred.make<Landed>();
+      const preparing = yield* Deferred.make<void>();
+      const held = yield* Deferred.make<void>();
+      const tool = Tool.make({
+        display: () => ({ form: 'none' }),
+        approval: ASKS_NEVER,
+        description: 'Prepare and read the directory.',
+        parameters: Schema.Struct({}),
+        prepare: () => Deferred.succeed(preparing, undefined).pipe(Effect.andThen(Deferred.await(held)), Effect.as({ subjects: [] })),
+        execute: () => Effect.succeed({ done: true }).pipe(agentSpan({ type: 'directory', threadId: 'thread-1' })),
+      });
+      const door = doorOver({ calls, hooks: owing(log, landed) });
+      const waiter = yield* Effect.forkScoped(attend(door, tool, {}).pipe(agentSpan({ type: 'run', runId: 'run-1' })));
+      yield* Deferred.await(preparing);
+      const moved = yield* calls
+        .control(address, { action: 'background' })
+        .pipe(
+          agentSpan({ type: 'tool-call', runId: 'run-2', toolName: 'control_call', toolCallId: 'control', executedBy: 'host' }),
+          agentSpan({ type: 'run', runId: 'run-2' }),
+        );
+      expect(moved.status).toBe('changed');
+      expect(yield* Fiber.join(waiter)).toMatchObject({ kind: 'answered', outcome: { output: { status: 'background' } } });
+      yield* Deferred.succeed(held, undefined);
+      expect(outcomeOf(yield* Deferred.await(landed))).toMatchObject({ executed: true, output: { done: true } });
     }),
   );
   it.effect(

@@ -122,9 +122,7 @@ export const makeAgentToolDoor = <TCtx>({
   });
 
   const receipted = (call: AgentToolInvocation, outcome: AgentToolOutcome): Effect.Effect<AgentToolOutcome> =>
-    agentSpan({ type: 'tool-call', runId: run.runId, toolName: call.name, toolCallId: call.options.toolCallId, executedBy: 'host' })(
-      called(call.name, call.options.toolCallId, 'host', call.arguments, Effect.succeed(outcome)),
-    );
+    called(call.name, call.options.toolCallId, 'host', call.arguments, Effect.succeed(outcome));
 
   const claims = (call: AgentPermissionQuestion): Effect.Effect<readonly Claim[], AgentToolFailed | AgentRuleFailed> =>
     execution.costing(

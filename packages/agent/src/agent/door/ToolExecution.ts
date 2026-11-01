@@ -6,7 +6,7 @@ import { CostLedger, CurrentCost, endCost } from '@runlith/performance/CostLedge
 import { permissionRefusal } from '../../modes/ApprovalMode';
 import type { AgentNote } from '../activities';
 import type { AgentCalls, CallHooks } from '../AgentCalls';
-import { type AgentCall, type CallCost, type CallTaking, WAIT_UNTOUCHED } from '../AgentCall';
+import { type AgentCall, type CallCost, type CallHandoff, type CallTaking, WAIT_UNTOUCHED } from '../AgentCall';
 import { callEnded, type CallControlResult } from '../callProgress';
 import { AgentToolFailed, type AgentToolFailure } from '../AgentFailure';
 import {
@@ -69,7 +69,7 @@ type Ready = {
 type Life = {
   readonly before?: Effect.Effect<Option.Option<AgentToolOutcome>, AgentToolFailure>;
   readonly detached?: boolean;
-  readonly handed?: true;
+  readonly handoff?: CallHandoff;
 };
 
 type Now = () => number;
@@ -652,7 +652,7 @@ export const makeToolExecution = <TCtx>({
           ),
         detached: life.detached,
         early: handable(tracked),
-        handed: life.handed,
+        handoff: life.handoff,
         completed: (exit) =>
           (tracked.hooks?.completed(tracked.call.record, exit) ?? Effect.void).pipe(
             Effect.tap(() =>
@@ -729,7 +729,7 @@ export const makeToolExecution = <TCtx>({
     const handed = yield* Effect.exit(
       living(tracked, ready, lifetime, {
         before: Effect.flatMap(preparing, (admitted) => decided(ready, admitted, tracked)),
-        handed: true,
+        handoff: 'taken',
       }),
     );
     if (Exit.isFailure(handed)) return { refused: stays('it could not be handed over', handed.cause) };
@@ -767,7 +767,9 @@ export const makeToolExecution = <TCtx>({
         order.place([{ toolCallId, name: call.name, claims }]);
         order.stand(toolCallId);
         tracked.receipt = receipt;
-        return Effect.asVoid(Effect.orDie(living(tracked, ready, lifetime, { before: decided(ready, prepared, tracked), handed: true })));
+        return Effect.asVoid(
+          Effect.orDie(living(tracked, ready, lifetime, { before: decided(ready, prepared, tracked), handoff: 'adopted' })),
+        );
       }),
     };
   });

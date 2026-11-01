@@ -1,6 +1,7 @@
-import { Cause, type Clock, Context, Deferred, Effect, Exit, Fiber, Latch, Option, type Scope } from 'effect';
+import { Cause, type Clock, Context, Deferred, Effect, Exit, Fiber, Latch, Option, type Scope, Tracer } from 'effect';
 import { CostLedger, CurrentCost, endCost, type CostCause } from '@runlith/performance/CostLedger';
 import { CallCancellation, type DeclaredCancellationCause } from '@runlith/executions/protocol/call';
+import { agentSpan } from './spans';
 import {
   callEnded,
   type CallAuthority,
@@ -11,6 +12,7 @@ import {
   type CallRecord,
 } from './callProgress';
 export type CallCost = { readonly cause: CostCause; readonly owned: boolean };
+export type CallHandoff = 'taken' | 'adopted';
 export type Arrival = 'words' | 'report';
 export type CallAttended<A, B> = { readonly handed: false; readonly value: A } | { readonly handed: true; readonly receipt: B };
 export type CallTaking<B> = { readonly receipt: B } | { readonly refused: string };
@@ -63,6 +65,7 @@ export const makeAgentCall = (
   { scope, clock, runCallback: fork, publish, envelopeMs, unread, cost: inherited }: CallSide,
 ) => {
   const context = Fiber.getCurrent()?.context;
+  const parentSpan = context === undefined ? undefined : Context.getOrUndefined(context, Tracer.ParentSpan);
   const ledger = context === undefined ? undefined : Context.getOrUndefined(context, CostLedger);
   const cost = inherited?.cause ?? ledger?.open(record.name, JSON.stringify([record.runId, record.toolCallId])) ?? null;
   const ownsCost = inherited?.owned ?? cost !== null;
@@ -517,7 +520,7 @@ export const makeAgentCall = (
       owe?: () => Effect.Effect<void, unknown>;
       detached?: boolean;
       early?: boolean;
-      handed?: boolean;
+      handoff?: CallHandoff;
     }): Effect.Effect<A | B, E> =>
       withCost(
         Effect.uninterruptibleMask(
@@ -542,7 +545,7 @@ export const makeAgentCall = (
               finish('stopped', 'The runtime that owns this invocation had already closed, so it did not run.');
               return yield* Effect.interrupt;
             }
-            if (options.handed === true) toBackground();
+            if (options.handoff !== undefined) toBackground();
             ahead = options.before !== undefined;
             const result = Deferred.makeUnsafe<A | B, E>();
             const known = Deferred.makeUnsafe<A | B, E>();
@@ -565,7 +568,23 @@ export const makeAgentCall = (
                         ),
                         Effect.flatMap((answered) => (Option.isSome(answered) ? Effect.succeed(answered.value) : proceed)),
                       );
-                const exit = yield* Effect.exit(stopped() ? Effect.interrupt : restore(body));
+                const work =
+                  options.handoff !== undefined
+                    ? agentSpan({
+                        type: 'tool-call',
+                        runId: record.runId,
+                        toolName: record.name,
+                        toolCallId: record.toolCallId,
+                        executedBy: 'host',
+                      })(body).pipe(
+                        Effect.updateContext((context: Context.Context<never>) =>
+                          options.handoff === 'adopted' || parentSpan === undefined
+                            ? Context.omit(Tracer.ParentSpan)(context)
+                            : Context.add(context, Tracer.ParentSpan, parentSpan),
+                        ),
+                      )
+                    : body;
+                const exit = yield* Effect.exit(stopped() ? Effect.interrupt : restore(work));
                 answered = true;
                 const resolved = stopped() ? yield* Effect.exit(options.stopped(current.detail ?? 'Stopped.')) : exit;
                 yield* Deferred.done(known, resolved);
@@ -593,7 +612,7 @@ export const makeAgentCall = (
             detach = () => {
               Deferred.doneUnsafe(result, Effect.succeed(options.background()));
             };
-            if (options.early === true && options.handed !== true) {
+            if (options.early === true && options.handoff === undefined) {
               canDetach = true;
               update({ detachable: current.mode === 'foreground' && !stopped() });
             }
@@ -603,7 +622,7 @@ export const makeAgentCall = (
               keeping = yield* Effect.forkIn(makingWay(), scope, { startImmediately: true });
             }
             if (stopped() && !ahead) running.interruptUnsafe();
-            if (options.handed === true) return options.background();
+            if (options.handoff !== undefined) return options.background();
             if (options.detached === true && !callEnded(current)) {
               const couldDetach = canDetach;
               canDetach = true;
