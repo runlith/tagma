@@ -118,7 +118,7 @@ import { ThreadRuns } from '../collaboration/runs';
 import { ContextCompaction } from '../collaboration/compaction';
 import { ThreadModel } from '../collaboration/model';
 import { runOwnership } from './run/ownership';
-import type { RunOwnership } from './run/ThreadRunLedger';
+import type { RunOwnership, ThreadRunRef } from './run/ThreadRunLedger';
 import { nativeContextCompactionLayer } from '../collaboration/native/compaction';
 import { nativeThreadModelLayer } from '../collaboration/native/model';
 import { nativeThreadRunsLayer } from '../collaboration/native/runs';
@@ -363,6 +363,7 @@ export type HarnessRuns = {
   hosting(): ThreadHosting['Service'];
   questions(): Questions['Service'];
   onDriving(hook: (count: number) => void): void;
+  driven(): readonly ThreadRunRef[];
   redeliver(threadId: string, runId: string): Effect.Effect<Redelivery, ThreadBorderFailed>;
   parked(): readonly string[];
   transports(): Transports['Service'];
@@ -454,6 +455,7 @@ export class AgentHarness<TState extends ThreadState = ThreadState, TTx = unknow
       hosting: () => Context.get(services, ThreadHosting),
       questions: () => Context.get(services, Questions),
       onDriving: (hook) => Context.get(services, RunControl).onChange(hook),
+      driven: () => Context.get(services, RunControl).driven(),
       redeliver: (threadId, runId) => run(Effect.flatMap(RunEndings, (endings) => endings.redeliver(threadId, runId))),
       parked: () => Context.get(services, ApprovalParking).parked(),
       transports: () => Context.get(services, Transports),

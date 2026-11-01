@@ -86,6 +86,7 @@ const setup = Effect.gen(function* () {
             hosting: unused,
             questions: unused,
             onDriving: unused,
+            driven: unused,
             redeliver: unused,
             parked: unused,
             transports: unused,

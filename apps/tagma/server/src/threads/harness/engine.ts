@@ -35,6 +35,7 @@ import {
   NativeAgents,
   NativeCompaction,
   NativeInputRecovery,
+  NativeHistories,
   NativeStorage,
   NativeSwitches,
   NativeWorkflow,
@@ -465,6 +466,11 @@ export const threadEngineLayer = Layer.effectContext(
     yield* followRoutes(harness);
     const awake = yield* AwakePolicy;
     harness.runs.onDriving((count) => awake.working(count));
+    const histories = yield* NativeHistories;
+    yield* Effect.acquireRelease(
+      Effect.sync(() => histories.serveDriven(() => new Set(harness.runs.driven().map((run) => run.threadId)))),
+      (stop) => Effect.sync(stop),
+    );
     yield* republishOnMachineFlip(
       settings,
       () => live.watched(),

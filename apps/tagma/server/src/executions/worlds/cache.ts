@@ -136,7 +136,9 @@ export const makeLeasedWorlds = Effect.fnUntraced(function* (sources: WorldSourc
   }, Effect.uninterruptible);
 
   const worlds = Worlds.of({
-    of: Effect.fn('Worlds.of')(function* (request) {
+    of: Effect.fn('Worlds.of')(function* (asked) {
+      const { id, hostKind, hostId } = asked.thread;
+      const request: WorldRequest = { thread: { id, hostKind, hostId }, at: asked.at, root: asked.root, projectId: asked.projectId };
       const key = keyOf(request.at);
       const standing = held.get(key);
       const opensAt = request.thread.hostKind === null ? request.root : null;

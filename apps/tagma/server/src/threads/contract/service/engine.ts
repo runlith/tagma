@@ -33,6 +33,13 @@ export class NativeStorage extends Context.Service<
   }
 >()('tagma/threads/NativeStorage') {}
 
+export class NativeHistories extends Context.Service<
+  NativeHistories,
+  {
+    readonly serveDriven: (driven: () => ReadonlySet<string>) => () => void;
+  }
+>()('tagma/threads/NativeHistories') {}
+
 export class NativeAgents extends Context.Service<NativeAgents, AgentRegistry<WriteUnit<'machine'>>>()('tagma/threads/NativeAgents') {}
 
 export class NativeCompaction extends Context.Service<

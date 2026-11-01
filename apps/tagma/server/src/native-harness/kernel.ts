@@ -23,6 +23,7 @@ import {
   NativeAgents,
   NativeCompaction,
   NativeInputRecovery,
+  NativeHistories,
   NativeStorage,
   NativeSwitches,
   NativeWorkflow,
@@ -326,6 +327,7 @@ const nativeEngine = (kernel: NativeKernel['Service']) =>
     writes: kernelStorageWrites,
   }).pipe(
     Context.add(NativeCompaction, { compaction: kernel.compaction, fill: kernel.fillers.compaction }),
+    Context.add(NativeHistories, { serveDriven: (driven) => kernel.store.folds.history.serveDriven(driven) }),
     Context.add(NativeInputRecovery, kernel.inputRecovery),
     Context.add(NativeSwitches, { of: kernel.standingSwitches }),
     Context.add(NativeWorkflow, {
