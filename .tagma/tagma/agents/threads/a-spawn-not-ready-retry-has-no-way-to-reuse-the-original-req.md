@@ -13,3 +13,5 @@ fields:
 Filed from project `tagma`. Received by a server up since 2026-11-01T19:32:43.457Z, from 554abb6a7.
 
 The first refusal named request `envelope:spawn:01a198aa-d1ae-7ed4-a99b-08db35af2718:call_5e2eca1a785346eeaea2d13a493db5c8` and child `01a198b4-d118-7cc8-af86-b478dc04e311`. Its retry was refused because that same child already held the requested name.
+
+The native tool derives the birth key from the tool-call id, so a new invocation cannot reuse it; the existing birth test calls the core directly with an explicit key. A recovery needs its own durable call identity and execution evidence, so settlement cannot start work that never passed admission. A child unseated after failed preparation must regain a seat, and previously stored birth digests omit worktree; resolving a fork source before reading the birth can also prevent recovery after that source disappears.
