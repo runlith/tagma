@@ -22,7 +22,9 @@ import type {
   PreparedBuilt,
   PreparedEmptied,
   PreparedLanding,
+  PreparedSubject,
 } from '../../change-record/contract/service/prepared.js';
+import type { Forming } from './formed.js';
 import { headOf, readMerge } from '../../change-record/prepared/subject.js';
 import { indexWrites } from '../../platform/git/index.js';
 import type { SubmitRequest } from '../contract/service/landings.js';
@@ -78,6 +80,7 @@ export type CommitCtx = {
   readonly retirement: Retirement['Service'];
   readonly carry: (built: string, left: string, stepped: readonly Reshaped[]) => Effect.Effect<RefusedEdits>;
   readonly read: (delta: Delta) => Effect.Effect<Carried, GateRefusal<'reshape-unreadable'>>;
+  readonly form: Forming;
   readonly witness: (commit: string, ref: string, submitted: SubmitReceipt) => Effect.Effect<void, StoreFailure>;
 };
 
@@ -111,6 +114,31 @@ const busy = (root: string, why: string): GateRefusal<'landing-busy'> =>
   new GateRefusal('landing-busy', `${why} in ${root}, so nothing was committed`, ['ask again once the checkout has settled']);
 
 const passed = (judging: Effect.Effect<Checked>): Effect.Effect<Checked, LandingRefusal> => Effect.flatMap(judging, judgedPassed);
+
+const formedFor = (
+  form: Forming,
+  subject: PreparedSubject<Lander>,
+  reshaped: readonly Reshaped[],
+  judging: Effect.Effect<Checked>,
+): Effect.Effect<Checked> => {
+  const { holders } = subject;
+  if (reshaped.length === 0) return judging;
+  const forming = Effect.acquireUseRelease(
+    form(reshaped),
+    () => judging,
+    (withdraw) => withdraw,
+  );
+  if (holders === undefined) return forming;
+  return Effect.flatMap(Effect.result(holders(reshaped.map((one) => ({ file: one.path, line: 1 })))), (primed) => {
+    if (primed._tag === 'Success') return forming;
+    return Effect.flatMap(
+      Effect.logWarning('the form the commit steps gave the working files was not laid before the rules judged them', {
+        reason: primed.failure.message,
+      }),
+      () => judging,
+    );
+  });
+};
 
 export const cutRefusal = (root: string, failure: HoldCut): GateRefusal<'landing-cut'> =>
   new GateRefusal('landing-cut', `the ${failure.resource} step in ${root} ran past its ceiling and was cut: ${failure.leaves}`, [
@@ -265,7 +293,10 @@ export const commitOwn = Effect.fn('submitWork.commit')(function* (
         const ref = prepared.ref;
         const built = prepared.built;
         yield* stage(`attempt ${attempt}: judging the rules over ${built.changed.length} changed paths`);
-        let judged = yield* Effect.mapError(passed(checks.before(prepared.subject)), formedRefusal(built.tree, built.reshaped));
+        let judged = yield* Effect.mapError(
+          passed(formedFor(ctx.form, prepared.subject, built.reshaped, checks.before(prepared.subject))),
+          formedRefusal(built.tree, built.reshaped),
+        );
         bases.push(built.base);
         const head = yield* headOf(git, root);
         if (head !== built.base) {
@@ -322,16 +353,13 @@ export const commitOwn = Effect.fn('submitWork.commit')(function* (
                 ]),
             ),
           );
-          judged = yield* hooked(
-            passed(
-              checks.before({
-                ...prepared.subject,
-                built: committing.tree,
-                paths: changed,
-                holders: prepared.subject.holders === undefined ? undefined : through(hooks, prepared.subject.holders),
-              }),
-            ),
-          );
+          const edited = {
+            ...prepared.subject,
+            built: committing.tree,
+            paths: changed,
+            holders: prepared.subject.holders === undefined ? undefined : through(hooks, prepared.subject.holders),
+          };
+          judged = yield* hooked(passed(formedFor(ctx.form, prepared.subject, built.reshaped, checks.before(edited))));
         }
         const carriage: Carriage = {
           stepped: yield* hooked(ctx.read(steppedDelta(built.reshaped))),

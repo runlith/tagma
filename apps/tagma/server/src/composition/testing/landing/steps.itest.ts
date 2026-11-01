@@ -93,6 +93,53 @@ layer(Layer.merge(checkoutFixture, BunFileSystem.layer), { excludeTestServices: 
       })(),
     ),
   );
+  it.effect('a gated check that reads the checkout meets the step’s form already in the working file, and the landing is one call', () =>
+    withCheckout((world) =>
+      Effect.fnUntraced(function* () {
+        yield* declared(world);
+        const seen: string[] = [];
+        const checks: ActChecks = {
+          before: () => Effect.sync(() => (seen.push(bytes(world)), UNCHECKED)),
+          after: () => Effect.void,
+        };
+        yield* world.wrote(MINE, [...FILE.slice(0, 4), 'const five = 5; // mine   ']);
+        const answer = yield* world.submit(MINE, { shape: (yield* steppedOver(world.store)).shape, checks });
+        const formatted = `${[...FILE.slice(0, 4), 'const five = 5; // mine'].join('\n')}\n`;
+        expect(answer).toMatchObject({ status: 'landed', edited: ['src/a.ts'] });
+        expect(seen).toEqual([formatted]);
+        expect(yield* world.run(['status', '--porcelain'])).toBe('');
+        const landed = yield* world.run(['rev-parse', 'HEAD']);
+        expect((yield* world.rows()).map((row) => row.commit)).toEqual([landed]);
+      })(),
+    ),
+  );
+  it.effect(
+    'a gated refusal after the step formed the file leaves its form in the working file as the session’s, and the next landing carries it',
+    () =>
+      withCheckout((world) =>
+        Effect.fnUntraced(function* () {
+          yield* declared(world);
+          const stepped = yield* steppedOver(world.store);
+          const refusing: ActChecks = {
+            before: () =>
+              Effect.succeed({
+                ...UNCHECKED,
+                refused: { code: 'rule-violated', reason: 'a gated rule is crossed', unblock: ['fix the code'] },
+              }),
+            after: () => Effect.void,
+          };
+          yield* world.wrote(MINE, [...FILE.slice(0, 4), 'const five = 5; // mine   ']);
+          const refused = yield* refusal(world, world.submitAs(MINE, { shape: stepped.shape, checks: refusing }));
+          const formatted = [...FILE.slice(0, 4), 'const five = 5; // mine'];
+          expect(refused.code).toBe('rule-violated');
+          expect(refused.reason).toContain('src/a.ts');
+          expect(bytes(world)).toBe(`${formatted.join('\n')}\n`);
+          expect(yield* world.submit(MINE, { shape: stepped.shape })).toMatchObject({ status: 'landed' });
+          expect(yield* world.committed()).toEqual(formatted);
+          expect(yield* world.run(['status', '--porcelain'])).toBe('');
+        })(),
+      ),
+  );
   it.effect('a change the step turns into what HEAD holds answers nothing, and the working file takes HEAD form', () =>
     withCheckout((checkout) =>
       Effect.fnUntraced(function* () {
