@@ -23,6 +23,8 @@ const PROVIDER_ID = 'meta';
 const PROFILE = ':ask-me';
 const APPROVALS = 'promptUnmatched';
 const CONTINUE = 'Continue the work.';
+
+const unsent: ClientRun = { wait: Effect.succeed({ status: 'cancelled' }), cancel: Effect.void };
 const UUID_V7 = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 const museVendor: BridgeVendor = {
@@ -304,7 +306,7 @@ export const makeMuseCycle = Effect.fnUntraced(function* (door: HostedDoor, proc
         configure: options.configure.bind(options),
         handed,
         queued: (named) => Effect.forEach(named, (input) => Effect.flatMap(slot(input), Deferred.await), { discard: true }),
-        send: Effect.fnUntraced(function* ({ input, prepared, output: out, permitted }) {
+        send: Effect.fnUntraced(function* ({ input, prepared, output: out, permitted, cancelled }) {
           output = out;
           yield* report();
           const prompt = prepared.opened.prompt ?? (yield* door.agent()).prompt;
@@ -313,6 +315,7 @@ export const makeMuseCycle = Effect.fnUntraced(function* (door: HostedDoor, proc
           if (input.context !== null) blocks.push({ type: 'text', text: input.context });
           blocks.push(...input.prompt);
           const parts = yield* partsOf(blocks);
+          if (cancelled()) return unsent;
           const turn = UUID_V7.test(input.id) ? input.id : runner.mint();
           const done = yield* Deferred.make<ClientOutcome>();
           const { effort, parameters } = options.read();
@@ -330,6 +333,12 @@ export const makeMuseCycle = Effect.fnUntraced(function* (door: HostedDoor, proc
               },
               permitted,
               stderr: process.stderr,
+              began: Effect.andThen(
+                input.taken,
+                Effect.sync(() => {
+                  history = [];
+                }),
+              ),
             },
             done,
           );
@@ -355,9 +364,7 @@ export const makeMuseCycle = Effect.fnUntraced(function* (door: HostedDoor, proc
             );
           if (admitted.turnId !== turn)
             return yield* new AgentFault({ code: FAULT.internal, message: `Muse Code admitted turn ${admitted.turnId} for ${turn}` });
-          if (admitted.disposition === 'started') running.started = true;
-          yield* input.taken;
-          history = [];
+          if (admitted.disposition === 'started') yield* running.begin();
           const finish = Effect.andThen(
             Effect.sync(() => {
               if (feed === running) feed = null;

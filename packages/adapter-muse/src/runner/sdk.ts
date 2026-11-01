@@ -1,10 +1,16 @@
-import { Effect, Predicate, Queue } from 'effect';
+import { Deferred, Effect, Predicate, Queue } from 'effect';
 import { AgentFault, FAULT } from '@runlith/acp/agent';
 import { MuseRefused, MuseSdk, type Frame, type Host } from './channel.js';
 
 type Module = typeof import('@muse-code/sdk');
 
 const SHUTDOWN_MS = 10_000;
+
+const PAGE = 1000;
+
+const cursorOf = (frame: Frame): string | undefined => (typeof frame.params.viewCursor === 'string' ? frame.params.viewCursor : undefined);
+
+const text = (value: unknown): string | undefined => (typeof value === 'string' ? value : undefined);
 
 const exitOf = (exit: { readonly code: number | null; readonly signal: string | null }): string =>
   exit.signal === null ? `muse serve exited with code ${exit.code}` : `muse serve ended by ${exit.signal}`;
@@ -64,8 +70,48 @@ const museSdk = (module: Module): MuseSdk['Service'] => {
           code: FAULT.internal,
           message: `Muse Code ${started.serverInfo.version} did not grant session MCP servers, so Tagma's tools cannot reach it`,
         });
-      yield* Effect.forkScoped(Effect.forever(Effect.flatMap(Queue.take(frames), launch.frame)));
       const connection = spawned.connection;
+      const tail = () => (spawned.child.stderrTail.length === 0 ? '' : `: ${spawned.child.stderrTail.join('\n')}`);
+      const lost = yield* Deferred.make<string>();
+      const paged = new Set<string>();
+      const page = (sessionId: string, cursor: string) =>
+        Effect.tryPromise({
+          try: () => connection.request('view/page', { sessionId, cursor, direction: 'forward', limit: PAGE }),
+          catch: refused('view/page'),
+        });
+      const recover = Effect.fnUntraced(function* (sessionId: string, after: string, next: string) {
+        paged.clear();
+        let cursor = after;
+        for (;;) {
+          const served = objectOf(yield* page(sessionId, cursor));
+          const events = Array.isArray(served.events) ? served.events : [];
+          for (const event of events) {
+            const shaped = objectOf(event);
+            const frame: Frame = { method: text(shaped.method) ?? '', params: objectOf(shaped.params), request: false };
+            const at = cursorOf(frame);
+            if (at === undefined || at === next) return;
+            paged.add(at);
+            cursor = at;
+            yield* launch.frame(frame);
+          }
+          if (events.length === 0 || text(served.nextCursor) === undefined) return;
+        }
+      });
+      const deliver = Effect.fnUntraced(function* (frame: Frame) {
+        if (frame.method !== 'view/gap') {
+          const at = cursorOf(frame);
+          if (at !== undefined && paged.delete(at)) return;
+          return yield* launch.frame(frame);
+        }
+        const { sessionId, after, next } = frame.params;
+        if (typeof sessionId !== 'string' || typeof after !== 'string' || typeof next !== 'string') return;
+        yield* recover(sessionId, after, next).pipe(
+          Effect.catchTag('MuseRefused', (refusal) =>
+            Deferred.succeed(lost, `Muse Code dropped events of session ${sessionId} and could not page them back: ${refusal.message}`),
+          ),
+        );
+      });
+      yield* Effect.forkScoped(Effect.forever(Effect.flatMap(Queue.take(frames), deliver)));
       return {
         home: started.museHome,
         command: (method, params, commandId) =>
@@ -78,10 +124,17 @@ const museSdk = (module: Module): MuseSdk['Service'] => {
             Effect.withSpan('MuseSdk.request', { attributes: { method } }),
           ),
         mint: () => connection.mintCommandId(),
-        ended: Effect.map(
-          Effect.promise(() => spawned.exited),
-          (exit) => `${exitOf(exit)}${spawned.child.stderrTail.length === 0 ? '' : `: ${spawned.child.stderrTail.join('\n')}`}`,
-        ),
+        ended: Effect.raceAll([
+          Effect.map(
+            Effect.promise(() => spawned.exited),
+            (exit) => `${exitOf(exit)}${tail()}`,
+          ),
+          Effect.map(
+            Effect.promise(() => connection.closed.then(undefined, () => undefined)),
+            () => `muse serve closed its MSP connection${tail()}`,
+          ),
+          Deferred.await(lost),
+        ]),
       } satisfies Host;
     }),
   });

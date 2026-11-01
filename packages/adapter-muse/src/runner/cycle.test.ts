@@ -305,6 +305,49 @@ it.effect('a stop before the follow-up of an unread steer ends the turn and hand
   }),
 );
 
+it.effect('a stop while the host is still opening ends the turn cancelled without handing its words to Muse', () =>
+  Effect.gen(function* () {
+    const opening = yield* Deferred.make<void>();
+    const { agent, sent } = yield* world((one) => {
+      if (one.method === 'session/start')
+        return Effect.andThen(Deferred.await(opening), ok(one, { session: { sessionId: one.params.sessionId } }));
+      return ok(one, { turnId: TURN, disposition: 'started' });
+    });
+    const session = yield* agent.newSession({ cwd: '/work', mcpServers: [] });
+    const running = yield* Effect.forkChild(
+      agent.prompt({ sessionId: session.sessionId, prompt: [{ type: 'text', text: 'go' }], _meta: { 'tagma/turn': TURN } }),
+    );
+    while (!sent.some((one) => one.method === 'session/start')) yield* Effect.yieldNow;
+    yield* agent.cancel({ sessionId: session.sessionId });
+    yield* Deferred.succeed(opening, undefined);
+    expect(yield* Fiber.join(running)).toMatchObject({ stopReason: 'cancelled' });
+    expect(sent.filter((one) => one.method === 'turn/start')).toEqual([]);
+  }),
+);
+
+it.effect('a turn Muse only queued and a stop reclaimed leaves its opening unheard', () =>
+  Effect.gen(function* () {
+    const { agent, sent } = yield* world((one, emit) => {
+      const sessionId = one.params.sessionId;
+      if (one.method === 'session/start') return ok(one, { session: { sessionId } });
+      if (one.method === 'turn/start') return ok(one, { turnId: TURN, disposition: 'queued' });
+      if (one.method === 'turn/unqueue')
+        return Effect.as(emit({ method: 'turn/unqueued', params: { sessionId, turnId: TURN } }), { commandId: one.id });
+      return ok(one);
+    });
+    const session = yield* agent.newSession({ cwd: '/work', mcpServers: [] });
+    const running = yield* Effect.forkChild(
+      agent.prompt({ sessionId: session.sessionId, prompt: [{ type: 'text', text: 'go' }], _meta: { 'tagma/turn': TURN } }),
+    );
+    while (!sent.some((one) => one.method === 'turn/start')) yield* Effect.yieldNow;
+    yield* Effect.yieldNow;
+    yield* agent.cancel({ sessionId: session.sessionId });
+    const answer = yield* Fiber.join(running);
+    expect(answer).toMatchObject({ stopReason: 'cancelled' });
+    expect(answer._meta).not.toHaveProperty('tagma/opened');
+  }),
+);
+
 it.effect('a steer Muse refuses after the turn completed under it still lets the turn end', () =>
   Effect.gen(function* () {
     const { agent } = yield* world((one, emit) => {

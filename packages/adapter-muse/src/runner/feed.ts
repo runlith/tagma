@@ -106,6 +106,7 @@ type FeedPorts = {
   readonly measured: (window: number) => void;
   readonly permitted: (call: ToolCall) => Effect.Effect<string | null>;
   readonly stderr: (text: string) => void;
+  readonly began: Effect.Effect<void>;
 };
 
 const NOTHING: Spent = spentOf({ inputTokens: 0, outputTokens: 0, cachedTokens: 0, reasoningTokens: 0 });
@@ -159,6 +160,12 @@ export class Feed {
   owns(turn: string): boolean {
     return this.owned.has(turn);
   }
+
+  readonly begin = Effect.fnUntraced(function* (this: Feed) {
+    if (this.started) return;
+    this.started = true;
+    yield* this.ports.began;
+  });
 
   steering(command: string): Deferred.Deferred<boolean> {
     this.owned.add(command);
@@ -218,7 +225,7 @@ export class Feed {
       case 'turn/started': {
         const id = starts(frame.params)?.turnId;
         if (id === undefined || !this.owned.has(id)) return;
-        if (id === turn) this.started = true;
+        if (id === turn) yield* this.begin();
         this.open.add(id);
         if (this.stopping) yield* this.interrupt(id);
         return;

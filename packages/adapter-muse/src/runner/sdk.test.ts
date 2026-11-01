@@ -16,9 +16,15 @@ class MspError extends Error {
   }
 }
 
-const fake = (version: number) => {
+type Pages = (params: { readonly cursor: string }) => Promise<Record<string, unknown>>;
+
+const fake = (version: number, pages: Pages = async () => ({ events: [], nextCursor: null })) => {
   let notify: (note: { method: string; params?: unknown }) => void = () => {};
   let ask: (asked: { method: string; params?: unknown }) => Promise<Record<string, unknown>> = async () => ({});
+  let hangUp: () => void = () => {};
+  const closed = new Promise<void>((resolve) => {
+    hangUp = resolve;
+  });
   const answers: Record<string, unknown>[] = [];
   const module = {
     MspError,
@@ -46,14 +52,16 @@ const fake = (version: number) => {
             if (method === 'turn/steer') throw new MspError('commandRejected', -32030, 'already_terminal');
             return { status: 'accepted' };
           },
-          request: async () => ({}),
+          request: async (method: string, params: { readonly cursor: string }) => (method === 'view/page' ? pages(params) : {}),
           mintCommandId: () => 'minted',
+          closed,
         },
       }),
     }),
   } as unknown as Module;
   return {
     module,
+    hangUp: () => hangUp(),
     notify: (note: { method: string; params?: unknown }) => notify(note),
     ask: async (asked: { method: string; params?: unknown }) => answers.push(await ask(asked)),
     answers,
@@ -104,4 +112,49 @@ it.effect(
       });
       expect(host.home).toBe('/home');
     }),
+);
+
+it.effect('a host whose MSP connection closes while its process still runs is ended', () =>
+  Effect.gen(function* () {
+    const frames = yield* Queue.unbounded<Frame>();
+    const connection = fake(1);
+    const host = yield* (yield* connected(connection.module)).open(launch(frames));
+    connection.hangUp();
+    expect(yield* host.ended).toContain('closed its MSP connection');
+  }),
+);
+
+const event = (method: string, viewCursor: string) => ({ method, params: { sessionId: 's', viewCursor } });
+
+it.effect('events a gap dropped are paged back in order before the events delivered after it', () =>
+  Effect.gen(function* () {
+    const frames = yield* Queue.unbounded<Frame>();
+    const connection = fake(1, async ({ cursor }) =>
+      cursor === 'c1'
+        ? { events: [event('item/started', 'c2'), event('item/completed', 'c3')], nextCursor: 'c3' }
+        : { events: [event('turn/completed', 'c4')], nextCursor: null },
+    );
+    yield* (yield* connected(connection.module)).open(launch(frames));
+    connection.notify({ method: 'view/gap', params: { sessionId: 's', after: 'c1', next: 'c4' } });
+    connection.notify(event('turn/completed', 'c4'));
+    const seen = [];
+    for (let at = 0; at < 3; at += 1) seen.push(yield* Queue.take(frames));
+    expect(seen.map((frame) => [frame.method, frame.params.viewCursor])).toEqual([
+      ['item/started', 'c2'],
+      ['item/completed', 'c3'],
+      ['turn/completed', 'c4'],
+    ]);
+  }),
+);
+
+it.effect('a gap Muse cannot page back ends the host rather than leaving a turn short of its events', () =>
+  Effect.gen(function* () {
+    const frames = yield* Queue.unbounded<Frame>();
+    const connection = fake(1, async () => {
+      throw new MspError('invalidParams', -32602, 'cursor expired');
+    });
+    const host = yield* (yield* connected(connection.module)).open(launch(frames));
+    connection.notify({ method: 'view/gap', params: { sessionId: 's', after: 'c1', next: 'c4' } });
+    expect(yield* host.ended).toContain('could not page them back');
+  }),
 );
