@@ -406,7 +406,7 @@ export const remeasures = Effect.fn('enforcement.remeasures')(function* (options
     if (!enforcing || closed.has(key)) {
       watched.get(key)?.fiber.interruptUnsafe();
       watched.delete(key);
-    } else if (!watched.has(key)) {
+    } else if (watched.get(key)?.fiber.pollUnsafe() !== undefined || !watched.has(key)) {
       watched.set(key, {
         checkout,
         fiber: fork(

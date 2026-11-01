@@ -136,6 +136,31 @@ it.live('a failed HEAD read preserves the healthy watcher and its observation un
   ),
 );
 
+it.live('a linked worktree removed with git worktree remove ends its observation and frees its watchers', () =>
+  work(
+    Effect.gen(function* () {
+      const state = yield* fixture();
+      const linked = state.paths.join(state.root, 'linked');
+      const tickets = watchTickets(8);
+      yield* state.run(['worktree', 'add', '-q', '--detach', linked, state.first]);
+      yield* Effect.gen(function* () {
+        const watches = yield* makeHeadWatches;
+        const subscriber = yield* following(watches, linked);
+        yield* head(subscriber.events, state.first);
+        yield* state.run(['worktree', 'remove', '--force', linked]);
+        yield* Effect.race(
+          Fiber.await(subscriber.fiber),
+          Effect.forEach(Array.from({ length: 500 }), () => TestClock.adjust(2000).pipe(Effect.andThen(Effect.yieldNow)), {
+            discard: true,
+          }),
+        );
+        expect(subscriber.fiber.pollUnsafe()).toBeDefined();
+        expect(tickets.standing().active).toBe(0);
+      }).pipe(Effect.provideService(WatchTickets, tickets), Effect.provide(TestClock.layer()));
+    }),
+  ),
+);
+
 it.live(
   'recovery of a missing git directory is cancelled with its last subscriber and a new subscriber observes the restored repository',
   () =>

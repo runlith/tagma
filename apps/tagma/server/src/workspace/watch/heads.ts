@@ -1,6 +1,7 @@
 import { Effect, Exit, Fiber, Queue, Scope, Stream } from 'effect';
 import { Git } from '@runlith/git/Git';
-import { commitOf } from '@runlith/git/repository';
+import { existsSync } from 'node:fs';
+import { commitOf, locationsAt } from '@runlith/git/repository';
 import { actingGit } from '../../platform/git/ownGit.js';
 import type { HeadMoved, HeadObservation } from '../contract/service/checkouts.js';
 import { watchingHead } from './tree.js';
@@ -16,6 +17,7 @@ type Watched = {
   readonly scope: Scope.Closeable;
   wake: (() => void) | null;
   head: string | null | undefined;
+  admin: { readonly gitDir: string; readonly commonDir: string } | null | undefined;
 };
 
 export type HeadWatches = Effect.Success<typeof makeHeadWatches>;
@@ -33,6 +35,7 @@ export const makeHeadWatches = Effect.gen(function* () {
           join(checkout, (event) => {
             const selected = select(event);
             if (selected !== undefined) Queue.offerUnsafe(queue, selected);
+            if (event.kind === 'gone') Queue.endUnsafe(queue);
           }),
           (listener) => leave(checkout, listener),
         ),
@@ -53,6 +56,7 @@ export const makeHeadWatches = Effect.gen(function* () {
       scope: Scope.forkUnsafe(scope),
       wake: null,
       head: undefined,
+      admin: undefined,
     };
     watched.set(checkout, entry);
     yield* observe(checkout, entry).pipe(Effect.forkIn(entry.scope));
@@ -112,13 +116,41 @@ export const makeHeadWatches = Effect.gen(function* () {
     }
   });
 
+  const dropped = (checkout: string, entry: Watched, reason: string): Effect.Effect<void> =>
+    Effect.suspend(() => {
+      for (const listener of [...entry.listeners]) listener({ kind: 'gone', checkout, reason });
+      if (watched.get(checkout) === entry) watched.delete(checkout);
+      return Effect.forkIn(Scope.close(entry.scope, Exit.void), scope);
+    }).pipe(Effect.asVoid);
+
+  const located = Effect.fnUntraced(function* (checkout: string, entry: Watched) {
+    if (entry.admin !== undefined) return;
+    const place = yield* Effect.result(locationsAt(git, checkout));
+    if (place._tag === 'Failure') {
+      yield* Effect.logWarning('the layout of a watched checkout could not be read; it is read again with the next HEAD read', {
+        checkout,
+        failure: place.failure,
+      });
+      return;
+    }
+    const { gitDir, commonDir } = place.success;
+    entry.admin = gitDir === commonDir ? null : { gitDir, commonDir };
+  });
+
   const read = Effect.fn('heads.read')(function* (checkout: string, entry: Watched): Effect.fn.Return<boolean> {
     const answer = yield* Effect.result(commitOf(git, checkout, 'HEAD'));
     if (answer._tag === 'Failure') {
+      const { admin } = entry;
+      if (admin !== undefined && admin !== null && !existsSync(admin.gitDir) && existsSync(admin.commonDir)) {
+        yield* Effect.logInfo('a linked worktree is no longer registered with its repository; its HEAD observation ends', { checkout });
+        yield* dropped(checkout, entry, answer.failure.message);
+        return false;
+      }
       yield* Effect.logWarning('HEAD could not be read; observation will recover', { checkout, failure: answer.failure });
       for (const listener of entry.listeners) listener({ kind: 'unread', checkout, reason: answer.failure.message });
       return false;
     }
+    yield* located(checkout, entry);
     const head = answer.success;
     const changed = head !== entry.head;
     entry.head = head;

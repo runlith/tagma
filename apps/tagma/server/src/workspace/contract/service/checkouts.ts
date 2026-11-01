@@ -76,7 +76,8 @@ export type HeadMoved = { readonly checkout: string; readonly head: string | nul
 
 export type HeadObservation =
   | ({ readonly kind: 'read' } & HeadMoved)
-  | { readonly kind: 'unread'; readonly checkout: string; readonly reason: string };
+  | { readonly kind: 'unread'; readonly checkout: string; readonly reason: string }
+  | { readonly kind: 'gone'; readonly checkout: string; readonly reason: string };
 
 export type CheckoutsMoved = { readonly root: string; readonly watching: boolean };
 
