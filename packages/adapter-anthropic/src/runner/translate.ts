@@ -5,9 +5,10 @@ import type { StopReason, Usage } from '@runlith/acp/methods';
 import type { ToolCallContent, ToolCallStatus, ToolKind } from '@runlith/acp/toolCalls';
 import type { SessionUpdate } from '@runlith/acp/updates';
 import type { TransportFailure } from '@runlith/agent/transcript/entries';
+import { SERVED } from '@runlith/hosted-runner/bridge';
 import type { Handed } from '@runlith/hosted-runner/handed';
 import type { Said } from '@runlith/hosted-runner/output';
-import { SERVED, type Names } from './names.js';
+import type { Names } from './names.js';
 import { nativeNameOf, WEB_FETCH, WEB_SEARCH } from './vendor.js';
 
 const KINDS: Readonly<Record<string, ToolKind>> = {

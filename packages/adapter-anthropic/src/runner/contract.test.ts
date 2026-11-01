@@ -29,8 +29,7 @@ import {
 import type { RequestPermissionParams } from '@runlith/acp/methods';
 import type { HostedToolWire } from '@runlith/hosted-runner/wire/messages';
 import { claudeAgent, type Launch } from './agent.js';
-import { servedPrompt } from './bridge.js';
-import { TAGMA_SERVER } from './names.js';
+import { TAGMA_SERVER, servedPrompt } from '@runlith/hosted-runner/bridge';
 import type { HostedDoor, HostedOpened } from '@runlith/hosted-runner/door';
 import type { Channel, ClaudeSdk, Entry, Interrupted, Said, SideAnswer, ThinkingDisplay } from './channel.js';
 import type { Runner } from './runner.js';

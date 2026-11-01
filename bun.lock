@@ -995,6 +995,7 @@
         "@runlith/acp": "workspace:*",
         "@runlith/agent": "workspace:*",
         "@runlith/llm": "workspace:*",
+        "@runlith/mcp": "workspace:*",
         "@runlith/ndjson-rpc": "workspace:*",
         "@runlith/tagma": "workspace:*",
         "effect": "catalog:",

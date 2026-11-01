@@ -9,6 +9,10 @@
       "types": "./src/agent.ts",
       "default": "./src/agent.ts"
     },
+    "./bridge": {
+      "types": "./src/bridge.ts",
+      "default": "./src/bridge.ts"
+    },
     "./client": {
       "types": "./src/client.ts",
       "default": "./src/client.ts"
@@ -80,6 +84,7 @@
     "@runlith/acp": "workspace:*",
     "@runlith/agent": "workspace:*",
     "@runlith/llm": "workspace:*",
+    "@runlith/mcp": "workspace:*",
     "@runlith/ndjson-rpc": "workspace:*",
     "@runlith/tagma": "workspace:*",
     "effect": "catalog:"

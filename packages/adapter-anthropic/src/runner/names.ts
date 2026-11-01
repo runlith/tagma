@@ -1,6 +1,4 @@
-export const TAGMA_SERVER = 'tagma';
-
-export const SERVED = `mcp__${TAGMA_SERVER}__`;
+import { SERVED } from '@runlith/hosted-runner/bridge';
 
 export const servedName = (name: string): string => `${SERVED}${name}`;
 
