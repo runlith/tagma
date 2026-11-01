@@ -12,6 +12,7 @@ import { InstalledHarnesses } from '../../threads/contract/service/harness.js';
 import type { HarnessInstall } from '../../threads/contract/wire/harness/externalSession.js';
 import { installedHarnessesWith } from './installed.js';
 import { grok } from '@runlith/adapter-xai/harness';
+import { museCode } from '@runlith/adapter-muse/harness';
 import { SHIPPED_PROVIDERS } from '../testing/builtin.js';
 import { makeHarnessAdapters } from '../adapters.js';
 import { HarnessAdapters } from '../contract/service/adapters.js';
@@ -26,7 +27,7 @@ import { EnvironmentId } from '../../workspace/contract/wire/environments.js';
 
 const withGrok = Layer.effect(
   HarnessAdapters,
-  Effect.tap(makeHarnessAdapters, (adapters) => adapters.declared([...SHIPPED_PROVIDERS, grok])),
+  Effect.tap(makeHarnessAdapters, (adapters) => adapters.declared([...SHIPPED_PROVIDERS, grok, museCode])),
 );
 
 const root = realpathSync(mkdtempSync(join(tmpdir(), 'installed-harnesses-')));
@@ -139,6 +140,19 @@ it.effect('a probe still running when its reader leaves is reaped when the layer
     );
     const standing = yield* Effect.result(Effect.try({ try: () => process.kill(pid, 0), catch: (cause) => cause }));
     expect(standing).toMatchObject({ _tag: 'Failure', failure: { code: 'ESRCH' } });
+  }),
+);
+
+it.effect('the version probe of a harness carries the environment its adapter declares', () =>
+  Effect.gen(function* () {
+    const { home, local } = homeOf('declared');
+    yield* machine(home);
+    script(join(local, 'muse'), '#!/bin/sh\necho "muse updates:${MUSE_NO_AUTO_UPDATE:-allowed}"\n');
+    const users = isolatedUsers({ shell: shellFor(local, [], failedProfile), env: process.env, world: null, home });
+    yield* users.ready;
+    const installs = yield* installsOver(users);
+    yield* installs.program('muse');
+    expect((yield* installs.read).find((row) => row.harness === 'muse-code')).toMatchObject({ version: 'muse updates:1' });
   }),
 );
 
