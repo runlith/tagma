@@ -31,7 +31,7 @@ sources:
 **How.** The project or subtree map screen; opened from the block menu and from the Knowledge column.
 
 **Behaviour.**
-- The canvas shows the tree, typed edges each in its color, and references as dashed lines. Resting blocks are paler.
+- The canvas shows the tree, typed edges each in its color, and references as dashed lines. Local edge and reference endpoints retain their identities when printed names collide. Resting blocks are paler.
 - Modules, specs, tasks, ideas, and rules get their own shape and color. The legend names only those of these tags that the project declared.
 - Clicking a node opens a card with status and turns. Nodes can be dragged, zoomed, and focused to a subtree; a tag and state filter rebuilds the camera.
 
