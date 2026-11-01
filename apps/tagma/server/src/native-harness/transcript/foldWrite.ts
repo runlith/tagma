@@ -1,10 +1,11 @@
 import { Effect } from 'effect';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { ThreadStorageFailed } from '@runlith/agent/thread/persisted';
 import type { ThreadAtomicPatch } from '@runlith/agent/thread/storage/aggregate';
 import { MachineStore } from '../../platform/contract/service/store.js';
 import type { ProgramUnit, WriteUnit } from '../../platform/contract/service/units.js';
 import { unplannable } from '../../platform/store/programs.js';
+import { bindQuery } from '../../platform/store/queries.js';
 import { thread } from '../../threads/store/kernel.js';
 import { plannedFacts } from '../../threads/journal/log.js';
 import { ThreadRecords } from '../../thread-record/contract/service/records.js';
@@ -24,6 +25,18 @@ export const makeFoldWriter = Effect.fnUntraced(function* (input: { readonly rea
   const history = yield* makeHistoryStore(input);
   const entries = yield* makeEntryFold(input);
   const observations = yield* makeCacheObservationStore;
+  const stamped = {
+    touched: db
+      .update(thread)
+      .set({ updatedAt: sql.placeholder('updatedAt') })
+      .where(eq(thread.id, sql.placeholder('id')))
+      .prepare(),
+    reading: db
+      .update(thread)
+      .set({ contextReading: sql.placeholder('reading'), updatedAt: sql.placeholder('updatedAt') })
+      .where(eq(thread.id, sql.placeholder('id')))
+      .prepare(),
+  };
   return {
     history,
     entries,
@@ -73,10 +86,9 @@ export const makeFoldWriter = Effect.fnUntraced(function* (input: { readonly rea
       yield* history.plan(program, id, next, covered == null ? standing : covered.through, standing, facts);
       yield* entries.plan(program, id, placements ?? [], facts, standing);
       yield* program.write(
-        db
-          .update(thread)
-          .set({ ...Object.fromEntries(patched), updatedAt: at })
-          .where(eq(thread.id, id)),
+        'contextReading' in columns && columns.contextReading !== undefined
+          ? bindQuery(stamped.reading, { id, reading: columns.contextReading, updatedAt: at })
+          : bindQuery(stamped.touched, { id, updatedAt: at }),
         1,
       );
     }),

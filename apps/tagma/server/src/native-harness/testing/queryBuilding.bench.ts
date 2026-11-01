@@ -1,13 +1,17 @@
 import * as BunRuntime from '@effect/platform-bun/BunRuntime';
 import { Effect, Layer } from 'effect';
-import { and, asc, desc, eq, fillPlaceholders, gt, isNull, or, sql, type Placeholder, type Query } from 'drizzle-orm';
+import { and, asc, desc, eq, fillPlaceholders, gt, isNull, lte, or, Placeholder, sql, type Param, type Query } from 'drizzle-orm';
+import type { AnySQLiteColumn } from 'drizzle-orm/sqlite-core';
 import { makeWithDefaults } from 'drizzle-orm/effect-sqlite-bun';
 import { heldPool } from '@runlith/sqlite-process/testing/pool';
 import { sqliteProcessLayer } from '@runlith/sqlite-process/SqliteProcess';
 import type { ThreadEventPayloadValue } from '@runlith/agent/thread/storage/eventLog';
 import type { ThreadTranscriptEntry } from '@runlith/agent/transcript/rows';
 import { metadataColumns, threadRow } from '../row.js';
-import { threadEntry, threadRun } from '../../threads/store/kernel.js';
+import { thread, threadEntry, threadRun } from '../../threads/store/kernel.js';
+import { payloadField } from '../../threads/store/fields.js';
+import { bodyInFold } from '../../threads/journal/foldedFacts.js';
+import type { ThreadContextReading } from '@runlith/agent/thread/rows';
 import { threadLog, threadRev } from '../store/thread.js';
 import { journalHead } from '../../threads/journal/base.js';
 import { recordFacts } from '../../thread-record/facts.js';
@@ -15,7 +19,23 @@ import { factsWhere } from '../../thread-record/identity.js';
 import { bindQuery } from '../../platform/store/queries.js';
 import { storeDb } from '../../platform/contract/service/store.js';
 import { setting } from '../../settings/store/table.js';
-import { journalProjectOf, threadBase, threadEvent, threadRolloutCursor } from '../../threads/store/journal.js';
+import { journalProjectOf, threadBase, threadEvent, threadEventIdentity, threadRolloutCursor } from '../../threads/store/journal.js';
+
+const A1_COUNTS = new Map<string, number>([
+  ['9c1071d8e1460bde', 2572],
+  ['a6366da23c94f1ff', 2581],
+  ['d129dc8b82f3c6c5', 3379],
+  ['8815dd46e05abe18', 1473],
+  ['72d6024e4d3538f2', 1478],
+  ['56b3b810b05538fc', 2212],
+  ['172a0aa7981152a4', 2581],
+  ['75c9122508683458', 2581],
+  ['e2439998ed20d78b', 2581],
+  ['13985ed539e79d6e', 5162],
+  ['7a27dcdf707e405e', 1471],
+  ['a0c8c6f5ce2939c9', 1471],
+  ['a45be3611ee20f37', 1895],
+]);
 
 const ITERATIONS = 4000;
 const WARMUP = 200;
@@ -43,6 +63,11 @@ type Bind = {
   readonly position: Slot<number>;
   readonly entry: Slot<ThreadTranscriptEntry>;
   readonly payload: Slot<ThreadEventPayloadValue>;
+  readonly held: Slot<ThreadEventPayloadValue>;
+  readonly identity: Slot<string>;
+  readonly updatedAt: Slot<Date>;
+  readonly reading: Slot<ThreadContextReading>;
+  readonly adapter: Slot<string>;
 };
 
 const sample = {
@@ -57,6 +82,11 @@ const sample = {
   position: 42,
   entry: { id: 'entry-10', type: 'message', role: 'assistant', text: 'x'.repeat(1024) } as unknown as ThreadTranscriptEntry,
   payload: { entry: { id: 'entry-10', type: 'tool', input: 'x'.repeat(1024) } } as unknown as ThreadEventPayloadValue,
+  held: { bodyInFold: true, entry: { id: 'entry-10', type: 'tool' } } as unknown as ThreadEventPayloadValue,
+  identity: 'tool:run-1:call-10',
+  updatedAt: new Date(1_790_000_000_000),
+  reading: { tokens: 1024, at: '2026-11-01T00:00:00.000Z' } as unknown as ThreadContextReading,
+  adapter: 'native',
 } satisfies Bind;
 
 const holes: Bind = {
@@ -71,7 +101,15 @@ const holes: Bind = {
   position: sql.placeholder('position'),
   entry: sql.placeholder('entry'),
   payload: sql.placeholder('payload'),
+  held: sql.placeholder('held'),
+  identity: sql.placeholder('identity'),
+  updatedAt: sql.placeholder('updatedAt'),
+  reading: sql.placeholder('reading'),
+  adapter: sql.placeholder('adapter'),
 };
+
+const encoded = <T>(slot: Slot<T>, column: AnySQLiteColumn): Slot<T> | Param =>
+  slot instanceof Placeholder ? sql.param(slot, column) : slot;
 
 const baseOf = (id: Slot<string>) =>
   sql`exists (select 1 from ${threadBase} where ${threadBase.threadId} = ${id} or ${threadBase.sourceId} = ${id})`;
@@ -208,6 +246,47 @@ BunRuntime.runMain(
           .set({ payload: bind.payload })
           .where(and(eq(threadEvent.threadId, bind.id), eq(threadEvent.position, bind.position)));
       const cursor = (bind: Bind) => db.update(threadLog).set({ entriesThrough: bind.through }).where(eq(threadLog.threadId, bind.id));
+      const historyGuard = (bind: Bind) =>
+        db
+          .select({ id: threadLog.threadId })
+          .from(threadLog)
+          .where(and(eq(threadLog.threadId, bind.id), eq(threadLog.historyThrough, bind.through)));
+      const historyCursor = (bind: Bind) =>
+        db.update(threadLog).set({ historyThrough: bind.through }).where(eq(threadLog.threadId, bind.id));
+      const touched = (bind: Bind) => db.update(thread).set({ updatedAt: bind.updatedAt }).where(eq(thread.id, bind.id));
+      const reading = (bind: Bind) =>
+        db.update(thread).set({ contextReading: bind.reading, updatedAt: bind.updatedAt }).where(eq(thread.id, bind.id));
+      const identityRead = (bind: Bind) =>
+        db
+          .select({ position: threadEvent.position, payload: threadEvent.payload })
+          .from(threadEvent)
+          .where(
+            and(
+              eq(threadEvent.threadId, bind.id),
+              lte(threadEvent.position, bind.through),
+              sql`${payloadField(threadEvent.payload, 'entry.id')} is not null`,
+              sql`${threadEventIdentity(threadEvent.payload)} = ${bind.identity}`,
+              bodyInFold(threadEvent.payload),
+            ),
+          )
+          .orderBy(desc(threadEvent.position));
+      const restore = (bind: Bind) =>
+        db
+          .update(threadEvent)
+          .set({ payload: bind.payload })
+          .where(
+            and(
+              eq(threadEvent.threadId, bind.id),
+              eq(threadEvent.position, bind.position),
+              eq(threadEvent.payload, encoded(bind.held, threadEvent.payload)),
+            ),
+          );
+      const adapterGuard = (bind: Bind) =>
+        db
+          .select({ id: threadRow.id })
+          .from(threadRow)
+          .where(and(eq(threadRow.id, bind.id), sql`json_extract(${threadRow.transport}, '$.adapter') is ${bind.adapter}`));
+      const absentGuard = (bind: Bind) => db.select({ id: threadRow.id }).from(threadRow).where(eq(threadRow.id, bind.id));
       const planning: readonly Planned[] = [
         {
           name: 'planning bounds',
@@ -286,6 +365,94 @@ BunRuntime.runMain(
             return { use: () => bindQuery(query, sample).getQuery(), text: () => bindQuery(query, sample).getQuery() };
           },
         },
+        {
+          name: 'history guard',
+          census: '75c9122508683458',
+          via: 'program statement',
+          direct: () => historyGuard(sample).toSQL(),
+          directText: () => historyGuard(sample).toSQL(),
+          prepare: () => {
+            const query = historyGuard(holes).prepare();
+            return { use: () => bindQuery(query, sample).getQuery(), text: () => bindQuery(query, sample).getQuery() };
+          },
+        },
+        {
+          name: 'history cursor',
+          census: 'e2439998ed20d78b',
+          via: 'program statement',
+          direct: () => historyCursor(sample).toSQL(),
+          directText: () => historyCursor(sample).toSQL(),
+          prepare: () => {
+            const query = historyCursor(holes).prepare();
+            return { use: () => bindQuery(query, sample).getQuery(), text: () => bindQuery(query, sample).getQuery() };
+          },
+        },
+        {
+          name: 'thread touched',
+          census: '13985ed539e79d6e',
+          via: 'program statement',
+          direct: () => touched(sample).toSQL(),
+          directText: () => touched(sample).toSQL(),
+          prepare: () => {
+            const query = touched(holes).prepare();
+            return { use: () => bindQuery(query, sample).getQuery(), text: () => bindQuery(query, sample).getQuery() };
+          },
+        },
+        {
+          name: 'thread touched with context reading',
+          census: 'd545b21402fa8905',
+          via: 'program statement',
+          direct: () => reading(sample).toSQL(),
+          directText: () => reading(sample).toSQL(),
+          prepare: () => {
+            const query = reading(holes).prepare();
+            return { use: () => bindQuery(query, sample).getQuery(), text: () => bindQuery(query, sample).getQuery() };
+          },
+        },
+        {
+          name: 'folded event identity read',
+          census: '7a27dcdf707e405e',
+          via: 'effect creation',
+          direct: () => identityRead(sample).get(),
+          directText: () => identityRead(sample).toSQL(),
+          prepare: () => {
+            const query = identityRead(holes).prepare();
+            return { use: () => query.get(sample), text: () => filled(query.getQuery()) };
+          },
+        },
+        {
+          name: 'folded event restore',
+          census: 'a0c8c6f5ce2939c9',
+          via: 'program statement',
+          direct: () => restore(sample).toSQL(),
+          directText: () => restore(sample).toSQL(),
+          prepare: () => {
+            const query = restore(holes).prepare();
+            return { use: () => bindQuery(query, sample).getQuery(), text: () => bindQuery(query, sample).getQuery() };
+          },
+        },
+        {
+          name: 'thread row guard, transport adapter',
+          census: 'a45be3611ee20f37',
+          via: 'program statement',
+          direct: () => adapterGuard(sample).toSQL(),
+          directText: () => adapterGuard(sample).toSQL(),
+          prepare: () => {
+            const query = adapterGuard(holes).prepare();
+            return { use: () => bindQuery(query, sample).getQuery(), text: () => bindQuery(query, sample).getQuery() };
+          },
+        },
+        {
+          name: 'thread row guard, absent row',
+          census: '352fe685a755c918',
+          via: 'program statement',
+          direct: () => absentGuard(sample).toSQL(),
+          directText: () => absentGuard(sample).toSQL(),
+          prepare: () => {
+            const query = absentGuard(holes).prepare();
+            return { use: () => bindQuery(query, sample).getQuery(), text: () => bindQuery(query, sample).getQuery() };
+          },
+        },
       ];
       yield* Effect.sync(() => {
         const rows = shapes.map(({ name, build }) => {
@@ -311,7 +478,11 @@ BunRuntime.runMain(
             name: shape.name,
             via: shape.via,
             fingerprint,
-            census: { fingerprint: shape.census, matches: fingerprint === shape.census },
+            census: {
+              fingerprint: shape.census,
+              matches: fingerprint === shape.census,
+              a1Statements90s: A1_COUNTS.get(shape.census) ?? null,
+            },
             sameSqlAndParams: true,
             unprepared: measured(shape.direct),
             prepared: measured(prepared.use),

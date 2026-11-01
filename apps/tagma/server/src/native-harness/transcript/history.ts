@@ -12,6 +12,7 @@ import type { StoredFailure } from '../../platform/store/crossing.js';
 import { MachineStore } from '../../platform/contract/service/store.js';
 import type { ProgramQuery, ProgramUnit, Unit, WriteUnit } from '../../platform/contract/service/units.js';
 import { unplannable } from '../../platform/store/programs.js';
+import { bindQuery } from '../../platform/store/queries.js';
 import { atUnitEnd } from '../../platform/store/life.js';
 import { threadHistoryItem, threadLog } from '../store/thread.js';
 import { threadEvent } from '../../threads/store/journal.js';
@@ -38,6 +39,18 @@ export const makeHistoryStore = Effect.fnUntraced(function* ({ reads }: { readon
     .where(and(eq(threadEvent.threadId, sql.placeholder('id')), gt(threadEvent.position, sql.placeholder('through'))))
     .orderBy(asc(threadEvent.position))
     .prepare();
+  const planned = {
+    guard: db
+      .select({ id: threadLog.threadId })
+      .from(threadLog)
+      .where(and(eq(threadLog.threadId, sql.placeholder('id')), eq(threadLog.historyThrough, sql.placeholder('cursor'))))
+      .prepare(),
+    cursor: db
+      .update(threadLog)
+      .set({ historyThrough: sql.placeholder('through') })
+      .where(eq(threadLog.threadId, sql.placeholder('id')))
+      .prepare(),
+  };
   const factsById = db.all<HistoryFact>(sql`
     select 0 as fact, ${threadLog.historyThrough} as at, null as kind, null as body
       from ${threadLog}
@@ -414,22 +427,16 @@ export const makeHistoryStore = Effect.fnUntraced(function* ({ reads }: { readon
         }
         if (quiet === cursor) return;
       }
-      yield* program.guard(
-        db
-          .select({ id: threadLog.threadId })
-          .from(threadLog)
-          .where(and(eq(threadLog.threadId, id), eq(threadLog.historyThrough, cursor))),
-        1,
-      );
+      yield* program.guard(bindQuery(planned.guard, { id, cursor }), 1);
       const claim = live.claim(id, program);
       if (next === undefined) {
-        yield* program.write(db.update(threadLog).set({ historyThrough: quiet }).where(eq(threadLog.threadId, id)), 1);
+        yield* program.write(bindQuery(planned.cursor, { id, through: quiet }), 1);
         const moved: HistoryState = { ...warm.standing, cursor: quiet, through: Math.max(warm.standing.through, quiet) };
         return yield* program.afterCommit(Effect.sync(() => live.settle(claim, warm.history, moved)));
       }
       const rows = yield* changedRows(id, stored, next);
       for (const statement of rows.statements) yield* program.write(statement);
-      yield* program.write(db.update(threadLog).set({ historyThrough: through }).where(eq(threadLog.threadId, id)), 1);
+      yield* program.write(bindQuery(planned.cursor, { id, through }), 1);
       const held = { ...warm.standing, history: warm.history };
       const fresh: HistoryState = { stored: next, cursor: through, through, guidance: yield* guided(id, held, stored, next, rows.shared) };
       yield* program.afterCommit(Effect.sync(() => live.settle(claim, next, fresh)));

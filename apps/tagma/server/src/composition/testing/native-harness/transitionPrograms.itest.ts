@@ -6,6 +6,7 @@ import { Message } from '@runlith/llm/schema/messages';
 import { CostLedger, costLedgerLayer, rootCost } from '@runlith/performance/CostLedger';
 import { readThreadEvents, threadEntryEvent, threadStepMessagesEvent } from '@runlith/agent/thread/events';
 import type { ThreadToolEntry } from '@runlith/agent/transcript/entries';
+import type { ThreadContextReading } from '@runlith/agent/thread/rows';
 import { callKey, type Evidence } from '@runlith/agent/thread/keyed';
 import { sealThreadEvents } from '@runlith/agent/thread/ThreadEventDoor';
 import { type TransitionDeps, transitionNow } from '@runlith/agent/thread/transition/kernel';
@@ -91,6 +92,27 @@ const opened = Effect.gen(function* () {
       },
       { evidence: { decidedBy: `test:${entry.toolState}` }, digest: entry.toolState },
     );
+  const readingStep = (reading: ThreadContextReading | null) =>
+    transitionNow(
+      deps,
+      thread.id,
+      {
+        declared: sealThreadEvents([threadStepMessagesEvent([Message.assistant('read')])!]),
+        decide: Effect.fnUntraced(function* (_view: unknown, tx: WriteUnit<'machine'>) {
+          const standing = yield* runs.latestRun(thread.id, ['running'], tx);
+          return standing?.ownerId === OWNER
+            ? { apply: true as const, result: 'applied', patch: { contextReading: reading } }
+            : { refuse: 'refused' };
+        }),
+      },
+      { evidence: { decidedBy: 'test:reading' }, digest: 'reading' },
+    );
+  const storedReading = Effect.map(
+    db.all<{ reading: string | null; kind: string }>(
+      sql`select context_reading as reading, typeof(context_reading) as kind from native_thread where id = ${thread.id}`,
+    ),
+    ([row]) => ({ kind: row?.kind, value: row?.reading == null ? null : JSON.parse(row.reading) }),
+  );
   const cursor = Effect.gen(function* () {
     const [log] = yield* db.all<{ through: number; head: number }>(
       sql`select entries_through as through, (select max(position) from thread_event where thread_id = ${thread.id}) as head
@@ -99,7 +121,7 @@ const opened = Effect.gen(function* () {
     return log;
   });
   const journal = readThreadEvents(storage.eventLog, storage.kinds, thread.id, 0, 100);
-  return { storage, db, thread, run: start.run, step, entryStep, cursor, journal, deps };
+  return { storage, db, thread, run: start.run, step, entryStep, readingStep, storedReading, cursor, journal, deps };
 });
 
 it.live('a transition whose reads are planned commits as one program and no interactive unit', () =>
@@ -181,6 +203,41 @@ it.live('a planned transcript entry is inserted, replaced and folded by its prog
     expect(second.events.map((event) => ({ position: event.position, entry: (event.payload as { entry?: unknown }).entry }))).toEqual([
       { position: 1, entry: CALL },
       { position: 2, entry: SETTLED },
+    ]);
+  }).pipe(Effect.provide(Layer.fresh(costLedgerLayer({ capacity: 16 })))),
+);
+
+const READING: ThreadContextReading = {
+  usage: { inputTokens: 1200, outputTokens: 80, visibleOutputTokens: 80 },
+  contextWindow: 200_000,
+  runId: 'run-1',
+  stepNumber: 3,
+  provider: null,
+  model: null,
+  measuredAt: '2026-11-01T00:00:00.000Z',
+  stale: false,
+};
+
+it.live('a planned transition stamps the thread with its context reading and clears it again, one program each', () =>
+  Effect.gen(function* () {
+    const { readingStep, storedReading } = yield* opened;
+    const set = yield* rootCost('test.transition', readingStep(READING), 'test-reading-set');
+    const held = yield* storedReading;
+    const cleared = yield* rootCost('test.transition', readingStep(null), 'test-reading-clear');
+    const ledger = yield* CostLedger;
+    const costs = ['test-reading-set', 'test-reading-clear'].map((rootId) => {
+      const total = ledger.read({ rootId, limit: 1 }).rows[0]?.total;
+      return { programs: total?.programs, units: total?.units };
+    });
+    expect({ set, cleared, held, after: yield* storedReading }).toEqual({
+      set: { committed: 'applied' },
+      cleared: { committed: 'applied' },
+      held: { kind: 'text', value: READING },
+      after: { kind: 'null', value: null },
+    });
+    expect(costs).toEqual([
+      { programs: 1, units: 0 },
+      { programs: 1, units: 0 },
     ]);
   }).pipe(Effect.provide(Layer.fresh(costLedgerLayer({ capacity: 16 })))),
 );

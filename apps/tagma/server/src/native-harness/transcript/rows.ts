@@ -91,6 +91,31 @@ export const makeTranscriptRows = Effect.gen(function* () {
       .set({ payload: sql.placeholder('payload') })
       .where(and(eq(threadEvent.threadId, threadId), eq(threadEvent.position, sql.placeholder('position'))))
       .prepare(),
+    identity: db
+      .select({ position: threadEvent.position, payload: threadEvent.payload })
+      .from(threadEvent)
+      .where(
+        and(
+          eq(threadEvent.threadId, threadId),
+          lte(threadEvent.position, sql.placeholder('through')),
+          sql`${payloadField(threadEvent.payload, 'entry.id')} is not null`,
+          sql`${threadEventIdentity(threadEvent.payload)} = ${sql.placeholder('identity')}`,
+          bodyInFold(threadEvent.payload),
+        ),
+      )
+      .orderBy(desc(threadEvent.position))
+      .prepare(),
+    restored: db
+      .update(threadEvent)
+      .set({ payload: sql.placeholder('payload') })
+      .where(
+        and(
+          eq(threadEvent.threadId, threadId),
+          eq(threadEvent.position, sql.placeholder('position')),
+          eq(threadEvent.payload, sql.param(sql.placeholder('held'), threadEvent.payload)),
+        ),
+      )
+      .prepare(),
     cursor: db
       .update(threadLog)
       .set({ entriesThrough: sql.placeholder('through') })
@@ -164,22 +189,7 @@ export const makeTranscriptRows = Effect.gen(function* () {
         if (!moved.has(entry.id)) continue;
         const identity = toolEventIdentity(entry);
         if (identity === null) continue;
-        const held = yield* unit.run(
-          db
-            .select({ position: threadEvent.position, payload: threadEvent.payload })
-            .from(threadEvent)
-            .where(
-              and(
-                eq(threadEvent.threadId, id),
-                lte(threadEvent.position, through),
-                sql`${payloadField(threadEvent.payload, 'entry.id')} is not null`,
-                sql`${threadEventIdentity(threadEvent.payload)} = ${identity}`,
-                bodyInFold(threadEvent.payload),
-              ),
-            )
-            .orderBy(desc(threadEvent.position))
-            .get(),
-        );
+        const held = yield* unit.run(planned.identity.get({ threadId: id, through, identity }));
         if (held === undefined) continue;
         const heldEntryId = foldedEntryId(held.payload);
         if (heldEntryId !== entry.id) {
@@ -336,22 +346,7 @@ export const makeTranscriptRows = Effect.gen(function* () {
           for (const entry of old) {
             const identity = toolEventIdentity(entry);
             if (identity === null) continue;
-            const event = yield* unit.run(
-              db
-                .select({ position: threadEvent.position, payload: threadEvent.payload })
-                .from(threadEvent)
-                .where(
-                  and(
-                    eq(threadEvent.threadId, id),
-                    lte(threadEvent.position, through),
-                    sql`${payloadField(threadEvent.payload, 'entry.id')} is not null`,
-                    sql`${threadEventIdentity(threadEvent.payload)} = ${identity}`,
-                    bodyInFold(threadEvent.payload),
-                  ),
-                )
-                .orderBy(desc(threadEvent.position))
-                .get(),
-            );
+            const event = yield* unit.run(planned.identity.get({ threadId: id, through, identity }));
             if (event !== undefined) held.push({ entry, ...event });
           }
           return { span, held };
@@ -363,10 +358,7 @@ export const makeTranscriptRows = Effect.gen(function* () {
       for (const { entry, position, payload } of read.held) {
         if (foldedEntryId(payload) !== entry.id) return yield* unplannable(program, `folded event ${position} names another entry`);
         yield* program.write(
-          db
-            .update(threadEvent)
-            .set({ payload: restoredFact(payload, entry) })
-            .where(and(eq(threadEvent.threadId, id), eq(threadEvent.position, position), eq(threadEvent.payload, payload))),
+          bindQuery(planned.restored, { threadId: id, position, payload: restoredFact(payload, entry), held: payload }),
           1,
         );
       }
