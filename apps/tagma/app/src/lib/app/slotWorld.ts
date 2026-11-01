@@ -9,7 +9,8 @@ import { ChatConnection, type ChatThreadView } from '@runlith/chat-ui/wire/ChatC
 import { Layer } from '@runlith/layer/Layer';
 import type { PlatformStorage } from '@runlith/layer/Platform';
 import { Scope } from '@runlith/layer/Scope';
-import { makeStorage } from '@runlith/layer/testing';
+import { makePoint, makeStorage } from '@runlith/layer/testing';
+import { StagedKinds } from '$lib/shared/threads/staged.js';
 import { keyed } from '@runlith/query/builders/keyed';
 import { stubFamily, stubMutation, stubSingle } from '@runlith/query/testing';
 import { QueryClient } from '@tanstack/query-core';
@@ -132,6 +133,7 @@ export function testThreadSlots(over: Partial<SlotParts>, options: readonly Test
       over.skills ?? emptySkills(projectId, scope),
       testDoor(),
       testRecords(),
+      makePoint(StagedKinds),
       over.storage ?? makeStorage(),
       scope,
       world.app,
@@ -206,6 +208,7 @@ export function slotWorld(over: Partial<SlotParts>, scope: Scope) {
     Layer.of(Live, live as never),
     Layer.of(Door, testDoor()),
     Layer.of(ProductRecords, testRecords()),
+    StagedKinds,
     Layer.of(ThreadsRepo, threads),
     Layer.of(TeamRepo, teams),
     Layer.of(UsageAccounts, accounts),

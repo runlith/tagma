@@ -41,7 +41,7 @@ it.live('a turn a live page holds is no other page’s; once that page is gone o
     const locks = new PageLocks();
     const page = (shelf: DraftShelf) => new PendingStore(outbox, locks as unknown as LockManager, shelf, NO_FETCH, 5);
 
-    const firstShelf = new DraftShelf(storage, files);
+    const firstShelf = new DraftShelf(storage, files, () => true);
     const first = page(firstShelf);
     const firstHolder = locks.held[0]!;
     firstShelf.stash('turn-1', {
@@ -49,7 +49,7 @@ it.live('a turn a live page holds is no other page’s; once that page is gone o
       images: [],
       files: [],
       mentions: [],
-      pieces: [],
+      items: [],
       documents: [{ id: 'd1', title: 'Заметка', text: 'тело' }],
     });
     first.keep({
@@ -63,9 +63,9 @@ it.live('a turn a live page holds is no other page’s; once that page is gone o
     });
     yield* first.orphans();
 
-    const nextShelf = new DraftShelf(storage, files);
+    const nextShelf = new DraftShelf(storage, files, () => true);
     const next = page(nextShelf);
-    const other = page(new DraftShelf(storage, files));
+    const other = page(new DraftShelf(storage, files, () => true));
     expect(yield* next.orphans()).toEqual([]);
 
     locks.release(firstHolder);
@@ -80,7 +80,7 @@ it.live('a turn a live page holds is no other page’s; once that page is gone o
     expect(nextShelf.at('thread:thread-1').documents).toEqual([{ id: 'd1', title: 'Заметка', text: 'тело' }]);
     yield* next.orphans();
     locks.held.splice(0);
-    expect(yield* page(new DraftShelf(storage, files)).orphans()).toEqual([]);
+    expect(yield* page(new DraftShelf(storage, files, () => true)).orphans()).toEqual([]);
   }),
 );
 
@@ -97,7 +97,7 @@ it.live('words the server already stores come back with their attachments when a
     };
     const page = (shelf: DraftShelf) => new PendingStore(outbox, locks as unknown as LockManager, shelf, fetch, 5);
 
-    const first = page(new DraftShelf(storage, files));
+    const first = page(new DraftShelf(storage, files, () => true));
     const firstHolder = locks.held[0]!;
     first.keep({
       inputId: 'turn-2',
@@ -112,7 +112,7 @@ it.live('words the server already stores come back with their attachments when a
     yield* first.orphans();
 
     locks.release(firstHolder);
-    const nextShelf = new DraftShelf(storage, files);
+    const nextShelf = new DraftShelf(storage, files, () => true);
     const next = page(nextShelf);
     const [taken] = yield* next.orphans();
     next.handBack(turnOf(taken));
@@ -131,7 +131,7 @@ it.live('an answer a gone page kept is taken back whole by the next page', () =>
     const files = new DraftFiles(new IDBFactory());
     const outbox = new IDBFactory();
     const locks = new PageLocks();
-    const page = () => new PendingStore(outbox, locks as unknown as LockManager, new DraftShelf(storage, files), NO_FETCH, 5);
+    const page = () => new PendingStore(outbox, locks as unknown as LockManager, new DraftShelf(storage, files, () => true), NO_FETCH, 5);
     const first = page();
     const firstHolder = locks.held[0]!;
     const kept = {

@@ -1,4 +1,5 @@
 import type { Capture, CapturesEvent } from '@tagma/server/speech/contract/wire/feeds';
+import { SvelteSet } from 'svelte/reactivity';
 import { Failure } from '@runlith/layer/Failure';
 import { Scope } from '@runlith/layer/Scope';
 import { Service } from '@runlith/layer/key';
@@ -15,6 +16,7 @@ export class Captures extends Service<Captures>()('SpeechCaptures', { tier: 'app
 
   open = $state.raw<readonly Capture[]>([]);
   stopping = $state(false);
+  private readonly claimed = new SvelteSet<string>();
 
   constructor(
     live: LiveConnection,
@@ -34,7 +36,17 @@ export class Captures extends Service<Captures>()('SpeechCaptures', { tier: 'app
     scope.defer(() => held.unsubscribe());
   }
 
-  async stop(which: readonly Capture[] = this.open): Promise<void> {
+  get unclaimed(): readonly Capture[] {
+    return this.open.filter((capture) => !this.claimed.has(keyOf(capture)));
+  }
+
+  claim(capture: Capture): () => void {
+    const key = keyOf(capture);
+    this.claimed.add(key);
+    return () => this.claimed.delete(key);
+  }
+
+  async stop(which: readonly Capture[]): Promise<void> {
     this.stopping = true;
     try {
       await Promise.all(which.map((capture) => this.end(capture)));
@@ -45,11 +57,7 @@ export class Captures extends Service<Captures>()('SpeechCaptures', { tier: 'app
 
   private async end(capture: Capture): Promise<void> {
     try {
-      if (capture.kind === 'recognition') await this.door.perform('finish_recognition', { id: capture.id }, {});
-      else {
-        const lens = capture.projectId === null ? {} : { project: String(capture.projectId) };
-        await this.door.perform('end_listening', { listening: capture.id, mode: 'stop' }, lens);
-      }
+      await this.door.perform('stop_capture', { kind: capture.kind, id: capture.id }, {});
     } catch (error) {
       this.notices.refusal(error);
     }

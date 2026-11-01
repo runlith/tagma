@@ -13,7 +13,8 @@
   import { Topics } from '$lib/shared/threads/Topics.svelte.js';
   import DesktopTabKeys from '$lib/features/checkout/files/DesktopTabKeys.svelte';
   import DictationKeys from '$lib/features/speech/dictation/Keys.svelte';
-  import CallKeys from '$lib/features/speech/calls/CallKeys.svelte';
+  import PointView from '@runlith/layer/svelte/PointView.svelte';
+  import { WindowParts } from '$lib/shared/window/parts.js';
   import ShellTagmaApps from '$lib/features/tagma-apps/ShellTagmaApps.svelte';
   import DictationArm from '$lib/features/speech/dictation/Arm.svelte';
   import TerminalCloses from '$lib/features/executions/terminal/CloseDialogs.svelte';
@@ -61,6 +62,7 @@
   const area = AreaFrame.use();
   const topics = Topics.use();
   const keymap = Keymap.use();
+  const parts = WindowParts.use();
   const projectAim = ProjectRung.Source.use();
   const projectKey = $derived(router.params.project ? (projectAim()?.projectId ?? null) : null);
 
@@ -163,7 +165,7 @@
 {#snippet dock()}<Dock />{/snippet}
 
 <DictationKeys />
-<CallKeys />
+<PointView point={parts} props={{}} />
 <ShellTagmaApps />
 <WarmHolds />
 <DictationArm />

@@ -3,6 +3,7 @@ import type { PresenceRow } from '@tagma/server/threads/contract/wire/presence';
 import { flushSync } from 'svelte';
 import { expect, test } from 'vitest';
 import type { ThreadPresence } from '$lib/features/presence/Presence.svelte.js';
+import type { TagmaMethod } from '../views/methods.js';
 import type { ViewCall, ViewParams } from '../views/ViewBridge.js';
 import { type TagmaAppHostOwners, tagmaAppHost, THREAD_CHANGED } from './tagmaAppHost.svelte.js';
 
@@ -17,6 +18,25 @@ class Watched {
 const rowOf = (life: string, text: string): PresenceRow =>
   ({ status: { life, runId: life === 'working' ? 'run-1' : null }, tail: null, saidLine: text, outcome: null }) as unknown as PresenceRow;
 
+test('a contributed tagma method answers under its name with the mounting project and is offered in the handshake', async () => {
+  const echo: TagmaMethod = {
+    name: 'echo',
+    notifications: [],
+    method: (_owners, mount) => async (params) => ({ projectId: mount.projectId, params }),
+  };
+  const host = tagmaAppHost({ methods: [echo] } as unknown as TagmaAppHostOwners, {
+    projectId: 7,
+    tagmaApp: 'poker',
+    view: 'table',
+    threadId: null,
+    key: null,
+  });
+  const call: ViewCall = { signal: new AbortController().signal, mounted: new AbortController().signal, notify: () => undefined };
+
+  expect(await host.methods['tagma/echo']!({ said: 'hi' }, call)).toEqual({ projectId: 7, params: { said: 'hi' } });
+  expect(host.capabilities).toHaveProperty(['tagma/echo']);
+});
+
 test('a thread the view stops watching sends nothing more and gives back its presence hold', async () => {
   const set = new Watched();
   set.current = rowOf('idle', 'first');
@@ -27,7 +47,7 @@ test('a thread the view stops watching sends nothing more and gives back its pre
       return { set, release: () => (held -= 1) };
     },
   } as unknown as ThreadPresence;
-  const host = tagmaAppHost({ presence } as unknown as TagmaAppHostOwners, {
+  const host = tagmaAppHost({ presence, methods: [] } as unknown as TagmaAppHostOwners, {
     projectId: 1,
     tagmaApp: 'poker',
     view: 'table',

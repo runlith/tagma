@@ -11,7 +11,10 @@ import { testDoor } from '$lib/wire/testing.js';
 import { testShelf } from '$lib/features/threads/native/testing.js';
 import { ThreadDraft } from '$lib/features/threads/Draft.svelte.js';
 import { ThreadsRepo } from '$lib/features/threads/Repo.js';
-import { CallPieces } from '$lib/features/threads/native/CallPieces.js';
+import { StagedItems } from '$lib/features/threads/native/StagedItems.js';
+import { StagedKinds } from '$lib/shared/threads/staged.js';
+import type { Resolver } from '@runlith/layer/key';
+import { makePoint } from '@runlith/layer/testing';
 import { ThreadUploads } from '$lib/features/threads/native/ThreadUploads.js';
 import { Picks } from './Picks.js';
 
@@ -51,7 +54,11 @@ it.live('a picked element sends a titled Markdown document and its picture throu
     });
     const mounted = mountRepo(ThreadsRepo, { door, queryClient: new QueryClient() });
     yield* Effect.addFinalizer(() => Effect.promise(mounted.unmount));
-    const draft = new ThreadDraft(testShelf(), new ThreadUploads(mounted.repo, door, 5), new CallPieces(mounted.repo, 5));
+    const draft = new ThreadDraft(
+      testShelf(),
+      new ThreadUploads(mounted.repo, door, 5),
+      new StagedItems(makePoint(StagedKinds), {} as Resolver, 5),
+    );
     draft.useKey(`thread:${threadId}`);
     const picks = new Picks({
       host: { stageDocument: (document) => draft.stageDocument(document), attach: (files) => draft.attach(files) },

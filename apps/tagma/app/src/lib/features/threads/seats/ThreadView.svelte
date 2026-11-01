@@ -25,9 +25,9 @@
   const topic = seats.take(key);
   if (topic?.kind === 'block') host.draft.stageMentions([{ name: topic.name, title: topic.title, tag: topic.tag }]);
   if (topic?.kind === 'text') host.draft.setText(topic.text);
-  if (topic?.kind === 'piece') host.draft.stagePiece(topic.piece);
-  if (topic?.kind === 'piece' && topic.ask !== undefined) host.draft.setText(topic.ask);
-  let asking = topic?.kind === 'piece' && topic.ask !== undefined;
+  if (topic?.kind === 'staged') host.draft.stage(topic.item);
+  if (topic?.kind === 'staged' && topic.ask !== undefined) host.draft.setText(topic.ask);
+  let asking = topic?.kind === 'staged' && topic.ask !== undefined;
 
   $effect(() => {
     if (!asking || !host.canSend) return;

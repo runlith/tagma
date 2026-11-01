@@ -62,7 +62,6 @@ import { CATALOG_MODULES } from '@tagma/server/composition/catalog';
 import type { CollectedDeclarations, CollectedFeeds } from '@tagma/server/platform/contract/wire/manifest';
 import { PickScreen, type PickDraft } from '$lib/features/browser/pick/PickScreen.js';
 import { CheckoutScreen } from '$lib/features/checkout/CheckoutScreen.js';
-import { CallScreen, type CallDraft } from '$lib/features/speech/calls/CallScreen.js';
 import { ThreadOnScreen } from '$lib/features/threads/OnScreen.svelte.js';
 import { ThreadsRepo } from '$lib/features/threads/Repo.js';
 import { ShellOps } from '$lib/features/workspace/ShellOps.js';
@@ -219,25 +218,6 @@ export function appLayers(desktop: DesktopApi | undefined) {
       const addresses = yield* Addresses;
       if ((yield* Host).kind === 'mobile') return new MobileShell(router, workspace, visits, surfaces, addresses, threads, prefetch);
       return new DesktopShell(router, workspace, visits, surfaces, addresses, threads, prefetch, yield* SidePanes, yield* ThreadSeats);
-    }),
-    Layer.provide(CallScreen, function* () {
-      const screen = yield* ThreadOnScreen;
-      return {
-        get host(): CallDraft | null {
-          const host = screen.host;
-          if (host === null) return null;
-          return {
-            get canSend() {
-              return host.canSend;
-            },
-            get thread() {
-              return host.activeId === null ? null : { id: host.activeId, projectId: host.projectId };
-            },
-            stage: (piece) => host.draft.stagePiece(piece),
-            send: () => host.writes.send(),
-          };
-        },
-      };
     }),
     Layer.provide(CheckoutScreen, function* () {
       const screen = yield* ThreadOnScreen;

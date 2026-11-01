@@ -3,7 +3,7 @@
   import { CHAT_DRAFT_ATTACH_ACCEPT } from '@runlith/chat-ui/draftFiles';
   import type { ComposerMentionOption } from '@runlith/chat-ui/composer';
   import DraftAttachmentStrip from '@runlith/chat-ui/DraftAttachmentStrip.svelte';
-  import PieceCards from '$lib/features/speech/calls/PieceCards.svelte';
+  import StagedCards from './StagedCards.svelte';
   import TagIcon from '$lib/features/graph/TagIcon.svelte';
   import { mentionedProject } from '@tagma/server/projects/contract/wire/references';
   import { labelOf } from '$lib/features/workspace/mark.js';
@@ -130,12 +130,7 @@
       {#if dropState !== null}<MentionSlot state={dropState} {incoming} />{/if}
     </div>
   {/if}
-  <PieceCards
-    pieces={draft.pieces}
-    documents={draft.documents}
-    onRemovePiece={(key) => draft.removePiece(key)}
-    onRemoveDocument={(id) => draft.removeDocument(id)}
-  />
+  <StagedCards {draft} />
   <DraftAttachmentStrip images={draft.images} files={draft.files} onRemove={(id) => draft.removeAttachment(id)} />
 {/snippet}
 

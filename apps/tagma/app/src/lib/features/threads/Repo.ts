@@ -1,5 +1,4 @@
 import type { ThreadSelectionQuery } from '@tagma/server/threads/contract/wire/selection';
-import type { Piece } from '@tagma/server/speech/contract/wire/listening';
 import type { FavoriteModels, ModelDefaults, ModelDefaultsWrite } from '@tagma/server/native-harness/contract/wire/modelSelection';
 import { ThreadId } from '@tagma/server/platform/contract/wire/thread';
 import type { HarnessTransport } from '@tagma/server/threads/contract/wire/harness/names';
@@ -387,30 +386,6 @@ export const ThreadsRepo = Repo.define(
             signal,
           })
           .then(bare),
-    }),
-
-    pieceText: mutation({
-      mutator: async (input: { piece: Piece }, { signal }, door) =>
-        (
-          await door.perform(
-            'read_transcript_text',
-            { listening: input.piece.listening, through: input.piece.through, span: input.piece.span ?? undefined },
-            at(input.piece.projectId),
-            { signal },
-          )
-        ).piece,
-    }),
-
-    givePiece: mutation({
-      mutator: async (input: { piece: Piece; thread: { readonly id: string; readonly projectId: number } }, { signal }, door) =>
-        (
-          await door.perform(
-            'give_transcript_piece',
-            { listening: input.piece.listening, through: input.piece.through, span: input.piece.span ?? undefined, thread: input.thread },
-            at(input.piece.projectId),
-            { signal },
-          )
-        ).givenThrough,
     }),
 
     upload: mutation({

@@ -13,8 +13,12 @@ import { DraftFiles } from './DraftFiles.js';
 import * as nativeRecords from './productRecords.js';
 import { type ProductRecord, ProductRecords } from './records.js';
 
-export function testShelf(storage: PlatformStorage = makeStorage(), pictures: IDBFactory = new IDBFactory()): DraftShelf {
-  return new DraftShelf(storage, new DraftFiles(pictures));
+export function testShelf(
+  storage: PlatformStorage = makeStorage(),
+  pictures: IDBFactory = new IDBFactory(),
+  known: (kind: string) => boolean = () => true,
+): DraftShelf {
+  return new DraftShelf(storage, new DraftFiles(pictures), known);
 }
 
 export function declaredCommand(declarations: readonly CommandDeclaration[], name: string, owners: SlotOwners): ComposerSlashCommand {

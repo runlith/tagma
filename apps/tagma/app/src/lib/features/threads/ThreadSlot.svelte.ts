@@ -35,7 +35,8 @@ import { type ProductRecord, ProductRecords, recordOf } from './native/records.j
 import type { Point } from '@runlith/layer/Point';
 import { pickedSummarizer } from './native/compactionWords.js';
 import { PromptStore } from './native/PromptStore.js';
-import { CallPieces } from './native/CallPieces.js';
+import { type StagedKind, StagedKinds } from '$lib/shared/threads/staged.js';
+import { StagedItems } from './native/StagedItems.js';
 import { ThreadUploads, attachmentHandlers } from './native/ThreadUploads.js';
 import { Door } from '$lib/wire/Door.js';
 import { SkillCatalog } from './native/SkillCatalog.svelte.js';
@@ -120,6 +121,7 @@ export class ThreadSlot extends Process<ThreadSlot, SlotArgs>()('ThreadSlot', { 
       new SkillCatalog(library.skills, projectId, scope),
       yield* Door,
       yield* ProductRecords,
+      yield* StagedKinds,
       (yield* Platform).storage.local,
       scope,
       app,
@@ -151,6 +153,7 @@ export class ThreadSlot extends Process<ThreadSlot, SlotArgs>()('ThreadSlot', { 
     readonly skills: SkillCatalog,
     door: Door,
     records: Point<ProductRecord>,
+    kinds: Point<StagedKind>,
     storage: ConstructorParameters<typeof PromptStore>[0],
     private readonly scope: Scope,
     private readonly app: MountedApp,
@@ -163,7 +166,7 @@ export class ThreadSlot extends Process<ThreadSlot, SlotArgs>()('ThreadSlot', { 
     this.selection = new SlotSelection(projectId, options.pane);
     this.writer = writer;
     this.opens = new ThreadOpenWatch(runner, (threadId) => this.showing(threadId));
-    this.draft = new ThreadDraft(shelf, new ThreadUploads(threads, door, projectId), new CallPieces(threads, projectId), () =>
+    this.draft = new ThreadDraft(shelf, new ThreadUploads(threads, door, projectId), new StagedItems(kinds, app, projectId), () =>
       list.titles(),
     );
     this.draft.useKey(this.selection.draftKey(null));

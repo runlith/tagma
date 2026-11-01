@@ -19,6 +19,7 @@ export type SurfaceDeclaration = {
   readonly surface: Surface;
   readonly formerly?: Surface;
   readonly route: string;
+  readonly formerRoutes?: readonly string[];
   readonly place?: string;
   readonly label: string;
   readonly icon: Component<{ class?: string }>;
@@ -53,6 +54,12 @@ const admitsOf = (declaration: SurfaceDeclaration): string | null => {
   if (contributed(declaration.route) && (declaration.payload === undefined || declaration.place !== undefined)) {
     return `a surface under the "${CONTRIBUTED_ROUTE}" route carries its page and keeps no place directory`;
   }
+  if (declaration.formerRoutes !== undefined && !contributed(declaration.route)) {
+    return `only a surface under the "${CONTRIBUTED_ROUTE}" route sends its former routes to itself`;
+  }
+  if (declaration.formerRoutes?.some((route) => route === '' || contributed(route) || route === CONTRIBUTED_ROUTE) === true) {
+    return `a former route is a path outside the "${CONTRIBUTED_ROUTE}" route`;
+  }
   if (declaration.home === true && declaration.rail === undefined) return 'the home surface has no place in the rail';
   if (
     declaration.within !== undefined &&
@@ -69,6 +76,7 @@ const claimsOf = (declaration: SurfaceDeclaration): readonly string[] => {
     ...(declaration.formerly === undefined ? [] : [`Surface "${declaration.formerly}"`]),
     `Route "${declaration.route}"`,
     ...(declaration.place === undefined ? [] : [`Route "${declaration.place}"`]),
+    ...(declaration.formerRoutes ?? []).map((route) => `Route "${route}"`),
     ...(declaration.home === true ? ['The home surface'] : []),
   ];
 };
@@ -87,6 +95,7 @@ type SurfaceIndex = {
   readonly former: ReadonlyMap<Surface, Surface>;
   readonly byRoute: ReadonlyMap<string, SurfaceDeclaration>;
   readonly memberRoutes: ReadonlyMap<string, SurfaceDeclaration>;
+  readonly formerRoutes: ReadonlyMap<string, SurfaceDeclaration>;
   readonly rail: readonly SurfaceDeclaration[];
   readonly home: Surface;
 };
@@ -97,11 +106,13 @@ const indexOf = (items: readonly SurfaceDeclaration[]): SurfaceIndex => {
   const former = new Map<Surface, Surface>();
   const byRoute = new Map<string, SurfaceDeclaration>();
   const memberRoutes = new Map<string, SurfaceDeclaration>();
+  const formerRoutes = new Map<string, SurfaceDeclaration>();
   for (const declaration of items) {
     bySurface.set(declaration.surface, declaration);
     if (declaration.formerly !== undefined) former.set(declaration.formerly, declaration.surface);
     if (contributed(declaration.route)) {
       memberRoutes.set(declaration.route, declaration);
+      for (const route of declaration.formerRoutes ?? []) formerRoutes.set(route, declaration);
       continue;
     }
     byRoute.set(declaration.route, declaration);
@@ -114,6 +125,7 @@ const indexOf = (items: readonly SurfaceDeclaration[]): SurfaceIndex => {
     former,
     byRoute,
     memberRoutes,
+    formerRoutes,
     rail: items.filter((one) => one.rail !== undefined).toSorted((left, right) => (left.rail ?? 0) - (right.rail ?? 0)),
     home: declared.find((one) => one.home === true)?.surface ?? declared.find((one) => one.rail !== undefined)?.surface ?? '',
   };
@@ -212,6 +224,17 @@ export class SurfaceRegistry extends Service<SurfaceRegistry>()('SurfaceRegistry
       if (found !== undefined) return found;
     }
     return undefined;
+  }
+
+  moved(url: URL): string | null {
+    const cut = url.pathname.indexOf('/', 1);
+    if (cut === -1 || this.index.formerRoutes.size === 0) return null;
+    const route = url.pathname.slice(cut + 1);
+    for (let end = route.length; end > 0; end = route.lastIndexOf('/', end - 1)) {
+      const found = this.index.formerRoutes.get(route.slice(0, end));
+      if (found !== undefined) return `${url.pathname.slice(0, cut)}/${found.route}${route.slice(end)}${url.search}`;
+    }
+    return null;
   }
 
   pathOf(project: string, surface: Surface, place: string | null = null): string {

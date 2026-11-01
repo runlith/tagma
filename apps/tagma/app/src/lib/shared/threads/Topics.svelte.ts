@@ -1,10 +1,10 @@
-import type { Piece } from '@tagma/server/speech/contract/wire/listening';
 import { Service } from '@runlith/layer/key';
+import type { StagedItem } from './staged.js';
 
 export type Topic =
   | { readonly kind: 'block'; readonly name: string; readonly title: string; readonly tag: string | null }
   | { readonly kind: 'text'; readonly text: string; readonly born?: (thread: { readonly id: string; readonly projectId: number }) => void }
-  | { readonly kind: 'piece'; readonly piece: Piece; readonly ask?: string };
+  | { readonly kind: 'staged'; readonly item: StagedItem; readonly ask?: string };
 
 export class Topics extends Service<Topics>()('Topics', { tier: 'app' }) {
   static make(): Topics {

@@ -2,9 +2,8 @@ import type { ModelSwitches } from '@runlith/llm/models/description';
 import type { TeamLayer } from '@runlith/agent/collaboration/team';
 import type { ThreadAttachment } from '@runlith/agent/transcript/entries';
 import type { ThreadAttachmentRef } from '@runlith/agent/transcript/attachments';
-import type { Piece } from '@tagma/server/speech/contract/wire/listening';
-import { pieceKey } from '$lib/features/speech/calls/piece.js';
-import type { CallPieces } from './native/CallPieces.js';
+import type { StagedItem } from '$lib/shared/threads/staged.js';
+import type { StagedItems } from './native/StagedItems.js';
 import type { ThreadUploads } from './native/ThreadUploads.js';
 import type { DraftShelf, DraftSlot } from './native/DraftShelf.svelte.js';
 import { Effect } from 'effect';
@@ -51,7 +50,7 @@ export type Draft = {
   images: readonly ChatDraftImage[];
   files: readonly ChatDraftFile[];
   mentions: readonly DraftMention[];
-  pieces: readonly Piece[];
+  items: readonly StagedItem[];
   documents: readonly DraftDocument[];
 };
 
@@ -66,8 +65,10 @@ export interface DraftChoices {
   setTeam(value: TeamLayer | null): void;
 }
 
-const GIVE_ATTEMPTS = 3;
-const GIVE_DEADLINE_MS = 5_000;
+const SENT_ATTEMPTS = 3;
+const SENT_DEADLINE_MS = 5_000;
+
+const sameItem = (one: StagedItem, two: StagedItem): boolean => one.kind === two.kind && one.key === two.key;
 
 export class ThreadDraft implements ChatDraft<Draft> {
   key = $state('new:none');
@@ -75,7 +76,7 @@ export class ThreadDraft implements ChatDraft<Draft> {
   constructor(
     private readonly shelf: DraftShelf,
     private readonly api: ThreadUploads,
-    private readonly calls: CallPieces,
+    private readonly staged: StagedItems,
     private readonly taken: () => ReadonlySet<string> = () => new Set(),
   ) {}
 
@@ -107,8 +108,8 @@ export class ThreadDraft implements ChatDraft<Draft> {
     return this.slot.mentions;
   }
 
-  get pieces(): readonly Piece[] {
-    return this.slot.pieces;
+  get items(): readonly StagedItem[] {
+    return this.slot.items;
   }
 
   get documents(): readonly DraftDocument[] {
@@ -200,7 +201,7 @@ export class ThreadDraft implements ChatDraft<Draft> {
       images: slot.images,
       files: slot.files,
       mentions: slot.mentions,
-      pieces: slot.pieces,
+      items: slot.items,
       documents: slot.documents,
     };
   }
@@ -240,7 +241,7 @@ export class ThreadDraft implements ChatDraft<Draft> {
     slot.files = [];
     slot.restoring = null;
     slot.mentions = [];
-    slot.pieces = [];
+    slot.items = [];
     slot.documents = [];
     slot.lostAttachments = 0;
     this.keep();
@@ -253,7 +254,7 @@ export class ThreadDraft implements ChatDraft<Draft> {
     slot.files = draft.files.map((file) => ({ ...file }));
     slot.restoring = null;
     slot.mentions = draft.mentions.map((mention) => ({ ...mention }));
-    slot.pieces = [...draft.pieces];
+    slot.items = [...draft.items];
     slot.documents = [...draft.documents];
     this.keep();
   }
@@ -264,13 +265,13 @@ export class ThreadDraft implements ChatDraft<Draft> {
       draft.images.length > 0 ||
       draft.files.length > 0 ||
       draft.mentions.length > 0 ||
-      draft.pieces.length > 0 ||
+      draft.items.length > 0 ||
       draft.documents.length > 0
     );
   }
 
   attached(draft: Draft): boolean {
-    return draft.images.length > 0 || draft.files.length > 0 || draft.pieces.length > 0 || draft.documents.length > 0;
+    return draft.images.length > 0 || draft.files.length > 0 || draft.items.length > 0 || draft.documents.length > 0;
   }
 
   textOf(draft: Draft): string {
@@ -280,7 +281,7 @@ export class ThreadDraft implements ChatDraft<Draft> {
   preview(draft: Draft): string {
     const line = clipLabel(draft.text.replace(/\s+/g, ' ').trim(), CHAT_QUEUE_PREVIEW_MAX);
     if (line) return line;
-    const document = draft.documents[0] ?? draft.pieces[0];
+    const document = draft.documents[0] ?? draft.items[0];
     if (document) return clipLabel(document.title, CHAT_QUEUE_PREVIEW_MAX);
     const file = draft.files[0];
     if (file) return draft.files.length === 1 ? clipLabel(file.filename, CHAT_QUEUE_PREVIEW_MAX) : `${draft.files.length} PDFs`;
@@ -297,7 +298,7 @@ export class ThreadDraft implements ChatDraft<Draft> {
       images: draft.images.map((image) => ({ ...image })),
       files: draft.files.map((file) => ({ ...file })),
       mentions: draft.mentions.map((mention) => ({ ...mention })),
-      pieces: [...draft.pieces],
+      items: [...draft.items],
       documents: [...draft.documents],
     };
   }
@@ -309,7 +310,7 @@ export class ThreadDraft implements ChatDraft<Draft> {
   opening(draft: Draft): ChatTurnOpening {
     const refs = draft.mentions.map((mention) => mentionReference(mention.name, mention.title)).join(' ');
     const previews = [
-      ...[...draft.pieces, ...draft.documents].map((document): ThreadAttachment => ({
+      ...[...draft.items, ...draft.documents].map((document): ThreadAttachment => ({
         mime: 'text/markdown',
         url: '',
         filename: document.title,
@@ -339,17 +340,17 @@ export class ThreadDraft implements ChatDraft<Draft> {
     const receipts = this.slot.uploaded;
     const attachments: ThreadAttachmentRef[] = [];
     const staged = [
-      ...draft.pieces.map((piece) => ({
-        receipt: `${sessionId}:piece:${pieceKey(piece)}:${piece.through}`,
-        title: piece.title,
-        read: () => this.calls.file(piece),
-        piece,
+      ...draft.items.map((item) => ({
+        receipt: `${sessionId}:${item.kind}:${item.key}:${JSON.stringify(item.data)}`,
+        title: item.title,
+        read: () => this.staged.file(item),
+        item,
       })),
       ...draft.documents.map((document) => ({
         receipt: `${sessionId}:document:${document.id}`,
         title: document.title,
         read: async () => new File([document.text], 'document.md', { type: 'text/markdown' }),
-        piece: null,
+        item: null,
       })),
     ];
     for (const one of staged) {
@@ -360,9 +361,9 @@ export class ThreadDraft implements ChatDraft<Draft> {
       }
       const file = await one.read().catch((error: unknown) => error as Error);
       if (file instanceof Error)
-        return { status: 'failed', notice: { tone: 'error', message: `The call piece could not be read: ${file.message}` } };
+        return { status: 'failed', notice: { tone: 'error', message: `${one.title} could not be read: ${file.message}` } };
       if (file === null) {
-        if (one.piece !== null) this.removePiece(pieceKey(one.piece));
+        if (one.item !== null) this.unstage(one.item);
         continue;
       }
       const result = await this.api.upload(sessionId, file);
@@ -383,7 +384,7 @@ export class ThreadDraft implements ChatDraft<Draft> {
       receipts.set(receipt, result.attachment.id);
     }
     if (attachments.length === 0 && draft.text.trim() === '' && draft.mentions.length === 0) {
-      return { status: 'failed', notice: { tone: 'error', message: 'Nothing new was left on the call: that speech was already given.' } };
+      return { status: 'failed', notice: { tone: 'error', message: 'Nothing was left to send: what was staged holds nothing new.' } };
     }
     return { status: 'composed', attachments };
   }
@@ -393,30 +394,29 @@ export class ThreadDraft implements ChatDraft<Draft> {
   }
 
   private async acceptance(threadId: string, draft: Draft): Promise<ChatNotice | null> {
-    const unmoved = (await Promise.all(draft.pieces.map((piece) => this.given(piece, threadId)))).filter(
-      (title): title is string => title !== null,
-    );
+    const noted = draft.items.filter((item) => this.staged.noted(item));
+    const unmoved = (await Promise.all(noted.map((item) => this.sent(item, threadId)))).filter((title): title is string => title !== null);
     if (unmoved.length === 0) return null;
     return {
       tone: 'error',
-      message: `The call piece reached the thread, but its mark on the call did not move (${unmoved.join(', ')}). The next piece may repeat it.`,
+      message: `What was staged reached the thread, but its owner did not record the sending (${unmoved.join(', ')}). The next one may repeat it.`,
     };
   }
 
-  private async given(piece: Piece, threadId: string): Promise<string | null> {
-    const deadline = new Promise<'late'>((resolve) => setTimeout(() => resolve('late'), GIVE_DEADLINE_MS));
-    for (let attempt = 0; attempt < GIVE_ATTEMPTS; attempt += 1) {
+  private async sent(item: StagedItem, threadId: string): Promise<string | null> {
+    const deadline = new Promise<'late'>((resolve) => setTimeout(() => resolve('late'), SENT_DEADLINE_MS));
+    for (let attempt = 0; attempt < SENT_ATTEMPTS; attempt += 1) {
       const done = await Promise.race([
-        this.calls.give(piece, threadId).then(
-          () => 'given' as const,
+        this.staged.sent(item, threadId).then(
+          () => 'noted' as const,
           () => 'refused' as const,
         ),
         deadline,
       ]);
-      if (done === 'given') return null;
+      if (done === 'noted') return null;
       if (done === 'late') break;
     }
-    return piece.title;
+    return item.title;
   }
 
   async attach(files: readonly File[]): Promise<DraftAttachResult> {
@@ -468,16 +468,15 @@ export class ThreadDraft implements ChatDraft<Draft> {
     this.keep();
   }
 
-  stagePiece(piece: Piece): void {
+  stage(item: StagedItem): void {
     const slot = this.slot;
-    const key = pieceKey(piece);
-    slot.pieces = [...slot.pieces.filter((standing) => pieceKey(standing) !== key), piece];
+    slot.items = [...slot.items.filter((standing) => !sameItem(standing, item)), item];
     this.keep();
   }
 
-  removePiece(key: string): void {
+  unstage(item: StagedItem): void {
     const slot = this.slot;
-    slot.pieces = slot.pieces.filter((piece) => pieceKey(piece) !== key);
+    slot.items = slot.items.filter((standing) => !sameItem(standing, item));
     this.keep();
   }
 

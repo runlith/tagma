@@ -7,6 +7,7 @@
   import { Door } from '$lib/wire/Door.js';
   import { Live } from '$lib/wire/Live.js';
   import { SoundChannel } from '$lib/wire/SoundChannel.js';
+  import { TagmaMethods } from '../views/methods.js';
   import ResultFrame from '../views/ResultFrame.svelte';
   import type { ViewDocument } from '../views/ViewBridge.js';
   import ViewFrame from '../views/ViewFrame.svelte';
@@ -34,7 +35,8 @@
   const presence = ThreadPresence.use();
   const sets = ViewSets.use();
   const links = ExternalLinks.use();
-  const owners = $derived({ door, live, sound, presence, shell: shell ?? appShell, sets, links });
+  const methods = TagmaMethods.use();
+  const owners = $derived({ door, live, sound, presence, shell: shell ?? appShell, sets, links, methods: methods.items });
 
   const project = $derived(projectId);
   const appId = $derived(tagmaApp);

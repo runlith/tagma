@@ -1,7 +1,7 @@
 import type { PlatformStorage } from '@runlith/layer/Platform';
 import type { ModelSwitches } from '@runlith/llm/models/description';
 import { type DraftDocument, type DraftMention, type DraftPlace, MAIN_CHECKOUT } from '../Draft.svelte.js';
-import { Piece } from '@tagma/server/speech/contract/wire/listening';
+import type { StagedItem } from '$lib/shared/threads/staged.js';
 import { TeamLayer, TeamModelKey } from '@runlith/agent/collaboration/team';
 import { Option, Schema } from 'effect';
 
@@ -10,7 +10,7 @@ export type StoredDraft = {
   name: string;
   text: string;
   mentions: readonly DraftMention[];
-  pieces: readonly Piece[];
+  items: readonly StagedItem[];
   documents: readonly DraftDocument[];
   type: string | null;
   account: string | null;
@@ -30,13 +30,16 @@ const SPEND_STEPS = 10;
 const SPEND_FROM_FIVE: Readonly<Record<number, number>> = { 1: 1, 2: 3, 3: 5, 4: 8, 5: 10 };
 
 export class DraftStore {
-  constructor(private readonly storage: PlatformStorage) {}
+  constructor(
+    private readonly storage: PlatformStorage,
+    private readonly known: (kind: string) => boolean,
+  ) {}
 
   read(key: string): StoredDraft | null {
     const raw = this.storage.getItem(DRAFT_KEY + key);
     if (raw === null) return null;
     try {
-      return draftOf(JSON.parse(raw));
+      return draftOf(JSON.parse(raw), this.known);
     } catch {
       return null;
     }
@@ -107,7 +110,7 @@ function readIndex(storage: PlatformStorage): readonly string[] {
   }
 }
 
-function draftOf(value: unknown): StoredDraft | null {
+function draftOf(value: unknown, known: (kind: string) => boolean): StoredDraft | null {
   if (typeof value !== 'object' || value === null) return null;
   const row = value as Record<string, unknown>;
   if (typeof row.text !== 'string' || typeof row.name !== 'string') return null;
@@ -116,7 +119,7 @@ function draftOf(value: unknown): StoredDraft | null {
     name: row.name,
     text: row.text,
     mentions: mentionsOf(row.mentions),
-    pieces: piecesOf(row.pieces),
+    items: itemsOf(row.items, known),
     documents: documentsOf(row.documents),
     type: typeof row.type === 'string' ? row.type : null,
     account: typeof row.account === 'string' ? row.account : null,
@@ -179,13 +182,15 @@ function documentsOf(value: unknown): readonly DraftDocument[] {
   });
 }
 
-const pieceOf = Schema.decodeUnknownOption(Piece);
+const itemOf = Schema.decodeUnknownOption(
+  Schema.Struct({ kind: Schema.String, key: Schema.String, title: Schema.String, data: Schema.Unknown }),
+);
 
-function piecesOf(value: unknown): readonly Piece[] {
+function itemsOf(value: unknown, known: (kind: string) => boolean): readonly StagedItem[] {
   if (!Array.isArray(value)) return [];
-  return value.flatMap((item: unknown) => {
-    const piece = pieceOf(item);
-    return piece._tag === 'Some' ? [piece.value] : [];
+  return value.flatMap((stored: unknown) => {
+    const item = itemOf(stored);
+    return item._tag === 'Some' && known(item.value.kind) ? [item.value] : [];
   });
 }
 

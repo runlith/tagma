@@ -6,7 +6,7 @@ import type { ShellPort } from '$lib/features/workspace/ShellOps.js';
 import type { Door } from '$lib/wire/Door.js';
 import type { LiveConnection } from '$lib/wire/Live.js';
 import type { SoundChannel } from '$lib/wire/SoundChannel.js';
-import { speechMethod } from '../speech/viewSpeech.js';
+import type { TagmaMethod } from '../views/methods.js';
 import { argumentsOf, needed, openLink } from '../views/params.js';
 import { resourceSubscription } from '../views/resourceFeed.js';
 import { INVALID_PARAMS, type ViewCall, type ViewHost, type ViewParams, ViewRefusal } from '../views/ViewBridge.js';
@@ -29,6 +29,7 @@ export type TagmaAppHostOwners = {
   readonly shell: ShellPort;
   readonly sets: ViewSets;
   readonly links: LinkPort;
+  readonly methods: readonly TagmaMethod[];
 };
 
 export const THREAD_CHANGED = 'tagma/notifications/thread';
@@ -128,12 +129,14 @@ const answered = <A extends { readonly status: string }>(answer: A): Extract<A, 
 };
 
 export function tagmaAppHost(owners: TagmaAppHostOwners, mount: TagmaAppMount): ViewHost {
-  const { door, live, sound, presence, shell, sets, links } = owners;
+  const { door, live, sound, presence, shell, sets, links, methods } = owners;
   const lens = { project: String(mount.projectId) };
   const at = { app: mount.tagmaApp, view: mount.view };
   const keyOf = (params: ViewParams): string => needed(params, 'key');
+  const contributed = methods.map((declared) => [`tagma/${declared.name}`, declared] as const);
   return {
     methods: {
+      ...Object.fromEntries(contributed.map(([name, declared]) => [name, declared.method({ door, live, sound }, mount)])),
       'tools/call': async (params, { signal }) =>
         answered(
           await door.perform(
@@ -174,9 +177,13 @@ export function tagmaAppHost(owners: TagmaAppHostOwners, mount: TagmaAppMount): 
       },
       'tagma/thread': async (params, call) => watchThread(presence, needed(params, 'threadId'), call),
       'tagma/thread/unwatch': async (params, call) => unwatchThread(needed(params, 'threadId'), call),
-      'tagma/speech': speechMethod(door, live, sound, mount.projectId),
     },
-    capabilities: { 'tagma/open': {}, 'tagma/storage': {}, 'tagma/thread': {}, 'tagma/speech': {} },
+    capabilities: {
+      ...Object.fromEntries(contributed.map(([name]) => [name, {}])),
+      'tagma/open': {},
+      'tagma/storage': {},
+      'tagma/thread': {},
+    },
     subscribe: resourceSubscription(
       live,
       (uri) => (client) => client['views.resource.subscribe']({ projectId: mount.projectId, ...at, uri }),
