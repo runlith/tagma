@@ -68,6 +68,11 @@ export const names: Builtin<'names', NamesParams> = {
             path: 'packages/chat-ui/stand/recorder.ts',
             why: 'One subject: a DOM recording lifecycle — trusted input, wheel and scroll timing and command evidence, own scroller writes and the movement they leave running, row measurements, anchor history and final ResizeObserver samples share the same pending capture and frame boundary.',
           },
+          {
+            lines: 704,
+            path: 'packages/code-facts/src/languages/js/symbols.ts',
+            why: "One subject: the JS/TS implementation of SymbolReader — reading a text's references, names and exports, and placing member spellings on checker types over handed texts, share the same spelling, receiver and script helpers.",
+          },
         ],
         lines: 700,
       },

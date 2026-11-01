@@ -1,4 +1,5 @@
-import type { Layer } from 'effect';
+import { Layer } from 'effect';
+import { unofferedLayer } from '../installation/unoffered.js';
 import type { HttpClient } from 'effect/http';
 import type { ProcessProvenance } from '../platform/contract/wire/provenance.js';
 import type { Installation } from '../installation/contract/wire/manifest.js';
@@ -48,3 +49,13 @@ export type Bindings = {
   readonly nextInstallation: (place: NextPlace) => Layer.Layer<NextInstallation, never, NextNeeds>;
   readonly door: (place: DoorPlace) => Layer.Layer<never, never, DoorNeeds>;
 };
+
+export type BindingChoice = {
+  readonly nextInstallation?: Bindings['nextInstallation'];
+  readonly door?: Bindings['door'];
+};
+
+export const boundOf = (choice: BindingChoice): Bindings => ({
+  nextInstallation: choice.nextInstallation ?? (() => unofferedLayer),
+  door: choice.door ?? (() => Layer.empty),
+});

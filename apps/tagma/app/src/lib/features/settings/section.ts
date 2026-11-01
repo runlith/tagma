@@ -4,7 +4,7 @@ import type { HostKind } from '@runlith/layer/Host';
 import { Point } from '@runlith/layer/Point';
 import type { Shown } from '@runlith/layer/svelte/payload';
 import type { Component } from 'svelte';
-import type { Gated } from '$lib/wire/access.js';
+import { type Gated, gatedBy } from '$lib/wire/access.js';
 import type { SettingEntry, SettingsCatalog } from '$lib/features/settings/SettingsCatalog.svelte.js';
 
 export type SectionProps = {
@@ -47,6 +47,7 @@ export const SectionContributions = Point.define<SectionContribution>()('Section
   tier: 'app',
   key: (contribution) => contribution.id,
   order: (contribution) => contribution.order,
+  draws: gatedBy('write'),
 });
 
 export function pick(entries: readonly SettingEntry[], ids: readonly string[]): readonly SettingEntry[] {

@@ -103,14 +103,53 @@ describe('HeldHistories', () => {
     expect(live.held('t')?.history).toBe(fresh);
   });
 
-  test('a claim hides what stood until its writer settles, and marks what a reader held as no longer current', () => {
+  test('while a writer is in flight readers still read what stood, but cannot publish over the claim', () => {
     const live = new HeldHistories();
     const doc = weighed(live);
     live.settle(live.claim('t', {}), doc, standing(doc, 3));
-    const held = live.held('t');
-    live.claim('t', {});
+    const before = live.held('t');
+    const writer = unit();
+    live.claim('t', writer.unit);
+    const during = live.held('t');
+    expect(during?.history).toBe(doc);
+    expect(before !== null && live.current('t', before.entry)).toBe(false);
+    const read = weighed(live);
+    if (during !== null) live.offer('t', { entry: during.entry }, read, standing(read, 3));
+    live.offer('t', live.glimpse('t', {}), read, standing(read, 3));
+    expect(live.held('t')?.history).toBe(doc);
+    writer.end.close();
+    expect(live.held('t')?.history).toBe(doc);
+    live.offer('t', live.glimpse('t', {}), read, standing(read, 3));
+    expect(live.held('t')?.history).toBe(read);
+  });
+
+  test('a claim taken over another writer in flight never restores what it read when it ends unsettled', () => {
+    const live = new HeldHistories();
+    const doc = weighed(live);
+    live.settle(live.claim('t', {}), doc, standing(doc, 1));
+    const first = live.claim('t', {});
+    const second = unit();
+    live.claim('t', second.unit);
+    const written = weighed(live);
+    live.settle(first, written, standing(written, 1));
+    second.end.close();
     expect(live.held('t')).toBeNull();
-    expect(held !== null && live.current('t', held.entry)).toBe(false);
+  });
+
+  test('threads with a run driven here are held past the bound, and idle ones leave first', () => {
+    const live = new HeldHistories(120 + 160);
+    let driven = new Set(['a', 'b', 'c']);
+    live.serveDriven(() => driven);
+    for (const id of ['first', 'a', 'b', 'second', 'c']) {
+      const next = weighed(live, 100);
+      live.settle(live.claim(id, {}), next, standing(next, 1));
+    }
+    expect(live.held('first')).toBeNull();
+    for (const id of ['a', 'b', 'c', 'second']) expect(live.held(id)).not.toBeNull();
+    driven = new Set(['c']);
+    live.reconsider();
+    expect([live.held('a'), live.held('b'), live.held('second')].filter((held) => held !== null)).toHaveLength(1);
+    expect(live.held('c')).not.toBeNull();
   });
 
   test('a claim whose unit ends without settling stops hiding the thread from readers', () => {

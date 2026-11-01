@@ -6,7 +6,6 @@
   import * as Dialog from '$lib/shared/ui/dialog/index.js';
   import { Input } from '$lib/shared/ui/input/index.js';
   import Told from '$lib/shared/Told.svelte';
-  import { Access, gateOf } from '$lib/wire/access.js';
   import { CreationFields, type CreationDraft, type CreationField, type CreationFieldProps } from './creation.js';
   import NewProjectCatalogs from './NewProjectCatalogs.svelte';
   import { folderName, ProjectCreation, refusedOf, type Refused } from './ProjectCreation.svelte.js';
@@ -16,17 +15,15 @@
 
   const creation = ProjectCreation.use();
   const fields = CreationFields.use();
-  const gate = gateOf(Access.find());
   const drawn = (id: string): boolean => {
     const field = fields.find(id);
-    return field !== undefined && gate.allows(field.right);
+    return field !== undefined && fields.drawn(field) === field;
   };
 
   let draftName = $state('');
   let draftPath = $state('');
   let draftStorage = $state<StorageMode>('stealth');
   let draftCatalogs = $state<readonly string[] | undefined>();
-  let draftRemote = $state('');
   let contributed = $state.raw<Readonly<Record<string, unknown>>>({});
   let refused = $state.raw<Refused | null>(null);
 
@@ -61,12 +58,10 @@
     const catalogs = draftCatalogs;
     if (catalogs === undefined) return;
     refused = null;
-    const graphRemote = draftStorage === 'stealth' && draftRemote.trim() !== '' ? draftRemote.trim() : undefined;
     try {
       await creation.create({
         ...draft,
         catalogs,
-        graphRemote,
         contributed: Object.fromEntries(Object.entries(contributed).filter(([id]) => drawn(id))),
       });
     } catch (error) {
@@ -78,7 +73,6 @@
     draftPath = '';
     draftStorage = 'stealth';
     draftCatalogs = undefined;
-    draftRemote = '';
     contributed = {};
   }
 </script>
@@ -121,19 +115,9 @@
           </label>
         {/each}
       </div>
-      {#if draftStorage === 'stealth'}
-        <label class="grid gap-1.5">
-          <span class="eyebrow text-muted-foreground">Graph remote</span>
-          <Input placeholder="git@github.com:you/graph.git" bind:value={draftRemote} class="font-mono text-small" />
-          <span class="text-small text-muted-foreground">
-            Optional. A private git repository Tagma keeps the graph in: a graph it holds comes back here, an empty one receives this graph.
-          </span>
-        </label>
-      {/if}
       <NewProjectCatalogs bind:value={draftCatalogs} />
       <PointView
         point={fields}
-        gate={gate.shown}
         propsOf={(field: CreationField): CreationFieldProps => ({
           draft,
           value: contributed[field.id],

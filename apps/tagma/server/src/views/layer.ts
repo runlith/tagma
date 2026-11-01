@@ -16,11 +16,13 @@ export const viewsLayer: Layer.Layer<
   Effect.gen(function* () {
     const shelf = yield* makeShelf;
     const points = yield* TagmaAppPoints;
-    yield* Effect.acquireRelease(points.declare(shelf.viewsPoint), (withdraw) => Effect.sync(withdraw));
-    yield* Effect.acquireRelease(points.declare(shelf.resultsPoint), (withdraw) => Effect.sync(withdraw));
-    yield* Effect.acquireRelease(points.declare(shelf.surfaces.point), (withdraw) => Effect.sync(withdraw));
-    yield* Effect.acquireRelease(points.declare(shelf.panes.point), (withdraw) => Effect.sync(withdraw));
-    yield* Effect.acquireRelease(points.declare(shelf.launchers.point), (withdraw) => Effect.sync(withdraw));
+    const { views, results, surfaces, panes, launchers } = shelf.contributions;
+    const withdrawn = (withdraw: () => void) => Effect.sync(withdraw);
+    yield* Effect.acquireRelease(points.declare(views.point, views.register), withdrawn);
+    yield* Effect.acquireRelease(points.declare(results.point, results.register), withdrawn);
+    yield* Effect.acquireRelease(points.declare(surfaces.point, surfaces.register), withdrawn);
+    yield* Effect.acquireRelease(points.declare(panes.point, panes.register), withdrawn);
+    yield* Effect.acquireRelease(points.declare(launchers.point, launchers.register), withdrawn);
     return Context.make(TagmaAppViews, shelf).pipe(Context.add(ViewStorage, makeValues({ shelf })));
   }),
 );

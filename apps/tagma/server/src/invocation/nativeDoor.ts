@@ -38,14 +38,14 @@ import { operationGateAt } from './refusals.js';
 import { journaled } from './journaled.js';
 import { routedSeams } from '../graph/serving/routing.js';
 import { answeredOutcome, triggered } from './perform.js';
-import { admitOperation } from './admission/callers.js';
+import { admitCaller } from './admission/callers.js';
 import { OperationCatalog } from './contract/service/catalog.js';
 import { inputParsing, inputRefusal } from './contract/service/input.js';
 import { answerDisplay, presentationOf, refusalText, refusedAnswer, voiced } from './presentation.js';
 import type { WorkingOrigins } from '../workspace/contract/service/places.js';
 
 const unprepared = (gate: GateRefusal): ToolFailed =>
-  new ToolFailed({ reason: gate.reason, code: gate.code, unblock: gate.unblock, words: gate.words?.text });
+  new ToolFailed({ reason: gate.reason, code: gate.code, unblock: gate.unblock, words: gate.words?.text, right: gate.right });
 
 const unresolved = (id: OperationId, failure: DynamicOperationFailure): ToolFailed =>
   new ToolFailed({ reason: `${id} could not resolve what the act is about: ${saidBy(failure)} — nothing was done, so call it again.` });
@@ -262,7 +262,7 @@ function nativeSurface<Owners>(ctx: NativeCall<Owners>) {
               at,
               call.toolCallId,
               Effect.andThen(
-                admitOperation(id, caller, input),
+                admitCaller(id, caller),
                 triggered(id, caller, bound.execute(prepared.facts.bodyInput ?? input, prepared.value, caller)),
               ),
               call.progress?.stage,

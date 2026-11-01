@@ -1,6 +1,5 @@
-import { Console, Effect, Option } from 'effect';
+import { Console, Effect } from 'effect';
 import { Argument, Command, Flag } from 'effect/cli';
-import type { GraphRemote } from '../contract/wire/remote.js';
 import { PROJECT_SETTINGS } from '../contract/wire/storage.js';
 import { STORAGE_MODES } from '../../projects/contract/wire/project.js';
 import type { DoorLens, Perform } from '../../platform/contract/service/perform.js';
@@ -18,7 +17,7 @@ export const renderProjects = (rows: readonly Project[]): string =>
   rows
     .map(
       (row) =>
-        `${row.name} (${row.id}) ${row.rootPath} ${row.kind === 'global' ? '[cross-project]' : row.kind === 'group' ? '[group]' : `[${row.repoKey}]`} [${row.storage}] [${row.servesFrom}]${row.strictProvenance ? ' [strict-provenance]' : ''}${row.private ? ' [private]' : ''}${row.graphRemote === null ? '' : ` [remote ${row.graphRemote}]`}`,
+        `${row.name} (${row.id}) ${row.rootPath} ${row.kind === 'global' ? '[cross-project]' : row.kind === 'group' ? '[group]' : `[${row.repoKey}]`} [${row.storage}] [${row.servesFrom}]${row.strictProvenance ? ' [strict-provenance]' : ''}${row.private ? ' [private]' : ''}`,
     )
     .join('\n');
 
@@ -75,51 +74,5 @@ export const policy = ({ perform, here, render }: PolicyCli) => {
       }),
   ).pipe(Command.withDescription(`move a project's graph to another storage: ${STORAGE_MODES.join(' | ')}`));
 
-  const remote = Command.make(
-    'remote',
-    {
-      json,
-      ref: Argument.String('name|id'),
-      remote: Argument.String('remote').pipe(
-        Argument.optional,
-        Argument.withDescription(
-          'git@host:owner/graph.git, an https URL or the absolute path of a bare repository; omitted, show the remote',
-        ),
-      ),
-      off: Flag.Boolean('off').pipe(
-        Flag.withDefault(false),
-        Flag.withDescription('take the remote away: the graph lives on this machine alone'),
-      ),
-      restore: Flag.Boolean('restore').pipe(
-        Flag.withDefault(false),
-        Flag.withDescription('set this machine’s graph aside and take the graph the remote holds'),
-      ),
-    },
-    ({ json, ref, remote, off, restore }) =>
-      Effect.gen(function* () {
-        const lens = here(yield* CurrentInvocation);
-        const named = Option.getOrNull(remote);
-        const answer =
-          named === null && !off
-            ? { ...(yield* perform(REGISTRY_OPERATIONS.read_graph_remote, { ref }, lens)), setAside: null }
-            : yield* perform(REGISTRY_OPERATIONS.set_graph_remote, { ref, remote: off ? null : named, restore }, lens);
-        if (json) return yield* print(answer, true);
-        yield* Console.log(renderRemote(answer.remote, answer.setAside));
-      }),
-  ).pipe(
-    Command.withDescription(
-      'the private git remote of a project’s stealth graph — a stealth project’s whole graph, a team project’s stealth blocks: show it, set it and exchange now, take it away with --off, or take the graph it holds with --restore',
-    ),
-  );
-
-  return [set, storage, remote] as const;
+  return [set, storage] as const;
 };
-
-const renderRemote = (state: GraphRemote, setAside: string | null): string =>
-  [
-    state.remote === null ? 'remote: none — the graph lives on this machine alone' : `remote: ${state.remote} — holds ${state.holds}`,
-    ...state.branches.map((one) => `  ${one.branch}: ${one.state}`),
-    state.exchanging ? 'exchanging now' : `last exchange: ${state.exchangedAt ?? 'none since the server started'}`,
-    ...(state.failure === null ? [] : [`failed at ${state.failure.at}: ${state.failure.message}`]),
-    ...(setAside === null ? [] : [`this machine's graph set aside in ${setAside}`]),
-  ].join('\n');

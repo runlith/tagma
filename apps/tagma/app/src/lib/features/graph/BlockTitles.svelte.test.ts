@@ -38,7 +38,6 @@ const registered: readonly Project[] = ['home', 'other'].map((name, index) => ({
   private: false,
   kind: 'folder',
   storage: 'team',
-  graphRemote: null,
   servesFrom: 'files',
   createdAt: '2026-10-10T00:00:00Z',
 }));

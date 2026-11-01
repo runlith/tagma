@@ -74,15 +74,21 @@ describe('Point', () => {
     await rt.unmount();
   });
 
-  it('takes members only while its scope starts when it joins at start: a later condition or run-time source is refused', async () => {
+  it('takes members only during its scope’s synchronous start when it joins at start: a chunk, a later condition or a run-time source is refused', async () => {
     const Fixed = Point.define<Entry>()('PointTest.Fixed', { tier: 'app', key: (entry) => entry.id, joins: 'start' });
+    const Unused = Point.define<Entry>()('PointTest.Unused', { tier: 'app', key: (entry) => entry.id, joins: 'start' });
     const gate = new Gate();
     const failures: unknown[] = [];
     const rt = mountApp(
       Layer.mergeAll(
         Fixed,
+        Unused,
         Fixed.contribute('core', { id: 'core', order: 0 }),
-        Layer.when(Gate, (open) => open.on, Fixed.contribute('late', { id: 'late', order: 1 })),
+        Layer.when(
+          () => true,
+          () => Promise.resolve({ default: Fixed.contribute('chunk', { id: 'chunk', order: 1 }) }),
+        ),
+        Layer.when(Gate, (open) => open.on, Fixed.contribute('late', { id: 'late', order: 2 })),
       ),
       Layer.of(Gate, gate),
       { onFailure: (error) => failures.push(error) },
@@ -94,8 +100,12 @@ describe('Point', () => {
     flushSync();
     await flush();
     expect(fixed.items.map((entry) => entry.id)).toEqual(['core']);
-    expect((failures[0] as ServiceStartError).cause).toMatchObject({ name: 'RegistryRefusal', contributor: 'late' });
-    expect(() => fixed.register('views', { id: 'view', order: 2 })).toThrow(/only while its scope starts/);
+    expect(failures.map((failure) => (failure as ServiceStartError).cause)).toEqual([
+      expect.objectContaining({ name: 'RegistryRefusal', contributor: 'chunk' }),
+      expect.objectContaining({ name: 'RegistryRefusal', contributor: 'late' }),
+    ]);
+    expect(() => fixed.register('views', { id: 'view', order: 3 })).toThrow(/only while its scope starts/);
+    expect(() => rt.get(Unused).register('views', { id: 'view', order: 0 })).toThrow(/only while its scope starts/);
     await rt.unmount();
   });
 
@@ -166,20 +176,40 @@ describe('PointView', () => {
     framed.remove();
   });
 
-  it('draws what its gate answers for each item: the payload, another one in its place, or nothing', () => {
-    const components = pointOf<Shown<{ label: string }> & { readonly id: string }>();
-    components.register(
-      'core',
-      { id: 'open', payload: { component: Labelled } },
-      { id: 'offered', payload: { component: Labelled } },
-      { id: 'closed', payload: { component: Labelled } },
+  it('draws each item as its point’s definition answers from a service it reads: the item, another payload, or nothing', async () => {
+    type Panel = Shown<{ label: string }> & { readonly id: string };
+    const Drawn = Point.define<Panel>()('PointTest.Drawn', {
+      tier: 'app',
+      key: (panel) => panel.id,
+      *draws() {
+        const gate = yield* Gate.optional();
+        return (panel) =>
+          panel.id === 'offered' ? { ...panel, payload: { component: Offered } } : panel.id === 'closed' && gate?.on ? null : panel;
+      },
+    });
+    const gate = new Gate();
+    const rt = mountApp(
+      Layer.mergeAll(
+        Drawn,
+        Drawn.contribute(
+          'core',
+          { id: 'open', payload: { component: Labelled } },
+          { id: 'offered', payload: { component: Labelled } },
+          { id: 'closed', payload: { component: Labelled } },
+        ),
+      ),
+      Layer.of(Gate, gate),
     );
-    const gate = (item: { readonly id: string; readonly payload: Shown<{ label: string }>['payload'] }) =>
-      item.id === 'open' ? item.payload : item.id === 'offered' ? { component: Offered } : null;
-    const shown = show((target) => mount(ComponentsHost, { target, props: { point: components, gate } }));
+    await flush();
+    const shown = show((target) => mount(ComponentsHost, { target, props: { point: rt.get(Drawn) } }));
+    flushSync();
+    expect(shown.target.querySelectorAll('[data-item]')).toHaveLength(2);
+    expect(shown.target.querySelectorAll('[data-offer]')).toHaveLength(1);
+
+    gate.on = true;
     flushSync();
     expect(shown.target.querySelectorAll('[data-item]')).toHaveLength(1);
-    expect(shown.target.querySelectorAll('[data-offer]')).toHaveLength(1);
     shown.remove();
+    await rt.unmount();
   });
 });

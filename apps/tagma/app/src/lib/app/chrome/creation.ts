@@ -2,7 +2,7 @@ import { Point } from '@runlith/layer/Point';
 import type { Shown } from '@runlith/layer/svelte/payload';
 import type { StorageMode } from '@tagma/server/projects/contract/wire/project';
 import type { Told } from '$lib/wire/told.js';
-import type { Gated } from '$lib/wire/access.js';
+import { type Gated, gatedBy } from '$lib/wire/access.js';
 
 export type CreationDraft = { readonly name: string; readonly rootPath: string; readonly storage: StorageMode };
 
@@ -22,4 +22,5 @@ export const CreationFields = Point.define<CreationField>()('CreationFields', {
   tier: 'app',
   key: (field) => field.id,
   order: (field) => field.order,
+  draws: gatedBy('write'),
 });

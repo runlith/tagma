@@ -5318,10 +5318,6 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead apps/tagma/server/src/graph/contract/service/remote.ts#RemoteSet",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "dead-code dead apps/tagma/server/src/graph/contract/service/serving.ts#DetachedCheckout",
           "owner": "5a3bed29"
         },
@@ -5651,14 +5647,6 @@ fields:
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/graph/contract/wire/references.ts#BlockAddress",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/graph/contract/wire/remote.ts#REMOTE_BRANCH_STATES",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/graph/contract/wire/remote.ts#REMOTE_HOLDINGS",
           "owner": "5a3bed29"
         },
         {
@@ -6106,14 +6094,6 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead apps/tagma/server/src/graph/serving/remotes.ts#RemoteBindings",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/graph/serving/remotes.ts#GraphRemoteDriver",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "dead-code dead apps/tagma/server/src/graph/serving/routing.ts#ROUTED",
           "owner": "5a3bed29"
         },
@@ -6151,10 +6131,6 @@ fields:
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/graph/storage/move.ts#LayerMove",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/graph/storage/remote.ts#PushOutcome",
           "owner": "5a3bed29"
         },
         {
@@ -10762,10 +10738,6 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead apps/tagma/server/src/views/sections.ts#SectionPointName",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "dead-code dead apps/tagma/server/src/workspace/assignments/lineage.ts#lineageOf",
           "owner": "5a3bed29"
         },
@@ -14017,10 +13989,6 @@ fields:
         },
         {
           "fingerprint": "dead-code dead packages/agent/src/tool/display.ts#ToolDisplayForm",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead packages/agent/src/tool/refusal.ts#ToldRefusal",
           "owner": "5a3bed29"
         },
         {
@@ -17281,10 +17249,6 @@ fields:
         },
         {
           "fingerprint": "dead-code dead packages/layer/src/key.ts#ServiceDefinition",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead packages/layer/src/key.ts#Optional",
           "owner": "5a3bed29"
         },
         {

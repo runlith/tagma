@@ -1,15 +1,18 @@
 import { type ThreadBorderFailed, ThreadCallBroke } from '@runlith/agent/thread/ThreadBorder';
 import { Effect } from 'effect';
 import { stored } from '../../platform/store/crossing.js';
-import { type TagmaAppContribution, type TagmaAppPoint, TagmaAppPointRefused } from '../../tagma-apps/contract/service/points.js';
+import { ContributionPoint } from '../../platform/contract/service/contribution.js';
+import { type TagmaAppContribution, TagmaAppPointRefused, type TagmaAppRegister } from '../../tagma-apps/contract/service/points.js';
 import { TagmaApps } from '../../tagma-apps/contract/service/supervision.js';
 import { ENDED_REASON, EndingTools, TAGMA_APP_BINDING } from '../contract/wire/tagmaAppEndings.js';
 import type { ThreadEvent, ThreadEventRecipient } from '../events/happened.js';
 import type { ThreadSummary } from '../list/summary.js';
 
+export const ENDINGS = new ContributionPoint<never, EndingTools>('threads/endings', { name: 'on', schema: EndingTools });
+
 type Hook = { readonly tool: string; readonly contribution: TagmaAppContribution<EndingTools> };
 
-const refused = (reason: string) => new TagmaAppPointRefused({ point: 'on', reason });
+const refused = (reason: string) => new TagmaAppPointRefused({ point: ENDINGS.app.name, reason });
 
 const broke = (message: string) => new ThreadCallBroke({ cause: new Error(message) });
 
@@ -44,29 +47,24 @@ export const makeEndingDelivery = Effect.gen(function* () {
     if ('isError' in answer && answer.isError === true) return yield* broke(`${app} answered the ending of ${run.runId} with an error`);
   });
 
-  const point: TagmaAppPoint<EndingTools> = {
-    name: 'on',
-    owner: 'threads',
-    schema: EndingTools,
-    register: (contribution) =>
-      Effect.suspend(() => {
-        const { app, value, tools } = contribution;
-        const tool = value.ended;
-        if (tool === undefined) return Effect.succeed(() => undefined);
-        if (tools === null) return Effect.fail(refused('endings are delivered to a process, and the app declares none'));
-        if (!tools.some((descriptor) => descriptor.name === tool)) return Effect.fail(refused(`the process serves no tool ${tool}`));
-        const hook: Hook = { tool, contribution };
-        hooks.set(app.id, hook);
-        return Effect.succeed(() => {
-          if (hooks.get(app.id) === hook) hooks.delete(app.id);
-        });
-      }),
-  };
+  const register: TagmaAppRegister<EndingTools> = (contribution) =>
+    Effect.suspend(() => {
+      const { app, value, tools } = contribution;
+      const tool = value.ended;
+      if (tool === undefined) return Effect.succeed(() => undefined);
+      if (tools === null) return Effect.fail(refused('endings are delivered to a process, and the app declares none'));
+      if (!tools.some((descriptor) => descriptor.name === tool)) return Effect.fail(refused(`the process serves no tool ${tool}`));
+      const hook: Hook = { tool, contribution };
+      hooks.set(app.id, hook);
+      return Effect.succeed(() => {
+        if (hooks.get(app.id) === hook) hooks.delete(app.id);
+      });
+    });
   const recipient: ThreadEventRecipient = {
     name: 'plugin endings',
     takes: ['ended'],
     follows: (thread) => Effect.succeed(appOf(thread) !== undefined),
     handle: deliver,
   };
-  return { point, recipient };
+  return { register, recipient };
 });

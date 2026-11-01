@@ -6,7 +6,7 @@ import { SourceChanges } from '../../checkout-builds/contract/service/changes.js
 import { buildPlaces } from '../../checkout-builds/places.js';
 import type { RunningRevision } from '../../checkout-builds/reading.js';
 import { labelRevision } from '../../installation/contract/wire/layout.js';
-import type { Bindings, DoorPlace, NextPlace, SourcePlace } from '../next.js';
+import type { BindingChoice, DoorPlace, NextPlace, SourcePlace } from '../next.js';
 import { sourceChanges } from './sourceChanges.js';
 
 const runningRevision = ({ installation, source }: NextPlace): RunningRevision | null => {
@@ -37,4 +37,4 @@ const nextInstallation = (place: NextPlace) => {
 
 const door = (place: DoorPlace) => devSurfaceLayer({ checkout: checkoutOf(place), port: place.port });
 
-export const BINDINGS: Bindings = { nextInstallation, door };
+export const BINDINGS: BindingChoice = { nextInstallation, door };

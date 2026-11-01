@@ -4,15 +4,11 @@ import { basename, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { it, layer } from '@runlith/effect-test';
-import { sharedPool } from '@runlith/sqlite-process/testing/pool';
 import { sql } from 'drizzle-orm';
 import { Context, Effect, Exit, FileSystem, Layer, Schema, Scope } from 'effect';
-import { HttpPlatform, HttpRouter, HttpServer } from 'effect/http';
 import { endHosts } from '../../executions/testing/doubles.js';
 import { type CreationStep, PROJECT_CREATION } from '../../graph/contract/service/creation.js';
 import { ServedGraphs } from '../../graph/contract/service/serving.js';
-import { routedContext } from '../../graph/testing/doubles.js';
-import { frozenBuildsLayer } from '../../installation/testing/doubles.js';
 import { body, pair } from '../../platform/contract/service/body.js';
 import { manifest } from '../../platform/contract/service/manifest.js';
 import { ownStorePath } from '../../platform/contract/service/ownStore.js';
@@ -21,22 +17,13 @@ import { arms, operation } from '../../platform/contract/wire/operation.js';
 import { GateRefusal } from '../../platform/contract/wire/refusal.js';
 import type { Right } from '../../platform/contract/wire/right.js';
 import { Access } from '../../platform/contract/service/access.js';
-import { testGrantSigner } from '../../platform/testing/grants.js';
 import type { Store } from '../../platform/contract/service/store.js';
 import { serverParts } from '../build.js';
-import { DEVELOPER } from '../developer/build.js';
 import { MODULES } from '../developer/modules.js';
 import { PARTS } from '../developer/parts.js';
-import { doorLayer } from '../http/door.js';
-import { type Assembly, assemble } from '../manifest.js';
-import { makeRuntime } from '../runtime.js';
-import { TESTING_ADAPTERS } from './adapters.js';
+import { assemble } from '../manifest.js';
+import { servedAssembly as served } from './assembled.js';
 import { ASSEMBLY } from './composed.js';
-import { doorServing } from './doorServices.js';
-import { hostBundleRoot } from './hostBundle.js';
-import { requestEffect } from './httpRequest.js';
-
-const ORIGIN = 'http://tagma';
 
 class Greeting extends Context.Service<Greeting, { readonly of: (name: string) => Effect.Effect<string> }>()('testing/Greeting') {}
 
@@ -188,50 +175,6 @@ const greeting = manifest({
 
 const extended = serverParts({ ...PARTS, modules: [...MODULES, greeting] });
 
-const served = Effect.fnUntraced(function* (home: string, assembly: Assembly) {
-  const files = yield* FileSystem.FileSystem;
-  const runtime = yield* makeRuntime(
-    {
-      assembly,
-      channel: DEVELOPER.channel,
-      adapters: TESTING_ADAPTERS,
-      grants: testGrantSigner,
-      databasePath: join(home, 'tagma.sqlite'),
-      tokensPath: join(home, 'tokens.json'),
-      attachmentsPath: join(home, 'attachments'),
-      sourcePath: join(home, 'source'),
-      hostBundlePath: yield* Effect.orDie(hostBundleRoot),
-      drivers: [],
-      localOrigin: ORIGIN,
-    },
-    Layer.empty,
-    yield* sharedPool,
-  ).pipe(Effect.orDie);
-  const routed = routedContext(runtime.graph, runtime.pool);
-  const handler = yield* HttpRouter.toHttpEffect(
-    doorServing(doorLayer({ status: runtime.status }), runtime, home).pipe(
-      Layer.provide(frozenBuildsLayer({ dataPath: home })),
-      Layer.provide(Layer.succeedContext(routed)),
-      Layer.provide(Layer.succeedContext(runtime.bindings)),
-      Layer.provide(HttpServer.layerServices),
-      Layer.provideMerge(HttpPlatform.layer),
-      Layer.provideMerge(BunFileSystem.layer),
-    ),
-  );
-  const request = (path: string, sent?: unknown) =>
-    Effect.provide(
-      requestEffect(
-        Effect.provideService(handler, FileSystem.FileSystem, files),
-        new Request(
-          `${ORIGIN}${path}`,
-          sent === undefined ? {} : { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(sent) },
-        ),
-      ),
-      routed,
-    );
-  return { runtime, request };
-});
-
 class Root extends Context.Service<
   Root,
   {
@@ -332,6 +275,9 @@ layer(root, { excludeTestServices: true })('a root composing the core with a mod
 
       world.grants.level = 'full';
       expect(yield* sealed('full-sealed')).toMatchObject({ status: 200 });
+      const listed = (yield* world.op('list_projects', {})).body as { projects: { name: string }[] };
+      expect(listed.projects.map((one) => one.name)).toEqual(expect.arrayContaining(['full-sealed']));
+      expect(listed.projects.map((one) => one.name)).not.toContain('read-sealed');
     }),
   );
 });

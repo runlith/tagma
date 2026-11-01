@@ -4,7 +4,6 @@ export type GraphPolicy = {
   readonly strictProvenance: boolean;
   readonly private: boolean;
   readonly storage: StorageMode;
-  readonly graphRemote: string | null;
 };
 
 export type ProjectPolicyRow = ProjectRow & GraphPolicy;

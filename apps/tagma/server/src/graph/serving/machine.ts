@@ -93,7 +93,6 @@ export const machineGraphOf = <R>(
         read: (ids) => within(policy.read(ids)),
         set: (input) => within(policy.set(input)),
         setStorage: (input) => within(policy.setStorage(input)),
-        setRemote: (input) => within(policy.setRemote(input)),
         servesFrom: (ids) => within(policy.servesFrom(ids)),
         subscribe: policy.subscribe,
       }),

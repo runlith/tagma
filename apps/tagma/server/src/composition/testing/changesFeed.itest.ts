@@ -173,6 +173,42 @@ layer(Layer.mergeAll(demoGraphLayer(), BunFileSystem.layer, Path.layer), { exclu
     ),
   );
 
+  it.effect('a submodule file event leaves the parent worktree change feed current and its held lines intact', () =>
+    withDemo((demo) =>
+      Effect.gen(function* () {
+        const s = yield* stand(demo);
+        const files = yield* FileSystem.FileSystem;
+        yield* gitEffect(s.tree, ['-c', 'protocol.file.allow=always', 'submodule', 'add', '-q', s.checkout, 'nested']);
+        yield* gitEffect(s.tree, ['commit', '-qam', 'add nested checkout']);
+        yield* s.place();
+        yield* s.write('own.txt', 'held\n');
+        yield* s.judges.settled(s.inTree.rootId);
+        expect((yield* s.read)?.checkouts[0]?.state.kind).toBe('current');
+
+        const generated = 'nested/node_modules/.vite-temp/config.js';
+        yield* files.makeDirectory(join(s.tree, 'nested/node_modules/.vite-temp'), { recursive: true });
+        yield* files.writeFileString(join(s.tree, generated), 'generated\n');
+        yield* s.checkouts.mark(s.inTree.rootId, 'observer', [generated]);
+        yield* s.judges.settled(s.inTree.rootId);
+
+        const frame = yield* s.read;
+        expect(frame?.checkouts[0]?.state).toEqual({ kind: 'current' });
+        expect(frame?.checkouts[0]?.entries).toMatchObject([{ section: 'uncommitted', path: 'own.txt', lines: { added: 1, removed: 0 } }]);
+        const judged = yield* s.judges.read(s.inTree.rootId);
+        expect(judged.paths.some((one) => one.path === generated)).toBe(false);
+
+        yield* s.write('nested/owned.txt', 'nested held\n');
+        yield* s.judges.settled(s.inTree.rootId);
+        const recorded = yield* s.read;
+        expect(recorded?.checkouts[0]?.state).toEqual({ kind: 'current' });
+        expect(recorded?.checkouts[0]?.entries).toMatchObject([
+          { section: 'uncommitted', path: 'own.txt', lines: { added: 1, removed: 0 } },
+          { section: 'outside', path: 'nested/owned.txt', lines: { added: 1, removed: 0 } },
+        ]);
+      }),
+    ),
+  );
+
   it.effect('a worktree git removed leaves the thread its other checkouts and lets its lines go as checkout-gone', () =>
     withDemo((demo) =>
       Effect.gen(function* () {

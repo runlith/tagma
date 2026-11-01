@@ -1,10 +1,10 @@
 import { reactiveCell } from '@runlith/roster/cell.svelte';
 import { Point } from './Point.js';
 import { Router, type RouteId, emptyRouteData } from './Router.js';
-import type { makePoint, RouterAt } from './testing.js';
+import { drawingAlone, type makePoint, type RouterAt } from './testing.js';
 
 export function makeReactivePoint<Item>(key: Parameters<typeof makePoint<Item>>[0], ...items: readonly NoInfer<Item>[]): Point<Item> {
-  const point = Point.over<Item>(key.id, key.definition, reactiveCell());
+  const point = Point.over<Item>(key.id, key.definition, reactiveCell(), undefined, drawingAlone(key.definition));
   if (items.length > 0) point.register('test', ...items);
   return point;
 }

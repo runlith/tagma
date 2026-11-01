@@ -2,7 +2,7 @@ import type { Context, Layer, ManagedRuntime } from 'effect';
 import type { Manifest } from '../platform/contract/service/manifest.js';
 import type { Channel } from '../installation/contract/wire/channel.js';
 import type { Distribution } from '../installation/cut/descriptor.js';
-import type { Bindings } from './next.js';
+import { type BindingChoice, type Bindings, boundOf } from './next.js';
 import type { CoreBindings, VerbBindings, VerbModule } from './cli/binding.js';
 import type { LiveDoorOf, SocketDoor } from './socketBinding.js';
 import type { ControlServices, SettingControlNeeds } from './settings.js';
@@ -46,9 +46,15 @@ export type ServerParts<Modules extends readonly Manifest[] = readonly Manifest[
   readonly rested: () => Worker;
 };
 
+type PartsChoice<Modules extends readonly Manifest[]> = {
+  readonly modules: Modules;
+  readonly bindings?: BindingChoice;
+  readonly rested: () => Worker;
+};
+
 export const serverParts = <const Modules extends readonly Manifest[]>(
-  parts: ServerParts<Modules> & ([Unserved<Modules>] extends [never] ? unknown : { readonly unserved: Unserved<Modules> }),
-): CheckedParts => parts as unknown as CheckedParts;
+  parts: PartsChoice<Modules> & ([Unserved<Modules>] extends [never] ? unknown : { readonly unserved: Unserved<Modules> }),
+): CheckedParts => ({ modules: parts.modules, bindings: boundOf(parts.bindings ?? {}), rested: parts.rested }) as unknown as CheckedParts;
 
 export type Build = {
   readonly channel: Channel;

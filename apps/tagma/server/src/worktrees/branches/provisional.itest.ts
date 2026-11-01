@@ -9,6 +9,7 @@ import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { MachineStore } from '../../platform/contract/service/store.js';
 import { MachineUnits } from '../../platform/contract/service/units.js';
 import { ShadowGit } from '../../graph/tree/shadow.js';
+import { NO_SIDE } from '../../graph/contract/service/exchange.js';
 import { syncTopology } from '../../graph/tree/topology.js';
 import { type DemoState, demoGraphLayer, tempRepoEffect, withDemo } from '../../composition/testing/graphFixture.js';
 import { RootId } from '../../workspace/contract/wire/ids.js';
@@ -109,7 +110,7 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(Layer.merge(BunFileSystem.layer, 
           Effect.gen(function* () {
             const files = yield* FileSystem.FileSystem;
             const home = yield* files.makeTempDirectoryScoped({ prefix: 'provisional-shadow-' });
-            const shadow = yield* ShadowGit.open(join(home, 'graph.git'), yield* Git, null);
+            const shadow = yield* ShadowGit.open(join(home, 'graph.git'), yield* Git, NO_SIDE);
             const twins: BranchTwins = (place, rename) => Effect.andThen(Effect.orDie(shadow.renameBranch(place.from, place.to)), rename);
             const { branches, make, project, recorded } = yield* composed(demo, twins);
             yield* Effect.orDie(syncTopology(shadow, project, join(home, 'trees', 'main'), shippedSteps));

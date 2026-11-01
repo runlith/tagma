@@ -4,6 +4,7 @@ import { Effect, FileSystem } from 'effect';
 import type { PlatformError } from 'effect/PlatformError';
 import { GateRefusal } from '../../platform/contract/wire/refusal.js';
 import { ShadowGit } from '../tree/shadow.js';
+import type { GraphSide } from '../contract/service/exchange.js';
 import { type OwnGitFailed, runGit } from '../../platform/git/ownGit.js';
 import { unmergedPaths } from '../../platform/git/unmerged.js';
 import { WORKFLOWS_DIRECTORY } from '../contract/wire/storage.js';
@@ -48,12 +49,12 @@ const branchOf = Effect.fnUntraced(function* (checkout: string) {
   return 'ref' in standing ? standing.ref.slice('refs/heads/'.length) : 'main';
 });
 
-const prepare = Effect.fnUntraced(function* (git: Git['Service'], to: StorageLayout, checkout: string, origin: string | null) {
+const prepare = Effect.fnUntraced(function* (git: Git['Service'], to: StorageLayout, checkout: string, side: GraphSide) {
   if (to.mode === 'team') {
     yield* (yield* FileSystem.FileSystem).makeDirectory(to.treeRoot, { recursive: true });
     return null;
   }
-  const shadow = yield* ShadowGit.open(to.gitDir, git, origin);
+  const shadow = yield* ShadowGit.open(to.gitDir, git, side);
   yield* shadow.attach(to.treeRoot, yield* branchOf(checkout));
   return shadow;
 });
@@ -126,14 +127,14 @@ export const moveStorage = Effect.fnUntraced(function* ({
   from,
   to,
   checkout,
-  origin,
+  side,
   layers,
 }: {
   readonly git: Git['Service'];
   readonly from: StorageLayout;
   readonly to: StorageLayout;
   readonly checkout: string;
-  readonly origin: string | null;
+  readonly side: GraphSide;
   readonly layers: LayerMove;
 }): Effect.fn.Return<
   boolean,
@@ -169,7 +170,7 @@ export const moveStorage = Effect.fnUntraced(function* ({
     yield* runGit(git, 'worktree-prune', ['--git-dir', layer.gitDir, 'worktree', 'prune']);
     if (to.mode === 'stealth' && !existsSync(to.gitDir)) yield* files.rename(layer.gitDir, to.gitDir);
   }
-  const shadow = yield* prepare(git, to, checkout, origin);
+  const shadow = yield* prepare(git, to, checkout, side);
   for (const name of yield* treeContent(to.treeRoot)) yield* files.remove(join(to.treeRoot, name), { recursive: true, force: true });
   for (const name of source) yield* travel(join(from.treeRoot, name), join(to.treeRoot, name));
   yield* folded(to.treeRoot, forest);
@@ -177,9 +178,9 @@ export const moveStorage = Effect.fnUntraced(function* ({
   yield* retire(git, from);
   if (shadow !== null) yield* shadow.commitAct(to.treeRoot, `storage moved to ${to.mode}`);
   const reshaped = forest.length > 0 || hidden.length > 0;
-  if (from.mode !== 'stealth' || (hidden.length === 0 && origin === null)) return reshaped;
+  if (from.mode !== 'stealth' || (hidden.length === 0 && side.birth === null)) return reshaped;
   if (!existsSync(layer.gitDir)) yield* files.rename(from.gitDir, layer.gitDir);
-  const beside = yield* ShadowGit.open(layer.gitDir, git, origin);
+  const beside = yield* ShadowGit.open(layer.gitDir, git, side);
   yield* beside.attach(layer.treeRoot, yield* branchOf(checkout));
   for (const name of yield* treeContent(layer.treeRoot)) yield* files.remove(join(layer.treeRoot, name), { recursive: true, force: true });
   for (const [path, text] of renderForest(hidden, (row) => row.parentId ?? '').files) {

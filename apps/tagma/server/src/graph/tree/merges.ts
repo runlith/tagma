@@ -8,7 +8,8 @@ import { canon, type ShadowGit } from './shadow.js';
 import { validateTree } from './validation.js';
 import { FORMAT_FILE, TREE_MERGES } from '../contract/wire/storage.js';
 import { readMarker } from './marker.js';
-import { isTracking } from '../storage/remote.js';
+
+const tracked = (incoming: string): boolean => incoming.startsWith('refs/');
 
 const recordSchema = Schema.Struct({
   ...graphRecoverySchema.fields,
@@ -262,8 +263,7 @@ export const TreeMerges = {
     const verdicts = new Map<string, boolean>();
     for (const record of yield* records(shadow)) {
       const targetKept = kept.has(record.branch);
-      if (targetKept && (kept.has(record.incoming) || isTracking(record.incoming) || record.relocating || record.threadId !== null))
-        continue;
+      if (targetKept && (kept.has(record.incoming) || tracked(record.incoming) || record.relocating || record.threadId !== null)) continue;
       if (!(yield* shadow.belongsTo(record.treeRoot, repository))) continue;
       if (targetKept && twins.includes(record.incoming)) {
         const held = verdicts.get(record.incoming) ?? (yield* heldBy(shadow, record.incoming, kept));

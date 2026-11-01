@@ -41,12 +41,10 @@ export const projects = <Row, Removed, const Policy extends ReadonlyArray<Comman
         Flag.optional,
         Flag.withDescription('where the graph files live: stealth (shadow git, default) or team (the project repo)'),
       ),
-      graphRemote: Flag.String('graph-remote').pipe(
+      steps: Flag.KeyValuePair('step').pipe(
         Flag.optional,
-        Flag.withMetavar('remote'),
-        Flag.withDescription(
-          'the private git remote of the stealth graph: a graph it holds is restored here, an empty one receives this graph',
-        ),
+        Flag.withMetavar('id=value'),
+        Flag.withDescription('a value for a creation step this build contributes, keyed by the step id; repeat for several'),
       ),
     },
     (o) =>
@@ -55,9 +53,9 @@ export const projects = <Row, Removed, const Policy extends ReadonlyArray<Comman
         const rootPath = resolve(at.cwd, o.path);
         const name = optional(o.name) ?? rootPath.split('/').pop() ?? rootPath;
         const storage = optional(o.storage);
-        const graphRemote = optional(o.graphRemote);
+        const contributed = optional(o.steps);
         yield* print(
-          yield* registry.add({ name, rootPath, strictProvenance: o.strictProvenance, private: o.private, storage, graphRemote }, here(at)),
+          yield* registry.add({ name, rootPath, strictProvenance: o.strictProvenance, private: o.private, storage, contributed }, here(at)),
           o.json,
         );
       }),

@@ -577,6 +577,10 @@ const placing =
           (node.arguments ?? []).some((argument) => (checker.getTypeAtLocation(argument).flags & ts.TypeFlags.Any) !== 0)
         );
       };
+      const fixed = (node: ts.CallExpression, declaration: ts.Node): boolean =>
+        ts.isFunctionLike(declaration) &&
+        (declaration.typeParameters?.length ?? 0) === 0 &&
+        checker.getTypeAtLocation(node.expression).getCallSignatures().length === 1;
       const clean = new Set<ts.Node>();
       const settled = (receivers: readonly ts.Node[]): boolean => {
         const seen = new Set<ts.Node>();
@@ -597,6 +601,10 @@ const placing =
             if (guessed(node)) return false;
             const declaration = checker.getResolvedSignature(node)?.declaration;
             if (declaration !== undefined && !ts.isJSDocSignature(declaration)) pending.push(declaration);
+            if (ts.isCallExpression(node) && declaration !== undefined && fixed(node, declaration)) {
+              pending.push(node.expression);
+              continue;
+            }
           }
           ts.forEachChild(node, (child) => {
             pending.push(child);

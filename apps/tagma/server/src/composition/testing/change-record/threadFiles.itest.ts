@@ -128,6 +128,7 @@ layer(layers, { excludeTestServices: true })('thread files', (it) => {
       yield* run(world.git, world.root, ['add', 'born.txt']);
       yield* world.files.writeFileString(loose, 'loose\n');
       yield* edited(world.mine, loose, '', 'loose\n');
+      yield* world.checkouts.mark(world.rootId, 'index');
       const words = new Map(entriesOf(yield* world.list()).map((entry) => [entry.path, entry.section === 'outside' ? null : entry.git]));
       expect(words.get('kept.txt')).toBe('modified');
       expect(words.get('born.txt')).toBe('added');

@@ -22,7 +22,7 @@ type Entry = {
   readonly history: ThreadHistory | null | undefined;
   readonly standing?: HistoryState;
   readonly weight?: Weight;
-  readonly prior?: Weighed;
+  readonly claimed?: true;
   readonly bytes: number;
 };
 
@@ -36,8 +36,21 @@ export class HeldHistories {
   private readonly entries = new Map<string, Entry>();
   private readonly sizes = new WeakMap<Message, number>();
   private total = 0;
+  private driven: () => ReadonlySet<string> = () => NONE;
 
   constructor(private readonly residentBytes = HELD_RESIDENT_BYTES) {}
+
+  serveDriven(driven: () => ReadonlySet<string>): () => void {
+    this.driven = driven;
+    return () => {
+      if (this.driven === driven) this.driven = () => NONE;
+      this.reconsider();
+    };
+  }
+
+  reconsider(): void {
+    if (this.total > this.residentBytes) this.evict(this.driven());
+  }
 
   held(id: string): { readonly history: ThreadHistory; readonly standing: HistoryState; readonly entry: Entry } | null {
     const entry = this.entries.get(id);
@@ -65,12 +78,16 @@ export class HeldHistories {
   }
 
   claim(id: string, writer: object): HistoryClaim {
-    const prior = weighedOf(this.entries.get(id));
-    const claim: HistoryClaim = { id, entry: prior === undefined ? { history: null, bytes: 0 } : { history: null, prior, bytes: 0 } };
-    this.drop(id);
+    const standing = this.entries.get(id);
+    const prior = committedOf(standing);
+    const restorable = prior !== undefined && standing?.claimed !== true;
+    const claim: HistoryClaim = { id, entry: prior === undefined ? { history: null, bytes: 0 } : { ...prior, claimed: true } };
+    if (prior === undefined) this.drop(id);
     this.entries.set(id, claim.entry);
     atUnitEnd(writer, () => {
-      if (this.entries.get(id) === claim.entry) this.drop(id);
+      if (this.entries.get(id) !== claim.entry) return;
+      if (restorable) this.entries.set(id, prior);
+      else this.drop(id);
     });
     return claim;
   }
@@ -81,7 +98,7 @@ export class HeldHistories {
   }
 
   offer(id: string, seen: Glimpse, history: ThreadHistory, standing: HistoryState): void {
-    if (seen.entry.history === null) return;
+    if (seen.entry.history === null || seen.entry.claimed === true) return;
     if (this.entries.get(id) !== seen.entry) return;
     this.publish(id, history, standing);
   }
@@ -104,15 +121,25 @@ export class HeldHistories {
     this.drop(id);
     if (weight === null || kept === null) return;
     const bytes = Math.ceil(kept.bytes * RESIDENT_PER_BYTE) + kept.messages * RESIDENT_PER_MESSAGE;
-    if (bytes > this.residentBytes) return;
+    const driven = bytes > this.residentBytes || this.total + bytes > this.residentBytes ? this.driven() : NONE;
+    if (bytes > this.residentBytes && !driven.has(id)) return;
     this.entries.set(id, { history, standing, weight, bytes });
     this.total += bytes;
-    while (this.total > this.residentBytes) {
-      for (const [oldest, entry] of this.entries) {
-        if (entry.history == null) continue;
-        this.drop(oldest);
-        break;
-      }
+    if (this.total > this.residentBytes) this.evict(driven);
+  }
+
+  private evict(driven: ReadonlySet<string>): void {
+    let idle = this.total;
+    const evictable: string[] = [];
+    for (const [id, entry] of this.entries) {
+      if (entry.history == null) continue;
+      if (driven.has(id)) idle -= entry.bytes;
+      else evictable.push(id);
+    }
+    for (const id of evictable) {
+      if (idle <= this.residentBytes) return;
+      idle -= this.entries.get(id)?.bytes ?? 0;
+      this.drop(id);
     }
   }
 
@@ -155,5 +182,14 @@ export class HeldHistories {
 
 const EMPTY: ThreadHistory = [];
 
+const NONE: ReadonlySet<string> = new Set();
+
+type Committed = { readonly history: ThreadHistory; readonly standing: HistoryState; readonly weight: Weight; readonly bytes: number };
+
+const committedOf = (entry: Entry | undefined): Committed | undefined =>
+  entry?.history == null || entry.standing === undefined || entry.weight === undefined
+    ? undefined
+    : { history: entry.history, standing: entry.standing, weight: entry.weight, bytes: entry.bytes };
+
 const weighedOf = (entry: Entry | undefined): Weighed | undefined =>
-  entry?.history != null && entry.weight !== undefined ? { history: entry.history, weight: entry.weight } : entry?.prior;
+  entry?.history != null && entry.weight !== undefined ? { history: entry.history, weight: entry.weight } : undefined;

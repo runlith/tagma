@@ -35,6 +35,7 @@ import {
   NativeAgents,
   NativeCompaction,
   NativeInputRecovery,
+  NativeHistories,
   NativeStorage,
   NativeSwitches,
   NativeWorkflow,
@@ -84,7 +85,7 @@ import { makeOwedCallRows } from '../store/owedCalls.js';
 import { CallEpoch } from '../contract/service/owedCalls.js';
 import { OwnWork } from '../contract/service/ownWork.js';
 import { TagmaAppPoints } from '../../tagma-apps/contract/service/points.js';
-import { makeEndingDelivery } from './tagmaAppEndings.js';
+import { ENDINGS, makeEndingDelivery } from './tagmaAppEndings.js';
 import { makeRunSweep } from '../ending.js';
 import { coldWakeRefusal, coldWakeTokens } from '../contract/wire/settings.js';
 import { makeChildUpdates } from '../collaboration/childUpdates.js';
@@ -355,7 +356,7 @@ export const threadEngineLayer = Layer.effectContext(
       Layer.succeed(ActivityLog, yield* ActivityLog),
     );
     const endings = yield* makeEndingDelivery;
-    yield* Effect.acquireRelease((yield* TagmaAppPoints).declare(endings.point), (withdraw) => Effect.sync(withdraw));
+    yield* Effect.acquireRelease((yield* TagmaAppPoints).declare(ENDINGS, endings.register), (withdraw) => Effect.sync(withdraw));
     const evidence = yield* CacheWarmth;
     const warmth: ThreadWarmth = (summary, now) =>
       Effect.map(evidence.warmthBasis([summary]), (basis) => cacheWarmthOf(summary, false, basis, now));
@@ -465,6 +466,12 @@ export const threadEngineLayer = Layer.effectContext(
     yield* followRoutes(harness);
     const awake = yield* AwakePolicy;
     harness.runs.onDriving((count) => awake.working(count));
+    const histories = yield* NativeHistories;
+    yield* Effect.acquireRelease(
+      Effect.sync(() => histories.serveDriven(() => new Set(harness.runs.driven().map((run) => run.threadId)))),
+      (stop) => Effect.sync(stop),
+    );
+    harness.runs.onDriving(() => histories.reconsider());
     yield* republishOnMachineFlip(
       settings,
       () => live.watched(),

@@ -97,8 +97,8 @@ test('a contributed field draws after the core fields, its value rides the creat
   expect(alert()?.textContent).toContain('this mark is refused');
 });
 
-test('a field whose right the access lacks draws its offer in its place, and a refusal naming it goes to the alert', async () => {
-  const lacking: Right = { key: 'warmth', state: 'lapsed', access: 'none', unblock: ['renew warmth'] };
+test('a field whose right the access grants only for reading draws its offer in its place, and a refusal naming it goes to the alert', async () => {
+  const lacking: Right = { key: 'warmth', state: 'trial', access: 'read', unblock: ['renew warmth'] };
   app = mountShell(
     Layer.mergeAll(
       CreationFields,
@@ -120,7 +120,7 @@ test('a field whose right the access lacks draws its offer in its place, and a r
   typed(document.body.querySelector('input[placeholder="/absolute/path/to/repo"]'), '/work/book');
   create.mockRejectedValueOnce(refusal('sealed-mark'));
   await submitted(() => document.body.querySelector('[role="alert"]') !== null);
-  expect(create).toHaveBeenCalledWith(expect.objectContaining({ contributed: {} }));
+  expect(document.body.querySelector('[role="alert"]')?.textContent).toContain('this mark is refused');
 });
 
 test('a field that leaves before the creation takes its value with it', async () => {

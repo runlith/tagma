@@ -7,7 +7,7 @@ import * as BunPath from '@effect/platform-bun/BunPath';
 import { gitLayer } from '@runlith/git/Git';
 import { installationRoot, launcherPath } from '../paths.js';
 import type { Channel } from '../contract/wire/channel.js';
-import { BUILD_COMMAND, BUILD_SWAPPED_ENV, CURRENT } from '../contract/wire/layout.js';
+import { BUILD_COMMAND, BUILD_SOURCE_ENV, BUILD_SWAPPED_ENV, CURRENT } from '../contract/wire/layout.js';
 import { refusalLines } from '@runlith/agent/tool/refusal';
 import type { RefusalBody } from '../../platform/contract/wire/refusal.js';
 import { CurrentInvocation, failureLines, refusalOf } from '../../platform/cli/verb.js';
@@ -19,6 +19,7 @@ import type { LauncherWritten } from '../setup/launcher.js';
 import type { BuildServer } from './port.js';
 import type { Composition } from './descriptor.js';
 import { releaseInstallation, stepBack } from './release.js';
+import { buildHead, type BuildAttribution } from './source.js';
 
 const spawning = BunChildProcessSpawner.layer.pipe(Layer.provide(Layer.mergeAll(BunFileSystem.layer, BunPath.layer)));
 
@@ -210,7 +211,18 @@ const reachLines = (launcher: LauncherWritten): string[] => {
   }
 };
 
-export const build = (api: BuildServer, given: readonly string[], composition: Composition): Effect.Effect<void> => {
+type BuildRecipe = {
+  readonly channel: Channel;
+  readonly checkout: string;
+  readonly composition: Effect.Effect<Composition>;
+};
+
+export const build = (
+  api: BuildServer,
+  given: readonly string[],
+  recipe: BuildRecipe,
+  attribution: BuildAttribution | undefined = undefined,
+): Effect.Effect<void> => {
   const originAt = given.indexOf('--origin');
   const originCheckout = originAt < 0 ? undefined : given[originAt + 1];
   if (originAt >= 0 && (originCheckout === undefined || originCheckout.startsWith('--'))) {
@@ -224,9 +236,10 @@ export const build = (api: BuildServer, given: readonly string[], composition: C
   const wantsBack = args.delete('--back');
   const restart = !args.delete('--no-restart');
   const portable = args.delete('--portable');
+  const tree = args.delete('--tree');
   if (args.size > 0) {
     refuse(json, 'unknown-flag', `${[...args].join(' ')} is not a flag of this build`, [
-      `${BUILD_COMMAND} [--verify | --back] [--no-restart] [--portable | --origin <checkout>] [--json]`,
+      `${BUILD_COMMAND} [--verify | --back] [--tree] [--no-restart] [--portable | --origin <checkout>] [--json]`,
     ]);
   }
   if (portable && originCheckout !== undefined) {
@@ -242,9 +255,16 @@ export const build = (api: BuildServer, given: readonly string[], composition: C
       `${BUILD_COMMAND} --back — swap current onto the version kept beside it`,
     ]);
   }
-  return wantsVerify
-    ? verify(composition.channel, json)
-    : wantsBack
-      ? back(api, composition.channel, json, restart)
-      : released(api, json, origin, restart, composition);
+  if (wantsVerify) return verify(recipe.channel, json);
+  if (wantsBack) return back(api, recipe.channel, json, restart);
+  return Effect.flatMap(CurrentInvocation, (at) => {
+    if (tree || at.env[BUILD_SOURCE_ENV] === recipe.checkout)
+      return Effect.flatMap(recipe.composition, (composition) => released(api, json, origin, restart, composition));
+    return buildHead(recipe.checkout, given, attribution).pipe(
+      Effect.provide(Layer.mergeAll(gitLayer.pipe(Layer.provide(spawning)), spawning, BunFileSystem.layer)),
+      Effect.catchTag('SourceRefused', (failure) =>
+        Effect.sync(() => refuse(json, 'source-refused', failure.message, [...failure.unblock])),
+      ),
+    );
+  });
 };

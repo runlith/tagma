@@ -133,7 +133,7 @@ export const nativePlacement = <Owners>(ctx: NativeCall<Owners>) => {
           'start a new call for the new subject',
         ]);
     }
-    yield* Effect.provide(admitOperation(id, facts.caller, input), services);
+    yield* Effect.provide(admitOperation(id, facts.caller), services);
     const actor = facts.caller.actor;
     const checkout = facts.served?.checkout ?? place?.checkout;
     if (

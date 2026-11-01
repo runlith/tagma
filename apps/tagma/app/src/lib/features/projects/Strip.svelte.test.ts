@@ -18,7 +18,6 @@ const project = (id: number, name: string): Project => ({
   private: false,
   kind: 'folder',
   storage: 'stealth',
-  graphRemote: null,
   servesFrom: 'rows',
   createdAt: '2026-10-15T00:00:00Z',
 });

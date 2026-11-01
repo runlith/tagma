@@ -21,6 +21,7 @@ import type { GraphContext } from '../contract/service/serving.js';
 import { graphPool } from '../testing/doubles.js';
 import { resolveStorageLayout, storageHomes } from '../storage/layout.js';
 import { ShadowGit } from '../tree/shadow.js';
+import { NO_SIDE } from '../contract/service/exchange.js';
 import { markerText } from '../tree/marker.js';
 import { projectToTree } from '../tree/projection.js';
 import { scanTree } from '../tree/scan.js';
@@ -51,7 +52,7 @@ layer(demoGraphLayer({ repos: ['namespace'] }).pipe(Layer.provideMerge(BunFileSy
             worktree: checkout,
           });
           if (layout.mode !== 'stealth') return yield* Effect.die('the fixture requires a stealth tree');
-          const shadow = yield* ShadowGit.open(layout.gitDir, graph.git, null);
+          const shadow = yield* ShadowGit.open(layout.gitDir, graph.git, NO_SIDE);
           yield* shadow.attach(layout.treeRoot, 'main');
           yield* shadow.recordCheckout(layout.treeRoot, checkout, checkout);
           yield* projectToTree({ projectId: row.id, treeRoot: layout.treeRoot });
