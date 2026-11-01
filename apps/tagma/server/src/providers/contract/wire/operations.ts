@@ -52,7 +52,7 @@ const nobody = () => [];
 export const PROVIDER_OPERATIONS = {
   refresh_model_catalog: operation('refresh_model_catalog', {
     approval: ASKS_IN_REVIEW,
-    ...operatorOnly,
+    ...adapterActs,
     meaning: 'Refresh the models an installed provider discovers with its default account, keeping the last successful catalog on failure.',
     input: Schema.Struct({ provider: Schema.optional(Schema.String) }),
     answer: arms({ refreshed: { catalog: servedCatalogSchema } }),
