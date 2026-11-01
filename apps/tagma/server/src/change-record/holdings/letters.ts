@@ -18,10 +18,7 @@ export const lettersAt = Effect.fnUntraced(function* (
   status: Status,
   heads: ReadonlyMap<string, HeadSide>,
   working: ReadonlyMap<string, Working>,
-  checked: ReadonlySet<string>,
-  ignored: Result.Result<ReadonlySet<string>, { readonly message: string }>,
 ): Effect.fn.Return<Lettered | string> {
-  if (ignored._tag === 'Failure') return ignored.failure.message;
   const asked = new Set(paths);
   const letters = new Map<string, HoldingGit>();
   const { unmerged, staged, unstaged, untracked } = status.entries;
@@ -38,13 +35,11 @@ export const lettersAt = Effect.fnUntraced(function* (
     const bytes = working.get(path);
     return bytes !== undefined && bytes.kind !== 'absent' && bytes.kind !== 'unread';
   });
-  const remaining = candidates.filter((path) => !checked.has(path));
-  const later = yield* Effect.result(ignoredAmong(configuredGit(git, 'holdings-ignored'), dir, remaining));
-  if (later._tag === 'Failure') return later.failure.message;
+  const ignored = yield* Effect.result(ignoredAmong(configuredGit(git, 'holdings-ignored'), dir, candidates));
+  if (ignored._tag === 'Failure') return ignored.failure.message;
   const outside = new Set(candidates);
   for (const path of paths)
-    if (!letters.has(path))
-      letters.set(path, outside.has(path) ? (ignored.success.has(path) || later.success.has(path) ? 'ignored' : 'untracked') : null);
+    if (!letters.has(path)) letters.set(path, outside.has(path) ? (ignored.success.has(path) ? 'ignored' : 'untracked') : null);
   return { letters, added };
 });
 

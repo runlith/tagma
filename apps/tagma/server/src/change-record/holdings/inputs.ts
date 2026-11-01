@@ -5,7 +5,7 @@ import { chunk, unique } from '@runlith/utils/collection';
 import { contentDigest, streamedDigest, versionContentLimit } from '@runlith/files/content';
 import { exactWorkingAt, listingUnder, type Working } from '@runlith/files/working';
 import type { Git } from '@runlith/git/Git';
-import { changedBetween, ignoredAmong } from '@runlith/git/entries';
+import { changedBetween } from '@runlith/git/entries';
 import { commitOf } from '@runlith/git/repository';
 import { pathspecFits, statusAt } from '@runlith/git/status';
 import { conversionsAt, normalizedAt, workingBlobFilesAt, type Conversions } from '@runlith/git/working';
@@ -255,7 +255,7 @@ export const probeAt = Effect.fn('Holdings.probe')(function* (
       rowsAt(readers, checkout.rootId, requested),
       Effect.result(
         statusAt(configuredGit(readers.git, 'holdings-status'), checkout.dir, {
-          untracked: 'no',
+          untracked: scope === 'candidates' ? 'all' : 'no',
           paths: scoped ? requested.map(literal) : undefined,
           monitor: !scoped,
         }),
@@ -275,22 +275,20 @@ export const probeAt = Effect.fn('Holdings.probe')(function* (
   const listed =
     scope === 'candidates' && tracked._tag === 'Success' ? requested.filter((path) => !rows.has(path) && !tracked.success.has(path)) : [];
   const sides =
-    listed.length > 0 && scoped && Result.isSuccess(status)
-      ? yield* headsAt(readers.git, checkout.dir, status.success.branch.head, requested, known)
+    listed.length > 0 && Result.isSuccess(status)
+      ? yield* headsAt(readers.git, checkout.dir, status.success.branch.head, listed, known)
       : new Map<string, HeadSide>();
-  const candidates = listed.filter((path) => sides.get(path)?.kind !== 'blob');
-  const checked = new Set(candidates);
-  const ignored = yield* Effect.result(ignoredAmong(configuredGit(readers.git, 'holdings-ignored'), checkout.dir, candidates));
+  const untracked = new Set(status._tag === 'Success' ? status.success.entries.untracked.map((row) => row.path) : []);
   const paths =
     scope === 'required'
       ? requested
       : requested.filter(
           (path) =>
             rows.has(path) ||
-            ignored._tag === 'Failure' ||
             tracked._tag === 'Failure' ||
             tracked.success.has(path) ||
-            !ignored.success.has(path),
+            sides.get(path)?.kind !== 'absent' ||
+            untracked.has(path),
         );
   yield* Effect.annotateCurrentSpan({ 'holdings.ignored': requested.length - paths.length });
   if (paths.length === 0)
@@ -325,9 +323,7 @@ export const probeAt = Effect.fn('Holdings.probe')(function* (
         );
   const told = status._tag === 'Failure' ? status : yield* confirmedAt(readers.git, checkout.dir, status.success, silent);
   const read =
-    told._tag === 'Failure'
-      ? causeOf(told.failure)
-      : yield* lettersAt(readers.git, checkout.dir, paths, told.success, heads, working, checked, ignored);
+    told._tag === 'Failure' ? causeOf(told.failure) : yield* lettersAt(readers.git, checkout.dir, paths, told.success, heads, working);
   const fresh = paths.filter((path) => {
     const bytes = working.get(path);
     return heads.get(path)?.kind === 'absent' && bytes !== undefined && bytes.kind !== 'absent' && bytes.kind !== 'unread';
