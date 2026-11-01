@@ -20,15 +20,20 @@ export class GateRefusal<Code extends string = string> extends Data.TaggedError(
   readonly unblock: Unblock;
   readonly inputFile?: string;
   readonly words?: Words;
+  readonly field?: string;
 }> {
   declare readonly code: Code;
 
-  constructor(code: Code, reason: string, unblock: Unblock, inputFile?: string, words?: Words) {
-    super({ code, reason, unblock, inputFile, words });
+  constructor(code: Code, reason: string, unblock: Unblock, inputFile?: string, words?: Words, field?: string) {
+    super({ code, reason, unblock, inputFile, words, field });
   }
 
   saying(words: Words): GateRefusal<Code> {
-    return new GateRefusal(this.code, this.reason, this.unblock, this.inputFile, words);
+    return new GateRefusal(this.code, this.reason, this.unblock, this.inputFile, words, this.field);
+  }
+
+  about(field: string): GateRefusal<Code> {
+    return new GateRefusal(this.code, this.reason, this.unblock, this.inputFile, this.words, field);
   }
 
   override get message(): string {
@@ -180,6 +185,7 @@ export type RefusalBody = {
   readonly unblock: readonly string[];
   readonly inputFile?: string;
   readonly words?: Words;
+  readonly field?: string;
   readonly causes?: ReadonlyArray<{ readonly tag: string; readonly message: string }>;
 };
 
@@ -216,6 +222,7 @@ const refusalFields = {
   unblock: Schema.Array(Schema.String).check(Schema.isMinLength(1)),
   inputFile: Schema.optional(Schema.String),
   words: Schema.optional(wordsSchema),
+  field: Schema.optional(Schema.String).annotate({ description: 'The input entry this refusal is about, named by its id.' }),
 };
 export interface RefusalSchema extends Schema.Struct<typeof refusalFields> {}
 export const refusalSchema: RefusalSchema = Schema.Struct(refusalFields).pipe(HttpApiSchema.status(409));

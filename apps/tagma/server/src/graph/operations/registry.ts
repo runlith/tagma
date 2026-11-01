@@ -8,6 +8,7 @@ import { CurrentProject } from '../../projects/contract/service/caller.js';
 import type { ProjectRow } from '../../projects/contract/wire/project.js';
 import { Selection } from '../contract/service/reads.js';
 import { RegisteredRoots } from '../contract/service/registeredRoots.js';
+import { CreationSteps } from '../contract/service/creation.js';
 import { GraphCall, ProjectLifecycle, ProjectPolicy, RoutedGraphs } from '../contract/service/serving.js';
 import { GraphRemotes } from '../contract/service/remote.js';
 import { remoteRefusal } from '../contract/wire/remote.js';
@@ -88,10 +89,14 @@ export const REGISTRY_PAIRS = {
     OPS.add_project,
     body(OPS.add_project, {
       execute: Effect.fnUntraced(function* (input: In<'add_project'>) {
-        const refusal = input.graphRemote === undefined ? null : remoteRefusal(input.graphRemote);
+        const { contributed, ...registration } = input;
+        const refusal = registration.graphRemote === undefined ? null : remoteRefusal(registration.graphRemote);
         if (refusal !== null) return yield* refusal;
+        const steps = yield* (yield* CreationSteps).take(contributed ?? {});
         const pool = yield* RoutedGraphs;
-        const row = yield* (yield* ProjectLifecycle).create({ ...input }, pool === null ? undefined : (born) => pool.birth(born.id));
+        const row = yield* (yield* ProjectLifecycle).create(registration, (born) =>
+          Effect.andThen(steps(born.id), pool === null ? Effect.void : pool.birth(born.id)),
+        );
         yield* (yield* RegisteredRoots).joined(row.rootPath);
         return { status: 'ok' as const, project: yield* wiredOne(row), returned: row.returned };
       }),
