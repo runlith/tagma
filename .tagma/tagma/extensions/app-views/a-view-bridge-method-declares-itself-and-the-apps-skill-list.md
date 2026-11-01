@@ -5,11 +5,11 @@ ord: 8
 tags: ["explanation"]
 sources:
   - kind: file
-    ref: apps/tagma/server/src/views/contract/wire/bridge.ts
+    ref: apps/tagma/app/src/lib/features/tagma-apps/methods.ts
   - kind: file
     ref: apps/tagma/server/src/native-harness/skills/bridgeMethods.ts
   - kind: file
-    ref: apps/tagma/app/src/lib/features/tagma-apps/methods.ts
+    ref: apps/tagma/server/src/views/contract/wire/bridge.ts
 ---
 A `tagma/<id>` method of the view bridge is declared once, in wire both sides import: its id, notifications, signature, a description and, where one line is not enough, a reference body. The owning module contributes the declaration to the server's `views/bridge-methods` point through its manifest, and the app registers the same declaration in `TagmaMethods` with the function that serves it; the app's key, capability, claims and admission against the host's own methods come from it. The `apps` skill is read with `<!-- bridge-methods -->` replaced by the list of the declarations the root composed, and every declared reference is a reference of that skill, so a root without a module does not mention its method and no skill text names a method by hand.
 
