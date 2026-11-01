@@ -74,7 +74,7 @@ const checkout = (
   mkdirSync(join(install, '20260101T000000000Z'), { recursive: true });
   symlinkSync('20260101T000000000Z', join(install, 'current'));
   const shell: NodeJS.ProcessEnv = { HOME: join(root, 'home'), SHELL: '/bin/zsh', PATH: '/usr/bin:/bin' };
-  return { source, install, launcher: join(root, 'bin/tagma'), shell };
+  return { root, source, install, launcher: join(root, 'bin/tagma'), shell };
 };
 
 const inert: Applications = {
@@ -89,11 +89,29 @@ const inert: Applications = {
 
 const refusalOf = (where: ReturnType<typeof checkout>) =>
   Effect.flip(
-    releaseInstallation(where.source, where.install, where.launcher, where.shell, {
+    releaseInstallation(where.install, where.launcher, where.shell, {
       conditions: [],
       channel: CHANNELS.dev,
+      workshop: CHANNELS.dev,
       applications: inert,
-      entries: { cli: 'composition/developer/cli.ts', server: 'composition/developer/server.ts' },
+      roots: {
+        checkout: where.root,
+        server: where.source,
+        packages: join(where.root, 'packages'),
+        desktop: join(where.root, 'apps/tagma/desktop'),
+      },
+      entries: {
+        cli: join(where.source, 'src/composition/developer/cli.ts'),
+        server: join(where.source, 'src/composition/developer/server.ts'),
+      },
+      client: { root: join(where.root, 'apps/tagma/app'), config: null },
+      brand: { assets: join(where.root, 'apps/tagma/desktop/assets') },
+      signing: { team: null, notary: 'test' },
+      plugins: [],
+      feed: null,
+      publisher: null,
+      steps: { graph: [], journal: [] },
+      stores: [],
     }),
   ).pipe(Effect.provide(machine));
 

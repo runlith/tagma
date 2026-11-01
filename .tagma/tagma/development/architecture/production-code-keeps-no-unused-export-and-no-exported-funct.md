@@ -6787,10 +6787,6 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead apps/tagma/server/src/installation/cut/notarize.ts#NOTARY_PROFILE",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "dead-code dead apps/tagma/server/src/installation/cut/notarize.ts#NotarizationRefused",
           "owner": "5a3bed29"
         },
@@ -6896,18 +6892,6 @@ fields:
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/installation/cut/publish.ts#publishRelease",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/installation/cut/published.ts#Issued",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/installation/cut/published.ts#latestFeed",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/installation/cut/published.ts#publishedNumbers",
           "owner": "5a3bed29"
         },
         {
@@ -8194,10 +8178,6 @@ fields:
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/platform/contract/service/snapshots.ts#SnapshotAnswer",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/platform/contract/service/store.ts#IN_MEMORY",
           "owner": "5a3bed29"
         },
         {

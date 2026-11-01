@@ -9,14 +9,15 @@ import { Git } from '@runlith/git/Git';
 import { verifyArtifact } from '@runlith/executions/hostArtifacts';
 import { type GitAnswerInvalid, type GitRefused, type GitUnreadable, troubleOf } from '@runlith/git/repository';
 import { gitCut, gitTree } from '../../platform/git/readings.js';
-import type { Applications } from '../contract/service/applications.js';
-import type { Channel } from '../contract/wire/channel.js';
+import type { Composition } from './descriptor.js';
 import {
   hostBinary,
   SURFACE_INDEX,
   CLI_ENTRY,
   RUNTIME_PART,
   SIGNING_IDENTITY_ENV,
+  HOST_ASSETS_ENV,
+  HOST_CHANNEL_ENV,
   BUILD_CONDITIONS_ENV,
   BUILD_INPUTS_ENV,
   BUILD_MAPS_ENV,
@@ -37,6 +38,7 @@ import {
   MIGRATIONS,
   PACKAGE_FILE,
   SERVER_ENTRY,
+  STORE_MIGRATIONS,
   SURFACE,
 } from '../contract/wire/manifest.js';
 import { partsAt } from '../closure/read.js';
@@ -53,16 +55,9 @@ import { carrySkills, skillInputs } from './skills.js';
 import { carryRipgrep, carryTypescript } from './tools.js';
 import { installedPackages, lockedPackages } from './locked.js';
 import { type Target, targetName, targetTrouble } from './target.js';
-import { PROGRAM_RELEASE_DEFINE } from '../../platform/contract/wire/program.js';
+import { PROGRAM_FEED_DEFINE, PROGRAM_RELEASE_DEFINE } from '../../platform/contract/wire/program.js';
 
 export const RELEASE_LOG = 'release.log';
-
-export type Composition = {
-  readonly conditions: readonly string[];
-  readonly channel: Channel;
-  readonly applications: Applications;
-  readonly entries: { readonly cli: string; readonly server: string };
-};
 
 export type ReleaseCut = {
   readonly number: string;
@@ -141,25 +136,29 @@ const importOf = (from: string, to: string): RegExp => {
 const bundled = Effect.fnUntraced(function* (
   entry: string,
   outfile: string,
-  checkout: string,
   external: { readonly from: RegExp; readonly to: string } | null,
-  conditions: readonly string[],
+  composition: Composition,
   carried: readonly string[],
   release: { readonly cut: ReleaseCut; readonly root: string } | null,
 ): Effect.fn.Return<Written, string, FileSystem.FileSystem> {
   const files = yield* FileSystem.FileSystem;
+  const { checkout } = composition.roots;
   let rewrote = 0;
   const closure = yield* bundle(entry, basename(outfile), {
     sourcemap: 'external',
     comments: release === null ? 'kept' : 'none',
     minify: release !== null,
-    define: release === null ? {} : { [PROGRAM_RELEASE_DEFINE]: JSON.stringify(release.cut.number) },
-    conditions,
+    define: {
+      ...(composition.feed === null ? {} : { [PROGRAM_FEED_DEFINE]: JSON.stringify(composition.feed) }),
+      ...(release === null ? {} : { [PROGRAM_RELEASE_DEFINE]: JSON.stringify(release.cut.number) }),
+    },
+    conditions: composition.conditions,
     external: carried,
     plugins:
       external === null
-        ? []
+        ? [...composition.plugins]
         : [
+            ...composition.plugins,
             {
               name: 'closure-entry',
               setup(plugin) {
@@ -216,7 +215,6 @@ const labelled = Effect.fnUntraced(function* (
 type Unswapped = { root: string | null; readonly swapped: (version: string) => void };
 
 const releaseWith = <Launcher>(
-  sourcePath: string,
   installRoot: string,
   composition: Composition,
   writing: (platform: InstallationPlatform) => Effect.Effect<Launcher, LauncherWriteFailed, FileSystem.FileSystem>,
@@ -226,7 +224,7 @@ const releaseWith = <Launcher>(
 ): Effect.Effect<ReleaseLanded<Launcher>, ReleaseRefused, FileSystem.FileSystem | Spawner | Git> =>
   Effect.suspend(() => {
     const unswapped: Unswapped = { root: null, swapped };
-    return releasing(unswapped, sourcePath, installRoot, composition, writing, origin, release).pipe(
+    return releasing(unswapped, installRoot, composition, writing, origin, release).pipe(
       Effect.onInterrupt(() => {
         const root = unswapped.root;
         return root === null
@@ -241,14 +239,14 @@ const releaseWith = <Launcher>(
 
 const releasing = Effect.fnUntraced(function* <Launcher>(
   unswapped: Unswapped,
-  sourcePath: string,
   installRoot: string,
   composition: Composition,
   writing: (platform: InstallationPlatform) => Effect.Effect<Launcher, LauncherWriteFailed, FileSystem.FileSystem>,
   origin: { readonly checkout: string } | null | undefined,
   release: ReleaseCut | null,
 ): Effect.fn.Return<ReleaseLanded<Launcher>, ReleaseRefused, FileSystem.FileSystem | Spawner | Git> {
-  const { conditions } = composition;
+  const { conditions, roots, client, entries } = composition;
+  const sourcePath = roots.server;
   const files = yield* FileSystem.FileSystem;
   const git = yield* Git;
   const log = `${installRoot}/${RELEASE_LOG}`;
@@ -299,10 +297,8 @@ const releasing = Effect.fnUntraced(function* <Launcher>(
       `a closure carries a desktop application and an execution host, and both are darwin's; this machine is ${platform.os}`,
     );
   }
-  const app = resolve(sourcePath, '..', 'app');
-  const desktop = resolve(sourcePath, '..', 'desktop');
-  const checkout = resolve(sourcePath, '..', '..', '..');
-  const packages = `${checkout}/packages`;
+  const app = client.root;
+  const { desktop, checkout, packages } = roots;
   const host = `${packages}/execution-host`;
   if (release !== null) {
     const trouble = yield* targetTrouble(release.target, checkout);
@@ -317,7 +313,7 @@ const releasing = Effect.fnUntraced(function* <Launcher>(
   );
   const targeted = release === null ? null : release.target.arch;
   for (const [what, where] of [
-    ['the CLI entry', `${sourcePath}/src/${composition.entries.cli}`],
+    ['the CLI entry', entries.cli],
     ['the app package', `${app}/package.json`],
     ['the desktop package', `${desktop}/package.json`],
     ['the execution host', `${host}/package.json`],
@@ -453,26 +449,14 @@ const releasing = Effect.fnUntraced(function* <Launcher>(
         assets.push(['server', watchEngine]);
         const mapped = release === null ? null : { cut: release, root };
         const cli = yield* bundled(
-          `${sourcePath}/src/${composition.entries.cli}`,
+          entries.cli,
           at(CLI_ENTRY),
-          checkout,
-          {
-            from: importOf(composition.entries.cli, composition.entries.server),
-            to: relativePath(dirname(`/${CLI_ENTRY}`), `/${SERVER_ENTRY}`),
-          },
-          conditions,
+          { from: importOf(entries.cli, entries.server), to: relativePath(dirname(`/${CLI_ENTRY}`), `/${SERVER_ENTRY}`) },
+          composition,
           nativeModules.external,
           mapped,
         );
-        const server = yield* bundled(
-          `${sourcePath}/src/${composition.entries.server}`,
-          at(SERVER_ENTRY),
-          checkout,
-          null,
-          conditions,
-          nativeModules.external,
-          mapped,
-        );
+        const server = yield* bundled(entries.server, at(SERVER_ENTRY), null, composition, nativeModules.external, mapped);
         if (release !== null) {
           yield* files.makeDirectory(release.inputs, { recursive: true });
           const skills = yield* skillInputs(sourcePath);
@@ -497,6 +481,7 @@ const releasing = Effect.fnUntraced(function* <Launcher>(
       yield* writeInstallationPackage(`${sourcePath}/${PACKAGE_FILE}`, at(PACKAGE_FILE));
       yield* files.copy(`${packages}/performance/${MIGRATIONS}`, at(EVIDENCE_MIGRATIONS));
       yield* files.copy(`${packages}/activity/${MIGRATIONS}`, at(ACTIVITY_MIGRATIONS));
+      for (const store of composition.stores) yield* files.copy(store.migrations, at(`${STORE_MIGRATIONS}/${store.id}`));
       yield* carryNative(nativeModules, root);
       const asked = nativeModules.loaded;
       const probed = yield* output(runtime, ['-e', `for (const name of ${JSON.stringify(asked)}) require(name);`], at('bin/server'), {});
@@ -532,7 +517,7 @@ const releasing = Effect.fnUntraced(function* <Launcher>(
       const work = yield* files.makeTempDirectoryScoped({ directory, prefix: 'cut-' });
       yield* producer(
         'surface',
-        ['run', 'build'],
+        ['run', 'build', ...(client.config === null ? [] : ['--config', client.config])],
         app,
         { TAGMA_SURFACE_OUT: at(SURFACE), TAGMA_SURFACE_WORK: realpathSync(work), ...producedBy(release, SURFACE) },
         at(`${SURFACE}/${SURFACE_INDEX}`),
@@ -554,7 +539,7 @@ const releasing = Effect.fnUntraced(function* <Launcher>(
     ]);
   }
 
-  const labels = yield* step('revision', labelled(git, sourcePath, version), troubleOf);
+  const labels = yield* step('revision', labelled(git, checkout, version), troubleOf);
   const build = release === null ? labels.build : release.number;
   const { tree } = labels;
   yield* step(
@@ -595,7 +580,8 @@ const releasing = Effect.fnUntraced(function* <Launcher>(
   const manifest = yield* step(
     'manifest',
     Effect.gen(function* () {
-      const layout = [...programs, ...CLOSURE_LAYOUT, ...engineLayout(engine)];
+      const stores = composition.stores.length === 0 ? [] : [['migrations', STORE_MIGRATIONS] as const];
+      const layout = [...programs, ...CLOSURE_LAYOUT, ...stores, ...engineLayout(engine)];
       const measured = yield* Effect.forEach(layout, ([role, place]) => partsAt(root, role, place));
       const carried = origin === undefined ? { checkout } : origin === null ? undefined : origin;
       return yield* writeInstallation(root, platform, build, measured.flat(), carried, tree, release?.irreversible);
@@ -616,6 +602,8 @@ const releasing = Effect.fnUntraced(function* <Launcher>(
     {
       TAGMA_HOST_OUT: at(DESKTOP),
       TAGMA_HOST_RELEASE: root,
+      [HOST_CHANNEL_ENV]: JSON.stringify(composition.channel),
+      [HOST_ASSETS_ENV]: composition.brand.assets,
       [SIGNING_IDENTITY_ENV]: signer.fingerprint,
       ...producedBy(release, DESKTOP),
     },
@@ -643,7 +631,6 @@ const releasing = Effect.fnUntraced(function* <Launcher>(
 });
 
 export const releaseInstallation = (
-  sourcePath: string,
   installRoot: string,
   launcher: string,
   env: NodeJS.ProcessEnv,
@@ -651,25 +638,22 @@ export const releaseInstallation = (
   origin: { readonly checkout: string } | null | undefined = undefined,
   swapped: (version: string) => void = () => undefined,
 ): Effect.Effect<ReleaseLanded, ReleaseRefused, FileSystem.FileSystem | Spawner | Git> =>
-  releaseWith(sourcePath, installRoot, composition, (platform) => writeLauncher(installRoot, launcher, platform, env), origin, swapped);
+  releaseWith(installRoot, composition, (platform) => writeLauncher(installRoot, launcher, platform, env), origin, swapped);
 
 export const releaseBeside = (
-  sourcePath: string,
   installRoot: string,
   launcher: string,
   composition: Composition,
   env: Readonly<Record<string, string>> = {},
 ): Effect.Effect<ReleaseLanded<string>, ReleaseRefused, FileSystem.FileSystem | Spawner | Git> =>
-  releaseWith(sourcePath, installRoot, composition, (platform) => writeLauncherBeside(installRoot, launcher, platform, env));
+  releaseWith(installRoot, composition, (platform) => writeLauncherBeside(installRoot, launcher, platform, env));
 
 export const releaseStaged = (
-  sourcePath: string,
   stage: string,
   composition: Composition,
   release: ReleaseCut,
 ): Effect.Effect<ReleaseLanded<null>, ReleaseRefused, FileSystem.FileSystem | Spawner | Git> =>
   releaseWith(
-    sourcePath,
     stage,
     composition,
     () => Effect.succeed(null),

@@ -6,7 +6,7 @@ import * as BunHttpServer from '@effect/platform-bun/BunHttpServer';
 import { Context, Effect, FileSystem, Layer, Result, Stream } from 'effect';
 import { HttpEffect, HttpPlatform, HttpRouter, HttpServer, HttpServerRequest, HttpServerResponse } from 'effect/http';
 import { portBlock } from '../../../installation/contract/wire/ports.js';
-import { CHANNEL } from '@tagma/server/composition/channel';
+import { CHANNEL } from '../../developer/channel.js';
 import { Access } from '../../../remote/contract/service/access.js';
 import { PlacedSites } from '../../../remote/contract/service/sites.js';
 import { ViewSites } from '../../../views/contract/service/views.js';

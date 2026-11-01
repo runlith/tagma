@@ -1,9 +1,12 @@
 import { expect } from 'bun:test';
+import { existsSync } from 'node:fs';
 import { basename, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
-import { layer } from '@runlith/effect-test';
+import { it, layer } from '@runlith/effect-test';
 import { sharedPool } from '@runlith/sqlite-process/testing/pool';
-import { Context, Effect, Exit, FileSystem, Layer, Schema } from 'effect';
+import { sql } from 'drizzle-orm';
+import { Context, Effect, Exit, FileSystem, Layer, Schema, Scope } from 'effect';
 import { HttpPlatform, HttpRouter, HttpServer } from 'effect/http';
 import { endHosts } from '../../executions/testing/doubles.js';
 import { type CreationStep, PROJECT_CREATION } from '../../graph/contract/service/creation.js';
@@ -12,19 +15,20 @@ import { routedContext } from '../../graph/testing/doubles.js';
 import { frozenBuildsLayer } from '../../installation/testing/doubles.js';
 import { body, pair } from '../../platform/contract/service/body.js';
 import { manifest } from '../../platform/contract/service/manifest.js';
+import { ownStorePath } from '../../platform/contract/service/ownStore.js';
 import { ASKS_NEVER } from '../../platform/contract/wire/conditions.js';
 import { arms, operation } from '../../platform/contract/wire/operation.js';
 import { GateRefusal } from '../../platform/contract/wire/refusal.js';
 import type { Right } from '../../platform/contract/wire/right.js';
 import { Access } from '../../platform/contract/service/access.js';
 import { testGrantSigner } from '../../platform/testing/grants.js';
-import { MachineStore } from '../../platform/contract/service/store.js';
+import type { Store } from '../../platform/contract/service/store.js';
 import { serverParts } from '../build.js';
 import { DEVELOPER } from '../developer/build.js';
 import { MODULES } from '../developer/modules.js';
 import { PARTS } from '../developer/parts.js';
 import { doorLayer } from '../http/door.js';
-import { assemble } from '../manifest.js';
+import { type Assembly, assemble } from '../manifest.js';
 import { makeRuntime } from '../runtime.js';
 import { TESTING_ADAPTERS } from './adapters.js';
 import { ASSEMBLY } from './composed.js';
@@ -34,9 +38,11 @@ import { requestEffect } from './httpRequest.js';
 
 const ORIGIN = 'http://tagma';
 
-class Greeting extends Context.Service<Greeting, { readonly of: (name: string) => string }>()('testing/Greeting') {}
+class Greeting extends Context.Service<Greeting, { readonly of: (name: string) => Effect.Effect<string> }>()('testing/Greeting') {}
 
 class Salutation extends Context.Service<Salutation, { readonly word: string }>()('testing/Salutation') {}
+
+class GreetingStore extends Context.Service<GreetingStore, Store<'greeting'>>()('testing/GreetingStore') {}
 
 type Mark = { readonly mark: string; readonly opened: boolean };
 
@@ -73,8 +79,8 @@ const GREETING_OPERATIONS = {
     lifetimes: [],
     effect: 'read',
     identity: 'none',
-    meaning: 'Greet through the service this module stands in the serving lifetime.',
-    grammar: 'Answers the greeting the serving service shapes from the channel the server runs on.',
+    meaning: 'Greet through the service this module stands in the serving lifetime, counting greetings in its own store.',
+    grammar: 'Answers the greeting the serving service shapes and how many times the name was greeted.',
     input: Schema.Struct({ name: Schema.String }),
     answer: arms({ greeted: { text: Schema.String } }),
     refusals: [],
@@ -114,7 +120,7 @@ const greeting = manifest({
       GREETING_OPERATIONS.greet,
       body(GREETING_OPERATIONS.greet, {
         execute: Effect.fnUntraced(function* (input) {
-          return { status: 'greeted' as const, text: (yield* Greeting).of(input.name) };
+          return { status: 'greeted' as const, text: yield* (yield* Greeting).of(input.name) };
         }),
       }),
     ),
@@ -125,6 +131,7 @@ const greeting = manifest({
       }),
     ),
   ],
+  stores: [{ id: 'greeting', key: GreetingStore, migrations: fileURLToPath(new URL('./greetingStore', import.meta.url)) }],
   contributions: PROJECT_CREATION.of(
     {
       id: 'greeting-mark',
@@ -158,14 +165,72 @@ const greeting = manifest({
     ),
     serving: Layer.effect(
       Greeting,
-      Effect.map(Effect.all([Salutation, MachineStore]), ([salutation, store]) => ({
-        of: (name: string) => `${salutation.word} ${name} at ${basename(store.path)}`,
+      Effect.map(Effect.all([Salutation, GreetingStore]), ([salutation, store]) => ({
+        of: (name: string) =>
+          store
+            .transaction('greet', () =>
+              Effect.gen(function* () {
+                yield* store.db.run(
+                  sql`insert into greeting (name, times) values (${name}, 1) on conflict (name) do update set times = times + 1`,
+                );
+                const [row] = yield* store.db.all<{ times: number }>(sql`select times from greeting where name = ${name}`);
+                return row?.times ?? 0;
+              }),
+            )
+            .pipe(
+              Effect.map((times) => `${salutation.word} ${name}, greeted ${times} time in ${basename(store.path)}`),
+              Effect.orDie,
+            ),
       })),
     ),
   },
 });
 
 const extended = serverParts({ ...PARTS, modules: [...MODULES, greeting] });
+
+const served = Effect.fnUntraced(function* (home: string, assembly: Assembly) {
+  const files = yield* FileSystem.FileSystem;
+  const runtime = yield* makeRuntime(
+    {
+      assembly,
+      channel: DEVELOPER.channel,
+      adapters: TESTING_ADAPTERS,
+      grants: testGrantSigner,
+      databasePath: join(home, 'tagma.sqlite'),
+      tokensPath: join(home, 'tokens.json'),
+      attachmentsPath: join(home, 'attachments'),
+      sourcePath: join(home, 'source'),
+      hostBundlePath: yield* Effect.orDie(hostBundleRoot),
+      drivers: [],
+      localOrigin: ORIGIN,
+    },
+    Layer.empty,
+    yield* sharedPool,
+  ).pipe(Effect.orDie);
+  const routed = routedContext(runtime.graph, runtime.pool);
+  const handler = yield* HttpRouter.toHttpEffect(
+    doorServing(doorLayer({ status: runtime.status }), runtime, home).pipe(
+      Layer.provide(frozenBuildsLayer({ dataPath: home })),
+      Layer.provide(Layer.succeedContext(routed)),
+      Layer.provide(Layer.succeedContext(runtime.bindings)),
+      Layer.provide(HttpServer.layerServices),
+      Layer.provideMerge(HttpPlatform.layer),
+      Layer.provideMerge(BunFileSystem.layer),
+    ),
+  );
+  const request = (path: string, sent?: unknown) =>
+    Effect.provide(
+      requestEffect(
+        Effect.provideService(handler, FileSystem.FileSystem, files),
+        new Request(
+          `${ORIGIN}${path}`,
+          sent === undefined ? {} : { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(sent) },
+        ),
+      ),
+      routed,
+    );
+  return { runtime, request };
+});
 
 class Root extends Context.Service<
   Root,
@@ -183,47 +248,9 @@ const root = Layer.effect(
     const files = yield* FileSystem.FileSystem;
     const home = yield* files.makeTempDirectoryScoped({ prefix: 'extension-root-' });
     yield* Effect.addFinalizer(() => Effect.orDie(endHosts(home)));
-    const runtime = yield* makeRuntime(
-      {
-        assembly: yield* Effect.promise(() => assemble(extended)),
-        channel: DEVELOPER.channel,
-        adapters: TESTING_ADAPTERS,
-        grants: testGrantSigner,
-        databasePath: join(home, 'tagma.sqlite'),
-        tokensPath: join(home, 'tokens.json'),
-        attachmentsPath: join(home, 'attachments'),
-        sourcePath: join(home, 'source'),
-        hostBundlePath: yield* Effect.orDie(hostBundleRoot),
-        drivers: [],
-        localOrigin: ORIGIN,
-      },
-      Layer.empty,
-      yield* sharedPool,
-    ).pipe(Effect.orDie);
-    const routed = routedContext(runtime.graph, runtime.pool);
-    const handler = yield* HttpRouter.toHttpEffect(
-      doorServing(doorLayer({ status: runtime.status }), runtime, home).pipe(
-        Layer.provide(frozenBuildsLayer({ dataPath: home })),
-        Layer.provide(Layer.succeedContext(routed)),
-        Layer.provide(Layer.succeedContext(runtime.bindings)),
-        Layer.provide(HttpServer.layerServices),
-        Layer.provideMerge(HttpPlatform.layer),
-        Layer.provideMerge(BunFileSystem.layer),
-      ),
-    );
+    const { runtime, request } = yield* served(home, yield* Effect.promise(() => assemble(extended)));
     return Root.of({
-      op: (id, input) =>
-        Effect.provide(
-          requestEffect(
-            Effect.provideService(handler, FileSystem.FileSystem, files),
-            new Request(`${ORIGIN}/api/op/${id}`, {
-              method: 'POST',
-              headers: { 'content-type': 'application/json' },
-              body: JSON.stringify(input),
-            }),
-          ),
-          routed,
-        ),
+      op: (id, input) => request(`/api/op/${id}`, input),
       folder: (label) => Effect.orDie(files.makeTempDirectory({ directory: home, prefix: `${label}-` })),
       marks: Context.getUnsafe(runtime.owners, Marks),
       grants: Context.getUnsafe(runtime.owners, Grants),
@@ -232,10 +259,10 @@ const root = Layer.effect(
 ).pipe(Layer.provide(BunFileSystem.layer));
 
 layer(root, { excludeTestServices: true })('a root composing the core with a module of its own', (it) => {
-  it.effect('serves its operation through the serving lifetime it declares', () =>
+  it.effect('serves its operation through the serving lifetime it declares, from a store of its own', () =>
     Effect.gen(function* () {
       expect(yield* (yield* Root).op('greet', { name: 'Ada' })).toMatchObject({
-        body: { status: 'greeted', text: 'Hello Ada at tagma.sqlite' },
+        body: { status: 'greeted', text: 'Hello Ada, greeted 1 time in greeting.sqlite' },
       });
       expect(ASSEMBLY.registry.named('greet')).toBeNull();
     }),
@@ -308,3 +335,20 @@ layer(root, { excludeTestServices: true })('a root composing the core with a mod
     }),
   );
 });
+
+it.live('the core alone opens a data directory holding the store of a module it lacks, and serves', () =>
+  Effect.gen(function* () {
+    const files = yield* FileSystem.FileSystem;
+    const home = yield* files.makeTempDirectoryScoped({ prefix: 'extension-core-' });
+    yield* Effect.addFinalizer(() => Effect.orDie(endHosts(home)));
+    const first = yield* Scope.make();
+    const { request } = yield* Scope.provide(served(home, yield* Effect.promise(() => assemble(extended))), first);
+    expect((yield* request('/api/op/greet', { name: 'Ada' })).status).toBe(200);
+    yield* Scope.close(first, Exit.void);
+    expect(existsSync(ownStorePath(join(home, 'tagma.sqlite'), 'greeting'))).toBe(true);
+    const second = yield* Scope.make();
+    yield* Effect.addFinalizer(() => Scope.close(second, Exit.void));
+    const { request: core } = yield* Scope.provide(served(home, ASSEMBLY), second);
+    expect((yield* core('/health')).status).toBe(200);
+  }).pipe(Effect.provide(BunFileSystem.layer)),
+);

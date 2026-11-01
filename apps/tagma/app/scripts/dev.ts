@@ -1,7 +1,7 @@
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { serverPort } from '@tagma/server/installation/contract/wire/ports';
-import { CHANNEL } from '@tagma/server/composition/channel';
+import { CHANNEL } from '@tagma/server/composition/developer/channel';
 import { runDev } from '@runlith/dev-runner';
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));

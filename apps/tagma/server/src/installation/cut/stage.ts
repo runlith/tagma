@@ -66,7 +66,7 @@ export type Released = {
 
 export const decodeRecord = Schema.decodeUnknownResult(Schema.fromJsonString(ReleaseRecord));
 const encodeRecord = Schema.encodeSync(Schema.fromJsonString(ReleaseRecord, { space: 2 }));
-export const encodeFeed = Schema.encodeSync(Schema.fromJsonString(feedSchema, { space: 2 }));
+const encodeFeed = Schema.encodeSync(Schema.fromJsonString(feedSchema, { space: 2 }));
 
 export const feedEntry = (one: ReleaseRecord, address: (archive: string) => string): FeedRelease => ({
   release: one.release,

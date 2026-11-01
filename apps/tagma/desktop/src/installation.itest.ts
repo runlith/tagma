@@ -4,7 +4,7 @@ import { dirname, join } from 'node:path';
 import { activeElsewhere } from './installation.js';
 import { startServer } from './server.js';
 import { ACTIVE_FILE, holderName, junctionDirectory } from '@tagma/server/installation/contract/wire/junction';
-import { CHANNEL } from '@tagma/server/composition/channel';
+import { CHANNEL } from './channel.js';
 
 const base = join('/tmp', `tagma-desktop-installation-${process.pid}`);
 const root = join(base, 'install', '0.1.0');

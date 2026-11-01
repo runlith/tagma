@@ -1,5 +1,5 @@
 import { serverPort } from '@tagma/server/installation/contract/wire/ports';
-import { CHANNEL } from '@tagma/server/composition/channel';
+import { CHANNEL } from './channel.js';
 
 export const SURFACE_URL_ARGUMENT = '--tagma-surface-url=';
 

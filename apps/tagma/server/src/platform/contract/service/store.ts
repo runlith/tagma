@@ -11,7 +11,7 @@ import type { WriteSet } from './writes.js';
 import type { TableMoves } from '../../store/moves.js';
 import type { SnapshotFailed, StoreSnapshots } from './snapshots.js';
 
-export type StoreBrand = 'machine' | 'graph';
+export type StoreBrand = string;
 
 declare const storeBrand: unique symbol;
 

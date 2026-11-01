@@ -25,7 +25,6 @@ export const releaseAfter = (newest: string | null): string => {
 };
 
 export const FEED_FILE = 'feed.json';
-export const FEED_REPOSITORY = 'runlith/tagma';
 
 export const tagOf = (release: string): string => `v${release}`;
 
@@ -33,11 +32,6 @@ export const releaseOfTag = (tag: string): string | null => {
   const release = tag.startsWith('v') ? tag.slice(1) : null;
   return release !== null && isRelease(release) ? release : null;
 };
-
-export const feedAddress = (repo: string): string => `https://github.com/${repo}/releases/latest/download/${FEED_FILE}`;
-
-export const releaseFile = (repo: string, release: string, name: string): string =>
-  `https://github.com/${repo}/releases/download/${tagOf(release)}/${encodeURIComponent(name)}`;
 
 const names = Schema.Array(Schema.String);
 
@@ -53,7 +47,6 @@ export type FeedArchive = typeof feedArchiveSchema.Type;
 export type ReleaseArchive = FeedArchive & { readonly release: string };
 
 export const platformArchivesSchema = Schema.Record(Schema.String, feedArchiveSchema);
-export type PlatformArchives = typeof platformArchivesSchema.Type;
 
 export const feedReleaseSchema = Schema.Struct({
   release: Schema.String.check(Schema.isPattern(RELEASE_NUMBER)),

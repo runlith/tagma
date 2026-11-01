@@ -1,5 +1,5 @@
 import type { Startup } from '@tagma/server/installation/contract/wire/restart';
-import { CHANNEL } from '@tagma/server/composition/channel';
+import { CHANNEL } from './channel.js';
 import type { Holder } from './installation.js';
 
 export type LoaderState =

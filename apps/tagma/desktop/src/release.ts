@@ -8,7 +8,7 @@ import { currentVersion } from '@tagma/server/installation/closure/versions';
 import { RELEASE_INSIDE, RUNTIME_PART, hostBundle } from '@tagma/server/installation/contract/wire/layout';
 import { DESKTOP } from '@tagma/server/installation/contract/wire/manifest';
 import { compareReleases, isRelease } from '@tagma/server/installation/contract/wire/feed';
-import { CHANNEL } from '@tagma/server/composition/channel';
+import { CHANNEL } from './channel.js';
 
 export type Bearing = { readonly build: string; readonly digest: string };
 

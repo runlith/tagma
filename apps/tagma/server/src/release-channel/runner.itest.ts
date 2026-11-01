@@ -537,6 +537,11 @@ layer(world(releaseWorld, {}).pipe(Layer.provideMerge(BunFileSystem.layer)), { e
           );
           expect(absent.offers).toEqual([]);
           expect(absent.issue?.reason).toContain('404');
+
+          world.feedAt = '';
+          const unfed = yield* channel(placed('0.5.0', standing()), (next) => until(next, (frame) => frame.back !== null));
+          world.feedAt = `${world.url}/feed.json`;
+          expect([unfed.readFrom, unfed.offers, unfed.issue]).toEqual([null, [], null]);
         });
       }),
   );

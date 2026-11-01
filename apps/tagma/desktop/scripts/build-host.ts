@@ -10,7 +10,7 @@ import { downloadArtifact } from '@electron/get';
 import { absoluteSources } from '@runlith/bundle/maps';
 import { isMachO, type Signing, signCode } from '@runlith/codesign/codesign';
 import { HOST_REFUSAL_ENV, type HostRefusal } from '@tagma/server/installation/contract/wire/hostRefusal';
-import { CHANNEL } from '@tagma/server/composition/channel';
+import { CHANNEL as DEVELOPER_CHANNEL } from '@tagma/server/composition/developer/channel';
 import {
   AUDIO_HELPER,
   BUILD_INPUTS_ENV,
@@ -18,6 +18,8 @@ import {
   BUILD_TARGET_ENV,
   buildConditionsIn,
   hostBundle,
+  hostChannelIn,
+  HOST_ASSETS_ENV,
   HOST_MAIN,
   RELEASE_INSIDE,
   RELEASE_NUMBER_ENV,
@@ -29,10 +31,13 @@ import { signingIdentity, signingNotice } from '@tagma/server/installation/setup
 import { Effect, Layer } from 'effect';
 import { type BuildOptions, build, context } from 'esbuild';
 import { KEYCHAIN_ADDON } from '../src/browser/keychain.js';
+import { CHANNEL_DEFINE } from '../src/channel.js';
 import { INPUT_EXECUTABLE, INPUT_HELPER } from '../src/helper.js';
 import { SWIPE_ADDON } from '../src/swipe.js';
 
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const CHANNEL = hostChannelIn(process.env, DEVELOPER_CHANNEL);
+const assets = process.env[HOST_ASSETS_ENV]?.trim() || join(packageRoot, 'assets');
 const DESKTOP_INPUT = resolve(packageRoot, '..', '..', '..', 'packages', 'desktop-input');
 const watching = process.argv.includes('--watch');
 
@@ -133,6 +138,7 @@ function bundleOptions(entry: string, outfile: string, format: 'esm' | 'cjs'): B
     entryPoints: [join(packageRoot, 'src', entry)],
     external: ['electron'],
     conditions: conditions.length === 0 ? undefined : [...conditions, 'module'],
+    define: { [CHANNEL_DEFINE]: JSON.stringify(CHANNEL) },
     format,
     outfile,
     platform: 'node',
@@ -182,8 +188,8 @@ async function standApplication(fingerprint: string): Promise<void> {
   plistSet(plist, 'CFBundleName', CHANNEL.name);
   plistSet(plist, 'CFBundleDisplayName', CHANNEL.name);
   plistSet(plist, 'LSMinimumSystemVersion', '13.0');
-  cpSync(join(packageRoot, 'assets', ICON), join(target, 'Contents', 'Resources', ICON));
-  cpSync(join(packageRoot, 'assets', ICON_CATALOG), join(target, 'Contents', 'Resources', ICON_CATALOG));
+  cpSync(join(assets, ICON), join(target, 'Contents', 'Resources', ICON));
+  cpSync(join(assets, ICON_CATALOG), join(target, 'Contents', 'Resources', ICON_CATALOG));
   plistSet(plist, 'CFBundleIconFile', ICON);
   plistSet(plist, 'CFBundleIconName', ICON_NAME);
   if (releaseNumber !== null) {

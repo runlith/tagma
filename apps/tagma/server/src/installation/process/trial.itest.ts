@@ -30,7 +30,8 @@ for (const version of ['v1', 'v2']) {
   mkdirSync(join(install, version), { recursive: true });
   writeFileSync(join(install, version, 'install.json'), '{}');
 }
-const place: TrialPlace = { installRoot: install, release: join(install, 'v2'), files: [store, fresh] };
+const stores = join(home, 'stores');
+const place: TrialPlace = { installRoot: install, release: join(install, 'v2'), files: [store, fresh], stores };
 const standing = () => readlinkSync(join(install, 'current'));
 const data = () => [readFileSync(store, 'utf8'), readFileSync(`${store}-wal`, 'utf8'), existsSync(`${store}-shm`), existsSync(fresh)];
 
@@ -58,16 +59,21 @@ it.effect(
   () =>
     Effect.gen(function* () {
       attempted(0);
+      const module = join(stores, 'module.sqlite');
+      mkdirSync(stores, { recursive: true });
+      writeFileSync(module, 'module before');
       expect(yield* arrive(place)).toBe('serve');
       const trial = yield* on(yield* enterTrial(place));
       expect(readAttempt(install)).toMatchObject({ starts: 1, copied: true });
       written();
+      writeFileSync(module, 'module migrated');
       yield* trial.failed('the migration failed');
 
-      expect(data()).toEqual(['before', 'wal before', false, false]);
+      expect([...data(), readFileSync(module, 'utf8')]).toEqual(['before', 'wal before', false, false, 'module before']);
       expect(standing()).toBe('v1');
       expect(readAttempt(install)?.ended).toEqual({ detail: 'the migration failed', data: 'restored' });
-      expect(existsSync(`${store}.attempt`)).toBe(false);
+      expect([existsSync(`${store}.attempt`), existsSync(`${module}.attempt`)]).toEqual([false, false]);
+      rmSync(stores, { recursive: true, force: true });
     }),
 );
 
@@ -145,10 +151,13 @@ const unreturned = Effect.fnUntraced(function* (migrations: readonly string[]) {
 });
 
 it.effect(
-  'data that did not come back and that the release before has since served and written stays as it left it: current goes to that release, and the copies leave',
+  'data that did not come back and that the release before has since served and written stays as it left it, even beside a module store the attempt made: current goes to that release, and the copies leave',
   () =>
     Effect.gen(function* () {
       yield* unreturned(['base']);
+      const made = join(stores, 'made.sqlite');
+      mkdirSync(stores, { recursive: true });
+      writeFileSync(made, 'made by the attempt');
       const db = new Database(store);
       db.run('insert into note (said) values (?)', ['by the release before']);
       db.close();
@@ -157,7 +166,8 @@ it.effect(
       yield* rollBack(place, 'unused');
       expect([standing(), readAttempt(install)?.ended]).toEqual(['v1', { detail: 'the migration failed', data: 'kept' }]);
       expect(notes()).toEqual(['before', 'by the attempt', 'by the release before']);
-      expect(existsSync(`${store}.attempt`)).toBe(false);
+      expect([existsSync(`${store}.attempt`), readFileSync(made, 'utf8')]).toEqual([false, 'made by the attempt']);
+      rmSync(stores, { recursive: true, force: true });
     }),
 );
 

@@ -10,7 +10,7 @@ import { openVersion, swapCurrent } from '../../../installation/testing/doubles.
 import { writeInstallation } from '../../../installation/testing/doubles.js';
 import { type InstallationPart, type InstallationRole, REQUIRED_ROLES } from '../../../installation/contract/wire/manifest.js';
 import { hostBundle, CURRENT } from '../../../installation/contract/wire/layout.js';
-import { CHANNEL } from '@tagma/server/composition/channel';
+import { CHANNEL } from '../../developer/channel.js';
 import { CHANNELS } from '../../../installation/contract/wire/channel.js';
 import { junctionDirectory } from '../../../installation/contract/wire/junction.js';
 import { takeActive } from '../../../installation/setup/active.js';

@@ -144,7 +144,7 @@ import { databasePath, seedDirectory } from '../installation/paths.js';
 import { InstalledChannel } from '../installation/contract/service/channel.js';
 import type { Channel } from '../installation/contract/wire/channel.js';
 import type { Assembly, DriverId } from './manifest.js';
-import { standsIn } from './extensions.js';
+import { installedIn, servedIn } from './extensions.js';
 import { makeDrives } from './drives.js';
 import { Drives } from '../platform/contract/service/drives.js';
 import { Capacity, serverCapacity, thisMachine } from '../platform/contract/service/capacity.js';
@@ -749,7 +749,7 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
             Layer.provideMerge(approvalModesLayer),
             Layer.provideMerge(Layer.succeed(Handover, options.leaving ?? Effect.succeed(false))),
             Layer.provideMerge(Layer.succeed(Drives, driving.drives)),
-            Layer.provide(childLedgerLayer(options.hostSourcePath, carriedBundle)),
+            Layer.provideMerge(childLedgerLayer(options.hostSourcePath, carriedBundle)),
             Layer.provide(Layer.succeedContext(prepared)),
             Layer.provideMerge(observations),
           ),
@@ -760,7 +760,7 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
     baseScope,
   );
   const installed = yield* runtime.contextEffect;
-  const built = Context.merge(installed, yield* standsIn(assembly.modules, 'installation', installed, baseScope));
+  const built = Context.merge(installed, yield* installedIn(assembly.modules, installed, migrations.seeds, baseScope));
   yield* admitRights(assembly.rights, built);
   const store = Context.get(built, MachineStore);
   const sourceCache = Context.get(built, WorkspaceInputs);
@@ -818,7 +818,7 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
     stackScope,
   ).pipe(Effect.updateContext((context: Context.Context<never>) => Context.omit(Tracer.ParentSpan)(context)));
   const served = Context.merge(servingInputs, stack);
-  const owners = Context.merge(served, yield* standsIn(assembly.modules, 'serving', served, stackScope));
+  const owners = Context.merge(served, yield* servedIn(assembly.modules, served, stackScope));
   const scratch = Context.get(owners, ScratchAreas);
   const judging = owners;
   const pool = Context.get(owners, ServingPool);
