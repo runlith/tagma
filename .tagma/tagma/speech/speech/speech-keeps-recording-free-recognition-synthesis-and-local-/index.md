@@ -64,7 +64,7 @@ The speech module keeps:
 
 It holds no listening, transcript or recording state, and imports neither `@runlith/echo` nor `@runlith/audio-file`. The kit keeps its recorded-file road and the adapters their file models: they are part of the speech protocol, not of any product. A module from any root that records and keeps captures — a *keeping module* here — reaches speech, the window, threads and the machine only through the points below. With none, each point is empty.
 
-**Order.** Each point lands beside today's code, which keeps working as it is. The code it replaces — `Listenings`' kept-capture members, `CallThreads`, `RecordingsPlace`, `Echo`, `Handoff`, `MachineCalls`, `SpeechGroup`, `CallScreen`, `Draft.pieces` and the inline settings cards — goes in the change that moves its last consumer onto the point.
+**Order.** Each point lands beside today's code, which keeps working as it is. The code it replaces — `Listenings`' kept-capture members, `CallThreads`, `RecordingsPlace`, `Echo`, `MachineCalls`, `SpeechGroup`, `CallScreen`, `Draft.pieces` and the inline settings cards — goes in the change that moves its last consumer onto the point.
 
 Server:
 1. **A recognition service and a capture kit.** A recognition service with `recognize`, `finish` and `send` takes recording-free recognition out of `Listenings`.
@@ -79,7 +79,7 @@ Server:
    - What a keeping module needs from speech's wire — track and recognizer asks, turn mode, `Heard`, `Recognizer` — is reached through a declared entry.
 4. **The shared owners reach extension lifetimes.** The context an extension's installation lifetime is built over, and its checked type, offer:
    - `Speech`, `AudioDevices`, `Settings`, `Projects`, `ProjectChanges` and `Captures`, the same instances the core uses;
-   - succession's `leaving` and `opened`, which speech takes today as `Handoff`.
+   - succession's `leaving` and `opened` as the platform's `Handoff` (`platform/contract/service/handoff.ts`), bound once in the runtime and taken by speech from there.
 
    A serving-tier extension lifetime reaches what a server-side producer needs to put a keyed message with a document into a thread and withdraw it: queueing and unqueueing a keyed input, uploading an attachment, and a thread's project.
 5. **A module's files directory.** Each module with a store gets `<data>/stores/<id>/` for its files. The transition attempt leaves it untouched, as it leaves module files today. A world transfer and data-directory relocation carry the whole `<data>/stores/` tree — every store, every files directory and every set-aside — whether or not the build declares their owners.
@@ -122,7 +122,7 @@ Speech's settings section needs no new point: `SettingsPage.svelte` already draw
 ## Acceptance
 
 - A test module, composed with the core in `composition/testing`, reaches speech only through declared entries and the extension context of item 4, and uses that context's real services:
-  - captures a synthetic mic track with the track chain and registers a capture of its own kind, which the stop operation ends;
+  - captures a synthetic mic track with the track chain and registers a capture of its own kind, which the stop operation ends. The composed world's devices are the machine's own and it signs in no recognizer, so the synthetic track passes `named` and `listened` there, while `capture` and `recognized` are proved in speech's own world. The module's installation lifetime takes `Speech`, `AudioDevices` and `Handoff`, so the composed world builds only if the context offers them;
   - adds a `speech.*` key that `read_settings` lists in speech's section;
   - declares an operation on the speech capability, which an agent carrying the capability is offered;
   - serves an HTTP group under `/api/<id>/`, refused `right-missing` when `Access` answers `none`;
