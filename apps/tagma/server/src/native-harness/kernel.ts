@@ -97,7 +97,7 @@ import type { AgentRecovery } from '@runlith/agent/AgentRecovery';
 import type { ThreadTransitionStorage } from '@runlith/agent/thread/transition/port';
 import { HarnessRegistry } from '../threads/contract/service/harness.js';
 import { TagmaAppPoints } from '../tagma-apps/contract/service/points.js';
-import { makeTagmaAppAgents } from './agents/declared/tagmaApps.js';
+import { makeTagmaAppAgents, TAGMA_APP_AGENTS } from './agents/declared/tagmaApps.js';
 import { makePluginAgents } from './agents/declared/plugins.js';
 import { EnabledPlugins } from '../plugins/contract/service/plugins.js';
 export type NativeKernelRequirements =
@@ -252,7 +252,7 @@ export const assembleNativeKernel: Effect.Effect<NativeKernel['Service'], never,
   const agentFiles = agentFilesOf(capabilities);
   const toolSources = threadToolSources();
   const packaged = yield* makeTagmaAppAgents({ capabilities, sources: toolSources });
-  yield* Effect.acquireRelease((yield* TagmaAppPoints).declare(packaged.point), (withdraw) => Effect.sync(withdraw));
+  yield* Effect.acquireRelease((yield* TagmaAppPoints).declare(TAGMA_APP_AGENTS, packaged.register), (withdraw) => Effect.sync(withdraw));
   const types = yield* makeDeclaredAgents({
     harnesses: installed.read,
     storePath: machine.path,
