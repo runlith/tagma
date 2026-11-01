@@ -44,7 +44,7 @@ export class ReasoningTail {
     this.held = null;
     const open = this.view().open;
     for (let at = open.length - 1; at >= 0; at -= 1) {
-      const reasoning = reasoningOf(open[at]!);
+      const reasoning = reasoningOf(open[at]!.entry);
       if (reasoning === null) continue;
       this.held = {
         runId: reasoning.runId,
@@ -58,7 +58,7 @@ export class ReasoningTail {
   apply(event: ThreadLiveEvent<NativeThreadState>): TailMove {
     if (event.type === 'open') return this.change(event.change);
     const held = this.held;
-    return held !== null && !this.view().open.some((entry) => entry.id === held.entryId) ? this.clear() : undefined;
+    return held !== null && !this.view().open.some((one) => one.entry.id === held.entryId) ? this.clear() : undefined;
   }
 
   private change(change: ThreadOpenChange): TailMove {

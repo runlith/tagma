@@ -1,5 +1,6 @@
 import { mapFilePatches } from '../tool/display';
 import type { ThreadToolEntry } from './entries';
+import type { ThreadOpenEntry } from './live';
 import type { ThreadTranscriptEntry } from './rows';
 import { coreEntry } from './kinds';
 
@@ -62,6 +63,13 @@ export function capTranscript(transcript: readonly ThreadTranscriptEntry[]): rea
     capped.push(bounded);
   }
   return capped ?? transcript;
+}
+
+export function capOpenEntries(open: readonly ThreadOpenEntry[]): readonly ThreadOpenEntry[] {
+  return open.map((one) => {
+    const entry = capTranscriptEntry(one.entry);
+    return entry === one.entry ? one : { entry, from: one.from };
+  });
 }
 
 function withFact(display: NonNullable<ThreadToolEntry['toolDisplay']>, withheld: number): NonNullable<ThreadToolEntry['toolDisplay']> {

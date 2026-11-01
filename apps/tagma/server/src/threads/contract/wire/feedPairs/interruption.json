@@ -186,7 +186,8 @@
           "role": "assistant",
           "runId": "run",
           "text": "Half a"
-        }
+        },
+        "from": 0
       }
     },
     {

@@ -77,6 +77,7 @@ const main = withDemo((demo) =>
           {
             op: 'put',
             entry: { type: 'tool', id: `call-${index}`, toolCallId: `call-${index}`, toolName: 'read', toolState: 'input-available' },
+            from: 0,
           },
         ],
         { incarnation: 'bench', runId: `run-${index}`, at: { position: 1, seq: 1 } },

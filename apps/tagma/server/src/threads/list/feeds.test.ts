@@ -1,7 +1,8 @@
 import { expect } from 'bun:test';
 import { it } from '@runlith/effect-test';
-import { Effect, Fiber, Stream } from 'effect';
+import { Effect, Stream } from 'effect';
 import { WIRE_PAGE_MAX_BYTES, WIRE_PAGE_MAX_ENTRIES } from '@runlith/agent/protocol/cap';
+import { OPEN_WINDOW } from '@runlith/agent/transcript/openText';
 import type { ThreadTranscriptEntry } from '@runlith/agent/transcript/rows';
 import { FeedView } from '@runlith/agent/transcript/testing/feedView';
 import type { WireState } from '../contract/wire/snapshot.js';
@@ -31,22 +32,32 @@ it.live('a subscriber that falls behind is answered with a resume from what it w
     expect(reader.gaps).toBe(0);
     expect(reader.transcript).toEqual(rig.transcript());
     expect(reader.open).toEqual(rig.open());
-    expect(reader.open).toEqual([said('assistant:run', `${'x'.repeat(WIRE_PAGE_MAX_ENTRIES + 2)} tail`)]);
+    expect(reader.open).toEqual([{ entry: said('assistant:run', `${'x'.repeat(WIRE_PAGE_MAX_ENTRIES + 2)} tail`), from: 0 }]);
   }),
 );
 
-it.live('a change heavier than the queue holds wakes the waiting reader with a resume that carries it', () =>
+it.live('an open entry larger than the window travels as its newest window, named by the offset it starts at', () =>
   Effect.gen(function* () {
     const rig = yield* world();
-    const heavy = said('assistant:run', 'y'.repeat(4 * WIRE_PAGE_MAX_BYTES + 1));
+    const text = `${'y'.repeat(4 * WIRE_PAGE_MAX_BYTES)}${'😀'.repeat(OPEN_WINDOW)}z`;
+    const window = { entry: said('assistant:run', `${'😀'.repeat(OPEN_WINDOW / 2 - 1)}z`), from: text.length - OPEN_WINDOW + 1 };
     const next = yield* Stream.toPull(rig.stream);
     yield* next;
-    const waiting = yield* Effect.forkChild(next);
-    yield* Effect.yieldNow;
-    rig.live.tail('thread', 'run', [heavy], []);
-    const recovered = (yield* Fiber.join(waiting))[0]!;
-    expect(recovered.type).toBe('resume');
-    if (recovered.type === 'resume') expect(recovered.payload.open).toEqual([heavy]);
+    rig.live.tail('thread', 'run', [said('assistant:run', text)], []);
+    const put = (yield* next)[0]!;
+    expect(put.type === 'open' ? put.change : null).toEqual({ op: 'put', ...window });
+
+    const reopened = (yield* Stream.toPull(rig.reconnect({ position: 0, seq: 0 })).pipe(Effect.flatMap((pull) => pull)))[0]!;
+    expect(reopened.type === 'resume' ? reopened.payload.open : null).toEqual([window]);
+
+    const burst = 'q'.repeat(OPEN_WINDOW + 1);
+    rig.live.append('thread', 'run', 'assistant:run', burst);
+    const grown = (yield* next)[0]!;
+    expect(grown.type === 'open' ? grown.change : null).toEqual({
+      op: 'put',
+      entry: said('assistant:run', 'q'.repeat(OPEN_WINDOW)),
+      from: text.length + 1,
+    });
   }),
 );
 
@@ -87,6 +98,6 @@ it.live('what changes while the snapshot is read reaches the reader exactly once
     reader.take((yield* next)[0]!);
     expect(reader.gaps).toBe(0);
     expect(reader.transcript).toEqual([said('assistant:other', 'landed during the read')]);
-    expect(reader.open).toEqual([said('assistant:run', 'before during after')]);
+    expect(reader.open).toEqual([{ entry: said('assistant:run', 'before during after'), from: 0 }]);
   }),
 );

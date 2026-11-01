@@ -96,6 +96,7 @@ const world = Effect.fnUntraced(function* () {
     held: unused,
     entry: unused,
     entries: unused,
+    text: unused,
     attachFrom: unused,
     rewindActs: unused,
     presence: (ids) => read(ids),
@@ -469,7 +470,7 @@ it.live(
       const rig = yield* world();
       rig.known.set('a', found('a', working('a')));
       const producerTail = (): string => {
-        const open = rig.live.view('a').open[0] as unknown as { readonly text: string };
+        const open = rig.live.view('a').open[0]?.entry as unknown as { readonly text: string };
         return [...open.text].slice(-TAIL_CODE_POINTS).join('');
       };
       const next = yield* Stream.toPull(rig.feed({ projectId: 1, threadIds: ['a'] }));

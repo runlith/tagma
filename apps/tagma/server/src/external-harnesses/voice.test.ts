@@ -18,7 +18,7 @@ test('a transport move settles into a tool entry its reader decodes, naming the 
       toolDisplay: display,
     };
     const change = Schema.decodeUnknownSync(threadOpenChangeSchema)(JSON.parse(JSON.stringify({ op: 'put', entry })));
-    expect(change).toEqual({ op: 'put', entry });
+    expect(change).toEqual({ op: 'put', entry, from: 0 });
     expect(display.facts?.map((fact) => fact.value)).toEqual([answer.transport]);
   }
 });

@@ -34,6 +34,7 @@ export const runWorld = Effect.fnUntraced(function* (runs: ThreadRunStorage<Thre
           progress: () => {},
           view: () => ({ at: { position: 0, seq: 0 }, open: [], progress: null }),
           liveView: () => ({ incarnation: 'no-live-run', runId: null, at: { position: 0, seq: 0 }, open: [], progress: null }),
+          text: () => null,
           publish: () => Effect.void,
           carry: () => Effect.succeed(false),
         }),

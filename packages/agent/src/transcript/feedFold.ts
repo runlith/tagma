@@ -1,11 +1,12 @@
 import { markThreadEntry, placeThreadEntry, type ThreadEntryPlacement, type ThreadEventDelta, type TranscriptHeld } from './eventFold';
-import { coreEntry } from './kinds';
-import type { FeedPosition, ThreadFeedEvent, ThreadLiveProgress, ThreadOpenChange } from './live';
+import type { FeedPosition, ThreadFeedEvent, ThreadLiveProgress, ThreadOpenChange, ThreadOpenEntry } from './live';
+import { joinedOpen } from './openText';
 import type { ThreadTranscriptEntry } from './rows';
 
 export type FeedHeld = {
   readonly at: FeedPosition | null;
   entry(id: string): ThreadTranscriptEntry | undefined;
+  record(id: string): ThreadOpenEntry | undefined;
   ofRun(runId: string): readonly ThreadTranscriptEntry[];
   open(id: string): boolean;
   openOfRun(runId: string): readonly string[];
@@ -17,7 +18,7 @@ export type FeedApply =
       readonly op: 'reset';
       readonly transcript: readonly ThreadTranscriptEntry[];
       readonly before: number | null;
-      readonly open: readonly ThreadTranscriptEntry[];
+      readonly open: readonly ThreadOpenEntry[];
       readonly progress: ThreadLiveProgress | null;
     }
   | { readonly op: 'place'; readonly placement: ThreadEntryPlacement; readonly closesOpen: boolean }
@@ -32,7 +33,8 @@ export type FeedStep<TState> = {
 export function step<TState>(held: FeedHeld, event: ThreadFeedEvent<TState>): FeedStep<TState> | 'gap' {
   switch (event.type) {
     case 'snapshot': {
-      const { transcript, before, open, progress } = event.payload.snapshot;
+      const { transcript, before, progress } = event.payload.snapshot;
+      const open = event.payload.snapshot.open.map((one) => joinedOpen(held.record(one.entry.id), one));
       return { at: event.at, state: event.payload.snapshot, apply: [{ op: 'reset', transcript, before, open, progress }] };
     }
     case 'resume': {
@@ -57,15 +59,6 @@ export function step<TState>(held: FeedHeld, event: ThreadFeedEvent<TState>): Fe
       return { at: advanced(held.at, event.at), state: null, apply: new HeldView(held).change(event.change) };
     }
   }
-}
-
-export function appendedEntry(entry: ThreadTranscriptEntry, text: string): ThreadTranscriptEntry {
-  if (!coreEntry(entry)) return entry;
-  if (entry.type === 'tool') {
-    const raw = entry.toolInputRaw;
-    return raw?.kind === 'text' ? { ...entry, toolInputRaw: { ...raw, text: raw.text + text } } : entry;
-  }
-  return 'text' in entry ? { ...entry, text: entry.text + text } : entry;
 }
 
 function covers(held: number, records: readonly ThreadEventDelta[], through: number): boolean {
@@ -131,19 +124,28 @@ class HeldView implements TranscriptHeld {
     return apply;
   }
 
-  reopen(entries: readonly ThreadTranscriptEntry[], progress: ThreadLiveProgress | null): FeedApply[] {
-    const listed = new Set(entries.map((entry) => entry.id));
+  reopen(entries: readonly ThreadOpenEntry[], progress: ThreadLiveProgress | null): FeedApply[] {
+    const listed = new Set(entries.map((open) => open.entry.id));
     const apply: FeedApply[] = [];
     for (const id of this.held.openIds()) if (!this.closed.has(id) && !listed.has(id)) apply.push({ op: 'drop', id });
-    for (const entry of entries) apply.push(...this.change({ op: 'put', entry }));
+    for (const open of entries) apply.push(...this.change({ op: 'put', entry: open.entry, from: open.from }));
     apply.push({ op: 'progress', progress });
     return apply;
   }
 
   change(change: ThreadOpenChange): readonly FeedApply[] {
     if (change.op === 'drop') return this.isOpen(change.id) ? [change] : [];
-    if (change.op !== 'put' || this.isOpen(change.entry.id) || this.entry(change.entry.id) === undefined) return [change];
-    return [{ op: 'place', placement: { kind: 'replace', entry: change.entry }, closesOpen: false }];
+    if (change.op !== 'put') return [change];
+    const joined = joinedOpen(this.record(change.entry.id), change);
+    const put: ThreadOpenChange = joined === change ? change : { op: 'put', entry: joined.entry, from: joined.from };
+    if (put.from > 0 || this.isOpen(put.entry.id) || this.entry(put.entry.id) === undefined) return [put];
+    return [{ op: 'place', placement: { kind: 'replace', entry: put.entry }, closesOpen: false }];
+  }
+
+  private record(id: string): ThreadOpenEntry | undefined {
+    const changed = this.changed.get(id);
+    if (changed === undefined) return this.held.record(id);
+    return changed === null ? undefined : { entry: changed, from: 0 };
   }
 
   private isOpen(id: string): boolean {

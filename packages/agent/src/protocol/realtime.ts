@@ -5,6 +5,8 @@ import { ThreadRunConflictError } from '../thread/storage/runs';
 import type { ThreadSaid } from '../thread/run/scheduler/inputs';
 import { threadCauseOf } from '../thread/ThreadBorder';
 import { threadQueuedTurnSchema } from './http';
+import { WIRE_PAGE_MAX_BYTES } from '../transcript/cap';
+import { OPEN_TEXT_MAX } from '../transcript/openText';
 
 const trimmed = (checked: Schema.Codec<string, string>) =>
   Schema.String.pipe(
@@ -74,6 +76,14 @@ export const threadEntrySchema = Schema.Struct({
 
 export const threadEntriesSchema = Schema.Struct({
   before: Schema.Int,
+});
+
+export const threadTextSchema = Schema.Struct({
+  ...threadEntrySchema.fields,
+  from: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  limit: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: OPEN_TEXT_MAX })).annotate({
+    description: `UTF-16 code units; at most ${OPEN_TEXT_MAX}, which fits the ${WIRE_PAGE_MAX_BYTES}-byte page with its frame at six JSON bytes a unit`,
+  }),
 });
 
 export const threadAuthoritySchema = Schema.Struct({

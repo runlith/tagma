@@ -58,7 +58,7 @@ test('a full thread page reads as its rows with the cursor that continues it, an
       toolDisplay: display,
     };
     const change = Schema.decodeUnknownSync(threadOpenChangeSchema)(JSON.parse(JSON.stringify({ op: 'put', entry })));
-    expect(change).toEqual({ op: 'put', entry });
+    expect(change).toEqual({ op: 'put', entry, from: 0 });
     expect(display?.facts?.[0]?.value).toBe(String(rows.length));
     const text = threadToolText(answer) ?? '';
     expect(text).toContain('next-page');

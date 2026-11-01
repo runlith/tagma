@@ -85,7 +85,21 @@ it.effect('a hydration cut keeps its stored run and identifies a successor live 
     expect(cut.storedOpen).toEqual([other]);
     expect(cut.live).toEqual(world.live.view('t'));
     expect(cut.live.runId).toBe('new');
-    expect(cut.live.open).toEqual([successor]);
+    expect(cut.live.open).toEqual([{ entry: successor, from: 0 }]);
+  }),
+);
+it.effect('a range of an entry text never splits a pair, read from the open lane while it streams and from its record once landed', () =>
+  Effect.gen(function* () {
+    const world = yield* snapshotsOver();
+    const text = 'ab😀cd😀';
+    world.live.tail('t', 'r', [words('open', text)], []);
+    yield* world.append(words('landed', text));
+
+    expect(yield* world.snapshots.text('t', 'open', 3, 3)).toEqual({ text: 'cd', from: 4, length: 8 });
+    expect(yield* world.snapshots.text('t', 'open', 0, 3)).toEqual({ text: 'ab', from: 0, length: 8 });
+    expect(yield* world.snapshots.text('t', 'landed', 5, 2)).toEqual({ text: 'd', from: 5, length: 8 });
+    expect(yield* world.snapshots.text('t', 'landed', 4, 100)).toEqual({ text: 'cd😀', from: 4, length: 8 });
+    expect(yield* world.snapshots.text('t', 'absent', 0, 10)).toBeNull();
   }),
 );
 it.effect(

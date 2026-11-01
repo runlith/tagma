@@ -1,7 +1,7 @@
 import { expect } from 'bun:test';
 import { it } from '@runlith/effect-test';
 import { Effect, Result, Schema } from 'effect';
-import { threadEntryWireSchema, threadOpenChangeSchema } from '../protocol/http';
+import { threadEntryWireSchema, threadOpenChangeSchema, threadOpenEntrySchema } from '../protocol/http';
 import { makeThreadEntryReader, ThreadEntryKinds, ThreadEntryUnreadable } from '../transcript/kinds';
 
 const Placed = Schema.Struct({ type: Schema.Literal('placed'), id: Schema.String, rootId: Schema.String });
@@ -36,6 +36,19 @@ it.effect('an entry holding an absent optional as undefined crosses the JSON wir
     const sent = yield* Schema.encodeUnknownEffect(wire)({ op: 'put', entry });
     const read = yield* Schema.decodeUnknownEffect(wire)(JSON.parse(JSON.stringify(sent)));
     expect(read).toMatchObject({ op: 'put', entry: { type: 'tool', id: 't', toolState: 'input-available' } });
+  }),
+);
+
+it.effect('an open entry crosses the JSON wire with its offset, and a frame from before offsets reads as starting at zero', () =>
+  Effect.gen(function* () {
+    const open = Schema.toCodecJson(Schema.Array(threadOpenEntrySchema));
+    const change = Schema.toCodecJson(threadOpenChangeSchema);
+    const entry = { type: 'message', id: 'm', role: 'assistant', runId: 'r', text: 'tail' };
+    const sent = yield* Schema.encodeUnknownEffect(open)([{ entry, from: 70_000 }]);
+    expect(yield* Schema.decodeUnknownEffect(open)(JSON.parse(JSON.stringify(sent)))).toEqual([{ entry, from: 70_000 }]);
+
+    expect(yield* Schema.decodeUnknownEffect(open)([entry])).toEqual([{ entry, from: 0 }]);
+    expect(yield* Schema.decodeUnknownEffect(change)({ op: 'put', entry })).toEqual({ op: 'put', entry, from: 0 });
   }),
 );
 

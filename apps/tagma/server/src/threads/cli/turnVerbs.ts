@@ -1,4 +1,4 @@
-import { Deferred, Effect, Fiber, Option, Stdio, Stream } from 'effect';
+import { Data, Deferred, Effect, Fiber, Option, Stdio, Stream } from 'effect';
 import { Argument, Command, Flag } from 'effect/cli';
 import type { ThreadWireFeedEvent, ThreadWireSnapshotPayload, WireSnapshot, WireState } from '../contract/wire/snapshot.js';
 import type {
@@ -11,7 +11,8 @@ import type {
 import type { ThreadTypesPage } from '../contract/wire/birth.js';
 import type { ThreadTranscriptEntry } from '@runlith/agent/transcript/rows';
 import { coreEntry } from '@runlith/agent/transcript/kinds';
-import type { FeedPosition, ThreadOpenChange } from '@runlith/agent/transcript/live';
+import type { FeedPosition, ThreadOpenChange, ThreadOpenEntry } from '@runlith/agent/transcript/live';
+import { OPEN_TEXT_MAX } from '@runlith/agent/transcript/openText';
 import { THREAD_COMPACTION_POINTS, type ThreadCompactionPoint } from '@runlith/agent/thread/storage/inbox';
 import type { SerializedThreadRun } from '@runlith/agent/protocol/http';
 import { contextLine } from '../voice/threadText.js';
@@ -120,6 +121,7 @@ function refuseRunActive(threadId: string, runId: string): never {
 
 const runTurn = Effect.fn('threads.runTurn')(function* (input: {
   live: ThreadLive;
+  prefix: Prefix;
   projectId: number;
   threadId: string;
   start: Effect.Effect<TurnOpened, unknown>;
@@ -159,10 +161,10 @@ const runTurn = Effect.fn('threads.runTurn')(function* (input: {
       });
     }
   });
-  const live = new LiveWords();
+  const live = new LiveWords(input.prefix);
   const onFrame = Effect.fnUntraced(function* (frame: ThreadWireFeedEvent) {
     if (frame.type === 'open') {
-      const said = live.said(frame.change);
+      const said = yield* live.said(frame.change);
       if (said.text !== '') text += said.text;
       if (!input.quiet && said.shown !== '') yield* write(said.shown);
       return;
@@ -240,52 +242,86 @@ function answerWith(outcome: TurnOutcome, threadId: string, asJson: boolean) {
   );
 }
 
+class TextGone extends Data.TaggedError('TextGone')<{ readonly message: string }> {}
+
+type Prefix = (entryId: string, from: number) => Effect.Effect<string, unknown>;
+
+const prefixReader =
+  (ask: ThreadsCli['ask'], projectId: number, threadId: string): Prefix =>
+    Effect.fnUntraced(function* (entryId: string, from: number) {
+      let text = '';
+      let at = from;
+      while (at > 0) {
+        const start = Math.max(0, at - OPEN_TEXT_MAX);
+        const read = (yield* ask((door) =>
+          door.operations.perform({
+            params: { id: 'read_thread_text' },
+            query: { project: String(projectId) },
+            headers: {},
+            payload: { threadId, entryId, from: start, limit: at - start },
+          }),
+        )) as { readonly status: 'found'; readonly text: string; readonly from: number } | { readonly status: 'absent' };
+        if (read.status === 'absent' || read.from >= at) {
+          return yield* new TextGone({ message: `entry ${entryId} has no text before offset ${at}` });
+        }
+        text = read.text + text;
+        at = read.from;
+      }
+      return text;
+    });
+
 class LiveWords {
   private readonly words = new Set<string>();
   private readonly calls = new Set<string>();
 
-  said(change: ThreadOpenChange): { readonly text: string; readonly shown: string } {
+  constructor(private readonly prefix: Prefix) {}
+
+  said(change: ThreadOpenChange): Effect.Effect<{ readonly text: string; readonly shown: string }, unknown> {
     if (change.op === 'append') {
-      return this.words.has(change.id) ? { text: change.text, shown: change.text } : { text: '', shown: '' };
+      return Effect.succeed(this.words.has(change.id) ? { text: change.text, shown: change.text } : { text: '', shown: '' });
     }
-    if (change.op !== 'put') return { text: '', shown: '' };
+    if (change.op !== 'put') return Effect.succeed({ text: '', shown: '' });
     const entry = change.entry;
-    if (!coreEntry(entry)) return { text: '', shown: '' };
+    if (!coreEntry(entry)) return Effect.succeed({ text: '', shown: '' });
     if (entry.type === 'message' && entry.role === 'assistant' && !this.words.has(entry.id)) {
       this.words.add(entry.id);
-      return { text: entry.text, shown: entry.text };
+      const whole = change.from === 0 ? Effect.succeed(entry.text) : Effect.map(this.prefix(entry.id, change.from), (head) => head + entry.text);
+      return Effect.map(whole, (text) => ({ text, shown: text }));
     }
     if (entry.type === 'tool' && !this.calls.has(entry.id)) {
       this.calls.add(entry.id);
-      return { text: '', shown: `\n[tool] ${entry.toolName}\n` };
+      return Effect.succeed({ text: '', shown: `\n[tool] ${entry.toolName}\n` });
     }
-    return { text: '', shown: '' };
+    return Effect.succeed({ text: '', shown: '' });
   }
 
-  open(entries: readonly ThreadTranscriptEntry[]): string {
-    return entries.map((entry) => this.said({ op: 'put', entry }).shown).join('');
+  open(entries: readonly ThreadOpenEntry[]): Effect.Effect<string, unknown> {
+    return Effect.map(
+      Effect.forEach(entries, (one) => this.said({ op: 'put', entry: one.entry, from: one.from })),
+      (said) => said.map((one) => one.shown).join(''),
+    );
   }
 }
 
-function followFrameText(frame: ThreadWireFeedEvent, asJson: boolean, live: LiveWords): string {
-  if (asJson) return `${JSON.stringify(frame)}\n`;
+function followFrameText(frame: ThreadWireFeedEvent, asJson: boolean, live: LiveWords): Effect.Effect<string, unknown> {
+  if (asJson) return Effect.succeed(`${JSON.stringify(frame)}\n`);
   const state = (snapshot: { readonly activeRun: { readonly id: string } | null }): string =>
     snapshot.activeRun === null ? '\n[idle]\n' : `\n[run ${snapshot.activeRun.id}]\n`;
   switch (frame.type) {
     case 'open':
-      return live.said(frame.change).shown;
+      return Effect.map(live.said(frame.change), (said) => said.shown);
     case 'snapshot':
-      return state(frame.payload.snapshot) + live.open(frame.payload.snapshot.open);
+      return Effect.map(live.open(frame.payload.snapshot.open), (open) => state(frame.payload.snapshot) + open);
     case 'resume': {
       const records = frame.payload.records.map((record) => {
         const entry = record.entry;
         const said = entry !== undefined && 'text' in entry && typeof entry.text === 'string' && entry.text ? `${entry.text}\n` : '';
         return `\n[${entry?.type ?? record.kind} @${record.position}]\n${said}`;
       });
-      return records.join('') + state(frame.payload.snapshot) + live.open(frame.payload.open);
+      return Effect.map(live.open(frame.payload.open), (open) => records.join('') + state(frame.payload.snapshot) + open);
     }
     case 'state':
-      return state(frame.payload.snapshot);
+      return Effect.succeed(state(frame.payload.snapshot));
   }
 }
 
@@ -352,7 +388,7 @@ export const threadTurns = ({ ask, askLive, lens }: ThreadsCli) => {
                 context: null,
               } satisfies TurnOutcome;
             }
-            return yield* runTurn({ live, projectId, threadId: id, start, quiet: o.json });
+            return yield* runTurn({ live, prefix: prefixReader(ask, projectId, id), projectId, threadId: id, start, quiet: o.json });
           }),
         );
         if (outcome.status === 'detached') {
@@ -416,6 +452,7 @@ export const threadTurns = ({ ask, askLive, lens }: ThreadsCli) => {
         const outcome = yield* askLive((live) =>
           runTurn({
             live,
+            prefix: prefixReader(ask, projectId, o.id),
             projectId,
             threadId: o.id,
             start: live['thread.answer']({
@@ -448,6 +485,7 @@ export const threadTurns = ({ ask, askLive, lens }: ThreadsCli) => {
       const outcome = yield* askLive((live) =>
         runTurn({
           live,
+          prefix: prefixReader(ask, projectId, o.id),
           projectId,
           threadId: o.id,
           start: live['thread.continue']({ projectId, threadId: o.id }),
@@ -545,6 +583,7 @@ export const threadTurns = ({ ask, askLive, lens }: ThreadsCli) => {
         const outcome = yield* askLive((live) =>
           runTurn({
             live,
+            prefix: prefixReader(ask, projectId, o.id),
             projectId,
             threadId: o.id,
             start: live['thread.compact']({ projectId, threadId: o.id, params }),
@@ -595,14 +634,14 @@ export const threadTurns = ({ ask, askLive, lens }: ThreadsCli) => {
     asJson: boolean;
   }): Effect.Effect<void, never, Stdio.Stdio> =>
     askLive((live) => {
-      const words = new LiveWords();
+      const words = new LiveWords(prefixReader(ask, input.projectId, input.threadId));
       return Stream.runForEach(
         live['thread.subscribe']({
           projectId: input.projectId,
           threadId: input.threadId,
           since: input.since === undefined ? undefined : { position: input.since, seq: 0 },
         }),
-        (frame) => write(followFrameText(frame, input.asJson, words)),
+        (frame) => Effect.flatMap(followFrameText(frame, input.asJson, words), write),
       );
     });
   return { askThread, reply, stop, continueThread, steer, compact, unqueue, followThread };

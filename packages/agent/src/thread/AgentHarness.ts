@@ -2,7 +2,7 @@ import { Context, Duration, Effect, Exit, Layer, Scope, Stream } from 'effect';
 import { WorkflowEngine, workflowEngineLayer } from '../workflow/engine';
 import type { WorkflowPlan } from '../workflow/plan';
 import type { WorkflowArgumentsError, WorkflowRun } from '../workflow/run';
-import type { ThreadOpenView, ThreadResumeOf, ThreadSnapshotOf } from '../transcript/live';
+import type { ThreadOpenText, ThreadOpenView, ThreadResumeOf, ThreadSnapshotOf } from '../transcript/live';
 import type { ThreadState, ThreadStateProject } from './state';
 import type { ThreadBindings } from '../agent/contracts';
 import type { ThreadHostBinding, ThreadRow } from './rows';
@@ -399,6 +399,7 @@ export type HarnessReads<TState extends ThreadState> = {
   newestEndings(threadIds: readonly string[], depth: number): Effect.Effect<readonly RunEnding[], ThreadBorderFailed>;
   page(threadId: string, before: number): Effect.Effect<ThreadTranscriptPage, ThreadBorderFailed>;
   attachFrom(threadId: string, sincePosition: number): Effect.Effect<ThreadResumeOf<TState> | null, ThreadBorderFailed>;
+  text(threadId: string, entryId: string, from: number, limit: number): Effect.Effect<ThreadOpenText | null, ThreadBorderFailed>;
   shape(threadId: string): Effect.Effect<ThreadSessionShape, ThreadBorderFailed>;
   composition(threadId: string): Effect.Effect<ThreadRequestComposition, ThreadBorderFailed>;
   window(threadId: string, input: ThreadLogWindowInput): Effect.Effect<ThreadLogWindow, ThreadBorderFailed>;
@@ -603,6 +604,8 @@ function harnessReads<TState extends ThreadState>(
     page: (threadId, before) => run(Effect.flatMap(ThreadAggregate, (aggregate) => aggregate.page(threadId, before))),
     attachFrom: (threadId, sincePosition) =>
       run(Effect.flatMap(ThreadSnapshots, (snapshots) => snapshots.attachFrom(threadId, sincePosition, toState))),
+    text: (threadId, entryId, from, limit) =>
+      run(Effect.flatMap(ThreadSnapshots, (snapshots) => snapshots.text(threadId, entryId, from, limit))),
     shape: (threadId) => run(Effect.flatMap(ThreadIntrospection, (reads) => reads.shape(threadId))),
     composition: (threadId) => run(Effect.flatMap(ThreadComposition, (reads) => reads.of(threadId))),
     window: (threadId, input) => run(Effect.flatMap(ThreadIntrospection, (reads) => reads.window(threadId, input))),

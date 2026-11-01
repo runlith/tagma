@@ -185,6 +185,7 @@ export const feedRig = Effect.fnUntraced(function* () {
       held: unused,
       entry: unused,
       entries: unused,
+      text: (threadId, _projectId, entryId, from, limit) => Effect.sync(() => live.text(threadId, entryId, from, limit)),
       attachFrom: (_threadId, _projectId, since) =>
         Effect.sync(() => ({ state: state(), deltas: records.filter((record) => record.position > since), live: view() })),
       rewindActs: unused,

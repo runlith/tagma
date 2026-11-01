@@ -4,7 +4,7 @@ import { AgentPhase } from '../agent/AgentPhase';
 import { AgentSignalNotice } from '../agent/contracts';
 import { RUN_ENDINGS, RUN_STAGES, WORDS_WAITS } from '../transcript/live';
 import { THREAD_ATTACHMENT_MEDIA_TYPES } from '../transcript/attachments';
-import { capTranscript, capTranscriptEntry } from '../transcript/cap';
+import { capOpenEntries, capTranscript, capTranscriptEntry } from '../transcript/cap';
 import { ThreadAttachment, ThreadFailureDiagnostics, ThreadMessageEntry, ThreadSignalEntry, WithdrawnWords } from '../transcript/entries';
 import { ThreadRewindMark, type ThreadEventDelta } from '../transcript/eventFold';
 import type { ThreadTranscriptPage } from '../transcript/rows';
@@ -174,7 +174,7 @@ export function threadSnapshotPayload(snapshot: ThreadSnapshot): ThreadSnapshotP
       ...threadStateView(snapshot),
       transcript: capTranscript(snapshot.transcript),
       before: snapshot.before,
-      open: capTranscript(snapshot.live.open),
+      open: capOpenEntries(snapshot.live.open),
       progress: snapshot.live.progress,
     },
   };
@@ -189,7 +189,7 @@ export function threadFeedRecords(deltas: readonly ThreadEventDelta[]): readonly
 }
 
 export function threadOpenChange(change: ThreadOpenChange): ThreadOpenChange {
-  return change.op === 'put' ? { op: 'put', entry: capTranscriptEntry(change.entry) } : change;
+  return change.op === 'put' ? { op: 'put', entry: capTranscriptEntry(change.entry), from: change.from } : change;
 }
 
 export function threadSnapshotEvent(snapshot: ThreadSnapshot): ThreadFeedEvent<ThreadStateView> {
@@ -203,7 +203,7 @@ export function threadResumeEvent(resumed: ThreadResumeOf<ThreadState>, from: Fe
     payload: {
       from,
       records: threadFeedRecords(resumed.deltas),
-      open: capTranscript(resumed.live.open),
+      open: capOpenEntries(resumed.live.open),
       progress: resumed.live.progress,
       snapshot: threadStateView(resumed.state),
     },
@@ -360,15 +360,31 @@ export const threadLiveProgressSchema = Schema.Struct({
   estimate: Schema.NullOr(Schema.Struct({ stepNumber: Schema.Number, tokens: Schema.Number, contextWindow: Schema.NullOr(Schema.Number) })),
 });
 
+const openFrom = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
+
+const threadOpenEntryValue = Schema.Struct({ entry: threadEntryWireSchema, from: openFrom });
+
+export const threadOpenEntrySchema = Schema.Union([
+  threadOpenEntryValue,
+  threadEntryWireSchema.pipe(
+    Schema.decodeTo(Schema.toType(threadOpenEntryValue), {
+      decode: SchemaGetter.transform((entry: ThreadTranscriptEntry) => ({ entry, from: 0 })),
+      encode: SchemaGetter.forbiddenEncoding,
+    }),
+  ),
+]);
+
+export const threadOpenTextSchema = Schema.Struct({ text: Schema.String, from: openFrom, length: openFrom });
+
 export const threadOpenChangeSchema = Schema.Union([
-  Schema.Struct({ op: Schema.tag('put'), entry: threadEntryWireSchema }),
+  Schema.Struct({ op: Schema.tag('put'), entry: threadEntryWireSchema, from: openFrom.pipe(Schema.withDecodingDefaultKey(Effect.succeed(0))) }),
   Schema.Struct({ op: Schema.tag('append'), id: Schema.String, text: Schema.String }),
   Schema.Struct({ op: Schema.tag('drop'), id: Schema.String }),
   Schema.Struct({ op: Schema.tag('progress'), progress: Schema.NullOr(threadLiveProgressSchema) }),
 ]).pipe(Schema.toTaggedUnion('op'));
 
 export function threadFeedEventSchema<const State extends Schema.Struct.Fields>(state: State) {
-  const open = Schema.Array(threadEntryWireSchema);
+  const open = Schema.Array(threadOpenEntrySchema);
   const progress = Schema.NullOr(threadLiveProgressSchema);
   const records = Schema.Array(threadEventDeltaSchema);
   return Schema.Union([
@@ -377,7 +393,7 @@ export function threadFeedEventSchema<const State extends Schema.Struct.Fields>(
       at: feedPositionSchema,
       payload: Schema.Struct({
         status: Schema.tag('loaded'),
-        snapshot: Schema.Struct({ ...state, transcript: open, before: Schema.NullOr(Schema.Int), open, progress }),
+        snapshot: Schema.Struct({ ...state, transcript: Schema.Array(threadEntryWireSchema), before: Schema.NullOr(Schema.Int), open, progress }),
       }),
     }),
     Schema.Struct({

@@ -239,7 +239,7 @@ layer(protocolFixture('protocol-continuity'), { excludeTestServices: true })('AC
           const snapshot = () => floor.harness.reads.snapshot(threadId);
           yield* until(
             Effect.map(snapshot(), (state) =>
-              state.live.open.some((entry) => coreEntry(entry) && entry.type === 'message' && entry.text === 'Partial') ? true : null,
+              state.live.open.some(({ entry }) => coreEntry(entry) && entry.type === 'message' && entry.text === 'Partial') ? true : null,
             ),
             'the active text was visible',
             report,
@@ -249,7 +249,7 @@ layer(protocolFixture('protocol-continuity'), { excludeTestServices: true })('AC
           yield* until(
             Effect.map(snapshot(), (state) =>
               state.live.open.some(
-                (entry) =>
+                ({ entry }) =>
                   coreEntry(entry) &&
                   entry.type === 'tool' &&
                   entry.toolInputRaw?.kind === 'text' &&

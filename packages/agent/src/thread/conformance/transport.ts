@@ -281,7 +281,7 @@ export function describeTransportContract<TTx, TWrite extends TTx = TTx, R = nev
         const world = yield* lifecycleWorld(open);
         const run = yield* opened(world);
         const reports = world.reports.of(ADAPTER);
-        const shown = () => world.feed.view(run.threadId).open.map((entry) => [entry.id, 'text' in entry ? entry.text : null]);
+        const shown = () => world.feed.view(run.threadId).open.map(({ entry: e }) => [e.id, 'text' in e ? e.text : null]);
         const first = assistantMessageEntryId(run.id, 0);
         const second = assistantMessageEntryId(run.id, 1);
         yield* reports.live(run, { op: 'append', stream: 'message', part: 0, text: 'Hel' });
@@ -340,7 +340,7 @@ export function describeTransportContract<TTx, TWrite extends TTx = TTx, R = nev
         yield* reports.live(run, { op: 'tool-input', callId: 'call-1', name: 'read', text: '1' });
         expect(changes.map((change) => change.op)).toEqual(['put', 'append']);
         expect(changes[1]).toEqual({ op: 'append', id: inputId, text: '1' });
-        expect(world.feed.view(run.threadId).open.find((entry) => entry.id === inputId)).toMatchObject({
+        expect(world.feed.view(run.threadId).open.find(({ entry }) => entry.id === inputId)?.entry).toMatchObject({
           toolDisplay: { form: 'none', title: 'a.ts' },
           toolInputRaw: { text: '{"path":"a.ts","rest":1' },
         });

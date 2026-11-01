@@ -227,6 +227,12 @@
       "node": "./src/transcript/live.ts",
       "default": "./src/transcript/live.ts"
     },
+    "./transcript/openText": {
+      "types": "./src/transcript/openText.ts",
+      "browser": "./src/transcript/openText.ts",
+      "node": "./src/transcript/openText.ts",
+      "default": "./src/transcript/openText.ts"
+    },
     "./transcript/page": {
       "types": "./src/transcript/page.ts",
       "browser": "./src/transcript/page.ts",

@@ -273,6 +273,9 @@ export const threadEvidence = Effect.fnUntraced(function* ({ rows, runs }: Threa
     entries: (threadId, projectId, before) =>
       opened(threadId, projectId, () => Effect.map(harness.reads.page(threadId, before), threadPagePayload)),
 
+    text: (threadId, projectId, entryId, from, limit) =>
+      opened(threadId, projectId, () => harness.reads.text(threadId, entryId, from, limit)),
+
     attachFrom: (threadId, projectId, sincePosition) =>
       opened(threadId, projectId, () => harness.reads.attachFrom(threadId, sincePosition)),
 

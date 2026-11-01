@@ -1,6 +1,6 @@
 import { Cause, Effect, Queue, Stream } from 'effect';
 import type { ThreadPagePayload } from '@runlith/agent/protocol/http';
-import type { FeedPosition } from '@runlith/agent/transcript/live';
+import type { FeedPosition, ThreadOpenText } from '@runlith/agent/transcript/live';
 import type { ThreadTranscriptEntry } from '@runlith/agent/transcript/rows';
 import {
   type ChatAnswer,
@@ -34,6 +34,7 @@ type Answers = {
   stop: ChatStopped;
   entriesBefore: ThreadPagePayload;
   entry: ThreadTranscriptEntry | null;
+  text: ThreadOpenText | null;
 };
 
 type Inputs = {
@@ -46,6 +47,7 @@ type Inputs = {
   stop: { readonly withdraw: boolean };
   entriesBefore: { readonly before: number };
   entry: { readonly entryId: string };
+  text: { readonly entryId: string; readonly from: number; readonly limit: number };
 };
 
 type Errors = {
@@ -58,6 +60,7 @@ type Errors = {
   stop: ChatCommandRefused | ChatCommandLost;
   entriesBefore: ChatReadRefused;
   entry: ChatReadRefused;
+  text: ChatReadRefused;
 };
 
 export type Command = keyof Answers;
@@ -85,6 +88,7 @@ const DEFAULTS: { [K in Command]: Answers[K] } = {
   stop: { status: 'stopped', runId: 'run-1' },
   entriesBefore: { entries: [], before: null },
   entry: null,
+  text: null,
 };
 
 export class TestConnection<TThread extends ChatThreadView = TestThread> implements ChatConnection<TThread> {
@@ -203,6 +207,10 @@ export class TestConnection<TThread extends ChatThreadView = TestThread> impleme
 
   entry(threadId: string, entryId: string) {
     return this.command('entry', threadId, { entryId });
+  }
+
+  text(threadId: string, entryId: string, from: number, limit: number) {
+    return this.command('text', threadId, { entryId, from, limit });
   }
 
   private live(threadId?: string): Feed<TThread> | undefined {

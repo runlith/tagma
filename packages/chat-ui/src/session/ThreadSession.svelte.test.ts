@@ -4,6 +4,7 @@ import { it } from '@runlith/effect-test/vitest';
 import { describe, expect, test } from 'vitest';
 import type { ThreadEventDelta } from '@runlith/agent/transcript/eventFold';
 import type { ThreadTranscriptEntry } from '@runlith/agent/transcript/rows';
+import { OPEN_TEXT_MAX, openSlice } from '@runlith/agent/transcript/openText';
 import type { ChatEntry } from '../entries';
 import { ChatReadRefused } from '../wire/ChatConnection';
 import type { TestThread } from '../testing/chatConnection';
@@ -234,6 +235,56 @@ describe('a row whose bodies the page withheld', () => {
       yield* session.loadEntry('call-1');
       expect(ids(session.fold.entries)).toEqual(['u-1', 'call-1']);
       expect(session.fold.entries.at(-1)).toMatchObject({ kind: 'tool', truncated: undefined, toolOutput: 'every byte of it' });
+    }),
+  );
+});
+describe('an open answer that arrives as its newest window', () => {
+  it.effect('is completed by reading the prefix it lacks page by page, never splitting a pair, and keeps growing', () =>
+    Effect.gen(function* () {
+      const chat = yield* makeChat();
+      const split = 10;
+      const prefix = `${'x'.repeat(split - 1)}😀${'y'.repeat(OPEN_TEXT_MAX - 1)}`;
+      const whole = `${prefix}window more`;
+      chat.connection.stub('text', ({ entryId, from, limit }) =>
+        Effect.succeed(entryId === 'assistant:run-1' ? openSlice(whole, from, limit) : null),
+      );
+      const { session } = yield* chat.open();
+      chat.connection.emit(snapshotEvent({ activeRunId: 'run-1' }));
+      chat.connection.emit(
+        openEvent({ op: 'put', entry: message('assistant:run-1', 'assistant', 'window', 'run-1'), from: prefix.length }, at(0, 2)),
+      );
+      chat.connection.emit(openEvent({ op: 'append', id: 'assistant:run-1', text: ' more' }, at(0, 3)));
+      yield* settle;
+      expect(assistantText(session.fold.entries)).toBe(whole);
+      const asked = chat.connection.calls.filter((call) => call.command === 'text').map((call) => call.input);
+      expect(asked).toEqual([
+        { entryId: 'assistant:run-1', from: prefix.length - OPEN_TEXT_MAX, limit: OPEN_TEXT_MAX },
+        { entryId: 'assistant:run-1', from: 0, limit: split + 1 },
+      ]);
+    }),
+  );
+});
+describe('an open answer whose window moves while its prefix is read', () => {
+  it.effect('reads again from the window that replaced it and drops the page that answered the old one', () =>
+    Effect.gen(function* () {
+      const chat = yield* makeChat();
+      const whole = `${'p'.repeat(300)}ending`;
+      chat.connection.stub('text', ({ from, limit }) => Effect.succeed(openSlice(whole, from, limit)));
+      const reached = chat.connection.hold('text');
+      const { session } = yield* chat.open();
+      chat.connection.emit(snapshotEvent({ activeRunId: 'run-1' }));
+      chat.connection.emit(
+        openEvent({ op: 'put', entry: message('assistant:run-1', 'assistant', whole.slice(100, 110), 'run-1'), from: 100 }, at(0, 2)),
+      );
+      yield* settle;
+      yield* Effect.promise(() => reached);
+      chat.connection.emit(
+        openEvent({ op: 'put', entry: message('assistant:run-1', 'assistant', 'ending', 'run-1'), from: 300 }, at(0, 3)),
+      );
+      yield* settle;
+      chat.connection.release('text');
+      yield* settle;
+      expect(assistantText(session.fold.entries)).toBe(whole);
     }),
   );
 });

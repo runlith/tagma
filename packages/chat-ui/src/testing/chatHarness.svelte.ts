@@ -319,7 +319,7 @@ export function snapshotEvent(input: SnapshotInput = {}): ChatFeedEvent<TestThre
         ...state(input),
         transcript: (input.transcript ?? []) as readonly ThreadTranscriptEntry[],
         before: input.before ?? null,
-        open: (input.open ?? []) as readonly ThreadTranscriptEntry[],
+        open: ((input.open ?? []) as readonly ThreadTranscriptEntry[]).map((entry) => ({ entry, from: 0 })),
         progress: input.progress ?? null,
       },
     },

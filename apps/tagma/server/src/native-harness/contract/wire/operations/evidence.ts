@@ -1,6 +1,6 @@
 import { Schema } from 'effect';
-import { threadEntriesSchema, threadEntrySchema } from '@runlith/agent/protocol/realtime';
-import { threadPagePayloadSchema, threadEntryWireSchema } from '@runlith/agent/protocol/http';
+import { threadEntriesSchema, threadEntrySchema, threadTextSchema } from '@runlith/agent/protocol/realtime';
+import { threadOpenTextSchema, threadPagePayloadSchema, threadEntryWireSchema } from '@runlith/agent/protocol/http';
 import { arms, operation } from '../../../../platform/contract/wire/operation.js';
 import { ThreadId } from '../../../../platform/contract/wire/thread.js';
 import {
@@ -77,6 +77,21 @@ export const EVIDENCE_OPERATIONS = {
     confirmation: (input) => ({ summary: `Read entry ${input.entryId} of ${input.threadId}?` }),
     confirmLabel: 'Read entry',
     presentation: { running: 'Reading a transcript entry', done: 'Read a transcript entry' },
+  }),
+  read_thread_text: operation('read_thread_text', {
+    approval: ASKS_NEVER,
+    ...threadRead,
+    meaning:
+      "Read a range of one transcript entry's growing text — an answer, its reasoning or a tool's streamed input — by UTF-16 offset, open or recorded.",
+    input: Schema.Struct({ threadId: ThreadId, ...threadTextSchema.fields }),
+    answer: arms({ found: threadOpenTextSchema.fields, absent: {} }),
+    refusals: THREAD_READ_REFUSALS,
+    effect: 'read',
+    identity: 'none',
+    subjects: () => [],
+    confirmation: (input) => ({ summary: `Read the text of entry ${input.entryId} of ${input.threadId}?` }),
+    confirmLabel: 'Read text',
+    presentation: { running: 'Reading entry text', done: 'Read entry text' },
   }),
   read_thread_entries: operation('read_thread_entries', {
     approval: ASKS_NEVER,

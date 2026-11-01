@@ -61,6 +61,19 @@ export const EVIDENCE_PAIRS: { readonly [K in EvidenceOperationId]: OperationPai
         ),
     }),
   ),
+  read_thread_text: pair(
+    OPS.read_thread_text,
+    body(OPS.read_thread_text, {
+      execute: (input) =>
+        declaredRefusals(OPS.read_thread_text)(
+          Effect.gen(function* () {
+            const call = yield* yield* CurrentProject;
+            const read = yield* (yield* ThreadEvidence).text(input.threadId, call.project.id, input.entryId, input.from, input.limit);
+            return read === null ? { status: 'absent' as const } : { status: 'found' as const, ...read };
+          }),
+        ),
+    }),
+  ),
   read_thread_entries: pair(
     OPS.read_thread_entries,
     body(OPS.read_thread_entries, {

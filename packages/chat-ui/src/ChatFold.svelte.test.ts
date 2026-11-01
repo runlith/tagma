@@ -85,7 +85,7 @@ describe('the chat fold follows the runtime feed', () => {
   test('an open entry that ends without a record leaves, and a new one lands at the end', () => {
     const feed = opened({ activeRunId: 'run-1', open: [tool('a', 'run-1', 'input-streaming')] });
 
-    feed.open({ op: 'put', entry: tool('b', 'run-1', 'input-available') });
+    feed.open({ op: 'put', entry: tool('b', 'run-1', 'input-available'), from: 0 });
     expect(ids(feed.fold)).toEqual(['tool:a', 'tool:b']);
 
     feed.open({ op: 'drop', id: 'tool:a' });
@@ -109,7 +109,7 @@ describe('the chat fold follows the runtime feed', () => {
     expect(ids(feed.fold)).toEqual(['message:user:run-1', 'tool:a', 'transcript:signal:s', 'tool:b']);
 
     feed.state({ activeRunId: 'run-1' }, 4, [record(4, tool('b', 'run-1', 'output-error'))]);
-    feed.open({ op: 'put', entry: tool('c', 'run-1', 'input-available') });
+    feed.open({ op: 'put', entry: tool('c', 'run-1', 'input-available'), from: 0 });
     feed.state({ activeRunId: 'run-1' }, 5, [
       record(5, { type: 'signal', id: 'transcript:signal:t', runId: 'run-1', signalType: 'message', addressee: 'reader', text: 'again' }),
     ]);
@@ -181,7 +181,7 @@ describe('the chat fold follows the runtime feed', () => {
       payload: {
         from: at(1, 1),
         records: [record(2, tool('a', 'run-1', 'output-available')), record(3, message('assistant:run-1', 'assistant', 'run-1', 'Готово'))],
-        open: [tool('c', 'run-1', 'input-available')] as never,
+        open: [{ entry: tool('c', 'run-1', 'input-available'), from: 0 }] as never,
         progress: null,
         snapshot: state({ activeRunId: 'run-1' }),
       },

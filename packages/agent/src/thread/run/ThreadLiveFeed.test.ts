@@ -73,7 +73,7 @@ describe('ThreadLiveFeed', () => {
       feed.append('thread-1', 'run-1', 'assistant:run-1', 'lo');
       feed.tail('thread-1', 'run-1', [said('assistant:run-1:text:1', 'draft')], ['assistant:run-1']);
 
-      expect(feed.view('thread-1').open.map((entry) => entry.id)).toEqual(['assistant:run-1:text:1']);
+      expect(feed.view('thread-1').open.map(({ entry }) => entry.id)).toEqual(['assistant:run-1:text:1']);
 
       feed.publishState(
         frame(1, { active: 'run-1', latest: 'run-1' }, [{ position: 1, kind: 'message', entry: said('assistant:run-1', 'Hello') }]),
@@ -107,7 +107,7 @@ describe('ThreadLiveFeed', () => {
       feed.tail('thread-1', 'run-2', [said('assistant:run-2', 'still streaming')], []);
       feed.publishState(frame(0, { active: null, latest: 'run-1' }));
 
-      expect(feed.view('thread-1').open.map((entry) => entry.id)).toEqual(['assistant:run-2']);
+      expect(feed.view('thread-1').open.map(({ entry }) => entry.id)).toEqual(['assistant:run-2']);
       expect(events.filter((event) => event.type === 'open').map((event) => event.change.op)).toEqual(['put']);
     }),
   );

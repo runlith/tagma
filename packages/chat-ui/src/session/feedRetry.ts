@@ -9,6 +9,8 @@ export const feedGapPolicy = Schedule.upTo(Schedule.exponential(Duration.millis(
   Schedule.while(({ input }) => input instanceof FeedGap),
 );
 
-export const feedRecoveryPolicy = Schedule.min([Schedule.exponential(Duration.millis(250)), Schedule.spaced(Duration.seconds(30))]).pipe(
+export const readRecoveryPolicy = Schedule.min([Schedule.exponential(Duration.millis(250)), Schedule.spaced(Duration.seconds(30))]);
+
+export const feedRecoveryPolicy = readRecoveryPolicy.pipe(
   Schedule.while(({ input }) => input instanceof FeedGap || input instanceof ChatFeedBroken),
 );

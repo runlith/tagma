@@ -190,7 +190,8 @@
           "toolInput": {
             "to": "child"
           }
-        }
+        },
+        "from": 0
       }
     },
     {

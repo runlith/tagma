@@ -129,7 +129,15 @@ class Unconfirmed extends Data.TaggedError('Unconfirmed') {}
 
 class StatusTarget implements FeedTarget {
   held(at: FeedPosition | null): FeedHeld {
-    return { at, entry: () => undefined, ofRun: () => [], open: () => false, openOfRun: () => [], openIds: () => [] };
+    return {
+      at,
+      entry: () => undefined,
+      record: () => undefined,
+      ofRun: () => [],
+      open: () => false,
+      openOfRun: () => [],
+      openIds: () => [],
+    };
   }
 
   apply(): void {}

@@ -366,7 +366,8 @@
           "role": "assistant",
           "runId": "run",
           "text": "still thinking"
-        }
+        },
+        "from": 0
       }
     },
     {

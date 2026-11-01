@@ -9,7 +9,9 @@ import type {
   ThreadWaitingTurn,
   WordsWait,
   ThreadLiveView,
+  ThreadOpenText,
 } from '../../transcript/live';
+import { joinedOpen, openSlice, openText } from '../../transcript/openText';
 import { toolSettled, type ThreadToolEntry } from '../../transcript/entries';
 import type { ThreadRunChange, ThreadState, ThreadStateChange, ThreadStateProject } from '../state';
 import { WIRE_PAGE_MAX_BYTES, WIRE_PAGE_MAX_ENTRIES } from '../../transcript/cap';
@@ -90,6 +92,7 @@ export class ThreadSnapshots extends Context.Service<
       project: ThreadStateProject<T>,
     ): Effect.Effect<ThreadResumeOf<T> | null, ThreadBorderFailed>;
     page(threadId: string, before: number): Effect.Effect<ThreadTranscriptPage, ThreadBorderFailed>;
+    text(threadId: string, entryId: string, from: number, limit: number): Effect.Effect<ThreadOpenText | null, ThreadBorderFailed>;
     publish(threadId: string): Effect.Effect<void, ThreadBorderFailed>;
     committed(change: ThreadStateChange): Effect.Effect<void>;
     statuses(ownerId: string, threadIds: readonly string[]): Effect.Effect<readonly StatusRow[], ThreadBorderFailed>;
@@ -340,12 +343,14 @@ export const makeThreadSnapshots = Effect.gen(function* () {
         }),
       ),
       ({ value, live }) => {
-        const fresher = new Map(live.open.map((entry) => [entry.id, entry]));
-        const transcript = value.transcript.map((entry) => {
+        const fresher = new Map(live.open.map((open) => [open.entry.id, open]));
+        const transcript = value.transcript.flatMap((entry) => {
           const open = fresher.get(entry.id);
-          if (open === undefined) return entry;
+          if (open === undefined) return [entry];
+          const joined = joinedOpen({ entry, from: 0 }, open);
+          if (joined.from > 0) return [];
           fresher.delete(entry.id);
-          return open;
+          return [joined.entry];
         });
         return { ...value, transcript, live: { ...live, open: [...fresher.values()] } };
       },
@@ -377,6 +382,27 @@ export const makeThreadSnapshots = Effect.gen(function* () {
   }
   const page = (threadId: string, before: number): Effect.Effect<ThreadTranscriptPage, ThreadBorderFailed> =>
     inCut(threadId, (cut) => window(threadId, before, cut.tx));
+  const text = Effect.fn('ThreadSnapshots.text')(function* (
+    threadId: string,
+    entryId: string,
+    from: number,
+    limit: number,
+  ): Effect.fn.Return<ThreadOpenText | null, ThreadBorderFailed> {
+    const live = feed.text(threadId, entryId, from, limit);
+    if (live !== null) return live;
+    return yield* inCut(
+      threadId,
+      Effect.fnUntraced(function* (cut) {
+        const stored = yield* store.entryById(threadId, entryId, cut.tx);
+        const recorded = stored === undefined ? null : openText(stored);
+        if (recorded !== null) return openSlice(recorded, from, limit);
+        const run = yield* ledger.activeRunIn(threadId, cut.tx);
+        const tailed = run?.streamTail?.find((entry) => entry.id === entryId);
+        const held = tailed === undefined ? null : openText(tailed);
+        return held === null ? null : openSlice(held, from, limit);
+      }),
+    );
+  });
   const standing = (status: RunStatus): string => `${status.life}|${status.ownership ?? ''}`;
   const arm = (threadId: string, status: RunStatus, changesAt: Date | null): Effect.Effect<void> =>
     changesAt === null
@@ -654,7 +680,7 @@ export const makeThreadSnapshots = Effect.gen(function* () {
       }),
     );
   (yield* ThreadChanges).project(committed);
-  return ThreadSnapshots.of({ readCut, state, snapshot, attachFrom, page, publish, committed, statuses, forget });
+  return ThreadSnapshots.of({ readCut, state, snapshot, attachFrom, page, text, publish, committed, statuses, forget });
 });
 
 export const threadSnapshotsLayer = Layer.effect(ThreadSnapshots, makeThreadSnapshots);

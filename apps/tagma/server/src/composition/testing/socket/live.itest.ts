@@ -17,6 +17,7 @@ import { testSessionIdentity } from '../../../platform/testing/identity.js';
 import { websocketHttpTracing } from '../../../socket/live.js';
 import { TAGMA_SOCKET_PATH } from '../../../socket/rpc.js';
 import { birthsOf } from '../../../threads/testing/doubles.js';
+import { ThreadLive } from '../../../threads/contract/service/engine.js';
 import { LiveRpc } from '../composed.js';
 import type { ServerRuntime } from '../../runtime.js';
 import { makeDoorWorld, type DoorFixture } from '../doorFixture.js';
@@ -288,6 +289,22 @@ layer(Layer.effectContext(makeWorld).pipe(Layer.provideMerge(BunFileSystem.layer
       expect(yield* Effect.flip(Stream.runCollect(client['graph.work']({ projectId: project.id, threadId: 'no-thread' })))).toMatchObject({
         code: 'not-found',
       });
+    }),
+  );
+
+  it.effect('a range of an open entry text read through the live door never splits a pair', () =>
+    Effect.gen(function* () {
+      const { client, runtime } = yield* World;
+      const project = yield* addProject('text');
+      const { thread } = yield* birthsOf(runtime.owners).create({ projectId: project.id, createdBySessionId: null }).pipe(Effect.orDie);
+      const said = { type: 'message', id: 'open', role: 'assistant', runId: 'run-open', text: 'ab😀cd😀' } as const;
+      Context.get(runtime.owners, ThreadLive).tail(thread.id, 'run-open', [said], []);
+      const read = (entryId: string, from: number, limit: number) =>
+        client['thread.text']({ projectId: project.id, threadId: thread.id, params: { entryId, from, limit } });
+
+      expect(yield* read('open', 3, 3)).toEqual({ text: 'cd', from: 4, length: 8 });
+      expect(yield* read('open', 0, 3)).toEqual({ text: 'ab', from: 0, length: 8 });
+      expect(yield* read('missing', 0, 1)).toBeNull();
     }),
   );
 

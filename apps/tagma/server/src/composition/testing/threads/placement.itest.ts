@@ -176,6 +176,7 @@ const composed = Effect.fn('testing.rootPlacement')(function* (demo: EffectDemo)
             newestEndings: unexpected,
             page: unexpected,
             attachFrom: unexpected,
+            text: unexpected,
             shape: unexpected,
             composition: unexpected,
             window: unexpected,

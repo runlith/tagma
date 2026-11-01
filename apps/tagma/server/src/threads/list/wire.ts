@@ -1,5 +1,5 @@
 import type { FeedPosition, ThreadResumeOf } from '@runlith/agent/transcript/live';
-import { capTranscript } from '@runlith/agent/protocol/cap';
+import { capOpenEntries } from '@runlith/agent/protocol/cap';
 import {
   serializeRun,
   serializeThread,
@@ -338,7 +338,7 @@ export function wireResumeEvent(resumed: ThreadResumeOf<NativeThreadState>, from
     payload: {
       from,
       records: threadFeedRecords(resumed.deltas),
-      open: capTranscript(resumed.live.open),
+      open: capOpenEntries(resumed.live.open),
       progress: resumed.live.progress,
       snapshot: wireStateOf(resumed.state, basis),
     },

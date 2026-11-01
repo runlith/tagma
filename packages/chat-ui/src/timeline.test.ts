@@ -803,11 +803,11 @@ describe('a streaming run draws its parts in the order they arrived', () => {
         transcript: [{ type: 'message', id: 'message:user:run-1', role: 'user', runId: 'run-1', text: 'начни' }],
       }),
     );
-    open({ op: 'put', entry: thought('streaming') as never });
-    open({ op: 'put', entry: thought('done') as never });
+    open({ op: 'put', entry: thought('streaming') as never, from: 0 });
+    open({ op: 'put', entry: thought('done') as never, from: 0 });
     const order = ['message:user:run-1', 'reasoning:run-1', 'assistant:run-1'];
 
-    expect(open({ op: 'put', entry: answer as never })).toEqual(order);
+    expect(open({ op: 'put', entry: answer as never, from: 0 })).toEqual(order);
     expect(
       read(stateEvent({ activeRunId: 'run-1' }, at(2, ++seq), [{ position: 2, kind: 'reasoning', entry: thought('done') as never }])),
     ).toEqual(order);

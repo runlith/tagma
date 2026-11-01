@@ -114,6 +114,7 @@ const setup = Effect.gen(function* () {
             newestEndings: unused,
             page: unused,
             attachFrom: unused,
+            text: unused,
             shape: unused,
             composition: unused,
             window: unused,

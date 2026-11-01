@@ -21,7 +21,8 @@ import {
 } from '../wire/ChatConnection';
 import type { DetachedSession } from './DetachedSessions';
 import { FeedReader } from './FeedReader';
-import { FEED_GAPS, FeedGap, feedGapPolicy, feedRecoveryPolicy } from './feedRetry';
+import { FEED_GAPS, FeedGap, feedGapPolicy, feedRecoveryPolicy, readRecoveryPolicy } from './feedRetry';
+import { OPEN_TEXT_MAX } from '@runlith/agent/transcript/openText';
 import { type ChatRunEnding, type FeedReading, type FeedStill, LIVE_FEED, runEnding, runVerdict, waitingItems } from './FeedVerdicts';
 import type { PendingAnswer, PendingTurn, PendingTurns, PendingWatcher } from './PendingTurns';
 
@@ -105,6 +106,7 @@ export class ThreadSession<TThread extends ChatThreadView> implements PendingWat
   private paging: Deferred.Deferred<boolean, ChatReadRefused> | null = null;
   private reader: FeedReader<TThread>;
   private readonly bubbles = new Map<string, ChatStreamTurn>();
+  private readonly prefixing = new Map<string, number>();
   private readonly deadlineMs: number;
 
   private constructor(
@@ -308,6 +310,7 @@ export class ThreadSession<TThread extends ChatThreadView> implements PendingWat
       const first = this.first;
       this.attached = null;
       this.first = null;
+      this.prefixing.clear();
       if (first) Deferred.doneUnsafe(first, Effect.interrupt);
       return attached === null ? Effect.void : Scope.close(attached, Exit.void);
     });
@@ -349,7 +352,36 @@ export class ThreadSession<TThread extends ChatThreadView> implements PendingWat
       this.frameAt = now;
       if (read.state !== null) this.applyState(read.state, now);
       if (read.progress !== undefined) this.applyProgress(read.progress);
-      return Effect.asVoid(Deferred.succeed(first, undefined));
+      return Effect.andThen(this.fetchPrefixes(), Effect.asVoid(Deferred.succeed(first, undefined)));
+    });
+  }
+
+  private fetchPrefixes(): Effect.Effect<void> {
+    return Effect.suspend(() => {
+      const scope = this.attached;
+      const lacking = this.fold.lacking();
+      const standing = new Set(lacking.map((one) => one.id));
+      for (const id of this.prefixing.keys()) if (!standing.has(id)) this.prefixing.delete(id);
+      if (scope === null) return Effect.void;
+      const fresh = lacking.filter((one) => this.prefixing.get(one.id) !== one.from);
+      for (const one of fresh) this.prefixing.set(one.id, one.from);
+      return Effect.forEach(
+        fresh,
+        (one) => Effect.forkIn(Effect.andThen(Effect.retry(this.prefixOf(one.id), readRecoveryPolicy), this.fetchPrefixes()), scope),
+        { discard: true },
+      );
+    });
+  }
+
+  private prefixOf(entryId: string): Effect.Effect<void, ChatReadRefused> {
+    return Effect.suspend(() => {
+      const from = this.fold.lacking().find((one) => one.id === entryId)?.from;
+      if (from === undefined) return Effect.void;
+      this.prefixing.set(entryId, from);
+      const start = Math.max(0, from - OPEN_TEXT_MAX);
+      return Effect.flatMap(this.connection.text(this.threadId, entryId, start, from - start), (read) =>
+        read !== null && this.fold.prefix(entryId, read.from, read.text) ? this.prefixOf(entryId) : Effect.void,
+      );
     });
   }
 

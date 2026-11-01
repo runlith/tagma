@@ -34,7 +34,7 @@ const STEP_ENDING_PHASES: ReadonlySet<ThreadPhase['phase']> = new Set(['preparin
 export function phaseChanges<TState extends ThreadStateShape>(event: ThreadLiveEvent<TState>): readonly ThreadOpenChange[] {
   if (event.type === 'open') return [event.change];
   const changes: ThreadOpenChange[] = [];
-  for (const delta of event.frame.deltas) if (delta.entry?.type === 'tool') changes.push({ op: 'put', entry: delta.entry });
+  for (const delta of event.frame.deltas) if (delta.entry?.type === 'tool') changes.push({ op: 'put', entry: delta.entry, from: 0 });
   return changes;
 }
 
@@ -142,12 +142,12 @@ export class ThreadPhaseFeed {
     const runId = this.followed.get(threadId);
     if (view !== null) {
       this.take(threadId, [
-        ...view.open.map((entry): ThreadOpenChange => ({ op: 'put', entry })),
+        ...view.open.map((open): ThreadOpenChange => ({ op: 'put', entry: open.entry, from: open.from })),
         { op: 'progress', progress: view.progress },
       ]);
     }
     const known = this.live.get(threadId)?.tools;
-    const fresh = stored.filter((entry) => !known?.has(entry.id)).map((entry): ThreadOpenChange => ({ op: 'put', entry }));
+    const fresh = stored.filter((entry) => !known?.has(entry.id)).map((entry): ThreadOpenChange => ({ op: 'put', entry, from: 0 }));
     const later = heard.filter(({ at }) => at.runId === null || at.runId === runId).flatMap(({ changes }) => changes);
     this.take(threadId, [...fresh, ...later]);
   }

@@ -23,8 +23,10 @@ const snapshot = (
 ): ThreadFeedEvent<State> => ({
   type: 'snapshot',
   at: where,
-  payload: { status: 'loaded', snapshot: { name: 'snapshot', transcript, before: null, open, progress: null } },
+  payload: { status: 'loaded', snapshot: { name: 'snapshot', transcript, before: null, open: open.map(whole), progress: null } },
 });
+
+const whole = (entry: ThreadTranscriptEntry) => ({ entry, from: 0 });
 
 const state = (where: FeedPosition, records: readonly ThreadEventDelta[]): ThreadFeedEvent<State> => ({
   type: 'state',
@@ -39,10 +41,10 @@ const record = (position: number, entry: ThreadTranscriptEntry): ThreadEventDelt
 describe('feed step', () => {
   test('an event that does not follow the held sequence is a gap and changes nothing', () => {
     const view = new FeedView<State>();
-    expect(view.take(open(at(0, 1), { op: 'put', entry: message('a', 'run', 'x') }))).toBe(false);
+    expect(view.take(open(at(0, 1), { op: 'put', entry: message('a', 'run', 'x'), from: 0 }))).toBe(false);
     view.take(snapshot(at(3, 10), [message('m1', 'run', 'one')]));
 
-    expect(view.take(open(at(3, 12), { op: 'put', entry: message('a', 'run', 'x') }))).toBe(false);
+    expect(view.take(open(at(3, 12), { op: 'put', entry: message('a', 'run', 'x'), from: 0 }))).toBe(false);
     expect(view.take(state(at(4, 10), [record(4, message('m2', 'run', 'two'))]))).toBe(false);
     expect(view.take(state(at(5, 11), [record(4, message('m2', 'run', 'two'))]))).toBe(false);
 
@@ -67,7 +69,7 @@ describe('feed step', () => {
       payload: {
         from: at(1, 2),
         records: [record(2, message('m2', 'run', 'two')), record(3, message('m3', 'run', 'three'))],
-        open: [message('live', 'run', 'typ')],
+        open: [whole(message('live', 'run', 'typ'))],
         progress: { phase: { phase: 'writing', since: 1 }, estimate: null },
         snapshot: { name: 'resumed' },
       },
@@ -77,7 +79,7 @@ describe('feed step', () => {
     view.take({ ...replayed, at: at(3, 9) });
 
     expect(view.transcript.map((entry) => entry.id)).toEqual(['m1', 'm2', 'm3']);
-    expect(view.open).toEqual([message('live', 'run', 'typ')]);
+    expect(view.open).toEqual([whole(message('live', 'run', 'typ'))]);
     expect(view.progress?.phase?.phase).toBe('writing');
     expect(view.state).toEqual({ name: 'resumed' });
     expect(view.at).toEqual(at(3, 9));
@@ -96,10 +98,10 @@ describe('feed step', () => {
   test('open text grows by appended characters and its record settles it in place', () => {
     const view = new FeedView<State>();
     view.take(snapshot(at(1, 0), [message('user', 'run', 'hi')]));
-    view.take(open(at(1, 1), { op: 'put', entry: message('assistant:run', 'run', 'Hel') }));
+    view.take(open(at(1, 1), { op: 'put', entry: message('assistant:run', 'run', 'Hel'), from: 0 }));
     view.take(open(at(1, 2), { op: 'append', id: 'assistant:run', text: 'lo' }));
 
-    expect(view.open).toEqual([message('assistant:run', 'run', 'Hello')]);
+    expect(view.open).toEqual([whole(message('assistant:run', 'run', 'Hello'))]);
 
     view.take(state(at(2, 3), [record(2, message('assistant:run', 'run', 'Hello'))]));
 
@@ -119,7 +121,7 @@ describe('feed step', () => {
     const view = new FeedView<State>();
     view.take(snapshot(at(1, 0), [announced]));
 
-    view.take(open(at(1, 1), { op: 'put', entry: { ...announced, toolState: 'output-available', toolOutput: 'text' } }));
+    view.take(open(at(1, 1), { op: 'put', entry: { ...announced, toolState: 'output-available', toolOutput: 'text' }, from: 0 }));
 
     expect(view.open).toEqual([]);
     expect(view.transcript).toEqual([{ ...announced, toolState: 'output-available', toolOutput: 'text' }]);
@@ -134,6 +136,35 @@ describe('feed step', () => {
 
     expect(view.transcript).toEqual([prompt]);
     expect(view.open).toEqual([]);
+  });
+
+  test('a windowed open entry on resume joins the prefix the reader already holds instead of losing it', () => {
+    const view = new FeedView<State>();
+    view.take(snapshot(at(1, 4), [], [message('a', 'run', 'Hello wor')]));
+
+    view.take({
+      type: 'resume',
+      at: at(1, 9),
+      payload: {
+        from: at(1, 4),
+        records: [],
+        open: [{ entry: message('a', 'run', 'world!'), from: 6 }],
+        progress: null,
+        snapshot: { name: 'resumed' },
+      },
+    });
+
+    expect(view.open).toEqual([whole(message('a', 'run', 'Hello world!'))]);
+  });
+
+  test('a windowed open entry the reader does not hold keeps its offset, so the reader knows the prefix it lacks', () => {
+    const view = new FeedView<State>();
+    view.take(snapshot(at(1, 0), []));
+
+    view.take(open(at(1, 1), { op: 'put', entry: message('a', 'run', 'tail'), from: 70_000 }));
+    view.take(open(at(1, 2), { op: 'append', id: 'a', text: '!' }));
+
+    expect(view.open).toEqual([{ entry: message('a', 'run', 'tail!'), from: 70_000 }]);
   });
 
   test('records of one event see each other: an entry appended and then replaced lands once', () => {

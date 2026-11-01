@@ -11,7 +11,7 @@ import type {
 import type { ThreadAttachmentRef } from '@runlith/agent/transcript/attachments';
 import type { ThreadContextLimit } from '@runlith/agent/thread/compaction/limit';
 import type { ThreadInteractionAnswer } from '@runlith/agent/transcript/entries';
-import type { FeedPosition, RunStatus, ThreadFeedEvent, ThreadPendingInput } from '@runlith/agent/transcript/live';
+import type { FeedPosition, RunStatus, ThreadFeedEvent, ThreadOpenText, ThreadPendingInput } from '@runlith/agent/transcript/live';
 import type { ThreadTranscriptEntry } from '@runlith/agent/transcript/rows';
 import type { ChatTold } from '../notice';
 
@@ -105,6 +105,7 @@ export interface ChatConnection<TThread extends ChatThreadView> {
   stop(threadId: string, withdraw: boolean): Effect.Effect<ChatStopped, ChatCommandFailure>;
   entriesBefore(threadId: string, before: number): Effect.Effect<ThreadPagePayload, ChatReadRefused>;
   entry(threadId: string, entryId: string): Effect.Effect<ThreadTranscriptEntry | null, ChatReadRefused>;
+  text(threadId: string, entryId: string, from: number, limit: number): Effect.Effect<ThreadOpenText | null, ChatReadRefused>;
 }
 
 export const ChatConnection = <TThread extends ChatThreadView>(): Context.Service<ChatConnection<TThread>, ChatConnection<TThread>> =>

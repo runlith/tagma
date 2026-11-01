@@ -80,7 +80,7 @@ const entry = (
   toolDisplay: title === undefined ? undefined : { form: 'none', title },
   execution,
 });
-const tool = (...args: Parameters<typeof entry>): ThreadOpenChange => ({ op: 'put', entry: entry(...args) });
+const tool = (...args: Parameters<typeof entry>): ThreadOpenChange => ({ op: 'put', entry: entry(...args), from: 0 });
 const startedAt = '2026-10-10T12:00:00.000Z';
 const started = { state: 'started', at: startedAt } as const;
 const phase = (name: 'preparing' | 'reasoning' | 'retrying' | 'writing' | 'tools' | 'calling', since = 0): ThreadOpenChange => ({
@@ -179,8 +179,8 @@ test('following a run already under way reads the calls open in it', () => {
   const world = feed({
     at: { position: 4, seq: 7 },
     open: [
-      entry('call-1', 'bash', 'input-available', 'bun test', started),
-      entry('call-2', 'read', 'input-available', undefined, { state: 'queued' }),
+      { entry: entry('call-1', 'bash', 'input-available', 'bun test', started), from: 0 },
+      { entry: entry('call-2', 'read', 'input-available', undefined, { state: 'queued' }), from: 0 },
     ],
     progress: { phase: { phase: 'tools', since: 3 }, estimate: null },
   });

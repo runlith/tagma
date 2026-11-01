@@ -3,6 +3,7 @@ import {
   threadFeedEventSchema,
   threadEntryWireSchema,
   threadLiveProgressSchema,
+  threadOpenEntrySchema,
   threadStateViewFields,
   type ThreadStateView,
 } from '@runlith/agent/protocol/http';
@@ -123,7 +124,7 @@ const threadWireSnapshotPayloadFields = {
     ...wireStateFields,
     transcript: Schema.Array(threadEntryWireSchema),
     before: Schema.NullOr(Schema.Int),
-    open: Schema.Array(threadEntryWireSchema),
+    open: Schema.Array(threadOpenEntrySchema),
     progress: Schema.NullOr(threadLiveProgressSchema),
   }),
 };

@@ -26,16 +26,27 @@ export type ThreadLiveProgress = {
   readonly estimate: ThreadContextEstimate | null;
 };
 
+export type ThreadOpenEntry = {
+  readonly entry: ThreadTranscriptEntry;
+  readonly from: number;
+};
+
 export type ThreadOpenChange =
-  | { readonly op: 'put'; readonly entry: ThreadTranscriptEntry }
+  | { readonly op: 'put'; readonly entry: ThreadTranscriptEntry; readonly from: number }
   | { readonly op: 'append'; readonly id: string; readonly text: string }
   | { readonly op: 'drop'; readonly id: string }
   | { readonly op: 'progress'; readonly progress: ThreadLiveProgress | null };
 
 export type ThreadOpenView = {
   readonly at: FeedPosition;
-  readonly open: readonly ThreadTranscriptEntry[];
+  readonly open: readonly ThreadOpenEntry[];
   readonly progress: ThreadLiveProgress | null;
+};
+
+export type ThreadOpenText = {
+  readonly text: string;
+  readonly from: number;
+  readonly length: number;
 };
 
 export type ThreadLivePosition = {
@@ -49,7 +60,7 @@ export type ThreadLiveView = ThreadOpenView & ThreadLivePosition;
 export type ThreadFeedSnapshot<TState> = TState & {
   readonly transcript: readonly ThreadTranscriptEntry[];
   readonly before: number | null;
-  readonly open: readonly ThreadTranscriptEntry[];
+  readonly open: readonly ThreadOpenEntry[];
   readonly progress: ThreadLiveProgress | null;
 };
 
@@ -65,7 +76,7 @@ export type ThreadFeedEvent<TState> =
       readonly payload: {
         readonly from: FeedPosition;
         readonly records: readonly ThreadEventDelta[];
-        readonly open: readonly ThreadTranscriptEntry[];
+        readonly open: readonly ThreadOpenEntry[];
         readonly progress: ThreadLiveProgress | null;
         readonly snapshot: TState;
       };

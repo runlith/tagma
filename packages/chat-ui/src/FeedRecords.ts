@@ -5,16 +5,23 @@ import type { ThreadTranscriptEntry } from '@runlith/agent/transcript/rows';
 export class FeedRecords {
   readonly open = new Set<string>();
   private readonly byId = new Map<string, ThreadTranscriptEntry>();
+  private readonly starts = new Map<string, number>();
   private readonly runs = new Map<string, Set<string>>();
 
   get(id: string): ThreadTranscriptEntry | undefined {
     return this.byId.get(id);
   }
 
-  store(raw: ThreadTranscriptEntry): void {
+  startOf(id: string): number {
+    return this.starts.get(id) ?? 0;
+  }
+
+  store(raw: ThreadTranscriptEntry, from = 0): void {
     const held = this.byId.get(raw.id);
     if (held !== undefined && runOf(held) !== runOf(raw)) this.unrun(held);
     this.byId.set(raw.id, raw);
+    if (from > 0) this.starts.set(raw.id, from);
+    else this.starts.delete(raw.id);
     const runId = runOf(raw);
     if (runId === undefined) return;
     const ids = this.runs.get(runId);
@@ -26,20 +33,32 @@ export class FeedRecords {
     const held = this.byId.get(id);
     if (held === undefined) return;
     this.byId.delete(id);
+    this.starts.delete(id);
     this.unrun(held);
     this.open.delete(id);
   }
 
   clear(): void {
     this.byId.clear();
+    this.starts.clear();
     this.runs.clear();
     this.open.clear();
+  }
+
+  lacking(): readonly { readonly id: string; readonly from: number }[] {
+    const lacking: { readonly id: string; readonly from: number }[] = [];
+    for (const [id, from] of this.starts) if (this.open.has(id)) lacking.push({ id, from });
+    return lacking;
   }
 
   held(at: FeedPosition | null): FeedHeld {
     return {
       at,
       entry: (id) => (this.open.has(id) ? undefined : this.byId.get(id)),
+      record: (id) => {
+        const entry = this.byId.get(id);
+        return entry === undefined ? undefined : { entry, from: this.startOf(id) };
+      },
       ofRun: (runId) => {
         const found: ThreadTranscriptEntry[] = [];
         for (const id of this.runs.get(runId) ?? []) {

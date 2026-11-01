@@ -41,9 +41,9 @@ const user = message('message:user:run-1', 'user', 'run-1', 'начни');
 const corpus: Record<string, readonly ChatFeedEvent<TestThread>[]> = {
   'tools that settle out of order, a streaming answer that settles under its record, and the run end': [
     snap(1, 1, { activeRunId: 'run-1', transcript: [user] }),
-    open(2, { op: 'put', entry: tool('a', 'input-available') }),
-    open(3, { op: 'put', entry: tool('b', 'input-available') }),
-    open(4, { op: 'put', entry: message('assistant:run-1', 'assistant', 'run-1', 'Раз') }),
+    open(2, { op: 'put', entry: tool('a', 'input-available'), from: 0 }),
+    open(3, { op: 'put', entry: tool('b', 'input-available'), from: 0 }),
+    open(4, { op: 'put', entry: message('assistant:run-1', 'assistant', 'run-1', 'Раз'), from: 0 }),
     open(5, { op: 'append', id: 'assistant:run-1', text: ' два' }),
     frame(6, 2, [record(2, tool('b', 'output-available'))]),
     frame(7, 3, [record(3, tool('a', 'output-error'))]),
@@ -73,7 +73,7 @@ describe('a session fed by events equals a session fed the snapshot the producer
           seq: oracle.at!.seq,
           activeRunId: 'run-1',
           transcript: oracle.transcript as never,
-          open: oracle.open as never,
+          open: oracle.open.map((one) => one.entry) as never,
         }),
       );
       expect(shown(folded)).toEqual(shown(fresh));

@@ -1,7 +1,14 @@
-import type { ThreadLivePosition, ThreadLiveProgress, ThreadLiveView, ThreadOpenChange } from '../../transcript/live';
+import type {
+  ThreadLivePosition,
+  ThreadLiveProgress,
+  ThreadLiveView,
+  ThreadOpenChange,
+  ThreadOpenEntry,
+  ThreadOpenText,
+} from '../../transcript/live';
 import type { ThreadTranscriptEntry } from '../../transcript/rows';
 import { coreEntry } from '../../transcript/kinds';
-import { appendedEntry } from '../../transcript/feedFold';
+import { appendedEntry, OPEN_WINDOW, openSlice, openText, openWindow } from '../../transcript/openText';
 import { wireWeight } from '../../transcript/cap';
 import { Effect, FiberSet, Layer, Semaphore } from 'effect';
 import type { ThreadBorderFailed } from '../ThreadBorder';
@@ -70,7 +77,7 @@ export const makeThreadLiveFeed = Effect.fnUntraced(function* <TState extends Th
       if (held === entry) continue;
       const grown = held === undefined ? null : growth(held, entry);
       if (grown === '') continue;
-      emitOpen(threadId, lane, grown === null ? { op: 'put', entry } : { op: 'append', id: entry.id, text: grown });
+      emitOpen(threadId, lane, grown === null ? { op: 'put', ...openWindow(entry) } : grew(entry, grown));
     }
     for (const id of [...lane.open.keys()]) {
       if (seen.has(id) || lane.landing.has(id)) continue;
@@ -85,8 +92,9 @@ export const makeThreadLiveFeed = Effect.fnUntraced(function* <TState extends Th
     const lane = running(threadId, runId);
     const held = lane.open.get(id);
     if (held === undefined) return;
-    lane.open.set(id, appendedEntry(held, text));
-    emitOpen(threadId, lane, { op: 'append', id, text });
+    const entry = appendedEntry(held, text);
+    lane.open.set(id, entry);
+    emitOpen(threadId, lane, grew(entry, text));
   };
 
   const progress = (threadId: string, runId: string, progress: ThreadLiveProgress): void => {
@@ -133,8 +141,8 @@ export const makeThreadLiveFeed = Effect.fnUntraced(function* <TState extends Th
   const view = (threadId: string): ThreadLiveView => {
     const lane = lanes.get(threadId);
     if (lane === undefined) return { incarnation: emptyIncarnation, runId: null, at: { position: 0, seq: 0 }, open: [], progress: null };
-    const open: ThreadTranscriptEntry[] = [];
-    for (const [id, entry] of lane.open) if (!lane.landing.has(id)) open.push(entry);
+    const open: ThreadOpenEntry[] = [];
+    for (const [id, entry] of lane.open) if (!lane.landing.has(id)) open.push(openWindow(entry));
     return {
       incarnation: lane.incarnation,
       runId: lane.runId,
@@ -142,6 +150,12 @@ export const makeThreadLiveFeed = Effect.fnUntraced(function* <TState extends Th
       open,
       progress: lane.progress,
     };
+  };
+
+  const text = (threadId: string, id: string, from: number, limit: number): ThreadOpenText | null => {
+    const entry = lanes.get(threadId)?.open.get(id);
+    const held = entry === undefined ? null : openText(entry);
+    return held === null ? null : openSlice(held, from, limit);
   };
 
   const stateOf = (threadId: string): TState | null => lanes.get(threadId)?.state ?? null;
@@ -217,7 +231,7 @@ export const makeThreadLiveFeed = Effect.fnUntraced(function* <TState extends Th
     if (lane.watchers > 0 || lane.runId !== null || lane.open.size > 0) return;
     if (lanes.get(threadId) === lane) lanes.delete(threadId);
   }
-  return { atCut, tail, append, progress, publishState, stateOf, view, watched, subscribe, subscribeStates };
+  return { atCut, tail, append, progress, publishState, stateOf, view, text, watched, subscribe, subscribeStates };
 });
 
 function growth(held: ThreadTranscriptEntry, next: ThreadTranscriptEntry): string | null {
@@ -232,6 +246,10 @@ function growth(held: ThreadTranscriptEntry, next: ThreadTranscriptEntry): strin
     return sameBesides(held, next, 'text') ? grownBy(held.text, next.text) : null;
   }
   return null;
+}
+
+function grew(entry: ThreadTranscriptEntry, text: string): ThreadOpenChange {
+  return text.length > OPEN_WINDOW ? { op: 'put', ...openWindow(entry) } : { op: 'append', id: entry.id, text };
 }
 
 function grownBy(before: string, after: string): string | null {
@@ -287,6 +305,7 @@ export function threadFeedLayer<TState extends ThreadStateShape>(
       return { at, open, progress };
     },
     liveView: live.view,
+    text: live.text,
     publish,
     carry: (frame, published) => {
       const last = live.stateOf(frame.state.thread.id);

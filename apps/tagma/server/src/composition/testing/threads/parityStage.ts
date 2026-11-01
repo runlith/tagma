@@ -268,7 +268,7 @@ export const scribbled = Effect.fn('testing.parityScribbled')(function* (ending:
           Effect.sync(() => {
             const entry = kernel()
               .reads.openView(threadId)
-              .open.find((one) => coreEntry(one) && one.type === 'tool');
+              .open.find((one) => coreEntry(one.entry) && one.entry.type === 'tool')?.entry;
             return entry !== undefined &&
               coreEntry(entry) &&
               entry.type === 'tool' &&
@@ -323,7 +323,7 @@ export const stoppingSteer = Effect.fn('testing.parityStoppingSteer')(function* 
   yield* turns().send(threadId, parity.projectId, 'STREAM LINGER the answer.');
   const stopped = yield* until(
     Effect.map(snapshot(threadId), (state) =>
-      state.live.open.some((entry) => coreEntry(entry) && entry.type === 'message' && entry.text.includes('Partial'))
+      state.live.open.some(({ entry }) => coreEntry(entry) && entry.type === 'message' && entry.text.includes('Partial'))
         ? state.status.runId
         : null,
     ),
@@ -351,7 +351,7 @@ export const stoppingSteer = Effect.fn('testing.parityStoppingSteer')(function* 
     Effect.map(snapshot(threadId), (state) =>
       state.status.runId !== null &&
       state.status.runId !== stopped &&
-      state.live.open.some((entry) => coreEntry(entry) && entry.type === 'message' && entry.text.includes('Partial')) &&
+      state.live.open.some(({ entry }) => coreEntry(entry) && entry.type === 'message' && entry.text.includes('Partial')) &&
       state.transcript.some(
         (entry) =>
           coreEntry(entry) &&

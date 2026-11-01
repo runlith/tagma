@@ -1,7 +1,8 @@
 import type { ThreadAttachment } from '@runlith/agent/transcript/entries';
 import { markThreadEntry, type ThreadEntryPlacement, type ThreadRewindMark } from '@runlith/agent/transcript/eventFold';
-import { appendedEntry, type FeedApply, type FeedHeld } from '@runlith/agent/transcript/feedFold';
-import type { FeedPosition } from '@runlith/agent/transcript/live';
+import type { FeedApply, FeedHeld } from '@runlith/agent/transcript/feedFold';
+import type { FeedPosition, ThreadOpenEntry } from '@runlith/agent/transcript/live';
+import { appendedEntry, openText, withOpenText } from '@runlith/agent/transcript/openText';
 import type { ThreadTranscriptEntry } from '@runlith/agent/transcript/rows';
 import { userMessageEntryId } from '@runlith/agent/transcript/entryNames';
 import { untrack } from 'svelte';
@@ -137,6 +138,25 @@ export class ChatFold implements FeedSource {
       if (shown.length > 0) this.spliceAt(0, 0, shown);
     });
     this.before = before;
+  }
+
+  lacking(): readonly { readonly id: string; readonly from: number }[] {
+    return this.records.lacking();
+  }
+
+  prefix(id: string, from: number, text: string): boolean {
+    const raw = this.records.get(id);
+    const held = raw === undefined ? null : openText(raw);
+    if (raw === undefined || held === null || !this.records.open.has(id) || from + text.length !== this.records.startOf(id)) return false;
+    const whole = withOpenText(raw, text + held);
+    this.records.store(whole, from);
+    this.mutate(() => {
+      for (const entry of this.present(whole)) {
+        const at = this.list.indexOf(entry.id);
+        if (at >= 0) this.patchAt(at, entry);
+      }
+    });
+    return true;
   }
 
   replaceEntry(raw: ThreadTranscriptEntry, entryId: string): void {
@@ -295,7 +315,7 @@ export class ChatFold implements FeedSource {
         this.place(op.placement, op.closesOpen);
         return;
       case 'put':
-        this.put(op.entry);
+        this.put(op.entry, op.from);
         return;
       case 'append':
         this.grow(op.id, op.text);
@@ -308,15 +328,15 @@ export class ChatFold implements FeedSource {
     }
   }
 
-  private reset(transcript: readonly ThreadTranscriptEntry[], open: readonly ThreadTranscriptEntry[], before: number | null): void {
+  private reset(transcript: readonly ThreadTranscriptEntry[], open: readonly ThreadOpenEntry[], before: number | null): void {
     const held = this.list.slice();
     this.records.clear();
     for (const raw of transcript) this.records.store(raw);
-    for (const raw of open) {
-      this.records.store(raw);
-      this.records.open.add(raw.id);
+    for (const one of open) {
+      this.records.store(one.entry, one.from);
+      this.records.open.add(one.entry.id);
     }
-    const streaming = this.projection.entries(open).map(streamingEntry);
+    const streaming = this.projection.entries(open.map((one) => one.entry)).map(streamingEntry);
     this.replace(this.keepPendingTurns(this.marked([...this.projection.entries(transcript), ...streaming])));
     this.carry(held);
     this.before = before;
@@ -385,15 +405,15 @@ export class ChatFold implements FeedSource {
     const raw = this.records.get(id);
     if (raw === undefined) return;
     const marked = markThreadEntry(raw, rewound);
-    this.records.store(marked);
+    this.records.store(marked, this.records.startOf(id));
     for (const entry of this.present(marked)) {
       const at = this.list.indexOf(entry.id);
       if (at >= 0) this.patchAt(at, entry);
     }
   }
 
-  private put(raw: ThreadTranscriptEntry): void {
-    this.records.store(raw);
+  private put(raw: ThreadTranscriptEntry, from: number): void {
+    this.records.store(raw, from);
     this.records.open.add(raw.id);
     for (const entry of this.present(raw)) {
       const at = this.list.indexOf(entry.id);
@@ -407,7 +427,7 @@ export class ChatFold implements FeedSource {
     if (raw === undefined) return;
     const grown = appendedEntry(raw, text);
     if (grown === raw) return;
-    this.records.store(grown);
+    this.records.store(grown, this.records.startOf(id));
     for (const entry of this.present(grown)) {
       const at = this.list.indexOf(entry.id);
       if (at < 0) continue;

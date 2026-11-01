@@ -42,7 +42,7 @@ describe('ThreadStreamRecorder', () => {
       for (const piece of ['  Hel', 'lo', ' wor', 'ld  ']) yield* recorder.push({ type: 'text-delta', id: 'first', text: piece });
       yield* recorder.push({ type: 'tool-call', id: 'call-1', name: 'read', input: { path: 'a' } });
       yield* recorder.flushRecorded();
-      expect([...reader.transcript, ...reader.open]).toEqual(durable());
+      expect([...reader.transcript, ...reader.open.map((one) => one.entry)]).toEqual(durable());
       yield* recorder.push({ type: 'tool-result', id: 'call-1', name: 'read', result: { type: 'json', value: { text: 'a' } } });
       yield* recorder.push({ type: 'text-end', id: 'first' });
       world.steps.push(step([Message.assistant('Hello world')]));
@@ -52,7 +52,7 @@ describe('ThreadStreamRecorder', () => {
       yield* recorder.push({ type: 'text-start', id: 'next' });
       yield* recorder.push({ type: 'text-delta', id: 'next', text: 'live tail' });
       yield* recorder.stop();
-      expect([...reader.transcript, ...reader.open]).toEqual(durable());
+      expect([...reader.transcript, ...reader.open.map((one) => one.entry)]).toEqual(durable());
       expect(reader.gaps).toBe(0);
       const text = world.feedEvents.flatMap((event) =>
         event.type === 'open' && event.change.op !== 'progress' && 'id' in event.change && event.change.id === 'assistant:run-1'
@@ -1199,6 +1199,7 @@ const recorderWorld = Effect.fnUntraced(function* ({ transcript: initialTranscri
           snapshot: unused,
           attachFrom: unused,
           page: unused,
+          text: unused,
           statuses: unused,
           publish: () => published,
           committed: unused,

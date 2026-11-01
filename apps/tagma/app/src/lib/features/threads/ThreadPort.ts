@@ -117,6 +117,13 @@ export class ThreadPort implements ChatConnection<WireThread> {
       );
   }
 
+  text(threadId: string, entryId: string, from: number, limit: number) {
+    return Effect.mapError(
+      this.live.attempt((client) => client['thread.text']({ ...this.at(threadId), params: { entryId, from, limit } })),
+      (failed) => new ChatReadRefused({ message: failed.refusal.reason }),
+    );
+  }
+
   private at(threadId: string): { readonly projectId: number; readonly threadId: string } {
     return { projectId: this.projectId, threadId };
   }
