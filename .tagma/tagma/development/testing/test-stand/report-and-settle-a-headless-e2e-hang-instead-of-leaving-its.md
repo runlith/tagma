@@ -6,10 +6,10 @@ tags: ["task"]
 fields:
   {
     "holder": "tagma:01a19936-99ee-751b-8cb6-b0f991b1ee5e",
-    "status": "closed"
+    "status": "in_work"
   }
 edges:
   - kind: discovered-from
     to: 01a1991b-afdd-734c-83ee-cd5227668518
 ---
-The earlier terminal e2e run was stopped after 298 seconds while cleanup was still in progress. A subsequent run with the current `world.op` cleanup settled at the three-minute guard with exit 1 and a report containing one failed test; the worker hang did not recur. That run's artifact directory contained the scenario's earlier `handoff.png` but no failure screenshot, console log, or trace, and the output named no `Artifacts:` directory; both cleanup operations logged an interrupted HTTP 503. The missing failure artifacts are observed separately from the non-reproduced worker hang.
+A terminal e2e with the current `world.op` cleanup reached the three-minute guard while a PTY lane was open, lost its execution host, and continued logging unavailable-host retries without a verdict. A second run settled at the guard but its artifact directory lacked the failure screenshot, console log, and trace. Investigate the guard, failure-artifact and finalization boundary, then preserve failure evidence and settle the worker without changing the guard duration.
