@@ -1,7 +1,7 @@
 ---
 id: 01a194b3-5756-74b5-b537-c07d2b3a9de1
 title: tagma:build installs a shared checkout's uncommitted peer work, and the agent cannot step back from it
-ord: 1224
+ord: 60
 tags: ["reflection"]
 fields:
   {
