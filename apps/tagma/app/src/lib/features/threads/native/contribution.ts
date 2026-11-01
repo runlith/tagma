@@ -14,7 +14,7 @@ import type { FeedRegions } from '@runlith/chat-ui/FeedRegions.svelte';
 import type { PromptHandle } from '@runlith/chat-ui/PromptHandle.svelte';
 import { Point } from '@runlith/layer/Point';
 import type { Shown } from '@runlith/layer/svelte/payload';
-import type { Gated } from '$lib/wire/access.js';
+import { type Gated, gatedBy } from '$lib/wire/access.js';
 import type { Worktrees } from '$lib/features/worktrees/BoardState.svelte.js';
 import type { ThreadBirth } from '../birth/ThreadBirth.svelte.js';
 import type { ChatHold } from '../ChatHold.svelte.js';
@@ -100,6 +100,10 @@ export const ThreadKinds = Point.define<KindDeclaration>()('ThreadKinds', {
   claims: (kind) => kind.facets.map((facet) => `Entry kind "${kind.key}" facet "${facet}"`),
 });
 
-export const ComposerParts = Point.define<ComposerPartDeclaration>()('ComposerParts', { tier: 'app', key: (part) => part.id });
+export const ComposerParts = Point.define<ComposerPartDeclaration>()('ComposerParts', {
+  tier: 'app',
+  key: (part) => part.id,
+  draws: gatedBy('write'),
+});
 
-export const FeedParts = Point.define<FeedPartDeclaration>()('FeedParts', { tier: 'app', key: (part) => part.id });
+export const FeedParts = Point.define<FeedPartDeclaration>()('FeedParts', { tier: 'app', key: (part) => part.id, draws: gatedBy('read') });

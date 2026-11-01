@@ -1,4 +1,4 @@
-import { Service } from '@runlith/layer/key';
+import { type Optional, Service } from '@runlith/layer/key';
 import type { Right, RightKey } from '@tagma/server/platform/contract/wire/right';
 import type { Refusal } from './refusal.js';
 import type { Act } from './told.js';
@@ -25,13 +25,27 @@ export interface Gated<Payload> {
   readonly offer?: Payload;
 }
 
+type Use = 'read' | 'write';
+
 type Gate = {
   readonly right: (key: RightKey) => Right | undefined;
   readonly allows: (key: RightKey | undefined) => boolean;
   readonly shown: <Payload>(item: { readonly payload: Payload } & Gated<Payload>) => Payload | null;
 };
 
-export const gateOf = (access: AccessShape | undefined, use: 'read' | 'write'): Gate => {
+type GatedItem = { readonly payload: unknown; readonly right?: RightKey; readonly offer?: unknown };
+
+export const gatedBy = <Item extends GatedItem>(use: Use) =>
+  function* (): Generator<Optional, (item: Item) => Item | null, unknown> {
+    const gate = gateOf(yield* Access.optional(), use);
+    return (item) => {
+      const payload = gate.shown(item);
+      if (payload === null) return null;
+      return payload === item.payload ? item : ({ ...item, payload } as Item);
+    };
+  };
+
+export const gateOf = (access: AccessShape | undefined, use: Use): Gate => {
   const allows = (key: RightKey | undefined): boolean => {
     if (key === undefined) return true;
     const granted = access?.right(key)?.access;

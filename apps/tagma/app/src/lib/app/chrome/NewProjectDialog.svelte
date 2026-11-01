@@ -133,7 +133,6 @@
       <NewProjectCatalogs bind:value={draftCatalogs} />
       <PointView
         point={fields}
-        gate={gate.shown}
         propsOf={(field: CreationField): CreationFieldProps => ({
           draft,
           value: contributed[field.id],
