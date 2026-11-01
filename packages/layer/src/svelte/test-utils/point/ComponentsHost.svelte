@@ -7,9 +7,9 @@
 
   type Panel = Shown<{ label: string }> & { readonly id: string };
 
-  let { point }: { point: Point<Panel> } = $props();
+  let { point, gate }: { point: Point<Panel>; gate?: (item: Panel) => Panel['payload'] | null } = $props();
 
   provideErrorBoundaryConfig({ policy: { reportingEnabled: false } });
 </script>
 
-<PointView {point} props={{ label: 'owner' }} />
+<PointView {point} {gate} props={{ label: 'owner' }} />

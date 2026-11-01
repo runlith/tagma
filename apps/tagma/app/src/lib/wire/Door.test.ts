@@ -35,6 +35,21 @@ test.each([
   expect(result).toMatchObject({ ...body, gate });
 });
 
+test('a refusal for a missing right carries the right, and the access hint words its told', async () => {
+  const right = { key: 'warmth', state: 'lapsed', access: 'none' as const, unblock: ['renew warmth'] };
+  answer = () =>
+    Response.json(
+      { code: 'right-missing', reason: 'greet_warmly needs the right "warmth"', unblock: right.unblock, right },
+      { status: 409 },
+    );
+  const renew = { label: 'Renew', run: () => undefined };
+  const hints = { hint: (short: typeof right) => ({ note: `Warmth ${short.state}.`, act: renew }) };
+  const door = new Door(fetch, new ServerOrigin('http://tagma.test'), makeRouter(), testOperations(), undefined, hints);
+  const result = await door.perform('list_sessions', {}, {}).catch((error: unknown) => error);
+  expect(result).toMatchObject({ code: 'right-missing', right });
+  expect((result as Refusal).told).toMatchObject({ note: 'Warmth lapsed.', act: renew, code: 'right-missing' });
+});
+
 test('evidence decodes installed product entries and retains a typed diagnostic for an unknown kind', async () => {
   const door = new Door(fetch, new ServerOrigin('http://tagma.test'), makeRouter(), testOperations(), wireEntries(testWireKinds()));
   const entry = { type: 'transport', id: 'transport:1', from: 'terminal', to: 'acp', occurredAt: '' };

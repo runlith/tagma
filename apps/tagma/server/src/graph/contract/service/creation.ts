@@ -1,30 +1,36 @@
 import { Context, Effect, Schema } from 'effect';
+import { admitRight } from '../../../platform/contract/service/access.js';
 import { ContributionPoint } from '../../../platform/contract/service/contribution.js';
 import type { StoreFailure } from '../../../platform/contract/service/store.js';
 import { GateRefusal, type FieldRefusal } from '../../../platform/contract/wire/refusal.js';
+import type { RightKey } from '../../../platform/contract/wire/right.js';
 
 type Run = (projectId: number) => Effect.Effect<void, GateRefusal<FieldRefusal> | StoreFailure, unknown>;
 
 export interface CreationStep<A = unknown> {
   readonly id: string;
   readonly value: Schema.Decoder<A>;
+  readonly right?: RightKey;
   step(projectId: number, value: A): Effect.Effect<void, GateRefusal<FieldRefusal> | StoreFailure, unknown>;
 }
 
 export const PROJECT_CREATION = new ContributionPoint<CreationStep>('graph/project-creation');
 
 export type CreationSteps = {
-  readonly take: (contributed: Readonly<Record<string, unknown>>) => Effect.Effect<Run, GateRefusal<'field-invalid'>>;
+  readonly take: (contributed: Readonly<Record<string, unknown>>) => Effect.Effect<Run, GateRefusal<'field-invalid' | 'right-missing'>>;
 };
 
 const taken = (one: CreationStep, value: unknown) =>
-  Schema.decodeUnknownEffect(one.value)(value).pipe(
-    Effect.mapError((issue) =>
-      new GateRefusal('field-invalid', `"${one.id}" is not a value this step takes: ${issue.message}`, [
-        `correct "${one.id}" and create the project again`,
-      ]).about(one.id),
+  Effect.andThen(
+    Effect.mapError(admitRight(`The creation step "${one.id}"`, one.right, 'write'), (refused) => refused.about(one.id)),
+    Schema.decodeUnknownEffect(one.value)(value).pipe(
+      Effect.mapError((issue) =>
+        new GateRefusal('field-invalid', `"${one.id}" is not a value this step takes: ${issue.message}`, [
+          `correct "${one.id}" and create the project again`,
+        ]).about(one.id),
+      ),
+      Effect.map((decoded) => ({ one, decoded })),
     ),
-    Effect.map((decoded) => ({ one, decoded })),
   );
 
 export const creationSteps = (all: readonly CreationStep[]): CreationSteps => {

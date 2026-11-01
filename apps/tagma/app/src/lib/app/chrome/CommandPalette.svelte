@@ -61,7 +61,7 @@
   const env = (): ActionEnv => ({
     project: workspace.contextProject,
     routeProject: projectOpen(router) ? (router.params.project ?? null) : null,
-    surface: projectOpen(router) ? surfaces.of(router.routeId) : null,
+    surface: projectOpen(router) ? surfaces.of(router.routeId, router.params) : null,
     goto: (href) => void router.goto(href),
     resolve: (key) => app.resolve(key),
   });

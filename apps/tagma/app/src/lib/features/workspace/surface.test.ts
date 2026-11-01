@@ -48,10 +48,10 @@ const registry = () =>
 test('a route id belongs to the surface that declared its directory, and the project root to the surface with the empty route', () => {
   const surfaces = registry();
 
-  expect(surfaces.of('/[project]/mail/[[id]]')).toBe('mail');
-  expect(surfaces.of('/[project]/b/[id]')).toBe('home');
-  expect(surfaces.of('/[project]')).toBe('home');
-  expect(surfaces.of('/[project]/archive')).toBe('archive');
+  expect(surfaces.of('/[project]/mail/[[id]]', {})).toBe('mail');
+  expect(surfaces.of('/[project]/b/[id]', {})).toBe('home');
+  expect(surfaces.of('/[project]', {})).toBe('home');
+  expect(surfaces.of('/[project]/archive', {})).toBe('archive');
   expect(surfaces.owner('b')).toBe('home');
 });
 
@@ -111,10 +111,11 @@ test('a view within a nested surface joins the rail and answers its route until 
   expect(surfaces.find('app/crm/deals')).toBeUndefined();
 });
 
-test('a surface carrying its page answers its route under p with no umbrella declared, travels like a core surface, and only there', () => {
+test('a surface carrying its page answers its route and the paths below it under p with no umbrella declared, travels like a core surface, and only there', () => {
   const surfaces = of(declared('mail', { rail: 10, home: true }), declared('notes', { route: 'p/notes', rail: 30, payload: page }));
 
   expect(surfaces.of(ROUTE, { project: 'runlith', path: 'notes' })).toBe('notes');
+  expect(surfaces.of(ROUTE, { project: 'runlith', path: 'notes/42' })).toBe('notes');
   expect(surfaces.declared.map((one) => one.surface)).toEqual(['mail', 'notes']);
   expect(surfaces.portable('notes')).toBe(true);
   expect(() => of(declared('stray', { payload: page }))).toThrow(RegistryRefusal);

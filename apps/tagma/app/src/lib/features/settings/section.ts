@@ -4,6 +4,7 @@ import type { HostKind } from '@runlith/layer/Host';
 import { Point } from '@runlith/layer/Point';
 import type { Shown } from '@runlith/layer/svelte/payload';
 import type { Component } from 'svelte';
+import type { Gated } from '$lib/wire/access.js';
 import type { SettingEntry, SettingsCatalog } from '$lib/features/settings/SettingsCatalog.svelte.js';
 
 export type SectionProps = {
@@ -29,7 +30,7 @@ export type SettingsSection = {
   readonly hosts?: readonly HostKind[];
 };
 
-export interface SectionContribution extends Shown<SectionProps> {
+export interface SectionContribution extends Shown<SectionProps>, Gated<Shown<SectionProps>['payload']> {
   readonly id: string;
   readonly section: string;
   readonly order: number;

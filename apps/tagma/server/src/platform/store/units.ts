@@ -11,6 +11,7 @@ import {
   type WriteUnit,
 } from '../contract/service/units.js';
 import type { WriteSet } from '../contract/service/writes.js';
+import { UnitEnd } from './life.js';
 import { UnitStore } from './transaction.js';
 
 export const unitsLayer = <IU, IS, Brand extends StoreBrand>(
@@ -39,12 +40,19 @@ class ConnectionUnits<Brand extends StoreBrand> implements Units<Brand> {
 
   read<T, E>(work: (unit: Unit<Brand>) => Effect.Effect<T, E>, options?: ReadOptions): Effect.Effect<T, E | StoreFailure> {
     const mark = options?.bulk === true ? bulk : readOnly;
-    return work(
-      unitOf<Brand>({
-        store: this.store.identity,
-        run: <A>(query: Effect.Effect<A, StoreFailure>) => Effect.provideService(mark(query), UnitStore, this.store.identity),
-      }),
-    );
+    return Effect.suspend(() => {
+      const end = new UnitEnd();
+      const unit = end.bind(
+        unitOf<Brand>({
+          store: this.store.identity,
+          run: <A>(query: Effect.Effect<A, StoreFailure>) => Effect.provideService(mark(query), UnitStore, this.store.identity),
+        }),
+      );
+      return Effect.ensuring(
+        work(unit),
+        Effect.sync(() => end.close()),
+      );
+    });
   }
 
   markReadOnly<A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> {

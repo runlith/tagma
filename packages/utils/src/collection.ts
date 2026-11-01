@@ -16,6 +16,17 @@ export function uniqueBy<T>(values: readonly T[], key: (value: T) => string): T[
   return result;
 }
 
+export function arrayView<T>(length: number, value: (at: number) => T): readonly T[] {
+  const index = (key: string | symbol): number => {
+    const at = typeof key === 'string' ? Number(key) : -1;
+    return Number.isInteger(at) && at >= 0 && at < length && String(at) === key ? at : -1;
+  };
+  return new Proxy<T[]>([], {
+    get: (target, key, receiver) => (key === 'length' ? length : index(key) >= 0 ? value(index(key)) : Reflect.get(target, key, receiver)),
+    has: (target, key) => index(key) >= 0 || Reflect.has(target, key),
+  });
+}
+
 export function sharedPrefix<T>(held: readonly T[], next: readonly T[]): number {
   const shared = Math.min(held.length, next.length);
   let at = 0;

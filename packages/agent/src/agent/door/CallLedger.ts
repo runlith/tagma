@@ -116,6 +116,13 @@ export const makeCallLedger = ({
         return endIfSettled();
       }),
 
+    forget: (toolCallId: string): void => {
+      preflights.delete(toolCallId);
+      prepared.delete(toolCallId);
+      outcomes.delete(toolCallId);
+      resolutions.delete(toolCallId);
+    },
+
     opened,
     retain,
     release,

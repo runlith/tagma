@@ -1,4 +1,5 @@
 import { Buffer } from 'node:buffer';
+import { arrayView } from '@runlith/utils/collection';
 
 export type TextSlice = {
   readonly bytes: Uint8Array<SharedArrayBuffer>;
@@ -27,19 +28,7 @@ export function sliceLines(slice: TextSlice): readonly string[] {
 }
 
 export function lineView(text: string, offsets: Uint32Array): readonly string[] {
-  const index = (key: string | symbol): number => {
-    const at = typeof key === 'string' ? Number(key) : -1;
-    return Number.isInteger(at) && at >= 0 && at + 1 < offsets.length && String(at) === key ? at : -1;
-  };
-  return new Proxy<string[]>([], {
-    get: (target, key, receiver) =>
-      key === 'length'
-        ? offsets.length - 1
-        : index(key) >= 0
-          ? text.slice(offsets[index(key)], offsets[index(key) + 1])
-          : Reflect.get(target, key, receiver),
-    has: (target, key) => (index(key) >= 0 && index(key) < offsets.length - 1) || Reflect.has(target, key),
-  });
+  return arrayView(offsets.length - 1, (at) => text.slice(offsets[at], offsets[at + 1]));
 }
 
 export function lineIn(slice: TextSlice, at: number): string {

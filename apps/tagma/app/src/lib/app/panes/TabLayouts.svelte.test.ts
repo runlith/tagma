@@ -7,7 +7,10 @@ import { panes as threadKinds } from '$lib/features/threads/panes.js';
 import { KEPT_DAYS, KEPT_HOLDERS, TabLayouts } from './TabLayouts.svelte.js';
 import { testKind, testPanes } from './testing.js';
 
-const KINDS = testPanes(...threadKinds, ...tagmaAppKinds, testKind('file'), testKind('browser'));
+const KINDS = testPanes(...threadKinds, ...tagmaAppKinds, testKind('file'), testKind('browser'), {
+  ...testKind('sealed'),
+  right: 'warmth',
+});
 const SURFACES = testSurfaces();
 const DAY_MS = 86_400_000;
 
@@ -134,6 +137,23 @@ test('tabs saved under the former plugin kind and section reload as app tabs of 
   expect(layouts.layout(sectionHolder('app/crm/deals')).active).toBe('k1');
   expect(ids(layouts, A)).toEqual(['app:crm/board']);
   expect(storage.keys('tagma.tabs:1:').toSorted()).toEqual(['tagma.tabs:1:a', 'tagma.tabs:1:section:app/crm/deals']);
+});
+
+test('a restored layout keeps a tab of a kind under a right, and sweeps a tab of a kind this build does not declare', () => {
+  const storage = makeStorage();
+  const tabs = [
+    { key: 'k1', kind: 'sealed', id: 'vault' },
+    { key: 'k2', kind: 'ghost', id: 'gone' },
+    { key: 'k3', kind: 'file', id: 'one.ts' },
+  ];
+  storage.setItem('tagma.tabs:1:a', JSON.stringify({ tabs, active: 'k1', open: true, recent: [], at: 1_000 * DAY_MS }));
+
+  const layouts = layoutsOn(storage);
+  expect(ids(layouts, A)).toEqual(['sealed:vault', 'file:one.ts']);
+  layouts.show(A, false);
+
+  expect(ids(layoutsOn(storage), A)).toEqual(['sealed:vault', 'file:one.ts']);
+  expect(JSON.parse(storage.getItem('tagma.tabs:1:a') ?? 'null').tabs.map((tab: { kind: string }) => tab.kind)).toEqual(['sealed', 'file']);
 });
 
 test('writing one thread’s layout leaves another thread’s stored layout as it was', () => {

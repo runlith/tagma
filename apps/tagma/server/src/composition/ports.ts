@@ -13,6 +13,7 @@ import { CommitOverlay } from '../workspace/contract/service/checkouts.js';
 import { EnvironmentBackends } from '../workspace/contract/service/environments.js';
 import { RootPublished } from '../workspace/contract/service/roots.js';
 import { FileWatcher } from '../platform/contract/service/watch.js';
+import { Access, type NamedRight } from '../platform/contract/service/access.js';
 import { AssemblyInvalid } from './start.js';
 
 type Port = readonly [name: string, tag: Context.Service<any, any>];
@@ -22,6 +23,11 @@ export const admitPorts = (context: Context.Context<never>, ports: readonly Port
     const unbound = ports.filter(([, tag]) => Option.isNone(Context.getOption(context, tag))).map(([name]) => name);
     return unbound.length === 0 ? Effect.void : new AssemblyInvalid({ unregistered: [], ports: unbound });
   });
+
+export const admitRights = (rights: readonly NamedRight[], context: Context.Context<never>): Effect.Effect<void, AssemblyInvalid> =>
+  rights.length === 0
+    ? Effect.void
+    : admitPorts(context, [[`Access (asked by ${rights.map(({ key, by }) => `${by} for "${key}"`).join(', ')})`, Access]]);
 
 export type AssembledPorts =
   | EnvironmentBackends

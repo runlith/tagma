@@ -43,9 +43,12 @@ export const makeToolAdmission = <TCtx>({
   readonly catalog: (() => ReadonlyMap<string, Tool>) | undefined;
 }) => {
   const decode = (call: AgentPermissionQuestion): Effect.Effect<unknown, AgentToolFailed> =>
-    toolArguments(call.tool, call.name, call.input, catalog?.()).pipe(
-      Effect.mapError((cause) => new AgentToolFailed({ toolName: call.name, toolCallId: call.toolCallId, cause })),
-    );
+    Effect.suspend(() => {
+      run.runState.noteToolCall(call.name, call.toolCallId);
+      return toolArguments(call.tool, call.name, call.input, catalog?.()).pipe(
+        Effect.mapError((cause) => new AgentToolFailed({ toolName: call.name, toolCallId: call.toolCallId, cause })),
+      );
+    });
 
   const rewritten = (call: AgentPermissionQuestion, given: unknown, ruleId: string | undefined): Effect.Effect<unknown, AgentToolFailed> =>
     toolArguments(call.tool, call.name, given, catalog?.()).pipe(
@@ -69,7 +72,6 @@ export const makeToolAdmission = <TCtx>({
     const handed = ledger.resolutionFor(call.toolCallId, call.name, call.input);
     if (handed !== undefined) return { input: handed.judged, denied: null, rewritten: handed.rewritten === true };
     const runState = run.runState;
-    runState.noteToolInput(call.name, call.input, call.toolCallId, runState.stepNumber);
     const decoded = yield* decode(call);
     const before = yield* rules.evaluate({
       hook: 'beforeTool',

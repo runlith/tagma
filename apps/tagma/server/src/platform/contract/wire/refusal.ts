@@ -2,6 +2,7 @@ import { errorChain } from '@runlith/utils/error';
 import { walking } from '@runlith/paging';
 import { Data, Schema } from 'effect';
 import * as HttpApiSchema from 'effect/http-api/HttpApiSchema';
+import { type Right, rightSchema } from './right.js';
 
 export type Unblock = readonly [string, ...string[]];
 
@@ -21,19 +22,20 @@ export class GateRefusal<Code extends string = string> extends Data.TaggedError(
   readonly inputFile?: string;
   readonly words?: Words;
   readonly field?: string;
+  readonly right?: Right;
 }> {
   declare readonly code: Code;
 
-  constructor(code: Code, reason: string, unblock: Unblock, inputFile?: string, words?: Words, field?: string) {
-    super({ code, reason, unblock, inputFile, words, field });
+  constructor(code: Code, reason: string, unblock: Unblock, inputFile?: string, words?: Words, field?: string, right?: Right) {
+    super({ code, reason, unblock, inputFile, words, field, right });
   }
 
   saying(words: Words): GateRefusal<Code> {
-    return new GateRefusal(this.code, this.reason, this.unblock, this.inputFile, words, this.field);
+    return new GateRefusal(this.code, this.reason, this.unblock, this.inputFile, words, this.field, this.right);
   }
 
   about(field: string): GateRefusal<Code> {
-    return new GateRefusal(this.code, this.reason, this.unblock, this.inputFile, this.words, field);
+    return new GateRefusal(this.code, this.reason, this.unblock, this.inputFile, this.words, field, this.right);
   }
 
   override get message(): string {
@@ -89,6 +91,7 @@ export type CallerRefusal =
   | 'declined'
   | 'no-approver'
   | 'mode-unknown'
+  | 'right-missing'
   | GitRefusal;
 
 export type FloorRefusal =
@@ -147,6 +150,7 @@ const FIELD_REFUSAL = {
   declined: 'Declined',
   'no-approver': 'Nobody to approve it',
   'mode-unknown': 'Unknown approval mode',
+  'right-missing': 'Not included in this access',
   'git-refused': 'Git refused',
   'git-unreadable': 'Git could not be read',
   'git-incomplete': 'Git answer incomplete',
@@ -186,6 +190,7 @@ export type RefusalBody = {
   readonly inputFile?: string;
   readonly words?: Words;
   readonly field?: string;
+  readonly right?: Right;
   readonly causes?: ReadonlyArray<{ readonly tag: string; readonly message: string }>;
 };
 
@@ -223,6 +228,7 @@ const refusalFields = {
   inputFile: Schema.optional(Schema.String),
   words: Schema.optional(wordsSchema),
   field: Schema.optional(Schema.String).annotate({ description: 'The input entry this refusal is about, named by its id.' }),
+  right: Schema.optional(rightSchema).annotate({ description: 'The right a `right-missing` refusal found short.' }),
 };
 export interface RefusalSchema extends Schema.Struct<typeof refusalFields> {}
 export const refusalSchema: RefusalSchema = Schema.Struct(refusalFields).pipe(HttpApiSchema.status(409));

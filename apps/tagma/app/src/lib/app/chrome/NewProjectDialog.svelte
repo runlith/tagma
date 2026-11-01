@@ -6,6 +6,7 @@
   import * as Dialog from '$lib/shared/ui/dialog/index.js';
   import { Input } from '$lib/shared/ui/input/index.js';
   import Told from '$lib/shared/Told.svelte';
+  import { Access, gateOf } from '$lib/wire/access.js';
   import { CreationFields, type CreationDraft, type CreationField, type CreationFieldProps } from './creation.js';
   import NewProjectCatalogs from './NewProjectCatalogs.svelte';
   import { folderName, ProjectCreation, refusedOf, type Refused } from './ProjectCreation.svelte.js';
@@ -15,6 +16,11 @@
 
   const creation = ProjectCreation.use();
   const fields = CreationFields.use();
+  const gate = gateOf(Access.find());
+  const drawn = (id: string): boolean => {
+    const field = fields.find(id);
+    return field !== undefined && gate.allows(field.right);
+  };
 
   let draftName = $state('');
   let draftPath = $state('');
@@ -25,7 +31,7 @@
   let refused = $state.raw<Refused | null>(null);
 
   const draft: CreationDraft = $derived({ name: draftName.trim(), rootPath: draftPath.trim(), storage: draftStorage });
-  const underField = $derived(refused?.field !== undefined && fields.find(refused.field) !== undefined ? refused.field : undefined);
+  const underField = $derived(refused?.field !== undefined && drawn(refused.field) ? refused.field : undefined);
 
   function put(id: string, value: unknown): void {
     if (value !== undefined) {
@@ -57,8 +63,12 @@
     refused = null;
     const graphRemote = draftStorage === 'stealth' && draftRemote.trim() !== '' ? draftRemote.trim() : undefined;
     try {
-      const drawn = Object.fromEntries(Object.entries(contributed).filter(([id]) => fields.find(id) !== undefined));
-      await creation.create({ ...draft, catalogs, graphRemote, contributed: drawn });
+      await creation.create({
+        ...draft,
+        catalogs,
+        graphRemote,
+        contributed: Object.fromEntries(Object.entries(contributed).filter(([id]) => drawn(id))),
+      });
     } catch (error) {
       refused = refusedOf(error);
       return;
@@ -123,6 +133,7 @@
       <NewProjectCatalogs bind:value={draftCatalogs} />
       <PointView
         point={fields}
+        gate={gate.shown}
         propsOf={(field: CreationField): CreationFieldProps => ({
           draft,
           value: contributed[field.id],

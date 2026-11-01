@@ -94,6 +94,15 @@ declare module '$lib/wire/liveGroup.js' {
   interface Feeds extends CollectedFeeds<typeof CATALOG_MODULES> {}
 }
 
+declare module '@runlith/layer/key' {
+  interface Ladder {
+    tile: object;
+    project: { under: 'tile' };
+    graph: { under: 'project' };
+    thread: { under: 'project' };
+  }
+}
+
 export const LADDER = [TileRung, ProjectRung, ThreadRung, GraphRung] as const;
 
 export function appLayers(desktop: DesktopApi | undefined) {

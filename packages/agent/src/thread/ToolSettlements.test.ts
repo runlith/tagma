@@ -61,17 +61,23 @@ layer(threadToolSettlementsLayer.pipe(Layer.provide(ports)))('recorded tool sett
     Effect.fnUntraced(function* () {
       const settlements = yield* ToolSettlements;
       if (settlements === undefined) return yield* Effect.die('The journal owns tool settlements.');
-      const held = new Set(['call-1']);
+      const held = new Set(['read-back', 'door']);
       const identity = { toolCallId: 'call-1', caller: callerInThread('thread-1', 'run-1') };
       const claim = settlements.retain(
         identity,
-        () => held.delete(identity.toolCallId),
+        () => held.delete('read-back'),
         () => false,
+      );
+      settlements.retain(
+        identity,
+        () => held.delete('door'),
+        () => false,
+        'call',
       );
       claim?.ended();
       const before = yield* recorded([terminal('call-1')], true);
       expect(Exit.isFailure(before)).toBe(true);
-      expect([...held]).toEqual(['call-1']);
+      expect([...held]).toEqual(['read-back', 'door']);
       expect(settlements.size).toBe(1);
       const after = yield* recorded([terminal('call-1')]);
       expect(Exit.isSuccess(after)).toBe(true);

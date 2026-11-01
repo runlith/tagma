@@ -3,18 +3,22 @@ import type { Point } from '@runlith/layer/Point';
 import type { Holder } from '$lib/shared/panes/holder.js';
 import { type PaneContent, type PaneKind, type PaneOffer, PaneUndeclared, type PaneRefusal, Panes } from '$lib/shared/panes/pane.js';
 
+type ListedOffer = PaneOffer & Pick<PaneKind, 'right'>;
+
 type PaneIndex = {
   readonly items: readonly PaneKind[];
   readonly kinds: ReadonlyMap<string, PaneKind>;
   readonly former: ReadonlyMap<string, string>;
-  readonly offers: readonly PaneOffer[];
+  readonly offers: readonly ListedOffer[];
 };
 
 const indexOf = (items: readonly PaneKind[]): PaneIndex => ({
   items,
   kinds: new Map(items.map((declared) => [declared.kind, declared])),
   former: new Map(items.flatMap((declared) => (declared.formerly === undefined ? [] : [[declared.formerly, declared.kind] as const]))),
-  offers: items.flatMap((declared) => (declared.offer === undefined ? [] : [declared.offer])).toSorted((one, two) => one.order - two.order),
+  offers: items
+    .flatMap((declared) => (declared.offer === undefined ? [] : [{ ...declared.offer, right: declared.right }]))
+    .toSorted((one, two) => one.order - two.order),
 });
 
 export class PaneRegistry extends Service<PaneRegistry>()('PaneRegistry', { tier: 'app' }) {
@@ -37,7 +41,7 @@ export class PaneRegistry extends Service<PaneRegistry>()('PaneRegistry', { tier
     return this.index.items;
   }
 
-  get offers(): readonly PaneOffer[] {
+  get offers(): readonly ListedOffer[] {
     return this.index.offers;
   }
 

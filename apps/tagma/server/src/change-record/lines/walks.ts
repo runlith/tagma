@@ -12,7 +12,7 @@ import {
   type PreparedText,
   type TextContent,
 } from './folding.js';
-import type { BaseAlignment } from './projection.js';
+import type { BaseAlignment, Verdict } from './projection.js';
 import type { FoldJob, FoldResponse } from './jobs.js';
 import type { ReleasedSpan } from './released.js';
 import type { DebtWindow } from './owed.js';
@@ -20,6 +20,7 @@ import type { DependencyAnswer, DependencyInput, DependencyProbe, ImportProbe, P
 import { GateRefusal } from '../../platform/contract/wire/refusal.js';
 import type { Authoring, Placed } from '../threadFiles/authored.js';
 import type { LineTally, Tallied } from './tally.js';
+import type { PackedVerdict } from './packed.js';
 
 export type Version = { readonly text: string } | { readonly bytes: Uint8Array } | { readonly file: string; readonly digest: string };
 
@@ -36,6 +37,7 @@ export type Hunked = {
 
 export type WalkQuestion =
   | { readonly kind: 'fold'; readonly job: FoldJob; readonly limit: number }
+  | { readonly kind: 'pack'; readonly verdict: Verdict; readonly limit: number }
   | { readonly kind: 'text'; readonly text: string; readonly digest: string | undefined }
   | { readonly kind: 'bytes'; readonly bytes: Uint8Array }
   | { readonly kind: 'authored'; readonly authoring: Authoring }
@@ -52,6 +54,7 @@ export type WalkAsk = { readonly id: number } & WalkQuestion;
 
 export type WalkAnswer = { readonly id: number } & (
   | { readonly kind: 'fold'; readonly answer: FoldResponse }
+  | { readonly kind: 'pack'; readonly answer: PackedVerdict | null }
   | { readonly kind: 'text'; readonly answer: PreparedText }
   | { readonly kind: 'bytes'; readonly answer: PreparedBytes }
   | { readonly kind: 'authored'; readonly answer: Placed }
@@ -244,6 +247,15 @@ export const makeWalks = ({ size = poolSize(), wall = WALL_MS }: { readonly size
     );
 
   return {
+    pack: (verdict: Verdict, limit: number, lane: Lane) =>
+      ask(
+        {
+          kind: 'pack',
+          verdict: verdict.verdict === 'proven' ? { ...verdict, overwritten: new Map(verdict.overwritten) } : verdict,
+          limit,
+        },
+        lane,
+      ),
     authored: (authoring: Authoring) => ask({ kind: 'authored', authoring }, 'now'),
     hunks: (pairs: readonly HunkPair[]) => ask({ kind: 'hunks', pairs }, 'later'),
     digests: (contents: readonly Uint8Array[], lane: Lane = 'later') => ask({ kind: 'digests', contents }, lane),

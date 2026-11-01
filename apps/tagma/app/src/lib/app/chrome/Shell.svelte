@@ -52,8 +52,8 @@
   const router = Router.use();
   const surfaces = SurfaceRegistry.use();
   const columns = ColumnRegistry.use();
-  const framed = $derived(columns.at(router.routeId, Boolean(router.params.project), app));
-  const surface = $derived(surfaces.of(router.routeId));
+  const framed = $derived(columns.at(router.routeId, router.params, Boolean(router.params.project), app));
+  const surface = $derived(surfaces.of(router.routeId, router.params));
 
   const panes = SidePanes.use();
   const away = (): void => panes.focusOn(null);
@@ -86,7 +86,7 @@
             : {
                 projectId: project.id,
                 project: project.name,
-                threadId: surfaces.of(to.routeId) === CHAT ? (to.params.id ?? null) : null,
+                threadId: surfaces.of(to.routeId, to.params) === CHAT ? (to.params.id ?? null) : null,
               },
           navigation.type,
           startedAt,
@@ -95,7 +95,7 @@
       after: (navigation) => {
         const to = navigation.to;
         if (to === null) return;
-        switches.navigated(to.params.project, surfaces.of(to.routeId) === CHAT ? (to.params.id ?? null) : null);
+        switches.navigated(to.params.project, surfaces.of(to.routeId, to.params) === CHAT ? (to.params.id ?? null) : null);
       },
     }),
   );

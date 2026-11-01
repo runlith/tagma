@@ -11,6 +11,7 @@ interface PointDefinition<Item, Tr extends Tier = Tier> {
   readonly order?: (item: Item) => number;
   readonly claims?: (item: Item) => readonly string[];
   readonly admits?: (item: Item) => string | null;
+  readonly joins?: 'start';
 }
 
 type Contribution<Id extends string, From extends string, Item, Tr extends Tier> = Layer<
@@ -56,9 +57,18 @@ export class Point<Item> {
     };
   }
 
-  static over<Item>(id: string, definition: PointDefinition<Item>, cell: Cell<readonly Item[]>): Point<Item> {
+  static over<Item>(id: string, definition: PointDefinition<Item>, cell: Cell<readonly Item[]>, settled?: Promise<void>): Point<Item> {
     const subject = (key: string): string => `Point "${id}" item "${key}"`;
-    return new Point<Item>(id, definition.key, new Roster(subject, definition.key, cell, definition));
+    let starting = true;
+    void settled?.then(() => {
+      starting = false;
+    });
+    const admits =
+      settled === undefined
+        ? definition.admits
+        : (item: Item): string | null =>
+            starting ? (definition.admits?.(item) ?? null) : 'this point takes members only while its scope starts';
+    return new Point<Item>(id, definition.key, new Roster(subject, definition.key, cell, { ...definition, admits }));
   }
 
   static define<Item>() {
@@ -67,7 +77,13 @@ export class Point<Item> {
         static readonly definition = definition;
 
         static *make() {
-          return Point.over<Item>(id, definition, cellOf<readonly Item[]>(yield* Scope));
+          const scope = yield* Scope;
+          return Point.over<Item>(
+            id,
+            definition,
+            cellOf<readonly Item[]>(scope),
+            definition.joins === 'start' ? settledOf(scope) : undefined,
+          );
         }
 
         static contribute<const From extends string>(from: From, ...items: readonly Item[]): Contribution<Id, From, Item, Tr> {
@@ -85,8 +101,16 @@ export class Point<Item> {
   }
 }
 
-function cellOf<T>(scope: Scope): Cell<T> {
+function graphOf(scope: Scope) {
   const graph = scope.graph;
   if (!graph) throw new Error('A point needs a scope the graph opened');
-  return graph.cell<T>();
+  return graph;
+}
+
+function cellOf<T>(scope: Scope): Cell<T> {
+  return graphOf(scope).cell<T>();
+}
+
+function settledOf(scope: Scope): Promise<void> {
+  return graphOf(scope).settled(scope.home);
 }

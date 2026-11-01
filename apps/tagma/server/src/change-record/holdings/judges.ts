@@ -21,6 +21,7 @@ import { introduced } from './introduced.js';
 import { type Folder, type Judge, type JudgeParts, makeJudge } from './judge.js';
 import { holdersOf, Totals } from './totals.js';
 import { annotationsAt } from './annotation.js';
+import { Details } from './details.js';
 
 const THREADS_PER_STATEMENT = rowsPerStatement(1);
 
@@ -68,6 +69,7 @@ export const makeJudges = Effect.fnUntraced(function* ({
     readers,
     folder,
     memory,
+    details: new Details(Math.min(32 * 1024 * 1024, Math.floor(totalmem() / 256))),
     totals,
     metadata,
     graphDirectory: yield* GraphDirectory,
@@ -177,7 +179,7 @@ export const makeJudges = Effect.fnUntraced(function* ({
     using(checkout, (judge) =>
       Effect.map(wait === 'settled' ? judge.settledView : Effect.sync(judge.view), (view) => ({
         ...view,
-        paths: view.paths.map((entry) => entry.judged.holding),
+        paths: view.paths.map((entry) => entry.holding),
       })),
     );
 

@@ -3,6 +3,7 @@
   import type { EntryKinds } from '@runlith/chat-ui/EntryKinds.svelte';
   import type { FeedRegions } from '@runlith/chat-ui/FeedRegions.svelte';
   import PointView from '@runlith/layer/svelte/PointView.svelte';
+  import { Access, gateOf } from '$lib/wire/access.js';
   import {
     type ComposerPart,
     type ComposerPartDeclaration,
@@ -42,6 +43,7 @@
   const declarations = ThreadKinds.use();
   const composerParts = ComposerParts.use();
   const feedParts = FeedParts.use();
+  const gate = gateOf(Access.find());
 
   $effect.pre(() => {
     const disposers = [
@@ -57,9 +59,11 @@
 
 <PointView
   point={composerParts}
+  gate={gate.shown}
   propsOf={(one: ComposerPartDeclaration): ComposerPart => ({ ...owners, contributor: one.id, composer, surface, rendering })}
 />
 <PointView
   point={feedParts}
+  gate={gate.shown}
   propsOf={(one: FeedPartDeclaration): FeedPart => ({ ...owners, contributor: one.id, kinds, regions, transcript })}
 />

@@ -9,6 +9,7 @@ import { answerFold } from './jobs.js';
 import { prepareBytes, prepareText } from './folding.js';
 import { releaseSpan } from './released.js';
 import { debtWindows } from './owed.js';
+import { packVerdict } from './packed.js';
 import type { WalkAnswer, WalkAsk } from './walks.js';
 
 declare const self: Worker;
@@ -20,6 +21,8 @@ const answered = (ask: WalkAsk): WalkAnswer | Promise<WalkAnswer> => {
       const answer = answerFold(ask.job, { expired: (amount) => (used += amount) > ask.limit });
       return { id: ask.id, kind: 'fold', answer: { answer, used } };
     }
+    case 'pack':
+      return { id: ask.id, kind: 'pack', answer: packVerdict(ask.verdict, ask.limit) };
     case 'text':
       return { id: ask.id, kind: 'text', answer: prepareText(ask.text, ask.digest) };
     case 'bytes':

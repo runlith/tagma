@@ -2128,10 +2128,6 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead apps/tagma/app/src/lib/features/workspace/surface.ts#RouteParams",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "dead-code dead apps/tagma/app/src/lib/features/worktrees/BoardState.svelte.ts#BornThread",
           "owner": "5a3bed29"
         },
@@ -2830,10 +2826,6 @@ fields:
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/change-record/holdings/inputs.ts#Sided",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/change-record/holdings/judge.ts#Ruling",
           "owner": "5a3bed29"
         },
         {
@@ -11949,10 +11941,6 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead packages/agent/src/agent/AgentRunState.ts#AgentStepCommit",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "dead-code dead packages/agent/src/agent/AgentRunner.ts#AgentSignals",
           "owner": "5a3bed29"
         },
@@ -12688,10 +12676,6 @@ fields:
         },
         {
           "fingerprint": "dead-code dead packages/agent/src/thread/HistoryFold.ts#ThreadHistorySplice",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead packages/agent/src/thread/HistoryFold.ts#ThreadHistoryMove",
           "owner": "5a3bed29"
         },
         {
