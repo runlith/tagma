@@ -4811,10 +4811,6 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead apps/tagma/server/src/external-harnesses/birth/seat.ts#acpCapabilities",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "dead-code dead apps/tagma/server/src/external-harnesses/birth/seat.ts#terminalCapabilities",
           "owner": "5a3bed29"
         },
@@ -19896,14 +19892,6 @@ fields:
         },
         {
           "commit": "02614ae3e237e023a288767d709a39e18df0bcd9",
-          "fingerprint": "dead-code dead packages/agent/src/transcript/kinds.ts#ThreadReaderWorker",
-          "fix": "Delete it; drop `export` when its own file uses it. A test-only consumer is not a reason to export it.",
-          "line": 159,
-          "path": "packages/agent/src/transcript/kinds.ts",
-          "said": "exported type `ThreadReaderWorker` is imported by no production file"
-        },
-        {
-          "commit": "02614ae3e237e023a288767d709a39e18df0bcd9",
           "fingerprint": "dead-code dead packages/chrome-for-testing/src/build.ts#cachedExecutable",
           "fix": "Delete it; drop `export` when its own file uses it. A test-only consumer is not a reason to export it.",
           "line": 23,
@@ -20151,6 +20139,14 @@ fields:
           "line": 42,
           "path": "packages/mcp/src/sdkServer.ts",
           "said": "exported type `StdioServerInput` is imported by no production file"
+        },
+        {
+          "commit": "02614ae3e237e023a288767d709a39e18df0bcd9",
+          "fingerprint": "dead-code dead packages/agent/src/transcript/kinds.ts#ThreadReaderWorker",
+          "fix": "Delete it; drop `export` when its own file uses it. A test-only consumer is not a reason to export it.",
+          "line": 159,
+          "path": "packages/agent/src/transcript/kinds.ts",
+          "said": "exported type `ThreadReaderWorker` is imported by no production file"
         }
       ],
       "inspection": "dead-code",
