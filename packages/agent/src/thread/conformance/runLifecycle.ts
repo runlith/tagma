@@ -14,6 +14,7 @@ import { inboxSignalValues, inboxTurnValues } from '../inboxItems';
 import { APPROVAL, INSTANCE, OWNER, SCOPE, lifecycleWorld, type LifecycleWorld, started } from './lifecycleWorld';
 import { LATE_STOP } from '../run/lifecycle/RunLifecycle';
 import type { ThreadStorageFactory } from './storagePort';
+import { journalLaneFaces, ThreadJournalLane, threadJournalLane } from '../transition/lane';
 const BY_READER: ThreadRunStopIntent = { by: 'reader', marker: false, withdraw: false };
 export function describeRunLifecycleActs<TTx, TWrite extends TTx = TTx, R = never>(
   name: string,
@@ -120,6 +121,83 @@ export function describeRunLifecycleActs<TTx, TWrite extends TTx = TTx, R = neve
             runs: [{ id: run.id, progress: stored?.progress, updatedAt: stored?.updatedAt }],
           },
         ]);
+      }, Effect.provide(TestClock.layer())),
+    );
+    test(
+      'a delayed phase follows the older journal writer through its committed handoff',
+      Effect.fnUntraced(function* () {
+        const journal = yield* threadJournalLane;
+        const lane = journalLaneFaces(journal);
+        yield* Effect.provideService(
+          Effect.gen(function* () {
+            const world = yield* lifecycleWorld(open, 30_000, 250);
+            const { run } = started(yield* world.lifecycle.create(world.startFrom, APPROVAL, { kind: 'turn' }));
+            const entered = yield* Deferred.make<void>();
+            const release = yield* Deferred.make<void>();
+            const phased = yield* Deferred.make<void>();
+            const handed: ThreadStateChange[] = [];
+            world.changes.project((change) =>
+              Effect.gen(function* () {
+                handed.push(change);
+                if (change.kind === 'ran' && change.runs.some((row) => row.progress?.phase?.phase === 'reasoning'))
+                  yield* Deferred.succeed(phased, undefined);
+              }),
+            );
+            yield* world.progress.enter(run, 'reasoning', { since: 17 });
+            const older = yield* Effect.forkScoped(
+              lane.order(
+                run.threadId,
+                world.storage.aggregate.transaction(
+                  Effect.fnUntraced(function* (unit: TWrite) {
+                    const committed = within(unit);
+                    yield* world.storage.transitions.opened([run.threadId], unit);
+                    world.changes.claim(run.threadId, unit as object);
+                    yield* world.runs.writeProgress(
+                      run.id,
+                      { stage: 'running', message: 'before phase' },
+                      new Date(yield* Clock.currentTimeMillis),
+                      unit,
+                    );
+                    const stored = yield* world.runs.runById(run.id, unit);
+                    if (stored === null) return yield* Effect.die('the older writer lost its run');
+                    yield* committed.afterCommit(Effect.andThen(Deferred.succeed(entered, undefined), Deferred.await(release)));
+                    yield* committed.afterCommit(
+                      Effect.sync(() =>
+                        world.changes.note(run.threadId, unit as object, {
+                          kind: 'run',
+                          run: { id: run.id, progress: stored.progress, updatedAt: stored.updatedAt },
+                        }),
+                      ),
+                    );
+                    yield* world.storage.transitions.revised([run.threadId], unit, (revisions) =>
+                      world.changes.settle(run.threadId, unit as object, revisions.get(run.threadId)),
+                    );
+                  }),
+                ),
+              ),
+            );
+            yield* Deferred.await(entered);
+            yield* TestClock.adjust('250 millis');
+            yield* Effect.raceFirst(
+              Deferred.await(phased),
+              Effect.whileLoop({
+                while: () => !journal.standing().some((row) => row.key === run.threadId && row.waiting > 0),
+                body: () => Effect.yieldNow,
+                step: () => {},
+              }),
+            );
+            yield* Deferred.succeed(release, undefined);
+            yield* Fiber.join(older);
+            yield* Deferred.await(phased);
+            yield* world.progress.end(run.id);
+            expect(handed.map((change) => change.kind)).toEqual(['ran', 'ran']);
+            const runs = handed.filter((change) => change.kind === 'ran');
+            expect(runs.map((change) => change.runs[0]?.progress?.phase?.phase)).toEqual([undefined, 'reasoning']);
+            expect(runs[1]?.revision.from).toBe(runs[0]?.revision.to);
+          }),
+          ThreadJournalLane,
+          lane,
+        );
       }, Effect.provide(TestClock.layer())),
     );
     test(

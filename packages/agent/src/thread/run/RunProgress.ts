@@ -14,6 +14,8 @@ import {
 } from '../ThreadPorts';
 import type { ThreadRunRef } from './ThreadRunLedger';
 import { changeUnit, ThreadChanges } from './ThreadChanges';
+import { ThreadJournalLane } from '../transition/lane';
+import { ThreadStorageFailed } from '../persisted';
 
 export type PhaseEntry = {
   readonly waiting?: AgentWaiting;
@@ -65,6 +67,7 @@ export const runProgressLayer: Layer.Layer<
     const changes = yield* ThreadChanges;
     const store = yield* ThreadStore;
     const transitions = yield* ThreadTransitions;
+    const journal = yield* ThreadJournalLane;
     const rhythm = yield* ThreadStreamRhythm;
     const runs = (yield* ThreadRunStoreFactory).create((yield* ThreadOwner).id);
     const held = new Map<string, Held>();
@@ -93,7 +96,24 @@ export const runProgressLayer: Layer.Layer<
     const durable = Effect.fn('RunProgress.durable')(function* (runId: string) {
       const standing = held.get(runId);
       if (standing === undefined || !standing.unwritten) return;
-      yield* changeUnit({ store, transitions, changes }, [standing.run.threadId], `phase:${runId}`, (unit) => written(standing.run, unit));
+      const admitted = yield* journal.enter(
+        standing.run.threadId,
+        journal.place(),
+        Effect.suspend(() =>
+          pending(runId)
+            ? changeUnit({ store, transitions, changes }, [standing.run.threadId], `phase:${runId}`, (unit) => written(standing.run, unit))
+            : Effect.void,
+        ),
+      );
+      if ('ran' in admitted) return;
+      return yield* new ThreadStorageFailed({
+        call: 'phase-order',
+        cause: new Error(
+          admitted.stalled === 'none'
+            ? 'The journal lane did not start the phase flush.'
+            : 'The journal lane cut the phase flush; whether it committed is unknown.',
+        ),
+      });
     });
     const tick = Effect.fnUntraced(function* (runId: string) {
       const started = FiberMap.run(
@@ -101,7 +121,7 @@ export const runProgressLayer: Layer.Layer<
         runId,
         Effect.andThen(Effect.sleep(rhythm.flushIntervalMs), durable(runId)).pipe(
           Effect.repeat({ while: () => pending(runId) }),
-          Effect.tapError((failure) => Effect.logWarning('the phase of a run was not written', { runId, failure })),
+          Effect.tapError((failure) => Effect.logWarning('the phase of a run could not be confirmed', { runId, failure })),
         ),
         { onlyIfMissing: true },
       );
