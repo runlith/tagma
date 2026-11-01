@@ -9,7 +9,7 @@ test('a hung browser records evidence before its processes are released', async 
   const report = join(root, 'run.jsonl');
   writeFileSync(
     file,
-    `import { jest, onTestFinished } from 'bun:test';
+    `import { afterAll, beforeAll, jest } from 'bun:test';
 import { writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
@@ -17,11 +17,15 @@ import { e2e } from ${JSON.stringify(join(import.meta.dir, 'browser.ts'))};
 import { onFailure } from ${JSON.stringify(join(import.meta.dir, 'artifacts.ts'))};
 const required = createRequire(import.meta.url)('bun:test');
 jest.useFakeTimers();
+let child;
+beforeAll(() => {
+  child = Bun.spawn([process.execPath, '-e', 'await Bun.sleep(40); console.log("ready"); await Bun.stdin.text()'], { stdin: 'pipe', stdout: 'pipe', stderr: 'ignore' });
+}, 20);
+afterAll(async () => { child.kill(); await child.exited; });
 e2e('a hanging page', async ({ page }) => {
-  const child = Bun.spawn(['/bin/sleep', '600'], { stdout: 'ignore', stderr: 'ignore' });
-  onTestFinished(async () => { child.kill(); await child.exited; });
   required.onTestFinished((done) => { writeFile(${JSON.stringify(join(root, 'finished'))}, 'finished').then(() => done(), done); });
   onFailure((directory) => writeFile(join(directory, 'process.json'), JSON.stringify({ alive: child.exitCode === null })));
+  await child.stdout.getReader().read();
   await page.setContent('<!doctype html><title>Guard evidence</title><p>Browser still alive</p>');
   queueMicrotask(() => { jest.advanceTimersByTime(${HANG_MS}); jest.useRealTimers(); });
   await new Promise(() => {});

@@ -506,7 +506,7 @@ const registerEffect = <E>(name: string, body: (fixture: IOSTest) => Effect.Effe
   for (const runtime of runtimes(options)) {
     const title = `${name} [ios-${runtime}]`;
     beforeAll(() => Effect.runPromise(prepareSimulator({ runtime, deviceType: options.deviceType })));
-    it.live(title, () => execute(title, { runtime, deviceType: options.deviceType }, body), 0);
+    it.live(title, () => execute(title, { runtime, deviceType: options.deviceType }, body), Infinity);
   }
 };
 export const ios = Object.assign(register, { effect: registerEffect });

@@ -70,7 +70,7 @@ const registerEffect = <E>(
   for (const lane of selected(options)) {
     const title = `${name} [${lane}]`;
     if (options.headed === true && !headed()) notRun(title, 'headed');
-    else it.live(title, () => execute(title, lane, options, body), 0);
+    else it.live(title, () => execute(title, lane, options, body), Infinity);
   }
 };
 
