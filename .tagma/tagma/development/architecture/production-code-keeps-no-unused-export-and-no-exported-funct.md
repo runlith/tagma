@@ -11254,10 +11254,6 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead packages/agent-sources/src/SkillDirectories.ts#DiscoveredSkill",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "dead-code dead packages/agent-sources/src/SkillDirectories.ts#SkillBound",
           "owner": "5a3bed29"
         },
