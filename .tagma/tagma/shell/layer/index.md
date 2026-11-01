@@ -405,6 +405,9 @@ fields:
       },
       {
         "at": "src/svelte/payload.ts"
+      },
+      {
+        "at": "src/svelte/ShownPayload.svelte"
       }
     ],
     "id": "@runlith/layer",
