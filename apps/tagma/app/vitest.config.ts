@@ -15,6 +15,7 @@ const isolatedUnit = [
   'src/lib/features/speech/viewSpeech.test.ts',
   'src/lib/features/calls/TranscriptView.svelte.test.ts',
   'src/lib/features/calls/viewCalls.test.ts',
+  'src/lib/features/calls/moment.svelte.test.ts',
   'src/lib/features/views/ViewBridge.test.ts',
   'src/lib/features/threads/ThreadSlot.open.svelte.test.ts',
   'src/lib/features/threads/Column.svelte.test.ts',
