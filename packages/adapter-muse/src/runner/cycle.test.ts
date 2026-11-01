@@ -1,6 +1,6 @@
 import { expect } from 'bun:test';
 import { it } from '@runlith/effect-test';
-import { Deferred, Effect, FileSystem, Fiber, Scope } from 'effect';
+import { Deferred, Effect, FileSystem, Fiber, PlatformError, Scope } from 'effect';
 import type { Outlet } from '@runlith/acp/agent';
 import { hostedAgent } from '@runlith/hosted-runner/agent';
 import type { HostedDoor } from '@runlith/hosted-runner/door';
@@ -21,6 +21,7 @@ const world = Effect.fnUntraced(function* (
   script: Script,
   prompt: () => string = () => 'the frozen prompt',
   drained: Effect.Effect<void> = Effect.void,
+  stored: Map<string, string> = new Map(),
 ) {
   const scope = yield* Effect.scope;
   const sent: Sent[] = [];
@@ -110,7 +111,14 @@ const world = Effect.fnUntraced(function* (
       }),
   };
   const files = FileSystem.makeNoop({
-    writeFileString: (_path, text) => Effect.sync(() => void settings.push(text)),
+    writeFileString: (path, text) =>
+      Effect.sync(() => void (path.includes('settings.json') ? settings.push(text) : stored.set(path, text))),
+    readFileString: (path) => {
+      const text = stored.get(path);
+      return text === undefined
+        ? Effect.fail(PlatformError.systemError({ _tag: 'NotFound', module: 'FileSystem', method: 'readFileString' }))
+        : Effect.succeed(text);
+    },
     rename: () => Effect.void,
   });
   const cycle = yield* makeMuseCycle(
@@ -622,13 +630,19 @@ it.effect('a prompt that changed between runs restarts the host and resumes the 
 );
 
 it.effect(
-  'blank words never reach Muse, and a turn costs what Muse priced the session above the turn before, from zero on a new session',
+  'blank words never reach Muse, and a turn costs what Muse priced the session above the turn before, from zero on a new session and across a runner restart',
   () =>
     Effect.gen(function* () {
-      const turns = ['01a19573-1cea-7c2e-90b4-000000000021', '01a19573-1cea-7c2e-90b4-000000000022'];
+      const turns = [
+        '01a19573-1cea-7c2e-90b4-000000000021',
+        '01a19573-1cea-7c2e-90b4-000000000022',
+        '01a19573-1cea-7c2e-90b4-000000000023',
+      ];
       let usd = 0;
-      const { agent, sent } = yield* world((one, emit) => {
-        if (one.method === 'session/start') return ok(one, { session: { sessionId: one.params.sessionId } });
+      const stored = new Map<string, string>();
+      const script: Script = (one, emit) => {
+        if (one.method === 'session/start' || one.method === 'session/resume')
+          return ok(one, { session: { sessionId: one.params.sessionId, approvalMode: { mode: 'promptUnmatched' } } });
         if (one.method === 'turn/start') {
           usd += 0.25;
           const sessionId = one.params.sessionId;
@@ -654,7 +668,8 @@ it.effect(
           );
         }
         return ok(one);
-      });
+      };
+      const { agent, sent } = yield* world(script, undefined, undefined, stored);
       const session = yield* agent.newSession({ cwd: '/work', mcpServers: [] });
       const first = yield* agent.prompt({
         sessionId: session.sessionId,
@@ -669,6 +684,17 @@ it.effect(
       });
       expect(sent.filter((one) => one.method === 'turn/start').at(-1)?.params.input).toEqual([{ type: 'text', text: 'turn context' }]);
       expect(second._meta).toMatchObject({ 'tagma/cost': { amount: 0.25, currency: 'USD', basis: 'estimate' } });
+      const restarted = yield* world(script, undefined, undefined, stored);
+      yield* (
+        restarted.agent.resumeSession?.({ sessionId: session.sessionId, cwd: '/work', mcpServers: [] }) ??
+          Effect.die('the hosted agent resumes no session')
+      );
+      const third = yield* restarted.agent.prompt({
+        sessionId: session.sessionId,
+        prompt: [{ type: 'text', text: 'three' }],
+        _meta: { 'tagma/turn': turns[2] },
+      });
+      expect(third._meta).toMatchObject({ 'tagma/cost': { amount: 0.25, currency: 'USD', basis: 'estimate' } });
     }),
 );
 

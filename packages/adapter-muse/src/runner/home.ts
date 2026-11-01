@@ -86,6 +86,25 @@ const settingsOf = (settings: MuseSettings) => ({
   },
 });
 
+const pricedPath = (place: MusePlace, session: string) => join(place.config, `${session}.priced`);
+
+export const keepPriced = Effect.fn('muse.keepPriced')(function* (place: MusePlace, session: string, usd: number) {
+  const files = yield* FileSystem.FileSystem;
+  yield* files
+    .writeFileString(pricedPath(place, session), String(usd))
+    .pipe(Effect.mapError(failed(`keep the priced total of ${session}`)));
+});
+
+export const keptPriced = Effect.fn('muse.keptPriced')(function* (place: MusePlace, session: string) {
+  const files = yield* FileSystem.FileSystem;
+  const text = yield* files.readFileString(pricedPath(place, session)).pipe(
+    Effect.catchReason('PlatformError', 'NotFound', () => Effect.succeed(null)),
+    Effect.mapError(failed(`read the priced total of ${session}`)),
+  );
+  const usd = text === null ? Number.NaN : Number(text);
+  return Number.isFinite(usd) ? usd : null;
+});
+
 export const writeSettings = Effect.fn('muse.writeSettings')(function* (place: MusePlace, settings: MuseSettings) {
   const files = yield* FileSystem.FileSystem;
   const path = join(place.config, 'muse', 'settings.json');

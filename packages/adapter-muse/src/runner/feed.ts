@@ -115,7 +115,7 @@ type FeedPorts = {
   readonly began: Effect.Effect<void>;
   readonly abandon: Effect.Effect<void>;
   readonly pricedBefore: number | null;
-  readonly priced: (usd: number) => void;
+  readonly priced: (usd: number) => Effect.Effect<void>;
 };
 
 export const NOTHING: Spent = spentOf({ inputTokens: 0, outputTokens: 0, cachedTokens: 0, reasoningTokens: 0 });
@@ -523,7 +523,7 @@ export class Feed {
     const cost = usage.cumulative?.cost;
     if (cost !== undefined) {
       this.priced = cost;
-      this.ports.priced(cost.usd);
+      yield* this.ports.priced(cost.usd);
     }
     yield* output.event({
       type: 'usage',

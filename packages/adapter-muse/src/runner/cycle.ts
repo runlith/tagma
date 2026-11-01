@@ -1,7 +1,7 @@
 import { Clock, Deferred, Effect, Exit, FileSystem, Option, Predicate, Result, Schema, Scope } from 'effect';
 import { AgentFault, FAULT, type Outlet } from '@runlith/acp/agent';
 import type { ContentBlock } from '@runlith/acp/content';
-import { QuotaObservation, QuotaWindow } from '@runlith/llm/schema/quota';
+import { QuotaObservation } from '@runlith/llm/schema/quota';
 import { Bridge, servedPrompt, type BridgeVendor } from '@runlith/hosted-runner/bridge';
 import { clientSession, type ClientCompaction, type ClientOutcome, type ClientRun } from '@runlith/hosted-runner/client';
 import type { Cycle, Process, Steered, Withdrawn } from '@runlith/hosted-runner/cycle';
@@ -16,7 +16,8 @@ import type { McpServerInput } from '@runlith/mcp/server';
 import { MuseSdk, type Frame, type Host, type MuseRefused } from './channel.js';
 import { Feed, NOTHING, spentOf, sum, type Spent } from './feed.js';
 import { Compact, ItemEvent, Models, Opened, Quota, Started, TokenUsage, TurnCompleted, TurnStarted, type Item } from './frames.js';
-import { writeSettings, type MusePlace } from './home.js';
+import { keepPriced, keptPriced, writeSettings, type MusePlace } from './home.js';
+import { observationOf } from './quota.js';
 
 const PROVIDER_ID = 'meta';
 const PROFILE = ':ask-me';
@@ -144,6 +145,21 @@ export const makeMuseCycle = Effect.fnUntraced(function* (door: HostedDoor, proc
   const refused = new Set<string>();
   const steers = new Map<string, { readonly command: string; readonly feed: Feed }>();
   const priced = new Map<string, number>();
+  const stored = <A>(work: Effect.Effect<A, AgentFault, FileSystem.FileSystem>, none: A) =>
+    work.pipe(
+      Effect.provideService(FileSystem.FileSystem, files),
+      Effect.catchTag('AgentFault', (fault) =>
+        Effect.as(
+          Effect.sync(() => process.stderr(`${fault.message}\n`)),
+          none,
+        ),
+      ),
+    );
+  const price = (session: string, usd: number) =>
+    Effect.suspend(() => {
+      priced.set(session, usd);
+      return stored(keepPriced(runner.place, session, usd), undefined);
+    });
 
   const slot = (input: string) => {
     const standing = words.get(input);
@@ -181,34 +197,9 @@ export const makeMuseCycle = Effect.fnUntraced(function* (door: HostedDoor, proc
   const quota = Effect.fnUntraced(function* (frame: Frame) {
     const read = Schema.decodeUnknownResult(Quota)(frame.params);
     if (Result.isFailure(read)) return process.stderr(`Muse Code reported its quota in an unreadable shape: ${read.failure.message}\n`);
-    const { window: session, weekly, observedAtMs, tier } = read.success;
-    const windows = [
-      ...(session === undefined
-        ? []
-        : [
-            new QuotaWindow({
-              kind: 'session',
-              usedPercent: session.usedPercent,
-              windowMinutes: session.windowDurationMins,
-              resetsAt: session.resetsAtMs === undefined ? undefined : session.resetsAtMs / 1000,
-            }),
-          ]),
-      ...(weekly === undefined
-        ? []
-        : [
-            new QuotaWindow({
-              kind: 'weekly',
-              usedPercent: weekly.usedPercent,
-              windowMinutes: 10_080,
-              resetsAt: weekly.resetsAtMs === undefined ? undefined : weekly.resetsAtMs / 1000,
-            }),
-          ]),
-    ];
-    if (windows.length === 0) return;
-    const observedAt = observedAtMs ?? (yield* Clock.currentTimeMillis);
-    observed = yield* Schema.encodeEffect(Schema.toCodecJson(QuotaObservation))(
-      new QuotaObservation({ observedAt: new Date(observedAt), source: 'usage', windows, plan: tier }),
-    ).pipe(Effect.orDie);
+    const observation = observationOf(read.success, yield* Clock.currentTimeMillis);
+    if (observation === null) return;
+    observed = yield* Schema.encodeEffect(Schema.toCodecJson(QuotaObservation))(observation).pipe(Effect.orDie);
     yield* report();
   });
 
@@ -366,7 +357,7 @@ export const makeMuseCycle = Effect.fnUntraced(function* (door: HostedDoor, proc
         })
         .pipe(Effect.mapError(faultOf));
       seat.fresh = false;
-      priced.set(seat.id, 0);
+      yield* price(seat.id, 0);
       applied = model === null ? null : { session: seat.id, model };
     } else {
       const resumed = yield* standing.host
@@ -374,6 +365,8 @@ export const makeMuseCycle = Effect.fnUntraced(function* (door: HostedDoor, proc
         .pipe(Effect.mapError(faultOf), Effect.flatMap(decoded(Opened, 'session/resume')));
       if (resumed.session.approvalMode?.mode !== APPROVALS)
         yield* standing.host.command('session/setApprovalMode', { sessionId: seat.id, mode: APPROVALS }).pipe(Effect.mapError(faultOf));
+      const kept = priced.has(seat.id) ? null : yield* stored(keptPriced(runner.place, seat.id), null);
+      if (kept !== null) priced.set(seat.id, kept);
       applied = null;
     }
     standing.loaded.add(seat.id);
@@ -452,7 +445,7 @@ export const makeMuseCycle = Effect.fnUntraced(function* (door: HostedDoor, proc
                 ),
                 abandon: Effect.suspend(() => (live === standing ? drop() : Effect.void)),
                 pricedBefore: priced.get(seat.id) ?? null,
-                priced: (usd) => void priced.set(seat.id, usd),
+                priced: (usd) => price(seat.id, usd),
               },
               done,
             );
