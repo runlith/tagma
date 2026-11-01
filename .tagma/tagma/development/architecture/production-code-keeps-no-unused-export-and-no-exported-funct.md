@@ -3568,10 +3568,6 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead apps/tagma/server/src/composition/http/ranged.ts#Span",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "dead-code dead apps/tagma/server/src/composition/http/remote.ts#remoteGate",
           "owner": "5a3bed29"
         },
