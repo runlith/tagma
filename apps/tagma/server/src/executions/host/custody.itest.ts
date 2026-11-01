@@ -274,7 +274,11 @@ const scripted = (script: PortScript): ScriptedPort => {
 const owner = Effect.fnUntraced(function* (
   registration: Registrar,
   host: ScriptedPort,
-  over: { readonly bundle?: string | null; readonly welcome?: Ref.Ref<SessionWelcome | undefined> } = {},
+  over: {
+    readonly bundle?: string | null;
+    readonly welcome?: Ref.Ref<SessionWelcome | undefined>;
+    readonly successor?: Effect.Effect<boolean>;
+  } = {},
 ): Effect.fn.Return<TerminalHostCustody, never, FileSystem.FileSystem> {
   return yield* makeTerminalHostCustody({
     executions: host.port,
@@ -285,6 +289,7 @@ const owner = Effect.fnUntraced(function* (
       over.bundle === null
         ? undefined
         : { bundle: over.bundle ?? offered, digest: manifest.identity.digest, ...level, policy: executionPolicy },
+    successor: over.successor,
   }).pipe(Effect.provideService(HostRegistration, registration.service));
 });
 
@@ -324,6 +329,116 @@ const refusedUnauthorized = (name: string): StartAnswer => ({
   operation: keyOf(name),
   refusal: { _tag: 'Unauthorized', reason: 'the presented custody is not the one that stands: NotCustodian' },
 });
+
+const refusedClosed = (name: string): StartAnswer => ({
+  _tag: 'Refused',
+  operation: keyOf(name),
+  refusal: { _tag: 'AdmissionClosed', reason: 'the host admits no durable work: stopping' },
+});
+
+const counted = (answer: boolean) => {
+  let asked = 0;
+  return { successor: Effect.sync(() => ((asked += 1), answer)), asked: () => asked };
+};
+
+it.live('a start the host refuses because it admits no more work brings up a successor and starts there once', () =>
+  run(
+    Effect.gen(function* () {
+      const registration = registrar(Effect.succeed(registered(publishedStamp())));
+      const host = scripted({
+        status: [Effect.succeed(statusOf(vacant(0, 0), 0))],
+        take: [Effect.succeed(takeHeld(heldBy('floor-1', 0, 1, 1)))],
+        start: [Effect.succeed(refusedClosed('closing')), Effect.succeed(started('closing'))],
+      });
+      const raised = counted(true);
+      const custody = yield* owner(registration, host, { successor: raised.successor });
+      const answer = yield* custody.guarded().start(keyOf('closing'), launch);
+      expect(answer._tag).toBe('Started');
+      expect(raised.asked()).toBe(1);
+      expect(host.asked()).toEqual(['status', 'take:0', 'start', 'start']);
+    }),
+  ),
+);
+
+it.live('a start keeps the refusal of a host that admits no more work when no successor comes up', () =>
+  run(
+    Effect.gen(function* () {
+      const registration = registrar(Effect.succeed(registered(publishedStamp())));
+      const host = scripted({
+        status: [Effect.succeed(statusOf(vacant(0, 0), 0))],
+        take: [Effect.succeed(takeHeld(heldBy('floor-1', 0, 1, 1)))],
+        start: [Effect.succeed(refusedClosed('kept'))],
+      });
+      const raised = counted(false);
+      const custody = yield* owner(registration, host, { successor: raised.successor });
+      const answer = yield* custody.guarded().start(keyOf('kept'), launch);
+      expect(answer).toEqual(refusedClosed('kept'));
+      expect(raised.asked()).toBe(1);
+      expect(host.asked()).toEqual(['status', 'take:0', 'start']);
+    }),
+  ),
+);
+
+it.live('a successor is asked for once per start, so a successor that also admits nothing answers its own refusal', () =>
+  run(
+    Effect.gen(function* () {
+      const registration = registrar(Effect.succeed(registered(publishedStamp())));
+      const host = scripted({
+        status: [Effect.succeed(statusOf(vacant(0, 0), 0))],
+        take: [Effect.succeed(takeHeld(heldBy('floor-1', 0, 1, 1)))],
+        start: [Effect.succeed(refusedClosed('twice')), Effect.succeed(refusedClosed('again'))],
+      });
+      const raised = counted(true);
+      const custody = yield* owner(registration, host, { successor: raised.successor });
+      const answer = yield* custody.guarded().start(keyOf('twice'), launch);
+      expect(answer).toEqual(refusedClosed('again'));
+      expect(raised.asked()).toBe(1);
+    }),
+  ),
+);
+
+it.live('a take refused because the host admits no more work brings up a successor and takes custody of it', () =>
+  run(
+    Effect.gen(function* () {
+      const registration = registrar(Effect.succeed(registered(publishedStamp())));
+      const host = scripted({
+        status: [Effect.succeed(statusOf(vacant(0, 0), 0)), Effect.succeed(statusOf(heldBy('floor-0', 0, 4, 4), 1))],
+        take: [
+          Effect.succeed({ _tag: 'Refused', refusal: { _tag: 'AdmissionClosed', reason: 'this host admits no more work' } }),
+          Effect.succeed(takeHeld(heldBy('floor-1', 1, 5, 5))),
+        ],
+        start: [Effect.succeed(started('taken'))],
+      });
+      const raised = counted(true);
+      const custody = yield* owner(registration, host, { successor: raised.successor });
+      const answer = yield* custody.guarded().start(keyOf('taken'), launch);
+      expect(answer._tag).toBe('Started');
+      expect(raised.asked()).toBe(1);
+      expect(host.asked()).toEqual(['status', 'take:0', 'status', 'take:4', 'start']);
+    }),
+  ),
+);
+
+it.live('a start that finds no host answering brings up a successor and starts there once', () =>
+  run(
+    Effect.gen(function* () {
+      const registration = registrar(Effect.succeed(registered(publishedStamp())));
+      const host = scripted({
+        status: [Effect.succeed(statusOf(vacant(0, 0), 0))],
+        take: [Effect.succeed(takeHeld(heldBy('floor-1', 0, 1, 1)))],
+        start: [
+          Effect.fail(new WireUnavailable({ kind: 'unreachable', reason: 'connect ECONNREFUSED', sent: false })),
+          Effect.succeed(started('left')),
+        ],
+      });
+      const raised = counted(true);
+      const custody = yield* owner(registration, host, { successor: raised.successor });
+      const answer = yield* custody.guarded().start(keyOf('left'), launch);
+      expect(answer._tag).toBe('Started');
+      expect(raised.asked()).toBe(1);
+    }),
+  ),
+);
 
 it.live.each([false, true])('conditional prevention never widens into a stop across custody assurance (refresh %s)', (refresh) =>
   run(

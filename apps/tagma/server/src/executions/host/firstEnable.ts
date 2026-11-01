@@ -113,10 +113,9 @@ export const endStanding = Effect.fnUntraced(function* (input: FirstEnableInput,
   }
   const graceMs = input.graceMs ?? shutdownMsOf(undefined);
   const ending = yield* endHolderless({ bundle: input.bundle, state: input.state });
-  const gone =
-    ending._tag === 'Refused'
-      ? yield* forced(input, named, `its own recovery program refused: ${ending.detail}`, graceMs)
-      : (yield* letGo(input, graceMs)) || (yield* forced(input, named, 'it did not let go after its recovery program ended it', graceMs));
+  const asked =
+    ending._tag === 'Refused' ? `its own recovery program refused: ${ending.detail}` : 'it did not let go after its recovery program ended it';
+  const gone = (yield* letGo(input, graceMs)) || (yield* forced(input, named, asked, graceMs));
   if (!gone) return { _tag: 'Refused', detail: `${named} did not let go of this installation` };
   const executions = ending._tag === 'Ended' ? ending.executions : undefined;
   yield* input.record(executions, ending.detail);

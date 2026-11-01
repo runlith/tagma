@@ -39,6 +39,8 @@ export type AdmissionPhase = typeof AdmissionPhase.Type;
 const reach: Record<AdmissionPhase, number> = { open: 0, fenced: 1, stopping: 2, closed: 3 };
 export const narrower = (phase: AdmissionPhase, next: AdmissionPhase): AdmissionPhase => (reach[next] > reach[phase] ? next : phase);
 
+export const closing = (phase: AdmissionPhase): boolean => reach[phase] >= reach.stopping;
+
 export const CredentialReferences = Schema.Struct({
   custodian: Schema.NonEmptyString,
   recovery: Schema.NonEmptyString,

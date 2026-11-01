@@ -30,7 +30,7 @@ import { HostByteRecords } from './registry/reads';
 import { ExecutionRetirement } from './registry/retention';
 import { HostLifecycle } from './registry/shutdown';
 import { ExecutionStore } from './store/ExecutionStore';
-import { Holder } from './holder/Holder';
+import { Holder, type HeldExecution, type WorkState } from './holder/Holder';
 import { connectionOf, keyOf, principalOf, registrationOf } from './hostFixture';
 import { hostState } from './hostState';
 import { hostSpawner } from './hostSpawner';
@@ -139,6 +139,7 @@ type RuntimeOptions = {
   readonly holdSeal?: RuntimeGate;
   readonly holdVacate?: RuntimeGate;
   readonly holdOutput?: RuntimeGate;
+  readonly unmeasured?: { readonly vacated: Deferred.Deferred<void> };
   readonly shutdownMs?: number;
   readonly library?: boolean;
 };
@@ -160,22 +161,34 @@ const withHost = Effect.fnUntraced(function* <A, E>(
   const heldHolder = Layer.effectContext(Effect.map(Layer.build(testHolder(directory)), Context.omit(Processes)));
   const vacating = options.holdVacate;
   const output = options.holdOutput;
+  const unmeasured = options.unmeasured;
   const closing = new Set<string>();
+  const measuredAs = (child: HeldExecution): HeldExecution =>
+    unmeasured === undefined
+      ? child
+      : {
+          ...child,
+          get reaped() {
+            return child.reaped;
+          },
+          workState: Effect.succeed<WorkState>('unmeasured'),
+        };
   const holder =
-    vacating === undefined && output === undefined
+    vacating === undefined && output === undefined && unmeasured === undefined
       ? heldHolder
       : Layer.effect(
           Holder,
           Effect.map(Holder, (real) => ({
             ...real,
             launch: (launch) =>
-              Effect.map(real.launch(launch), (child) =>
-                output === undefined
+              Effect.map(real.launch(launch), (launched) => {
+                const child = measuredAs(launched);
+                return output === undefined
                   ? child
                   : {
                       ...child,
                       get reaped() {
-                        return child.reaped;
+                        return launched.reaped;
                       },
                       closeOutput: Effect.andThen(
                         Effect.suspend(() => {
@@ -184,12 +197,14 @@ const withHost = Effect.fnUntraced(function* <A, E>(
                         }),
                         Effect.andThen(Deferred.await(output.held), child.closeOutput),
                       ),
-                    },
-              ),
+                    };
+              }),
             vacate:
-              vacating === undefined
-                ? real.vacate
-                : Effect.andThen(Deferred.succeed(vacating.entered, undefined), Effect.andThen(Deferred.await(vacating.held), real.vacate)),
+              vacating !== undefined
+                ? Effect.andThen(Deferred.succeed(vacating.entered, undefined), Effect.andThen(Deferred.await(vacating.held), real.vacate))
+                : unmeasured !== undefined
+                  ? Effect.andThen(Deferred.succeed(unmeasured.vacated, undefined), real.vacate)
+                  : real.vacate,
           })),
         ).pipe(Layer.provideMerge(heldHolder));
   const platform = Layer.mergeAll(files, BunPath.layer, hostSpawner);
@@ -1132,6 +1147,38 @@ describe('the live execution runtime', () => {
         ['leader', { _tag: 'Signal', signal: 'SIGINT' }, 'interrupt'],
         ['work', { _tag: 'Signal', signal: 'SIGINT' }, 'interrupt'],
       ]);
+    }),
+  );
+
+  it.live('closes and vacates its holder once every stop ran, naming the groups it could not measure', () =>
+    Effect.gen(function* () {
+      const vacated = Deferred.makeUnsafe<void>();
+      const outcome = yield* withHost(
+        ({ hostExecutions, lifecycle, claim }) =>
+          Effect.gen(function* () {
+            const started = yield* hostExecutions.start(
+              claim,
+              keyOf('unmeasured-1'),
+              launchOf('/bin/sh', ['-c', 'exec /usr/bin/perl -e "sleep while 1"'], 'agent'),
+            );
+            if (started._tag !== 'Started') return yield* Effect.die(new Error(`the child did not start: ${started._tag}`));
+            const shutdown = yield* lifecycle.shutdown(claim, keyOf('unmeasured-shutdown'));
+            const status = yield* lifecycle.status();
+            const retried = yield* lifecycle.shutdown(claim, keyOf('unmeasured-shutdown'));
+            const refused = yield* hostExecutions.start(claim, keyOf('unmeasured-2'), launchOf('/bin/sh', ['-c', 'sleep 1'], 'agent'));
+            return { shutdown, phase: status.phase, retried, refused, vacated: yield* Deferred.isDone(vacated) };
+          }),
+        { unmeasured: { vacated } },
+      );
+      expect(outcome.shutdown._tag).toBe('ShutdownIncomplete');
+      if (outcome.shutdown._tag !== 'ShutdownIncomplete')
+        return yield* Effect.die(new Error(`expected Incomplete, got ${outcome.shutdown._tag}`));
+      expect(outcome.shutdown.reason).toContain('the host closed');
+      expect(outcome.shutdown.unverifiable.map((row) => row.reason)).toContain('the retained group could not be measured');
+      expect(outcome.phase).toBe('closed');
+      expect(outcome.vacated).toBe(true);
+      expect(outcome.retried).toEqual(outcome.shutdown);
+      expect(outcome.refused._tag).toBe('Refused');
     }),
   );
 

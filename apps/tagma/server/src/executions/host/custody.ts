@@ -49,6 +49,7 @@ export type CustodyOffer = {
     readonly lifetime?: HostLifetime;
   };
   readonly ready?: Effect.Effect<void>;
+  readonly successor?: Effect.Effect<boolean>;
 };
 
 type CustodyDecision = { readonly _tag: 'Take' } | { readonly _tag: 'Decline'; readonly assurance: CustodyAssurance };
@@ -150,6 +151,7 @@ export const makeTerminalHostCustody = Effect.fnUntraced(function* ({
   state,
   offered,
   ready = Effect.void,
+  successor = Effect.succeed(false),
 }: CustodyOffer) {
   const activation = yield* makeHostActivation;
   const custody = yield* Ref.make<HostCustody | undefined>(undefined);
@@ -289,11 +291,23 @@ export const makeTerminalHostCustody = Effect.fnUntraced(function* ({
   const starting = Effect.fnUntraced(function* (
     operation: HostRequestRef,
     launch: LaunchRequest,
+    succeeding: boolean,
   ): Effect.fn.Return<StartAnswer, ExecutionsFailure> {
     yield* ready;
     const assurance = yield* ensure();
-    if (assurance._tag === 'Declined') return refusedStart(operation, assurance.reason, state);
-    const answered = yield* executions.start(operation, launch);
+    if (assurance._tag === 'Declined') {
+      return succeeding && unserved(assurance.reason) && (yield* successor)
+        ? yield* starting(operation, launch, false)
+        : refusedStart(operation, assurance.reason, state);
+    }
+    const sent = yield* Effect.result(executions.start(operation, launch));
+    if (sent._tag === 'Failure') {
+      return succeeding && gone(sent.failure) && (yield* successor) ? yield* starting(operation, launch, false) : yield* sent.failure;
+    }
+    const answered = sent.success;
+    if (succeeding && answered._tag === 'Refused' && answered.refusal._tag === 'AdmissionClosed' && (yield* successor)) {
+      return yield* starting(operation, launch, false);
+    }
     if (answered._tag !== 'Refused' || answered.refusal._tag !== 'Unauthorized') return answered;
     const second = yield* ensure({ fresh: true });
     if (second._tag === 'Declined') return refusedStart(operation, second.reason, state);
@@ -363,12 +377,18 @@ export const makeTerminalHostCustody = Effect.fnUntraced(function* ({
     ready: Effect.andThen(ready, Effect.asVoid(ensure())),
     guarded: (): HostPort => ({
       ...served,
-      start: starting,
+      start: (operation, launch) => starting(operation, launch, true),
       cancelStart: (operation, cause, trigger, when = 'always') => cancelling(operation, cause, trigger, when),
       preventStop: preventing,
     }),
   };
 });
+
+const gone = (failure: ExecutionsFailure): boolean =>
+  failure._tag === 'WireUnavailable' && !failure.sent && (failure.kind === 'absent' || failure.kind === 'unreachable');
+
+const unserved = (reason: CustodyDeferral): boolean =>
+  (reason._tag === 'TakeRefused' && reason.refusal._tag === 'AdmissionClosed') || (reason._tag === 'HostUnreachable' && gone(reason.failure));
 
 const refusalOf = (reason: CustodyDeferral, detail: string): Refusal =>
   reason._tag === 'HostUnreachable'

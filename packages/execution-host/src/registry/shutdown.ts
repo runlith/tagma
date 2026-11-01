@@ -261,17 +261,10 @@ const runSweep = Effect.fn('HostLifecycle.sweep')(function* (
   }
   const residual = receipts.flatMap((receipt) => receipt.residual);
   const unverifiable = [...receipts.flatMap((receipt) => receipt.unverifiable), ...stranded, ...unrecorded];
-  if (residual.length > 0 || unverifiable.length > 0) {
-    return {
-      _tag: 'ShutdownIncomplete',
-      operation,
-      executions: receipts,
-      residual,
-      unverifiable,
-      reason: 'resources survive or could not be measured',
-    } satisfies ShutdownAnswer;
-  }
-  for (const found of executions) {
+  const unsettled = new Set(
+    receipts.filter((receipt) => receipt.residual.length > 0 || receipt.unverifiable.length > 0).map((receipt) => receipt.execution.execution),
+  );
+  for (const found of executions.filter((found) => !unsettled.has(found.ref.execution))) {
     const released = yield* raced(Effect.andThen(Deferred.await(found.worked), found.close));
     if (released._tag === 'Expired') {
       return expired(
@@ -294,8 +287,8 @@ const runSweep = Effect.fn('HostLifecycle.sweep')(function* (
       _tag: 'ShutdownIncomplete',
       operation,
       executions: receipts,
-      residual: [],
-      unverifiable: [{ kind: 'process', detail: `holder (pid ${registry.holder.pid})`, reason: vacated.value.failure.detail }],
+      residual,
+      unverifiable: [...unverifiable, { kind: 'process', detail: `holder (pid ${registry.holder.pid})`, reason: vacated.value.failure.detail }],
       reason: 'the holder would not vacate',
     } satisfies ShutdownAnswer;
   }
@@ -308,12 +301,22 @@ const runSweep = Effect.fn('HostLifecycle.sweep')(function* (
       _tag: 'ShutdownIncomplete',
       operation,
       executions: receipts,
-      residual: [],
-      unverifiable: [{ kind: 'record', detail: 'closed phase', reason: String(closed.value.failure._tag) }],
+      residual,
+      unverifiable: [...unverifiable, { kind: 'record', detail: 'closed phase', reason: String(closed.value.failure._tag) }],
       reason: 'the closed phase could not be recorded',
     } satisfies ShutdownAnswer;
   }
   yield* admission.close();
+  if (residual.length > 0 || unverifiable.length > 0) {
+    return {
+      _tag: 'ShutdownIncomplete',
+      operation,
+      executions: receipts,
+      residual,
+      unverifiable,
+      reason: 'the host closed, and its holder ends what it still holds as it leaves: resources survive or could not be measured',
+    } satisfies ShutdownAnswer;
+  }
   return { _tag: 'ShutdownComplete', operation, executions: receipts } satisfies ShutdownAnswer;
 });
 
@@ -337,7 +340,7 @@ const shutdownOnce = Effect.fnUntraced(function* (registry: RegistryState, opera
   const answered: ShutdownAnswer =
     outcome._tag === 'Success' ? outcome.value : { _tag: 'Uncertain', effect: { _tag: 'InFlight', operation } };
   if (outcome._tag === 'Failure') yield* Effect.logError('a host shutdown died instead of answering', outcome.cause);
-  const stands = answered._tag === 'ShutdownComplete';
+  const stands = answered._tag === 'ShutdownComplete' || (yield* admission.phase()) === 'closed';
   yield* Ref.update(shutdowns, (keys) => {
     const live = new Map(keys.live);
     live.delete(key);

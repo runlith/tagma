@@ -7,8 +7,9 @@ import type { HostLifecycle } from '@runlith/executions/HostLifecycle';
 import { WireUnavailable } from '@runlith/executions/Executions';
 import type { CapabilityProfile, HostGrant } from '@runlith/executions/protocol/capacity';
 import { InstallationId } from '@runlith/executions/protocol/execution';
+import type { RuntimeStatus } from '@runlith/executions/protocol/runtime';
 import type { AuthorityAnswer } from '@runlith/executions/protocol/wire';
-import { grantHostShare } from './boot.js';
+import { grantHostShare, hostAdmission } from './boot.js';
 
 const installation = InstallationId.make('host-share');
 
@@ -162,5 +163,18 @@ it.effect('an answer a grant never asks for is declined rather than believed', (
 
     expect(outcome._tag).toBe('Declined');
     if (outcome._tag === 'Declined') expect(outcome.detail).toContain('Unbound');
+  }),
+);
+
+const standingAt = (phase: RuntimeStatus['phase']): RuntimeStatus =>
+  ({ installation, incarnation: 7, phase, custody: { revision: 0, epoch: 0 } }) as unknown as RuntimeStatus;
+
+it.effect('only a generation a shutdown has entered is read as ending, never one fenced for a hand-over', () =>
+  Effect.gen(function* () {
+    expect(yield* hostAdmission(Effect.succeed(standingAt('open')))).toEqual({ _tag: 'Standing', incarnation: 7, phase: 'open' });
+    expect(yield* hostAdmission(Effect.succeed(standingAt('fenced')))).toEqual({ _tag: 'Standing', incarnation: 7, phase: 'fenced' });
+    expect(yield* hostAdmission(Effect.succeed(standingAt('stopping')))).toEqual({ _tag: 'Closing', incarnation: 7, phase: 'stopping' });
+    expect(yield* hostAdmission(Effect.succeed(standingAt('closed')))).toEqual({ _tag: 'Closing', incarnation: 7, phase: 'closed' });
+    expect((yield* hostAdmission(undeclared<RuntimeStatus>('status')))._tag).toBe('Unread');
   }),
 );

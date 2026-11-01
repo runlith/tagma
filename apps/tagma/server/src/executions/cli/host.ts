@@ -154,7 +154,7 @@ const shutdownCommand = Command.make('shutdown', { json, environment, state, ope
   }),
 ).pipe(
   Command.withDescription(
-    'end the host, reporting every execution it enumerated — an incomplete shutdown keeps its key, so re-running the identical command resumes it',
+    'end the host, reporting every execution it enumerated and what of it survives or could not be measured — a shutdown that runs out of its budget keeps its key, so re-running the identical command resumes it',
   ),
 );
 

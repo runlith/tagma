@@ -15,9 +15,10 @@ import {
   loadRefusalOf,
   OUTPUT_LIMIT_VARIABLE,
 } from '@runlith/executions/protocol/boot';
-import type { Registration } from '@runlith/executions/protocol/registration';
+import { type AdmissionPhase, closing, type Registration } from '@runlith/executions/protocol/registration';
+import type { RuntimeStatus } from '@runlith/executions/protocol/runtime';
 import type { ExecutionPolicy } from '@runlith/executions/protocol/capacity';
-import { type InstallationId, type HostRequestRef, HostRequestKey } from '@runlith/executions/protocol/execution';
+import { type Incarnation, type InstallationId, type HostRequestRef, HostRequestKey } from '@runlith/executions/protocol/execution';
 import type { ClaimHolders } from '../contract/service/host.js';
 import { executionGrant, executionWireLimits } from './policy.js';
 
@@ -69,6 +70,24 @@ const failureDetail = (failure: ExecutionsFailure): string => {
       return `${failure.refusal._tag}: ${failure.refusal.reason}`;
   }
 };
+
+type HostAdmission =
+  | { readonly _tag: 'Standing'; readonly incarnation: Incarnation; readonly phase: AdmissionPhase }
+  | { readonly _tag: 'Closing'; readonly incarnation: Incarnation; readonly phase: AdmissionPhase }
+  | { readonly _tag: 'Unread'; readonly detail: string };
+
+export const hostAdmission = (status: Effect.Effect<RuntimeStatus, ExecutionsFailure>): Effect.Effect<HostAdmission> =>
+  Effect.match(status, {
+    onSuccess: (seen): HostAdmission => ({
+      _tag: closing(seen.phase) ? 'Closing' : 'Standing',
+      incarnation: seen.incarnation,
+      phase: seen.phase,
+    }),
+    onFailure: (failure): HostAdmission => ({ _tag: 'Unread', detail: failureDetail(failure) }),
+  });
+
+export const endingDetail = (ending: Extract<HostAdmission, { readonly _tag: 'Closing' }>): string =>
+  `the execution host whose generation ${ending.incarnation} is ${ending.phase} and admits no more work`;
 
 export const hostPresence = (probe: Effect.Effect<unknown, ExecutionsFailure>): Effect.Effect<HostPresence> =>
   Effect.match(probe, {

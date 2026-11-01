@@ -13,6 +13,7 @@ import {
   Duration,
   Effect,
   Exit,
+  Fiber,
   FileSystem,
   Layer,
   Path,
@@ -20,6 +21,7 @@ import {
   Queue,
   Ref,
   Scope,
+  Semaphore,
   Stream,
 } from 'effect';
 import { HostRegistration } from '@runlith/executions/HostRegistration';
@@ -76,12 +78,16 @@ import { placeOverForeign, standingAfter } from './host/foreign.js';
 import { endStanding, firstEnable } from './host/firstEnable.js';
 import { shutdownMsOf } from '@runlith/executions/protocol/capacity';
 import {
+  endingDetail,
+  grantHostShare,
   holdHostShare,
   hostBundle,
+  hostAdmission,
+  hostPresence,
+  hostShareDetail,
   signalClaimHolder,
   stateClaim,
   hostBootDetail,
-  hostPresence,
   hostRaisable,
   raiseHost,
   type HostBoot,
@@ -290,7 +296,7 @@ export const executionsLayer: Layer.Layer<
     const displaced = yield* Queue.unbounded<TerminalDisplaced>();
     const heldAtFence = yield* Ref.make<readonly TerminalRecord[]>([]);
     const yieldAsk = yield* LogicYield;
-    const broughtUp = Effect.fnUntraced(function* (cold: Effect.Success<typeof coldRoad>, given: HostOffer) {
+    const broughtUp = Effect.fnUntraced(function* (arriving: HostPlacement | undefined, given: HostOffer) {
       const ending = {
         files,
         bundle,
@@ -315,7 +321,7 @@ export const executionsLayer: Layer.Layer<
           ask: yieldAsk,
           state: address.state,
         },
-        cold?._tag === 'Foreign' ? cold.placed : placed,
+        arriving,
       );
       const replaced =
         replacing === true && (arrival._tag === 'Refused' || arrival._tag === 'Kept')
@@ -325,7 +331,14 @@ export const executionsLayer: Layer.Layer<
         yield* tellReplaced(units, terminalRows, displaced, yield* Ref.get(heldAtFence)).pipe(Effect.orDie);
       }
       if (replaced?._tag === 'Refused') yield* Effect.logWarning(replaced.detail);
-      const stayed = replaced?._tag === 'Enabled' ? null : yield* standingAfter(arrival, files, address.state);
+      const standing = replaced?._tag === 'Enabled' ? null : yield* standingAfter(arrival, files, address.state);
+      const admission = replaced?._tag === 'Enabled' ? undefined : yield* hostAdmission(executions.status());
+      const retired = admission?._tag === 'Closing' ? yield* endStanding(ending, endingDetail(admission)) : undefined;
+      if (retired?._tag === 'Enabled') {
+        yield* tellReplaced(units, terminalRows, displaced, yield* Ref.get(heldAtFence)).pipe(Effect.orDie);
+      }
+      if (retired?._tag === 'Refused') yield* Effect.logWarning(retired.detail);
+      const stayed = retired?._tag === 'Enabled' ? null : standing;
       if (stayed !== null) yield* Effect.logWarning(stayed);
       const raised: HostBoot =
         given._tag === 'Unoffered'
@@ -333,7 +346,7 @@ export const executionsLayer: Layer.Layer<
           : yield* raiseHost({ address: host.address, files, registrations, policy, status: executions.status(), claim, swap, lifetime });
       return { stayed, raised };
     });
-    const brought = takenAfter === undefined ? yield* broughtUp(cold, offer) : undefined;
+    const brought = takenAfter === undefined ? yield* broughtUp(cold?._tag === 'Foreign' ? cold.placed : placed, offer) : undefined;
     const offeredOf = (bundle: string) =>
       offer._tag === 'Unoffered'
         ? undefined
@@ -350,6 +363,7 @@ export const executionsLayer: Layer.Layer<
       state: address.state,
       offered: offeredOf(takenAfter === undefined ? yield* offering : bundle),
       ready: takenAfter === undefined ? undefined : Deferred.await(takenOver),
+      successor: Effect.suspend(() => successor),
     });
     yield* Ref.set(host.opened, custody.opened);
     const floorDetail = (boot: HostBoot, assurance: CustodyAssurance, state: string): string =>
@@ -369,7 +383,7 @@ export const executionsLayer: Layer.Layer<
     yield* PubSub.publish(standings, opening);
     const stand = (standing: HostStanding) => Effect.andThen(Ref.set(live, standing), PubSub.publish(standings, standing));
     const settings = yield* Settings;
-    const settled = Effect.fnUntraced(function* ({ stayed, raised }: Effect.Success<ReturnType<typeof broughtUp>>) {
+    const stood = Effect.fnUntraced(function* ({ stayed, raised }: Effect.Success<ReturnType<typeof broughtUp>>) {
       const assured = yield* custody.ensure();
       const floor = floorDetail(raised, assured, address.state);
       const detail = stayed === null ? floor : `${floor} ${stayed}.`;
@@ -394,6 +408,9 @@ export const executionsLayer: Layer.Layer<
           detail: detailOf(assured.reason, address.state),
         });
       }
+    });
+    const settled = Effect.fnUntraced(function* (brought: Effect.Success<ReturnType<typeof broughtUp>>) {
+      yield* stood(brought);
       const shares = yield* Effect.result(settings.changes(hostMemoryShare));
       if (shares._tag === 'Failure') {
         yield* Effect.logWarning('the execution host was left on the share it came up at', {
@@ -403,6 +420,34 @@ export const executionsLayer: Layer.Layer<
         yield* holdHostShare({ installation: address.installation, executions }, shares.success);
       }
     });
+    const layerScope = yield* Effect.scope;
+    const succeeding = yield* Semaphore.make(1);
+    const admitting = Effect.map(hostAdmission(executions.status()), (read) => read._tag === 'Standing' && read.phase === 'open');
+    const unheld = Effect.gen(function* () {
+      if ((yield* hostPresence(executions.status()))._tag !== 'Absent') return false;
+      return (yield* claim)._tag === 'Free';
+    });
+    const bringUp = succeeding.withPermits(1)(
+      Effect.gen(function* () {
+        if ((yield* Ref.get(yielding)) !== 'idle') return false;
+        const admission = yield* hostAdmission(executions.status());
+        if (admission._tag !== 'Closing' && !(yield* unheld)) return yield* admitting;
+        yield* Effect.logWarning(
+          `bringing up a successor in place of ${admission._tag === 'Closing' ? endingDetail(admission) : 'the execution host that left this installation'}`,
+        );
+        yield* stood(yield* broughtUp(undefined, offer));
+        const share = yield* Effect.result(settings.value(hostMemoryShare));
+        if (share._tag === 'Failure') {
+          yield* Effect.logWarning('the successor execution host was left on the share it came up at', { reason: share.failure._tag });
+        } else {
+          const granted = yield* grantHostShare({ installation: address.installation, executions }, undefined, share.success);
+          yield* granted._tag === 'Declined' ? Effect.logWarning(hostShareDetail(granted)) : Effect.log(hostShareDetail(granted));
+        }
+        yield* Effect.forkIn(Effect.asVoid(Effect.suspend(() => terminals.sweepReplaced())), layerScope);
+        return yield* admitting;
+      }),
+    );
+    const successor: Effect.Effect<boolean> = Effect.flatMap(Effect.forkIn(bringUp, layerScope), Fiber.join);
     if (brought !== undefined) yield* settled(brought);
     yield* drive(
       'request-key-retention',
@@ -536,12 +581,11 @@ export const executionsLayer: Layer.Layer<
     });
     if (takenAfter === undefined) yield* booted;
     else {
-      const scope = yield* Effect.scope;
       yield* Effect.forkIn(
         Effect.gen(function* () {
           yield* takenAfter;
           const taken = yield* coldRoad;
-          yield* settled(yield* broughtUp(taken, yield* offered(placementOf(taken))));
+          yield* settled(yield* broughtUp(taken?._tag === 'Foreign' ? taken.placed : placed, yield* offered(placementOf(taken))));
           yield* Deferred.succeed(admitted, undefined);
           yield* booted;
         }).pipe(
@@ -560,9 +604,9 @@ export const executionsLayer: Layer.Layer<
             );
           }),
           Effect.ensuring(Effect.andThen(Deferred.succeed(admitted, undefined), Deferred.succeed(takenOver, undefined))),
-          Scope.provide(scope),
+          Scope.provide(layerScope),
         ),
-        scope,
+        layerScope,
       );
     }
     const hostState = HostManagement.of({ standing: Ref.get(live), connection: host });
