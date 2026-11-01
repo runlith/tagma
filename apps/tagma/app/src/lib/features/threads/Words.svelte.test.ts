@@ -1,5 +1,6 @@
 import { afterEach, expect, test, vi } from 'vitest';
 import type { Workspace } from '$lib/features/workspace/Selection.svelte.js';
+import { ThreadNames } from '$lib/shared/threads/Names.svelte.js';
 import { ThreadWords } from './Words.svelte.js';
 
 const FAR = '01a0d0bb-0000-7000-8000-000000000001';
@@ -61,6 +62,26 @@ test('a thread outside the list is read by its id alone, and its words carry the
     { project: null, ids: [FAR] },
     { project: null, ids: [OLD] },
   ]);
+});
+
+test('an awaited identity read finds a holder home before the list loads and propagates failures', async () => {
+  let failing = false;
+  const { words } = wordsOver(
+    (ids) =>
+      failing
+        ? Promise.reject(new Error('down'))
+        : Promise.resolve(ids.map((id) => ({ id, projectId: 2, name: 'Holder', title: 't', harness: null, archivedAt: null }))),
+    null,
+  );
+  const names = new ThreadNames(
+    (thread, project) => words.of(thread, project),
+    (thread) => words.read(thread),
+  );
+
+  expect(names.of(FAR)).toBeUndefined();
+  expect(await names.read(FAR)).toEqual({ label: 'Holder', archived: false, harness: false, home: 'polygon', projectId: 2 });
+  failing = true;
+  await expect(names.read(FAR)).rejects.toThrow('down');
 });
 
 test('nothing is read before the list has loaded, and a holder that is not a thread id is never read', async () => {

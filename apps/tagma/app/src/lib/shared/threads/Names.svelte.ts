@@ -15,8 +15,15 @@ export class ThreadNames extends Service<ThreadNames>()('ThreadNames', { tier: '
     return new ThreadNames(() => null);
   }
 
-  constructor(private readonly words: (thread: string, project?: string) => OwnerWords | null | undefined) {
+  constructor(
+    private readonly words: (thread: string, project?: string) => OwnerWords | null | undefined,
+    private readonly readWords: (thread: string) => Promise<OwnerWords | null | undefined> = (thread) => Promise.resolve(words(thread)),
+  ) {
     super();
+  }
+
+  read(thread: string): Promise<OwnerWords | null | undefined> {
+    return this.readWords(thread);
   }
 
   of(thread: string, project?: string): OwnerWords | null | undefined {

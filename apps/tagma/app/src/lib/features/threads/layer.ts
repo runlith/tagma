@@ -99,7 +99,10 @@ export const HarnessLayer = Layer.mergeAll(
   Layer.provide(ThreadNames, function* () {
     const threads = yield* ThreadList;
     const words = new ThreadWords(threads, yield* ThreadsRepo, yield* Workspace, (yield* ProjectRung.Current).projectId);
-    return new ThreadNames((thread, project) => words.of(thread, project));
+    return new ThreadNames(
+      (thread, project) => words.of(thread, project),
+      (thread) => words.read(thread),
+    );
   }),
   ThreadFolds,
   ContextPanelState,

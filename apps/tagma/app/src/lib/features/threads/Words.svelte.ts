@@ -20,7 +20,7 @@ const wordsOf = (row: Pick<ThreadListRow, 'name' | 'title' | 'archivedAt' | 'har
 });
 
 export class ThreadWords {
-  private readonly read = new SvelteMap<string, OwnerWords | null>();
+  private readonly cache = new SvelteMap<string, OwnerWords | null>();
   private readonly asked = new Map<string, number>();
   private readonly own: string;
   private pending: Ask[] = [];
@@ -49,9 +49,15 @@ export class ThreadWords {
     const key = keyOf(at, thread);
     const readAt = this.asked.get(key);
     if (readAt === undefined || (readAt !== IN_FLIGHT && Date.now() - readAt >= REREAD_MS)) this.ask({ project: at, thread });
-    if (!this.read.has(key)) return undefined;
-    const words = this.read.get(key) ?? null;
+    if (!this.cache.has(key)) return undefined;
+    const words = this.cache.get(key) ?? null;
     return words === null || words.projectId === undefined ? words : { ...words, ...this.homeOf(words.projectId) };
+  }
+
+  async read(thread: string): Promise<OwnerWords | null | undefined> {
+    if (!isThreadId(thread)) return null;
+    const words = (await this.fetchAt(null, [thread]))?.[0];
+    return words == null || words.projectId === undefined ? words : { ...words, ...this.homeOf(words.projectId) };
   }
 
   private ask(ask: Ask): void {
@@ -64,7 +70,7 @@ export class ThreadWords {
     const asks = this.pending;
     this.pending = [];
     const projects = [...new Set(asks.flatMap((ask) => (ask.project === null ? [] : [ask.project])))];
-    await Promise.all([
+    await Promise.allSettled([
       ...projects.map((project) =>
         this.fetchAt(
           project,
@@ -75,18 +81,24 @@ export class ThreadWords {
     ]);
   }
 
-  private async fetchAt(project: string | null, ids: readonly string[]): Promise<void> {
+  private async fetchAt(project: string | null, ids: readonly string[]): Promise<readonly (OwnerWords | null)[] | undefined> {
     try {
       const answer = await this.repo.list
         .key({ project, selection: { ids: ids.join(','), set: 'all', limit: String(ids.length) } })
         .refresh({ throwOnError: true });
-      if (answer === undefined || answer.status !== 'rows') return this.unread(project, ids);
-      for (const id of ids) {
-        const row = answer.rows.find((candidate) => candidate.id === id);
-        this.settle(project, id, row === undefined ? null : { ...wordsOf(row), projectId: row.projectId });
+      if (answer === undefined || answer.status !== 'rows') {
+        this.unread(project, ids);
+        return undefined;
       }
-    } catch {
+      return ids.map((id) => {
+        const row = answer.rows.find((candidate) => candidate.id === id);
+        const words = row === undefined ? null : { ...wordsOf(row), projectId: row.projectId };
+        this.settle(project, id, words);
+        return words;
+      });
+    } catch (error) {
       this.unread(project, ids);
+      throw error;
     }
   }
 
@@ -101,7 +113,7 @@ export class ThreadWords {
 
   private settle(project: string | null, id: string, words: OwnerWords | null): void {
     const key = keyOf(project, id);
-    const standing = this.read.get(key);
+    const standing = this.cache.get(key);
     if (
       standing === undefined ||
       standing?.label !== words?.label ||
@@ -109,7 +121,7 @@ export class ThreadWords {
       standing?.harness !== words?.harness ||
       standing?.projectId !== words?.projectId
     ) {
-      this.read.set(key, words);
+      this.cache.set(key, words);
     }
     this.asked.set(key, Date.now());
   }
