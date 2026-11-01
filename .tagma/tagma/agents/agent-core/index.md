@@ -1634,6 +1634,12 @@ fields:
       {
         "at": "src/thread/storage/memory/units.ts",
         "role": "testing"
+      },
+      {
+        "at": "src/thread/run/ThreadSnapshots.ts",
+        "for": [
+          "1a45453a"
+        ]
       }
     ],
     "id": "agent",

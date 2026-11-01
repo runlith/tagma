@@ -14,4 +14,4 @@ sources:
   - kind: file
     ref: packages/utils/src/worker.ts
 ---
-A request can survive cancellation of its waiting fiber. Callers that own paths or other resources used remotely join the request so their cleanup waits for its reply, or for the worker's close event after a transport failure. This does not cancel remote work; response-only callers can still abandon their waiter without joining it.
+A request can survive cancellation of its waiting fiber. Callers that own paths or other resources used remotely join the request so their cleanup waits for its reply, or for the worker's close event after a transport failure. Response-only callers can still abandon their waiter without joining it. The rested-fold owner retains its worker links in its scope; closing it refuses new requests and joins each worker's close, including idle and retiring workers, before the owner is released.
