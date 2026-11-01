@@ -1,8 +1,8 @@
 import { Api } from '@tagma/server/api';
 import { ThreadEntryKinds, type ThreadEntryReader } from '@runlith/agent/transcript/kinds';
-import { readingOf, WireEntryKinds } from './WireEntryKinds.js';
+import { wireEntries, WireEntryKinds } from './WireEntryKinds.js';
+import { WireCatalog } from './WireCatalog.js';
 import { CONTRACT_HEADER } from '@tagma/server/invocation/contract/wire/headers';
-import type { HttpOperationId, OperationAnswer, OperationInput } from '@tagma/server/composition/catalog';
 import type { EndpointDeclaration } from '@tagma/server/platform/contract/wire/operation';
 import { faultBody } from '@tagma/server/platform/contract/wire/refusal';
 import { Platform, type PlatformFetch } from '@runlith/layer/Platform';
@@ -11,7 +11,7 @@ import { Service } from '@runlith/layer/key';
 import { Effect, Result, Schema, SchemaIssue } from 'effect';
 import { FetchHttpClient, HttpClient, HttpClientError } from 'effect/http';
 import { HttpApiClient } from 'effect/http-api';
-import { operationAnswer, operationPayload } from './operation.js';
+import { OperationCodecs, type HttpOperationId, type OperationAnswer, type OperationInput } from './operation.js';
 import { Refusal, refusalOf } from './refusal.js';
 import { ServerOrigin } from './ServerOrigin.svelte.js';
 
@@ -95,8 +95,9 @@ const serverFault = Effect.fn(function* <E>(failure: E) {
 export class Door extends Service<Door>()('Door', { tier: 'app' }) {
   static *make() {
     const platform = yield* Platform;
+    const operations = new OperationCodecs(yield* WireCatalog);
     const kinds = yield* WireEntryKinds.optional();
-    return new Door(platform.fetch, yield* ServerOrigin, yield* Router, readingOf(kinds));
+    return new Door(platform.fetch, yield* ServerOrigin, yield* Router, operations, wireEntries(kinds));
   }
 
   private client: ApiClient | null = null;
@@ -110,7 +111,8 @@ export class Door extends Service<Door>()('Door', { tier: 'app' }) {
     private readonly fetch: PlatformFetch,
     private readonly origin: ServerOrigin,
     private readonly router: Router,
-    private readonly entries: ThreadEntryReader = readingOf(undefined),
+    private readonly operations: OperationCodecs,
+    private readonly entries: ThreadEntryReader = wireEntries(undefined),
   ) {
     super();
   }
@@ -134,12 +136,14 @@ export class Door extends Service<Door>()('Door', { tier: 'app' }) {
     const asked = this.leaving || options?.keepalive === true;
     return this.run(
       (api) =>
-        Effect.flatMap(operationPayload(id, input), (payload) => {
-          const call = Effect.flatMap(api.operations.perform({ params: { id }, query: lens, headers: {}, payload }), (answered) =>
-            Effect.mapError(operationAnswer(id, answered), (issue) => apart(id, issue, this.reload)),
-          );
-          return asked && fitsKeepalive(payload) ? Effect.provideService(call, FetchHttpClient.RequestInit, { keepalive: true }) : call;
-        }),
+        Effect.flatMap(this.operations.of(id), (codec) =>
+          Effect.flatMap(codec.payload(input), (payload) => {
+            const call = Effect.flatMap(api.operations.perform({ params: { id }, query: lens, headers: {}, payload }), (answered) =>
+              Effect.mapError(codec.answer(answered), (issue) => apart(id, issue, this.reload)),
+            );
+            return asked && fitsKeepalive(payload) ? Effect.provideService(call, FetchHttpClient.RequestInit, { keepalive: true }) : call;
+          }),
+        ),
       options?.signal,
     );
   }

@@ -11,10 +11,9 @@ import { TerminalAppearance, type AppearancePane } from './Settings.svelte.js';
 import { SettingsRepo } from '$lib/features/settings/SettingsRepo.js';
 import { catalogTheme } from '$lib/shared/terminalThemes.js';
 import type { ThemeMode } from '$lib/shared/Theme.svelte.js';
-import { testDoor } from '$lib/wire/testing.js';
-import { loadOperations } from '$lib/wire/operation.js';
+import { loadCatalog, testDoor } from '$lib/wire/testing.js';
 
-await loadOperations();
+await loadCatalog();
 
 function catalog(over: Record<string, unknown> = {}): SettingEntry[] {
   return SETTING_KEYS.filter((key) => key.section === 'terminal').map((key) => ({

@@ -1,4 +1,4 @@
-import { mergeOperations, type OperationManifest } from '../../../platform/contract/wire/manifest.js';
+import { mergeOperations, type WireModule } from '../../../platform/contract/wire/manifest.js';
 
 export const externalHarnesses = {
   id: 'external-harnesses',
@@ -17,4 +17,4 @@ export const externalHarnesses = {
       refusals: REFUSAL_WORDS,
     } as const;
   },
-} as const satisfies OperationManifest;
+} as const satisfies WireModule;

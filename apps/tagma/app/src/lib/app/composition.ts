@@ -55,6 +55,9 @@ import { WorkspaceLayer } from '$lib/features/workspace/layer.js';
 import { WorktreesLayer } from '$lib/features/worktrees/layer.js';
 import { RETRIES, retriable } from '$lib/wire/refusal.js';
 import { WireLayer } from '$lib/wire/wire.layer.js';
+import { WireCatalog } from '$lib/wire/WireCatalog.js';
+import { CATALOG_MODULES } from '@tagma/server/composition/catalog';
+import type { CollectedDeclarations, CollectedFeeds } from '@tagma/server/platform/contract/wire/manifest';
 import { PickScreen, type PickDraft } from '$lib/features/browser/pick/PickScreen.js';
 import { CheckoutScreen } from '$lib/features/checkout/CheckoutScreen.js';
 import { CallScreen, type CallDraft } from '$lib/features/speech/calls/CallScreen.js';
@@ -82,6 +85,14 @@ import { DesktopShell } from './shell/DesktopShell.js';
 import { MobileShell } from './shell/MobileShell.js';
 import { Screen } from './mobile/Screen.svelte.js';
 import { Overlays } from './overlays.js';
+
+declare module '$lib/wire/operation.js' {
+  interface Operations extends CollectedDeclarations<typeof CATALOG_MODULES> {}
+}
+
+declare module '$lib/wire/liveGroup.js' {
+  interface Feeds extends CollectedFeeds<typeof CATALOG_MODULES> {}
+}
 
 export const LADDER = [TileRung, ProjectRung, ThreadRung, GraphRung] as const;
 
@@ -136,6 +147,7 @@ export function appLayers(desktop: DesktopApi | undefined) {
 
   return Layer.mergeAll(
     WireLayer,
+    WireCatalog.contribute('core', ...CATALOG_MODULES),
     WorkspaceLayer,
     ProjectsLayer,
     WorktreesLayer,

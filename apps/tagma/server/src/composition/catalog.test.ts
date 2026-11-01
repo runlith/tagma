@@ -1,7 +1,7 @@
 import { it } from '@runlith/effect-test';
 import { expect } from 'bun:test';
 import { Effect } from 'effect';
-import { OPERATION_IDS, OPERATIONS } from './catalog.js';
+import { OPERATION_IDS, OPERATIONS } from './testing/catalog.js';
 import { collectedOperations, ownerOf } from './testing/composed.js';
 import type { Operation } from '../platform/contract/wire/operation.js';
 

@@ -6,12 +6,13 @@ import { it } from '@runlith/effect-test/vitest';
 import { DEVICE_REVOKED_CLOSE } from '@tagma/server/remote/contract/wire/access';
 import { LiveConnection, type LiveFailure } from './Live.js';
 import { ServerOrigin } from './ServerOrigin.svelte.js';
+import { testCatalog } from './testing.js';
 
 const origin = new ServerOrigin('http://localhost');
 
 const liveOver = (socket: () => EventTarget, life: Scope.Scope) =>
   Scope.provide(
-    LiveConnection.make(() => socket() as unknown as WebSocket, origin),
+    LiveConnection.make(() => socket() as unknown as WebSocket, origin, testCatalog()),
     life,
   );
 

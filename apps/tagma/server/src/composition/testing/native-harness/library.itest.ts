@@ -62,7 +62,7 @@ import { ThreadRecords } from '../../../thread-record/contract/service/records.j
 import { Projects } from '../../../projects/contract/service/registry.js';
 import { Settings } from '../../../settings/contract/service/values.js';
 import { CHECKOUT_FACTS } from '../../../executions/contract/service/worlds.js';
-import { OPERATION_IDS } from '../../catalog.js';
+import { OPERATION_IDS } from '../catalog.js';
 import { OperationId } from '../../../platform/contract/wire/ids.js';
 import { commentPolicy } from '../../../graph/testing/doubles.js';
 import { nativeOffers } from '../../../invocation/testing/native.js';

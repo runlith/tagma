@@ -1,7 +1,9 @@
 import { Effect } from 'effect';
 import { expect } from 'vitest';
 import { it } from '@runlith/effect-test/vitest';
-import { operationAnswer } from './operation.js';
+import { loadCatalog, testOperations } from './testing.js';
+
+await loadCatalog();
 
 const account = '0e937f4c-e47c-422b-b103-17194a7b863d';
 
@@ -30,7 +32,8 @@ it.effect('an answer that crossed as JSON decodes its dates and failures into th
         },
       ],
     };
-    const answered = yield* operationAnswer('set_default_account', wire);
+    const codec = yield* testOperations().of('set_default_account');
+    const answered = yield* codec.answer(wire);
     expect(answered.status).toBe('set');
     const row = 'accounts' in answered ? answered.accounts[0] : undefined;
     expect(row?.quota?.observedAt).toEqual(new Date('2026-09-29T05:42:33.005Z'));

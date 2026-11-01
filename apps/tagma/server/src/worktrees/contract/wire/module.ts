@@ -1,4 +1,6 @@
-import { mergeOperations, type OperationManifest } from '../../../platform/contract/wire/manifest.js';
+import { mergeOperations, type WireModule } from '../../../platform/contract/wire/manifest.js';
+import { WORKTREES_FEED } from './feed.js';
+import { SPACE_SCAN_FEED } from './space.js';
 
 export const worktrees = {
   id: 'worktrees',
@@ -15,4 +17,5 @@ export const worktrees = {
       refusals: REFUSAL_WORDS,
     } as const;
   },
-} as const satisfies OperationManifest;
+  feeds: [WORKTREES_FEED, SPACE_SCAN_FEED],
+} as const satisfies WireModule;

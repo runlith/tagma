@@ -4,7 +4,7 @@
   import Group from '$lib/features/settings/Group.svelte';
   import { Button } from '$lib/shared/ui/button/index.js';
   import { Input } from '$lib/shared/ui/input/index.js';
-  import type { OperationAnswer, OperationInput } from '@tagma/server/composition/catalog';
+  import type { OperationAnswer, OperationInput } from '$lib/wire/operation.js';
   import { type Refusal, refusalOf } from '$lib/wire/refusal.js';
   import { Door } from '$lib/wire/Door.js';
 

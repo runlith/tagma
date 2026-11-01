@@ -4,8 +4,7 @@ import { mountRepo } from '@runlith/query/testing';
 import { Scope } from '@runlith/layer/Scope';
 import { afterEach, beforeEach, expect, test } from 'vitest';
 import { waitUntil } from '@runlith/testing/flush';
-import { testDoor } from '$lib/wire/testing.js';
-import { loadOperations } from '$lib/wire/operation.js';
+import { loadCatalog, testDoor } from '$lib/wire/testing.js';
 import { makePoint } from '@runlith/layer/testing';
 import { makeReactivePoint } from '@runlith/layer/testing/svelte';
 import { SectionContributions, SettingSections, type SettingsSection } from './section.js';
@@ -13,7 +12,7 @@ import { SectionRegistry } from './SectionRegistry.js';
 import { SettingsCatalog } from './SettingsCatalog.svelte.js';
 import { SettingsRepo } from './SettingsRepo.js';
 
-await loadOperations();
+await loadCatalog();
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });

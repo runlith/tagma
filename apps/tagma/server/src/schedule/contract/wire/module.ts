@@ -1,4 +1,4 @@
-import type { OperationManifest } from '../../../platform/contract/wire/manifest.js';
+import type { WireModule } from '../../../platform/contract/wire/manifest.js';
 
 export const schedule = {
   id: 'schedule',
@@ -7,4 +7,4 @@ export const schedule = {
     const { SCHEDULE_OPERATIONS } = await import('./schedule.js');
     return { declarations: SCHEDULE_OPERATIONS };
   },
-} as const satisfies OperationManifest;
+} as const satisfies WireModule;

@@ -19,7 +19,7 @@ import type { Caller, FileReach } from '../../../platform/contract/wire/caller.j
 import { CheckoutPaths } from '../../../workspace/contract/service/checkoutPaths.js';
 import { fixedCheckoutPaths } from '../../../workspace/testing/doubles.js';
 import type { TagTable } from '../../../graph/contract/wire/tags/table.js';
-import type { CatalogOperationId } from '../../catalog.js';
+import type { CatalogOperationId } from '../catalog.js';
 import { fixtureNativeCatalog as nativeCatalog, fixtureServedGraphs } from '../nativeCatalog.js';
 import { RoutedGraphs } from '../../../graph/contract/service/serving.js';
 import { operationChecks } from '../../operationChecks.js';

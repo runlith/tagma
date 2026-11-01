@@ -1,6 +1,6 @@
 import type { KeyedLoaderContext } from '@runlith/query/types';
 import { Repo } from '@runlith/query/repo';
-import type { OperationInput } from '@tagma/server/composition/catalog';
+import type { OperationInput } from '$lib/wire/operation.js';
 import { GraphDoor } from '$lib/features/workspace/GraphDoor.js';
 
 export type TranslationKey = { readonly block: string; readonly language?: string };

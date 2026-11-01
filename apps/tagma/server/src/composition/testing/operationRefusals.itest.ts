@@ -8,7 +8,7 @@ import { McpServers } from '../../mcp/contract/service/servers.js';
 import { mcpServersLayer } from '../../mcp/testing/doubles.js';
 import { ProjectChanges } from '../../projects/contract/service/changes.js';
 import { Settings } from '../../settings/contract/service/values.js';
-import { type CatalogOperationId, OPERATIONS } from '../catalog.js';
+import { type CatalogOperationId, OPERATIONS } from './catalog.js';
 import { mcpServers } from '../../mcp/contract/wire/settings.js';
 
 function names(operation: CatalogOperationId, refusal: GateRefusal, code: string): void {

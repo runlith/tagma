@@ -6,7 +6,7 @@ import { Effect, Schema } from 'effect';
 import { it } from '@runlith/effect-test/vitest';
 import { ThreadEntryKinds, ThreadEntryUnreadable } from '@runlith/agent/transcript/kinds';
 import { entryFromTranscript } from '@runlith/chat-ui/entryProjection';
-import { readingOf } from '$lib/wire/WireEntryKinds.js';
+import { wireEntries } from '$lib/wire/WireEntryKinds.js';
 import { testWireKinds } from './testing.js';
 import { describe, expect } from 'vitest';
 import bounded from '@tagma/server/threads/contract/wire/feedPairs/bounded.json';
@@ -37,7 +37,7 @@ const pairs: Record<string, Pair> = {
   restore,
   reconnect,
 } as never;
-const kinds = readingOf(testWireKinds());
+const kinds = wireEntries(testWireKinds());
 const decode = Schema.decodeUnknownEffect(threadWireFeedEventSchema);
 
 const shown = (fold: ChatFold) => fold.entries.map((entry) => ({ ...entry }));

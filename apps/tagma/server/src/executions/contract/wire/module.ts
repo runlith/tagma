@@ -1,4 +1,5 @@
-import { mergeOperations, type OperationManifest } from '../../../platform/contract/wire/manifest.js';
+import { mergeOperations, type WireModule } from '../../../platform/contract/wire/manifest.js';
+import { EXECUTION_FEEDS } from './feeds.js';
 
 export const executions = {
   id: 'executions',
@@ -33,4 +34,5 @@ export const executions = {
       refusals: REFUSAL_WORDS,
     } as const;
   },
-} as const satisfies OperationManifest;
+  feeds: EXECUTION_FEEDS,
+} as const satisfies WireModule;

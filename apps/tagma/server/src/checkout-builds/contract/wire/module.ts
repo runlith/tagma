@@ -1,4 +1,4 @@
-import type { OperationManifest } from '../../../platform/contract/wire/manifest.js';
+import type { WireModule } from '../../../platform/contract/wire/manifest.js';
 
 export const checkoutBuilds = {
   id: 'checkout-builds',
@@ -7,4 +7,4 @@ export const checkoutBuilds = {
     const [{ DEV_SURFACE_OPERATIONS }, { REFUSAL_WORDS }] = await Promise.all([import('./operations.js'), import('./refusalWords.js')]);
     return { declarations: DEV_SURFACE_OPERATIONS, refusals: REFUSAL_WORDS };
   },
-} as const satisfies OperationManifest;
+} as const satisfies WireModule;

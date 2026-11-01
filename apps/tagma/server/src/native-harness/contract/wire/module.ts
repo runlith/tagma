@@ -1,4 +1,6 @@
-import { mergeOperations, type OperationManifest } from '../../../platform/contract/wire/manifest.js';
+import { mergeOperations, type WireModule } from '../../../platform/contract/wire/manifest.js';
+import { CALLS_FEED } from './calls.js';
+import { THREAD_NATIVE_FEEDS } from './threadFeeds.js';
 
 export const nativeHarness = {
   id: 'native-harness',
@@ -45,4 +47,5 @@ export const nativeHarness = {
       refusals: REFUSAL_WORDS,
     } as const;
   },
-} as const satisfies OperationManifest;
+  feeds: [CALLS_FEED, ...THREAD_NATIVE_FEEDS],
+} as const satisfies WireModule;

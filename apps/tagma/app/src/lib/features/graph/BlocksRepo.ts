@@ -3,7 +3,7 @@ import type { Delivery } from '@tagma/server/graph/contract/wire/tags/law';
 import type { StorageMode } from '@tagma/server/projects/contract/wire/project';
 import type { KeyedLoaderContext } from '@runlith/query/types';
 import { Repo } from '@runlith/query/repo';
-import type { OperationInput } from '@tagma/server/composition/catalog';
+import type { OperationInput } from '$lib/wire/operation.js';
 import { GraphDoor, type GraphLens } from '$lib/features/workspace/GraphDoor.js';
 
 export type BlockReadKey = { readonly name: string; readonly depth: number };

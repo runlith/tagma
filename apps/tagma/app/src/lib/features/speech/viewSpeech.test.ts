@@ -6,16 +6,16 @@ import { it } from '@runlith/effect-test/vitest';
 import { waitFor, waitUntil } from '@runlith/testing/flush';
 import { Door } from '$lib/wire/Door.js';
 import { LiveConnection } from '$lib/wire/Live.js';
-import { loadOperations } from '$lib/wire/operation.js';
 import { ServerOrigin } from '$lib/wire/ServerOrigin.svelte.js';
 import { SoundChannel } from '$lib/wire/SoundChannel.js';
+import { loadCatalog, testCatalog, testOperations } from '$lib/wire/testing.js';
 import { makePlatform, makeRouter } from '@runlith/layer/testing';
 import { INVALID_PARAMS, UNAVAILABLE, ViewBridge, type ViewParams, ViewRefusal } from '../views/ViewBridge.js';
 import { speechMethod } from './viewSpeech.js';
 import { CallFeed } from './calls/Feed.svelte.js';
 import { saidOf } from './calls/Picked.svelte.js';
 
-await loadOperations();
+await loadCatalog();
 
 const utterance: Heard = {
   kind: 'utterance',
@@ -268,8 +268,8 @@ const rig = Effect.fnUntraced(function* () {
   const scope = yield* Scope.fork(yield* Effect.scope);
   const platform = makePlatform();
   const server = new ServerOrigin('http://tagma.test');
-  const live = yield* Scope.provide(LiveConnection.make(platform.socket, server), scope);
-  const door = new Door(platform.fetch, server, makeRouter());
+  const live = yield* Scope.provide(LiveConnection.make(platform.socket, server, testCatalog()), scope);
+  const door = new Door(platform.fetch, server, makeRouter(), testOperations());
   const method = speechMethod(door, live, new SoundChannel(platform.socket, server), 7);
   const source = {};
   const origin = 'http://proxy.test';

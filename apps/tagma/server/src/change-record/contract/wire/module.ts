@@ -1,4 +1,6 @@
-import { mergeOperations, type OperationManifest } from '../../../platform/contract/wire/manifest.js';
+import { mergeOperations, type WireModule } from '../../../platform/contract/wire/manifest.js';
+import { HOLDINGS_FEED } from './holdings.js';
+import { THREAD_CHANGES_FEED } from './threadChanges.js';
 
 export const changeRecord = {
   id: 'change-record',
@@ -11,4 +13,5 @@ export const changeRecord = {
     ]);
     return { declarations: mergeOperations(CHANGE_READS, CHANGE_WRITES), refusals: REFUSAL_WORDS };
   },
-} as const satisfies OperationManifest;
+  feeds: [HOLDINGS_FEED, THREAD_CHANGES_FEED],
+} as const satisfies WireModule;

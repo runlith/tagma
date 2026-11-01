@@ -1,5 +1,6 @@
 import { Schema } from 'effect';
-import { Rpc, type RpcSchema, RpcSerialization } from 'effect/rpc';
+import { Rpc, RpcGroup, type RpcSchema, RpcSerialization } from 'effect/rpc';
+import type { FeedOf, WireModule } from './manifest.js';
 import type { FeedDeclaration } from './operation.js';
 import { refusalSchema } from './refusal.js';
 
@@ -25,6 +26,9 @@ export const rpcOf = <const F extends FeedDeclaration>(declared: F): RpcOfFeed<F
     error: refusalSchema,
     stream: declared.stream ?? true,
   }) as RpcOfFeed<F>;
+
+export const liveGroupOf = <const Modules extends readonly WireModule[]>(modules: Modules): RpcGroup.RpcGroup<RpcOfFeed<FeedOf<Modules>>> =>
+  RpcGroup.make(...modules.flatMap((module) => module.feeds ?? []).map(rpcOf)) as unknown as RpcGroup.RpcGroup<RpcOfFeed<FeedOf<Modules>>>;
 
 export type FeedBody = (params: { readonly projectId?: number }, ...rest: readonly unknown[]) => unknown;
 

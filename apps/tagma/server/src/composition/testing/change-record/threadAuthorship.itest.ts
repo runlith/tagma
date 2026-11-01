@@ -2,7 +2,7 @@ import { expect } from 'bun:test';
 import { layer } from '@runlith/effect-test';
 import { Effect, Schema } from 'effect';
 import { AUTHORSHIP_ANSWER_LINES } from '../../../change-record/contract/wire/operations.js';
-import { OPERATIONS } from '../../catalog.js';
+import { OPERATIONS } from '../catalog.js';
 import type { PathAuthorship } from '../../../change-record/contract/wire/authorship.js';
 import { authorshipRefusal, READING_CAPTURE } from '../../../change-record/threadFiles/failures.js';
 import {

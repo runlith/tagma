@@ -1,50 +1,85 @@
-import type { CatalogOperationId, OPERATIONS, OperationAnswer, OperationInput } from '@tagma/server/composition/catalog';
-import { knownAnswer } from '@tagma/server/platform/contract/wire/operation';
+import { declarationsOf, type WireModule } from '@tagma/server/platform/contract/wire/manifest';
+import { knownAnswer, type DeclaredAnswer, type OperationDeclaration } from '@tagma/server/platform/contract/wire/operation';
+import type { Point } from '@runlith/layer/Point';
 import { toJson } from '@runlith/utils/json';
-import { Effect, Schema } from 'effect';
+import { Data, Effect, Schema } from 'effect';
 
-type Declared = typeof OPERATIONS;
+export interface Operations {}
 
-type Codecs = { readonly params: Schema.Codec<unknown, unknown>; readonly answer?: Schema.Codec<unknown, unknown> };
+export type CatalogOperationId = keyof Operations & string;
 
-let declared: Declared | null = null;
-let loading: Promise<Declared> | null = null;
+export type OperationInput<Id extends CatalogOperationId> = Operations[Id]['input']['Type'];
 
-export const loadedOperations = (): Declared | null => declared;
+export type OperationAnswer<Id extends CatalogOperationId> = Operations[Id] extends { readonly answer: infer Answer extends Schema.Top }
+  ? DeclaredAnswer<Answer>
+  : unknown;
 
-export const loadOperations = (): Promise<Declared> =>
-  (loading ??= import('@tagma/server/composition/catalog').then(
-    (catalog) => (declared = catalog.OPERATIONS),
-    (failure: unknown) => {
-      loading = null;
-      throw failure;
-    },
-  ));
+type SocketOnlyOperationId = {
+  [K in CatalogOperationId]: Operations[K] extends { readonly doors: { readonly socket: true; readonly http: false } } ? K : never;
+}[CatalogOperationId];
 
-const codecsOf = (id: CatalogOperationId): Effect.Effect<Codecs> =>
-  declared === null ? Effect.map(Effect.promise(loadOperations), (loaded) => loaded[id]) : Effect.succeed(declared[id]);
+export type HttpOperationId = Exclude<CatalogOperationId, SocketOnlyOperationId>;
 
-export const operationPayload = <Id extends CatalogOperationId>(
-  id: Id,
-  input: OperationInput<Id>,
-): Effect.Effect<unknown, Schema.SchemaError> =>
-  Effect.flatMap(codecsOf(id), (codecs) => Effect.map(Schema.encodeUnknownEffect(codecs.params)(input), toJson));
+class OperationUndeclared extends Data.TaggedError('OperationUndeclared')<{ readonly id: string }> {
+  override get message(): string {
+    return `No module of this window's catalog declares the operation ${this.id}.`;
+  }
+}
 
-const jsonAnswers = new Map<CatalogOperationId, (answered: unknown) => Effect.Effect<unknown, Schema.SchemaError>>();
+type Declared = ReadonlyMap<string, OperationDeclaration>;
 
-const jsonAnswerOf = (id: CatalogOperationId): Effect.Effect<(answered: unknown) => Effect.Effect<unknown, Schema.SchemaError>> => {
-  const held = jsonAnswers.get(id);
-  if (held !== undefined) return Effect.succeed(held);
-  return Effect.map(codecsOf(id), (codecs) => {
-    const answer = codecs.answer;
-    const decode = answer === undefined ? Effect.succeed : Schema.decodeUnknownEffect(Schema.toCodecJson(knownAnswer(answer)));
-    jsonAnswers.set(id, decode);
-    return decode;
-  });
+type Decode = (answered: unknown) => Effect.Effect<unknown, Schema.SchemaError>;
+
+type OperationCodec<Id extends CatalogOperationId> = {
+  readonly payload: (input: OperationInput<Id>) => Effect.Effect<unknown, Schema.SchemaError>;
+  readonly answer: (answered: unknown) => Effect.Effect<OperationAnswer<Id>, Schema.SchemaError>;
 };
 
-export const operationAnswer = <Id extends CatalogOperationId>(
-  id: Id,
-  answered: unknown,
-): Effect.Effect<OperationAnswer<Id>, Schema.SchemaError> =>
-  Effect.flatMap(jsonAnswerOf(id), (decode) => decode(answered)) as Effect.Effect<OperationAnswer<Id>, Schema.SchemaError>;
+export class OperationCodecs {
+  private loading: { readonly modules: readonly WireModule[]; readonly declared: Promise<Declared> } | null = null;
+  private loaded: { readonly modules: readonly WireModule[]; readonly declared: Declared } | null = null;
+  private readonly answers = new Map<OperationDeclaration, Decode>();
+
+  constructor(private readonly catalog: Point<WireModule>) {}
+
+  load(): Promise<Declared> {
+    const modules = this.catalog.items;
+    if (this.loading?.modules === modules) return this.loading.declared;
+    const declared = declarationsOf(modules).then(
+      (catalog) => {
+        const read: Declared = new Map(Object.entries(catalog.declarations));
+        if (this.catalog.items === modules) this.loaded = { modules, declared: read };
+        return read;
+      },
+      (failure: unknown) => {
+        if (this.loading?.declared === declared) this.loading = null;
+        throw failure;
+      },
+    );
+    this.loading = { modules, declared };
+    return declared;
+  }
+
+  of<Id extends CatalogOperationId>(id: Id): Effect.Effect<OperationCodec<Id>, OperationUndeclared> {
+    const loaded = this.loaded;
+    const declared =
+      loaded !== null && loaded.modules === this.catalog.items ? Effect.succeed(loaded.declared) : Effect.promise(() => this.load());
+    return Effect.flatMap(declared, (table) => {
+      const declaration = table.get(id);
+      if (declaration === undefined) return Effect.fail(new OperationUndeclared({ id }));
+      const decode = this.decodeOf(declaration);
+      return Effect.succeed({
+        payload: (input) => Effect.map(Schema.encodeUnknownEffect(declaration.input)(input), toJson),
+        answer: (answered) => decode(answered) as Effect.Effect<OperationAnswer<Id>, Schema.SchemaError>,
+      });
+    });
+  }
+
+  private decodeOf(declaration: OperationDeclaration): Decode {
+    const held = this.answers.get(declaration);
+    if (held !== undefined) return held;
+    const decode: Decode = Schema.decodeUnknownEffect(Schema.toCodecJson(knownAnswer(declaration.answer)));
+    this.answers.set(declaration, decode);
+    return decode;
+  }
+}

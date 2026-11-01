@@ -1,4 +1,5 @@
-import type { OperationManifest } from '../../../platform/contract/wire/manifest.js';
+import type { WireModule } from '../../../platform/contract/wire/manifest.js';
+import { BROWSER_FEEDS } from './feeds.js';
 
 export const browser = {
   id: 'browser',
@@ -33,4 +34,5 @@ export const browser = {
       refusals: REFUSAL_WORDS,
     };
   },
-} as const satisfies OperationManifest;
+  feeds: BROWSER_FEEDS,
+} as const satisfies WireModule;

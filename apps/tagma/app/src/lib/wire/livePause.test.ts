@@ -3,11 +3,12 @@ import { expect } from 'vitest';
 import { it } from '@runlith/effect-test/vitest';
 import { LiveConnection } from './Live.js';
 import { ServerOrigin } from './ServerOrigin.svelte.js';
+import { testCatalog } from './testing.js';
 
 const unopened = (): WebSocket => {
   throw new Error('This test opens no socket.');
 };
-const connection = LiveConnection.make(unopened, new ServerOrigin('http://localhost'));
+const connection = LiveConnection.make(unopened, new ServerOrigin('http://localhost'), testCatalog());
 
 it.effect('a pause reports no failure, and resume returns the page to a connectable state', () =>
   Effect.gen(function* () {

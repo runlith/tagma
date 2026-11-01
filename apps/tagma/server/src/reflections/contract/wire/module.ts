@@ -1,4 +1,4 @@
-import type { OperationManifest } from '../../../platform/contract/wire/manifest.js';
+import type { WireModule } from '../../../platform/contract/wire/manifest.js';
 
 export const reflections = {
   id: 'reflections',
@@ -11,4 +11,4 @@ export const reflections = {
     ]);
     return { declarations: REFLECTION_FILING_OPERATIONS, refusals: REFUSAL_WORDS };
   },
-} as const satisfies OperationManifest;
+} as const satisfies WireModule;

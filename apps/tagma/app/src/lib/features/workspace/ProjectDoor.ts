@@ -1,7 +1,6 @@
 import { Service } from '@runlith/layer/key';
-import type { OperationAnswer, OperationInput } from '@tagma/server/composition/catalog';
-import type { HttpOperationId } from '@tagma/server/composition/catalog';
 import type { Effect } from 'effect';
+import type { HttpOperationId, OperationAnswer, OperationInput } from '$lib/wire/operation.js';
 import { type ApiClient, Door } from '$lib/wire/Door.js';
 import { ProjectRung, type ProjectAim } from './ProjectRung.js';
 

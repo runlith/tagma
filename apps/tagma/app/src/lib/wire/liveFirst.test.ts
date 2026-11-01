@@ -4,6 +4,7 @@ import { waitFor, waitUntil } from '@runlith/testing/flush';
 import { it } from '@runlith/effect-test/vitest';
 import { LiveConnection } from './Live.js';
 import { ServerOrigin } from './ServerOrigin.svelte.js';
+import { testCatalog } from './testing.js';
 
 class DialedSocket extends EventTarget {
   readyState = 0;
@@ -42,11 +43,15 @@ it.live('a stop made while the socket is closed reaches the server first once it
     const sockets: DialedSocket[] = [];
     const life = yield* Scope.fork(yield* Effect.scope);
     const live = yield* Scope.provide(
-      LiveConnection.make(() => {
-        const socket = new DialedSocket();
-        sockets.push(socket);
-        return socket as unknown as WebSocket;
-      }, new ServerOrigin('http://localhost')),
+      LiveConnection.make(
+        () => {
+          const socket = new DialedSocket();
+          sockets.push(socket);
+          return socket as unknown as WebSocket;
+        },
+        new ServerOrigin('http://localhost'),
+        testCatalog(),
+      ),
       life,
     );
     const at = { projectId: 1, threadId: 'thread-1' };

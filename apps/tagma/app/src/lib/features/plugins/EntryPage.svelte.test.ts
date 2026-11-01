@@ -12,12 +12,11 @@ import { McpRepo } from '$lib/features/mcp/Repo.js';
 import { Notices } from '$lib/features/notices/Service.svelte.js';
 import { ThreadSeats } from '$lib/features/threads/seats/ThreadSeats.svelte.js';
 import { Door } from '$lib/wire/Door.js';
-import { loadOperations } from '$lib/wire/operation.js';
-import { testDoor } from '$lib/wire/testing.js';
+import { loadCatalog, testDoor } from '$lib/wire/testing.js';
 import { PluginsRepo } from './Repo.js';
 import EntryPage from './EntryPage.svelte';
 
-await loadOperations();
+await loadCatalog();
 
 const marketplace: MarketplaceRow = {
   id: 'fixture',

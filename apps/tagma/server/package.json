@@ -218,9 +218,16 @@
       "default": "./src/worktrees/contract/wire/space.ts"
     },
     "./composition/catalog": {
-      "types": "./src/composition/catalog.ts",
-      "browser": "./src/composition/catalog.ts",
-      "default": "./src/composition/catalog.ts"
+      "types": "./src/composition/developer/catalog.ts",
+      "release": "./src/composition/release/catalog.ts",
+      "browser": "./src/composition/developer/catalog.ts",
+      "default": "./src/composition/developer/catalog.ts"
+    },
+    "./composition/operations": {
+      "types": "./src/composition/developer/operations.ts",
+      "release": "./src/composition/release/operations.ts",
+      "browser": "./src/composition/developer/operations.ts",
+      "default": "./src/composition/developer/operations.ts"
     },
     "./composition/shipped": {
       "types": "./src/composition/shipped.ts",
@@ -1181,6 +1188,11 @@
       "types": "./src/platform/contract/wire/operation.ts",
       "browser": "./src/platform/contract/wire/operation.ts",
       "default": "./src/platform/contract/wire/operation.ts"
+    },
+    "./platform/contract/wire/manifest": {
+      "types": "./src/platform/contract/wire/manifest.ts",
+      "browser": "./src/platform/contract/wire/manifest.ts",
+      "default": "./src/platform/contract/wire/manifest.ts"
     },
     "./providers/contract/wire/signIns": {
       "types": "./src/providers/contract/wire/signIns.ts",

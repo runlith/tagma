@@ -4,6 +4,7 @@ import { expect, vi } from 'vitest';
 import { waitUntil } from '@runlith/testing/flush';
 import { LiveConnection } from './Live.js';
 import { ServerOrigin } from './ServerOrigin.svelte.js';
+import { testCatalog } from './testing.js';
 
 class OpeningSocket extends EventTarget {
   static last: OpeningSocket | null = null;
@@ -28,7 +29,7 @@ class OpeningSocket extends EventTarget {
 }
 
 const opening = (): WebSocket => new OpeningSocket() as unknown as WebSocket;
-const connection = LiveConnection.make(opening, new ServerOrigin('http://localhost'));
+const connection = LiveConnection.make(opening, new ServerOrigin('http://localhost'), testCatalog());
 
 it.live('a verb the dropped connection was carrying fails as transport, so its caller waits instead of giving up', () =>
   Effect.gen(function* () {
