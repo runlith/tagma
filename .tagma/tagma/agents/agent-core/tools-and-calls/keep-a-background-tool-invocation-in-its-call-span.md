@@ -1,6 +1,6 @@
 ---
 id: 01a1957a-1784-7037-be6e-a1043483f789
-title: Keep background tool preparation in its call span
+title: Keep a background tool invocation in its call span
 ord: 25
 tags: ["task"]
 fields:
@@ -12,4 +12,4 @@ edges:
   - kind: discovered-from
     to: 01a19578-7e70-7ca7-ba04-4194cdc3f56c
 ---
-Restore the tool-call span context while a background call is prepared and executed, so compaction and other collaboration calls can finish and report their outcomes.
+Keep a background tool invocation under its own span across preparation, execution and delivery, so child compaction and other collaboration calls can finish and report their outcomes.
