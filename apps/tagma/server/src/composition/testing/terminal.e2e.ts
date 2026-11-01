@@ -69,7 +69,6 @@ e2e.effect(
         await page.locator('textarea.prompt').waitFor();
         await page.locator('[data-area-toggle="1"]').click();
         await view.waitFor();
-        console.info('terminal e2e restored');
         const running = await page.request.post(`${served.origin}/api/op/read_terminal_processes?project=${target.projectId}`, {
           data: address,
         });
@@ -80,10 +79,12 @@ e2e.effect(
               process.association !== undefined && process.association.relation !== 'leader',
           ),
         ).toBe(true);
-        await side.getByRole('button', { name: 'Close terminal', exact: true }).click();
+        await page
+          .getByRole('tablist', { name: 'Tabs beside', exact: true })
+          .getByRole('button', { name: 'Close terminal', exact: true })
+          .click();
         const dialog = page.getByRole('dialog');
         await dialog.waitFor();
-        console.info('terminal e2e close confirmation visible');
         const stopped = page.waitForResponse((response) => response.url().includes('/api/op/stop_terminal'));
         await dialog.getByRole('button', { name: 'Stop and Close', exact: true }).click();
         const receipt = await (await stopped).json();
