@@ -3,6 +3,7 @@ import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { Data, Effect, FileSystem, Schema } from 'effect';
 import type { ModelSpec } from '@runlith/llm/models/description';
 import type { CatalogModels, CliHarnessCatalogReader } from '@runlith/tagma/adapter/provider';
+import { MUSE_SPECS } from '../models/muse.js';
 import { Models } from '../runner/frames.js';
 import { prepareHome } from '../runner/home.js';
 import { loadMuseSdk } from '../runner/sdk.js';
@@ -10,6 +11,8 @@ import { loadMuseSdk } from '../runner/sdk.js';
 class CatalogRefused extends Data.TaggedError('CatalogRefused')<{ readonly message: string }> {}
 
 const PROVIDER_ID = 'meta';
+
+const KNOWN: Readonly<Record<string, ModelSpec>> = MUSE_SPECS;
 
 const projectCatalog = (listed: Models): CatalogModels => {
   const models: Record<string, ModelSpec> = {};
@@ -19,8 +22,9 @@ const projectCatalog = (listed: Models): CatalogModels => {
     if (row.providerId !== PROVIDER_ID || models[row.modelId] !== undefined) continue;
     const reasoning = Array.isArray(row.variants) ? row.variants.filter((variant): variant is string => typeof variant === 'string') : [];
     if (row.contextLimit === null) warnings.push(`${row.modelId}: context window is unknown`);
-    models[row.modelId] = {
-      label: row.displayLabel.trim() || row.modelId,
+    const listedSpec: ModelSpec = {
+      label: KNOWN[row.modelId]?.label ?? (row.displayLabel.trim() || row.modelId),
+      short: KNOWN[row.modelId]?.short,
       capacity:
         row.contextLimit === null
           ? undefined
@@ -30,6 +34,10 @@ const projectCatalog = (listed: Models): CatalogModels => {
       defaultReasoning:
         row.defaultReasoningEffort !== undefined && reasoning.includes(row.defaultReasoningEffort) ? row.defaultReasoningEffort : null,
     };
+    models[row.modelId] = listedSpec;
+    const contributor = KNOWN[`${row.modelId}-contributor`];
+    if (contributor !== undefined)
+      models[`${row.modelId}-contributor`] ??= { ...listedSpec, label: contributor.label, short: contributor.short };
     if (row.isDefault && preferred === null) preferred = row.modelId;
   }
   return { models, defaultTextModel: preferred ?? Object.keys(models)[0] ?? '', warnings };

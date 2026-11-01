@@ -8,7 +8,7 @@ export const DEFAULT_MUSE_MODEL = 'muse-spark-1.3';
 
 export const MUSE_SPECS = {
   'muse-wonder-full-1.0': {
-    label: 'Muse Wonder Full 1.0',
+    label: 'Wonder Full 1.0',
     short: 'Wonder Full',
     toolChoice: ['auto'],
     capacity: { context: 1_007_997, output: 128_000 },
@@ -17,7 +17,7 @@ export const MUSE_SPECS = {
     defaultReasoning: 'high',
   },
   'muse-wonder-full-1.0-contributor': {
-    label: 'Muse Wonder Full 1.0 Contributor',
+    label: 'Wonder Full 1.0 Contributor',
     short: 'Wonder Full C',
     toolChoice: ['auto'],
     capacity: { context: 1_007_997, output: 128_000 },
@@ -26,7 +26,7 @@ export const MUSE_SPECS = {
     defaultReasoning: 'high',
   },
   'muse-wonder-1.0': {
-    label: 'Muse Wonder 1.0',
+    label: 'Wonder 1.0',
     short: 'Wonder',
     toolChoice: ['auto'],
     capacity: { context: 1_007_997, output: 128_000 },
@@ -35,7 +35,7 @@ export const MUSE_SPECS = {
     defaultReasoning: 'high',
   },
   'muse-wonder-1.0-contributor': {
-    label: 'Muse Wonder 1.0 Contributor',
+    label: 'Wonder 1.0 Contributor',
     short: 'Wonder C',
     toolChoice: ['auto'],
     capacity: { context: 1_007_997, output: 128_000 },
@@ -44,7 +44,7 @@ export const MUSE_SPECS = {
     defaultReasoning: 'high',
   },
   [DEFAULT_MUSE_MODEL]: {
-    label: 'Muse Spark 1.3',
+    label: 'Spark 1.3',
     short: 'Spark',
     toolChoice: ['auto'],
     capacity: { context: 1_007_997, output: 128_000 },
@@ -53,7 +53,7 @@ export const MUSE_SPECS = {
     defaultReasoning: 'high',
   },
   'muse-spark-1.3-contributor': {
-    label: 'Muse Spark 1.3 Contributor',
+    label: 'Spark 1.3 Contributor',
     short: 'Spark C',
     toolChoice: ['auto'],
     capacity: { context: 1_007_997, output: 128_000 },
@@ -62,7 +62,7 @@ export const MUSE_SPECS = {
     defaultReasoning: 'high',
   },
   'muse-spark-1.2-contributor': {
-    label: 'Muse Spark 1.2 Contributor',
+    label: 'Spark 1.2 Contributor',
     short: 'Spark C',
     toolChoice: ['auto'],
     capacity: { context: 1_007_997, output: 128_000 },
@@ -71,7 +71,7 @@ export const MUSE_SPECS = {
     defaultReasoning: 'high',
   },
   'muse-spark-1.2': {
-    label: 'Muse Spark 1.2',
+    label: 'Spark 1.2',
     short: 'Spark',
     toolChoice: ['auto'],
     capacity: { context: 1_007_997, output: 128_000 },
