@@ -52,11 +52,11 @@ const submitted = async (landed: () => boolean) => {
   await waitUntil(landed);
 };
 
-test('the core dialog draws no contributed field', async () => {
+test('the core dialog ends with its own fields, leaving no place drawn for contributions', async () => {
   app = mountShell(CreationFields, boot);
   app.draw(NewProjectDialog as never, { open: true });
   await waitUntil(() => catalogs() !== null);
-  expect(document.body.querySelector('[data-testid="creation-field"]')).toBeNull();
+  expect(catalogs()!.nextElementSibling).toBeNull();
 });
 
 test('a contributed field draws after the core fields, its value rides the creation under its id, and a refusal naming it lands under it', async () => {
@@ -92,4 +92,20 @@ test('a contributed field draws after the core fields, its value rides the creat
   await submitted(() => alert() !== null);
   expect(underField()).toBeNull();
   expect(alert()?.textContent).toContain('this mark is refused');
+});
+
+test('a field that leaves before the creation takes its value with it', async () => {
+  app = mountShell(CreationFields, boot);
+  const leave = app.get(CreationFields).register('passing', { id: 'passing-mark', order: 1, payload: { component: CreationField } });
+  app.draw(NewProjectDialog as never, { open: true });
+  await waitUntil(() => document.body.querySelector('input[aria-label="Mark"]') !== null);
+  typed(document.body.querySelector('input[placeholder="runlith"]'), 'book');
+  typed(document.body.querySelector('input[placeholder="/absolute/path/to/repo"]'), '/work/book');
+  typed(document.body.querySelector('input[aria-label="Mark"]'), 'oak');
+  leave();
+  flushSync();
+
+  create.mockResolvedValueOnce(undefined);
+  await submitted(() => create.mock.calls.length > 0);
+  expect(create).toHaveBeenCalledWith(expect.objectContaining({ contributed: {} }));
 });

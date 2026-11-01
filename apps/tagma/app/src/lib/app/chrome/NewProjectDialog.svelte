@@ -57,7 +57,8 @@
     refused = null;
     const graphRemote = draftStorage === 'stealth' && draftRemote.trim() !== '' ? draftRemote.trim() : undefined;
     try {
-      await creation.create({ ...draft, catalogs, graphRemote, contributed });
+      const drawn = Object.fromEntries(Object.entries(contributed).filter(([id]) => fields.find(id) !== undefined));
+      await creation.create({ ...draft, catalogs, graphRemote, contributed: drawn });
     } catch (error) {
       refused = refusedOf(error);
       return;

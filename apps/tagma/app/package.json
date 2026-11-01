@@ -54,6 +54,11 @@
       "browser": "./src/lib/features/threads/native/records.ts",
       "default": "./src/lib/features/threads/native/records.ts"
     },
+    "./points/creation": {
+      "types": "./src/lib/app/chrome/creation.ts",
+      "browser": "./src/lib/app/chrome/creation.ts",
+      "default": "./src/lib/app/chrome/creation.ts"
+    },
     "./points/wire": {
       "types": "./src/lib/wire/WireEntryKinds.ts",
       "browser": "./src/lib/wire/WireEntryKinds.ts",
