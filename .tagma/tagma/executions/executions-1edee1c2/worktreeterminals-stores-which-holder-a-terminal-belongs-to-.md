@@ -12,6 +12,9 @@ sources:
     ref: apps/tagma/app/src/lib/features/executions/worktrees/TerminalSettings.svelte.ts
   - kind: file
     ref: apps/tagma/app/src/lib/features/executions/worktrees/WorktreeTerminals.svelte.ts
+  - kind: symbol
+    ref: apps/tagma/server/src/executions/contract/wire/terminalBehavior.ts
+    symbol: terminalStoredTab
 ---
 Worktree terminals live in the bottom panel (`executions/terminal/Panel.svelte`), shared by all threads of that branch; the right area holds only its own holder's terminals. Belonging has a single owner — `WorktreeTerminals.holders`, written into the project setting `terminal.placeLayouts` together with the tab layout. A holder includes its layout project: section names are shared across projects, while a terminal can stand beside its thread in another project. The settings schema preserves both the holder and its project. The tab in the holder's layout (`TabLayouts`, device storage) is only a projection, and it is reconciled with the owner in both directions. After terminals are read, and whenever the settings catalog brings a new layout, `Terminals` lays a tab for every terminal that has a holder. The displayed threads' live execution inventory supplies their terminal projects, which the shell holds even before any device tab exists; a cold foreign project can therefore restore its owned tabs after a device layout is lost. Confirmation dialogs observe the live terminal owners across those projects. And a terminal tab belonging to another holder never stands in the shown layout (the terminal kind's `stands` compares the holder) and is swept from the stored one: an unsaved setting or someone else's layout never place one terminal in the panel and on the right at once.
 

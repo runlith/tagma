@@ -6,7 +6,7 @@ tags: ["task"]
 fields:
   {
     "holder": "tagma:01a19917-0235-76be-a812-9672f9ae9798",
-    "status": "in_work"
+    "status": "done"
   }
 ---
 Fix opening an execution held by a thread homed in another project: navigate to the thread’s actual home and keep the terminal’s execution project in its tab identity, restore, closing and rendering. Prove the reported cross-project opening through the same terminal reveal operation, including a holder absent from the current list.
