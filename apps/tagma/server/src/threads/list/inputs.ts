@@ -1,5 +1,5 @@
 import { and, eq, inArray, isNotNull, sql, type SQL } from 'drizzle-orm';
-import type { SQLiteColumn } from 'drizzle-orm/sqlite-core';
+import { alias, type SQLiteColumn } from 'drizzle-orm/sqlite-core';
 import { Schema } from 'effect';
 import type { StoreDb } from '../../platform/contract/service/store.js';
 import type { Unit } from '../../platform/contract/service/units.js';
@@ -205,19 +205,21 @@ const projectedSubjects: SQL = sql`(
   union select ${threadInbox.threadId} as id from ${threadInbox} where ${threadInbox.owes} = 1
 )`;
 
-const self: SQL = sql`${threadRecord.id}`;
+// A selection reads `thread` itself, so the key it is handed must name a table no selection reads.
+const listed = alias(threadRecord, 'listed');
+const self: SQL = sql`${listed.id}`;
 
 export const narrowRows = (db: StoreDb<'machine'>, unit: Unit<'machine'>) =>
   unit.run(
     db
       .select({
-        id: threadRecord.id,
+        id: listed.id,
         activity: activityInput.encoded(self),
         ancestry: ancestryInput.encoded(self),
         owing: owingInput.encoded(self),
       })
-      .from(threadRecord)
-      .where(sql`${threadRecord.id} in ${projectedSubjects}`),
+      .from(listed)
+      .where(sql`${listed.id} in ${projectedSubjects}`),
   );
 
 export const heldRows = (db: StoreDb<'machine'>, unit: Unit<'machine'>, ids: readonly string[]) =>
@@ -238,6 +240,7 @@ export const heldRows = (db: StoreDb<'machine'>, unit: Unit<'machine'>, ids: rea
         ancestry: ancestryInput.encoded(self),
       })
       .from(threadRecord)
+      .innerJoin(listed, eq(listed.id, threadRecord.id))
       .innerJoin(thread, eq(thread.id, threadRecord.id))
       .innerJoin(threadMandate, eq(threadMandate.id, threadRecord.id))
       .leftJoin(externalSession, eq(externalSession.id, threadRecord.id))
