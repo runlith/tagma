@@ -1688,10 +1688,6 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead apps/tagma/app/src/lib/features/tagma-apps/tagmaAppHost.svelte.ts#THREAD_CHANGED",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "dead-code dead apps/tagma/app/src/lib/features/tagma-apps/tagmaAppHost.svelte.ts#ThreadReading",
           "owner": "5a3bed29"
         },
