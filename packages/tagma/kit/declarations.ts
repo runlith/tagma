@@ -36,10 +36,20 @@ const expandedSource = async (door: RulesDoor): Promise<ts.SourceFile> => {
     for (const binding of bindings.elements) imported.set(binding.name.text, exports[(binding.propertyName ?? binding.name).text]);
     edits.push({ start: statement.getFullStart(), end: statement.end, text: '' });
   }
-  const refers = (node: ts.Node): boolean => (ts.isIdentifier(node) && imported.has(node.text)) || ts.forEachChild(node, refers) === true;
+  const privateName = (node: ts.Node): string | null => (ts.isIdentifier(node) && imported.has(node.text) ? node.text : null);
+  const expandable = (node: ts.TypeNode): boolean =>
+    ts.isParenthesizedTypeNode(node)
+      ? expandable(node.type)
+      : ts.isTypeQueryNode(node)
+        ? privateName(node.exprName) !== null
+        : ts.isIndexedAccessTypeNode(node)
+          ? expandable(node.objectType)
+          : ts.isTypeReferenceNode(node) && privateName(node.typeName) !== null;
   const valueOf = (node: ts.TypeNode): unknown => {
     if (ts.isParenthesizedTypeNode(node)) return valueOf(node.type);
     if (ts.isTypeQueryNode(node) && ts.isIdentifier(node.exprName)) return imported.get(node.exprName.text);
+    if (ts.isTypeReferenceNode(node) && ts.isIdentifier(node.typeName) && node.typeArguments === undefined)
+      return imported.get(node.typeName.text);
     if (ts.isIndexedAccessTypeNode(node)) {
       const value = valueOf(node.objectType);
       if (ts.isLiteralTypeNode(node.indexType) && ts.isStringLiteral(node.indexType.literal))
@@ -50,11 +60,23 @@ const expandedSource = async (door: RulesDoor): Promise<ts.SourceFile> => {
     }
     throw new Error(`${door.source}: cannot expand ${node.getText()}`);
   };
+  const expansionOf = (node: ts.TypeNode): string => {
+    const value = valueOf(node);
+    return Array.isArray(value) ? value.map((one) => JSON.stringify(one)).join(' | ') : signatureOf(value as Schema.Top);
+  };
+  const expand = (node: ts.Node, whole: boolean): void => {
+    if (ts.isTypeNode(node) && expandable(node)) {
+      const text = expansionOf(node);
+      edits.push({ start: node.getStart(source), end: node.end, text: whole ? text : `(${text})` });
+      return;
+    }
+    if (privateName(node) !== null) throw new Error(`${door.source}: cannot expand ${node.parent.getText()}`);
+    ts.forEachChild(node, (child) => expand(child, false));
+  };
   for (const statement of source.statements) {
-    if (!ts.isTypeAliasDeclaration(statement) || !refers(statement.type)) continue;
-    const value = valueOf(statement.type);
-    const expanded = Array.isArray(value) ? value.map((one) => JSON.stringify(one)).join(' | ') : signatureOf(value as Schema.Top);
-    edits.push({ start: statement.type.getStart(source), end: statement.type.end, text: expanded });
+    if (ts.isImportDeclaration(statement)) continue;
+    if (ts.isTypeAliasDeclaration(statement)) expand(statement.type, true);
+    else expand(statement, false);
   }
   const expanded = edits
     .sort((left, right) => right.start - left.start)
