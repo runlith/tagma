@@ -37,6 +37,11 @@
       "browser": "./src/providers/contract/wire/accounts.ts",
       "default": "./src/providers/contract/wire/accounts.ts"
     },
+    "./providers/contract/wire/asks": {
+      "types": "./src/providers/contract/wire/asks.ts",
+      "browser": "./src/providers/contract/wire/asks.ts",
+      "default": "./src/providers/contract/wire/asks.ts"
+    },
     "./projects/contract/wire/project": {
       "types": "./src/projects/contract/wire/project.ts",
       "browser": "./src/projects/contract/wire/project.ts",
