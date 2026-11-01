@@ -237,12 +237,13 @@ layer(doorFixture().pipe(Layer.provideMerge(BunFileSystem.layer)), {
         .block.name;
       expect((yield* world.op('sync_graph', { project })).status).toBe(200);
       const set = yield* world.op('set_graph_remote', { ref: String(project), remote: bare });
-      expect(set.body).toMatchObject({ project: { graphRemote: bare }, remote: { holds: 'this-graph', failure: null } });
+      expect(set.body).toMatchObject({ remote: { remote: bare, holds: 'this-graph', failure: null } });
 
-      const cloned = Effect.fnUntraced(function* (label: string, graphRemote?: string) {
+      const cloned = Effect.fnUntraced(function* (label: string, remote?: string) {
         const clone = join(yield* files.realPath(yield* world.directory(label)), 'checkout');
         yield* suiteGit(root, 'clone', '-q', root, clone);
-        const added = yield* world.op('add_project', { name: world.uniqueName(), rootPath: clone, storage: 'team', graphRemote });
+        const contributed = remote === undefined ? {} : { 'graph-remote': remote };
+        const added = yield* world.op('add_project', { name: world.uniqueName(), rootPath: clone, storage: 'team', contributed });
         expect(added.status).toBe(200);
         return (added.body as { project: { id: number } }).project.id;
       });

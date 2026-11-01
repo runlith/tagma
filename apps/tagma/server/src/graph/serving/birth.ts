@@ -57,7 +57,7 @@ const chosenCatalogs = Effect.fn('Projects.chosenCatalogs')(function* (shipped: 
   }
   return [...new Set([...(shipped.byId(CORE_LIBRARY) === null ? [] : [CORE_LIBRARY]), ...asked])];
 });
-const GROUP_POLICY: GraphPolicy = { strictProvenance: false, private: false, storage: 'stealth', graphRemote: null };
+const GROUP_POLICY: GraphPolicy = { strictProvenance: false, private: false, storage: 'stealth' };
 
 const moving = writes('ProjectLifecycle.move', []);
 const updating = writes('ProjectLifecycle.update', []);
@@ -236,7 +236,6 @@ export const projectsLayer = (
             private?: boolean;
             storage?: StorageMode;
             catalogs?: readonly string[];
-            graphRemote?: string;
           },
           birth?: (row: ProjectPolicyRow) => Effect.Effect<void, E, R>,
         ) {
@@ -250,7 +249,6 @@ export const projectsLayer = (
               strictProvenance: input.strictProvenance ?? false,
               private: input.private ?? false,
               storage: input.storage ?? 'stealth',
-              graphRemote: input.graphRemote ?? null,
             };
             const born = yield* established(row, policy, input.name, now);
             if (road.shipped.key === null) return born;

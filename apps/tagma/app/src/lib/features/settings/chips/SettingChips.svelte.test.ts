@@ -61,7 +61,7 @@ function world(writes: unknown[]) {
       const row = { ...project, repoKey: 'demo', rootPath: '/projects/demo', strictProvenance: false, private: false, kind: 'folder' };
       return json({
         status: 'ok',
-        projects: [{ ...row, storage: 'stealth', graphRemote: null, servesFrom: 'rows', createdAt: '2026-10-18T00:00:00Z' }],
+        projects: [{ ...row, storage: 'stealth', servesFrom: 'rows', createdAt: '2026-10-18T00:00:00Z' }],
       });
     }
     if (path === '/api/op/list_groups') return json({ status: 'ok', groups: [] });

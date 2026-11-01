@@ -17,7 +17,6 @@ const project: Project = {
   private: false,
   kind: 'folder',
   storage: 'stealth',
-  graphRemote: null,
   servesFrom: 'rows',
   createdAt: '2026-09-05T00:00:00Z',
 };

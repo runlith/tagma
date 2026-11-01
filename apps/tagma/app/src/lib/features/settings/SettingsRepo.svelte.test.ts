@@ -47,7 +47,6 @@ test.each([
             private: false,
             kind: 'folder',
             storage: 'stealth',
-            graphRemote: null,
             servesFrom: 'rows',
             createdAt: '2026-10-18T00:00:00Z',
           },

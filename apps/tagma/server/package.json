@@ -370,10 +370,10 @@
       "browser": "./src/graph/contract/wire/recovery.ts",
       "default": "./src/graph/contract/wire/recovery.ts"
     },
-    "./graph/contract/wire/remote": {
-      "types": "./src/graph/contract/wire/remote.ts",
-      "browser": "./src/graph/contract/wire/remote.ts",
-      "default": "./src/graph/contract/wire/remote.ts"
+    "./graph-remote/contract/wire/remote": {
+      "types": "./src/graph-remote/contract/wire/remote.ts",
+      "browser": "./src/graph-remote/contract/wire/remote.ts",
+      "default": "./src/graph-remote/contract/wire/remote.ts"
     },
     "./threads/contract/wire/harness/names": {
       "types": "./src/threads/contract/wire/harness/names.ts",
@@ -1705,6 +1705,21 @@
       "default": null
     },
     "./graph/testing/*": null,
+    "./graph-remote/contract/wire/module": {
+      "types": "./src/graph-remote/contract/wire/module.ts",
+      "bun": "./src/graph-remote/contract/wire/module.ts",
+      "default": null
+    },
+    "./graph-remote/graph-remote": {
+      "types": "./src/graph-remote/graph-remote.ts",
+      "bun": "./src/graph-remote/graph-remote.ts",
+      "default": null
+    },
+    "./graph-remote/verbs": {
+      "types": "./src/graph-remote/verbs.ts",
+      "bun": "./src/graph-remote/verbs.ts",
+      "default": null
+    },
     "./http/*": {
       "types": "./src/http/*.ts",
       "bun": "./src/http/*.ts",

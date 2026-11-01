@@ -10,8 +10,6 @@ import { Selection } from '../contract/service/reads.js';
 import { RegisteredRoots } from '../contract/service/registeredRoots.js';
 import { CreationSteps } from '../contract/service/creation.js';
 import { GraphCall, ProjectLifecycle, ProjectPolicy, RoutedGraphs } from '../contract/service/serving.js';
-import { GraphRemotes } from '../contract/service/remote.js';
-import { remoteRefusal } from '../contract/wire/remote.js';
 import { REGISTRY_OPERATIONS as OPS } from '../contract/wire/operations/registry.js';
 import type { ProjectPolicyRow } from '../contract/wire/serving.js';
 import { wireBlock, wireProject } from '../reading/rows.js';
@@ -90,8 +88,6 @@ export const REGISTRY_PAIRS = {
     body(OPS.add_project, {
       execute: Effect.fnUntraced(function* (input: In<'add_project'>) {
         const { contributed, ...registration } = input;
-        const refusal = registration.graphRemote === undefined ? null : remoteRefusal(registration.graphRemote);
-        if (refusal !== null) return yield* refusal;
         const steps = yield* (yield* CreationSteps).take(contributed ?? {});
         const pool = yield* RoutedGraphs;
         const row = yield* (yield* ProjectLifecycle).create(registration, (born) =>
@@ -202,51 +198,6 @@ export const REGISTRY_PAIRS = {
         }
         const moved = yield* pool.moveProjectStorage({ projectId: row.id, mode: input.mode, keep: input.keep });
         return { status: 'ok' as const, project: yield* wiredOne(moved.row), treeRoot: moved.treeRoot };
-      }),
-    }),
-  ),
-
-  set_graph_remote: pair(
-    OPS.set_graph_remote,
-    body(OPS.set_graph_remote, {
-      prepare: Effect.fn('set_graph_remote.terms')(function* (input: In<'set_graph_remote'>) {
-        const row = yield* resolved(input.ref);
-        const consents: readonly Raised[] =
-          input.restore === true
-            ? [
-                {
-                  condition: 'graph-set-aside',
-                  fact: `"${row.name}"'s graph on this machine is set aside, and the graph ${input.remote ?? 'the remote'} holds is served in its place`,
-                },
-              ]
-            : [];
-        return consents;
-      }),
-      execute: Effect.fnUntraced(function* (input: In<'set_graph_remote'>) {
-        const row = yield* resolved(input.ref);
-        if ((yield* RoutedGraphs) === null) {
-          return yield* new GateRefusal('no-pool', 'this door serves no graphs, so none can exchange with a remote', [
-            'run it against the tagma server, which holds the graphs',
-          ]);
-        }
-        const set = yield* (yield* GraphRemotes).set({ projectId: row.id, remote: input.remote, restore: input.restore === true });
-        return { status: 'ok' as const, project: yield* wiredOne(set.row), remote: set.remote, setAside: set.setAside };
-      }),
-    }),
-  ),
-
-  read_graph_remote: pair(
-    OPS.read_graph_remote,
-    body(OPS.read_graph_remote, {
-      execute: Effect.fnUntraced(function* (input: In<'read_graph_remote'>) {
-        const row = input.ref !== undefined ? yield* resolved(input.ref) : (yield* yield* CurrentProject).project;
-        if ((yield* RoutedGraphs) === null) {
-          return yield* new GateRefusal('no-pool', 'this door serves no graphs, so it knows no graph remote', [
-            'run it against the tagma server, which holds the graphs',
-          ]);
-        }
-        const remote = yield* (yield* GraphRemotes).read(row.id);
-        return { status: 'ok' as const, project: yield* registered(yield* (yield* Projects).byId(row.id)), remote };
       }),
     }),
   ),

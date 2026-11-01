@@ -6,17 +6,9 @@ import { graphArms as arms } from '../answers.js';
 import { blockSchema, projectBranchSchema, projectSchema } from '../rows.js';
 import { STORAGE_MODES } from '../../../../projects/contract/wire/project.js';
 import { pointingSchema } from '../far.js';
-import { graphRemoteSchema } from '../remote.js';
 import { SURFACE_ACT, SURFACE_READ, noSubjects, graphInput } from './shared.js';
 
 const PRIVATE_PROJECT: Condition = { id: 'private-project', label: 'Private project', asksFrom: 'review', timeout: 'none' };
-
-const GRAPH_SET_ASIDE: Condition = { id: 'graph-set-aside', label: 'Graph set aside', asksFrom: 'review', timeout: 'none' };
-
-const remoteField = Schema.String.annotate({
-  description:
-    'A git remote as git takes it — git@host:owner/graph.git, https://host/owner/graph.git or an absolute path to a bare repository — reached with the user’s own ssh key or credential helper; it carries no password.',
-});
 
 const ref = Schema.String.check(Schema.isMinLength(1)).annotate({ description: 'The project, by name or id.' });
 const root = Schema.String.check(Schema.isMinLength(1));
@@ -76,25 +68,13 @@ export const REGISTRY_OPERATIONS = {
         description:
           'The shipped catalogs this project is born with, saved as its own graph.catalogs choice. Omit to inherit the machine setting; an empty list installs the system library alone and no domain catalog.',
       }),
-      graphRemote: Schema.optional(remoteField).annotate({
-        description:
-          'The private git remote of the stealth graph — a stealth project’s whole graph, a team project’s stealth blocks: a graph it holds is restored here, an empty one receives this graph. A remote git cannot read refuses the registration.',
-      }),
       contributed: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)).annotate({
         description:
           'Values for the creation steps this server’s modules contribute, keyed by step id. Each step takes its value after registration and before the graph first opens; a value it refuses, or an id no step takes, refuses the registration whole, naming the entry in `field`.',
       }),
     }),
     answer: arms({ ok: { project: projectSchema, returned: Schema.Boolean } }),
-    refusals: [
-      ...ROOT_REFUSALS,
-      'reserved-project',
-      'project-name',
-      'duplicate-name',
-      'unknown-catalog',
-      'remote-invalid',
-      'field-invalid',
-    ],
+    refusals: [...ROOT_REFUSALS, 'reserved-project', 'project-name', 'duplicate-name', 'unknown-catalog', 'field-invalid'],
   }),
 
   set_project_root: operation('set_project_root', {
@@ -134,7 +114,7 @@ export const REGISTRY_OPERATIONS = {
     ...act('Change this project?', 'Change', 'Changed a project'),
     meaning: 'Rename a registered project or switch its policies; what is not named stays as it is.',
     grammar:
-      'A new name passes the checks a registration does and becomes the first segment of the project’s addresses; its graph, worktree copies, mirrors, graph remote and threads stay where they are, because Tagma keeps them by the project’s id. The cross-project graph keeps its name.',
+      'A new name passes the checks a registration does and becomes the first segment of the project’s addresses; its graph, worktree copies, mirrors and threads stay where they are, because Tagma keeps them by the project’s id. The cross-project graph keeps its name.',
     input: Schema.Struct({
       ref,
       name: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
@@ -159,7 +139,7 @@ export const REGISTRY_OPERATIONS = {
     ...act('Move this project’s graph to another storage?', 'Move', 'Moved a project’s storage'),
     meaning: 'Move a project’s block tree to another storage mode.',
     grammar:
-      'To stealth, every block goes into the stealth tree, a team project’s stealth blocks under the parents they stand under. To team, every block goes into `.tagma` except the subtrees `keep` names: they stay stealth, with the stealth tree’s history and graph remote, and a team block that depends on one of them refuses the move as `stealth-dependency` naming both.',
+      'To stealth, every block goes into the stealth tree, a team project’s stealth blocks under the parents they stand under. To team, every block goes into `.tagma` except the subtrees `keep` names: they stay stealth, with the stealth tree’s history, and a team block that depends on one of them refuses the move as `stealth-dependency` naming both.',
     input: Schema.Struct({
       ref,
       mode: Schema.Literals(STORAGE_MODES),
@@ -187,40 +167,6 @@ export const REGISTRY_OPERATIONS = {
       'bad-name',
       'ambiguous-name',
     ],
-  }),
-
-  set_graph_remote: operation('set_graph_remote', {
-    ...SURFACE_ACT,
-    place: 'machine',
-    ...act('Change this project’s graph remote?', 'Set', 'Set a graph remote'),
-    meaning:
-      'Give a project’s stealth graph — a stealth project’s whole graph, a team project’s stealth blocks — a private git remote, change it or take it away, and exchange the graph with it now.',
-    grammar:
-      'Tagma then pushes every graph branch there after its commits and takes in what another machine pushed. `remote: null` takes the remote away; naming the standing remote exchanges now. An empty remote receives this graph; a remote holding another graph refuses `remote-unrelated` and the project keeps its remote. `restore: true` sets this machine’s graph aside under `setAside` and serves the graph the remote holds instead. A failed exchange keeps the remote, answers git’s words in `remote.failure` and repeats on its own. A team project’s `.tagma` travels with the repository, never with this remote.',
-    input: Schema.Struct({
-      ref,
-      remote: Schema.NullOr(remoteField),
-      restore: Schema.optional(Schema.Boolean).annotate({
-        description: 'Set this machine’s graph aside and take the graph the remote holds.',
-      }),
-    }),
-    answer: arms({ ok: { project: projectSchema, remote: graphRemoteSchema, setAside: Schema.NullOr(Schema.String) } }),
-    subjects: noSubjects,
-    raises: (_input: unknown, raised?: readonly Raised[]) => raised ?? [],
-    approval: { ...ASKS_IN_REVIEW, when: [GRAPH_SET_ASIDE] },
-    refusals: ['not-found', 'no-pool', 'remote-invalid', 'remote-unrelated', 'remote-unreachable', 'remote-empty'],
-  }),
-
-  read_graph_remote: operation('read_graph_remote', {
-    ...SURFACE_READ,
-    place: 'project',
-    ...read('Read this project’s graph remote?', 'Read the graph remote'),
-    meaning:
-      'Read the private git remote of a project’s stealth graph — a stealth project’s whole graph, a team project’s stealth blocks: whether each graph branch stands there as it stands here, and how the last exchange went.',
-    grammar: 'Without `ref` it reads the project the call stands in.',
-    input: graphInput({ ref: Schema.optional(ref) }),
-    answer: arms({ ok: { project: projectSchema, remote: graphRemoteSchema } }),
-    refusals: ['not-found', 'no-pool'],
   }),
 
   list_branches: operation('list_branches', {

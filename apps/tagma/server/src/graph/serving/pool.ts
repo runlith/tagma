@@ -50,7 +50,8 @@ import { refused } from './refusal.js';
 import { entryGateKey, mirrorGateKey, overEntry, overRepositoryAndTree, overTree } from './permits.js';
 import { makeServingSwitch } from './checkout.js';
 import { makeRecoveries } from './recovery.js';
-import { makeGraphRemotes } from './remotes.js';
+import { exchangeHost, stealthGitDir } from './exchange.js';
+import { type Exchange, GraphExchange, type GraphSide } from '../contract/service/exchange.js';
 import { makeTwinning } from './twinning.js';
 import { writes } from '../../platform/contract/service/writes.js';
 import { copyIndex } from './copyIndex.js';
@@ -86,15 +87,16 @@ export const makeGraphPool = Effect.gen(function* () {
     gates.set(key, made);
     return made;
   };
-  const mirrorBuilder = yield* makeMirrorBuilder({ gates: gate });
+  const side = (projectId: number): GraphSide => exchange.side(projectId);
+  const mirrorBuilder = yield* makeMirrorBuilder({ gates: gate, side });
   const mergeFormat = yield* makeMergeFormat.pipe(Effect.provideService(MirrorBuilder, mirrorBuilder));
   const freshnessGate = yield* makeFreshnessGate({
     gates: gate,
     storePath: machineStore.path,
-    changed: (projectId) => remotes.wake(projectId),
+    changed: (projectId) => exchange.committed(projectId),
   }).pipe(Effect.provideService(MirrorBuilder, mirrorBuilder));
   const servingSwitch = yield* makeServingSwitch.pipe(Effect.provideService(MirrorBuilder, mirrorBuilder));
-  const recoveries = yield* makeRecoveries({ gates: gate, storePath: machineStore.path }).pipe(
+  const recoveries = yield* makeRecoveries({ gates: gate, storePath: machineStore.path, side }).pipe(
     Effect.provideService(ServingSwitch, servingSwitch),
   );
 
@@ -359,7 +361,7 @@ export const makeGraphPool = Effect.gen(function* () {
           ? yield* restore(
               Effect.gen(function* () {
                 const repository = layout.mode === 'team' ? checkout : layout.gitDir;
-                if (layout.mode === 'stealth') yield* refused(ShadowGit.open(repository, git, row.graphRemote));
+                if (layout.mode === 'stealth') yield* refused(ShadowGit.open(repository, git, side(row.id)));
                 const source = layout.mode === 'team' || existsSync(layout.treeRoot) ? layout.treeRoot : repository;
                 const commit = yield* refused(runGit(git, 'detached-graph-head', ['-C', source, 'rev-parse', 'HEAD']));
                 return yield* mirrorBuilder.prepare({
@@ -392,7 +394,7 @@ export const makeGraphPool = Effect.gen(function* () {
               settled: acting.settled,
               siblings: freshnessGate.siblings,
               resolveProject,
-              committed: () => remotes.wake(row.id),
+              committed: () => exchange.committed(row.id),
             }),
           ));
         const release = prepared?.release ?? Effect.promise(() => built.dispose());
@@ -412,7 +414,7 @@ export const makeGraphPool = Effect.gen(function* () {
                       ),
                   );
             yield* freshnessGate.settled(layout.treeRoot);
-            if (!detached) remotes.opened(row, layout);
+            if (!detached) exchange.opened(row.id, stealthGitDir(machineStore.path, row.id, layout, checkout));
             const graph = Context.get(built.context, GraphStore);
             const tags = Context.get(built.context, Tags);
             const held: HeldGraph = {
@@ -559,16 +561,17 @@ export const makeGraphPool = Effect.gen(function* () {
     }
   });
 
-  const remotes = yield* makeGraphRemotes({
-    gates: gate,
-    storePath: machineStore.path,
-    fork: (effect) => void keepFork(effect),
-    moved: (gitDir) => freshnessGate.remoteMoved(gitDir),
-    exclusive: (projectId, effect) => copies.exclusive(projectId, Effect.uninterruptible(effect)),
-    release: dropAll,
-    open: (projectId) => Effect.flatMap(resolve({ projectId }), (served) => served.settled(true)),
-    reopen: (projectId) => Effect.flatMap(within(projectId, null), (served) => served.settled(true)),
-  });
+  const exchange: Exchange = yield* (yield* GraphExchange)(
+    yield* exchangeHost({
+      gates: gate,
+      storePath: machineStore.path,
+      moved: (gitDir) => freshnessGate.remoteMoved(gitDir),
+      exclusive: (projectId, effect) => copies.exclusive(projectId, Effect.uninterruptible(effect)),
+      release: dropAll,
+      open: (projectId) => Effect.flatMap(resolve({ projectId }), (served) => served.settled(true)),
+      reopen: (projectId) => Effect.flatMap(within(projectId, null), (served) => served.settled(true)),
+    }),
+  ).pipe(Effect.provideService(Scope.Scope, keepScope));
 
   const served = ServedGraphs.of({
     resolve,
@@ -665,6 +668,7 @@ export const makeGraphPool = Effect.gen(function* () {
     moveProjectStorage: Effect.fnUntraced(
       function* (input) {
         return yield* servingSwitch.move(input, {
+          side: side(input.projectId),
           releaseProject: dropAll,
           resolveFresh: Effect.fnUntraced(function* (projectId: number) {
             const served = yield* within(projectId, null);
@@ -689,7 +693,7 @@ export const makeGraphPool = Effect.gen(function* () {
     }),
   });
 
-  const followBranch = yield* makeTwinning({ gate, copies }).pipe(Effect.provideService(ServingSwitch, servingSwitch));
+  const followBranch = yield* makeTwinning({ gate, copies, side }).pipe(Effect.provideService(ServingSwitch, servingSwitch));
   const graphChanges = yield* makeBranchChanges(served).pipe(Effect.provideService(ServingSwitch, servingSwitch));
 
   return {
@@ -698,7 +702,6 @@ export const makeGraphPool = Effect.gen(function* () {
     freshnessGate,
     mergeFormat,
     recoveries,
-    remotes: remotes.service,
     followBranch,
     graphChanges,
   };

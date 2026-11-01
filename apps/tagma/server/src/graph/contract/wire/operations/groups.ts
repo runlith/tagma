@@ -60,7 +60,7 @@ export const GROUP_OPERATIONS = {
     meaning:
       'Make a group of registered projects under one name: one system to Tagma, while each project keeps its own repository, graph, law and threads.',
     grammar:
-      'The group is born with a graph of its own in Tagma’s data directory, stealth and with no remote until set_graph_remote gives it one; its blocks carry no sources. A group dissolved under this name comes back with its graph and answers `returned`. The order of `projects` is the group’s order. A project belongs to at most one group, and neither the global project nor a group joins one.',
+      'The group is born with a graph of its own in Tagma’s data directory, stealth; its blocks carry no sources. A group dissolved under this name comes back with its graph and answers `returned`. The order of `projects` is the group’s order. A project belongs to at most one group, and neither the global project nor a group joins one.',
     input: Schema.Struct({
       name,
       projects: Schema.Array(project)
@@ -75,7 +75,7 @@ export const GROUP_OPERATIONS = {
     ...SURFACE_ACT,
     place: 'machine',
     ...act('Rename this group?', 'Rename', 'Renamed a group'),
-    meaning: 'Rename a group; its graph, members and remote stay where they are.',
+    meaning: 'Rename a group; its graph and members stay where they are.',
     input: Schema.Struct({ group, name }),
     answer: arms({ ok: { group: groupSchema } }),
     refusals: [...PROJECT_REFUSALS, ...NAME_REFUSALS, 'not-a-group', 'global-permanent'],

@@ -77,6 +77,7 @@ import { openFormat } from './format.js';
 import { adoptIdentities } from './identities.js';
 import { GraphMigrations, GraphSource } from '../contract/service/source.js';
 import { GraphSteps } from '../contract/service/steps.js';
+import type { GraphSide } from '../contract/service/exchange.js';
 import { HolderStandings } from '../contract/service/holders.js';
 import { refusal, refused } from './refusal.js';
 import {
@@ -93,7 +94,13 @@ import {
 import { throughWrites, writeThrough } from './writeThrough.js';
 import { Background } from '../../platform/contract/service/background.js';
 
-export const makeMirrorBuilder = Effect.fnUntraced(function* ({ gates }: { readonly gates: (key: string) => Semaphore.Semaphore }) {
+export const makeMirrorBuilder = Effect.fnUntraced(function* ({
+  gates,
+  side: sideOf,
+}: {
+  readonly gates: (key: string) => Semaphore.Semaphore;
+  readonly side: (projectId: number) => GraphSide;
+}) {
   const machine = yield* Effect.context<GraphServices | GraphStore | GraphUnits | MachineStore | MachineUnits>();
   const git = yield* Git;
   const files = yield* FileSystem.FileSystem;
@@ -195,6 +202,7 @@ export const makeMirrorBuilder = Effect.fnUntraced(function* ({ gates }: { reado
   const build = (input: MirrorBuildInput): Effect.Effect<MirrorBuilt, GateRefusal<OpenRefusal>> =>
     Effect.suspend(() => {
       const { row, checkout, layout } = input;
+      const side = sideOf(row.id);
       const mirror = ManagedRuntime.make(
         mirrorStoreLayer(layout.mirrorPath, migrations).pipe(
           Layer.provide(
@@ -218,7 +226,7 @@ export const makeMirrorBuilder = Effect.fnUntraced(function* ({ gates }: { reado
                 }
               : yield* overShadow(
                   Effect.gen(function* () {
-                    const attached = yield* refused(attachTree(git, row, checkout, layout, steps));
+                    const attached = yield* refused(attachTree(git, side, checkout, layout, steps));
                     const standing = yield* refused(
                       switchIfDue(
                         machine,
@@ -245,8 +253,8 @@ export const makeMirrorBuilder = Effect.fnUntraced(function* ({ gates }: { reado
                   })
                 : null;
             const stealthShadow =
-              stealthLayout !== null && (existsSync(stealthLayout.gitDir) || row.graphRemote !== null)
-                ? yield* overRepository(gates, stealthLayout)(refused(attachShadowTree(git, row, checkout, stealthLayout, steps)))
+              stealthLayout !== null && (existsSync(stealthLayout.gitDir) || side.birth !== null)
+                ? yield* overRepository(gates, stealthLayout)(refused(attachShadowTree(git, side, checkout, stealthLayout, steps)))
                 : null;
             const stealthRoot = stealthLayout?.treeRoot ?? null;
             const roots = { root: layout.treeRoot, stealth: stealthRoot };
@@ -450,7 +458,7 @@ export const makeMirrorBuilder = Effect.fnUntraced(function* ({ gates }: { reado
                                 gates,
                                 stealthLayout,
                               )(
-                                Effect.map(refused(attachShadowTree(git, row, checkout, stealthLayout, steps)), (held) => {
+                                Effect.map(refused(attachShadowTree(git, side, checkout, stealthLayout, steps)), (held) => {
                                   attached = stealthTree(stealthLayout, held, null);
                                   return attached;
                                 }),

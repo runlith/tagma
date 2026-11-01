@@ -3,7 +3,6 @@ import { OPEN_REFUSALS } from '../../../platform/contract/wire/refusal.js';
 import { feed } from '../../../platform/contract/wire/operation.js';
 import { GRAPH_EVENT_OPS, eventSchema, journalSessionSchema } from './journal.js';
 import { recoveryNoticeSchema } from './recovery.js';
-import { graphRemoteSchema } from './remote.js';
 import { edgeSchema, refSchema, treeBlockSchema } from './rows.js';
 
 const changeEventSchema = Schema.Struct({ ...eventSchema.fields, op: Schema.Literals(GRAPH_EVENT_OPS) });
@@ -45,14 +44,6 @@ export const GRAPH_RECOVERY_FEED = feed('graph.recovery', {
   input: Schema.Struct({ projectId: Schema.Int.check(Schema.isGreaterThan(0)) }),
   event: recoveryNoticeSchema,
   refusals: ['team-tree', ...OPEN_REFUSALS],
-  callers: 'any',
-  admission: 'project',
-});
-
-export const GRAPH_REMOTE_FEED = feed('graph.remote', {
-  input: Schema.Struct({ projectId: Schema.Int.check(Schema.isGreaterThan(0)) }),
-  event: graphRemoteSchema,
-  refusals: ['not-found', ...OPEN_REFUSALS],
   callers: 'any',
   admission: 'project',
 });

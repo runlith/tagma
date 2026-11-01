@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { Effect, FileSystem } from 'effect';
 import { twinWorld, twinWorldLayer, unheld } from '../testing/twins.js';
 import { ShadowGit } from './shadow.js';
+import { NO_SIDE } from '../contract/service/exchange.js';
 import { syncTopology } from './topology.js';
 
 layer(twinWorldLayer, { excludeTestServices: true })('cold checkout recovery', (it) => {
@@ -22,7 +23,7 @@ layer(twinWorldLayer, { excludeTestServices: true })('cold checkout recovery', (
       yield* fs.writeFileString(join(treeOf(second), 'draft.md'), draft);
       yield* sh(['worktree', 'remove', second], project);
       yield* sh(['switch', 'release'], project);
-      const reopened = yield* ShadowGit.open(shadow.gitDir, git, null);
+      const reopened = yield* ShadowGit.open(shadow.gitDir, git, NO_SIDE);
       expect((yield* syncTopology(reopened, project, treeOf(project), shippedSteps, { treeHold: unheld })).branch).toBe('release');
       expect(yield* fs.readFileString(join(treeOf(project), 'release-note.md'))).toBe(committed);
       expect(yield* fs.readFileString(join(treeOf(second), 'draft.md'))).toBe(draft);

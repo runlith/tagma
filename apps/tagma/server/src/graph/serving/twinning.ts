@@ -9,12 +9,17 @@ import { TwinFailed, type BranchTwins } from '../contract/service/branchTwins.js
 import { resolveStorageLayout, storageHomes } from '../storage/layout.js';
 import { renameColdMirror, renameMirrorBranch } from '../storage/identity.js';
 import { ShadowGit } from '../tree/shadow.js';
+import type { GraphSide } from '../contract/service/exchange.js';
 import type { Copies } from './copies.js';
 import { overEntry, overMirror, overRepositoryAndTree } from './permits.js';
 
-type TwinningInput = { readonly gate: (key: string) => Semaphore.Semaphore; readonly copies: Copies };
+type TwinningInput = {
+  readonly gate: (key: string) => Semaphore.Semaphore;
+  readonly copies: Copies;
+  readonly side: (projectId: number) => GraphSide;
+};
 
-export const makeTwinning = Effect.fnUntraced(function* ({ gate, copies }: TwinningInput) {
+export const makeTwinning = Effect.fnUntraced(function* ({ gate, copies, side }: TwinningInput) {
   const git = yield* Git;
   const machineStore = yield* MachineStore;
   const servingSwitch = yield* ServingSwitch;
@@ -55,7 +60,7 @@ export const makeTwinning = Effect.fnUntraced(function* ({ gate, copies }: Twinn
           Effect.gen(function* () {
             const shadow =
               layout.mode === 'stealth' && existsSync(layout.gitDir)
-                ? yield* ShadowGit.open(layout.gitDir, git, row.graphRemote).pipe(Effect.mapError(unfollowed))
+                ? yield* ShadowGit.open(layout.gitDir, git, side(row.id)).pipe(Effect.mapError(unfollowed))
                 : null;
             const moved = shadow === null ? false : yield* shadow.renameBranch(place.from, place.to).pipe(Effect.mapError(unfollowed));
             const renamed = yield* Effect.exit(rename);

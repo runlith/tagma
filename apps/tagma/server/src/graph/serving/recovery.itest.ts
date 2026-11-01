@@ -7,6 +7,7 @@ import { Git } from '@runlith/git/Git';
 import { makeRecoveries } from './recovery.js';
 import { watchProcessLayer } from '../../composition/testing/fileWatcher.js';
 import { ShadowGit } from '../tree/shadow.js';
+import { NO_SIDE } from '../contract/service/exchange.js';
 import { TreeMerges } from '../tree/merges.js';
 import { resolveStorageLayout, storageHomes } from '../storage/layout.js';
 import { ProjectPolicy, ServingSwitch, type ProjectPolicyChanged } from '../contract/service/serving.js';
@@ -26,7 +27,6 @@ const registered: ProjectPolicyRow = {
   strictProvenance: false,
   private: false,
   storage: 'stealth',
-  graphRemote: null,
 };
 
 const block = (body: string) => `---\nid: 0198c3d4-7b2a-7f00-8000-3f9ac2b41e7a\ntitle: Rule\nord: 1\n---\n${body}\n`;
@@ -44,7 +44,6 @@ const policyFor = (row: ProjectPolicyRow) => {
         yield* Effect.forEach([...subscribers], (subscriber) => subscriber({ projectId: current.id, field: 'storage' }));
         return current;
       }),
-      setRemote: () => Effect.die('only storage moves in this world'),
       servesFrom: () => Effect.die('not used in this world'),
       subscribe: (subscriber) => {
         subscribers.add(subscriber);
@@ -62,7 +61,7 @@ const recoveries = (
   gates: (key: string) => Semaphore.Semaphore,
   storePath: string,
 ) =>
-  makeRecoveries({ gates, storePath }).pipe(
+  makeRecoveries({ gates, storePath, side: () => NO_SIDE }).pipe(
     Effect.provide(Context.make(ServingSwitch, switching).pipe(Context.add(ProjectPolicy, policy))),
   );
 
@@ -157,7 +156,7 @@ layer(Layer.merge(BunFileSystem.layer, liveGitLayer), { excludeTestServices: tru
         worktree: checkout,
       });
       if (layout.mode !== 'stealth') return yield* Effect.die('wrong fixture storage');
-      const shadow = yield* ShadowGit.open(layout.gitDir, yield* Git, null);
+      const shadow = yield* ShadowGit.open(layout.gitDir, yield* Git, NO_SIDE);
       yield* shadow.branch('topic', 'main');
       yield* shadow.attach(layout.treeRoot, 'topic');
       yield* fs.writeFileString(join(layout.treeRoot, 'rule.md'), block('base'));

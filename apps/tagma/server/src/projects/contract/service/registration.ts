@@ -9,7 +9,7 @@ export type ProjectRegistration = {
   readonly strictProvenance: boolean;
   readonly private: boolean;
   readonly storage?: StorageMode;
-  readonly graphRemote?: string;
+  readonly contributed?: Readonly<Record<string, unknown>>;
 };
 
 export type ProjectRemoval = { readonly ref: string; readonly unlink: boolean };

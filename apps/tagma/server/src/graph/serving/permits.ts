@@ -36,12 +36,13 @@ export const overTree = (gates: (key: string) => Semaphore.Semaphore, treeRoot: 
   return (act) => holding(permit, 'treePermit.wait', act);
 };
 
-export const overRepository = (gates: (key: string) => Semaphore.Semaphore, layout: StorageLayout): PermitHold => {
-  const key = shadowGateKey(layout);
-  if (key === null) return (act) => act;
-  const permit = gates(key);
+export const overShadow = (gates: (key: string) => Semaphore.Semaphore, gitDir: string): PermitHold => {
+  const permit = gates(`shadow:${gitDir}`);
   return (act) => holding(permit, 'repositoryPermit.wait', act);
 };
+
+export const overRepository = (gates: (key: string) => Semaphore.Semaphore, layout: StorageLayout): PermitHold =>
+  layout.mode === 'team' ? (act) => act : overShadow(gates, layout.gitDir);
 
 export const overRepositoryAndTree = (gates: (key: string) => Semaphore.Semaphore, layout: StorageLayout): PermitHold => {
   const tree = overTree(gates, layout.treeRoot);

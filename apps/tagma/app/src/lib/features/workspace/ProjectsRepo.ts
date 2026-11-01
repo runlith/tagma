@@ -21,7 +21,6 @@ export const ProjectsRepo = Repo.define(
           rootPath: string;
           storage?: StorageMode;
           catalogs?: readonly string[];
-          graphRemote?: string;
           contributed?: Readonly<Record<string, unknown>>;
         },
         { signal },

@@ -23,7 +23,6 @@ export function wireProject(row: ProjectPolicyRow, servesFrom: ServesFrom): Proj
     private: row.private,
     kind: row.kind,
     storage: row.storage,
-    graphRemote: row.graphRemote,
     servesFrom,
     createdAt: at(row.createdAt),
   };
