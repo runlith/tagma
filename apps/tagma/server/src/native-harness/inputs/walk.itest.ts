@@ -2,11 +2,13 @@ import { expect } from 'bun:test';
 import { layer } from '@runlith/effect-test';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { join } from 'node:path';
+import type { AgentSkill } from '@runlith/agent/AgentSkill';
 import { Effect, FileSystem, Layer } from 'effect';
 import { demoGraphLayer, withDemo, tempRootEffect, type EffectDemo } from '../../composition/testing/graphFixture.js';
 import { LAW_END, LAW_START } from '../../graph/contract/wire/law.js';
 import { contextFileNames, contextFilesEnabled, skillGlobalDirectories, skillProjectDirectories } from '../contract/wire/sourceSettings.js';
 import { Settings } from '../../settings/contract/service/values.js';
+import { type BridgeMethod, bridgeMethod, HOST_BRIDGE } from '../../views/contract/wire/bridge.js';
 import { readWorkspaceInputs } from './walk.js';
 
 const setup = Effect.fnUntraced(function* (demo: EffectDemo) {
@@ -35,6 +37,7 @@ layer(demoGraphLayer({ projects: ['p'] }).pipe(Layer.provideMerge(BunFileSystem.
             projectRoot: root,
             own: [join(root, '.agents/skills/tagma')],
             plugins: [],
+            bridge: [],
           });
           expect(sources.contextFiles.map((file) => file.name)).toEqual(['AGENTS.md']);
           expect(sources.contextFiles[0]?.body).toBe('the project law');
@@ -56,6 +59,7 @@ layer(demoGraphLayer({ projects: ['p'] }).pipe(Layer.provideMerge(BunFileSystem.
             projectRoot: root,
             own: [join(root, '.agents/skills/tagma')],
             plugins: [],
+            bridge: [],
           });
           expect(sources.contextFiles[0]?.body).toContain('keep this');
           expect(sources.contextFiles[0]?.body).toContain('and this');
@@ -77,6 +81,7 @@ layer(demoGraphLayer({ projects: ['p'] }).pipe(Layer.provideMerge(BunFileSystem.
             projectRoot: root,
             own: [join(root, '.agents/skills/tagma')],
             plugins: [],
+            bridge: [],
           });
           expect(sources.contextFiles[0]?.body).toBe('generic');
         }),
@@ -94,6 +99,7 @@ layer(demoGraphLayer({ projects: ['p'] }).pipe(Layer.provideMerge(BunFileSystem.
             projectRoot: root,
             own: [join(root, '.agents/skills/tagma')],
             plugins: [],
+            bridge: [],
           });
           expect(sources.contextFiles).toEqual([]);
         }),
@@ -113,6 +119,7 @@ layer(demoGraphLayer({ projects: ['p'] }).pipe(Layer.provideMerge(BunFileSystem.
             projectRoot: root,
             own: [join(root, '.agents/skills/tagma')],
             plugins: [],
+            bridge: [],
           });
           expect(sources.skills.map((skill) => skill.id)).toEqual(['deployer']);
         }),
@@ -137,6 +144,7 @@ layer(demoGraphLayer({ projects: ['p'] }).pipe(Layer.provideMerge(BunFileSystem.
             projectRoot: root,
             own: [join(root, '.agents/skills/tagma')],
             plugins: [],
+            bridge: [],
           });
           expect(sources.skills.map((skill) => skill.id)).toEqual([]);
           expect(sources.inventory.map((entry) => [entry.name, entry.own, entry.enabled])).toEqual([['tagma', true, false]]);
@@ -146,6 +154,7 @@ layer(demoGraphLayer({ projects: ['p'] }).pipe(Layer.provideMerge(BunFileSystem.
             projectRoot: root,
             own: [join(root, '.agents/skills/tagma')],
             plugins: [],
+            bridge: [],
           });
           expect(reordered.inventory.find((entry) => entry.name === 'tagma' && entry.directory?.includes('ops') === true)).toMatchObject({
             own: false,
@@ -158,6 +167,7 @@ layer(demoGraphLayer({ projects: ['p'] }).pipe(Layer.provideMerge(BunFileSystem.
             projectRoot: root,
             own: [join(root, '.agents/skills/tagma')],
             plugins: [],
+            bridge: [],
           });
           expect(offered.skills.map((skill) => skill.id)).toEqual(['tagma']);
         }),
@@ -182,8 +192,39 @@ layer(demoGraphLayer({ projects: ['p'] }).pipe(Layer.provideMerge(BunFileSystem.
             projectRoot: root,
             own: [join(root, '.agents/skills/tagma')],
             plugins: [],
+            bridge: [],
           });
           expect(sources.inventory.map((entry) => [entry.name, entry.scope])).toEqual([['greeter', 'global']]);
+        }),
+      ),
+    );
+
+    it.effect('the shipped apps skill renders the bridge methods it is given and offers their references', () =>
+      withDemo((demo) =>
+        Effect.gen(function* () {
+          const { root, projectId } = yield* setup(demo);
+          const echo = bridgeMethod({
+            id: 'echo',
+            notifications: ['tagma/notifications/echo'],
+            signature: '{said}',
+            description: 'Says it back.',
+            reference: { title: 'Echo in a view', text: 'Echo details.' },
+          });
+          const read = (bridge: readonly BridgeMethod[]) =>
+            readWorkspaceInputs({ projectId, projectRoot: root, own: [], plugins: [], bridge });
+          const textOf = (skill: AgentSkill<unknown>) => {
+            const read = skill.instructions(undefined);
+            return typeof read === 'string' ? Effect.succeed(read) : read;
+          };
+          const apps = (yield* read([...HOST_BRIDGE, echo])).shipped.find((skill) => skill.id === 'apps')!;
+          const text = yield* textOf(apps);
+          expect(text).toContain('- `tagma/storage/get {key}`');
+          expect(text).toContain('- `tagma/echo {said}` — Says it back.');
+          expect(text).not.toContain('<!-- bridge-methods -->');
+          expect(apps.references?.map(({ name }) => name)).toEqual(['example', 'echo']);
+          expect(yield* apps.reference!('echo')).toContain('Echo details.');
+          const bare = (yield* read(HOST_BRIDGE)).shipped.find((skill) => skill.id === 'apps')!;
+          expect(yield* textOf(bare)).not.toContain('tagma/echo');
         }),
       ),
     );

@@ -6,6 +6,7 @@ import { NATIVE_CAPABILITIES } from './contract/wire/capability.js';
 import { CallActivity } from './contract/service/calls.js';
 import type { NativeLive } from './contract/service/live.js';
 import { OwnSkillDirectories } from './contract/service/ownSkills.js';
+import { BridgeMethods } from '../views/contract/service/bridge.js';
 import { NATIVE_SETTING_KEYS, NATIVE_SETTING_SECTIONS } from './contract/wire/settingDeclarations.js';
 import { keepWarmTurns } from './doctrine/keepWarm.js';
 import { typedTools } from './doctrine/typedTools.js';
@@ -136,7 +137,8 @@ export const nativeHarness = manifest({
           nativeStoresLayer,
           Layer.unwrap(
             Effect.gen(function* () {
-              return workspaceInputsLayer(yield* OwnSkillDirectories);
+              const own = yield* OwnSkillDirectories;
+              return workspaceInputsLayer(own, (yield* BridgeMethods).all);
             }),
           ),
         ),

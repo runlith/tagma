@@ -1,4 +1,4 @@
-import { SPEECH_NOTIFICATION } from '@tagma/server/speech/contract/wire/view';
+import { SPEECH_BRIDGE } from '@tagma/server/speech/contract/wire/view';
 import { Layer } from '@runlith/layer/Layer';
 import { SettingSections } from '$lib/features/settings/section.js';
 import { TagmaMethods } from '$lib/features/tagma-apps/methods.js';
@@ -32,8 +32,7 @@ export const SpeechLayer = Layer.mergeAll(
   WindowParts.contribute('speech', { id: 'call-keys', order: 10, payload: { component: CallKeys } }),
   StagedKinds.contribute('speech', pieceKind),
   TagmaMethods.contribute('speech', {
-    name: 'speech',
-    notifications: [SPEECH_NOTIFICATION],
+    declaration: SPEECH_BRIDGE,
     method: ({ door, live, sound }, { projectId }) => speechMethod(door, live, sound, projectId),
   }),
   SpeechRepo,

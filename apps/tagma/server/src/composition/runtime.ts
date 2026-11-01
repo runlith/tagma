@@ -33,6 +33,7 @@ import { fileWatcherLayer } from './fileWatcher.js';
 import { PROGRAM_RELEASE } from '../platform/contract/wire/program.js';
 import { MachineAgents } from '../installation/contract/service/agents.js';
 import { LiveWorks } from '../platform/contract/service/live.js';
+import { BridgeMethods } from '../views/contract/service/bridge.js';
 import { Handoff } from '../platform/contract/service/handoff.js';
 import { Listenings } from '../speech/contract/service/listenings.js';
 import { ThreadRunning } from '../threads/contract/service/reads.js';
@@ -624,6 +625,7 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
                 Layer.provide(
                   Layer.succeed(ToolOutputsPlace, options.toolOutputsPath === undefined ? {} : { path: options.toolOutputsPath }),
                 ),
+                Layer.provide(Layer.succeed(BridgeMethods, { all: assembly.bridgeMethods })),
                 Layer.provide(BunFileSystem.layer),
               ),
             ),

@@ -26,6 +26,8 @@ import { HOME_FOLLOWERS, type HomeFollower } from '../thread-record/contract/ser
 import { LIVE_WORK, type LiveWork } from '../platform/contract/service/live.js';
 import { PROJECT_CREATION, type CreationStep } from '../graph/contract/service/creation.js';
 import type { NamedRight } from '../platform/contract/service/access.js';
+import { BRIDGE_METHODS } from '../views/contract/service/bridge.js';
+import type { BridgeMethod } from '../views/contract/wire/bridge.js';
 import type { ServerParts } from './build.js';
 import { type LiveGroup, liveRpc } from './rpc.js';
 import type { CORE_MODULES } from './core.js';
@@ -66,6 +68,7 @@ export type Assembly = {
   readonly nativeRules: ReturnType<typeof NATIVE_RULES.collect>;
   readonly homeFollowers: readonly HomeFollower[];
   readonly liveWork: readonly LiveWork[];
+  readonly bridgeMethods: readonly BridgeMethod[];
   readonly creationSteps: readonly CreationStep[];
   readonly rights: readonly NamedRight[];
   readonly entryKinds: ThreadEntryReader;
@@ -180,6 +183,7 @@ export const assemble = async ({ modules, rested }: ServerParts): Promise<Assemb
     nativeRules: NATIVE_RULES.collect(modules),
     homeFollowers: HOME_FOLLOWERS.collect(modules).map(({ entry }) => entry),
     liveWork: LIVE_WORK.collect(modules).map(({ entry }) => entry),
+    bridgeMethods: BRIDGE_METHODS.collect(modules).map(({ entry }) => entry),
     creationSteps,
     rights,
     entryKinds: entryKinds(modules, rested),

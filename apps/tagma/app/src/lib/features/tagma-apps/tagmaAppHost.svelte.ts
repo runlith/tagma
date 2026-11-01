@@ -1,4 +1,5 @@
 import type { PresenceMissingReason, PresenceRow } from '@tagma/server/threads/contract/wire/presence';
+import { capabilityOf, HOST_BRIDGE, type HostMethod, THREAD_CHANGED } from '@tagma/server/views/contract/wire/bridge';
 import { Cause, Effect, Exit } from 'effect';
 import type { LinkPort } from '$lib/shared/ExternalLinks.js';
 import type { ThreadPresence } from '$lib/features/presence/Presence.svelte.js';
@@ -9,7 +10,7 @@ import type { SoundChannel } from '$lib/wire/SoundChannel.js';
 import { argumentsOf, needed, openLink } from '../views/params.js';
 import { resourceSubscription } from '../views/resourceFeed.js';
 import { INVALID_PARAMS, type ViewCall, type ViewHost, type ViewMethod, type ViewParams, ViewRefusal } from '../views/ViewBridge.js';
-import { capabilityOf, HOST_METHODS, type HostMethod, type TagmaMethod, THREAD_CHANGED } from './methods.js';
+import type { TagmaMethod } from './methods.js';
 import { sectionOpening } from './sectionOpen.js';
 import type { ViewSets } from './ViewSets.svelte.js';
 
@@ -154,8 +155,8 @@ export function tagmaAppHost(owners: TagmaAppHostOwners, mount: TagmaAppMount): 
     'thread/unwatch': async (params, call) => unwatchThread(needed(params, 'threadId'), call),
   };
   const tagma: readonly (readonly [string, ViewMethod])[] = [
-    ...HOST_METHODS.map((name) => [name, own[name]] as const),
-    ...methods.map((declared) => [declared.name, declared.method({ door, live, sound }, mount)] as const),
+    ...HOST_BRIDGE.map(({ id }) => [id, own[id]] as const),
+    ...methods.map(({ declaration, method }) => [declaration.id, method({ door, live, sound }, mount)] as const),
   ];
   return {
     methods: {

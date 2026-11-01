@@ -5,6 +5,8 @@ import { lazyLayer, liveOf, manifest } from '../platform/contract/service/manife
 import { LIVE_WORK } from '../platform/contract/service/live.js';
 import { RELOCATIONS } from '../platform/contract/service/relocation.js';
 import { HOME_FOLLOWERS } from '../thread-record/contract/service/homes.js';
+import { BRIDGE_METHODS } from '../views/contract/service/bridge.js';
+import { SPEECH_BRIDGE } from './contract/wire/view.js';
 import { RECORDINGS } from './contract/service/recording.js';
 import { speechCapability } from './contract/wire/capability.js';
 import { Captures } from './contract/service/captures.js';
@@ -42,6 +44,7 @@ export const speech = manifest({
   settings: SPEECH_SETTINGS,
   settingSections: SPEECH_SETTING_SECTIONS,
   contributions: [
+    ...BRIDGE_METHODS.of(SPEECH_BRIDGE),
     ...RELOCATIONS.of({
       id: 'speech/recordings',
       carried: (data) => [join(data, RECORDINGS)],

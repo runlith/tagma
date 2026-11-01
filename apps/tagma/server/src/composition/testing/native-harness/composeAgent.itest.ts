@@ -1049,7 +1049,7 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
             Effect.provideService(Settings, demo.graph.settings),
           );
           const sourceCache = Context.get(
-            yield* Layer.build(workspaceInputsLayer(() => [])).pipe(
+            yield* Layer.build(workspaceInputsLayer(() => [], [])).pipe(
               Effect.provideService(EnabledPlugins, (yield* enabledPlugins()).service),
             ),
             WorkspaceInputs,

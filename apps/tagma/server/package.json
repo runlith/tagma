@@ -645,6 +645,11 @@
       "browser": "./src/views/contract/wire/points.ts",
       "default": "./src/views/contract/wire/points.ts"
     },
+    "./views/contract/wire/bridge": {
+      "types": "./src/views/contract/wire/bridge.ts",
+      "browser": "./src/views/contract/wire/bridge.ts",
+      "default": "./src/views/contract/wire/bridge.ts"
+    },
     "./secrets/contract/wire/rows": {
       "types": "./src/secrets/contract/wire/rows.ts",
       "browser": "./src/secrets/contract/wire/rows.ts",
