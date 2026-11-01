@@ -214,13 +214,13 @@ export const externalHarnessesLayer = Layer.effectContext(
         ),
       );
     const titleReported = (threadId: string, title: string) => aside(threadId, observations.titled(threadId, title));
-    const titleBegun = (threadId: string, run: string) =>
+    const titleBegun = (threadId: string, run: string, titled: boolean) =>
       aside(
         threadId,
         Effect.flatMap(records.projectOf(threadId), (projectId) =>
           projectId === undefined
             ? Effect.void
-            : Effect.flatMap(settings.value(harnessTitle, projectId), (cli) => (cli ? Effect.void : titles.begun(threadId, run))),
+            : Effect.flatMap(settings.value(harnessTitle, projectId), (cli) => (cli && titled ? Effect.void : titles.begun(threadId, run))),
         ),
       );
     const adoptions = yield* Effect.acquireRelease(PubSub.sliding<void>({ capacity: 1 }), PubSub.shutdown);
@@ -450,7 +450,7 @@ export const externalHarnessesLayer = Layer.effectContext(
       threads,
       open,
       permissions,
-      titleBegun,
+      (threadId, run) => titleBegun(threadId, run, true),
       terminalWatch,
       terminalGuidance,
       terminalClosing,

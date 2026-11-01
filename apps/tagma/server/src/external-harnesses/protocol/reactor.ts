@@ -21,7 +21,7 @@ const decodeQuota = Schema.decodeUnknownResult(QuotaReading);
 
 export type TitleReported = (threadId: string, title: string) => Effect.Effect<void>;
 
-export type TurnBegun = (threadId: string, runId: string) => Effect.Effect<void>;
+export type TurnBegun = (threadId: string, runId: string, titles: boolean) => Effect.Effect<void>;
 
 export type TurnStepped = (run: ThreadRunRef) => Effect.Effect<void>;
 
@@ -107,7 +107,7 @@ export class ProtocolReactor {
     const queue: Persisted[] = [persisted];
     while (queue.length > 0) {
       const next = queue.shift()!;
-      for (const turn of next.begun) yield* begun(link.threadId, turn);
+      for (const turn of next.begun) yield* begun(link.threadId, turn, link.profile.titles);
       if (next.ended.length > 0) yield* this.quieted(link);
       for (const closing of next.endings) yield* asides.kept(link, closing);
       const boundary = steppedOf(link, next.events);

@@ -6,6 +6,7 @@ import { CLAUDE_CODE_PROVIDER } from '../models/anthropic.js';
 export const claudeAcp = (model: HarnessModelArgv): AcpProfile => ({
   argv: (choice) => [HOST_COMMAND, 'harness-run', 'claude-code', ...chosenModelArgv(model, choice)],
   untitled: ['--untitled'],
+  titles: true,
   configure: (choice, switches) => [
     ...(choice === undefined
       ? []

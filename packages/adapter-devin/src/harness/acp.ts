@@ -2,6 +2,7 @@ import { chosenModelArgv, type AcpProfile, type HarnessModelArgv } from '@runlit
 
 export const devinAcp = (model: HarnessModelArgv): AcpProfile => ({
   argv: (choice) => ['devin', 'acp', ...chosenModelArgv(model, choice)],
+  titles: true,
   configure: (choice) => (choice === undefined ? [] : [{ configId: 'model', value: choice.model }]),
   reportedModel: 'model',
   hosts: null,

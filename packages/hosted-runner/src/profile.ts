@@ -36,6 +36,7 @@ export const clientProfile = ({
     id,
     ...(choice === undefined ? [] : ['--model', choice.model, ...(choice.rung === null ? [] : ['--effort', choice.rung])]),
   ],
+  titles: false,
   configure: (choice, switches) => [
     ...(choice === undefined
       ? []

@@ -440,6 +440,7 @@ export type AcpProves = {
 export type AcpProfile = {
   readonly argv: (choice: HarnessModelChoice | undefined) => readonly string[];
   readonly untitled?: readonly string[];
+  readonly titles: boolean;
   readonly configure: (choice: HarnessModelChoice | undefined, switches: ModelSwitches) => readonly ConfigChoice[];
   readonly reportedModel: string | null;
   readonly hosts: string | null;
