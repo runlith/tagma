@@ -11,6 +11,7 @@ import {
   ThreadRunKeyReusedError,
   type ThreadRunReapSelector,
   type ThreadRunStorage,
+  type ThreadRunHeartbeat,
   type ThreadRunStopAsked,
 } from '../runs';
 import { mergedStopRequest, seedThreadNotification } from '../settlement';
@@ -348,14 +349,16 @@ export function makeMemoryRuns({ memory, ownerId, scope }: MemoryRunsInput): Thr
       memory.units.commit(
         (unit) =>
           attempt('writeHeartbeats', () => {
+            const written: ThreadRunHeartbeat[] = [];
             const asked: ThreadRunStopAsked[] = [];
-            for (const runId of runIds) {
+            for (const runId of new Set(runIds)) {
               const run = owned(runId);
               if (!run) continue;
-              change(unit, run, { heartbeatAt, updatedAt: heartbeatAt });
+              const next = change(unit, run, { heartbeatAt, updatedAt: heartbeatAt });
+              written.push({ id: next.id, threadId: next.threadId, heartbeatAt: next.heartbeatAt, updatedAt: next.updatedAt });
               if (run.stopRequest !== null) asked.push({ runId, by: run.stopRequest.by });
             }
-            return asked;
+            return { written, asked };
           }),
         tx,
       ),

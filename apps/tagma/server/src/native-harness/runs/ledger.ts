@@ -8,6 +8,7 @@ import {
   ThreadRunConflictError,
   ThreadRunKeyReusedError,
   type ThreadRunStorage,
+  type ThreadRunHeartbeat,
   type ThreadRunStopAsked,
 } from '@runlith/agent/thread/storage/runs';
 import { parseThreadRunStopRequest, parseThreadRunUsage, type ThreadStorageFailed } from '@runlith/agent/thread/persisted';
@@ -549,7 +550,7 @@ export const makeRunStores = Effect.gen(function* () {
         ),
       writeHeartbeats: (runIds, heartbeatAt, tx) =>
         runIds.length === 0
-          ? Effect.succeed([])
+          ? Effect.succeed({ written: [], asked: [] })
           : stored('writeHeartbeats')(
               writing(
                 writes('ThreadRunStore.writeHeartbeats', [threadRun]),
@@ -559,28 +560,43 @@ export const makeRunStores = Effect.gen(function* () {
                       .update(threadRun)
                       .set({ heartbeatAt, updatedAt: heartbeatAt })
                       .where(ownedRows(inArray(threadRun.id, among(runIds))))
-                      .returning({ id: threadRun.id, stopRequest: threadRun.stopRequest });
+                      .returning({
+                        id: threadRun.id,
+                        threadId: threadRun.threadId,
+                        heartbeatAt: threadRun.heartbeatAt,
+                        updatedAt: threadRun.updatedAt,
+                        stopRequest: threadRun.stopRequest,
+                      });
+                    const written: ThreadRunHeartbeat[] = [];
+                    const asked: ThreadRunStopAsked[] = [];
                     const program = programOf(unit);
                     if (program !== null) {
-                      const asked: ThreadRunStopAsked[] = [];
                       yield* program.returning(statement, (rows) =>
                         Effect.sync(() => {
-                          for (const [runId, value] of rows) {
+                          for (const [id, threadId, heartbeat, updated, value] of rows) {
+                            const runId = String(id);
+                            written.push({
+                              id: runId,
+                              threadId: String(threadId),
+                              heartbeatAt: threadRun.heartbeatAt.mapFromDriverValue(Number(heartbeat)),
+                              updatedAt: threadRun.updatedAt.mapFromDriverValue(Number(updated)),
+                            });
                             const request = parseThreadRunStopRequest(
                               value === null ? null : threadRun.stopRequest.mapFromDriverValue(String(value)),
                             );
-                            if (request !== null) asked.push({ runId: String(runId), by: request.by });
+                            if (request !== null) asked.push({ runId, by: request.by });
                           }
                         }),
                       );
-                      return asked;
+                    } else {
+                      const beaten = yield* unit.run(statement.all());
+                      for (const { stopRequest, ...run } of beaten) {
+                        written.push(run);
+                        const request = parseThreadRunStopRequest(stopRequest);
+                        if (request !== null) asked.push({ runId: run.id, by: request.by });
+                      }
                     }
-                    return yield* Effect.map(unit.run(statement.all()), (beaten) =>
-                      beaten.flatMap((row) => {
-                        const request = parseThreadRunStopRequest(row.stopRequest);
-                        return request === null ? [] : [{ runId: row.id, by: request.by }];
-                      }),
-                    );
+                    return { written, asked };
                   }),
                 tx,
               ),

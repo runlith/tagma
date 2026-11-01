@@ -14,6 +14,7 @@ import { recoveryEntryId } from '../../../transcript/entryNames';
 import { actDigest } from '../../keyed';
 import type { ThreadRunKind, ThreadRunProgress, ThreadRunRow, ThreadRunStage } from '../../rows';
 import type { RunHalt } from '../../../transcript/live';
+import type { ThreadRunChange } from '../../state';
 import { ROUTED_AWAITING } from '../routedQuestions';
 import {
   RunActRefused,
@@ -502,24 +503,25 @@ export const runLifecycleLayer = Layer.effect(
         const runIds = beaten.map((run) => run.id);
         const write = Effect.fnUntraced(function* (tx: ThreadWriteTx) {
           yield* kernel.transitions.opened(threadIds, tx);
-          const asked = yield* runs.writeHeartbeats(runIds, at, tx);
-          yield* kernel.transitions.revised(threadIds, tx, (revisions) =>
-            Effect.forEach(
+          const { written, asked } = yield* runs.writeHeartbeats(runIds, at, tx);
+          yield* kernel.transitions.revised(threadIds, tx, (revisions) => {
+            const byThread = new Map<string, ThreadRunChange[]>();
+            for (const { threadId, ...run } of written) {
+              const held = byThread.get(threadId);
+              if (held === undefined) byThread.set(threadId, [run]);
+              else held.push(run);
+            }
+            return Effect.forEach(
               threadIds,
               (threadId) => {
                 const revision = revisions.get(threadId);
                 return revision === undefined
                   ? Effect.void
-                  : changes.deliver({
-                      kind: 'ran',
-                      threadId,
-                      revision,
-                      runs: beaten.flatMap((run) => (run.threadId === threadId ? [{ id: run.id, heartbeatAt: at, updatedAt: at }] : [])),
-                    });
+                  : changes.deliver({ kind: 'ran', threadId, revision, runs: byThread.get(threadId) ?? [] });
               },
               { discard: true },
-            ),
-          );
+            );
+          });
           return asked;
         });
         if (kernel.store.program !== undefined) {

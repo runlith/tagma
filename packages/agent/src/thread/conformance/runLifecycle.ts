@@ -10,7 +10,7 @@ import type { ThreadRunRef } from '../run/ThreadRunLedger';
 import { userMessageEntryId } from '../../transcript/entryNames';
 import { KEEP_WARM_SIGNAL_TYPE } from '../../transcript/keepWarm';
 import { inboxSignalValues, inboxTurnValues } from '../inboxItems';
-import { APPROVAL, lifecycleWorld, type LifecycleWorld, started } from './lifecycleWorld';
+import { APPROVAL, INSTANCE, OWNER, SCOPE, lifecycleWorld, type LifecycleWorld, started } from './lifecycleWorld';
 import { LATE_STOP } from '../run/lifecycle/RunLifecycle';
 import type { ThreadStorageFactory } from './storagePort';
 const BY_READER: ThreadRunStopIntent = { by: 'reader', marker: false, withdraw: false };
@@ -44,6 +44,40 @@ export function describeRunLifecycleActs<TTx, TWrite extends TTx = TTx, R = neve
         expect(revision.to).toBeGreaterThan(revision.from);
         expect(yield* world.storage.transitions.revision(run.threadId)).toBeGreaterThanOrEqual(revision.to);
         expect(yield* world.runs.runById(run.id)).toMatchObject({ heartbeatAt: at, updatedAt: at });
+      }),
+    );
+    test(
+      'a stale beat hands no unwritten heartbeat after an end or ownership loss, including a mixed batch',
+      Effect.fnUntraced(function* () {
+        const world = yield* lifecycleWorld(open);
+        const ended = started(yield* world.lifecycle.create(world.startFrom, APPROVAL, { kind: 'turn' })).run;
+        yield* world.lifecycle.finish(ended, { kind: 'completed' });
+        const lost = started(yield* world.lifecycle.create(world.startFrom, APPROVAL, { kind: 'turn' })).run;
+        yield* world.lifecycle.handover([lost.id], new Date(yield* Clock.currentTimeMillis));
+        const other = world.storage.runs({ ownerId: 'other-instance', scope: SCOPE });
+        const adopted = yield* other.adoptRun(lost.id, {
+          selector: { kind: 'handed-over' },
+          maxResumes: 1,
+          progress: { stage: 'running', message: null },
+          heartbeatAt: new Date(yield* Clock.currentTimeMillis),
+        });
+        expect(adopted?.ownerId).toBe('other-instance');
+        const thread = yield* world.storage.createThread({ ownerId: OWNER, scope: SCOPE });
+        const going = started(yield* world.lifecycle.create({ ...world.startFrom, id: thread.id }, APPROVAL, { kind: 'turn' })).run;
+        const before = yield* Effect.all([world.runs.runById(ended.id), world.runs.runById(lost.id)]);
+        const at = new Date((yield* Clock.currentTimeMillis) + 60_000);
+        yield* world.runs.requestStop(going.id, BY_READER, at);
+        const handed: ThreadStateChange[] = [];
+        world.changes.project((change) => Effect.sync(() => void handed.push(change)));
+        expect(yield* world.lifecycle.beat([ended, lost], at)).toEqual([]);
+        expect(handed.flatMap((change) => (change.kind === 'ran' ? change.runs : []))).toEqual([]);
+        handed.length = 0;
+        expect(yield* world.lifecycle.beat([ended, lost, going], at)).toEqual([{ runId: going.id, by: 'reader' }]);
+        expect(handed.flatMap((change) => (change.kind === 'ran' ? change.runs : []))).toEqual([
+          { id: going.id, heartbeatAt: at, updatedAt: at },
+        ]);
+        expect(yield* Effect.all([world.runs.runById(ended.id), world.runs.runById(lost.id)])).toEqual(before);
+        expect(yield* world.runs.runById(going.id)).toMatchObject({ ownerId: INSTANCE, heartbeatAt: at, updatedAt: at });
       }),
     );
     test(
