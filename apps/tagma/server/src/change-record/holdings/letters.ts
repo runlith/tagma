@@ -1,7 +1,6 @@
 import { Effect, Result } from 'effect';
 import type { Working } from '@runlith/files/working';
 import type { Git } from '@runlith/git/Git';
-import { ignoredAmong } from '@runlith/git/entries';
 import { literal } from '@runlith/git/repository';
 import { pathspecFits, statusAt, type Status, type StatusRow } from '@runlith/git/status';
 import { configuredGit } from '../../platform/git/ownGit.js';
@@ -11,14 +10,13 @@ import { WHOLE_TREE } from './heads.js';
 
 export type Lettered = { readonly letters: ReadonlyMap<string, HoldingGit>; readonly added: ReadonlySet<string> };
 
-export const lettersAt = Effect.fnUntraced(function* (
-  git: Git['Service'],
-  dir: string,
+export const lettersAt = (
   paths: readonly string[],
   status: Status,
   heads: ReadonlyMap<string, HeadSide>,
   working: ReadonlyMap<string, Working>,
-): Effect.fn.Return<Lettered | string> {
+  visible: ReadonlySet<string>,
+): Lettered => {
   const asked = new Set(paths);
   const letters = new Map<string, HoldingGit>();
   const { unmerged, staged, unstaged, untracked } = status.entries;
@@ -35,13 +33,11 @@ export const lettersAt = Effect.fnUntraced(function* (
     const bytes = working.get(path);
     return bytes !== undefined && bytes.kind !== 'absent' && bytes.kind !== 'unread';
   });
-  const ignored = yield* Effect.result(ignoredAmong(configuredGit(git, 'holdings-ignored'), dir, candidates));
-  if (ignored._tag === 'Failure') return ignored.failure.message;
   const outside = new Set(candidates);
   for (const path of paths)
-    if (!letters.has(path)) letters.set(path, outside.has(path) ? (ignored.success.has(path) ? 'ignored' : 'untracked') : null);
+    if (!letters.has(path)) letters.set(path, outside.has(path) ? (visible.has(path) ? 'untracked' : 'ignored') : null);
   return { letters, added };
-});
+};
 
 export const confirmedAt = Effect.fnUntraced(function* (
   git: Git['Service'],

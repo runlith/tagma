@@ -196,6 +196,15 @@ layer(Layer.mergeAll(demoGraphLayer(), BunFileSystem.layer, Path.layer), { exclu
         expect(frame?.checkouts[0]?.entries).toMatchObject([{ section: 'uncommitted', path: 'own.txt', lines: { added: 1, removed: 0 } }]);
         const judged = yield* s.judges.read(s.inTree.rootId);
         expect(judged.paths.some((one) => one.path === generated)).toBe(false);
+
+        yield* s.write('nested/owned.txt', 'nested held\n');
+        yield* s.judges.settled(s.inTree.rootId);
+        const recorded = yield* s.read;
+        expect(recorded?.checkouts[0]?.state).toEqual({ kind: 'current' });
+        expect(recorded?.checkouts[0]?.entries).toMatchObject([
+          { section: 'uncommitted', path: 'own.txt', lines: { added: 1, removed: 0 } },
+          { section: 'outside', path: 'nested/owned.txt', lines: { added: 1, removed: 0 } },
+        ]);
       }),
     ),
   );

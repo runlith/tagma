@@ -1,11 +1,11 @@
 import { join } from 'node:path';
-import { Clock, Effect, type FileSystem, type PlatformError, Result } from 'effect';
+import { Clock, Effect, FileSystem, type PlatformError, Result } from 'effect';
 import { and, eq, gte, inArray, sql } from 'drizzle-orm';
 import { chunk, unique } from '@runlith/utils/collection';
 import { contentDigest, streamedDigest, versionContentLimit } from '@runlith/files/content';
 import { exactWorkingAt, listingUnder, type Working } from '@runlith/files/working';
 import type { Git } from '@runlith/git/Git';
-import { changedBetween } from '@runlith/git/entries';
+import { changedBetween, visibleAmong } from '@runlith/git/entries';
 import { commitOf } from '@runlith/git/repository';
 import { pathspecFits, statusAt } from '@runlith/git/status';
 import { conversionsAt, normalizedAt, workingBlobFilesAt, type Conversions } from '@runlith/git/working';
@@ -255,7 +255,7 @@ export const probeAt = Effect.fn('Holdings.probe')(function* (
       rowsAt(readers, checkout.rootId, requested),
       Effect.result(
         statusAt(configuredGit(readers.git, 'holdings-status'), checkout.dir, {
-          untracked: scope === 'candidates' ? 'all' : 'no',
+          untracked: 'no',
           paths: scoped ? requested.map(literal) : undefined,
           monitor: !scoped,
         }),
@@ -272,13 +272,18 @@ export const probeAt = Effect.fn('Holdings.probe')(function* (
         ),
       ),
   );
-  const listed =
-    scope === 'candidates' && tracked._tag === 'Success' ? requested.filter((path) => !rows.has(path) && !tracked.success.has(path)) : [];
   const sides =
-    listed.length > 0 && Result.isSuccess(status)
-      ? yield* headsAt(readers.git, checkout.dir, status.success.branch.head, listed, known)
+    Result.isSuccess(status)
+      ? yield* headsAt(readers.git, checkout.dir, status.success.branch.head, requested, known)
       : new Map<string, HeadSide>();
-  const untracked = new Set(status._tag === 'Success' ? status.success.entries.untracked.map((row) => row.path) : []);
+  const candidates = requested.filter(
+    (path) => sides.get(path)?.kind === 'absent' && tracked._tag === 'Success' && !tracked.success.has(path),
+  );
+  const visible = yield* Effect.result(
+    visibleAmong(configuredGit(readers.git, 'holdings-visible'), checkout.dir, candidates).pipe(
+      Effect.provideService(FileSystem.FileSystem, readers.files),
+    ),
+  );
   const paths =
     scope === 'required'
       ? requested
@@ -288,11 +293,21 @@ export const probeAt = Effect.fn('Holdings.probe')(function* (
             tracked._tag === 'Failure' ||
             tracked.success.has(path) ||
             sides.get(path)?.kind !== 'absent' ||
-            untracked.has(path),
+            visible._tag === 'Failure' ||
+            visible.success.has(path),
         );
   yield* Effect.annotateCurrentSpan({ 'holdings.ignored': requested.length - paths.length });
   if (paths.length === 0)
-    return { head: status._tag === 'Success' ? status.success.branch.head : (expected ?? null), status: { read: true }, probes: new Map() };
+    return {
+      head: status._tag === 'Success' ? status.success.branch.head : (expected ?? null),
+      status:
+        status._tag === 'Failure'
+          ? { read: false, cause: causeOf(status.failure) }
+          : visible._tag === 'Failure'
+            ? { read: false, cause: causeOf(visible.failure) }
+            : { read: true },
+      probes: new Map(),
+    };
   const unattributed = yield* unattributedAt(readers, checkout.rootId, paths);
   const early =
     expected === undefined || status._tag === 'Success' ? undefined : yield* headsAt(readers.git, checkout.dir, expected, paths, known);
@@ -323,7 +338,11 @@ export const probeAt = Effect.fn('Holdings.probe')(function* (
         );
   const told = status._tag === 'Failure' ? status : yield* confirmedAt(readers.git, checkout.dir, status.success, silent);
   const read =
-    told._tag === 'Failure' ? causeOf(told.failure) : yield* lettersAt(readers.git, checkout.dir, paths, told.success, heads, working);
+    told._tag === 'Failure'
+      ? causeOf(told.failure)
+      : visible._tag === 'Failure'
+        ? causeOf(visible.failure)
+        : lettersAt(paths, told.success, heads, working, visible.success);
   const fresh = paths.filter((path) => {
     const bytes = working.get(path);
     return heads.get(path)?.kind === 'absent' && bytes !== undefined && bytes.kind !== 'absent' && bytes.kind !== 'unread';

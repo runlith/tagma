@@ -56,7 +56,7 @@ layer(layers, { excludeTestServices: true })('ignored observer inputs', (it) => 
     }),
   );
 
-  it.effect('an unread ignore policy leaves outside ownership present and reports stale until it can be read', () =>
+  it.effect('an unread git listing leaves outside ownership present and reports stale until it can be read', () =>
     Effect.gen(function* () {
       const world = yield* fixture;
       const held = world.paths.join(world.root, 'trace.log');
@@ -67,8 +67,8 @@ layer(layers, { excludeTestServices: true })('ignored observer inputs', (it) => 
       const git: Git['Service'] = {
         objects: world.git.objects,
         run: (args, options) =>
-          unavailable && args.includes('check-ignore')
-            ? Effect.fail(new GitEndingUnreadable({ command: [...args], reason: 'ignore policy is unavailable' }))
+          unavailable && args.includes('ls-files')
+            ? Effect.fail(new GitEndingUnreadable({ command: [...args], reason: 'git listing is unavailable' }))
             : world.git.run(args, options),
       };
       const judges = yield* judgesOf(world, git);
