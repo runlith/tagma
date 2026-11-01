@@ -146,6 +146,7 @@ const composed = Effect.fn('testing.rootPlacement')(function* (demo: EffectDemo)
             duplicate: unexpected,
             deleteByHost: unexpected,
             publish: unexpected,
+            rewritten: unexpected,
             stepping: unexpected,
             unseen: unexpected,
             stepped: unexpected,

@@ -37,6 +37,7 @@ export type ThreadStateFrame<TState> = {
   readonly state: TState;
   readonly from: number;
   readonly deltas: readonly ThreadEventDelta[];
+  readonly rewritten?: true;
 };
 
 export type ThreadMetadataChange = Partial<Pick<ThreadMetadataRow, 'updatedAt' | 'contextReading' | 'pendingInteraction'>>;
@@ -59,7 +60,8 @@ export type ThreadStateChange =
       readonly revision: ThreadChangeRevision;
       readonly runs: readonly ThreadRunChange[];
     }
-  | { readonly kind: 'moved'; readonly threadId: string };
+  | { readonly kind: 'moved'; readonly threadId: string }
+  | { readonly kind: 'rewritten'; readonly threadId: string };
 
 export type ThreadRunChange = { readonly id: string } & Partial<
   Pick<ThreadRunRow, 'heartbeatAt' | 'updatedAt' | 'streamTail' | 'resumes' | 'progress'>

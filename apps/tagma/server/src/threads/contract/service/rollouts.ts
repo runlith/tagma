@@ -30,5 +30,6 @@ export class ThreadRollouts extends Context.Service<
     replay(): Effect.Effect<number, HarnessFailure>;
     repair(threadId: string, projectId: number): Effect.Effect<RolloutRepair, HarnessFailure>;
     report(threadId: string, projectId: number, records?: number): Effect.Effect<ThreadRolloutDisagreement, HarnessFailure>;
+    rewritten(follower: (threadId: string) => Effect.Effect<void>): () => void;
   }
 >()('tagma/threads/ThreadRollouts') {}

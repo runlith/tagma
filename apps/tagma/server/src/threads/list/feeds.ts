@@ -76,11 +76,14 @@ export const threadFeeds = ({ list, folders, evidence, feed, basis: services }: 
 
   'thread.subscribe': ({ projectId, threadId, since }: Thread & { readonly since?: FeedPosition | undefined }) => {
     let delivered = since;
+    let rewritten = false;
     return snapshotFeed(
       (listener: (event: ThreadLiveEvent<NativeThreadState>) => void) => feed.subscribe(threadId, listener),
       Effect.fn('ThreadFeeds.open')(function* (first: boolean) {
         yield* Effect.annotateCurrentSpan({ threadId, project: projectId });
-        const value = yield* asking(openingFrame(evidence, services, threadId, projectId, delivered));
+        const from = rewritten ? undefined : delivered;
+        rewritten = false;
+        const value = yield* asking(openingFrame(evidence, services, threadId, projectId, from));
         yield* Effect.annotateCurrentSpan({ openPath: `${first ? 'open' : 'overflow'}:${value.type}` });
         delivered = value.at;
         const cut = value.at.seq;
@@ -94,6 +97,11 @@ export const threadFeeds = ({ list, folders, evidence, feed, basis: services }: 
       },
       WIRE_PAGE_MAX_ENTRIES,
       { limit: THREAD_FEED_QUEUE_BYTES, weigh: (event) => event.weight },
+      (event) => {
+        if (event.type !== 'state' || event.frame.rewritten !== true) return false;
+        rewritten = true;
+        return true;
+      },
     );
   },
 });

@@ -85,6 +85,7 @@ const setup = Effect.gen(function* () {
             duplicate: unused,
             deleteByHost: unused,
             publish: unused,
+            rewritten: unused,
             stepping: unused,
             unseen: unused,
             stepped: unused,

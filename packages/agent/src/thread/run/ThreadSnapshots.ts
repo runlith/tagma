@@ -144,6 +144,7 @@ export const makeThreadSnapshots = Effect.gen(function* () {
   const framedAt = new Map<string, number>();
   const ahead = new Map<string, number>();
   const projections = new Map<string, Projection>();
+  const rewrites = new Map<string, number>();
   const queues = new Map<string, Work[]>();
   const draining = yield* FiberSet.make<void>();
   const lifetime = Context.omit(Tracer.ParentSpan, References.CurrentStackFrame)(yield* Effect.context<never>());
@@ -427,6 +428,7 @@ export const makeThreadSnapshots = Effect.gen(function* () {
             ahead.delete(threadId);
             queues.delete(threadId);
             projections.delete(threadId);
+            rewrites.delete(threadId);
           }),
         ),
       { discard: true },
@@ -446,6 +448,8 @@ export const makeThreadSnapshots = Effect.gen(function* () {
     inLane(
       threadId,
       Effect.gen(function* () {
+        const rewrite = rewrites.get(threadId);
+        const rewritten = rewrite !== undefined;
         const read = yield* feed.atCut(
           threadId,
           store.readCut(
@@ -453,10 +457,12 @@ export const makeThreadSnapshots = Effect.gen(function* () {
             Effect.fnUntraced(function* (cut) {
               const read = yield* readingIn(threadId, cut);
               const current = read.state;
-              const from = published.get(threadId) ?? current.position;
+              const from = rewritten ? current.position : (published.get(threadId) ?? current.position);
               const deltas = from < current.position ? yield* threadWireDeltas(journal, kinds, threadId, from, cut.tx) : [];
-              yield* feed.publish({ state: current, from, deltas: deltas ?? [] }, cut.tx, () => {
-                published.set(threadId, Math.max(from, current.position));
+              const frame = { state: current, from, deltas: deltas ?? [] };
+              yield* feed.publish(rewritten ? { ...frame, rewritten } : frame, cut.tx, () => {
+                if (rewrites.get(threadId) === rewrite) rewrites.delete(threadId);
+                published.set(threadId, rewritten ? current.position : Math.max(from, current.position));
                 framedAt.set(threadId, Math.max(framedAt.get(threadId) ?? read.revision, read.revision));
                 if ((ahead.get(threadId) ?? read.revision) <= read.revision) ahead.delete(threadId);
               });
@@ -626,9 +632,14 @@ export const makeThreadSnapshots = Effect.gen(function* () {
       parent: Context.getOrUndefined(fiber.context, Tracer.ParentSpan) ?? null,
     }),
   );
-  const committed = (change: ThreadStateChange): Effect.Effect<void> =>
+  const committed = (handed: ThreadStateChange): Effect.Effect<void> =>
     Effect.flatMap(asking, (by) =>
       Effect.suspend(() => {
+        if (handed.kind === 'rewritten') {
+          rewrites.set(handed.threadId, (rewrites.get(handed.threadId) ?? 0) + 1);
+          projections.delete(handed.threadId);
+        }
+        const change: ThreadStateChange = handed.kind === 'rewritten' ? { kind: 'moved', threadId: handed.threadId } : handed;
         const queue = queues.get(change.threadId);
         if (queue !== undefined) {
           if (queue.at(-1)?.change.kind === 'moved') return Effect.void;

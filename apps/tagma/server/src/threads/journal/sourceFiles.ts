@@ -13,6 +13,7 @@ import { RolloutUnreadable } from './rolloutFile.js';
 import { rolloutFiles, rolloutStateOf } from './rolloutForms.js';
 import type { NativeFolds } from './rolloutMeta.js';
 import type { SourceRetention } from './sourceRetention.js';
+import type { SourceRewrites } from './sourceRewrites.js';
 
 type SourceCandidate =
   | { readonly kind: 'current' }
@@ -119,6 +120,7 @@ const publishSourceIn = Effect.fnUntraced(function* (
   db: StoreDb<'machine'>,
   unit: WriteUnit<'machine'>,
   retention: SourceRetention,
+  rewrites: SourceRewrites,
   threadId: string,
   canonical: string,
   source: PublishedSource,
@@ -130,7 +132,10 @@ const publishSourceIn = Effect.fnUntraced(function* (
       .values({ threadId, ...source })
       .onConflictDoUpdate({ target: threadPublishedSource.threadId, set: source }),
   );
-  if (previous !== undefined && previous.factFingerprint !== source.factFingerprint) yield* conversationCleared(db, unit, threadId);
+  if (previous !== undefined && previous.factFingerprint !== source.factFingerprint) {
+    yield* conversationCleared(db, unit, threadId);
+    yield* unit.afterCommit(rewrites.told(threadId));
+  }
   if (previous !== undefined && previous.generation !== source.generation) {
     yield* unit.afterCommit(retireSource(retention, threadId, canonical, previous));
   }
@@ -138,12 +143,12 @@ const publishSourceIn = Effect.fnUntraced(function* (
 
 export type SourcePublication = ReturnType<typeof sourcePublication>;
 
-export const sourcePublication = (folds: NativeFolds, retention: SourceRetention) => ({
+export const sourcePublication = (folds: NativeFolds, retention: SourceRetention, rewrites: SourceRewrites) => ({
   using: retention.using,
   stage: (input: SourceStage) => stageSource(input, folds),
   digest: (path: string) => folds.digest(rolloutFiles(path), 'plain'),
   publishIn: (db: StoreDb<'machine'>, unit: WriteUnit<'machine'>, threadId: string, canonical: string, source: PublishedSource) =>
-    publishSourceIn(db, unit, retention, threadId, canonical, source),
+    publishSourceIn(db, unit, retention, rewrites, threadId, canonical, source),
   withdrawIn: (db: StoreDb<'machine'>, unit: WriteUnit<'machine'>, threadId: string, canonical: string) =>
     withdrawSourceIn(db, unit, retention, threadId, canonical),
   discard: (threadId: string, canonical: string, source: PublishedSource) => {

@@ -11,6 +11,7 @@ export function snapshotFeed<A, B, E, R>(
   project: (event: A) => Effect.Effect<B, E, R>,
   capacity: number,
   bytes?: FeedBytes<A>,
+  reopens: (event: A) => boolean = () => false,
 ): Stream.Stream<B, E, R> {
   return Stream.unwrap(
     Effect.gen(function* () {
@@ -27,7 +28,9 @@ export function snapshotFeed<A, B, E, R>(
         Queue.offerUnsafe(events, null);
       };
       const detach = subscribe((event) => {
+        const reopened = reopens(event);
         if (overflow) return;
+        if (reopened) return overflowed();
         const weight = bytes?.weigh(event) ?? 0;
         if (bytes !== undefined && held + weight > bytes.limit) return overflowed();
         const context = Fiber.getCurrent()?.context;

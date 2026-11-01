@@ -420,6 +420,10 @@ export const threadEngineLayer = Layer.effectContext(
       (unfollow) => Effect.sync(unfollow),
     );
     delivering = (threadId, envelope) => harness.inputs.deliver(threadId, OPERATOR_PRINCIPAL, envelope);
+    yield* Effect.acquireRelease(
+      Effect.sync(() => rollouts.rewritten((threadId) => harness.threads.rewritten(threadId))),
+      (unfollow) => Effect.sync(unfollow),
+    );
     const made = yield* MadeBirths;
     yield* Effect.acquireRelease(
       Effect.sync(() => made.on((threadId, rootId) => notes.created(threadId, rootId))),

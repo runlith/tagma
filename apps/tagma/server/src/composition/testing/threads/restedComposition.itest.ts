@@ -1,6 +1,10 @@
 import { expect } from 'bun:test';
 import { it } from '@runlith/effect-test';
-import { Clock, Context, Effect, Schema } from 'effect';
+import { Clock, Context, Effect, Queue, Schema, Stream } from 'effect';
+import { ThreadHarness } from '../../../threads/contract/service/engine.js';
+import { ThreadFeeds } from '../../../threads/contract/service/feeds.js';
+import type { ThreadWireFeedEvent } from '../../../threads/contract/wire/snapshot.js';
+import { appendFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { eq } from 'drizzle-orm';
 import { DoorFixture, doorFixture, projectLeaving } from '../doorFixture.js';
@@ -9,7 +13,7 @@ import { birthsOf, exportThreadRollout, rolloutsOf, threadEvent, threadRun } fro
 import { compositionEntryId } from '@runlith/agent/transcript/entryNames';
 import { threadCompactionCheckpoint, threadPrunedToolCall } from '../../../native-harness/testing/doubles.js';
 import { nativeOnlyParts } from '../../../native-harness/testing/rollout.js';
-import { restOf } from '../../../threads/testing/rest.js';
+import { restFor, restOf } from '../../../threads/testing/rest.js';
 import { ENTRY_KINDS } from '../composed.js';
 import { ThreadEntryKinds } from '@runlith/agent/transcript/kinds';
 import type { ThreadCompositionEntry } from '@runlith/agent/transcript/entries';
@@ -101,4 +105,39 @@ it.live('reading compaction choices preserves a rested journal and its compactio
     expect(yield* restOf(db, id)).toEqual(stamp);
     expect(yield* db.select({ id: threadEvent().id }).from(threadEvent()).where(eq(threadEvent().threadId, id))).toEqual([]);
   }).pipe(Effect.provide(fixture)),
+);
+
+it.live('a repair that renumbers a rested journal reopens its open feed and its live cut at the new positions', () =>
+  Effect.gen(function* () {
+    const world = yield* DoorFixture;
+    const projectId = yield* world.stealthProject();
+    yield* projectLeaving(world, projectId);
+    const id = (yield* birthsOf(world.runtime.owners).create({ projectId, createdBySessionId: null })).thread.id;
+    const rollouts = rolloutsOf(world.runtime.owners);
+    yield* rollouts.ensure(id);
+    const { db } = Context.get(world.runtime.graph, MachineStore);
+    const said = (position: number, text: string) =>
+      `${JSON.stringify({
+        kind: 'event',
+        row: { threadId: id, position, id: `said-${position}`, kind: 'message', payload: { entry: { type: 'message', id: `said-${position}`, role: 'user', text } } },
+      })}\n`;
+    yield* Effect.promise(() => appendFile(join(world.dataHome, 'threads', String(projectId), `${id}.jsonl`), `${said(1, 'first')}${said(3, 'second')}`));
+    yield* restFor(db, id, new Date(yield* Clock.currentTimeMillis));
+    const harness = Context.get(world.runtime.owners, ThreadHarness);
+    const frames = yield* Queue.unbounded<ThreadWireFeedEvent>();
+    yield* Effect.forkScoped(
+      Stream.runForEach(Context.get(world.runtime.owners, ThreadFeeds)['thread.subscribe']({ projectId, threadId: id }), (frame) =>
+        Queue.offer(frames, frame),
+      ),
+    );
+    expect(yield* Queue.take(frames)).toMatchObject({ type: 'snapshot', at: { position: 3 } });
+    yield* harness.threads.publish(id);
+    expect(yield* Queue.take(frames)).toMatchObject({ type: 'state', at: { position: 3 } });
+    expect((yield* world.op('repair_thread_rollout', { threadId: id }, `project=${projectId}`)).status).toBe(200);
+    let reopened = yield* Queue.take(frames);
+    while (reopened.type !== 'snapshot') reopened = yield* Queue.take(frames);
+    expect(reopened).toMatchObject({ at: { position: 2 } });
+    const cut = yield* harness.threads.readCut(id, () => Effect.void);
+    expect({ position: cut.position, live: cut.live.at.position }).toEqual({ position: 2, live: 2 });
+  }).pipe(Effect.scoped, Effect.provide(fixture)),
 );

@@ -89,6 +89,7 @@ const stand = Effect.fnUntraced(function* (
       queueMeta: unexpected,
       formRested: unexpected,
       shelve: unexpected,
+      rewritten: unexpected,
     }),
     Layer.succeed(ThreadReleasing, {
       release: (id) =>

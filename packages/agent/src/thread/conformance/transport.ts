@@ -88,7 +88,7 @@ export function describeTransportContract<TTx, TWrite extends TTx = TTx, R = nev
               yield* world.storage.aggregate.transaction(write);
             }
             const stored = yield* world.runs.runById(run.id);
-            const patches = handed.flatMap((change) => (change.kind === 'moved' ? [] : (change.runs ?? [])));
+            const patches = handed.flatMap((change) => (change.kind === 'moved' || change.kind === 'rewritten' ? [] : (change.runs ?? [])));
             expect(patches).toEqual([
               {
                 id: run.id,

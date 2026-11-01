@@ -98,7 +98,7 @@ const opened = Effect.fnUntraced(function* (source?: 'resource' | 'commands', gr
         }),
         Layer.succeed(ThreadLive, live),
         Layer.succeed(ThreadLaunchGate, gate),
-        Layer.mock(ThreadRollouts, { pathOf: unused, appendRecord: unused, queueMeta: unused, shelve: unused, formRested: unused }),
+        Layer.mock(ThreadRollouts, { pathOf: unused, appendRecord: unused, queueMeta: unused, shelve: unused, formRested: unused, rewritten: unused }),
         Layer.mock(ProjectGroups, { list: () => Effect.succeed(groups) }),
         Layer.mock(ThreadFolders, { regrouped: () => () => {} }),
         Layer.succeed(HeldPathCounts, {

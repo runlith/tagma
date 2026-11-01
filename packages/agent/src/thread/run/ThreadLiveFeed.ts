@@ -113,7 +113,8 @@ export const makeThreadLiveFeed = Effect.fnUntraced(function* <TState extends Th
         lane.landing.delete(id);
       }
     }
-    lane.position = Math.max(lane.position, frame.state.position, frame.deltas.at(-1)?.position ?? 0);
+    lane.position =
+      frame.rewritten === true ? frame.state.position : Math.max(lane.position, frame.state.position, frame.deltas.at(-1)?.position ?? 0);
     lane.state = state;
     lane.seq += 1;
     events.emit(threadId, {

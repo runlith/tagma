@@ -360,6 +360,7 @@ export type HarnessThreads<TState extends ThreadState, TTx, TWrite extends TTx> 
   duplicate(input: ThreadDuplicateInput): Effect.Effect<ThreadRow, ThreadBorderFailed>;
   deleteByHost(ownerId: string, hostKind: string, hostId: string): Effect.Effect<void, ThreadBorderFailed>;
   publish(threadId: string): Effect.Effect<void, ThreadBorderFailed>;
+  rewritten(threadId: string): Effect.Effect<void>;
   stepping(threadId: string, tx: TWrite): Effect.Effect<void, ThreadBorderFailed>;
   unseen(threadId: string, tx: TWrite): Effect.Effect<void>;
   stepped(threadId: string, tx: TWrite): Effect.Effect<void, ThreadBorderFailed>;
@@ -567,6 +568,7 @@ function harnessThreads<TState extends ThreadState, TTx, TWrite extends TTx>(
     readCut: (threadId, use) =>
       run(Effect.flatMap(ThreadSnapshots, (snapshots) => snapshots.readCut(threadId, (cut) => use(cut as ThreadReadCut<TTx>)))),
     publish: (threadId) => run(Effect.flatMap(ThreadSnapshots, (snapshots) => snapshots.publish(threadId))),
+    rewritten: (threadId) => run(Effect.flatMap(ThreadChanges, (changes) => changes.deliver({ kind: 'rewritten', threadId }))),
     stepping: (threadId, tx) =>
       run(
         Effect.gen(function* () {

@@ -53,6 +53,7 @@ import { makeRestedReads } from '../journal/restedReads.js';
 import { makeSourcePublisher } from '../journal/sourcePublisher.js';
 import { makeSourceReplacement } from '../journal/sourceReplacement.js';
 import { sourceRetention, type SourceRetention } from '../journal/sourceRetention.js';
+import { sourceRewrites } from '../journal/sourceRewrites.js';
 import { sourcePublication, type SourcePublication } from '../journal/sourceFiles.js';
 import type { NativeFolds } from '../journal/rolloutMeta.js';
 import { makeRolloutForms } from '../journal/rolloutForming.js';
@@ -472,7 +473,7 @@ export const restedReads = Effect.fnUntraced(
     retention: SourceRetention = sourceRetention(),
   ) {
     const journal: JournalEntry = (_threadId, work) => work;
-    const publication = sourcePublication(folds, retention);
+    const publication = sourcePublication(folds, retention, sourceRewrites());
     const forms = yield* makeRolloutForms({ journal, stage, publication });
     const replacement = yield* makeSourceReplacement(publication, home);
     const sources = yield* makeSourcePublisher({ home, journal, forms, publication, replacement, retention });
@@ -485,7 +486,7 @@ export const journalSources = Effect.fnUntraced(
   function* (_kinds: ThreadEntryReader, home: string, folds: NativeFolds, stage: StageRollout = stagedHere) {
     const journal: JournalEntry = (_threadId, work) => work;
     const retention = sourceRetention();
-    const publication = sourcePublication(folds, retention);
+    const publication = sourcePublication(folds, retention, sourceRewrites());
     const forms = yield* makeRolloutForms({ journal, stage, publication });
     const replacement = yield* makeSourceReplacement(publication, home);
     return yield* makeSourcePublisher({ home, journal, forms, publication, replacement, retention });
@@ -515,7 +516,7 @@ export const rolloutForms = (
     makeRolloutForms({
       journal,
       stage,
-      publication: folds === undefined ? unpublishedSources : sourcePublication(folds, retention),
+      publication: folds === undefined ? unpublishedSources : sourcePublication(folds, retention, sourceRewrites()),
     }),
     ThreadEntryKinds,
     kinds,
@@ -531,7 +532,7 @@ export const threadProjection = (kinds: ThreadEntryReader) => Effect.provideServ
 
 export const threadRolloutRepair = Effect.fnUntraced(
   function* (_kinds: ThreadEntryReader, home: string, folds: NativeFolds) {
-    const publication = sourcePublication(folds, sourceRetention());
+    const publication = sourcePublication(folds, sourceRetention(), sourceRewrites());
     const replacement = yield* makeSourceReplacement(publication, home);
     return yield* makeThreadRolloutRepair({ publication, replacement });
   },
@@ -578,7 +579,7 @@ export const replayRollout = (...input: Parameters<typeof replayRolloutOver>): R
 
 export const exportThreadRollout = Effect.fnUntraced(
   function* (input: Parameters<typeof exportThreadRolloutOver>[0]) {
-    const publication = sourcePublication(input.parts.native.folds, sourceRetention());
+    const publication = sourcePublication(input.parts.native.folds, sourceRetention(), sourceRewrites());
     const replacement = yield* makeSourceReplacement(publication, dirname(input.path));
     return yield* exportThreadRolloutOver(input, publication, replacement);
   },
@@ -594,7 +595,7 @@ export const rehydrateThreadRecords = (
   input: Parameters<typeof rehydrateThreadRecordsOver>[0],
   retention: SourceRetention = sourceRetention(),
 ): ReturnType<typeof rehydrateThreadRecordsOver> =>
-  rehydrateThreadRecordsOver(input, sourcePublication(input.parts.native.folds, retention));
+  rehydrateThreadRecordsOver(input, sourcePublication(input.parts.native.folds, retention, sourceRewrites()));
 
 export const replayThreadRollout = (...input: Parameters<typeof replayThreadRolloutOver>): ReturnType<typeof replayThreadRolloutOver> =>
   replayThreadRolloutOver(...input);
@@ -608,7 +609,7 @@ export const foldedToolFact = (...input: Parameters<typeof foldedToolFactOver>):
 export const evictThreadProjection = (
   input: Parameters<typeof evictThreadProjectionOver>[0],
 ): ReturnType<typeof evictThreadProjectionOver> =>
-  evictThreadProjectionOver(input, sourcePublication(input.parts.native.folds, sourceRetention()));
+  evictThreadProjectionOver(input, sourcePublication(input.parts.native.folds, sourceRetention(), sourceRewrites()));
 
 export const compressRollout = (...input: Parameters<typeof compressRolloutOver>): ReturnType<typeof compressRolloutOver> =>
   compressRolloutOver(...input);

@@ -23,6 +23,7 @@ import { makeRestedReads } from './journal/restedReads.js';
 import { makeSourcePublisher } from './journal/sourcePublisher.js';
 import { makeSourceReplacement } from './journal/sourceReplacement.js';
 import { sourceRetention } from './journal/sourceRetention.js';
+import { sourceRewrites } from './journal/sourceRewrites.js';
 import { sourcePublication } from './journal/sourceFiles.js';
 import { makeRolloutForms } from './journal/rolloutForming.js';
 import { journalEntry } from './journal/rolloutContext.js';
@@ -93,7 +94,8 @@ export const makeThreadsLifetime = Effect.fnUntraced(function* ({ rolloutHome }:
   const own = yield* makeOwnWork.pipe(Effect.provideService(ThreadRows, rows));
   const reads = yield* makeThreadListReads.pipe(Effect.provideService(OwnWork, own));
   const retention = sourceRetention();
-  const publication = sourcePublication(parts.native.folds, retention);
+  const rewrites = sourceRewrites();
+  const publication = sourcePublication(parts.native.folds, retention, rewrites);
   const forms = yield* makeRolloutForms({ journal: journalEntry(order), stage: parts.native.folds.stage, publication });
   const replacement = yield* makeSourceReplacement(publication, rolloutHome);
   const sources = yield* makeSourcePublisher({
@@ -130,6 +132,7 @@ export const makeThreadsLifetime = Effect.fnUntraced(function* ({ rolloutHome }:
     retention,
     publication,
     replacement,
+    rewrites,
     home: rolloutHome,
   }).pipe(
     Effect.provideService(ThreadRunning, reads),

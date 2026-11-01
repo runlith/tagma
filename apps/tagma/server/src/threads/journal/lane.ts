@@ -38,6 +38,7 @@ import { threadUses } from './uses.js';
 import type { SourceRetention } from './sourceRetention.js';
 import type { SourcePublication } from './sourceFiles.js';
 import type { SourceReplacement } from './sourceReplacement.js';
+import type { SourceRewrites } from './sourceRewrites.js';
 import { ThreadEntryKinds } from '@runlith/agent/transcript/kinds';
 
 export class JournalOrder extends Context.Service<JournalOrder, Lane>()('tagma/threads/JournalOrder') {}
@@ -51,9 +52,11 @@ export const makeThreadRollouts = Effect.fnUntraced(function* ({
   retention,
   publication,
   replacement,
+  rewrites,
   home: rolloutHome,
 }: {
   readonly retention: SourceRetention;
+  readonly rewrites: SourceRewrites;
   readonly publication: SourcePublication;
   readonly replacement: SourceReplacement;
   readonly projection: ThreadProjection;
@@ -147,6 +150,7 @@ export const makeThreadRollouts = Effect.fnUntraced(function* ({
     replay: rolloutReconciling(ctx, forms, written),
     repair: repaired,
     report,
+    rewritten: rewrites.follow,
 
     appendRecord: (threadId, record) => {
       if (rolloutHome === undefined) return;
