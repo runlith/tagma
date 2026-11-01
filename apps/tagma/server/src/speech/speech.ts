@@ -6,15 +6,23 @@ import { RELOCATIONS } from '../platform/contract/service/relocation.js';
 import { HOME_FOLLOWERS } from '../thread-record/contract/service/homes.js';
 import { RECORDINGS } from './contract/service/recording.js';
 import { speechCapability } from './contract/wire/capability.js';
+import { Captures } from './contract/service/captures.js';
 import { Listenings } from './contract/service/listenings.js';
 import { Models } from './contract/service/models.js';
+import { Recognitions } from './contract/service/recognitions.js';
 import { Speaking } from './contract/service/speaking.js';
 import type { SpeechLive } from './contract/service/live.js';
 import { SPEECH_FEEDS } from './contract/wire/feeds.js';
 import { SPEECH_SETTING_SECTIONS, SPEECH_SETTINGS } from './keys.js';
 
 const live: SpeechLive = liveOf(SPEECH_FEEDS, async (door) =>
-  (await import('./feeds.js')).speechChannels(Context.get(door, Listenings), Context.get(door, Models), Context.get(door, Speaking)),
+  (await import('./feeds.js')).speechChannels({
+    listenings: Context.get(door, Listenings),
+    recognitions: Context.get(door, Recognitions),
+    captures: Context.get(door, Captures),
+    models: Context.get(door, Models),
+    speaking: Context.get(door, Speaking),
+  }),
 );
 
 export const speech = manifest({

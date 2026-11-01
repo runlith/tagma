@@ -7,6 +7,8 @@ import { ProjectChanges } from '../projects/contract/service/changes.js';
 import { Projects } from '../projects/contract/service/registry.js';
 import { Settings } from '../settings/contract/service/values.js';
 import { CallThreads } from './contract/service/callThreads.js';
+import { Captures } from './contract/service/captures.js';
+import { Recognitions } from './contract/service/recognitions.js';
 import { Echo } from './contract/service/echo.js';
 import { Handoff } from './contract/service/handoff.js';
 import { Listenings } from './contract/service/listenings.js';
@@ -14,12 +16,12 @@ import { LocalModels, Models } from './contract/service/models.js';
 import { RecordingsPlace } from './contract/service/recording.js';
 import { Speaking } from './contract/service/speaking.js';
 import { marked, muted, named } from './listening/annotations.js';
-import { makeBooth } from './listening/booth.js';
+import { LISTENING, makeBooth } from './listening/booth.js';
 import { makeCaptures } from './listening/captures.js';
 import { described, detailOf } from './listening/detail.js';
 import { makeFollowing } from './listening/following.js';
 import { textPage } from './listening/page.js';
-import { makeHearings } from './listening/hearing.js';
+import { makeRecognitions } from './listening/hearing.js';
 import { given, pieceOf, pieceText } from './listening/pieces.js';
 import { indexing } from './listening/indexing.js';
 import { reading, shelf, transcribed, watching } from './listening/readings.js';
@@ -31,7 +33,7 @@ import { makeModels } from './models.js';
 import { makeSpeaking } from './speaking.js';
 import { makeTranscripts } from './store/transcripts.js';
 
-export type SpeechServices = Listenings | Speaking | Models;
+export type SpeechServices = Listenings | Recognitions | Captures | Speaking | Models;
 export type SpeechNeeds =
   | Speech
   | AudioDevices
@@ -105,7 +107,7 @@ export const speechLayer: Layer.Layer<SpeechServices, never, SpeechNeeds> = Laye
     );
     yield* Effect.forkIn(Effect.andThen(handoff.opened, swept), scope);
     const search = yield* makeSearch({ transcripts });
-    const hearings = yield* makeHearings({ captures });
+    const recognitions = yield* makeRecognitions({ captures });
     const listenings = Listenings.of({
       start: booth.start,
       end: booth.end,
@@ -132,12 +134,13 @@ export const speechLayer: Layer.Layer<SpeechServices, never, SpeechNeeds> = Laye
       recording: booth.recording,
       watch: (projectId, id) => watching(booth, projectId, id),
       transcript: (projectId, id, after, stay) => transcribed(booth, projectId, id, after, stay),
-      recognize: hearings.recognize,
-      captures: captures.events,
-      live: captures.live('listening'),
-      finishRecognition: hearings.finish,
-      send: hearings.send,
+      live: captures.count(LISTENING),
     });
-    return Context.make(Listenings, listenings).pipe(Context.add(Speaking, yield* makeSpeaking), Context.add(Models, yield* makeModels));
+    return Context.make(Listenings, listenings).pipe(
+      Context.add(Recognitions, recognitions),
+      Context.add(Captures, captures),
+      Context.add(Speaking, yield* makeSpeaking),
+      Context.add(Models, yield* makeModels),
+    );
   }),
 );

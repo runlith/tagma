@@ -12,7 +12,7 @@
 
   const AUTO = 'auto';
 
-  const again = $derived(models.filter((model) => model.again));
+  const again = $derived(models.filter((model) => model.recorded));
   const choice = $derived(stood<Chosen>(place.catalog, SPEECH.callAgain) ?? {});
   const picked = $derived(again.find((model) => model.provider === choice.provider && model.model === choice.model));
   const problem = $derived(picked?.availability._tag === 'absent' ? unavailable(picked.availability) : null);

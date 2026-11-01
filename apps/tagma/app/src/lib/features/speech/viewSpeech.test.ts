@@ -1,4 +1,4 @@
-import type { Heard, Line, Listening } from '@tagma/server/speech/contract/wire/listening';
+import type { Heard, Line, Listening, ListeningEvent } from '@tagma/server/speech/contract/wire/listening';
 import { SPEECH_NOTIFICATION } from '@tagma/server/speech/contract/wire/view';
 import { Effect, Exit, Scope } from 'effect';
 import { afterEach, beforeEach, expect, vi } from 'vitest';
@@ -136,7 +136,7 @@ class SpeechSocket extends EventTarget {
     }
   }
 
-  event(id: string, event: Heard | Line): void {
+  event(id: string, event: ListeningEvent | Line): void {
     this.message({ _tag: 'Chunk', requestId: id, values: [event] });
   }
 

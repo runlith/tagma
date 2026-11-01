@@ -109,7 +109,6 @@ export function apply(run: Run, heard: Heard, now: number): Run {
     case 'gap':
       return { ...run, gaps: [...run.gaps, heard].slice(-GAPS_KEPT) };
     case 'state':
-    case 'listing':
       return run;
   }
 }

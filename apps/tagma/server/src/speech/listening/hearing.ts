@@ -4,10 +4,10 @@ import { type Cause, Clock, Deferred, Effect, Fiber, Queue, type Scope, Stream }
 import type { StoreFailure } from '../../platform/contract/service/store.js';
 import { GateRefusal } from '../../platform/contract/wire/refusal.js';
 import { Settings } from '../../settings/contract/service/values.js';
-import type { HearAsk, StartRefusal } from '../contract/service/listenings.js';
+import type { Captures } from '../contract/service/captures.js';
+import { type HearAsk, Recognitions, type StartRefusal } from '../contract/service/recognitions.js';
 import type { Heard } from '../contract/wire/listening.js';
 import { dictationRecognizer, microphone } from '../keys.js';
-import type { Captures } from './captures.js';
 import { chosen, listeningSettings } from './choice.js';
 import { heardOf, voiceKey, voiceOf } from './convert.js';
 import { makeSenders } from './sending.js';
@@ -16,6 +16,8 @@ import { capture, type Captured, type Ears, listened, named, recognized } from '
 const HEARD_CAPACITY = 4_096;
 
 const SLOWEST_TAIL_MS = 15_000;
+
+const RECOGNITION = 'recognition';
 
 export const unknownRecognition = (id: string): GateRefusal<'unknown-recognition'> =>
   new GateRefusal('unknown-recognition', `no recognition ${id} is open on this server`, [
@@ -33,9 +35,7 @@ type Open = {
   finishing: boolean;
 };
 
-export type Hearings = Effect.Success<ReturnType<typeof makeHearings>>;
-
-export const makeHearings = Effect.fnUntraced(function* ({ captures }: { readonly captures: Captures }) {
+export const makeRecognitions = Effect.fnUntraced(function* ({ captures }: { readonly captures: Captures['Service'] }) {
   const speech = yield* Speech;
   const devices = yield* AudioDevices;
   const settings = yield* Settings;
@@ -57,7 +57,7 @@ export const makeHearings = Effect.fnUntraced(function* ({ captures }: { readonl
       (entry) =>
         Effect.suspend(() => {
           if (open.get(id) === entry) open.delete(id);
-          return Effect.andThen(captures.ended('recognition', id), Effect.asVoid(Deferred.succeed(entry.ready, undefined)));
+          return Effect.andThen(captures.end(RECOGNITION, id), Effect.asVoid(Deferred.succeed(entry.ready, undefined)));
         }),
     );
 
@@ -104,14 +104,18 @@ export const makeHearings = Effect.fnUntraced(function* ({ captures }: { readonl
         yield* Effect.forkScoped(Effect.andThen(Fiber.joinAll(fibers), Queue.end(out)));
         yield* Deferred.succeed(entry.ready, { captured, scope: yield* Effect.scope, cut: Effect.asVoid(Queue.end(out)) });
         yield* Queue.offer(out, { kind: 'state', state: 'live' });
-        yield* captures.opened({
-          kind: 'recognition',
-          id: ask.id,
-          projectId: null,
-          sources: tracks.map((track) => track.source),
-          at: ask.tracks.some((track) => track.at === 'caller') ? 'caller' : 'server',
-          startedAt: new Date(clock.currentTimeMillisUnsafe()).toISOString(),
-        });
+        yield* captures.open(
+          {
+            kind: RECOGNITION,
+            noun: { one: 'recognition', many: 'recognitions' },
+            id: ask.id,
+            projectId: null,
+            sources: tracks.map((track) => track.source),
+            at: ask.tracks.some((track) => track.at === 'caller') ? 'caller' : 'server',
+            startedAt: new Date(clock.currentTimeMillisUnsafe()).toISOString(),
+          },
+          finish(ask.id),
+        );
         return Stream.fromQueue(out);
       }),
     );
@@ -126,5 +130,5 @@ export const makeHearings = Effect.fnUntraced(function* ({ captures }: { readonl
     entry.finishing = true;
     yield* Effect.forkIn(Effect.andThen(Effect.sleep(SLOWEST_TAIL_MS), registered.cut), registered.scope);
   });
-  return { recognize, send: senders.send, finish };
+  return Recognitions.of({ recognize, finish, send: senders.send });
 });

@@ -1,4 +1,4 @@
-import type { Heard, Line } from '@tagma/server/speech/contract/wire/listening';
+import type { Line, ListeningEvent } from '@tagma/server/speech/contract/wire/listening';
 import { SPEECH_NOTIFICATION, SpeechViewAsk } from '@tagma/server/speech/contract/wire/view';
 import { Result, Schema, Stream } from 'effect';
 import type { Door } from '$lib/wire/Door.js';
@@ -117,7 +117,7 @@ async function subscribe(
     row.release();
   };
   try {
-    let open: (client: ServerClient) => Stream.Stream<Heard | Line, LiveError>;
+    let open: (client: ServerClient) => Stream.Stream<ListeningEvent | Line, LiveError>;
     if (ask.action === 'recognize') {
       const status = await door.perform('speech_status', {}, lens, { signal: call.signal });
       if (status.status !== 'read') throw new Error(`the server answered ${status.status}`);
@@ -146,7 +146,7 @@ async function subscribe(
           after: ask.after,
         });
     }
-    feed = live.hold<Heard | Line | null>(
+    feed = live.hold<ListeningEvent | Line | null>(
       (client) => open(client).pipe(Stream.concat(Stream.succeed(null))),
       (event) => {
         if (!held.has(id)) return;

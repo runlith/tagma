@@ -1,14 +1,14 @@
 import { Schema } from 'effect';
 import { Source } from '@runlith/audio/port/devices';
 import { feed } from '../../../platform/contract/wire/operation.js';
-import { Heard, HeardTrackAsk, Line, RecognitionPurpose, RecognizerAsk, TrackPlace } from './listening.js';
+import { Heard, HeardTrackAsk, Line, ListeningEvent, RecognitionPurpose, RecognizerAsk, TrackPlace } from './listening.js';
 import { SpeakAsk, Synthesized } from './speaking.js';
 
 const projectId = Schema.Int.check(Schema.isGreaterThan(0));
 
 export const LISTENING_FEED = feed('speech.listening.subscribe', {
   input: Schema.Struct({ projectId, listening: Schema.String }),
-  event: Heard,
+  event: ListeningEvent,
   refusals: ['unknown-listening'],
   callers: 'any',
   admission: 'project',
@@ -63,11 +63,15 @@ export const INSTALL_FEED = feed('speech.install.subscribe', {
   callers: 'operator',
 });
 
-export const CaptureKind = Schema.Literals(['listening', 'recognition']);
-export type CaptureKind = typeof CaptureKind.Type;
+const CaptureKind = Schema.String.check(Schema.isMinLength(1)).annotate({
+  description: 'Named by the owner of the capture; `recognition` is a recognition without a record.',
+});
 
 export const Capture = Schema.Struct({
   kind: CaptureKind,
+  noun: Schema.Struct({ one: Schema.String, many: Schema.String }).annotate({
+    description: 'What one capture of this kind is called, and several.',
+  }),
   id: Schema.String,
   projectId: Schema.NullOr(Schema.Int),
   sources: Schema.Array(Source),

@@ -31,7 +31,9 @@ import { Settings } from '../../../settings/contract/service/values.js';
 import { CallThreads } from '../../../speech/contract/service/callThreads.js';
 import { Echo } from '../../../speech/contract/service/echo.js';
 import { Handoff } from '../../../speech/contract/service/handoff.js';
+import { Captures } from '../../../speech/contract/service/captures.js';
 import { Listenings } from '../../../speech/contract/service/listenings.js';
+import { Recognitions } from '../../../speech/contract/service/recognitions.js';
 import { LocalModels, Models } from '../../../speech/contract/service/models.js';
 import { Speaking } from '../../../speech/contract/service/speaking.js';
 import type { Line } from '../../../speech/contract/wire/listening.js';
@@ -61,6 +63,8 @@ export const separating = scriptedProvider({ id: 'scripted', recognition: [strea
 
 export type World = {
   readonly listenings: Listenings['Service'];
+  readonly recognitions: Recognitions['Service'];
+  readonly captures: Captures['Service'];
   readonly speaking: Speaking['Service'];
   readonly models: Models['Service'];
   readonly status: ReturnType<typeof statusOf>;
@@ -166,6 +170,8 @@ const makeStand = Effect.gen(function* () {
     };
     const world: World = {
       listenings: Context.get(built, Listenings),
+      recognitions: Context.get(built, Recognitions),
+      captures: Context.get(built, Captures),
       speaking: Context.get(built, Speaking),
       models: Context.get(built, Models),
       status: statusOf(Context.get(heard, Speech), Context.get(audio, AudioDevices), Context.get(built, Models), settings, 'server'),

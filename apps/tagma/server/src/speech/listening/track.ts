@@ -1,6 +1,4 @@
 import type { AudioDevices } from '@runlith/audio/port/devices';
-import type { Chunk } from '@runlith/audio/sound/chunk';
-import { type Format, framesOf, millisOf } from '@runlith/audio/sound/format';
 import { Meter } from '@runlith/audio/sound/level';
 import type { Track } from '@runlith/audio/sound/track';
 import type { RecognitionChoice } from '@runlith/speech/engine/choose';
@@ -24,37 +22,6 @@ export type Ears<E> = {
 };
 
 export type Captured = { readonly track: ListeningTrack; readonly capture: Track };
-
-export type Silenced = { readonly from: number; readonly to: number };
-
-export type Muting = { readonly within: (track: string, from: number, to: number) => readonly Silenced[] };
-
-const silenced = (format: Format, chunk: Chunk, from: number, hushed: readonly Silenced[]): Chunk => {
-  const frames = framesOf(format, chunk.pcm);
-  const pcm = chunk.pcm.slice();
-  const frameAt = (ms: number): number => Math.min(frames, Math.max(0, Math.round(((ms - from) * format.rate) / 1000)));
-  for (const one of hushed) pcm.fill(0, frameAt(one.from) * format.channels, frameAt(one.to) * format.channels);
-  return { ...chunk, pcm };
-};
-
-const gated = (captured: Captured, origin: bigint, muting: Muting): Captured => {
-  const format = captured.capture.format;
-  const id = captured.track.id;
-  return {
-    ...captured,
-    capture: {
-      ...captured.capture,
-      chunks: captured.capture.chunks.pipe(
-        Stream.map((sound) => {
-          if (sound._tag !== 'Chunk') return sound;
-          const from = Number(sound.at - origin) / 1e6;
-          const hushed = muting.within(id, from, from + millisOf(format, framesOf(format, sound.pcm)));
-          return hushed.length === 0 ? sound : silenced(format, sound, from, hushed);
-        }),
-      ),
-    },
-  };
-};
 
 export const named = (asked: readonly TrackAsk[], microphone: string | null): readonly ListeningTrack[] => {
   const seen = new Map<string, number>();
@@ -106,10 +73,10 @@ const metered = <E>(captured: Captured, origin: bigint, ears: Ears<E>): Track =>
   };
 };
 
-export const listened = <E>(captured: Captured, origin: bigint, ears: Ears<E>, muting?: Muting): Captured => {
-  const heard = muting === undefined ? captured : gated(captured, origin, muting);
-  return { ...heard, capture: metered(heard, origin, ears) };
-};
+export const listened = <E>(captured: Captured, origin: bigint, ears: Ears<E>): Captured => ({
+  ...captured,
+  capture: metered(captured, origin, ears),
+});
 
 export const recognized = Effect.fnUntraced(function* <E extends { readonly message: string }>(
   speech: Speech['Service'],

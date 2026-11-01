@@ -9,7 +9,9 @@ import { cursorRefusal, GateRefusal } from '../platform/contract/wire/refusal.js
 import { Settings } from '../settings/contract/service/values.js';
 import { CurrentProject } from '../projects/contract/service/caller.js';
 import type { Actor } from '../platform/contract/wire/actor.js';
+import { Captures } from './contract/service/captures.js';
 import { type Cut, Listenings, type Place, type Recipient } from './contract/service/listenings.js';
+import { Recognitions } from './contract/service/recognitions.js';
 import { type Installing, type ModelRefused, Models } from './contract/service/models.js';
 import { Speaking } from './contract/service/speaking.js';
 import { OPERATOR, type Span } from './contract/wire/listening.js';
@@ -217,8 +219,22 @@ export const SPEECH_PAIRS: { readonly [K in SpeechOperationId]: OperationPair<(t
     OPS.finish_recognition,
     body(OPS.finish_recognition, {
       execute: Effect.fnUntraced(function* (input) {
-        yield* (yield* Listenings).finishRecognition(input.id);
+        yield* (yield* Recognitions).finish(input.id);
         return { status: 'ending' as const, id: input.id };
+      }),
+    }),
+  ),
+  stop_capture: pair(
+    OPS.stop_capture,
+    body(OPS.stop_capture, {
+      execute: Effect.fnUntraced(function* (input) {
+        if ((input.kind === undefined) !== (input.id === undefined)) {
+          return yield* new GateRefusal('selection-shape', 'a capture is named by its kind and its id together', [
+            'name both `kind` and `id` to stop one capture, or neither to stop all',
+          ]);
+        }
+        const target = input.kind === undefined || input.id === undefined ? null : { kind: input.kind, id: input.id };
+        return { status: 'stopped' as const, stopped: yield* (yield* Captures).stop(target) };
       }),
     }),
   ),

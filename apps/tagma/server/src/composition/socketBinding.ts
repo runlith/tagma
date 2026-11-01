@@ -13,7 +13,7 @@ import type { Assembly } from './manifest.js';
 import type { CORE_MODULES } from './core.js';
 import { sendingRoute } from './http/sending.js';
 import { doorStep } from './http/answering.js';
-import { Listenings } from '../speech/contract/service/listenings.js';
+import { Recognitions } from '../speech/contract/service/recognitions.js';
 import { DesktopChannel } from '../desktop-browser/contract/service/channel.js';
 import { desktopReportRoute } from '../desktop-browser/door.js';
 
@@ -81,7 +81,7 @@ export const liveServing = (assembly: Assembly, connections: Connections | null)
       Effect.map(liveHandlers(assembly, door), (handlers) =>
         Layer.mergeAll(
           liveLayer(assembly.live, handlers, assembly.socketVerbs, connections, assembly.feeds),
-          sendingRoute(Context.get(door, Listenings), connections),
+          sendingRoute(Context.get(door, Recognitions), connections),
           desktopReportRoute(Context.get(door, DesktopChannel)),
         ),
       ),

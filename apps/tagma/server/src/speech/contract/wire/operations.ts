@@ -489,6 +489,26 @@ export const RECOGNITION_OPERATIONS = {
     confirmLabel: 'Finish recognition',
     presentation: { running: 'Finishing the recognition', done: 'Finished the recognition' },
   }),
+  stop_capture: operation('stop_capture', {
+    approval: ASKS_IN_REVIEW,
+    ...operatorOnly,
+    meaning:
+      'Stop one capture of this machine, or all of them: each stops the way its owner registered — a recognition reads out its confirmed tail, any other capture ends at once.',
+    grammar:
+      'Name `kind` and `id` together, as the speech.captures.subscribe feed lists them, to stop one; name neither to stop every capture. The call answers once each stop ended.',
+    input: Schema.Struct({
+      kind: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
+      id: Schema.optional(Schema.String.check(Schema.isMinLength(1))),
+    }),
+    answer: arms({ stopped: { stopped: Schema.Int } }),
+    refusals: ['unknown-capture', 'stop-refused', 'selection-shape'],
+    effect: 'write',
+    identity: { key: 'request' },
+    subjects: nobody,
+    confirmation: (input) => ({ summary: input.id === undefined ? 'Stop every capture?' : `Stop the ${input.kind} ${input.id}?` }),
+    confirmLabel: 'Stop',
+    presentation: { running: 'Stopping the capture', done: 'Stopped the capture' },
+  }),
 };
 
 const voiced = Voiced.fields;

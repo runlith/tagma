@@ -237,7 +237,7 @@ export type ListeningDetail = typeof ListeningDetail.Type;
 export const TrackPhase = Schema.Literals(['connecting', 'live', 'waiting', 'finished', 'ended', 'failed']);
 export type TrackPhase = typeof TrackPhase.Type;
 
-export const Heard = Schema.Union([
+const HEARD = [
   Schema.Struct({
     kind: Schema.Literal('utterance'),
     track: Schema.String,
@@ -274,7 +274,14 @@ export const Heard = Schema.Union([
     retryInMs: Schema.NullOr(Schema.Number),
     reason: Schema.NullOr(Schema.String),
   }),
+] as const;
+
+export const Heard = Schema.Union([...HEARD, Schema.Struct({ kind: Schema.Literal('state'), state: Schema.Literal('live') })]);
+export type Heard = typeof Heard.Type;
+
+export const ListeningEvent = Schema.Union([
+  ...HEARD,
   Schema.Struct({ kind: Schema.Literal('state'), state: ListeningState }),
   Schema.Struct({ kind: Schema.Literal('listing'), listening: Listening }),
 ]);
-export type Heard = typeof Heard.Type;
+export type ListeningEvent = typeof ListeningEvent.Type;
