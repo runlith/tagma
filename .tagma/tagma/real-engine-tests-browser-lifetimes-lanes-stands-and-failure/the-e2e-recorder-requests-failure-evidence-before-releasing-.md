@@ -11,4 +11,4 @@ sources:
   - kind: file
     ref: packages/e2e/src/lanes/ios.ts
 ---
-Keeping the fixture scope outside the body fiber lets the recorder request evidence before that scope’s cleanup runs when the body fails or is interrupted. The recorder, rather than Bun’s native test timer, owns the shared hang bound because a native timeout can kill browser children before screenshots and traces are saved. Capture failures remain part of the failed outcome.
+Keeping the fixture scope outside the body fiber lets the recorder request evidence before that scope’s cleanup runs when the body fails or is interrupted. The recorder owns the shared hang bound; native registration uses `Infinity` because Bun 1.4.4 can fire an earlier hook’s timer during a later test, and zero makes its process-killer treat that test as expired before evidence is saved. Capture failures remain part of the failed outcome.
