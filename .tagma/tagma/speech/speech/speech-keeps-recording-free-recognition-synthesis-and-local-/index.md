@@ -129,7 +129,7 @@ Speech's settings section needs no new point: `SettingsPage.svelte` already draw
   - adds a live-work count that `read_machine_state` lists, while `server.calls` answers the total;
   - adopts the set-aside of a test table that a test machine migration removed, with every row. Each step is checked: a rollback after the migration, re-entry, an adoption interrupted before and after its commit, and a version skip over the release that set the table aside;
   - keeps a file in its files directory that a world transfer carries, both with and without the module in the target build;
-  - puts a keyed message with a document into a thread from its serving lifetime, and withdraws it.
+  - reads a thread's home through the thread owners from its serving lifetime. The test world signs in no model and so creates no thread; a keyed delivery is proved by the delivering module's own test.
 - A build without that module opens the same data directory and serves, leaving the module's store, files directory and set-aside in place.
 - An old CLI decodes the new `read_machine_state`, and the new desktop judges an old server's answer busy or idle.
 - App tests: a test layer contributes a top-bar part, a window part, a draft attachment kind, a view bridge method and a surface with a former route.
