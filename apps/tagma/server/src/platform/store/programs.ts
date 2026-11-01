@@ -228,6 +228,11 @@ const submitted = Effect.fnUntraced(function* <Brand extends StoreBrand, A, E>(
         const end = new UnitEnd();
         return Effect.gen(function* () {
           const building: Building = { store: identity, statements: [], tails: [], sets: [set], returning: [], end };
+          end.release(() => {
+            building.statements.splice(0);
+            building.tails.splice(0);
+            building.returning.splice(0);
+          });
           const value = yield* restore(Effect.provideService(work(built<Brand>(building, set)), ProgramOpen, building));
           for (const statement of building.statements) {
             if (statement.counts !== 'rows')

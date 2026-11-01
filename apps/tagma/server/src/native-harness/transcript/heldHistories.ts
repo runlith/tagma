@@ -87,7 +87,7 @@ export class HeldHistories {
   }
 
   weigh(message: Message, bytes: number): void {
-    this.sizes.set(message, bytes);
+    if (!this.sizes.has(message)) this.sizes.set(message, bytes);
   }
 
   private publish(id: string, history: ThreadHistory, standing: HistoryState): void {

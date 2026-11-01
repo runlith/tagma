@@ -139,6 +139,7 @@ export const storeTransaction =
             const joined = outer !== null && outer.store.path === identity.path && outer.store.generation === identity.generation;
             const end = joined ? outer.end : (owned = new UnitEnd());
             const commits: CommitQueue = { store: identity, queued: [], moved: [], end, body: Context.empty() };
+            end.release(() => void commits.queued.splice(0));
             const life: UnitLife = { identity, operation, open: true };
             const value = yield* db
               .transaction(() =>
@@ -254,6 +255,7 @@ export const withinCommit = <A, E, R>(
         new LateStatementRefused({ store: life?.identity.path ?? outer?.store.path ?? '', operation: life?.operation ?? '' }),
       );
     const inner: CommitQueue = { store: outer.store, queued: [], moved: [], end: outer.end, body: outer.body };
+    outer.end.release(() => void inner.queued.splice(0));
     return Effect.tap(Effect.provideService(work(inner.queued, outer.end), CommitQueue, inner), () =>
       life.open
         ? Effect.sync(() => {

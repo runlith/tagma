@@ -200,10 +200,18 @@ it.live('a history folded inside a unit leaves memory when the unit ends, though
       kept.push(unit);
       return Effect.map(reader.read(unit, id), (history) => new WeakRef(history ?? []));
     });
+    const written = yield* units
+      .write(changed, (unit) => {
+        kept.push(unit);
+        const next = [Message.make({ role: 'user', content: 'kept' }), Message.make({ role: 'assistant', content: 'dropped' })];
+        return Effect.andThen(reader.write(unit, id, next, 0), Effect.fail(new WeakRef(next)));
+      })
+      .pipe(Effect.flip);
     yield* Effect.promise(() => new Promise<void>((resolve) => setImmediate(resolve)));
     Bun.gc(true);
-    expect(kept).toHaveLength(1);
+    expect(kept).toHaveLength(2);
     expect(loaded.deref()).toBeUndefined();
+    expect(written instanceof WeakRef && written.deref()).toBeUndefined();
   }).pipe(Effect.provide(layer)),
 );
 

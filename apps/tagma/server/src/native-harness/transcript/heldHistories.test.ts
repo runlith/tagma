@@ -65,6 +65,21 @@ describe('HeldHistories', () => {
     expect(live.held('t')).toBeNull();
   });
 
+  test('a message measured again after it was held leaves the bound as it entered it', () => {
+    const live = new HeldHistories(2 * (120 + 160));
+    const doc = weighed(live, 100);
+    live.settle(live.claim('t', {}), doc, standing(doc, 1));
+    live.weigh(doc[0]!, 10_000);
+    const emptied: ThreadHistory = [];
+    live.settle(live.claim('t', {}), emptied, standing(emptied, 2));
+    for (const id of ['u', 'v', 'w']) {
+      const next = weighed(live, 100);
+      live.settle(live.claim(id, {}), next, standing(next, 1));
+    }
+    expect(live.held('u')).toBeNull();
+    expect(live.held('w')).not.toBeNull();
+  });
+
   test('a settled claim answers the history with the cursor it stands at', () => {
     const live = new HeldHistories();
     const doc = weighed(live);
