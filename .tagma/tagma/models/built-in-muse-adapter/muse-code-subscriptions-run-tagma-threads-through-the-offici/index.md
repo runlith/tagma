@@ -5,7 +5,7 @@ ord: 2
 tags: ["spec"]
 fields:
   {
-    "status": "open"
+    "status": "closed"
   }
 edges:
   - kind: relates
@@ -100,6 +100,7 @@ The cached prefix of a Muse request is the base instructions, the tool list, the
 - How late a `view/gap` can arrive after its turn's drain barrier: MSP promises no order between a gap and its neighbours, and no live session produced a gap to measure.
 - A completed compaction lost to a host death is reconciled by contract test only: no live host was killed mid-compaction.
 - The cache lifetime's exact end between 20 and 30 minutes, and whether it moves with prefix size or load: one session was measured per gap.
+- Whether the first request after a runner restart with resume reads the whole earlier prefix from cache on the dispatch catalog. The one live reading predates the dispatcher (130,932 cached of 168,343, with no total kept for the request before the restart). A rerun on HEAD f90c2549 got 32,242 input and 31,985 cached on the last request before the restart, then the trial server did not come back up in time on a loaded machine, so the request after the restart was never measured.
 
 ## Out of scope
 
