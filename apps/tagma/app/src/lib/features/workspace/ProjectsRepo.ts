@@ -16,7 +16,14 @@ export const ProjectsRepo = Repo.define(
 
     add: mutation({
       mutator: async (
-        input: { name: string; rootPath: string; storage?: StorageMode; catalogs?: readonly string[]; graphRemote?: string },
+        input: {
+          name: string;
+          rootPath: string;
+          storage?: StorageMode;
+          catalogs?: readonly string[];
+          graphRemote?: string;
+          contributed?: Readonly<Record<string, unknown>>;
+        },
         { signal },
         door,
       ) => {
