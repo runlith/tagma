@@ -11,7 +11,7 @@ import { Handed } from './handed.js';
 import { Output } from './output.js';
 import { permitted } from './question.js';
 import { Relay } from './relay.js';
-import { UNSTEPPED } from './wire/extensions.js';
+import { COST, UNSTEPPED, type Priced } from './wire/extensions.js';
 
 const CANCELLED = -32800;
 
@@ -21,6 +21,7 @@ export type ClientOutcome = {
   readonly failure?: TransportFailure;
   readonly detail?: string;
   readonly turn?: string;
+  readonly cost?: Priced;
 };
 
 export interface ClientRun {
@@ -143,7 +144,11 @@ export const clientSession = Effect.fnUntraced(function* (
         const outcome = yield* run.wait;
         if (outcome.detail !== undefined) process.stderr(`${outcome.detail}\n`);
         const turn = outcome.turn ?? input.id;
-        const meta = { 'tagma/turn': { prompt: turn, last: turn }, 'tagma/failure': outcome.failure };
+        const meta = {
+          'tagma/turn': { prompt: turn, last: turn },
+          'tagma/failure': outcome.failure,
+          ...(outcome.cost === undefined ? {} : { [COST]: outcome.cost }),
+        };
         if (outcome.status === 'error' && !running.cancelled)
           return yield* new AgentFault({
             code: outcome.failure?.reason?.family === 'auth' ? FAULT.authRequired : FAULT.internal,

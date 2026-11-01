@@ -510,6 +510,50 @@ it.effect('a prompt that changed between runs restarts the host and resumes the 
   }),
 );
 
+it.effect('blank words never reach Muse, and a turn costs what Muse priced the session above the turn before', () =>
+  Effect.gen(function* () {
+    const turns = ['01a19573-1cea-7c2e-90b4-000000000021', '01a19573-1cea-7c2e-90b4-000000000022'];
+    let usd = 0;
+    const { agent, sent } = yield* world((one, emit) => {
+      if (one.method === 'session/start') return ok(one, { session: { sessionId: one.params.sessionId } });
+      if (one.method === 'turn/start') {
+        usd += 0.25;
+        const sessionId = one.params.sessionId;
+        const usage = { inputTokens: 10, outputTokens: 1, cachedTokens: 0, reasoningTokens: 0 };
+        return Effect.as(
+          Effect.forkDetach(
+            Effect.andThen(
+              emit({
+                method: 'session/tokenUsage',
+                params: {
+                  sessionId,
+                  turnId: one.id,
+                  modelId: null,
+                  usage,
+                  promptTokens: 10,
+                  cumulative: { cost: { usd, partial: false } },
+                },
+              }),
+              emit({ method: 'turn/completed', params: { sessionId, turnId: one.id, terminal: 'completed' } }),
+            ),
+          ),
+          { commandId: one.id, status: 'accepted', turnId: one.id, disposition: 'started' },
+        );
+      }
+      return ok(one);
+    });
+    const session = yield* agent.newSession({ cwd: '/work', mcpServers: [] });
+    yield* agent.prompt({ sessionId: session.sessionId, prompt: [{ type: 'text', text: 'one' }], _meta: { 'tagma/turn': turns[0] } });
+    const second = yield* agent.prompt({
+      sessionId: session.sessionId,
+      prompt: [{ type: 'text', text: '  ' }],
+      _meta: { 'tagma/turn': turns[1] },
+    });
+    expect(sent.filter((one) => one.method === 'turn/start').at(-1)?.params.input).toEqual([{ type: 'text', text: 'turn context' }]);
+    expect(second._meta).toMatchObject({ 'tagma/cost': { amount: 0.25, currency: 'USD', basis: 'estimate' } });
+  }),
+);
+
 it.effect('a tool whose definition changed under the same name restarts the host and resumes the same session', () =>
   Effect.gen(function* () {
     const turns = ['01a19573-1cea-7c2e-90b4-000000000011', '01a19573-1cea-7c2e-90b4-000000000012'];

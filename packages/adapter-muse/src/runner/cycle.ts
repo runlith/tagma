@@ -70,14 +70,36 @@ const decoded =
 
 type Part = Readonly<Record<string, string>>;
 
-const partsOf = (blocks: readonly ContentBlock[]): Effect.Effect<readonly Part[], AgentFault> =>
-  Effect.forEach(blocks, (block): Effect.Effect<Part, AgentFault> =>
-    block.type === 'text'
-      ? Effect.succeed({ type: 'text', text: block.text })
-      : block.type === 'image'
-        ? Effect.succeed({ type: 'image', base64Data: block.data, mediaType: block.mimeType })
-        : Effect.fail(new AgentFault({ code: FAULT.invalidParams, message: `Muse Code cannot receive ${block.type} content` })),
-  );
+const partOf = (block: ContentBlock): Effect.Effect<Part, AgentFault> => {
+  switch (block.type) {
+    case 'text':
+      return Effect.succeed({ type: 'text', text: block.text });
+    case 'image':
+      return Effect.succeed({ type: 'image', base64Data: block.data, mediaType: block.mimeType });
+    case 'resource_link':
+      return Effect.succeed({ type: 'text', text: `[${block.name}](${block.uri})` });
+    case 'resource':
+      if ('text' in block.resource)
+        return Effect.succeed({ type: 'text', text: `<context ref="${block.resource.uri}">\n${block.resource.text}\n</context>` });
+      if (block.resource.mimeType?.startsWith('image/') === true)
+        return Effect.succeed({ type: 'image', base64Data: block.resource.blob, mediaType: block.resource.mimeType });
+      return Effect.fail(
+        new AgentFault({
+          code: FAULT.invalidParams,
+          message: `Muse Code cannot receive a ${block.resource.mimeType ?? 'binary'} resource`,
+        }),
+      );
+    default:
+      return Effect.fail(new AgentFault({ code: FAULT.invalidParams, message: `Muse Code cannot receive ${block.type} content` }));
+  }
+};
+
+const partsOf = (blocks: readonly ContentBlock[]): Effect.Effect<readonly Part[], AgentFault> => Effect.forEach(blocks, partOf);
+
+const said = (parts: readonly Part[]): readonly Part[] => {
+  const kept = parts.filter((part) => part.type !== 'text' || (part.text ?? '').trim() !== '');
+  return kept.length === 0 ? [{ type: 'text', text: CONTINUE }] : kept;
+};
 
 const keyOf = (want: Want): string =>
   JSON.stringify([
@@ -104,6 +126,7 @@ export const makeMuseCycle = Effect.fnUntraced(function* (door: HostedDoor, proc
   const words = new Map<string, Deferred.Deferred<void>>();
   const refused = new Set<string>();
   const steers = new Map<string, { readonly command: string; readonly feed: Feed }>();
+  const priced = new Map<string, number>();
 
   const slot = (input: string) => {
     const standing = words.get(input);
@@ -141,7 +164,7 @@ export const makeMuseCycle = Effect.fnUntraced(function* (door: HostedDoor, proc
   const quota = Effect.fnUntraced(function* (frame: Frame) {
     const read = Schema.decodeUnknownResult(Quota)(frame.params);
     if (Result.isFailure(read)) return process.stderr(`Muse Code reported its quota in an unreadable shape: ${read.failure.message}\n`);
-    const { window: session, weekly, observedAtMs } = read.success;
+    const { window: session, weekly, observedAtMs, tier } = read.success;
     const windows = [
       ...(session === undefined
         ? []
@@ -167,7 +190,7 @@ export const makeMuseCycle = Effect.fnUntraced(function* (door: HostedDoor, proc
     if (windows.length === 0) return;
     const observedAt = observedAtMs ?? (yield* Clock.currentTimeMillis);
     observed = yield* Schema.encodeEffect(Schema.toCodecJson(QuotaObservation))(
-      new QuotaObservation({ observedAt: new Date(observedAt), source: 'usage', windows }),
+      new QuotaObservation({ observedAt: new Date(observedAt), source: 'usage', windows, plan: tier }),
     ).pipe(Effect.orDie);
     yield* report();
   });
@@ -297,6 +320,7 @@ export const makeMuseCycle = Effect.fnUntraced(function* (door: HostedDoor, proc
       yield* standing.host
         .command('session/setModel', { sessionId: seat.id, model: { modelId: model, providerId: PROVIDER_ID } })
         .pipe(Effect.mapError(faultOf));
+      if (applied?.model !== model) window = null;
       applied = { session: seat.id, model };
     }
     return standing;
@@ -353,6 +377,8 @@ export const makeMuseCycle = Effect.fnUntraced(function* (door: HostedDoor, proc
                 }),
               ),
               abandon: Effect.suspend(() => (live === standing ? drop() : Effect.void)),
+              pricedBefore: priced.get(seat.id) ?? null,
+              priced: (usd) => void priced.set(seat.id, usd),
             },
             done,
           );
@@ -362,7 +388,7 @@ export const makeMuseCycle = Effect.fnUntraced(function* (door: HostedDoor, proc
               'turn/start',
               {
                 sessionId: seat.id,
-                input: parts.length === 0 ? [{ type: 'text', text: CONTINUE }] : parts,
+                input: said(parts),
                 ...(effort === null ? {} : { reasoningEffort: effort }),
               },
               turn,
@@ -421,7 +447,7 @@ export const makeMuseCycle = Effect.fnUntraced(function* (door: HostedDoor, proc
               const read = running.steering(command);
               if (word !== undefined) steers.set(word, { command, feed: running });
               const admitted = yield* standing.host
-                .command('turn/steer', { sessionId: seat.id, expectedTurnId: turn, input: steering }, command)
+                .command('turn/steer', { sessionId: seat.id, expectedTurnId: running.current, input: steering }, command)
                 .pipe(
                   Effect.as(true),
                   Effect.catchTag('MuseRefused', (refusal) =>
@@ -504,7 +530,7 @@ export const makeMuseCycle = Effect.fnUntraced(function* (door: HostedDoor, proc
             ),
           } satisfies ClientCompaction;
         }),
-        close: Effect.void,
+        close: Effect.suspend(() => (live?.loaded.has(seat.id) === true ? drop() : Effect.void)),
       },
       door,
       process,
@@ -518,7 +544,11 @@ export const makeMuseCycle = Effect.fnUntraced(function* (door: HostedDoor, proc
     initialize: {
       protocolVersion: 1,
       agentInfo: { name: 'tagma-muse-code', version: launch.version },
-      agentCapabilities: { loadSession: true, promptCapabilities: { image: true }, sessionCapabilities: { resume: {}, close: {} } },
+      agentCapabilities: {
+        loadSession: true,
+        promptCapabilities: { image: true, embeddedContext: true },
+        sessionCapabilities: { resume: {}, close: {} },
+      },
     },
     modes: { currentModeId: 'agent', availableModes: [{ id: 'agent', name: 'Agent' }] },
     open: Effect.fnUntraced(function* (opening, outlet, replacing) {

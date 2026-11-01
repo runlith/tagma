@@ -59,6 +59,7 @@ export const TokenUsage = Schema.Struct({
   modelId: Schema.NullOr(Schema.String),
   usage: Tokens,
   promptTokens: Schema.Finite,
+  cumulative: Schema.optional(Schema.Struct({ cost: Schema.optional(Schema.Struct({ usd: Schema.Finite, partial: Schema.Boolean })) })),
 });
 export type TokenUsage = typeof TokenUsage.Type;
 export const ContextUsage = Schema.Struct({
@@ -98,6 +99,7 @@ export const Quota = Schema.Struct({
   ),
   weekly: Schema.optional(Schema.Struct({ usedPercent: Schema.Finite, resetsAtMs: Schema.optional(Schema.Finite) })),
   observedAtMs: Schema.optional(Schema.Finite),
+  tier: Schema.optional(Schema.String),
 });
 export type Quota = typeof Quota.Type;
 export const Started = Schema.Struct({ turnId: Schema.String, disposition: Schema.optional(Schema.String) });

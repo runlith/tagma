@@ -1,5 +1,6 @@
 import { Clock, Deferred, Effect, Result, Schema, type Scope } from 'effect';
 import type { ToolCall } from '@runlith/acp/toolCalls';
+import type { AgentPhase } from '@runlith/agent/AgentPhase';
 import type { TransportFailure } from '@runlith/agent/transcript/entries';
 import { familyRetries, type WireFailureFamily } from '@runlith/llm/schema/errors';
 import { SERVED } from '@runlith/hosted-runner/bridge';
@@ -84,7 +85,7 @@ export const spentOf = (usage: Tokens) => ({
 
 type Spent = ReturnType<typeof spentOf>;
 
-const remainderOf = (whole: Spent, parts: Spent): Spent | undefined => {
+const remainderOf = (whole: Spent, parts: Spent): Spent | 'negative' | undefined => {
   const left = {
     inputTokens: whole.inputTokens - parts.inputTokens,
     outputTokens: whole.outputTokens - parts.outputTokens,
@@ -94,7 +95,8 @@ const remainderOf = (whole: Spent, parts: Spent): Spent | undefined => {
     thoughtTokens: whole.thoughtTokens - parts.thoughtTokens,
   };
   const values = Object.values(left);
-  return values.some((value) => value < 0) || values.every((value) => value === 0) ? undefined : left;
+  if (values.some((value) => value < 0)) return 'negative';
+  return values.every((value) => value === 0) ? undefined : left;
 };
 
 type FeedPorts = {
@@ -110,6 +112,8 @@ type FeedPorts = {
   readonly stderr: (text: string) => void;
   readonly began: Effect.Effect<void>;
   readonly abandon: Effect.Effect<void>;
+  readonly pricedBefore: number | null;
+  readonly priced: (usd: number) => void;
 };
 
 const NOTHING: Spent = spentOf({ inputTokens: 0, outputTokens: 0, cachedTokens: 0, reasoningTokens: 0 });
@@ -134,6 +138,9 @@ export class Feed {
   private modelStarted = false;
   private stopping = false;
   private relinquishing = false;
+  private said: AgentPhase['phase'] | null = null;
+  private latest: string | null = null;
+  private priced: { readonly usd: number; readonly partial: boolean } | null = null;
   private last: TurnCompleted | null = null;
   private whole: Spent = NOTHING;
   private readonly owned: Set<string>;
@@ -163,6 +170,10 @@ export class Feed {
 
   owns(turn: string): boolean {
     return this.owned.has(turn);
+  }
+
+  get current(): string {
+    return this.latest !== null && this.open.has(this.latest) ? this.latest : this.ports.turn;
   }
 
   readonly begin = Effect.fnUntraced(function* (this: Feed) {
@@ -293,6 +304,7 @@ export class Feed {
         if (id === undefined || !this.owned.has(id)) return;
         if (id === turn) yield* this.begin();
         this.open.add(id);
+        this.latest = id;
         if (this.stopping) yield* this.interrupt(id);
         return;
       }
@@ -324,7 +336,7 @@ export class Feed {
         const retry = retries(frame.params);
         if (retry === null || !this.owned.has(retry.turnId)) return;
         this.attempt = retry.attempt;
-        yield* output.event({ type: 'phase', phase: 'retrying' });
+        yield* this.phase('retrying');
         return yield* output.event({
           type: 'notification',
           method: RETRYING,
@@ -360,15 +372,26 @@ export class Feed {
   });
 
   private outcome(ended: TurnCompleted): ClientOutcome {
-    const { turn } = this.ports;
-    const usage = this.whole === NOTHING ? undefined : remainderOf(this.whole, this.spent);
-    if (ended.terminal === 'completed') return { status: 'finished', usage, turn };
-    if (ended.terminal === 'cancelled') return { status: 'cancelled', usage, turn };
+    const { turn, stderr, pricedBefore } = this.ports;
+    const left = this.whole === NOTHING ? undefined : remainderOf(this.whole, this.spent);
+    if (left === 'negative')
+      stderr(
+        `Muse Code reported turn ${turn} spending ${JSON.stringify(this.whole)}, less than its requests measured ${JSON.stringify(this.spent)}; the request spend stands\n`,
+      );
+    const usage = left === 'negative' ? undefined : left;
+    const priced = this.priced;
+    const cost =
+      priced === null || pricedBefore === null || priced.usd < pricedBefore
+        ? undefined
+        : { amount: priced.usd - pricedBefore, currency: 'USD', basis: priced.partial ? 'estimate-partial' : 'estimate' };
+    if (ended.terminal === 'completed') return { status: 'finished', usage, turn, cost };
+    if (ended.terminal === 'cancelled') return { status: 'cancelled', usage, turn, cost };
     const signedOut = ended.error?.kind === 'authRequired';
     return {
       status: 'error',
       usage,
       turn,
+      cost,
       failure: failureOf(ended, this.modelStarted),
       detail: signedOut
         ? `Muse Code is not signed in: run \`${LOGIN}\`, or sign in to Muse Code on the Providers screen. ${ended.error?.message ?? ''}`.trim()
@@ -391,7 +414,7 @@ export class Feed {
         if (opened) {
           this.content();
           this.modelStarted = true;
-          yield* output.event({ type: 'phase', phase: 'reasoning' });
+          yield* this.phase('reasoning');
         }
         if (closed && this.ports.thoughts)
           for (const [part, text] of (item.summary ?? []).entries()) yield* this.delta(item.itemId, `summary.${part}`, text, true);
@@ -401,7 +424,7 @@ export class Feed {
         if (opened) {
           this.content();
           this.modelStarted = true;
-          yield* output.event({ type: 'phase', phase: 'writing' });
+          yield* this.phase('writing');
         }
         if (closed && item.text !== undefined) yield* this.delta(item.itemId, 'text', item.text, true);
         return;
@@ -421,10 +444,10 @@ export class Feed {
             content: text === '' ? undefined : [{ type: 'content', content: { type: 'text', text } }],
           },
         });
-        return yield* output.event({ type: 'phase', phase: 'calling' });
+        return yield* this.phase('calling');
       }
       case 'compaction': {
-        if (opened) return yield* output.event({ type: 'phase', phase: 'compacting' });
+        if (opened) return yield* this.phase('compacting');
         if (!closed) return;
         if (item.outcome === 'compacted')
           yield* output.event({
@@ -434,10 +457,16 @@ export class Feed {
             preTokens: item.tokensBefore,
             postTokens: item.tokensAfter,
           });
-        return yield* output.event({ type: 'phase', phase: 'calling' });
+        return yield* this.phase('calling');
       }
     }
   });
+
+  private phase(phase: AgentPhase['phase']) {
+    if (this.said === phase) return Effect.void;
+    this.said = phase;
+    return this.ports.output.event({ type: 'phase', phase });
+  }
 
   private readonly delta = Effect.fnUntraced(function* (this: Feed, itemId: string, field: string, text: string, whole = false) {
     const { output } = this.ports;
@@ -465,6 +494,11 @@ export class Feed {
     const spent = spentOf(usage.usage);
     this.spent = sum(this.spent, spent);
     this.modelStarted = true;
+    const cost = usage.cumulative?.cost;
+    if (cost !== undefined) {
+      this.priced = cost;
+      this.ports.priced(cost.usd);
+    }
     yield* output.event({
       type: 'usage',
       update: {
@@ -488,7 +522,7 @@ export class Feed {
     });
     this.attempt = 0;
     this.closed = true;
-    return yield* output.event({ type: 'phase', phase: 'calling' });
+    return yield* this.phase('calling');
   });
 
   private readonly announce = Effect.fnUntraced(function* (this: Feed, id: string, tool: string, args: string | undefined) {
@@ -499,7 +533,7 @@ export class Feed {
     const web = tool === 'web_search' || tool === 'web_fetch' ? WEB[tool] : undefined;
     const name = hosted ? tool.slice(SERVED.length) : (web ?? tool);
     this.modelStarted = true;
-    yield* output.event({ type: 'phase', phase: 'tools' });
+    yield* this.phase('tools');
     yield* output.event({
       type: 'call',
       hosted,
