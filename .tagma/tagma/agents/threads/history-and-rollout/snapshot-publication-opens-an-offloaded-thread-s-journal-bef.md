@@ -14,7 +14,7 @@ sources:
   - kind: file
     ref: packages/agent/src/thread/run/ThreadSnapshots.ts
 ---
-A publication that reads the thread again reads its journal under `atCut`, on the projection owner's per-thread drain fiber. Reading a compressed rollout of an offloaded thread, or one whose publication a crash left unsettled (`RolloutForms.readable`), enters the `thread-journal` lane to open or settle it. So that read runs inside `ThreadResidence.reading`: the server opens the rollout (`RestedRollouts.readable`) before `atCut` and holds `rollouts.using` until the read ends. Offload (compresses the file) and forming (drops the form mark and rewrites the file) answer `in-use` and wait for the next access.
+A whole publication reads its journal under `atCut`. Opening a compressed offloaded rollout or settling an interrupted file publication may enter the thread journal lane, so residence prepares that source before `atCut` and holds its use until the read finishes. Offload and background forming refuse an in-use source; otherwise they could change the file during that read.
 
 Order is fixed: first the thread journal lock, then `uses.rest` (`evict`, `rolloutWhole`). Publication is also asked from inside the same thread's journal steps (`afterCommit`, `ensuring`); the step then awaits the drain, and the drain's `using` awaits any running `rest`. When `rest` is taken outside the journal lock, `rest` awaits the lane held by the publishing step, the step awaits the drain, and the drain awaits `rest`. Only the lane's minute ceiling lifts this mutual wait.
 
