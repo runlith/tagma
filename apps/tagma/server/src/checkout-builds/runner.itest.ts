@@ -36,6 +36,13 @@ const checkoutOf = Effect.fnUntraced(function* (script: string) {
   const writeScript = (command: string) => writeFileSync(join(checkout, 'build.command'), command);
   writeScript(script);
   yield* git(checkout, 'init', '-q');
+  const library = join(dir, 'library');
+  mkdirSync(library);
+  writeFileSync(join(library, 'value.txt'), 'pinned\n');
+  yield* git(library, 'init', '-q');
+  yield* git(library, 'add', '.');
+  yield* git(library, 'commit', '-q', '-m', 'pinned');
+  yield* git(checkout, '-c', 'protocol.file.allow=always', 'submodule', 'add', '-q', library, 'lib');
   yield* git(checkout, 'add', '.');
   yield* git(checkout, 'commit', '-q', '-m', 'first');
   const log = join(dir, 'data', 'build.log');
@@ -48,7 +55,7 @@ const checkoutOf = Effect.fnUntraced(function* (script: string) {
       landed: () => Promise.resolve('v9'),
       ...more,
     });
-  return { dir, checkout, builds, log, writeScript };
+  return { dir, checkout, submodule: join(checkout, 'lib'), builds, log, writeScript };
 });
 
 const settled = Effect.fnUntraced(function* (next: NextInstallation['Service'], since: string) {
@@ -131,9 +138,14 @@ it.live('a trial HEAD update builds with the launching home while retaining its 
   }),
 );
 
-it.live('stopping a HEAD build ends its descendants and worktree, and a successor recovers a build its server never saw end', () =>
+it.live('stopping a HEAD build ends its descendants and worktrees, and a successor recovers a build its server never saw end', () =>
   Effect.gen(function* () {
-    const { checkout, dir, builds } = yield* checkoutOf('sleep 30 & echo $! > ../grandchild; wait');
+    const { checkout, submodule, dir, builds } = yield* checkoutOf('sleep 30 & echo $! > ../grandchild; wait');
+    const worktrees = (repository: string) =>
+      Effect.map(
+        git(repository, 'worktree', 'list', '--porcelain'),
+        (listed) => listed.split('\n').filter((line) => line.startsWith('worktree ')).length,
+      );
     const running = yield* builds({ restart: () => Promise.resolve('restart must not be reached after a stop') });
     const first = yield* running.install('head', 'restart', null);
     const grandchild = join(dir, 'data', 'build', 'grandchild');
@@ -143,17 +155,20 @@ it.live('stopping a HEAD build ends its descendants and worktree, and a successo
     expect((yield* Effect.flip(running.install('head', null, 'another'))).code).toBe('install-running');
     expect(yield* running.stop()).toMatchObject({ since: first.installing.since, outcome: 'stopped' });
     expect(alive(sleeper)).toBe(false);
-    expect((yield* git(checkout, 'worktree', 'list')).split('\n')).toHaveLength(1);
+    expect(yield* worktrees(checkout)).toBe(1);
+    expect(yield* worktrees(submodule)).toBe(1);
 
     rmSync(grandchild);
     const crashed = yield* running.install('head', null, null);
     yield* appears(grandchild);
     const orphan = Number(readFileSync(grandchild, 'utf8').trim());
     expect(alive(orphan)).toBe(true);
+    expect(yield* worktrees(submodule)).toBe(2);
     const successor = yield* builds();
     expect((yield* successor.reading).installed).toMatchObject({ since: crashed.installing.since, outcome: 'failed' });
     expect(yield* successor.installing).toBeNull();
     while (alive(orphan)) yield* Effect.sleep('10 millis');
     expect(alive(orphan)).toBe(false);
+    while ((yield* worktrees(submodule)) > 1 || (yield* worktrees(checkout)) > 1) yield* Effect.sleep('10 millis');
   }),
 );
