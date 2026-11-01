@@ -1,6 +1,6 @@
 import { mkdirSync, realpathSync, rmSync } from 'node:fs';
 import { totalmem } from 'node:os';
-import { basename, dirname, join, resolve } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { liveAttempt } from '../installation/closure/attempt.js';
 import { fileURLToPath } from 'node:url';
 import { Cause, Context, Effect, Exit, FileSystem, Layer, Result, Scope, Stream } from 'effect';
@@ -199,13 +199,13 @@ export const serve = async (build: Build): Promise<void> => {
     told: (line) => console.log(`[tagma] ${line}`),
   });
   const standing: Installation | undefined = read.success.handsOut;
-  const executionHostPath = installation === undefined ? resolve(serverPath, '..', '..', '..', 'packages', 'execution-host') : undefined;
+  const executionHostPath = installation === undefined ? join(build.cut.roots.packages, 'execution-host') : undefined;
   const source =
     installation === undefined
       ? await Effect.runPromise(
           phase(
             'source measured',
-            Effect.promise(() => measureProvenance(serverPath)),
+            Effect.promise(() => measureProvenance(build.cut.roots.checkout)),
           ),
         )
       : undefined;
@@ -219,7 +219,7 @@ export const serve = async (build: Build): Promise<void> => {
     installation === undefined
       ? {
           _tag: 'Checkout',
-          path: resolve(serverPath, '..', '..', '..', 'packages', 'execution-host'),
+          path: join(build.cut.roots.packages, 'execution-host'),
           build:
             source?.revision === null || source?.revision === undefined
               ? (source?.startedAt ?? startedAt)
