@@ -1,4 +1,5 @@
 import type { Table } from 'drizzle-orm';
+import type { RowDeclarations } from '@runlith/sqlite-process/channel';
 import { Data, Effect, Layer, type Context } from 'effect';
 import type { EndpointDeclaration, FeedDeclaration, OperationDeclaration } from '../wire/operation.js';
 import type { FeedHandlers } from '../wire/live.js';
@@ -46,6 +47,7 @@ export type Manifest = {
   readonly sections?: readonly DoctrineSection[];
   readonly facts?: readonly DoctrineFact[];
   readonly tables?: () => Promise<{ readonly entities: readonly Table[]; readonly history: readonly Table[] }>;
+  readonly rowFacts?: () => Promise<RowDeclarations>;
   readonly retiredTables?: readonly string[];
   readonly stores?: readonly OwnStore[];
 
@@ -270,6 +272,14 @@ const unique = (loaded: readonly DeclaredOperations[]): readonly DeclaredOperati
     }
   }
   return loaded;
+};
+
+export const rowFactsOf = async (modules: readonly Manifest[]): Promise<RowDeclarations> => {
+  const declarations = await Promise.all(modules.flatMap((module) => (module.rowFacts === undefined ? [] : [module.rowFacts()])));
+  return {
+    rows: declarations.flatMap((declaration) => declaration.rows),
+    selections: declarations.flatMap((declaration) => declaration.selections),
+  };
 };
 
 export const operationsOf = (modules: readonly Manifest[]): Effect.Effect<readonly DeclaredOperations[]> =>

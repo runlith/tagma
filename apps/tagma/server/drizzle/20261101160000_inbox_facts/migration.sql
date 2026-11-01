@@ -1,0 +1,1 @@
+ALTER TABLE `thread_inbox` ADD `owes` integer GENERATED ALWAYS AS (kind = 'signal' and state = 'queued' and delivered_to_run_id is null and json_extract(body, '$.type') in ('command-result', 'tool-result') and json_extract(body, '$.waits') is null) VIRTUAL;

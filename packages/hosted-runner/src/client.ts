@@ -1,4 +1,4 @@
-import { Cause, Deferred, Effect, Exit, type Scope } from 'effect';
+import { Cause, Deferred, Effect, Exit, Option, type Scope } from 'effect';
 import { AgentFault, FAULT, type Outlet } from '@runlith/acp/agent';
 import type { ContentBlock } from '@runlith/acp/content';
 import type { PromptResult } from '@runlith/acp/methods';
@@ -46,7 +46,7 @@ type ClientCompacted = {
   readonly usage?: PromptResult['usage'];
 };
 
-interface ClientCompaction {
+export interface ClientCompaction {
   readonly wait: Effect.Effect<ClientCompacted, AgentFault>;
   readonly cancel: Effect.Effect<void, AgentFault>;
 }
@@ -82,6 +82,7 @@ export const clientSession = Effect.fnUntraced(function* (
   let prepared: Prepared | null = null;
   let current: Running | null = null;
   let compacting: ClientCompaction | null = null;
+  let acquiring: Deferred.Deferred<void> | null = null;
   const handed = client.handed ?? new Handed();
   const output = new Output(client.id, outlet, handed);
   const relay = new Relay(door, handed, {
@@ -99,6 +100,8 @@ export const clientSession = Effect.fnUntraced(function* (
     return run;
   });
   const cancel = Effect.fnUntraced(function* () {
+    const pending = acquiring;
+    if (pending !== null) yield* Deferred.succeed(pending, undefined);
     const stopping = compacting;
     if (stopping !== null) yield* stopping.cancel.pipe(Effect.catchTag('AgentFault', (cause) => process.died(cause.message)));
     const running = current;
@@ -112,13 +115,13 @@ export const clientSession = Effect.fnUntraced(function* (
     cwd: client.cwd,
     configOptions: () => client.configOptions(),
     configure: (id, value) => client.configure(id, value),
-    busy: () => current !== null || compacting !== null,
+    busy: () => current !== null || compacting !== null || acquiring !== null,
     prepare: (input) =>
       Effect.sync(() => {
         prepared = input;
       }),
     start: Effect.fnUntraced(function* (input) {
-      if (current !== null || compacting !== null || prepared === null)
+      if (current !== null || compacting !== null || acquiring !== null || prepared === null)
         return yield* new AgentFault({ code: FAULT.invalidRequest, message: 'This agent has no prepared idle turn' });
       const frozen = prepared;
       prepared = null;
@@ -182,10 +185,27 @@ export const clientSession = Effect.fnUntraced(function* (
         : Effect.fnUntraced(function* (instructions, at) {
             if (at === 'step')
               return yield* new AgentFault({ code: UNSTEPPED, message: 'this agent compacts its session only between turns' });
-            if (current !== null || compacting !== null)
+            if (current !== null || compacting !== null || acquiring !== null)
               return yield* new AgentFault({ code: FAULT.invalidRequest, message: 'this session is busy; compaction runs between turns' });
-            const compaction = yield* compact(instructions, output);
-            compacting = compaction;
+            const halted = yield* Deferred.make<void>();
+            acquiring = halted;
+            const acquired = yield* Effect.raceFirst(
+              Effect.map(compact(instructions, output), (compaction) => {
+                compacting = compaction;
+                acquiring = null;
+                return Option.some(compaction);
+              }),
+              Effect.as(Deferred.await(halted), Option.none<ClientCompaction>()),
+            ).pipe(
+              Effect.ensuring(
+                Effect.sync(() => {
+                  if (acquiring === halted) acquiring = null;
+                }),
+              ),
+            );
+            if (Option.isNone(acquired))
+              return yield* new AgentFault({ code: CANCELLED, message: 'the compaction was cancelled before the agent began it' });
+            const compaction = acquired.value;
             return yield* compaction.wait.pipe(
               Effect.ensuring(
                 Effect.sync(() => {

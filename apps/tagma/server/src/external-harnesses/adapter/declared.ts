@@ -31,13 +31,19 @@ const markOf = (provider: HarnessProvider): string | undefined => provider.mark 
 
 const labelOf = (provider: HarnessProvider): string => provider.harnessLabel ?? provider.label;
 
+const declaredEnv = (provider: HarnessProvider): Record<string, string> =>
+  provider.auth === 'cli'
+    ? Object.fromEntries(provider.environment(null).flatMap((entry) => (entry._tag === 'Set' ? [[entry.name, entry.value]] : [])))
+    : {};
+
 const acpOnly = (provider: HarnessProvider, acp: AcpProfile): HarnessAdapter => ({
   harness: provider.id,
   label: labelOf(provider),
   mark: markOf(provider),
   prefix: provider.id,
-  binary: acp.argv(undefined)[0] ?? provider.id,
+  binary: acp.program ?? acp.argv(undefined)[0] ?? provider.id,
   ...ACP_ONLY,
+  env: declaredEnv(provider),
   launch: null,
   acp,
 });

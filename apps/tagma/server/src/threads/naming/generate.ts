@@ -19,7 +19,7 @@ import { writes } from '../../platform/contract/service/writes.js';
 import type { HarnessId } from '../../platform/contract/wire/session.js';
 import type { HarnessName } from '../contract/wire/harness/names.js';
 import { HarnessRegistry, type Harness } from '../contract/service/harness.js';
-import { threadRecord } from '../../thread-record/store/table.js';
+import { recordRows } from '../../thread-record/store/table.js';
 import { Settings } from '../../settings/contract/service/values.js';
 import { autoTitle, titleCharacters, TITLE_CHARACTERS_MAX, titleModel } from '../contract/wire/settings.js';
 import {
@@ -294,7 +294,7 @@ export const makeThreadNaming = Effect.fnUntraced(function* ({
       metadata,
       Effect.gen(function* () {
         const write = (title: string) =>
-          units.write(writes('ThreadNaming.name', [threadRecord]), (unit) => records.nameTitle(unit, thread.id, title, revision));
+          units.write(writes('ThreadNaming.name', [recordRows]), (unit) => records.nameTitle(unit, thread.id, title, revision));
         const selection = yield* asks
           .choose('text', yield* settings.value(titleModel, projectId), {
             provider: thread.provider,
@@ -336,7 +336,7 @@ export const makeThreadNaming = Effect.fnUntraced(function* ({
       function* (aside) {
         if (aside.readerInput === null) return;
         const readerInput = aside.readerInput;
-        const claimed = yield* units.write(writes('ThreadNaming.claim', [threadRecord]), (unit) =>
+        const claimed = yield* units.write(writes('ThreadNaming.claim', [recordRows]), (unit) =>
           records.claimTitleInput(unit, threadId, readerInput),
         );
         if (claimed === undefined) return;
@@ -349,7 +349,7 @@ export const makeThreadNaming = Effect.fnUntraced(function* ({
           aside,
           { source: 'captured' },
           (title) =>
-            units.write(writes('ThreadNaming.name', [threadRecord]), (unit) => records.nameTitle(unit, threadId, title, claimed.revision)),
+            units.write(writes('ThreadNaming.name', [recordRows]), (unit) => records.nameTitle(unit, threadId, title, claimed.revision)),
           placement,
         );
         if (outcome === null) {
@@ -443,7 +443,7 @@ export const makeThreadNaming = Effect.fnUntraced(function* ({
           held,
           { source: 'captured' },
           (title) =>
-            units.write(writes('ThreadNaming.name', [threadRecord]), (unit) => records.nameTitle(unit, threadId, title, identity.revision)),
+            units.write(writes('ThreadNaming.name', [recordRows]), (unit) => records.nameTitle(unit, threadId, title, identity.revision)),
           placement,
         );
         if (captured !== null) {
@@ -469,7 +469,7 @@ export const makeThreadNaming = Effect.fnUntraced(function* ({
       const excerpts = yield* material(thread, items);
       const input = titleContext(excerpts, Math.min(TITLE_CHARACTERS_MAX, yield* settings.value(titleCharacters, thread.projectId)));
       if (input === '') return;
-      const claimed = yield* units.write(writes('ThreadNaming.claim', [threadRecord]), (unit) =>
+      const claimed = yield* units.write(writes('ThreadNaming.claim', [recordRows]), (unit) =>
         records.claimTitleInput(unit, threadId, input),
       );
       if (claimed === undefined) return;

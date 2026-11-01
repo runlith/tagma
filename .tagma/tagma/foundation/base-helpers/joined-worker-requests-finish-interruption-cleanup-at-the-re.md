@@ -8,10 +8,10 @@ edges:
     to: 01a190c6-9088-7be5-8efe-8b03a3cb3d23
 sources:
   - kind: file
-    ref: packages/utils/src/worker.ts
-  - kind: file
     ref: apps/tagma/server/src/native-harness/transcript/restedWork.ts
   - kind: file
     ref: apps/tagma/server/src/threads/journal/restScan.ts
+  - kind: file
+    ref: packages/utils/src/worker.ts
 ---
 A request can survive cancellation of its waiting fiber. Callers that own paths or other resources used remotely join the request so their cleanup waits for its reply, or for the worker's close event after a transport failure. Response-only callers can still abandon their waiter without joining it. The rested-fold owner retains its worker links in its scope; closing it refuses new requests and joins each worker's close, including idle and retiring workers, before the owner is released.

@@ -88,7 +88,12 @@ export const makeInstalledHarnesses = Effect.fnUntraced(function* (input: { read
       );
     return exists ? dir : null;
   });
-  const probed = Effect.fn('InstalledHarnesses.probe')(function* (candidate: string, path: string, budget: number) {
+  const probed = Effect.fn('InstalledHarnesses.probe')(function* (
+    candidate: string,
+    path: string,
+    budget: number,
+    declared: Readonly<Record<string, string>>,
+  ) {
     const born = generation;
     const file = yield* fileKey(candidate);
     const key = file === null ? null : `${file}\u0000${path}`;
@@ -100,7 +105,12 @@ export const makeInstalledHarnesses = Effect.fnUntraced(function* (input: { read
       const child = yield* Effect.acquireRelease(
         Effect.try({
           try: () =>
-            Bun.spawn([candidate, '--version'], { stdin: 'ignore', stdout: 'pipe', stderr: 'ignore', env: { ...process.env, PATH: path } }),
+            Bun.spawn([candidate, '--version'], {
+              stdin: 'ignore',
+              stdout: 'pipe',
+              stderr: 'ignore',
+              env: { ...process.env, ...declared, PATH: path },
+            }),
           catch: refused,
         }),
         (child) =>
@@ -140,7 +150,7 @@ export const makeInstalledHarnesses = Effect.fnUntraced(function* (input: { read
       const runtime = yield* runtimeOf(candidate, path);
       const budget = second === null ? budgetMs : Math.max(1, Math.floor(second / (candidates.length - at)));
       const startedAt = yield* Clock.currentTimeMillis;
-      const answer = yield* probed(candidate, pathWith(runtime, path), budget);
+      const answer = yield* probed(candidate, pathWith(runtime, path), budget, adapter.env ?? {});
       if (second !== null) second = Math.max(0, second - ((yield* Clock.currentTimeMillis) - startedAt));
       if (answer._tag === 'Answered') {
         const found: Found = {

@@ -1,5 +1,6 @@
 import { Effect } from 'effect';
 import { foldedReferences } from '@runlith/agent/AgentDeferredTools';
+import { vendorBoundaryMessage } from '@runlith/agent/AgentSignal';
 import { requestDeployment } from '@runlith/agent/thread/cache/ThreadCacheWarmth';
 import { Message } from '@runlith/llm/schema/messages';
 import { Usage } from '@runlith/llm/schema/events';
@@ -19,7 +20,13 @@ import type {
   ReportResult,
   RunEnding,
 } from '@runlith/agent/thread/run/lifecycle/RunReports';
-import { threadCompactionEvent, threadGuidanceEvent, threadUserMessageEvent, type ThreadEventBody } from '@runlith/agent/thread/events';
+import {
+  threadCompactionEvent,
+  threadGuidanceEvent,
+  threadRunMessagesEvent,
+  threadUserMessageEvent,
+  type ThreadEventBody,
+} from '@runlith/agent/thread/events';
 import type { StoredThreadAttachment } from '@runlith/agent/thread/attachmentStorage';
 import type { ThreadWordFate } from '@runlith/agent/thread/storage/inbox';
 import type { ThreadCompactionEntry, ThreadEntry, ThreadQuestionEntry, ThreadToolEntry } from '@runlith/agent/transcript/entries';
@@ -32,7 +39,13 @@ import type { NativeStorage } from '../../threads/contract/service/engine.js';
 import type { NativeThreadState } from '../../threads/contract/service/state.js';
 import type { ThreadAttachmentStore } from '../../threads/resources/attachments.js';
 import type { ThreadInbox } from '../../threads/store/inbox.js';
-import { type HarnessTurnBegun, type HarnessTurnContext, type HarnessTurnEnded, type HarnessTurnStep } from './turns.js';
+import {
+  type HarnessTurnBegun,
+  type HarnessTurnContext,
+  type HarnessTurnEnded,
+  type HarnessTurnMessage,
+  type HarnessTurnStep,
+} from './turns.js';
 
 const readingOf = (
   models: ModelCatalog,
@@ -82,7 +95,7 @@ const eventsOf = (
   entries: readonly ThreadEntry[],
   history: readonly Message[],
   opened: number,
-  messages?: readonly Message[],
+  messages?: readonly HarnessTurnMessage[],
 ): readonly ThreadEventBody[] => {
   let length = history.length + opened;
   return [
@@ -94,16 +107,30 @@ const eventsOf = (
           payload: { entry, messages: [entry.role === 'user' ? Message.user(entry.text) : Message.assistant(entry.text)] },
         };
       }
-      if (entry.type === 'compaction' && entry.status === 'completed' && entry.summary !== undefined) {
+      if (entry.type === 'compaction' && entry.status === 'completed' && entry.summary !== undefined && entry.summary !== '') {
         const keepFrom = length;
         length = 1;
         const head = Message.make({ role: 'user', content: entry.summary, metadata: foldedReferences(history) });
         return threadCompactionEvent(entry, { keepFrom, messages: [head] });
       }
+      if (entry.type === 'compaction' && entry.status === 'completed' && entry.summary === '') {
+        length += 1;
+        return { kind: entry.type, payload: { entry, messages: [vendorBoundaryMessage()] } };
+      }
       return { kind: entry.type, payload: { entry } };
     }),
-    ...(messages?.length ? [{ kind: 'message', payload: { messages } }] : []),
+    ...byRun(messages ?? []),
   ];
+};
+
+const byRun = (messages: readonly HarnessTurnMessage[]): readonly ThreadEventBody[] => {
+  const runs: { turn: string; messages: Message[] }[] = [];
+  for (const { turn, message } of messages) {
+    const last = runs.at(-1);
+    if (last?.turn === turn) last.messages.push(message);
+    else runs.push({ turn, messages: [message] });
+  }
+  return runs.map((run) => threadRunMessagesEvent(run.turn, run.messages));
 };
 
 const saidOf = (begun: HarnessTurnBegun, pictured: ReadonlyMap<string, readonly StoredThreadAttachment[]>) => {

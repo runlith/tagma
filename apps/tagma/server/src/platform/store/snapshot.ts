@@ -3,7 +3,8 @@ import { open, readFile, readdir, rm, stat } from 'node:fs/promises';
 import { basename, dirname, join, resolve } from 'node:path';
 import { sql } from 'drizzle-orm';
 import { makeWithDefaults } from 'drizzle-orm/effect-sqlite-bun';
-import { sqliteProcessLayer } from '@runlith/sqlite-process/SqliteProcess';
+import { RowCommits, sqliteProcessLayer } from '@runlith/sqlite-process/SqliteProcess';
+import type { RowDeclarations } from '@runlith/sqlite-process/channel';
 import type { ProcessPool } from '@runlith/sqlite-process/ProcessPool';
 import { Effect, Schema, Semaphore } from 'effect';
 import { makeDirectory, requireSpace } from '../durable/files.js';
@@ -183,6 +184,7 @@ export const restoreParticipantInto = Effect.fnUntraced(function* (
 export function storeSnapshots(
   participants: Readonly<Record<string, SnapshotParticipant>>,
   processes: ProcessPool,
+  rowFacts?: (path: string) => Promise<RowDeclarations>,
 ): StoreSnapshots['Service'] {
   const registered = Object.entries(participants);
   const retire = new Map<string, string>();
@@ -415,6 +417,7 @@ export function storeSnapshots(
         }
         const losses: SnapshotLoss[] = [];
         const publications: SnapshotPublication[] = [];
+        const facts = rowFacts === undefined ? undefined : yield* Effect.promise(() => rowFacts(path));
         const tables = manifest.tables.filter((table) => table.data).map((table) => table.name);
         yield* snapshotIO(path, async () => {
           for (const suffix of ['', '-wal', '-shm']) await rm(`${paths.staging}${suffix}`, { force: true });
@@ -493,6 +496,7 @@ export function storeSnapshots(
                 (yield* foreignKeys(db)).filter((key) => touched.has(key.parent.toLowerCase()) && existed.has(key.parent.toLowerCase())),
               );
               yield* restoreTables(db, manifest.tables, manifest.objects, manifest.rebuilt);
+              if (facts !== undefined && facts.rows.length > 0) yield* RowCommits.use((rows) => rows.reset(facts.rows));
               const checked = yield* checkKeys(db, captures, {
                 existed,
                 touched,
@@ -528,6 +532,7 @@ export function storeSnapshots(
                 readers: 0,
                 synchronous: 'full',
                 fullfsync: process.platform === 'darwin',
+                projectionWrite: () => 'effects',
                 onLost: (reason) => console.error(`[tagma] snapshot restore connection lost: ${reason}`),
               },
               processes,

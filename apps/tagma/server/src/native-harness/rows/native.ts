@@ -7,7 +7,7 @@ import { MachineStore, type StoreFailure } from '../../platform/contract/service
 import { MachineUnits, type Unit, type WriteUnit } from '../../platform/contract/service/units.js';
 import { type WriteSet, writes } from '../../platform/contract/service/writes.js';
 import { threadCompactionCheckpoint } from '../store/thread.js';
-import { thread, threadRun, stalledKernelThread, unparkedRun } from '../../threads/store/kernel.js';
+import { nativeRows, thread, threadRun, stalledKernelThread, unparkedRun } from '../../threads/store/kernel.js';
 import { roadOf, seatKernel } from '../../threads/store/seat.js';
 import type { HarnessRoad, HarnessSeat } from '../../threads/contract/wire/harness/seat.js';
 import { HARNESS_AGENT_ID } from '../../threads/contract/wire/harness/names.js';
@@ -318,7 +318,7 @@ export const makeNativeThreadRows = Effect.fnUntraced(function* ({ threads }: { 
       ),
     advanceWorldState: (id: string, state: WorldStateRecord, tx?: Unit<'machine'>) =>
       advance(
-        writes('NativeThreadRows.advanceWorldState', [thread]),
+        writes('NativeThreadRows.advanceWorldState', [nativeRows]),
         (unit) =>
           Effect.asVoid(
             unit.run(
@@ -332,7 +332,7 @@ export const makeNativeThreadRows = Effect.fnUntraced(function* ({ threads }: { 
       ),
     advanceGraphCursor: (id: string, through: { eventId: number }, tx?: Unit<'machine'>) =>
       advance(
-        writes('NativeThreadRows.advanceGraphCursor', [thread]),
+        writes('NativeThreadRows.advanceGraphCursor', [nativeRows]),
         (unit) => Effect.asVoid(unit.run(db.update(thread).set({ contextEventId: through.eventId }).where(eq(thread.id, id)))),
         tx,
       ),

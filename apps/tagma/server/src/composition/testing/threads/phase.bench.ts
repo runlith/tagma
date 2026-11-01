@@ -1,6 +1,6 @@
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import * as BunRuntime from '@effect/platform-bun/BunRuntime';
-import type { ThreadOpenChange } from '@runlith/agent/transcript/live';
+import type { ThreadLivePosition, ThreadOpenChange } from '@runlith/agent/transcript/live';
 import { Clock, Effect, Layer } from 'effect';
 import { demoGraphLayer, withDemo } from '../graphFixture.js';
 import { makeThreadRecords } from '../../../thread-record/layer.js';
@@ -54,7 +54,7 @@ const main = withDemo((demo) =>
         return made;
       }),
     );
-    const emitters = new Map<string, (changes: readonly ThreadOpenChange[]) => void>();
+    const emitters = new Map<string, (changes: readonly ThreadOpenChange[], at: ThreadLivePosition) => void>();
     const phases = yield* Effect.acquireRelease(
       Effect.sync(() =>
         threadPhaseFeed({
@@ -64,8 +64,7 @@ const main = withDemo((demo) =>
               emitters.delete(threadId);
             };
           },
-          view: () => ({ at: { position: 0, seq: 0 }, open: [], progress: null }),
-          journal: (_threadId, _runId, deliver) => deliver([]),
+          cut: (_threadId, deliver) => deliver(null),
           onChanged: () => {},
         }),
       ),
@@ -73,12 +72,15 @@ const main = withDemo((demo) =>
     );
     for (const [index, id] of ids.entries()) {
       phases.follow(id, `run-${index}`);
-      emitters.get(id)?.([
-        {
-          op: 'put',
-          entry: { type: 'tool', id: `call-${index}`, toolCallId: `call-${index}`, toolName: 'read', toolState: 'input-available' },
-        },
-      ]);
+      emitters.get(id)?.(
+        [
+          {
+            op: 'put',
+            entry: { type: 'tool', id: `call-${index}`, toolCallId: `call-${index}`, toolName: 'read', toolState: 'input-available' },
+          },
+        ],
+        { incarnation: 'bench', runId: `run-${index}`, at: { position: 1, seq: 1 } },
+      );
     }
     let published = 0;
     const publish = (_row: ReturnType<typeof asThreadSummary> & { readonly phase: ReturnType<typeof phases.phaseOf> }): void => {

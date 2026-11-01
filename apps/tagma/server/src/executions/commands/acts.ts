@@ -24,13 +24,8 @@ import { type TerminalWaitAnswer } from '../contract/wire/terminals.js';
 import type { TerminalOperationKey } from '../contract/wire/requestKeys.js';
 import { writes } from '../../platform/contract/service/writes.js';
 import { commandDeliveryOwed } from '../contract/wire/commands.js';
-import {
-  commandDelivery,
-  commandWait as commandWaitTable,
-  terminalIntent,
-  terminalRequestKey,
-  terminalRequestKeyTally,
-} from '../store/terminal.js';
+import { commandWait as commandWaitTable, terminalIntent, terminalRequestKey, terminalRequestKeyTally } from '../store/terminal.js';
+import { deliveryRows } from '../contract/service/commands.js';
 import type { AwaitPreparation, ObservePreparation, RevisePreparation } from '../contract/service/access.js';
 import type { TerminalFailure } from '../contract/service/terminals.js';
 import type { CommandAuthority } from '../contract/service/commands.js';
@@ -162,7 +157,7 @@ export const makeCommandActs = Effect.fnUntraced(function* ({ installation }: { 
   const measuredCommand = (execution: ExecutionRef, words: string): Effect.Effect<void, TerminalFailure> =>
     waiters.measured(execution, words);
 
-  const foregroundMoves = writes('commandActs.foregroundCommand', [commandWaitTable, commandDelivery]);
+  const foregroundMoves = writes('commandActs.foregroundCommand', [commandWaitTable, deliveryRows]);
 
   const foregroundCommand = Effect.fn('Terminals.foregroundCommand')(function* (
     execution: ExecutionRef,

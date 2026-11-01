@@ -125,7 +125,7 @@ const world = Effect.fnUntraced(function* () {
     working: unused,
     sweepRelation: unused,
     serveArchiving: unused,
-    serveOpenCalls: unused,
+    serveCuts: unused,
     setArchived: unused,
     setArchivedMatching: unused,
     setPinned: unused,

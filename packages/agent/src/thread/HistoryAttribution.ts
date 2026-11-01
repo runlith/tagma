@@ -194,8 +194,8 @@ export class HistoryAttribution {
     if (run !== undefined && id !== null) this.runs = HashMap.set(this.runs, id, { ...run, messages: run.messages + by });
   }
   private see(position: number, event: ThreadEventBody): string | null {
-    const { entry, context, withdrawn } = event.payload;
-    const named = entry?.runId ?? context?.runId ?? withdrawn?.runId ?? null;
+    const { entry, context, withdrawn, runId } = event.payload;
+    const named = entry?.runId ?? context?.runId ?? runId ?? withdrawn?.runId ?? null;
     if (named === null) return null;
     let run = this.run(named);
     if (run === undefined) {
@@ -219,7 +219,7 @@ export class HistoryAttribution {
       if (this.open === named) this.open = null;
     } else if (!run.ended) this.open = named;
     this.runs = HashMap.set(this.runs, named, run);
-    return entry?.runId ?? context?.runId ?? null;
+    return entry?.runId ?? context?.runId ?? runId ?? null;
   }
   private compact(position: number, keepFrom: number, messages: readonly Message[]): void {
     const held = Chunk.toReadonlyArray(this.held);

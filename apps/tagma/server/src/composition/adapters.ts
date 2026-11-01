@@ -55,7 +55,11 @@ export const BUILTIN_ADAPTERS: readonly Builtin[] = [
     id: 'gemini',
     load: async () => (await import('@runlith/adapter-google/harness')).gemini,
   }),
-  builtin('muse', () => import('@runlith/adapter-muse/adapter')),
+  builtin('muse', () => import('@runlith/adapter-muse/adapter'), {
+    id: 'muse-code',
+    load: async () => (await import('@runlith/adapter-muse/harness')).museCode,
+    runner: async () => (await import('@runlith/adapter-muse/runner')).museCodeRunner,
+  }),
   builtin('devin', () => import('@runlith/adapter-devin/adapter'), {
     id: 'devin',
     load: async () => (await import('@runlith/adapter-devin/harness')).devin,

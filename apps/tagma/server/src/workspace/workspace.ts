@@ -57,6 +57,7 @@ export const workspace = manifest({
       history: [environmentUse],
     };
   },
+  rowFacts: async () => ({ rows: [(await import('./store/tables.js')).placementRows.raw], selections: [] }),
   drivers: [{ id: 'root-healing' }, { id: 'commit-trees-sweep' }],
   lifetimes: {
     installation: lazyLayer(

@@ -15,6 +15,7 @@ import { operationCatalog } from './operationCatalog.js';
 import { OperationSubjects } from '../enforcement/contract/service/operationSubjects.js';
 import type { Assembly } from './manifest.js';
 import { OperationOwners } from '../platform/contract/service/operationOwners.js';
+import { rowFactsOf } from '../platform/contract/service/manifest.js';
 
 export class AssemblyInvalid extends Data.TaggedError('AssemblyInvalid')<{
   readonly unregistered: readonly { readonly key: string; readonly by: string }[];
@@ -66,7 +67,7 @@ export const start = Effect.fn('composition.start')(function* (
   const maintenance = yield* Deferred.make<void>();
   const graphMigrations: MigrationChain<'graph'> = { folder, seeds, snapshots };
   return {
-    migrations: { folder, seeds, snapshots },
+    migrations: { folder, seeds, snapshots, rowFacts: () => rowFactsOf(assembly.modules) },
     graphMigrations,
     bindings: Context.make(SessionIdentity, identity).pipe(
       Context.add(GrantSigner, grants),

@@ -3,8 +3,6 @@ import { it } from '@runlith/effect-test';
 import { Effect } from 'effect';
 import { threadStoreFixture } from '../threadStoreFixture.js';
 import type { ThreadRecords } from '../../../thread-record/contract/service/records.js';
-import { writes } from '../../../platform/contract/service/writes.js';
-import { threadRecord } from '../../../thread-record/testing/doubles.js';
 import { readThreadTitle } from '../../../threads/testing/doubles.js';
 
 const titleIdentity = (records: ThreadRecords['Service'], id: string) =>
@@ -16,12 +14,10 @@ const born = Effect.fnUntraced(function* (title?: string) {
   const { records, store, threads, units, projectId } = yield* threadStoreFixture;
   const titles = {
     identity: (id: string) => titleIdentity(records, id),
-    setTitle: (id: string, title: string) =>
-      units.write(writes('ThreadTitles.setTitle', [threadRecord()]), (unit) => records.setTitle(unit, id, title, 'manual')),
+    setTitle: (id: string, title: string) => units.write(records.writes, (unit) => records.setTitle(unit, id, title, 'manual')),
     name: (id: string, title: string, expected: number) =>
-      units.write(writes('ThreadTitles.name', [threadRecord()]), (unit) => records.nameTitle(unit, id, title, expected)),
-    claim: (id: string, input: string) =>
-      units.write(writes('ThreadTitles.claim', [threadRecord()]), (unit) => records.claimTitleInput(unit, id, input)),
+      units.write(records.writes, (unit) => records.nameTitle(unit, id, title, expected)),
+    claim: (id: string, input: string) => units.write(records.writes, (unit) => records.claimTitleInput(unit, id, input)),
   };
   const created = yield* units.write('ThreadTitles.created', (unit) =>
     Effect.gen(function* () {

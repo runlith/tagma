@@ -8,14 +8,19 @@ import {
   type SqliteReply,
   type SqliteRequest,
   type SqliteSaid,
+  type SelectionWork,
 } from './channel.js';
 import { checkEngine } from './engine.js';
+import { makeRowCapture, type RowCapture } from './capture.js';
+import { PROJECTION_BYTES } from './channel.js';
 
 const CHECKPOINT_PAGES = 1000;
 const STATEMENTS = 512;
 
 Database.MAX_QUERY_CACHE_SIZE = Math.max(Database.MAX_QUERY_CACHE_SIZE, STATEMENTS);
 const EXPLAIN = /^(?:[\s;]|--[^\n]*(?:\n|$)|\/\*[\s\S]*?\*\/)*explain\b/i;
+const WRITE =
+  /^(?:[\s;]|--[^\n]*(?:\n|$)|\/\*[\s\S]*?\*\/)*(?:(?:insert|update|delete|replace)\b|with\b[\s\S]*\b(?:insert|update|delete|replace)\b)/i;
 
 export type SqliteHost = {
   readonly answer: (request: SqliteRequest, queueMs: number) => SqliteSaid;
@@ -30,12 +35,14 @@ export type SqliteHost = {
 export const busy = (said: SqliteSaid): boolean =>
   said._tag === 'Failed' && (said.thrown.code === 'SQLITE_BUSY' || said.thrown.errno === 5);
 
-const applied = (db: Database, program: SqliteProgram): ProgramOutcome => {
+const applied = (db: Database, program: SqliteProgram, capture?: RowCapture, budget?: number): ProgramOutcome => {
   const started = performance.now();
   db.run('SAVEPOINT program');
   let at = 0;
   const returned: ReturnedRows[] = [];
   try {
+    capture?.begin(budget);
+    capture?.authorize(program.projections ?? []);
     for (; at < program.statements.length; at += 1) {
       const step = program.statements[at]!;
       const statement = db.query(step.sql);
@@ -54,9 +61,10 @@ const applied = (db: Database, program: SqliteProgram): ProgramOutcome => {
         return { _tag: 'Conflict', statement: at, expected: step.expect, actual: count, execMs: performance.now() - started };
       }
     }
+    const rows = capture?.seal();
     db.run('RELEASE program');
     const execMs = performance.now() - started;
-    return returned.length === 0 ? { _tag: 'Applied', execMs } : { _tag: 'Applied', execMs, returned };
+    return { _tag: 'Applied', execMs, ...(returned.length === 0 ? {} : { returned }), ...(rows === undefined ? {} : { rows }) };
   } catch (cause) {
     if (!db.inTransaction) throw cause;
     db.run('ROLLBACK TO program');
@@ -69,11 +77,14 @@ export const makeSqliteHost = (reply: (said: SqliteReply) => void, waits: 'engin
   const databases = new Map<number, Database>();
   const writers = new Map<number, string>();
   const timeouts = new Map<number, number>();
+  const captures = new Map<number, RowCapture>();
+  const rebound = new Map<number, RowCapture | undefined>();
   let maintaining = false;
 
   const answer = (connection: number, ask: SqliteAsk, queueMs: number): SqliteSaid => {
     const started = performance.now();
     const db = databases.get(connection);
+    const projectionWork: SelectionWork[] = [];
     try {
       switch (ask._tag) {
         case 'Open': {
@@ -100,22 +111,90 @@ export const makeSqliteHost = (reply: (said: SqliteReply) => void, waits: 'engin
             writers.set(connection, ask.config.filename);
           return { _tag: 'Did', id: ask.id };
         }
+        case 'Project': {
+          if (ask.reset === true) {
+            if (!db!.inTransaction) throw new Error('A row reset must rebind inside the restoring transaction.');
+            if (!rebound.has(connection)) rebound.set(connection, captures.get(connection));
+            captures.set(connection, makeRowCapture(db!, ask.projections, [], true));
+          } else {
+            if (captures.has(connection) || db!.inTransaction)
+              throw new Error('Row capture must be installed once, after schema setup and outside a transaction.');
+            if (ask.projections.length > 0) captures.set(connection, makeRowCapture(db!, ask.projections, ask.selections));
+          }
+          return { _tag: 'Did', id: ask.id };
+        }
         case 'Run': {
+          const capture = captures.get(connection);
+          if (capture !== undefined && !db!.inTransaction && WRITE.test(ask.sql)) {
+            db!.run('BEGIN IMMEDIATE');
+            try {
+              capture.begin();
+              capture.authorize(ask.projections ?? []);
+              const statement = db!.query(ask.sql);
+              statement.safeIntegers(ask.safeIntegers);
+              const rows =
+                ask.shape === 'values' ? (statement.values(...(ask.params as [])) ?? []) : (statement.all(...(ask.params as [])) ?? []);
+              const sealed = capture.seal();
+              projectionWork.push(...capture.work());
+              db!.run('COMMIT');
+              const returnedAt = performance.now();
+              return {
+                _tag: 'Rows',
+                id: ask.id,
+                rows,
+                queueMs,
+                execMs: returnedAt - started,
+                commitReturnedAt: performance.timeOrigin + returnedAt,
+                ...(sealed === undefined ? {} : { commits: [sealed] }),
+                ...(projectionWork.length === 0 ? {} : { projectionWork }),
+              };
+            } catch (cause) {
+              if (db!.inTransaction) db!.run('ROLLBACK');
+              throw cause;
+            }
+          }
+          capture?.authorize(db!.inTransaction ? (ask.projections ?? []) : []);
+          const commit = /^COMMIT\s*;?$/i.test(ask.sql.trim());
+          const begin = /^BEGIN\b/i.test(ask.sql.trim());
           const explained = EXPLAIN.test(ask.sql);
           const statement = explained ? db!.prepare(ask.sql) : db!.query(ask.sql);
+          let sealing = false;
           try {
+            if (commit && capture !== undefined) {
+              db!.run('SAVEPOINT __row_seal');
+              sealing = true;
+            }
+            const sealed = sealing ? capture!.seal() : undefined;
+            if (sealing) projectionWork.push(...capture!.work());
             statement.safeIntegers(ask.safeIntegers);
             const rows =
               ask.shape === 'values' ? (statement.values(...(ask.params as [])) ?? []) : (statement.all(...(ask.params as [])) ?? []);
             const returnedAt = performance.now();
+            sealing = false;
+            if (begin) capture?.begin();
+            if (commit) rebound.delete(connection);
+            if (/^ROLLBACK\s*;?$/i.test(ask.sql.trim()) && rebound.has(connection)) {
+              const previous = rebound.get(connection);
+              if (previous === undefined) captures.delete(connection);
+              else captures.set(connection, previous);
+              rebound.delete(connection);
+            }
             return {
               _tag: 'Rows',
               id: ask.id,
               rows,
               queueMs,
               execMs: returnedAt - started,
-              commitReturnedAt: ask.sql === 'COMMIT' ? performance.timeOrigin + returnedAt : undefined,
+              commitReturnedAt: commit ? performance.timeOrigin + returnedAt : undefined,
+              ...(sealed === undefined ? {} : { commits: [sealed] }),
+              ...(projectionWork.length === 0 ? {} : { projectionWork }),
             };
+          } catch (cause) {
+            if (sealing && db!.inTransaction) {
+              db!.run('ROLLBACK TO __row_seal');
+              db!.run('RELEASE __row_seal');
+            }
+            throw cause;
           } finally {
             if (explained) statement.finalize();
           }
@@ -130,6 +209,8 @@ export const makeSqliteHost = (reply: (said: SqliteReply) => void, waits: 'engin
           databases.delete(connection);
           writers.delete(connection);
           timeouts.delete(connection);
+          captures.delete(connection);
+          rebound.delete(connection);
           return { _tag: 'Did', id: ask.id };
         case 'Checkpoint': {
           const checkpoint = new Database(ask.filename, { readwrite: true, create: false });
@@ -151,7 +232,14 @@ export const makeSqliteHost = (reply: (said: SqliteReply) => void, waits: 'engin
           if (ask.synchronous !== null) db!.run(`PRAGMA synchronous = ${ask.synchronous.toUpperCase()}`);
           db!.run('BEGIN IMMEDIATE');
           try {
-            const outcomes = ask.programs.map((program) => applied(db!, program));
+            const capture = captures.get(connection);
+            let budget = PROJECTION_BYTES;
+            const outcomes = ask.programs.map((program, index) => {
+              const outcome = applied(db!, program, capture, budget);
+              projectionWork.push(...(capture?.work() ?? []).map((work) => ({ ...work, program: index })));
+              if (outcome._tag === 'Applied' && outcome.rows !== undefined) budget = Math.max(0, budget - capture!.bytes());
+              return outcome;
+            });
             db!.run('COMMIT');
             const returnedAt = performance.now();
             return {
@@ -161,6 +249,7 @@ export const makeSqliteHost = (reply: (said: SqliteReply) => void, waits: 'engin
               queueMs,
               execMs: returnedAt - started,
               commitReturnedAt: performance.timeOrigin + returnedAt,
+              ...(projectionWork.length === 0 ? {} : { projectionWork }),
             };
           } catch (cause) {
             if (db!.inTransaction) db!.run('ROLLBACK');
@@ -174,7 +263,14 @@ export const makeSqliteHost = (reply: (said: SqliteReply) => void, waits: 'engin
           return { _tag: 'Did', id: ask.id };
       }
     } catch (cause) {
-      return { _tag: 'Failed', id: ask.id, thrown: thrownShapeOf(cause), queueMs, execMs: performance.now() - started };
+      return {
+        _tag: 'Failed',
+        id: ask.id,
+        thrown: thrownShapeOf(cause),
+        queueMs,
+        execMs: performance.now() - started,
+        ...(projectionWork.length === 0 ? {} : { projectionWork }),
+      };
     }
   };
 
@@ -203,6 +299,8 @@ export const makeSqliteHost = (reply: (said: SqliteReply) => void, waits: 'engin
       for (const db of databases.values()) db.close();
       databases.clear();
       writers.clear();
+      captures.clear();
+      rebound.clear();
     },
   };
 };

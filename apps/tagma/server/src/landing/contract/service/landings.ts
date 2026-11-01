@@ -4,6 +4,7 @@ import type { ShapeRefusal } from '../../../change-record/contract/wire/shape.js
 import type { JudgeRefusalCode } from '../../../enforcement/contract/wire/enforcement.js';
 import type { HeldTaskLabel } from '../../../change-record/contract/service/taskLabels.js';
 import type { ChangeTaking } from '../../../change-record/contract/wire/handover.js';
+import type { DeriveCommand } from '../../../change-record/contract/wire/derivation.js';
 
 export type SubmitTaking = ChangeTaking & { readonly tasks: readonly HeldTaskLabel[] };
 
@@ -16,6 +17,7 @@ export type SubmitRequest = {
   readonly paths?: readonly string[];
   readonly whole?: readonly string[];
   readonly withoutFormat?: boolean;
+  readonly derive?: readonly DeriveCommand[];
   readonly taking: readonly SubmitTaking[];
 };
 

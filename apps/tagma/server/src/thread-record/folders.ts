@@ -12,7 +12,7 @@ import type { ThreadFolder } from './contract/wire/folder.js';
 import { liveRootOf } from './lineage.js';
 import { absorbFolders, type FolderPlan, type HeldFolder, type PlacedFolder, partFolders } from './regroup.js';
 import { threadFolder } from './store/folders.js';
-import { threadRecord } from './store/table.js';
+import { recordRows, threadRecord } from './store/table.js';
 
 const folderColumns = {
   id: threadFolder.id,
@@ -165,7 +165,7 @@ export const makeThreadFolders = Effect.gen(function* () {
   const groups = yield* ProjectGroups;
   const changes = yield* ProjectChanges;
   const subscribers = new Set<Subscriber>();
-  const folding = (operation: string) => writes(`ThreadFolders.${operation}`, [threadFolder, threadRecord]);
+  const folding = (operation: string) => writes(`ThreadFolders.${operation}`, [threadFolder, recordRows]);
 
   const ownerOf = (projectId: number): Effect.Effect<FolderOwner, StoreFailure> =>
     Effect.map(groups.of(projectId), (group) => {

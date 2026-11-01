@@ -41,7 +41,7 @@ import {
   type ThreadTargetOperationFailure,
 } from '../store/targetIntents.js';
 import { threadTargetOperation } from '../store/tables.js';
-import { assignmentMembership, assignmentSelection } from '../../workspace/store/tables.js';
+import { assignmentMembership, assignmentSelection, placementRows } from '../../workspace/store/tables.js';
 import type { ThreadHomes } from '../contract/service/homes.js';
 import type { HomeMove } from '../../thread-record/contract/service/homes.js';
 
@@ -113,7 +113,7 @@ export const makeThreadTargets = Effect.fnUntraced(function* ({
     const decided = yield* units.write(
       writes(
         'ThreadTargets.decided',
-        [threadTargetOperation, assignmentMembership, assignmentSelection],
+        [threadTargetOperation, assignmentMembership, placementRows],
         ...(homes === undefined ? [] : [homes.writes]),
       ),
       (unit) => decide(caller, input, digest, unit, shift),

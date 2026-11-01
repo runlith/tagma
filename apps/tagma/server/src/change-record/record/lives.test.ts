@@ -11,7 +11,7 @@ const clock = () => {
 
 const instant = (at: number) => ({ from: at, to: at });
 
-const as = (role: Role): Command => ({ id: null, role, signatures: [], team: null });
+const as = (role: Role): Command => ({ id: null, role, signatures: [], team: null, line: null });
 const READER = as({ kind: 'reader', implicit: ['__snapshots__/', '*.snap'] });
 const named = (...paths: string[]) => as({ kind: 'named', paths, implicit: [] });
 

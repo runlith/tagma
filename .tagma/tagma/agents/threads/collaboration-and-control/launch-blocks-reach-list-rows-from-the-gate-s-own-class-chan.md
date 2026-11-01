@@ -5,8 +5,8 @@ ord: 21
 tags: ["explanation"]
 sources:
   - kind: file
-    ref: packages/agent/src/thread/run/LaunchGate.ts
-  - kind: file
     ref: apps/tagma/server/src/threads/list/threadList.ts
+  - kind: file
+    ref: packages/agent/src/thread/run/LaunchGate.ts
 ---
 A refusal or lift can change launchability without a committed run change, so the list listens to the gate's own class changes. Subscribers observe the new gate value, and disposing a list releases that subscription.

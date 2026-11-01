@@ -3,9 +3,9 @@ import { and, asc, eq, inArray } from 'drizzle-orm';
 import { WorkerUnavailable } from '@runlith/utils/worker';
 import { MachineStore } from '../../platform/contract/service/store.js';
 import { writes } from '../../platform/contract/service/writes.js';
-import { threadRecord } from '../../thread-record/store/table.js';
+import { recordRows } from '../../thread-record/store/table.js';
 import { setRested } from '../rest.js';
-import { threadMandate } from '../store/mandate.js';
+import { mandateRows } from '../store/mandate.js';
 import { session } from '../../platform/store/writers.js';
 import { basename, dirname } from 'node:path';
 import { conversationWrites, threadBase, threadEvent, threadJournalPlace, threadRolloutCursor } from '../store/journal.js';
@@ -215,7 +215,7 @@ export const replayThreadRollout = Effect.fnUntraced(function* (input: {
     .transaction(
       writes(
         'thread.rollout',
-        [threadRecord, threadMandate, session, threadEvent, threadRolloutCursor, threadResource, threadBase, threadJournalPlace],
+        [recordRows, mandateRows, session, threadEvent, threadRolloutCursor, threadResource, threadBase, threadJournalPlace],
         input.parts.native.writes,
         input.parts.native.folds.writes,
         input.parts.external.writes,

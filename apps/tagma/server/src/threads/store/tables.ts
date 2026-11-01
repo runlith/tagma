@@ -10,6 +10,8 @@ import { KEEP_WARM_SIGNAL_TYPE } from '@runlith/agent/transcript/keepWarm';
 import { type SQL, sql } from 'drizzle-orm';
 import { index, integer, primaryKey, sqliteTable, text, type SQLiteColumn } from 'drizzle-orm/sqlite-core';
 import { threadRecord } from '../../thread-record/store/table.js';
+import { projectRows } from '../../platform/contract/service/projections.js';
+import { OWN_ENDINGS } from '../contract/service/ownWork.js';
 
 export const threadResource = sqliteTable(
   'thread_resource',
@@ -62,6 +64,15 @@ export const threadInbox = sqliteTable(
     sender: text('sender', { mode: 'json' }).$type<ThreadInboxSender>().notNull(),
     kind: text('kind').$type<ThreadInboxKind>().notNull(),
     body: text('body', { mode: 'json' }).$type<ThreadInboxBody>().notNull(),
+    owes: integer('owes', { mode: 'boolean' }).generatedAlwaysAs(
+      sql`kind = 'signal' and state = 'queued' and delivered_to_run_id is null
+      and json_extract(body, '$.type') in (${sql.join(
+        [...OWN_ENDINGS].map((type) => sql`${type}`),
+        sql`, `,
+      )})
+      and json_extract(body, '$.waits') is null`,
+      { mode: 'virtual' },
+    ),
     state: text('state').$type<ThreadInboxState>().notNull().default('queued'),
     deliveredToRunId: text('delivered_to_run_id'),
     claimId: text('claim_id'),
@@ -105,7 +116,31 @@ export const threadSeen = sqliteTable('thread_seen', {
 type Exact<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false;
 type Assert<T extends true> = T;
 type ThreadResourceRowMatches = Assert<Exact<typeof threadResource.$inferSelect, ThreadResourceRow>>;
-type ThreadInboxRowMatches = Assert<Exact<Omit<typeof threadInbox.$inferSelect, 'claimId' | 'requestDigest' | 'seq'>, ThreadInboxRow>>;
+type ThreadInboxRowMatches = Assert<
+  Exact<Omit<typeof threadInbox.$inferSelect, 'claimId' | 'requestDigest' | 'seq' | 'owes'>, ThreadInboxRow>
+>;
+
+export const inboxRows = projectRows({
+  id: 'threads.inbox',
+  table: threadInbox,
+  keys: ['id'],
+  address: 'threadId',
+  columns: {
+    id: threadInbox.id,
+    threadId: threadInbox.threadId,
+    owes: threadInbox.owes,
+    deliveredToRunId: threadInbox.deliveredToRunId,
+    occurredAt: threadInbox.occurredAt,
+  },
+});
+
+export const seenRows = projectRows({
+  id: 'threads.seen',
+  table: threadSeen,
+  keys: ['threadId'],
+  address: 'threadId',
+  columns: { threadId: threadSeen.threadId, runId: threadSeen.runId },
+});
 
 export const KEEP_WARM_PING_IDS = `${KEEP_WARM_SIGNAL_TYPE}:%`;
 

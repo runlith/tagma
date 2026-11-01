@@ -3,7 +3,7 @@ import { Effect } from 'effect';
 import { MachineStore } from '../platform/contract/service/store.js';
 import { writes } from '../platform/contract/service/writes.js';
 import { frozen, type RolloutPart } from '../threads/journal/rolloutMeta.js';
-import { activeOf, externalSession, sessionValues } from '../threads/store/harnessFacet.js';
+import { activeOf, externalSession, sessionFacts, sessionValues } from '../threads/store/harnessFacet.js';
 
 const stored = {
   id: externalSession.id,
@@ -24,5 +24,5 @@ export const externalRolloutPart: RolloutPart = {
       .insert(externalSession)
       .values({ ...row, ...sessionValues(facet), activeAt: activeOf(facet) } as typeof externalSession.$inferInsert);
   }),
-  writes: writes('rollout.external', [externalSession]),
+  writes: writes('rollout.external', [sessionFacts]),
 };

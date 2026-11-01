@@ -20,9 +20,9 @@ import { adoptTitle, claimTitleInput, nameTitle, setTitle } from './titles.js';
 import { voidRecap, writeRecap } from './recaps.js';
 import { rehome } from './home.js';
 import { writes } from '../platform/contract/service/writes.js';
-import { threadRecord as threadRecordTable } from './store/table.js';
+import { recordRows } from './store/table.js';
 
-const recording = writes('ThreadRecords', [threadRecordTable]);
+const recording = writes('ThreadRecords', [recordRows]);
 
 type Subscriber<E> = (event: E) => Effect.Effect<void>;
 

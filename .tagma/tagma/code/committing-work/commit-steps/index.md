@@ -50,4 +50,4 @@ sources:
   - kind: dir
     ref: apps/tagma/server/src/commit-steps
 ---
-The team declares in its `tagma.config.ts` `format` section what brings every Tagma commit to its shape — formatter, import sorting, linter --fix — and Tagma runs those commands over the commit version in the commit tree and records the result in the commit. The module takes the commands from the commit version's `Config`, selects their files, runs the commands, and fills the change record's CommitShape port; reading and executing the config is `config`'s business, while the commit itself, its judgment, and delivery of the delta to working files are done by landing, enforcement and the change record.
+The repository declares formatting and derivation commands, and the module runs them over the version each commit lands. Formatting transforms selected files and returns its delta for delivery to the working checkout; a derivation regenerates only its declared outputs over the commit tree and leaves working output bytes alone. Config owns declaration reading, ProgramRoad owns execution, and landing, enforcement and the change record own publication, judgment and authorship.

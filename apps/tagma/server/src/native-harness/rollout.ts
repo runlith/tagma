@@ -2,7 +2,7 @@ import { eq } from 'drizzle-orm';
 import { Effect } from 'effect';
 import { MachineStore } from '../platform/contract/service/store.js';
 import { writes } from '../platform/contract/service/writes.js';
-import { thread } from '../threads/store/kernel.js';
+import { nativeRows, thread } from '../threads/store/kernel.js';
 import { frozen, type RolloutParts } from '../threads/journal/rolloutMeta.js';
 import { makeNativeFolds } from './rolloutFolds.js';
 
@@ -18,6 +18,5 @@ export const makeNativeRolloutPart = Effect.gen(function* () {
       const { db } = yield* MachineStore;
       yield* db.insert(thread).values(row as typeof thread.$inferInsert);
     }),
-    writes: writes('rollout.native', [thread]),
   } satisfies RolloutParts['native'];
 });

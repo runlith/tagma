@@ -2,7 +2,7 @@ import { Effect, Exit, FiberSet, Layer, Scope } from 'effect';
 import { carryCost } from '@runlith/performance/CostLedger';
 import { type CopyPlace, ServedGraphs } from '../graph/contract/service/serving.js';
 import { Projects } from '../projects/contract/service/registry.js';
-import { ThreadLive } from '../threads/contract/service/engine.js';
+import { ThreadRows } from '../threads/contract/service/rows.js';
 import { ThreadPlacement } from '../threads/contract/service/placement.js';
 
 type Hold = { readonly scope: Scope.Closeable; backing: string | null };
@@ -18,7 +18,7 @@ const keyOf = (place: CopyPlace): string => `${place.projectId}\u0000${place.che
 
 export const threadCopiesLayer = Layer.effectDiscard(
   Effect.gen(function* () {
-    const live = yield* ThreadLive;
+    const rows = yield* ThreadRows;
     const graphs = yield* ServedGraphs;
     const placement = yield* ThreadPlacement;
     const projects = yield* Projects;
@@ -85,17 +85,27 @@ export const threadCopiesLayer = Layer.effectDiscard(
       for (const key of [...standing.holds.keys()]) drop(standing, key);
     };
 
-    const detach = live.subscribeStates((state) => {
-      const projectId = state.thread.projectId;
-      if (state.activeRun === null || projectId === null || projectId === undefined) return ended(state.thread.id);
-      const root = state.place?.rootId ?? null;
-      const standing = running.get(state.thread.id);
-      if (standing !== undefined && standing.root === root) return;
-      const next = standing ?? { projectId, root, places: [], holds: new Map() };
-      next.root = root;
-      running.set(state.thread.id, next);
-      placed(state.thread.id, next);
+    const follow = (): void => {
+      const active = rows.activities();
+      for (const threadId of [...running.keys()]) if (!active.has(threadId)) ended(threadId);
+      for (const [threadId, activity] of active) {
+        if (activity.projectId === null) {
+          ended(threadId);
+          continue;
+        }
+        const standing = running.get(threadId);
+        if (standing !== undefined && standing.root === activity.rootId) continue;
+        const next = standing ?? { projectId: activity.projectId, root: activity.rootId, places: [], holds: new Map() };
+        next.root = activity.rootId;
+        running.set(threadId, next);
+        placed(threadId, next);
+      }
+    };
+
+    const detach = rows.subscribe((batch) => {
+      if (batch.activity) follow();
     });
+    follow();
 
     const unsubscribe = graphs.copies.subscribe((event) => {
       for (const standing of running.values()) {

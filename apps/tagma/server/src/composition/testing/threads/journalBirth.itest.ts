@@ -11,6 +11,7 @@ import { threadStoreFixture } from '../threadStoreFixture.js';
 import { MachineStore } from '../../../platform/contract/service/store.js';
 import { MachineUnits } from '../../../platform/contract/service/units.js';
 import { writes } from '../../../platform/contract/service/writes.js';
+import { nativeRows } from '../../../threads/store/kernel.js';
 import { bornThread } from '../../../native-harness/testing/born.js';
 import { nativeOnlyParts } from '../../../native-harness/testing/rollout.js';
 import {
@@ -52,7 +53,7 @@ const setup = Effect.fnUntraced(function* () {
   const parts = yield* nativeOnlyParts;
   const journal = () => Effect.provide(filedThreadJournal(rolloutWriter(pathOf, rolloutBirth(store, parts))), runtime);
   const append = (opened: Effect.Success<ReturnType<typeof journal>>, threadId: string, id: string) =>
-    units.write(writes('journal-birth', [threadEvent()]), (unit) => opened.append(fact(threadId, id), unit));
+    units.write(writes('journal-birth', [threadEvent(), nativeRows]), (unit) => opened.append(fact(threadId, id), unit));
   const born = Effect.fnUntraced(function* (id: string) {
     yield* Effect.provide(
       bornThread(

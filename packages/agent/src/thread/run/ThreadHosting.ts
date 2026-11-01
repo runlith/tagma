@@ -10,7 +10,7 @@ import { Message, ToolResultPart, ToolResultValue } from '@runlith/llm/schema/me
 import { AgentGuidanceJournal, pendingRuntimeGuides } from '../../agent/AgentGuidanceJournal';
 import type { PendingRuntimeGuide } from '../../agent/contracts';
 import { agentStepToolPolicy } from '../../agent/policy/AgentRuntimePolicy';
-import { agentRuntimeGuidanceMessage } from '../../agent/AgentSignal';
+import { agentRuntimeGuidanceMessage, vendorVisible } from '../../agent/AgentSignal';
 import type { AgentToolInvocation } from '../../agent/door/types';
 import { AgentToolFailed, type AgentToolCallRegenerated, type AgentToolCallReused, type AgentToolFailure } from '../../agent/AgentFailure';
 import type { CallAdmission } from '../../agent/callProgress';
@@ -41,7 +41,7 @@ import {
   threadContextEvent,
   threadEntryEvent,
   threadGuidanceEvent,
-  threadStepMessagesEvent,
+  threadRunMessagesEvent,
   type ThreadEventBody,
 } from '../events';
 import type { ThreadRow, ThreadRunRow } from '../rows';
@@ -191,7 +191,12 @@ export const threadHostingLayer = Layer.effect(
     const historyOf = (threadId: string): Effect.Effect<readonly Message[], ThreadBorderFailed> =>
       Effect.map(store.historyOf(threadId), (history) => history ?? []);
 
-    const view = (thread: ThreadRow, agentId: string): ThreadView => ({ ...thread, agentId, transcript: [] });
+    const view = (thread: ThreadRow, agentId: string): ThreadView => ({
+      ...thread,
+      history: vendorVisible(thread.history),
+      agentId,
+      transcript: [],
+    });
 
     const ours = (run: ThreadRunRow): boolean => run.ownerId === ownerId;
 
@@ -404,11 +409,11 @@ export const threadHostingLayer = Layer.effect(
             const result = { id: call.toolCallId, name: call.name, result: output, retained: retained };
             hosted.open.delete(call.toolCallId);
             const told = guidance(hosted, after);
-            const step = yield* stepped(hosted, [...history, Message.tool(ToolResultPart.from(result)), ...told.messages]);
+            const step = yield* stepped(hosted, vendorVisible([...history, Message.tool(ToolResultPart.from(result)), ...told.messages]));
             const message = Message.tool(
               ToolResultPart.from({ ...result, metadata: { [HOSTED_RESULT]: { failed, offered: step.moved } } }),
             );
-            const event = threadStepMessagesEvent([message]);
+            const event = threadRunMessagesEvent(hosted.runId, [message]);
             const written = yield* committed(
               threadId,
               hosted.runId,
@@ -421,7 +426,7 @@ export const threadHostingLayer = Layer.effect(
               [
                 threadEntryEvent(entryOf(hosted.runId, call, settled, hosted.started.get(call.toolCallId))),
                 ...readyEvents,
-                ...(event === null ? [] : [event]),
+                event,
                 ...told.events,
                 ...step.events,
               ],
@@ -534,7 +539,7 @@ export const threadHostingLayer = Layer.effect(
         input: call.input,
         arguments: call.arguments,
         onExecution: (admission) => Effect.flatMap(shown, (display) => admitted(hosted, call, display)(admission)),
-        options: { toolCallId: call.toolCallId, messages: [...hosted.history] },
+        options: { toolCallId: call.toolCallId, messages: [...vendorVisible(hosted.history)] },
       };
       const attended = yield* door.attend(invocation);
       if (attended.kind === 'answered') return outcomeSettled(attended.outcome);
@@ -682,7 +687,7 @@ export const threadHostingLayer = Layer.effect(
             hosted.handle.instructions,
             hosted.handle.catalog(),
             context?.message ?? null,
-            hosted.history,
+            vendorVisible(hosted.history),
           );
           yield* committed(threadId, hosted.runId, {}, [threadCompositionEvent(composed)], 'composition');
         }
@@ -690,7 +695,7 @@ export const threadHostingLayer = Layer.effect(
           threadId,
           Effect.gen(function* () {
             const history = yield* historyOf(threadId);
-            const step = yield* stepped(hosted, history);
+            const step = yield* stepped(hosted, vendorVisible(history));
             if (step.events.length > 0)
               yield* committed(threadId, hosted.runId, owed(step.texts.join('\n\n')), step.events, `guidance:step:${hosted.step}`);
             hosted.history = [...history, ...step.messages];

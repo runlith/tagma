@@ -7,6 +7,7 @@ import { Layer } from '@runlith/layer/Layer';
 import { stubFamily } from '@runlith/query/testing';
 import { flushSync, tick } from 'svelte';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
+import { waitFor } from '@runlith/testing/flush';
 import { AgentTypes } from './AgentTypes.svelte.js';
 import { ThreadChats } from './ThreadChats.js';
 import { ModelDefaults } from './ModelDefaults.svelte.js';
@@ -269,4 +270,23 @@ test('the agents column leaves when the page gives up the main seat in the same 
   page.open = false;
   flushSync();
   expect(target.querySelector('aside[aria-label="Agents"]')).toBeNull();
+});
+
+test('a thread opened elsewhere is unfolded from its team and scrolled into the column without taking focus', async () => {
+  const { shown, host } = shell();
+  const target = shown.draw(Column as never, { host });
+  flushSync();
+  const scroller = target.querySelector<HTMLElement>('[data-drop="loose"]');
+  if (scroller === null) throw new Error('The column drew no list.');
+  Object.defineProperty(scroller, 'clientHeight', { value: 27 });
+  scroller.dispatchEvent(new Event('scroll'));
+  const member = { ...row(40), parentThreadId: 't-30', spawnRootId: 't-30' };
+  listed([...Array.from({ length: 40 }, (_unused, index) => row(index)), member]);
+  flushSync();
+  expect(drawn(target)).not.toContain(member.id);
+
+  host.activateRoute(member.id, 1);
+  await waitFor(() => expect(drawn(target)).toContain(member.id));
+  expect(drawn(target)).not.toContain('t-0');
+  expect((document.activeElement as HTMLElement | null)?.dataset.thread).toBeUndefined();
 });

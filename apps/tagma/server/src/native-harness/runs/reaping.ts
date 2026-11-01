@@ -25,10 +25,10 @@ import { and, asc, desc, eq, inArray, isNotNull, isNull, lt, ne, type SQL, sql }
 import { MachineStore, type StoreFailure } from '../../platform/contract/service/store.js';
 import { type Unit, MachineUnits, type WriteUnit } from '../../platform/contract/service/units.js';
 import { type WriteSet, writes } from '../../platform/contract/service/writes.js';
-import { threadRun, threadRunTally } from '../../threads/store/kernel.js';
+import { runRows, threadRun, threadRunTally } from '../../threads/store/kernel.js';
 import type { EndedRuns } from './endedRuns.js';
-import { threadRecord } from '../../thread-record/store/table.js';
-import { threadLiveSpell } from '../../threads/store/mandate.js';
+import { recordRows, threadRecord } from '../../thread-record/store/table.js';
+import { spellRows, threadLiveSpell } from '../../threads/store/mandate.js';
 import type { ThreadStatusMove } from '../../thread-record/contract/service/records.js';
 import { stored, trusted, type StoredFailure } from '../../platform/store/crossing.js';
 import { ThreadEntryKinds, type ThreadEntryReader } from '@runlith/agent/transcript/kinds';
@@ -104,7 +104,7 @@ export const makeReaping = Effect.gen(function* () {
     });
 
     const notified = (call: string, write: (unit: WriteUnit<'machine'>) => Effect.Effect<readonly { id: string }[], StoredFailure>) =>
-      stored(call)(units.write(writes(`ThreadRunStore.${call}`, [threadRun]), write).pipe(Effect.map((rows) => rows.length === 1)));
+      stored(call)(units.write(writes(`ThreadRunStore.${call}`, [runRows]), write).pipe(Effect.map((rows) => rows.length === 1)));
 
     return {
       ending,
@@ -136,7 +136,7 @@ export const makeReaping = Effect.gen(function* () {
         const claim = and(eq(threadRun.id, runId), reapClaim(input.selector));
         return stored('reapRun')(
           writing(
-            writes('ThreadRunStore.reapRun', [threadRun, threadRunTally, threadRecord, threadLiveSpell]),
+            writes('ThreadRunStore.reapRun', [runRows, threadRunTally, recordRows, spellRows]),
             (unit) =>
               Effect.gen(function* () {
                 const current = yield* unit.run(
@@ -176,7 +176,7 @@ export const makeReaping = Effect.gen(function* () {
           ? Effect.void
           : stored('handOverRuns')(
               writing(
-                writes('ThreadRunStore.handOverRuns', [threadRun]),
+                writes('ThreadRunStore.handOverRuns', [runRows]),
                 (unit) =>
                   unit.run(
                     db
@@ -198,7 +198,7 @@ export const makeReaping = Effect.gen(function* () {
         const claim = and(eq(threadRun.id, runId), reapClaim(input.selector));
         return stored('cutRun')(
           writing(
-            writes('ThreadRunStore.cutRun', [threadRun, threadRunTally, threadRecord, threadLiveSpell]),
+            writes('ThreadRunStore.cutRun', [runRows, threadRunTally, recordRows, spellRows]),
             (unit) =>
               Effect.gen(function* () {
                 const current = yield* unit.run(db.select({ streamTail: threadRun.streamTail }).from(threadRun).where(claim).get());
@@ -244,7 +244,7 @@ export const makeReaping = Effect.gen(function* () {
         );
         return stored('adoptRun')(
           writing(
-            writes('ThreadRunStore.adoptRun', [threadRun, threadRecord]),
+            writes('ThreadRunStore.adoptRun', [runRows, recordRows]),
             (unit) =>
               Effect.gen(function* () {
                 const current = yield* unit.run(
@@ -282,7 +282,7 @@ export const makeReaping = Effect.gen(function* () {
           scope,
         );
         return stored('claimSettledForNotification')(
-          units.write(writes('ThreadRunStore.claimSettledForNotification', [threadRun]), (unit) =>
+          units.write(writes('ThreadRunStore.claimSettledForNotification', [runRows]), (unit) =>
             Effect.gen(function* () {
               const claimed = yield* unit.run(
                 db
@@ -411,7 +411,7 @@ export const makeReaping = Effect.gen(function* () {
       heartbeatSettledClaim: (runId: string, heartbeatAt: Date, expectedId: string | null): Effect.Effect<void, ThreadStorageFailed> =>
         stored('heartbeatSettledClaim')(
           units
-            .write(writes('ThreadRunStore.heartbeatSettledClaim', [threadRun]), (unit) =>
+            .write(writes('ThreadRunStore.heartbeatSettledClaim', [runRows]), (unit) =>
               unit.run(
                 db
                   .update(threadRun)

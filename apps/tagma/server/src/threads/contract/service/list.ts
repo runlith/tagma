@@ -1,5 +1,7 @@
-import type { ThreadTranscriptEntry } from '@runlith/agent/transcript/rows';
+import type { ThreadHydrationCut } from '@runlith/agent/thread/run/ThreadSnapshots';
+import type { ThreadBorderFailed } from '@runlith/agent/thread/ThreadBorder';
 import { Context, type Effect } from 'effect';
+import type { Unit } from '../../../platform/contract/service/units.js';
 import type { Actor } from '../../../platform/contract/wire/actor.js';
 import type { FieldRefusal } from '../../../platform/contract/wire/refusal.js';
 import type { THREAD_OPERATIONS } from '../wire/operations/catalog.js';
@@ -40,7 +42,10 @@ export type AttentionEvent =
   | { readonly kind: 'removed'; readonly threadId: string }
   | { readonly kind: 'resync' };
 
-export type OpenCalls = (threadId: string, runId: string) => Effect.Effect<readonly ThreadTranscriptEntry[], unknown>;
+export type ThreadCut = <T, E>(
+  threadId: string,
+  use: (unit: Unit<'machine'>) => Effect.Effect<T, E>,
+) => Effect.Effect<ThreadHydrationCut<T>, E | ThreadBorderFailed>;
 
 export type ArchiveClose = (threadIds: readonly string[]) => Effect.Effect<void, HarnessFailure>;
 export type ArchiveWork = <A, E>(
@@ -74,7 +79,7 @@ export class ThreadList extends Context.Service<
       callerId: string,
     ): Effect.Effect<ThreadRelation, HarnessFailure>;
     serveArchiving(work: ArchiveWork): () => void;
-    serveOpenCalls(read: OpenCalls): () => void;
+    serveCuts(cut: ThreadCut): () => void;
     setArchived(
       threadId: string,
       projectId: number,

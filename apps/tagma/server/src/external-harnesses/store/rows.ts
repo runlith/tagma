@@ -6,10 +6,10 @@ import { writes } from '../../platform/contract/service/writes.js';
 import { WorkSpells } from '../../thread-record/contract/service/spells.js';
 import { ThreadRecords } from '../../thread-record/contract/service/records.js';
 import { ModelChanges } from '../../threads/contract/service/modelChanges.js';
-import { externalSession, leased, sessionValues } from '../../threads/store/harnessFacet.js';
+import { externalSession, leased, sessionFacts, sessionValues } from '../../threads/store/harnessFacet.js';
 import { inProgram } from '../../platform/store/crossing.js';
 import { programOf, programWriteUnit } from '../../platform/store/programs.js';
-import { thread, threadRun, unparkedRun } from '../../threads/store/kernel.js';
+import { nativeRows, thread, threadRun, unparkedRun } from '../../threads/store/kernel.js';
 import { askedOf, bindingOf, capabilitiesOf, chooseModel, roadOf, switchesOf } from '../../threads/store/seat.js';
 import { parseExternalSession } from '../../threads/contract/wire/harness/externalSession.js';
 import { readExternalSession, writeSession } from '../session.js';
@@ -27,9 +27,9 @@ export const makeSessionRows = Effect.fnUntraced(function* ({ db }: { readonly d
         .from(thread)
         .where(and(eq(thread.id, externalSession.id), sql`json_extract(${thread.transport}, '$.adapter') = ${transport}`)),
     );
-  const changing = writes('HarnessSessionStore.change', [externalSession], records.writes, spells.writes);
-  const beating = writes('HarnessSessionStore.beat', [externalSession]);
-  const choosing = writes('HarnessSessionStore.choose', [thread]);
+  const changing = writes('HarnessSessionStore.change', [sessionFacts], records.writes, spells.writes);
+  const beating = writes('HarnessSessionStore.beat', [sessionFacts]);
+  const choosing = writes('HarnessSessionStore.choose', [nativeRows]);
   return SessionRows.of({
     inspect: (work) => units.read(work),
     within: (operation, work) => units.write(operation, work),

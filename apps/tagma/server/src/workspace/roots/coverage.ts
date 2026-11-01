@@ -6,7 +6,7 @@ import { worktreesOf } from '@runlith/git/worktree';
 import { Git } from '@runlith/git/Git';
 import { MachineUnits } from '../../platform/contract/service/units.js';
 import { writes } from '../../platform/contract/service/writes.js';
-import { assignmentMembership, assignmentSelection, fileRoot, fileRootNamespace, projectRoot, projectRootCover } from '../store/tables.js';
+import { assignmentMembership, fileRoot, fileRootNamespace, placementRows, projectRoot, projectRootCover } from '../store/tables.js';
 import type { StoreFailure } from '../../platform/contract/service/store.js';
 import {
   ProjectRootsUnavailable,
@@ -123,14 +123,7 @@ export const makeCoverageLedger = Effect.fnUntraced(function* ({
       );
       const withheld: WithheldCheckout[] = [];
       const changed = yield* units.write(
-        writes('ProjectRoots.moved', [
-          projectRoot,
-          projectRootCover,
-          fileRoot,
-          fileRootNamespace,
-          assignmentSelection,
-          assignmentMembership,
-        ]),
+        writes('ProjectRoots.moved', [projectRoot, projectRootCover, fileRoot, fileRootNamespace, placementRows, assignmentMembership]),
         (unit) =>
           Effect.gen(function* () {
             const held = yield* store.stamp(projectId, unit);

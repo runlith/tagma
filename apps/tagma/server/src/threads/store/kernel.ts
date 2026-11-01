@@ -27,6 +27,7 @@ import { RUN_ENDINGS } from '@runlith/agent/transcript/live';
 import type { TransportBinding } from '@runlith/agent/thread/record';
 import type { TransportCapabilities } from '@runlith/agent/thread/record';
 import { NATIVE_BINDING, NATIVE_CAPABILITIES } from '@runlith/agent/thread/record';
+import { projectRows } from '../../platform/contract/service/projections.js';
 
 export const ENDINGS_LIST: SQL = sql.raw(`(${RUN_ENDINGS.map((status) => `'${status}'`).join(', ')})`);
 
@@ -193,6 +194,55 @@ export const threadRunTally = sqliteTable(
       .where(sql`${table.unseen} = 1`),
   ],
 );
+
+export const nativeRows = projectRows({
+  id: 'threads.native',
+  table: thread,
+  keys: ['id'],
+  address: 'id',
+  columns: {
+    id: thread.id,
+    cacheGroup: thread.cacheGroup,
+    profile: thread.profile,
+    pendingInteraction: thread.pendingInteraction,
+    account: thread.account,
+    provider: thread.provider,
+    model: thread.model,
+    reasoning: thread.reasoning,
+    switches: thread.switches,
+    transport: thread.transport,
+    capabilities: thread.capabilities,
+    failureReason: thread.failureReason,
+    contextReading: thread.contextReading,
+    updatedAt: thread.updatedAt,
+  },
+});
+
+export const runRows = projectRows({
+  id: 'threads.run',
+  table: threadRun,
+  keys: ['id'],
+  address: 'threadId',
+  columns: {
+    id: threadRun.id,
+    threadId: threadRun.threadId,
+    status: threadRun.status,
+    progress: threadRun.progress,
+    resumes: threadRun.resumes,
+    provider: threadRun.provider,
+    model: threadRun.model,
+    reasoning: threadRun.reasoning,
+    failureReason: threadRun.failureReason,
+    failure: threadRun.failure,
+    createdAt: threadRun.createdAt,
+    startedAt: threadRun.startedAt,
+    heartbeatAt: threadRun.heartbeatAt,
+    handedOverAt: threadRun.handedOverAt,
+    finishedAt: threadRun.finishedAt,
+    saidLive: threadRun.saidLive,
+    saidFinal: threadRun.saidFinal,
+  },
+});
 
 export const ENDED_RUN: SQL = sql`${threadRun.status} in ${ENDINGS_LIST}`;
 

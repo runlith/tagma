@@ -2,9 +2,16 @@ import { Effect } from 'effect';
 import { type Column, getTableColumns, getTableName, type SQL, sql } from 'drizzle-orm';
 import type { SQLiteTable } from 'drizzle-orm/sqlite-core';
 import type { StoreBrand, StoreDb, StoreFailure } from '../contract/service/store.js';
-import type { WriteUnit } from '../contract/service/units.js';
+import type { Unit, WriteUnit } from '../contract/service/units.js';
+import { PROJECTION_CLOCK } from '@runlith/sqlite-process/channel';
 
 type Row = Readonly<Record<string, unknown>>;
+
+export const rowCursor = Effect.fnUntraced(function* <Brand extends StoreBrand>(db: StoreDb<Brand>, unit: Unit<Brand>) {
+  const row = yield* unit.run(db.get<{ cursor: number }>(sql`select cursor from ${sql.identifier(PROJECTION_CLOCK)} where id = ''`));
+  if (row === undefined) return yield* Effect.die(new Error('A row projection was read before its writer clock was installed.'));
+  return row.cursor;
+});
 
 //! One bound parameter carries the whole list, so no list length meets SQLite's parameter ceiling.
 export const among = (values: readonly string[]): SQL => sql`(select value from json_each(${JSON.stringify(values)}))`;

@@ -28,6 +28,7 @@ export const workspaceChange = sqliteTable(
     reason: text('reason'),
     origin: text('origin', { enum: ['edit', 'write', 'delete'] }).notNull(),
     provenance: text('provenance', { enum: ['typed', 'command', 'command-whole'] }),
+    commandLine: text('command_line'),
     mode: text('mode'),
     firstLine: integer('first_line'),
     lines: integer('lines'),

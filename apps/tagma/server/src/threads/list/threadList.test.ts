@@ -17,6 +17,7 @@ import { ThreadLive, ThreadLaunchGate } from '../contract/service/engine.js';
 import { ThreadRollouts } from '../contract/service/rollouts.js';
 import { ThreadReleasing } from '../contract/service/releasing.js';
 import { HeldPathCounts } from '../contract/service/parts.js';
+import { ThreadRows } from '../contract/service/rows.js';
 import { makeThreadList } from './threadList.js';
 import type { ThreadSummary } from './summary.js';
 
@@ -39,6 +40,7 @@ const opened = Effect.fnUntraced(function* (source?: 'resource' | 'commands', gr
   const reading = yield* Deferred.make<void>();
   const release = yield* Deferred.make<void>();
   let emit: (state: NativeThreadState) => void = unused;
+  let row = summary;
   const feed = yield* makeThreadLiveFeed<NativeThreadState>();
   const live = {
     ...feed,
@@ -55,11 +57,22 @@ const opened = Effect.fnUntraced(function* (source?: 'resource' | 'commands', gr
       Layer.mergeAll(
         Layer.mock(ThreadLookup, { summary: () => Effect.succeed(summary) }),
         Layer.mock(ThreadWindows, {
-          rootWindow: () =>
+          rootIds: () =>
             Deferred.succeed(reading, undefined).pipe(
               Effect.andThen(Deferred.await(release)),
-              Effect.as({ rows: [summary], roots: 1, windowBefore: null }),
+              Effect.as({ ids: ['thread'], roots: 1, windowBefore: null }),
             ),
+        }),
+        Layer.mock(ThreadRows, {
+          current: () => row,
+          read: (ids) => Effect.succeed(ids.map(() => summary)),
+          retain: () => () => {},
+          release: () => {},
+          subscribe: () => () => {},
+          latest: unused,
+          activities: unused,
+          waiting: unused,
+          waitingIds: unused,
         }),
         Layer.mock(ThreadRunning, {
           heldSessionsInSubtree: () =>
@@ -112,8 +125,29 @@ const opened = Effect.fnUntraced(function* (source?: 'resource' | 'commands', gr
     },
     stamped: () => stamped,
     emit: (state: NativeThreadState) => emit(state),
+    become: (next: ThreadSummary) => {
+      row = next;
+    },
   };
 });
+
+it.effect('a shown row whose run stalls with time is announced on the state its owner publishes, once', () =>
+  Effect.gen(function* () {
+    const world = yield* opened();
+    const lives: string[] = [];
+    const stop = world.list.subscribe(1, (event) => {
+      if (event.kind === 'row') lives.push(event.row.life);
+    });
+    yield* Effect.addFinalizer(() => Effect.sync(stop));
+    world.become({ ...summary, life: 'working' } as ThreadSummary);
+    world.list.announce({ ...summary, life: 'working' } as ThreadSummary);
+    world.become({ ...summary, life: 'stalled' } as ThreadSummary);
+    const published = { thread: { id: 'thread', ownerId: 'agent' } } as unknown as NativeThreadState;
+    world.emit(published);
+    world.emit(published);
+    expect(lives).toEqual(['working', 'stalled']);
+  }),
+);
 
 it.effect.each(['resource', 'commands'] as const)('an archive whose %s closure fails stamps nothing', (source) =>
   Effect.gen(function* () {

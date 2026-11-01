@@ -11,6 +11,8 @@ fields:
 edges:
   - kind: discovered-from
     to: 01a196c4-e242-7ea0-97a4-269b83c5b282
+  - kind: waits-on
+    to: 01a196fb-0b48-78bf-b865-846fad128298
 sources:
   - kind: file
     ref: apps/tagma/server/src/graph/journal/callRange.ts

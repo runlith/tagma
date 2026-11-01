@@ -290,9 +290,10 @@ const extended = (message: Message): void => {
       else if (instructions.includes('GARBLE')) send({ method: '_tagma/said', params: { sessionId: said(message.params, 'sessionId') } });
       else if (instructions.includes('FAIL')) send({ id, error: { code: -32603, message: 'summary refused', data: { usage } } });
       else {
+        const told = instructions.includes('SILENT') ? { ...SUMMARY, summary: '' } : SUMMARY;
         later(() => {
-          send({ method: '_tagma/compacted', params: { sessionId: said(message.params, 'sessionId'), trigger: 'manual', ...SUMMARY } });
-          send({ id, result: { ...SUMMARY, usage } });
+          send({ method: '_tagma/compacted', params: { sessionId: said(message.params, 'sessionId'), trigger: 'manual', ...told } });
+          send({ id, result: { ...told, usage } });
         });
       }
       return;

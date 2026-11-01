@@ -24,9 +24,9 @@ import { MachineStore } from '../../platform/contract/service/store.js';
 import { type Unit, MachineUnits, type WriteUnit } from '../../platform/contract/service/units.js';
 import { type WriteSet, writes } from '../../platform/contract/service/writes.js';
 import { among } from '../../platform/store/rows.js';
-import { thread, threadRun, threadRunTally } from '../../threads/store/kernel.js';
-import { threadRecord } from '../../thread-record/store/table.js';
-import { threadLiveSpell } from '../../threads/store/mandate.js';
+import { nativeRows, runRows, thread, threadRun, threadRunTally } from '../../threads/store/kernel.js';
+import { recordRows, threadRecord } from '../../thread-record/store/table.js';
+import { spellRows } from '../../threads/store/mandate.js';
 import { ThreadRecords } from '../../thread-record/contract/service/records.js';
 import { recordFacts } from '../../thread-record/facts.js';
 import { stored, type StoredFailure } from '../../platform/store/crossing.js';
@@ -47,7 +47,7 @@ export type RunsInput = {
   readonly lifecycle?: RunLifecycle;
 };
 
-const settling = [threadRun, threadRunTally, threadRecord, threadLiveSpell];
+const settling = [runRows, threadRunTally, recordRows, spellRows];
 
 export const makeRunStores = Effect.gen(function* () {
   const { db } = yield* MachineStore;
@@ -100,7 +100,7 @@ export const makeRunStores = Effect.gen(function* () {
     ) =>
       stored(call)(
         writing(
-          writes('ThreadRunStore.patchRunning', [threadRun]),
+          writes('ThreadRunStore.patchRunning', [runRows]),
           (unit) =>
             Effect.asVoid(
               unit.run(
@@ -134,7 +134,7 @@ export const makeRunStores = Effect.gen(function* () {
         failedAs(
           'createRun',
           writing(
-            writes('ThreadRunStore.createRun', [threadRun, thread, threadRecord, threadLiveSpell]),
+            writes('ThreadRunStore.createRun', [runRows, nativeRows, recordRows, spellRows]),
             (unit) =>
               Effect.gen(function* () {
                 const row = yield* unit.run(db.select({ id: thread.id }).from(thread).where(eq(thread.id, startFrom.id)).get());
@@ -207,7 +207,7 @@ export const makeRunStores = Effect.gen(function* () {
       resumeAwaitingRun: ({ threadId, runId, progress, heartbeatAt }) =>
         failedAs(
           'resumeAwaitingRun',
-          units.write(writes('ThreadRunStore.resumeAwaitingRun', [threadRun]), (unit) =>
+          units.write(writes('ThreadRunStore.resumeAwaitingRun', [runRows]), (unit) =>
             Effect.gen(function* () {
               const run = yield* unit.run(
                 db
@@ -239,7 +239,7 @@ export const makeRunStores = Effect.gen(function* () {
       parkRun: (runId, progress, heartbeatAt, tx) =>
         stored('parkRun')(
           writing(
-            writes('ThreadRunStore.parkRun', [threadRun]),
+            writes('ThreadRunStore.parkRun', [runRows]),
             (unit) =>
               Effect.gen(function* () {
                 const run = yield* unit.run(db.select({ stopRequest: threadRun.stopRequest }).from(threadRun).where(owned(runId)).get());
@@ -327,7 +327,7 @@ export const makeRunStores = Effect.gen(function* () {
       withdrawRun: (runId, words, tx) =>
         stored('withdrawRun')(
           writing(
-            writes('ThreadRunStore.withdrawRun', [threadRun]),
+            writes('ThreadRunStore.withdrawRun', [runRows]),
             (unit) =>
               Effect.flatMap(
                 unit.run(
@@ -346,7 +346,7 @@ export const makeRunStores = Effect.gen(function* () {
       markStatus: ({ threadId, status, failureReason, updatedAt }, tx) =>
         stored('markStatus')(
           writing(
-            writes('ThreadRunStore.markStatus', [thread, threadRecord]),
+            writes('ThreadRunStore.markStatus', [nativeRows, recordRows]),
             (unit) =>
               Effect.gen(function* () {
                 if (status !== 'running') {
@@ -497,7 +497,7 @@ export const makeRunStores = Effect.gen(function* () {
       writePhase: (runId, phase, tx) =>
         stored('writePhase')(
           writing(
-            writes('ThreadRunStore.writePhase', [threadRun]),
+            writes('ThreadRunStore.writePhase', [runRows]),
             (unit) =>
               Effect.gen(function* () {
                 const statement = db
@@ -539,7 +539,7 @@ export const makeRunStores = Effect.gen(function* () {
       addUsage: (runId, delta, heartbeatAt, tx) =>
         stored('addUsage')(
           writing(
-            writes('ThreadRunStore.addUsage', [threadRun]),
+            writes('ThreadRunStore.addUsage', [runRows]),
             (unit) =>
               Effect.gen(function* () {
                 const current = yield* unit.run(db.select({ usage: threadRun.usage }).from(threadRun).where(owned(runId)).get());
@@ -558,7 +558,7 @@ export const makeRunStores = Effect.gen(function* () {
       charge: (runId, charge, tx) =>
         stored('charge')(
           writing(
-            writes('ThreadRunStore.charge', [threadRun]),
+            writes('ThreadRunStore.charge', [runRows]),
             (unit) =>
               Effect.gen(function* () {
                 const current = yield* unit.run(db.select({ usage: threadRun.usage }).from(threadRun).where(eq(threadRun.id, runId)).get());
@@ -582,7 +582,7 @@ export const makeRunStores = Effect.gen(function* () {
           ? Effect.succeed({ written: [], asked: [] })
           : stored('writeHeartbeats')(
               writing(
-                writes('ThreadRunStore.writeHeartbeats', [threadRun]),
+                writes('ThreadRunStore.writeHeartbeats', [runRows]),
                 (unit) =>
                   Effect.gen(function* () {
                     const statement = db
@@ -634,7 +634,7 @@ export const makeRunStores = Effect.gen(function* () {
         const claim = and(eq(threadRun.id, runId), eq(threadRun.status, 'running'), scope);
         return stored('requestStop')(
           writing(
-            writes('ThreadRunStore.requestStop', [threadRun]),
+            writes('ThreadRunStore.requestStop', [runRows]),
             (unit) =>
               Effect.gen(function* () {
                 const current = yield* unit.run(db.select({ stopRequest: threadRun.stopRequest }).from(threadRun).where(claim).get());

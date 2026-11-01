@@ -13,11 +13,11 @@ import { unitsLayer } from '../../../platform/store/units.js';
 import { ThreadId } from '../../../platform/contract/wire/thread.js';
 import { bornThread } from '../../../native-harness/testing/born.js';
 import { COMMAND_RESULT_SIGNAL, commandSignalId } from '../../../executions/contract/wire/commands.js';
-import { CommandWaiters } from '../../../executions/contract/service/commands.js';
 import { storesOver } from '../../../executions/testing/stores.js';
-import { waitersOver } from '../../../executions/testing/waitersFixture.js';
 import { OwnWork } from '../../../threads/contract/service/ownWork.js';
-import { eventReads, ownWork, threadInbox } from '../../../threads/testing/doubles.js';
+import { eventReads, ownWork, threadInbox, threadRows } from '../../../threads/testing/doubles.js';
+import { ThreadRows } from '../../../threads/contract/service/rows.js';
+import { ENTRY_KINDS } from '../composed.js';
 
 const INSTALLATION = InstallationId.make('owed-rest');
 
@@ -44,7 +44,7 @@ layer(base)('owed rest', (it) => {
       yield* birth('lead', null);
       yield* birth('worker', 'lead');
       const { deliveries } = storesOver(db, INSTALLATION);
-      const own = yield* ownWork().pipe(Effect.provideService(CommandWaiters, yield* waitersOver(deliveries)));
+      const own = yield* ownWork().pipe(Effect.provideService(ThreadRows, yield* threadRows(ENTRY_KINDS)));
       const reads = yield* eventReads().pipe(Effect.provideService(OwnWork, own));
       const standing = Effect.gen(function* () {
         const holders = yield* reads.holders(['lead', 'worker']);

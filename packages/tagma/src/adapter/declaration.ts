@@ -97,6 +97,8 @@ const surfaceFault = (provider: HarnessProvider): string | null => {
     return `harness provider "${provider.id}" declares an ACP surface without its argv or configure`;
   if (terminal !== undefined && acp !== undefined && acp.hosts === null && acp.argv(undefined)[0] !== terminal.binary)
     return `harness provider "${provider.id}" launches its ACP agent with a program other than its terminal binary ${terminal.binary}`;
+  if (terminal === undefined && acp !== undefined && acp.hosts !== null && !hasText(acp.program))
+    return `harness provider "${provider.id}" hosts its ACP agent without a terminal surface and names no program its runner drives`;
   return null;
 };
 

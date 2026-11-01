@@ -19,6 +19,7 @@ export type CommandUnattributed = {
   readonly reason: string;
   readonly team: string | null;
   readonly digest: string | null;
+  readonly commandLine: string | null;
   readonly at: number;
 };
 

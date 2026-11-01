@@ -41,16 +41,21 @@ layer(commandLayer, { excludeTestServices: true })('command-written files', (it)
       yield* call(s.mine.bash, { command: `printf '${both.join('\\n')}\\n' > src/a.ts`, description: 'Change the next line' });
       expect(yield* s.w.submit(MINE, { commands: s.commands })).toMatchObject({ status: 'landed', carried: [] });
       expect(yield* s.w.committed()).toEqual([...FILE.slice(0, 3), 'const four = 40;', FILE[4]!]);
+      expect((yield* s.w.submit(THEIRS, { commands: s.commands })).status).toBe('landed');
       yield* s.decided(MINE);
-      yield* call(s.theirs.edit, { path: 'src/a.ts', oldString: 'const five = 50;', newString: 'const five = 51;' });
+      yield* call(s.mine.edit, { path: 'src/a.ts', oldString: 'const five = 50;', newString: 'const five = 51;' });
       const rewritten = FILE.map((line) => line.replace('const ', 'let '));
       yield* call(s.mine.bash, { command: `printf '${rewritten.join('\\n')}\\n' > src/a.ts`, description: 'Rewrite after a typed edit' });
       yield* s.decided(MINE);
       yield* call(s.theirs.bash, { command: "printf 'let six = 6;\\n' >> src/a.ts", description: 'Append a peer line' });
       yield* s.decided(THEIRS);
-      yield* call(s.mine.bash, { command: "printf 'let seven = 7;\\n' >> src/a.ts", description: 'Append an own line' });
+      const own = ['let one = 10;', ...rewritten.slice(1)];
+      yield* call(s.mine.bash, {
+        command: `printf '${[...own, 'let six = 6;'].join('\\n')}\\n' > src/a.ts`,
+        description: 'Change an independent own line',
+      });
       expect(yield* s.w.submit(MINE, { commands: s.commands })).toMatchObject({ status: 'landed', carried: [] });
-      expect(yield* s.w.committed()).toEqual([...rewritten, 'let seven = 7;']);
+      expect(yield* s.w.committed()).toEqual(own);
     }),
   );
 

@@ -29,6 +29,16 @@
     "./profiles/museToolSchema": {
       "types": "./src/profiles/museToolSchema.ts",
       "default": "./src/profiles/museToolSchema.ts"
+    },
+    "./harness": {
+      "types": "./src/harness/museCode.ts",
+      "bun": "./src/harness/museCode.ts",
+      "default": "./src/harness/museCode.ts"
+    },
+    "./runner": {
+      "types": "./src/runner/run.ts",
+      "bun": "./src/runner/run.ts",
+      "default": "./src/runner/run.ts"
     }
   },
   "scripts": {
@@ -36,11 +46,20 @@
     "typecheck": "runlith-typecheck"
   },
   "dependencies": {
+    "@effect/platform-bun": "catalog:",
+    "@muse-code/sdk": "1.4.10",
+    "@runlith/acp": "workspace:*",
+    "@runlith/agent": "workspace:*",
+    "@runlith/hosted-runner": "workspace:*",
     "@runlith/llm": "workspace:*",
+    "@runlith/mcp": "workspace:*",
+    "@runlith/ndjson-rpc": "workspace:*",
     "@runlith/tagma": "workspace:*",
     "effect": "catalog:"
   },
   "devDependencies": {
+    "@runlith/effect-test": "workspace:*",
+    "@runlith/testbed": "workspace:*",
     "@runlith/tsconfig": "workspace:*",
     "@types/bun": "catalog:"
   },

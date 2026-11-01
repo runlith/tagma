@@ -32,7 +32,7 @@ const PROGRAM: Descriptor = { program: 'tools/check.ts', name: 'forbidden', conc
 const MAP: ModuleMap = { modules: [{ id: 'core', territory: ['src/core/'], entries: [] }], relations: [], region: ['src/core/'] };
 
 const described = (entries: Record<string, Descriptor>): Descriptions => ({
-  config: { inspections: new Map(Object.entries(entries)), format: [], footprint: [] },
+  config: { inspections: new Map(Object.entries(entries)), format: [], derive: [], footprint: [] },
 });
 
 const stored = (inspection: string, count = 1) => ({

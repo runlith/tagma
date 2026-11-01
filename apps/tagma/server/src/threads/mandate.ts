@@ -9,7 +9,7 @@ import { MachineUnits, type Unit } from '../platform/contract/service/units.js';
 import { ThreadMandate } from './contract/service/mandate.js';
 import { writes } from '../platform/contract/service/writes.js';
 import { recordsAs } from '../thread-record/facts.js';
-import { threadMandate } from './store/mandate.js';
+import { mandateRows, threadMandate } from './store/mandate.js';
 
 export type MandateWrite = {
   readonly authority?: ThreadAuthority;
@@ -90,7 +90,7 @@ export const makeMandateRows = Effect.gen(function* () {
       };
     }),
     setDelegation: (id, delegation) =>
-      units.write(writes('MandateRows.setDelegation', [threadMandate]), (unit) => writeMandate(db, unit, id, { delegation })),
+      units.write(writes('MandateRows.setDelegation', [mandateRows]), (unit) => writeMandate(db, unit, id, { delegation })),
     approvesLineage: Effect.fn('MandateRows.approvesLineage')(function* (id, tx) {
       const rows = yield* read(tx, (unit) => unit.run(approvals.execute({ id })));
       const listed = (raw: string | null): readonly string[] | null => (raw === null ? null : (JSON.parse(raw) as readonly string[]));
@@ -102,7 +102,7 @@ export const makeMandateRows = Effect.gen(function* () {
       };
     }),
     setApproves: (id, approves) =>
-      units.write(writes('MandateRows.setApproves', [threadMandate]), (unit) => writeMandate(db, unit, id, { approves })),
+      units.write(writes('MandateRows.setApproves', [mandateRows]), (unit) => writeMandate(db, unit, id, { approves })),
     teamLineage: Effect.fn('MandateRows.teamLineage')(function* (id) {
       const rows = yield* units.read((unit) => unit.run(teams.execute({ id })));
       const nearest = rows.find((row) => row.team !== null);
@@ -112,7 +112,7 @@ export const makeMandateRows = Effect.gen(function* () {
         nearest: nearest?.team == null ? null : { team: JSON.parse(nearest.team) as TeamLayer, setAt: nearest.id },
       };
     }),
-    setTeam: (id, team) => units.write(writes('MandateRows.setTeam', [threadMandate]), (unit) => writeMandate(db, unit, id, { team })),
+    setTeam: (id, team) => units.write(writes('MandateRows.setTeam', [mandateRows]), (unit) => writeMandate(db, unit, id, { team })),
     takenOver: (id, tx) =>
       read(tx, (unit) =>
         unit
@@ -120,7 +120,7 @@ export const makeMandateRows = Effect.gen(function* () {
           .pipe(Effect.map((rows) => rows[0]?.takenOver ?? false)),
       ),
     setTakenOver: (id, takenOver) =>
-      units.write(writes('MandateRows.setTakenOver', [threadMandate]), (unit) => writeMandate(db, unit, id, { takenOver })),
+      units.write(writes('MandateRows.setTakenOver', [mandateRows]), (unit) => writeMandate(db, unit, id, { takenOver })),
     operatorNotice: (id) =>
       units.read((unit) =>
         unit
@@ -128,6 +128,6 @@ export const makeMandateRows = Effect.gen(function* () {
           .pipe(Effect.map((rows) => rows[0]?.operatorNotice ?? null)),
       ),
     setOperatorNotice: (id, operatorNotice) =>
-      units.write(writes('MandateRows.setOperatorNotice', [threadMandate]), (unit) => writeMandate(db, unit, id, { operatorNotice })),
+      units.write(writes('MandateRows.setOperatorNotice', [mandateRows]), (unit) => writeMandate(db, unit, id, { operatorNotice })),
   });
 });

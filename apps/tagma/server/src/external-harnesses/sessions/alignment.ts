@@ -10,7 +10,7 @@ import { threadCallFailed, type HarnessFailure } from '../../threads/contract/se
 import type { Unit, WriteUnit } from '../../platform/contract/service/units.js';
 import type { StoreDb, StoreFailure } from '../../platform/contract/service/store.js';
 import { writes, type WriteSet } from '../../platform/contract/service/writes.js';
-import { thread } from '../../threads/store/kernel.js';
+import { nativeRows, thread } from '../../threads/store/kernel.js';
 import { declareHistory } from '../../threads/store/seat.js';
 import { terminalHistory } from '../birth/seat.js';
 import type { SessionObservations } from '../contract/service/observations.js';
@@ -169,7 +169,7 @@ export const makeSessionAlignment = (
   ownerId: string,
   adapters: HarnessAdapters['Service'],
 ): SessionAlignment => {
-  const aligning = writes('SessionAlignment.align', [thread], turns.writes);
+  const aligning = writes('SessionAlignment.align', [nativeRows], turns.writes);
 
   const held = (facet: ExternalSession, sessionId: string): HarnessSession | null => {
     const session = facet.session;

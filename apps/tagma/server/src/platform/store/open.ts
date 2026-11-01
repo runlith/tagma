@@ -1,4 +1,4 @@
-import { Connections, sqliteProcessLayer } from '@runlith/sqlite-process/SqliteProcess';
+import { Connections, RowCommits, sqliteProcessLayer } from '@runlith/sqlite-process/SqliteProcess';
 import { Programs } from '@runlith/sqlite-process/programs';
 import { ProcessPool } from '@runlith/sqlite-process/ProcessPool';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
@@ -32,7 +32,7 @@ import { storeTransaction, UnitStore, WriterTimings } from './transaction.js';
 import { storeProgram } from './programs.js';
 import { type Freeing, reclaiming, vacuumStore } from './vacuum.js';
 import { adopting, setAside } from './aside.js';
-import { checkStatement, readConsequences } from './writes.js';
+import { checkStatement, readConsequences, UnitWrites } from './writes.js';
 import { WriteSetMode } from '../contract/service/writes.js';
 import { TableMoves } from './moves.js';
 import { ChildLedger } from '../contract/service/children.js';
@@ -203,6 +203,11 @@ function connection<Brand extends StoreBrand, A>(
                   : Effect.die(new StoreIdentityConflict({ expected: held, actual: identity })),
               ),
               checkStatement: checkStatement(identity),
+              projectionWrite: (context) => {
+                const set = Context.get(context, UnitWrites).get(identity);
+                if (set === undefined || set === null || set.projections === 'effects') return 'effects';
+                return [...(set.projections ?? [])];
+              },
               synchronous: !durable ? 'off' : classed ? 'full' : undefined,
               fullfsync: classed && process.platform === 'darwin',
               onLost: (reason) => {
@@ -246,6 +251,7 @@ type Opened = {
   readonly moves: TableMoves;
   readonly programs: Programs['Service'];
   readonly connections: Connections['Service'];
+  readonly rows: RowCommits['Service'];
   readonly stalled: Effect.Effect<WriterStall | null>;
   readonly adopted: Effect.Effect<boolean>;
 };
@@ -261,6 +267,7 @@ const storeOf = <Brand extends StoreBrand>({
   moves,
   programs,
   connections,
+  rows,
   stalled,
   processes,
   durable,
@@ -268,6 +275,7 @@ const storeOf = <Brand extends StoreBrand>({
 }: Opened): Store<Brand> => ({
   processes,
   connections,
+  rows,
   durable,
   db: storeDb<Brand>(db),
   path: identity.path,
@@ -314,7 +322,16 @@ const open = <Brand extends StoreBrand>(
   adoptions?: Adopting,
 ) =>
   Effect.flatMap(
-    Effect.tap(migrated(identity.path, migrations, processes, withoutSnapshot), ({ db }) => readConsequences(identity, db)),
+    Effect.tap(migrated(identity.path, migrations, processes, withoutSnapshot), ({ db }) =>
+      Effect.andThen(
+        readConsequences(identity, db),
+        Effect.flatMap(RowCommits, (rows) =>
+          migrations.rowFacts === undefined
+            ? rows.install([])
+            : Effect.flatMap(Effect.promise(migrations.rowFacts), (facts) => rows.install(facts.rows, facts.selections)),
+        ),
+      ),
+    ),
     ({ db, schema }) => {
       const moves = new TableMoves();
       const transaction = storeTransaction<'machine'>(db, timings, identity, moves, classed, processes.writerMetrics);
@@ -323,9 +340,10 @@ const open = <Brand extends StoreBrand>(
           reclaiming(db, transaction),
           Connections,
           Programs,
+          RowCommits,
           adopting(db, storeTransaction<StoreBrand>(db, timings, identity, moves, classed, processes.writerMetrics), adoptions),
         ]),
-        ([freeing, connections, programs, adopted]) => ({
+        ([freeing, connections, programs, rows, adopted]) => ({
           adopted,
           db,
           schema,
@@ -337,6 +355,7 @@ const open = <Brand extends StoreBrand>(
           moves,
           programs,
           connections,
+          rows,
           stalled: Effect.map(connections.writer, ({ holder, waiting }) =>
             holder === null || holder.quietMs < WRITER_STALL_MS ? null : { ...holder, waiting },
           ),

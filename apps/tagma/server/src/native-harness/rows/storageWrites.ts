@@ -1,14 +1,14 @@
 import { writes } from '../../platform/contract/service/writes.js';
-import { threadRecord } from '../../thread-record/store/table.js';
-import { thread, threadEntry, threadRun, threadRunTally } from '../../threads/store/kernel.js';
-import { threadLiveSpell, threadMandate } from '../../threads/store/mandate.js';
-import { threadInbox, threadResource } from '../../threads/store/tables.js';
+import { recordRows } from '../../thread-record/store/table.js';
+import { nativeRows, runRows, threadEntry, threadRunTally } from '../../threads/store/kernel.js';
+import { mandateRows, spellRows } from '../../threads/store/mandate.js';
+import { inboxRows, seenRows, threadResource } from '../../threads/store/tables.js';
 import { conversationWrites, threadBase, threadEvent, threadRolloutForm } from '../../threads/store/journal.js';
-import { externalSession } from '../../threads/store/harnessFacet.js';
-import { owedCall, spentCallKey, threadCall } from '../../threads/store/calls.js';
-import { assignmentMembership, assignmentSelection } from '../../workspace/store/tables.js';
+import { sessionFacts } from '../../threads/store/harnessFacet.js';
+import { owedRows, spentCallKey, threadCall } from '../../threads/store/calls.js';
+import { assignmentMembership, placementRows } from '../../workspace/store/tables.js';
 import { worktree } from '../../worktrees/store/tables.js';
-import { commandDelivery } from '../../executions/store/terminal.js';
+import { deliveryRows } from '../../executions/contract/service/commands.js';
 import {
   threadCacheObservation,
   threadCompactionCheckpoint,
@@ -22,9 +22,9 @@ import {
 export const kernelStorageWrites = writes(
   'ThreadStore.kernel',
   [
-    threadRecord,
-    thread,
-    threadRun,
+    recordRows,
+    nativeRows,
+    runRows,
     threadRunTally,
     threadRunReceipt,
     threadRev,
@@ -34,21 +34,22 @@ export const kernelStorageWrites = writes(
     threadCompactionCheckpoint,
     threadPrunedToolCall,
     threadCacheObservation,
-    threadMandate,
-    threadInbox,
+    mandateRows,
+    inboxRows,
+    seenRows,
     threadResource,
     threadEvent,
     threadBase,
     threadRolloutForm,
     threadCall,
-    owedCall,
+    owedRows,
     spentCallKey,
-    threadLiveSpell,
-    externalSession,
+    spellRows,
+    sessionFacts,
     assignmentMembership,
-    assignmentSelection,
+    placementRows,
     worktree,
-    commandDelivery,
+    deliveryRows,
   ],
   conversationWrites,
 );

@@ -1,6 +1,7 @@
 import { threadRunInterrupted } from '@runlith/agent/thread/rows';
 import type { ThreadCacheWarmth } from '@runlith/agent/thread/cache/ThreadCacheWarmth';
-import { type KeepWarmPing, keepWarmSignalId } from '@runlith/agent/transcript/keepWarm';
+import { type KeepWarmPing, keepWarmPingOf, keepWarmSignalId } from '@runlith/agent/transcript/keepWarm';
+import type { ThreadRunRow } from '@runlith/agent/thread/rows';
 import { Cause, Clock, Context, Duration, Effect, Fiber, FiberMap, Queue, type Scope, Stream } from 'effect';
 import { CurrentCost, producerCost, type CostCause } from '@runlith/performance/CostLedger';
 import type { AccountQuota } from '../../providers/contract/service/quota.js';
@@ -10,9 +11,7 @@ import type { Settings } from '../../settings/contract/service/values.js';
 import type { ModelCatalog } from '@runlith/llm/models/catalog';
 import type { ProviderRegistry } from '../../providers/contract/service/registry.js';
 import { keepWarm, keepWarmPings } from '../contract/wire/settings.js';
-import { type KeepWarmLatest, makeKeepWarmReads } from './reads.js';
-import { ThreadLookup } from '../../threads/contract/service/reads.js';
-import { OwnWork } from '../../threads/contract/service/ownWork.js';
+import { ThreadRows } from '../../threads/contract/service/rows.js';
 import { ThreadHarness, ThreadLive } from '../../threads/contract/service/engine.js';
 import type { NativeThreadState } from '../../threads/contract/service/state.js';
 import type { ThreadSummary } from '../../threads/list/summary.js';
@@ -20,6 +19,12 @@ import type { CacheWarmth } from '../../threads/contract/service/evidence.js';
 import { cacheWarmthOf } from '../../threads/list/wire.js';
 
 export const KEEP_WARM_MARGIN_MS = 60_000;
+
+type KeepWarmLatest = {
+  readonly runId: string;
+  readonly status: ThreadRunRow['status'];
+  readonly ping: { readonly anchor: string; readonly ping: number; readonly sentAt: number } | null;
+};
 
 export type KeepWarmSubject = {
   readonly on: boolean;
@@ -125,9 +130,7 @@ export type KeepWarmInput = {
 };
 
 export const makeKeepWarm = Effect.fnUntraced(function* ({ settings, warmth, spending, marginMs = KEEP_WARM_MARGIN_MS }: KeepWarmInput) {
-  const reads = yield* makeKeepWarmReads;
-  const own = yield* OwnWork;
-  const threads = yield* ThreadLookup;
+  const rows = yield* ThreadRows;
   const harness = yield* ThreadHarness;
   const live = yield* ThreadLive;
   const working = new Set<string>();
@@ -146,8 +149,19 @@ export const makeKeepWarm = Effect.fnUntraced(function* ({ settings, warmth, spe
     }
   };
 
+  const latestOf = (threadId: string): KeepWarmLatest | null => {
+    const latest = rows.latest(threadId);
+    if (latest === null) return null;
+    const ping = latest.pingId === null ? null : keepWarmPingOf(latest.pingId);
+    return {
+      runId: latest.runId,
+      status: latest.status,
+      ping: ping === null || latest.pingAt === null ? null : { ...ping, sentAt: latest.pingAt.getTime() },
+    };
+  };
+
   const subject = Effect.fnUntraced(function* (threadId: string, now: number): Effect.fn.Return<KeepWarmSubject | null, unknown> {
-    const summary = yield* threads.summary(threadId);
+    const summary = rows.current(threadId) ?? (yield* rows.read([threadId]))[0];
     if (summary === undefined || summary.ownerId !== OPERATOR_PRINCIPAL) return null;
     const { on, pings } = yield* settings(summary.projectId);
     const running = summary.activeRun !== null;
@@ -161,7 +175,7 @@ export const makeKeepWarm = Effect.fnUntraced(function* ({ settings, warmth, spe
       waits: true,
       warmth: settled ? yield* warmth(summary) : null,
       measuredAt: Number.isFinite(measuredAt) ? measuredAt : null,
-      latest: settled ? yield* reads.latest(threadId) : null,
+      latest: settled ? latestOf(threadId) : null,
       spendableFrom: settled ? yield* spending(summary, now) : null,
     };
   });
@@ -170,12 +184,12 @@ export const makeKeepWarm = Effect.fnUntraced(function* ({ settings, warmth, spe
     function* (look: Look, looks: Queue.Queue<Look>, timers: FiberMap.FiberMap<string>) {
       yield* FiberMap.remove(timers, look.threadId);
       if (look.busy) return;
-      const standing = yield* reads.standing(look.threadId);
+      const standing = rows.waiting(look.threadId);
       if (standing === null) return;
       if (look.climb && standing.parentThreadId !== null) {
         yield* Queue.offer(looks, { threadId: standing.parentThreadId, busy: false, climb: true, cause: look.cause });
       }
-      if (!standing.waits && (yield* own.owing([look.threadId, ...standing.below])).length === 0) return;
+      if (!standing.waits && !standing.owing) return;
       const now = yield* Clock.currentTimeMillis;
       const judged = yield* subject(look.threadId, now);
       if (judged === null) return;
@@ -216,12 +230,10 @@ export const makeKeepWarm = Effect.fnUntraced(function* ({ settings, warmth, spe
     );
     const everyWaiting = producerCost(
       'KeepWarm.scan',
-      own.owing().pipe(
-        Effect.flatMap((owing) => reads.waiting(owing)),
-        Effect.flatMap((ids) =>
-          Effect.forEach(ids, (threadId) => Queue.offer(looks, { threadId, busy: false, climb: false, cause: null }), { discard: true }),
-        ),
-        Effect.catchCause((cause) => Effect.logWarning('keep-warm could not read the waiting threads', { reason: Cause.pretty(cause) })),
+      Effect.suspend(() =>
+        Effect.forEach(rows.waitingIds(), (threadId) => Queue.offer(looks, { threadId, busy: false, climb: false, cause: null }), {
+          discard: true,
+        }),
       ),
     );
     yield* Effect.forkScoped(Stream.runForEach(changes, () => everyWaiting));

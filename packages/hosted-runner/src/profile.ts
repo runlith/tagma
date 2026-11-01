@@ -11,6 +11,7 @@ export type ClientProfile = {
   readonly usage: AcpProfile['proves']['usage'];
   readonly midTurn?: AcpProfile['midTurn'];
   readonly web?: AcpProfile['web'];
+  readonly program?: string;
 };
 
 export const clientProfile = ({
@@ -22,7 +23,9 @@ export const clientProfile = ({
   usage,
   midTurn = 'after-turn',
   web = 'none',
+  program,
 }: ClientProfile): AcpProfile => ({
+  ...(program === undefined ? {} : { program }),
   argv: (choice) => [
     HOST_COMMAND,
     'harness-run',

@@ -16,9 +16,9 @@ edges:
     to: 01a14c08-619e-7ae1-af8b-16d0312bb7f6
 sources:
   - kind: file
-    ref: apps/tagma/server/src/speech/contract/wire/capability.ts
-  - kind: file
     ref: apps/tagma/server/src/calls/listening/page.ts
+  - kind: file
+    ref: apps/tagma/server/src/speech/contract/wire/capability.ts
   - kind: file
     ref: apps/tagma/server/src/speech/operations.ts
   - kind: symbol

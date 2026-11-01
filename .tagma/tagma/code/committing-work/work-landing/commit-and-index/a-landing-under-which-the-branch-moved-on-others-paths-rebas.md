@@ -18,6 +18,7 @@ Rebasing is impossible, and the landing assembles the commit from scratch, when:
 - the shift touched a change path, or a path nested in it or containing it: the session's lines were judged against the old version of the file;
 - the shift touched a path carrying this commit's format commands (`declaration` of the ready tree): `tagma.config.ts`, a file it imports, or a path the resolver looked for and missed. The commit is shaped by the commands of its own version;
 - the landing closes a merge or runs next to an open merge;
+- the ready tree regenerated derived outputs: the new HEAD may change their inputs, so they must be regenerated again;
 - the publication was lost by an attempt whose hooks edited the tree: the edits already reached the working files as the session's lines, and the rebased old tree would not have committed them.
 
 While the landing runs, it names its step via `CallStage`: `wait_call` and `read_calls` answer it in `detail`.

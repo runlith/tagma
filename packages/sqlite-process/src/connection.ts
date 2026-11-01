@@ -15,10 +15,21 @@ import * as Option from 'effect/Option';
 import * as Client from 'effect/sql/SqlClient';
 import type { Connection } from 'effect/sql/SqlConnection';
 import { classifySqliteError, SqlError } from 'effect/sql/SqlError';
-import type { Committed, ProgramBatch, SqliteAsk, SqliteSaid, ThrownShape } from './channel.js';
+import type {
+  Committed,
+  ProgramBatch,
+  ProjectionWrite,
+  RowCommit,
+  RowProjection,
+  RowSelection,
+  SelectionWork,
+  SqliteAsk,
+  SqliteSaid,
+  ThrownShape,
+} from './channel.js';
 import { prepareEngine } from './engine.js';
 import type { StatementCounts } from './StatementMetrics.js';
-import { parameterBytes, rowBytes, thrownBytes } from './payload.js';
+import { parameterBytes, rowBytes, rowCommitBytes, thrownBytes } from './payload.js';
 
 export type StatementTiming = {
   readonly operation: string;
@@ -26,6 +37,7 @@ export type StatementTiming = {
   readonly queueMs: number;
   readonly execMs: number;
   readonly source?: 'writer' | 'reader' | undefined;
+  readonly enclosed?: boolean;
 };
 
 export type ConnectionOptions = {
@@ -42,6 +54,8 @@ export type ConnectionOptions = {
   readonly onSpawned?: ((spawned: SpawnedChild) => () => void) | undefined;
   readonly checkConnection?: Effect.Effect<void, SqlError> | undefined;
   readonly checkStatement?: ((sql: string) => Effect.Effect<void, SqlError>) | undefined;
+  readonly projectionWrite?: (context: Context.Context<never>) => ProjectionWrite;
+  readonly onCommit?: (commits: readonly RowCommit[]) => void;
 };
 
 export type SpawnedChild = { readonly pid: number };
@@ -54,6 +68,11 @@ export type ProcessConnection = Connection & {
   readonly retire: Effect.Effect<void, SqlError>;
   readonly handover: Effect.Effect<void, SqlError>;
   readonly programs: (batch: ProgramBatch) => Effect.Effect<Effect.Effect<Committed | Unapplied, SqlError>, SqlError>;
+  readonly project: (
+    projections: readonly RowProjection[],
+    selections: readonly RowSelection[],
+    reset?: boolean,
+  ) => Effect.Effect<void, SqlError>;
 };
 
 export type Unapplied = {
@@ -62,6 +81,7 @@ export type Unapplied = {
   readonly thrown: ThrownShape;
   readonly queueMs: number;
   readonly execMs: number;
+  readonly projectionWork?: readonly SelectionWork[];
 };
 
 const MAX_BUSY_TIMEOUT = 2_147_483_647;
@@ -81,7 +101,7 @@ const brokenChannel = (message: string, operation: string) =>
   new SqlError({ reason: classifySqliteError(new Error(message), { message, operation }) });
 
 const failureOf = (thrown: ThrownShape, message: string, operation: string) =>
-  new SqlError({ reason: classifySqliteError(thrown, { message, operation }) });
+  new SqlError({ reason: classifySqliteError(thrown, { message: `${message}: ${thrown.message}`, operation }) });
 
 type Outstanding = {
   readonly cell: Deferred.Deferred<SqliteSaid, SqlError>;
@@ -103,6 +123,8 @@ export const openConnection = Effect.fnUntraced(function* (processes: ProcessPoo
   const clock = Context.get(Context.empty(), Clock.Clock);
   const nowMs = () => Number(clock.monotonicTimeNanosUnsafe()) / 1_000_000;
   const pending = new Map<number, Outstanding>();
+  const selectionQueries = new Map<string, string>();
+  let projected = false;
   let quietSince: number | null = nowMs();
   const answered = (id: number): void => {
     pending.delete(id);
@@ -206,7 +228,10 @@ export const openConnection = Effect.fnUntraced(function* (processes: ProcessPoo
       if (waiting.cost !== null) {
         waiting.cost.counts.statementMs += totalMs;
         waiting.cost.counts.statementExecMs += said.execMs;
-        waiting.cost.counts.responseBytes += said._tag === 'Rows' ? rowBytes(said.rows) : thrownBytes(said.thrown);
+        waiting.cost.counts.responseBytes +=
+          said._tag === 'Rows'
+            ? rowBytes(said.rows) + (said.commits ?? []).reduce((bytes, commit) => bytes + rowCommitBytes(commit), 0)
+            : thrownBytes(said.thrown);
       }
     }
     if ((said._tag === 'Rows' || said._tag === 'Failed') && waiting.ask._tag === 'Run' && options.onStatement !== undefined) {
@@ -218,6 +243,33 @@ export const openConnection = Effect.fnUntraced(function* (processes: ProcessPoo
           execMs: said.execMs,
         });
       } catch {}
+    }
+    if (said._tag === 'Rows' || said._tag === 'Committed' || said._tag === 'Failed') {
+      for (const work of said.projectionWork ?? []) {
+        const measured = processes.statements.query(selectionQueries.get(work.selection)!);
+        measured.statements++;
+        measured.completed++;
+        measured.execMs += work.execMs;
+        measured.totalMs += work.execMs;
+        if (waiting.cost !== null) {
+          waiting.cost.counts.statements++;
+        }
+        options.onStatement?.({
+          operation: `select:${work.selection}`,
+          totalMs: work.execMs,
+          queueMs: 0,
+          execMs: work.execMs,
+          enclosed: true,
+        });
+      }
+    }
+    if (options.onCommit !== undefined) {
+      if (said._tag === 'Rows' && said.commits !== undefined) options.onCommit(said.commits);
+      else if (said._tag === 'Committed') {
+        const commits: RowCommit[] = [];
+        for (const outcome of said.outcomes) if (outcome._tag === 'Applied' && outcome.rows !== undefined) commits.push(outcome.rows);
+        if (commits.length > 0) options.onCommit(commits);
+      }
     }
     Deferred.doneUnsafe(waiting.cell, Effect.succeed(said));
   };
@@ -296,7 +348,10 @@ export const openConnection = Effect.fnUntraced(function* (processes: ProcessPoo
         if (cost === null) processes.unattributedStatements++;
         else {
           cost.counts.statements += 1;
-          cost.counts.requestBytes += Buffer.byteLength(ask.sql, 'utf8') + parameterBytes(ask.params);
+          cost.counts.requestBytes +=
+            Buffer.byteLength(ask.sql, 'utf8') +
+            parameterBytes(ask.params) +
+            (ask.projections === 'effects' ? 7 : parameterBytes(ask.projections ?? []));
         }
       } else if (ask._tag === 'Programs') {
         for (const program of ask.programs) {
@@ -335,6 +390,7 @@ export const openConnection = Effect.fnUntraced(function* (processes: ProcessPoo
       Effect.andThen(
         options.checkStatement?.(sql) ?? Effect.void,
         Effect.withFiber<Array<any>, SqlError>((fiber) => {
+          const projections = projected ? (options.projectionWrite?.(fiber.context) ?? []) : [];
           const cost = Context.get(fiber.context, CurrentCost);
           const observed = Context.get(fiber.context, CurrentWriter);
           const writer = lane === undefined && observed?.owner === connection ? observed : null;
@@ -353,6 +409,7 @@ export const openConnection = Effect.fnUntraced(function* (processes: ProcessPoo
                 params,
                 safeIntegers: Context.get(fiber.context, Client.SafeIntegers),
                 sentAt: Date.now(),
+                ...(projections.length === 0 ? {} : { projections }),
               },
               operation,
               cost,
@@ -486,6 +543,19 @@ export const openConnection = Effect.fnUntraced(function* (processes: ProcessPoo
         ),
       ),
     ),
+    project: (projections, selections, reset = false) =>
+      Effect.suspend(() =>
+        call({ _tag: 'Project', id: (counter += 1), projections, selections, reset }, 'project').pipe(
+          Effect.flatMap((said) =>
+            said._tag === 'Did'
+              ? Effect.sync(() => {
+                  projected = projections.length > 0;
+                  for (const selection of selections) selectionQueries.set(selection.id, selection.sql);
+                })
+              : Effect.fail(answeredWrong(said, 'Failed to install row projections', 'project')),
+          ),
+        ),
+      ),
     programs: (batch) =>
       Effect.andThen(
         options.checkConnection ?? Effect.void,
@@ -501,6 +571,7 @@ export const openConnection = Effect.fnUntraced(function* (processes: ProcessPoo
                       thrown: said.thrown,
                       queueMs: said.queueMs,
                       execMs: said.execMs,
+                      projectionWork: said.projectionWork,
                     })
                   : Effect.fail(answeredWrong(said, 'Failed to commit programs', 'programs')),
             ),

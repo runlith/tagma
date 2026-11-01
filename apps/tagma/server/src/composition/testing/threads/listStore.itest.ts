@@ -5,14 +5,13 @@ import { THREAD_RUN_AWAITING_QUESTION_STAGE } from '@runlith/agent/thread/storag
 import { THREAD_TOOL_CONFIRM_KIND } from '@runlith/agent/transcript/parts';
 import type { ThreadQuestionEntry } from '@runlith/agent/transcript/entries';
 import { eq, sql } from 'drizzle-orm';
-import { Clock, Effect, Queue } from 'effect';
+import { Clock, Effect } from 'effect';
 import { ExecutionId, InstallationId, type ExecutionRef } from '@runlith/executions/protocol/execution';
 import { COMMAND_RESULT_SIGNAL, commandSignalId } from '../../../executions/contract/wire/commands.js';
-import { CommandWaiters } from '../../../executions/contract/service/commands.js';
-import { commandNoticeQueue } from '../../../executions/testing/doubles.js';
 import { storesOver } from '../../../executions/testing/stores.js';
 import { ThreadId } from '../../../platform/contract/wire/thread.js';
-import { ownWork, standingOfSummary, threadInbox, threadListReads } from '../../../threads/testing/doubles.js';
+import { ownWork, standingOfSummary, threadInbox, threadListReads, threadRows } from '../../../threads/testing/doubles.js';
+import { ThreadRows } from '../../../threads/contract/service/rows.js';
 import { externalSession, thread, threadRun, unmeasuredObservation } from '../../../threads/testing/doubles.js';
 import { harnessPresentation } from '../../../external-harnesses/contract/service/table.js';
 import { builtinHarness } from '../../../external-harnesses/testing/builtin.js';
@@ -28,7 +27,6 @@ import { threadDirectoryStore } from '../../../threads/testing/doubles.js';
 import { nativeAsk } from '../../../threads/testing/doubles.js';
 
 import { threadParts, type ThreadParts } from '../threadParts.js';
-import { writes } from '../../../platform/contract/service/writes.js';
 import type { ThreadRecords } from '../../../thread-record/contract/service/records.js';
 import { threadRecord } from '../../../thread-record/testing/doubles.js';
 import { ENTRY_KINDS } from '../composed.js';
@@ -454,9 +452,7 @@ it.live(
     const demo = yield* threadStoreFixture;
     const { store, threads, records, ids } = yield* project(demo, 1);
     const [root] = ids as [string];
-    yield* demo.units
-      .write(writes('ThreadStore.setTitle', [threadRecord()]), (unit) => records.setTitle(unit, root, 'quiet-harbor', 'manual'))
-      .pipe(Effect.orDie);
+    yield* demo.units.write(records.writes, (unit) => records.setTitle(unit, root, 'quiet-harbor', 'manual')).pipe(Effect.orDie);
     const [branch, spawned, titled] = yield* demo.units
       .write('ThreadStore', (unit) =>
         Effect.gen(function* () {
@@ -879,12 +875,8 @@ it.live(
 const owingReads = Effect.fnUntraced(function* (demo: ThreadStoreFixture, store: ThreadStoreFixture['store']) {
   const installation = InstallationId.make('list-owes');
   const deliveries = storesOver(demo.db, installation).deliveries;
-  const waiters = yield* commandNoticeQueue({
-    deliveries,
-    ended: yield* Queue.unbounded<ExecutionRef>(),
-    takeBack: Effect.die(new Error('the list takes back no notice')),
-  }).pipe(Effect.provide(demo.context));
-  const own = yield* ownWork().pipe(Effect.provideService(CommandWaiters, waiters), Effect.provide(demo.context));
+  const rows = yield* threadRows(ENTRY_KINDS).pipe(Effect.provide(demo.context));
+  const own = yield* ownWork().pipe(Effect.provideService(ThreadRows, rows));
   const reads = yield* Effect.provide(threadListReads(store, demo.records, ENTRY_KINDS, own), demo.context);
   const ended = Effect.fnUntraced(function* (threadId: string, runId: string) {
     yield* demo.db

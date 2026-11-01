@@ -3,12 +3,14 @@ import { BUILTIN_IDS, BUILTINS, type Inspection } from '@tagma/inspection/builti
 import {
   type Config,
   type Descriptor,
+  type DeriveEntry,
   type FormatEntry,
   FormatCommand,
   KEY,
   LinterInspection,
   ProgramInspection,
 } from './contract/wire/config.js';
+import { DeriveCommand } from '../change-record/contract/wire/derivation.js';
 export type Misfit = { readonly key: string | null; readonly reason: string };
 
 const CLOSED = { onExcessProperty: 'error' } as const;
@@ -16,6 +18,7 @@ const CLOSED = { onExcessProperty: 'error' } as const;
 const Sections = Schema.Struct({
   inspections: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
   format: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
+  derive: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
 });
 
 const Builtin = Schema.Struct({ builtin: Schema.Literals(BUILTIN_IDS), params: Schema.Unknown });
@@ -41,7 +44,7 @@ export const configOf = (value: unknown, footprint: readonly string[]): Result.R
   const at = (key: string | null, reason: string): Misfit => ({ key, reason });
   const sections = decoded(Sections, value);
   if (sections._tag === 'Failure')
-    return Result.fail(at(null, `its default export is not defineConfig({ inspections, format }): ${sections.failure}`));
+    return Result.fail(at(null, `its default export is not defineConfig({ inspections, format, derive }): ${sections.failure}`));
   const inspections = new Map<string, Descriptor>();
   for (const [key, one] of Object.entries(sections.success.inspections ?? {})) {
     if (!KEY.test(key)) return Result.fail(at(key, `the inspection key ${key} does not match ${KEY.source}`));
@@ -56,5 +59,12 @@ export const configOf = (value: unknown, footprint: readonly string[]): Result.R
     if (command._tag === 'Failure') return Result.fail(at(key, `format.${key}: ${command.failure}`));
     format.push({ key, command: command.success });
   }
-  return Result.succeed({ inspections, format, footprint });
+  const derive: DeriveEntry[] = [];
+  for (const [key, one] of Object.entries(sections.success.derive ?? {})) {
+    if (!KEY.test(key)) return Result.fail(at(key, `the derive key ${key} does not match ${KEY.source}`));
+    const command = decoded(DeriveCommand, one);
+    if (command._tag === 'Failure') return Result.fail(at(key, `derive.${key}: ${command.failure}`));
+    derive.push({ key, command: command.success });
+  }
+  return Result.succeed({ inspections, format, derive, footprint });
 };

@@ -2,6 +2,7 @@ import { Effect, Schema } from 'effect';
 import type { Inspection } from '@tagma/inspection/builtins';
 import { FACT_KINDS } from '@tagma/inspection/program';
 import { CONCERNS } from '@tagma/inspection/rule';
+import { Argv, type DeriveCommand, RepositoryPath } from '../../../change-record/contract/wire/derivation.js';
 
 export const CONFIG_FILE = 'tagma.config.ts';
 
@@ -12,13 +13,7 @@ export type ConfigRefusal = 'config-invalid' | 'config-unstored' | 'config-unrun
 const defaulted = <S extends Schema.Top>(schema: S, value: S['Encoded']) =>
   schema.pipe(Schema.withDecodingDefaultKey(Effect.succeed(value)));
 
-const Argv = Schema.NonEmptyArray(Schema.NonEmptyString);
-
 const Globs = Schema.Array(Schema.NonEmptyString);
-
-const RepositoryPath = Schema.String.check(Schema.isPattern(/^(?!\/)(?!(?:.*\/)?\.{1,2}(?:\/|$))[^\\]+$/u)).annotate({
-  description: 'A file path from the repository root, without `.` or `..` segments.',
-});
 
 export const ProgramInspection = Schema.Struct({
   program: RepositoryPath,
@@ -59,8 +54,11 @@ export type FormatCommand = typeof FormatCommand.Type;
 
 export type FormatEntry = { readonly key: string; readonly command: FormatCommand };
 
+export type DeriveEntry = { readonly key: string; readonly command: DeriveCommand };
+
 export type Config = {
   readonly inspections: ReadonlyMap<string, Descriptor>;
   readonly format: readonly FormatEntry[];
+  readonly derive: readonly DeriveEntry[];
   readonly footprint: readonly string[];
 };

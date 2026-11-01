@@ -160,6 +160,7 @@ export const SUBMIT_PAIRS = {
             coAuthored: yield* (yield* Settings).value(coAuthor, call.project.id),
             paths: input.paths,
             whole: input.whole,
+            derive: input.derive,
             withoutFormat: input.withoutFormat,
           },
           ruleChecks,

@@ -4,6 +4,7 @@ import { threadRecord } from '../../thread-record/store/table.js';
 import type { StoreDb, StoreFailure } from '../../platform/contract/service/store.js';
 import type { Unit } from '../../platform/contract/service/units.js';
 import { Effect } from 'effect';
+import { projectRows } from '../../platform/contract/service/projections.js';
 import type { ExternalSession } from '../contract/wire/harness/externalSession.js';
 
 export const recoverableSession = (facet: SQLiteColumn): SQL =>
@@ -33,6 +34,14 @@ export const externalSession = sqliteTable(
       .where(sql`${table.leaseBeat} is not null`),
   ],
 );
+
+export const sessionFacts = projectRows({
+  id: 'threads.session',
+  table: externalSession,
+  keys: ['id'],
+  address: 'id',
+  columns: { id: externalSession.id, facet: externalSession.facet },
+});
 
 export type SessionLease = { readonly leaseOwner: string | null; readonly leaseBeat: number | null };
 

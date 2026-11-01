@@ -9,6 +9,7 @@ import { project } from '../../projects/store/table.js';
 import { NATIVE_HARNESS } from '../../platform/contract/wire/session.js';
 import { session } from '../../platform/store/writers.js';
 import { threadFolder } from './folders.js';
+import { projectRows } from '../../platform/contract/service/projections.js';
 
 export const threadRecord = sqliteTable(
   'thread',
@@ -70,3 +71,36 @@ export const threadRecord = sqliteTable(
       .where(sql`${table.folderId} is not null`),
   ],
 );
+
+export const recordRows = projectRows({
+  id: 'thread-record.record',
+  table: threadRecord,
+  keys: ['id'],
+  address: 'id',
+  context: ['projectId', 'parentId', 'principalId', 'archivedAt'],
+  columns: {
+    id: threadRecord.id,
+    projectId: threadRecord.projectId,
+    parentId: threadRecord.parentId,
+    spawnRootId: threadRecord.spawnRootId,
+    detachedFrom: threadRecord.detachedFrom,
+    principalId: threadRecord.principalId,
+    name: threadRecord.name,
+    title: threadRecord.title,
+    titleOrigin: threadRecord.titleOrigin,
+    agentId: threadRecord.agentId,
+    bornOf: threadRecord.bornOf,
+    spawnedByRunId: threadRecord.spawnedByRunId,
+    createdBy: threadRecord.createdBy,
+    scopeBlockUuid: threadRecord.scopeBlockUuid,
+    createdBySessionId: threadRecord.createdBySessionId,
+    readerOrderAt: threadRecord.readerOrderAt,
+    pinnedAt: threadRecord.pinnedAt,
+    folderId: threadRecord.folderId,
+    archivedAt: threadRecord.archivedAt,
+    status: threadRecord.status,
+    movedAt: threadRecord.movedAt,
+    recap: threadRecord.recap,
+    createdAt: threadRecord.createdAt,
+  },
+});

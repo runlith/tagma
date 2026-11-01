@@ -6,13 +6,13 @@ import { DETACHED_DETAIL } from '@runlith/agent/tool';
 import { ThreadStorageFailed } from '@runlith/agent/thread/persisted';
 import { MachineUnits } from '../../platform/contract/service/units.js';
 import { writes } from '../../platform/contract/service/writes.js';
-import { owedCall } from '../store/calls.js';
+import { owedRows } from '../store/calls.js';
 import type { OwedCallRows, OwedEnding, OwedOutcome, OwedRow } from '../store/owedCalls.js';
 import { CallEpoch, OwedCalls } from '../contract/service/owedCalls.js';
 import { HarnessCalls } from '../contract/service/engine.js';
 import type { CommandSignalSend } from './commandEndings.js';
 
-const owing = writes('OwedCalls.write', [owedCall]);
+const owing = writes('OwedCalls.write', [owedRows]);
 
 const REDRIVE_ATTEMPTS = 3;
 const REDRIVE_MS = 1_000;

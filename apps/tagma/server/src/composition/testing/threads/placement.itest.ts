@@ -201,7 +201,7 @@ const composed = Effect.fn('testing.rootPlacement')(function* (demo: EffectDemo)
           announceFolders: unexpected,
           resync: unexpected,
           serveArchiving: unexpected,
-          serveOpenCalls: unexpected,
+          serveCuts: unexpected,
         }),
       ),
     ),

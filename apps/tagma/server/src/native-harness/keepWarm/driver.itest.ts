@@ -48,20 +48,16 @@ import { makeThreadInbox } from '../../threads/store/inbox.js';
 import { makeSqliteThreadJournal } from '../../threads/journal/log.js';
 import { makeApprovalPreferences } from '../../threads/store/approvals.js';
 import { ThreadHarness, ThreadLive } from '../../threads/contract/service/engine.js';
-import { ThreadLookup } from '../../threads/contract/service/reads.js';
-import { OwnWork } from '../../threads/contract/service/ownWork.js';
-import { ownWork } from '../../threads/testing/doubles.js';
+import { ThreadRows } from '../../threads/contract/service/rows.js';
+import { threadRows } from '../../threads/testing/doubles.js';
 import { ThreadId } from '../../platform/contract/wire/thread.js';
 import { commandSignalId } from '../../executions/contract/wire/commands.js';
-import { CommandWaiters } from '../../executions/contract/service/commands.js';
-import { commandNoticeQueue } from '../../executions/testing/doubles.js';
 import { storesOver } from '../../executions/testing/stores.js';
 import { makeCompactionStore } from '../compaction/store.js';
 import { toolOutputStore } from '../tools/outputStore.js';
 import { makeTransitions } from '../runs/transitionStore.js';
 import { COMPACTION_POLICY, COMPACTION_PROMPT, COMPACTION_TEXT } from '../compaction/policy.js';
 import { makeKeepWarm } from './driver.js';
-import { makeKeepWarmReads } from './reads.js';
 import { threadStack } from '../../composition/testing/threadParts.js';
 import { AGENT_IDLE_MS } from '@runlith/agent/callProgress';
 import { LEASE_RHYTHM, REAPER_RHYTHM, RECONCILE_INTERVAL_MS, SETTLEMENT_RHYTHM } from '../../threads/contract/wire/rhythm.js';
@@ -247,13 +243,8 @@ const opened = Effect.gen(function* () {
     (made) => made.dispose(),
   );
   const deliveries = storesOver(db, INSTALLATION).deliveries;
-  const waiters = yield* commandNoticeQueue({
-    deliveries,
-    ended: yield* Queue.unbounded<ExecutionRef>(),
-    takeBack: Effect.die(new Error('keep-warm takes back no notice')),
-  });
-  const own = yield* ownWork().pipe(Effect.provideService(CommandWaiters, waiters));
-  return { db, units, projectId: created.id, inbox, threads, parts, reads: yield* makeKeepWarmReads, harness, live, deliveries, own };
+  const rows = yield* threadRows(CORE_KINDS);
+  return { db, units, projectId: created.id, inbox, threads, parts, harness, live, deliveries, rows };
 });
 class Floor extends Context.Service<Floor, Effect.Success<typeof opened>>()('test/native-harness/KeepWarmFloor') {}
 const floor = Layer.effect(Floor, opened).pipe(Layer.provideMerge(machine));
@@ -380,7 +371,7 @@ layer(floor, { excludeTestServices: true })('keep-warm', (it) => {
     'the driver pings a lead whose child runs up to the count per wait, keeps the count across a restart, and stops when the child reports',
     () =>
       Effect.gen(function* () {
-        const { harness, live, parts, reads, own } = yield* Floor;
+        const { harness, live, parts, rows } = yield* Floor;
         const thread = yield* lead;
         const anchor = yield* turn(thread, 'Delegate the bridge.', 'Delegated.');
         const gate = Promise.withResolvers<void>();
@@ -401,10 +392,9 @@ layer(floor, { excludeTestServices: true })('keep-warm', (it) => {
           spending: (_summary, now) => Effect.succeed(knobs.spendable ? now : null),
           marginMs: TTL_MS,
         }).pipe(
-          Effect.provideService(ThreadLookup, parts.list as unknown as ThreadLookup['Service']),
+          Effect.provideService(ThreadRows, rows),
           Effect.provideService(ThreadHarness, harness as unknown as ThreadHarness['Service']),
           Effect.provideService(ThreadLive, live as unknown as ThreadLive['Service']),
-          Effect.provideService(OwnWork, own),
           Effect.flatMap((made) => Effect.scoped(made.drive())),
         );
         plan(thread, { text: 'ok' }, { text: 'ok' });
@@ -412,7 +402,7 @@ layer(floor, { excludeTestServices: true })('keep-warm', (it) => {
         yield* until('two pings settled', () => Effect.map(resting(thread), (rest) => calls(thread).length === 3 && rest));
         yield* settle;
         expect(calls(thread)).toHaveLength(3);
-        expect(yield* reads.latest(thread)).toMatchObject({ ping: { anchor, ping: 2 } });
+        expect(rows.latest(thread)).toMatchObject({ pingId: keepWarmSignalId({ anchor, ping: 2 }) });
         const summary = yield* parts.list.summary(thread);
         expect(cacheWarmthOf(summary!, false, { curves: new Map(), accounts: new Map(), models: MODELS })).toMatchObject({
           state: 'warm',
@@ -436,7 +426,7 @@ layer(floor, { excludeTestServices: true })('keep-warm', (it) => {
         yield* until('the restarted driver sent the third ping of the same wait', () =>
           Effect.map(resting(thread), (rest) => calls(thread).length === 4 && rest),
         );
-        expect(yield* reads.latest(thread)).toMatchObject({ ping: { anchor, ping: 3 } });
+        expect(rows.latest(thread)).toMatchObject({ pingId: keepWarmSignalId({ anchor, ping: 3 }) });
         knobs.pings = 4;
         knobs.spendable = false;
         yield* harness.threads.publish(thread);
@@ -448,7 +438,7 @@ layer(floor, { excludeTestServices: true })('keep-warm', (it) => {
         yield* until('the spendable lead was pinged the fourth time', () =>
           Effect.map(resting(thread), (rest) => calls(thread).length === 5 && rest),
         );
-        expect(yield* reads.latest(thread)).toMatchObject({ ping: { anchor, ping: 4 } });
+        expect(rows.latest(thread)).toMatchObject({ pingId: keepWarmSignalId({ anchor, ping: 4 }) });
         plan(thread, { text: 'Read the report.' });
         gate.resolve();
         yield* until('the child reported and the lead read it', () =>
@@ -460,13 +450,13 @@ layer(floor, { excludeTestServices: true })('keep-warm', (it) => {
         yield* harness.threads.publish(thread);
         yield* settle;
         expect(calls(thread)).toHaveLength(6);
-        expect(yield* reads.standing(thread)).toMatchObject({ waits: false });
+        expect(rows.waiting(thread)?.waits ?? false).toBe(false);
         yield* Fiber.interrupt(second);
       }),
   );
   it.effect('the driver pings a lead at rest whose own command still runs, but only under a promised cache lifetime', () =>
     Effect.gen(function* () {
-      const { harness, live, parts, reads, own, deliveries, units } = yield* Floor;
+      const { harness, live, rows, deliveries, units } = yield* Floor;
       const thread = yield* lead;
       const anchor = yield* turn(thread, 'Run the build.', 'The build runs in the background.');
       const build = { installation: INSTALLATION, execution: ExecutionId.make('exec-keep-warm-build'), incarnation: 1 };
@@ -487,10 +477,9 @@ layer(floor, { excludeTestServices: true })('keep-warm', (it) => {
         spending: (_summary, now) => Effect.succeed(now),
         marginMs: TTL_MS,
       }).pipe(
-        Effect.provideService(ThreadLookup, parts.list as unknown as ThreadLookup['Service']),
+        Effect.provideService(ThreadRows, rows),
         Effect.provideService(ThreadHarness, harness as unknown as ThreadHarness['Service']),
         Effect.provideService(ThreadLive, live as unknown as ThreadLive['Service']),
-        Effect.provideService(OwnWork, own),
         Effect.flatMap((made) => Effect.scoped(made.drive())),
       );
       const driving = yield* Effect.forkChild(driver);
@@ -502,7 +491,7 @@ layer(floor, { excludeTestServices: true })('keep-warm', (it) => {
       yield* until('the lead was pinged while its command runs', () =>
         Effect.map(resting(thread), (rest) => calls(thread).length === 2 && rest),
       );
-      expect(yield* reads.latest(thread)).toMatchObject({ ping: { anchor, ping: 1 } });
+      expect(rows.latest(thread)).toMatchObject({ pingId: keepWarmSignalId({ anchor, ping: 1 }) });
       yield* Fiber.interrupt(driving);
       yield* units.write('keepWarm.deliveredCommand', (unit) => deliveries.settleDelivery(unit, build));
     }),

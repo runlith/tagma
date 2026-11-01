@@ -25,7 +25,7 @@ sources:
 **How.** The left column of the Knowledge surface, with an outline/map switch.
 
 **Behaviour.**
-- The search field finds project blocks. While it is empty, shelves show: work in progress with holders, recently opened blocks, project tree, and views.
+- The search field finds project blocks. While it is empty, shelves show: work in progress with holders, recently opened blocks, project tree, and views. A shelf keeps distinct block identities apart even when their short names collide, and a block reached by old and current visit addresses appears once.
 - Collapsed shelves, opened branches, and column width are remembered in the browser.
 
 **Limits.** The column tree hides the same resting blocks as outline.

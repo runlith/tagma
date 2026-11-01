@@ -21,7 +21,7 @@ import { Assignments } from '../workspace/contract/service/assignments.js';
 import { WorkPlaces } from './contract/service/working.js';
 import { makeWorkingPlaces } from './working.js';
 import type { RootId } from '../workspace/contract/wire/ids.js';
-import { assignmentMembership, assignmentSelection } from '../workspace/store/tables.js';
+import { assignmentMembership, placementRows } from '../workspace/store/tables.js';
 import { Custody } from '../executions/contract/service/custody.js';
 import { NoticeTakeBack } from '../executions/contract/service/notices.js';
 import { Remeasure } from '../enforcement/contract/service/remeasure.js';
@@ -160,7 +160,7 @@ export const worktreeThreadsLayer = Layer.effect(
       },
       place: (threadId: string, root: Parameters<FinishingThreads['place']>[1]) =>
         units
-          .write(writes('threads.place', [assignmentMembership, assignmentSelection]), (unit) =>
+          .write(writes('threads.place', [assignmentMembership, placementRows]), (unit) =>
             assignments.select(unit, { actor: { kind: 'operator' }, threadId: ThreadId.make(threadId), root }),
           )
           .pipe(

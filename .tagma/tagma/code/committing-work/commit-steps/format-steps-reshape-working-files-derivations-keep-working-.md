@@ -1,6 +1,6 @@
 ---
 id: 01a113ab-20fb-747e-aa1e-9c77f37610fd
-title: Commit steps change only the step's files; a refusal publishes nothing, and the steps delta reaches working files after landing or a refusal that judged their shape
+title: Format steps reshape working files; derivations keep working outputs intact
 ord: 1
 tags: ["explanation"]
 sources:
@@ -13,7 +13,7 @@ sources:
   - kind: file
     ref: apps/tagma/server/src/commit-steps/shape.ts
 ---
-A step is only a transformation of a file into itself, so the commit takes not everything the tool wrote but the hash (with `cleans`, as in `ownBlobs`) of the paths the step received. Cache, `.next` files and any write next to them stay in the private tree and vanish at its next reset; a file deleted by a step is `format-failed`, because the commit shape cannot be produced — not a reason to silently lose it.
+A format step transforms a file into itself, so the commit takes only the hash (with `cleans`, as in `ownBlobs`) of its selected files. Derivations run after formatting over the same private tree, take only declared output paths, and do not deliver a reshape to working outputs or reattribute their remaining lines. Cache, `.next` files and any write next to them stay in the private tree and vanish at its next reset; a file deleted by a step is `format-failed`, because the commit shape cannot be produced — not a reason to silently lose it.
 
 - **Commands come from the commit version's `Config`** (`Configs.read` over the commit tree, [[8fda30d8]]): an uncommitted or ignored edit to `tagma.config.ts` has no effect on the commit. A config that does not evaluate is a `config-invalid` refusal with a place, not a silent skip.
 - **`ok` is the codes by which the tool says "done"**, not "no violations left": findings after `--fix` are judged by the inspection, which has debt and per-line-holder splitting. Only failures of the command itself refuse the commit: a code outside `ok` (`format-failed`), no program (`format-missing`), blown ceiling (`format-cut`).
@@ -23,7 +23,7 @@ A step is only a transformation of a file into itself, so the commit takes not e
 - **A step's writes outside its files never reach the next step:** after each step, paths outside its set are restored from the index, so a file step A touched "along the way" reaches step B as it was.
 - **Violation attribution** (`holders`) is kept by line numbers of the pre-steps version and translated into post-steps shapes via `git diff-tree -U0` over the delta files; hook edits pass through the same translation before re-judgment. A violation on a shifted line belongs to whoever held it before the shift; on a line inside a replaced block — to the peer only when all old lines of the block are theirs, otherwise to whoever lands; on a line the step created by insertion — to no peer. This way the gate never passes its own violation off as someone else's. `removers` are not translated: a line removed only by the step answers `unknown`.
 - **When `reshape` left a file as is** (`kept`: conflict, shift, unreadable), the line stamp is still set: the commit already holds the transformed shape, and session lines must not stay "unsaved"; the working file keeps its previous text, and the answer names it in `kept`.
-- **A merge commit** (`submit_work` or `commit_checkout` finishing a merge) is never shaped by steps: no side wrote its contents.
+- **A merge commit** (`submit_work` or `commit_checkout` finishing a merge) is never formatted: no side wrote its contents. Required output derivations can still run when `submit_work` leaves working inputs outside the merge.
 - **`ProgramRoad`, not the module, reports "no tool"**: the launch shell checks `argv[0]` in the host environment and answers with a marker carrying `PATH`; the tool's own 127 stays an ordinary exit. Step files reach it as `operands` past the host call header: the header carries the command's whole environment and is envelope-bound, while the path list is bound by nothing. The road puts them in a file and deals them out via `xargs -0`; when xargs cuts the list at the OS limit, the tool's own first non-zero code remains the answer. An `argv[0]` with `/` is checked for a file with the executable bit, because `command -v` under dash does not check it; the `format-missing` reason carries the setup worktree state (`pending`, `running`, `failed`) while it is unfinished, so the agent does not install dependencies in parallel with setup.
 - **Steps run as the `commit-step` tool:** the command rule names it separately from `inspection`, and the time ceiling is the hooks-line ceiling; every run is keyed uniquely, because the host treats the key as idempotent, and a retry after a HEAD shift would otherwise receive the first attempt's answer. An interrupted run stops together with its children until the commit tree is released.
 - **Unproven:** Windows (launch via `cmd.exe`, `PATHEXT`, the 8191 limit) — `ProgramRoad` starts `/bin/sh` today, and Windows will become its adapter.

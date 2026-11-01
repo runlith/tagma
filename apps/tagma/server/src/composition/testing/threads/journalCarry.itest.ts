@@ -9,6 +9,7 @@ import { threadStoreFixture } from '../threadStoreFixture.js';
 import { MachineStore } from '../../../platform/contract/service/store.js';
 import { MachineUnits } from '../../../platform/contract/service/units.js';
 import { writes } from '../../../platform/contract/service/writes.js';
+import { nativeRows } from '../../../threads/store/kernel.js';
 import { bornThread } from '../../../native-harness/testing/born.js';
 import { nativeOnlyParts } from '../../../native-harness/testing/rollout.js';
 import {
@@ -39,7 +40,9 @@ const setup = Effect.fnUntraced(function* () {
   const parts = yield* nativeOnlyParts;
   const journal = () => Effect.provide(filedThreadJournal(rolloutWriter(pathOf, rolloutBirth(store, parts))), runtime);
   const commit = (written: Journal, threadId: string, ids: readonly string[]) =>
-    units.write(writes('journal-carry', [threadEvent()]), (unit) => Effect.forEach(ids, (id) => written.append(fact(threadId, id), unit)));
+    units.write(writes('journal-carry', [threadEvent(), nativeRows]), (unit) =>
+      Effect.forEach(ids, (id) => written.append(fact(threadId, id), unit)),
+    );
   const files = Context.get(runtime, FileSystem.FileSystem);
   const lineSchema = Schema.fromJsonString(
     Schema.Struct({
@@ -101,7 +104,7 @@ it.live(
     yield* Effect.provide(commit(written, 'rolled-back', ['kept-1']), runtime);
     const turned = yield* Effect.provide(
       Effect.result(
-        units.write(writes('journal-carry', [threadEvent()]), (unit) =>
+        units.write(writes('journal-carry', [threadEvent(), nativeRows]), (unit) =>
           Effect.andThen(written.append(fact('rolled-back', 'lost'), unit), Effect.fail('turned back')),
         ),
       ),

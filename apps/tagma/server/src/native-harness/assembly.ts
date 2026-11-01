@@ -34,6 +34,7 @@ import { ThreadRecords } from '../thread-record/contract/service/records.js';
 import type { HarnessFailure } from '../threads/contract/service/failure.js';
 import { CacheWarmth, EvidenceFeed, EvidenceQueries, ThreadEvidence, EvidenceReads } from '../threads/contract/service/evidence.js';
 import { OwnWork } from '../threads/contract/service/ownWork.js';
+import { ThreadRows } from '../threads/contract/service/rows.js';
 import { EndingRedelivery } from '../threads/contract/service/redelivery.js';
 import { gatedByProject } from '../threads/birth/projectGate.js';
 import { AgentLibrary } from '../threads/contract/service/library.js';
@@ -236,6 +237,7 @@ export type NativeHarnessRequirements =
   | CacheWarmth
   | ContextLimits
   | OwnWork
+  | ThreadRows
   | TargetPreparation
   | TargetSnapshots;
 
@@ -252,7 +254,7 @@ export const assembleNativeHarness: Effect.Effect<NativeAssembly, never, NativeH
   const threads = { ...(yield* ThreadLookup), ...(yield* ThreadWindows), ...(yield* ThreadRunning) };
   const { rows, store, modelRows, types, declarations, compaction, choices: reader, runner, runs, capabilities } = yield* NativeKernel;
   yield* Effect.acquireRelease(
-    Effect.sync(() => list.serveOpenCalls((threadId, runId) => store.entriesOfRun(threadId, runId))),
+    Effect.sync(() => list.serveCuts((threadId, use) => harness.threads.readCut(threadId, (cut) => use(cut.tx)))),
     (stopServing) => Effect.sync(stopServing),
   );
   const projectRoot = (projectId: number) => projects.byId(projectId).pipe(Effect.map((project) => project.rootPath));

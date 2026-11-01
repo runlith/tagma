@@ -3416,10 +3416,6 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead apps/tagma/server/src/commit-steps/running.ts#Running",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "dead-code dead apps/tagma/server/src/commit-steps/selection.ts#Candidate",
           "owner": "5a3bed29"
         },
@@ -4151,14 +4147,6 @@ fields:
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/executions/contract/service/access.ts#TerminalPreparation",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/executions/contract/service/commands.ts#OutputSearchRefusal",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/executions/contract/service/commands.ts#CommandWaitMove",
           "owner": "5a3bed29"
         },
         {
@@ -7686,14 +7674,6 @@ fields:
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/native-harness/keepWarm/driver.ts#KeepWarmInput",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/native-harness/keepWarm/reads.ts#KeepWarmWaiting",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/native-harness/keepWarm/reads.ts#KeepWarmReads",
           "owner": "5a3bed29"
         },
         {
@@ -19618,10 +19598,6 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead packages/mcp/src/sdkServer.ts#serveMcpOverHttp",
-          "owner": "7761ae92"
-        },
-        {
           "fingerprint": "dead-code dead apps/tagma/server/src/calls/contract/service/callThreads.ts#Delivery",
           "owner": "5a3bed29"
         },
@@ -19793,14 +19769,6 @@ fields:
           "line": 21,
           "path": "apps/tagma/server/src/threads/journal/rolloutCarry.ts",
           "said": "exported type `CarryOpening` is imported by no production file"
-        },
-        {
-          "commit": "18ddb3d39142cac45f89198a91bd2774e349db95",
-          "fingerprint": "dead-code dead packages/agent/src/transcript/kinds.ts#ThreadReaderWorker",
-          "fix": "Delete it; drop `export` when its own file uses it. A test-only consumer is not a reason to export it.",
-          "line": 159,
-          "path": "packages/agent/src/transcript/kinds.ts",
-          "said": "exported type `ThreadReaderWorker` is imported by no production file"
         },
         {
           "commit": "18ddb3d39142cac45f89198a91bd2774e349db95",
@@ -19980,22 +19948,6 @@ fields:
         },
         {
           "commit": "18ddb3d39142cac45f89198a91bd2774e349db95",
-          "fingerprint": "dead-code dead packages/mcp/src/sdkServer.ts#McpServedMedia",
-          "fix": "Delete it; drop `export` when its own file uses it. A test-only consumer is not a reason to export it.",
-          "line": 19,
-          "path": "packages/mcp/src/sdkServer.ts",
-          "said": "exported type `McpServedMedia` is imported by no production file"
-        },
-        {
-          "commit": "18ddb3d39142cac45f89198a91bd2774e349db95",
-          "fingerprint": "dead-code dead packages/mcp/src/sdkServer.ts#StdioServerInput",
-          "fix": "Delete it; drop `export` when its own file uses it. A test-only consumer is not a reason to export it.",
-          "line": 42,
-          "path": "packages/mcp/src/sdkServer.ts",
-          "said": "exported type `StdioServerInput` is imported by no production file"
-        },
-        {
-          "commit": "18ddb3d39142cac45f89198a91bd2774e349db95",
           "fingerprint": "dead-code dead packages/testbed/src/core/bed.ts#diskContinuity",
           "fix": "Delete it; drop `export` when its own file uses it. A test-only consumer is not a reason to export it.",
           "line": 174,
@@ -20049,6 +20001,30 @@ fields:
           "line": 23,
           "path": "packages/utils/src/worker.ts",
           "said": "exported type `WorkerLink` is imported by no production file"
+        },
+        {
+          "commit": "18ddb3d39142cac45f89198a91bd2774e349db95",
+          "fingerprint": "dead-code dead packages/mcp/src/sdkServer.ts#McpServedMedia",
+          "fix": "Delete it; drop `export` when its own file uses it. A test-only consumer is not a reason to export it.",
+          "line": 19,
+          "path": "packages/mcp/src/sdkServer.ts",
+          "said": "exported type `McpServedMedia` is imported by no production file"
+        },
+        {
+          "commit": "18ddb3d39142cac45f89198a91bd2774e349db95",
+          "fingerprint": "dead-code dead packages/mcp/src/sdkServer.ts#StdioServerInput",
+          "fix": "Delete it; drop `export` when its own file uses it. A test-only consumer is not a reason to export it.",
+          "line": 42,
+          "path": "packages/mcp/src/sdkServer.ts",
+          "said": "exported type `StdioServerInput` is imported by no production file"
+        },
+        {
+          "commit": "18ddb3d39142cac45f89198a91bd2774e349db95",
+          "fingerprint": "dead-code dead packages/agent/src/transcript/kinds.ts#ThreadReaderWorker",
+          "fix": "Delete it; drop `export` when its own file uses it. A test-only consumer is not a reason to export it.",
+          "line": 159,
+          "path": "packages/agent/src/transcript/kinds.ts",
+          "said": "exported type `ThreadReaderWorker` is imported by no production file"
         }
       ],
       "inspection": "dead-code",

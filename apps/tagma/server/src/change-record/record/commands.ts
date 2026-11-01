@@ -50,7 +50,14 @@ const commandOf = (
   role: roleOf(facts, tree, learned),
   signatures: facts.parts.filter((part) => !part.readsOnly).map((part) => (learns(part) ? signatureIn(tree, part.signature) : null)),
   team,
+  line: facts.line ?? null,
 });
+
+const NO_DIGESTS: ReadonlyMap<string, string> = new Map();
+
+const digestsOf = (
+  moves: readonly { readonly name: string; readonly present: boolean; readonly after: string }[],
+): ReadonlyMap<string, string> => new Map(moves.map((move) => [move.name, move.present ? move.after : ABSENT_DIGEST]));
 
 const UNTAUGHT = (): null => null;
 
@@ -129,9 +136,10 @@ export const makeCommandWrites = Effect.fnUntraced(function* ({
     names: readonly string[],
     reason: string,
     now: number,
+    line: string | null,
+    digests: ReadonlyMap<string, string>,
     team: string | null = null,
-    digests?: ReadonlyMap<string, string>,
-  ): void => {
+  ): Effect.Effect<void> => {
     const rows = names.map((path) => ({
       projectId: at.projectId,
       threadId: at.threadId,
@@ -139,11 +147,14 @@ export const makeCommandWrites = Effect.fnUntraced(function* ({
       path,
       reason,
       team,
-      digest: digests?.get(path) ?? null,
+      digest: digests.get(path) ?? null,
+      commandLine: line,
       at: now,
     }));
     for (const row of rows) remember(row);
-    if (journal !== null) background(journal.unattribute(rows), 'unattributed command paths were not journaled; a restart forgets them');
+    return journal === null
+      ? Effect.void
+      : Effect.asVoid(journaled(journal.unattribute(rows), 'unattributed command paths were not journaled; a restart forgets them'));
   };
 
   const adopt = (at: Commanding, names: readonly string[], through: number): void => {
@@ -218,7 +229,9 @@ export const makeCommandWrites = Effect.fnUntraced(function* ({
       window();
     };
     const paths = new Set(moves.map((move) => move.name));
-    const unwritten = (names: readonly string[], reason: string): void => unattribute(at, names, reason, Date.now());
+    const unwritten = (names: readonly string[], reason: string): void => {
+      Effect.runFork(unattribute(at, names, reason, Date.now(), life.command.line, digestsOf(moves)));
+    };
     const adopted = (names: readonly string[]): void => adopt(at, names, now);
     const entry: CommandEntry = { ...at, life, window: moved.window, base: moved.base, moves: queued, paths, release, unwritten, adopted };
     return queue.append(`${at.key}\0${at.threadId}`, [entry]);
@@ -265,12 +278,15 @@ export const makeCommandWrites = Effect.fnUntraced(function* ({
       const guard = hold(at.windowId);
       const now = Date.now();
       const { verdicts, decided, overlapped, unproven, teamed, bases, lesson } = judged(at, life, moved);
-      if (overlapped.length > 0) unattribute(at, overlapped, OVERLAP_REASON, now);
-      if (unproven.length > 0) unattribute(at, unproven, UNPROVEN_REASON, now);
-      const digests =
-        teamed.size === 0 ? undefined : new Map(moved.moves.map((move) => [move.name, move.present ? move.after : ABSENT_DIGEST]));
-      for (const [root, names] of teamed) unattribute(at, names, TEAM_REASON, now, root, digests);
-      return recorded(bases).pipe(
+      const line = life.command.line;
+      const digests = overlapped.length === 0 && unproven.length === 0 && teamed.size === 0 ? NO_DIGESTS : digestsOf(moved.moves);
+      const observed = [
+        ...(overlapped.length > 0 ? [unattribute(at, overlapped, OVERLAP_REASON, now, line, digests)] : []),
+        ...(unproven.length > 0 ? [unattribute(at, unproven, UNPROVEN_REASON, now, line, digests)] : []),
+        ...[...teamed].map(([root, names]) => unattribute(at, names, TEAM_REASON, now, line, digests, root)),
+      ];
+      return Effect.all(observed, { discard: true }).pipe(
+        Effect.andThen(recorded(bases)),
         Effect.andThen(!teaching || lesson === null || lessons === null ? Effect.void : lessons.taught(at.key, lesson)),
         Effect.andThen(enqueue(at, life, moved, decided, now)),
         Effect.ensuring(Effect.sync(guard)),
@@ -389,6 +405,7 @@ export const makeCommandWrites = Effect.fnUntraced(function* ({
         role: command.role,
         signatures: command.signatures,
         team: command.team,
+        line: command.line,
       };
       const written = yield* journaled(
         journal.opened(window),

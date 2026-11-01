@@ -46,6 +46,10 @@ layer(BunFileSystem.layer, { excludeTestServices: true })('snapshot recovery', (
           },
         },
         yield* sharedPool,
+        async () => ({
+          rows: [{ id: 'rollout-home', table: 'thread_rollout_home', keys: ['path'], columns: ['path', 'imported_at'] }],
+          selections: [],
+        }),
       );
       yield* FileSystem.FileSystem.use((files) => files.makeDirectory(join(home, '1'), { recursive: true }));
       yield* FileSystem.FileSystem.use((files) => files.writeFileString(rollout, before));
@@ -73,6 +77,7 @@ layer(BunFileSystem.layer, { excludeTestServices: true })('snapshot recovery', (
       try {
         expect(live.query('select value from fact').get()).toEqual({ value: 'after' });
         expect(live.query('select path from thread_rollout_home').all()).toEqual([{ path: home }]);
+        expect(live.query("select name from sqlite_master where name = '__row_projection_clock'").all()).toEqual([]);
       } finally {
         live.close();
       }
@@ -83,6 +88,7 @@ layer(BunFileSystem.layer, { excludeTestServices: true })('snapshot recovery', (
       try {
         expect(restored.query('select value from fact').get()).toEqual({ value: 'before' });
         expect(restored.query('select path from thread_rollout_home').all()).toEqual([]);
+        expect(restored.query("select cursor from __row_projection_clock where id = ''").get()).toEqual({ cursor: 1 });
       } finally {
         restored.close();
       }

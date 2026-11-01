@@ -13,9 +13,9 @@ edges:
     to: 01a18327-c7aa-7718-b037-fece2ea21922
 sources:
   - kind: file
-    ref: apps/tagma/app/src/lib/features/checkout/files/ExplorerView.svelte
-  - kind: file
     ref: apps/tagma/app/src/lib/features/calls/TranscriptView.svelte
+  - kind: file
+    ref: apps/tagma/app/src/lib/features/checkout/files/ExplorerView.svelte
   - kind: file
     ref: apps/tagma/app/src/lib/features/threads/ColumnWindow.svelte.ts
   - kind: file

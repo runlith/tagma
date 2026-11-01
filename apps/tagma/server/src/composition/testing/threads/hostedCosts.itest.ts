@@ -87,7 +87,7 @@ layer(protocolWorld({ name: 'hosted-costs', prepare: (world) => Effect.andThen(c
       expect(root!.own.programs).toBeGreaterThan(0);
       expect(root!.own.writerHoldMs).toBeGreaterThan(0);
       expect(root!.producers.find((row) => row.name === 'ThreadSnapshots.publish')?.counts.statements).toBe(0);
-      expect(root!.producers.find((row) => row.name === 'ThreadList.project')?.counts.statements).toBeGreaterThan(0);
+      expect(root!.producers.find((row) => row.name === 'ThreadList.project')?.counts.statements ?? 0).toBe(0);
       expect(root!.producers.find((row) => row.name === 'ThreadFeeds.project')).toBeDefined();
       expect(root!.own.statements + root!.producers.reduce((sum, row) => sum + row.counts.statements, 0)).toBe(root!.total.statements);
       expect(after.evicted).toBe(before.evicted);

@@ -145,9 +145,21 @@ describe('ACP adapter boundaries over one execution host', () => {
             const handle = floor.harness.threads.handle(threadId, 'operator');
             let firstReturned = false;
             let secondReturned = false;
-            const first = yield* Effect.forkChild(Effect.tap(handle.stop(), () => Effect.sync(() => { firstReturned = true; })));
+            const first = yield* Effect.forkChild(
+              Effect.tap(handle.stop(), () =>
+                Effect.sync(() => {
+                  firstReturned = true;
+                }),
+              ),
+            );
             yield* Deferred.await(pause.stopping);
-            const second = yield* Effect.forkChild(Effect.tap(handle.stop(), () => Effect.sync(() => { secondReturned = true; })));
+            const second = yield* Effect.forkChild(
+              Effect.tap(handle.stop(), () =>
+                Effect.sync(() => {
+                  secondReturned = true;
+                }),
+              ),
+            );
             yield* Deferred.await(pause.secondStopping);
             expect(firstReturned).toBe(false);
             expect(secondReturned).toBe(false);
@@ -366,7 +378,9 @@ describe('ACP adapter boundaries over one execution host', () => {
         yield* scenario(
           Effect.gen(function* () {
             const hold = join(report, '..', 'opening.hold');
-            yield* Effect.acquireRelease(rig.files.writeFileString(hold, ''), () => rig.files.remove(hold, { force: true }).pipe(Effect.orDie));
+            yield* Effect.acquireRelease(rig.files.writeFileString(hold, ''), () =>
+              rig.files.remove(hold, { force: true }).pipe(Effect.orDie),
+            );
             const pause = {
               entered: yield* Deferred.make<void>(),
               released: yield* Deferred.make<void>(),
@@ -735,6 +749,63 @@ describe('ACP adapter boundaries over one execution host', () => {
     );
 
     it.effect(
+      'after a compaction whose retelling the agent keeps to itself, the next turn hears its orientation again and the history stays whole',
+      () =>
+        Effect.gen(function* () {
+          const { openThread, floor } = yield* ProtocolRig;
+          const report = yield* agent('silent-compact');
+          const threadId = 'thread-silent-compact';
+          const until = waiting(threadId);
+          yield* openThread(threadId, CLAUDE);
+          const said: Said[] = [];
+          yield* scenario(
+            Effect.gen(function* () {
+              const raised = yield* floor(said);
+              const driver = yield* raised.driver('owner-silent-compact');
+              const answered = Effect.fn('testing.answeredSilentWords')(function* (text: string) {
+                const count = own(said, threadId).length + 1;
+                yield* driver.send(threadId, text);
+                yield* until(
+                  Effect.sync(() => (own(said, threadId).length >= count ? true : null)),
+                  `answered ${text}`,
+                  report,
+                );
+              });
+              const history = raised.harness.runs.hosting().history(threadId, 'referenced');
+              const oriented = Effect.map(
+                history,
+                (messages) =>
+                  messages.filter((message) => message.content.some((part) => part.type === 'text' && part.text.includes('ORIENTATION')))
+                    .length,
+              );
+              yield* answered('remember this');
+              yield* answered('and this');
+              expect(yield* oriented).toBe(1);
+              const retained = (yield* history).length;
+              yield* raised.harness.threads.handle(threadId, 'operator').compact({ at: 'end', keep: 'SILENT' });
+              yield* until(
+                Effect.map(raised.entries(threadId), (entries) =>
+                  compactions(entries).some((entry) => entry.status === 'completed') ? true : null,
+                ),
+                'ended the silent compaction',
+                report,
+              );
+              yield* answered('after the compaction');
+              const answers = Effect.map(history, (messages) => messages.filter((message) => message.role === 'assistant').length);
+              yield* until(
+                Effect.map(answers, (count) => (count === 3 ? true : null)),
+                'journaled the answer after the compaction',
+                report,
+              );
+              expect(yield* oriented).toBe(2);
+              expect((yield* history).length).toBe(retained + 3);
+              yield* driver.stop(threadId);
+            }),
+          );
+        }),
+    );
+
+    it.effect(
       'a move mid-turn answers at once, the turn ends on its model, the next prompt reconfigures the same session, and a restart keeps what it applied',
       () =>
         Effect.gen(function* () {
@@ -1054,6 +1125,40 @@ describe('ACP adapter boundaries over one execution host', () => {
             }),
           );
         }),
+    );
+
+    it.effect('a rewound hosted turn leaves neither its words nor its answer in the history a new session is built from', () =>
+      Effect.gen(function* () {
+        const { openThread, floor } = yield* ProtocolRig;
+        const report = yield* agent('rewound-answer');
+        const threadId = 'thread-rewound-answer';
+        const until = waiting(threadId);
+        yield* openThread(threadId, CLAUDE);
+        const said: Said[] = [];
+        yield* scenario(
+          Effect.gen(function* () {
+            const raised = yield* floor(said);
+            const driver = yield* raised.driver('owner-rewound-answer');
+            const answered = Effect.fn('testing.answeredRewoundWords')(function* (text: string) {
+              const count = own(said, threadId).length + 1;
+              yield* driver.send(threadId, text);
+              yield* until(
+                Effect.sync(() => (own(said, threadId).length >= count ? true : null)),
+                `answered ${text}`,
+                report,
+              );
+              return own(said, threadId).at(-1)!.run;
+            });
+            yield* answered('remember this');
+            const second = yield* answered('and this');
+            yield* driver.stop(threadId);
+            yield* raised.harness.threads.handle(threadId, 'operator').rewind({ at: second, scope: 'turn' });
+            const history = yield* raised.harness.runs.hosting().history(threadId, 'referenced');
+            const answers = history.filter((message) => message.role === 'assistant');
+            expect(answers).toHaveLength(1);
+          }),
+        );
+      }),
     );
   });
 });
