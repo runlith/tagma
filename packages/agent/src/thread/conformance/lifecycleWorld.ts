@@ -13,7 +13,7 @@ import { RunControl, runControlLayer } from '../run/RunControl';
 import { makeLandingHolds, RunAdmission } from '../run/runAdmission';
 import { type Handover, makeHandover } from '../run/scheduler/handover';
 import { SenderWakes } from '../run/SenderWakes';
-import { threadChangesLayer } from '../run/ThreadChanges';
+import { ThreadChanges, threadChangesLayer } from '../run/ThreadChanges';
 import { makeThreadLiveFeed, threadFeedLayer, type ThreadLiveFeed } from '../run/ThreadLiveFeed';
 import { ThreadRunSettlements, threadRunSettlementsLayer } from '../run/ThreadRunSettlements';
 import { threadSettlementOutboxLayer } from '../run/ThreadSettlementOutbox';
@@ -48,6 +48,7 @@ export type LifecycleWorld<TTx, TWrite extends TTx> = {
   readonly settlements: ThreadRunSettlements['Service'];
   readonly handover: Handover;
   readonly control: RunControl['Service'];
+  readonly changes: ThreadChanges['Service'];
   readonly gate: LaunchGate['Service'];
   readonly adapter: FakeAdapter;
   readonly feed: ThreadLiveFeed<ThreadState>;
@@ -189,6 +190,7 @@ const makeWorld = Effect.fnUntraced(function* <TTx, TWrite extends TTx>(
     ledger: Context.get(services, ThreadRunLedger),
     settlements: Context.get(services, ThreadRunSettlements),
     control: Context.get(services, RunControl),
+    changes: Context.get(services, ThreadChanges),
     handover,
     gate: Context.get(services, LaunchGate),
     adapter,

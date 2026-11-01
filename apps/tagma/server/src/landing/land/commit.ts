@@ -24,7 +24,7 @@ import type {
   PreparedLanding,
   PreparedSubject,
 } from '../../change-record/contract/service/prepared.js';
-import type { Forming } from './formed.js';
+import { type Forming, judgedInForm } from './formed.js';
 import { headOf, readMerge } from '../../change-record/prepared/subject.js';
 import { indexWrites } from '../../platform/git/index.js';
 import type { SubmitRequest } from '../contract/service/landings.js';
@@ -122,13 +122,8 @@ const formedFor = (
   judging: Effect.Effect<Checked>,
 ): Effect.Effect<Checked> => {
   const { holders } = subject;
-  if (reshaped.length === 0) return judging;
-  const forming = Effect.acquireUseRelease(
-    form(reshaped),
-    () => judging,
-    (withdraw) => withdraw,
-  );
-  if (holders === undefined) return forming;
+  const forming = judgedInForm(form, reshaped, judging);
+  if (reshaped.length === 0 || holders === undefined) return forming;
   return Effect.flatMap(Effect.result(holders(reshaped.map((one) => ({ file: one.path, line: 1 })))), (primed) => {
     if (primed._tag === 'Success') return forming;
     return Effect.flatMap(

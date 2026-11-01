@@ -6,7 +6,7 @@ import { isSource, type Packages, productionOf, targetKeys, type Reach } from '.
 import { consumptions } from './dead';
 import type { DeadParams } from './declaration';
 import type { Facts } from './facts';
-import { blobsAt, factsAt, importersByName, manifestsAt, movedPackages } from './index';
+import { blobsAt, factsAt, importersByName, manifestsAt, movedPackages, WholeRequired } from './index';
 import { patternDir, probesOf, type Resolver, resolverOf } from './resolve';
 
 export const sideEntries = (
@@ -32,7 +32,9 @@ const alternatives = (path: string): readonly string[] => {
 
 const bounded = (dir: string, what: string): string => {
   if (dir === '')
-    throw new Error(`${what} reaches the repository root, which a change cannot be judged against; remeasure with check_rules over "all"`);
+    throw new WholeRequired(
+      `${what} reaches the repository root, which a change cannot be judged against; remeasure with check_rules over "all"`,
+    );
   return `${dir}/`;
 };
 

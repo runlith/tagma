@@ -28,7 +28,10 @@ function harness(keepOneTraceIn = NEVER_BY_HASH) {
       places.set(spanId, { unit, root: false, parentId, openedAtMs: clock });
       sampler.open(TRACE, producer, false, unit);
     },
-    end: (spanId: string, outcome: { readonly failed?: boolean; readonly slow?: boolean; readonly bytes?: number } = {}) => {
+    end: (
+      spanId: string,
+      outcome: { readonly failed?: boolean; readonly slow?: boolean; readonly bytes?: number; readonly upper?: number } = {},
+    ) => {
       const place = places.get(spanId);
       if (place === undefined) throw new Error(`${spanId} was never opened`);
       sampler.end(sampled(spanId, place, clock - place.openedAtMs, outcome));
@@ -48,7 +51,7 @@ function sampled(
   spanId: string,
   place: Place,
   durationMs: number,
-  outcome: { readonly failed?: boolean; readonly slow?: boolean; readonly bytes?: number },
+  outcome: { readonly failed?: boolean; readonly slow?: boolean; readonly bytes?: number; readonly upper?: number },
 ): SampledSpan {
   return {
     traceId: TRACE,
@@ -67,6 +70,7 @@ function sampled(
     unit: place.unit,
     slow: outcome.slow ?? false,
     byteSize: outcome.bytes ?? 100,
+    upperBytes: outcome.upper,
   };
 }
 
@@ -212,6 +216,56 @@ test('a unit forgotten past the byte bound still hands over its head when the he
 
   expect(run.kept()).toEqual(['tool:slow']);
   expect(run.sampler.counts.droppedSpans).toBeGreaterThan(0);
+});
+
+test('a unit keeps its spans at the exact byte limit and overflows only when the actual weight exceeds it', () => {
+  const atLimit = harness();
+  atLimit.root('run');
+  atLimit.unit('tool');
+  atLimit.member('first', 'tool');
+  atLimit.end('first', { bytes: 131_072, upper: 200_000 });
+  atLimit.member('second', 'tool');
+  atLimit.end('second', { bytes: 131_072, upper: 200_000 });
+  atLimit.end('tool', { failed: true });
+  expect(atLimit.kept()).toEqual(['first:failed', 'second:failed', 'tool:failed']);
+
+  const above = harness();
+  above.root('run');
+  above.unit('tool');
+  above.member('first', 'tool');
+  above.end('first', { bytes: 131_072, upper: 200_000 });
+  above.member('second', 'tool');
+  above.end('second', { bytes: 131_073, upper: 200_000 });
+  above.end('tool', { failed: true });
+  expect(above.kept()).toEqual(['tool:failed']);
+  expect(above.sampler.counts.droppedSpans).toBe(2);
+});
+
+test('stall extraction preserves the bound of the spans a nested unit joins into its parent', () => {
+  const run = harness();
+  run.root('run');
+  run.unit('outer');
+  run.member('other', 'outer');
+  run.at(10);
+  run.end('other', { bytes: 20_000, upper: 120_000 });
+  run.unit('inner', 'outer');
+  run.member('quiet', 'inner');
+  run.at(20);
+  run.end('quiet', { bytes: 20_000, upper: 120_000 });
+  run.at(40);
+  run.member('crossing', 'inner');
+  run.at(100);
+  run.end('crossing', { bytes: 20_000, upper: 120_000 });
+  run.sampler.coverStall(75, 90);
+  run.at(120);
+  run.end('inner');
+  run.member('after', 'outer');
+  run.at(121);
+  run.end('after', { bytes: 20_000, upper: 120_000 });
+  run.at(130);
+  run.end('outer', { failed: true });
+
+  expect(run.kept()).toEqual(['after:failed', 'crossing:stalled', 'inner:stalled', 'other:failed', 'outer:failed', 'quiet:failed']);
 });
 
 test('a trace the hash chose hands over every span it ends, window by window', () => {

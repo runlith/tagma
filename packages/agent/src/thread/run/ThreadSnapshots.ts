@@ -2,7 +2,7 @@ import { Cause, Clock, Context, Duration, Effect, FiberMap, FiberSet, Layer, Ref
 import { CurrentCost, producerCost, type CostCause } from '@runlith/performance/CostLedger';
 import { declare, type Held } from '@runlith/held/Held';
 import type { ThreadPendingInput, ThreadQueuedTurn, ThreadResumeOf, ThreadWaitingTurn, WordsWait } from '../../transcript/live';
-import type { ThreadSnapshot, ThreadState, ThreadStateChange } from '../state';
+import type { ThreadRunChange, ThreadSnapshot, ThreadState, ThreadStateChange } from '../state';
 import { WIRE_PAGE_MAX_BYTES, WIRE_PAGE_MAX_ENTRIES } from '../../transcript/cap';
 import { extendPageToTurnRoot } from '../../transcript/page';
 import { coreEntry } from '../../transcript/kinds';
@@ -41,6 +41,7 @@ import { recordedReceiptOf, runStatusOf, type RecordedReceipt } from './runStatu
 import { ThreadCallBroke, isThreadBorderFailure, type ThreadBorderFailed } from '../ThreadBorder';
 import { RunEndings, type RunEnding } from './lifecycle/endings';
 import { LaunchGate } from './LaunchGate';
+import { ThreadChanges } from './ThreadChanges';
 import { openQuestionsOf } from './openQuestions';
 import { decodeRecord } from './scheduler/answers';
 import { ThreadRunLedger } from './ThreadRunLedger';
@@ -75,6 +76,7 @@ type SnapshotReading = {
 };
 type Projection = { readonly state: ThreadState; readonly revision: number; readonly inputs: StatusInputs };
 type Appended = Extract<ThreadStateChange, { readonly kind: 'appended' }>;
+type Ran = Extract<ThreadStateChange, { readonly kind: 'ran' }>;
 type Asked = { readonly cause: CostCause | null; readonly parent: Tracer.AnySpan | null };
 type Work = Asked & { readonly change: ThreadStateChange };
 const HELD_PROJECTIONS = 256;
@@ -376,13 +378,14 @@ export const makeThreadSnapshots = Effect.gen(function* () {
         if (revision.to <= (framedAt.get(threadId) ?? -1)) return true;
         const position = change.from + change.records.length;
         const held = projections.get(threadId);
-        const activeRun = held?.state.activeRun ?? null;
+        const activeRun = patchedRun(held?.state.activeRun ?? null, change.runs);
         if (held === undefined || activeRun === null || held.revision !== revision.from || published.get(threadId) !== change.from)
           return false;
         if (awaitsAnswer(activeRun.progress.stage) || !change.records.every(plainEntry)) return false;
+        const latestRun = patchedRun(held.state.latestRun, change.runs);
         const now = new Date(yield* Clock.currentTimeMillis);
         const thread = { ...held.state.thread, ...change.thread };
-        const wordsWait = yield* wordsWaitOf(owners, transports, thread, { active: true, after: held.state.latestRun?.id ?? null });
+        const wordsWait = yield* wordsWaitOf(owners, transports, thread, { active: true, after: latestRun?.id ?? null });
         const { status, changesAt } = runStatusOf(
           {
             thread,
@@ -397,7 +400,7 @@ export const makeThreadSnapshots = Effect.gen(function* () {
           lease,
           held.inputs.ended,
         );
-        const next: ThreadState = { ...held.state, thread, position, status, now: now.toISOString() };
+        const next: ThreadState = { ...held.state, thread, position, activeRun, latestRun, status, now: now.toISOString() };
         const carried = yield* feed.atCut(
           threadId,
           Effect.suspend(() => {
@@ -422,6 +425,51 @@ export const makeThreadSnapshots = Effect.gen(function* () {
         return true;
       }),
     );
+  const ran = (threadId: string, change: Ran): Effect.Effect<void, ThreadBorderFailed> =>
+    inLane(
+      threadId,
+      Effect.gen(function* () {
+        const { revision } = change;
+        const held = projections.get(threadId);
+        if (held === undefined || revision.to <= held.revision) return;
+        if (held.revision !== revision.from) return void projections.delete(threadId);
+        const activeRun = patchedRun(held.state.activeRun, change.runs);
+        const latestRun = patchedRun(held.state.latestRun, change.runs);
+        if (activeRun === null || (activeRun === held.state.activeRun && latestRun === held.state.latestRun))
+          return hold(threadId, { ...held, state: { ...held.state, latestRun }, revision: revision.to });
+        const now = new Date(yield* Clock.currentTimeMillis);
+        const wordsWait = yield* wordsWaitOf(owners, transports, held.state.thread, { active: true, after: latestRun?.id ?? null });
+        const { status, changesAt } = runStatusOf(
+          {
+            thread: held.state.thread,
+            activeRun,
+            pendingInput: held.state.pendingInput,
+            openQuestions: held.inputs.openQuestions,
+            recorded: held.inputs.recorded,
+            launchBlocked: gate.blocked(threadId),
+            wordsWait,
+          },
+          now,
+          lease,
+          held.inputs.ended,
+        );
+        const next: ThreadState = { ...held.state, activeRun, latestRun, status, now: now.toISOString() };
+        if (standing(status) !== standing(held.state.status)) {
+          const carried = yield* feed.atCut(
+            threadId,
+            Effect.suspend(() => {
+              if (projections.get(threadId) !== held || (ahead.get(threadId) ?? revision.from) > revision.from)
+                return Effect.succeed(false);
+              framedAt.set(threadId, revision.to);
+              return Effect.as(feed.carry({ state: next, from: next.position, deltas: [] }), true);
+            }),
+          );
+          if (!carried) return void projections.delete(threadId);
+        }
+        if (projections.get(threadId) === held) hold(threadId, { state: next, revision: revision.to, inputs: held.inputs });
+        yield* arm(threadId, status, changesAt);
+      }),
+    );
   const asked = <A, E>(work: Effect.Effect<A, E>, by: Asked): Effect.Effect<A, E> =>
     Effect.provideService(by.parent === null ? work : Effect.withParentSpan(work, by.parent), CurrentCost, by.cause);
   const drain = Effect.fnUntraced(function* (threadId: string, queue: Work[]) {
@@ -430,6 +478,18 @@ export const makeThreadSnapshots = Effect.gen(function* () {
       if (next === undefined) {
         if (queues.get(threadId) === queue) queues.delete(threadId);
         return;
+      }
+      if (next.change.kind === 'ran') {
+        const kept = yield* asked(Effect.exit(producerCost(PUBLISHING, ran(threadId, next.change))), next);
+        if (kept._tag === 'Failure') {
+          projections.delete(threadId);
+          if (!Cause.hasInterruptsOnly(kept.cause))
+            yield* Effect.logWarning('a heartbeat could not be applied, so the next change reads the thread', {
+              threadId,
+              cause: kept.cause,
+            });
+        }
+        continue;
       }
       const applied =
         next.change.kind === 'appended' ? yield* asked(Effect.exit(producerCost(PUBLISHING, applying(threadId, next.change))), next) : null;
@@ -468,11 +528,18 @@ export const makeThreadSnapshots = Effect.gen(function* () {
         );
       }),
     );
+  (yield* ThreadChanges).project(committed);
   return ThreadSnapshots.of({ state, snapshot, attachFrom, page, publish, committed, statuses, forget });
 });
 
 export const threadSnapshotsLayer = Layer.effect(ThreadSnapshots, makeThreadSnapshots);
 
+function patchedRun(run: ThreadRunRow | null, changes: readonly ThreadRunChange[] | undefined): ThreadRunRow | null {
+  const patch = run === null ? undefined : changes?.find((change) => change.id === run.id);
+  if (run === null || patch === undefined) return run;
+  const { id: _id, ...fields } = patch;
+  return { ...run, ...fields };
+}
 export const PUBLISHING = 'ThreadSnapshots.publish';
 export const READING = 'ThreadSnapshots.reading';
 function plainEntry(record: ThreadEventRecord): boolean {

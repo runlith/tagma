@@ -68,6 +68,9 @@ const version = (root: string): string => {
   return found;
 };
 
+export const sameReader = (root: string, from: string, to: string): boolean =>
+  withReader(root, from, () => version(root)) === withReader(root, to, () => version(root));
+
 const handles = new Map<string, Database>();
 
 export const databaseAt = (root: string): Database => {

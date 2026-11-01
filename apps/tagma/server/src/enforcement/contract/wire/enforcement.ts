@@ -2,6 +2,7 @@ import { Schema } from 'effect';
 import { type Assembled, BUILTINS, relevant } from '@tagma/inspection/builtins';
 import { CONCERNS, moduleMapSchema, type Reach } from '@tagma/inspection/rule';
 import { Site, Unjudged } from '@tagma/inspection/verdict';
+import { ProgramRemeasure } from '@tagma/inspection/program';
 import { processProvenanceSchema } from '../../../platform/contract/wire/provenance.js';
 import { wordsSchema } from '../../../platform/contract/wire/refusal.js';
 import {
@@ -51,6 +52,7 @@ export const Measurement = Schema.Struct({
   at: Schema.String.check(Schema.isPattern(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/u)),
   identity: Schema.optional(MeasurementIdentity),
   sources: Schema.optional(Schema.Record(Schema.String, Schema.String)),
+  remeasure: Schema.optional(ProgramRemeasure),
 }).annotate({
   description:
     'The confirmed rule state in this checkout: its commit and identity, the duration of its last pass and the source files of its debt.',

@@ -11,6 +11,7 @@ import {
   ThreadRunKeyReusedError,
   type ThreadRunReapSelector,
   type ThreadRunStorage,
+  type ThreadRunHeartbeat,
   type ThreadRunStopAsked,
 } from '../runs';
 import { mergedStopRequest, seedThreadNotification } from '../settlement';
@@ -344,18 +345,22 @@ export function makeMemoryRuns({ memory, ownerId, scope }: MemoryRunsInput): Thr
           }),
         tx,
       ),
-    writeHeartbeats: (runIds, heartbeatAt) =>
-      memory.units.commit((unit) =>
-        attempt('writeHeartbeats', () => {
-          const asked: ThreadRunStopAsked[] = [];
-          for (const runId of runIds) {
-            const run = owned(runId);
-            if (!run) continue;
-            change(unit, run, { heartbeatAt });
-            if (run.stopRequest !== null) asked.push({ runId, by: run.stopRequest.by });
-          }
-          return asked;
-        }),
+    writeHeartbeats: (runIds, heartbeatAt, tx) =>
+      memory.units.commit(
+        (unit) =>
+          attempt('writeHeartbeats', () => {
+            const written: ThreadRunHeartbeat[] = [];
+            const asked: ThreadRunStopAsked[] = [];
+            for (const runId of new Set(runIds)) {
+              const run = owned(runId);
+              if (!run) continue;
+              const next = change(unit, run, { heartbeatAt, updatedAt: heartbeatAt });
+              written.push({ id: next.id, threadId: next.threadId, heartbeatAt: next.heartbeatAt, updatedAt: next.updatedAt });
+              if (run.stopRequest !== null) asked.push({ runId, by: run.stopRequest.by });
+            }
+            return { written, asked };
+          }),
+        tx,
       ),
     requestStop: (runId, intent, at, tx) =>
       memory.units.commit(
@@ -370,7 +375,7 @@ export function makeMemoryRuns({ memory, ownerId, scope }: MemoryRunsInput): Thr
         tx,
       ),
     writeStreamTail: (runId, tail, heartbeatAt, tx, durable = false) =>
-      patched(runId, { streamTail: tail, ...(durable || tail?.length ? { resumes: 0 } : {}), heartbeatAt }, tx),
+      patched(runId, { streamTail: tail, ...(durable || tail?.length ? { resumes: 0 } : {}), heartbeatAt, updatedAt: heartbeatAt }, tx),
     reapableRuns: (selector, limit) =>
       attempt('reapableRuns', () =>
         memory.read(undefined, () => {

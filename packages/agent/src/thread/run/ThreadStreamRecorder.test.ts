@@ -560,7 +560,19 @@ describe('ThreadStreamRecorder', () => {
       const arrived = '{"question": "Опыт по фронту", "anchors": ["Стейт фо';
       yield* recorder.push({ type: 'tool-input-start', id: 'call-1', name: 'publish_cue' });
       yield* recorder.push({ type: 'tool-input-delta', id: 'call-1', name: 'publish_cue', text: arrived });
-      yield* recorder.push({ type: 'tool-display', toolCallId: 'call-1', display: { form: 'none', title: 'Опыт по фронту' } });
+      yield* recorder.push({
+        type: 'tool-display',
+        toolCallId: 'call-1',
+        display: {
+          form: 'none',
+          title: 'Опыт по фронту',
+          alone: undefined,
+          subtitle: undefined,
+          reference: undefined,
+          awaitsMs: undefined,
+        },
+      });
+      const emitted = world.feedEvents.length;
       yield* recorder.flushRecorded();
       expect(world.events).toHaveLength(0);
       expect(world.tail).toEqual([
@@ -575,6 +587,11 @@ describe('ThreadStreamRecorder', () => {
           toolDisplay: { form: 'none', title: 'Опыт по фронту' },
           occurredAt: expect.any(String),
         },
+      ]);
+      yield* recorder.push({ type: 'tool-input-delta', id: 'call-1', name: 'publish_cue', text: 'рмы' });
+      yield* recorder.flushRecorded();
+      expect(world.feedEvents.slice(emitted).flatMap((event) => (event.type === 'open' ? [event.change] : []))).toEqual([
+        { op: 'append', id: 'tool:call-1', text: 'рмы' },
       ]);
     }),
   );

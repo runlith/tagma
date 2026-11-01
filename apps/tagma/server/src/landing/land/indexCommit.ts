@@ -17,6 +17,7 @@ import type { CommitTrees } from '../../workspace/contract/service/commitTrees.j
 import { commitHooks, type Committing, formedRefusal, type HookKind, HookRefused, landedHook, type Posted, withSteps } from './hooks.js';
 import type { CheckoutLanes } from './lanes.js';
 import { laneFailed } from './commit.js';
+import { type Forming, judgedInForm } from './formed.js';
 import { advanced, concluded, makeCommit, midOperation, type Unsigned } from './publish.js';
 import { type Carried, deltaOf, type Delta, unreadIn } from './reshaping.js';
 
@@ -37,6 +38,7 @@ export type IndexCommitAsk = CommitRequest & {
   readonly act: ShapeAct;
   readonly landing: (commit: string, tree: string) => Effect.Effect<void, GateRefusal<'record-unread'>>;
   readonly read: (delta: Delta) => Effect.Effect<Carried, GateRefusal<'reshape-unreadable'>>;
+  readonly form: Forming;
 };
 
 export type IndexCommitted = {
@@ -237,7 +239,7 @@ export const commitIndex = Effect.fn('landing.commitIndex')(function* (
     ask.judge === null
       ? null
       : yield* Effect.mapError(
-          judged(ask.judge(built, read.base, shapedPaths, read.parents.slice(1))),
+          judged(judgedInForm(ask.form, shaped.reshaped, ask.judge(built, read.base, shapedPaths, read.parents.slice(1)))),
           formedRefusal(built, shaped.reshaped),
         );
   const committing = yield* commitHooks(git, git, trees, root, read.places, read.parents[0] ?? null, built, ask.message, ask.kind).pipe(
@@ -268,7 +270,10 @@ export const commitIndex = Effect.fn('landing.commitIndex')(function* (
         ]),
       ),
     );
-    if (ask.judge !== null) judgement = yield* hooked(judged(ask.judge(committing.tree, read.base, paths, read.parents.slice(1))));
+    if (ask.judge !== null)
+      judgement = yield* hooked(
+        judged(judgedInForm(ask.form, shaped.reshaped, ask.judge(committing.tree, read.base, paths, read.parents.slice(1)))),
+      );
   }
   const stepped = yield* hooked(deltaOf(git, root, read.tree, committing.tree));
   const staging = yield* hooked(ask.read(stepped));

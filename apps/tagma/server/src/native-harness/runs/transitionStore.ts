@@ -1,6 +1,7 @@
 import { Cause, Clock, Effect } from 'effect';
 import { and, desc, eq, inArray, isNotNull, sql, type SQL } from 'drizzle-orm';
 import { among } from '../../platform/store/rows.js';
+import { bindQuery } from '../../platform/store/queries.js';
 import {
   callParts,
   mintedBefore,
@@ -63,6 +64,55 @@ export const makeTransitions = Effect.fnUntraced(function* ({
     .where(eq(threadRow.id, sql.placeholder('threadId')))
     .prepare();
 
+  const absentCall = db
+    .select({ key: threadCall.key })
+    .from(threadCall)
+    .where(
+      and(
+        eq(threadCall.actor, sql.placeholder('actor')),
+        eq(threadCall.operation, sql.placeholder('operation')),
+        eq(threadCall.key, sql.placeholder('key')),
+      ),
+    )
+    .prepare();
+  const absentSpent = db
+    .select({ key: spentCallKey.key })
+    .from(spentCallKey)
+    .where(
+      and(
+        eq(spentCallKey.actor, sql.placeholder('actor')),
+        eq(spentCallKey.operation, sql.placeholder('operation')),
+        eq(spentCallKey.key, sql.placeholder('key')),
+      ),
+    )
+    .prepare();
+  const guardVersion = versionColumns(sql`${sql.placeholder('threadId')}`);
+  const unchangedThread = db
+    .select({ id: threadRow.id })
+    .from(threadRow)
+    .where(
+      and(
+        eq(threadRow.id, sql.placeholder('threadId')),
+        sql`${guardVersion.foldRev} = ${sql.placeholder('foldRev')}`,
+        sql`${guardVersion.inheritRev} = ${sql.placeholder('inheritRev')}`,
+        sql`${guardVersion.head} = ${sql.placeholder('head')}`,
+        eq(threadRow.updatedAt, sql.param(sql.placeholder('updatedAt'), threadRow.updatedAt)),
+      ),
+    )
+    .prepare();
+  const recordCall = db
+    .insert(threadCall)
+    .values({
+      actor: sql.placeholder('actor'),
+      operation: sql.placeholder('operation'),
+      key: sql.placeholder('key'),
+      threadId: sql.placeholder('threadId'),
+      digest: sql.placeholder('digest'),
+      result: sql.placeholder('result'),
+      at: sql.placeholder('at'),
+    })
+    .prepare();
+
   const version = (unit: Unit<'machine'>, threadId: string): Effect.Effect<ThreadVersion | undefined, StoredFailure> =>
     unit.run(versionById.get({ threadId }));
 
@@ -123,20 +173,8 @@ export const makeTransitions = Effect.fnUntraced(function* ({
     const standing = assumed.get(program);
     if (standing === undefined) assumed.set(program, [key]);
     else standing.push(key);
-    yield* program.guard(
-      db
-        .select({ key: threadCall.key })
-        .from(threadCall)
-        .where(and(eq(threadCall.actor, call.actor), eq(threadCall.operation, call.operation), eq(threadCall.key, call.key))),
-      0,
-    );
-    yield* program.guard(
-      db
-        .select({ key: spentCallKey.key })
-        .from(spentCallKey)
-        .where(and(eq(spentCallKey.actor, call.actor), eq(spentCallKey.operation, call.operation), eq(spentCallKey.key, call.key))),
-      0,
-    );
+    yield* program.guard(bindQuery(absentCall, call), 0);
+    yield* program.guard(bindQuery(absentSpent, call), 0);
     if (epoch === undefined) {
       const stamped = yield* units.read((unit) =>
         unit.run(db.select({ at: spentEpoch.at }).from(spentEpoch).where(eq(spentEpoch.id, 1)).get()),
@@ -268,17 +306,15 @@ export const makeTransitions = Effect.fnUntraced(function* ({
     }
     const call = callParts(evidence.call);
     const program = programOf(unit);
+    const recorded = {
+      ...call,
+      threadId,
+      digest: write.digest,
+      result: { answer: write.result ?? null },
+      at: new Date(yield* Clock.currentTimeMillis),
+    };
     if (program !== null) {
-      yield* program.write(
-        db.insert(threadCall).values({
-          ...call,
-          threadId,
-          digest: write.digest,
-          result: { answer: write.result ?? null },
-          at: new Date(yield* Clock.currentTimeMillis),
-        }),
-        1,
-      );
+      yield* program.write(bindQuery(recordCall, recorded), 1);
       if (call.operation !== REPORT_OPERATION) return;
       const marks = and(eq(threadCall.actor, call.actor), eq(threadCall.operation, REPORT_OPERATION));
       return yield* program.write(
@@ -292,15 +328,7 @@ export const makeTransitions = Effect.fnUntraced(function* ({
           ),
       );
     }
-    yield* unit.run(
-      db.insert(threadCall).values({
-        ...call,
-        threadId,
-        digest: write.digest,
-        result: { answer: write.result ?? null },
-        at: new Date(yield* Clock.currentTimeMillis),
-      }),
-    );
+    yield* unit.run(recordCall.run(recorded));
     if (call.operation !== REPORT_OPERATION) return;
     const marks = yield* unit.run(
       db
@@ -331,24 +359,7 @@ export const makeTransitions = Effect.fnUntraced(function* ({
     work: (at: ThreadHold<WriteUnit<'machine'>>) => Effect.Effect<T, E>,
     tx: WriteUnit<'machine'>,
   ) {
-    const standing = versionColumns(threadId);
-    yield* stored('programAt')(
-      program.guard(
-        db
-          .select({ id: threadRow.id })
-          .from(threadRow)
-          .where(
-            and(
-              eq(threadRow.id, threadId),
-              sql`${standing.foldRev} = ${version.foldRev}`,
-              sql`${standing.inheritRev} = ${version.inheritRev}`,
-              sql`${standing.head} = ${version.head}`,
-              eq(threadRow.updatedAt, row.updatedAt),
-            ),
-          ),
-        1,
-      ),
-    );
+    yield* stored('programAt')(program.guard(bindQuery(unchangedThread, { threadId, ...version, updatedAt: row.updatedAt }), 1));
     planHead(program, threadId, version.head);
     return yield* Effect.catchCause(work({ row, version, tx }), (cause) => standingFirst(program, threadId, cause));
   });

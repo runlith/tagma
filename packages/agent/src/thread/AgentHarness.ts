@@ -38,6 +38,7 @@ import type { ThreadLiveFeed } from './run/ThreadLiveFeed';
 import type { ThreadStateShape } from './state';
 import {
   ThreadStore,
+  ThreadTransitions,
   type ThreadFeed,
   type ThreadWriteTx,
   emptyThreadWorkflowMembersLayer,
@@ -88,7 +89,7 @@ import { senderWakesLayer } from './run/SenderWakes';
 import { threadSettlementOutboxLayer } from './run/ThreadSettlementOutbox';
 import { ThreadRunReaper, threadRunReaperLayer } from './run/ThreadRunReaper';
 import { type ThreadRunSettledSubscriber, ThreadRunSettlements, threadRunSettlementsLayer } from './run/ThreadRunSettlements';
-import { threadChangesLayer } from './run/ThreadChanges';
+import { ThreadChanges, threadChangesLayer } from './run/ThreadChanges';
 import { threadRunContextsClosingLayer, threadRunContextsLayer } from './run/ThreadRunContexts';
 import { runAssemblyLayer } from './run/assembly/RunAssembly';
 import { runSchedulerLayer } from './run/scheduler/RunScheduler';
@@ -354,6 +355,9 @@ export type HarnessThreads<TState extends ThreadState, TTx, TWrite extends TTx> 
   duplicate(input: ThreadDuplicateInput): Effect.Effect<ThreadRow, ThreadBorderFailed>;
   deleteByHost(ownerId: string, hostKind: string, hostId: string): Effect.Effect<void, ThreadBorderFailed>;
   publish(threadId: string): Effect.Effect<void, ThreadBorderFailed>;
+  stepping(threadId: string, tx: TWrite): Effect.Effect<void, ThreadBorderFailed>;
+  unseen(threadId: string, tx: TWrite): Effect.Effect<void>;
+  stepped(threadId: string, tx: TWrite): Effect.Effect<void, ThreadBorderFailed>;
 };
 
 export type HarnessRuns = {
@@ -555,6 +559,23 @@ function harnessThreads<TState extends ThreadState, TTx, TWrite extends TTx>(
     deleteByHost: (ownerId, hostKind, hostId) =>
       run(Effect.flatMap(ThreadAggregate, (aggregate) => aggregate.deleteByHost(ownerId, hostKind, hostId))),
     publish: (threadId) => run(Effect.flatMap(ThreadSnapshots, (snapshots) => snapshots.publish(threadId))),
+    stepping: (threadId, tx) =>
+      run(
+        Effect.gen(function* () {
+          yield* (yield* ThreadTransitions).opened([threadId], tx as unknown as ThreadWriteTx);
+          (yield* ThreadChanges).claim(threadId, tx as object);
+        }),
+      ),
+    unseen: (threadId, tx) => run(Effect.map(ThreadChanges, (changes) => changes.note(threadId, tx as object, { kind: 'unseen' }))),
+    stepped: (threadId, tx) =>
+      run(
+        Effect.gen(function* () {
+          const changes = yield* ThreadChanges;
+          yield* (yield* ThreadTransitions).revised([threadId], tx as unknown as ThreadWriteTx, (revisions) =>
+            changes.settle(threadId, tx as object, revisions.get(threadId)),
+          );
+        }),
+      ),
   };
 }
 

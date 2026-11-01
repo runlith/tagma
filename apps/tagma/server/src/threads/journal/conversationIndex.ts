@@ -6,6 +6,7 @@ import type { ThreadEventPayloadValue } from '@runlith/agent/thread/storage/even
 import type { StoreDb, StoreFailure } from '../../platform/contract/service/store.js';
 import type { ProgramUnit, Unit, WriteUnit } from '../../platform/contract/service/units.js';
 import { unplannable } from '../../platform/store/programs.js';
+import { bindQuery, prepareFor } from '../../platform/store/queries.js';
 import { MESSAGE_FTS, threadConversation, threadMessage, threadMessageGap, threadQuietRun } from '../store/conversation.js';
 import type { ConversationRole } from '../contract/wire/conversation.js';
 import { recapVoiding } from '../../thread-record/recaps.js';
@@ -334,6 +335,41 @@ type Reads = <A>(work: (unit: Unit<'machine'>) => Effect.Effect<A, StoreFailure>
 
 type Program = ProgramUnit<'machine'>;
 
+const plannedQueries = prepareFor((db: Db) => ({
+  mark: db
+    .update(threadConversation)
+    .set({
+      through: sql`case when ${threadConversation.through} = ${sql.placeholder('previous')} then ${sql.placeholder('at')} else ${threadConversation.through} end`,
+      seen: sql`max(${threadConversation.seen}, ${sql.placeholder('at')})`,
+    })
+    .where(eq(threadConversation.threadId, sql.placeholder('threadId')))
+    .prepare(),
+  ensure: db
+    .insert(threadConversation)
+    .values({
+      threadId: sql.placeholder('threadId'),
+      through: sql.placeholder('through'),
+      seen: sql.placeholder('at'),
+    })
+    .onConflictDoNothing()
+    .prepare(),
+  noReaders: db
+    .select({ threadId: threadBase.threadId })
+    .from(threadBase)
+    .where(eq(threadBase.sourceId, sql.placeholder('threadId')))
+    .prepare(),
+  missingMessage: db
+    .select({ entryId: threadMessage.entryId })
+    .from(threadMessage)
+    .where(and(eq(threadMessage.threadId, sql.placeholder('threadId')), eq(threadMessage.entryId, sql.placeholder('entryId'))))
+    .prepare(),
+  quiet: db
+    .select({ runId: threadQuietRun.runId })
+    .from(threadQuietRun)
+    .where(and(eq(threadQuietRun.threadId, sql.placeholder('threadId')), eq(threadQuietRun.runId, sql.placeholder('runId'))))
+    .prepare(),
+}));
+
 const placing = new WeakMap<Program, Set<string>>();
 
 const markedAt = (threadId: string, at: number): SQL =>
@@ -386,15 +422,10 @@ const messagePlanned = Effect.fnUntraced(function* (
     }),
   );
   if (readers.length > 0) return yield* unplannable(program, 'a branch reads this conversation');
-  yield* program.guard(db.select({ threadId: threadBase.threadId }).from(threadBase).where(eq(threadBase.sourceId, threadId)), 0);
+  const queries = plannedQueries(db);
+  yield* program.guard(bindQuery(queries.noReaders, { threadId }), 0);
   yield* standing === undefined
-    ? program.guard(
-        db
-          .select({ entryId: threadMessage.entryId })
-          .from(threadMessage)
-          .where(and(eq(threadMessage.threadId, threadId), eq(threadMessage.entryId, entryId))),
-        0,
-      )
+    ? program.guard(bindQuery(queries.missingMessage, { threadId, entryId }), 0)
     : program.guard(
         db.all(sql`select 1 from ${threadMessage} where key = cast(${standing.key} as integer)
           and ${threadMessage.threadId} = ${threadId} and ${threadMessage.entryId} = ${entryId}
@@ -402,14 +433,7 @@ const messagePlanned = Effect.fnUntraced(function* (
           and ${threadMessage.text} = ${standing.text} and ${threadMessage.rewound} is ${standing.rewound}`),
         1,
       );
-  if (listened)
-    yield* program.guard(
-      db
-        .select({ runId: threadQuietRun.runId })
-        .from(threadQuietRun)
-        .where(and(eq(threadQuietRun.threadId, threadId), eq(threadQuietRun.runId, runId))),
-      silent ? 1 : 0,
-    );
+  if (listened) yield* program.guard(bindQuery(queries.quiet, { threadId, runId }), silent ? 1 : 0);
   const when = markedAt(threadId, position);
   const ms = typeof entry.occurredAt === 'string' ? Date.parse(entry.occurredAt) : Number.NaN;
   const dropped = role === null || silent || text.trim() === '' || !keyable(ms);
@@ -460,21 +484,9 @@ export const conversationPlanned = Effect.fnUntraced(function* (
   event: IndexedEvent,
 ) {
   const at = event.position;
-  yield* program.write(
-    db
-      .update(threadConversation)
-      .set({
-        through: sql`case when ${threadConversation.through} = ${at - 1} then ${at} else ${threadConversation.through} end`,
-        seen: sql`max(${threadConversation.seen}, ${at})`,
-      })
-      .where(eq(threadConversation.threadId, threadId)),
-  );
-  yield* program.write(
-    db
-      .insert(threadConversation)
-      .values({ threadId, through: at === 1 ? 1 : 0, seen: at })
-      .onConflictDoNothing(),
-  );
+  const queries = plannedQueries(db);
+  yield* program.write(bindQuery(queries.mark, { threadId, previous: at - 1, at }));
+  yield* program.write(bindQuery(queries.ensure, { threadId, through: at === 1 ? 1 : 0, at }));
   if (!speaks(event.payload)) return;
   const facts = event.payload as Facts;
   if (facts.withdrawn !== undefined || facts.branched !== undefined || facts.rewound !== undefined || facts.restored !== undefined)

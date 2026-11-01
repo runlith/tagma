@@ -36,6 +36,18 @@ export type ThreadRunSettlePatch = {
 
 export type ThreadRunStopAsked = { readonly runId: string; readonly by: ThreadRunRow['settledBy'] };
 
+export type ThreadRunHeartbeat = {
+  readonly id: string;
+  readonly threadId: string;
+  readonly heartbeatAt: Date;
+  readonly updatedAt: Date;
+};
+
+type ThreadRunHeartbeats = {
+  readonly written: readonly ThreadRunHeartbeat[];
+  readonly asked: readonly ThreadRunStopAsked[];
+};
+
 export type ThreadRunStopIntent = {
   readonly by: ThreadRunRow['settledBy'];
   readonly key?: string;
@@ -212,7 +224,7 @@ export interface ThreadRunStorage<TTx, TWrite extends TTx = TTx> {
   writePhase(runId: string, phase: AgentPhase | null, tx?: TWrite): Effect.Effect<void, ThreadPortFailure>;
   addUsage(runId: string, delta: Usage, heartbeatAt: Date, tx?: TWrite): Effect.Effect<void, ThreadPortFailure>;
   charge(runId: string, charge: ThreadRunCharge, tx?: TWrite): Effect.Effect<void, ThreadPortFailure>;
-  writeHeartbeats(runIds: readonly string[], heartbeatAt: Date): Effect.Effect<readonly ThreadRunStopAsked[], ThreadPortFailure>;
+  writeHeartbeats(runIds: readonly string[], heartbeatAt: Date, tx?: TWrite): Effect.Effect<ThreadRunHeartbeats, ThreadPortFailure>;
 
   requestStop(
     runId: string,

@@ -1,6 +1,8 @@
 import {
   type BindingReach,
   type ProgramInvocation,
+  type ProgramMode,
+  type ProgramRemeasure,
   type ProgramKey,
   type ProgramResult,
   type ProgramSide,
@@ -32,6 +34,7 @@ export type ProgramBinding = {
 };
 
 export type GroupSubject = {
+  readonly mode?: ProgramMode;
   readonly projectId: number;
   readonly root: string;
   readonly tree: string;
@@ -44,6 +47,7 @@ export type GroupSubject = {
 
 export type BindingReading = {
   readonly rule: string;
+  readonly remeasure?: ProgramRemeasure;
   readonly coverage: InspectionCoverage;
   readonly verdict: {
     readonly violations: readonly RuleViolation[];
@@ -125,6 +129,7 @@ const execute = Effect.fn('enforcement.program.group')(function* (
           needs,
         );
   const input: ProgramInvocation = {
+    mode: subject.mode,
     request: crypto.randomUUID(),
     checker: checker.id,
     keys: [...keys.values()] as [ProgramKey, ...ProgramKey[]],
@@ -186,7 +191,13 @@ const execute = Effect.fn('enforcement.program.group')(function* (
   const sides = new Map(subject.sides.map((one) => [one.side, one]));
   const measured = new Map<
     string,
-    { tree: readonly RuleViolation[]; base: readonly RuleViolation[]; covered: ReadonlySet<string>; coverage: InspectionCoverage }
+    {
+      tree: readonly RuleViolation[];
+      base: readonly RuleViolation[];
+      covered: ReadonlySet<string>;
+      coverage: InspectionCoverage;
+      remeasure: ProgramRemeasure | undefined;
+    }
   >();
   for (const { binding, key, signature } of routes) {
     if (measured.has(signature)) continue;
@@ -221,6 +232,7 @@ const execute = Effect.fn('enforcement.program.group')(function* (
     const coverage = readings.get(`${key.key}/tree`)!.covered;
     measured.set(signature, {
       tree: values.get('tree')!,
+      remeasure: readings.get(`${key.key}/tree`)!.remeasure,
       base: values.get('base') ?? [],
       covered,
       coverage: {
@@ -234,11 +246,12 @@ const execute = Effect.fn('enforcement.program.group')(function* (
   return routes.map(({ binding, signature }): BindingReading => {
     const reading = measured.get(signature)!;
     const counted =
-      subject.base === null
+      subject.mode === 'measure' || subject.base === null
         ? { violations: reading.tree, occurrences: [], standing: [] }
         : newViolations(reading.tree, reading.base, judgedDebt(binding.debt), { covers: (path) => reading.covered.has(path) });
     return {
       rule: binding.rule,
+      remeasure: reading.remeasure,
       coverage: reading.coverage,
       verdict: {
         violations: counted.violations,
