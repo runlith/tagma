@@ -13,6 +13,10 @@ import { doorFixture, DoorFixture } from '../doorFixture.js';
 import { makeThreadDoors } from '../threadDoors.js';
 import { suiteGit, suiteGitRan } from '../suiteGit.js';
 import { seedRepository } from './native.js';
+import { ThreadJournal } from '../../../threads/contract/service/engine.js';
+import { receiptsOver } from '../../../landing/testing/doubles.js';
+import { MachineStore } from '../../../platform/contract/service/store.js';
+import { MachineUnits } from '../../../platform/contract/service/units.js';
 
 layer(doorFixture().pipe(Layer.provideMerge(BunFileSystem.layer)), {
   excludeTestServices: true,
@@ -113,10 +117,19 @@ layer(doorFixture().pipe(Layer.provideMerge(BunFileSystem.layer)), {
       expect(yield* files.exists(join(gitDir, 'MERGE_HEAD'))).toBe(false);
       const closed = yield* Stream.runHead(changes.pipe(Stream.filter((row) => row.head === during.head && row.operation === 'none')));
       expect(closed._tag).toBe('Some');
-      expect(yield* doors.atNative('merge_worktree', { rootId, whenBaseFree: true }, placed)).toMatchObject({
-        class: 'answer',
-        value: { status: 'merged' },
-      });
+      const journal = Context.get(world.runtime.owners, ThreadJournal);
+      const position = yield* journal.headPosition(thread.id);
+      const merged = yield* doors.atNative('merge_worktree', { rootId, whenBaseFree: true }, placed);
+      expect(merged).toMatchObject({ class: 'answer', value: { status: 'merged' } });
+      const commit = yield* suiteGit(main, 'rev-parse', 'HEAD');
+      const store = Context.get(world.runtime.graph, MachineStore);
+      const units = Context.get(world.runtime.graph, MachineUnits);
+      expect(yield* receiptsOver(store.db, units).read(rootId, commit)).toMatchObject({ rootId, commit, addressees: [thread.id] });
+      expect(yield* journal.eventsAfter(thread.id, position, 10)).toContainEqual(
+        expect.objectContaining({
+          payload: expect.objectContaining({ entry: expect.objectContaining({ event: 'merged', rootId, commit }) }),
+        }),
+      );
       expect(yield* files.readFileString(join(main, 'choice.txt'))).toBe('resolved\n');
     }),
   );

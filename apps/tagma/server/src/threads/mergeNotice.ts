@@ -14,12 +14,13 @@ import { ThreadEntryKinds } from '@runlith/agent/transcript/kinds';
 import { JournalOrder } from './journal/lane.js';
 
 export const makeMergeNotice = Effect.gen(function* () {
-  const { threads: store, transitions } = yield* NativeStorage;
+  const { threads: store, transitions, writes } = yield* NativeStorage;
   const log = yield* ThreadJournal;
   const lane = journalLaneFaces(yield* JournalOrder);
   const kinds = yield* ThreadEntryKinds;
   const deps: TransitionDeps<Unit<'machine'>, WriteUnit<'machine'>> = { store, log, transitions, lane, kinds };
   return MergeNotice.of({
+    writes,
     prepare: Effect.fn('MergeNotice.prepare')(function* (threadId, receipt, recorded) {
       const entry: WorktreeEntry = {
         type: WORKTREE_ENTRY,

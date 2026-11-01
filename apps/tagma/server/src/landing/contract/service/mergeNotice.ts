@@ -1,6 +1,7 @@
 import { Context, Data, type Effect } from 'effect';
 import type { StoreFailure } from '../../../platform/contract/service/store.js';
 import type { Unit, WriteUnit } from '../../../platform/contract/service/units.js';
+import type { WriteSet } from '../../../platform/contract/service/writes.js';
 import type { MergeReceipt } from '../wire/merge.js';
 
 export class MergeNoticeConflict extends Data.TaggedError('MergeNoticeConflict')<{ readonly threadId: string }> {
@@ -22,6 +23,7 @@ export type NoticeWrite = (unit: WriteUnit<'machine'>) => Effect.Effect<void, Me
 export class MergeNotice extends Context.Service<
   MergeNotice,
   {
+    readonly writes: WriteSet;
     readonly prepare: (
       threadId: string,
       receipt: MergeReceipt,

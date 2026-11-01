@@ -34,8 +34,6 @@ import { type GraphSyncRun, mergeTail } from './tail.js';
 import { intentLifecycle } from '../store/intentLifecycle.js';
 import { type MergeRequestRow, mergeRequests } from '../store/mergeRequests.js';
 
-const settling = writes('Merges.settle', [mergeReceipt, worktreePendingMerge, landingIntent]);
-
 const stopping = writes('Merges.recover', [worktreePendingMerge]);
 
 const SETTLE_ATTEMPTS = 3;
@@ -72,6 +70,7 @@ export const makeMergeCoordinator = Effect.fnUntraced(function* (options: {
   const receipts = yield* MergeReceipts;
   const pending = (yield* PendingBoard).store;
   const notice = yield* MergeNotice;
+  const settling = writes('Merges.settle', [mergeReceipt, worktreePendingMerge, landingIntent], notice.writes);
   const commits = yield* makeMergeCommits();
   const { graph, gh } = options;
   const recorded = (receipt: MergeReceipt) => (unit: Parameters<MergeReceipts['Service']['recorded']>[0]) =>

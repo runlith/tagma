@@ -346,7 +346,7 @@ export const composed = Effect.fnUntraced(
           Context.add(FinishingGate, gates),
           Context.add(WorktreeRetirement, retirement),
           Context.add(WorkingOrigins, provedOrigins),
-          Context.add(MergeNotice, { prepare: () => Effect.succeed(null) }),
+          Context.add(MergeNotice, { writes: writes('testing.mergeNotice', []), prepare: () => Effect.succeed(null) }),
           Context.add(MergeReceipts, {
             ...receipts,
             record: (unit, projectId, receipt) =>
