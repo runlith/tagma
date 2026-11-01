@@ -44,7 +44,12 @@ export class HeldHistories {
     this.driven = driven;
     return () => {
       if (this.driven === driven) this.driven = () => NONE;
+      this.reconsider();
     };
+  }
+
+  reconsider(): void {
+    if (this.total > this.residentBytes) this.evict(this.driven());
   }
 
   held(id: string): { readonly history: ThreadHistory; readonly standing: HistoryState; readonly entry: Entry } | null {
@@ -73,14 +78,16 @@ export class HeldHistories {
   }
 
   claim(id: string, writer: object): HistoryClaim {
-    const prior = committedOf(this.entries.get(id));
+    const standing = this.entries.get(id);
+    const prior = committedOf(standing);
+    const restorable = prior !== undefined && standing?.claimed !== true;
     const claim: HistoryClaim = { id, entry: prior === undefined ? { history: null, bytes: 0 } : { ...prior, claimed: true } };
     if (prior === undefined) this.drop(id);
     this.entries.set(id, claim.entry);
     atUnitEnd(writer, () => {
       if (this.entries.get(id) !== claim.entry) return;
-      if (prior === undefined) this.drop(id);
-      else this.entries.set(id, prior);
+      if (restorable) this.entries.set(id, prior);
+      else this.drop(id);
     });
     return claim;
   }

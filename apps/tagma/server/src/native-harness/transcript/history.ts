@@ -279,6 +279,7 @@ export const makeHistoryStore = Effect.fnUntraced(function* ({ reads }: { readon
     read,
     forget,
     serveDriven: (driven: () => ReadonlySet<string>) => live.serveDriven(driven),
+    reconsider: () => live.reconsider(),
     toldState: Effect.fn('ThreadStorage.toldState')(function* (unit: Unit<'machine'>, id: string, key: string, toolCallId?: string) {
       const warm = heldIn(unit).has(id) ? null : live.held(id);
       if (warm !== null) {

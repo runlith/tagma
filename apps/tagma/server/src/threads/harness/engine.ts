@@ -471,6 +471,7 @@ export const threadEngineLayer = Layer.effectContext(
       Effect.sync(() => histories.serveDriven(() => new Set(harness.runs.driven().map((run) => run.threadId)))),
       (stop) => Effect.sync(stop),
     );
+    harness.runs.onDriving(() => histories.reconsider());
     yield* republishOnMachineFlip(
       settings,
       () => live.watched(),

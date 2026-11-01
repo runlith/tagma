@@ -327,7 +327,10 @@ const nativeEngine = (kernel: NativeKernel['Service']) =>
     writes: kernelStorageWrites,
   }).pipe(
     Context.add(NativeCompaction, { compaction: kernel.compaction, fill: kernel.fillers.compaction }),
-    Context.add(NativeHistories, { serveDriven: (driven) => kernel.store.folds.history.serveDriven(driven) }),
+    Context.add(NativeHistories, {
+      serveDriven: (driven) => kernel.store.folds.history.serveDriven(driven),
+      reconsider: () => kernel.store.folds.history.reconsider(),
+    }),
     Context.add(NativeInputRecovery, kernel.inputRecovery),
     Context.add(NativeSwitches, { of: kernel.standingSwitches }),
     Context.add(NativeWorkflow, {

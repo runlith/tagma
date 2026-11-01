@@ -37,6 +37,7 @@ export class NativeHistories extends Context.Service<
   NativeHistories,
   {
     readonly serveDriven: (driven: () => ReadonlySet<string>) => () => void;
+    readonly reconsider: () => void;
   }
 >()('tagma/threads/NativeHistories') {}
 

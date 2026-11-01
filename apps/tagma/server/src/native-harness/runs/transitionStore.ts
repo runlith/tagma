@@ -32,6 +32,7 @@ import { threadInbox } from '../../threads/store/tables.js';
 import { spentCallKey, spentEpoch, threadCall } from '../../threads/store/calls.js';
 import { inProgram, inUnit, stored, type StoredFailure } from '../../platform/store/crossing.js';
 import { fellBack, programOf, programWriteUnit, unplannable } from '../../platform/store/programs.js';
+import { atUnitEnd } from '../../platform/store/life.js';
 import { planHead, plannedFacts } from '../../threads/journal/log.js';
 import type { ThreadMetadataRow, ThreadRow } from '@runlith/agent/thread/rows';
 import { failedAs } from '../../threads/contract/service/failure.js';
@@ -377,7 +378,13 @@ export const makeTransitions = Effect.fnUntraced(function* ({
                 snapshot(
                   unit,
                   threadId,
-                  (at) => Effect.tap(work(at), () => Effect.sync(() => settled.set(program, { threadId, ...at }))),
+                  (at) =>
+                    Effect.tap(work(at), () =>
+                      Effect.sync(() => {
+                        settled.set(program, { threadId, row: at.row, version: at.version });
+                        atUnitEnd(program, () => settled.delete(program));
+                      }),
+                    ),
                   true,
                 ),
               ),

@@ -123,15 +123,33 @@ describe('HeldHistories', () => {
     expect(live.held('t')?.history).toBe(read);
   });
 
+  test('a claim taken over another writer in flight never restores what it read when it ends unsettled', () => {
+    const live = new HeldHistories();
+    const doc = weighed(live);
+    live.settle(live.claim('t', {}), doc, standing(doc, 1));
+    const first = live.claim('t', {});
+    const second = unit();
+    live.claim('t', second.unit);
+    const written = weighed(live);
+    live.settle(first, written, standing(written, 1));
+    second.end.close();
+    expect(live.held('t')).toBeNull();
+  });
+
   test('threads with a run driven here are held past the bound, and idle ones leave first', () => {
     const live = new HeldHistories(120 + 160);
-    live.serveDriven(() => new Set(['a', 'b', 'c']));
+    let driven = new Set(['a', 'b', 'c']);
+    live.serveDriven(() => driven);
     for (const id of ['first', 'a', 'b', 'second', 'c']) {
       const next = weighed(live, 100);
       live.settle(live.claim(id, {}), next, standing(next, 1));
     }
     expect(live.held('first')).toBeNull();
     for (const id of ['a', 'b', 'c', 'second']) expect(live.held(id)).not.toBeNull();
+    driven = new Set(['c']);
+    live.reconsider();
+    expect([live.held('a'), live.held('b'), live.held('second')].filter((held) => held !== null)).toHaveLength(1);
+    expect(live.held('c')).not.toBeNull();
   });
 
   test('a claim whose unit ends without settling stops hiding the thread from readers', () => {

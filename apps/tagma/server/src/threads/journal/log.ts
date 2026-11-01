@@ -12,6 +12,7 @@ import { asc, and, desc, eq, gt, inArray, lte, sql } from 'drizzle-orm';
 import { MachineStore, type StoreFailure } from '../../platform/contract/service/store.js';
 import { MachineUnits, type ProgramUnit, type Unit, type WriteUnit } from '../../platform/contract/service/units.js';
 import { programOf, unplannable } from '../../platform/store/programs.js';
+import { atUnitEnd } from '../../platform/store/life.js';
 import { thread, threadEntry } from '../store/kernel.js';
 import { recordFacts } from '../../thread-record/facts.js';
 import { journalProjectOf, threadBase, threadEvent, threadEventIdentity } from '../store/journal.js';
@@ -30,8 +31,12 @@ export type PlannedFact = ThreadEventRow & { readonly kind: string };
 const planned = new WeakMap<ProgramUnit<'machine'>, Map<string, { head: number; readonly facts: PlannedFact[] }>>();
 
 export const planHead = (program: ProgramUnit<'machine'>, threadId: string, head: number): void => {
-  const heads = planned.get(program) ?? new Map();
-  planned.set(program, heads);
+  let heads = planned.get(program);
+  if (heads === undefined) {
+    heads = new Map();
+    planned.set(program, heads);
+    atUnitEnd(program, () => planned.delete(program));
+  }
   heads.set(threadId, { head, facts: [] });
 };
 
@@ -159,8 +164,12 @@ export const makeSqliteThreadJournal = Effect.gen(function* () {
 
   const carry = (row: ThreadEventRow, tx: WriteUnit<'machine'>): Effect.Effect<void> => {
     if (floor === undefined) return Effect.void;
-    const batches = carrying.get(tx) ?? new Map<string, ThreadEventRow[]>();
-    carrying.set(tx, batches);
+    let batches = carrying.get(tx);
+    if (batches === undefined) {
+      batches = new Map<string, ThreadEventRow[]>();
+      carrying.set(tx, batches);
+      atUnitEnd(tx, () => carrying.delete(tx));
+    }
     const batch = batches.get(row.threadId);
     if (batch !== undefined && batch[batch.length - 1]!.position + 1 === row.position) {
       batch.push(row);
