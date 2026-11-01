@@ -7,7 +7,7 @@ import type { ThreadAttachmentRef } from '../../transcript/attachments';
 import type { ThreadInteractionAnswer, ThreadRestartEntry } from '../../transcript/entries';
 import { ThreadRunConflictError, ThreadRunNotInterruptedError } from '../storage/runs';
 import { unsettledEffects } from './ThreadEffectSettlement';
-import type { ThreadResumeOf, ThreadSnapshotOf } from '../../transcript/live';
+import type { FeedPosition, ThreadResumeOf, ThreadSnapshotOf } from '../../transcript/live';
 import type { ThreadSnapshot, ThreadState, ThreadStateProject } from '../state';
 import { ATTACHED_CONTEXT_SIGNAL_TYPE, type ThreadSignal } from '../../transcript/parts';
 import { isReaderWordsItem } from '../inboxItems';
@@ -189,7 +189,7 @@ export class ThreadAggregate extends Context.Service<
     deleteByHost(ownerId: string, hostKind: string, hostId: string): Effect.Effect<void, ThreadBorderFailed>;
     snapshot(threadId: string): Effect.Effect<ThreadSnapshot, ThreadBorderFailed>;
     page(threadId: string, before: number): Effect.Effect<ThreadTranscriptPage, ThreadBorderFailed>;
-    attachFrom(threadId: string, sincePosition: number): Effect.Effect<ThreadResumeOf<ThreadState> | null, ThreadBorderFailed>;
+    attachFrom(threadId: string, since: FeedPosition): Effect.Effect<ThreadResumeOf<ThreadState> | null, ThreadBorderFailed>;
     stop(
       threadId: string,
       ownerId: string,

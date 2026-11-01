@@ -147,6 +147,7 @@ export type ThreadReadCut<TTx> = {
   readonly tx: TTx;
   readonly revision: number;
   readonly position: number;
+  readonly epoch: number;
 };
 
 export interface ThreadAggregateStorage<TTx, TWrite extends TTx = TTx> {

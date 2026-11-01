@@ -11,6 +11,7 @@ import { THREAD_TOOL_CONFIRM_KIND } from './parts';
 export type FeedPosition = {
   readonly position: number;
   readonly seq: number;
+  readonly epoch?: number;
 };
 
 export type ThreadContextEstimate = {

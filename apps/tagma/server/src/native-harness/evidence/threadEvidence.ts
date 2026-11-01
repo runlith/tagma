@@ -276,8 +276,7 @@ export const threadEvidence = Effect.fnUntraced(function* ({ rows, runs }: Threa
     text: (threadId, projectId, entryId, from, limit) =>
       opened(threadId, projectId, () => harness.reads.text(threadId, entryId, from, limit)),
 
-    attachFrom: (threadId, projectId, sincePosition) =>
-      opened(threadId, projectId, () => harness.reads.attachFrom(threadId, sincePosition)),
+    attachFrom: (threadId, projectId, since) => opened(threadId, projectId, () => harness.reads.attachFrom(threadId, since)),
 
     rewindActs: (threadId, projectId, runIds) =>
       opened(threadId, projectId, () =>

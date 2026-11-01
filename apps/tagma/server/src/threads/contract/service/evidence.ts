@@ -7,7 +7,7 @@ import type { ThreadEventRecord } from '@runlith/agent/thread/events';
 import type { ThreadLiveEvent } from '@runlith/agent/thread/run/ThreadLiveFeed';
 import type { ThreadQueryStop, ThreadSessionShape } from '@runlith/agent/thread/ThreadIntrospection';
 import type { ThreadTranscriptEntry } from '@runlith/agent/transcript/rows';
-import type { ThreadOpenText, ThreadOpenView, ThreadResumeOf } from '@runlith/agent/transcript/live';
+import type { FeedPosition, ThreadOpenText, ThreadOpenView, ThreadResumeOf } from '@runlith/agent/transcript/live';
 import type { ThreadPagePayload } from '@runlith/agent/protocol/http';
 import type { ConversationHeld } from '../wire/conversation.js';
 import type { EvidenceThread } from '../wire/evidence.js';
@@ -173,7 +173,7 @@ export class ThreadEvidence extends Context.Service<
     attachFrom(
       threadId: string,
       projectId: number,
-      sincePosition: number,
+      since: FeedPosition,
     ): Effect.Effect<ThreadResumeOf<NativeThreadState> | null, HarnessFailure>;
     rewindActs(threadId: string, projectId: number, runIds: readonly string[]): Effect.Effect<ThreadRunActs, HarnessFailure>;
   }

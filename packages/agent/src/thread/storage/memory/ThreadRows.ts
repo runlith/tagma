@@ -124,7 +124,7 @@ export const makeMemoryRows = ({ memory }: MemoryStorageInput): ThreadAggregateS
           const held = memory.held(threadId);
           return held === undefined ? 0 : headOf(held);
         });
-        return use({ tx, revision, position });
+        return use({ tx, revision, position, epoch: 0 });
       }),
     transaction: (work) => memory.units.commit(work),
     find: (id, tx) =>

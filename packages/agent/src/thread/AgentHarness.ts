@@ -2,7 +2,7 @@ import { Context, Duration, Effect, Exit, Layer, Scope, Stream } from 'effect';
 import { WorkflowEngine, workflowEngineLayer } from '../workflow/engine';
 import type { WorkflowPlan } from '../workflow/plan';
 import type { WorkflowArgumentsError, WorkflowRun } from '../workflow/run';
-import type { ThreadOpenText, ThreadOpenView, ThreadResumeOf, ThreadSnapshotOf } from '../transcript/live';
+import type { FeedPosition, ThreadOpenText, ThreadOpenView, ThreadResumeOf, ThreadSnapshotOf } from '../transcript/live';
 import type { ThreadState, ThreadStateProject } from './state';
 import type { ThreadBindings } from '../agent/contracts';
 import type { ThreadHostBinding, ThreadRow } from './rows';
@@ -398,7 +398,7 @@ export type HarnessReads<TState extends ThreadState> = {
   }): Effect.Effect<RunEndingsPage, ThreadBorderFailed | ThreadCursorRefused>;
   newestEndings(threadIds: readonly string[], depth: number): Effect.Effect<readonly RunEnding[], ThreadBorderFailed>;
   page(threadId: string, before: number): Effect.Effect<ThreadTranscriptPage, ThreadBorderFailed>;
-  attachFrom(threadId: string, sincePosition: number): Effect.Effect<ThreadResumeOf<TState> | null, ThreadBorderFailed>;
+  attachFrom(threadId: string, since: FeedPosition): Effect.Effect<ThreadResumeOf<TState> | null, ThreadBorderFailed>;
   text(threadId: string, entryId: string, from: number, limit: number): Effect.Effect<ThreadOpenText | null, ThreadBorderFailed>;
   shape(threadId: string): Effect.Effect<ThreadSessionShape, ThreadBorderFailed>;
   composition(threadId: string): Effect.Effect<ThreadRequestComposition, ThreadBorderFailed>;
@@ -602,8 +602,7 @@ function harnessReads<TState extends ThreadState>(
     endings: (input) => run(Effect.flatMap(RunEndings, (endings) => endings.page(input))),
     newestEndings: (threadIds, depth) => run(Effect.flatMap(RunEndings, (endings) => endings.newest(threadIds, depth))),
     page: (threadId, before) => run(Effect.flatMap(ThreadAggregate, (aggregate) => aggregate.page(threadId, before))),
-    attachFrom: (threadId, sincePosition) =>
-      run(Effect.flatMap(ThreadSnapshots, (snapshots) => snapshots.attachFrom(threadId, sincePosition, toState))),
+    attachFrom: (threadId, since) => run(Effect.flatMap(ThreadSnapshots, (snapshots) => snapshots.attachFrom(threadId, since, toState))),
     text: (threadId, entryId, from, limit) =>
       run(Effect.flatMap(ThreadSnapshots, (snapshots) => snapshots.text(threadId, entryId, from, limit))),
     shape: (threadId) => run(Effect.flatMap(ThreadIntrospection, (reads) => reads.shape(threadId))),

@@ -90,7 +90,9 @@ export const threadFeeds = ({ list, folders, evidence, feed, basis: services }: 
         return { value, covered: (event: ThreadLiveEvent<NativeThreadState>) => event.at.seq <= cut };
       }),
       (event): Effect.Effect<ThreadWireFeedEvent> => {
-        delivered = { position: Math.max(delivered?.position ?? 0, event.at.position), seq: event.at.seq };
+        const epoch = delivered?.epoch;
+        const position = Math.max(delivered?.position ?? 0, event.at.position);
+        delivered = epoch === undefined ? { position, seq: event.at.seq } : { position, seq: event.at.seq, epoch };
         return event.type === 'open'
           ? Effect.succeed(wireOpenEvent(event))
           : Effect.map(frameBasis(services, stateThreads(event.frame.state, projectId)), (basis) => wireStateEvent(event, basis));
@@ -136,7 +138,7 @@ const openingFrame = Effect.fnUntraced(function* (
   since: FeedPosition | undefined,
 ) {
   if (since !== undefined) {
-    const resumed = yield* evidence.attachFrom(threadId, projectId, since.position);
+    const resumed = yield* evidence.attachFrom(threadId, projectId, since);
     if (resumed) return wireResumeEvent(resumed, since, yield* basisOf(services, stateThreads(resumed.state, projectId)));
   }
   const snapshot = yield* evidence.snapshot(threadId, projectId);

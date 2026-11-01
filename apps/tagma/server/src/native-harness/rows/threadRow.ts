@@ -34,6 +34,7 @@ import type { ThreadTranscriptEntry } from '@runlith/agent/transcript/rows';
 import { EMPTY_HISTORY, EMPTY_TRANSCRIPT, makeThreadMetadata, makeThreadUnits, threadRowOf } from './threadUnits.js';
 import { threadRev } from '../store/thread.js';
 import { journalHead } from '../../threads/journal/base.js';
+import { threadRolloutCursor } from '../../threads/store/journal.js';
 
 export type ThreadStore = Effect.Success<ReturnType<typeof makeThreadStore>>;
 
@@ -83,7 +84,12 @@ export const makeThreadStore = Effect.fnUntraced(function* (input: { readonly re
         'readCut',
         Effect.fnUntraced(function* (tx) {
           const row = yield* stored('readCut.revision')(
-            tx.run(db.select({ revision: threadRev.changeRev }).from(threadRev).where(eq(threadRev.threadId, threadId)).get()),
+            tx.run(
+              db.get<{ revision: number | null; epoch: number | null }>(
+                sql`select (select ${threadRev.changeRev} from ${threadRev} where ${threadRev.threadId} = ${threadId}) as revision,
+                  (select ${threadRolloutCursor.generation} from ${threadRolloutCursor} where ${threadRolloutCursor.threadId} = ${threadId}) as epoch`,
+              ),
+            ),
           );
           const filed = input.reads === undefined ? null : yield* stored('readCut.head')(input.reads.head(threadId, tx));
           const head =
@@ -92,7 +98,7 @@ export const makeThreadStore = Effect.fnUntraced(function* (input: { readonly re
                   tx.run(db.get<{ position: number }>(sql`select ${journalHead(sql`${threadId}`)} as position`)),
                 )
               : { position: filed };
-          return yield* use({ tx, revision: row?.revision ?? 0, position: Number(head?.position ?? 0) });
+          return yield* use({ tx, revision: row?.revision ?? 0, position: Number(head?.position ?? 0), epoch: row?.epoch ?? 0 });
         }),
         { snapshot: true },
       ),

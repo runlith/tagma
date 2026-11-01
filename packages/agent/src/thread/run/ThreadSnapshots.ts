@@ -10,6 +10,7 @@ import type {
   WordsWait,
   ThreadLiveView,
   ThreadOpenText,
+  FeedPosition,
 } from '../../transcript/live';
 import { joinedOpen, openSlice, openText } from '../../transcript/openText';
 import { toolSettled, type ThreadToolEntry } from '../../transcript/entries';
@@ -85,10 +86,10 @@ export class ThreadSnapshots extends Context.Service<
       threadId: string,
       project: ThreadStateProject<T>,
     ): Effect.Effect<ThreadSnapshotOf<T>, ThreadBorderFailed>;
-    attachFrom(threadId: string, sincePosition: number): Effect.Effect<ThreadResumeOf<ThreadState> | null, ThreadBorderFailed>;
+    attachFrom(threadId: string, since: FeedPosition): Effect.Effect<ThreadResumeOf<ThreadState> | null, ThreadBorderFailed>;
     attachFrom<T extends ThreadState>(
       threadId: string,
-      sincePosition: number,
+      since: FeedPosition,
       project: ThreadStateProject<T>,
     ): Effect.Effect<ThreadResumeOf<T> | null, ThreadBorderFailed>;
     page(threadId: string, before: number): Effect.Effect<ThreadTranscriptPage, ThreadBorderFailed>;
@@ -307,16 +308,19 @@ export const makeThreadSnapshots = Effect.gen(function* () {
       }),
     );
   });
-  const stateCut = <A>(threadId: string, read: (current: ThreadState, tx: ThreadTx) => Effect.Effect<A, ThreadBorderFailed>) =>
+  const stateCut = <A>(
+    threadId: string,
+    read: (current: ThreadState, tx: ThreadTx, epoch: number) => Effect.Effect<A, ThreadBorderFailed>,
+  ) =>
     inCut(
       threadId,
       Effect.fnUntraced(function* (cut) {
         const { state: current, revision } = yield* readingIn(threadId, cut);
-        const value = yield* read(current, cut.tx);
+        const value = yield* read(current, cut.tx, cut.epoch);
         if (!published.has(threadId)) published.set(threadId, current.position);
         ahead.set(threadId, Math.max(ahead.get(threadId) ?? revision, revision));
         const live = feed.view(threadId);
-        return { value, live: { ...live, at: { position: current.position, seq: live.at.seq } } };
+        return { value, live: { ...live, at: { position: current.position, seq: live.at.seq, epoch: cut.epoch } } };
       }),
     );
   function snapshot(threadId: string): Effect.Effect<ThreadSnapshotOf<ThreadState>, ThreadBorderFailed>;
@@ -356,22 +360,23 @@ export const makeThreadSnapshots = Effect.gen(function* () {
       },
     ).pipe(Effect.withSpan('ThreadSnapshots.snapshot'));
   }
-  function attachFrom(threadId: string, sincePosition: number): Effect.Effect<ThreadResumeOf<ThreadState> | null, ThreadBorderFailed>;
+  function attachFrom(threadId: string, since: FeedPosition): Effect.Effect<ThreadResumeOf<ThreadState> | null, ThreadBorderFailed>;
   function attachFrom<T extends ThreadState>(
     threadId: string,
-    sincePosition: number,
+    since: FeedPosition,
     project: ThreadStateProject<T>,
   ): Effect.Effect<ThreadResumeOf<T> | null, ThreadBorderFailed>;
   function attachFrom<T extends ThreadState>(
     threadId: string,
-    sincePosition: number,
+    since: FeedPosition,
     project?: ThreadStateProject<T>,
   ): Effect.Effect<ThreadResumeOf<ThreadState | T> | null, ThreadBorderFailed> {
     return Effect.map(
       stateCut(
         threadId,
-        Effect.fnUntraced(function* (current, tx) {
-          const deltas = yield* threadWireDeltas(journal, kinds, threadId, sincePosition, tx);
+        Effect.fnUntraced(function* (current, tx, epoch) {
+          if (since.epoch !== epoch) return null;
+          const deltas = yield* threadWireDeltas(journal, kinds, threadId, since.position, tx);
           if (deltas === null) return null;
           const state = project === undefined ? current : yield* project(current, tx);
           return { state, deltas };

@@ -215,7 +215,7 @@ export function describeThreadRunTurns<TTx, TWrite extends TTx = TTx, R = never>
         const lastRow = yield* storage.aggregate.find(thread.id);
         const lastRowTranscript = yield* transcriptOf(storage, thread.id);
         if (!lastRow) return yield* Effect.die('The thread disappeared under the proof.');
-        const attached = yield* world.harness.reads.attachFrom(thread.id, held.position);
+        const attached = yield* world.harness.reads.attachFrom(thread.id, { ...held.live.at, position: held.position });
         if (!attached) return yield* Effect.die('The resume window refused a position it just handed out.');
         const wire = decodeThreadFeedEvent(JSON.parse(JSON.stringify(threadResumeEvent(attached, { position: held.position, seq: 0 }))));
         if (wire.type !== 'resume') return yield* Effect.die('The resume event did not survive its own wire.');

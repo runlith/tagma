@@ -72,7 +72,9 @@ function covers(held: number, records: readonly ThreadEventDelta[], through: num
 }
 
 function advanced(held: FeedPosition, at: FeedPosition): FeedPosition {
-  return at.position >= held.position ? at : { position: held.position, seq: at.seq };
+  const epoch = at.epoch ?? held.epoch;
+  const position = Math.max(at.position, held.position);
+  return epoch === undefined ? { position, seq: at.seq } : { position, seq: at.seq, epoch };
 }
 
 class HeldView implements TranscriptHeld {

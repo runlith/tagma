@@ -119,9 +119,17 @@ it.live('a repair that renumbers a rested journal reopens its open feed and its 
     const said = (position: number, text: string) =>
       `${JSON.stringify({
         kind: 'event',
-        row: { threadId: id, position, id: `said-${position}`, kind: 'message', payload: { entry: { type: 'message', id: `said-${position}`, role: 'user', text } } },
+        row: {
+          threadId: id,
+          position,
+          id: `said-${position}`,
+          kind: 'message',
+          payload: { entry: { type: 'message', id: `said-${position}`, role: 'user', text } },
+        },
       })}\n`;
-    yield* Effect.promise(() => appendFile(join(world.dataHome, 'threads', String(projectId), `${id}.jsonl`), `${said(1, 'first')}${said(3, 'second')}`));
+    yield* Effect.promise(() =>
+      appendFile(join(world.dataHome, 'threads', String(projectId), `${id}.jsonl`), `${said(1, 'first')}${said(3, 'second')}`),
+    );
     yield* restFor(db, id, new Date(yield* Clock.currentTimeMillis));
     const harness = Context.get(world.runtime.owners, ThreadHarness);
     const frames = yield* Queue.unbounded<ThreadWireFeedEvent>();
@@ -130,7 +138,8 @@ it.live('a repair that renumbers a rested journal reopens its open feed and its 
         Queue.offer(frames, frame),
       ),
     );
-    expect(yield* Queue.take(frames)).toMatchObject({ type: 'snapshot', at: { position: 3 } });
+    const opened = yield* Queue.take(frames);
+    expect(opened).toMatchObject({ type: 'snapshot', at: { position: 3 } });
     yield* harness.threads.publish(id);
     expect(yield* Queue.take(frames)).toMatchObject({ type: 'state', at: { position: 3 } });
     expect((yield* world.op('repair_thread_rollout', { threadId: id }, `project=${projectId}`)).status).toBe(200);
@@ -139,5 +148,9 @@ it.live('a repair that renumbers a rested journal reopens its open feed and its 
     expect(reopened).toMatchObject({ at: { position: 2 } });
     const cut = yield* harness.threads.readCut(id, () => Effect.void);
     expect({ position: cut.position, live: cut.live.at.position }).toEqual({ position: 2, live: 2 });
+    const reconnected = yield* Stream.runHead(
+      Context.get(world.runtime.owners, ThreadFeeds)['thread.subscribe']({ projectId, threadId: id, since: opened.at }),
+    );
+    expect(reconnected).toMatchObject({ _tag: 'Some', value: { type: 'snapshot', at: { position: 2 } } });
   }).pipe(Effect.scoped, Effect.provide(fixture)),
 );

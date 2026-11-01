@@ -353,7 +353,7 @@ export const threadEventDeltaSchema = Schema.Struct({
 
 const ordinal = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
 
-export const feedPositionSchema = Schema.Struct({ position: ordinal, seq: ordinal });
+export const feedPositionSchema = Schema.Struct({ position: ordinal, seq: ordinal, epoch: Schema.optionalKey(ordinal) });
 
 export const threadLiveProgressSchema = Schema.Struct({
   phase: Schema.NullOr(AgentPhase),
@@ -377,7 +377,11 @@ export const threadOpenEntrySchema = Schema.Union([
 export const threadOpenTextSchema = Schema.Struct({ text: Schema.String, from: openFrom, length: openFrom });
 
 export const threadOpenChangeSchema = Schema.Union([
-  Schema.Struct({ op: Schema.tag('put'), entry: threadEntryWireSchema, from: openFrom.pipe(Schema.withDecodingDefaultKey(Effect.succeed(0))) }),
+  Schema.Struct({
+    op: Schema.tag('put'),
+    entry: threadEntryWireSchema,
+    from: openFrom.pipe(Schema.withDecodingDefaultKey(Effect.succeed(0))),
+  }),
   Schema.Struct({ op: Schema.tag('append'), id: Schema.String, text: Schema.String }),
   Schema.Struct({ op: Schema.tag('drop'), id: Schema.String }),
   Schema.Struct({ op: Schema.tag('progress'), progress: Schema.NullOr(threadLiveProgressSchema) }),
@@ -393,7 +397,13 @@ export function threadFeedEventSchema<const State extends Schema.Struct.Fields>(
       at: feedPositionSchema,
       payload: Schema.Struct({
         status: Schema.tag('loaded'),
-        snapshot: Schema.Struct({ ...state, transcript: Schema.Array(threadEntryWireSchema), before: Schema.NullOr(Schema.Int), open, progress }),
+        snapshot: Schema.Struct({
+          ...state,
+          transcript: Schema.Array(threadEntryWireSchema),
+          before: Schema.NullOr(Schema.Int),
+          open,
+          progress,
+        }),
       }),
     }),
     Schema.Struct({
