@@ -66,13 +66,17 @@ it.live('prepared program writes and guards bind encoded values in standalone an
     yield* units.program(keeping, 'test:prepared', (program) =>
       program.write(bindQuery(insert, { id: 'a', details: { text: '漢🙂' }, at }), 1),
     );
-    yield* units.write(keeping, () =>
-      units.program(keeping, 'test:prepared-joined', (program) =>
-        Effect.andThen(
-          program.guard(bindQuery(guard, { id: 'b', at }), 0),
-          program.write(bindQuery(insert, { id: 'b', details: null, at: null }), 1),
+    yield* Effect.provideService(
+      units.write(keeping, () =>
+        units.program(keeping, 'test:prepared-joined', (program) =>
+          Effect.andThen(
+            program.guard(bindQuery(guard, { id: 'b', at }), 0),
+            program.write(bindQuery(insert, { id: 'b', details: null, at: null }), 1),
+          ),
         ),
       ),
+      SafeIntegers,
+      true,
     );
     const refused = yield* Effect.result(
       units.program(keeping, 'test:prepared-refused', (program) =>
