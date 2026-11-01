@@ -3,7 +3,7 @@ import type { Point } from '@runlith/layer/Point';
 import type { Holder } from '$lib/shared/panes/holder.js';
 import { type PaneContent, type PaneKind, type PaneOffer, PaneUndeclared, type PaneRefusal, Panes } from '$lib/shared/panes/pane.js';
 
-type ListedOffer = PaneOffer & Pick<PaneKind, 'right'>;
+type ListedOffer = PaneOffer & { readonly right: PaneKind['right'] };
 
 type PaneIndex = {
   readonly items: readonly PaneKind[];

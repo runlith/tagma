@@ -43,7 +43,9 @@
   const declarations = ThreadKinds.use();
   const composerParts = ComposerParts.use();
   const feedParts = FeedParts.use();
-  const gate = gateOf(Access.find());
+  const access = Access.find();
+  const writing = gateOf(access, 'write');
+  const reading = gateOf(access, 'read');
 
   $effect.pre(() => {
     const disposers = [
@@ -59,11 +61,11 @@
 
 <PointView
   point={composerParts}
-  gate={gate.shown}
+  gate={writing.shown}
   propsOf={(one: ComposerPartDeclaration): ComposerPart => ({ ...owners, contributor: one.id, composer, surface, rendering })}
 />
 <PointView
   point={feedParts}
-  gate={gate.shown}
+  gate={reading.shown}
   propsOf={(one: FeedPartDeclaration): FeedPart => ({ ...owners, contributor: one.id, kinds, regions, transcript })}
 />

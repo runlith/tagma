@@ -11,7 +11,7 @@ import { Effect, Result, Schema, SchemaIssue } from 'effect';
 import { FetchHttpClient, HttpClient, HttpClientError } from 'effect/http';
 import { HttpApiClient } from 'effect/http-api';
 import { OperationTable, type HttpOperationId, type OperationAnswer, type OperationInput } from './operation.js';
-import { AccessHint, type AccessHintShape } from './access.js';
+import { AccessHint, type AccessHintShape, hinted } from './access.js';
 import { Refusal, refusalOf } from './refusal.js';
 import { ServerOrigin } from './ServerOrigin.svelte.js';
 
@@ -119,9 +119,6 @@ export class Door extends Service<Door>()('Door', { tier: 'app' }) {
     super();
   }
 
-  private readonly hinted = (refusal: Refusal): Refusal =>
-    this.hints === undefined || refusal.right === undefined ? refusal : refusal.hinted(this.hints.hint(refusal.right));
-
   private readonly reload = (): void => this.router.reload();
 
   markLeaving(): void {
@@ -225,7 +222,7 @@ export class Door extends Service<Door>()('Door', { tier: 'app' }) {
           })
         : call(this.client),
     ).pipe(
-      Effect.catch((error) => Effect.flatMap(serverFault(error), (refusal) => Effect.fail(this.hinted(refusal)))),
+      Effect.catch((error) => Effect.flatMap(serverFault(error), (refusal) => Effect.fail(hinted(refusal, this.hints)))),
       Effect.catchDefect((defect) => Effect.fail(refusalOf(readableDefect(defect)))),
       Effect.provideService(FetchHttpClient.Fetch, this.fetch),
       Effect.provideService(ThreadEntryKinds, this.entries),

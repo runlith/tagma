@@ -8,7 +8,7 @@
   let { pane }: { pane: SidePane } = $props();
 
   const panes = SidePanes.use();
-  const gate = gateOf(Access.find());
+  const gate = gateOf(Access.find(), 'read');
   const hints = AccessHint.find();
   const declared = untrack(() => panes.kinds.declared(pane.kind));
   const allowed = $derived(gate.allows(declared.right));

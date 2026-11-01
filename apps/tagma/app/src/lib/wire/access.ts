@@ -1,5 +1,6 @@
 import { Service } from '@runlith/layer/key';
 import type { Right, RightKey } from '@tagma/server/platform/contract/wire/right';
+import type { Refusal } from './refusal.js';
 import type { Act } from './told.js';
 
 interface AccessShape {
@@ -16,6 +17,9 @@ export interface AccessHintShape {
 
 export class AccessHint extends Service<AccessHintShape>()('AccessHint', { tier: 'app' }) {}
 
+export const hinted = (refusal: Refusal, hints: AccessHintShape | undefined): Refusal =>
+  hints === undefined || refusal.right === undefined ? refusal : refusal.hinted(hints.hint(refusal.right));
+
 export interface Gated<Payload> {
   readonly right?: RightKey;
   readonly offer?: Payload;
@@ -27,18 +31,18 @@ type Gate = {
   readonly shown: <Payload>(item: { readonly payload: Payload } & Gated<Payload>) => Payload | null;
 };
 
-export const gateOf = (access: AccessShape | undefined): Gate => {
+export const gateOf = (access: AccessShape | undefined, use: 'read' | 'write'): Gate => {
   const allows = (key: RightKey | undefined): boolean => {
     if (key === undefined) return true;
     const granted = access?.right(key)?.access;
-    return granted === 'read' || granted === 'full';
+    return granted === 'full' || (granted === 'read' && use === 'read');
   };
   return {
     right: (key) => access?.right(key),
     allows,
     shown: (item) => {
       if (item.right === undefined || allows(item.right)) return item.payload;
-      return access?.right(item.right)?.access === 'none' ? (item.offer ?? null) : null;
+      return access?.right(item.right) === undefined ? null : (item.offer ?? null);
     },
   };
 };

@@ -46,7 +46,7 @@
   const host = Host.use();
   const router = Router.use();
   const registry = SectionRegistry.use();
-  const gate = gateOf(Access.find());
+  const gate = gateOf(Access.find(), 'write');
 
   const parts = new SettingsParts();
   standParts(parts);

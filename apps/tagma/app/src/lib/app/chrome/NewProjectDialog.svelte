@@ -16,7 +16,7 @@
 
   const creation = ProjectCreation.use();
   const fields = CreationFields.use();
-  const gate = gateOf(Access.find());
+  const gate = gateOf(Access.find(), 'write');
   const drawn = (id: string): boolean => {
     const field = fields.find(id);
     return field !== undefined && gate.allows(field.right);

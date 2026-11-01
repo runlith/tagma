@@ -11,7 +11,7 @@
   let { trigger, label = 'New tab', align = 'start' }: { trigger?: Snippet; label?: string; align?: 'start' | 'end' } = $props();
 
   const panes = SidePanes.use();
-  const gate = gateOf(Access.find());
+  const gate = gateOf(Access.find(), 'read');
 </script>
 
 <DropdownMenu.Root>

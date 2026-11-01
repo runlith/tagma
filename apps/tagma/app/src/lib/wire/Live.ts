@@ -1,6 +1,7 @@
 import type { graphChangeSchema, graphFrameSchema } from '@tagma/server/graph/contract/wire/feed';
 import { liveSerialization } from '@tagma/server/platform/contract/wire/live';
 import type { Words } from '@tagma/server/platform/contract/wire/refusal';
+import type { Right } from '@tagma/server/platform/contract/wire/right';
 import { DEVICE_REVOKED_CLOSE } from '@tagma/server/remote/contract/wire/access';
 import { TAGMA_SOCKET_PATH } from '@tagma/server/socket/rpc';
 import type { WireModule } from '@tagma/server/platform/contract/wire/manifest';
@@ -15,6 +16,7 @@ import { Service } from '@runlith/layer/key';
 import { Cause, Context, Data, Deferred, Effect, Exit, type Fiber, FiberSet, Layer, Scope, Stream } from 'effect';
 import { RpcClient, RpcClientError } from 'effect/rpc';
 import { Socket } from 'effect/socket';
+import { AccessHint, type AccessHintShape, hinted } from './access.js';
 import { Refusal, refusalOf } from './refusal.js';
 import { causeText, closeFailure, failureFromCause, failureOf, type LiveError } from './liveFailure.js';
 import { ServerOrigin } from './ServerOrigin.svelte.js';
@@ -35,6 +37,7 @@ export type LiveFailure =
       readonly code?: string;
       readonly unblock?: readonly string[];
       readonly words?: Words;
+      readonly right?: Right;
     };
 
 export type ConnectionFailure = Extract<LiveFailure, { readonly kind: 'connection' }>;
@@ -118,6 +121,7 @@ export class LiveConnection {
     private readonly origin: ServerOrigin,
     private readonly group: () => LiveGroup,
     private readonly entries: ThreadEntryReader,
+    private readonly hints: AccessHintShape | undefined,
   ) {}
 
   static make(
@@ -125,14 +129,19 @@ export class LiveConnection {
     origin: ServerOrigin,
     catalog: Point<WireModule>,
     entries: ThreadEntryReader = wireEntries(undefined),
+    hints?: AccessHintShape,
   ): Effect.Effect<LiveConnection, never, Scope.Scope> {
     return Effect.flatMap(Scope.Scope, (life) =>
       Effect.map(
         FiberSet.makeRuntime<never, unknown, LiveGone>(),
-        (fork) => new LiveConnection(life, fork, socket, origin, liveGroupFrom(catalog), entries),
+        (fork) => new LiveConnection(life, fork, socket, origin, liveGroupFrom(catalog), entries, hints),
       ),
     );
   }
+
+  private readonly refusing = (error: LiveError | LiveGone): Refusal => hinted(callRefusal(error), this.hints);
+
+  private readonly sent = (error: LiveError | LiveGone): CallFailed => new CallFailed({ refusal: this.refusing(error), sent: true });
 
   get status(): LiveStatus {
     return this.currentStatus;
@@ -282,13 +291,13 @@ export class LiveConnection {
   }
 
   call<A>(work: (client: ServerClient) => Effect.Effect<A, LiveError>): Promise<A> {
-    return Effect.runPromise(Effect.mapError(this.answered(work), callRefusal));
+    return Effect.runPromise(Effect.mapError(this.answered(work), this.refusing));
   }
 
   attempt<A>(work: (client: ServerClient) => Effect.Effect<A, LiveError>): Effect.Effect<A, CallFailed> {
     return Effect.flatMap(
-      Effect.mapError(this.connected(), (gone) => new CallFailed({ refusal: callRefusal(gone), sent: false })),
-      (client) => Effect.mapError(this.flight(client, work), sentFailure),
+      Effect.mapError(this.connected(), (gone) => new CallFailed({ refusal: this.refusing(gone), sent: false })),
+      (client) => Effect.mapError(this.flight(client, work), this.sent),
     );
   }
 
@@ -298,10 +307,10 @@ export class LiveConnection {
       const answer = Deferred.makeUnsafe<A, CallFailed>();
       const waiting: Ahead = {
         start: (client) => {
-          this.fork(Deferred.into(Effect.mapError(this.flight(client, work), sentFailure), answer));
+          this.fork(Deferred.into(Effect.mapError(this.flight(client, work), this.sent), answer));
         },
         fail: (gone) => {
-          Deferred.doneUnsafe(answer, Effect.fail(new CallFailed({ refusal: callRefusal(gone), sent: false })));
+          Deferred.doneUnsafe(answer, Effect.fail(new CallFailed({ refusal: this.refusing(gone), sent: false })));
         },
       };
       this.ahead.add(waiting);
@@ -445,7 +454,7 @@ export class LiveConnection {
     ending: LiveEnding,
   ): { unsubscribe: () => void } {
     const scope = Scope.forkUnsafe(this.life);
-    const connection = new LiveConnection(scope, this.fork, this.socket, this.origin, this.group, this.entries);
+    const connection = new LiveConnection(scope, this.fork, this.socket, this.origin, this.group, this.entries, this.hints);
     const detach = connection.attach();
     Effect.runSync(Scope.addFinalizer(scope, Effect.sync(detach)));
     const held = connection.hold(open, onItem, onFailure, resume, ending);
@@ -607,10 +616,6 @@ function callRefusal(error: LiveError | LiveGone): Refusal {
   return failure?.kind === 'connection' ? transportRefusal(failure.message, error) : refusalOf(error);
 }
 
-function sentFailure(error: LiveError | LiveGone): CallFailed {
-  return new CallFailed({ refusal: callRefusal(error), sent: true });
-}
-
 function transportRefusal(reason: string, cause: unknown): Refusal {
   return new Refusal({ gate: false, code: 'transport', reason, unblock: [], cause });
 }
@@ -623,7 +628,8 @@ export class Live extends Service<LiveConnection>()('Live', { tier: 'app' }) {
     const fibers = Scope.makeUnsafe();
     const catalog = yield* WireCatalog;
     const kinds = yield* WireEntryKinds.optional();
-    const live = Effect.runSync(Scope.provide(LiveConnection.make(platform.socket, origin, catalog, wireEntries(kinds)), fibers));
+    const hints = yield* AccessHint.optional();
+    const live = Effect.runSync(Scope.provide(LiveConnection.make(platform.socket, origin, catalog, wireEntries(kinds), hints), fibers));
     app.defer(live.attach());
     app.defer(() => Effect.runPromise(Scope.close(fibers, Exit.void)));
     return live;
