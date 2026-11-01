@@ -9,4 +9,4 @@ fields:
     "status": "in_work"
   }
 ---
-Reproduce native calls queued behind a preparation refusal through the tool door, then release the refusing door's order and thread claims for every unexecuted ending. Establish the introducing revision, verify the running-server unblock path by code reading, and check the affected tests on seeds 1–3 without launching or restarting the product.
+A concurrent hosted sealed-message scan can place a predecessor after its preparation refusal has released it; the closure watcher sees that call still hosted while its committed response is being acknowledged and leaves the new claim standing. Make ordering release terminal within its door and cover interrupted preparation too. The deterministic ThreadHosting regression reproduces the background wait and blocked graph mutation on 4113b5f547 and its parent 4a64b540af5298afba1e28f37ccd8a3addf1e2b8, so the defect predates that commit and the later e3d99eddc5/ac74a52989 changes. The operator can stop the waiting background invocations through direct control_call operations outside the agent's tool queue, then stop the run to close its old door.
