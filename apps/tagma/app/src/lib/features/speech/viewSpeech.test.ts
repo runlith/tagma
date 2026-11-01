@@ -1,4 +1,4 @@
-import type { Heard, Line, Listening, ListeningEvent } from '@tagma/server/speech/contract/wire/listening';
+import type { Heard } from '@tagma/server/speech/contract/wire/listening';
 import { SPEECH_NOTIFICATION } from '@tagma/server/speech/contract/wire/view';
 import { Effect, Exit, Scope } from 'effect';
 import { afterEach, beforeEach, expect, vi } from 'vitest';
@@ -12,8 +12,6 @@ import { loadCatalog, testCatalog, testOperations } from '$lib/wire/testing.js';
 import { makePlatform, makeRouter } from '@runlith/layer/testing';
 import { INVALID_PARAMS, UNAVAILABLE, ViewBridge, type ViewParams, ViewRefusal } from '../views/ViewBridge.js';
 import { speechMethod } from './viewSpeech.js';
-import { CallFeed } from './calls/Feed.svelte.js';
-import { saidOf } from './calls/Picked.svelte.js';
 
 await loadCatalog();
 
@@ -30,43 +28,7 @@ const utterance: Heard = {
   to: 500,
   speaker: null,
 };
-const line: Line = {
-  kind: 'utterance',
-  track: 'mic',
-  segment: 0,
-  seq: 0,
-  revision: 1,
-  closed: true,
-  text: 'Bonjour',
-  from: 0,
-  to: 500,
-  speaker: null,
-  change: 1,
-  units: [],
-};
-
-const listing = (givenThrough: number, state: Listening['state'] = 'live'): Listening => ({
-  id: 'call',
-  projectId: 7,
-  title: null,
-  startedAt: '2026-10-13T12:00:00.000Z',
-  state,
-  durationMs: 0,
-  tracks: [{ id: 'mic', source: 'mic', label: 'Microphone', echoCancel: true }],
-  recognizer: { provider: 'scripted', model: 'live', turns: 'provider', languages: [], speakers: false, tuning: {} },
-  utterances: 0,
-  givenThrough,
-  muted: [],
-  speakers: [],
-  marks: 0,
-  gist: null,
-  audio: { state: 'off', until: null, bytes: 0 },
-  echo: false,
-  follower: null,
-  again: null,
-});
-
-const texts = (feed: CallFeed): readonly string[] => [...saidOf(feed.rows), ...saidOf(feed.tail)].map((one) => one.text);
+const admitted: Heard = { kind: 'state', state: 'live' };
 
 type Request = {
   readonly _tag: string;
@@ -79,7 +41,6 @@ type Request = {
 class SpeechSocket extends EventTarget {
   static current: SpeechSocket;
   static frames = 1;
-  static transcript: Line = line;
   readyState = 0;
   binaryType = 'arraybuffer';
   readonly active = new Map<string, Request>();
@@ -121,22 +82,12 @@ class SpeechSocket extends EventTarget {
             });
             this.message({ _tag: 'Exit', requestId: request.id, exit: { _tag: 'Success', value: null } });
           });
-        } else
-          queueMicrotask(() =>
-            this.event(
-              request.id,
-              request.tag === 'speech.recognize'
-                ? { kind: 'state', state: 'live' }
-                : request.tag === 'speech.listening.subscribe'
-                  ? { kind: 'listing', listening: listing(0) }
-                  : SpeechSocket.transcript,
-            ),
-          );
+        } else queueMicrotask(() => this.event(request.id, admitted));
       }
     }
   }
 
-  event(id: string, event: ListeningEvent | Line): void {
+  event(id: string, event: Heard): void {
     this.message({ _tag: 'Chunk', requestId: id, values: [event] });
   }
 
@@ -242,7 +193,6 @@ beforeEach(() => {
   BrowserAudio.automatic = true;
   BrowserAudio.initialState = 'running';
   SpeechSocket.frames = 1;
-  SpeechSocket.transcript = line;
   vi.stubGlobal('AudioContext', BrowserAudio);
   vi.stubGlobal('document', Object.assign(new EventTarget(), { visibilityState: 'visible' }));
   vi.stubGlobal('window', Object.assign(new EventTarget(), { location: { origin: 'http://tagma.test' } }));
@@ -326,16 +276,16 @@ const rig = Effect.fnUntraced(function* () {
   return { bridge, live, invoke, messages, changed, close };
 });
 
-it.live('the view receives transcript data and its unsubscribe releases the live speech feed', () =>
+it.live('the view receives recognition events and its unsubscribe releases the live speech feed', () =>
   Effect.gen(function* () {
     const view = yield* rig();
     yield* Effect.promise(async () => {
-      const opened = (await view.invoke({ action: 'transcript', listening: 'lesson' })) as { subscription: string };
+      const opened = (await view.invoke({ action: 'recognize' })) as { subscription: string };
       await view.changed.promise;
       expect(view.messages).toContainEqual({
         jsonrpc: '2.0',
         method: SPEECH_NOTIFICATION,
-        params: { subscription: opened.subscription, event: line },
+        params: { subscription: opened.subscription, event: admitted },
       });
       await view.invoke({ action: 'unsubscribe', subscription: opened.subscription });
       await SpeechSocket.current.interrupted.promise;
@@ -378,60 +328,6 @@ it.live('recognition delivers its confirmed tail before ending and text synthesi
   }),
 );
 
-it.live('a finite transcript notifies its end and cannot be held by the view after completion', () =>
-  Effect.gen(function* () {
-    const view = yield* rig();
-    yield* Effect.promise(async () => {
-      const opened = (await view.invoke({ action: 'transcript', listening: 'lesson' })) as { subscription: string };
-      await view.changed.promise;
-      const request = [...SpeechSocket.current.active.values()].find((one) => one.tag === 'speech.transcript.subscribe')!;
-      SpeechSocket.current.end(request.id);
-      await waitFor(() =>
-        expect(view.messages.at(-1)).toMatchObject({
-          method: SPEECH_NOTIFICATION,
-          params: { subscription: opened.subscription, event: null },
-        }),
-      );
-      await expect(view.invoke({ action: 'unsubscribe', subscription: opened.subscription })).rejects.toMatchObject({
-        code: INVALID_PARAMS,
-      });
-    });
-  }),
-);
-
-it.live.each([true, false])(
-  'an ended call keeps its tail, takes a later Give mark, and reopens its transcript after the lines it holds: confirmed words=%s',
-  (confirmed) =>
-    Effect.gen(function* () {
-      SpeechSocket.transcript = { ...line, closed: confirmed };
-      const view = yield* rig();
-      const feed = new CallFeed(view.live, 7, 'call');
-      yield* Effect.addFinalizer(() => Effect.sync(() => feed.close()));
-      yield* Effect.promise(async () => {
-        await waitUntil(() => texts(feed).length === 1);
-        expect(feed.fresh).toBe(confirmed ? 1 : 0);
-        const socket = SpeechSocket.current;
-        const transcript = [...socket.active.values()].find((one) => one.tag === 'speech.transcript.subscribe')!;
-        const listening = [...socket.active.values()].find((one) => one.tag === 'speech.listening.subscribe')!;
-        expect(transcript.payload.stay).toBe(true);
-        const tail: Line = { ...line, text: 'Bonjour encore', revision: 2, change: 2 };
-        socket.event(transcript.id, tail);
-        socket.event(listening.id, { kind: 'state', state: 'completed' });
-        socket.event(listening.id, { kind: 'listing', listening: listing(tail.change, 'completed') });
-        await waitUntil(() => feed.ended && feed.fresh === 0);
-        expect(texts(feed)).toEqual(['Bonjour encore']);
-        view.live.pause();
-        view.live.resume();
-        await waitUntil(() => SpeechSocket.current.active.size === 2);
-        const reopened = [...SpeechSocket.current.active.values()].find((one) => one.tag === 'speech.transcript.subscribe');
-        expect(reopened?.payload.after).toBe(tail.change);
-        feed.close();
-        await SpeechSocket.current.interrupted.promise;
-        await waitUntil(() => SpeechSocket.current.active.size === 0);
-      });
-    }),
-);
-
 it.live('teardown releases recognition, and another mount cannot finish its capture', () =>
   Effect.gen(function* () {
     const view = yield* rig();
@@ -446,17 +342,6 @@ it.live('teardown releases recognition, and another mount cannot finish its capt
     yield* view.close;
     yield* Effect.promise(() => socket.interrupted.promise);
     expect(socket.active.size).toBe(0);
-  }),
-);
-
-it.live('opening speech on a paused connection refuses once without an unaddressed notification', () =>
-  Effect.gen(function* () {
-    const view = yield* rig();
-    yield* Effect.promise(async () => {
-      view.live.pause();
-      await expect(view.invoke({ action: 'transcript', listening: 'lesson' })).rejects.toMatchObject({ code: -32000 });
-      expect(view.messages).toEqual([expect.objectContaining({ id: 1, error: expect.objectContaining({ code: -32000 }) })]);
-    });
   }),
 );
 
@@ -494,7 +379,7 @@ it.live.each([true, false])('a suspended audio context speaks only when browser 
   }),
 );
 
-it.live('paced speech does not hold up an independent transcript on the live connection', () =>
+it.live('paced speech does not hold up an independent recognition on the live connection', () =>
   Effect.gen(function* () {
     const view = yield* rig();
     const mounted = new AbortController();
@@ -505,12 +390,12 @@ it.live('paced speech does not hold up an independent transcript on the live con
       const speaking = view.invoke({ action: 'speak', text: 'Bonjour' }, mounted);
       const refused = expect(speaking).rejects.toBeInstanceOf(Error);
       await waitUntil(() => BrowserAudio.current.sources.length >= 20);
-      const transcript = (await view.invoke({ action: 'transcript', listening: 'lesson' })) as { subscription: string };
+      const recognition = (await view.invoke({ action: 'recognize' })) as { subscription: string };
       await view.changed.promise;
       expect(view.messages).toContainEqual({
         jsonrpc: '2.0',
         method: SPEECH_NOTIFICATION,
-        params: { subscription: transcript.subscription, event: line },
+        params: { subscription: recognition.subscription, event: admitted },
       });
       mounted.abort();
       await refused;
@@ -542,7 +427,7 @@ it.live('a foreign MCP App gets unavailable for speech and an app cannot choose 
   Effect.gen(function* () {
     const view = yield* rig();
     yield* Effect.promise(async () => {
-      await expect(view.invoke({ action: 'transcript', listening: 'lesson', projectId: 8 })).rejects.toMatchObject({
+      await expect(view.invoke({ action: 'status', projectId: 8 })).rejects.toMatchObject({
         code: INVALID_PARAMS,
       });
       const source = {};

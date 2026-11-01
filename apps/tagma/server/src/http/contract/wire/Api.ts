@@ -6,14 +6,12 @@ import { ThreadsGroup } from './threads.js';
 import { HealthGroup } from './health.js';
 import { OperationsGroup } from './operations.js';
 import { CheckoutsGroup } from './checkouts.js';
-import { SpeechGroup } from './speech.js';
 
 export const Api = HttpApi.make('tagma')
   .add(HealthGroup)
   .add(OperationsGroup.middleware(OperationCaller))
   .add(ThreadsGroup.middleware(CallerMiddleware))
   .add(CheckoutsGroup.middleware(CallerMiddleware))
-  .add(SpeechGroup.middleware(CallerMiddleware))
   .middleware(SchemaRefusal)
   .middleware(CallLog)
   .annotateMerge(

@@ -4,32 +4,16 @@ import { expect } from 'bun:test';
 import { SpeechEvent } from '@runlith/speech/wire/events';
 import { pcmOf } from '@runlith/speech/testing/scriptedProvider';
 import { event, ready, word } from '@runlith/speech/testing/world';
-import { count } from 'drizzle-orm';
 import { type Cause, Clock, Deferred, Effect, Fiber, Queue, Stream } from 'effect';
 import { TestClock } from 'effect/testing';
-import { MachineStore } from '../../../platform/contract/service/store.js';
-import { MachineUnits } from '../../../platform/contract/service/units.js';
 import type { Settings } from '../../../settings/contract/service/values.js';
 import type { HearAsk } from '../../../speech/contract/service/recognitions.js';
-import { listening, transcriptLine } from '../../../speech/store/tables.js';
 import { codeOf, fallbacks, sentFinish, silence, until, voice, type World } from './world.js';
-const stored = Effect.flatMap(SpeechFixture, (fixture: SpeechFixture['Service']) =>
-  Effect.gen(function* () {
-    const { db } = yield* MachineStore;
-    return yield* (yield* MachineUnits).read((unit) =>
-      Effect.all([
-        unit.run(db.select({ rows: count() }).from(listening).all()),
-        unit.run(db.select({ rows: count() }).from(transcriptLine).all()),
-      ]),
-    );
-  }),
-);
-layer(speechFixture({}), { excludeTestServices: true })('speech', (it) => {
-  it.effect('recognition without a listening hears and keeps nothing', () =>
+layer(speechFixture(), { excludeTestServices: true })('speech', (it) => {
+  it.effect('recognition without a listening hears what is said', () =>
     Effect.flatMap(SpeechFixture, (fixture) =>
       Effect.gen(function* () {
         const world = yield* fixture.stand.opened;
-        const kept = yield* stored;
         const heard: string[] = [];
         const ask: HearAsk = { id: 'hear-1', tracks: [{ source: 'mic' }] };
         const hearing = yield* Effect.forkChild(
@@ -45,7 +29,6 @@ layer(speechFixture({}), { excludeTestServices: true })('speech', (it) => {
         yield* link.receive(event(SpeechEvent.final('t1', [word('ephemeral', 0, 800)])));
         yield* until(() => heard.includes('ephemeral'), 'recognition to hear the phrase');
         yield* Fiber.interrupt(hearing);
-        expect(yield* stored).toEqual(kept);
         yield* world.close(false);
       }),
     ),

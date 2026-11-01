@@ -238,8 +238,6 @@ export interface RefusalSchema extends Schema.Struct<typeof refusalFields> {}
 export const refusalSchema: RefusalSchema = Schema.Struct(refusalFields).pipe(HttpApiSchema.status(409));
 export const refusalBody = Schema.encodeSync(refusalSchema);
 
-export type MissingBody = { readonly code: 'not-found'; readonly reason: string; readonly unblock: readonly string[] };
-
 export const missingSchema = Schema.Struct({
   code: Schema.Literal('not-found'),
   reason: Schema.String,

@@ -1175,10 +1175,20 @@
       "browser": "./src/speech/contract/wire/listening.ts",
       "default": "./src/speech/contract/wire/listening.ts"
     },
-    "./speech/contract/wire/search": {
-      "types": "./src/speech/contract/wire/search.ts",
-      "browser": "./src/speech/contract/wire/search.ts",
-      "default": "./src/speech/contract/wire/search.ts"
+    "./calls/contract/wire/listening": {
+      "types": "./src/calls/contract/wire/listening.ts",
+      "browser": "./src/calls/contract/wire/listening.ts",
+      "default": "./src/calls/contract/wire/listening.ts"
+    },
+    "./calls/contract/wire/search": {
+      "types": "./src/calls/contract/wire/search.ts",
+      "browser": "./src/calls/contract/wire/search.ts",
+      "default": "./src/calls/contract/wire/search.ts"
+    },
+    "./calls/contract/wire/view": {
+      "types": "./src/calls/contract/wire/view.ts",
+      "browser": "./src/calls/contract/wire/view.ts",
+      "default": "./src/calls/contract/wire/view.ts"
     },
     "./speech/contract/wire/speaking": {
       "types": "./src/speech/contract/wire/speaking.ts",
@@ -1339,6 +1349,11 @@
     "./browser/contract/*": {
       "types": "./src/browser/contract/*.ts",
       "bun": "./src/browser/contract/*.ts",
+      "default": null
+    },
+    "./calls/*": {
+      "types": "./src/calls/*.ts",
+      "bun": "./src/calls/*.ts",
       "default": null
     },
     "./catalogs/*": {

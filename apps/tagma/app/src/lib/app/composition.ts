@@ -5,6 +5,7 @@ import { Router } from '@runlith/layer/Router';
 import { Cache } from '@runlith/query/repo';
 import { AccountsLayer } from '$lib/features/providers/layer.js';
 import { SpeechLayer } from '$lib/features/speech/layer.js';
+import { CallsLayer } from '$lib/features/calls/layer.js';
 import { CheckoutLayer } from '$lib/features/checkout/layer.js';
 import { FilesLayer } from '$lib/features/checkout/files/layer.js';
 import { MarkdownPreview } from '$lib/features/checkout/files/MarkdownPreview.js';
@@ -168,6 +169,7 @@ export function appLayers(desktop: DesktopApi | undefined) {
     TerminalsLayer,
     AccountsLayer,
     SpeechLayer,
+    CallsLayer,
     SettingsLayer,
     ActivityLayer,
     PowerLayer,
