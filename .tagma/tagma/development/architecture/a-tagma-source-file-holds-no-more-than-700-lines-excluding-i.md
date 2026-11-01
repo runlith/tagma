@@ -42,7 +42,7 @@ fields:
         {
           "fingerprint": "F4 apps/tagma/app/src/lib/features/graph/spatial/GraphView.svelte",
           "owner": "e239d4dc",
-          "value": 794
+          "value": 795
         },
         {
           "fingerprint": "F4 apps/tagma/app/src/lib/shared/terminalThemes.ts",

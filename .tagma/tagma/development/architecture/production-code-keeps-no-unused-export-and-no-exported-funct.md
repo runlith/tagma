@@ -2044,10 +2044,6 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead apps/tagma/app/src/lib/features/workspace/address.ts#DiffRange",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "dead-code dead apps/tagma/app/src/lib/features/worktrees/BoardState.svelte.ts#BornThread",
           "owner": "5a3bed29"
         },
@@ -5263,10 +5259,6 @@ fields:
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/graph/contract/wire/answers.ts#graphCopySchema",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/graph/contract/wire/answers.ts#callJournalRangeSchema",
           "owner": "5a3bed29"
         },
         {
