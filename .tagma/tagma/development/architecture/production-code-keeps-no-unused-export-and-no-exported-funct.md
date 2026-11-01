@@ -1916,10 +1916,6 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead apps/tagma/app/src/lib/features/threads/native/strings.ts#activityWords",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "dead-code dead apps/tagma/app/src/lib/features/threads/notices.ts#birthFailed",
           "owner": "5a3bed29"
         },
