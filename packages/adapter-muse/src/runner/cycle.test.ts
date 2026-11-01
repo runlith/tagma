@@ -81,7 +81,10 @@ const world = Effect.fnUntraced(function* (
     tools: () =>
       Effect.sync(() => ({
         names: catalog.names,
-        tools: [{ name: 'echo', description: catalog.description, inputSchema: {}, mutates: false }],
+        tools: [
+          { name: 'echo', description: catalog.description, inputSchema: {}, mutates: false },
+          ...(catalog.dispatch ? [{ name: 'call_tool', description: 'dispatch', inputSchema: {}, mutates: true }] : []),
+        ],
         dispatch: catalog.dispatch,
       })),
     history: () => Effect.succeed([]),

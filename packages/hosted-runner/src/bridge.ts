@@ -17,18 +17,6 @@ export const servedPrompt = (prompt: string, dispatch: boolean): string =>
       : ''
   }`;
 
-const DISPATCHER: McpServedTool = {
-  name: DISPATCH_TOOL,
-  description:
-    'Call a deferred Tagma tool that `tool_search` revealed. `name` is its name as the search answer gives it; `input` is its input, following the `inputSchema` that answer carries.',
-  inputSchema: {
-    type: 'object',
-    properties: { name: { type: 'string' }, input: { type: 'object' } },
-    required: ['name'],
-  },
-  annotations: { readOnlyHint: true, destructiveHint: true },
-};
-
 export type Dispatched = { readonly name: string; readonly input: unknown };
 
 const dispatched = (tool: string, input: unknown): Dispatched | null => {
@@ -116,7 +104,7 @@ export class Bridge {
   private readonly offer = Effect.fnUntraced(
     function* (this: Bridge, offered: HostedListed) {
       this.dispatch = offered.dispatch;
-      const served = [...offered.tools.map(servedOf), ...(offered.dispatch ? [DISPATCHER] : [])];
+      const served = offered.tools.map(servedOf);
       if (sameTools(served, this.served)) return [...this.relisting].at(-1) ?? null;
       this.served = served;
       if (!this.vendor.relists) return null;

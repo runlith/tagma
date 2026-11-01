@@ -35,7 +35,7 @@ import { coreEntry } from '../../transcript/kinds';
 import { admittedToolSources } from '../agents/admittedToolSources';
 import type { ThreadView } from '../agents/ThreadAgent';
 import { ThreadAgents } from '../agents/ThreadAgents';
-import { compositionEntry } from '../composition/entry';
+import { catalogTools, compositionEntry, servedTools } from '../composition/entry';
 import {
   threadCompositionEvent,
   threadContextEvent,
@@ -688,12 +688,13 @@ export const threadHostingLayer = Layer.effect(
           opened.push(told);
         }
         if (hosted.step === 0) {
+          const visible = vendorVisible(hosted.history);
           const composed = compositionEntry(
             hosted.runId,
             hosted.handle.instructions,
-            hosted.handle.catalog(),
+            hosted.toolCatalog === 'dispatch' ? servedTools(offeredBy(hosted).tools) : catalogTools(hosted.handle.catalog(), visible),
             context?.message ?? null,
-            vendorVisible(hosted.history),
+            visible,
           );
           yield* committed(threadId, hosted.runId, {}, [threadCompositionEvent(composed)], 'composition');
         }

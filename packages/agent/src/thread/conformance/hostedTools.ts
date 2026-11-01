@@ -5,6 +5,8 @@ import { agentDeferredTools } from '../../agent/AgentDeferredTools';
 import { Tool } from '../../agent/tool';
 import type { ToolCatalog } from '../../agent/ToolCatalog';
 import { ASKS_NEVER } from '../../permissions/vocabulary';
+import { compositionEntryId } from '../../transcript/entryNames';
+import { coreEntry } from '../../transcript/kinds';
 import { hosted } from './hostedWorld';
 import type { ThreadStorageFactory } from './storagePort';
 export function describeHostedTools<TTx, TWrite extends TTx = TTx, R = never>(
@@ -37,7 +39,7 @@ export function describeHostedTools<TTx, TWrite extends TTx = TTx, R = never>(
       }),
     );
     test(
-      'a dispatching catalog lists its direct tools whatever a search reveals, and the search hands over the revealed definition',
+      'a dispatching catalog lists its direct tools and the dispatcher whatever a search reveals, composes the request from that list, and the search hands over the revealed definition',
       Effect.fnUntraced(function* () {
         const catalog: ToolCatalog = {
           read: Tool.make({
@@ -74,8 +76,15 @@ export function describeHostedTools<TTx, TWrite extends TTx = TTx, R = never>(
           output: { type: 'json', value: { tools: [{ name: 'send', inputSchema: catalog.send!.inputSchema }] } },
         });
         expect([before, yield* listed]).toEqual([
-          { tools: ['read', 'tool_search'], dispatch: true },
-          { tools: ['read', 'tool_search'], dispatch: true },
+          { tools: ['read', 'tool_search', 'call_tool'], dispatch: true },
+          { tools: ['read', 'tool_search', 'call_tool'], dispatch: true },
+        ]);
+        const composed = yield* run.storage.aggregate.entryById(run.thread.id, compositionEntryId(run.run.id));
+        const composition = composed !== undefined && coreEntry(composed) && composed.type === 'composition' ? composed : null;
+        expect(composition?.tools.each.map((tool) => [tool.name, tool.hidden])).toEqual([
+          ['read', undefined],
+          ['tool_search', undefined],
+          ['call_tool', undefined],
         ]);
         expect(yield* run.call('sent', 'send', { to: 'lead' })).toMatchObject({
           failed: false,
