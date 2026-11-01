@@ -32,7 +32,9 @@ import { type Installation, releaseApplication } from '../installation/contract/
 import { installationRoot } from '../installation/paths.js';
 import type { Channel } from '../installation/contract/wire/channel.js';
 import { Echo, EchoUnloaded } from '../speech/contract/service/echo.js';
-import { Handoff } from '../speech/contract/service/handoff.js';
+import { CallThreads } from '../speech/contract/service/callThreads.js';
+import { RecordingsPlace } from '../speech/contract/service/recording.js';
+import { speech } from '../speech/speech.js';
 import { InstallFailed, LocalModels, ModelRefused } from '../speech/contract/service/models.js';
 
 export const CLOUD_SPEECH = [soniox, openai] as const;
@@ -143,8 +145,20 @@ const echo = Layer.succeed(Echo, {
     }).pipe(Effect.flatMap((sonora) => sonora.open(format))),
 });
 
-export const speechBindings = (place: SpeechPlace, handoff: Handoff['Service']) =>
-  Layer.mergeAll(recognizers(place), devices(place), local, echo, Layer.succeed(Handoff, handoff)).pipe(
+const speechBindings = (place: SpeechPlace) =>
+  Layer.mergeAll(recognizers(place), devices(place), local, echo).pipe(
     Layer.provide(store(place)),
     Layer.provide(Layer.mergeAll(webSockets, FetchHttpClient.layer)),
+  );
+
+export const speechInstallation = <A, E, R>(input: {
+  readonly place: SpeechPlace;
+  readonly credentials: Layer.Layer<A, E, R>;
+  readonly calls: CallThreads['Service'];
+  readonly recordings: string;
+}) =>
+  speech.lifetimes.installation.pipe(
+    Layer.provideMerge(speechBindings(input.place).pipe(Layer.provide(input.credentials))),
+    Layer.provide(Layer.succeed(CallThreads, input.calls)),
+    Layer.provide(Layer.succeed(RecordingsPlace, { root: input.recordings })),
   );

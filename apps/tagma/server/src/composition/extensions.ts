@@ -2,6 +2,7 @@ import type { AudioDevices } from '@runlith/audio/port/devices';
 import type { Speech } from '@runlith/speech/engine/Speech';
 import { Context, Effect, Layer, Scope } from 'effect';
 import { Maintenance } from '../platform/contract/service/maintenance.js';
+import type { Handoff } from '../platform/contract/service/handoff.js';
 import type { ProjectChanges } from '../projects/contract/service/changes.js';
 import type { Projects } from '../projects/contract/service/registry.js';
 import type { Settings } from '../settings/contract/service/values.js';
@@ -15,7 +16,7 @@ import { CORE_MODULES } from './core.js';
 
 const CORE: ReadonlySet<Manifest> = new Set(CORE_MODULES);
 
-export type ExtensionOwners = Settings | Projects | ProjectChanges | Maintenance | Speech | AudioDevices | Captures;
+export type ExtensionOwners = Settings | Projects | ProjectChanges | Maintenance | Handoff | Speech | AudioDevices | Captures;
 
 type ExtensionLayer = Layer.Layer<never, unknown, any>;
 

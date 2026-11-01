@@ -33,6 +33,7 @@ import { fileWatcherLayer } from './fileWatcher.js';
 import { PROGRAM_RELEASE } from '../platform/contract/wire/program.js';
 import { MachineAgents } from '../installation/contract/service/agents.js';
 import { LiveWorks } from '../platform/contract/service/live.js';
+import { Handoff } from '../platform/contract/service/handoff.js';
 import { Listenings } from '../speech/contract/service/listenings.js';
 import { ThreadRunning } from '../threads/contract/service/reads.js';
 import type { TokenStore } from '@runlith/llm/oauth/FileTokenStore';
@@ -44,9 +45,8 @@ import { AccountCredentials, ModelAccess } from '../providers/contract/service/a
 import { DefaultAccounts } from '../providers/contract/service/accounts.js';
 import { CredentialFiles, KeyedProviders, ProviderCredentials, QuotaProviders } from '../providers/contract/service/credentials.js';
 import { credentialsLayer } from '../speech/credentials.js';
-import { speech } from '../speech/speech.js';
-import { RECORDINGS, RecordingsPlace } from '../speech/contract/service/recording.js';
-import { KEYED_SPEECH, speechBindings, speechPlace } from './speech.js';
+import { RECORDINGS } from '../speech/contract/service/recording.js';
+import { KEYED_SPEECH, speechInstallation, speechPlace } from './speech.js';
 import { callThreads } from './callThreads.js';
 import { browserBindings, browserRuns, cookieSourcesLayer } from './browser.js';
 import { browser } from '../browser/browser.js';
@@ -54,7 +54,6 @@ import { images } from '../images/images.js';
 import { managedBrowser } from '../managed-browser/managed-browser.js';
 import { pageRender } from '../page-render/page-render.js';
 import { desktopBrowser } from '../desktop-browser/desktop-browser.js';
-import { CallThreads } from '../speech/contract/service/callThreads.js';
 import { Attachments } from '../threads/contract/service/attachments.js';
 import { ThreadTurns } from '../threads/turns/acts.js';
 import { providers } from '../providers/providers.js';
@@ -658,18 +657,12 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
               : Layer.succeed(Sender, options.sender),
             closing(
               'speech',
-              speech.lifetimes.installation.pipe(
-                Layer.provideMerge(
-                  speechBindings(speechPlace(channel, options.sourcePath, options.installation, storeDirectory(storePath)), {
-                    leaving: options.leaving ?? Effect.succeed(false),
-                    opened: options.opened ?? Effect.void,
-                  }).pipe(Layer.provide(credentialsLayer)),
-                ),
-                Layer.provide(Layer.succeed(CallThreads, calls.port)),
-                Layer.provide(Layer.succeed(RecordingsPlace, { root: options.recordingsPath ?? join(dirname(storePath), RECORDINGS) })),
-                Layer.provide(readyProviders),
-                Layer.provide(BunFileSystem.layer),
-              ),
+              speechInstallation({
+                place: speechPlace(channel, options.sourcePath, options.installation, storeDirectory(storePath)),
+                credentials: credentialsLayer,
+                calls: calls.port,
+                recordings: options.recordingsPath ?? join(dirname(storePath), RECORDINGS),
+              }).pipe(Layer.provide(readyProviders), Layer.provide(BunFileSystem.layer)),
             ),
             browsers,
             images.lifetimes.installation.pipe(Layer.provide(readyProviders)),
@@ -750,7 +743,12 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
             ),
 
             Layer.provideMerge(approvalModesLayer),
-            Layer.provideMerge(Layer.succeed(Handover, options.leaving ?? Effect.succeed(false))),
+            Layer.provideMerge(
+              Layer.merge(
+                Layer.succeed(Handover, options.leaving ?? Effect.succeed(false)),
+                Layer.succeed(Handoff, { leaving: options.leaving ?? Effect.succeed(false), opened: options.opened ?? Effect.void }),
+              ),
+            ),
             Layer.provideMerge(Layer.succeed(Drives, driving.drives)),
             Layer.provideMerge(childLedgerLayer(options.hostSourcePath, carriedBundle)),
             Layer.provide(Layer.succeedContext(prepared)),

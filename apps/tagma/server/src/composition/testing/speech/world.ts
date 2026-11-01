@@ -30,7 +30,7 @@ import { ProjectChanges } from '../../../projects/contract/service/changes.js';
 import { Settings } from '../../../settings/contract/service/values.js';
 import { CallThreads } from '../../../speech/contract/service/callThreads.js';
 import { Echo } from '../../../speech/contract/service/echo.js';
-import { Handoff } from '../../../speech/contract/service/handoff.js';
+import { Handoff } from '../../../platform/contract/service/handoff.js';
 import { Captures } from '../../../speech/contract/service/captures.js';
 import { Listenings } from '../../../speech/contract/service/listenings.js';
 import { Recognitions } from '../../../speech/contract/service/recognitions.js';

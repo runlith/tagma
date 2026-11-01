@@ -10,7 +10,7 @@ import { CallThreads } from './contract/service/callThreads.js';
 import { Captures } from './contract/service/captures.js';
 import { Recognitions } from './contract/service/recognitions.js';
 import { Echo } from './contract/service/echo.js';
-import { Handoff } from './contract/service/handoff.js';
+import { Handoff } from '../platform/contract/service/handoff.js';
 import { Listenings } from './contract/service/listenings.js';
 import { LocalModels, Models } from './contract/service/models.js';
 import { RecordingsPlace } from './contract/service/recording.js';

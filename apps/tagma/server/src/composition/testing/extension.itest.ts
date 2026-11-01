@@ -27,6 +27,10 @@ import { type CreationStep, PROJECT_CREATION } from '../../graph/contract/servic
 import { ServedGraphs } from '../../graph/contract/service/serving.js';
 import { body, pair } from '../../platform/contract/service/body.js';
 import { liveOf, manifest } from '../../platform/contract/service/manifest.js';
+import { LIVE_WORK } from '../../platform/contract/service/live.js';
+import { Handoff } from '../../platform/contract/service/handoff.js';
+import { AudioDevices } from '@runlith/audio/port/devices';
+import { Speech } from '@runlith/speech/engine/Speech';
 import { ownStorePath } from '../../platform/contract/service/ownStore.js';
 import { ASKS_NEVER } from '../../platform/contract/wire/conditions.js';
 import { arms, feed, operation } from '../../platform/contract/wire/operation.js';
@@ -185,6 +189,7 @@ const tonesLayer = Layer.effect(
     const captures = yield* Captures;
     const settings = yield* Settings;
     const clock = yield* Clock.Clock;
+    yield* Effect.all([Speech, AudioDevices, Handoff]);
     return Tones.of({
       hear: Effect.fnUntraced(function* (name) {
         const loudness = yield* Effect.orDie(settings.value(greetingTone));
@@ -261,31 +266,38 @@ const greeting = manifest({
     ),
   ],
   stores: [{ id: 'greeting', key: GreetingStore, migrations: fileURLToPath(new URL('./greetingStore', import.meta.url)) }],
-  contributions: PROJECT_CREATION.of(
-    {
-      id: 'greeting-mark',
-      value: Schema.String,
-      step: Effect.fnUntraced(function* (projectId: number, mark: string) {
-        if (mark === 'refused') return yield* new GateRefusal('field-invalid', 'this mark is refused', ['choose another mark']);
-        const opened = (yield* ServedGraphs).held().some((copy) => copy.projectId === projectId);
-        const marks = yield* Marks;
-        marks.set(projectId, { mark, opened });
-        yield* Effect.addFinalizer((exit) => (Exit.isFailure(exit) ? Effect.sync(() => marks.delete(projectId)) : Effect.void));
-      }),
-    } satisfies CreationStep<string>,
-    {
-      id: 'greeting-gate',
-      value: Schema.Literals(['open', 'shut']),
-      step: (_projectId: number, gate: 'open' | 'shut') =>
-        gate === 'shut' ? Effect.fail(new GateRefusal('field-invalid', 'the gate is shut', ['open the gate'])) : Effect.void,
-    } satisfies CreationStep<'open' | 'shut'>,
-    {
-      id: 'greeting-seal',
-      value: Schema.String,
-      right: 'warmth',
-      step: () => Effect.void,
-    } satisfies CreationStep<string>,
-  ),
+  contributions: [
+    ...LIVE_WORK.of({
+      id: 'greeting/tones',
+      ends: { one: 'tone being heard ends', many: 'tones being heard end' },
+      count: Effect.flatMap(Captures, (captures) => captures.count('tone')),
+    }),
+    ...PROJECT_CREATION.of(
+      {
+        id: 'greeting-mark',
+        value: Schema.String,
+        step: Effect.fnUntraced(function* (projectId: number, mark: string) {
+          if (mark === 'refused') return yield* new GateRefusal('field-invalid', 'this mark is refused', ['choose another mark']);
+          const opened = (yield* ServedGraphs).held().some((copy) => copy.projectId === projectId);
+          const marks = yield* Marks;
+          marks.set(projectId, { mark, opened });
+          yield* Effect.addFinalizer((exit) => (Exit.isFailure(exit) ? Effect.sync(() => marks.delete(projectId)) : Effect.void));
+        }),
+      } satisfies CreationStep<string>,
+      {
+        id: 'greeting-gate',
+        value: Schema.Literals(['open', 'shut']),
+        step: (_projectId: number, gate: 'open' | 'shut') =>
+          gate === 'shut' ? Effect.fail(new GateRefusal('field-invalid', 'the gate is shut', ['open the gate'])) : Effect.void,
+      } satisfies CreationStep<'open' | 'shut'>,
+      {
+        id: 'greeting-seal',
+        value: Schema.String,
+        right: 'warmth',
+        step: () => Effect.void,
+      } satisfies CreationStep<string>,
+    ),
+  ],
   lifetimes: {
     installation: Layer.mergeAll(
       tonesLayer,
@@ -431,11 +443,21 @@ layer(root, { excludeTestServices: true })('a root composing the core with a mod
         const heard = yield* world.op('greet_aloud', { name: 'tone-1' });
         expect(heard.body).toMatchObject({ status: 'heard' });
         expect((heard.body as { levels: number }).levels).toBeGreaterThan(0);
+        const working = (count: number) => ({
+          machine: {
+            server: {
+              calls: count,
+              work: expect.arrayContaining([
+                expect.objectContaining({ id: 'speech/listenings', count: 0 }),
+                expect.objectContaining({ id: 'greeting/tones', count }),
+              ]),
+            },
+          },
+        });
+        expect((yield* world.op('read_machine_state', {})).body).toMatchObject(working(1));
         expect((yield* world.op('stop_capture', { kind: 'tone', id: 'tone-1' })).body).toMatchObject({ status: 'stopped', stopped: 1 });
         expect((yield* world.op('stop_capture', { kind: 'tone', id: 'tone-1' })).body).toMatchObject({ code: 'unknown-capture' });
-        expect((yield* world.op('read_machine_state', {})).body).toMatchObject({
-          machine: { server: { calls: 0, work: [{ id: 'speech/listenings', count: 0 }] } },
-        });
+        expect((yield* world.op('read_machine_state', {})).body).toMatchObject(working(0));
         expect(yield* world.pieces.home('no-such-thread')).toBeUndefined();
       }),
   );

@@ -6,4 +6,4 @@ export class Handoff extends Context.Service<
     readonly leaving: Effect.Effect<boolean>;
     readonly opened: Effect.Effect<void>;
   }
->()('tagma/speech/Handoff') {}
+>()('tagma/platform/Handoff') {}
