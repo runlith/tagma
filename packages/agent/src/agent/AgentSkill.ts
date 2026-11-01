@@ -19,6 +19,7 @@ export type AgentSkillReference = {
 export type AgentSkill<TCtx, TId extends string = string> = {
   readonly id: TId;
   readonly description: string;
+  readonly place?: string;
   readonly location?: string;
   readonly references?: readonly AgentSkillReference[];
   readonly arguments?: true;
@@ -64,6 +65,7 @@ export type AgentSkillLoadResult<TId extends string = string> =
 export type AgentSkillSummary = {
   readonly id: string;
   readonly description: string;
+  readonly place?: string;
   readonly references?: readonly AgentSkillReference[];
 };
 
@@ -72,7 +74,8 @@ export const SKILL_REFERENCE_INSTRUCTIONS = `A skill listing \`refs\` keeps thos
 export const agentSkillLine = (skill: AgentSkillSummary): string => {
   const references = skill.references ?? [];
   const listed = references.map((one) => (one.description === undefined ? one.name : `${one.name} (${one.description})`));
-  return `- ${skill.id}: ${skill.description}${listed.length === 0 ? '' : ` refs: ${listed.join(', ')}`}`;
+  const place = skill.place === undefined ? '' : ` (from ${skill.place})`;
+  return `- ${skill.id}${place}: ${skill.description}${listed.length === 0 ? '' : ` refs: ${listed.join(', ')}`}`;
 };
 
 export function agentSkillCatalogBlock<TCtx, TId extends string>(skills: AgentSkillPool<TCtx, TId>): string {

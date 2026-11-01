@@ -50,6 +50,7 @@ const entry = (plugin: PluginLoaded, name: string, description: string): SkillIn
   directory: null,
   scope: 'plugin',
   plugin: plugin.id,
+  project: null,
   enabled: true,
   own: false,
   replacedBy: null,

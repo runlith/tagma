@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { expect } from 'bun:test';
 import { layer } from '@runlith/effect-test';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
@@ -10,6 +11,7 @@ import type { TargetAt } from '../../workspace/contract/wire/place.js';
 import { WorkspaceInputs } from '../contract/service/inputs.js';
 import { workspaceInputsLayer } from './cache.js';
 import { EnabledPlugins, type PluginLoaded } from '../../plugins/contract/service/plugins.js';
+import { ProjectGroups } from '../../projects/contract/service/registry.js';
 import { enabledPlugins } from '../../plugins/testing/enabled.js';
 
 const at = (threadId: string, runId: string, generation = 0): TargetAt => ({
@@ -174,6 +176,51 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
           expect((yield* cache.preview(here)).skills.map((skill) => skill.id)).toEqual(['demo-clash']);
         }),
       ),
+  );
+
+  it.effect('a group member reads the other members’ project skills, a member’s re-read reaches it, and leaving withdraws them', () =>
+    withDemo((demo) =>
+      Effect.gen(function* () {
+        const files = yield* FileSystem.FileSystem;
+        const cache = yield* setup(demo);
+        const siblingRoot = yield* tempRootEffect(demo.fixture, 'skill-group-sibling-');
+        const sibling = yield* demo.graph.projectLifecycle.create({ name: 'sibling', rootPath: siblingRoot });
+        const skill = Effect.fnUntraced(function* (root: string, name: string, description: string) {
+          const directory = join(root, '.agents/skills', name);
+          yield* files.makeDirectory(directory, { recursive: true });
+          yield* files.writeFileString(join(directory, 'SKILL.md'), `---\ndescription: ${description}\n---\nBody.\n`);
+        });
+        yield* skill(demo.demoRoot, 'tests', 'Our tests.');
+        yield* skill(siblingRoot, 'tests', 'Their tests.');
+        yield* skill(siblingRoot, 'release', 'Their release.');
+        const groups = Context.get(demo.context, ProjectGroups);
+        const members = [yield* demo.graph.projects.byId(demo.projectId), sibling];
+        yield* demo.graph.units.write('testing.formGroup', (unit) => groups.form(unit, { name: `group-${randomUUID()}`, members }));
+        const here = { threadId: 'member', projectId: demo.projectId, root: demo.demoRoot };
+        const read = Effect.map(cache.preview(here), (sources) => ({
+          home: sources.skills.map((one) => one.description),
+          members: sources.members.map((one) => [one.project, one.skills.map((found) => [found.id, found.description, found.place])]),
+        }));
+        expect(yield* read).toEqual({
+          home: ['Our tests.'],
+          members: [
+            [
+              'sibling',
+              [
+                ['release', 'Their release.', 'sibling'],
+                ['tests', 'Their tests.', 'sibling'],
+              ],
+            ],
+          ],
+        });
+        yield* skill(siblingRoot, 'deploy', 'Their deploy.');
+        expect((yield* read).members[0]?.[1]).toHaveLength(2);
+        yield* cache.invalidate({ projectId: sibling.id });
+        expect((yield* read).members[0]?.[1]).toHaveLength(3);
+        yield* demo.graph.units.write('testing.leaveGroup', (unit) => groups.leave(unit, sibling));
+        expect(yield* read).toEqual({ home: ['Our tests.'], members: [] });
+      }),
+    ),
   );
 
   it.effect('threads standing in one tree share one walk, and an invalidation of any shape drops it', () =>

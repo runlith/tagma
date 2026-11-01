@@ -3,11 +3,13 @@ import { EnabledPlugins, type PluginLoaded } from '../../plugins/contract/servic
 import { GateRefusal } from '../../platform/contract/wire/refusal.js';
 import { SourceForgetting } from '../../threads/contract/service/engine.js';
 import type { TargetAt } from '../../workspace/contract/wire/place.js';
-import { rescanPolicy } from '../contract/wire/sourceSettings.js';
+import { ownSkillEnabled, projectSkillsEnabled, rescanPolicy } from '../contract/wire/sourceSettings.js';
 import { Settings } from '../../settings/contract/service/values.js';
-import { WorkspaceInputs, type WorkspaceInputAim, type WorkspaceInputSet } from '../contract/service/inputs.js';
+import { ProjectGroups } from '../../projects/contract/service/registry.js';
+import type { ProjectRow } from '../../projects/contract/wire/project.js';
+import { WorkspaceInputs, type MemberSkills, type WorkspaceInputAim, type WorkspaceInputSet } from '../contract/service/inputs.js';
 import type { BridgeMethod } from '../../views/contract/wire/bridge.js';
-import { readWorkspaceInputs } from './walk.js';
+import { readMemberSkills, readWorkspaceInputs, withMembers } from './walk.js';
 
 type Bound = { readonly at: TargetAt; readonly root: string; readonly sources: WorkspaceInputSet };
 
@@ -28,15 +30,17 @@ const signatureOf = (enabled: readonly PluginLoaded[]): string => JSON.stringify
 export const workspaceInputsLayer = (
   own: (projectRoot: string) => readonly string[],
   bridge: readonly BridgeMethod[],
-): Layer.Layer<WorkspaceInputs | SourceForgetting, never, Settings | EnabledPlugins> =>
+): Layer.Layer<WorkspaceInputs | SourceForgetting, never, Settings | EnabledPlugins | ProjectGroups> =>
   Layer.effectContext(
     Effect.map(
       Effect.gen(function* () {
         const settings = yield* Settings;
         const plugins = yield* EnabledPlugins;
+        const groups = yield* ProjectGroups;
         const closed = <A, E>(work: Effect.Effect<A, E, Settings>): Effect.Effect<A, E> => Effect.provideService(work, Settings, settings);
         const remembered = new Map<string, Remembered>();
         const walks = new Map<string, Walked>();
+        const memberWalks = new Map<string, MemberSkills>();
         let invalidations = 0;
         const entry = (input: WorkspaceInputAim): Remembered => {
           let held = remembered.get(input.threadId);
@@ -59,19 +63,49 @@ export const workspaceInputsLayer = (
             );
         const walkWith = (projectId: number, root: string, enabled: readonly PluginLoaded[]) =>
           readWorkspaceInputs({ projectId, projectRoot: root, own: own(root), plugins: enabled, bridge });
+        const memberOf = (member: ProjectRow, remembered: boolean) => {
+          const key = walkOf(member.id, member.rootPath);
+          const standing = remembered ? memberWalks.get(key) : undefined;
+          if (standing !== undefined) return Effect.succeed(standing);
+          const taken = invalidations;
+          return Effect.tap(
+            readMemberSkills({ projectId: member.id, name: member.name, root: member.rootPath, own: own(member.rootPath) }),
+            (walked) =>
+              Effect.sync(() => {
+                if (remembered && invalidations === taken) memberWalks.set(key, walked);
+              }),
+          );
+        };
+        const grouped = Effect.fn('WorkspaceInputs.members')(function* (projectId: number, home: WorkspaceInputSet, remembered: boolean) {
+          if (!(yield* settings.value(projectSkillsEnabled, projectId))) return home;
+          const group = yield* groups.of(projectId);
+          if (group === undefined || group.graph.id === projectId) return home;
+          const members = yield* Effect.forEach(
+            group.members.filter((member) => member.id !== projectId),
+            (member) => memberOf(member, remembered),
+            { concurrency: 'unbounded' },
+          );
+          return withMembers(home, members, yield* settings.value(ownSkillEnabled, projectId));
+        });
         const walk = (projectId: number, root: string) =>
-          Effect.flatMap(enabledIn(projectId), (enabled) => walkWith(projectId, root, enabled));
-        const read = Effect.fn('WorkspaceInputs.read')(function* (input: WorkspaceInputAim) {
-          const policy = yield* settings.value(rescanPolicy, input.projectId);
+          enabledIn(projectId).pipe(
+            Effect.flatMap((enabled) => walkWith(projectId, root, enabled)),
+            Effect.flatMap((home) => grouped(projectId, home, false)),
+          );
+        const homeOf = Effect.fnUntraced(function* (input: WorkspaceInputAim, remembered: boolean) {
           const enabled = yield* enabledIn(input.projectId);
           const key = walkOf(input.projectId, input.root);
           const signature = signatureOf(enabled);
-          const standing = policy === 'per-turn' ? undefined : walks.get(key);
+          const standing = remembered ? walks.get(key) : undefined;
           if (standing !== undefined && standing.plugins === signature) return standing.sources;
           const taken = invalidations;
           const sources = yield* walkWith(input.projectId, input.root, enabled);
-          if (policy !== 'per-turn' && invalidations === taken) walks.set(key, { plugins: signature, sources });
+          if (remembered && invalidations === taken) walks.set(key, { plugins: signature, sources });
           return sources;
+        });
+        const read = Effect.fn('WorkspaceInputs.read')(function* (input: WorkspaceInputAim) {
+          const remembered = (yield* settings.value(rescanPolicy, input.projectId)) !== 'per-turn';
+          return yield* grouped(input.projectId, yield* homeOf(input, remembered), remembered);
         });
         const newestOf = (held: Remembered | undefined, threadId: string, runId: string): Bound | undefined => {
           if (held === undefined) return undefined;
@@ -128,8 +162,10 @@ export const workspaceInputsLayer = (
           invalidate: (input) =>
             Effect.sync(() => {
               invalidations += 1;
-              if (input.projectId === undefined) walks.clear();
-              else for (const key of [...walks.keys()]) if (key.startsWith(`${input.projectId}\u0000`)) walks.delete(key);
+              for (const remembered of [walks, memberWalks]) {
+                if (input.projectId === undefined) remembered.clear();
+                else for (const key of [...remembered.keys()]) if (key.startsWith(`${input.projectId}\u0000`)) remembered.delete(key);
+              }
             }),
         } satisfies WorkspaceInputs['Service'];
       }),

@@ -128,6 +128,9 @@ export const skillInventoryEntrySchema = Schema.Struct({
   plugin: Schema.NullOr(Schema.String).annotate({
     description: 'The plugin that brings it, for a skill or command of the `plugin` scope.',
   }),
+  project: Schema.NullOr(Schema.String).annotate({
+    description: 'The other group member a `project` skill comes from; null for this project’s own skills and every other scope.',
+  }),
   enabled: Schema.Boolean,
   replacedBy: Schema.NullOr(Schema.Literals(SKILL_SCOPES)).annotate({
     description: 'The scope of the skill of the same name the catalog offers in its place; null when none stands in for it.',

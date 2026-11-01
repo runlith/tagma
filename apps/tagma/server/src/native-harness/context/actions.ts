@@ -117,8 +117,8 @@ export const nativeInstructions = (
               },
               sources: {
                 skills: skillInventory(artifacts, walked).flatMap(
-                  ({ name, description, path, directory, scope, plugin, enabled, replacedBy }) =>
-                    scope === 'built-in' ? [] : [{ name, description, path, directory, scope, plugin, enabled, replacedBy }],
+                  ({ name, description, path, directory, scope, plugin, project, enabled, replacedBy }) =>
+                    scope === 'built-in' ? [] : [{ name, description, path, directory, scope, plugin, project, enabled, replacedBy }],
                 ),
                 contextFiles: walked.contextFiles.map((file) => ({ path: file.path, name: file.name })),
                 rejected: walked.rejected,

@@ -52,6 +52,7 @@ export const skills: CapabilityBehaviour = {
       skillPool<ThreadContext>(ctx.artifacts, ctx.sources).map((skill) => ({
         id: skill.id,
         description: skill.description,
+        place: skill.place,
         references: skill.references?.map(({ name, description }) => ({ name, description })),
       })),
     ),

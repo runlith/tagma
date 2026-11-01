@@ -53,7 +53,7 @@ const setup = Effect.fnUntraced(function* (demo: EffectDemo) {
 });
 
 function sources(over: Partial<WorkspaceInputSet> = {}): WorkspaceInputSet {
-  return { contextFiles: [], shipped: [], skills: [], disabledSkills: new Set(), inventory: [], rejected: [], ...over };
+  return { contextFiles: [], shipped: [], skills: [], members: [], disabledSkills: new Set(), inventory: [], rejected: [], ...over };
 }
 
 function skill(id: string, description: string, body = 'Do the thing.') {

@@ -116,6 +116,9 @@ export const agentSkillCatalogSchema = Schema.Struct({
       id: Schema.String,
       description: Schema.String,
       plugin: Schema.NullOr(Schema.String).annotate({ description: 'The plugin that brings it, null for any other skill.' }),
+      project: Schema.NullOr(Schema.String).annotate({
+        description: 'The other group member it comes from, null for a skill of this project or of any other scope.',
+      }),
     }),
   ),
   basis: Schema.Literals(['thread', 'next-turn']),

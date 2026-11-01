@@ -14,15 +14,24 @@ export type SkillInventoryEntry = {
   readonly directory: string | null;
   readonly scope: SkillScope;
   readonly plugin: string | null;
+  readonly project: string | null;
   readonly enabled: boolean;
   readonly own: boolean;
   readonly replacedBy: SkillScope | null;
+};
+
+export type MemberSkills = {
+  readonly project: string;
+  readonly skills: readonly AgentSkill<unknown>[];
+  readonly inventory: readonly SkillInventoryEntry[];
+  readonly rejected: readonly { readonly path: string; readonly reason: string }[];
 };
 
 export type WorkspaceInputSet = {
   readonly contextFiles: readonly ContextFile[];
   readonly shipped: readonly AgentSkill<unknown>[];
   readonly skills: readonly AgentSkill<unknown>[];
+  readonly members: readonly MemberSkills[];
   readonly disabledSkills: ReadonlySet<string>;
   readonly inventory: readonly SkillInventoryEntry[];
   readonly rejected: readonly { readonly path: string; readonly reason: string }[];

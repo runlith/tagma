@@ -210,7 +210,12 @@ export const agentLibrary = Effect.fn('AgentLibrary.make')(function* ({ types, d
       ),
     );
     return {
-      skills: skills.map((skill) => ({ id: skill.id, description: skill.description, plugin: brought.get(skill.id) ?? null })),
+      skills: skills.map((skill) => ({
+        id: skill.id,
+        description: skill.description,
+        plugin: brought.get(skill.id) ?? null,
+        project: skill.place ?? null,
+      })),
       basis,
       available: skills.length > 0,
       note: basis === 'thread' ? 'Skills from this thread’s resolved sources. Reloaded sources apply to its next turn.' : null,

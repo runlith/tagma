@@ -105,7 +105,15 @@ layer(servingLayer, { excludeTestServices: true })('native graph storage', (it) 
           demo.graph.settings,
           {
             resolve: () =>
-              Effect.succeed({ contextFiles: [], shipped: [], skills: [], disabledSkills: new Set(), inventory: [], rejected: [] }),
+              Effect.succeed({
+                contextFiles: [],
+                shipped: [],
+                skills: [],
+                members: [],
+                disabledSkills: new Set(),
+                inventory: [],
+                rejected: [],
+              }),
           },
           { ensure: () => Effect.void },
           {},

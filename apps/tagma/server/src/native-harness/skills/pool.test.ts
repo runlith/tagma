@@ -2,7 +2,7 @@ import { expect } from 'bun:test';
 import { it } from '@runlith/effect-test';
 import { Effect, Stream } from 'effect';
 import { ArtifactStore } from '../../artifacts/contract/service/shelf.js';
-import type { SkillInventoryEntry, WorkspaceInputSet } from '../contract/service/inputs.js';
+import type { MemberSkills, SkillInventoryEntry, WorkspaceInputSet } from '../contract/service/inputs.js';
 import { skillInventory, skillPool } from './pool.js';
 
 const unused = () => Effect.die('the shelf is not read by the skill catalog');
@@ -29,6 +29,7 @@ const own: SkillInventoryEntry = {
   directory: '/repo/.agents/skills',
   scope: 'project',
   plugin: null,
+  project: null,
   enabled: true,
   own: false,
   replacedBy: null,
@@ -43,6 +44,7 @@ const sources = (disabled: readonly string[]): WorkspaceInputSet => ({
     { id: 'showcase', description: own.description, location: LOCATION, instructions: () => 'Show it our way.' },
     { id: 'deployer', description: deployer.description, instructions: () => 'Run it.' },
   ],
+  members: [],
   disabledSkills: new Set(disabled),
   inventory: [own, deployer],
   rejected: [],
@@ -62,6 +64,42 @@ it.effect('a disabled project skill stays in the inventory but leaves the catalo
   Effect.sync(() => {
     expect(offered(sources(['deployer']), 'deployer')).toEqual([]);
     expect(listed(sources(['deployer']), 'deployer')).toEqual([{ scope: 'project', enabled: false, replacedBy: null }]);
+  }),
+);
+
+const member = (project: string, names: readonly string[]): MemberSkills => ({
+  project,
+  skills: names.map((name) => ({ id: name, description: `${project} ${name}.`, place: project, instructions: () => 'Do it.' })),
+  inventory: names.map((name) => ({ ...own, name, description: `${project} ${name}.`, path: `/${project}/${name}/SKILL.md`, project })),
+  rejected: [],
+});
+
+it.effect('a group member’s skill keeps its name unless this catalog or another member offers it, and no name hides another', () =>
+  Effect.sync(() => {
+    const grouped: WorkspaceInputSet = {
+      ...sources(['beta-review']),
+      skills: [...sources([]).skills, { id: 'beta-lint', description: 'Ours.', instructions: () => 'Ours.' }],
+      inventory: [own, deployer, { ...deployer, name: 'beta-lint', path: '/repo/.agents/skills/beta-lint/SKILL.md' }],
+      members: [member('alpha', ['deployer', 'review', 'release', 'lint']), member('beta', ['review', 'lint'])],
+    };
+    const pool = skillPool(shelf, grouped).flatMap((skill) => (skill.place === undefined ? [] : [[skill.id, skill.place]]));
+    expect(pool).toEqual([
+      ['alpha-deployer', 'alpha'],
+      ['alpha-review', 'alpha'],
+      ['release', 'alpha'],
+      ['alpha-lint', 'alpha'],
+    ]);
+    const inventory = skillInventory(shelf, grouped).flatMap(({ name, project, enabled, replacedBy }) =>
+      project === null ? [] : [{ name, project, enabled, replacedBy }],
+    );
+    expect(inventory).toEqual([
+      { name: 'alpha-deployer', project: 'alpha', enabled: true, replacedBy: null },
+      { name: 'alpha-review', project: 'alpha', enabled: true, replacedBy: null },
+      { name: 'release', project: 'alpha', enabled: true, replacedBy: null },
+      { name: 'alpha-lint', project: 'alpha', enabled: true, replacedBy: null },
+      { name: 'beta-review', project: 'beta', enabled: false, replacedBy: null },
+      { name: 'beta-lint', project: 'beta', enabled: false, replacedBy: 'project' },
+    ]);
   }),
 );
 

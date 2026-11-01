@@ -7,6 +7,7 @@ const skillSummaries = Schema.Array(
   Schema.Struct({
     id: Schema.String,
     description: Schema.String,
+    place: Schema.optional(Schema.String),
     references: Schema.optional(Schema.Array(Schema.Struct({ name: Schema.String, description: Schema.optional(Schema.String) }))),
   }),
 );
@@ -160,7 +161,8 @@ const referencesTold = (current: readonly SkillSummary[]): string =>
   current.some((skill) => (skill.references?.length ?? 0) > 0) ? `\n\n${SKILL_REFERENCE_INSTRUCTIONS}` : '';
 
 function renderSkills(current: readonly SkillSummary[]): string {
-  return ['Skills available in this project:', ...current.map(agentSkillLine)].join('\n');
+  const scope = current.some((skill) => skill.place !== undefined) ? 'this project and the other members of its group' : 'this project';
+  return [`Skills available in ${scope}:`, ...current.map(agentSkillLine)].join('\n');
 }
 
 function renderFiles(current: readonly { path: string; body: string }[]): string {

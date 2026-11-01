@@ -44,7 +44,7 @@
       id: skill.id,
       label: skillReference(skill.id),
       description: skill.description,
-      value: skill.plugin ?? undefined,
+      value: skill.plugin ?? skill.project ?? undefined,
     })),
   );
   const ids = $derived(skills.view.state === 'ready' ? new Set(skills.view.items.map((skill) => skill.id)) : null);

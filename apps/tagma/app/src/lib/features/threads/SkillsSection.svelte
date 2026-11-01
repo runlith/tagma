@@ -31,6 +31,7 @@
     directory: string | null;
     scope: 'plugin' | 'global' | 'project' | 'built-in';
     plugin: string | null;
+    project: string | null;
     enabled: boolean;
     replacedBy: 'plugin' | 'global' | 'project' | 'built-in' | null;
   };
@@ -63,11 +64,24 @@
   };
 
   const GROUPS = [
-    { scope: 'project' as const, title: 'This project' },
     { scope: 'global' as const, title: 'Yours, everywhere' },
     { scope: 'plugin' as const, title: 'From plugins enabled here' },
     { scope: 'built-in' as const, title: 'Built into this server' },
   ];
+
+  const sections = $derived.by(() => {
+    const skills = inventory?.skills ?? [];
+    const members = [...new Set(skills.flatMap((skill) => (skill.project === null ? [] : [skill.project])))];
+    return [
+      { key: 'project', title: 'This project', found: skills.filter((skill) => skill.scope === 'project' && skill.project === null) },
+      ...members.map((name) => ({
+        key: `member:${name}`,
+        title: `From ${name} in this group`,
+        found: skills.filter((skill) => skill.project === name),
+      })),
+      ...GROUPS.map((group) => ({ key: group.scope, title: group.title, found: skills.filter((skill) => skill.scope === group.scope) })),
+    ];
+  });
 
   const switchedOff = (entry: InventorySkill): boolean => !entry.enabled && (entry.replacedBy === null || entry.scope === 'built-in');
 
@@ -143,12 +157,11 @@
     {:else if inventory.skills.length === 0}
       <p class="py-3 text-ui text-muted-foreground">No skills discovered. They are read from the directories below.</p>
     {:else}
-      {#each GROUPS as group (group.scope)}
-        {@const found = inventory.skills.filter((skill) => skill.scope === group.scope)}
-        {#if found.length > 0}
+      {#each sections as section (section.key)}
+        {#if section.found.length > 0}
           <div>
-            <p class="eyebrow pt-3 pb-1 text-muted-foreground">{group.title}</p>
-            {#each found as skill (skill.path ?? skill.name)}
+            <p class="eyebrow pt-3 pb-1 text-muted-foreground">{section.title}</p>
+            {#each section.found as skill (skill.path ?? skill.name)}
               <div class="flex items-center gap-6 border-t border-vein py-2" class:opacity-60={!skill.enabled}>
                 <div class="grid min-w-0 flex-1 gap-0.5">
                   <span class="truncate text-ui font-medium">{skill.name}</span>
@@ -170,7 +183,7 @@
                   <Tooltip text="Switched off in skills.disabled; {REPLACER[skill.replacedBy]} of the same name is offered in its place">
                     <span class="eyebrow shrink-0 text-muted-foreground"> Replaced </span>
                   </Tooltip>
-                {:else if skill.scope === 'plugin' && skill.replacedBy !== null}
+                {:else if (skill.scope === 'plugin' || skill.project !== null) && skill.replacedBy !== null}
                   <Tooltip text="Not offered: {REPLACER[skill.replacedBy]} of the same name stands in its place">
                     <span class="eyebrow shrink-0 text-muted-foreground"> Replaced </span>
                   </Tooltip>

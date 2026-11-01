@@ -16,7 +16,7 @@ function deferred() {
   return { promise, resolve };
 }
 const answer = (id: string): AgentSkillCatalog => ({
-  skills: [{ id, description: id, plugin: null }],
+  skills: [{ id, description: id, plugin: null, project: null }],
   available: true,
   basis: 'thread',
   note: null,
