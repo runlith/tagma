@@ -8,21 +8,21 @@ edges:
     to: 01a193d9-9a1f-79e8-9f71-7a9ff0c456d5
 sources:
   - kind: file
-    ref: apps/tagma/app/src/lib/wire/WireCatalog.ts
-  - kind: file
-    ref: apps/tagma/app/src/lib/wire/operation.ts
-  - kind: file
-    ref: apps/tagma/app/src/lib/wire/liveGroup.ts
-  - kind: file
-    ref: apps/tagma/server/src/platform/contract/wire/manifest.ts
-  - kind: file
-    ref: apps/tagma/server/src/composition/release/catalog.ts
-  - kind: file
-    ref: apps/tagma/server/src/composition/developer/catalog.ts
-  - kind: file
     ref: apps/tagma/app/src/lib/app/composition.ts
   - kind: file
     ref: apps/tagma/app/src/lib/wire/Live.ts
+  - kind: file
+    ref: apps/tagma/app/src/lib/wire/liveGroup.ts
+  - kind: file
+    ref: apps/tagma/app/src/lib/wire/operation.ts
+  - kind: file
+    ref: apps/tagma/app/src/lib/wire/WireCatalog.ts
+  - kind: file
+    ref: apps/tagma/server/src/composition/developer/catalog.ts
+  - kind: file
+    ref: apps/tagma/server/src/composition/release/catalog.ts
+  - kind: file
+    ref: apps/tagma/server/src/platform/contract/wire/manifest.ts
   - kind: symbol
     ref: apps/tagma/server/src/platform/contract/service/manifest.ts
     symbol: servesDeclared

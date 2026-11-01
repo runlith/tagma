@@ -7,9 +7,9 @@ sources:
   - kind: file
     ref: apps/tagma/server/src/platform/store/life.ts
   - kind: file
-    ref: apps/tagma/server/src/platform/store/transaction.ts
-  - kind: file
     ref: apps/tagma/server/src/platform/store/programs.ts
+  - kind: file
+    ref: apps/tagma/server/src/platform/store/transaction.ts
   - kind: file
     ref: apps/tagma/server/src/platform/store/units.ts
 ---
