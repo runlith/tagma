@@ -25,7 +25,6 @@ export class ModelCatalogs extends Context.Service<
 class CatalogReadFailed extends Data.TaggedError('CatalogReadFailed')<{ readonly message: string }> {}
 
 const snapshotsSchema = Schema.Record(Schema.String, catalogSnapshotSchema);
-const DAY_MS = 24 * 60 * 60 * 1_000;
 
 export const modelCatalogsLayer = Layer.effect(
   ModelCatalogs,
@@ -59,7 +58,7 @@ export const modelCatalogsLayer = Layer.effect(
       }
     } else yield* Effect.logWarning('Provider model catalogs could not be restored', { reason: restored.failure.message });
 
-    const refresh = Effect.fn('ModelCatalogs.refresh')(function* (selected?: string, staleOnly = false) {
+    const refresh = Effect.fn('ModelCatalogs.refresh')(function* (selected?: string) {
       const requested =
         selected === undefined
           ? yield* Effect.result(Effect.map(directories.requestedProviders(), (providers) => new Set(providers)))
@@ -70,8 +69,6 @@ export const modelCatalogsLayer = Layer.effect(
         if (cli && requested?._tag === 'Success' && !requested.success.has(provider.id)) continue;
         const previous = snapshots.get(provider.id);
         const now = yield* Clock.currentTimeMillis;
-        if (staleOnly && previous?.state.readAt !== null && previous?.state.readAt !== undefined && now - previous.state.readAt < DAY_MS)
-          continue;
         const reading = Effect.gen(function* () {
           if (cli && requested?._tag === 'Failure') return yield* requested.failure;
           const account = (yield* defaults.defaultAccount(provider.id)).account;
@@ -116,7 +113,7 @@ export const modelCatalogsLayer = Layer.effect(
       yield* Effect.forkScoped(
         Stream.runForEach(Stream.merge(defaults.defaultAccountMoved, harnesses.defaultSignedIn), (provider) => locked(provider)),
       );
-      yield* gate.withPermits(1)(refresh(undefined, true));
+      yield* locked();
       return yield* Effect.forever(Effect.andThen(Effect.sleep('1 day'), locked()));
     }).pipe(Effect.scoped);
     return ModelCatalogs.of({ refresh: locked, serve });

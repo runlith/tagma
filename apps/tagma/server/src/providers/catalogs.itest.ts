@@ -21,7 +21,7 @@ const home = await mkdtemp(join(tmpdir(), 'provider-catalogs-'));
 afterAll(() => rm(home, { recursive: true, force: true }));
 class Offline extends Data.TaggedError('Offline')<{ readonly message: string }> {}
 
-it.effect('a discovered model catalog survives a new registry and a failed refresh without losing the last models', () =>
+it.effect('a discovered model catalog survives a new registry and a failed refresh, and is read again when the server starts', () =>
   Effect.gen(function* () {
     let offline = false;
     let label = 'Discovered';
@@ -142,7 +142,12 @@ it.effect('a discovered model catalog survives a new registry and a failed refre
       warnings: ['A second model has unknown capacity'],
     });
     offline = false;
+    label = 'After start';
     yield* Effect.forkScoped(Context.get(second, ModelCatalogs).serve);
+    yield* registry.changes.pipe(
+      Stream.filter((catalog) => catalog.menu.options[0]?.label === 'After start'),
+      Stream.runHead,
+    );
     label = 'After default';
     directory = '/account/profile';
     yield* Queue.offer(moves, 'dynamic');
