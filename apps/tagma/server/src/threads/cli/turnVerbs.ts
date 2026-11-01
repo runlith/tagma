@@ -341,7 +341,7 @@ export const threadTurns = ({ ask, askLive, lens }: ThreadsCli) => {
         const projectId = yield* locate(id);
         const outcome = yield* askLive((live) =>
           Effect.gen(function* () {
-            const start = live['thread.send']({ projectId, threadId: id, params: { text: o.text } });
+            const start = live['thread.send']({ projectId, threadId: id, params: { text: o.text, key: crypto.randomUUID() } });
             if (o.detach) {
               const opened = yield* start;
               return {
@@ -469,7 +469,11 @@ export const threadTurns = ({ ask, askLive, lens }: ThreadsCli) => {
         ]);
       }
       const result = yield* askLive((live) =>
-        live['thread.steer']({ projectId, threadId: o.id, params: { expectedRunId: activeRun.id, text: o.text } }),
+        live['thread.steer']({
+          projectId,
+          threadId: o.id,
+          params: { expectedRunId: activeRun.id, text: o.text, key: crypto.randomUUID() },
+        }),
       );
       if (o.json) {
         yield* print(result, true);
