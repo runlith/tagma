@@ -3,9 +3,7 @@ import type { LinkPort } from '$lib/shared/ExternalLinks.js';
 import type { Notices } from '$lib/features/notices/Service.svelte.js';
 import type { AccountsRepo } from './AccountsRepo.js';
 
-type Accounts = ReturnType<typeof AccountsRepo.use>;
-
-export type SignInPending = NonNullable<Awaited<ReturnType<Accounts['begin']['run']>>>;
+export type SignInPending = NonNullable<Awaited<ReturnType<AccountsRepo['begin']['run']>>>;
 
 export type SignInPlace = { readonly id: number; readonly name: string };
 
@@ -35,7 +33,7 @@ export class SignInFlow {
   private attempt = 0;
 
   constructor(
-    private readonly accounts: Accounts,
+    private readonly accounts: AccountsRepo,
     private readonly notices: Notices,
     private readonly links: LinkPort,
     private readonly provider: () => string,

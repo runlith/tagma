@@ -5,8 +5,6 @@ import { ProjectsRepo } from '../workspace/ProjectsRepo.js';
 import { Workspace } from '../workspace/Selection.svelte.js';
 import { ProjectStrip } from './Strip.svelte.js';
 
-type Projects = ReturnType<typeof ProjectsRepo.use>;
-
 export class ProjectRemoval extends Service<ProjectRemoval>()('ProjectRemoval', { tier: 'app' }) {
   static *make() {
     return new ProjectRemoval(yield* ProjectsRepo, yield* Workspace, yield* ProjectStrip, yield* Router);
@@ -16,7 +14,7 @@ export class ProjectRemoval extends Service<ProjectRemoval>()('ProjectRemoval', 
   removing = $state(false);
 
   constructor(
-    private readonly projects: Projects,
+    private readonly projects: ProjectsRepo,
     private readonly workspace: Workspace,
     private readonly strip: ProjectStrip,
     private readonly router: Router,

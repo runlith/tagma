@@ -31,7 +31,7 @@ export class DesktopShell extends RoutedShell {
     visits: Visits,
     registry: SurfaceRegistry,
     addresses: Addresses,
-    threads: ReturnType<typeof ThreadsRepo.use>,
+    threads: ThreadsRepo,
     prefetch: ProjectPrefetch,
     private readonly panes: SidePanes,
     private readonly seats: ThreadSeats,

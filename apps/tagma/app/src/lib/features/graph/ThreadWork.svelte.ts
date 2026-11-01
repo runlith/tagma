@@ -15,8 +15,6 @@ export const START_WORDS = 'Start agent on this';
 
 export const startable = (tags: TagCatalog, row: TreeBlock): boolean => workStart(tags.table, row) !== null;
 
-type Repo = ReturnType<typeof ThreadWorkRepo.use>;
-
 type Shown = () => Work | undefined;
 
 type Watch = { readonly current: Shown };
@@ -58,7 +56,7 @@ export class ThreadWork extends Service<ThreadWork>()('ThreadWork', { tier: 'app
   private readonly shell: ShellActs;
 
   constructor(
-    private readonly repo: Repo,
+    private readonly repo: ThreadWorkRepo,
     private readonly live: LiveConnection,
     private readonly notices: Notices,
     ops: ShellPort,

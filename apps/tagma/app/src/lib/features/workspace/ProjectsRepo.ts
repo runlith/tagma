@@ -1,4 +1,5 @@
 import type { StorageMode } from '@tagma/server/projects/contract/wire/project';
+import type { InstanceOf } from '@runlith/layer/key';
 import type { KeyedLoaderContext } from '@runlith/query/types';
 import { Repo } from '@runlith/query/repo';
 import { Door } from '$lib/wire/Door.js';
@@ -74,3 +75,5 @@ export const ProjectsRepo = Repo.define(
   }),
   { tier: 'app', door: Door },
 );
+
+export type ProjectsRepo = InstanceOf<typeof ProjectsRepo>;

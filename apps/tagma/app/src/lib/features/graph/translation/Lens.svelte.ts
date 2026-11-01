@@ -3,8 +3,6 @@ import type { Refusal } from '$lib/wire/refusal.js';
 import type { TranslationsRepo } from './Repo.js';
 import type { TranslateAsk, Translations } from './Translations.svelte.js';
 
-type Repo = ReturnType<typeof TranslationsRepo.use>;
-
 export type Segment = { readonly key: number; readonly kind: 'shown' | 'pending' | 'changed'; readonly text: string };
 
 export type Phase = 'translating' | 'failed' | 'stopped' | 'outdated' | 'current';
@@ -39,7 +37,7 @@ export const standingOf = (one: LanguageStanding): Standing =>
 export class TranslationLens {
   constructor(
     private readonly translations: Translations,
-    private readonly repo: Repo,
+    private readonly repo: TranslationsRepo,
     private readonly block: () => string | null,
     readonly language: () => string | null,
     private readonly show: (language: string | null) => void,

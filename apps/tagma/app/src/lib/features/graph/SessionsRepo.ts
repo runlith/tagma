@@ -1,3 +1,4 @@
+import type { InstanceOf } from '@runlith/layer/key';
 import { Repo } from '@runlith/query/repo';
 import { GraphDoor } from '$lib/features/workspace/GraphDoor.js';
 
@@ -20,3 +21,5 @@ export const SessionsRepo = Repo.define(
   }),
   { tier: 'graph', door: GraphDoor },
 );
+
+export type SessionsRepo = InstanceOf<typeof SessionsRepo>;

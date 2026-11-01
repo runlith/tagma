@@ -51,8 +51,6 @@ export interface CheckoutSurface {
 
 type Waiting = { readonly located: Located; readonly reveal: boolean };
 
-type Projects = ReturnType<typeof ProjectsRepo.use>;
-
 export class FileOpener extends Service<FileOpener>()('FileOpener', { tier: 'app' }) {
   static *make() {
     return new FileOpener(
@@ -74,7 +72,7 @@ export class FileOpener extends Service<FileOpener>()('FileOpener', { tier: 'app
   constructor(
     private readonly door: Door,
     private readonly aim: () => GraphAim | undefined,
-    private readonly projects: Projects,
+    private readonly projects: ProjectsRepo,
     private readonly router: Router,
     private readonly addresses: Addresses,
     private readonly notices: Notices,

@@ -3,8 +3,6 @@ import type { Project } from '@tagma/server/graph/contract/wire/rows';
 import { ProjectsRepo } from '../workspace/ProjectsRepo.js';
 import { Workspace } from '../workspace/Selection.svelte.js';
 
-type Projects = ReturnType<typeof ProjectsRepo.use>;
-
 export class ProjectRenaming extends Service<ProjectRenaming>()('ProjectRenaming', { tier: 'app' }) {
   static *make() {
     return new ProjectRenaming(yield* ProjectsRepo, yield* Workspace);
@@ -14,7 +12,7 @@ export class ProjectRenaming extends Service<ProjectRenaming>()('ProjectRenaming
   renaming = $state(false);
 
   constructor(
-    private readonly projects: Projects,
+    private readonly projects: ProjectsRepo,
     private readonly workspace: Workspace,
   ) {
     super();

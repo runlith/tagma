@@ -22,9 +22,6 @@ import { ThreadEffects } from './ThreadEffects.js';
 import { ThreadFeed } from './ThreadFeed.svelte.js';
 import { refusedBy, refusedCall, ThreadRefused } from './ThreadRefused.js';
 
-type Threads = ReturnType<typeof ThreadsRepo.use>;
-type Settings = ReturnType<typeof SettingsRepo.use>;
-
 type ModeIntent = { readonly mode: string; readonly done: Deferred.Deferred<void, ThreadRefused>; readonly shaped: () => void };
 
 export class ThreadAuthority extends Service<ThreadAuthority>()('ThreadAuthority', { tier: 'thread' }) implements AuthorityView {
@@ -52,8 +49,8 @@ export class ThreadAuthority extends Service<ThreadAuthority>()('ThreadAuthority
     private readonly feed: ThreadFeed,
     private readonly effects: ThreadEffects,
     private readonly live: LiveConnection,
-    private readonly threads: Threads,
-    private readonly settings: Settings,
+    private readonly threads: ThreadsRepo,
+    private readonly settings: SettingsRepo,
     private readonly projectId: number,
   ) {
     super();

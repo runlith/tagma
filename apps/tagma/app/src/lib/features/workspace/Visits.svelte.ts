@@ -2,6 +2,7 @@ import type { Project } from '@tagma/server/graph/contract/wire/rows';
 import { Platform, type PlatformStorage } from '@runlith/layer/Platform';
 import { Service } from '@runlith/layer/key';
 import { SvelteMap } from 'svelte/reactivity';
+import { type Entry, EntryProject } from './EntryProject.js';
 import type { GraphAim } from './GraphRung.js';
 import { type Surface, SurfaceRegistry, withBranch } from './surface.js';
 
@@ -12,7 +13,7 @@ type Visit = Record<string, string | null | undefined>;
 export class Visits extends Service<Visits>()('Visits', { tier: 'app' }) {
   static *make() {
     const platform = yield* Platform;
-    return new Visits(platform.storage.local, yield* SurfaceRegistry);
+    return new Visits(platform.storage.local, yield* SurfaceRegistry, yield* EntryProject.optional());
   }
 
   private readonly held = new SvelteMap<string, Visit>();
@@ -20,6 +21,7 @@ export class Visits extends Service<Visits>()('Visits', { tier: 'app' }) {
   constructor(
     private readonly storage: PlatformStorage,
     private readonly registry: SurfaceRegistry,
+    private readonly entry?: Entry,
   ) {
     super();
     for (const [project, visit] of Object.entries(this.stored())) this.held.set(project, visit);
@@ -68,6 +70,8 @@ export class Visits extends Service<Visits>()('Visits', { tier: 'app' }) {
 
   resume(project: Project): string {
     const surface = this.held.get(String(project.id))?.surface;
+    const at = this.entry?.project === project.name ? this.entry.at : undefined;
+    if (surface == null && at !== undefined) return this.registry.pathOf(project.name, at.surface, at.place);
     return this.href(project, surface != null && this.registry.portable(surface) ? surface : this.registry.home);
   }
 }

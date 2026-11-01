@@ -50,3 +50,13 @@ test('a project resumes on the surface it was left on, with that surface’s pla
   reloaded.remember(project(5, 'renamed'), 'outline', 'beta', 'main');
   expect(new Visits(storage, surfaces).resume(project(5, 'renamed'))).toBe('/renamed?branch=main');
 });
+
+test('the entry project opens at the place its root names until the window has a visit of its own', () => {
+  const storage = makeStorage();
+  const visits = new Visits(storage, surfaces, { project: 'five', at: { surface: 'chat', place: 'thread-1' } });
+  expect(visits.resume(project(5, 'five'))).toBe('/five/chat/thread-1');
+  expect(visits.resume(project(7, 'seven'))).toBe(surfaces.pathOf('seven', surfaces.home));
+
+  visits.remember(project(5, 'five'), 'graph', 'alpha', null);
+  expect(visits.resume(project(5, 'five'))).toBe(surfaces.pathOf('five', 'graph', 'alpha'));
+});

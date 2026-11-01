@@ -20,15 +20,13 @@ import { focusTabSurface, type FocusHelper } from '../terminal/terminalTabFocus.
 import { planAdopt, pruneStoredTree, serializeTab, type StoredLayout, type StoredTab } from './layout.js';
 import type { Terminals } from './Terminals.svelte.js';
 
-type Repo = ReturnType<typeof ExecutionsRepo.use>;
-
 const REOPEN_STACK = 32;
 
 export type WorktreeBirth = { readonly rootId: string | null; readonly terminals: Terminals };
 
 type Adopter = AdoptedWords | null | 'unknown';
 
-export class WorktreeTerminals extends Process<WorktreeTerminals, WorktreeBirth>()('WorktreeTerminals') {
+export class WorktreeTerminals extends Process<WorktreeTerminals, WorktreeBirth>()('WorktreeTerminals', { tier: 'project' }) {
   static override *make(birth: WorktreeBirth) {
     return new WorktreeTerminals(
       birth.rootId,
@@ -74,7 +72,7 @@ export class WorktreeTerminals extends Process<WorktreeTerminals, WorktreeBirth>
     private readonly terminals: Terminals,
     readonly projectId: number,
     private readonly worktrees: Worktrees,
-    private readonly repo: Repo,
+    private readonly repo: ExecutionsRepo,
     private readonly notices: Notices,
     private readonly host: Host,
     private readonly scope: Scope,

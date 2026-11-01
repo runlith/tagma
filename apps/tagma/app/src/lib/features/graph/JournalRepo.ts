@@ -1,4 +1,5 @@
 import type { JournalSelection } from '@tagma/server/graph/contract/wire/journal';
+import type { InstanceOf } from '@runlith/layer/key';
 import type { KeyedLoaderContext } from '@runlith/query/types';
 import { Repo } from '@runlith/query/repo';
 import { GraphDoor } from '$lib/features/workspace/GraphDoor.js';
@@ -37,3 +38,5 @@ export const JournalRepo = Repo.define(
   }),
   { tier: 'graph', door: GraphDoor },
 );
+
+export type JournalRepo = InstanceOf<typeof JournalRepo>;

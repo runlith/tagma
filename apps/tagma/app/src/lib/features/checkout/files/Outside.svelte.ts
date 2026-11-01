@@ -1,7 +1,7 @@
 import type { RootId } from '@tagma/server/workspace/contract/wire/ids';
 import { Repo } from '@runlith/query/repo';
 import { Host } from '@runlith/layer/Host';
-import { Service } from '@runlith/layer/key';
+import { type InstanceOf, Service } from '@runlith/layer/key';
 import { Notices } from '$lib/features/notices/Service.svelte.js';
 import { Door } from '$lib/wire/Door.js';
 import { ServerOrigin } from '$lib/wire/ServerOrigin.svelte.js';
@@ -28,7 +28,9 @@ export const EditorsRepo = Repo.define(
   { tier: 'app', door: Door },
 );
 
-type Installed = NonNullable<ReturnType<typeof EditorsRepo.use>['installed']['data']>;
+export type EditorsRepo = InstanceOf<typeof EditorsRepo>;
+
+type Installed = NonNullable<EditorsRepo['installed']['data']>;
 
 export type MachineEditor = Installed['editors'][number];
 
@@ -40,7 +42,7 @@ export class Outside extends Service<Outside>()('Outside', { tier: 'app' }) {
   }
 
   constructor(
-    private readonly repo: ReturnType<typeof EditorsRepo.use>,
+    private readonly repo: EditorsRepo,
     private readonly door: Door,
     private readonly origin: ServerOrigin,
     private readonly notices: Notices,

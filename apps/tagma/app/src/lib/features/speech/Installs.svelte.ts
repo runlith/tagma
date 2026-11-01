@@ -5,8 +5,6 @@ import { Service } from '@runlith/layer/key';
 import { Live, type LiveConnection } from '$lib/wire/Live.js';
 import { SpeechRepo } from './Repo.js';
 
-type Speech = ReturnType<typeof SpeechRepo.use>;
-
 export class Installs extends Service<Installs>()('SpeechInstalls', { tier: 'app' }) {
   static *make() {
     return new Installs(yield* Live, yield* SpeechRepo, yield* Scope, yield* Failure);
@@ -16,7 +14,7 @@ export class Installs extends Service<Installs>()('SpeechInstalls', { tier: 'app
 
   constructor(
     live: LiveConnection,
-    private readonly speech: Speech,
+    private readonly speech: SpeechRepo,
     scope: Scope,
     failure: Failure,
   ) {

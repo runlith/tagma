@@ -27,7 +27,7 @@ export interface Gated<Payload> {
 
 type Use = 'read' | 'write';
 
-type Gate = {
+export type Gate = {
   readonly right: (key: RightKey) => Right | undefined;
   readonly allows: (key: RightKey | undefined) => boolean;
   readonly shown: <Payload>(item: { readonly payload: Payload } & Gated<Payload>) => Payload | null;

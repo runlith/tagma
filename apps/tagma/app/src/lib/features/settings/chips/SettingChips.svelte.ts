@@ -5,11 +5,9 @@ import { refusedOutcome, type WriteOutcome } from '../SettingsCatalog.svelte.js'
 import type { SettingsRepo } from '../SettingsRepo.js';
 import SettingChip from './SettingChip.svelte';
 
-type Settings = ReturnType<typeof SettingsRepo.use>;
-
 export class SettingChips {
   constructor(
-    private readonly repo: Settings,
+    private readonly repo: SettingsRepo,
     readonly projectId: number,
   ) {}
 

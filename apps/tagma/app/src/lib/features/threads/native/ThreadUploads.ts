@@ -4,8 +4,6 @@ import type { ChatEntryHandlers } from '@runlith/chat-ui/entries';
 import type { Door } from '$lib/wire/Door.js';
 import type { ThreadsRepo } from '../Repo.js';
 
-type Threads = ReturnType<typeof ThreadsRepo.use>;
-
 export type AttachmentUpload = { status: 'uploaded'; attachment: ThreadAttachmentRef } | { status: 'failed'; message: string };
 
 export const attachmentAddress = (door: Door, url: string, projectId: number): string => door.address(url, { project: String(projectId) });
@@ -17,7 +15,7 @@ export const attachmentHandlers = (door: Door, projectId: number): ChatEntryHand
 
 export class ThreadUploads {
   constructor(
-    private readonly threads: Threads,
+    private readonly threads: ThreadsRepo,
     private readonly door: Door,
     private readonly projectId: number,
   ) {}

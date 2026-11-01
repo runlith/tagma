@@ -12,10 +12,6 @@ import { JournalRepo } from './JournalRepo.js';
 import { SessionsRepo } from './SessionsRepo.js';
 import { TagCatalog } from './TagCatalog.svelte.js';
 
-type Blocks = ReturnType<typeof BlocksRepo.use>;
-type Journal = ReturnType<typeof JournalRepo.use>;
-type Sessions = ReturnType<typeof SessionsRepo.use>;
-
 type Pair = { readonly fromName: string; readonly toName: string };
 
 export class GraphFeed extends Service<GraphFeed>()('GraphFeed', { tier: 'graph', eager: true }) {
@@ -39,9 +35,9 @@ export class GraphFeed extends Service<GraphFeed>()('GraphFeed', { tier: 'graph'
     live: LiveConnection,
     private readonly aim: { readonly projectId: number; readonly branch: string | null },
     private readonly tags: TagCatalog,
-    private readonly blocks: Blocks,
-    private readonly journal: Journal,
-    private readonly sessions: Sessions,
+    private readonly blocks: BlocksRepo,
+    private readonly journal: JournalRepo,
+    private readonly sessions: SessionsRepo,
     private readonly cache: QueryClient,
     private readonly scope: Scope,
     failure: Failure,

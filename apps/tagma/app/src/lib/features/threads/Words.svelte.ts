@@ -6,8 +6,6 @@ import { isThreadId } from './activityIdentity.js';
 import type { ThreadList } from './List.svelte.js';
 import type { ThreadsRepo } from './Repo.js';
 
-type Threads = ReturnType<typeof ThreadsRepo.use>;
-
 const IN_FLIGHT = -1;
 const REREAD_MS = 60_000;
 
@@ -29,7 +27,7 @@ export class ThreadWords {
 
   constructor(
     private readonly threads: ThreadList,
-    private readonly repo: Threads,
+    private readonly repo: ThreadsRepo,
     private readonly workspace: Workspace,
     private readonly projectId: number,
   ) {

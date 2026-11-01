@@ -21,8 +21,6 @@ import { ExecutionActs, REVISION_REFUSALS } from '../acts.svelte.js';
 import { ThreadNames, type OwnerWords } from '$lib/shared/threads/Names.svelte.js';
 import { terminalKey, ExecutionsRepo, type CommandFeedKey } from '../Repo.js';
 
-type Repo = ReturnType<typeof ExecutionsRepo.use>;
-
 export type CommandScope = { readonly kind: 'thread'; readonly thread: string };
 
 export type ActivityReading =
@@ -127,7 +125,7 @@ export class CommandActivity extends Service<CommandActivity>()('CommandActivity
   private readonly byKey: ReadonlyMap<string, ProcessLine>;
 
   constructor(
-    private readonly repo: Repo,
+    private readonly repo: ExecutionsRepo,
     private readonly live: LiveConnection,
     private readonly aim: ProjectAim,
     private readonly scope: Scope,

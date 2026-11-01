@@ -6,8 +6,6 @@ import { SettingsRepo } from '$lib/features/settings/SettingsRepo.js';
 import { Workspace } from '$lib/features/workspace/Selection.svelte.js';
 import { Live, type LiveConnection } from '$lib/wire/Live.js';
 
-type Settings = ReturnType<typeof SettingsRepo.use>;
-
 const AGENT_WORK = 'power.agentWork';
 
 export const PACE_LABEL: Record<PaceLevel, string> = { full: 'Full', low: 'Low', lowest: 'Lowest' };
@@ -26,7 +24,7 @@ export class Pace extends Service<Pace>()('Pace', { tier: 'app' }) {
 
   constructor(
     live: LiveConnection,
-    private readonly settings: Settings,
+    private readonly settings: SettingsRepo,
     private readonly workspace: Workspace,
     scope: Scope,
     failure: Failure,

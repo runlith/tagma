@@ -5,8 +5,6 @@ import { type Refusal, refusalOf } from '$lib/wire/refusal.js';
 import { Workspace } from '$lib/features/workspace/Selection.svelte.js';
 import { CheckoutRepo } from './Repo.js';
 
-type Located = ReturnType<typeof CheckoutRepo.use>;
-
 export type CommitLink = { readonly sha: string; readonly subject: string; readonly project: string };
 
 export type CommitPeer = CommitLink | { readonly error: Refusal } | null;
@@ -24,7 +22,7 @@ export class CommitLinks extends Service<CommitLinks>()('CommitLinks', { tier: '
   private scheduled = false;
 
   constructor(
-    private readonly repo: Located,
+    private readonly repo: CheckoutRepo,
     private readonly workspace: Workspace,
     private readonly scope: Scope,
   ) {

@@ -1,4 +1,5 @@
 import type { SettableScope } from '@tagma/server/platform/contract/wire/setting';
+import type { InstanceOf } from '@runlith/layer/key';
 import type { KeyedLoaderContext } from '@runlith/query/types';
 import { Repo } from '@runlith/query/repo';
 import { Door } from '$lib/wire/Door.js';
@@ -65,11 +66,11 @@ export const SettingsRepo = Repo.define(
   { tier: 'app', door: Door },
 );
 
-type Settings = ReturnType<typeof SettingsRepo.use>;
+export type SettingsRepo = InstanceOf<typeof SettingsRepo>;
 
-type WrittenCatalog = NonNullable<Settings['write']['data']>['settings'];
+type WrittenCatalog = NonNullable<SettingsRepo['write']['data']>['settings'];
 
-export const writtenCatalog = (settings: Settings, projectId: number): WrittenCatalog | undefined => {
+export const writtenCatalog = (settings: SettingsRepo, projectId: number): WrittenCatalog | undefined => {
   const written = settings.write.data;
   return written?.projectId === projectId ? written.settings : undefined;
 };

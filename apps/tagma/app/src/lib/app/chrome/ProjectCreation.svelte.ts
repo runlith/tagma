@@ -13,8 +13,6 @@ import { Refusal, toldOf } from '$lib/wire/refusal.js';
 import { ProjectRemoval } from '$lib/features/projects/Removal.svelte.js';
 import { DesktopFolders } from '$lib/shared/desktop/DesktopFolders.js';
 
-type Projects = ReturnType<typeof ProjectsRepo.use>;
-
 export type ProjectDraft = {
   readonly name: string;
   readonly rootPath: string;
@@ -55,7 +53,7 @@ export class ProjectCreation extends Service<ProjectCreation>()('ProjectCreation
   offered = $state.raw<Offered | null>(null);
 
   constructor(
-    private readonly projects: Projects,
+    private readonly projects: ProjectsRepo,
     private readonly workspace: Workspace,
     private readonly router: Router,
     private readonly addresses: Addresses,

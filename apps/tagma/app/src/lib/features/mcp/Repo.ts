@@ -1,6 +1,7 @@
 import type { SettableScope } from '@tagma/server/platform/contract/wire/setting';
 import type { McpServerScope } from '@tagma/server/mcp/contract/wire/servers';
 import type { McpHttpServerDeclaration, McpStdioServerDeclaration } from '@runlith/mcp/declaration';
+import type { InstanceOf } from '@runlith/layer/key';
 import type { KeyedLoaderContext } from '@runlith/query/types';
 import { Repo } from '@runlith/query/repo';
 import { Door, type Lens } from '$lib/wire/Door.js';
@@ -69,3 +70,5 @@ export const McpRepo = Repo.define(
   }),
   { tier: 'app', door: Door },
 );
+
+export type McpRepo = InstanceOf<typeof McpRepo>;

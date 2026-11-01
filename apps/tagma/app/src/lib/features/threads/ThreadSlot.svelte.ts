@@ -73,7 +73,7 @@ export type SlotArgs = SlotOptions & {
   readonly context?: SlotContext;
 };
 
-export class ThreadSlot extends Process<ThreadSlot, SlotArgs>()('ThreadSlot') implements SlotNavigation {
+export class ThreadSlot extends Process<ThreadSlot, SlotArgs>()('ThreadSlot', { tier: 'project' }) implements SlotNavigation {
   readonly draft: ThreadDraft;
   readonly chat: ChatHold;
   readonly history: PromptHistory;
@@ -134,7 +134,7 @@ export class ThreadSlot extends Process<ThreadSlot, SlotArgs>()('ThreadSlot') im
     readonly projectId: number,
     chats: ThreadChat,
     private readonly shelf: DraftShelf,
-    threads: ReturnType<typeof ThreadsRepo.use>,
+    threads: ThreadsRepo,
     private readonly list: ThreadList,
     readonly places: Worktrees,
     types: AgentTypes,
@@ -142,11 +142,11 @@ export class ThreadSlot extends Process<ThreadSlot, SlotArgs>()('ThreadSlot') im
     accounts: UsageAccounts,
     favorites: Favorites,
     private readonly catalog: ProviderCatalog,
-    selection: ReturnType<typeof SelectionRepo.use>,
+    selection: SelectionRepo,
     tags: TagCatalog,
-    settings: ReturnType<typeof SettingsRepo.use>,
+    settings: SettingsRepo,
     choices: SurfaceChoices,
-    teams: ReturnType<typeof TeamRepo.use>,
+    teams: TeamRepo,
     notices: Notices,
     readonly skills: SkillCatalog,
     door: Door,

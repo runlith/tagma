@@ -74,7 +74,7 @@ export class TreeScreen extends Screen<TreeScreen, TreeScreenOptions>()('TreeScr
 
   constructor(
     private readonly tree: ProjectTree,
-    private readonly repo: ReturnType<typeof BlocksRepo.use>,
+    private readonly repo: BlocksRepo,
     private readonly hidden: HiddenStates,
     private readonly tags: TagCatalog,
     private readonly notices: Notices,

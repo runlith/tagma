@@ -30,9 +30,6 @@ import { standing } from './standing.js';
 import { TerminalSettings } from './TerminalSettings.svelte.js';
 import { WorktreeTerminals } from './WorktreeTerminals.svelte.js';
 
-type Repo = ReturnType<typeof ExecutionsRepo.use>;
-type Settings = ReturnType<typeof SettingsRepo.use>;
-
 export type Inventory = { readonly _tag: 'reading' } | { readonly _tag: 'failed'; readonly refusal: Refusal } | { readonly _tag: 'read' };
 
 const RECENT_TABS = 32;
@@ -80,9 +77,9 @@ export class Terminals extends Service<Terminals>()('Terminals', { tier: 'projec
 
   constructor(
     private readonly projectId: number,
-    private readonly repo: Repo,
+    private readonly repo: ExecutionsRepo,
     private readonly notices: Notices,
-    settings: Settings,
+    settings: SettingsRepo,
     private readonly rows: Worktrees,
     private readonly commands: CommandActivity,
     private readonly router: Router,

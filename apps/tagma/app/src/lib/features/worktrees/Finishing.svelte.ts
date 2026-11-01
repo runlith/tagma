@@ -14,8 +14,6 @@ import { NOTHING_STANDS, PlaceStanding, stands, unseen, type StandingInPlace } f
 import { Worktrees } from './BoardState.svelte.js';
 import { WorktreesRepo } from './Repo.js';
 
-type Repo = ReturnType<typeof WorktreesRepo.use>;
-
 export type MergeAsk = {
   readonly mode: MergeMode;
   readonly message?: string;
@@ -106,7 +104,7 @@ export class Finishing extends Service<Finishing>()('Finishing', { tier: 'projec
 
   constructor(
     readonly aim: ProjectAim,
-    private readonly repo: Repo,
+    private readonly repo: WorktreesRepo,
     private readonly worktrees: Worktrees,
     private readonly notices: Notices,
     private readonly places: PlaceStanding,

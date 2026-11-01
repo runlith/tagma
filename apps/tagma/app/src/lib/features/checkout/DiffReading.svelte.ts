@@ -12,8 +12,6 @@ export type Hand = { readonly author: NamedHolder; readonly key: string; readonl
 export const handName = (hand: Hand): string =>
   hand.author.holder.kind === 'operator' ? 'You' : (hand.author.agentName ?? hand.author.holder.thread.slice(0, 8));
 
-type Repo = ReturnType<typeof CheckoutRepo.use>;
-
 export type PathInRoot = {
   readonly projectId: number;
   readonly rootId: RootId;
@@ -31,7 +29,7 @@ export class DiffReading {
   private readonly beyond = new SvelteMap<string, string>();
 
   constructor(
-    private readonly repo: Repo,
+    private readonly repo: CheckoutRepo,
     private readonly at: () => PathInRoot | null,
     private readonly wanted: () => DiffWidth = () => 'whole',
   ) {}

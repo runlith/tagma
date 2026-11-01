@@ -8,8 +8,6 @@ import { approvalModes } from '../modeWords.js';
 import { type AuthorityView, type DelegationPick, DELEGATION_OWN, type DelegationReading } from '../thread/authority.js';
 import { refusedBy, ThreadRefused } from '../thread/ThreadRefused.js';
 
-type Settings = ReturnType<typeof SettingsRepo.use>;
-
 export class BirthAuthority implements AuthorityView {
   readonly busy = false;
   readonly terminalRefusal = null;
@@ -17,7 +15,7 @@ export class BirthAuthority implements AuthorityView {
 
   constructor(
     private readonly draft: ThreadDraft,
-    private readonly settings: Settings,
+    private readonly settings: SettingsRepo,
     private readonly types: AgentTypes,
     private readonly projectId: number,
   ) {}

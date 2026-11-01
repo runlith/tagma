@@ -6,8 +6,6 @@ import { SettingsRepo } from '$lib/features/settings/SettingsRepo.js';
 import { Workspace } from '$lib/features/workspace/Selection.svelte.js';
 import { Live, type LiveConnection } from '$lib/wire/Live.js';
 
-type Settings = ReturnType<typeof SettingsRepo.use>;
-
 const KEEP_AWAKE = 'power.keepAwake';
 
 export class Awake extends Service<Awake>()('Awake', { tier: 'app' }) {
@@ -21,7 +19,7 @@ export class Awake extends Service<Awake>()('Awake', { tier: 'app' }) {
 
   constructor(
     live: LiveConnection,
-    private readonly settings: Settings,
+    private readonly settings: SettingsRepo,
     private readonly workspace: Workspace,
     scope: Scope,
     failure: Failure,

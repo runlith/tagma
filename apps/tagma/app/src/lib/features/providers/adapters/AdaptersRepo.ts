@@ -1,3 +1,4 @@
+import type { InstanceOf } from '@runlith/layer/key';
 import { Repo } from '@runlith/query/repo';
 import { Door } from '$lib/wire/Door.js';
 
@@ -26,3 +27,5 @@ export const AdaptersRepo = Repo.define(
   }),
   { tier: 'app', door: Door },
 );
+
+export type AdaptersRepo = InstanceOf<typeof AdaptersRepo>;

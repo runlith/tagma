@@ -9,9 +9,6 @@ import { GraphFeed } from './Feed.js';
 import type { GraphChange } from '$lib/wire/Live.js';
 import { SelectionRepo } from './SelectionRepo.js';
 
-type Blocks = ReturnType<typeof BlocksRepo.use>;
-type Selection = ReturnType<typeof SelectionRepo.use>;
-
 const sibling = (a: TreeBlock, b: TreeBlock): number => a.ord - b.ord || a.name.localeCompare(b.name);
 
 const newestDeleted = (a: TreeBlock, b: TreeBlock): number => (b.deletedAt ?? '').localeCompare(a.deletedAt ?? '');
@@ -42,8 +39,8 @@ export class ProjectTree extends Service<ProjectTree>()('ProjectTree', { tier: '
 
   constructor(
     readonly aim: GraphAim,
-    private readonly blocksRepo: Blocks,
-    private readonly selection: Selection,
+    private readonly blocksRepo: BlocksRepo,
+    private readonly selection: SelectionRepo,
     feed: GraphFeed,
     scope: Scope,
     private readonly failure: Failure,

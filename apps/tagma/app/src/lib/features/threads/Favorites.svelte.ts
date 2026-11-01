@@ -14,7 +14,7 @@ export class Favorites extends Service<Favorites>()('Favorites', { tier: 'app' }
   private reading: Promise<void> | null = null;
 
   constructor(
-    private readonly threads: ReturnType<typeof ThreadsRepo.use>,
+    private readonly threads: ThreadsRepo,
     private readonly notices: Notices,
     private readonly scope: Scope,
   ) {

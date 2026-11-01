@@ -27,7 +27,7 @@ export class Subject {
 
   constructor(
     private readonly store: TreeScreen,
-    private readonly blocks: ReturnType<typeof BlocksRepo.use>,
+    private readonly blocks: BlocksRepo,
     private readonly feed: GraphFeed,
     private readonly tags: TagCatalog,
     private readonly notices: Notices,

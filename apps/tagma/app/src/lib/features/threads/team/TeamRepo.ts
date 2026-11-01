@@ -1,6 +1,7 @@
 import type { TeamLayer } from '@runlith/agent/collaboration/team';
 import type { SettableScope } from '@tagma/server/platform/contract/wire/setting';
 import { ThreadId } from '@tagma/server/platform/contract/wire/thread';
+import type { InstanceOf } from '@runlith/layer/key';
 import type { KeyedLoaderContext } from '@runlith/query/types';
 import { Repo } from '@runlith/query/repo';
 import { Door } from '$lib/wire/Door.js';
@@ -52,6 +53,8 @@ export const TeamRepo = Repo.define(
   { tier: 'app', door: Door },
 );
 
-export type TeamRead = NonNullable<ReturnType<ReturnType<typeof TeamRepo.use>['read']['key']>['data']>;
+export type TeamRepo = InstanceOf<typeof TeamRepo>;
 
-export type TeamPromoted = NonNullable<ReturnType<typeof TeamRepo.use>['promote']['data']>;
+export type TeamRead = NonNullable<ReturnType<TeamRepo['read']['key']>['data']>;
+
+export type TeamPromoted = NonNullable<TeamRepo['promote']['data']>;

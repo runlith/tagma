@@ -3,6 +3,7 @@ import type { RootId } from '@tagma/server/workspace/contract/wire/ids';
 import { RequestKey } from '@tagma/server/platform/contract/wire/ids';
 import type { RenameRemote, WorktreeMode } from '@tagma/server/worktrees/contract/wire/creation';
 import type { MergeAfter, MergeMode } from '@tagma/server/worktrees/contract/wire/mergeTypes';
+import type { InstanceOf } from '@runlith/layer/key';
 import { Repo } from '@runlith/query/repo';
 import { ThreadId } from '@tagma/server/platform/contract/wire/thread';
 import { Door } from '$lib/wire/Door.js';
@@ -146,3 +147,5 @@ export const WorktreesRepo = Repo.define(
   }),
   { tier: 'app', door: Door },
 );
+
+export type WorktreesRepo = InstanceOf<typeof WorktreesRepo>;
