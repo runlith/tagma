@@ -11965,10 +11965,6 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead packages/agent/src/agent/AgentRunState.ts#AgentStepCommit",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "dead-code dead packages/agent/src/agent/AgentRunner.ts#AgentSignals",
           "owner": "5a3bed29"
         },
