@@ -123,6 +123,24 @@ export function describeRunLifecycleActs<TTx, TWrite extends TTx = TTx, R = neve
       }, Effect.provide(TestClock.layer())),
     );
     test(
+      'a phase entered inside a finished program flushes in its own unit when its timer fires',
+      Effect.fnUntraced(function* () {
+        const world = yield* lifecycleWorld(open, 30_000, 250);
+        const { run } = started(yield* world.lifecycle.create(world.startFrom, APPROVAL, { kind: 'turn' }));
+        const enter = Effect.fnUntraced(function* (unit: TWrite) {
+          yield* world.storage.transitions.opened([run.threadId], unit);
+          yield* world.progress.enter(run, 'reasoning', { since: 17 });
+          yield* world.storage.transitions.revised([run.threadId], unit, () => Effect.void);
+        });
+        if (world.storage.aggregate.program === undefined || (yield* world.storage.aggregate.program('phase-parent', enter)) === null) {
+          yield* world.storage.aggregate.transaction(enter);
+        }
+        yield* TestClock.adjust('250 millis');
+        yield* world.progress.end(run.id);
+        expect((yield* world.runs.runById(run.id))?.progress.phase).toEqual({ phase: 'reasoning', since: 17 });
+      }, Effect.provide(TestClock.layer())),
+    );
+    test(
       'a refused keep-warm launch closes its refresh signal while returning unread reader work',
       Effect.fnUntraced(function* () {
         const world = yield* lifecycleWorld(open);

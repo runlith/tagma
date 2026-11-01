@@ -1,4 +1,5 @@
-import { Clock, Context, Effect, FiberMap, Layer } from 'effect';
+import { Clock, Context, Effect, FiberMap, Layer, References, Tracer } from 'effect';
+import { CurrentCost } from '@runlith/performance/CostLedger';
 import type { AgentPhase, AgentWaiting } from '../../agent/AgentPhase';
 import type { ThreadContextEstimate, ThreadLiveProgress } from '../../transcript/live';
 import type { ThreadPortFailure } from '../ThreadBorder';
@@ -68,10 +69,11 @@ export const runProgressLayer: Layer.Layer<
     const runs = (yield* ThreadRunStoreFactory).create((yield* ThreadOwner).id);
     const held = new Map<string, Held>();
     const ticks = yield* FiberMap.make<string, void, ThreadPortFailure>();
+    const lifetime = Context.omit(Tracer.ParentSpan, References.CurrentStackFrame)(yield* Effect.context<never>());
     const heldOf = (run: ThreadRunRef): Held => {
       const standing = held.get(run.id);
       if (standing !== undefined) return standing;
-      const fresh: Held = { run, shown: { phase: null, estimate: null }, unwritten: false };
+      const fresh: Held = { run: { id: run.id, threadId: run.threadId }, shown: { phase: null, estimate: null }, unwritten: false };
       held.set(run.id, fresh);
       return fresh;
     };
@@ -93,18 +95,20 @@ export const runProgressLayer: Layer.Layer<
       if (standing === undefined || !standing.unwritten) return;
       yield* changeUnit({ store, transitions, changes }, [standing.run.threadId], `phase:${runId}`, (unit) => written(standing.run, unit));
     });
-    const tick = (runId: string): Effect.Effect<void> =>
-      Effect.asVoid(
-        FiberMap.run(
-          ticks,
-          runId,
-          Effect.andThen(Effect.sleep(rhythm.flushIntervalMs), durable(runId)).pipe(
-            Effect.repeat({ while: () => pending(runId) }),
-            Effect.tapError((failure) => Effect.logWarning('the phase of a run was not written', { runId, failure })),
-          ),
-          { onlyIfMissing: true },
+    const tick = Effect.fnUntraced(function* (runId: string) {
+      const started = FiberMap.run(
+        ticks,
+        runId,
+        Effect.andThen(Effect.sleep(rhythm.flushIntervalMs), durable(runId)).pipe(
+          Effect.repeat({ while: () => pending(runId) }),
+          Effect.tapError((failure) => Effect.logWarning('the phase of a run was not written', { runId, failure })),
         ),
+        { onlyIfMissing: true },
       );
+      yield* Effect.updateContext(started, (context: Context.Context<never>) =>
+        Context.add(lifetime, CurrentCost, Context.get(context, CurrentCost)),
+      );
+    });
     const shown = (run: ThreadRunRef, standing: Held, next: ThreadLiveProgress): void => {
       standing.shown = next;
       feed.progress(run.threadId, run.id, next);
