@@ -36,6 +36,7 @@ sources:
 
 **Behaviour.**
 - Every block is its own tree markdown file; edges are written in canonical order, so identical knowledge yields identical bytes.
+- Repeated identical source entries on a block in a file represent one source, including when git combines them during a merge.
 - A file leaving the tree takes its block to the trash with a journal event, and `restore_block` brings it back; a returned file revives the block.
 - Two files with one id is a refusal naming both paths; the graph doesn't read until the copy is removed.
 - An old-form tree passes the graph's form steps on open.
