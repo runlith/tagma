@@ -73,6 +73,7 @@ export const prepareHome = Effect.fn('muse.prepareHome')(function* (
 
 const settingsOf = (settings: MuseSettings) => ({
   schema_version: 1,
+  context_compaction: { soft_threshold: 0.97, hard_threshold: 0.99 },
   run: {
     system_prompt: settings.system,
     toolset: settings.toolset,
