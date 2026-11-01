@@ -1,3 +1,4 @@
+import { Service } from '@runlith/layer/key';
 import { Point } from '@runlith/layer/Point';
 import type { Shown } from '@runlith/layer/svelte/payload';
 import { type Gated, gatedBy } from '$lib/wire/access.js';
@@ -19,3 +20,23 @@ const declared = {
 export const TopBarParts = Point.define<WindowPart>()('TopBarParts', declared);
 
 export const WindowParts = Point.define<WindowPart>()('WindowParts', declared);
+
+type MenuPlace = 'head' | 'go' | 'end' | 'foot';
+
+interface MenuPart extends Shown<PartProps> {
+  readonly id: string;
+  readonly place: MenuPlace;
+  readonly order: number;
+}
+
+export const MenuParts = Point.define<MenuPart>()('MenuParts', {
+  tier: 'app',
+  key: (part) => part.id,
+  order: (part) => part.order,
+});
+
+interface MenuSignalShape {
+  readonly waiting: boolean;
+}
+
+export class MenuSignal extends Service<MenuSignalShape>()('MenuSignal', { tier: 'app' }) {}

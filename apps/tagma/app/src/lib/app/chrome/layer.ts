@@ -24,11 +24,13 @@ import { PaletteActions } from '$lib/features/workspace/action.js';
 import { ActionRegistry } from './ActionRegistry.js';
 import { actions } from './actions.js';
 import { ColumnRegistry } from './ColumnRegistry.js';
-import { TopBarParts, WindowParts } from '$lib/shared/window/parts.js';
+import { MenuParts, MenuSignal, TopBarParts, WindowParts } from '$lib/shared/window/parts.js';
 
 export const FrameLayer = Layer.mergeAll(
   TopBarParts,
   WindowParts,
+  MenuParts,
+  Layer.fallback(MenuSignal, () => ({ waiting: false })),
   ActionRegistry,
   ColumnRegistry,
   PaletteActions.contribute('chrome', { id: 'chrome', actions }),
