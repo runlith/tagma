@@ -12,4 +12,4 @@ edges:
   - kind: discovered-from
     to: 01a19578-7e70-7ca7-ba04-4194cdc3f56c
 ---
-Keep a background tool invocation under its own span across preparation, execution and delivery, so child compaction and other collaboration calls can finish and report their outcomes.
+Keep a background tool invocation under its own span through preparation and execution, so child compaction and other collaboration calls can finish and report their outcomes.
