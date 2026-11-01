@@ -18,5 +18,6 @@ export const makeNativeRolloutPart = Effect.gen(function* () {
       const { db } = yield* MachineStore;
       yield* db.insert(thread).values(row as typeof thread.$inferInsert);
     }),
+    writes: writes('rollout.native', [nativeRows]),
   } satisfies RolloutParts['native'];
 });
