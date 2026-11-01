@@ -15,7 +15,7 @@ sources:
   - kind: file
     ref: apps/tagma/app/src/lib/features/checkout/files/ExplorerView.svelte
   - kind: file
-    ref: apps/tagma/app/src/lib/features/speech/calls/TranscriptView.svelte
+    ref: apps/tagma/app/src/lib/features/calls/TranscriptView.svelte
   - kind: file
     ref: apps/tagma/app/src/lib/features/threads/ColumnWindow.svelte.ts
   - kind: file
