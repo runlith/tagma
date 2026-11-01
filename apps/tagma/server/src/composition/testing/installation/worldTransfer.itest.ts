@@ -30,13 +30,16 @@ const newHome = Effect.fn('transferFixture.home')(function* () {
 const transfer = (home: string) => Effect.result(transferWorld(CHANNELS.dev, CHANNELS.stable, { HOME: home }, parts, migrationsFolder));
 
 layer(BunFileSystem.layer, { excludeTestServices: true })('a channel’s empty world is filled from another channel’s', (it) => {
-  it.effect('the database, rollouts and graphs are copied and name the new world; the source stays as it was', () =>
+  it.effect('the database, rollouts, graphs and every module store are copied and name the new world; the source stays as it was', () =>
     Effect.gen(function* () {
       const files = yield* FileSystem.FileSystem;
       const home = yield* newHome();
       const dev = join(home, CHANNELS.dev.data);
       yield* files.makeDirectory(join(dev, 'threads', '5'), { recursive: true });
       yield* files.writeFileString(join(dev, 'threads', '5', 't.jsonl'), '{}\n');
+      yield* files.makeDirectory(join(dev, 'stores', 'absent', 'kept'), { recursive: true });
+      yield* files.writeFileString(join(dev, 'stores', 'absent.sqlite'), 'a store no module of this build declares');
+      yield* files.writeFileString(join(dev, 'stores', 'absent', 'kept', 'one.ogg'), 'a file it keeps');
       yield* database(join(dev, 'tagma.sqlite'), (db) => {
         db.run('CREATE TABLE place (id INTEGER PRIMARY KEY, path TEXT)');
         db.run('INSERT INTO place (path) VALUES (?)', [join(dev, 'threads')]);
@@ -45,6 +48,8 @@ layer(BunFileSystem.layer, { excludeTestServices: true })('a channel’s empty w
       expect(done._tag).toBe('Success');
       const stable = join(home, CHANNELS.stable.data);
       expect(yield* files.readFileString(join(stable, 'threads', '5', 't.jsonl'))).toBe('{}\n');
+      expect(yield* files.readFileString(join(stable, 'stores', 'absent.sqlite'))).toBe('a store no module of this build declares');
+      expect(yield* files.readFileString(join(stable, 'stores', 'absent', 'kept', 'one.ogg'))).toBe('a file it keeps');
       expect(yield* database(join(stable, 'tagma.sqlite'), (db) => db.query('SELECT path FROM place').get())).toEqual({
         path: join(stable, 'threads'),
       });

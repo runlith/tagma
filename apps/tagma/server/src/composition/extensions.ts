@@ -1,4 +1,11 @@
+import type { AudioDevices } from '@runlith/audio/port/devices';
+import type { Speech } from '@runlith/speech/engine/Speech';
 import { Context, Effect, Layer, Scope } from 'effect';
+import type { Maintenance } from '../platform/contract/service/maintenance.js';
+import type { ProjectChanges } from '../projects/contract/service/changes.js';
+import type { Projects } from '../projects/contract/service/registry.js';
+import type { Settings } from '../settings/contract/service/values.js';
+import type { Captures } from '../speech/contract/service/captures.js';
 import type { Manifest } from '../platform/contract/service/manifest.js';
 import { ownStorePath } from '../platform/contract/service/ownStore.js';
 import { MachineStore } from '../platform/contract/service/store.js';
@@ -7,6 +14,8 @@ import { ownStoreChain } from '../installation/closure/read.js';
 import { CORE_MODULES } from './core.js';
 
 const CORE: ReadonlySet<Manifest> = new Set(CORE_MODULES);
+
+export type ExtensionOwners = Settings | Projects | ProjectChanges | Maintenance | Speech | AudioDevices | Captures;
 
 type ExtensionLayer = Layer.Layer<never, unknown, any>;
 

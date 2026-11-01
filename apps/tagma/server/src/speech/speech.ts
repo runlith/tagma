@@ -2,6 +2,7 @@ import { speech as declaration } from './contract/wire/module.js';
 import { join } from 'node:path';
 import { Context, Effect } from 'effect';
 import { lazyLayer, liveOf, manifest } from '../platform/contract/service/manifest.js';
+import { LIVE_WORK } from '../platform/contract/service/live.js';
 import { RELOCATIONS } from '../platform/contract/service/relocation.js';
 import { HOME_FOLLOWERS } from '../thread-record/contract/service/homes.js';
 import { RECORDINGS } from './contract/service/recording.js';
@@ -47,6 +48,11 @@ export const speech = manifest({
       relocate: () => Effect.succeed([]),
     }),
     ...HOME_FOLLOWERS.of({ id: 'speech/followers', load: async () => (await import('./homes.js')).speechHomes }),
+    ...LIVE_WORK.of({
+      id: 'speech/listenings',
+      ends: { one: 'call being recorded ends', many: 'calls being recorded end' },
+      count: Effect.flatMap(Listenings, (listenings) => listenings.live),
+    }),
   ],
   lifetimes: {
     installation: lazyLayer(

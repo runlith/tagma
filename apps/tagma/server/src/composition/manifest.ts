@@ -21,6 +21,7 @@ import { entryKinds } from './entryKinds.js';
 import { BUILTIN_NOTES, type BuiltinNote } from '../threads/contract/service/notes.js';
 import { NATIVE_RULES } from '../native-harness/contract/service/rules.js';
 import { HOME_FOLLOWERS, type HomeFollower } from '../thread-record/contract/service/homes.js';
+import { LIVE_WORK, type LiveWork } from '../platform/contract/service/live.js';
 import { PROJECT_CREATION, type CreationStep } from '../graph/contract/service/creation.js';
 import type { NamedRight } from '../platform/contract/service/access.js';
 import type { ServerParts } from './build.js';
@@ -62,6 +63,7 @@ export type Assembly = {
   readonly notes: readonly BuiltinNote[];
   readonly nativeRules: ReturnType<typeof NATIVE_RULES.collect>;
   readonly homeFollowers: readonly HomeFollower[];
+  readonly liveWork: readonly LiveWork[];
   readonly creationSteps: readonly CreationStep[];
   readonly rights: readonly NamedRight[];
   readonly entryKinds: ThreadEntryReader;
@@ -172,6 +174,7 @@ export const assemble = async ({ modules, rested }: ServerParts): Promise<Assemb
     notes: BUILTIN_NOTES.collect(modules).map(({ entry }) => entry),
     nativeRules: NATIVE_RULES.collect(modules),
     homeFollowers: HOME_FOLLOWERS.collect(modules).map(({ entry }) => entry),
+    liveWork: LIVE_WORK.collect(modules).map(({ entry }) => entry),
     creationSteps,
     rights,
     entryKinds: entryKinds(modules, rested),

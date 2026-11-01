@@ -26,7 +26,13 @@ export const serverStateSchema = Schema.Struct({
   pid: Schema.Int,
   startedAt: Schema.String,
   agents: Schema.Int,
-  calls: Schema.Int,
+  calls: Schema.Int.annotate({ description: 'The total of `work`, kept for readers of earlier releases.' }),
+  work: Schema.optional(
+    Schema.Array(Schema.Struct({ id: Schema.String, count: Schema.Int, one: Schema.String, many: Schema.String })).annotate({
+      description:
+        'What a stop of this server ends beside agents and executions, by its owner: how many are live, and the words for one and many.',
+    }),
+  ),
   born: Schema.Struct({
     replacedPid: Schema.NullOr(Schema.Int),
   }),

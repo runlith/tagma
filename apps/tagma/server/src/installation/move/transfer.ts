@@ -4,6 +4,7 @@ import { cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { Data, Effect } from 'effect';
 import type { Contributed } from '../../platform/contract/wire/contribution.js';
+import { ownStoreDirectory } from '../../platform/contract/service/ownStore.js';
 import { type Relocated, type Relocation, type RelocationMiss, relocatedPath } from '../../platform/contract/service/relocation.js';
 import { lockDataDirectory } from '../../platform/lock/dataDirectory.js';
 import { dataDirectoryLocked } from '../../platform/lock/holder.js';
@@ -123,7 +124,10 @@ export const transferWorld = Effect.fnUntraced(function* (
     ),
   );
   return yield* Effect.gen(function* () {
-    const carried = parts.relocations.flatMap(({ entry }) => entry.carried?.(source) ?? []).filter((path) => existsSync(path));
+    const carried = [
+      ownStoreDirectory(join(source, DATABASE_FILE)),
+      ...parts.relocations.flatMap(({ entry }) => entry.carried?.(source) ?? []),
+    ].filter((path) => existsSync(path));
     yield* Effect.try({
       try: () => {
         writeFileSync(join(target, TRANSFER_FILE), `${JSON.stringify({ from: source, to: target })}\n`);

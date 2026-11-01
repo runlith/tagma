@@ -53,6 +53,7 @@ const decodeMachine = Schema.decodeUnknownResult(
       server: Schema.Struct({
         agents: Schema.Int,
         calls: Schema.optional(Schema.Int),
+        work: Schema.optional(Schema.Array(Schema.Struct({ count: Schema.Int, one: Schema.String, many: Schema.String }))),
         next: Schema.Struct({ installing: Schema.NullOr(Schema.Unknown) }),
       }),
       host: Schema.Struct({ holds: Schema.NullOr(Schema.Struct({ terminals: Schema.Int, commands: Schema.Int })) }),
@@ -176,15 +177,27 @@ export type Work = {
   readonly agents: number;
   readonly terminals: number | null;
   readonly commands: number | null;
-  readonly calls: number | null;
+  readonly live: readonly Live[] | null;
   readonly busy: boolean;
   readonly needsHost: string | null;
 };
 
+export type Live = { readonly count: number; readonly one: string; readonly many: string };
+
 const some = (count: number | null): boolean => count === null || count > 0;
 
+const EARLIER = { one: 'recording ends', many: 'recordings end' } as const;
+
+const liveOf = (server: { readonly calls?: number | undefined; readonly work?: readonly Live[] | undefined }): readonly Live[] | null =>
+  server.work ?? (server.calls === undefined ? null : [{ count: server.calls, ...EARLIER }]);
+
 export const working = (work: Work): boolean =>
-  work.busy || work.agents > 0 || some(work.terminals) || some(work.commands) || some(work.calls);
+  work.busy ||
+  work.agents > 0 ||
+  some(work.terminals) ||
+  some(work.commands) ||
+  work.live === null ||
+  work.live.some((one) => one.count > 0);
 
 export async function machineWork(surfaceUrl: URL): Promise<Work | null> {
   const answer = await fetch(new URL('/api/op/read_machine_state', surfaceUrl), {
@@ -193,14 +206,18 @@ export async function machineWork(surfaceUrl: URL): Promise<Work | null> {
     body: '{}',
   }).catch(() => null);
   if (answer === null || !answer.ok) return null;
-  const read = decodeMachine(await answer.json().catch(() => null));
+  return workOf(await answer.json().catch(() => null));
+}
+
+export function workOf(answer: unknown): Work | null {
+  const read = decodeMachine(answer);
   if (read._tag === 'Failure') return null;
   const { server, host, restart, newHost } = read.success.machine;
   return {
     agents: server.agents,
     terminals: host.holds?.terminals ?? null,
     commands: host.holds?.commands ?? null,
-    calls: server.calls ?? null,
+    live: liveOf(server),
     busy: server.next.installing !== null || (restart.stage !== null && HANDING_OVER.has(restart.stage)),
     needsHost: newHost?.cause === 'update' ? newHost.build : null,
   };

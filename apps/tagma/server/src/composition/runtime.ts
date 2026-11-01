@@ -32,7 +32,7 @@ import type { WatchLifetime } from '@runlith/watch/client';
 import { fileWatcherLayer } from './fileWatcher.js';
 import { PROGRAM_RELEASE } from '../platform/contract/wire/program.js';
 import { MachineAgents } from '../installation/contract/service/agents.js';
-import { MachineCalls } from '../installation/contract/service/calls.js';
+import { LiveWorks } from '../platform/contract/service/live.js';
 import { Listenings } from '../speech/contract/service/listenings.js';
 import { ThreadRunning } from '../threads/contract/service/reads.js';
 import type { TokenStore } from '@runlith/llm/oauth/FileTokenStore';
@@ -144,7 +144,7 @@ import { databasePath, seedDirectory } from '../installation/paths.js';
 import { InstalledChannel } from '../installation/contract/service/channel.js';
 import type { Channel } from '../installation/contract/wire/channel.js';
 import type { Assembly, DriverId } from './manifest.js';
-import { installedIn, servedIn } from './extensions.js';
+import { type ExtensionOwners, installedIn, servedIn } from './extensions.js';
 import { makeDrives } from './drives.js';
 import { Drives } from '../platform/contract/service/drives.js';
 import { Capacity, serverCapacity, thisMachine } from '../platform/contract/service/capacity.js';
@@ -254,7 +254,8 @@ export type ServerRuntime = {
     | AwakePolicy
     | InspectionsInstalled
     | InstalledHarnesses
-    | HarnessAdapters,
+    | HarnessAdapters
+    | ExtensionOwners,
     never
   >;
   graph: Context.Context<GraphServices | GraphStore | GraphUnits | MachineStore | MachineUnits>;
@@ -870,7 +871,7 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
     Context.make(ServedGraphs, pool),
     Context.make(SessionResolution, resolution),
     Context.make(MachineAgents, { working: Context.get(owners, ThreadRunning).working }),
-    Context.make(MachineCalls, { live: Context.get(owners, Listenings).live }),
+    Context.make(LiveWorks, { all: assembly.liveWork }),
   );
   return {
     runtime,
