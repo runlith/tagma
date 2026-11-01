@@ -122,7 +122,7 @@ Muse Code's TUI as a terminal harness: there Muse runs its own agent, which move
 
 Live means a trial server on macOS with Muse Code 1.4.14 and `muse-spark-1.3` at minimal effort, 2026-11-01; contract means the runner's `cycle.test.ts` on a fake MSP host, or the server conformance named.
 
-1. Live: the menu lists the `model/list` models and tiers; turns ran with Tagma tool calls, a steered word, a cancel, and a turn resumed after a runner restart. Pictures and a withdrawn word: contract.
+1. Live: the menu lists the `model/list` models and tiers; turns ran with Tagma tool calls, a picture (a red PNG answered "red"), a steered word, a cancel, and a turn resumed after a runner restart. A withdrawn word: contract.
 2. Live (the probe report behind [[e698aca6]]): the request carries the Tagma prompt whole, only `mcp__tagma__*` plus vendor web tools, no reminder children, no judge reviews, none of the user's Muse setup.
 3. Live: calls run at Tagma's door under Muse's `callId`, a write stood in the change record, and in review mode a vendor `web_fetch` asked in the thread — allowed it fetched, denied it failed with `network access denied`.
 4. Live: a thread that ran on a native model (an `openai-compatible` provider) and moved onto Muse Code named the word said only there. Fork and rewind open a session seeded from the journal by the core road: contract.
