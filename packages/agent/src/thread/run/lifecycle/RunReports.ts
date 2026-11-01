@@ -220,7 +220,7 @@ export const runReportsLayer = Layer.effect(
         kind: 'run',
         run: {
           id: run.id,
-          streamTail: tail === null ? null : JSON.parse(JSON.stringify(tail)),
+          streamTail: tail,
           heartbeatAt: at,
           updatedAt: at,
           ...(durable || tail?.length ? { resumes: 0 } : {}),
