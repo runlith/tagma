@@ -43,7 +43,8 @@ const prepared = Effect.fn('e2e.recording')(function* (lane: Lane, options: Opti
       fixture.context.tracing.stop({ path: join(directory, 'trace.zip') }),
     ]);
     const failures = results.flatMap((result) => (result.status === 'rejected' ? [result.reason] : []));
-    if (failures.length > 0) throw new AggregateError(failures, 'browser failure artifacts were incomplete');
+    if (failures.length > 0)
+      throw new AggregateError(failures, `browser failure artifacts were incomplete: ${failures.map(String).join('; ')}`);
   });
   yield* Effect.addFinalizer(() => Effect.sync(stop));
   return { ...fixture, artifacts, failed };
@@ -69,7 +70,7 @@ const registerEffect = <E>(
   for (const lane of selected(options)) {
     const title = `${name} [${lane}]`;
     if (options.headed === true && !headed()) notRun(title, 'headed');
-    else it.live(title, () => execute(title, lane, options, body));
+    else it.live(title, () => execute(title, lane, options, body), 0);
   }
 };
 

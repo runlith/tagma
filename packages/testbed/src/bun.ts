@@ -1,6 +1,7 @@
 import { STARTED } from './core/started.ts';
 import * as runner from 'bun:test';
 import { afterAll, afterEach, beforeAll, beforeEach, mock, setDefaultTimeout } from 'bun:test';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { createRequire } from 'node:module';
 import { resolve } from 'node:path';
 import { carried, carry, diskContinuity, makeBed, type Bed } from './core/bed.ts';
@@ -23,6 +24,7 @@ const expose = (specifiers: readonly string[], object: Record<string, unknown>, 
 };
 
 const REGISTERS = ['describe', 'test', 'it', 'beforeAll', 'beforeEach', 'afterAll', 'afterEach'] as const;
+const outside = AsyncLocalStorage.snapshot();
 
 let claimed: string | undefined;
 
@@ -97,7 +99,20 @@ const prepare = async (): Promise<Bed> => {
   bed.install();
   confineHome();
   const real = { ...runner };
-  const wrapped = Object.fromEntries(REGISTERS.map((name) => [name, registering(name === 'describe' ? undefined : bed, real[name])]));
+  const finished: typeof runner.onTestFinished = (fn, options) => {
+    const inside = AsyncLocalStorage.snapshot();
+    const callback = Object.defineProperties(
+      function (this: unknown, ...args: unknown[]) {
+        return inside(() => Reflect.apply(fn, this, args));
+      },
+      { length: { value: fn.length }, name: { value: fn.name } },
+    );
+    outside(() => Reflect.apply(real.onTestFinished, undefined, [callback, options]));
+  };
+  const wrapped = {
+    ...Object.fromEntries(REGISTERS.map((name) => [name, registering(name === 'describe' ? undefined : bed, real[name])])),
+    onTestFinished: finished,
+  };
   const required = createRequire(import.meta.url)('bun:test') as typeof runner;
   Object.assign(required, wrapped);
   mock.module('bun:test', () => ({ ...real, ...wrapped }));

@@ -3,7 +3,8 @@ import { createHash } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 import { reportPath } from '@runlith/testbed/fixture';
-import { Cause, Effect, Exit, type Scope } from 'effect';
+import { HANG_MS } from '@runlith/testbed/kinds';
+import { Cause, Effect, Exit, Fiber, Scope } from 'effect';
 
 export type FailureArtifact = (directory: string) => Promise<void>;
 type Recording = { readonly directory: string; readonly failures: Set<FailureArtifact> };
@@ -38,7 +39,11 @@ export const captureFailure = async (): Promise<void> => {
   if (active === undefined) throw new Error('no e2e artifact recording stands');
   const results = await Promise.allSettled([...active.failures].map((write) => write(active.directory)));
   const failures = results.flatMap((result) => (result.status === 'rejected' ? [result.reason] : []));
-  if (failures.length > 0) throw new AggregateError(failures, `failure artifacts could not all be written to ${active.directory}`);
+  if (failures.length > 0)
+    throw new AggregateError(
+      failures,
+      `failure artifacts could not all be written to ${active.directory}: ${failures.map(String).join('; ')}`,
+    );
 };
 
 export const recorded = Effect.fn('e2e.recorded')(function* <A, E>(
@@ -50,15 +55,30 @@ export const recorded = Effect.fn('e2e.recorded')(function* <A, E>(
     const running = record(directory, () =>
       Effect.runPromiseExit(
         Effect.scoped(
-          Effect.gen(function* () {
-            const exit = yield* Effect.exit(work(directory));
-            if (Exit.isFailure(exit)) {
-              const captured = yield* Effect.exit(Effect.tryPromise(() => captureFailure()));
-              const errors = [Cause.pretty(exit.cause), ...(Exit.isFailure(captured) ? [Cause.pretty(captured.cause)] : [])];
-              return yield* Effect.die(new Error(`${errors.join('\n')}\nArtifacts: ${directory}`));
-            }
-            return exit.value;
-          }),
+          Effect.uninterruptibleMask((restore) =>
+            Effect.gen(function* () {
+              const scope = yield* Effect.acquireRelease(Scope.make(), (scope, exit) => Scope.close(scope, exit));
+              const test = yield* Effect.forkChild(restore(Effect.exit(Scope.provide(work(directory), scope))));
+              const observed = yield* Effect.exit(
+                restore(
+                  Effect.timeoutOrElse(Fiber.join(test), {
+                    duration: HANG_MS,
+                    orElse: () => Effect.die(new Error(`test timed out after ${HANG_MS}ms`)),
+                  }),
+                ),
+              );
+              const outcome = Exit.isFailure(observed) ? Exit.failCause(observed.cause) : observed.value;
+              if (Exit.isFailure(outcome)) {
+                const captured = yield* Effect.exit(Effect.tryPromise(() => captureFailure()));
+                const errors = [Cause.pretty(outcome.cause), ...(Exit.isFailure(captured) ? [Cause.pretty(captured.cause)] : [])];
+                yield* Fiber.interrupt(test);
+                const ended = yield* Fiber.await(test);
+                if (Exit.isFailure(ended) && !Cause.hasInterruptsOnly(ended.cause)) errors.push(Cause.pretty(ended.cause));
+                return yield* Effect.die(new Error(`${errors.join('\n')}\nArtifacts: ${directory}`));
+              }
+              return outcome.value;
+            }),
+          ),
         ),
         { signal },
       ),
@@ -67,6 +87,9 @@ export const recorded = Effect.fn('e2e.recorded')(function* <A, E>(
       (exit) => resume(exit),
       (cause) => resume(Effect.die(cause)),
     );
-    return Effect.promise(() => running.then(() => undefined));
+    return Effect.flatMap(
+      Effect.promise(() => running),
+      (exit) => (Exit.isFailure(exit) && !Cause.hasInterruptsOnly(exit.cause) ? Effect.failCause(exit.cause) : Effect.void),
+    );
   });
 });
