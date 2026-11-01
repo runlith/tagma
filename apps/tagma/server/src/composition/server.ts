@@ -44,6 +44,7 @@ import { RECORDINGS } from '../speech/contract/service/recording.js';
 import { SHIPPED_PRESETS } from '../marketplaces/contract/wire/presets.js';
 import { assemble } from './manifest.js';
 import type { Build } from './build.js';
+import { appOf } from './next.js';
 import { RolloutReads } from '../threads/contract/service/rolloutReads.js';
 import {
   type DataDirectoryConflict,
@@ -535,7 +536,7 @@ export const serve = async (build: Build): Promise<void> => {
       Scope.provide(
         Layer.build(
           parts.bindings
-            .door({ checkout: build.cut.roots.checkout, installation, port })
+            .door({ checkout: build.cut.roots.checkout, app: appOf(build.cut), installation, port })
             .pipe(Layer.provide(Layer.mergeAll(Layer.succeedContext(tagma.door), FetchHttpClient.layer))),
         ),
         localScope,
