@@ -111,9 +111,11 @@ export const makeCompactionStore = Effect.fnUntraced(function* ({
                 )
                 .pipe(
                   Effect.tap((landed) =>
-                    Effect.sync(() => {
-                      for (const row of landed) onRecords(threadId, { kind: 'pruned', row: { threadId, ...row } });
-                    }),
+                    unit.afterCommit(
+                      Effect.sync(() => {
+                        for (const row of landed) onRecords(threadId, { kind: 'pruned', row: { threadId, ...row } });
+                      }),
+                    ),
                   ),
                 ),
             ),
@@ -133,15 +135,16 @@ export const makeCompactionStore = Effect.fnUntraced(function* ({
                 )
                 .pipe(
                   Effect.tap((retired) =>
-                    Effect.sync(() => {
-                      for (const row of retired) onRecords(threadId, { kind: 'pruned-retired', row: { threadId, ...row } });
-                    }),
+                    unit.afterCommit(
+                      Effect.sync(() => {
+                        for (const row of retired) onRecords(threadId, { kind: 'pruned-retired', row: { threadId, ...row } });
+                      }),
+                    ),
                   ),
                 ),
             ),
           ),
     writeCheckpointIn: (input, unit) => {
-      let landed = false;
       return failedAs(
         'writeCheckpoint',
         Effect.gen(function* () {
@@ -160,10 +163,7 @@ export const makeCompactionStore = Effect.fnUntraced(function* ({
               .returning()
               .get(),
           );
-          if (inserted) {
-            landed = true;
-            return trustedCheckpoint(inserted);
-          }
+          if (inserted) return { row: trustedCheckpoint(inserted), landed: true };
           const existing = yield* unit.run(
             db
               .select()
@@ -179,8 +179,13 @@ export const makeCompactionStore = Effect.fnUntraced(function* ({
           if (!existing || existing.coveredPrefixHash !== input.coveredPrefixHash) {
             return yield* Effect.fail(new ThreadCompactionConflictError(input.threadId));
           }
-          return trustedCheckpoint(existing);
-        }).pipe(Effect.tap((row) => Effect.sync(() => landed && onRecords(input.threadId, { kind: 'checkpoint', row })))),
+          return { row: trustedCheckpoint(existing), landed: false };
+        }).pipe(
+          Effect.tap(({ row, landed }) =>
+            landed ? unit.afterCommit(Effect.sync(() => onRecords(input.threadId, { kind: 'checkpoint', row }))) : Effect.void,
+          ),
+          Effect.map(({ row }) => row),
+        ),
       );
     },
   };
