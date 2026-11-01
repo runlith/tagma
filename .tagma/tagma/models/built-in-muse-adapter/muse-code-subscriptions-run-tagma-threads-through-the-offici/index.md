@@ -117,3 +117,19 @@ Muse Code's TUI as a terminal harness: there Muse runs its own agent, which move
 8. A signed-out CLI ends the turn with an auth refusal naming `muse login`; a `META_API_KEY` in Tagma's environment never reaches the host.
 9. The Claude runner's tests pass unchanged after the bridge moves; contract tests drive the Muse cycle on a fake `Channel`, and `sdk.test.ts` the adapter on a fake connection.
 10. The feature [[d7d24be1]] and the module card of `@runlith/adapter-muse` say what ships; an explanation records the runner's launch and its reasons.
+
+## Acceptance, as checked
+
+Live means a trial server on macOS with Muse Code 1.4.14 and `muse-spark-1.3` at minimal effort, 2026-11-01; contract means the runner's `cycle.test.ts` on a fake MSP host, or the server conformance named.
+
+1. Live: the menu lists the `model/list` models and tiers; turns ran with Tagma tool calls, a steered word, a cancel, and a turn resumed after a runner restart. Pictures and a withdrawn word: contract.
+2. Live (the probe report behind [[e698aca6]]): the request carries the Tagma prompt whole, only `mcp__tagma__*` plus vendor web tools, no reminder children, no judge reviews, none of the user's Muse setup.
+3. Live: calls run at Tagma's door under Muse's `callId`, a write stood in the change record, and in review mode a vendor `web_fetch` asked in the thread — allowed it fetched, denied it failed with `network access denied`.
+4. Live: a thread that ran on a native model (an `openai-compatible` provider) and moved onto Muse Code named the word said only there. Fork and rewind open a session seeded from the journal by the core road: contract.
+5. Contract: a prompt or direct-tool change restarts the host and resumes the session before the turn; live, a disclosure kept the host and its list.
+6. Live: per-request spend, the window, reasoning, quota windows (session and weekly percent with the plan); the automatic threshold folded 172,090 tokens to 22,184 and a manual compaction folded the same session; a resumed session's first turn is priced (contract).
+7. Live: the request after a disclosure read 32,241 of 32,674 from cache, after a dispatched call 32,625 of 32,934, after a compaction 46,705 of 47,043; Muse's cache holds for 20 minutes and not for 30.
+8. Live: signed out, the turn ended `authRequired` naming `muse login`. Contract and the version-probe itest: an inherited `META_API_KEY` never reaches a Muse process.
+9. The Claude runner's tests run unchanged on the shared bridge; the Muse cycle and SDK adapter tests run on fakes.
+10. Done: [[d7d24be1]], the module card, [[4c4cc041]].
+11. Live: a title asked within the cache lifetime came from the Muse side session (`source: captured`), and an automatic recap was written five minutes after the second exchange, on `muse-code` / `muse-spark-1.3`.

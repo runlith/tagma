@@ -9,4 +9,4 @@ fields:
     "status": "in_work"
   }
 ---
-Fix the app's family read for an open thread in a grouped agent column: the dock tile is not the thread's home, so sending it as the explicit project produces place-mismatch. Resolve the family through the thread subject and prove the grouped-column path fails before the fix and succeeds after it.
+The app now reads an open thread's family by thread ID without an explicit project, so the server resolves its home rather than the column's group tile. The grouped-column regression exercises ThreadList, ThreadsRepo and the HTTP Door over a transport double enforcing the existing project contract: it failed before the fix with the reported 45-versus-5 place-mismatch and passed afterward. All 44 selected list tests passed; the changed file passed alone with shuffle seeds 1, 2 and 3. App typecheck passed with no errors and two warnings outside the changed files.
