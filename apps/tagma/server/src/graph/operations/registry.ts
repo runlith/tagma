@@ -95,7 +95,7 @@ export const REGISTRY_PAIRS = {
         const steps = yield* (yield* CreationSteps).take(contributed ?? {});
         const pool = yield* RoutedGraphs;
         const row = yield* (yield* ProjectLifecycle).create(registration, (born) =>
-          Effect.andThen(steps(born.id), pool === null ? Effect.void : pool.birth(born.id)),
+          Effect.scoped(pool === null ? steps(born.id) : pool.birth(born.id, steps(born.id))),
         );
         yield* (yield* RegisteredRoots).joined(row.rootPath);
         return { status: 'ok' as const, project: yield* wiredOne(row), returned: row.returned };

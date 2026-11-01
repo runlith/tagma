@@ -296,6 +296,11 @@ export const makeGraphPool = Effect.gen(function* () {
     }
   });
 
+  const born = Effect.fnUntraced(function* (projectId: number) {
+    const served = yield* within(projectId, steps.last);
+    yield* served.settled();
+  });
+
   const within = Effect.fnUntraced(function* (projectId: number, rowsStep: string | null) {
     const placed = yield* place({ projectId });
     return yield* acquire(placed, copies.generation(projectId), { rowsStep, klass: 'call' }, (copy) => {
@@ -628,17 +633,11 @@ export const makeGraphPool = Effect.gen(function* () {
       warm,
     }),
     releaseProject,
-    birth: Effect.fnUntraced(
-      function* (projectId) {
-        const served = yield* within(projectId, steps.last);
-        yield* served.settled();
-      },
-      (effect, projectId) =>
-        copies.exclusive(
-          projectId,
-          Effect.onError(effect, () => Effect.orDie(letGo(projectId))),
-        ),
-    ),
+    birth: <E, R>(projectId: number, first?: Effect.Effect<void, E, R>) =>
+      copies.exclusive(
+        projectId,
+        Effect.onError(Effect.andThen(first ?? Effect.void, born(projectId)), () => Effect.orDie(letGo(projectId))),
+      ),
     branches: servingSwitch.branches,
     dispose: Effect.fnUntraced(function* () {
       closed = true;

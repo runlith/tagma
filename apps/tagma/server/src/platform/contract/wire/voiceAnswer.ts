@@ -7,6 +7,7 @@ export type VoiceRefused = {
   readonly unblock: readonly string[];
   readonly inputFile?: string;
   readonly words?: Words;
+  readonly field?: string;
 };
 
 export type VoiceAck = {

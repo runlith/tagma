@@ -3,7 +3,7 @@ import { basename, join } from 'node:path';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { layer } from '@runlith/effect-test';
 import { sharedPool } from '@runlith/sqlite-process/testing/pool';
-import { Context, Effect, FileSystem, Layer, Schema } from 'effect';
+import { Context, Effect, Exit, FileSystem, Layer, Schema } from 'effect';
 import { HttpPlatform, HttpRouter, HttpServer } from 'effect/http';
 import { endHosts } from '../../executions/testing/doubles.js';
 import { type CreationStep, PROJECT_CREATION } from '../../graph/contract/service/creation.js';
@@ -77,15 +77,25 @@ const greeting = manifest({
       }),
     ),
   ],
-  contributions: PROJECT_CREATION.of({
-    id: 'greeting-mark',
-    value: Schema.String,
-    step: Effect.fnUntraced(function* (projectId: number, mark: string) {
-      if (mark === 'refused') return yield* new GateRefusal('field-invalid', 'this mark is refused', ['choose another mark']);
-      const opened = (yield* ServedGraphs).held().some((copy) => copy.projectId === projectId);
-      (yield* Marks).set(projectId, { mark, opened });
-    }),
-  } satisfies CreationStep<string>),
+  contributions: PROJECT_CREATION.of(
+    {
+      id: 'greeting-mark',
+      value: Schema.String,
+      step: Effect.fnUntraced(function* (projectId: number, mark: string) {
+        if (mark === 'refused') return yield* new GateRefusal('field-invalid', 'this mark is refused', ['choose another mark']);
+        const opened = (yield* ServedGraphs).held().some((copy) => copy.projectId === projectId);
+        const marks = yield* Marks;
+        marks.set(projectId, { mark, opened });
+        yield* Effect.addFinalizer((exit) => (Exit.isFailure(exit) ? Effect.sync(() => marks.delete(projectId)) : Effect.void));
+      }),
+    } satisfies CreationStep<string>,
+    {
+      id: 'greeting-gate',
+      value: Schema.Literals(['open', 'shut']),
+      step: (_projectId: number, gate: 'open' | 'shut') =>
+        gate === 'shut' ? Effect.fail(new GateRefusal('field-invalid', 'the gate is shut', ['open the gate'])) : Effect.void,
+    } satisfies CreationStep<'open' | 'shut'>,
+  ),
   lifetimes: {
     installation: Layer.mergeAll(
       Layer.succeed(Salutation, { word: 'Hello' }),
@@ -187,6 +197,7 @@ layer(root, { excludeTestServices: true })('a root composing the core with a mod
       const born = yield* add('marked', { 'greeting-mark': 'oak' });
       expect(born.status).toBe(200);
       expect(world.marks.get((born.body as { project: { id: number } }).project.id)).toEqual({ mark: 'oak', opened: false });
+      expect(yield* projects()).toContain('marked');
 
       const refused = yield* add('refused', { 'greeting-mark': 'refused' });
       expect(refused).toMatchObject({
@@ -197,8 +208,16 @@ layer(root, { excludeTestServices: true })('a root composing the core with a mod
       expect(malformed).toMatchObject({ status: 409, body: { code: 'field-invalid', field: 'greeting-mark' } });
       const stranger = yield* add('stranger', { 'nobody-takes': true });
       expect(stranger).toMatchObject({ status: 409, body: { code: 'field-invalid', field: 'nobody-takes' } });
+      const gated = yield* add('gated', { 'greeting-mark': 'elm', 'greeting-gate': 'shut' });
+      expect(gated).toMatchObject({ status: 409, body: { code: 'field-invalid', reason: 'the gate is shut', field: 'greeting-gate' } });
+      expect([...world.marks.values()].map((one) => one.mark)).toEqual(['oak']);
       expect(yield* projects()).toContain('marked');
       expect(yield* projects()).not.toContain('refused');
+      expect(yield* projects()).not.toContain('gated');
+
+      const after = yield* add('after', {});
+      const id = (answer: { readonly body: unknown }) => (answer.body as { project: { id: number } }).project.id;
+      expect(id(after)).toBe(id(born) + 3);
     }),
   );
 });

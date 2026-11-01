@@ -31,11 +31,11 @@ export const creationSteps = (all: readonly CreationStep[]): CreationSteps => {
   const known = new Set(all.map((one) => one.id));
   return {
     take: Effect.fnUntraced(function* (contributed: Readonly<Record<string, unknown>>) {
-      const unknown = Object.keys(contributed).find((id) => !known.has(id));
-      if (unknown !== undefined)
-        return yield* new GateRefusal('field-invalid', `no creation step of this server takes "${unknown}"`, [
-          `create the project without "${unknown}", or through a build that takes it`,
-        ]).about(unknown);
+      const stray = Object.keys(contributed).find((id) => !known.has(id));
+      if (stray !== undefined)
+        return yield* new GateRefusal('field-invalid', `no creation step of this server takes "${stray}"`, [
+          `create the project without "${stray}", or through a build that takes it`,
+        ]).about(stray);
       const decoded = yield* Effect.forEach(
         all.filter((one) => Object.hasOwn(contributed, one.id)),
         (one) => taken(one, contributed[one.id]),
