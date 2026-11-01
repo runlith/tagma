@@ -16,6 +16,7 @@ import { openConnection, type ProcessConnection, type SpawnedChild, type Stateme
 import { makePrograms, Programs } from './programs.js';
 import { makeReaderPool, type OpenReader, type PoolState, type ReaderPool } from './ReaderPool.js';
 import { writerPermit } from './writerPermit.js';
+import type { ReadClass } from './ReaderLanes.js';
 
 export type SqliteProcessConfig = SqliteClientConfig & {
   readonly onLost: (reason: string) => void;
@@ -47,6 +48,10 @@ export type WriterStanding = {
   readonly waiting: number;
 };
 
+export type SnapshotReader = {
+  readonly run: <A, E, R>(query: Effect.Effect<A, E, R>) => Effect.Effect<A, E | SqlError, R>;
+};
+
 export class Connections extends Context.Service<
   Connections,
   {
@@ -54,10 +59,17 @@ export class Connections extends Context.Service<
     readonly writer: Effect.Effect<WriterStanding>;
     readonly retire: Effect.Effect<void, SqlError>;
     readonly handover: Effect.Effect<void, SqlError>;
+    readonly readSnapshot: <A, E, R>(
+      work: (reader: SnapshotReader) => Effect.Effect<A, E, R>,
+      kind?: ReadClass,
+    ) => Effect.Effect<A, E | SqlError, R>;
   }
 >()('@runlith/sqlite-process/Connections') {}
 
 const ATTR_DB_SYSTEM_NAME = 'db.system.name';
+
+const snapshotRefused = (message: string): SqlError =>
+  new SqlError({ reason: classifySqliteError(new Error(message), { operation: 'readSnapshot', message }) });
 
 type Declared = 'write' | 'read' | 'bulk';
 
@@ -245,6 +257,37 @@ const make = Effect.fnUntraced(function* (processes: ProcessPool, options: Sqlit
   );
   const physical = Context.get(Context.empty(), Clock.Clock);
   const connections = Connections.of({
+    readSnapshot: (work, kind = 'point') =>
+      Effect.scoped(
+        Effect.uninterruptibleMask((restore) =>
+          Effect.gen(function* () {
+            yield* admission;
+            const readers = pool;
+            if (readers === undefined) return yield* snapshotRefused('This sqlite owner has no read-only lane for a snapshot.');
+            const connection = yield* restore(kind === 'bulk' ? readers.takeBulk : readers.take);
+            yield* Effect.onError(restore(connection.executeRaw('BEGIN', [])), () => readers.discard(connection));
+            let active = true;
+            const reader: SnapshotReader = {
+              run: <A, E, R>(query: Effect.Effect<A, E, R>) =>
+                Effect.suspend<A, E | SqlError, R>(() =>
+                  active
+                    ? Effect.provideService(query, client.transactionService, [connection, 0])
+                    : Effect.fail(snapshotRefused('This sqlite read snapshot has ended.')),
+                ),
+            };
+            return yield* Effect.onExit(restore(Effect.suspend(() => work(reader))), (exit) =>
+              Effect.suspend(() => {
+                active = false;
+                return Effect.asVoid(
+                  Effect.onError(connection.executeRaw(Exit.isSuccess(exit) ? 'COMMIT' : 'ROLLBACK', []), () =>
+                    readers.discard(connection),
+                  ),
+                );
+              }),
+            );
+          }),
+        ),
+      ).pipe(Effect.withSpan('Connections.readSnapshot')),
     state: Effect.sync(() => (retired ? 'retired' : accepting ? 'open' : 'handing-over')),
     writer: Effect.sync(() => {
       const now = Number(physical.monotonicTimeNanosUnsafe()) / 1_000_000;

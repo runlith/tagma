@@ -83,6 +83,59 @@ it.live('the read that did not wait for a unit sees what that unit committed, on
   }).pipe(Effect.provide(machine)),
 );
 
+it.live('a snapshot read keeps its first cut while writes commit and releases its reader on every ending', () =>
+  Effect.gen(function* () {
+    const store = yield* MachineStore;
+    const units = yield* MachineUnits;
+    yield* store.db.run(sql`create table snapshot_probe (value integer not null)`);
+    yield* store.db.run(sql`insert into snapshot_probe values (1)`);
+    const rows = () => store.db.all<{ value: number }>(sql`select value from snapshot_probe`);
+    const seen = yield* units.read(
+      (unit) =>
+        Effect.gen(function* () {
+          const first = yield* unit.run(rows());
+          yield* units.write('snapshot.concurrent', (writing) => writing.run(store.db.run(sql`update snapshot_probe set value = 2`)));
+          const second = yield* unit.run(rows());
+          const readOnly = yield* Effect.result(unit.run(store.db.run(sql`update snapshot_probe set value = 3`)));
+          expect(readOnly).toMatchObject({ _tag: 'Failure' });
+          return { first, second, unit };
+        }),
+      { snapshot: true },
+    );
+    expect(seen.first).toEqual([{ value: 1 }]);
+    expect(seen.second).toEqual([{ value: 1 }]);
+    expect(yield* rows()).toEqual([{ value: 2 }]);
+    expect(yield* Effect.flip(seen.unit.run(rows()))).toMatchObject({ _tag: 'SqlError' });
+
+    const refused = yield* Effect.result(
+      units.read((unit) => Effect.andThen(unit.run(rows()), Effect.fail('refused' as const)), { snapshot: true }),
+    );
+    expect(refused).toMatchObject({ _tag: 'Failure', failure: 'refused' });
+
+    const opened = yield* Deferred.make<void>();
+    const cancelled = yield* Effect.forkChild(
+      units.read((unit) => Effect.andThen(unit.run(rows()), Effect.andThen(Deferred.succeed(opened, undefined), Effect.never)), {
+        snapshot: true,
+      }),
+    );
+    yield* Deferred.await(opened);
+    yield* Fiber.interrupt(cancelled);
+    const ending = yield* Fiber.await(cancelled);
+    expect(Exit.isFailure(ending) && Cause.hasInterruptsOnly(ending.cause)).toBe(true);
+    expect(yield* units.read((unit) => unit.run(rows()), { snapshot: true })).toEqual([{ value: 2 }]);
+  }).pipe(Effect.provide(machine)),
+);
+
+it.live('a snapshot read refuses a store without reader lanes instead of taking its writer', () =>
+  Effect.gen(function* () {
+    const store = yield* GraphStore;
+    const units = yield* GraphUnits;
+    const rows = () => store.db.all<{ value: number }>(sql`select 1 as value`);
+    expect(yield* Effect.flip(units.read((unit) => unit.run(rows()), { snapshot: true }))).toMatchObject({ _tag: 'SqlError' });
+    expect(yield* units.read((unit) => unit.run(rows()))).toEqual([{ value: 1 }]);
+  }).pipe(Effect.provide(graph)),
+);
+
 it.live('a unit refuses statements from another graph instance before they write', () =>
   Effect.gen(function* () {
     const first = yield* Layer.build(graph);

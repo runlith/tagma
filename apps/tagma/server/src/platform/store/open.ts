@@ -245,6 +245,7 @@ type Opened = {
   readonly freeing: Freeing;
   readonly moves: TableMoves;
   readonly programs: Programs['Service'];
+  readonly connections: Connections['Service'];
   readonly stalled: Effect.Effect<WriterStall | null>;
   readonly adopted: Effect.Effect<boolean>;
 };
@@ -259,12 +260,14 @@ const storeOf = <Brand extends StoreBrand>({
   freeing,
   moves,
   programs,
+  connections,
   stalled,
   processes,
   durable,
   adopted,
 }: Opened): Store<Brand> => ({
   processes,
+  connections,
   durable,
   db: storeDb<Brand>(db),
   path: identity.path,
@@ -333,6 +336,7 @@ const open = <Brand extends StoreBrand>(
           freeing,
           moves,
           programs,
+          connections,
           stalled: Effect.map(connections.writer, ({ holder, waiting }) =>
             holder === null || holder.quietMs < WRITER_STALL_MS ? null : { ...holder, waiting },
           ),

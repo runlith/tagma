@@ -58,7 +58,7 @@ export const unitOf = <Brand extends StoreBrand>(unit: Unbranded<Unit<Brand>>): 
 
 export const writeUnitOf = <Brand extends StoreBrand>(unit: Unbranded<WriteUnit<Brand>>): WriteUnit<Brand> => unit as WriteUnit<Brand>;
 
-export type ReadOptions = { readonly bulk?: boolean };
+export type ReadOptions = { readonly bulk?: boolean; readonly snapshot?: boolean };
 
 export type Units<Brand extends StoreBrand> = {
   write<T, E>(operation: WriteSet | string, work: (unit: WriteUnit<Brand>) => Effect.Effect<T, E>): Effect.Effect<T, E | StoreFailure>;
