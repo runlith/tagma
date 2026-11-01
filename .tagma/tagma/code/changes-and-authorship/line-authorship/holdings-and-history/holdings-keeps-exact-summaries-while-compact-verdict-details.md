@@ -8,11 +8,11 @@ edges:
     to: 01a19471-c11f-7184-8092-d9c144a8862f
 sources:
   - kind: file
+    ref: apps/tagma/server/src/change-record/holdings/details.ts
+  - kind: file
     ref: apps/tagma/server/src/change-record/holdings/judge.ts
   - kind: file
     ref: apps/tagma/server/src/change-record/holdings/judges.ts
-  - kind: file
-    ref: apps/tagma/server/src/change-record/holdings/details.ts
   - kind: file
     ref: apps/tagma/server/src/change-record/lines/packed.ts
 ---

@@ -15,8 +15,8 @@ edges:
     to: 01a14c14-6895-75c6-80f2-47bf37a0e8a9
 sources:
   - kind: file
-    ref: apps/tagma/app/src/lib/features/threads/WorkPeek.svelte
-  - kind: file
     ref: apps/tagma/app/src/lib/features/threads/WorkLine.svelte
+  - kind: file
+    ref: apps/tagma/app/src/lib/features/threads/WorkPeek.svelte
 ---
 The app half of the spec: `WorkPeek`, `WorkLine`, `CommandStatus` per the spec's popover decision and the mockup, and an unplaced held terminal opening as a tab of its holder thread (`opens.ts`, `worktrees/Terminals.svelte.ts`). Feature 37a0e8a9 is rewritten to the new behaviour in the same change.
