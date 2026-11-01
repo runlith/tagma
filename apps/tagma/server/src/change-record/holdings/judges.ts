@@ -15,6 +15,7 @@ import { Holdings, type HoldingsChange, type HoldingsFailure, type Judged } from
 import type { HeldChange } from '../contract/service/held.js';
 import { standing, workspaceChange } from '../store/tables.js';
 import type { FoldMemory } from '../lines/memory.js';
+import type { FoldRecall } from '../lines/residence.js';
 import type { Walks } from '../lines/walks.js';
 import type { GitMetadata } from '../record/metadata.js';
 import { introduced } from './introduced.js';
@@ -24,10 +25,6 @@ import { annotationsAt } from './annotation.js';
 import { Details } from './details.js';
 
 const THREADS_PER_STATEMENT = rowsPerStatement(1);
-
-const FOLD_MEMORY_CEILING = 512 * 1024 * 1024;
-
-export const foldMemoryBudget = (): number => Math.min(FOLD_MEMORY_CEILING, Math.floor(totalmem() / 32));
 
 export const judgedChange = (judges: Judges, change: HeldChange): Effect.Effect<void> => {
   const byCheckout = new Map<string, string[]>();
@@ -49,7 +46,7 @@ export const makeJudges = Effect.fnUntraced(function* ({
 }: {
   readonly folder: Folder;
   readonly walks: Walks;
-  readonly memory: FoldMemory;
+  readonly memory: FoldMemory<FoldRecall>;
   readonly metadata: GitMetadata;
 }) {
   const store = yield* MachineStore;

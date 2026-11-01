@@ -483,13 +483,15 @@ export function recordStep(state: FoldState, row: FoldRow, step: Step | Unknown,
   return 'reason' in applied ? applied : remembered(applied, row);
 }
 
-export type Restored = {
+type Restored = {
   readonly state: FoldState;
   readonly text: string | null;
   readonly restored: readonly string[];
   readonly partial: readonly string[];
   readonly blocked: readonly string[];
 };
+export type RestoreResult = Omit<Restored, 'state'>;
+
 export function restoreFold(state: FoldState, selected: ReadonlySet<string>, budget: Deadline, working?: Content): Restored | Unknown {
   let snapshot = state.snapshot;
   let bytes = state.bytes;

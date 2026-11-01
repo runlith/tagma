@@ -7,15 +7,18 @@ import {
   type HoldingsState,
   type HoldingsView,
   type UnprovenReason,
+  type NobodyWhy,
 } from '../contract/wire/holdings.js';
 import * as Schema from 'effect/Schema';
 import type { Digests, HoldingsChange } from '../contract/service/holdings.js';
-import type { FoldInput, Folded } from '../lines/fold.js';
-import { digestOf, type CachedFold, type FoldRow, type TextContent } from '../lines/folding.js';
+import type { FoldInput } from '../lines/fold.js';
+import { digestOf } from '../lines/folding.js';
+import type { FoldRecall, JudgedFold } from '../lines/residence.js';
 import type { FoldMemory } from '../lines/memory.js';
-import type { BaseAlignment, FormedLine, Verdict } from '../lines/projection.js';
-import { formedLines } from '../lines/owed.js';
-import type { Lane, WalkUnfinished } from '../lines/walks.js';
+import type { BaseAlignment, Verdict } from '../lines/projection.js';
+import { NO_WITNESSES, type Witnesses } from '../lines/evidence.js';
+import type { WalkUnfinished } from '../lines/walks.js';
+import type { Lane } from '../lines/lanes.js';
 import {
   conversionsOf,
   headShiftAt,
@@ -37,8 +40,7 @@ import { headsRead } from './heads.js';
 import { annotated, annotationsAt } from './annotation.js';
 import type { StoreFailure } from '../../platform/contract/service/store.js';
 import { holdingOf, unreadOf } from './verdicts.js';
-import { NO_WITNESSES, witnessesAt, witnessKey, type Witnesses } from './witnesses.js';
-import type { Landed } from '../lines/landed.js';
+import { witnessesAt, witnessKey } from './witnesses.js';
 import type { GitMetadata } from '../record/metadata.js';
 import { Descendants } from './paths.js';
 import { Requests } from './requests.js';
@@ -47,10 +49,10 @@ import { unpackVerdict } from '../lines/packed.js';
 
 export type Folder = (
   input: FoldInput,
-  cached: CachedFold | undefined,
+  cached: FoldRecall | undefined,
   alignment: BaseAlignment | undefined,
   lane: Lane,
-) => Effect.Effect<Folded, WalkUnfinished>;
+) => Effect.Effect<JudgedFold, WalkUnfinished>;
 
 type Ruling = { readonly holding: Holding; readonly verdict: Verdict };
 
@@ -69,7 +71,7 @@ type JudgeView = Omit<HoldingsView, 'paths'> & { readonly paths: readonly Entry[
 export type JudgeParts = {
   readonly readers: InputReaders;
   readonly folder: Folder;
-  readonly memory: FoldMemory;
+  readonly memory: FoldMemory<FoldRecall>;
   readonly details: Details;
   readonly totals: Totals;
   readonly metadata: GitMetadata;
@@ -89,8 +91,6 @@ const SLICE = PREPARED;
 const FOLDS_AT_ONCE = 2;
 
 const READS_AT_ONCE = 32;
-
-const isText = (side: FoldInput['base']): side is TextContent => side.kind === 'text' || side.kind === 'absent';
 
 export type Judge = ReturnType<typeof makeJudge>;
 
@@ -187,28 +187,24 @@ export const makeJudge = ({
 
   const foldIn = (
     input: FoldInput,
-    cached: CachedFold | undefined,
+    cached: FoldRecall | undefined,
     alignment: BaseAlignment | undefined,
     lane: Lane,
-  ): Effect.Effect<Folded | string> =>
+  ): Effect.Effect<JudgedFold | string> =>
     Effect.map(Effect.exit(Effect.suspend(() => parts.folder(input, cached, alignment, lane))), (exit) =>
       Exit.isSuccess(exit) ? exit.value : Cause.pretty(exit.cause),
     );
 
-  const cachedOf = (key: string, input: FoldInput): CachedFold | undefined => {
+  const cachedOf = (key: string, input: FoldInput): FoldRecall | undefined => {
     const state = memory.fold(key);
     if (state === undefined) return undefined;
-    const rows: FoldRow[] = [];
-    for (let link = state.rows; link !== null; link = link.previous) rows.push(link.row);
-    rows.reverse();
     const prefix =
-      rows.length <= input.rows.length &&
-      rows.every((one, at) => {
+      state.rows.length <= input.rows.length &&
+      state.rows.every((one, at) => {
         const current = input.rows[at];
-        return current?.id === one.id && digestOf(current.after) === digestOf(one.after);
+        return current?.id === one.id && digestOf(current.after) === one.after;
       });
-    if (prefix && state.normalized === input.normalized && digestOf(state.base) === digestOf(input.base))
-      return { kind: 'complete', state };
+    if (prefix && state.normalized === input.normalized && digestOf(state.base) === digestOf(input.base)) return state;
     memory.forget(key);
     return undefined;
   };
@@ -217,19 +213,16 @@ export const makeJudge = ({
 
   const remembered = (path: string) => memory.fold(keyOf(path));
 
-  const alignmentOf = (input: FoldInput): BaseAlignment | undefined =>
-    isText(input.base) && isText(input.head) ? memory.alignment(input.base, input.head, input.normalized) : undefined;
-
   const foldOf = Effect.fnUntraced(function* (
     path: string,
     given: Prepared,
     whole: () => Effect.Effect<Prepared | string>,
-    formed: readonly FormedLine[],
-    landed: readonly Landed[],
-  ): Effect.fn.Return<{ readonly answer: Folded | string; readonly used: Prepared }> {
+    witnesses: Witnesses,
+    outside: NobodyWhy,
+  ): Effect.fn.Return<{ readonly answer: JudgedFold | string; readonly used: Prepared }> {
     const key = keyOf(path);
-    const folded = (input: FoldInput, cached: CachedFold | undefined, alignment: BaseAlignment | undefined, lane: Lane) =>
-      foldIn(formed.length === 0 && landed.length === 0 ? input : { ...input, formed, landed }, cached, alignment, lane);
+    const folded = (input: FoldInput, cached: FoldRecall | undefined, alignment: BaseAlignment | undefined, lane: Lane) =>
+      foldIn({ ...input, evidence: { outside, witnesses } }, cached, alignment, lane);
     let used = given;
     let cached = cachedOf(key, used.input);
     if (cached === undefined && given.recalled) {
@@ -238,7 +231,7 @@ export const makeJudge = ({
       used = read;
     }
     const lane: Lane = urgent.has(path) ? 'now' : 'later';
-    let answer = yield* folded(used.input, cached, alignmentOf(used.input), lane);
+    let answer = yield* folded(used.input, cached, undefined, lane);
     const retried =
       cached !== undefined &&
       typeof answer !== 'string' &&
@@ -252,7 +245,7 @@ export const makeJudge = ({
         if (typeof read === 'string') return { answer: read, used };
         used = read;
       }
-      answer = yield* folded(used.input, undefined, alignmentOf(used.input), lane);
+      answer = yield* folded(used.input, undefined, undefined, lane);
     }
     if (
       used.input.partial === true &&
@@ -263,13 +256,12 @@ export const makeJudge = ({
       const read = yield* whole();
       if (typeof read === 'string') return { answer: read, used };
       used = read;
-      answer = yield* folded(used.input, cached, alignmentOf(used.input), lane);
+      answer = yield* folded(used.input, cached, undefined, lane);
     }
     if (typeof answer === 'string') {
       memory.forget(key);
       return { answer, used };
     }
-    if (answer.alignment !== null) memory.aligned(answer.alignment);
     if (answer.record === null) memory.forget(key);
     else memory.keep(key, answer.record);
     return { answer, used };
@@ -303,7 +295,6 @@ export const makeJudge = ({
     if (one === undefined) return unproven({ kind: 'worker', cause: 'the inputs answered nothing for the path' });
     const print = `${probe.print}\n${one.print}`;
     const digests = { head: digestOf(one.input.head), working: digestOf(one.input.working) };
-    const lane: Lane = urgent.has(probe.path) ? 'now' : 'later';
     if (known !== undefined && known.prepared === print && known.holding.git === git) {
       if (!requests.owes(probe.path)) return { ...known, ...base, prepared: print, digests };
       const packed = details.read(keyOf(probe.path), print);
@@ -316,8 +307,8 @@ export const makeJudge = ({
       probe.path,
       one,
       wholeOf(probe, conversions, urgent.has(probe.path) ? 'now' : 'later'),
-      formedLines(witnesses.debts),
-      witnesses.landed,
+      witnesses,
+      probe.unattributed === null ? { kind: 'external' } : { kind: 'unattributed', ...probe.unattributed },
     ).pipe(
       Effect.withSpan('Holdings.path', {
         attributes: {
@@ -329,11 +320,9 @@ export const makeJudge = ({
     if (typeof answer === 'string') return unproven({ kind: 'worker', cause: answer });
     const verdict = answer.result;
     const prepared = `${probe.print}\n${used.print}`;
-    const packed = yield* Effect.result(readers.walks.pack(verdict, details.limit, lane));
-    if (packed._tag === 'Failure') return unproven({ kind: 'worker', cause: packed.failure.reason });
-    details.keep(keyOf(probe.path), prepared, packed.success);
+    details.keep(keyOf(probe.path), prepared, answer.packed);
     if (requests.owes(probe.path)) verdicts.set(probe.path, verdict);
-    const holding = holdingOf(probe, git, verdict, witnesses);
+    const holding = holdingOf(probe, git, verdict, answer.nobody);
     if (holding.verdict.verdict === 'unknown') noteUnknown(probe.path, holding.verdict.reason);
     else logged.delete(`path:${probe.path}`);
     return {
@@ -514,8 +503,8 @@ export const makeJudge = ({
     yield* Effect.annotateCurrentSpan({
       'holdings.folded': asked.length - rest.size,
       'holdings.yielded': rest.size,
-      'fold.cache.bytes': memory.retained,
-      'fold.cache.budget': memory.limit,
+      'fold.cache.bytes': memory.retained + readers.walks.retained,
+      'fold.cache.budget': memory.limit + readers.walks.limit,
       'verdict.cache.bytes': details.retained,
       'verdict.cache.budget': details.limit,
     });

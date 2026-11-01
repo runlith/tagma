@@ -7,6 +7,8 @@ export type LineHunk = {
   readonly newText: string;
 };
 
+export type HunkLayout = Omit<LineHunk, 'oldText' | 'newText'>;
+
 function lineOffsets(lines: readonly string[]): number[] {
   const offsets = [0];
   for (const line of lines) offsets.push((offsets[offsets.length - 1] as number) + line.length + 1);

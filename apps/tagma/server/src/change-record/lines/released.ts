@@ -1,13 +1,15 @@
 import { contentDigest } from '@runlith/files/content';
+import * as Schema from 'effect/Schema';
 import type { LineHunk } from '@runlith/files/hunk';
 import type { Proven } from './projection.js';
 import { tokensOf } from './marks.js';
 
-export type ReleasedSpan = {
-  readonly firstLine: number;
-  readonly before: readonly string[];
-  readonly after: readonly string[];
-};
+export const ReleasedSpanSchema = Schema.Struct({
+  firstLine: Schema.Number,
+  before: Schema.Array(Schema.String),
+  after: Schema.Array(Schema.String),
+});
+export type ReleasedSpan = typeof ReleasedSpanSchema.Type;
 
 export type ReleasedLine = {
   readonly row: string;

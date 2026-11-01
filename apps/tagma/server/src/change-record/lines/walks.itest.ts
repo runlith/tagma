@@ -5,7 +5,7 @@ import { makeWalks } from './walks.js';
 import { foldPath } from './fold.js';
 import { contentOf } from './folding.js';
 import { stepsIn } from '@runlith/utils/sequenceDiff';
-import { unpackVerdict } from './packed.js';
+import { contentDigest } from '@runlith/files/content';
 
 const textOf = (lines: number, seed: string): string => Array.from({ length: lines }, (_, at) => `${seed} ${at}\n`).join('');
 
@@ -100,7 +100,66 @@ it.live('worker telemetry outlives a cancelled caller and ends when the owner cl
   }),
 );
 
-it.live('the worker-run fold answers the verdict of the pure fold and keeps its state in the asking process', () =>
+it.live('the worker classifies released and step-created nobody lines from serialized witnesses', () =>
+  Effect.gen(function* () {
+    const walks = yield* opened({ size: 1 });
+    const base = contentOf(null);
+    const working = yield* walks.content('released\nstepped\nexternal\n');
+    const answer = yield* walks.fold({
+      base,
+      head: base,
+      working,
+      rows: [],
+      normalized: false,
+      evidence: {
+        outside: { kind: 'external' },
+        witnesses: {
+          released: [
+            {
+              row: 'released',
+              thread: 'A',
+              reason: 'rewound',
+              span: JSON.stringify({ firstLine: 1, before: [], after: [contentDigest('released\n')] }),
+            },
+          ],
+          debts: [
+            {
+              commit: 'commit',
+              windowCount: 1,
+              windows: JSON.stringify([{ lead: null, before: ['stepped\n'], after: ['formed\n'], trail: null }]),
+            },
+          ],
+          landed: [],
+        },
+      },
+    });
+    expect(answer.nobody).toEqual([
+      { added: 1, removed: 0, why: { kind: 'released', thread: 'A', reason: 'rewound' } },
+      { added: 1, removed: 0, why: { kind: 'steps', commit: 'commit' } },
+      { added: 1, removed: 0, why: { kind: 'external' } },
+    ]);
+  }),
+);
+
+it.live('an evicted worker recall answers alignment instead of using a different replay state', () =>
+  Effect.gen(function* () {
+    const base = contentOf('one\n');
+    const after = contentOf('one\ntwo\n');
+    const input = { base, head: base, working: after, rows: [{ id: 'a', holder: 'A', before: base, after }], normalized: false };
+    const local = foldPath(input, stepsIn(1 << 23));
+    if (local.record === null) return yield* Effect.die('the recorded edit must have replay state');
+    const walks = yield* opened({ size: 1, memory: local.record.bytes + 512 });
+    const first = yield* walks.fold(input);
+    expect(first.record).not.toBeNull();
+    yield* walks.fold({ ...input, rows: [{ ...input.rows[0]!, id: 'b' }] });
+    const expired = yield* walks.fold(input, first.record ?? undefined);
+    expect(expired.result).toMatchObject({ verdict: 'unknown', reason: 'alignment' });
+    const fresh = yield* walks.fold(input);
+    expect(fresh.result).toMatchObject({ verdict: 'proven', hands: [{ holder: 'A', added: 1, removed: 0 }] });
+  }),
+);
+
+it.live('the worker-run fold preserves the pure verdict while its replay state stays behind a recall', () =>
   Effect.gen(function* () {
     const base = Array.from({ length: 400 }, (_, at) => `line ${at}\n`).join('');
     const first = base.replace('line 10\n', 'A\n');
@@ -117,20 +176,18 @@ it.live('the worker-run fold answers the verdict of the pure fold and keeps its 
       nobody: { added: 1, removed: 1 },
     });
     if (remote.result.verdict !== 'proven' || local.result.verdict !== 'proven') return yield* Effect.die('both folds must prove');
-    expect(remote.result.lines).toEqual(local.result.lines);
-    const packed = yield* walks.pack(remote.result, 1 << 20, 'now');
-    expect(packed).not.toBeNull();
-    if (packed === null) return yield* Effect.die('the verdict must fit its resident budget');
-    const restored = unpackVerdict(packed);
-    expect(restored.verdict).toBe('proven');
-    if (restored.verdict !== 'proven') return yield* Effect.die('the packed verdict must stay proven');
-    if (restored.lines === 'unweighed' || remote.result.lines === 'unweighed')
+    if (remote.result.lines === 'unweighed' || local.result.lines === 'unweighed')
       return yield* Effect.die('the text verdict must keep its lines');
-    expect([...restored.lines]).toEqual([...remote.result.lines]);
-    expect(restored.regions.map((region) => ({ ...region, lines: [...region.lines] }))).toEqual(
-      remote.result.regions.map((region) => ({ ...region, lines: [...region.lines] })),
+    expect([...remote.result.lines]).toEqual([...local.result.lines]);
+    expect(remote.result.regions.map((region) => ({ ...region, lines: [...region.lines] }))).toEqual(
+      local.result.regions.map((region) => ({ ...region, lines: [...region.lines] })),
     );
-    expect(restored.overwritten).toEqual(new Map(remote.result.overwritten));
-    expect(remote.record?.last).toBe('a');
+    expect(remote.result.overwritten).toEqual(new Map(local.result.overwritten));
+    expect(remote.record?.rows.at(-1)?.id).toBe('a');
+    const repeated = yield* walks.fold(input, remote.record ?? undefined);
+    expect(repeated.result).toMatchObject({ verdict: 'proven', hands: remote.result.hands, nobody: remote.result.nobody });
+    const restored = yield* walks.restore(input, new Set(['a']), 'now');
+    expect(restored.result).toMatchObject({ verdict: 'proven', writers: [{ row: 'a', holder: 'A', added: 1, removed: 1 }] });
+    expect(restored.restored).toMatchObject({ text: `${base.replace('line 300\n', '')}external\n`, restored: ['a'] });
   }),
 );

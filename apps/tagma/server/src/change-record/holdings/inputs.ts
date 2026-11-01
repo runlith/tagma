@@ -14,9 +14,11 @@ import type { MachineUnits } from '../../platform/contract/service/units.js';
 import { configuredGit, OwnGitFailed } from '../../platform/git/ownGit.js';
 import type { HoldingGit } from '../contract/wire/holdings.js';
 import type { HeadSide } from '../contract/service/holdings.js';
-import { contentOf, digestOf, type Content, type FoldRow, type FoldState } from '../lines/folding.js';
+import { contentOf, digestOf, type Content, type FoldRow } from '../lines/folding.js';
+import type { FoldRecall } from '../lines/residence.js';
 import type { FoldInput } from '../lines/fold.js';
-import type { Lane, Walks, WalkUnfinished } from '../lines/walks.js';
+import type { Walks, WalkUnfinished } from '../lines/walks.js';
+import type { Lane } from '../lines/lanes.js';
 import { commandUnattributed } from '../store/commandTables.js';
 import { followsStanding, standing, workspaceChange, workspaceChangeContent, workspaceChangeText } from '../store/tables.js';
 import { versionTexts } from '../record/evidence.js';
@@ -47,7 +49,7 @@ export type StoredRow = HunkRow & {
   readonly afterKept: boolean;
 };
 
-export type Unattributed = {
+type Unattributed = {
   readonly windows: readonly { readonly thread: string; readonly reason: string; readonly team: string | null }[];
 };
 
@@ -71,7 +73,7 @@ export type Probed = {
 
 export type Prepared = { readonly input: FoldInput; readonly print: string; readonly recalled: boolean };
 
-export type Remembered = (path: string) => FoldState | undefined;
+export type Remembered = (path: string) => FoldRecall | undefined;
 
 export type Known = Result.Result<Conversions, { readonly message: string }>;
 
@@ -272,10 +274,9 @@ export const probeAt = Effect.fn('Holdings.probe')(function* (
         ),
       ),
   );
-  const sides =
-    Result.isSuccess(status)
-      ? yield* headsAt(readers.git, checkout.dir, status.success.branch.head, requested, known)
-      : new Map<string, HeadSide>();
+  const sides = Result.isSuccess(status)
+    ? yield* headsAt(readers.git, checkout.dir, status.success.branch.head, requested, known)
+    : new Map<string, HeadSide>();
   const candidates = requested.filter(
     (path) => sides.get(path)?.kind === 'absent' && tracked._tag === 'Success' && !tracked.success.has(path),
   );
@@ -485,15 +486,13 @@ const baseDigestOf = (first: StoredRow | undefined, head: Content): string | nul
   return first.beforeKept ? first.beforeHash : digestOf(head);
 };
 
-const prefixOf = (state: FoldState, one: Sided, normalized: boolean): number => {
+const prefixOf = (state: FoldRecall, one: Sided, normalized: boolean): number => {
   if (state.normalized !== normalized || digestOf(state.base) !== baseDigestOf(one.rows[0], one.head)) return 0;
-  const kept: FoldRow[] = [];
-  for (let link = state.rows; link !== null; link = link.previous) kept.push(link.row);
+  const kept = state.rows;
   if (kept.length > one.rows.length) return 0;
-  kept.reverse();
   for (const [at, row] of kept.entries()) {
     const current = one.rows[at] as StoredRow;
-    if (current.id !== row.id || afterDigestOf(current) !== digestOf(row.after)) return 0;
+    if (current.id !== row.id || afterDigestOf(current) !== row.after) return 0;
   }
   return kept.length;
 };
@@ -593,7 +592,7 @@ export const assembled = Effect.fnUntraced(function* (
   remembered?: Remembered,
   deferred?: boolean,
 ): Effect.fn.Return<ReadonlyMap<string, Prepared>, StoreFailure> {
-  const recalls = new Map<string, { readonly state: FoldState; readonly rows: number }>();
+  const recalls = new Map<string, { readonly state: FoldRecall; readonly rows: number }>();
   if (remembered !== undefined && known?._tag === 'Success')
     for (const one of sided) {
       const state = remembered(one.path);

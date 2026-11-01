@@ -14,6 +14,8 @@ import { lookup, type Writer } from './marks.js';
 import type { Landed } from './landed.js';
 import { projectWork, summarize, type BaseAlignment, type FormedLine, type Proven, type Verdict } from './projection.js';
 import { completeFold, type FoldWork } from './jobs.js';
+import { formedLines, type Debt } from './owed.js';
+import type { FoldEvidence } from './evidence.js';
 
 export type FoldInput = {
   readonly base: Content;
@@ -23,10 +25,12 @@ export type FoldInput = {
   readonly normalized: boolean;
   readonly partial?: boolean;
   readonly formed?: readonly FormedLine[];
+  readonly debts?: readonly Debt[];
+  readonly evidence?: FoldEvidence;
   readonly landed?: readonly Landed[];
   readonly ended?: ReadonlySet<string>;
 };
-export type Folded = {
+type Folded = {
   readonly record: FoldState | null;
   readonly working: FoldState | null;
   readonly result: Verdict;
@@ -88,7 +92,7 @@ const sameVersion = (one: Content, other: Content): boolean =>
 export function foldPath(input: FoldInput, budget: Deadline, cached?: CachedFold, alignment?: BaseAlignment): Folded {
   return completeFold(foldWork(input, budget, cached, alignment), budget);
 }
-export function* foldWork(input: FoldInput, budget: Deadline, cached?: CachedFold, alignment?: BaseAlignment): FoldWork<Folded> {
+function* foldWork(input: FoldInput, budget: Deadline, cached?: CachedFold, alignment?: BaseAlignment): FoldWork<Folded> {
   const unknown = (reason: Unknown, row?: string): Folded => ({
     record: null,
     working: null,
@@ -143,7 +147,7 @@ export function* foldWork(input: FoldInput, budget: Deadline, cached?: CachedFol
     input.working,
     budget,
     alignment,
-    input.formed,
+    input.formed ?? formedLines(input.debts ?? []),
     input.landed,
     input.ended,
   );
