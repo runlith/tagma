@@ -30,6 +30,7 @@ import { seedDatabase } from './seed.js';
 import { storeTransaction, UnitStore, WriterTimings } from './transaction.js';
 import { storeProgram } from './programs.js';
 import { type Freeing, reclaiming, vacuumStore } from './vacuum.js';
+import { adoptSetAside, setAside } from './aside.js';
 import { checkStatement, readConsequences } from './writes.js';
 import { WriteSetMode } from '../contract/service/writes.js';
 import { TableMoves } from './moves.js';
@@ -256,41 +257,45 @@ const storeOf = <Brand extends StoreBrand>({
   stalled,
   processes,
   durable,
-}: Opened): Store<Brand> => ({
-  processes,
-  durable,
-  db: storeDb<Brand>(db),
-  path: identity.path,
-  identity,
-  schema,
-  transaction: storeTransaction<Brand>(db, timings, identity, moves, classed, processes.writerMetrics),
-  program: storeProgram<Brand>(db, programs, identity, moves, classed, processes.writerMetrics),
-  readOnly: (work) =>
-    Effect.scoped(
-      Effect.flatMap(makeWithDefaults(), (reader) => work(storeDb<Brand>(reader))).pipe(
-        Effect.provide(
-          Layer.unwrap(
-            Effect.map(ChildLedger, (ledger) =>
-              sqliteProcessLayer(
-                {
-                  filename: identity.path,
-                  readonly: true,
-                  readers: 0,
-                  onLost: (reason) => console.warn(`[tagma] an isolated reader at ${identity.path} is gone: ${reason}`),
-                  onSpawned: ({ pid }) => ledger.record({ pid, role: 'database' }),
-                },
-                processes,
+}: Opened): Store<Brand> => {
+  const transaction = storeTransaction<Brand>(db, timings, identity, moves, classed, processes.writerMetrics);
+  return {
+    processes,
+    durable,
+    db: storeDb<Brand>(db),
+    path: identity.path,
+    identity,
+    schema,
+    transaction,
+    program: storeProgram<Brand>(db, programs, identity, moves, classed, processes.writerMetrics),
+    readOnly: (work) =>
+      Effect.scoped(
+        Effect.flatMap(makeWithDefaults(), (reader) => work(storeDb<Brand>(reader))).pipe(
+          Effect.provide(
+            Layer.unwrap(
+              Effect.map(ChildLedger, (ledger) =>
+                sqliteProcessLayer(
+                  {
+                    filename: identity.path,
+                    readonly: true,
+                    readers: 0,
+                    onLost: (reason) => console.warn(`[tagma] an isolated reader at ${identity.path} is gone: ${reason}`),
+                    onSpawned: ({ pid }) => ledger.record({ pid, role: 'database' }),
+                  },
+                  processes,
+                ),
               ),
             ),
           ),
         ),
       ),
-    ),
-  vacuum: () => vacuumStore(db, identity.path, freeBytes),
-  freeing,
-  moves,
-  stalled,
-});
+    vacuum: () => vacuumStore(db, identity.path, freeBytes),
+    adopt: (file) => adoptSetAside<Brand>(db, transaction, file),
+    freeing,
+    moves,
+    stalled,
+  };
+};
 
 const open = <Brand extends StoreBrand>(
   identity: StoreIdentity,
@@ -376,6 +381,7 @@ const migrated = Effect.fn('Store.open')(function* (
     console.log(`[tagma] migration ${index + 1}/${pending.length} ${migration.name} …`);
     const startedAt = yield* Clock.currentTimeMillis;
     yield* observe({ phase: 'migration', path, at: startedAt, name: migration.name, index: index + 1, total: pending.length });
+    yield* setAside(db, path, migrations.folder, migration.name);
     const checked = yield* applyMigration(db, migration);
     console.log(
       `[tagma] migration ${index + 1}/${pending.length} ${migration.name} landed, foreign keys checked, in ${elapsed(startedAt, yield* Clock.currentTimeMillis)}`,
