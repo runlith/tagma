@@ -223,11 +223,15 @@
       "browser": "./src/composition/developer/catalog.ts",
       "default": "./src/composition/developer/catalog.ts"
     },
-    "./composition/operations": {
-      "types": "./src/composition/developer/operations.ts",
-      "release": "./src/composition/release/operations.ts",
-      "browser": "./src/composition/developer/operations.ts",
-      "default": "./src/composition/developer/operations.ts"
+    "./workspace/contract/wire/checkoutActs": {
+      "types": "./src/workspace/contract/wire/checkoutActs.ts",
+      "browser": "./src/workspace/contract/wire/checkoutActs.ts",
+      "default": "./src/workspace/contract/wire/checkoutActs.ts"
+    },
+    "./landing/contract/wire/checkoutCommits": {
+      "types": "./src/landing/contract/wire/checkoutCommits.ts",
+      "browser": "./src/landing/contract/wire/checkoutCommits.ts",
+      "default": "./src/landing/contract/wire/checkoutCommits.ts"
     },
     "./composition/shipped": {
       "types": "./src/composition/shipped.ts",

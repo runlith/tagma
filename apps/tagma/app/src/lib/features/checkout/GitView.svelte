@@ -14,7 +14,8 @@
   import Users from '@lucide/svelte/icons/users';
   import X from '@lucide/svelte/icons/x';
   import type { CheckoutEntry, ComparedPath } from '@tagma/server/workspace/contract/wire/checkout';
-  import { OPERATIONS } from '@tagma/server/composition/operations';
+  import { CHECKOUT_ACT_OPERATIONS } from '@tagma/server/workspace/contract/wire/checkoutActs';
+  import { CHECKOUT_COMMIT_OPERATIONS } from '@tagma/server/landing/contract/wire/checkoutCommits';
   import SeamHandle from '@runlith/seam/SeamHandle.svelte';
   import { Seam } from '@runlith/seam/Seam.svelte';
   import Button from '$lib/shared/ui/button/button.svelte';
@@ -94,7 +95,10 @@
     | { readonly act: 'amend'; readonly message: string; readonly rootId: NonNullable<typeof rootId> }
     | { readonly act: 'abort' };
 
-  type Asked = ReturnType<typeof OPERATIONS.discard_checkout.confirmation> & {
+  const { discard_checkout, abort_checkout } = CHECKOUT_ACT_OPERATIONS;
+  const { commit_checkout } = CHECKOUT_COMMIT_OPERATIONS;
+
+  type Asked = ReturnType<typeof discard_checkout.confirmation> & {
     readonly confirmLabel: string;
     readonly intent?: 'destructive';
   };
@@ -103,19 +107,19 @@
     const at = { at: { judged: selected.path } };
     if (pending.act === 'discard')
       return {
-        ...OPERATIONS.discard_checkout.confirmation({ rootId: selected.rootId, paths: pending.paths }, at),
-        confirmLabel: OPERATIONS.discard_checkout.confirmLabel,
-        intent: OPERATIONS.discard_checkout.intent,
+        ...discard_checkout.confirmation({ rootId: selected.rootId, paths: pending.paths }, at),
+        confirmLabel: discard_checkout.confirmLabel,
+        intent: discard_checkout.intent,
       };
     if (pending.act === 'abort')
       return {
-        ...OPERATIONS.abort_checkout.confirmation({ rootId: selected.rootId }, at),
-        confirmLabel: OPERATIONS.abort_checkout.confirmLabel,
-        intent: OPERATIONS.abort_checkout.intent,
+        ...abort_checkout.confirmation({ rootId: selected.rootId }, at),
+        confirmLabel: abort_checkout.confirmLabel,
+        intent: abort_checkout.intent,
       };
     return {
-      ...OPERATIONS.commit_checkout.confirmation({ rootId: pending.rootId, message: pending.message, amend: true }, at),
-      confirmLabel: OPERATIONS.commit_checkout.confirmLabel,
+      ...commit_checkout.confirmation({ rootId: pending.rootId, message: pending.message, amend: true }, at),
+      confirmLabel: commit_checkout.confirmLabel,
     };
   };
 

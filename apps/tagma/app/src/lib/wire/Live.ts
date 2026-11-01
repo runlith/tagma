@@ -110,18 +110,15 @@ export class LiveConnection {
   private socketOpen: Deferred.Deferred<void, LiveConnectionLost> | null = null;
   private paused = false;
   private refused = false;
-  private readonly group: () => LiveGroup;
 
   private constructor(
     private readonly life: Scope.Scope,
     private readonly fork: LiveFork,
     private readonly socket: PlatformSocket,
     private readonly origin: ServerOrigin,
-    private readonly catalog: Point<WireModule>,
+    private readonly group: () => LiveGroup,
     private readonly entries: ThreadEntryReader,
-  ) {
-    this.group = liveGroupFrom(catalog);
-  }
+  ) {}
 
   static make(
     socket: PlatformSocket,
@@ -132,7 +129,7 @@ export class LiveConnection {
     return Effect.flatMap(Scope.Scope, (life) =>
       Effect.map(
         FiberSet.makeRuntime<never, unknown, LiveGone>(),
-        (fork) => new LiveConnection(life, fork, socket, origin, catalog, entries),
+        (fork) => new LiveConnection(life, fork, socket, origin, liveGroupFrom(catalog), entries),
       ),
     );
   }
@@ -448,7 +445,7 @@ export class LiveConnection {
     ending: LiveEnding,
   ): { unsubscribe: () => void } {
     const scope = Scope.forkUnsafe(this.life);
-    const connection = new LiveConnection(scope, this.fork, this.socket, this.origin, this.catalog, this.entries);
+    const connection = new LiveConnection(scope, this.fork, this.socket, this.origin, this.group, this.entries);
     const detach = connection.attach();
     Effect.runSync(Scope.addFinalizer(scope, Effect.sync(detach)));
     const held = connection.hold(open, onItem, onFailure, resume, ending);

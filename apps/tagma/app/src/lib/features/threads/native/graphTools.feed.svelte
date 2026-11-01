@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { operationsOwnedBy } from '@tagma/server/composition/operations';
+  import { OperationTable } from '$lib/wire/operation.js';
   import type { GraphToolAnswer } from '@tagma/server/graph/contract/wire/toolAnswers';
   import { graphText } from '@tagma/server/graph/voice/answers';
   import { settingsText } from '@tagma/server/settings/voice';
@@ -16,6 +16,8 @@
 
   const tags = TagCatalog.use();
   const naming = SessionNaming.use();
+  const operations = OperationTable.use();
+  const operationsOwnedBy = (module: string) => operations.ownedBy(module);
 
   const voiced = (names: readonly string[], modelText: (output: unknown) => string | null, render?: typeof nativeToolRow) =>
     names.map((name) => kinds.registerTool(contributor, { name, modelText, render }));

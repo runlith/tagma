@@ -42,6 +42,7 @@
   import { ThreadList } from '../List.svelte.js';
   import { Notices } from '$lib/features/notices/Service.svelte.js';
   import { Door } from '$lib/wire/Door.js';
+  import { OperationTable } from '$lib/wire/operation.js';
   import { Refusal } from '$lib/wire/refusal.js';
   import type { ThreadSlot } from '../ThreadSlot.svelte.js';
   import { ThreadPlace } from '../thread/ThreadPlace.svelte.js';
@@ -57,7 +58,8 @@
 
   let { host, lead, sheets = false }: { host: ThreadSlot; lead?: Snippet; sheets?: boolean } = $props();
 
-  provideChatStrings(nativeStrings());
+  const operations = OperationTable.use();
+  provideChatStrings(nativeStrings((toolName) => operations.declared(toolName)?.presentation));
 
   const roads = PathRoads.use();
 
