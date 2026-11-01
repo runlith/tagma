@@ -94,7 +94,7 @@ const eventsOf = (
           payload: { entry, messages: [entry.role === 'user' ? Message.user(entry.text) : Message.assistant(entry.text)] },
         };
       }
-      if (entry.type === 'compaction' && entry.status === 'completed' && entry.summary !== undefined) {
+      if (entry.type === 'compaction' && entry.status === 'completed' && entry.summary !== undefined && entry.summary !== '') {
         const keepFrom = length;
         length = 1;
         const head = Message.make({ role: 'user', content: entry.summary, metadata: foldedReferences(history) });
