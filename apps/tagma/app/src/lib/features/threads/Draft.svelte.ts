@@ -341,7 +341,7 @@ export class ThreadDraft implements ChatDraft<Draft> {
     const attachments: ThreadAttachmentRef[] = [];
     const staged = [
       ...draft.items.map((item) => ({
-        receipt: `${sessionId}:${item.kind}:${item.key}:${JSON.stringify(item.data)}`,
+        receipt: `${sessionId}:${JSON.stringify([item.kind, item.key, item.data])}`,
         title: item.title,
         read: () => this.staged.file(item),
         item,

@@ -6,10 +6,10 @@ import type { ShellPort } from '$lib/features/workspace/ShellOps.js';
 import type { Door } from '$lib/wire/Door.js';
 import type { LiveConnection } from '$lib/wire/Live.js';
 import type { SoundChannel } from '$lib/wire/SoundChannel.js';
-import type { TagmaMethod } from '../views/methods.js';
 import { argumentsOf, needed, openLink } from '../views/params.js';
 import { resourceSubscription } from '../views/resourceFeed.js';
-import { INVALID_PARAMS, type ViewCall, type ViewHost, type ViewParams, ViewRefusal } from '../views/ViewBridge.js';
+import { INVALID_PARAMS, type ViewCall, type ViewHost, type ViewMethod, type ViewParams, ViewRefusal } from '../views/ViewBridge.js';
+import { capabilityOf, HOST_METHODS, type HostMethod, type TagmaMethod, THREAD_CHANGED } from './methods.js';
 import { sectionOpening } from './sectionOpen.js';
 import type { ViewSets } from './ViewSets.svelte.js';
 
@@ -31,8 +31,6 @@ export type TagmaAppHostOwners = {
   readonly links: LinkPort;
   readonly methods: readonly TagmaMethod[];
 };
-
-export const THREAD_CHANGED = 'tagma/notifications/thread';
 
 export type ThreadReading =
   | {
@@ -133,10 +131,35 @@ export function tagmaAppHost(owners: TagmaAppHostOwners, mount: TagmaAppMount): 
   const lens = { project: String(mount.projectId) };
   const at = { app: mount.tagmaApp, view: mount.view };
   const keyOf = (params: ViewParams): string => needed(params, 'key');
-  const contributed = methods.map((declared) => [`tagma/${declared.name}`, declared] as const);
+  const own: Record<HostMethod, ViewMethod> = {
+    open: async (params) => {
+      const place = sectionOpening(shell, sets, mount.tagmaApp, params);
+      if (place !== null) return shellAct(place);
+      const threadId = needed(params, 'threadId');
+      if (params.beside !== undefined && typeof params.beside !== 'boolean') throw new ViewRefusal(INVALID_PARAMS, 'beside is a boolean');
+      if (!navigator.userActivation.isActive) throw new Error('a thread opens only from a click in the view');
+      return shellAct(shell.openThread({ projectId: mount.projectId, threadId }, params.beside === true ? 'beside' : 'main'));
+    },
+    'storage/get': async (params, { signal }) => {
+      const read = answered(await door.perform('read_view_storage', { ...at, key: keyOf(params) }, lens, { signal }));
+      return read.stored ? { stored: true, value: read.value } : { stored: false };
+    },
+    'storage/set': async (params, { signal }) => {
+      const written = answered(
+        await door.perform('write_view_storage', { ...at, key: keyOf(params), value: params.value }, lens, { signal }),
+      );
+      return { stored: written.stored };
+    },
+    thread: async (params, call) => watchThread(presence, needed(params, 'threadId'), call),
+    'thread/unwatch': async (params, call) => unwatchThread(needed(params, 'threadId'), call),
+  };
+  const tagma: readonly (readonly [string, ViewMethod])[] = [
+    ...HOST_METHODS.map((name) => [name, own[name]] as const),
+    ...methods.map((declared) => [declared.name, declared.method({ door, live, sound }, mount)] as const),
+  ];
   return {
     methods: {
-      ...Object.fromEntries(contributed.map(([name, declared]) => [name, declared.method({ door, live, sound }, mount)])),
+      ...Object.fromEntries(tagma.map(([name, method]) => [`tagma/${name}`, method])),
       'tools/call': async (params, { signal }) =>
         answered(
           await door.perform(
@@ -157,33 +180,8 @@ export function tagmaAppHost(owners: TagmaAppHostOwners, mount: TagmaAppMount): 
       },
       'ui/open-link': openLink(links),
       'ui/request-display-mode': async () => ({ mode: 'inline' }),
-      'tagma/open': async (params) => {
-        const place = sectionOpening(shell, sets, mount.tagmaApp, params);
-        if (place !== null) return shellAct(place);
-        const threadId = needed(params, 'threadId');
-        if (params.beside !== undefined && typeof params.beside !== 'boolean') throw new ViewRefusal(INVALID_PARAMS, 'beside is a boolean');
-        if (!navigator.userActivation.isActive) throw new Error('a thread opens only from a click in the view');
-        return shellAct(shell.openThread({ projectId: mount.projectId, threadId }, params.beside === true ? 'beside' : 'main'));
-      },
-      'tagma/storage/get': async (params, { signal }) => {
-        const read = answered(await door.perform('read_view_storage', { ...at, key: keyOf(params) }, lens, { signal }));
-        return read.stored ? { stored: true, value: read.value } : { stored: false };
-      },
-      'tagma/storage/set': async (params, { signal }) => {
-        const written = answered(
-          await door.perform('write_view_storage', { ...at, key: keyOf(params), value: params.value }, lens, { signal }),
-        );
-        return { stored: written.stored };
-      },
-      'tagma/thread': async (params, call) => watchThread(presence, needed(params, 'threadId'), call),
-      'tagma/thread/unwatch': async (params, call) => unwatchThread(needed(params, 'threadId'), call),
     },
-    capabilities: {
-      ...Object.fromEntries(contributed.map(([name]) => [name, {}])),
-      'tagma/open': {},
-      'tagma/storage': {},
-      'tagma/thread': {},
-    },
+    capabilities: Object.fromEntries(tagma.map(([name]) => [capabilityOf(name), {}])),
     subscribe: resourceSubscription(
       live,
       (uri) => (client) => client['views.resource.subscribe']({ projectId: mount.projectId, ...at, uri }),

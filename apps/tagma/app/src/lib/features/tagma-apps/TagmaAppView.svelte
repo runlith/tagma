@@ -7,7 +7,7 @@
   import { Door } from '$lib/wire/Door.js';
   import { Live } from '$lib/wire/Live.js';
   import { SoundChannel } from '$lib/wire/SoundChannel.js';
-  import { TagmaMethods } from '../views/methods.js';
+  import { TagmaMethods } from './methods.js';
   import ResultFrame from '../views/ResultFrame.svelte';
   import type { ViewDocument } from '../views/ViewBridge.js';
   import ViewFrame from '../views/ViewFrame.svelte';

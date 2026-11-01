@@ -67,6 +67,26 @@
       "browser": "./src/lib/app/chrome/creation.ts",
       "default": "./src/lib/app/chrome/creation.ts"
     },
+    "./points/parts": {
+      "types": "./src/lib/shared/window/parts.ts",
+      "browser": "./src/lib/shared/window/parts.ts",
+      "default": "./src/lib/shared/window/parts.ts"
+    },
+    "./points/staged": {
+      "types": "./src/lib/shared/threads/staged.ts",
+      "browser": "./src/lib/shared/threads/staged.ts",
+      "default": "./src/lib/shared/threads/staged.ts"
+    },
+    "./points/methods": {
+      "types": "./src/lib/features/tagma-apps/methods.ts",
+      "browser": "./src/lib/features/tagma-apps/methods.ts",
+      "default": "./src/lib/features/tagma-apps/methods.ts"
+    },
+    "./speech/captures": {
+      "types": "./src/lib/features/speech/Captures.svelte.ts",
+      "browser": "./src/lib/features/speech/Captures.svelte.ts",
+      "default": "./src/lib/features/speech/Captures.svelte.ts"
+    },
     "./points/wire": {
       "types": "./src/lib/wire/WireEntryKinds.ts",
       "browser": "./src/lib/wire/WireEntryKinds.ts",

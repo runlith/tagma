@@ -1,7 +1,7 @@
 import { SPEECH_NOTIFICATION } from '@tagma/server/speech/contract/wire/view';
 import { Layer } from '@runlith/layer/Layer';
 import { SettingSections } from '$lib/features/settings/section.js';
-import { TagmaMethods } from '$lib/features/views/methods.js';
+import { TagmaMethods } from '$lib/features/tagma-apps/methods.js';
 import { Surfaces } from '$lib/features/workspace/surface.js';
 import { Panes } from '$lib/shared/panes/pane.js';
 import { StagedKinds } from '$lib/shared/threads/staged.js';

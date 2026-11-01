@@ -17,7 +17,7 @@
 
 {#if items.length > 0 || draft.documents.length > 0}
   <div class="flex flex-wrap gap-1.5 pb-1">
-    {#each items as { item, Card } (`${item.kind}/${item.key}`)}
+    {#each items as { item, Card } (JSON.stringify([item.kind, item.key]))}
       <Card {item} remove={() => draft.unstage(item)} />
     {/each}
     {#each draft.documents as document (document.id)}

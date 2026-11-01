@@ -2,9 +2,9 @@
   import ErrorBoundary from '@runlith/error-boundary/ErrorBoundary.svelte';
   import DialogHost from '@runlith/primitives/DialogHost.svelte';
   import LauncherHost from '@runlith/primitives/LauncherHost.svelte';
-  import { type Component, type Snippet, untrack } from 'svelte';
+  import type { Component, Snippet } from 'svelte';
   import { Router } from '@runlith/layer/Router';
-  import { SurfaceRegistry } from '$lib/features/workspace/surface.js';
+  import FormerRoutes from './FormerRoutes.svelte';
   import { App } from '@runlith/layer/svelte/App.svelte';
   import LinkMenu from '$lib/features/opening/LinkMenu.svelte';
   import { Opening } from '$lib/features/opening/Opening.svelte.js';
@@ -26,16 +26,9 @@
   const theme = Theme.use();
   const router = Router.use();
   const opening = Opening.use();
-  const surfaces = SurfaceRegistry.use();
   const app = App.current();
 
   $effect(() => opening.attach(app));
-
-  $effect(() => {
-    if (router.routeId != null) return;
-    const moved = surfaces.moved(router.url);
-    if (moved !== null) untrack(() => void router.replace(moved));
-  });
 
   $effect(() => theme.paint());
 
@@ -72,6 +65,7 @@
 </script>
 
 <svelte:window ondragover={refuseStrayFiles} ondrop={refuseStrayFiles} />
+<FormerRoutes />
 
 {#if router.routeId === '/_desktop/dictation' || router.routeId === '/pair'}
   {@render children()}

@@ -308,7 +308,7 @@ function ahead(returned: string, standing: string): string {
 }
 
 function itemKey(item: StagedItem): string {
-  return `${item.kind}/${item.key}`;
+  return JSON.stringify([item.kind, item.key]);
 }
 
 function outboxKey(inputId: string): string {

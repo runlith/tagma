@@ -7,7 +7,7 @@ import { Notices } from '$lib/features/notices/Service.svelte.js';
 import { Door } from '$lib/wire/Door.js';
 import { Live, type LiveConnection } from '$lib/wire/Live.js';
 
-const keyOf = (capture: { readonly kind: string; readonly id: string }): string => `${capture.kind}/${capture.id}`;
+const keyOf = (capture: { readonly kind: string; readonly id: string }): string => JSON.stringify([capture.kind, capture.id]);
 
 export class Captures extends Service<Captures>()('SpeechCaptures', { tier: 'app' }) {
   static *make() {
