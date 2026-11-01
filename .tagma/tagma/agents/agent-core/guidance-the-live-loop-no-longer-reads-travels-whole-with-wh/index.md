@@ -18,7 +18,7 @@ sources:
     ref: packages/agent/src/agent/AgentSignal.ts
     symbol: agentSignalMessages
 ---
-A guide reaches the model through the live loop's step guides only while the loop that queued it still plans another step. Three cases outlive that loop. In each, the guides travel whole — text, `state`, `retell` — with a record the thread keeps, and the next request reads them as guidance messages. That way a rule judging by told state (a capability cue, the notes rule) sees them as delivered instead of offering them again.
+A guide reaches the model through the live loop's step guides only while the loop that queued it still plans another step. Three cases outlive that loop. In each, the guides travel whole — text, `state`, `retell` — with a record the thread keeps, and the next request reads them as guidance messages. That way a rule judging by told state (a capability cue, the notes rule) sees them as delivered instead of offering them again. Identical keyed guides are coalesced when they share one native delivery; independently delivered background endings retain their own guides.
 
 - **Parking.** Guides still queued when a run parks — a parked call's `beforeTool` context, an answered sibling's `afterTool` context — ride the parked question (`guidance`). They are written after the question's results when it ends: answered, lapsed, stopped, cleared or moved to the background. Written at park time, they would put a user message between a tool call and its result. A run that ends without parking writes its untold guides as a guidance event at its end.
 - **The answer door.** Guides of the calls an answer runs are written in the same transaction as those calls' results.
