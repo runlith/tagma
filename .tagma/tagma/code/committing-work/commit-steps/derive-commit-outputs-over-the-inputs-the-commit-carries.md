@@ -9,4 +9,4 @@ fields:
     "status": "in_work"
   }
 ---
-Run declared derivations and built-in lock-only generators in the commit tree when their inputs or output change. Preserve working outputs derived from all working inputs, release the landing session's ownership of their residue, and report failed derivations with omitted input holders. Prove the shared-manifest incident and generic derivation through native submit_work; update the program-written-file contract.
+Regenerate selected program-origin content over a partial landing's commit tree with caller derive commands or matching project declarations, without ecosystem tables or automatic command replay. Preserve working outputs and recorded authorship, retain command-observed origin independently of author, and report missing or failed derivations with the excluded changes. Prove the real opaque package-manager incident, typed-edit origin retention, project declarations and unchanged-output removal through native submit_work.
