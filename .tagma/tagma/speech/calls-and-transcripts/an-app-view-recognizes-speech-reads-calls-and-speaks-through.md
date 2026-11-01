@@ -24,7 +24,7 @@ sources:
 ---
 **Value.** An app view builds its own voice interface — dictation, a live call transcript, speech output — on Tagma speech, with no keys, models, or microphone access of its own.
 
-**How.** The `tagma/speech` method of the app-view bridge with actions: status, recognition, call subscription and its transcript, tail read-out, unsubscribe, speak, and silence. Subscription events arrive as `tagma/notifications/speech` notifications.
+**How.** The `tagma/speech` method of the app-view bridge with actions: status, recognition, tail read-out, unsubscribe, speak, and silence; its events arrive as `tagma/notifications/speech` notifications. A call subscription and its transcript come through the `tagma/calls` method, with `tagma/notifications/calls`.
 
 **Behaviour.**
 - Recognition records audio where ordinary dictation does: on the server machine — the server, on a paired device — the device itself.
