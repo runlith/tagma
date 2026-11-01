@@ -4291,10 +4291,6 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead apps/tagma/server/src/executions/host/boot.ts#HostPresence",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "dead-code dead apps/tagma/server/src/executions/host/boot.ts#RaiseInput",
           "owner": "5a3bed29"
         },
