@@ -7,6 +7,7 @@ import type { WireThread } from '@tagma/server/threads/contract/wire/snapshot';
 import { Failure } from '@runlith/layer/Failure';
 import { Layer } from '@runlith/layer/Layer';
 import { stubMutation } from '@runlith/query/testing';
+import { Cache } from '@runlith/query/repo';
 import { afterEach, expect, test, vi } from 'vitest';
 import { waitFor } from '@runlith/testing/flush';
 
@@ -20,6 +21,8 @@ import { FolderActs } from './FolderActs.js';
 import { ThreadOnScreen } from './OnScreen.svelte.js';
 import { Notices } from '$lib/features/notices/Service.svelte.js';
 import { Refusal } from '$lib/wire/refusal.js';
+import { Door } from '$lib/wire/Door.js';
+import { testDoor } from '$lib/wire/testing.js';
 
 let app: TestApp | undefined;
 const feed = liveFeed();
@@ -543,7 +546,7 @@ test('an act on a team member homed in another project is addressed to that proj
   ]);
 });
 
-function onScreen(family: (key: { projectId: number; threadId: string }) => Promise<readonly ThreadListRow[]>) {
+function onScreen(family: (threadId: string) => Promise<readonly ThreadListRow[]>) {
   const screen = $state<{ page: null; host: null; shown: { activeId: string; projectId: number }[] }>({
     page: null,
     host: null,
@@ -565,6 +568,45 @@ function onScreen(family: (key: { projectId: number; threadId: string }) => Prom
 
 const ids = (rows: readonly ThreadListRow[] | null): string[] => (rows ?? []).map((entry) => entry.id).sort();
 
+test('an open member thread joins its group column through the thread family HTTP door', async () => {
+  const old = { ...row('01a1987e-0000-7000-8000-000000000001', 1), projectId: 5 };
+  const screen = $state({ page: null, host: null, shown: [{ activeId: old.id, projectId: old.projectId }] });
+  const door = testDoor(async (input, init) => {
+    const request = new Request(input, init);
+    const url = new URL(request.url);
+    if (url.pathname !== '/api/op/list_threads') throw new Error(`Unexpected request ${request.url}`);
+    const selection = (await request.json()) as { of: string };
+    const project = url.searchParams.get('project');
+    if (project !== null && project !== String(old.projectId))
+      return new Response(
+        JSON.stringify({
+          code: 'place-mismatch',
+          reason: `This call names project ${project}, but its subject belongs to project ${old.projectId}.`,
+          unblock: [`call project ${old.projectId} for this subject`],
+        }),
+        { status: 409, headers: { 'content-type': 'application/json' } },
+      );
+    return Response.json({ status: 'rows', rows: selection.of === old.id ? [old] : [], total: 1, before: null });
+  });
+  app = mountShell(
+    Layer.mergeAll(ThreadList, FolderActs, Notices, ThreadsRepo, Cache.of({ defaultOptions: { queries: { retry: false } } })),
+    Layer.mergeAll(
+      Layer.of(Door, door),
+      Layer.of(Live, feed.live),
+      Layer.of(Workspace, soloWorkspace({ tileIdOf: () => 45 })),
+      Layer.of(ThreadOnScreen, screen as never),
+      Layer.of(Failure, new Failure((reason) => void reported.push(reason))),
+    ),
+    { at: { projectId: 45, branch: null } },
+  );
+  const list = app.get(ThreadList);
+  feed.frame?.({ type: 'list', rows: [], roots: 1, windowBefore: null });
+
+  await waitFor(() => expect(reported.length > 0 || list.row(old.id) !== undefined).toBe(true));
+  expect(reported).toEqual([]);
+  expect(list.threads.map((thread) => [thread.id, thread.projectId])).toEqual([[old.id, old.projectId]]);
+});
+
 test('a thread opened below the window joins the list with its live family while on screen, and leaves with it', async () => {
   const fresh = row('fresh', 10);
   const old = row('old', 1);
@@ -576,7 +618,6 @@ test('a thread opened below the window joins the list with its live family while
 
   screen.shown = [{ activeId: child.id, projectId: 1 }];
   await waitFor(() => expect(ids(list.threads)).toEqual(['fresh', 'old', 'old-child']));
-  expect(family).toHaveBeenCalledWith({ projectId: 1, threadId: child.id });
   expect(list.node(old.id)?.children.map((node) => node.row.id)).toEqual([child.id]);
 
   feed.frame?.({ type: 'row', row: { ...child, title: 'renamed' } });

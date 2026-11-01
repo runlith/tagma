@@ -78,17 +78,14 @@ export const ThreadsRepo = Repo.define(
 
     family: keyed({
       gcTime: 0,
-      loader: async (
-        { key, signal }: KeyedLoaderContext<{ projectId: number; threadId: string }>,
-        door,
-      ): Promise<readonly ThreadListRow[]> => {
+      loader: async ({ key, signal }: KeyedLoaderContext<string>, door): Promise<readonly ThreadListRow[]> => {
         const rows: ThreadListRow[] = [];
         let cursor: string | undefined;
         do {
           const page = await door.perform(
             'list_threads',
-            { of: ThreadId.make(key.threadId), reach: 'tree', set: 'all', limit: FAMILY_PAGE, cursor, shape: 'rows' },
-            at(key.projectId),
+            { of: ThreadId.make(key), reach: 'tree', set: 'all', limit: FAMILY_PAGE, cursor, shape: 'rows' },
+            {},
             { signal },
           );
           if (page.status !== 'rows') throw new Error('a thread family answered without rows');

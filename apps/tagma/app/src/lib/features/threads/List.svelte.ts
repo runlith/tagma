@@ -428,7 +428,7 @@ export class ThreadList extends Service<ThreadList>()('ThreadList', { tier: 'til
   private async readFamily(id: string): Promise<readonly ThreadListRow[] | undefined> {
     const era = this.era;
     try {
-      const rows = await this.repo.family.key({ projectId: this.aim.tileId, threadId: id }).refresh({ throwOnError: true });
+      const rows = await this.repo.family.key(id).refresh({ throwOnError: true });
       return era === this.era ? rows : undefined;
     } catch (error) {
       if (era === this.era) throw error;
