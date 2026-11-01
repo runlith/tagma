@@ -3,7 +3,7 @@ import type * as Tracer from 'effect/Tracer';
 import type { SpanPayload } from './protocol/records.js';
 
 export const TRACE_BUFFER_MS = 2_000;
-const TRACE_BUFFER_BYTES = 256 * 1024;
+export const TRACE_BUFFER_BYTES = 256 * 1024;
 export const KEEP_ONE_TRACE_IN = 100;
 
 export type TraceKeep = 'slow' | 'failed' | 'stalled' | 'hash';
