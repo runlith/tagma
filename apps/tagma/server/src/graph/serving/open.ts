@@ -458,7 +458,7 @@ export const makeMirrorBuilder = Effect.fnUntraced(function* ({
                                 gates,
                                 stealthLayout,
                               )(
-                                Effect.map(refused(attachShadowTree(git, side, checkout, stealthLayout, steps)), (held) => {
+                                Effect.map(refused(attachShadowTree(git, sideOf(row.id), checkout, stealthLayout, steps)), (held) => {
                                   attached = stealthTree(stealthLayout, held, null);
                                   return attached;
                                 }),

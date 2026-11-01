@@ -16,6 +16,13 @@ export type TrackedSides = {
   readonly tracked: ReadonlyMap<string, string>;
 };
 
+export type BranchRelation = {
+  readonly untracked: readonly string[];
+  readonly ahead: readonly string[];
+  readonly behind: readonly { readonly branch: string; readonly local: string; readonly tracked: string }[];
+  readonly diverged: readonly string[];
+};
+
 export type Exchange = {
   readonly side: (projectId: number) => GraphSide;
   readonly opened: (projectId: number, gitDir: string) => void;
@@ -26,12 +33,13 @@ type Replaced<A> = { readonly value: A; readonly aside: string };
 
 export type ExchangeHost = {
   readonly gitDir: (projectId: number) => Effect.Effect<string, GateRefusal<'not-found' | OpenRefusal>>;
-  readonly follow: (gitDir: string, sides: TrackedSides) => Effect.Effect<boolean, OwnGitFailed | GateRefusal<OpenRefusal>>;
+  readonly follow: (gitDir: string, relation: BranchRelation) => Effect.Effect<boolean, OwnGitFailed | GateRefusal<OpenRefusal>>;
   readonly moved: (gitDir: string) => Effect.Effect<void, GateRefusal<OpenRefusal>>;
   readonly open: (projectId: number) => Effect.Effect<void, GateRefusal<OpenRefusal>>;
   readonly replace: <A, E>(
     projectId: number,
     between: Effect.Effect<A, E>,
+    undo: Effect.Effect<void, E>,
   ) => Effect.Effect<Replaced<A>, E | GateRefusal<OpenRefusal | 'graph-pool'>>;
 };
 

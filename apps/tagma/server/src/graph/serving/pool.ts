@@ -568,7 +568,11 @@ export const makeGraphPool = Effect.gen(function* () {
       moved: (gitDir) => freshnessGate.remoteMoved(gitDir),
       exclusive: (projectId, effect) => copies.exclusive(projectId, Effect.uninterruptible(effect)),
       release: dropAll,
-      open: (projectId) => Effect.flatMap(resolve({ projectId }), (served) => served.settled(true)),
+      open: Effect.fnUntraced(function* (projectId: number) {
+        const served = yield* resolve({ projectId });
+        if (served.stealth !== null) yield* served.stealth.attach;
+        yield* served.settled(true);
+      }),
       reopen: (projectId) => Effect.flatMap(within(projectId, null), (served) => served.settled(true)),
     }),
   ).pipe(Effect.provideService(Scope.Scope, keepScope));

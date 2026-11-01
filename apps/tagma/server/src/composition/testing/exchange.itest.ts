@@ -8,7 +8,7 @@ import { Context, Deferred, Effect, FileSystem, Layer, Schedule, Schema } from '
 import { endHosts } from '../../executions/testing/doubles.js';
 import { type CreationStep, PROJECT_CREATION } from '../../graph/contract/service/creation.js';
 import { type ExchangeHost, GraphExchange } from '../../graph/contract/service/exchange.js';
-import { readSides } from '../../graph/storage/tracking.js';
+import { readSides, relate } from '../../graph/storage/tracking.js';
 import { block } from '../../graph/store/tables.js';
 import { manifest } from '../../platform/contract/service/manifest.js';
 import { GraphStore } from '../../platform/contract/service/store.js';
@@ -169,7 +169,8 @@ layer(world, { excludeTestServices: true })('a filler of the graph exchange port
       const host = yield* sync.host;
       const sides = yield* Effect.orDie(readSides(git, takerGit, TRACKING));
       expect(yield* Effect.orDie(host.gitDir(taker))).toBe(takerGit);
-      if (yield* Effect.orDie(host.follow(takerGit, sides))) yield* Effect.orDie(host.moved(takerGit));
+      const relation = yield* Effect.orDie(relate(git, takerGit, sides));
+      if (yield* Effect.orDie(host.follow(takerGit, relation))) yield* Effect.orDie(host.moved(takerGit));
       expect(yield* titleIn(taker, takerRoot, 'Later')).toBe(true);
       expect(yield* titleIn(taker, takerRoot, 'Featured')).toBe(false);
 

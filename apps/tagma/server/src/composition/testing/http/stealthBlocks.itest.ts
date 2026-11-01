@@ -254,6 +254,9 @@ layer(doorFixture().pipe(Layer.provideMerge(BunFileSystem.layer)), {
         Effect.map(world.op('search_blocks', { project: at, query: name }), (answer) => (answer.body as { total: number }).total);
       expect([yield* seen(shared, plan), yield* seen(shared, terms)]).toEqual([1, 1]);
       expect([yield* seen(alone, plan), yield* seen(alone, terms)]).toEqual([1, 0]);
+      expect((yield* world.op('set_graph_remote', { ref: String(alone), remote: bare })).body).toMatchObject({
+        remote: { remote: bare, holds: 'this-graph', branches: [{ branch: 'main', state: 'synced' }] },
+      });
     }),
   );
 

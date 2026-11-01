@@ -15,7 +15,7 @@ import {
   storageHomes,
   type StorageLayout,
 } from '../storage/layout.js';
-import { baseOf, forwardBranch } from '../storage/tracking.js';
+import { forwardBranch } from '../storage/tracking.js';
 import { ShadowGit } from '../tree/shadow.js';
 import { overShadow } from './permits.js';
 import { refused } from './refusal.js';
@@ -56,22 +56,14 @@ export const exchangeHost = Effect.fnUntraced(function* (bindings: HostBindings)
 
   const host: ExchangeHost = {
     gitDir,
-    follow: Effect.fnUntraced(function* (gitDir, sides) {
-      const behind: { readonly branch: string; readonly local: string; readonly tracked: string }[] = [];
-      const diverged: string[] = [];
-      for (const [branch, local] of sides.local) {
-        const tracked = sides.tracked.get(branch);
-        if (tracked === undefined || tracked === local) continue;
-        const base = yield* baseOf(git, gitDir, local, tracked);
-        if (base === local) behind.push({ branch, local, tracked });
-        else if (base !== null && base !== tracked) diverged.push(branch);
-      }
+    follow: Effect.fnUntraced(function* (gitDir, { behind, diverged }) {
       if (behind.length === 0 && diverged.length === 0) return false;
       return yield* overShadow(
         bindings.gates,
         gitDir,
       )(
         Effect.gen(function* () {
+          if (!existsSync(gitDir)) return false;
           const held = yield* (yield* ShadowGit.open(gitDir, git, NO_SIDE)).heldBranches();
           let served = diverged.some((branch) => held.has(branch));
           for (const one of behind) {
@@ -84,7 +76,7 @@ export const exchangeHost = Effect.fnUntraced(function* (bindings: HostBindings)
     }),
     moved: bindings.moved,
     open: bindings.open,
-    replace: Effect.fnUntraced(function* <A, E>(projectId: number, between: Effect.Effect<A, E>) {
+    replace: Effect.fnUntraced(function* <A, E>(projectId: number, between: Effect.Effect<A, E>, undo: Effect.Effect<void, E>) {
       const aside = setAsideHome(appHome, projectId, new Date(yield* Clock.currentTimeMillis));
       const places = [
         [graphHome(appHome, projectId), join(aside, 'graph')],
@@ -95,6 +87,7 @@ export const exchangeHost = Effect.fnUntraced(function* (bindings: HostBindings)
         Effect.gen(function* () {
           yield* bindings.release(projectId);
           const moved: (readonly [string, string])[] = [];
+          let set = false;
           const attempt = Effect.gen(function* () {
             for (const [from, to] of places) {
               if (!existsSync(from)) continue;
@@ -103,6 +96,7 @@ export const exchangeHost = Effect.fnUntraced(function* (bindings: HostBindings)
               moved.push([from, to]);
             }
             const value = yield* between;
+            set = true;
             yield* bindings.reopen(projectId);
             return value;
           });
@@ -113,6 +107,7 @@ export const exchangeHost = Effect.fnUntraced(function* (bindings: HostBindings)
             yield* io(() => rm(from, { recursive: true, force: true }));
             yield* io(() => rename(to, from));
           }
+          if (set) yield* undo;
           return yield* Effect.failCause(ended.cause);
         }),
       );
