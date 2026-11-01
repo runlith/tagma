@@ -19,7 +19,7 @@ import {
   type ThreadStorageFailed,
 } from '@runlith/agent/thread/persisted';
 import { mergedStopRequest, seedThreadNotification } from '@runlith/agent/thread/storage/settlement';
-import { and, asc, desc, eq, inArray, type SQL, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, type Placeholder, type SQL, sql } from 'drizzle-orm';
 import { MachineStore } from '../../platform/contract/service/store.js';
 import { type Unit, MachineUnits, type WriteUnit } from '../../platform/contract/service/units.js';
 import { type WriteSet, writes } from '../../platform/contract/service/writes.js';
@@ -31,6 +31,7 @@ import { ThreadRecords } from '../../thread-record/contract/service/records.js';
 import { recordFacts } from '../../thread-record/facts.js';
 import { stored, type StoredFailure } from '../../platform/store/crossing.js';
 import { programOf } from '../../platform/store/programs.js';
+import { bindQuery } from '../../platform/store/queries.js';
 import { failedAs } from '../../threads/contract/service/failure.js';
 import { makeEndedRuns } from './endedRuns.js';
 import { makeReaping, staged, trustedRun, type RunLifecycle } from './reaping.js';
@@ -56,12 +57,22 @@ export const makeRunStores = Effect.gen(function* () {
   const clock = yield* Clock.Clock;
   const endedIn = yield* makeEndedRuns;
   const reapingOf = yield* makeReaping;
-  const latestByThread = db
-    .select()
-    .from(threadRun)
-    .where(eq(threadRun.threadId, sql.placeholder('threadId')))
-    .orderBy(desc(threadRun.createdAt), desc(threadRun.id))
-    .prepare();
+  const newest = (rows: SQL) => db.select().from(threadRun).where(rows).orderBy(desc(threadRun.createdAt), desc(threadRun.id));
+  const heldNewest = (id: string | Placeholder, rows: SQL, held: string | null | Placeholder) =>
+    db
+      .select({ id: threadRecord.id })
+      .from(threadRecord)
+      .where(
+        and(
+          eq(threadRecord.id, id),
+          sql`(select ${threadRun.id} || char(0) || coalesce(${threadRun.ownerId}, '') || char(0) || ${threadRun.status} from ${threadRun} where ${rows} order by ${threadRun.createdAt} desc, ${threadRun.id} desc limit 1) is ${held}`,
+        ),
+      );
+  const forThread = sql.placeholder('threadId');
+  const runningRows = and(eq(threadRun.threadId, forThread), eq(threadRun.status, 'running')) as SQL;
+  const latestByThread = newest(eq(threadRun.threadId, forThread)).prepare();
+  const latestRunning = newest(runningRows).prepare();
+  const heldRunning = heldNewest(forThread, runningRows, sql.placeholder('held')).prepare();
   const runsByThread = db
     .select()
     .from(threadRun)
@@ -349,37 +360,29 @@ export const makeRunStores = Effect.gen(function* () {
           ),
         ),
       latestRun: (threadId, statuses, tx) => {
-        const of = statuses
-          ? and(eq(threadRun.threadId, threadId), inArray(threadRun.status, [...statuses]))
-          : eq(threadRun.threadId, threadId);
+        const running = statuses?.length === 1 && statuses[0] === 'running';
+        const rowsOf = (): SQL =>
+          statuses === undefined
+            ? eq(threadRun.threadId, threadId)
+            : (and(eq(threadRun.threadId, threadId), inArray(threadRun.status, [...statuses])) as SQL);
         const latest = (unit: Unit<'machine'>) =>
           Effect.flatMap(
             unit.run(
-              statuses
-                ? db.select().from(threadRun).where(of).orderBy(desc(threadRun.createdAt), desc(threadRun.id)).get()
-                : latestByThread.get({ threadId }),
+              running
+                ? latestRunning.get({ threadId })
+                : statuses === undefined
+                  ? latestByThread.get({ threadId })
+                  : newest(rowsOf()).get(),
             ),
-
             (row) => (row ? trustedRun(kinds, 'latestRun', row) : Effect.succeed(null)),
           );
         const program = tx === undefined ? null : programOf(tx);
         if (program === null) return stored('latestRun')(reading(latest, tx));
-        const held = sql`(select ${threadRun.id} || char(0) || coalesce(${threadRun.ownerId}, '') || char(0) || ${threadRun.status} from ${threadRun} where ${of} order by ${threadRun.createdAt} desc, ${threadRun.id} desc limit 1)`;
         return stored('latestRun')(
-          Effect.tap(units.read(latest), (run) =>
-            program.guard(
-              db
-                .select({ id: threadRecord.id })
-                .from(threadRecord)
-                .where(
-                  and(
-                    eq(threadRecord.id, threadId),
-                    sql`${held} is ${run === null ? null : `${run.id}\u0000${run.ownerId ?? ''}\u0000${run.status}`}`,
-                  ),
-                ),
-              1,
-            ),
-          ),
+          Effect.tap(units.read(latest), (run) => {
+            const held = run === null ? null : `${run.id}\u0000${run.ownerId ?? ''}\u0000${run.status}`;
+            return program.guard(running ? bindQuery(heldRunning, { threadId, held }) : heldNewest(threadId, rowsOf(), held), 1);
+          }),
         );
       },
       latestRuns: (threadIds, tx) =>

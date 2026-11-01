@@ -1,7 +1,7 @@
 import { expect } from 'bun:test';
 import { it } from '@runlith/effect-test';
 import { sql } from 'drizzle-orm';
-import { Cause, Effect, Exit, Layer } from 'effect';
+import { Cause, Clock, Deferred, Effect, Exit, Fiber, Layer } from 'effect';
 import { Message } from '@runlith/llm/schema/messages';
 import { CostLedger, costLedgerLayer, rootCost } from '@runlith/performance/CostLedger';
 import { readThreadEvents, threadEntryEvent, threadStepMessagesEvent } from '@runlith/agent/thread/events';
@@ -37,23 +37,25 @@ const SETTLED: ThreadToolEntry = {
 };
 
 const opened = Effect.gen(function* () {
-  const { storage, db } = yield* openThreadStore();
+  const { storage, db, units } = yield* openThreadStore();
   const thread = yield* storage.createThread({ ownerId: OWNER, scope: SCOPE });
   const runs = storage.runs({ ownerId: OWNER, scope: SCOPE });
-  const start = yield* runs.createRun({
-    kind: 'turn',
-    startFrom: {
-      id: thread.id,
-      ownerId: thread.ownerId,
-      account: thread.account,
-      provider: thread.provider,
-      model: thread.model,
-      reasoning: thread.reasoning,
-      switches: thread.switches ?? {},
-    },
-    approval: { mode: 'trust', interactive: false },
-    progress: { stage: 'starting', message: null },
-  });
+  const starting = () =>
+    runs.createRun({
+      kind: 'turn',
+      startFrom: {
+        id: thread.id,
+        ownerId: thread.ownerId,
+        account: thread.account,
+        provider: thread.provider,
+        model: thread.model,
+        reasoning: thread.reasoning,
+        switches: thread.switches ?? {},
+      },
+      approval: { mode: 'trust', interactive: false },
+      progress: { stage: 'starting', message: null },
+    });
+  const start = yield* starting();
   const deps: TransitionDeps<Unit<'machine'>, WriteUnit<'machine'>> = {
     store: storage.aggregate,
     log: storage.eventLog,
@@ -79,6 +81,28 @@ const opened = Effect.gen(function* () {
       },
       { evidence, digest: decidedBy },
     );
+  const absentStep = () =>
+    transitionNow(
+      deps,
+      thread.id,
+      {
+        declared: sealThreadEvents([threadStepMessagesEvent([Message.assistant('absent')])!]),
+        decide: Effect.fnUntraced(function* (_view: unknown, tx: WriteUnit<'machine'>) {
+          const standing = yield* runs.latestRun(thread.id, ['running'], tx);
+          return standing === null ? { apply: true as const, result: 'applied' } : { refuse: 'refused' };
+        }),
+      },
+      { evidence: { decidedBy: 'test:absent' }, digest: 'absent' },
+    );
+  const settled = Effect.gen(function* () {
+    const at = new Date(yield* Clock.currentTimeMillis);
+    return yield* runs.settleRun(start.run.id, {
+      status: 'completed',
+      progress: { stage: 'completed', message: null },
+      finishedAt: at,
+      heartbeatAt: at,
+    });
+  });
   const entryStep = (entry: ThreadToolEntry) =>
     transitionNow(
       deps,
@@ -121,7 +145,24 @@ const opened = Effect.gen(function* () {
     return log;
   });
   const journal = readThreadEvents(storage.eventLog, storage.kinds, thread.id, 0, 100);
-  return { storage, db, thread, run: start.run, step, entryStep, readingStep, storedReading, cursor, journal, deps };
+  return {
+    storage,
+    db,
+    thread,
+    units,
+    runs,
+    starting,
+    run: start.run,
+    settled,
+    absentStep,
+    step,
+    entryStep,
+    readingStep,
+    storedReading,
+    cursor,
+    journal,
+    deps,
+  };
 });
 
 it.live('a transition whose reads are planned commits as one program and no interactive unit', () =>
@@ -173,6 +214,45 @@ it.live('a decision whose dependency moved while its thread did not is refused a
     );
     expect(outcome).toEqual({ refused: 'refused' });
     expect(yield* storage.aggregate.historyOf(thread.id)).toEqual([]);
+  }),
+);
+
+it.live('a decision that found no running run commits as one program while none has started', () =>
+  Effect.gen(function* () {
+    const { storage, thread, settled, absentStep } = yield* opened;
+    yield* settled;
+    const outcome = yield* rootCost('test.transition', absentStep(), 'test-absent');
+    const [row] = (yield* CostLedger).read({ rootId: 'test-absent', limit: 1 }).rows;
+    expect(outcome).toEqual({ committed: 'applied' });
+    expect({ programs: row?.total.programs, units: row?.total.units }).toEqual({ programs: 1, units: 0 });
+    expect((yield* storage.aggregate.historyOf(thread.id))?.map((message) => message.role)).toEqual(['assistant']);
+  }).pipe(Effect.provide(Layer.fresh(costLedgerLayer({ capacity: 16 })))),
+);
+
+it.live('a program that read no running run is refused at commit once a run has started', () =>
+  Effect.gen(function* () {
+    const { units, runs, thread, starting, settled } = yield* opened;
+    yield* settled;
+    const read = yield* Deferred.make<void>();
+    const written = yield* Deferred.make<void>();
+    const writer = yield* Effect.forkChild(
+      Effect.andThen(Deferred.await(read), Effect.ensuring(starting(), Deferred.succeed(written, undefined))),
+    );
+    const outcome = yield* Effect.exit(
+      units.program(reading, 'test:run:absent', (program) =>
+        Effect.gen(function* () {
+          const standing = yield* runs.latestRun(thread.id, ['running'], programWriteUnit(program));
+          yield* Deferred.succeed(read, undefined);
+          yield* Deferred.await(written);
+          return standing;
+        }),
+      ),
+    );
+    yield* Fiber.join(writer);
+    const refusal = Exit.isFailure(outcome) ? Cause.squash(outcome.cause) : null;
+    expect(refusal).toBeInstanceOf(ProgramConflict);
+    const { statement, expected, actual } = refusal as ProgramConflict;
+    expect({ statement, expected, actual }).toEqual({ statement: 0, expected: 1, actual: 0 });
   }),
 );
 

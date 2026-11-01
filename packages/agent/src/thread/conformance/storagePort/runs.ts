@@ -3,6 +3,7 @@ import { describe, expect } from 'bun:test';
 import type { Tester } from '@runlith/effect-test';
 import { Clock, Data, Effect, Result, type Scope } from 'effect';
 import { ThreadStorageFailed } from '../../persisted';
+import type { ThreadRunStatus } from '../../rows';
 import { Usage } from '@runlith/llm/schema/events';
 import { THREAD_RUN_RESUMING_STAGE, ThreadRunConflictError } from '../../storage/runs';
 import type { ThreadStorageFactory } from '../storagePort';
@@ -103,6 +104,30 @@ export function describeThreadRunPort<TTx, TWrite extends TTx = TTx, R = never>(
         yield* started(runs.createRun(startInput(other)));
         expect((yield* runs.runsOf(thread.id)).map((row) => row.id)).toEqual([first.id, second.id]);
         expect(yield* runs.runsOf('no-such-thread')).toEqual([]);
+      }),
+    );
+    test(
+      'the newest run of a thread is answered among the statuses asked for, and only that thread`s',
+      Effect.fnUntraced(function* () {
+        const harness = yield* open();
+        const runs = harness.runs({ ownerId: INSTANCE, scope: SCOPE });
+        const thread = yield* harness.createThread({ ownerId: OWNER, scope: SCOPE });
+        const other = yield* harness.createThread({ ownerId: OWNER, scope: SCOPE });
+        const first = yield* started(runs.createRun(startInput(thread)));
+        yield* runs.settleRun(first.id, yield* settlePatch('completed'));
+        const second = yield* started(runs.createRun(startInput(thread)));
+        yield* runs.settleRun(second.id, yield* settlePatch('completed'));
+        const third = yield* started(runs.createRun(startInput(thread)));
+        yield* started(runs.createRun(startInput(other)));
+        const idOf = (statuses?: readonly ThreadRunStatus[]) => Effect.map(runs.latestRun(thread.id, statuses), (row) => row?.id ?? null);
+        expect({
+          any: yield* idOf(),
+          running: yield* idOf(['running']),
+          completed: yield* idOf(['completed']),
+          either: yield* idOf(['running', 'completed']),
+          absent: yield* idOf(['failed']),
+          none: yield* idOf([]),
+        }).toEqual({ any: third.id, running: third.id, completed: second.id, either: third.id, absent: null, none: null });
       }),
     );
     test(
