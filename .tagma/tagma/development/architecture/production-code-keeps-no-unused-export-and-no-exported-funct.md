@@ -248,10 +248,6 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead apps/tagma/app/src/lib/features/checkout/diffEnds.ts#DiffEnds",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "dead-code dead apps/tagma/app/src/lib/features/checkout/files/Closing.ts#CLOSE_WAIT_MS",
           "owner": "5a3bed29"
         },
