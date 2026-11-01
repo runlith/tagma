@@ -67,7 +67,6 @@ export const prepareHome = Effect.fn('muse.prepareHome')(function* (
     XDG_DATA_HOME: join(place.account, '.local', 'share'),
     XDG_STATE_HOME: join(place.account, '.local', 'state'),
     XDG_CACHE_HOME: join(place.account, '.cache'),
-    MUSE_NO_AUTO_UPDATE: '1',
   };
 });
 

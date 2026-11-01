@@ -21,10 +21,7 @@ export const museCode: HarnessProvider = {
     fromHeaders: () => null,
     read: () => Effect.fail(new QuotaUnavailable({ reason: 'Muse Code reports its quota windows once a thread on it has run a turn.' })),
   },
-  environment: () => [
-    { _tag: 'Unset', name: 'META_API_KEY' },
-    { _tag: 'Set', name: 'MUSE_NO_AUTO_UPDATE', value: '1' },
-  ],
+  environment: () => [{ _tag: 'Unset', name: 'META_API_KEY' }],
   asks: { program: museCodeProgram },
   dynamicCatalog: true,
   models: {},
