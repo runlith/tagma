@@ -21,29 +21,25 @@ layer(protocolFixture('snapshot-cut', 1), { excludeTestServices: true })('thread
       yield* rig.files.writeFileString(join(folder, attachment), '# inherited');
       const db = Context.get(rig.world.context, MachineStore).db;
       yield* db.update(threadRecord()).set({ title: 'before' }).where(eq(threadRecord().id, threadId));
-      yield* db
-        .insert(threadBase())
-        .values({
-          threadId,
-          depth: 0,
-          sourceId: source,
-          lowOrd: 1,
-          highOrd: 0,
-          afterPosition: 0,
-          throughPosition: 0,
-          prompts: 'kept',
-          hidden: [],
-        });
-      yield* db
-        .insert(threadInbox())
-        .values({
-          id: 'attached-signal',
-          threadId,
-          sender: { kind: 'host' },
-          kind: 'signal',
-          body: { type: 'notice', addressee: 'transport', text: 'attached', attachments: [{ id: attachment }] },
-          occurredAt: new Date(yield* Clock.currentTimeMillis),
-        });
+      yield* db.insert(threadBase()).values({
+        threadId,
+        depth: 0,
+        sourceId: source,
+        lowOrd: 1,
+        highOrd: 0,
+        afterPosition: 0,
+        throughPosition: 0,
+        prompts: 'kept',
+        hidden: [],
+      });
+      yield* db.insert(threadInbox()).values({
+        id: 'attached-signal',
+        threadId,
+        sender: { kind: 'host' },
+        kind: 'signal',
+        body: { type: 'notice', addressee: 'transport', text: 'attached', attachments: [{ id: attachment }] },
+        occurredAt: new Date(yield* Clock.currentTimeMillis),
+      });
       yield* scenario(
         Effect.gen(function* () {
           const entered = yield* Deferred.make<void>();
@@ -88,7 +84,7 @@ layer(protocolFixture('snapshot-cut', 1), { excludeTestServices: true })('thread
           yield* Effect.addFinalizer(() => Effect.sync(unsubscribe));
           yield* floor.harness.threads.publish(threadId);
           expect(yield* Queue.take(frames)).toBe('after');
-          expect((yield* floor.harness.reads.attachFrom(threadId, 0))?.state.title).toBe('after');
+          expect((yield* floor.harness.reads.attachFrom(threadId, { ...next.live.at, position: 0 }))?.state.title).toBe('after');
           const changing = yield* Deferred.make<void>();
           const changed = yield* Deferred.make<void>();
           pause = { entered: changing, released: changed, skip: 2 };
