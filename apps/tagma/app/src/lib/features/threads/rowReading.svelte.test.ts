@@ -86,10 +86,12 @@ test('a working row hands the work line each waiting call once, whether its phas
     calls: ids.map((id) => ({ id, name: 'bash', title: null, since: null })),
     queued,
   });
-  const working = (queued: readonly string[], ids: readonly string[]) => row({ life: 'working', phase: phase(queued, ids) });
+  const working = (queued: readonly string[], ids: readonly string[], activeRunId = 'run-1') =>
+    row({ life: 'working', activeRunId, phase: phase(queued, ids) });
   const queuedOf = (thread: ThreadListRow, held: readonly string[]) => reading(thread, held).followed.at(-1)?.queued;
 
   expect(queuedOf(working(['call-1'], []), ['call-1'])).toBe(1);
   expect(queuedOf(working(['call-1'], []), ['call-1', 'call-2'])).toBe(2);
   expect(queuedOf(working([], ['call-1']), ['call-1'])).toBe(0);
+  expect(queuedOf(working(['call-1'], [], 'run-2'), ['call-1'])).toBe(2);
 });

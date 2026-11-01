@@ -40,7 +40,7 @@ export class RowReading {
   ) {
     const row = $derived(node().row);
     this.mark = $derived(threadMark(row));
-    const waiting = $derived(this.calls.waitingOf(row.id, row.phase));
+    const waiting = $derived(this.calls.waitingOf(row));
     const work = $derived<WorkInput | null>(
       this.mark.state === 'working' && row.phase !== null
         ? {
