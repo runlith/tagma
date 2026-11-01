@@ -1,6 +1,7 @@
 import type { Project } from '@tagma/server/graph/contract/wire/rows';
 import { Service } from '@runlith/layer/key';
 import { Point } from '@runlith/layer/Point';
+import type { Shown } from '@runlith/layer/svelte/payload';
 import type { Component, Snippet } from 'svelte';
 
 export type Surface = string;
@@ -8,6 +9,14 @@ export type Surface = string;
 export const CHAT: Surface = 'chat';
 
 export const CHECKOUT: Surface = 'checkout';
+
+export const CONTRIBUTED_ROUTE = 'p';
+
+export type SurfaceProps = { readonly path: string };
+
+type SurfaceView = { readonly tagmaApp: string; readonly view: string };
+
+type SurfacePayload = Shown<SurfaceProps, SurfaceView>['payload'];
 
 export type SurfaceDeclaration = {
   readonly surface: Surface;
@@ -28,6 +37,7 @@ export type SurfaceDeclaration = {
   readonly iconUrl?: string;
   readonly nested?: true;
   readonly within?: Surface;
+  readonly payload?: SurfacePayload;
   readonly phone?: true;
 };
 
@@ -37,8 +47,15 @@ export type RouteParams = Readonly<Record<string, string | undefined>>;
 
 const RESERVED: readonly string[] = ['branch', 'surface'];
 
+const contributed = (route: string): boolean => route.startsWith(`${CONTRIBUTED_ROUTE}/`);
+
 const admitsOf = (declaration: SurfaceDeclaration): string | null => {
   if (RESERVED.includes(declaration.surface)) return 'the visit record keeps this name for itself';
+  const served = declaration.route === CONTRIBUTED_ROUTE || contributed(declaration.route);
+  if (declaration.payload !== undefined && !served) return `a surface carrying its page stands under the "${CONTRIBUTED_ROUTE}" route`;
+  if (contributed(declaration.route) && (declaration.payload === undefined || declaration.place !== undefined)) {
+    return `a surface under the "${CONTRIBUTED_ROUTE}" route carries its page and keeps no place directory`;
+  }
   if (declaration.home === true && declaration.rail === undefined) return 'the home surface has no place in the rail';
   if (
     declaration.within !== undefined &&
@@ -85,11 +102,11 @@ const indexOf = (items: readonly SurfaceDeclaration[]): SurfaceIndex => {
   const memberRoutes = new Map<string, SurfaceDeclaration>();
   for (const declaration of items) {
     bySurface.set(declaration.surface, declaration);
-    if (declaration.within !== undefined) {
+    if (declaration.formerly !== undefined) former.set(declaration.formerly, declaration.surface);
+    if (contributed(declaration.route)) {
       memberRoutes.set(declaration.route, declaration);
       continue;
     }
-    if (declaration.formerly !== undefined) former.set(declaration.formerly, declaration.surface);
     byRoute.set(declaration.route, declaration);
     if (declaration.place !== undefined) byRoute.set(declaration.place, declaration);
   }
@@ -111,7 +128,7 @@ export const withBranch = (path: string, branch: string | null): string =>
 const memberRoute = (routeId: string, params: RouteParams): string | null => {
   const parts: string[] = [];
   for (const segment of routeId.split('/').slice(2)) {
-    const named = /^\[+([^\]]+)\]+$/u.exec(segment)?.[1];
+    const named = /^\[+(?:\.\.\.)?([^\]]+)\]+$/u.exec(segment)?.[1];
     const value = named === undefined ? segment : params[named];
     if (value === undefined || value === '') return null;
     parts.push(value);
@@ -188,7 +205,7 @@ export class SurfaceRegistry extends Service<SurfaceRegistry>()('SurfaceRegistry
   of(routeId: string | null | undefined, params?: RouteParams): Surface {
     const route = routeId?.split('/')[2] ?? '';
     const fixed = this.byRoute.get(route) ?? this.byRoute.get('');
-    if (fixed?.nested === true && routeId != null && params !== undefined) {
+    if (route === CONTRIBUTED_ROUTE && routeId != null && params !== undefined) {
       const wanted = memberRoute(routeId, params);
       const member = wanted === null ? undefined : this.index.memberRoutes.get(wanted);
       if (member !== undefined) return member.surface;

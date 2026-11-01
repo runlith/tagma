@@ -1,8 +1,9 @@
 import type { Project } from '@tagma/server/graph/contract/wire/rows';
 import { RegistryRefusal } from '@runlith/roster/RegistryClash';
 import { makePoint, makeStorage } from '@runlith/layer/testing';
+import type { Component } from 'svelte';
 import { expect, test } from 'vitest';
-import { type SurfaceDeclaration, SurfaceRegistry, Surfaces } from './surface.js';
+import { type SurfaceDeclaration, type SurfaceProps, SurfaceRegistry, Surfaces } from './surface.js';
 import { Visits } from './Visits.svelte.js';
 
 const icon = (() => undefined) as unknown as SurfaceDeclaration['icon'];
@@ -30,6 +31,10 @@ const declared = (surface: string, over: Partial<SurfaceDeclaration> = {}): Surf
   remembers: true,
   ...over,
 });
+
+const page: SurfaceDeclaration['payload'] = { component: (() => undefined) as unknown as Component<SurfaceProps> };
+
+const ROUTE = '/[project]/p/[...path]';
 
 const of = (...declarations: readonly SurfaceDeclaration[]) => new SurfaceRegistry(makePoint(Surfaces, ...declarations));
 
@@ -85,25 +90,35 @@ test('a view within a nested surface joins the rail and answers its route until 
     declared('app', { route: 'p', nested: true, remembers: false }),
   );
   const surfaces = new SurfaceRegistry(point);
-  const params = { project: 'runlith', app: 'crm', view: 'deals' };
-  const section = declared('app/crm/deals', { route: 'p/crm/deals', rail: 100, remembers: false, within: 'app' });
+  const params = { project: 'runlith', path: 'crm/deals' };
+  const section = declared('app/crm/deals', { route: 'p/crm/deals', rail: 100, remembers: false, within: 'app', payload: page });
 
-  expect(surfaces.of('/[project]/p/[app]/[view]', params)).toBe('app');
+  expect(surfaces.of(ROUTE, params)).toBe('app');
   const release = point.register('features/apps', section);
-  expect(surfaces.of('/[project]/p/[app]/[view]', params)).toBe('app/crm/deals');
-  expect(surfaces.of('/[project]/p/[app]/[view]', { ...params, view: 'other' })).toBe('app');
+  expect(surfaces.of(ROUTE, params)).toBe('app/crm/deals');
+  expect(surfaces.of(ROUTE, { ...params, path: 'crm/other' })).toBe('app');
   expect(surfaces.rail.map((one) => one.surface)).toEqual(['mail', 'app/crm/deals']);
   expect(surfaces.declared.map((one) => one.surface)).toEqual(['mail', 'app']);
   expect(surfaces.pathOf('runlith', 'app/crm/deals')).toBe('/runlith/p/crm/deals');
   expect(surfaces.portable('app/crm/deals')).toBe(false);
-  expect(() => point.register('features/late', declared('deals', { route: 'p/crm/deals' }))).toThrow(
+  expect(() => point.register('features/late', declared('deals', { route: 'p/crm/deals', payload: page }))).toThrow(
     'Route "p/crm/deals" is contributed by both',
   );
 
   release();
-  expect(surfaces.of('/[project]/p/[app]/[view]', params)).toBe('app');
+  expect(surfaces.of(ROUTE, params)).toBe('app');
   expect(surfaces.rail.map((one) => one.surface)).toEqual(['mail']);
   expect(surfaces.find('app/crm/deals')).toBeUndefined();
+});
+
+test('a surface carrying its page answers its route under p with no umbrella declared, travels like a core surface, and only there', () => {
+  const surfaces = of(declared('mail', { rail: 10, home: true }), declared('notes', { route: 'p/notes', rail: 30, payload: page }));
+
+  expect(surfaces.of(ROUTE, { project: 'runlith', path: 'notes' })).toBe('notes');
+  expect(surfaces.declared.map((one) => one.surface)).toEqual(['mail', 'notes']);
+  expect(surfaces.portable('notes')).toBe(true);
+  expect(() => of(declared('stray', { payload: page }))).toThrow(RegistryRefusal);
+  expect(() => of(declared('bare', { route: 'p/bare' }))).toThrow(RegistryRefusal);
 });
 
 test('a visit remembers a place only on the surfaces that declared it', () => {

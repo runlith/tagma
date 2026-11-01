@@ -18,7 +18,7 @@
   const addresses = Addresses.use();
   const projectAim = ProjectRung.Source.use();
   const graphAim = GraphRung.Source.use();
-  const standing = $derived(standingKey(surfaces.get(surfaces.of(router.routeId)).stands, projectAim(), graphAim()));
+  const standing = $derived(standingKey(surfaces.get(surfaces.of(router.routeId, router.params)).stands, projectAim(), graphAim()));
 
   $effect(() => {
     const active = workspace.active;
@@ -27,7 +27,7 @@
 
   $effect(() => {
     const project = workspace.active;
-    const surface = surfaces.of(router.routeId);
+    const surface = surfaces.of(router.routeId, router.params);
     if (project === null) return;
     visits.remember(project, surface, currentPlace(router), currentBranch(router));
   });
