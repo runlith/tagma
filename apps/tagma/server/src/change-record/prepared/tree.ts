@@ -202,7 +202,9 @@ export const build = Effect.fn('prepared.build')(function* <Row extends Prepared
     const inputs = selected.map((one, at) => {
       const base = readable(bases.get(one.path));
       const index = readable(staged[at]);
-      return base instanceof Uint8Array && index instanceof Uint8Array ? { base, selected: one.text, staged: index } : null;
+      return base instanceof Uint8Array && index instanceof Uint8Array
+        ? { base, selected: one.text, staged: index, working: one.working, positions: one.positions }
+        : null;
     });
     const unweighed = () => unproven(selected.map((one) => one.path).join(', '), NO_PARTNERS);
     if (inputs.some((one) => one === null)) return yield* unweighed();

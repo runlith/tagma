@@ -1,7 +1,14 @@
 import { Effect } from 'effect';
 import { eventReason } from '@runlith/utils/worker';
 import { GateRefusal } from '../../platform/contract/wire/refusal.js';
-export type OverlayAsk = { readonly base: Uint8Array; readonly selected: string; readonly staged: Uint8Array };
+import type { SelectedSpan } from '../lines/selection.js';
+export type OverlayAsk = {
+  readonly base: Uint8Array;
+  readonly selected: string;
+  readonly staged: Uint8Array;
+  readonly working: string;
+  readonly positions: readonly SelectedSpan[];
+};
 
 export type Overlaid = { readonly kind: 'overlaid'; readonly text: string | null } | { readonly kind: 'unweighable' };
 
