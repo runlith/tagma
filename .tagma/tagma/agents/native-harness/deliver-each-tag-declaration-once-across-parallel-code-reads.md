@@ -14,4 +14,4 @@ edges:
   - kind: relates
     to: 01a14c14-a11c-7ce8-9d84-632f2c5e9bd2
 ---
-Preserve each file's law and explanations while code-read guidance delivers an already-seen tag declaration once per model context, including across checkout copies, recovery and context resets; deliver changed declarations when needed.
+Coalesce code-read tag declarations within a native model step or parked batch while preserving each file's law and explanations. Compare checkout copies by declaration content, recover delivered state from the model context, and deliver changed declarations or context resets when needed.
