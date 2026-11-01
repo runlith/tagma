@@ -108,6 +108,19 @@ export const Opened = Schema.Struct({
   }),
 });
 export const Compact = Schema.Struct({ status: Schema.String, reason: Schema.optional(Schema.String) });
+
+const Held = Schema.Struct({ kind: Schema.String, commandId: Schema.optional(Schema.String) });
+const Ref = Schema.Struct({ turnId: Schema.String, commandId: Schema.String });
+export const SessionRead = Schema.Struct({
+  history: Schema.Struct({
+    items: Schema.NullOr(Schema.Array(Held)),
+    snapshot: Schema.NullOr(
+      Schema.Struct({
+        state: Schema.Struct({ items: Schema.Array(Held), activeTurn: Schema.NullOr(Ref), queuedTurns: Schema.Array(Ref) }),
+      }),
+    ),
+  }),
+});
 export const Models = Schema.Struct({
   providerId: Schema.String,
   models: Schema.Array(

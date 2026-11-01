@@ -8,6 +8,8 @@ const SHUTDOWN_MS = 10_000;
 
 const PAGE = 1000;
 
+const ATTEMPTS = 3;
+
 const cursorOf = (frame: Frame): string | undefined => (typeof frame.params.viewCursor === 'string' ? frame.params.viewCursor : undefined);
 
 const text = (value: unknown): string | undefined => (typeof value === 'string' ? value : undefined);
@@ -116,7 +118,7 @@ const museSdk = (module: Module): MuseSdk['Service'] => {
         home: started.museHome,
         command: (method, params, commandId) =>
           Effect.tryPromise({
-            try: () => connection.command(method, params, commandId === undefined ? { maxAttempts: 1 } : { maxAttempts: 1, commandId }),
+            try: () => connection.command(method, params, { maxAttempts: ATTEMPTS, commandId: commandId ?? connection.mintCommandId() }),
             catch: refused(method),
           }).pipe(Effect.withSpan('MuseSdk.command', { attributes: { method } })),
         request: (method, params) =>

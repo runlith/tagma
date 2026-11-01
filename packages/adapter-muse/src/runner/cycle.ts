@@ -182,10 +182,18 @@ export const makeMuseCycle = Effect.fnUntraced(function* (door: HostedDoor, proc
     if (Result.isFailure(read) || host === undefined) return;
     const { sessionId, turnId } = read.success;
     process.stderr(`Muse Code started turn ${turnId}, which no Tagma turn holds; it is interrupted\n`);
+    const standing = live;
     yield* Effect.forkIn(
       host.command('turn/interrupt', { sessionId, turnId }).pipe(
         Effect.asVoid,
-        Effect.catchTag('MuseRefused', () => Effect.void),
+        Effect.catchTag('MuseRefused', (refused) =>
+          refused.kind === 'commandRejected' || live !== standing
+            ? Effect.void
+            : Effect.andThen(
+                Effect.sync(() => process.stderr(`Muse Code refused to stop turn ${turnId}: ${refused.message}; its host is replaced\n`)),
+                drop(),
+              ),
+        ),
       ),
       scope,
     );
@@ -339,6 +347,7 @@ export const makeMuseCycle = Effect.fnUntraced(function* (door: HostedDoor, proc
                   history = [];
                 }),
               ),
+              abandon: Effect.suspend(() => (live === standing ? drop() : Effect.void)),
             },
             done,
           );

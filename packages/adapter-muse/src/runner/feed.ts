@@ -6,13 +6,14 @@ import { SERVED } from '@runlith/hosted-runner/bridge';
 import type { ClientOutcome } from '@runlith/hosted-runner/client';
 import type { Output } from '@runlith/hosted-runner/output';
 import { MEASURED, RETRYING } from '@runlith/hosted-runner/wire/extensions';
-import type { Frame, Host } from './channel.js';
+import type { Frame, Host, MuseRefused } from './channel.js';
 import {
   Approval,
   ContextUsage,
   ItemDelta,
   ItemEvent,
   Retry,
+  SessionRead,
   TokenUsage,
   TurnCompleted,
   TurnStarted,
@@ -39,6 +40,7 @@ const usages = decoder(TokenUsage);
 const contexts = decoder(ContextUsage);
 const retries = decoder(Retry);
 const approvals = decoder(Approval);
+const reads = decoder(SessionRead);
 
 const inputOf = (args: string | undefined): unknown => {
   if (args === undefined || args === '') return {};
@@ -107,6 +109,7 @@ type FeedPorts = {
   readonly permitted: (call: ToolCall) => Effect.Effect<string | null>;
   readonly stderr: (text: string) => void;
   readonly began: Effect.Effect<void>;
+  readonly abandon: Effect.Effect<void>;
 };
 
 const NOTHING: Spent = spentOf({ inputTokens: 0, outputTokens: 0, cachedTokens: 0, reasoningTokens: 0 });
@@ -130,6 +133,7 @@ export class Feed {
   private attempt = 0;
   private modelStarted = false;
   private stopping = false;
+  private relinquishing = false;
   private last: TurnCompleted | null = null;
   private whole: Spent = NOTHING;
   private readonly owned: Set<string>;
@@ -194,20 +198,82 @@ export class Feed {
     return Effect.forkIn(
       host.command('turn/interrupt', { sessionId: session, turnId: turn }).pipe(
         Effect.asVoid,
-        Effect.catchTag('MuseRefused', () => Effect.void),
+        Effect.catchTag('MuseRefused', (refused) =>
+          refused.kind === 'commandRejected' ? Effect.void : this.lost(`Muse Code refused to stop turn ${turn}: ${refused.message}`),
+        ),
       ),
       scope,
     );
   }
 
-  private readonly settle = Effect.fnUntraced(function* (this: Feed) {
-    const last = this.last;
-    if (last === null || this.open.size > 0) return;
-    if (this.unread.size > 0 && !this.stopping && last.terminal === 'completed') return;
+  private readonly lost = Effect.fnUntraced(function* (this: Feed, reason: string): Effect.fn.Return<void> {
+    this.ports.stderr(`${reason}\n`);
     for (const read of this.reading.values()) yield* Deferred.succeed(read, false);
     this.reading.clear();
+    yield* Deferred.succeed(this.done, { status: 'error', detail: reason, turn: this.ports.turn });
+    yield* this.ports.abandon;
+  });
+
+  private readonly undecided = Effect.fnUntraced(function* (this: Feed, turn: string, reason: string) {
+    this.ports.stderr(`${reason}\n`);
+    yield* Deferred.succeed(this.done, { status: 'error', detail: reason, turn: this.ports.turn });
+    yield* this.interrupt(turn);
+  });
+
+  private readonly settle = Effect.fnUntraced(function* (this: Feed): Effect.fn.Return<void> {
+    const last = this.last;
+    if (last === null || this.open.size > 0) return;
+    if (this.unread.size > 0) {
+      if (!this.stopping && last.terminal === 'completed') return;
+      if (this.relinquishing) return;
+      this.relinquishing = true;
+      yield* Effect.forkIn(this.relinquish(), this.ports.scope);
+      return;
+    }
     yield* Deferred.succeed(this.done, this.outcome(last));
   });
+
+  private readonly heard = Effect.fnUntraced(function* (this: Feed, command: string, read: boolean) {
+    this.unread.delete(command);
+    const waiting = this.reading.get(command);
+    this.reading.delete(command);
+    if (waiting !== undefined) yield* Deferred.succeed(waiting, read);
+  });
+
+  private readonly relinquish = Effect.fnUntraced(
+    function* (this: Feed): Effect.fn.Return<void, MuseRefused> {
+      const { host, session } = this.ports;
+      for (const command of [...this.unread]) {
+        const reclaimed = yield* host.command('turn/unqueue', { sessionId: session, turnId: command }).pipe(
+          Effect.as(true),
+          Effect.catchTag('MuseRefused', (refused) => (refused.kind === 'commandRejected' ? Effect.succeed(false) : Effect.fail(refused))),
+        );
+        if (reclaimed) yield* this.heard(command, false);
+      }
+      if (this.unread.size > 0) {
+        const held = reads(yield* host.request('session/read', { sessionId: session, excludeItems: false }));
+        if (held === null) return yield* this.lost(`Muse Code answered session/read for ${session} in a shape Tagma cannot read`);
+        const state = held.history.snapshot?.state;
+        const said = new Set(
+          (state?.items ?? held.history.items ?? []).flatMap((item) =>
+            item.kind === 'userMessage' && item.commandId ? [item.commandId] : [],
+          ),
+        );
+        const running = [...(state?.activeTurn === null || state === undefined ? [] : [state.activeTurn]), ...(state?.queuedTurns ?? [])];
+        for (const command of [...this.unread]) {
+          const turn = running.find((ref) => ref.commandId === command || ref.turnId === command);
+          if (turn !== undefined) {
+            this.owned.add(turn.turnId);
+            this.open.add(turn.turnId);
+            yield* this.interrupt(turn.turnId);
+          } else yield* this.heard(command, said.has(command));
+        }
+      }
+      this.relinquishing = false;
+      yield* this.settle();
+    },
+    Effect.catchTag('MuseRefused', (refused) => this.lost(`Muse Code could not account for words it accepted: ${refused.message}`)),
+  );
 
   private message(): string {
     return `${this.ports.turn}:${this.step}`;
@@ -460,7 +526,7 @@ export class Feed {
     const decide = (allow: boolean) => {
       const choice = choose(allow);
       if (choice === undefined)
-        return Effect.sync(() => stderr(`Muse Code offered no ${allow ? 'allow-once' : 'refusing'} choice for ${asked.toolName}\n`));
+        return this.undecided(asked.turnId, `Muse Code offered no ${allow ? 'allow-once' : 'refusing'} choice for ${asked.toolName}`);
       return host
         .command('approval/decide', {
           sessionId: asked.sessionId,
@@ -471,7 +537,7 @@ export class Feed {
         .pipe(
           Effect.asVoid,
           Effect.catchTag('MuseRefused', (refused) =>
-            Effect.sync(() => stderr(`Muse Code refused the decision on ${asked.toolName}: ${refused.message}\n`)),
+            this.undecided(asked.turnId, `Muse Code refused the decision on ${asked.toolName}: ${refused.message}`),
           ),
         );
     };
