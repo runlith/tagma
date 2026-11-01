@@ -79,6 +79,7 @@ export const Retry = Schema.Struct({
 export const Approval = Schema.Struct({
   sessionId: Schema.String,
   approvalId: Schema.String,
+  turnId: Schema.String,
   toolCallId: Schema.String,
   toolName: Schema.String,
   rawArgs: Schema.String,

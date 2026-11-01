@@ -133,6 +133,8 @@ export class Feed {
   private whole: Spent = NOTHING;
   private readonly owned: Set<string>;
   private readonly open: Set<string>;
+  private readonly reading = new Map<string, Deferred.Deferred<boolean>>();
+  private readonly items = new Set<string>();
   private readonly announced = new Set<string>();
   private readonly written = new Map<string, number>();
   private readonly thought = new Map<string, number[]>();
@@ -158,20 +160,27 @@ export class Feed {
     return this.owned.has(turn);
   }
 
-  steering(command: string): void {
+  steering(command: string): Deferred.Deferred<boolean> {
     this.owned.add(command);
     this.unread.add(command);
+    const read = Deferred.makeUnsafe<boolean>();
+    this.reading.set(command, read);
+    return read;
   }
 
-  unsteered(command: string): void {
+  readonly unsteered = Effect.fnUntraced(function* (this: Feed, command: string) {
     this.owned.delete(command);
     this.unread.delete(command);
-  }
+    this.reading.delete(command);
+    yield* this.settle();
+  });
 
-  stop(): readonly string[] {
+  readonly stop = Effect.fnUntraced(function* (this: Feed) {
     this.stopping = true;
-    return [...this.open];
-  }
+    const open = [...this.open];
+    yield* this.settle();
+    return open;
+  });
 
   private interrupt(turn: string) {
     const { host, session, scope } = this.ports;
@@ -188,6 +197,8 @@ export class Feed {
     const last = this.last;
     if (last === null || this.open.size > 0) return;
     if (this.unread.size > 0 && !this.stopping && last.terminal === 'completed') return;
+    for (const read of this.reading.values()) yield* Deferred.succeed(read, false);
+    this.reading.clear();
     yield* Deferred.succeed(this.done, this.outcome(last));
   });
 
@@ -217,11 +228,12 @@ export class Feed {
       case 'item/completed': {
         const event = items(frame.params);
         if (event === null || !this.owned.has(event.item.turnId ?? '')) return;
+        this.items.add(event.item.itemId);
         return yield* this.item(event.item, frame.method === 'item/started', frame.method === 'item/completed');
       }
       case 'item/delta': {
         const delta = deltas(frame.params);
-        if (delta === null) return;
+        if (delta === null || !this.items.has(delta.itemId)) return;
         return yield* this.delta(delta.itemId, delta.field ?? 'text', delta.delta);
       }
       case 'session/tokenUsage': {
@@ -256,7 +268,7 @@ export class Feed {
       }
       case 'approval/request': {
         const asked = approvals(frame.params);
-        if (asked === null) return;
+        if (asked === null || !this.owned.has(asked.turnId)) return;
         return yield* this.approve(asked);
       }
       case 'turn/completed': {
@@ -295,7 +307,11 @@ export class Feed {
     const { output } = this.ports;
     switch (item.kind) {
       case 'userMessage': {
-        if (item.steered === true && item.commandId !== undefined) this.unread.delete(item.commandId);
+        if (item.steered !== true || item.commandId === undefined) return;
+        this.unread.delete(item.commandId);
+        const read = this.reading.get(item.commandId);
+        this.reading.delete(item.commandId);
+        if (read !== undefined) yield* Deferred.succeed(read, true);
         return;
       }
       case 'reasoning': {

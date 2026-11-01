@@ -129,7 +129,12 @@ const runAsk = Effect.fnUntraced(
         turn,
       )
       .pipe(Effect.mapError(refused));
-    const end = yield* Deferred.await(ended);
+    const end = yield* Effect.raceFirst(
+      Deferred.await(ended),
+      Effect.flatMap(host.ended, (reason) =>
+        Effect.fail(new AgentFault({ code: FAULT.internal, message: `Muse Code ended before the ask finished: ${reason}` })),
+      ),
+    );
     if (end.terminal !== 'completed')
       return yield* new AgentFault({
         code: end.error?.kind === 'authRequired' ? FAULT.authRequired : FAULT.internal,

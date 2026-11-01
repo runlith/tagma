@@ -123,6 +123,7 @@ it.effect('a turn runs under the Tagma turn id, seals each Tagma call before app
                 params: {
                   sessionId: one.params.sessionId,
                   approvalId: 'a1',
+                  turnId: TURN,
                   toolCallId: 'call_1',
                   toolName: 'mcp__tagma__echo',
                   rawArgs: '{"text":"hi"}',
@@ -227,6 +228,7 @@ it.effect('a steer the turn ended before reading runs in the follow-up turn Muse
                       params: {
                         sessionId,
                         approvalId: 'a2',
+                        turnId: STEER,
                         toolCallId: 'call_2',
                         toolName: 'mcp__tagma__echo',
                         rawArgs: '{}',
@@ -249,14 +251,16 @@ it.effect('a steer the turn ended before reading runs in the follow-up turn Muse
     );
     yield* Effect.yieldNow;
     const steer = agent.extensions!['_tagma/steer']!;
-    expect(yield* steer({ sessionId: session.sessionId, prompt: [{ type: 'text', text: 'BANANA' }], input: STEER })).toEqual({
-      outcome: 'injected',
-    });
-    expect(sent.find((one) => one.method === 'turn/steer')).toMatchObject({ id: STEER, params: { expectedTurnId: TURN } });
+    const steered = yield* Effect.forkChild(
+      steer({ sessionId: session.sessionId, prompt: [{ type: 'text', text: 'BANANA' }], input: STEER }),
+    );
     yield* Deferred.await(first);
     yield* Effect.yieldNow;
+    expect(sent.find((one) => one.method === 'turn/steer')).toMatchObject({ id: STEER, params: { expectedTurnId: TURN } });
     expect(running.pollUnsafe()).toBeUndefined();
+    expect(steered.pollUnsafe()).toBeUndefined();
     yield* Deferred.succeed(release, undefined);
+    expect(yield* Fiber.join(steered)).toEqual({ outcome: 'injected' });
     expect(yield* Fiber.join(running)).toMatchObject({ stopReason: 'end_turn' });
     yield* Effect.yieldNow;
     expect(sent.find((one) => one.method === 'approval/decide')?.params).toMatchObject({ approvalId: 'a2', choiceId: 'allow_once' });
@@ -267,6 +271,69 @@ it.effect('a steer the turn ended before reading runs in the follow-up turn Muse
     yield* Effect.yieldNow;
     expect(yield* steer({ sessionId: session.sessionId, prompt: [{ type: 'text', text: 'late' }] })).toEqual({ outcome: 'promptRequired' });
     yield* Fiber.interrupt(late);
+  }),
+);
+
+it.effect('a stop before the follow-up of an unread steer ends the turn and hands the steer back unread', () =>
+  Effect.gen(function* () {
+    const { agent } = yield* world((one, emit) => {
+      const sessionId = one.params.sessionId;
+      if (one.method === 'session/start') return ok(one, { session: { sessionId } });
+      if (one.method === 'turn/start') return ok(one, { turnId: TURN, disposition: 'started' });
+      if (one.method === 'turn/steer')
+        return Effect.as(emit({ method: 'turn/completed', params: { sessionId, turnId: TURN, terminal: 'completed' } }), {
+          commandId: one.id,
+          status: 'accepted',
+          turnId: TURN,
+        });
+      return ok(one);
+    });
+    const session = yield* agent.newSession({ cwd: '/work', mcpServers: [] });
+    const running = yield* Effect.forkChild(
+      agent.prompt({ sessionId: session.sessionId, prompt: [{ type: 'text', text: 'go' }], _meta: { 'tagma/turn': TURN } }),
+    );
+    yield* Effect.yieldNow;
+    const steer = agent.extensions!['_tagma/steer']!;
+    const steered = yield* Effect.forkChild(
+      steer({ sessionId: session.sessionId, prompt: [{ type: 'text', text: 'late' }], input: '01a19573-2e48-708d-9b8c-9be329a9e7ea' }),
+    );
+    yield* Effect.yieldNow;
+    expect(running.pollUnsafe()).toBeUndefined();
+    yield* agent.cancel({ sessionId: session.sessionId });
+    expect(yield* Fiber.join(running)).toMatchObject({ stopReason: 'cancelled' });
+    expect(yield* Fiber.join(steered)).toEqual({ outcome: 'promptRequired' });
+  }),
+);
+
+it.effect('a steer Muse refuses after the turn completed under it still lets the turn end', () =>
+  Effect.gen(function* () {
+    const { agent } = yield* world((one, emit) => {
+      const sessionId = one.params.sessionId;
+      if (one.method === 'session/start') return ok(one, { session: { sessionId } });
+      if (one.method === 'turn/start') return ok(one, { turnId: TURN, disposition: 'started' });
+      if (one.method === 'turn/steer')
+        return Effect.andThen(
+          emit({ method: 'turn/completed', params: { sessionId, turnId: TURN, terminal: 'completed' } }),
+          Effect.fail(new MuseRefused({ method: one.method, kind: 'commandRejected', code: -32030, message: 'already_terminal' })),
+        );
+      return ok(one);
+    });
+    const session = yield* agent.newSession({ cwd: '/work', mcpServers: [] });
+    const running = yield* Effect.forkChild(
+      agent.prompt({ sessionId: session.sessionId, prompt: [{ type: 'text', text: 'go' }], _meta: { 'tagma/turn': TURN } }),
+    );
+    yield* Effect.yieldNow;
+    const steer = agent.extensions!['_tagma/steer']!;
+    expect(
+      yield* steer({
+        sessionId: session.sessionId,
+        prompt: [{ type: 'text', text: 'late' }],
+        input: '01a19573-2e48-708d-9b8c-9be329a9e7e9',
+      }),
+    ).toEqual({
+      outcome: 'promptRequired',
+    });
+    expect(yield* Fiber.join(running)).toMatchObject({ stopReason: 'end_turn' });
   }),
 );
 

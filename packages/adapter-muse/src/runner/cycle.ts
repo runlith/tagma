@@ -371,7 +371,7 @@ export const makeMuseCycle = Effect.fnUntraced(function* (door: HostedDoor, proc
               Effect.ensuring(finish),
             ),
             cancel: Effect.gen(function* () {
-              const open = running.stop();
+              const open = yield* running.stop();
               if (!running.started) {
                 const reclaimed = yield* standing.host.command('turn/unqueue', { sessionId: seat.id, turnId: turn }).pipe(
                   Effect.as(true),
@@ -397,27 +397,24 @@ export const makeMuseCycle = Effect.fnUntraced(function* (door: HostedDoor, proc
               const steering = yield* partsOf(prompt);
               const command = word !== undefined && UUID_V7.test(word) ? word : runner.mint();
               const settled = word === undefined ? null : yield* slot(word);
-              running.steering(command);
+              const read = running.steering(command);
               if (word !== undefined) steers.set(word, { command, feed: running });
-              const answer = yield* standing.host
+              const admitted = yield* standing.host
                 .command('turn/steer', { sessionId: seat.id, expectedTurnId: turn, input: steering }, command)
                 .pipe(
-                  Effect.as<Steered>({ outcome: 'injected' }),
+                  Effect.as(true),
                   Effect.catchTag('MuseRefused', (refusal) =>
-                    refusal.kind === 'commandRejected'
-                      ? Effect.sync((): Steered => {
-                          running.unsteered(command);
-                          if (word !== undefined) {
-                            steers.delete(word);
-                            refused.add(word);
-                          }
-                          return { outcome: 'promptRequired' };
-                        })
-                      : Effect.fail(faultOf(refusal)),
+                    Effect.andThen(running.unsteered(command), () => {
+                      if (word !== undefined) steers.delete(word);
+                      if (refusal.kind !== 'commandRejected') return Effect.fail(faultOf(refusal));
+                      if (word !== undefined) refused.add(word);
+                      return Effect.succeed(false);
+                    }),
                   ),
                   Effect.ensuring(settled === null ? Effect.void : Deferred.succeed(settled, undefined)),
                 );
-              return answer;
+              const outcome: Steered['outcome'] = admitted && (yield* Deferred.await(read)) ? 'injected' : 'promptRequired';
+              return { outcome } satisfies Steered;
             }),
             withdraw: Effect.fnUntraced(function* (word: string) {
               const pending = words.get(word);

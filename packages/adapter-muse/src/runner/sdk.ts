@@ -72,8 +72,11 @@ const museSdk = (module: Module): MuseSdk['Service'] => {
           Effect.tryPromise({
             try: () => connection.command(method, params, commandId === undefined ? { maxAttempts: 1 } : { maxAttempts: 1, commandId }),
             catch: refused(method),
-          }),
-        request: (method, params) => Effect.tryPromise({ try: () => connection.request(method, params), catch: refused(method) }),
+          }).pipe(Effect.withSpan('MuseSdk.command', { attributes: { method } })),
+        request: (method, params) =>
+          Effect.tryPromise({ try: () => connection.request(method, params), catch: refused(method) }).pipe(
+            Effect.withSpan('MuseSdk.request', { attributes: { method } }),
+          ),
         mint: () => connection.mintCommandId(),
         ended: Effect.map(
           Effect.promise(() => spawned.exited),
