@@ -8,4 +8,4 @@ sources:
     ref: packages/agent/src/agent/ModelRequests.ts
     symbol: wireToolDefinitions
 ---
-Selection changes reuse the catalog's definitions rather than manufacturing another copy of each tool. Keeping only the current selected array preserves identity for repeated requests without making resident memory grow with every subset the run has used; replacing or releasing the catalog releases its wire state through the weak key.
+Selection changes reuse the catalog's definitions rather than manufacturing another copy of each tool. Keeping only the current selected array preserves identity for repeated requests without making resident memory grow with every subset the run has used. The weak key lets the wire state become collectable with a catalog no caller holds.
