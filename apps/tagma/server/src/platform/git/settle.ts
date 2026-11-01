@@ -265,67 +265,77 @@ export const editHeldIndex = Effect.fn('platform.index.edit')(function* <A, E, R
   );
 });
 
-export const settleIndex = Effect.fn('platform.index.settle')(function* (
+type SettleFailure = IndexBusy | IndexWriteFailed | OwnGitFailed | HoldStalled | HoldCut;
+
+export const settleIndex = (
   git: Git['Service'],
   checkout: string,
   places: GitPlaces,
   ref: string,
   entries: readonly SettleEntry[],
-): Effect.fn.Return<Settlement, IndexBusy | IndexWriteFailed | OwnGitFailed | HoldStalled | HoldCut> {
+): Effect.Effect<Settlement, SettleFailure> =>
+  entries.length === 0
+    ? Effect.succeed({ paths: new Map(), moved: false })
+    : indexWrites.hold(places.index, settleHeldIndex(git, checkout, places, ref, entries));
+
+export const settleHeldIndex = Effect.fn('platform.index.settle')(function* (
+  git: Git['Service'],
+  checkout: string,
+  places: GitPlaces,
+  ref: string,
+  entries: readonly SettleEntry[],
+): Effect.fn.Return<Settlement, SettleFailure> {
   if (entries.length === 0) return { paths: new Map(), moved: false };
   const { index } = places;
   const guard = yield* shaOf(git, checkout, ref);
   const paths = entries.map((entry) => entry.path);
   const atRef = yield* treeBlobs(git, checkout, guard, paths);
   const superseded = (entry: SettleEntry) => (atRef.get(entry.path)?.blob ?? null) !== entry.landed;
-  const settled = yield* indexWrites.hold(
+  const settled = yield* editHeldIndex(
     index,
-    editHeldIndex(
-      index,
-      Effect.gen(function* () {
-        const onRef = (yield* refOfHead(git, checkout)) === ref;
-        if ((yield* shaOf(git, checkout, ref)) !== guard) {
-          return {
-            value: {
-              paths: new Map<string, Settled>(entries.map((entry) => [entry.path, superseded(entry) ? 'superseded' : 'unsynced'] as const)),
-              moved: true,
-            },
-            write: null,
-          };
-        }
-        const staged = yield* indexBlobs(git, checkout, paths);
-        const decided = new Map<string, Settled>();
-        const lines: string[] = [];
-        for (const entry of entries) {
-          const now = atRef.get(entry.path);
-          if (superseded(entry)) {
-            decided.set(entry.path, 'superseded');
-            continue;
-          }
-          const inIndex = staged.get(entry.path) ?? null;
-          if (!onRef || (inIndex !== entry.base && inIndex !== entry.landed)) {
-            decided.set(entry.path, 'unsynced');
-            continue;
-          }
-          decided.set(entry.path, 'synced');
-          if (inIndex === entry.landed) continue;
-          lines.push(now === undefined ? `0 ${'0'.repeat(guard.length)}\t${entry.path}` : `${now.mode} ${now.blob}\t${entry.path}`);
-        }
+    Effect.gen(function* () {
+      const onRef = (yield* refOfHead(git, checkout)) === ref;
+      if ((yield* shaOf(git, checkout, ref)) !== guard) {
         return {
-          value: { paths: decided, moved: false },
-          write:
-            lines.length === 0
-              ? null
-              : (temporary: string) =>
-                  Effect.asVoid(
-                    runGitBytes(git, 'settle-write', ['-C', checkout, 'update-index', '-z', '--index-info'], {
-                      env: { GIT_INDEX_FILE: temporary },
-                      stdin: lines.map((line) => `${line}\0`).join(''),
-                    }),
-                  ),
+          value: {
+            paths: new Map<string, Settled>(entries.map((entry) => [entry.path, superseded(entry) ? 'superseded' : 'unsynced'] as const)),
+            moved: true,
+          },
+          write: null,
         };
-      }),
-    ),
+      }
+      const staged = yield* indexBlobs(git, checkout, paths);
+      const decided = new Map<string, Settled>();
+      const lines: string[] = [];
+      for (const entry of entries) {
+        const now = atRef.get(entry.path);
+        if (superseded(entry)) {
+          decided.set(entry.path, 'superseded');
+          continue;
+        }
+        const inIndex = staged.get(entry.path) ?? null;
+        if (!onRef || (inIndex !== entry.base && inIndex !== entry.landed)) {
+          decided.set(entry.path, 'unsynced');
+          continue;
+        }
+        decided.set(entry.path, 'synced');
+        if (inIndex === entry.landed) continue;
+        lines.push(now === undefined ? `0 ${'0'.repeat(guard.length)}\t${entry.path}` : `${now.mode} ${now.blob}\t${entry.path}`);
+      }
+      return {
+        value: { paths: decided, moved: false },
+        write:
+          lines.length === 0
+            ? null
+            : (temporary: string) =>
+                Effect.asVoid(
+                  runGitBytes(git, 'settle-write', ['-C', checkout, 'update-index', '-z', '--index-info'], {
+                    env: { GIT_INDEX_FILE: temporary },
+                    stdin: lines.map((line) => `${line}\0`).join(''),
+                  }),
+                ),
+      };
+    }),
   );
   const after = yield* quietGit(git, 'settle-ref', ['-C', checkout, 'rev-parse', '--verify', '-q', `${ref}^{commit}`]);
   const moved = settled.moved || after !== guard;

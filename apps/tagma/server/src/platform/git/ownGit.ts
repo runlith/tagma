@@ -117,14 +117,32 @@ function cleaningEnvironment(extra?: Record<string, string | undefined>): Record
   });
 }
 
+function scratchEnvironment(extra?: Record<string, string | undefined>): Record<string, string | undefined> {
+  return gitEnvironment({
+    GIT_CONFIG_COUNT: '5',
+    GIT_CONFIG_KEY_3: 'core.fsmonitor',
+    GIT_CONFIG_VALUE_3: 'false',
+    GIT_CONFIG_KEY_4: 'core.splitIndex',
+    GIT_CONFIG_VALUE_4: 'false',
+    ...extra,
+  });
+}
+
 export type RunGitOptions = Omit<GitOptions, 'env'> & {
   readonly env?: Record<string, string>;
   readonly cleans?: boolean;
   readonly configured?: boolean;
+  readonly scratch?: boolean;
 };
 
 const environmentOf = (options: RunGitOptions | undefined) =>
-  options?.cleans === true ? cleaningEnvironment : options?.configured === true ? configuredEnvironment : gitEnvironment;
+  options?.cleans === true
+    ? cleaningEnvironment
+    : options?.configured === true
+      ? configuredEnvironment
+      : options?.scratch === true
+        ? scratchEnvironment
+        : gitEnvironment;
 
 const noteGit = (op: string, args: readonly string[]): Effect.Effect<void> =>
   Effect.annotateCurrentSpan({ 'git.op': op, 'git.verb': gitVerb(args), 'git.args': args.length });

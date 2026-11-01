@@ -103,4 +103,33 @@ layer(Layer.merge(demoGraphLayer(), BunFileSystem.layer), { excludeTestServices:
         }),
       ),
   );
+  it.effect('a path whose uncommitted work hides behind assume-unchanged is kept by its file, and the rest of the merge is brought', () =>
+    withDemo((demo) =>
+      Effect.gen(function* () {
+        let base = '';
+        const { finishing, make, project, projectId } = yield* composed(
+          demo,
+          makeMachineWorld(() => null),
+          {
+            before: () =>
+              Effect.sync(() => {
+                writeFileSync(join(base, 'lock.txt'), 'hidden lock\n');
+                Bun.spawnSync(['git', '-C', base, 'update-index', '--assume-unchanged', 'lock.txt']);
+                return UNCHECKED;
+              }),
+          },
+        );
+        base = project;
+        yield* commitEffect(project, 'lock.txt', 'lock\n', 'a lockfile');
+        const side = yield* make('hidden');
+        yield* commitEffect(side.path, 'lock.txt', 'moved lock\n', 'move the lock');
+        yield* commitEffect(side.path, 'pin.txt', 'pinned\n', 'move the pin');
+        const answer = yield* finishing.merge(projectId, side.rootId, {});
+        expect(answer.unsynced?.paths).toEqual(['lock.txt']);
+        expect(readFileSync(join(project, 'pin.txt'), 'utf8')).toBe('pinned\n');
+        expect(readFileSync(join(project, 'lock.txt'), 'utf8')).toBe('hidden lock\n');
+        expect(yield* shEffect(project, ['diff', '--cached', '--name-only'])).toBe('');
+      }),
+    ),
+  );
 });

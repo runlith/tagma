@@ -12,7 +12,7 @@ import { commitHooks, type Committing, HookRefused, landedHook, MERGING } from '
 import type { CheckoutLanes } from './lanes.js';
 import { laneFailed } from './commit.js';
 import { advanced, makeCommit } from './publish.js';
-import { standingOf } from '../../platform/git/places.js';
+import { type GitPlaces, standingOf } from '../../platform/git/places.js';
 import type { IndexCommitRefusal } from './indexCommit.js';
 
 export type PullAsk = { readonly root: string; readonly head: string; readonly merge: PullMerge; readonly job: string };
@@ -34,20 +34,22 @@ const fits = (git: Git['Service'], root: string, head: string, tree: string): Ef
 const brought = (
   git: Git['Service'],
   root: string,
-  index: string,
+  places: GitPlaces,
+  ref: string,
   head: string,
   commit: string,
   paths: readonly string[],
 ): Effect.Effect<readonly string[]> =>
-  Effect.flatMap(Effect.result(indexWrites.hold(index, bringCheckout(git, root, index, head, commit))), (done) => {
+  Effect.flatMap(Effect.result(indexWrites.hold(places.index, bringCheckout(git, root, places, ref, head, commit))), (done) => {
     if (done._tag === 'Failure')
       return Effect.as(
         Effect.logWarning('a pulled merge landed and the checkout was not brought to it', { root, reason: done.failure.message }),
         paths,
       );
-    if (done.success.failure !== null)
+    const reason = done.success.failure ?? done.success.stale;
+    if (reason !== null)
       return Effect.as(
-        Effect.logWarning('a pulled merge landed and the checkout was not brought to it', { root, reason: done.success.failure }),
+        Effect.logWarning('a pulled merge landed and the checkout was not wholly brought to it', { root, reason }),
         done.success.kept,
       );
     return Effect.succeed(done.success.kept);
@@ -81,7 +83,7 @@ export const mergePulled = Effect.fn('landing.mergePulled')(function* (
   const landed = Effect.gen(function* () {
     const sent = yield* advanced(git, git, { root, places, ref, base: head, job: ask.job }, commit);
     if (sent._tag === 'moved') return null;
-    return yield* brought(git, root, places.index, head, commit, paths);
+    return yield* brought(git, root, places, ref, head, commit, paths);
   });
   const unsynced = yield* hooked(
     lanes.commits.enter(root, landed).pipe(
