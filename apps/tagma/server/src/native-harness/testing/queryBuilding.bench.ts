@@ -1,6 +1,6 @@
 import * as BunRuntime from '@effect/platform-bun/BunRuntime';
 import { Effect, Layer } from 'effect';
-import { and, asc, desc, eq, fillPlaceholders, gt, isNull, lte, or, Placeholder, sql, type Param, type Query } from 'drizzle-orm';
+import { and, asc, desc, eq, fillPlaceholders, gt, isNull, lte, or, Placeholder, sql, type Param, type Query, type SQL } from 'drizzle-orm';
 import type { AnySQLiteColumn } from 'drizzle-orm/sqlite-core';
 import { makeWithDefaults } from 'drizzle-orm/effect-sqlite-bun';
 import { heldPool } from '@runlith/sqlite-process/testing/pool';
@@ -9,12 +9,15 @@ import type { ThreadEventPayloadValue } from '@runlith/agent/thread/storage/even
 import type { ThreadTranscriptEntry } from '@runlith/agent/transcript/rows';
 import { metadataColumns, threadRow } from '../row.js';
 import { thread, threadEntry, threadRun } from '../../threads/store/kernel.js';
-import { payloadField } from '../../threads/store/fields.js';
+import { entryField, payloadField } from '../../threads/store/fields.js';
 import { bodyInFold } from '../../threads/journal/foldedFacts.js';
 import type { ThreadContextReading } from '@runlith/agent/thread/rows';
-import { threadLog, threadRev } from '../store/thread.js';
+import { targetSnapshot, threadLog, threadRev } from '../store/thread.js';
+import { mandateFacts } from '../../threads/mandate.js';
+import { project } from '../../projects/store/table.js';
+import { registration } from '../../projects/resolution.js';
 import { journalHead } from '../../threads/journal/base.js';
-import { recordFacts } from '../../thread-record/facts.js';
+import { recordFacts, recordsAs } from '../../thread-record/facts.js';
 import { factsWhere } from '../../thread-record/identity.js';
 import { bindQuery } from '../../platform/store/queries.js';
 import { storeDb } from '../../platform/contract/service/store.js';
@@ -22,6 +25,12 @@ import { setting } from '../../settings/store/table.js';
 import { journalProjectOf, threadBase, threadEvent, threadEventIdentity, threadRolloutCursor } from '../../threads/store/journal.js';
 
 const A1_COUNTS = new Map<string, number>([
+  ['5a87d6c457198db5', 507],
+  ['7fb008158d4c266b', 230],
+  ['b7fa629b16478dcc', 362],
+  ['96f1d5d272dd2e35', 1803],
+  ['1f5e9a94a2387573', 1803],
+  ['8c7ed8e99994529b', 2523],
   ['9c1071d8e1460bde', 2572],
   ['a6366da23c94f1ff', 2581],
   ['d129dc8b82f3c6c5', 3379],
@@ -68,6 +77,9 @@ type Bind = {
   readonly updatedAt: Slot<Date>;
   readonly reading: Slot<ThreadContextReading>;
   readonly adapter: Slot<string>;
+  readonly run: Slot<string>;
+  readonly generation: Slot<number>;
+  readonly projectId: Slot<number>;
 };
 
 const sample = {
@@ -87,6 +99,9 @@ const sample = {
   updatedAt: new Date(1_790_000_000_000),
   reading: { tokens: 1024, at: '2026-11-01T00:00:00.000Z' } as unknown as ThreadContextReading,
   adapter: 'native',
+  run: 'run-1',
+  generation: 3,
+  projectId: 7,
 } satisfies Bind;
 
 const holes: Bind = {
@@ -106,6 +121,9 @@ const holes: Bind = {
   updatedAt: sql.placeholder('updatedAt'),
   reading: sql.placeholder('reading'),
   adapter: sql.placeholder('adapter'),
+  run: sql.placeholder('run'),
+  generation: sql.placeholder('generation'),
+  projectId: sql.placeholder('projectId'),
 };
 
 const encoded = <T>(slot: Slot<T>, column: AnySQLiteColumn): Slot<T> | Param =>
@@ -287,6 +305,43 @@ BunRuntime.runMain(
           .from(threadRow)
           .where(and(eq(threadRow.id, bind.id), sql`json_extract(${threadRow.transport}, '$.adapter') is ${bind.adapter}`));
       const absentGuard = (bind: Bind) => db.select({ id: threadRow.id }).from(threadRow).where(eq(threadRow.id, bind.id));
+      const lineage = (column: SQL, label: string) => (bind: Bind) =>
+        db.all<{ id: string; depth: number }>(sql`
+        with recursive lineage(id, parent, depth) as (
+          select tree.id, tree.parent_id, 0 from ${recordsAs('tree')} where tree.id = ${bind.id}
+          union all
+          select leaf.id, leaf.parent_id, l.depth + 1 from ${recordsAs('leaf')} join lineage l on leaf.id = l.parent
+        )
+        select l.id as id, ${column} as ${sql.raw(label)}, l.depth as depth
+          from lineage l left join ${mandateFacts} on ${mandateFacts.id} = l.id order by l.depth`);
+      const delegationLineage = lineage(sql`${mandateFacts.delegation}`, 'delegation');
+      const approvesLineage = lineage(sql`${mandateFacts.approves}`, 'approves');
+      const teamLineage = lineage(sql`${mandateFacts.team}`, 'team');
+      const targetAt = (bind: Bind) =>
+        db
+          .select()
+          .from(targetSnapshot)
+          .where(
+            and(eq(targetSnapshot.threadId, bind.id), eq(targetSnapshot.runId, bind.run), eq(targetSnapshot.generation, bind.generation)),
+          );
+      const activeGeneration = (bind: Bind) =>
+        db.all<{ run_id: string; generation: unknown }>(sql`
+            select r.id as run_id,
+                   coalesce(max(case
+                     when e.type = 'context-change'
+                      and ${entryField(sql.raw('e.entry'), 'status')} = 'published'
+                     then ${entryField(sql.raw('e.entry'), 'generation')}
+                   end), 0) as generation
+              from thread_run r
+              left join thread_entry e on e.thread_id = r.thread_id and e.run_id = r.id
+             where r.thread_id = ${bind.id} and r.status = 'running'
+             group by r.id
+          `);
+      const projectById = (bind: Bind) =>
+        db
+          .select(registration)
+          .from(project)
+          .where(and(eq(project.id, bind.projectId), isNull(project.removedAt)));
       const planning: readonly Planned[] = [
         {
           name: 'planning bounds',
@@ -451,6 +506,72 @@ BunRuntime.runMain(
           prepare: () => {
             const query = absentGuard(holes).prepare();
             return { use: () => bindQuery(query, sample).getQuery(), text: () => bindQuery(query, sample).getQuery() };
+          },
+        },
+        {
+          name: 'mandate delegation lineage',
+          census: '5a87d6c457198db5',
+          via: 'effect creation',
+          direct: () => delegationLineage(sample).execute(),
+          directText: () => delegationLineage(sample).getQuery(),
+          prepare: () => {
+            const query = delegationLineage(holes);
+            return { use: () => query.execute(sample), text: () => filled(query.getQuery()) };
+          },
+        },
+        {
+          name: 'mandate approves lineage',
+          census: '7fb008158d4c266b',
+          via: 'effect creation',
+          direct: () => approvesLineage(sample).execute(),
+          directText: () => approvesLineage(sample).getQuery(),
+          prepare: () => {
+            const query = approvesLineage(holes);
+            return { use: () => query.execute(sample), text: () => filled(query.getQuery()) };
+          },
+        },
+        {
+          name: 'mandate team lineage',
+          census: 'b7fa629b16478dcc',
+          via: 'effect creation',
+          direct: () => teamLineage(sample).execute(),
+          directText: () => teamLineage(sample).getQuery(),
+          prepare: () => {
+            const query = teamLineage(holes);
+            return { use: () => query.execute(sample), text: () => filled(query.getQuery()) };
+          },
+        },
+        {
+          name: 'target snapshot at',
+          census: '96f1d5d272dd2e35',
+          via: 'effect creation',
+          direct: () => targetAt(sample).get(),
+          directText: () => targetAt(sample).toSQL(),
+          prepare: () => {
+            const query = targetAt(holes).prepare();
+            return { use: () => query.get(sample), text: () => filled(query.getQuery()) };
+          },
+        },
+        {
+          name: 'target snapshot active generation',
+          census: '1f5e9a94a2387573',
+          via: 'effect creation',
+          direct: () => activeGeneration(sample).execute(),
+          directText: () => activeGeneration(sample).getQuery(),
+          prepare: () => {
+            const query = activeGeneration(holes);
+            return { use: () => query.execute(sample), text: () => filled(query.getQuery()) };
+          },
+        },
+        {
+          name: 'project by id (a section C candidate, not an approved D migration)',
+          census: '8c7ed8e99994529b',
+          via: 'effect creation',
+          direct: () => projectById(sample).get(),
+          directText: () => projectById(sample).toSQL(),
+          prepare: () => {
+            const query = projectById(holes).prepare();
+            return { use: () => query.get(sample), text: () => filled(query.getQuery()) };
           },
         },
       ];

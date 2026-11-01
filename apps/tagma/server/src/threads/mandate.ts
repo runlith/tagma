@@ -1,7 +1,7 @@
 import type { ThreadBindings } from '@runlith/agent/contracts';
 import type { ThreadAuthority } from '@runlith/agent/thread/rows';
 import type { TeamLayer } from '@runlith/agent/collaboration/team';
-import { eq, getTableColumns, sql } from 'drizzle-orm';
+import { eq, getTableColumns, sql, type SQL } from 'drizzle-orm';
 import { QueryBuilder } from 'drizzle-orm/sqlite-core';
 import { Effect } from 'effect';
 import { MachineStore, type StoreDb, type StoreFailure } from '../platform/contract/service/store.js';
@@ -64,20 +64,21 @@ export type ApprovesLineage = {
 export const makeMandateRows = Effect.gen(function* () {
   const { db } = yield* MachineStore;
   const units = yield* MachineUnits;
-  return ThreadMandate.of({
-    delegationLineage: Effect.fn('MandateRows.delegationLineage')(function* (id) {
-      const rows = yield* units.read((unit) =>
-        unit.run(
-          db.all<{ id: string; delegation: number | null; depth: number }>(sql`
+  const lineageOf = <Name extends string, Value>(column: SQL, name: Name) =>
+    db.all<{ id: string; depth: number } & Record<Name, Value>>(sql`
         with recursive lineage(id, parent, depth) as (
-          select tree.id, tree.parent_id, 0 from ${recordsAs('tree')} where tree.id = ${id}
+          select tree.id, tree.parent_id, 0 from ${recordsAs('tree')} where tree.id = ${sql.placeholder('id')}
           union all
           select leaf.id, leaf.parent_id, l.depth + 1 from ${recordsAs('leaf')} join lineage l on leaf.id = l.parent
         )
-        select l.id as id, ${mandateFacts.delegation} as delegation, l.depth as depth
-          from lineage l left join ${mandateFacts} on ${mandateFacts.id} = l.id order by l.depth`),
-        ),
-      );
+        select l.id as id, ${column} as ${sql.raw(name)}, l.depth as depth
+          from lineage l left join ${mandateFacts} on ${mandateFacts.id} = l.id order by l.depth`);
+  const delegations = lineageOf<'delegation', number | null>(sql`${mandateFacts.delegation}`, 'delegation');
+  const approvals = lineageOf<'approves', string | null>(sql`${mandateFacts.approves}`, 'approves');
+  const teams = lineageOf<'team', string | null>(sql`${mandateFacts.team}`, 'team');
+  return ThreadMandate.of({
+    delegationLineage: Effect.fn('MandateRows.delegationLineage')(function* (id) {
+      const rows = yield* units.read((unit) => unit.run(delegations.execute({ id })));
       const nearest = rows.find((row) => row.delegation !== null);
       const own = rows.find((row) => row.depth === 0)?.delegation ?? null;
       return {
@@ -89,18 +90,7 @@ export const makeMandateRows = Effect.gen(function* () {
     setDelegation: (id, delegation) =>
       units.write(writes('MandateRows.setDelegation', [threadMandate]), (unit) => writeMandate(db, unit, id, { delegation })),
     approvesLineage: Effect.fn('MandateRows.approvesLineage')(function* (id) {
-      const rows = yield* units.read((unit) =>
-        unit.run(
-          db.all<{ id: string; approves: string | null; depth: number }>(sql`
-        with recursive lineage(id, parent, depth) as (
-          select tree.id, tree.parent_id, 0 from ${recordsAs('tree')} where tree.id = ${id}
-          union all
-          select leaf.id, leaf.parent_id, l.depth + 1 from ${recordsAs('leaf')} join lineage l on leaf.id = l.parent
-        )
-        select l.id as id, ${mandateFacts.approves} as approves, l.depth as depth
-          from lineage l left join ${mandateFacts} on ${mandateFacts.id} = l.id order by l.depth`),
-        ),
-      );
+      const rows = yield* units.read((unit) => unit.run(approvals.execute({ id })));
       const listed = (raw: string | null): readonly string[] | null => (raw === null ? null : (JSON.parse(raw) as readonly string[]));
       const nearest = rows.find((row) => row.approves !== null);
       return {
@@ -112,18 +102,7 @@ export const makeMandateRows = Effect.gen(function* () {
     setApproves: (id, approves) =>
       units.write(writes('MandateRows.setApproves', [threadMandate]), (unit) => writeMandate(db, unit, id, { approves })),
     teamLineage: Effect.fn('MandateRows.teamLineage')(function* (id) {
-      const rows = yield* units.read((unit) =>
-        unit.run(
-          db.all<{ id: string; team: string | null; depth: number }>(sql`
-        with recursive lineage(id, parent, depth) as (
-          select tree.id, tree.parent_id, 0 from ${recordsAs('tree')} where tree.id = ${id}
-          union all
-          select leaf.id, leaf.parent_id, l.depth + 1 from ${recordsAs('leaf')} join lineage l on leaf.id = l.parent
-        )
-        select l.id as id, ${mandateFacts.team} as team, l.depth as depth
-          from lineage l left join ${mandateFacts} on ${mandateFacts.id} = l.id order by l.depth`),
-        ),
-      );
+      const rows = yield* units.read((unit) => unit.run(teams.execute({ id })));
       const nearest = rows.find((row) => row.team !== null);
       const own = rows.find((row) => row.depth === 0)?.team ?? null;
       return {
