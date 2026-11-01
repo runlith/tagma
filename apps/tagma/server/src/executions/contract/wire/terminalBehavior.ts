@@ -114,6 +114,8 @@ const terminalStoredTab = Schema.Struct({
   tree: terminalTabTree,
   labels: Schema.Record(Schema.String, Schema.String),
   active: Schema.optionalKey(Schema.Union([Schema.String, Schema.Null])),
+  holder: Schema.optional(Schema.NullOr(Schema.String)),
+  holderProject: Schema.optional(Schema.Int.check(Schema.isGreaterThan(0))),
 });
 
 const terminalPlaceLayout = Schema.Struct({
@@ -146,6 +148,8 @@ export const terminalPlaceLayouts = settingKey({
                 readonly tree: TerminalTabTree;
                 readonly labels: Readonly<Record<string, string>>;
                 readonly active?: string | null;
+                readonly holder?: string | null;
+                readonly holderProject?: number;
               }
             >
           >;
@@ -154,6 +158,8 @@ export const terminalPlaceLayouts = settingKey({
             readonly tree: TerminalTabTree;
             readonly labels: Readonly<Record<string, string>>;
             readonly active?: string | null;
+            readonly holder?: string | null;
+            readonly holderProject?: number;
           }[];
           readonly shown?: boolean;
           readonly active?: string | null;

@@ -3,6 +3,10 @@ import { tick } from 'svelte';
 import { expect, test } from 'vitest';
 import { draftHolder, threadHolder } from '$lib/shared/panes/holder.js';
 import { terminalPane } from '../kind.js';
+import { panes as terminalKinds } from '../panes.js';
+import { TerminalTabs } from '../terminal/Tabs.svelte.js';
+import { ProjectRung } from '$lib/features/workspace/ProjectRung.js';
+import type { Resolver } from '@runlith/layer/key';
 import { paneNode, splitNode } from '../terminal/paneLayout.js';
 import type { StoredLayout } from './layout.js';
 import { FEATURE, MAIN, listingFor, reportFor, stand, until } from './testing/fixture.svelte.js';
@@ -219,7 +223,7 @@ test('a terminal started beside a thread is that thread’s: it stands in its ta
   const mine = worktree.tabs.find((tab) => tab.key !== 'm:0');
   if (mine === undefined) throw new Error('no terminal started beside');
   expect(worktree.holderOf(mine.key)).toBe(owned.panes.holder);
-  expect(owned.panes.shows(terminalPane(mine.key))).toBe(true);
+  expect(owned.panes.shows(terminalPane(owned.layouts.projectId, mine.key))).toBe(true);
   expect(worktree.panel.map((tab) => tab.key)).toEqual(['m:0']);
 
   expect(owned.terminals.requestClose(mine.key)).toBe(true);
@@ -237,7 +241,7 @@ test('a terminal its thread holds stands in that thread’s tabs wherever the la
     threads: (thread) => (thread === 't-live' ? ({ label: 'live', archived: false } as never) : null),
   });
 
-  expect(owned.layouts.layout(threadHolder('t-live')).tabs).toMatchObject([{ kind: 'terminal', id: 'a:0' }]);
+  expect(owned.layouts.layout(threadHolder('t-live')).tabs).toMatchObject([{ kind: 'terminal', id: '1:a:0' }]);
   expect(owned.worktree(MAIN).panel.map((tab) => tab.key)).toEqual(['g:0']);
   owned.stop();
 });
@@ -263,9 +267,9 @@ test('a terminal tab stands only in the layout of the holder that owns it', asyn
   const here = owned.panes.holder;
   if (here === null) throw new Error('no holder on screen');
 
-  owned.layouts.open(here, terminalPane('m:0'));
+  owned.layouts.open(here, terminalPane(owned.layouts.projectId, 'm:0'));
 
-  expect(owned.panes.holds(terminalPane('m:0'))).toBe(false);
+  expect(owned.panes.holds(terminalPane(owned.layouts.projectId, 'm:0'))).toBe(false);
   expect(owned.worktree(MAIN).panel.map((tab) => tab.key)).toEqual(['m:0']);
   owned.stop();
 });
@@ -336,10 +340,10 @@ test('a shell an agent starts lands as a background tab in its thread’s layout
   await until(() => owned.terminals.rootOf('agent:0') === MAIN, 'the agent terminal adopted');
 
   expect(owned.layouts.layout(threadHolder('t-1')).tabs).toMatchObject([
-    { kind: 'terminal', id: 'early:0', agent: true },
-    { kind: 'terminal', id: 'agent:0', agent: true },
+    { kind: 'terminal', id: '1:early:0', agent: true },
+    { kind: 'terminal', id: '1:agent:0', agent: true },
   ]);
-  expect(owned.panes.holds(terminalPane('agent:0'))).toBe(false);
+  expect(owned.panes.holds(terminalPane(owned.layouts.projectId, 'agent:0'))).toBe(false);
   owned.stop();
 });
 
@@ -352,7 +356,7 @@ test('a terminal a thread holds outside every checkout opens as a tab of that th
   await owned.terminals.reveal('far:0');
 
   expect(owned.addresses.at(-1)).toBe('/proj/chat/t-1');
-  expect(owned.layouts.layout(threadHolder('t-1')).tabs).toMatchObject([{ kind: 'terminal', id: 'far:0' }]);
+  expect(owned.layouts.layout(threadHolder('t-1')).tabs).toMatchObject([{ kind: 'terminal', id: '1:far:0' }]);
   expect(owned.worktree(MAIN).tabs).toEqual([]);
   expect(owned.terminals.home?.panel).toEqual([]);
 
@@ -364,6 +368,44 @@ test('a terminal a thread holds outside every checkout opens as a tab of that th
   const written = owned.writes.at(-1) as unknown as Written | undefined;
   expect(Object.keys(written?.value.places ?? {}).every((root) => root === MAIN || root === FEATURE)).toBe(true);
   owned.stop();
+});
+
+test('opening a terminal held by a thread in another project keeps the thread home and the execution project separate', async () => {
+  const owned = await stand([listingFor('far:0', { holder: 'thread:t-1', heldBy: 't-1' })], {
+    threads: () => undefined,
+    readThread: async () => ({ label: 'holder', archived: false, harness: false, home: 'home', projectId: 2 }),
+    processesOf: (at) => reportFor(at, false),
+  });
+  try {
+    await owned.terminals.reveal('far:0');
+
+    expect(owned.addresses.at(-1)).toBe('/home/chat/t-1?terminal=1%3Afar%3A0');
+    owned.background();
+    const destination = owned.showProject(2, 't-1');
+    await owned.terminals.reveal('far:0', 2);
+
+    expect(owned.addresses.at(-1)).toBe('/home/chat/t-1');
+    expect(destination.layout(threadHolder('t-1')).tabs).toMatchObject([{ kind: 'terminal', id: '1:far:0' }]);
+    expect(owned.panes.shows(terminalPane(1, 'far:0'))).toBe(true);
+    const written = owned.writes.at(-1) as unknown as Written;
+    expect(written.value.places[MAIN]?.tabs['far:0']).toMatchObject({ holder: 't-1', holderProject: 2 });
+    expect(owned.worktree(MAIN).tabOf('far:0')?.current?.address).toEqual({ execution: 'far', incarnation: 0 });
+
+    const kind = terminalKinds.find((kind) => kind.kind === 'terminal');
+    const home = {
+      resolve: (key: unknown) => {
+        if (key === ProjectRung.Current) return { projectId: 2 };
+        if (key === TerminalTabs) return owned.tabs;
+        throw new Error('The home screen only resolves the terminal tab owners.');
+      },
+    } as Resolver;
+    expect(kind?.stands?.(home, '1:far:0', threadHolder('t-1'))).toBe(true);
+    expect(kind?.close?.(home, '1:far:0')).toBe(true);
+    await until(() => !owned.worktree(MAIN).holds('far:0'), 'the foreign terminal closed in its execution project');
+    expect(kind?.stands?.(home, '1:far:0', threadHolder('t-1'))).toBe(false);
+  } finally {
+    owned.stop();
+  }
 });
 
 test('an address revealed before the worktree listing arrives aims the frame once the listing is read', async () => {

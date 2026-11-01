@@ -5,7 +5,7 @@
   import Plus from '@lucide/svelte/icons/plus';
   import { Router } from '@runlith/layer/Router';
   import { Seam } from '@runlith/seam/Seam.svelte';
-  import { untrack } from 'svelte';
+  import Reveal from './Reveal.svelte';
   import SeamHandle from '@runlith/seam/SeamHandle.svelte';
   import { Keymap } from '$lib/app/keys/Keymap.svelte.js';
   import TabRail from '$lib/shared/TabRail.svelte';
@@ -37,10 +37,6 @@
   $effect(() => terminals.mountPanel());
 
   const revealed = $derived(router.url.searchParams.get('terminal'));
-  $effect(() => {
-    const key = revealed;
-    if (key !== null) untrack(() => void terminals.reveal(key));
-  });
 
   function onPanelKey(event: KeyboardEvent): void {
     if (worktree !== null) routeKey(event, keymap, worktree.current, (act) => terminals.perform(act, worktree, null));
@@ -69,6 +65,10 @@
     if (tab !== null && pane !== null) tab.perform({ _tag: 'split-right' }, pane);
   }
 </script>
+
+{#if revealed !== null}
+  {#key revealed}<Reveal address={revealed} />{/key}
+{/if}
 
 {#snippet face(tab: TerminalTab)}
   {#if worktree !== null}<TabFace {worktree} {tab} />{/if}

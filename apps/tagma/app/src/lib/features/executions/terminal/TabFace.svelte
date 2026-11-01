@@ -1,6 +1,7 @@
 <script lang="ts">
   import Bot from '@lucide/svelte/icons/bot';
   import { Addresses } from '$lib/features/workspace/Addresses.js';
+  import { Workspace } from '$lib/features/workspace/Selection.svelte.js';
   import FadeText from '$lib/shared/FadeText.svelte';
   import Tooltip from '$lib/shared/ui/tooltip/Tooltip.svelte';
   import TerminalIcon from '../TerminalIcon.svelte';
@@ -11,6 +12,8 @@
   let { worktree, tab }: { worktree: WorktreeTerminals; tab: TerminalTab } = $props();
 
   const addresses = Addresses.use();
+  const workspace = Workspace.use();
+  const project = $derived(workspace.find(worktree.projectId));
   const renaming = $derived(worktree.renaming === tab.key);
   const adopter = $derived(worktree.adopterOf(tab));
 
@@ -45,7 +48,7 @@
   <Tooltip text={`Thread “${adopter.label}” runs its CLI in this terminal — open the thread`} class="flex shrink-0 items-center">
     <a
       class="text-muted-foreground hover:text-foreground"
-      href={addresses.thread(adopter.thread)}
+      href={project === null ? undefined : addresses.thread(adopter.thread, project.name)}
       aria-label={`Open thread ${adopter.label}`}
       data-tab-adopter={adopter.thread}
       onpointerdown={(event) => event.stopPropagation()}

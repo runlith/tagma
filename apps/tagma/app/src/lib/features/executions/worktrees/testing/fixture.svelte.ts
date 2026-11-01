@@ -23,16 +23,17 @@ import { TerminalOutput, pageHidden, pageTime } from '../../terminal/Output.js';
 import type { TerminalPane } from '../../terminal/Pane.svelte.js';
 import { Terminals } from '../Terminals.svelte.js';
 import type { SidePanes } from '$lib/app/panes/SidePanes.svelte.js';
-import type { TabLayouts } from '$lib/app/panes/TabLayouts.svelte.js';
+import { TabLayouts } from '$lib/app/panes/TabLayouts.svelte.js';
 import type { PlacesPort } from '$lib/app/panes/ThreadPlaces.js';
 import { threadHolder } from '$lib/shared/panes/holder.js';
 import type { Resolver } from '@runlith/layer/key';
-import { testArea } from '$lib/app/panes/testing.js';
+import { noSurfaces, testArea } from '$lib/app/panes/testing.js';
 import { testAddresses } from '$lib/app/testing.js';
 import { panes as terminalKinds } from '../../panes.js';
 import { Worktrees } from '$lib/features/worktrees/BoardState.svelte.js';
 import { TerminalRenderPolicy } from '../../terminal/RenderPolicy.js';
 import type { TerminalTab } from '../../terminal/Tab.svelte.js';
+import { TerminalTabs } from '../../terminal/Tabs.svelte.js';
 import { ExecutionsRepo, type ExecutionAddress } from '../../Repo.js';
 import { ThreadNames, type OwnerWords } from '$lib/shared/threads/Names.svelte.js';
 
@@ -161,12 +162,14 @@ export type DoorStand = {
   readonly unlisted?: boolean;
   readonly adoptedBy?: (execution: string) => string | undefined;
   readonly threads?: (thread: string) => OwnerWords | null | undefined;
+  readonly readThread?: (thread: string) => Promise<OwnerWords | null | undefined>;
 };
 
 export type Stand = {
   readonly terminals: Terminals;
   readonly panes: SidePanes;
   readonly layouts: TabLayouts;
+  readonly tabs: TerminalTabs;
   readonly stops: { key: string; cause: unknown; heldAtStop: boolean }[];
   readonly writes: { projectId: number; key: string; value: unknown }[];
   readonly starts: { operationId: string; cwd: string; geometry?: { rows: number; columns: number } }[];
@@ -179,6 +182,7 @@ export type Stand = {
   leave(rootId: string): void;
   list(): void;
   background(): void;
+  showProject(projectId: number, thread: string): TabLayouts;
   reconnect(): void;
   stop(): void;
 };
@@ -371,10 +375,31 @@ export async function stand(listings: readonly TerminalRow[], door: DoorStand = 
     },
   };
   let terminals!: Terminals;
-  const { panes, layouts } = testArea(terminalKinds, storage, { resolve: () => terminals } as unknown as Resolver);
+  const tabs = new TerminalTabs();
+  const names = new ThreadNames(
+    door.threads ?? (() => undefined),
+    door.readThread ??
+      (async (thread) => {
+        const words = door.threads === undefined ? { label: thread, archived: false, harness: false } : door.threads(thread);
+        return words == null ? words : { ...words, projectId: words.projectId ?? projectId };
+      }),
+  );
+  const resolverAt = (projectId: number) =>
+    ({
+      resolve: (key: unknown) => (key === TerminalTabs ? tabs : key === ProjectRung.Current ? { projectId } : terminals),
+    }) as Resolver;
+  const { panes, layouts: base } = testArea(terminalKinds, storage, resolverAt(projectId));
+  const layouts = projectId === base.projectId ? base : new TabLayouts(projectId, storage, panes.kinds, noSurfaces(), () => 1);
+  if (layouts !== base) panes.attach(layouts, resolverAt(projectId));
   panes.seatMain({ activeId: 'thread-1', projectId });
   const places: PlacesPort = {
-    place: (at, thread) => ({ layouts: at, holder: threadHolder(thread) }),
+    get threads() {
+      return panes.main?.activeId == null ? [] : [panes.main.activeId];
+    },
+    place: (at, thread) =>
+      panes.main?.activeId === thread && panes.layouts !== null
+        ? { layouts: panes.layouts, holder: panes.holder ?? threadHolder(thread) }
+        : { layouts: at, holder: threadHolder(thread) },
     openFor: (at, thread, content, how) => panes.openAt({ layouts: at, holder: threadHolder(thread) }, content, how),
     ask: () => {
       throw new Error('asking a thread is not part of this case');
@@ -388,7 +413,7 @@ export async function stand(listings: readonly TerminalRow[], door: DoorStand = 
       Layer.mergeAll(
         Layer.of(ExecutionsRepo, repo as never),
         Layer.of(TerminalHolders, new TerminalHolders(() => [], ThreadNames.make())),
-        Layer.of(ThreadNames, new ThreadNames(door.threads ?? (() => undefined))),
+        Layer.of(ThreadNames, names),
         Layer.of(TerminalRenderPolicy, {
           resume: () => undefined,
           suspend: () => undefined,
@@ -448,6 +473,9 @@ export async function stand(listings: readonly TerminalRow[], door: DoorStand = 
       layouts,
       rung.scope.child('Terminals'),
       live as never,
+      names,
+      { projectsOf: async (ids: readonly number[]) => ids.map((id) => ({ id, name: id === projectId ? 'proj' : 'home' })) } as never,
+      tabs,
     );
   });
   await tick();
@@ -456,6 +484,7 @@ export async function stand(listings: readonly TerminalRow[], door: DoorStand = 
     terminals,
     panes,
     layouts,
+    tabs,
     stops,
     writes,
     starts,
@@ -482,6 +511,12 @@ export async function stand(listings: readonly TerminalRow[], door: DoorStand = 
     },
     background: () => {
       focus.current = false;
+    },
+    showProject: (projectId, thread) => {
+      const shown = new TabLayouts(projectId, storage, panes.kinds, noSurfaces(), () => 1);
+      panes.attach(shown, resolverAt(projectId));
+      panes.seatMain({ activeId: thread, projectId });
+      return shown;
     },
     reconnect: () => {
       for (const status of ['closed', 'open'] as const) for (const hear of statuses) hear(status);

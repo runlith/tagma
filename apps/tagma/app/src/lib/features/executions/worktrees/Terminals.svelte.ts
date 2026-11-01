@@ -3,13 +3,16 @@ import type { WorktreePlace } from '@tagma/server/worktrees/contract/wire/rows';
 import { Router } from '@runlith/layer/Router';
 import { Scope } from '@runlith/layer/Scope';
 import { Service } from '@runlith/layer/key';
-import { untrack } from 'svelte';
+import { tick, untrack } from 'svelte';
 import { SvelteMap } from 'svelte/reactivity';
-import { draftHolder, holderThread, type Holder } from '$lib/shared/panes/holder.js';
-import { SidePanes } from '$lib/app/panes/SidePanes.svelte.js';
+import { holderThread, type Holder } from '$lib/shared/panes/holder.js';
+import { SidePanes, type Placement } from '$lib/app/panes/SidePanes.svelte.js';
 import { type TabOpen, TabLayouts } from '$lib/app/panes/TabLayouts.svelte.js';
 import { type PlacesPort, ThreadPlaces } from '$lib/app/panes/ThreadPlaces.js';
 import { Notices } from '$lib/features/notices/Service.svelte.js';
+import { ThreadNames } from '$lib/shared/threads/Names.svelte.js';
+import { Workspace } from '$lib/features/workspace/Selection.svelte.js';
+import { TerminalTabs } from '../terminal/Tabs.svelte.js';
 import { SettingsRepo } from '$lib/features/settings/SettingsRepo.js';
 import { ProjectFocus } from '$lib/features/workspace/Focus.svelte.js';
 import { branchHref, currentBranch, currentProject } from '$lib/features/workspace/address.js';
@@ -20,7 +23,7 @@ import { Worktrees } from '$lib/features/worktrees/BoardState.svelte.js';
 import { Live, type LiveConnection } from '$lib/wire/Live.js';
 import { refusalOf, type Refusal } from '$lib/wire/refusal.js';
 import { CommandActivity } from '../commands/Activity.svelte.js';
-import { terminalPane } from '../kind.js';
+import { terminalPane, terminalPaneOf } from '../kind.js';
 import { STANDING_INVENTORY, ExecutionsRepo, terminalAddress, terminalKey } from '../Repo.js';
 import type { FitGrid } from '../terminal/Fit.js';
 import type { TerminalAct } from '../terminal/Keymap.js';
@@ -52,6 +55,9 @@ export class Terminals extends Service<Terminals>()('Terminals', { tier: 'projec
       yield* TabLayouts,
       yield* Scope,
       yield* Live,
+      yield* ThreadNames,
+      yield* Workspace,
+      yield* TerminalTabs,
     );
   }
 
@@ -70,13 +76,13 @@ export class Terminals extends Service<Terminals>()('Terminals', { tier: 'projec
   private readonly store: TerminalSettings;
   private pending: Promise<void> | null = null;
   private reread = false;
-  private revealing: string | null = null;
+  private revealing: { readonly key: string; readonly project: number } | null = null;
   private edited = false;
   private readonly listing: (() => void)[] = [];
   private readonly recent: string[] = [];
 
   constructor(
-    private readonly projectId: number,
+    readonly projectId: number,
     private readonly repo: ExecutionsRepo,
     private readonly notices: Notices,
     settings: SettingsRepo,
@@ -90,8 +96,12 @@ export class Terminals extends Service<Terminals>()('Terminals', { tier: 'projec
     private readonly layouts: TabLayouts,
     private readonly scope: Scope,
     live: LiveConnection,
+    private readonly names: ThreadNames,
+    private readonly workspace: Workspace,
+    private readonly tabs: TerminalTabs,
   ) {
     super();
+    scope.defer(tabs.attach(projectId, this));
     this.store = new TerminalSettings(projectId, settings, notices, scope);
     this.running = $derived(
       new Set(commands.roster.flatMap((row) => (placeOf(row)?.kind !== 'checkout' ? [] : [terminalKey(row.record.execution)]))),
@@ -116,7 +126,13 @@ export class Terminals extends Service<Terminals>()('Terminals', { tier: 'projec
         if (settled) for (const done of this.listing.splice(0)) done();
       });
     });
-    scope.defer(panes.inherit((from, to) => from === draftHolder(projectId) && this.carry(from, to)));
+    $effect(() => {
+      for (const worktree of this.all) {
+        for (const at of worktree.holders.values()) void this.tabs.of(at.projectId);
+      }
+      untrack(() => this.settle());
+    });
+    scope.defer(panes.inherit((from, to) => this.carry(from, to)));
     scope.defer(commands.onReading(() => this.recover()));
     scope.defer(
       live.subscribeStatus((status) => {
@@ -297,9 +313,10 @@ export class Terminals extends Service<Terminals>()('Terminals', { tier: 'projec
     queueMicrotask(() => this.prune());
   }
 
-  async reveal(key: string): Promise<void> {
-    if (this.revealing === key) return;
-    this.revealing = key;
+  async reveal(key: string, shownProject = this.projectId): Promise<void> {
+    const revealing = { key, project: shownProject };
+    if (this.revealing?.key === key && this.revealing.project === revealing.project) return;
+    this.revealing = revealing;
     try {
       const address = terminalAddress(key);
       if (address === null) {
@@ -338,21 +355,30 @@ export class Terminals extends Service<Terminals>()('Terminals', { tier: 'projec
         return;
       }
       const thread = owner === null ? null : holderThread(owner);
-      await this.readdress(worktree.rootId, thread);
+      if (shownProject === this.projectId && !(await this.readdress(worktree.rootId, thread, key))) return;
       const revealed = worktree.reveal(key);
-      if (owner !== null) {
-        this.lay(worktree, revealed, owner);
-        return;
+      const held = worktree.holderOf(key);
+      if (held !== null) {
+        const layouts = this.panes.layouts?.projectId === shownProject ? this.panes.layouts : this.tabs.of(shownProject)?.layouts;
+        if (layouts === undefined) {
+          this.notices.error('Terminal', `Project ${shownProject} has no open layout for this terminal.`);
+          return;
+        }
+        this.lay(worktree, revealed, held, {}, { layouts, holder: held });
+      } else {
+        worktree.show();
+        if (revealed !== null) worktree.select(revealed);
       }
-      worktree.show();
-      if (revealed !== null) worktree.select(revealed);
+      await this.clearReveal(key);
+    } catch (error) {
+      this.notices.refusal(error);
     } finally {
-      this.revealing = null;
+      if (this.revealing === revealing) this.revealing = null;
     }
   }
 
   async openIn(row: WorktreePlace): Promise<void> {
-    await this.readdress(row.rootId);
+    if (!(await this.readdress(row.rootId))) return;
     await this.read();
     await this.openPanel(this.worktree(row.rootId));
   }
@@ -413,8 +439,8 @@ export class Terminals extends Service<Terminals>()('Terminals', { tier: 'projec
         this.panes.step(-1);
         return true;
       case 'previous-recent-tab': {
-        const previous = this.recent.slice(0, -1).findLast((recent) => this.panes.holds(terminalPane(recent)));
-        if (previous !== undefined) this.panes.open(terminalPane(previous));
+        const previous = this.recent.slice(0, -1).findLast((recent) => this.panes.holds(terminalPane(this.projectId, recent)));
+        if (previous !== undefined) this.panes.open(terminalPane(this.projectId, previous));
         return true;
       }
       case 'select-index':
@@ -429,13 +455,20 @@ export class Terminals extends Service<Terminals>()('Terminals', { tier: 'projec
     return this.panes.showsProject(this.projectId) ? this.panes.holder : null;
   }
 
-  private lay(worktree: WorktreeTerminals, key: string | null, holder: Holder, how: TabOpen = {}): void {
+  private lay(worktree: WorktreeTerminals, key: string | null, holder: Holder, how: TabOpen = {}, placement?: Placement): void {
     if (key === null) return;
-    worktree.own(key, holder);
+    const content = terminalPane(this.projectId, key);
+    const thread = holderThread(holder);
+    const owner = worktree.ownerOf(key);
+    const layouts = this.tabs.of(owner?.projectId ?? this.projectId)?.layouts;
+    const at =
+      placement ??
+      (thread === null ? (layouts === undefined ? null : { layouts, holder }) : this.seats.place(this.layouts, thread, content));
+    if (at === null) return;
+    worktree.own(key, at.holder, at.layouts.projectId);
     const activate = how.activate ?? true;
     if (activate) this.front(worktree, key);
-    const at = { layouts: this.layouts, holder };
-    this.panes.openAt(at, terminalPane(key), how);
+    this.panes.openAt(at, content, how);
     if (activate && this.panes.hosts(at)) worktree.focus(key);
   }
 
@@ -508,8 +541,10 @@ export class Terminals extends Service<Terminals>()('Terminals', { tier: 'projec
 
   private settle(): void {
     for (const worktree of this.all) {
-      for (const [key, holder] of worktree.holders) {
-        if (worktree.owned(key)) this.layouts.open(holder, terminalPane(key), { activate: false });
+      for (const [key, owner] of worktree.holders) {
+        const layouts = this.tabs.of(owner.projectId)?.layouts;
+        if (worktree.owned(key) && layouts !== undefined)
+          this.lay(worktree, key, owner.holder, { activate: false }, { layouts, holder: owner.holder });
       }
     }
   }
@@ -539,8 +574,8 @@ export class Terminals extends Service<Terminals>()('Terminals', { tier: 'projec
     const worktree = this.worktreeOf(key);
     const tab = worktree?.tabOf(key) ?? null;
     if (worktree === null || tab === null || record.holder === 'operator' || record.heldBy === undefined) return;
-    const { holder } = this.seats.place(this.layouts, record.heldBy, terminalPane(tab.key));
-    this.lay(worktree, tab.key, holder, { activate: false, agent: true });
+    const at = this.seats.place(this.layouts, record.heldBy, terminalPane(this.projectId, tab.key));
+    this.lay(worktree, tab.key, at.holder, { activate: false, agent: true }, at);
   }
 
   private prune(): void {
@@ -563,17 +598,48 @@ export class Terminals extends Service<Terminals>()('Terminals', { tier: 'projec
     return !this.rows.known || this.rows.byRoot(rootId) !== null;
   }
 
-  private async readdress(rootId: string | null, thread: string | null = null): Promise<void> {
+  private async readdress(rootId: string | null, thread: string | null = null, key?: string): Promise<boolean> {
     if (rootId !== null) await this.listed();
-    if (!this.focus.current) return;
+    if (!this.focus.current) return true;
     const row = rootId === null ? null : this.rows.byRoot(rootId);
     const standing = currentBranch(this.router);
     const branch = row === null ? standing : row.kind === 'main' ? null : (row.branch ?? standing);
-    if (thread !== null || (row !== null && this.elsewhere(row))) {
-      await this.router.replace(this.addresses.place(currentProject(this.router), CHAT, thread, branch));
-      return;
+    if (thread !== null) {
+      const owner = await this.names.read(thread);
+      if (owner === undefined || (owner !== null && owner.projectId === undefined)) {
+        this.notices.error('Terminal', `The home of thread ${thread} could not be read, so its terminal cannot open here.`);
+        return false;
+      }
+      if (owner !== null) {
+        const home = owner.projectId!;
+        const [project] = await this.workspace.projectsOf([home]);
+        if (!this.focus.current) return true;
+        const path = this.addresses.place(project!.name, CHAT, thread, home === this.projectId ? branch : null);
+        if (home !== this.projectId && key !== undefined) {
+          const url = new URL(path, this.router.url);
+          url.searchParams.set('terminal', terminalPane(this.projectId, key).id!);
+          await this.router.replace(`${url.pathname}${url.search}`);
+          return false;
+        }
+        await this.router.replace(path);
+        return true;
+      }
+    }
+    if (row !== null && this.elsewhere(row)) {
+      await this.router.replace(this.addresses.place(currentProject(this.router), CHAT, null, branch));
+      return true;
     }
     const url = new URL(branchHref(this.router, branch), this.router.url);
+    url.searchParams.delete('terminal');
+    await this.router.replace(`${url.pathname}${url.search}`);
+    return true;
+  }
+
+  private async clearReveal(key: string): Promise<void> {
+    const requested = terminalPaneOf(this.router.url.searchParams.get('terminal'), this.projectId);
+    if (requested?.projectId !== this.projectId || requested.key !== key) return;
+    await tick();
+    const url = new URL(this.router.url);
     url.searchParams.delete('terminal');
     await this.router.replace(`${url.pathname}${url.search}`);
   }

@@ -54,6 +54,10 @@ export class ThreadSeats extends Service<ThreadSeats>()('ThreadSeats', { tier: '
     return [this.page, beside ?? null].filter((host): host is ThreadSlot => host !== null);
   }
 
+  get threads(): readonly string[] {
+    return this.shown.flatMap((slot) => (slot.activeId === null ? [] : [slot.activeId]));
+  }
+
   get mainFocused(): boolean {
     const key = this.panes.focus;
     return key === null || !this.seats.has(key);

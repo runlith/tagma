@@ -12,6 +12,7 @@ import { TerminalOutput } from './terminal/Output.js';
 import { Terminals } from './worktrees/Terminals.svelte.js';
 import { TerminalRenderPolicy } from './terminal/RenderPolicy.js';
 import { TerminalViews } from './terminal/Views.svelte.js';
+import { TerminalTabs } from './terminal/Tabs.svelte.js';
 import { ExecutionsRepo } from './Repo.js';
 import { isLive } from './processes/lines.js';
 import { SettingSections } from '$lib/features/settings/section.js';
@@ -32,6 +33,7 @@ export const TerminalsLayer = Layer.mergeAll(
   TerminalOutput,
   TerminalRenderPolicy,
   TerminalViews,
+  TerminalTabs,
   Terminals,
   CommandActivity,
   TerminalHolders,

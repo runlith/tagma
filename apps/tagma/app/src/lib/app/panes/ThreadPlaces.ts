@@ -5,6 +5,7 @@ import type { Placement } from './SidePanes.svelte.js';
 import type { TabLayouts, TabOpen } from './TabLayouts.svelte.js';
 
 export interface PlacesPort {
+  readonly threads: readonly string[];
   place(layouts: TabLayouts, thread: string, content: PaneContent): Placement;
   openFor(layouts: TabLayouts, thread: string, content: PaneContent, how?: TabOpen): PaneOpening;
   ask(topic: Topic): void;

@@ -1,10 +1,14 @@
 <script lang="ts">
-  import { Terminals } from '../worktrees/Terminals.svelte.js';
+  import { TerminalTabs } from './Tabs.svelte.js';
   import CloseDialog from './CloseDialog.svelte';
+  import Restore from './Restore.svelte';
 
-  const terminals = Terminals.use();
+  const tabs = TerminalTabs.use();
+  const worktrees = $derived(tabs.all.flatMap((terminals) => terminals.all));
 </script>
 
-{#each terminals.all as worktree (worktree)}
+<Restore />
+
+{#each worktrees as worktree (worktree)}
   <CloseDialog {worktree} />
 {/each}

@@ -23,6 +23,7 @@ import type { Terminals } from './Terminals.svelte.js';
 const REOPEN_STACK = 32;
 
 export type WorktreeBirth = { readonly rootId: string | null; readonly terminals: Terminals };
+type TerminalHolder = { readonly projectId: number; readonly holder: Holder };
 
 type Adopter = AdoptedWords | null | 'unknown';
 
@@ -43,7 +44,7 @@ export class WorktreeTerminals extends Process<WorktreeTerminals, WorktreeBirth>
 
   readonly held = new SvelteMap<string, TerminalTab>();
   readonly titles = new SvelteMap<string, string>();
-  readonly holders = new SvelteMap<string, Holder>();
+  readonly holders = new SvelteMap<string, TerminalHolder>();
   active = $state<string | null>(null);
   shown = $state(false);
   closed = $state.raw<readonly StoredTab[]>([]);
@@ -98,6 +99,10 @@ export class WorktreeTerminals extends Process<WorktreeTerminals, WorktreeBirth>
   }
 
   holderOf(key: string): Holder | null {
+    return this.ownerOf(key)?.holder ?? null;
+  }
+
+  ownerOf(key: string): TerminalHolder | null {
     const tab = this.tabOf(key);
     return tab === null || !this.owned(tab.key) ? null : (this.holders.get(tab.key) ?? null);
   }
@@ -129,7 +134,7 @@ export class WorktreeTerminals extends Process<WorktreeTerminals, WorktreeBirth>
       }
       const restore = tree === null ? undefined : { tree, bindings, labels, active: storedTab?.active ?? null };
       const holder = tree === null || storedTab?.holder == null ? null : storedHolder(storedTab.holder);
-      this.birth(group.key, first.record, restore, null, holder);
+      this.birth(group.key, first.record, restore, null, holder, storedTab?.holderProject ?? this.projectId);
     }
     if (stored !== null) {
       this.absorb(stored);
@@ -146,7 +151,7 @@ export class WorktreeTerminals extends Process<WorktreeTerminals, WorktreeBirth>
     for (const [key, tab] of Object.entries(stored.tabs)) {
       if (!this.held.has(key)) continue;
       if (tab.title !== null) this.titles.set(key, tab.title);
-      if (tab.holder !== null) this.holders.set(key, storedHolder(tab.holder));
+      if (tab.holder !== null) this.holders.set(key, { holder: storedHolder(tab.holder), projectId: tab.holderProject ?? this.projectId });
     }
   }
 
@@ -154,24 +159,25 @@ export class WorktreeTerminals extends Process<WorktreeTerminals, WorktreeBirth>
     return this.birth(terminalKey(record.execution), record, undefined, null, holder);
   }
 
-  own(key: string, holder: Holder): void {
-    if (!this.held.has(key) || this.holders.get(key) === holder) return;
-    this.holders.set(key, holder);
+  own(key: string, holder: Holder, projectId = this.projectId): void {
+    const standing = this.holders.get(key);
+    if (!this.held.has(key) || (standing?.holder === holder && standing.projectId === projectId)) return;
+    this.holders.set(key, { holder, projectId });
     if (this.active === key) this.active = this.panel.at(-1)?.key ?? null;
     this.terminals.persist();
   }
 
   carry(from: Holder, to: Holder): void {
-    const carried = [...this.holders].filter(([, holder]) => holder === from);
+    const carried = [...this.holders].filter(([, at]) => at.holder === from);
     if (carried.length === 0) return;
-    for (const [key] of carried) this.holders.set(key, to);
+    for (const [key, at] of carried) this.holders.set(key, { ...at, holder: to });
     this.terminals.persist();
   }
 
   owned(key: string): boolean {
     const holder = this.holders.get(key);
     if (holder === undefined) return false;
-    const thread = holderThread(holder);
+    const thread = holderThread(holder.holder);
     return thread === null || this.names.of(thread) !== null;
   }
 
@@ -251,11 +257,19 @@ export class WorktreeTerminals extends Process<WorktreeTerminals, WorktreeBirth>
   async open(holder: Holder | null = null, beside?: string): Promise<string | null> {
     const folder = this.folder ?? (beside === undefined ? null : (this.tabOf(beside)?.root ?? null));
     if (this.opening || folder === null || folder === '') return null;
+    const owner = beside === undefined ? null : this.ownerOf(beside);
     this.opening = true;
     try {
       const started = await this.startShell(folder);
       if (started === null) return null;
-      const tab = this.birth(terminalKey(started.address), started.record, undefined, started.born, holder);
+      const tab = this.birth(
+        terminalKey(started.address),
+        started.record,
+        undefined,
+        started.born,
+        holder,
+        owner?.projectId ?? this.projectId,
+      );
       if (tab !== null && holder === null) this.active = tab.key;
       this.terminals.persist();
       return tab?.key ?? null;
@@ -303,18 +317,20 @@ export class WorktreeTerminals extends Process<WorktreeTerminals, WorktreeBirth>
   async detach(sourceKey: string, paneId: string): Promise<string | null> {
     const source = this.held.get(sourceKey);
     if (source === undefined) return null;
+    const owner = this.ownerOf(sourceKey);
     const address = source.detach(paneId);
     if (address === null) return null;
     const listing = await this.repo.record.key(address).refresh({ throwOnError: true });
     if (listing === undefined) return null;
     const free = terminalKey(address);
-    const holder = this.holderOf(sourceKey);
+    const holder = owner?.holder ?? null;
     const tab = this.birth(
       this.held.has(free) ? `${free}~${crypto.randomUUID().slice(0, 8)}` : free,
       listing.record,
       undefined,
       null,
       holder,
+      owner?.projectId ?? this.projectId,
     );
     if (tab !== null && holder === null) this.active = tab.key;
     this.terminals.persist();
@@ -464,7 +480,8 @@ export class WorktreeTerminals extends Process<WorktreeTerminals, WorktreeBirth>
       (pane) => tab.panes.get(pane)?.label ?? null,
       this.titles.get(tab.key) ?? null,
       tab.active,
-      this.holders.get(tab.key) ?? null,
+      this.holders.get(tab.key)?.holder ?? null,
+      this.holders.get(tab.key)?.projectId,
     );
   }
 
@@ -519,14 +536,15 @@ export class WorktreeTerminals extends Process<WorktreeTerminals, WorktreeBirth>
     restore?: TabRestore,
     born: FitGrid | null = null,
     holder: Holder | null = null,
+    holderProject = this.projectId,
   ): TerminalTab | null {
     this.note(record);
     const standing = this.held.get(key);
     if (standing !== undefined) {
-      if (holder !== null) this.holders.set(key, holder);
+      if (holder !== null) this.holders.set(key, { holder, projectId: holderProject });
       return standing;
     }
-    if (holder !== null) this.holders.set(key, holder);
+    if (holder !== null) this.holders.set(key, { holder, projectId: holderProject });
     const life = this.scope.child(`TerminalTab:${key}`);
     this.lives.set(key, life);
     const tab = TerminalTab.start(life, {

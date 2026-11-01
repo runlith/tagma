@@ -13,6 +13,7 @@ function world(standing: readonly Page[], project = 1) {
   const { panes, layouts } = testArea([testKind(BROWSER_PANE)]);
   const elsewhere: string[] = [];
   const seats: PlacesPort = {
+    threads: [],
     place: () => {
       throw new Error('Pages are placed through openFor.');
     },

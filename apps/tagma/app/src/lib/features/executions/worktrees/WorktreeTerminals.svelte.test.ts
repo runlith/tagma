@@ -2,6 +2,7 @@
 import { expect, test } from 'vitest';
 import { terminalPane } from '../kind.js';
 import type { StoredLayout } from './layout.js';
+import { sectionHolder } from '$lib/shared/panes/holder.js';
 import {
   FEATURE,
   FEATURE_FOLDER,
@@ -248,6 +249,28 @@ test('moving a tab’s first pane to a new tab gives that shell a tab of its own
   expect(worktree.reveal('e1:0')).toBe(moved?.key);
   expect(worktree.active).toBe(moved?.key);
   owned.stop();
+});
+
+test('new and detached tabs retain the project of a foreign section holder', async () => {
+  const owned = await stand([listingFor('e1:0')]);
+  try {
+    const worktree = owned.worktree();
+    const tab = worktree.tabs[0];
+    if (tab === undefined) throw new Error('no terminal adopted');
+    const holder = sectionHolder('files');
+    worktree.own(tab.key, holder, 2);
+    const opened = await worktree.open(holder, tab.key);
+    expect(opened === null ? null : worktree.ownerOf(opened)).toEqual({ holder, projectId: 2 });
+
+    tab.mount();
+    const seed = tab.active;
+    await tab.split(tab.panes.get(seed)!, 'row');
+    await until(() => tab.count === 2 && [...tab.panes.values()].every((pane) => pane.address !== null), 'the foreign split bound');
+    const detached = await worktree.detach(tab.key, seed);
+    expect(detached === null ? null : worktree.ownerOf(detached)).toEqual({ holder, projectId: 2 });
+  } finally {
+    owned.stop();
+  }
 });
 
 test('a new shell opens in its place’s folder, whichever place the frame aims', async () => {

@@ -6,6 +6,7 @@ export type StoredTab = {
   readonly labels: Readonly<Record<string, string>>;
   readonly active: string | null;
   readonly holder: string | null;
+  readonly holderProject?: number;
 };
 
 export type StoredLayout = {
@@ -47,6 +48,8 @@ function parseStoredTab(tab: unknown): StoredTab | null {
     labels,
     active,
     holder: typeof tab.holder === 'string' && tab.holder !== '' ? tab.holder : null,
+    holderProject:
+      typeof tab.holderProject === 'number' && Number.isInteger(tab.holderProject) && tab.holderProject > 0 ? tab.holderProject : undefined,
   };
 }
 
@@ -132,6 +135,7 @@ export function serializeTab(
   title: string | null,
   active: string | null,
   holder: string | null,
+  holderProject?: number,
 ): StoredTab | null {
   const convert = (node: PaneNode): PaneNode | null => {
     if (node.kind === 'pane') {
@@ -152,5 +156,5 @@ export function serializeTab(
     const label = labelOf(leaf);
     if (exec !== null && label !== null && label !== '') labels[exec] = label;
   }
-  return { title, tree, labels, active: active === null ? null : execOf(active), holder };
+  return { title, tree, labels, active: active === null ? null : execOf(active), holder, holderProject };
 }

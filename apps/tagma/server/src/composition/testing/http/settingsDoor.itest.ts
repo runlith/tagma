@@ -31,6 +31,29 @@ layer(doorFixture(), { excludeTestServices: true })('settings door', (it) => {
       expect(entry(restored.body, key)).toMatchObject({ value: inherited!.value, from: 'default' });
       const refused = yield* world.op('write_setting_layer', { scope: 'project', key: 'agent.contextFiles.enabled', value: 'yes' }, at);
       expect(refused).toMatchObject({ status: 409, body: { code: 'setting-value' } });
+
+      const layoutKey = 'terminal.placeLayouts';
+      const terminal = {
+        places: {
+          'execution-root': {
+            order: ['execution:1'],
+            tabs: {
+              'execution:1': {
+                title: null,
+                tree: { kind: 'pane', id: 'execution:1' },
+                labels: {},
+                holder: '01a19917-0000-7000-8000-000000000001',
+                holderProject: project,
+              },
+            },
+            closed: [],
+          },
+        },
+      };
+      const laid = yield* world.op('write_setting', { key: layoutKey, value: terminal }, at);
+      expect(laid).toMatchObject({ status: 200, body: { key: layoutKey, value: terminal } });
+      const reopened = yield* world.op('read_settings', {}, at);
+      expect(entry(reopened.body, layoutKey)).toMatchObject({ value: terminal, from: 'project' });
     }),
   );
 });
