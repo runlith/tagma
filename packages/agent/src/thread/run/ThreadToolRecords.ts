@@ -1,4 +1,5 @@
 import { Result, type Schema } from 'effect';
+import { toJson } from '@runlith/utils/json';
 import type { AgentStepToolCall } from '../../agent/AgentStep';
 import type { CallAdmission } from '../../agent/callProgress';
 import type { ToolOutcome } from '../../agent/tool';
@@ -121,8 +122,9 @@ export class ThreadToolRecords {
   }
 
   display(toolCallId: string, display: ToolDisplay): void {
-    this.displays.set(toolCallId, display);
-    this.opened(toolCallId, { toolDisplay: display });
+    const held = toJson(display) as ToolDisplay;
+    this.displays.set(toolCallId, held);
+    this.opened(toolCallId, { toolDisplay: held });
   }
 
   execution(toolCallId: string, admission: CallAdmission): void {

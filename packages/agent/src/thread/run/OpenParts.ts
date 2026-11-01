@@ -136,7 +136,7 @@ export class OpenParts {
 
   showInput(callId: string, display: ToolDisplay | undefined): void {
     const part = this.inputPart(callId);
-    if (part !== undefined) part.display = display;
+    if (part !== undefined) part.display = display === undefined ? undefined : (toJson(display) as ToolDisplay);
   }
 
   input(callId: string): OpenInputView | undefined {
