@@ -4,13 +4,31 @@ import { sql } from 'drizzle-orm';
 import { Effect, Layer } from 'effect';
 import { Message } from '@runlith/llm/schema/messages';
 import { CostLedger, costLedgerLayer, rootCost } from '@runlith/performance/CostLedger';
-import { threadStepMessagesEvent } from '@runlith/agent/thread/events';
+import { readThreadEvents, threadEntryEvent, threadStepMessagesEvent } from '@runlith/agent/thread/events';
+import type { ThreadToolEntry } from '@runlith/agent/transcript/entries';
 import { callKey, type Evidence } from '@runlith/agent/thread/keyed';
 import { sealThreadEvents } from '@runlith/agent/thread/ThreadEventDoor';
 import { type TransitionDeps, transitionNow } from '@runlith/agent/thread/transition/kernel';
 import type { Unit, WriteUnit } from '../../../platform/contract/service/units.js';
 import { OWNER, SCOPE } from '@runlith/agent/thread/conformance/runLog/world';
 import { openThreadStore } from '../storageHarness.js';
+
+const CALL: ThreadToolEntry = {
+  type: 'tool',
+  id: 'tool:c1',
+  runId: 'run-1',
+  toolName: 'read',
+  toolCallId: 'c1',
+  toolState: 'input-available',
+  toolInput: { filePath: '/a' },
+  occurredAt: '2026-09-10T10:00:00.000Z',
+};
+
+const SETTLED: ThreadToolEntry = {
+  ...CALL,
+  toolState: 'output-available',
+  toolOutput: { text: 'the file' },
+};
 
 const opened = Effect.gen(function* () {
   const { storage, db } = yield* openThreadStore();
@@ -55,7 +73,28 @@ const opened = Effect.gen(function* () {
       },
       { evidence, digest: decidedBy },
     );
-  return { storage, db, thread, run: start.run, step, deps };
+  const entryStep = (entry: ThreadToolEntry) =>
+    transitionNow(
+      deps,
+      thread.id,
+      {
+        declared: sealThreadEvents([threadEntryEvent(entry)]),
+        decide: Effect.fnUntraced(function* (_view: unknown, tx: WriteUnit<'machine'>) {
+          const standing = yield* runs.latestRun(thread.id, ['running'], tx);
+          return standing?.ownerId === OWNER ? { apply: true as const, result: 'applied' } : { refuse: 'refused' };
+        }),
+      },
+      { evidence: { decidedBy: `test:${entry.toolState}` }, digest: entry.toolState },
+    );
+  const cursor = Effect.gen(function* () {
+    const [log] = yield* db.all<{ through: number; head: number }>(
+      sql`select entries_through as through, (select max(position) from thread_event where thread_id = ${thread.id}) as head
+        from thread_log where thread_id = ${thread.id}`,
+    );
+    return log;
+  });
+  const journal = readThreadEvents(storage.eventLog, storage.kinds, thread.id, 0, 100);
+  return { storage, db, thread, run: start.run, step, entryStep, cursor, journal, deps };
 });
 
 it.live('a transition whose reads are planned commits as one program and no interactive unit', () =>
@@ -108,4 +147,35 @@ it.live('a decision whose dependency moved while its thread did not is refused a
     expect(outcome).toEqual({ refused: 'refused' });
     expect(yield* storage.aggregate.historyOf(thread.id)).toEqual([]);
   }),
+);
+
+it.live('a planned transcript entry is inserted, replaced and folded by its program, and the cursor follows the journal', () =>
+  Effect.gen(function* () {
+    const { storage, thread, entryStep, cursor, journal } = yield* opened;
+    const placed = yield* rootCost('test.transition', entryStep(CALL), 'test-insert');
+    const first = { entry: yield* storage.aggregate.entryById(thread.id, CALL.id), cursor: yield* cursor, events: yield* journal };
+    const settled = yield* rootCost('test.transition', entryStep(SETTLED), 'test-replace');
+    const second = { entry: yield* storage.aggregate.entryById(thread.id, CALL.id), cursor: yield* cursor, events: yield* journal };
+    const ledger = yield* CostLedger;
+    const costs = ['test-insert', 'test-replace'].map((rootId) => {
+      const total = ledger.read({ rootId, limit: 1 }).rows[0]?.total;
+      return { programs: total?.programs, units: total?.units };
+    });
+    expect({ placed, settled }).toEqual({ placed: { committed: 'applied' }, settled: { committed: 'applied' } });
+    expect(costs).toEqual([
+      { programs: 1, units: 0 },
+      { programs: 1, units: 0 },
+    ]);
+    expect(first.entry).toEqual(CALL);
+    expect(first.cursor).toEqual({ through: 1, head: 1 });
+    expect(first.events.map((event) => ({ position: event.position, entry: (event.payload as { entry?: unknown }).entry }))).toEqual([
+      { position: 1, entry: CALL },
+    ]);
+    expect(second.entry).toEqual(SETTLED);
+    expect(second.cursor).toEqual({ through: 2, head: 2 });
+    expect(second.events.map((event) => ({ position: event.position, entry: (event.payload as { entry?: unknown }).entry }))).toEqual([
+      { position: 1, entry: CALL },
+      { position: 2, entry: SETTLED },
+    ]);
+  }).pipe(Effect.provide(Layer.fresh(costLedgerLayer({ capacity: 16 })))),
 );
