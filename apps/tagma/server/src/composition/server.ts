@@ -496,7 +496,7 @@ export const serve = async (build: Build): Promise<void> => {
           Layer.build(
             parts.bindings
               .nextInstallation({
-                serverPath,
+                checkout: build.cut.roots.checkout,
                 dataPath,
                 installations,
                 installation,
@@ -535,7 +535,7 @@ export const serve = async (build: Build): Promise<void> => {
       Scope.provide(
         Layer.build(
           parts.bindings
-            .door({ serverPath, installation, port })
+            .door({ checkout: build.cut.roots.checkout, installation, port })
             .pipe(Layer.provide(Layer.mergeAll(Layer.succeedContext(tagma.door), FetchHttpClient.layer))),
         ),
         localScope,
