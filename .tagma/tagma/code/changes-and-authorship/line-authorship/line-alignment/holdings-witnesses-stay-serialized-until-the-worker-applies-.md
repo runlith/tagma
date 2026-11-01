@@ -8,17 +8,17 @@ edges:
     to: 01a19487-1565-7388-9082-e7b9e6850f6b
 sources:
   - kind: file
+    ref: apps/tagma/server/src/change-record/holdings/verdicts.ts
+  - kind: file
+    ref: apps/tagma/server/src/change-record/holdings/witnesses.ts
+  - kind: file
     ref: apps/tagma/server/src/change-record/lines/evidence.ts
   - kind: file
     ref: apps/tagma/server/src/change-record/record/debts.ts
   - kind: file
-    ref: apps/tagma/server/src/change-record/record/released.ts
-  - kind: file
     ref: apps/tagma/server/src/change-record/record/landed.ts
   - kind: file
-    ref: apps/tagma/server/src/change-record/holdings/witnesses.ts
-  - kind: file
-    ref: apps/tagma/server/src/change-record/holdings/verdicts.ts
+    ref: apps/tagma/server/src/change-record/record/released.ts
   - kind: file
     ref: apps/tagma/server/src/change-record/record/runFiles.ts
 ---
