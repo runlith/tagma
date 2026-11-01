@@ -39,6 +39,7 @@ export type DeclaredByAgent = {
   readonly pictures: boolean;
   readonly steer: TransportCapabilities['steer'];
   readonly withdraw: boolean;
+  readonly toolCatalog: TransportCapabilities['toolCatalog'];
 };
 
 export const declareCapabilities = Effect.fn('ThreadSeat.declareCapabilities')(function* (
@@ -48,12 +49,15 @@ export const declareCapabilities = Effect.fn('ThreadSeat.declareCapabilities')(f
   declared: DeclaredByAgent,
 ): Effect.fn.Return<void, StoreFailure> {
   const updatedAt = new Date(yield* Clock.currentTimeMillis);
+  const set = sql`json_set(${thread.capabilities}, '$.pictures', json(${declared.pictures ? 'true' : 'false'}), '$.steer', ${declared.steer}, '$.withdraw', json(${declared.withdraw ? 'true' : 'false'}))`;
+  const catalog = declared.toolCatalog ?? null;
   yield* unit.run(
     db
       .update(thread)
       .set({
-        capabilities:
-          sql`json_set(${thread.capabilities}, '$.pictures', json(${declared.pictures ? 'true' : 'false'}), '$.steer', ${declared.steer}, '$.withdraw', json(${declared.withdraw ? 'true' : 'false'}))` as never,
+        capabilities: (catalog === null
+          ? sql`json_remove(${set}, '$.toolCatalog')`
+          : sql`json_set(${set}, '$.toolCatalog', ${catalog})`) as never,
         updatedAt,
       })
       .where(
@@ -61,7 +65,8 @@ export const declareCapabilities = Effect.fn('ThreadSeat.declareCapabilities')(f
           eq(thread.id, threadId),
           sql`(json_extract(${thread.capabilities}, '$.pictures') is not ${declared.pictures ? 1 : 0}
               or json_extract(${thread.capabilities}, '$.steer') is not ${declared.steer}
-              or json_extract(${thread.capabilities}, '$.withdraw') is not ${declared.withdraw ? 1 : 0})`,
+              or json_extract(${thread.capabilities}, '$.withdraw') is not ${declared.withdraw ? 1 : 0}
+              or json_extract(${thread.capabilities}, '$.toolCatalog') is not ${catalog})`,
         ),
       ),
   );

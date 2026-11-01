@@ -33,8 +33,8 @@ export type Dispatched = { readonly name: string; readonly input: unknown };
 
 const dispatched = (tool: string, input: unknown): Dispatched | null => {
   if (tool !== DISPATCH_TOOL || typeof input !== 'object' || input === null) return null;
-  const { name, input: inner } = input as { readonly name?: unknown; readonly input?: unknown };
-  return typeof name === 'string' && name !== '' ? { name, input: inner ?? {} } : null;
+  const { name } = input as { readonly name?: unknown };
+  return typeof name === 'string' && name !== '' ? { name, input: 'input' in input ? input.input : {} } : null;
 };
 
 export type BridgeVendor = {

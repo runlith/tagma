@@ -6,7 +6,6 @@ import { DISPATCH_TOOL, type ToolCatalog, deferredToolNames } from './ToolCatalo
 import { TOOL_OUTPUT_MAX_LINES } from './ToolOutputSpool';
 import { ToolAnswer, ToolFailed, Tool, describedTool } from './tool';
 import { type PackedWorldStateSection, withdrawn, worldStateSection } from './WorldState';
-import { isVendorBoundary } from './AgentSignal';
 import { ASKS_IN_REVIEW, ASKS_NEVER } from '../permissions/vocabulary';
 
 export const TOOL_SEARCH_TOOL = 'tool_search';
@@ -160,12 +159,8 @@ function renderDefinitions(names: readonly string[], catalog: ToolCatalog): stri
 export function revealedDefinitionsSection(catalog: ToolCatalog, history: readonly Message[]): PackedWorldStateSection {
   const head = history[0];
   const deferred = deferredToolNames(catalog);
-  const names =
-    head === undefined || !isVendorBoundary(head)
-      ? []
-      : carriedReferences(head)
-          .filter((name) => deferred.has(name))
-          .toSorted();
+  const carried = head === undefined ? [] : [...(head.compaction?.toolReferences ?? []), ...carriedReferences(head)];
+  const names = [...new Set(carried)].filter((name) => deferred.has(name)).toSorted();
   return worldStateSection({
     id: 'revealed-definitions',
     codec: Schema.Array(Schema.String),

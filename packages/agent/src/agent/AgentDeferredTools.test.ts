@@ -367,6 +367,15 @@ describe('a vendor compaction without a retelling', () => {
       expect(yield* renderWorldState([revealedDefinitionsSection(catalog, before)], {})).toEqual({ kind: 'unchanged', snapshot: {} });
     }),
   );
+  it.effect(
+    'a fold another model retold hands the definitions over too, since the new session it seeds holds no schema',
+    Effect.fnUntraced(function* () {
+      const before = revealing('mcp__tagma__read_block');
+      const folded = [Message.make({ role: 'user', content: 'checkpoint', metadata: foldedReferences(before) }), Message.user('after')];
+      const told = yield* renderWorldState([revealedDefinitionsSection(catalog, folded)], {});
+      expect(told.kind === 'changed' && told.text.includes('"name":"mcp__tagma__read_block"')).toBe(true);
+    }),
+  );
 });
 describe('revealedDeferredToolNames', () => {
   test('reads only deferred names out of tool_search results that still say what they mean', () => {
