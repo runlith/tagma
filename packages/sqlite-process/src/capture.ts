@@ -3,10 +3,12 @@ import { randomUUID } from 'node:crypto';
 import {
   PROJECTION_BYTES,
   PROJECTION_CLOCK,
+  SELECTION_KEY,
   type RowChange,
   type RowCommit,
   type RowProjection,
   type RowSelection,
+  type RowValue,
   type SelectedRow,
   type SelectionWork,
   type ProjectionWrite,
@@ -201,7 +203,10 @@ export const makeRowCapture = (
       const value = `json_object(${selection.columns.flatMap((name) => [literal(name), `selected.${identifier(name)}`]).join(',')})`;
       return [
         selection.id,
-        db.query(`SELECT CASE WHEN (${cost}) <= ?2 THEN ${value} END AS body, (${cost}) AS bytes FROM (${selection.sql}) selected LIMIT 2`),
+        db.query(
+          `SELECT (SELECT json_group_array(json_array(CASE WHEN (${cost}) <= ?2 THEN ${value} END, ${cost}))
+            FROM (SELECT * FROM (${selection.sql}) LIMIT 2) selected) FROM (SELECT ?1 AS "key") AS ${identifier(SELECTION_KEY)}`,
+        ),
       ] as const;
     }),
   );
@@ -243,15 +248,16 @@ export const makeRowCapture = (
         for (const [id, key] of dirty.values()) {
           const logical = (JSON.parse(String(key)) as [string | number | null])[0];
           const started = performance.now();
-          const result = selectors.get(String(id))!.values(logical, remaining);
+          const [answer] = selectors.get(String(id))!.values(logical, remaining);
+          const result = JSON.parse(String(answer![0])) as [Readonly<Record<string, RowValue>> | null, number][];
           work.push({ selection: String(id), execMs: performance.now() - started, rows: result.length });
           if (result.length > 1) throw new Error(`${String(id)} answered more than one selected row.`);
           if (result.length === 1 && result[0]![0] === null) {
             gap = true;
             break;
           }
-          remaining -= Number(result[0]?.[1] ?? 0);
-          selected.push({ selection: String(id), key: logical, values: result.length === 0 ? null : JSON.parse(String(result[0]![0])) });
+          remaining -= result[0]?.[1] ?? 0;
+          selected.push({ selection: String(id), key: logical, values: result[0]?.[0] ?? null });
         }
       db.query(`UPDATE ${STATE} SET bytes = ?, gap = ?`).run(gap ? Number(held![3]) : Number(held![3]) - remaining, gap ? 1 : 0);
       const cursor = Number(advancing.values()[0]![0]);

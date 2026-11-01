@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { randomUUID } from 'node:crypto';
 import { SqlClient } from 'effect/sql/SqlClient';
 import { join } from 'node:path';
-import { PROJECTION_BYTES, PROJECTION_CLOCK, type RowCommit, type ProjectionWrite } from './channel.js';
+import { PROJECTION_BYTES, PROJECTION_CLOCK, SELECTION_KEY, type RowCommit, type ProjectionWrite } from './channel.js';
 import { Connections, RowCommits, sqliteProcessLayer } from './SqliteProcess.js';
 import { sharedPool } from './testing/pool.js';
 import { Programs } from './programs.js';
@@ -17,6 +17,8 @@ const descriptors = [
   { id: 'parent', table: 'parent', keys: ['id'], columns: ['id', 'body', 'stamp'], address: 'id', context: ['stamp'] },
   { id: 'child', table: 'child', keys: ['id'], columns: ['id', 'parent'], address: 'parent' },
 ] as const;
+const LAST_CHILD = `SELECT id, parent FROM child WHERE parent = "${SELECTION_KEY}"."key" ORDER BY id DESC LIMIT 1`;
+const READY_PARENT = `SELECT id, stamp FROM parent WHERE id = "${SELECTION_KEY}"."key" AND stamp > 0`;
 
 it.live('row commits capture actual keys and cascades, isolate savepoint rollback and refuse undeclared effects before commit', () =>
   Effect.gen(function* () {
@@ -36,13 +38,13 @@ it.live('row commits capture actual keys and cascades, isolate savepoint rollbac
     yield* rows.install(descriptors, [
       {
         id: 'last-child',
-        sql: 'SELECT id, parent FROM child WHERE parent = ?1 ORDER BY id DESC LIMIT 1',
+        sql: LAST_CHILD,
         columns: ['id', 'parent'],
         sources: [{ projection: 'child', columns: ['id', 'parent'] }],
       },
       {
         id: 'ready-parent',
-        sql: 'SELECT id, stamp FROM parent WHERE id = ?1 AND stamp > 0',
+        sql: READY_PARENT,
         columns: ['id', 'stamp'],
         sources: [{ projection: 'parent', columns: ['id', 'stamp'], when: '$row.stamp > 0' }],
       },
@@ -65,8 +67,8 @@ it.live('row commits capture actual keys and cascades, isolate savepoint rollbac
         { projection: 'child', kind: 'insert', key: ['child-a'], address: 'a', before: null, values: { id: 'child-a', parent: 'a' } },
       ]),
     });
-    const selectedBefore = pool.statements.query('SELECT id, parent FROM child WHERE parent = ?1 ORDER BY id DESC LIMIT 1').statements;
-    const readyBefore = pool.statements.query('SELECT id, stamp FROM parent WHERE id = ?1 AND stamp > 0').statements;
+    const selectedBefore = pool.statements.query(LAST_CHILD).statements;
+    const readyBefore = pool.statements.query(READY_PARENT).statements;
     yield* both(
       sql.withTransaction(
         Effect.gen(function* () {
@@ -81,10 +83,8 @@ it.live('row commits capture actual keys and cascades, isolate savepoint rollbac
         }),
       ),
     );
-    expect(
-      pool.statements.query('SELECT id, parent FROM child WHERE parent = ?1 ORDER BY id DESC LIMIT 1').statements - selectedBefore,
-    ).toBe(1);
-    expect(pool.statements.query('SELECT id, stamp FROM parent WHERE id = ?1 AND stamp > 0').statements - readyBefore).toBe(1);
+    expect(pool.statements.query(LAST_CHILD).statements - selectedBefore).toBe(1);
+    expect(pool.statements.query(READY_PARENT).statements - readyBefore).toBe(1);
     expect(commits[1]).toMatchObject({
       _tag: 'Complete',
       cursor: 2,

@@ -46,6 +46,7 @@ export type RowCommit = {
 
 export const PROJECTION_CLOCK = '__row_projection_clock';
 export const PROJECTION_BYTES = 1_048_576;
+export const SELECTION_KEY = '__selection_key';
 
 export type SqliteRequest = { readonly connection: number; readonly ask: SqliteAsk };
 export type SqliteReply = { readonly connection: number; readonly said: SqliteSaid };

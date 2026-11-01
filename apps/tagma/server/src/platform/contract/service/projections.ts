@@ -1,11 +1,12 @@
 import { getTableName, sql, type GetColumnData, type SQL, type Table } from 'drizzle-orm';
 import { SQLiteDialect, type SQLiteColumn } from 'drizzle-orm/sqlite-core';
-import type {
-  RowChange,
-  RowProjection as SqlProjection,
-  RowSelection as SqlSelection,
-  SelectedRow,
-  RowValue,
+import {
+  SELECTION_KEY,
+  type RowChange,
+  type RowProjection as SqlProjection,
+  type RowSelection as SqlSelection,
+  type SelectedRow,
+  type RowValue,
 } from '@runlith/sqlite-process/channel';
 
 export type ProjectionRow<Columns extends Readonly<Record<string, SQLiteColumn>>> = {
@@ -88,10 +89,11 @@ export const nullableColumn = <Column extends SQLiteColumn>(column: Column): Row
 type RowSelection<Columns extends Readonly<Record<string, SelectionColumn>>> = {
   readonly raw: SqlSelection;
   readonly columns: Columns;
-  readonly query: (key: SQL) => SQL;
-  readonly encoded: (key: SQL) => SQL<SelectionRow<Columns> | null>;
+  readonly encoded: (key: SQLiteColumn) => SQL<SelectionRow<Columns> | null>;
   readonly value: (selected: SelectedRow) => SelectionRow<Columns> | null | undefined;
 };
+
+const keyRelation = sql.identifier(SELECTION_KEY);
 
 export const selectRows = <const Columns extends Readonly<Record<string, SelectionColumn>>>(input: {
   readonly id: string;
@@ -106,10 +108,15 @@ export const selectRows = <const Columns extends Readonly<Record<string, Selecti
         return [key, 'decode' in column ? column.decode(raw) : raw === null ? null : column.mapFromDriverValue(raw)];
       }),
     ) as SelectionRow<Columns>;
+  const compiled = new SQLiteDialect().sqlToQuery(input.query(sql`${keyRelation}."key"`).inlineParams()).sql;
+  const body = sql`select json_object(${sql.join(
+    Object.keys(input.columns).flatMap((name) => [sql`${name}`, sql`selected.${sql.identifier(name)}`]),
+    sql`, `,
+  )}) from (${sql.raw(compiled)}) selected`;
   return {
     raw: {
       id: input.id,
-      sql: new SQLiteDialect().sqlToQuery(input.query(sql.raw('?1')).inlineParams()).sql,
+      sql: compiled,
       columns: Object.keys(input.columns),
       sources: input.sources.map((source) => ({
         projection: source.rows.raw.id,
@@ -118,12 +125,10 @@ export const selectRows = <const Columns extends Readonly<Record<string, Selecti
       })),
     },
     columns: input.columns,
-    query: input.query,
     encoded: (key) =>
-      sql<string | null>`(select json_object(${sql.join(
-        Object.keys(input.columns).flatMap((name) => [sql`${name}`, sql`selected.${sql.identifier(name)}`]),
-        sql`, `,
-      )}) from (${input.query(key)}) selected)`.mapWith((raw: string | null) => (raw === null ? null : decode(JSON.parse(raw)))),
+      sql<string | null>`(select (${body}) from (select ${key} as "key") as ${keyRelation})`.mapWith((raw: string | null) =>
+        raw === null ? null : decode(JSON.parse(raw)),
+      ),
     value: (selected) => (selected.selection !== input.id ? undefined : selected.values === null ? null : decode(selected.values)),
   };
 };

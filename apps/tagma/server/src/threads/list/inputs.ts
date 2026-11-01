@@ -1,5 +1,5 @@
 import { and, eq, inArray, isNotNull, sql, type SQL } from 'drizzle-orm';
-import { alias, type SQLiteColumn } from 'drizzle-orm/sqlite-core';
+import type { SQLiteColumn } from 'drizzle-orm/sqlite-core';
 import { Schema } from 'effect';
 import type { StoreDb } from '../../platform/contract/service/store.js';
 import type { Unit } from '../../platform/contract/service/units.js';
@@ -205,21 +205,17 @@ const projectedSubjects: SQL = sql`(
   union select ${threadInbox.threadId} as id from ${threadInbox} where ${threadInbox.owes} = 1
 )`;
 
-// A selection reads `thread` itself, so the key it is handed must name a table no selection reads.
-const listed = alias(threadRecord, 'listed');
-const self: SQL = sql`${listed.id}`;
-
 export const narrowRows = (db: StoreDb<'machine'>, unit: Unit<'machine'>) =>
   unit.run(
     db
       .select({
-        id: listed.id,
-        activity: activityInput.encoded(self),
-        ancestry: ancestryInput.encoded(self),
-        owing: owingInput.encoded(self),
+        id: threadRecord.id,
+        activity: activityInput.encoded(threadRecord.id),
+        ancestry: ancestryInput.encoded(threadRecord.id),
+        owing: owingInput.encoded(threadRecord.id),
       })
-      .from(listed)
-      .where(sql`${listed.id} in ${projectedSubjects}`),
+      .from(threadRecord)
+      .where(sql`${threadRecord.id} in ${projectedSubjects}`),
   );
 
 export const heldRows = (db: StoreDb<'machine'>, unit: Unit<'machine'>, ids: readonly string[]) =>
@@ -232,15 +228,14 @@ export const heldRows = (db: StoreDb<'machine'>, unit: Unit<'machine'>, ids: rea
         facet: externalSession.facet,
         seen: threadSeen.runId,
         root: assignmentSelection.rootId,
-        activity: activityInput.encoded(self),
-        outcome: outcomeInput.encoded(self),
-        latest: latestInput.encoded(self),
-        recap: recapInput.encoded(self),
-        owing: owingInput.encoded(self),
-        ancestry: ancestryInput.encoded(self),
+        activity: activityInput.encoded(threadRecord.id),
+        outcome: outcomeInput.encoded(threadRecord.id),
+        latest: latestInput.encoded(threadRecord.id),
+        recap: recapInput.encoded(threadRecord.id),
+        owing: owingInput.encoded(threadRecord.id),
+        ancestry: ancestryInput.encoded(threadRecord.id),
       })
       .from(threadRecord)
-      .innerJoin(listed, eq(listed.id, threadRecord.id))
       .innerJoin(thread, eq(thread.id, threadRecord.id))
       .innerJoin(threadMandate, eq(threadMandate.id, threadRecord.id))
       .leftJoin(externalSession, eq(externalSession.id, threadRecord.id))
