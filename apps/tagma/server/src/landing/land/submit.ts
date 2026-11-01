@@ -24,6 +24,7 @@ import { LandingLanes } from './lanes.js';
 import { messageOf, subjectFor } from './message.js';
 import { commitOwn, type CommitCtx, cutRefusal } from './commit.js';
 import { HookRefused } from './hooks.js';
+import { formingOver } from './formed.js';
 import {
   applyCarried,
   carriedOnRefusal,
@@ -165,6 +166,7 @@ const submitHeld = Effect.fn('submitWork.held')(function* (
       ),
       carrying,
     );
+  const form = formingOver(changes, checkout, carrying);
   const callId = yield* SignedCall;
   const work = origin.work;
   const job = `landing:${randomUUID()}`;
@@ -203,6 +205,7 @@ const submitHeld = Effect.fn('submitWork.held')(function* (
         retirement,
         carry,
         read,
+        form,
       } satisfies CommitCtx,
       produce,
     ),
