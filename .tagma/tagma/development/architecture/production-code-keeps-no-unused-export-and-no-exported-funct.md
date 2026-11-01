@@ -2128,10 +2128,6 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead apps/tagma/app/src/lib/features/workspace/surface.ts#RouteParams",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "dead-code dead apps/tagma/app/src/lib/features/worktrees/BoardState.svelte.ts#BornThread",
           "owner": "5a3bed29"
         },
@@ -12700,10 +12696,6 @@ fields:
         },
         {
           "fingerprint": "dead-code dead packages/agent/src/thread/HistoryFold.ts#ThreadHistorySplice",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead packages/agent/src/thread/HistoryFold.ts#ThreadHistoryMove",
           "owner": "5a3bed29"
         },
         {
