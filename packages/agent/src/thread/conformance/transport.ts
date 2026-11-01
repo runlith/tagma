@@ -13,6 +13,7 @@ import { NATIVE_CAPABILITIES } from '../record';
 import type { ThreadRunRow } from '../rows';
 import { unreadReportEnvelope, type ReportPlan } from '../run/lifecycle/RunReports';
 import type { ThreadWriteTx } from '../ThreadPorts';
+import { THREAD_REQUEST_DETACHED } from '../storage/inbox';
 import type { RunLaunch } from '../transport/contract';
 import { silentGuidance } from './fakeTransport';
 import { APPROVAL, lifecycleWorld, lifecycleWorldOver, type LifecycleWorld, SCOPE, started } from './lifecycleWorld';
@@ -366,6 +367,35 @@ export function describeTransportContract<TTx, TWrite extends TTx = TTx, R = nev
       }),
     );
     test(
+      'withdrawing unconfirmed task and interrupt turns keeps delivered words without a reporting obligation',
+      Effect.fnUntraced(function* () {
+        for (const intent of ['task', 'interrupt'] as const) {
+          const world = yield* lifecycleWorld(open);
+          const run = yield* opened(world);
+          const reports = world.reports.of(ADAPTER);
+          const requester = yield* world.storage.createThread({ ownerId: 'owner', scope: SCOPE });
+          const request = {
+            ...(yield* wordsFor(run.threadId, 'request-unconfirmed')),
+            kind: 'task',
+            sender: { kind: 'thread', threadId: requester.id, name: 'asker' },
+            body: { intent, text: 'rebuild the index', inReplyTo: null },
+          } as const;
+          yield* world.storage.inbox.put(request);
+          yield* world.storage.inbox.deliver([request.id], run.id);
+          const task = threadSignalOfInboxItem({ ...request, state: 'delivered', deliveredToRunId: run.id });
+          yield* report(world, reports.recorded(run, [threadSignalOpening(task, run.id, request.body.text)], 'stdout:1'));
+          yield* report(world, reports.fate(run, 'unconfirmed', [request.id]));
+          if (intent === 'task') yield* world.storage.inbox.closeRequests([request.id], THREAD_REQUEST_DETACHED);
+          expect(yield* world.storage.inbox.openRequests(run.threadId)).toEqual([]);
+          const history = (yield* world.storage.aggregate.find(run.threadId))!.history;
+          yield* world.lifecycle.stop(run, { by: 'reader', marker: false, withdraw: true }, false);
+          expect(yield* world.runs.runById(run.id)).toMatchObject({ status: 'aborted' });
+          expect((yield* world.storage.aggregate.find(run.threadId))!.history).toEqual(history);
+          expect(yield* world.storage.inbox.receipt(request.id)).toMatchObject({ state: 'delivered', deliveredToRunId: run.id });
+        }
+      }),
+    );
+    test(
       'a request whose words lapsed unread reports once to its sender, closes once, and withdraws a run that only carries them',
       Effect.fnUntraced(function* () {
         const world = yield* lifecycleWorld(open);
@@ -382,7 +412,6 @@ export function describeTransportContract<TTx, TWrite extends TTx = TTx, R = nev
         yield* world.storage.inbox.deliver([request.id], run.id);
         const task = threadSignalOfInboxItem({ ...request, state: 'delivered', deliveredToRunId: run.id });
         yield* report(world, reports.recorded(run, [threadSignalOpening(task, run.id, request.body.text)], 'stdout:1'));
-        yield* report(world, reports.fate(run, 'unconfirmed', [request.id]));
         expect((yield* report(world, reports.lapsed(run, [request.id]))).status).toBe('applied');
         const sent = (yield* world.storage.inbox.pending(requester.id)).filter((item) => item.kind === 'envelope');
         expect(sent).toHaveLength(1);
@@ -390,6 +419,7 @@ export function describeTransportContract<TTx, TWrite extends TTx = TTx, R = nev
         expect((yield* world.storage.inbox.pendingWakes(10)).map((item) => item.id)).toEqual([unreadReportEnvelope(request.id)]);
         expect((yield* world.storage.inbox.openRequests(run.threadId)).map((request) => request.id)).toEqual([]);
         expect(yield* world.runs.runById(run.id)).toMatchObject({ status: 'withdrawn' });
+        expect((yield* world.storage.aggregate.find(run.threadId))!.history).toEqual([]);
         expect((yield* report(world, reports.lapsed(run, [request.id]))).status).toBe('settled');
         expect((yield* world.storage.inbox.pending(requester.id)).filter((item) => item.kind === 'envelope')).toHaveLength(1);
         expect(yield* world.storage.inbox.pendingWakes(10)).toHaveLength(1);

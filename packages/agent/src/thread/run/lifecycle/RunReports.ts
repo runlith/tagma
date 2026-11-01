@@ -485,6 +485,7 @@ export const runReportsLayer = Layer.effect(
           if (open.length === 0) return result('settled', run.id);
           const ids = open.map((item) => item.id);
           const intended: string[] = [];
+          yield* signalled(run, ids, 'unconfirmed', tx);
           yield* inbox.fated(run.threadId, run.id, ids, 'acknowledged', tx);
           for (const item of open) {
             if (!isInboxRequest(item)) continue;

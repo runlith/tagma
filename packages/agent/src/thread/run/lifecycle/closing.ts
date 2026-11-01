@@ -1,5 +1,6 @@
 import { Clock, Effect } from 'effect';
 import { opensTurnMessage } from '../../../agent/AgentSignal';
+import { signalEntryId } from '../../../transcript/entryNames';
 import type { ThreadInterruptedInput, WithdrawnWords } from '../../../transcript/entries';
 import { coreEntry } from '../../../transcript/kinds';
 import { KEEP_WARM_SIGNAL_TYPE } from '../../../transcript/keepWarm';
@@ -98,6 +99,15 @@ export const makeRunClosing = Effect.fnUntraced(function* ({
         : [];
     const withdrawsReader = unprompted.length > 0 && written.stopRequest?.withdraw === true;
     const unread = pending.filter(isUnreadSteer).length;
+    const opening = ofRun.find(opensTurnEntry);
+    const keepsAssignment =
+      written.status === 'aborted' &&
+      written.stopRequest?.withdraw === true &&
+      opening !== undefined &&
+      coreEntry(opening) &&
+      opening.type === 'signal' &&
+      opening.addressee !== 'reader' &&
+      (opening.unconfirmed !== true || pending.some((item) => signalEntryId(item.id) === opening.id));
     const shape = act.interruption?.(written) ?? null;
     const interruption: ThreadInterruptionMark | null = shape === 'steers' ? { steers: unread } : shape === 'plain' ? { steers: 0 } : null;
     const events = [
@@ -111,7 +121,11 @@ export const makeRunClosing = Effect.fnUntraced(function* ({
             row.pendingInteraction !== null && routedEntry(row.pendingInteraction) ? null : row.pendingInteraction,
             act.unsettled,
           )),
-      ...(withdrawsReader ? [threadWithdrawalEvent(run.id, row.history.length)] : (act.ending?.(written, row, ofRun, unread) ?? [])),
+      ...(withdrawsReader
+        ? [threadWithdrawalEvent(run.id, row.history.length)]
+        : keepsAssignment
+          ? []
+          : (act.ending?.(written, row, ofRun, unread) ?? [])),
     ];
     const refs = unprompted.flatMap((item) => (item.kind === 'turn' || item.kind === 'signal' ? (item.body.attachments ?? []) : []));
     const stored = refs.length === 0 ? [] : yield* attachments.resolve(run.threadId, row.ownerId, refs);
@@ -256,7 +270,7 @@ export const makeRunClosing = Effect.fnUntraced(function* ({
 });
 
 export function withdrawnTurn(run: ThreadRunRow, thread: ThreadRow, ofRun: ThreadTranscript): readonly ThreadEventBody[] {
-  return wordsOfTurn(run, ofRun) === 1 ? turnWithdrawal(run, thread, ofRun) : [];
+  return wordsOfTurn(run, ofRun) === 1 ? turnWithdrawal(run, thread) : [];
 }
 
 export function wordsOnly(run: ThreadRunRow, ofRun: ThreadTranscript): boolean {
@@ -266,12 +280,10 @@ export function wordsOnly(run: ThreadRunRow, ofRun: ThreadTranscript): boolean {
 export function displacedTurn(run: ThreadRunRow, thread: ThreadRow, ofRun: ThreadTranscript): readonly ThreadEventBody[] {
   const said = wordsOfTurn(run, ofRun);
   if (said === 0) return [threadWithdrawalEvent(run.id, thread.history.length)];
-  return said === 1 ? turnWithdrawal(run, thread, ofRun) : [];
+  return said === 1 ? turnWithdrawal(run, thread) : [];
 }
 
-function turnWithdrawal(run: ThreadRunRow, thread: ThreadRow, ofRun: ThreadTranscript): readonly ThreadEventBody[] {
-  const opening = ofRun.find(opensTurnEntry);
-  if (opening !== undefined && coreEntry(opening) && opening.type === 'signal' && opening.addressee !== 'reader') return [];
+function turnWithdrawal(run: ThreadRunRow, thread: ThreadRow): readonly ThreadEventBody[] {
   const from = thread.history.findLastIndex(opensTurnMessage);
   return from < 0 ? [] : [threadWithdrawalEvent(run.id, from)];
 }
