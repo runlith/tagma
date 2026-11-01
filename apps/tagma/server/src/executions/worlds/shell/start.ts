@@ -1,6 +1,7 @@
 import { Effect } from 'effect';
 import {
   CommandRefused,
+  CommandUnreadable,
   type CommandAcceptance,
   type CommandObservation,
   type CommandRequest,
@@ -29,7 +30,7 @@ import type { WorldLease } from '../../contract/service/worlds.js';
 import type { CommandAdmitter } from '../../terminals/executionPort.js';
 import type { WorldLeasing } from '../cache.js';
 import { commandRun, launchOf, prepare } from './launch.js';
-import { accepted, decidingRule, watching, wireRefusal } from './results.js';
+import { accepted, decidingRule, refusalText, watching, wireRefusal } from './results.js';
 import { cancelling } from './stops.js';
 
 export type ShellCommandBinding = {
@@ -126,13 +127,24 @@ export const makeShellCommands = ({
     );
     launches.drop(operationId);
     const execution = yield* accepted(operation, outcome).pipe(Effect.tapError(unsubmitted));
-    const run = yield* commandRun(road, operation, execution, cancellation, decidingRule(prepared.receipt));
+    const run = yield* commandRun(road, operation, execution, cancellation, decidingRule(prepared.receipt.time, prepared.receipt.limits.origin));
     const observed = yield* watching(observe(run).pipe(Effect.ensuring(settled)), held);
     return { run, observed };
   });
 
   return {
     retainedBytes: OUTPUT_RETAINED_BYTES,
+    startedBy: Effect.fnUntraced(function* (correlation: string) {
+      const creator = road.binding.creator;
+      if (creator._tag !== 'Thread') return null;
+      const started = yield* road.managed
+        .startedBy(road.binding.projectId, { thread: creator.thread, run: creator.run, toolCall: correlation })
+        .pipe(Effect.mapError((failure) => new CommandUnreadable({ reason: refusalText(failure) })));
+      if (started === null) return null;
+      const { record } = started;
+      const operation: HostRequestRef = { installation: road.binding.installation, operation: started.operation };
+      return yield* commandRun(road, operation, record.execution, undefined, decidingRule(record.time, record.time?.life?.origin));
+    }),
     start: Effect.fnUntraced(function* <A>(request: CommandRequest, observe: CommandObservation<A>) {
       if (request.stop !== undefined && request.stop.stopped() !== null) {
         return yield* new CommandRefused({

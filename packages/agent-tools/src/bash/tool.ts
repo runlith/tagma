@@ -16,7 +16,7 @@ import { CheckoutFlights } from '../CheckoutFlights';
 import { observerLost } from '../ShellRun';
 import { commandTitle, finishedAnswer, finishedElsewhere, movedAnswer, ownerEnded, runningAnswer, type Retained } from './answers';
 import { commandClaims, commitElsewhere, sweepsShared } from './preflight';
-import { admitted } from './managed';
+import { admitted, recovered } from './managed';
 import { local } from './local';
 import { COMMAND_LIFE, COMMAND_WAIT, humanMs } from '../CommandWork';
 
@@ -125,9 +125,13 @@ export function createBashTool(options: ToolFactoryOptions): Tool {
               : admitted(resolved.at(call.caller), commandWork, services, params, call, baselines, retained),
             call,
           ),
-    settleEffect: Effect.fnUntraced(function* ({ toolCallId }) {
+    settleEffect: Effect.fnUntraced(function* ({ toolCallId, toolInput, caller }) {
       const held = retained.get(toolCallId);
-      if (held === undefined) return { status: 'unknown' } as const;
+      if (held === undefined) {
+        return commandWork === undefined || services === undefined
+          ? ({ status: 'unknown' } as const)
+          : yield* recovered(resolved.at(caller), commandWork, services, toolInput, baselines, toolCallId);
+      }
       if (held.kind === 'unsubmitted') return { status: 'aborted' } as const;
       if (held.kind === 'uncertain') {
         return {

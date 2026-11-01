@@ -23,7 +23,7 @@ import type { FrameRevision, ScreenPointRead, ScreenRead, ScreenFeedItem } from 
 import type { RecordChunk } from '../contract/wire/viewLeases.js';
 import { ByteOffset, offsetValue, type ByteCursor } from '@runlith/executions/protocol/record';
 import type { SubscriptionEnding } from '@runlith/executions/protocol/wire';
-import { TerminalRefused } from '../contract/wire/refusals.js';
+import { TerminalRefused, TerminalUnavailable } from '../contract/wire/refusals.js';
 import { operationPhase, type TerminalOperationDigest, type TerminalOperationState } from '../contract/wire/requestKeys.js';
 import { principalOf } from './principals.js';
 import {
@@ -39,6 +39,7 @@ import type { Unit } from '../../platform/contract/service/units.js';
 import type { CommandRecord } from '../contract/wire/commands.js';
 import type { ExecutionHandle, TerminalFailure } from '../contract/service/terminals.js';
 import type { BytesOptions } from '../contract/service/records.js';
+import type { CommandCall, StartedCommand } from '../contract/service/commands.js';
 import { writes } from '../../platform/contract/service/writes.js';
 import { terminalIntent, terminalRequestKey, terminalRequestKeyTally } from '../store/terminal.js';
 import { refKey, type StopDispatches } from './refs.js';
@@ -90,7 +91,28 @@ export const makeTerminalReads = Effect.fnUntraced(function* ({
   const ref = (operation: HostRequestKey) => ({ installation, operation });
   const record = yield* makeTerminalRecord;
   const commandRecord = yield* makeCommandRecord;
+  const commandRows = yield* CommandRows;
   const listed: TableAnswers<string, TerminalListing> = (yield* MachineStore).moves.answers([terminal]);
+
+  const commandStartedBy = Effect.fn('Terminals.commandStartedBy')(function* (
+    projectId: number,
+    call: CommandCall,
+  ): Effect.fn.Return<StartedCommand | null, TerminalFailure> {
+    return yield* units.read((unit) =>
+      Effect.gen(function* () {
+        const started = yield* commandRows.commandStartedBy(unit, projectId, call);
+        if (started === null) return null;
+        const key = yield* requestKeys.keyOf(unit, started.execution.execution, started.execution.incarnation);
+        if (key === null) {
+          return yield* new TerminalUnavailable({
+            owner: 'store',
+            message: `Command ${started.execution.execution} stands without the key it was started under, so its start cannot be named.`,
+          });
+        }
+        return { record: started, operation: key.operationId };
+      }),
+    );
+  });
 
   const operation = Effect.fn('Terminals.operation')(function* (
     projectId: number,
@@ -386,6 +408,7 @@ export const makeTerminalReads = Effect.fnUntraced(function* ({
     operation,
     operationFor,
     commandRecord,
+    commandStartedBy,
     record,
     recordsOf,
     shell,

@@ -89,6 +89,7 @@ export const makeHostTerminals = Effect.fnUntraced(function* ({
   const commands = ManagedCommands.of({
     ...acts,
     record: reading.commandRecord,
+    startedBy: reading.commandStartedBy,
     stop: stops.stopCommand,
     stopAll: stops.stopCommands,
     changes: stops.commandChanges,

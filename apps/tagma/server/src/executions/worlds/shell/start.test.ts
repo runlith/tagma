@@ -25,6 +25,7 @@ import type { CommandAccess } from '../../contract/service/access.js';
 import type { WorldLease } from '../../contract/service/worlds.js';
 import type { ManagedCommands } from '../../contract/service/commands.js';
 import type { TerminalOperationKey } from '../../contract/wire/requestKeys.js';
+import { TerminalUnavailable } from '../../contract/wire/refusals.js';
 import { PreparedLaunches, makeShellCommands, type ShellCommandBinding } from './start.js';
 import { bytes, commandPhase, commandResult } from './results.js';
 
@@ -842,5 +843,39 @@ it.live('an agent’s limit ask is the total it comes to, which is the shape a t
 
     expect(control.revises[0]?.actor).toBe('Thread');
     expect(control.revises[0]?.change).toEqual({ _tag: 'Total', executionMs: 90_000 });
+  }),
+);
+
+it.effect('a command is found again by the call that started it, read through its owner, and a call that started none finds none', () =>
+  Effect.gen(function* () {
+    const asked: Array<{ readonly projectId: number; readonly call: unknown }> = [];
+    const found = refOf('exec-found');
+    const rule = { id: 'r1', limitMs: 5_000, writer: 'operator', at: 'now', words: 'keep it short' };
+    const managed = {
+      startedBy: (projectId: number, call: { readonly toolCall: string }) =>
+        Effect.suspend(() => {
+          asked.push({ projectId, call });
+          if (call.toolCall === 'call-unread') return Effect.fail(new TerminalUnavailable({ owner: 'store', message: 'the store is closed' }));
+          return Effect.succeed(
+            call.toolCall === 'call-1'
+              ? {
+                  record: { execution: found, time: { tool: 'bash', rules: [rule], life: { ms: 5_000, origin: 'rule' } } },
+                  operation: HostRequestKey.make('call-1:minted'),
+                }
+              : null,
+          );
+        }),
+    } as unknown as ManagedCommands['Service'];
+    const commands = commandsOver(hostOver({ executions: new Map() }), managed);
+
+    const run = yield* commands.startedBy('call-1');
+    expect(asked[0]).toEqual({ projectId: 7, call: { thread: 'thread-1', run: 'run-1', toolCall: 'call-1' } });
+    expect(run?.execution).toEqual(found);
+    expect(run?.operation).toEqual({ installation, operation: HostRequestKey.make('call-1:minted') });
+    expect(run?.rule).toContain('r1 (life');
+    expect(yield* commands.startedBy('call-2')).toBeNull();
+    const unread = yield* Effect.flip(commands.startedBy('call-unread'));
+    expect(unread._tag).toBe('CommandUnreadable');
+    expect(unread.reason).toContain('the store is closed');
   }),
 );

@@ -114,6 +114,7 @@ export type CommandAcceptance<A> = {
 
 export type CommandWork = {
   readonly start: <A>(request: CommandRequest, observe: CommandObservation<A>) => Effect.Effect<CommandAcceptance<A>, CommandRefused>;
+  readonly startedBy: (correlation: string) => Effect.Effect<CommandRun | null, CommandUnreadable>;
   readonly retainedBytes: number;
 };
 

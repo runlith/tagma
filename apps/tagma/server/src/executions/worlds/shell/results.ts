@@ -11,14 +11,14 @@ import type { Commands } from '@runlith/executions/Commands';
 import type { Executions, ExecutionsFailure } from '@runlith/executions/Executions';
 import type { ExecutionFeed } from '@runlith/executions/ExecutionFeed';
 import type { CallDecisionAnswer } from '@runlith/executions/protocol/call';
-import type { CommandDeadline, CommandSnapshot } from '@runlith/executions/protocol/command';
+import type { CommandDeadline, CommandSnapshot, LimitProvenance } from '@runlith/executions/protocol/command';
 import type { StopReceipt } from '@runlith/executions/protocol/stop';
 import type { ExecutionPhase, ExecutionRef, HostRequestRef } from '@runlith/executions/protocol/execution';
 import type { ExecutionSummary } from '@runlith/executions/protocol/runtime';
 import { type ByteOffset, byteOffset, offsetValue } from '@runlith/executions/protocol/record';
 import type { Refusal } from '@runlith/executions/protocol/host';
 import type { StartAnswer } from '@runlith/executions/protocol/launch';
-import type { CommandPolicyReceipt } from '../../contract/wire/commands.js';
+import type { CommandTimeRecord } from '../../contract/wire/commands.js';
 import { TerminalRefused, hostRefusalReason } from '../../contract/wire/refusals.js';
 import type { WorldLease } from '../../contract/service/worlds.js';
 import { terminalRefusal } from '../../terminals/refusal.js';
@@ -126,9 +126,9 @@ export const commandPhase = Effect.fnUntraced(function* (
 const phaseOf = (phase: ExecutionPhase): CommandPhase =>
   phase === 'ended' ? 'ended' : phase === 'queued' || phase === 'reserved' ? 'queued' : 'running';
 
-export const decidingRule = (receipt: CommandPolicyReceipt): string | undefined => {
-  const copy = receipt.time.rules[0];
-  return copy === undefined || receipt.limits.origin !== 'rule' ? undefined : copyHead(copy, 'life');
+export const decidingRule = (time: CommandTimeRecord | undefined, origin: LimitProvenance | undefined): string | undefined => {
+  const copy = time?.rules[0];
+  return copy === undefined || origin !== 'rule' ? undefined : copyHead(copy, 'life');
 };
 
 export const deadlineOf = (snapshot: Result.Result<CommandSnapshot | undefined, unknown>): CommandRunDeadline => {

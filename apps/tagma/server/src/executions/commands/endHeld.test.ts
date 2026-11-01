@@ -20,6 +20,7 @@ const close = (sweep: CommandSweep) =>
   endHeldCommands(
     ManagedCommands.of({
       record: unused,
+      startedBy: unused,
       revise: unused,
       background: unused,
       foreground: unused,

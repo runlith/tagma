@@ -131,17 +131,37 @@ export const runningAnswer = (params: Params, run: CommandRun, phase: string): T
   );
 };
 
+const phaseState = (run: CommandRun, process: HandoffPhase): string =>
+  process.phase === 'ended'
+    ? 'its process has ended; its command observation is still finishing'
+    : process.phase === 'queued'
+      ? `accepted, its process has not started (${lifeOf(run)})`
+      : process.phase === 'running'
+        ? `its process is running (${lifeOf(run)})`
+        : `its process phase could not be read${process.unreadable === null ? '' : `: ${process.unreadable}`}`;
+
+export const strandedAnswer = (params: Params, run: CommandRun, process: HandoffPhase, reason: string): Tool.ToolAnswer => {
+  const where = `${run.execution.execution}:${run.execution.incarnation}`;
+  return new Tool.ToolAnswer(
+    [
+      `${where} could not be moved to the background (${reason}): ${phaseState(run, process)}. Its ending does not arrive as a notice, so read it before relying on it, and do not run it again.`,
+      run.inspect,
+    ].join('\n'),
+    {
+      form: 'command',
+      verb: 'Not moved to the background',
+      ...commandTitle(params),
+      command: params.command,
+      details: [{ label: 'phase', value: process.phase ?? 'unavailable' }, ...lifeFacts(run), ...addressDetails(run)],
+      reference: commandReference(run, process.phase === 'running' || process.phase === 'queued'),
+    },
+  );
+};
+
 export const movedAnswer = (params: Params, run: CommandRun, wait: CommandLimit | null, process: HandoffPhase): Tool.ToolAnswer => {
   const where = `${run.execution.execution}:${run.execution.incarnation}`;
   const phase = process.phase;
-  const state =
-    phase === 'ended'
-      ? 'its process has ended; its command observation is still finishing'
-      : phase === 'queued'
-        ? `accepted, its process has not started (${lifeOf(run)})`
-        : phase === 'running'
-          ? `its process is running (${lifeOf(run)})`
-          : `its process phase could not be read${process.unreadable === null ? '' : `: ${process.unreadable}`}`;
+  const state = phaseState(run, process);
   return new Tool.ToolAnswer(
     [
       `${wait === null ? `Moved ${where} to the background` : `The wait passed (${waitWords(wait)}), so ${where} moved to the background`}: ${state}. ${IN_BACKGROUND}`,

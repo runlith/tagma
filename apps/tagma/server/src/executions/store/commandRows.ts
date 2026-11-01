@@ -233,6 +233,32 @@ export const makeCommandRows = ({
 
     recordCommand,
 
+    commandStartedBy: Effect.fn('CommandRows.commandStartedBy')(function* (
+      unit: Unit<'machine'>,
+      projectId: number,
+      call: { readonly thread: ThreadId; readonly run?: string; readonly toolCall: string },
+    ) {
+      const rows = yield* queried(
+        unit,
+        db
+          .select()
+          .from(command)
+          .where(
+            and(
+              eq(command.projectId, projectId),
+              eq(command.createdBy, principalOf({ _tag: 'Thread', threadId: call.thread, projectId })),
+              call.run === undefined ? isNull(command.createdRun) : eq(command.createdRun, call.run),
+              eq(command.createdToolCall, call.toolCall),
+            ),
+          )
+          .orderBy(desc(command.admittedAt), desc(command.executionId))
+          .limit(1)
+          .all(),
+      );
+      const row = rows[0];
+      return row === undefined ? null : yield* recordOf(row);
+    }),
+
     inventoryCommand: Effect.fn('CommandRows.inventoryCommand')(function* (unit: Unit<'machine'>, projectId: number) {
       const rows = yield* queried(unit, db.select().from(command).where(eq(command.projectId, projectId)).all());
       return yield* Effect.forEach(rows, recordOf);

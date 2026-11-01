@@ -1,5 +1,5 @@
 import { Context, type Effect, type Queue, type Stream } from 'effect';
-import type { ExecutionRef, Incarnation } from '@runlith/executions/protocol/execution';
+import type { ExecutionRef, HostRequestKey, Incarnation } from '@runlith/executions/protocol/execution';
 import type { CancellationCause } from '@runlith/executions/protocol/call';
 import type { CommandDeadline, CommandRevision, CommandRevisionAnswer, CommandRevisionRequest } from '@runlith/executions/protocol/command';
 import type { InventoryFeedItem } from '@runlith/executions/protocol/inventory';
@@ -165,10 +165,15 @@ export class CommandWaiters extends Context.Service<
   }
 >()('tagma/executions/CommandWaiters') {}
 
+export type CommandCall = { readonly thread: ThreadId; readonly run?: string; readonly toolCall: string };
+
+export type StartedCommand = { readonly record: CommandRecord; readonly operation: HostRequestKey };
+
 export class ManagedCommands extends Context.Service<
   ManagedCommands,
   {
     readonly record: (executionId: string, incarnation?: Incarnation) => Effect.Effect<CommandRecord | null, TerminalFailure>;
+    readonly startedBy: (projectId: number, call: CommandCall) => Effect.Effect<StartedCommand | null, TerminalFailure>;
     readonly revise: (
       key: TerminalOperationKey,
       execution: ExecutionRef,

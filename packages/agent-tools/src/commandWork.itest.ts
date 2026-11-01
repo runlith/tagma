@@ -130,6 +130,7 @@ const builtOwner = Effect.fnUntraced(function* (options: FakeOptions) {
   const measurements: string[] = [];
   const work: CommandWork = {
     retainedBytes: 4096,
+    startedBy: () => Effect.succeed(null),
     start: Effect.fnUntraced(
       function* <A>(request: CommandRequest, observe: (run: CommandRun) => Effect.Effect<A>) {
         started += 1;
@@ -1215,5 +1216,129 @@ it.live('stopping one call ends only its own command, and the call beside it ans
     expect(owner.stops()).toHaveLength(1);
     expect(owner.stops()[0]).toEqual(refOf(1));
     expect(said(sibling)).toContain('sibling');
+  }),
+);
+
+type Survivor = {
+  readonly phase: CommandPhase;
+  readonly background?: Effect.Effect<'moved' | 'already' | 'ended', CommandUnreadable>;
+  readonly printed?: string;
+};
+
+const survivorOf = (found: Survivor, moves: string[]): CommandRun => {
+  const execution = refOf(7);
+  const operation = { installation, operation: 'call-lost:minted' } as HostRequestRef;
+  const deadline: CommandRunDeadline = { state: 'armed', timeoutMs: 60_000, origin: 'default' };
+  return {
+    operation,
+    execution,
+    deadline,
+    standing: Effect.succeed(deadline),
+    revise: () => Effect.succeed({ state: 'refused' as const, reason: 'this survivor moves no deadline' }),
+    background:
+      found.background ??
+      Effect.sync(() => {
+        moves.push(execution.execution);
+        return 'moved' as const;
+      }),
+    foreground: Effect.die('a recovered call never takes its command back'),
+    measured: () => Effect.die('a recovered call measures nothing'),
+    inspect: `read_output with execution ${execution.execution} and incarnation ${execution.incarnation} reads what it has printed so far.`,
+    phase: Effect.succeed(found.phase),
+    result:
+      found.phase === 'ended'
+        ? Effect.succeed({
+            _tag: 'Decided',
+            decision: { _tag: 'Completed', operation, execution, sequence: 0 },
+            nativeExit: { _tag: 'Code', code: 0 },
+            sources: { stdout: { completed: true, offset: 0n as never }, stderr: { completed: true, offset: 0n as never } },
+            cleanup: 'complete',
+            retention: 'retained',
+            cost: { _tag: 'Unmeasured', reason: 'unsupported', detail: 'the survivor measures nothing' },
+            kept: { _tag: 'Empty' },
+          } satisfies RuledAnswer)
+        : Effect.die('a recovered call waits on no command still running'),
+    stdout: Stream.make(new TextEncoder().encode(found.printed ?? '')),
+    stderr: Stream.empty,
+  };
+};
+
+const survivingOwner = (found: Survivor | null) => {
+  const asked: string[] = [];
+  const moves: string[] = [];
+  const work: CommandWork = {
+    retainedBytes: 4096,
+    start: () => Effect.die('a recovered call never starts its command again'),
+    startedBy: (correlation) =>
+      Effect.sync(() => {
+        asked.push(correlation);
+        return found === null ? null : survivorOf(found, moves);
+      }),
+  };
+  return { work, asked, moves };
+};
+
+const recoveredOf = Effect.fnUntraced(function* (found: Survivor | null) {
+  const root = yield* createTempDir();
+  const owner = survivingOwner(found);
+  const bash = shellOf(createTools(options({ cwd: root, world: worldWith(owner.work) })));
+  const input = { command: 'sleep 20; printf finished', description: 'Outlive the process' };
+  const settlement = yield* settleOf(bash, { toolCallId: 'call-lost', caller: unthreadedCaller, toolInput: input });
+  const answer = settlement?.status === 'completed' && settlement.output instanceof ToolAnswer ? settlement.output : null;
+  return { settlement, answer, asked: owner.asked, moves: owner.moves };
+});
+
+it.live('a call whose process died is answered by the command its correlation names, moved to the background, never run again', () =>
+  Effect.gen(function* () {
+    const running = yield* recoveredOf({ phase: 'running' });
+    expect(running.asked).toEqual(['call-lost']);
+    expect(running.moves).toEqual(['exec-7']);
+    expect(running.answer?.display?.verb).toBe('Moved to the background');
+    expect(running.answer?.display?.reference).toMatchObject({ kind: 'command', execution: 'exec-7', incarnation: 1, standing: true });
+    expect(String(running.answer?.value)).toContain('its process is running');
+
+    const already = yield* recoveredOf({ phase: 'running', background: Effect.succeed('already') });
+    expect(already.answer?.display?.verb).toBe('Left running');
+    expect(already.answer?.display?.reference).toMatchObject({ execution: 'exec-7', standing: true });
+
+    const stuck = yield* recoveredOf({
+      phase: 'running',
+      background: Effect.fail(new CommandUnreadable({ reason: 'the wait moved under every attempt' })),
+    });
+    expect(stuck.answer?.display?.verb).toBe('Not moved to the background');
+    expect(String(stuck.answer?.value)).toContain('the wait moved under every attempt');
+    expect(String(stuck.answer?.value)).toContain('does not arrive as a notice');
+  }),
+);
+
+it.live('a call whose command ended while nobody held it answers that ending and output, its checkout named unmeasured', () =>
+  Effect.gen(function* () {
+    const ended = yield* recoveredOf({ phase: 'ended', printed: 'printed while nobody held the call' });
+    expect(ended.moves).toEqual([]);
+    expect(ended.answer?.verdict).toEqual({ kind: 'answered' });
+    expect(String(ended.answer?.value)).toContain('printed while nobody held the call');
+    expect(String(ended.answer?.value)).toContain('the checkout was NOT measured: the process that held this call died while its command ran');
+    expect(ended.answer?.display?.details?.[0]).toEqual({ label: 'exit', value: '0' });
+    expect(ended.answer?.display?.reference).toMatchObject({ kind: 'command', execution: 'exec-7', standing: false });
+  }),
+);
+
+it.live('a call no command was admitted for stays unknown, and an unreadable owner is never read as nothing admitted', () =>
+  Effect.gen(function* () {
+    const none = yield* recoveredOf(null);
+    expect(none.asked).toEqual(['call-lost']);
+    expect(none.settlement).toEqual({ status: 'unknown' });
+
+    const root = yield* createTempDir();
+    const unreadable: CommandWork = {
+      retainedBytes: 4096,
+      start: () => Effect.die('a recovered call never starts its command again'),
+      startedBy: () => Effect.fail(new CommandUnreadable({ reason: 'the store could not be read' })),
+    };
+    const bash = shellOf(createTools(options({ cwd: root, world: worldWith(unreadable) })));
+    const failed = yield* Effect.flip(
+      settleOf(bash, { toolCallId: 'call-lost', caller: unthreadedCaller, toolInput: { command: 'true', description: 'Do nothing' } }),
+    );
+    expect(failed.reason).toContain('the store could not be read');
   }),
 );

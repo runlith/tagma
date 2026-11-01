@@ -54,6 +54,7 @@ const toolsAt = Effect.fnUntraced(function* (
   };
   const work: CommandWork = {
     retainedBytes: 4096,
+    startedBy: () => Effect.succeed(null),
     start: (request) => {
       asked.push(request.waitMs ?? -1);
       return Effect.fail(new CommandRefused({ reason: 'the test only reads what the command was given', certainty: 'unsubmitted' }));
