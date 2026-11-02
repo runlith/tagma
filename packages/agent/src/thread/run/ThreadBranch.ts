@@ -7,6 +7,7 @@ import { toolEntryId } from '../../transcript/entryNames';
 import { settleTool, toolSettled } from '../../transcript/entries';
 import { attributionDisagrees, type HistoryAttribution } from '../HistoryAttribution';
 import { ThreadAttributions } from './ThreadAttributions';
+import { branchReading } from './BranchReading';
 import { spliceThreadHistory } from '../HistoryFold';
 import { ThreadRewindRefusedError } from '../rewind';
 import type { ThreadProfileBirth } from '../agents/AgentProfile';
@@ -203,13 +204,31 @@ export const makeThreadBranch = Effect.gen(function* () {
           systemPrompt: agentChanged ? undefined : source.systemPrompt,
         };
         const answer = carried.history.length > planned.history.length ? (carried.history[carried.history.length - 1] ?? null) : null;
-        return { source, version, cut, values, seed, history: carried.history, sealed: carried.replaced, cuts: planned.cuts, answer };
+        const reading = yield* branchReading({
+          reading: source.contextReading,
+          source: source.history,
+          carried: carried.history,
+          sourcePrompt: source.systemPrompt,
+          promptDropped: agentChanged,
+        });
+        return {
+          source,
+          version,
+          cut,
+          values,
+          seed,
+          history: carried.history,
+          reading,
+          sealed: carried.replaced,
+          cuts: planned.cuts,
+          answer,
+        };
       }),
       within,
     );
   type Prepared = NonNullable<Effect.Success<ReturnType<typeof prepare>>>;
   const told = Effect.fnUntraced(function* (childId: string, prepared: Prepared, base: ThreadBranchBase, tx: ThreadWriteTx) {
-    const { seed, history, sealed: replaced, cuts, answer } = prepared;
+    const { seed, history, reading, sealed: replaced, cuts, answer } = prepared;
     const cut = {
       hidden: seed.entries.kind === 'kept' ? seed.entries.taken : [],
       prompts: seed.prompts,
@@ -233,7 +252,7 @@ export const makeThreadBranch = Effect.gen(function* () {
       }
     }
     const head = base.through + declared.length;
-    const fold = { history, covered: { from: base.through, through: head } };
+    const fold = { history, covered: { from: base.through, through: head }, contextReading: reading };
     yield* kernel.transitions.writeFold(
       childId,
       { fold, standing: base.through, head, base: [], at: new Date(yield* Clock.currentTimeMillis) },

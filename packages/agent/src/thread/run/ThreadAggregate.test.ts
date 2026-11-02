@@ -2,6 +2,7 @@ import { describe, expect } from 'bun:test';
 import { it } from '@runlith/effect-test';
 import { Context, Effect, Layer } from 'effect';
 import { modelCatalog } from '@runlith/llm/models/catalog';
+import { Usage } from '@runlith/llm/schema/events';
 import { Message, ToolCallPart, ToolResultPart } from '@runlith/llm/schema/messages';
 import { approvalModesLayer } from '../../modes/ApprovalModes';
 import { Agent } from '../../agent/Agent';
@@ -24,7 +25,7 @@ import { registeredAgents } from '../conformance/agents';
 import { threadAgent } from '../agents/ThreadAgent';
 import { ThreadCallBroke, type ThreadBorderFailed, type ThreadPortFailure, threadCauseOf } from '../ThreadBorder';
 import { threadHostLayer } from '../ThreadPorts';
-import { threadSpokenMessageEvent } from '../events';
+import { threadMeasurementEvent, threadSpokenMessageEvent } from '../events';
 import type { ThreadAggregateStorage, ThreadInsertValues } from '../storage/aggregate';
 import { ThreadDeleteConflictError } from '../storage/aggregate';
 import type { ThreadInboxItemValues } from '../storage/inbox';
@@ -577,6 +578,43 @@ describe('ThreadAggregate over the composed graph', () => {
       expect((yield* h.events.eventsAfter(ROOT, 0, 3)).map((row) => row.kind)).toEqual(['message', 'message']);
       expect(committed).toEqual(referenced);
       expect(published.map((state) => state.position)).toEqual([2]);
+    }),
+  );
+  it.effect(
+    'a fork shows the context it carries from birth: the source figure for a whole copy, a reduced one for a cut, none for nothing',
+    Effect.fnUntraced(function* () {
+      const h = yield* kernelOver();
+      const turns = [1, 2, 3].flatMap((turn) => [
+        threadSpokenMessageEvent({ role: 'user', text: `question ${turn} ${'lorem '.repeat(120)}`, occurredAt: AT }),
+        threadSpokenMessageEvent({ role: 'assistant', text: `answer ${turn} ${'ipsum '.repeat(120)}`, occurredAt: AT }),
+      ]);
+      const usage = Usage.from({ inputTokens: 6_000, totalTokens: 6_000 });
+      const measurement = threadMeasurementEvent({
+        runId: 'run-1',
+        stepNumber: 0,
+        attempt: 1,
+        provider: 'anthropic',
+        model: 'claude-opus-5-5',
+        usage,
+        contextWindow: 200_000,
+        inputLimit: null,
+        footprint: { messages: 6, messageDigest: 'messages', promptDigest: 'prompt', toolDigests: [] },
+        measuredAt: AT,
+      });
+      yield* h.aggregate.append(ROOT, OWNER, [...turns, measurement]);
+      const source = (yield* h.store.find(ROOT))?.contextReading;
+      expect(source?.usage.inputTokens).toBe(6_000);
+      const carried = (cut: Parameters<typeof h.duplicate>[0]['cut']) =>
+        Effect.flatMap(h.duplicate({ ...forkInput, cut }), (born) => Effect.map(h.store.find(born.id), (row) => row?.contextReading));
+      expect(yield* carried({ kind: 'all' })).toEqual(source);
+      const last = yield* carried({ kind: 'turns', turns: 1 });
+      const lastTwo = yield* carried({ kind: 'turns', turns: 2 });
+      expect(last).toMatchObject({ stale: false, runId: 'run-1', provider: 'anthropic', model: 'claude-opus-5-5' });
+      expect(last?.footprint).toBeUndefined();
+      expect(last?.usage.inputTokens).toBeGreaterThan(0);
+      expect(last?.usage.inputTokens).toBeLessThan(lastTwo?.usage.inputTokens ?? 0);
+      expect(lastTwo?.usage.inputTokens).toBeLessThan(6_000);
+      expect(yield* carried({ kind: 'none' })).toBeNull();
     }),
   );
   it.effect(
