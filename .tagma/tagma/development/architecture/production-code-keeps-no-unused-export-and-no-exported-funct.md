@@ -1400,10 +1400,6 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead apps/tagma/app/src/lib/features/presence/Presence.svelte.ts#PresenceHold",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "dead-code dead apps/tagma/app/src/lib/features/projects/Grouping.svelte.ts#GroupPair",
           "owner": "5a3bed29"
         },
@@ -9100,10 +9096,6 @@ fields:
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/speech/keys.ts#globalDictationKey",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/speech/listening/choice.ts#Chosen",
           "owner": "5a3bed29"
         },
         {
