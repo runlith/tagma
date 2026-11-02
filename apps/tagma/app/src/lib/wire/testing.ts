@@ -15,16 +15,16 @@ export const TEST_ORIGIN = 'http://localhost';
 
 const noServer: PlatformFetch = () => Promise.reject(new Error('This test named no server.'));
 
-export const testCatalog = (): Point<WireModule> => makePoint(WireCatalog, ...CATALOG_MODULES);
+export const testCatalog = (...modules: readonly WireModule[]): Point<WireModule> => makePoint(WireCatalog, ...CATALOG_MODULES, ...modules);
 
 export const TestCatalog = Layer.mergeAll(WireCatalog, WireCatalog.contribute('core', ...CATALOG_MODULES), OperationTable);
 
-export const testOperations = (): OperationTable => new OperationTable(testCatalog());
+export const testOperations = (...modules: readonly WireModule[]): OperationTable => new OperationTable(testCatalog(...modules));
 
-export const loadCatalog = (): Promise<unknown> => testOperations().load();
+export const loadCatalog = (...modules: readonly WireModule[]): Promise<unknown> => testOperations(...modules).load();
 
-export function testDoor(fetch: PlatformFetch = noServer): Door {
-  return new Door(fetch, new ServerOrigin(TEST_ORIGIN), makeRouter(), testOperations());
+export function testDoor(fetch: PlatformFetch = noServer, ...modules: readonly WireModule[]): Door {
+  return new Door(fetch, new ServerOrigin(TEST_ORIGIN), makeRouter(), testOperations(...modules));
 }
 
 const STAMPS_FEED = feed('fixture.stamps', {
