@@ -18,9 +18,9 @@ Without it the infrastructure cannot be used; it is not a product.
 - **Microphone** — from the server machine's device list.
 - **Local models** — install with progress, deletion, space taken.
 - **Permissions** — microphone and system-sound state and a move into macOS System Settings. The capture itself requests permission on first start; there is no separate form.
-- **Verification run** on each track shows the level and distinguishes: no capability; permission unknown or denied; no frames arriving; silence; recognizer not ready; queue growing; provider answered with an error. It also verifies recognition (say a phrase and see text) and synthesis (hear a phrase). The run goes through the `recognize` feed and writes nothing into the project transcript.
+- **Verification run** on each track shows the level and distinguishes: no capability; permission unknown or denied; no frames arriving; silence; recognizer not ready; queue growing; provider answered with an error. It also verifies recognition (say a phrase and see text) and synthesis (hear a phrase). The run goes through the `recognize` feed and writes nothing.
 
-The surface only shows facts owned by others (`speech_status`, listening feeds) and derives none of its own.
+The surface only shows facts owned by others (`speech_status`, recognition feeds) and derives none of its own.
 
 ## Proof
 
