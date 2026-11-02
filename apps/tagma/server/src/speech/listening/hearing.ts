@@ -120,7 +120,7 @@ export const makeRecognitions = Effect.fnUntraced(function* ({ captures }: { rea
       }),
     );
 
-  const finish = Effect.fn('Listenings.finish')(function* (id: string): Effect.fn.Return<void, GateRefusal<'unknown-recognition'>> {
+  const finish = Effect.fn('Recognitions.finish')(function* (id: string): Effect.fn.Return<void, GateRefusal<'unknown-recognition'>> {
     const entry = open.get(id);
     if (entry === undefined) return yield* unknownRecognition(id);
     const registered = yield* Deferred.await(entry.ready);

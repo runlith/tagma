@@ -132,7 +132,7 @@ export const makeSenders = Effect.gen(function* () {
   const clock = yield* Clock.Clock;
   const open = new Map<string, Line>();
   const early = new Map<string, Deferred.Deferred<Line>>();
-  const track = Effect.fn('Listenings.senderTrack')(function* (
+  const track = Effect.fn('Senders.track')(function* (
     recognition: string,
     track: ListeningTrack,
   ): Effect.fn.Return<Captured, never, Scope.Scope> {
@@ -183,7 +183,7 @@ export const makeSenders = Effect.gen(function* () {
       ),
     );
 
-  const read = Effect.fn('Listenings.senderRead')(function* <E>(
+  const read = Effect.fn('Senders.read')(function* <E>(
     line: Line,
     frames: Stream.Stream<Uint8Array, E>,
   ): Effect.fn.Return<Sent, GateRefusal<'sender-refused'> | E> {

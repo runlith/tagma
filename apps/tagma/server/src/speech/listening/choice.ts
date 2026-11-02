@@ -39,7 +39,7 @@ const needOf = (recognizer: Recognizer): RecognitionNeed => ({
 export const again = (speech: Speech['Service'], recognizer: Recognizer): Effect.Effect<RecognitionChoice, GateRefusal<'no-model'>> =>
   Effect.mapError(speech.recognizer(needOf(recognizer), recognizer.account), noModel);
 
-const standingOf = Effect.fn('Listenings.standingOf')(function* (
+const standingOf = Effect.fn('Speech.standingOf')(function* (
   settings: Settings['Service'],
   preferred: SettingKey<RecognizerPick> | undefined,
 ): Effect.fn.Return<RecognizerPick, StoreFailure> {
@@ -50,7 +50,7 @@ const standingOf = Effect.fn('Listenings.standingOf')(function* (
   return yield* settings.value(recognizerChoice);
 });
 
-export const chosen = Effect.fn('Listenings.chosen')(function* (
+export const chosen = Effect.fn('Speech.chosen')(function* (
   speech: Speech['Service'],
   settings: Settings['Service'],
   ask: RecognizerAsk | undefined,
@@ -90,7 +90,7 @@ export const chosen = Effect.fn('Listenings.chosen')(function* (
 
 type ModelPick = { readonly provider?: string | undefined; readonly model?: string | undefined };
 
-export const recordedChoice = Effect.fn('Listenings.recordedChoice')(function* (
+export const recordedChoice = Effect.fn('Speech.recordedChoice')(function* (
   speech: Speech['Service'],
   ask: ModelAsk | undefined,
   standing: ModelPick,
