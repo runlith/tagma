@@ -1,10 +1,9 @@
 <script lang="ts">
   import ChevronDown from '@lucide/svelte/icons/chevron-down';
-  import ProviderMark from '$lib/features/providers/Mark.svelte';
-  import FadeText from '$lib/shared/FadeText.svelte';
   import InlineSvg from '$lib/shared/ui/InlineSvg.svelte';
   import type { ModelPanelState } from '../ModelPanelState.svelte.js';
   import type { ThreadViews } from '../thread/ThreadViews.js';
+  import ModelSummary from './ModelSummary.svelte';
 
   let { views, panel }: { views: ThreadViews; panel: ModelPanelState } = $props();
 
@@ -33,13 +32,7 @@
     onpointerdown={(event) => event.preventDefault()}
     onclick={() => (open ? panel.close() : panel.open('model'))}
   >
-    <ProviderMark provider={settings.provider} class="size-3.5 shrink-0" titled={false} />
-    <span class="flex min-w-0 @min-[22rem]:hidden"><FadeText text={settings.modelShort} /></span>
-    <span class="hidden min-w-0 @min-[22rem]:flex"><FadeText text={settings.modelLabel} /></span>
-    {#if settings.reasoning}
-      <span class="text-muted-foreground @min-[22rem]:hidden">{settings.reasoningShort}</span>
-      <span class="hidden text-muted-foreground @min-[22rem]:inline">{settings.reasoningLabel}</span>
-    {/if}
+    <ModelSummary {settings} />
     {#each lit as option (option.id)}
       <InlineSvg svg={option.icon} label={option.label} class="size-3" />
     {/each}

@@ -15,6 +15,7 @@
   import type { ThreadWrites } from '../ThreadWrites.js';
   import { ThreadCompaction } from '../thread/ThreadCompaction.svelte.js';
   import { tokensWord } from './compactionWords.js';
+  import ModelSummary from './ModelSummary.svelte';
   import type { Rewinds } from './Rewinds.svelte.js';
   import { runEndingLine } from './runEndingLine.js';
 
@@ -56,8 +57,7 @@
   const continues = $derived(shown.row?.capabilities.continue ?? true);
   const continueWith = $derived.by(() => {
     const settings = views.model.settings;
-    if (!settings || settings.modelShort === '') return null;
-    return settings.reasoningShort === '' ? settings.modelShort : `${settings.modelShort} · ${settings.reasoningShort}`;
+    return settings && settings.modelShort !== '' ? settings : null;
   });
 
   function compactWith(row: CompactionChoice): void {
@@ -82,7 +82,7 @@
     >
       {commands.busy === 'continue' ? 'Continuing…' : 'Continue'}
       {#if continueWith !== null}
-        <span class="font-mono text-meta font-medium text-muted-foreground">{continueWith}</span>
+        <span class="inline-flex min-w-0 items-center gap-1.5 text-small"><ModelSummary settings={continueWith} /></span>
       {/if}
     </Button>
   {/if}
