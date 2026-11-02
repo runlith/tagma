@@ -40,6 +40,6 @@ sources:
 **Behaviour.**
 - A thread enters the list when it waits on the operator's answer (including approval), when its run crashed or was cut and is unseen — a child's too — or when a root thread finished. A child's question that a parent agent answers by routing does not land here; it appears when it passes to the operator: on interception, child detachment, grant change, or when the parent goes to archive while the child stays. A child's end reaches the parent as a report and does not land here.
 - The list groups waiting, crashed, and finished, with app notices above them; all projects or the current one can be watched. A click opens the thread.
-- A thread open on screen marks itself seen; "mark all" clears crashed and finished ones.
+- A thread open on screen marks itself seen; "mark all" clears crashed and finished ones and dismisses the notices that ask nothing, the ones the bell's green dot counts beside finished threads; a notice with a question stays until answered.
 
 **Limits.** On desktop a question cannot be answered from the list — only by going to the thread; short options are answered right in the phone's Inbox. Archived threads never enter the list.
