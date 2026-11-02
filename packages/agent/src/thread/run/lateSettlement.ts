@@ -2,6 +2,8 @@ import { Cause, Clock, Effect, Exit } from 'effect';
 import type { CallHooks } from '../../agent/AgentCalls';
 import { agentToolRefusal } from '../../agent/AgentFailure';
 import { doorToolOutcome } from '../../agent/door/types';
+import { outcomeLines } from '../../agent/door/outcomeText';
+import { agentToolDisplay } from '../../agent/ToolOutput';
 import type { ToolOutcome } from '../../agent/tool';
 import { coreEntry } from '../../transcript/kinds';
 import { toolEntryId } from '../../transcript/entryNames';
@@ -23,11 +25,25 @@ export const settledLate = Effect.fnUntraced(function* (
 ): Effect.fn.Return<void, ThreadBorderFailed> {
   const id = toolEntryId(call.toolCallId);
   const refusal = Exit.isFailure(exit) ? agentToolRefusal(Cause.squash(exit.cause)) : null;
-  const outcome: ToolOutcome = Exit.isSuccess(exit)
-    ? doorToolOutcome(exit.value)
-    : refusal === null
-      ? { kind: 'failed', error: Cause.pretty(exit.cause) }
-      : { kind: 'refused', refusal };
+  const interrupted = Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause);
+  const ending = call.admittedAt === null ? 'cancelled' : 'unknown';
+  const outcome: ToolOutcome = interrupted
+    ? {
+        kind: ending,
+        output: {
+          status: ending,
+          reason:
+            call.admittedAt === null
+              ? 'The call was interrupted before execution; it did not run.'
+              : 'The call was interrupted before it answered; whether its effect happened is unknown. Read what it acts on before repeating it.',
+          executions: call.executions,
+        },
+      }
+    : Exit.isSuccess(exit)
+      ? doorToolOutcome(exit.value)
+      : refusal === null
+        ? { kind: 'failed', error: Cause.pretty(exit.cause) }
+        : { kind: 'refused', refusal };
   const key = { call: { namespace: `background:${runId}`, id: call.toolCallId } };
   yield* feed.atCut(
     threadId,
@@ -43,6 +59,23 @@ export const settledLate = Effect.fnUntraced(function* (
               cause: new Error(`The background call ${call.toolCallId} has no recorded tool entry.`),
             });
           }
+          const now = yield* Clock.currentTimeMillis;
+          const display = Exit.isSuccess(exit)
+            ? exit.value.display
+            : agentToolDisplay({
+                declared: undefined,
+                published: original.toolDisplay,
+                modelOutput: {
+                  type: 'text',
+                  value:
+                    outcome.kind === 'failed'
+                      ? outcome.error
+                      : outcomeLines(outcome.kind === 'refused' ? { status: 'refused', ...outcome.refusal } : outcome.output).join('\n'),
+                },
+                mutates: original.toolDisplay?.mutates === true,
+                keep: 'head',
+                durationMs: now - call.startedAt,
+              });
           const entry = settledToolEntry(
             {
               id: original.id,
@@ -50,10 +83,10 @@ export const settledLate = Effect.fnUntraced(function* (
               toolName: original.toolName,
               toolCallId: call.toolCallId,
               input: original.toolInput,
-              occurredAt: new Date(yield* Clock.currentTimeMillis).toISOString(),
+              occurredAt: new Date(now).toISOString(),
             },
             outcome,
-            Exit.isSuccess(exit) ? exit.value.display : original.toolDisplay,
+            display,
             original.execution,
           );
           return {

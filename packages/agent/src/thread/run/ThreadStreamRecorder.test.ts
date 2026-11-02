@@ -1,6 +1,6 @@
 import { it } from '@runlith/effect-test';
 import { describe, expect, test } from 'bun:test';
-import { Cause, Clock, Deferred, Effect, Fiber, Layer, PubSub, Schema, Stream } from 'effect';
+import { Cause, Clock, Deferred, Effect, Exit, Fiber, Layer, PubSub, Schema, Stream } from 'effect';
 import { entryOf, makeThreadEntryReader, ThreadEntryKinds, ThreadEntryUndecodable, type ThreadEntryReader } from '../../transcript/kinds';
 import type { AgentEvent } from '../../agent/AgentEvent';
 import { InputUsage, Usage, sumUsage } from '@runlith/llm/schema/events';
@@ -242,6 +242,69 @@ describe('ThreadStreamRecorder', () => {
         { type: 'tool', id: 'tool:call-1', toolState: 'output-available', toolOutput: { status: 'offered' } },
         { type: 'ready-answers', id: 'transcript:ready-answers:run-1:call-1' },
       ]);
+    }),
+  );
+  it.effect(
+    'a late background commit keeps interruption, failure and full duration distinct',
+    Effect.fnUntraced(function* () {
+      const now = yield* Clock.currentTimeMillis;
+      const startedAt = now - 1_000;
+      for (const [admittedAt, cause, toolState] of [
+        [startedAt, Cause.interrupt(), 'output-unknown'],
+        [null, Cause.interrupt(), 'output-cancelled'],
+        [startedAt, Cause.die(new Error('inspection crashed')), 'output-error'],
+      ] as const) {
+        const world = yield* recorderWorld({
+          transcript: [
+            {
+              type: 'tool',
+              id: 'tool:commit',
+              runId: 'run-1',
+              toolName: 'submit_work',
+              toolCallId: 'commit',
+              toolState: 'output-available',
+              toolInput: { background: true },
+              toolOutput: { status: 'background' },
+              toolDisplay: { form: 'text', text: 'background receipt', durationMs: 4, mutates: true },
+              execution: admittedAt === null ? undefined : { state: 'started', at: new Date(admittedAt).toISOString(), mutates: true },
+              occurredAt: new Date(startedAt).toISOString(),
+            },
+          ],
+        });
+        const reader = world.reader();
+        const recorder = yield* world.recorder();
+        yield* recorder.stop();
+        yield* recorder.completed(
+          {
+            runId: 'run-1',
+            toolCallId: 'commit',
+            threadId: 'thread-1',
+            name: 'submit_work',
+            input: { background: true },
+            phase: admittedAt === null ? 'preparing' : 'running',
+            mode: 'background',
+            detachable: false,
+            startedAt,
+            admittedAt,
+            endedAt: null,
+            expiresAt: null,
+            expiresBy: null,
+            limitCeilingMs: null,
+            detail: null,
+            executions: [],
+          },
+          Exit.failCause(cause),
+        );
+        const entry = world.store.transcript[0];
+        expect(entry).toMatchObject({ toolState, toolDisplay: { durationMs: 1_000 } });
+        if (toolState === 'output-error') {
+          expect(entry).toMatchObject({ toolError: expect.stringContaining('inspection crashed') });
+        } else {
+          expect(entry).toMatchObject({ toolOutput: { status: admittedAt === null ? 'cancelled' : 'unknown', executions: [] } });
+          expect(entry).not.toHaveProperty('toolError');
+        }
+        expect(reader.transcript[0]).toEqual(entry);
+      }
     }),
   );
   it.live(
