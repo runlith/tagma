@@ -212,7 +212,18 @@ export const makeOpenCodeSdk = Effect.fn('opencode.makeSdk')(function* (home: Ho
     const tail = yield* Effect.tryPromise({ try: () => client.message.list({ sessionID: id, limit: 1, order: 'desc' }), catch: failed });
     const terminal = tail.data.length === 0 || tail.data[0]?.type === 'idle';
     const inbox = yield* Effect.tryPromise({ try: () => client.session.inbox.list({ sessionID: id }), catch: failed });
-    if (!terminal || inbox.length > 0)
+    const pristine =
+      !terminal &&
+      session.fork !== undefined &&
+      !(yield* Effect.tryPromise({
+        try: async () => {
+          for await (const event of client.session.log({ sessionID: id, follow: false }))
+            if (event.type === 'session.execution.started') return true;
+          return false;
+        },
+        catch: failed,
+      }));
+    if ((!terminal && !pristine) || inbox.length > 0)
       return yield* new AgentFault({
         code: FAULT.notFound,
         message: `OpenCode session ${id} has an unfinished execution or undelivered input; restore it from the Tagma journal`,
@@ -231,18 +242,24 @@ export const makeOpenCodeSdk = Effect.fn('opencode.makeSdk')(function* (home: Ho
     } while (cursor !== undefined);
     return messages;
   });
+  const addressed = (message: SessionMessageInfo) => message.type === 'user' || message.type === 'compaction';
   const ordinal = Effect.fn('opencode.ordinal')(function* (
     sessionID: string,
     address: string,
     history: readonly SessionMessageInfo[],
   ): Effect.fn.Return<number, AgentFault> {
-    const users = history.filter((message) => message.type === 'user');
-    const index = users.findIndex((message) => message.id === address);
+    const points = history.filter(addressed);
+    const index = points.findIndex((message) => message.id === address);
     if (index >= 0) return index;
     const session = yield* Effect.tryPromise({ try: () => client.session.get({ sessionID }), catch: failed });
     if (session.fork !== undefined) {
-      const inherited = yield* ordinal(session.fork.sessionID, address, yield* messages(session.fork.sessionID));
-      if (inherited < users.length) return inherited;
+      const source = yield* messages(session.fork.sessionID);
+      const boundary = source.findIndex((message) => message.id === session.fork!.boundary.messageID);
+      if (boundary >= 0) {
+        const copied = source.slice(0, boundary + (session.fork.boundary.type === 'through' ? 1 : 0)).filter(addressed).length;
+        const inherited = yield* ordinal(session.fork.sessionID, address, source);
+        if (inherited < copied && inherited < points.length) return inherited;
+      }
     }
     return yield* new AgentFault({ code: FAULT.notFound, message: `OpenCode session ${sessionID} has no turn ${address}` });
   });
@@ -250,14 +267,27 @@ export const makeOpenCodeSdk = Effect.fn('opencode.makeSdk')(function* (home: Ho
     const address = point.turn ?? point.through;
     if (address === null) return undefined;
     const history = yield* messages(sessionID);
+    const tail = history.find((message) => message.id === address);
+    if (point.turn === null && tail?.type === 'idle') return tail.id;
     const index = yield* ordinal(sessionID, address, history);
-    const user = history.filter((message) => message.type === 'user')[index];
-    if (user === undefined) return yield* new AgentFault({ code: FAULT.notFound, message: `OpenCode lost the turn ${address}` });
-    if (point.turn !== null) return user.id;
-    const end = history.slice(history.indexOf(user) + 1).find((message) => message.type === 'idle');
+    const mark = history.filter(addressed)[index];
+    if (mark === undefined) return yield* new AgentFault({ code: FAULT.notFound, message: `OpenCode lost the turn ${address}` });
+    if (point.turn !== null) return mark.id;
+    const end = history.slice(history.indexOf(mark) + 1).find((message) => message.type === 'idle');
     if (end === undefined)
       return yield* new AgentFault({ code: FAULT.notFound, message: `OpenCode has no completed boundary after turn ${address}` });
     return end.id;
+  });
+  const compactMark = Effect.fn('opencode.compactMark')(function* (sessionID: string, request: string) {
+    const current = yield* Effect.tryPromise({
+      try: () => client.message.list({ sessionID, limit: 1, order: 'desc', type: 'compaction' }),
+      catch: failed,
+    });
+    if (current.data[0]?.id !== request) return undefined;
+    const tail = yield* Effect.tryPromise({ try: () => client.message.list({ sessionID, limit: 1, order: 'desc' }), catch: failed });
+    const last = tail.data[0];
+    if (last === undefined) return yield* new AgentFault({ code: FAULT.internal, message: 'OpenCode lost its compacted transcript tail' });
+    return { 'tagma/turn': { prompt: request, last: last.id } };
   });
   return OpenCodeSdk.of({
     open: Effect.fn('OpenCodeSdk.open')(function* (opening, replacing) {
@@ -382,9 +412,21 @@ export const makeOpenCodeSdk = Effect.fn('opencode.makeSdk')(function* (home: Ho
               yield* Deferred.succeed(current.admitted, undefined);
               const result = yield* Effect.raceFirst(Deferred.await(done), Fiber.join(events));
               if (input.at === 'end') yield* Effect.tryPromise({ try: () => client.session.wait({ sessionID: id }), catch: failed });
-              return result;
+              return { ...result, _meta: input.at === 'end' ? yield* compactMark(id, request) : undefined };
             }),
           ).pipe(
+            Effect.catchTag('AgentFault', (cause) =>
+              Effect.gen(function* () {
+                if (input.at !== 'end') return yield* cause;
+                yield* Effect.tryPromise({ try: () => client.session.wait({ sessionID: id }), catch: failed });
+                const meta = yield* compactMark(id, request);
+                if (meta === undefined) return yield* cause;
+                const data = yield* Schema.decodeUnknownEffect(Schema.Record(Schema.String, Schema.Unknown))(cause.data ?? {}).pipe(
+                  Effect.mapError(failed),
+                );
+                return yield* new AgentFault({ code: cause.code, message: cause.message, data: { ...data, _meta: meta } });
+              }),
+            ),
             Effect.ensuring(Deferred.succeed(current.admitted, undefined)),
             Effect.ensuring(
               Effect.sync(() => {

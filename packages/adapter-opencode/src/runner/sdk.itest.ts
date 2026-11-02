@@ -247,6 +247,8 @@ it.live(
       const address = metadata._meta['tagma/turn'];
       const copied = yield* fork!({ sessionId: session.sessionId, cwd: root, through: address.prompt });
       const forked = yield* Schema.decodeUnknownEffect(Schema.Struct({ sessionId: Schema.String }))(copied).pipe(Effect.orDie);
+      yield* forkAgent.ended;
+      yield* forkAgent.resumeSession!({ sessionId: forked.sessionId, cwd: root, mcpServers: [] });
       const next = [{ type: 'text' as const, text: 'The same next words' }];
       const beforeFork = requests.length;
       yield* forkAgent.prompt({ sessionId: forked.sessionId, prompt: next });
@@ -270,11 +272,11 @@ it.live(
       yield* forkAgent.prompt({ sessionId: cutSession.sessionId, prompt: next });
       expect(wireRequests[beforeCut]!.body).not.toContain('before-image');
       yield* forkAgent.ended;
-      yield* Scope.close(forkScope, Exit.void);
       const compact =
         agent.extensions[COMPACT] ??
         (() => Effect.fail(new AgentFault({ code: FAULT.methodNotFound, message: 'OpenCode did not declare in-session compaction' })));
-      expect(yield* compact({ sessionId: session.sessionId, at: 'end', instructions: 'Preserve the recorded markers' })).toMatchObject({
+      const compacted = yield* compact({ sessionId: session.sessionId, at: 'end', instructions: 'Preserve the recorded markers' });
+      expect(compacted).toMatchObject({
         summary: '## Objective\n\nCOMPACTED_CHECKPOINT',
         usage: { inputTokens: 10, outputTokens: 2, totalTokens: 12 },
       });
@@ -282,6 +284,18 @@ it.live(
       expect(requests.at(-1)!.messages.filter((message) => message.role === 'system')).toEqual([
         { role: 'system', content: `${system}\n\nPreserve the recorded markers` },
       ]);
+      const compactAddress = yield* Schema.decodeUnknownEffect(
+        Schema.Struct({ _meta: Schema.Struct({ 'tagma/turn': Schema.Struct({ prompt: Schema.String, last: Schema.String }) }) }),
+      )(compacted).pipe(Effect.orDie);
+      const compactCopy = yield* fork!({ sessionId: session.sessionId, cwd: root, through: compactAddress._meta['tagma/turn'].last });
+      const compactFork = yield* Schema.decodeUnknownEffect(Schema.Struct({ sessionId: Schema.String }))(compactCopy).pipe(Effect.orDie);
+      const beforeCompactFork = requests.length;
+      yield* forkAgent.prompt({ sessionId: compactFork.sessionId, prompt: next });
+      const compactRequest = wireRequests[beforeCompactFork];
+      const beforeCompactSource = requests.length;
+      yield* agent.prompt({ sessionId: session.sessionId, prompt: next });
+      expect(compactRequest).toEqual(wireRequests[beforeCompactSource]);
+      yield* forkAgent.ended;
       system = 'NEXT_EXACT_SYSTEM';
       listed = [{ ...tool, name: 'replacement' }];
       yield* agent.prompt({ sessionId: session.sessionId, prompt: [{ type: 'text', text: 'Next turn' }] });
@@ -292,14 +306,29 @@ it.live(
       expect(yield* Effect.flip(compact({ sessionId: session.sessionId, at: 'end' }))).toMatchObject({
         code: FAULT.authRequired,
         message: 'Compaction authorization rejected',
+        data: { _meta: { 'tagma/turn': { prompt: expect.any(String), last: expect.any(String) } } },
       });
       summaryMode = 'hold';
       const folding = yield* Effect.forkChild(Effect.flip(compact({ sessionId: session.sessionId, at: 'end' })));
       yield* Deferred.await(summarizing);
       yield* agent.cancel({ sessionId: session.sessionId });
-      expect((yield* Fiber.join(folding)).code).toBe(-32800);
+      const cancellation = yield* Fiber.join(folding);
+      expect(cancellation.code).toBe(-32800);
       expect(boundaries).toHaveLength(1);
       summaryMode = 'finish';
+      const cancelledAddress = yield* Schema.decodeUnknownEffect(
+        Schema.Struct({ data: Schema.Struct({ _meta: Schema.Struct({ 'tagma/turn': Schema.Struct({ last: Schema.String }) }) }) }),
+      )(cancellation).pipe(Effect.orDie);
+      const cancelCopy = yield* fork!({ sessionId: session.sessionId, cwd: root, through: cancelledAddress.data._meta['tagma/turn'].last });
+      const cancelledFork = yield* Schema.decodeUnknownEffect(Schema.Struct({ sessionId: Schema.String }))(cancelCopy).pipe(Effect.orDie);
+      const beforeCancelledFork = requests.length;
+      yield* forkAgent.prompt({ sessionId: cancelledFork.sessionId, prompt: next });
+      const cancelledRequest = wireRequests[beforeCancelledFork];
+      const beforeCancelledSource = requests.length;
+      yield* agent.prompt({ sessionId: session.sessionId, prompt: next });
+      expect(cancelledRequest).toEqual(wireRequests[beforeCancelledSource]);
+      yield* forkAgent.ended;
+      yield* Scope.close(forkScope, Exit.void);
       overflow = true;
       expect(
         (yield* agent.prompt({ sessionId: session.sessionId, prompt: [{ type: 'text', text: 'Recover from context overflow' }] }))

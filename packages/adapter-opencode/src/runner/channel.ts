@@ -26,7 +26,7 @@ type Compacting = {
   readonly selection: Selection;
   readonly measure: (reading: Measured) => Effect.Effect<void>;
 };
-export type Compacted = { readonly summary: string; readonly usage?: Usage };
+export type Compacted = { readonly summary: string; readonly usage?: Usage; readonly _meta?: Readonly<Record<string, unknown>> };
 export interface Channel {
   readonly id: string;
   send(input: Sending): Effect.Effect<ClientRun, AgentFault>;

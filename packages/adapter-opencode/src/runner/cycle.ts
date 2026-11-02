@@ -94,7 +94,7 @@ export const makeOpenCodeCycle = Effect.fnUntraced(function* (door: HostedDoor, 
               }),
           });
           yield* outlet.notify(COMPACTED, { sessionId: channel.id, trigger: 'manual', summary: result.summary });
-          return { summary: result.summary, usage: result.usage };
+          return { summary: result.summary, usage: result.usage, _meta: result._meta };
         }).pipe(
           Effect.ensuring(
             Effect.sync(() => {
