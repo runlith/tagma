@@ -33,7 +33,7 @@ const world = Effect.fnUntraced(function* (
   let minted = 0;
   let mcp: McpServerInput | null = null;
   const called: string[] = [];
-  const catalog = { description: 'echo', dispatch: false, names: ['echo'] };
+  const catalog = { description: 'echo', dispatch: false, reversed: false, names: ['echo'] };
   const sdk = MuseSdk.of({
     open: (launch) =>
       Effect.andThen(
@@ -82,14 +82,13 @@ const world = Effect.fnUntraced(function* (
     agent: () => Effect.sync(() => ({ prompt: prompt(), web: 'none' as const })),
     turn: () => Effect.sync(() => ({ prompt: prompt(), context: 'turn context', web: 'none' as const })),
     tools: () =>
-      Effect.sync(() => ({
-        names: catalog.names,
-        tools: [
+      Effect.sync(() => {
+        const tools = [
           { name: 'echo', description: catalog.description, inputSchema: {}, mutates: false },
           ...(catalog.dispatch ? [{ name: 'call_tool', description: 'dispatch', inputSchema: {}, mutates: true }] : []),
-        ],
-        dispatch: catalog.dispatch,
-      })),
+        ];
+        return { names: catalog.names, tools: catalog.reversed ? tools.toReversed() : tools, dispatch: catalog.dispatch };
+      }),
     history: () => Effect.succeed([]),
     call: (toolCallId, name, input) =>
       Effect.sync(() => {
@@ -909,10 +908,11 @@ it.effect('a turn answers only once its host delivered what it holds, so events 
   }),
 );
 
-it.effect('a tool whose definition changed under the same name restarts the host and resumes the same session', () =>
+it.effect('a resumed Muse session serves its original catalog until a deliberate prompt change selects a new host', () =>
   Effect.gen(function* () {
-    const turns = ['01a19573-1cea-7c2e-90b4-000000000011', '01a19573-1cea-7c2e-90b4-000000000012'];
-    const { agent, sent, launches, catalog } = yield* world((one, emit) => {
+    const stored = new Map<string, string>();
+    let prompt = 'stable system';
+    const script: Script = (one, emit) => {
       if (one.method === 'session/start' || one.method === 'session/resume')
         return ok(one, { session: { sessionId: one.params.sessionId, approvalMode: { mode: 'promptUnmatched' } } });
       if (one.method === 'turn/start')
@@ -923,13 +923,31 @@ it.effect('a tool whose definition changed under the same name restarts the host
           { commandId: one.id, status: 'accepted', turnId: one.id, disposition: 'started' },
         );
       return ok(one);
-    });
-    const session = yield* agent.newSession({ cwd: '/work', mcpServers: [] });
-    yield* agent.prompt({ sessionId: session.sessionId, prompt: [{ type: 'text', text: 'one' }], _meta: { 'tagma/turn': turns[0] } });
-    catalog.description = 'echo, now with a new contract';
-    yield* agent.prompt({ sessionId: session.sessionId, prompt: [{ type: 'text', text: 'two' }], _meta: { 'tagma/turn': turns[1] } });
-    expect(launches).toHaveLength(2);
-    expect(sent.filter((one) => one.method === 'session/resume').map((one) => one.params.sessionId)).toEqual([session.sessionId]);
+    };
+    const original = yield* world(script, () => prompt, undefined, stored);
+    original.catalog.dispatch = true;
+    const session = yield* original.agent.newSession({ cwd: '/work', mcpServers: [] });
+    const send = (agent: typeof original.agent) =>
+      agent.prompt({ sessionId: session.sessionId, prompt: [{ type: 'text', text: 'same words' }] });
+    yield* send(original.agent);
+    const catalog = original.served().tools();
+    yield* original.agent.ended;
+    const resumed = yield* world(script, () => prompt, undefined, stored);
+    resumed.catalog.description = 'changed catalog definition';
+    resumed.catalog.dispatch = true;
+    resumed.catalog.reversed = true;
+    yield* resumed.agent.resumeSession!({ sessionId: session.sessionId, cwd: '/work', mcpServers: [] });
+    yield* send(resumed.agent);
+    expect(resumed.served().tools()).toEqual(catalog);
+    prompt = 'deliberately changed system';
+    yield* send(resumed.agent);
+    expect(
+      resumed
+        .served()
+        .tools()
+        .map((tool) => tool.description),
+    ).toEqual(['dispatch', 'changed catalog definition']);
+    yield* resumed.agent.ended;
   }),
 );
 

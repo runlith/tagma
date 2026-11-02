@@ -92,7 +92,7 @@ const replaced = Effect.fnUntraced(function* (path: string, text: string, doing:
   yield* files.rename(`${path}.next`, path).pipe(Effect.mapError(failed(doing)));
 });
 
-type SessionState = 'priced' | 'compaction';
+type SessionState = 'priced' | 'compaction' | 'host';
 
 const statePath = (place: MusePlace, session: string, state: SessionState) => join(place.config, `${session}.${state}`);
 

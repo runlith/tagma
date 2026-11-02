@@ -5,7 +5,7 @@ import { QuotaObservation } from '@runlith/llm/schema/quota';
 import { Bridge, servedPrompt, type BridgeVendor } from '@runlith/hosted-runner/bridge';
 import { clientSession, type ClientCompaction, type ClientOutcome, type ClientRun } from '@runlith/hosted-runner/client';
 import type { Cycle, Process, Steered, Withdrawn } from '@runlith/hosted-runner/cycle';
-import type { HostedDoor, HostedListed } from '@runlith/hosted-runner/door';
+import type { HostedDoor } from '@runlith/hosted-runner/door';
 import { Handed } from '@runlith/hosted-runner/handed';
 import { historyBlocks } from '@runlith/hosted-runner/history';
 import { Options, type ClientLaunch } from '@runlith/hosted-runner/options';
@@ -20,6 +20,7 @@ import { keepPriced, keepState, keptPriced, keptState, writeSettings, type MuseP
 import { observationOf } from './quota.js';
 import { Compactions } from './compactions.js';
 import { HostModels } from './models.js';
+import { makeConfiguration, type Configuration } from './configuration.js';
 
 const PROFILE = ':ask-me';
 const APPROVALS = 'promptUnmatched';
@@ -42,7 +43,6 @@ export type MuseRunner = {
   readonly serve: (input: McpServerInput & { readonly bearer: string }) => Effect.Effect<{ readonly url: string }, AgentFault, Scope.Scope>;
 };
 
-type Want = { readonly prompt: string; readonly web: 'vendor' | 'none'; readonly listed: HostedListed };
 type Seat = { readonly id: string; readonly cwd: string; fresh: boolean };
 type Live = {
   readonly host: Host;
@@ -118,15 +118,12 @@ const said = (parts: readonly Part[]): readonly Part[] => {
   return kept.length === 0 ? [{ type: 'text', text: CONTINUE }] : kept;
 };
 
-const keyOf = (want: Want): string =>
-  JSON.stringify([
-    want.web,
-    want.listed.dispatch,
-    want.listed.tools.toSorted((left, right) => (left.name < right.name ? -1 : left.name > right.name ? 1 : 0)),
-    want.prompt,
-  ]);
+const keyOf = (want: Configuration): string => JSON.stringify([want.web, want.listed.dispatch, want.listed.tools, want.prompt]);
 
-const toolsetOf = (web: Want['web']): readonly string[] => ['mcp__tagma__*', ...(web === 'vendor' ? ['web_search', 'web_fetch'] : [])];
+const toolsetOf = (web: Configuration['web']): readonly string[] => [
+  'mcp__tagma__*',
+  ...(web === 'vendor' ? ['web_search', 'web_fetch'] : []),
+];
 
 export const makeMuseCycle = Effect.fnUntraced(function* (door: HostedDoor, process: Process, runner: MuseRunner, launch: ClientLaunch) {
   const sdk = yield* MuseSdk;
@@ -134,6 +131,7 @@ export const makeMuseCycle = Effect.fnUntraced(function* (door: HostedDoor, proc
   const scope = yield* Effect.scope;
   const options = new Options(launch, true);
   const handed = new Handed();
+  const configuration = yield* makeConfiguration(runner.place);
   let live: Live | null = null;
   let feed: Feed | null = null;
   let compacting: Compacting | null = null;
@@ -329,7 +327,7 @@ export const makeMuseCycle = Effect.fnUntraced(function* (door: HostedDoor, proc
     yield* Scope.close(standing.scope, Exit.void);
   });
 
-  const ensureHost = Effect.fnUntraced(function* (want: Want, cwd: string) {
+  const ensureHost = Effect.fnUntraced(function* (want: Configuration, cwd: string) {
     const key = keyOf(want);
     yield* bridge.serve(want.listed);
     const standing = live;
@@ -386,8 +384,8 @@ export const makeMuseCycle = Effect.fnUntraced(function* (door: HostedDoor, proc
     standing.loaded.add(seat.id);
   });
 
-  const attach = Effect.fnUntraced(function* (seat: Seat, want: Want) {
-    const standing = yield* ensureHost(want, seat.cwd);
+  const attach = Effect.fnUntraced(function* (seat: Seat, want: Configuration) {
+    const standing = yield* ensureHost(yield* configuration.select(seat.id, want), seat.cwd);
     yield* load(standing, seat);
     const { model } = options.read();
     if (model !== null && (applied?.session !== seat.id || applied.model !== model)) {
@@ -402,7 +400,7 @@ export const makeMuseCycle = Effect.fnUntraced(function* (door: HostedDoor, proc
 
   const wanted = Effect.fnUntraced(function* () {
     const [agent, listed] = yield* Effect.zip(door.agent(), door.tools());
-    return { prompt: servedPrompt(agent.prompt, listed.dispatch), web: agent.web, listed } satisfies Want;
+    return { prompt: servedPrompt(agent.prompt, listed.dispatch), web: agent.web, listed } satisfies Configuration;
   });
 
   const windowOf = () => window ?? (applied === null ? null : (live?.models.windowOf(applied.model) ?? null));
