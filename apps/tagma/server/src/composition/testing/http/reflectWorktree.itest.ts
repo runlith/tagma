@@ -92,6 +92,55 @@ layer(Layer.effect(Place, setup).pipe(Layer.provideMerge(BunFileSystem.layer)), 
     }),
   );
 
+  it.effect('a native thread answers a reflection moved from the server source project into its own graph', () =>
+    Effect.gen(function* () {
+      const { world, parent } = yield* Place;
+      const root = yield* world.directory('reflection-core');
+      yield* suiteGit(root, 'init', '-q', '-b', 'main');
+      yield* suiteGit(root, 'commit', '--allow-empty', '-qm', 'initial');
+      const fix = yield* suiteGit(root, 'rev-parse', 'HEAD');
+      const added = yield* world.op('add_project', { name: world.uniqueName(), rootPath: root, storage: 'stealth' });
+      expect(added.status).toBe(200);
+      const core = (added.body as { project: { id: number } }).project.id;
+      yield* projectLeaving(world, core);
+      const filed = yield* op('file_reflection', {
+        title: 'Foreign filing',
+        command: 'one call',
+        expected: 'answer',
+        actual: 'refused',
+      });
+      expect(filed.status).toBe(200);
+      const entry = (filed.body as { block: { name: string } }).block.name;
+      const roots = yield* world.op('list_root_blocks', {}, `project=${core}`);
+      const parentId = (roots.body as { blocks: { name: string }[] }).blocks[0]!.name;
+      expect((yield* op('update_block', { blockId: entry, parentId })).status).toBe(200);
+      const origin = yield* op('create_block', { parentId: parent, title: 'Foreign origin', edges: [{ kind: 'relates', to: entry }] });
+      expect(origin.status).toBe(200);
+      const born = yield* world.op('create_thread', { approvalMode: 'bypass' }, `project=${core}`);
+      const thread = (born.body as { snapshot: { thread: { id: string; ownerId: string } } }).snapshot.thread;
+      const doors = makeThreadDoors(world, core, ['read_block', 'answer_reflection', 'unanswer_reflection']);
+      const placed = yield* doors.doorsFor(thread.id, thread.ownerId);
+      expect(yield* answered(yield* doors.atNative('read_block', { blockIds: [entry] }, placed))).toMatchObject({
+        reads: [{ name: entry, projectId: core }],
+      });
+      expect(yield* answered(yield* doors.atNative('answer_reflection', { blockId: entry, commit: fix }, placed))).toMatchObject({
+        status: 'ok',
+      });
+      expect(yield* answered(yield* doors.atNative('read_block', { blockIds: [entry] }, placed))).toMatchObject({
+        reads: [{ answeredCommit: fix }],
+      });
+      expect(
+        yield* answered(yield* doors.atNative('unanswer_reflection', { blockId: `${core}/${entry}`, commit: fix }, placed)),
+      ).toMatchObject({ status: 'ok' });
+      expect(
+        yield* answered(yield* doors.atNative('answer_reflection', { blockId: `${core}/${entry}`, commit: fix }, placed)),
+      ).toMatchObject({ status: 'ok' });
+      expect(yield* answered(yield* doors.atNative('read_block', { blockIds: [entry] }, placed))).toMatchObject({
+        reads: [{ answeredCommit: fix }],
+      });
+    }),
+  );
+
   it.effect('thread credentials keep rules local and file, read and answer reflections in main at both doors', () =>
     Effect.gen(function* () {
       const { world, project, area, parent } = yield* Place;

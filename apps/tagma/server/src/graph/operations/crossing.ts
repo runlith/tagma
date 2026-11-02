@@ -337,6 +337,12 @@ const placeOf = Effect.fn('crossing.placeOf')(function* (
 
 export const blockPlace = (name: string) => Effect.flatMap(locate(name), placeOf);
 
+export const reflectionBlockPlace = Effect.fn('crossing.reflectionBlockPlace')(function* (name: string) {
+  const target = yield* locate(name);
+  const project = yield* (yield* Projects).byId(target.projectId);
+  return { projectId: project.id, checkout: project.rootPath, branch: null };
+});
+
 export const reflectionPlace = Effect.fn('crossing.reflectionPlace')(function* () {
   const home = yield* (yield* SourceProject).project();
   if (home === undefined)

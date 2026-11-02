@@ -34,7 +34,7 @@ import {
   atTarget,
   currentTarget,
   documentScope,
-  reflectionPlace,
+  reflectionBlockPlace,
   scoped,
   targeted,
   peer,
@@ -174,7 +174,7 @@ const R = REFLECTION_OPERATIONS;
 
 const REFLECTION_ROUTED = {
   answer_reflection: routed(R.answer_reflection, {
-    place: reflectionPlace,
+    place: (input) => reflectionBlockPlace(input.blockId),
     execute: Effect.fnUntraced(function* (input: (typeof R.answer_reflection)['input']['Type']) {
       const named = yield* answerNamed(input);
       return yield* Effect.gen(function* () {
@@ -188,7 +188,7 @@ const REFLECTION_ROUTED = {
   }),
 
   unanswer_reflection: routed(R.unanswer_reflection, {
-    place: reflectionPlace,
+    place: (input) => reflectionBlockPlace(input.blockId),
     execute: Effect.fnUntraced(function* (input: (typeof R.unanswer_reflection)['input']['Type']) {
       const named = yield* answerNamed(input);
       return yield* Effect.gen(function* () {
