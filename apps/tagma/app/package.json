@@ -177,6 +177,196 @@
       "browser": "./src/lib/features/checkout/files/FileOpener.svelte.ts",
       "default": "./src/lib/features/checkout/files/FileOpener.svelte.ts"
     },
+    "./notices": {
+      "types": "./src/lib/features/notices/Service.svelte.ts",
+      "browser": "./src/lib/features/notices/Service.svelte.ts",
+      "default": "./src/lib/features/notices/Service.svelte.ts"
+    },
+    "./opening": {
+      "types": "./src/lib/features/opening/Opening.svelte.ts",
+      "browser": "./src/lib/features/opening/Opening.svelte.ts",
+      "default": "./src/lib/features/opening/Opening.svelte.ts"
+    },
+    "./opening/target": {
+      "types": "./src/lib/features/opening/linkTarget.ts",
+      "browser": "./src/lib/features/opening/linkTarget.ts",
+      "default": "./src/lib/features/opening/linkTarget.ts"
+    },
+    "./presence": {
+      "types": "./src/lib/features/presence/Presence.svelte.ts",
+      "browser": "./src/lib/features/presence/Presence.svelte.ts",
+      "default": "./src/lib/features/presence/Presence.svelte.ts"
+    },
+    "./presence/link": {
+      "types": "./src/lib/features/presence/link.ts",
+      "browser": "./src/lib/features/presence/link.ts",
+      "default": "./src/lib/features/presence/link.ts"
+    },
+    "./workspace/address": {
+      "types": "./src/lib/features/workspace/address.ts",
+      "browser": "./src/lib/features/workspace/address.ts",
+      "default": "./src/lib/features/workspace/address.ts"
+    },
+    "./workspace/addresses": {
+      "types": "./src/lib/features/workspace/Addresses.ts",
+      "browser": "./src/lib/features/workspace/Addresses.ts",
+      "default": "./src/lib/features/workspace/Addresses.ts"
+    },
+    "./workspace/project": {
+      "types": "./src/lib/features/workspace/ProjectRung.ts",
+      "browser": "./src/lib/features/workspace/ProjectRung.ts",
+      "default": "./src/lib/features/workspace/ProjectRung.ts"
+    },
+    "./workspace/selection": {
+      "types": "./src/lib/features/workspace/Selection.svelte.ts",
+      "browser": "./src/lib/features/workspace/Selection.svelte.ts",
+      "default": "./src/lib/features/workspace/Selection.svelte.ts"
+    },
+    "./workspace/shell": {
+      "types": "./src/lib/features/workspace/ShellOps.ts",
+      "browser": "./src/lib/features/workspace/ShellOps.ts",
+      "default": "./src/lib/features/workspace/ShellOps.ts"
+    },
+    "./panes/side": {
+      "types": "./src/lib/app/panes/SidePanes.svelte.ts",
+      "browser": "./src/lib/app/panes/SidePanes.svelte.ts",
+      "default": "./src/lib/app/panes/SidePanes.svelte.ts"
+    },
+    "./panes/threads": {
+      "types": "./src/lib/app/panes/ThreadPlaces.ts",
+      "browser": "./src/lib/app/panes/ThreadPlaces.ts",
+      "default": "./src/lib/app/panes/ThreadPlaces.ts"
+    },
+    "./routes/FormerRoutes.svelte": {
+      "types": "./src/lib/app/FormerRoutes.svelte",
+      "browser": "./src/lib/app/FormerRoutes.svelte",
+      "svelte": "./src/lib/app/FormerRoutes.svelte",
+      "default": null
+    },
+    "./settings/repo": {
+      "types": "./src/lib/features/settings/SettingsRepo.ts",
+      "browser": "./src/lib/features/settings/SettingsRepo.ts",
+      "default": "./src/lib/features/settings/SettingsRepo.ts"
+    },
+    "./settings/Group.svelte": {
+      "types": "./src/lib/features/settings/Group.svelte",
+      "browser": "./src/lib/features/settings/Group.svelte",
+      "svelte": "./src/lib/features/settings/Group.svelte",
+      "default": null
+    },
+    "./settings/KeyCard.svelte": {
+      "types": "./src/lib/features/settings/KeyCard.svelte",
+      "browser": "./src/lib/features/settings/KeyCard.svelte",
+      "svelte": "./src/lib/features/settings/KeyCard.svelte",
+      "default": null
+    },
+    "./settings/SwitchControl.svelte": {
+      "types": "./src/lib/features/settings/controls/SwitchControl.svelte",
+      "browser": "./src/lib/features/settings/controls/SwitchControl.svelte",
+      "svelte": "./src/lib/features/settings/controls/SwitchControl.svelte",
+      "default": null
+    },
+    "./speech/repo": {
+      "types": "./src/lib/features/speech/Repo.ts",
+      "browser": "./src/lib/features/speech/Repo.ts",
+      "default": "./src/lib/features/speech/Repo.ts"
+    },
+    "./speech/values": {
+      "types": "./src/lib/features/speech/values.ts",
+      "browser": "./src/lib/features/speech/values.ts",
+      "default": "./src/lib/features/speech/values.ts"
+    },
+    "./speech/words": {
+      "types": "./src/lib/features/speech/words.ts",
+      "browser": "./src/lib/features/speech/words.ts",
+      "default": "./src/lib/features/speech/words.ts"
+    },
+    "./speech/check": {
+      "types": "./src/lib/features/speech/check.ts",
+      "browser": "./src/lib/features/speech/check.ts",
+      "default": "./src/lib/features/speech/check.ts"
+    },
+    "./speech/chord": {
+      "types": "./src/lib/features/speech/dictation/chord.ts",
+      "browser": "./src/lib/features/speech/dictation/chord.ts",
+      "default": "./src/lib/features/speech/dictation/chord.ts"
+    },
+    "./speech/Card.svelte": {
+      "types": "./src/lib/features/speech/Card.svelte",
+      "browser": "./src/lib/features/speech/Card.svelte",
+      "svelte": "./src/lib/features/speech/Card.svelte",
+      "default": null
+    },
+    "./speech/Pick.svelte": {
+      "types": "./src/lib/features/speech/Pick.svelte",
+      "browser": "./src/lib/features/speech/Pick.svelte",
+      "svelte": "./src/lib/features/speech/Pick.svelte",
+      "default": null
+    },
+    "./speech/Row.svelte": {
+      "types": "./src/lib/features/speech/Row.svelte",
+      "browser": "./src/lib/features/speech/Row.svelte",
+      "svelte": "./src/lib/features/speech/Row.svelte",
+      "default": null
+    },
+    "./views/bridge": {
+      "types": "./src/lib/features/views/ViewBridge.ts",
+      "browser": "./src/lib/features/views/ViewBridge.ts",
+      "default": "./src/lib/features/views/ViewBridge.ts"
+    },
+    "./views/feeds": {
+      "types": "./src/lib/features/views/ViewFeeds.ts",
+      "browser": "./src/lib/features/views/ViewFeeds.ts",
+      "default": "./src/lib/features/views/ViewFeeds.ts"
+    },
+    "./markdown/MarkdownBody.svelte": {
+      "types": "./src/lib/features/graph/MarkdownBody.svelte",
+      "browser": "./src/lib/features/graph/MarkdownBody.svelte",
+      "svelte": "./src/lib/features/graph/MarkdownBody.svelte",
+      "default": null
+    },
+    "./threads/names": {
+      "types": "./src/lib/shared/threads/Names.svelte.ts",
+      "browser": "./src/lib/shared/threads/Names.svelte.ts",
+      "default": "./src/lib/shared/threads/Names.svelte.ts"
+    },
+    "./threads/StagedChip.svelte": {
+      "types": "./src/lib/shared/threads/StagedChip.svelte",
+      "browser": "./src/lib/shared/threads/StagedChip.svelte",
+      "svelte": "./src/lib/shared/threads/StagedChip.svelte",
+      "default": null
+    },
+    "./keys/spelling": {
+      "types": "./src/lib/shared/chordSpelling.ts",
+      "browser": "./src/lib/shared/chordSpelling.ts",
+      "default": "./src/lib/shared/chordSpelling.ts"
+    },
+    "./time": {
+      "types": "./src/lib/shared/time.ts",
+      "browser": "./src/lib/shared/time.ts",
+      "default": "./src/lib/shared/time.ts"
+    },
+    "./wire/told": {
+      "types": "./src/lib/wire/told.ts",
+      "browser": "./src/lib/wire/told.ts",
+      "default": "./src/lib/wire/told.ts"
+    },
+    "./testing": {
+      "types": "./src/lib/app/testing.ts",
+      "browser": "./src/lib/app/testing.ts",
+      "default": "./src/lib/app/testing.ts"
+    },
+    "./wire/testing": {
+      "types": "./src/lib/wire/testing.ts",
+      "browser": "./src/lib/wire/testing.ts",
+      "default": "./src/lib/wire/testing.ts"
+    },
+    "./shared/*.svelte": {
+      "types": "./src/lib/shared/*.svelte",
+      "browser": "./src/lib/shared/*.svelte",
+      "svelte": "./src/lib/shared/*.svelte",
+      "default": null
+    },
     "./ui/*.svelte": {
       "types": "./src/lib/shared/ui/*.svelte",
       "browser": "./src/lib/shared/ui/*.svelte",

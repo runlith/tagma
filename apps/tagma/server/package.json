@@ -24,6 +24,22 @@
       "types": "./src/composition/testing/assembled.ts",
       "default": "./src/composition/testing/assembled.ts"
     },
+    "./composition/testing/migrations": {
+      "types": "./src/composition/testing/migrations.ts",
+      "default": "./src/composition/testing/migrations.ts"
+    },
+    "./composition/testing/suiteGit": {
+      "types": "./src/composition/testing/suiteGit.ts",
+      "default": "./src/composition/testing/suiteGit.ts"
+    },
+    "./composition/testing/speech/world": {
+      "types": "./src/composition/testing/speech/world.ts",
+      "default": "./src/composition/testing/speech/world.ts"
+    },
+    "./installation/testing/doubles": {
+      "types": "./src/installation/testing/doubles.ts",
+      "default": "./src/installation/testing/doubles.ts"
+    },
     "./executions/testing/doubles": {
       "types": "./src/executions/testing/doubles.ts",
       "default": "./src/executions/testing/doubles.ts"
