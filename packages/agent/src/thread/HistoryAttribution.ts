@@ -3,7 +3,7 @@ import { Chunk, Effect, HashMap, HashSet, Option } from 'effect';
 import { sha256 } from '@runlith/utils/sha256';
 import { estimateThreadTokens } from './compaction/measurement';
 import { ThreadStorageFailed } from './persisted';
-import { agentOriginOf, agentReaderInput, agentReaderPosition, withAgentReaderInput } from '../agent/AgentSignal';
+import { agentOriginOf, agentReaderInput, agentReaderPosition, opensTurnMessage, withAgentReaderInput } from '../agent/AgentSignal';
 import type { ThreadRewindScope } from '../transcript/eventFold';
 import type { ThreadEntryReader } from '../transcript/kinds';
 import { readThreadRecordsAsOf, type ThreadEventBody } from './events';
@@ -28,6 +28,7 @@ type Description = {
   readonly source: AttributedMessage;
   readonly userKey: string | null;
   readonly summary: boolean;
+  readonly opening: boolean;
   readonly tokens: number;
 };
 type Held = Description & {
@@ -161,6 +162,22 @@ export class HistoryAttribution {
   }
   turns(runIds: readonly string[]): number {
     return runIds.filter((runId) => this.run(runId)?.opens === true).length;
+  }
+  turnStarts(): readonly number[] {
+    const seen = new Set<string>();
+    const starts: number[] = [];
+    for (const [index, held] of Chunk.toReadonlyArray(this.held).entries()) {
+      if (!held.opening || (held.run !== null && seen.has(held.run))) continue;
+      starts.push(index);
+      if (held.run !== null) seen.add(held.run);
+    }
+    return starts;
+  }
+  runsBefore(index: number): readonly string[] | null {
+    const before = new Set(this.kept());
+    if (before.size === 0) return null;
+    for (const held of Chunk.drop(this.held, index)) if (held.run !== null) before.delete(held.run);
+    return [...new Set([...before, ...this.cut()])];
   }
   cut(): readonly string[] {
     return Array.from(this.taken);
@@ -380,6 +397,7 @@ function describe(message: Message, source: AttributedMessage): Description {
     source,
     userKey: message.role === 'user' && origin === undefined ? sha256().update(JSON.stringify(keyed)).digest('hex') : null,
     summary: origin === 'summary',
+    opening: opensTurnMessage(message),
     tokens: estimateThreadTokens(message),
   };
 }

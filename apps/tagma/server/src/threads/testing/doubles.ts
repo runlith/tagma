@@ -880,6 +880,7 @@ export const teamLess: ThreadTeams['Service'] = ThreadTeams.of({
     }),
   of: () => Effect.die('a thread with no team never resolves one'),
   set: () => Effect.die('a thread with no team is given none'),
+  inherit: () => Effect.die('a thread with no team inherits none'),
   promote: () => Effect.die('a thread with no team promotes none'),
   adopt: () => Effect.die('a thread with no team adopts none'),
 });

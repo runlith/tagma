@@ -7,6 +7,7 @@ import type { NotInstalled } from '../../../providers/contract/service/registry.
 import type { ConnectedProviders } from '../../../providers/contract/service/accounts.js';
 import type { SettingWriteRefusal } from '../../../settings/contract/service/values.js';
 import type { TeamLineage } from '../../mandate.js';
+import type { WriteUnit } from '../../../platform/contract/service/units.js';
 
 export type TeamLayers = {
   readonly edits: readonly TeamEdit[];
@@ -33,6 +34,7 @@ export class ThreadTeams extends Context.Service<
     layers(place: TeamPlace): Effect.Effect<TeamLayers, StoreFailure | TokenStoreFault | NotInstalled>;
     of(place: TeamPlace, layers?: TeamLayers): Effect.Effect<Team, StoreFailure | TokenStoreFault | NotInstalled>;
     set(threadId: string, team: TeamLayer | null): Effect.Effect<TeamLineage, StoreFailure>;
+    inherit(threadId: string, source: TeamPlace, unit: WriteUnit<'machine'>): Effect.Effect<void, StoreFailure>;
     promote(threadId: string, projectId: number): Effect.Effect<TeamPromotion, StoreFailure | GateRefusal<SettingWriteRefusal>>;
     adopt(team: TeamLayer, projectId: number): Effect.Effect<TeamPromotion, StoreFailure | GateRefusal<SettingWriteRefusal>>;
   }

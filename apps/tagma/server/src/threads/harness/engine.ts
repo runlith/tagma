@@ -255,6 +255,7 @@ export const threadEngineLayer = Layer.effectContext(
     });
     const births = yield* makeEngineBirths({ transports: () => harness.runs.transports(), models: () => models() }).pipe(
       Effect.provideService(NoteWriting, notes),
+      Effect.provideService(ThreadTeams, teams),
     );
     const depths = yield* makeSubAgentDepths;
     const owedRows = yield* makeOwedCallRows;

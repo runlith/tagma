@@ -580,6 +580,29 @@ describe('ThreadAggregate over the composed graph', () => {
       expect(published.map((state) => state.position)).toEqual([2]);
     }),
   );
+  it.effect('a last-turn fork keeps every input delivered in the same run', () =>
+    Effect.gen(function* () {
+      const h = yield* kernelOver();
+      const said = (runId: string, id: string, role: 'user' | 'assistant', text: string) => ({
+        kind: 'message' as const,
+        payload: {
+          entry: { type: 'message' as const, id, runId, role, text, occurredAt: AT },
+          messages: [role === 'user' ? Message.user(text) : Message.assistant(text)],
+        },
+      });
+      yield* h.aggregate.append(ROOT, OWNER, [
+        said('first', 'u1', 'user', 'First task.'),
+        said('first', 'a1', 'assistant', 'First answer.'),
+        said('second', 'u2', 'user', 'Second task.'),
+        said('second', 'steer', 'user', 'An input delivered before the same run finishes.'),
+        said('second', 'a2', 'assistant', 'Second answer.'),
+      ]);
+      const source = (yield* h.store.find(ROOT))!;
+      const branch = yield* h.duplicate({ ...forkInput, cut: { kind: 'turns', turns: 1 } });
+      expect((yield* h.store.find(branch.id))?.history).toEqual(source.history.slice(2));
+      expect((yield* h.store.transcriptOf(branch.id))?.map((entry) => entry.id)).toEqual(['u2', 'steer', 'a2']);
+    }),
+  );
   it.effect(
     'a fork shows the context it carries from birth: the source figure for a whole copy, a reduced one for a cut, none for nothing',
     Effect.fnUntraced(function* () {
@@ -618,7 +641,7 @@ describe('ThreadAggregate over the composed graph', () => {
     }),
   );
   it.effect(
-    'a fork completes both host birth phases and stores its reset switches',
+    'a fork completes both host birth phases and inherits its source switches',
     Effect.fnUntraced(function* () {
       const phases: string[] = [];
       const h = yield* kernelOver({
@@ -633,7 +656,7 @@ describe('ThreadAggregate over the composed graph', () => {
           }),
       });
       const branch = yield* h.duplicate(forkInput);
-      expect((yield* h.store.find(branch.id))?.switches).toEqual({});
+      expect((yield* h.store.find(branch.id))?.switches).toEqual({ serviceTier: 'priority' });
       expect(phases).toEqual([`born:${branch.id}:${ROOT}:none`, `ready:${branch.id}`]);
     }),
   );

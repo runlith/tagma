@@ -5,7 +5,7 @@ import { ThreadAgents } from '../../thread/agents/ThreadAgents';
 import { agentTypeId } from '../../thread/agents/AgentProfile';
 import { ThreadStorageFailed } from '../../thread/persisted';
 import type { ThreadReadFailure, ThreadRecord } from '../../thread/record';
-import type { ThreadMetadataRow, ThreadRow, ThreadRunRow } from '../../thread/rows';
+import { agentOf, type ThreadMetadataRow, type ThreadRow, type ThreadRunRow } from '../../thread/rows';
 import { ThreadBranch } from '../../thread/run/ThreadBranch';
 import { ThreadChanges } from '../../thread/run/ThreadChanges';
 import { ThreadRunLedger } from '../../thread/run/ThreadRunLedger';
@@ -170,12 +170,25 @@ export const nativeThreadsLayer: Layer.Layer<
         if (asked.host !== null && 'fork' in asked.seed) {
           return yield* new BirthRefused({ childId: input.childId, reason: 'host-with-fork' });
         }
+        const source = 'fork' in asked.seed ? yield* store.metadata(asked.seed.source) : parent;
+        if (!source || source.ownerId !== input.principal) {
+          return yield* new ThreadMissing({ threadId: 'fork' in asked.seed ? asked.seed.source : parent.id });
+        }
         const judged = input.model !== null && 'judged' in input.model ? input.model : null;
-        const chosen = judged?.judged ?? { provider: parent.provider, model: parent.model, reasoning: parent.reasoning };
+        const chosen = judged?.judged ?? { provider: source.provider, model: source.model, reasoning: source.reasoning };
+        const copying =
+          'fork' in asked.seed &&
+          asked.project === undefined &&
+          agentOf(source) === input.offer.baseAgentId &&
+          (source.profile?.id ?? null) === (input.offer.profile?.id ?? null) &&
+          source.provider === chosen.provider &&
+          modelOf(declared?.models() ?? null, source) === chosen.model &&
+          (source.reasoning === null || source.reasoning === chosen.reasoning);
+        const inherited = copying ? source : parent;
         const switches =
           chosen.model === null
-            ? parent.switches
-            : yield* bornSwitches(parent, { provider: chosen.provider, model: chosen.model }, judged?.switches ?? {});
+            ? inherited.switches
+            : yield* bornSwitches(inherited, { provider: chosen.provider, model: chosen.model }, judged?.switches ?? {});
         const profile = input.offer.profile ? { id: input.offer.profile.id, overlay: input.offer.profile } : null;
         if ('fork' in asked.seed) {
           const forked = yield* branch.fork({
@@ -198,7 +211,13 @@ export const nativeThreadsLayer: Layer.Layer<
               model:
                 chosen.model === null
                   ? undefined
-                  : { provider: chosen.provider, model: chosen.model, reasoning: chosen.reasoning, switches },
+                  : {
+                      account: copying ? source.account : null,
+                      provider: chosen.provider,
+                      model: chosen.model,
+                      reasoning: chosen.reasoning,
+                      switches,
+                    },
             },
             commit: (child: ThreadRow, tx: ThreadWriteTx) => inbox.put({ ...provision, threadId: child.id }, tx).pipe(Effect.asVoid),
             place: input.place ?? undefined,

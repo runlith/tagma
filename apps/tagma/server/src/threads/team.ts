@@ -5,6 +5,7 @@ import { Settings } from '../settings/contract/service/values.js';
 import { ProviderAccounts } from '../providers/contract/service/accounts.js';
 import { ProviderRegistry } from '../providers/contract/service/registry.js';
 import { ThreadMandate } from './contract/service/mandate.js';
+import type { Unit } from '../platform/contract/service/units.js';
 import { ThreadTeams, type TeamLayers, type TeamPlace } from './contract/service/team.js';
 import { teamModels, teamReview } from './contract/wire/settings.js';
 
@@ -14,14 +15,18 @@ export const makeThreadTeams = Effect.gen(function* () {
   const registry = yield* ProviderRegistry;
   const accounts = yield* ProviderAccounts;
 
-  const layers = Effect.fn('ThreadTeams.layers')(function* (place: TeamPlace) {
-    const thread = place.threadId === null ? { own: null, nearest: null } : yield* mandate.teamLineage(place.threadId);
-    const connected = yield* accounts.connected;
+  const layer = Effect.fnUntraced(function* (place: TeamPlace, unit?: Unit<'machine'>) {
+    const thread = place.threadId === null ? { own: null, nearest: null } : yield* mandate.teamLineage(place.threadId, unit);
     const copy = place.copy ?? thread.nearest?.team;
-    if (copy !== undefined) return { edits: copy.models, review: copy.review, thread, connected } satisfies TeamLayers;
+    if (copy !== undefined) return { edits: copy.models, review: copy.review, thread };
     const edits = yield* settings.value(teamModels, place.projectId);
     const review = yield* settings.value(teamReview, place.projectId);
-    return { edits, review, thread, connected } satisfies TeamLayers;
+    return { edits, review, thread };
+  });
+  const layers = Effect.fn('ThreadTeams.layers')(function* (place: TeamPlace) {
+    const source = yield* layer(place);
+    const connected = yield* accounts.connected;
+    return { ...source, connected } satisfies TeamLayers;
   });
 
   const adopting = Effect.fnUntraced(function* (promoted: TeamLayer | null, projectId: number, then: Effect.Effect<void, StoreFailure>) {
@@ -53,6 +58,10 @@ export const makeThreadTeams = Effect.gen(function* () {
       return teamOf({ catalog, connected: connected.providers, edits, review });
     }),
     set: (threadId, team) => Effect.andThen(mandate.setTeam(threadId, team), mandate.teamLineage(threadId)),
+    inherit: Effect.fn('ThreadTeams.inherit')(function* (threadId, source, unit) {
+      const { edits, review } = yield* layer(source, unit);
+      yield* mandate.setTeam(threadId, { models: edits, review }, unit);
+    }),
     promote: Effect.fn('ThreadTeams.promote')(function* (threadId, projectId) {
       const promoted = (yield* mandate.teamLineage(threadId)).nearest?.team ?? null;
       return yield* adopting(promoted, projectId, mandate.setTeam(threadId, null));

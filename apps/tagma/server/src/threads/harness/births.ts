@@ -1,7 +1,7 @@
 import { Effect, Schema } from 'effect';
 import type { ThreadBirth, ThreadWriteTx } from '@runlith/agent/thread/ThreadPorts';
 import type { Transports } from '@runlith/agent/thread/transport/Transports';
-import type { ThreadRow } from '@runlith/agent/thread/rows';
+import { agentOf, type ThreadRow } from '@runlith/agent/thread/rows';
 import type { ModelCatalog } from '@runlith/llm/models/catalog';
 import { ThreadCallBroke } from '@runlith/agent/thread/ThreadBorder';
 import { BirthRefused } from '@runlith/agent/collaboration/threads';
@@ -23,6 +23,8 @@ import { NoteWriting } from '../journal/worktreeNotes.js';
 import { OperatorNotes } from '../contract/service/notes.js';
 import { holdThreadResources } from '../resources/hold.js';
 import { ThreadResources } from '../store/resources.js';
+import { ThreadTeams } from '../contract/service/team.js';
+import { ThreadRecords } from '../../thread-record/contract/service/records.js';
 import { birthRefusal } from './collaboration.js';
 
 const refused = (childId: string, reason: BirthRefused['reason'], detail: string) =>
@@ -46,6 +48,8 @@ export const makeEngineBirths = Effect.fnUntraced(function* ({
   const notes = yield* NoteWriting;
   const operatorNotes = yield* OperatorNotes;
   const lifetime = yield* Effect.scope;
+  const teams = yield* ThreadTeams;
+  const records = yield* ThreadRecords;
   const made = new Map<string, RootId>();
 
   const branched = new Set<string>();
@@ -95,6 +99,20 @@ export const makeEngineBirths = Effect.fnUntraced(function* ({
         .pipe(Effect.mapError((cause) => new ThreadCallBroke({ cause })));
     }
     if (cut !== undefined) {
+      if (cut.kind !== 'none') {
+        const sourceProject = yield* records.projectOf(parent.id, tx).pipe(stored('forkTeamProject'));
+        if (
+          sourceProject === projectId &&
+          agentOf(child) === agentOf(parent) &&
+          (child.profile?.id ?? null) === (parent.profile?.id ?? null) &&
+          child.provider === parent.provider &&
+          child.model === (parent.model ?? models().defaultTextModelId(parent.provider)) &&
+          (parent.reasoning === null || child.reasoning === parent.reasoning) &&
+          child.systemPrompt === parent.systemPrompt
+        ) {
+          yield* teams.inherit(child.id, { threadId: parent.id, projectId: sourceProject }, tx).pipe(stored('forkTeam'));
+        }
+      }
       yield* operatorNotes.forked(parent.id, child.id, tx).pipe(stored('forkOperatorNotes'));
       if (!hosted && served === null) yield* tx.afterCommit(Effect.sync(() => void branched.add(child.id)));
     }

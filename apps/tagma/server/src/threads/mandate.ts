@@ -103,8 +103,8 @@ export const makeMandateRows = Effect.gen(function* () {
     }),
     setApproves: (id, approves) =>
       units.write(writes('MandateRows.setApproves', [mandateRows]), (unit) => writeMandate(db, unit, id, { approves })),
-    teamLineage: Effect.fn('MandateRows.teamLineage')(function* (id) {
-      const rows = yield* units.read((unit) => unit.run(teams.execute({ id })));
+    teamLineage: Effect.fn('MandateRows.teamLineage')(function* (id, tx) {
+      const rows = yield* read(tx, (unit) => unit.run(teams.execute({ id })));
       const nearest = rows.find((row) => row.team !== null);
       const own = rows.find((row) => row.depth === 0)?.team ?? null;
       return {
@@ -112,7 +112,10 @@ export const makeMandateRows = Effect.gen(function* () {
         nearest: nearest?.team == null ? null : { team: JSON.parse(nearest.team) as TeamLayer, setAt: nearest.id },
       };
     }),
-    setTeam: (id, team) => units.write(writes('MandateRows.setTeam', [mandateRows]), (unit) => writeMandate(db, unit, id, { team })),
+    setTeam: (id, team, tx) =>
+      tx === undefined
+        ? units.write(writes('MandateRows.setTeam', [mandateRows]), (unit) => writeMandate(db, unit, id, { team }))
+        : writeMandate(db, tx, id, { team }),
     takenOver: (id, tx) =>
       read(tx, (unit) =>
         unit

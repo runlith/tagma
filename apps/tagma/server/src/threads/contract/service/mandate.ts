@@ -11,8 +11,8 @@ export class ThreadMandate extends Context.Service<
     setDelegation(id: string, delegation: boolean | null): Effect.Effect<void, StoreFailure>;
     approvesLineage(id: string, unit?: Unit<'machine'>): Effect.Effect<ApprovesLineage, StoreFailure>;
     setApproves(id: string, approves: readonly string[] | null): Effect.Effect<void, StoreFailure>;
-    teamLineage(id: string): Effect.Effect<TeamLineage, StoreFailure>;
-    setTeam(id: string, team: TeamLayer | null): Effect.Effect<void, StoreFailure>;
+    teamLineage(id: string, unit?: Unit<'machine'>): Effect.Effect<TeamLineage, StoreFailure>;
+    setTeam(id: string, team: TeamLayer | null, unit?: Unit<'machine'>): Effect.Effect<void, StoreFailure>;
     takenOver(id: string, unit?: Unit<'machine'>): Effect.Effect<boolean, StoreFailure>;
     setTakenOver(id: string, takenOver: boolean): Effect.Effect<void, StoreFailure>;
     operatorNotice(id: string): Effect.Effect<boolean | null, StoreFailure>;

@@ -161,26 +161,26 @@ export const makeThreadBranch = Effect.gen(function* () {
       input.sourceThreadId,
       Effect.fnUntraced(function* ({ row: source, version, tx }) {
         const sameAgent = input.agentId === undefined || input.agentId === agentOf(source);
-        const profile: ThreadProfileBirth | null =
+        const selected: ThreadProfileBirth | null =
           input.spawned !== undefined ? (input.spawned.profile ?? null) : sameAgent ? source.profile : null;
-        const agentChanged = input.spawned?.rehomed === true || !sameAgent || (profile?.id ?? null) !== (source.profile?.id ?? null);
+        const agentChanged = input.spawned?.rehomed === true || !sameAgent || (selected?.id ?? null) !== (source.profile?.id ?? null);
+        const profile = agentChanged ? selected : source.profile;
         const cut = yield* carriedCut(input, source, tx);
+        const attribution = cut.kind === 'before' || cut.kind === 'turns' ? yield* attributions.read(source.id, version.head, tx) : null;
+        if (cut.kind === 'turns' && attribution!.size !== source.history.length) {
+          return yield* new ThreadCallBroke({ cause: attributionDisagrees(source.id) });
+        }
         const planned =
           cut.kind === 'before'
-            ? cutBefore(
-                source.history,
-                source.id,
-                cut.runId,
-                yield* attributions.read(source.id, version.head, tx),
-                input.cut?.kind !== 'before',
-              )
-            : forkCut(source.history, cut);
+            ? cutBefore(source.history, source.id, cut.runId, attribution!, input.cut?.kind !== 'before')
+            : forkCut(source.history, cut, attribution?.turnStarts());
         if ('refused' in planned) return yield* new ThreadCallBroke({ cause: planned.refused });
         const carried = yield* sealed(input, source, planned.history, tx);
+        const before = cut.kind === 'turns' && planned.cuts.length > 0 ? attribution!.runsBefore(planned.cuts[0]!.to) : null;
         const seed: ThreadBranchSeed = {
           sourceId: source.id,
           childId,
-          entries: planned.entries,
+          entries: before === null ? planned.entries : { kind: 'kept', taken: before },
           prompts: agentChanged ? 'dropped' : 'kept',
         };
         const values = {
@@ -197,7 +197,7 @@ export const makeThreadBranch = Effect.gen(function* () {
           provider: input.spawned?.model?.provider ?? source.provider,
           model: input.spawned?.model ? input.spawned.model.model : source.model,
           reasoning: input.spawned?.model ? input.spawned.model.reasoning : source.reasoning,
-          switches: input.spawned?.model?.switches ?? {},
+          switches: input.spawned?.model?.switches ?? source.switches,
           capabilities: input.spawned?.capabilities,
           authority: input.spawned?.authority ?? source.authority,
           profile: profile ?? undefined,
@@ -463,13 +463,11 @@ export function forkCut(
       kind: 'before';
     }
   >,
+  starts?: readonly number[],
 ): ThreadBranchCut {
   if (cut.kind === 'all') return { history, entries: { kind: 'all' }, cuts: [] };
   if (cut.kind === 'none') return { history: [], entries: { kind: 'none' }, cuts: [] };
-  const opens: number[] = [];
-  history.forEach((message: ThreadHistory[number], index: number) => {
-    if (opensTurnMessage(message)) opens.push(index);
-  });
+  const opens = starts ?? history.flatMap((message, index) => (opensTurnMessage(message) ? [index] : []));
   if (opens.length <= cut.turns) return { history, entries: { kind: 'all' }, cuts: [] };
   const kept = opens[opens.length - cut.turns] ?? 0;
   return { history: history.slice(kept), entries: { kind: 'turns', turns: cut.turns }, cuts: kept === 0 ? [] : [{ from: 0, to: kept }] };

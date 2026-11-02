@@ -22,7 +22,7 @@ const mandate = ThreadMandate.of({
   operatorNotice: unused,
   setOperatorNotice: unused,
 });
-const teams = ThreadTeams.of({ layers: unused, of: unused, set: unused, promote: unused, adopt: unused });
+const teams = ThreadTeams.of({ layers: unused, of: unused, set: unused, inherit: unused, promote: unused, adopt: unused });
 const capabilities: Readonly<Record<string, readonly string[]>> = {
   tagma: ['mcp', 'skills'],
   rules: ['skills'],
