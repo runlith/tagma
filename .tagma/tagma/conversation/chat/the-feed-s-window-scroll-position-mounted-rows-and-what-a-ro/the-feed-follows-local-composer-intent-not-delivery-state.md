@@ -9,8 +9,7 @@ edges:
 sources:
   - kind: file
     ref: packages/chat-ui/src/session/TurnCommands.svelte.ts
-  - kind: symbol
+  - kind: file
     ref: packages/chat-ui/src/ChatSurface.svelte
-    symbol: send
 ---
 Returning to the tail belongs to the mounted surface, while only its holder knows that a composer draft was just submitted. The signal is transient and scoped to that holder: received entries, confirmations, automatic retries and reattaching a surface must not take a reader away from a place chosen after submission. The surface releases its listener on detachment and the command scope ends the signal's lifetime. Listener failures are raised outside delivery so a view defect cannot prevent the turn from being sent.
