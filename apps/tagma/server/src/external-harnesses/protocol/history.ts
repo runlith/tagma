@@ -73,9 +73,14 @@ export class ProtocolHistory {
     const facet = yield* store.readIn(source, unit);
     const profile = facet === null ? undefined : (yield* this.rowOf(facet)).acp;
     if (facet === null || profile?.proves.fork !== true) return yield* refused('This harness does not fork its conversation.');
-    const reachable = facet.session?.account === undefined || facet.session.account.key === account;
+    const standing = yield* rows.read(unit, source);
+    const pending = standing?.fork ?? null;
+    const session = pending?.session ?? facet.sessionKey;
+    const holder = pending === null ? (facet.session?.account === undefined ? undefined : facet.session.account.key) : pending.account;
+    const reachable = holder === undefined || holder === account;
     const before = cut.kind === 'before' ? yield* turns.turn(source, cut.runId, unit) : undefined;
-    const whole = reachable && facet.sessionKey !== null && (cut.kind === 'all' || (cut.kind === 'before' && before?.address != null));
+    const running = cut.kind === 'before' && before === undefined && standing?.turns.some((turn) => turn.id === cut.runId) === true;
+    const whole = reachable && session !== null && (cut.kind === 'all' || (cut.kind === 'before' && (before?.address != null || running)));
     const taken = whole ? yield* Effect.mapError(journal.cut(source, unit), threadCallFailed) : [];
     const point = whole ? yield* turns.point(source, taken, before?.ordinal ?? null, unit) : null;
     const at =
@@ -84,13 +89,15 @@ export class ProtocolHistory {
         : point._tag === 'Cut'
           ? { address: point.address, ordinal: point.ordinal }
           : { address: before?.address ?? null, ordinal: before?.ordinal ?? null };
-    const through = at !== null && at.address === null ? ((yield* turns.turns(unit, source)).at(-1)?.last ?? null) : null;
+    const pinned =
+      at === null || at.address !== null
+        ? { prompt: at?.address ?? null, through: null }
+        : pending !== null
+          ? { prompt: pending.prompt, through: pending.through ?? null }
+          : { prompt: null, through: yield* turns.tail(unit, source) };
     yield* rows.write(unit, child, {
       ...freshRow(child, null, null),
-      fork:
-        at === null || facet.sessionKey === null
-          ? null
-          : { session: facet.sessionKey, prompt: at.address, account, thread: source, through },
+      fork: at === null || session === null ? null : { session, ...pinned, account, thread: pending?.thread ?? source },
     });
     if (at === null) return;
     yield* turns.copy(unit, source, child, at.ordinal);

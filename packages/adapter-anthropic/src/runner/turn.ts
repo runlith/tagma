@@ -249,6 +249,7 @@ export class Turn {
     if (running === null || uuid === undefined) return;
     const idle = running.inFlight === 0;
     running.begun.add(uuid);
+    running.last = uuid;
     if (uuid === running.uuid) yield* running.taken;
     if (uuid === running.opener) running.opener = null;
     else if (running.words.has(uuid)) yield* this.took(running, uuid);
@@ -371,8 +372,13 @@ export class Turn {
     running.words.clear();
     running.early.length = 0;
     const spend = this.spend.settled(running.baseline);
+    const turned = { 'tagma/turn': { prompt: running.uuid, last: running.last } };
     if (outcome._tag === 'Failed') {
-      const data = { ...(outcome.failure == null ? {} : { [FAILURE]: outcome.failure }), ...spend };
+      const data = {
+        ...(outcome.failure == null ? {} : { [FAILURE]: outcome.failure }),
+        ...spend,
+        _meta: { ...turned, ...spend._meta },
+      };
       yield* Deferred.fail(
         running.done,
         running.unauthorized
@@ -388,7 +394,7 @@ export class Turn {
     yield* Deferred.succeed(running.done, {
       stopReason: outcome.stopReason,
       ...(spend.usage === undefined ? {} : { usage: spend.usage }),
-      _meta: { 'tagma/turn': { prompt: running.uuid, last: running.last }, ...spend._meta },
+      _meta: { ...turned, ...spend._meta },
     });
   });
 }

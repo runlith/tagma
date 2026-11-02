@@ -100,7 +100,7 @@ describe('a fork of a Claude Code thread on ACP', () => {
     );
 
     it.effect(
-      'a branch of a thread whose turn is going carries the conversation before that turn and opens its own session from it, leaving the turn with the source',
+      'a branch of a thread whose turn is going forks the vendor session at the record that ended the turn before it, leaving the going turn with the source',
       () =>
         Effect.gen(function* () {
           const { world, projectId, agent, birth } = yield* ProtocolWorld;
@@ -131,9 +131,40 @@ describe('a fork of a Claude Code thread on ACP', () => {
             (line) => line.method === 'session/prompt' && JSON.stringify(line.params).includes('Say what it does.'),
           );
           const opening = frames.slice(0, asked).findLast((line) => OPENINGS.has(line.method ?? ''));
-          expect(opening?.method).toBe('session/new');
+          expect(opening).toMatchObject({ method: '_tagma/fork', params: { sessionId: 'sess-1', turn: null, through: `last-${first}` } });
           expect((yield* kernel.reads.snapshot(source)).latestRun).toMatchObject({ id: going, status: 'running' });
         }),
+    );
+
+    it.effect('a branch of a fork that has not yet reached its vendor forks the same source session at the same record', () =>
+      Effect.gen(function* () {
+        const { world, projectId, agent, birth } = yield* ProtocolWorld;
+        const report = yield* agent('branch-pending');
+        const source = yield* birth();
+        const turns = turnsOf(world.runtime.owners);
+        const kernel = Context.get(world.runtime.owners, ThreadHarness);
+        const first = (yield* turns.send(source, projectId, 'Read the module.')).runId;
+        yield* completed(report, first);
+        const branched = Effect.fnUntraced(function* (threadId: string) {
+          const answer = yield* world.op('branch_thread', { threadId }, `project=${projectId}`);
+          expect(answer.status).toBe(200);
+          const child = String((answer.body as { readonly threadId: string }).threadId);
+          yield* Effect.addFinalizer(() => {
+            const born = kernel.threads.handle(child, 'operator');
+            return Effect.andThen(born.stop(), born.release()).pipe(Effect.orDie);
+          });
+          return child;
+        });
+        const child = yield* branched(source);
+        yield* completed(report, (yield* turns.send(child, projectId, 'UNSENT say what it does.')).runId);
+        const grandchild = yield* branched(child);
+        yield* completed(report, (yield* turns.send(grandchild, projectId, 'Say it again.')).runId);
+        const forks = (yield* heard(report)).filter((line) => line.method === '_tagma/fork').map((line) => line.params);
+        expect(forks).toMatchObject([
+          { sessionId: 'sess-1', turn: null, through: `last-${first}` },
+          { sessionId: 'sess-1', turn: null, through: `last-${first}` },
+        ]);
+      }),
     );
 
     it.effect('a branch whose source state the agent no longer holds opens its session from the journal instead of failing', () =>

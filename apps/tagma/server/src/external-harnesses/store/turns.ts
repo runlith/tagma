@@ -1,4 +1,4 @@
-import { and, asc, eq, gt, gte, inArray, lt, notInArray, sql, type SQL } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, gte, inArray, isNotNull, lt, notInArray, sql, type SQL } from 'drizzle-orm';
 import { index, integer, primaryKey, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 import { Effect, Schema } from 'effect';
 import { threadRecord } from '../../thread-record/store/table.js';
@@ -100,6 +100,21 @@ export class VendorTurns {
         .where(eq(vendorTurn.threadId, threadId))
         .orderBy(asc(vendorTurn.ordinal))
         .all(),
+    );
+  }
+
+  tail(unit: Unit<'machine'>, threadId: string): Effect.Effect<string | null, StoreFailure> {
+    return Effect.map(
+      unit.run(
+        this.db
+          .select({ last: vendorTurn.last })
+          .from(vendorTurn)
+          .where(and(eq(vendorTurn.threadId, threadId), isNotNull(vendorTurn.last)))
+          .orderBy(desc(vendorTurn.ordinal))
+          .limit(1)
+          .get(),
+      ),
+      (row) => row?.last ?? null,
     );
   }
 

@@ -639,6 +639,7 @@ export class ProtocolSteps {
         ...base,
         client: step.state,
         failure: base.failure ?? projected.failure,
+        fork: projected.heard ? null : base.fork,
         turns: projected.turns,
         sent: stamped(base.sent, link.row.client.requests, step.state.requests, at),
       };

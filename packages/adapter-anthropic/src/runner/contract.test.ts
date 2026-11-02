@@ -509,6 +509,23 @@ describe('a prompt', () => {
     }),
   );
 
+  it.live('names its prompt and the last record it left whether it ends on its echoed prompt alone or fails', () =>
+    Effect.gen(function* () {
+      const session = yield* open({
+        onUser: (_, channel) => {
+          const sent = channel.received.at(-1)!.uuid!;
+          if (channel.received.length === 1) return channel.emit(echoOf(sent), resultOf(1, 1, 0.1));
+          channel.emit(echoOf(sent), assistantOf('a2', 'Rate limited', { error: 'rate_limit' }), resultOf(1, 1, 0.1, { is_error: true }));
+        },
+      });
+      const first = crypto.randomUUID();
+      expect((yield* session.prompt('one', { 'tagma/turn': first }))._meta).toMatchObject({ 'tagma/turn': { prompt: first, last: first } });
+      const second = crypto.randomUUID();
+      const fault = yield* Effect.flip(session.prompt('two', { 'tagma/turn': second }));
+      expect(fault.data).toMatchObject({ _meta: { 'tagma/turn': { prompt: second, last: 'a2' } } });
+    }),
+  );
+
   it.live(
     'after a resume or a fork the first turn claims neither rest nor cost, since the cumulative baseline is unknown; the next one a difference',
     () =>
@@ -1772,22 +1789,25 @@ describe('fork at a turn', () => {
     }),
   );
 
-  it.live('refuses a turn the transcript does not hold', () =>
+  it.live('answers a turn or a record the transcript no longer holds as not found, so the server opens the child from its journal', () =>
     Effect.gen(function* () {
       const session = yield* open({}, { transcript });
-      expect((yield* session.refused(FORK, { turn: 'missing' })).code).toBe(FAULT.invalidParams);
+      expect((yield* session.refused(FORK, { turn: 'missing' })).code).toBe(FAULT.notFound);
+      expect((yield* session.refused(FORK, { through: 'gone' })).code).toBe(FAULT.notFound);
     }),
   );
 
-  it.live('copies a source that stands where the fork was born whole, and cuts one that went on at the record it stood on', () =>
+  it.live('keeps the source through the record the fork was born on at every opening, the reopen of its first turn included', () =>
     Effect.gen(function* () {
-      const session = yield* open({}, { transcript });
-      yield* session.extension(FORK, { through: 'a2' });
-      expect(session.sdk.opened[1]!.options).toMatchObject({ resume: session.sessionId, forkSession: true });
-      expect(session.sdk.opened[1]!.options.resumeSessionAt).toBeUndefined();
-      yield* session.extension(FORK, { through: 'a1' });
-      expect(session.sdk.opened[2]!.options).toMatchObject({ resume: session.sessionId, forkSession: true, resumeSessionAt: 'a1' });
-      expect((yield* session.refused(FORK, { through: 'gone' })).code).toBe(FAULT.notFound);
+      const door = new ScriptedDoor('v1', [{ context: null, prompt: 'v1', web: 'vendor' }]);
+      door.held = ['read'];
+      const session = yield* open({ onUser: (_, channel) => channel.emit(resultOf(1, 1, 0.1)) }, { door, transcript });
+      const forked = (yield* session.extension(FORK, { through: 'a2' })) as { readonly sessionId: string };
+      yield* session.handlers.prompt({ sessionId: forked.sessionId, prompt: text('first words') });
+      const openings = session.sdk.opened.slice(1).map(({ options }) => options);
+      expect(openings).toHaveLength(2);
+      for (const options of openings)
+        expect(options).toMatchObject({ resume: session.sessionId, forkSession: true, sessionId: forked.sessionId, resumeSessionAt: 'a2' });
     }),
   );
 });

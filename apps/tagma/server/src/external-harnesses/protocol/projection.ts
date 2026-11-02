@@ -255,6 +255,7 @@ export const project = (
         const stopped = outcome._tag === 'Stopped' ? outcome.stopReason : null;
         const carried = outcome._tag === 'Failed' && outcome.cause._tag === 'Agent' ? spendOf(outcome.cause.error.data) : null;
         if (outcome.meta != null) vendor.push(vendorOf(event.turn, outcome.meta));
+        else if (carried?._meta?.['tagma/turn'] !== undefined) vendor.push(vendorOf(event.turn, carried._meta));
         if ((outcome.meta ?? carried?._meta)?.[OPENED] === true) heard = true;
         ended.push({
           turn: event.turn,

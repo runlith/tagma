@@ -9,7 +9,7 @@ export const fork: Answering = {
   answered: (row, request, event) => {
     const read = settled(event);
     if (read._tag === 'Failed') return handled(row, [{ _tag: 'RequestFailed', request, cause: read.cause }]);
-    return handled({ ...row, fork: null }, [{ _tag: 'SessionReady', via: 'new', sessionId: read.answer.sessionId, setup: read.answer }]);
+    return handled(row, [{ _tag: 'SessionReady', via: 'new', sessionId: read.answer.sessionId, setup: read.answer }]);
   },
 };
 
