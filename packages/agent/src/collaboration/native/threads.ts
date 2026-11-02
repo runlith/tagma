@@ -5,7 +5,7 @@ import { ThreadAgents } from '../../thread/agents/ThreadAgents';
 import { agentTypeId } from '../../thread/agents/AgentProfile';
 import { ThreadStorageFailed } from '../../thread/persisted';
 import type { ThreadReadFailure, ThreadRecord } from '../../thread/record';
-import { agentOf, type ThreadMetadataRow, type ThreadRow, type ThreadRunRow } from '../../thread/rows';
+import type { ThreadMetadataRow, ThreadRow, ThreadRunRow } from '../../thread/rows';
 import { ThreadBranch } from '../../thread/run/ThreadBranch';
 import { ThreadChanges } from '../../thread/run/ThreadChanges';
 import { ThreadRunLedger } from '../../thread/run/ThreadRunLedger';
@@ -176,19 +176,7 @@ export const nativeThreadsLayer: Layer.Layer<
         }
         const judged = input.model !== null && 'judged' in input.model ? input.model : null;
         const chosen = judged?.judged ?? { provider: source.provider, model: source.model, reasoning: source.reasoning };
-        const copying =
-          'fork' in asked.seed &&
-          asked.project === undefined &&
-          agentOf(source) === input.offer.baseAgentId &&
-          (source.profile?.id ?? null) === (input.offer.profile?.id ?? null) &&
-          source.provider === chosen.provider &&
-          modelOf(declared?.models() ?? null, source) === chosen.model &&
-          (source.reasoning === null || source.reasoning === chosen.reasoning);
-        const inherited = copying ? source : parent;
-        const switches =
-          chosen.model === null
-            ? inherited.switches
-            : yield* bornSwitches(inherited, { provider: chosen.provider, model: chosen.model }, judged?.switches ?? {});
+        const model = chosen.model;
         const profile = input.offer.profile ? { id: input.offer.profile.id, overlay: input.offer.profile } : null;
         if ('fork' in asked.seed) {
           const forked = yield* branch.fork({
@@ -207,16 +195,22 @@ export const nativeThreadsLayer: Layer.Layer<
               authority: input.authority,
               profile,
               capabilities: input.offer.capabilities,
-              rehomed: asked.project === undefined ? undefined : (true as const),
+              projectId: asked.project ?? parent.projectId ?? undefined,
               model:
-                chosen.model === null
+                model === null
                   ? undefined
                   : {
-                      account: copying ? source.account : null,
                       provider: chosen.provider,
-                      model: chosen.model,
+                      model,
                       reasoning: chosen.reasoning,
-                      switches,
+                      current: (row) => {
+                        const option = declared?.models().findTextModel(row.provider, row.model);
+                        const model = option?.id ?? row.model;
+                        return model === null
+                          ? null
+                          : { provider: row.provider, model, reasoning: row.reasoning ?? option?.defaultReasoning ?? null };
+                      },
+                      switches: (source) => bornSwitches(source ?? parent, { provider: chosen.provider, model }, judged?.switches ?? {}),
                     },
             },
             commit: (child: ThreadRow, tx: ThreadWriteTx) => inbox.put({ ...provision, threadId: child.id }, tx).pipe(Effect.asVoid),
@@ -231,6 +225,8 @@ export const nativeThreadsLayer: Layer.Layer<
             acted: true,
           };
         }
+        const switches =
+          model === null ? parent.switches : yield* bornSwitches(parent, { provider: chosen.provider, model }, judged?.switches ?? {});
         const birth = yield* store.transaction(
           Effect.fnUntraced(function* (tx) {
             const settled = yield* readBirthRecord(transitions, input.childId, key, tx);

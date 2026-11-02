@@ -306,6 +306,7 @@ export type ThreadBirth = {
   readonly creator?: ThreadRow;
   readonly carried: ThreadBirthCarried;
   readonly cut?: ThreadForkCut;
+  readonly sameIdentity?: boolean;
   readonly title?: string;
   readonly typeId?: string;
   readonly host?: ThreadHostBinding;

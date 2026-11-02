@@ -11,7 +11,14 @@ import { branchReading } from './BranchReading';
 import { spliceThreadHistory } from '../HistoryFold';
 import { ThreadRewindRefusedError } from '../rewind';
 import type { ThreadProfileBirth } from '../agents/AgentProfile';
-import { forkCutLabel, historyCannot, TransportCannotError, type ThreadForkCut, type TransportCapabilities } from '../record';
+import {
+  forkCutLabel,
+  historyCannot,
+  TransportCannotError,
+  type ThreadForkCut,
+  type ThreadModelSelection,
+  type TransportCapabilities,
+} from '../record';
 import { ThreadAgents } from '../agents/ThreadAgents';
 import { threadBranchEvent, threadEntryEvent, threadStepMessagesEvent } from '../events';
 import type { ThreadBranchedCut } from '../../transcript/eventFold';
@@ -58,13 +65,14 @@ export type ThreadDuplicateInput = {
     readonly authority?: ThreadAuthority;
     readonly profile?: ThreadProfileBirth | null;
     readonly capabilities?: TransportCapabilities;
-    readonly rehomed?: true;
+    readonly projectId?: number;
     readonly model?: {
       readonly account?: string | null;
       readonly provider: string;
       readonly model: string;
       readonly reasoning: string | null;
-      readonly switches: ModelSwitches;
+      current(source: ThreadMetadataRow): ThreadModelSelection | null;
+      switches(source: ThreadMetadataRow | null): Effect.Effect<ModelSwitches, ThreadBorderFailed>;
     };
   };
   commit?: (child: ThreadRow, tx: ThreadWriteTx) => Effect.Effect<void, ThreadBorderFailed>;
@@ -163,8 +171,18 @@ export const makeThreadBranch = Effect.gen(function* () {
         const sameAgent = input.agentId === undefined || input.agentId === agentOf(source);
         const selected: ThreadProfileBirth | null =
           input.spawned !== undefined ? (input.spawned.profile ?? null) : sameAgent ? source.profile : null;
-        const agentChanged = input.spawned?.rehomed === true || !sameAgent || (selected?.id ?? null) !== (source.profile?.id ?? null);
-        const profile = agentChanged ? selected : source.profile;
+        const model = input.spawned?.model;
+        const current = model?.current(source);
+        const sameIdentity =
+          sameAgent &&
+          (selected?.id ?? null) === (source.profile?.id ?? null) &&
+          (input.spawned?.projectId === undefined || input.spawned.projectId === source.projectId) &&
+          (model === undefined ||
+            (current != null &&
+              current.provider === model.provider &&
+              current.model === model.model &&
+              current.reasoning === model.reasoning));
+        const profile = sameIdentity ? source.profile : selected;
         const cut = yield* carriedCut(input, source, tx);
         const attribution = cut.kind === 'before' || cut.kind === 'turns' ? yield* attributions.read(source.id, version.head, tx) : null;
         if (cut.kind === 'turns' && attribution!.size !== source.history.length) {
@@ -181,7 +199,7 @@ export const makeThreadBranch = Effect.gen(function* () {
           sourceId: source.id,
           childId,
           entries: before === null ? planned.entries : { kind: 'kept', taken: before },
-          prompts: agentChanged ? 'dropped' : 'kept',
+          prompts: sameIdentity ? 'kept' : 'dropped',
         };
         const values = {
           id: childId,
@@ -193,15 +211,15 @@ export const makeThreadBranch = Effect.gen(function* () {
           hostKind: source.hostKind || undefined,
           hostId: source.hostKind ? source.hostId : undefined,
           bindings: input.bindings,
-          account: input.spawned?.model ? (input.spawned.model.account ?? null) : source.account,
-          provider: input.spawned?.model?.provider ?? source.provider,
-          model: input.spawned?.model ? input.spawned.model.model : source.model,
-          reasoning: input.spawned?.model ? input.spawned.model.reasoning : source.reasoning,
-          switches: input.spawned?.model?.switches ?? source.switches,
+          account: sameIdentity ? source.account : (model?.account ?? null),
+          provider: model?.provider ?? source.provider,
+          model: model?.model ?? source.model,
+          reasoning: model === undefined ? source.reasoning : model.reasoning,
+          switches: model === undefined ? (sameIdentity ? source.switches : {}) : yield* model.switches(sameIdentity ? source : null),
           capabilities: input.spawned?.capabilities,
           authority: input.spawned?.authority ?? source.authority,
           profile: profile ?? undefined,
-          systemPrompt: agentChanged ? undefined : source.systemPrompt,
+          systemPrompt: sameIdentity ? source.systemPrompt : undefined,
         };
         const answer = carried.history.length > planned.history.length ? (carried.history[carried.history.length - 1] ?? null) : null;
         const reading = yield* branchReading({
@@ -209,12 +227,13 @@ export const makeThreadBranch = Effect.gen(function* () {
           source: source.history,
           carried: carried.history,
           sourcePrompt: source.systemPrompt,
-          promptDropped: agentChanged,
+          promptDropped: !sameIdentity,
         });
         return {
           source,
           version,
           cut,
+          sameIdentity,
           values,
           seed,
           history: carried.history,
@@ -325,6 +344,7 @@ export const makeThreadBranch = Effect.gen(function* () {
               creator: creator ?? undefined,
               carried: cut.kind,
               cut,
+              sameIdentity: prepared.sameIdentity,
               title: input.title,
               place: input.place,
             },

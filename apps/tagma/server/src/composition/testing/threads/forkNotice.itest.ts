@@ -18,6 +18,7 @@ import { refusalSchema } from '../../../platform/contract/wire/refusal.js';
 import { knownAnswer } from '../../../platform/contract/wire/operation.js';
 import { COLLABORATION_OPERATIONS } from '../../../threads/contract/wire/operations/collaboration.js';
 import { NativeStorage, ThreadHarness } from '../../../threads/contract/service/engine.js';
+import { ThreadMandate } from '../../../threads/contract/service/mandate.js';
 import { birthsOf, turnsOf } from '../../../threads/testing/doubles.js';
 import { Coverage } from '../../../workspace/contract/service/roots.js';
 import { DoorFixture, doorFixture, projectLeaving } from '../doorFixture.js';
@@ -215,9 +216,9 @@ it.live('native forks preserve request bytes across birth doors, history cuts an
       .id;
     const spawn = (input: object, caller: string) =>
       world.op('spawn_agent', input, at, { [GRANT_HEADER]: grantFor(caller), [APPROVAL_WAIT_HEADER]: '0' });
-    const forked = Effect.fnUntraced(function* (cut: 'all' | number | { before: string }, own = false) {
+    const forked = Effect.fnUntraced(function* (cut: 'all' | number | { before: string }, own = false, model?: string) {
       const caller = own ? source : spawner;
-      const ask = { agentId: 'fork-profile', task: 'Say what it does.', fork: cut, forkFrom: own ? undefined : source };
+      const ask = { agentId: 'fork-profile', task: 'Say what it does.', fork: cut, forkFrom: own ? undefined : source, model };
       const first = (yield* spawn(ask, caller)).body;
       const started = yield* decodeSpawn(
         Schema.is(refusalSchema)(first) && first.code === 'instructions-unread' ? (yield* spawn(ask, caller)).body : first,
@@ -227,6 +228,27 @@ it.live('native forks preserve request bytes across birth doors, history cuts an
       return started.threadId;
     });
     const started = yield* forked('all');
+    expect(
+      (yield* world.op(
+        'write_setting',
+        {
+          key: 'agent.models',
+          value: [{ provider: 'subscription', model: 'claude-haiku-5-5', reasoning: 'low', on: true }],
+        },
+        at,
+      )).status,
+    ).toBe(200);
+    const changed = yield* forked('all', false, 'claude-haiku-5-5');
+    const changedRow = yield* Context.get(world.runtime.owners, NativeStorage).threads.metadata(changed);
+    expect(changedRow?.profile?.overlay.tools).toEqual(['read']);
+    expect(changedRow?.account).toBeNull();
+    expect(changedRow?.switches).toEqual({});
+    expect((yield* Context.get(world.runtime.owners, ThreadMandate).teamLineage(changed)).own).toBeNull();
+    expect(asked.find((request) => request.lane === changed && request.stepped)?.tools.map((tool) => tool.name)).toEqual([
+      'read',
+      'send_message',
+      'tool_search',
+    ]);
     const secondRun = yield* turn(source, 'Say what it does.');
 
     const of = (lane: string) => asked.filter((request) => request.lane === lane && request.stepped);
