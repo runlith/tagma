@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs';
-import { Cause, Clock, Context, Effect, Semaphore } from 'effect';
+import { Cause, Clock, Context, Effect, Latch, Semaphore } from 'effect';
 import type { StoreFailure } from '../../platform/contract/service/store.js';
 import { OwnGitFailed, runGitBytes } from '../../platform/git/ownGit.js';
 import type { Git } from '@runlith/git/Git';
@@ -15,9 +15,9 @@ const PATHSPEC = [CHECKOUT_DIRECTORY, `:(exclude)${CHECKOUT_DIRECTORY}/${WORKFLO
 
 const PUBLISH_ATTEMPTS = 3;
 
-const QUIET_MS = 10_000;
+const AFTER_CODE_MS = 60_000;
 
-const CEILING_MS = 120_000;
+const IDLE_MS = 600_000;
 
 const RETRY_FIRST_MS = 1_000;
 
@@ -44,6 +44,7 @@ export type TreeCommitReport = {
 export const TreeCommits = Context.Reference<
   | {
       readonly carry: (paths: readonly string[]) => Effect.Effect<void>;
+      readonly moved: (head: string | null) => Effect.Effect<void>;
       readonly commit: Effect.Effect<SyncAnswer, OwnGitFailed | StoreFailure>;
       readonly uncommitted: Effect.Effect<number, OwnGitFailed>;
     }
@@ -111,12 +112,30 @@ export type TreeCommitsOptions = {
 
 export function treeCommits(options: TreeCommitsOptions): NonNullable<Context.Service.Shape<typeof TreeCommits>> {
   const { git, checkout, treeRoot, journal, permit, policy, fork } = options;
-  let pending: { since: number; last: number } | null = null;
+  let pending: { since: number } | null = null;
+  let coded: number | null = null;
+  let head: string | null | undefined;
+  const ours = new Map<string, string | null>();
   let settling = false;
   let written = new Set<string>();
   let failures = 0;
   let owed: OwedSettlement | null = null;
   const serial = Semaphore.makeUnsafe(1);
+  const nudge = Latch.makeUnsafe(false);
+
+  const dueOf = (open: { since: number }): number =>
+    coded !== null && coded + AFTER_CODE_MS >= open.since ? Math.min(coded + AFTER_CODE_MS, open.since + IDLE_MS) : open.since + IDLE_MS;
+
+  const onlyOurs = (to: string | null, from: string | null): boolean => {
+    let at = to;
+    while (at !== from) {
+      if (at === null) return false;
+      const parent = ours.get(at);
+      if (parent === undefined) return false;
+      at = parent;
+    }
+    return true;
+  };
 
   const dirt = Effect.map(
     runGitBytes(git, 'graph-dirty', [
@@ -161,6 +180,7 @@ export function treeCommits(options: TreeCommitsOptions): NonNullable<Context.Se
         const paths = yield* dirt;
         if (paths.length === 0 && written.size === 0) {
           if (pending === taken) pending = null;
+          coded = null;
           return { kind: 'clean' } as const;
         }
         let acted = new Set<string>();
@@ -205,7 +225,9 @@ export function treeCommits(options: TreeCommitsOptions): NonNullable<Context.Se
         }
         if (published.kind === 'held') return published;
         if (pending === taken) pending = null;
+        coded = null;
         if (published.kind === 'clean') return published;
+        ours.set(published.commit, published.base);
         if (published.unsettled !== null) {
           yield* Effect.logWarning('a graph commit landed and the checkout index kept some of its paths as they stood', {
             tree: treeRoot,
@@ -226,12 +248,13 @@ export function treeCommits(options: TreeCommitsOptions): NonNullable<Context.Se
   const settle = Effect.gen(function* () {
     for (;;) {
       for (;;) {
+        nudge.closeUnsafe();
         const open = pending;
         if (open === null) return;
-        const due = Math.min(open.last + QUIET_MS, open.since + CEILING_MS);
+        const due = dueOf(open);
         const now = yield* Clock.currentTimeMillis;
         if (now >= due) break;
-        yield* Effect.sleep(due - now);
+        yield* Effect.raceFirst(Effect.sleep(due - now), nudge.await);
       }
       const outcome = yield* Effect.exit(Effect.flatMap(policy, (chosen) => (chosen === 'auto' ? commit : Effect.succeed(null))));
       if (outcome._tag === 'Success') {
@@ -255,14 +278,28 @@ export function treeCommits(options: TreeCommitsOptions): NonNullable<Context.Se
   const due = Effect.fnUntraced(function* (paths: readonly string[]) {
     const now = yield* Clock.currentTimeMillis;
     for (const path of paths) written.add(path);
-    pending = { since: pending?.since ?? now, last: now };
+    pending ??= { since: now };
     if (settling) return;
     settling = true;
     fork(settle);
   });
 
+  const moved = (next: string | null): Effect.Effect<void> =>
+    serial.withPermits(1)(
+      Effect.gen(function* () {
+        const seen = head;
+        head = next;
+        const own = seen === undefined || onlyOurs(next, seen);
+        ours.clear();
+        if (own || next === null) return;
+        coded ??= yield* Clock.currentTimeMillis;
+        nudge.openUnsafe();
+      }),
+    );
+
   return {
     carry: due,
+    moved,
     commit,
     uncommitted: Effect.map(dirt, (paths) => new Set(paths).size),
   };

@@ -55,7 +55,7 @@ layer(demoGraphLayer(), { excludeTestServices: true })('graph format delivery', 
                 Effect.provideService(TreeCommits, commits),
               ),
             ).toBe(true);
-            yield* TestClock.adjust(10_000);
+            yield* TestClock.adjust('10 minutes');
             yield* Queue.take(landed);
           }).pipe(Effect.provide(TestClock.layer())),
         );

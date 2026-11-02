@@ -150,6 +150,7 @@ export type CheckoutPublished =
   | {
       readonly kind: 'committed';
       readonly commit: string;
+      readonly base: string | null;
       readonly files: number;
       readonly unsettled: string | null;
       readonly owed: OwedSettlement;
@@ -230,6 +231,7 @@ export const publishToCheckout = Effect.fnUntraced(function* (
   return {
     kind: 'committed',
     commit: published.commit,
+    base,
     files: entries.length,
     unsettled,
     owed: { ref, entries: owedOf(entries, settled) },

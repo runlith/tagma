@@ -3,7 +3,7 @@ import { CurrentCost } from '@runlith/performance/CostLedger';
 import { Handover } from '@runlith/sqlite-process/SqliteProcess';
 import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { Clock, Context, Effect, FiberSet, FileSystem, Layer, ManagedRuntime, Scope, Semaphore, Tracer } from 'effect';
+import { Clock, Context, Effect, FiberSet, FileSystem, Layer, ManagedRuntime, Scope, Semaphore, Stream, Tracer } from 'effect';
 import { unmergedTracker } from '../../platform/git/unmerged.js';
 import { treeCommitter } from './committer.js';
 import { STAGING_PATHSPEC } from '../tree/atomicFile.js';
@@ -320,6 +320,7 @@ export const makeMirrorBuilder = Effect.fnUntraced(function* ({
               };
               const checkoutChanged = Effect.suspend(() => (temporary ? Effect.void : committer().carry([])));
               const commits = layout.mode === 'team' && !temporary ? committer() : undefined;
+              if (commits !== undefined) fork(Stream.runForEach(input.heads(checkout), (moved) => commits.moved(moved.head)));
               const poolContext = Context.add(Context.add(opening, VocabularyFormat, format), TreeCommits, commits);
               const filled = yield* refused(fill(poolContext, row, layout, stealthRoot, shadow, opened.standing, input.scan));
               const advance = (fromTree: boolean) =>
@@ -627,6 +628,7 @@ export const makeMirrorBuilder = Effect.fnUntraced(function* ({
                 )),
             siblings: () => Effect.succeed({ blocked: undefined, copyFailures: [] }),
             committed: () => undefined,
+            heads: () => Stream.empty,
             temporary: true,
           });
           if (target !== undefined) {

@@ -91,11 +91,13 @@ const VERBS: Record<Exclude<GraphEventOp, 'create'>, string> = {
 const weightOf = (op: GraphEventOp, node: NamedBlock, table: TagReading): number =>
   table.supports(node, SPEC) && (op === 'create' || op === 'close')
     ? 0
-    : table.supports(node, WORK) && (op === 'create' || op === 'done')
+    : table.supports(node, WORK) && op === 'done'
       ? 1
-      : table.supports(node, LAW) && op === 'create'
+      : table.supports(node, WORK) && op === 'create'
         ? 2
-        : 3;
+        : table.supports(node, LAW) && op === 'create'
+          ? 3
+          : 4;
 
 const named = (scope: TreeScope, node: NamedBlock): boolean => scope === 'whole' || (scope === 'stealth' ? node.stealth : !node.stealth);
 
@@ -107,7 +109,7 @@ const actLine = Effect.fnUntraced(function* (
 ): Effect.fn.Return<ActLine | null> {
   if (entry.blockId === null) {
     if (entry.op === 'create' || scope === 'stealth') return null;
-    return { verb: VERBS[entry.op], name: null, title: '', kind: PROJECT, weight: 3 };
+    return { verb: VERBS[entry.op], name: null, title: '', kind: PROJECT, weight: 4 };
   }
   const stored = blocks.get(entry.blockId);
   if (stored === undefined || !named(scope, stored)) return null;

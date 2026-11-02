@@ -60,7 +60,7 @@ export const graphCommit = settingKey({
   control: {
     kind: 'choice',
     choices: [
-      { value: 'auto', label: 'Tagma', hint: 'Tagma commits the block tree itself, in its own commit stream on the branch.' },
+      { value: 'auto', label: 'Tagma', hint: 'Tagma commits the block tree itself, in its own commit after each code commit.' },
       { value: 'manual', label: 'On sync', hint: 'Only an explicit sync commits it.' },
       { value: 'off', label: 'Nobody', hint: 'The tree stands in the checkout as ordinary uncommitted work.' },
     ],

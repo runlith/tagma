@@ -15,6 +15,8 @@ import { commitJournal, startCommitJournals } from './message.js';
 
 const BASE = 'the code and its graph';
 const SYNCED = 'Sync graph files';
+const AFTER_CODE = 60_000;
+const IDLE = 600_000;
 const fixtures = demoGraphLayer({
   projects: ['code'],
   prepareEffect: Effect.fnUntraced(function* (demo: EffectDemo) {
@@ -212,12 +214,12 @@ layer(fixtures, { excludeTestServices: true })('the tree committer', (it) => {
         const refusal = w.refuse((args) => args.includes('ls-tree') && args.includes('--full-tree'));
         yield* w.wrote('born.md', 'a block whose index entry was never written\n');
         yield* w.commits.carry([]);
-        yield* TestClock.adjust(10_000);
+        yield* TestClock.adjust(IDLE);
         yield* refusal;
         expect(yield* w.landed).toHaveLength(2);
         expect(yield* w.graphStatus(`${CHECKOUT_DIRECTORY}/demo/born.md`)).toEqual(['?? .tagma/demo/born.md', 'D  .tagma/demo/born.md']);
         yield* w.wrote('later.md', 'a block nobody acted on since\n');
-        yield* TestClock.adjust(10_000);
+        yield* TestClock.adjust(IDLE);
         expect(yield* w.landed).toHaveLength(3);
         expect(yield* w.graphStatus(`${CHECKOUT_DIRECTORY}/demo/born.md`)).toEqual([]);
       }),
@@ -265,28 +267,34 @@ layer(fixtures, { excludeTestServices: true })('the tree committer', (it) => {
     ),
   );
 
-  it.effect('closes one batch after quiet and at the ceiling while acts keep arriving', () =>
-    withClock((w) =>
-      Effect.gen(function* () {
-        yield* w.commits.carry([]);
-        yield* TestClock.adjust(1_000);
-        yield* w.wrote('born.md', 'the first act\n');
-        yield* w.commits.carry([]);
-        yield* TestClock.adjust(9_999);
-        expect(yield* w.subjects).toEqual([BASE]);
-        yield* TestClock.adjust(1);
-        expect(yield* w.landed).toEqual([SYNCED, BASE]);
-        yield* w.wrote('later.md', 'an act inside a burst that never pauses\n');
-        for (let age = 0; age < 117_000; age += 9_000) {
+  it.effect(
+    'commits a batch a minute after a code commit, ten minutes after its first act without one, and never sooner for its own commit',
+    () =>
+      withClock((w) =>
+        Effect.gen(function* () {
+          const fs = yield* FileSystem.FileSystem;
+          const head = Effect.flatMap(w.run(['rev-parse', 'HEAD']), w.commits.moved);
+          yield* head;
+          yield* w.wrote('born.md', 'an act no code commit follows\n');
           yield* w.commits.carry([]);
-          yield* TestClock.adjust(9_000);
-        }
-        expect(yield* w.subjects).toHaveLength(2);
-        yield* w.commits.carry([]);
-        yield* TestClock.adjust(3_000);
-        expect(yield* w.landed).toEqual([SYNCED, SYNCED, BASE]);
-      }),
-    ),
+          yield* TestClock.adjust(IDLE - 1);
+          expect(yield* w.subjects).toEqual([BASE]);
+          yield* TestClock.adjust(1);
+          expect(yield* w.landed).toEqual([SYNCED, BASE]);
+          yield* head;
+          yield* w.wrote('later.md', 'an act the graph commit before it does not hurry\n');
+          yield* w.commits.carry([]);
+          yield* TestClock.adjust(2 * AFTER_CODE);
+          expect(yield* w.subjects).toEqual([SYNCED, BASE]);
+          yield* fs.writeFileString(join(w.base, 'src/a.ts'), 'export const a = 2;\n');
+          yield* w.run(['-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '-m', 'code', '--', 'src/a.ts']);
+          yield* head;
+          yield* TestClock.adjust(AFTER_CODE - 1);
+          expect(yield* w.subjects).toEqual(['code', SYNCED, BASE]);
+          yield* TestClock.adjust(1);
+          expect(yield* w.landed).toEqual([SYNCED, 'code', SYNCED, BASE]);
+        }),
+      ),
   );
 
   it.effect('resumes auto after manual and off, then ends its fiber before the served graph is released', () =>
@@ -296,7 +304,7 @@ layer(fixtures, { excludeTestServices: true })('the tree committer', (it) => {
           w.answers(answer);
           yield* w.wrote(`${answer}.md`, 'an act nobody committed\n');
           yield* w.commits.carry([]);
-          yield* TestClock.adjust(130_000);
+          yield* TestClock.adjust(IDLE);
           expect(yield* w.subjects).toEqual([BASE]);
         }
         w.answers('auto');
@@ -310,7 +318,7 @@ layer(fixtures, { excludeTestServices: true })('the tree committer', (it) => {
         yield* w.wrote('born.md', 'an act whose graph was disposed\n');
         yield* w.commits.carry([]);
         yield* Scope.close(w.scope, Exit.void);
-        yield* TestClock.adjust(130_000);
+        yield* TestClock.adjust(IDLE);
         expect(yield* w.subjects).toEqual([SYNCED, BASE]);
         expect(yield* w.graphStatus()).toEqual(['?? .tagma/demo/born.md']);
       }),
@@ -373,7 +381,7 @@ layer(fixtures, { excludeTestServices: true })('the tree committer', (it) => {
         const w = yield* checkout(demo);
         yield* w.wrote('born.md', 'an act whose unit closed before its batch settled\n');
         yield* demo.graph.graphStore.transaction('commits.itest.act', () => w.commits.carry([]));
-        yield* TestClock.adjust(10_000);
+        yield* TestClock.adjust(IDLE);
         expect(yield* w.landed).toEqual([SYNCED, BASE]);
       }).pipe(Effect.provide(TestClock.layer())),
     ),

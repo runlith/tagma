@@ -1,4 +1,5 @@
-import { Context, Effect, type Scope } from 'effect';
+import { Context, Effect, type Scope, type Stream } from 'effect';
+import type { HeadMoved } from '../../../workspace/contract/service/checkouts.js';
 import type { GraphStore, StoreFailure, StoreOpenFailure } from '../../../platform/contract/service/store.js';
 import type { OwnGitFailed } from '../../../platform/git/ownGit.js';
 import type { GraphUnits } from '../../../platform/contract/service/units.js';
@@ -287,6 +288,7 @@ export type MirrorBuildInput = {
   readonly resolveProject: (projectId: number) => Effect.Effect<GraphContext, GateRefusal<OpenRefusal>>;
   readonly siblings: (place: SiblingPlace) => Effect.Effect<SiblingReading, GateRefusal<'graph-pool'>>;
   readonly committed: () => void;
+  readonly heads: (checkout: string) => Stream.Stream<HeadMoved>;
   readonly temporary?: boolean;
 };
 

@@ -395,6 +395,7 @@ export const makeGraphPool = Effect.gen(function* () {
               siblings: freshnessGate.siblings,
               resolveProject,
               committed: () => exchange.committed(row.id),
+              heads: (at) => checkoutRows.headMoved(at),
             }),
           ));
         const release = prepared?.release ?? Effect.promise(() => built.dispose());
