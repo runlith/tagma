@@ -7,7 +7,7 @@ import { CANCELLED, failed, user, type Ended, type Heard } from './calls.js';
 import type { Commanded } from './channel.js';
 import type { Feed } from './feed.js';
 import type { Lifecycle } from './lifecycle.js';
-import type { Mark, Spend } from './spend.js';
+import type { Mark, Settled, Spend } from './spend.js';
 
 export type Compacted = {
   readonly preTokens: number;
@@ -30,7 +30,11 @@ type Pending = {
   cancelled: boolean;
   sent: boolean;
   command: string | null;
+  last: string | null;
 };
+
+const marked = (spend: Settled, last: string | null) =>
+  last === null ? spend : { ...spend, _meta: { ...spend._meta, 'tagma/turn': { last } } };
 
 export class Compaction {
   private pending: Pending | null = null;
@@ -58,6 +62,7 @@ export class Compaction {
       cancelled: false,
       sent: false,
       command: null,
+      last: null,
     };
     this.pending = pending;
     this.boundary = null;
@@ -77,7 +82,17 @@ export class Compaction {
 
   readonly step = Effect.fnUntraced(function* (this: Compaction, instructions: string) {
     const done = yield* Deferred.make<Compacted, AgentFault>();
-    const pending: Pending = { done, baseline: null, instructions, step: true, failure: null, cancelled: false, sent: true, command: null };
+    const pending: Pending = {
+      done,
+      baseline: null,
+      instructions,
+      step: true,
+      failure: null,
+      cancelled: false,
+      sent: true,
+      command: null,
+      last: null,
+    };
     this.pending = pending;
     this.boundary = null;
     yield* this.switched(true).pipe(
@@ -172,6 +187,7 @@ export class Compaction {
     boundary.summary = summary;
     const pending = this.pending;
     if (pending === null || pending.step) this.boundary = null;
+    else pending.last = message.uuid ?? null;
     yield* this.feed.notify(COMPACTED, {
       trigger: boundary.trigger,
       preTokens: boundary.preTokens,
@@ -184,6 +200,11 @@ export class Compaction {
     }
     return true;
   });
+
+  recorded(uuid: string | undefined): void {
+    const pending = this.pending;
+    if (pending !== null && !pending.step && pending.last !== null && uuid !== undefined) pending.last = uuid;
+  }
 
   readonly finished = Effect.fnUntraced(function* (this: Compaction, result: Ended) {
     const pending = this.pending;
@@ -205,7 +226,7 @@ export class Compaction {
     this.pending = null;
     const boundary = this.boundary;
     this.boundary = null;
-    const spend = pending.baseline === null ? {} : this.spend.settled(pending.baseline);
+    const spend = marked(pending.baseline === null ? {} : this.spend.settled(pending.baseline), pending.last);
     if (pending.cancelled) {
       yield* Deferred.fail(pending.done, new AgentFault({ code: CANCELLED, message: 'the compaction was cancelled', data: spend }));
       return true;

@@ -1370,29 +1370,32 @@ const hooked = (session: { readonly sdk: ScriptedSdk }, event: 'PreCompact' | 'P
   });
 
 describe('compact', () => {
-  it.live('answers the sizes, the summary and the spend, and tells the client what was compacted', () =>
-    Effect.gen(function* () {
-      const session = yield* open({});
-      const compacting = yield* started(session.extension(COMPACT, { instructions: 'keep names' }));
-      yield* session.sdk.first.arrived(1);
-      expect(session.sdk.first.received[0]?.message.content).toBe('/compact');
-      expect(yield* hooked(session, 'PreCompact', 'manual')).toEqual({ systemMessage: 'keep names' });
-      session.sdk.first.emit(...boundary('manual', 'the story so far'), resultOf(300, 40, 0.5));
-      const answered = yield* Fiber.join(compacting);
-      expect(answered).toMatchObject({
-        preTokens: 9000,
-        postTokens: 1000,
-        summary: 'the story so far',
-        usage: { inputTokens: 300, outputTokens: 40 },
-        _meta: { 'tagma/cost': { amount: 0.5, currency: 'USD' } },
-      });
-      expect(session.notices).toEqual([
-        {
-          method: COMPACTED,
-          params: { sessionId: session.sessionId, trigger: 'manual', preTokens: 9000, postTokens: 1000, summary: 'the story so far' },
-        },
-      ]);
-    }),
+  it.live(
+    'answers the sizes, the summary, the spend and the record ending the compacted transcript, and tells the client what was compacted',
+    () =>
+      Effect.gen(function* () {
+        const session = yield* open({});
+        const compacting = yield* started(session.extension(COMPACT, { instructions: 'keep names' }));
+        yield* session.sdk.first.arrived(1);
+        expect(session.sdk.first.received[0]?.message.content).toBe('/compact');
+        expect(yield* hooked(session, 'PreCompact', 'manual')).toEqual({ systemMessage: 'keep names' });
+        const folded = boundary('manual', 'the story so far');
+        session.sdk.first.emit(...folded, resultOf(300, 40, 0.5));
+        const answered = yield* Fiber.join(compacting);
+        expect(answered).toMatchObject({
+          preTokens: 9000,
+          postTokens: 1000,
+          summary: 'the story so far',
+          usage: { inputTokens: 300, outputTokens: 40 },
+          _meta: { 'tagma/cost': { amount: 0.5, currency: 'USD' }, 'tagma/turn': { last: (folded[1] as { uuid: string }).uuid } },
+        });
+        expect(session.notices).toEqual([
+          {
+            method: COMPACTED,
+            params: { sessionId: session.sessionId, trigger: 'manual', preTokens: 9000, postTokens: 1000, summary: 'the story so far' },
+          },
+        ]);
+      }),
   );
 
   it.live('tells the client of a compaction Claude Code made on its own', () =>

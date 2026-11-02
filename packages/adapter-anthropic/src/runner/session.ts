@@ -178,7 +178,9 @@ export class ClaudeSession implements Listener {
             )
           : this.feed.streamed(message.event);
       case 'assistant':
-        return message.parent_tool_use_id === null ? Effect.andThen(this.turn.assistant(message), this.feed.titled()) : Effect.void;
+        if (message.parent_tool_use_id !== null) return Effect.void;
+        this.compaction.recorded(message.uuid);
+        return Effect.andThen(this.turn.assistant(message), this.feed.titled());
       case 'user':
         return Effect.andThen(this.spoken(message), this.feed.titled());
       case 'system':
@@ -217,6 +219,7 @@ export class ClaudeSession implements Listener {
     yield* this.feed.heard();
     if ('isReplay' in message && message.isReplay === true) return yield* this.turn.echoed(message);
     if (yield* this.compaction.summarized(message)) return;
+    this.compaction.recorded(message.uuid);
     yield* this.turn.heard(message);
   });
 
