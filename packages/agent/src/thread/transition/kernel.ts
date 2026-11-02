@@ -310,16 +310,15 @@ const applyPrepared = Effect.fnUntraced(function* <A, TTx, TWrite extends TTx, E
 const SHOWN_COLUMNS: ReadonlySet<string> = new Set(['contextReading', 'pendingInteraction']);
 const FOLDED_ONLY: ReadonlySet<string> = new Set(['history', 'covered', 'placements', 'cacheObservations']);
 function shownFold(fold: ThreadAtomicPatch, stamped: Date): ThreadMetadataChange | null {
-  const keys = Object.keys(fold);
-  if (keys.length === 0) return {};
-  const shown: Record<string, unknown> = { updatedAt: stamped };
-  for (const key of keys) {
-    const value = (fold as Readonly<Record<string, unknown>>)[key];
-    if (value === undefined || FOLDED_ONLY.has(key)) continue;
-    if (!SHOWN_COLUMNS.has(key)) return null;
-    shown[key] = value === null ? null : JSON.parse(JSON.stringify(value));
+  const fields = Object.entries(fold);
+  if (fields.length === 0) return {};
+  for (const [key, value] of fields) {
+    if (value !== undefined && !FOLDED_ONLY.has(key) && !SHOWN_COLUMNS.has(key)) return null;
   }
-  return shown as ThreadMetadataChange;
+  const shown: ThreadMetadataChange = { updatedAt: stamped };
+  if (fold.contextReading !== undefined) shown.contextReading = fold.contextReading;
+  if (fold.pendingInteraction !== undefined) shown.pendingInteraction = fold.pendingInteraction;
+  return shown;
 }
 function recordsUnseen(evidence: Evidence): boolean {
   if ('call' in evidence) return callParts(evidence.call).operation !== INPUT_OPERATION;
