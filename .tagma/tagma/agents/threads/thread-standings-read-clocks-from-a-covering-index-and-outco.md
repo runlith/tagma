@@ -15,5 +15,7 @@ sources:
     ref: apps/tagma/server/drizzle/20261102151500_thread_clock/migration.sql
   - kind: file
     ref: apps/tagma/server/src/threads/list/store.ts
+  - kind: file
+    ref: apps/tagma/server/drizzle/20261102151500_thread_clock/heavy.json
 ---
 A thread's activity timestamp shares a row with large prompt and state payloads, so a narrow clock lookup must be covered without loading that row. Standings select the covering index explicitly because SQLite otherwise prefers the unique primary-key lookup and fetches the payload. The outcome selector uses the same literal terminal predicate as its partial index: parameterizing that fixed set prevents SQLite from matching the index and makes each thread sort its run history. Delivered keep-warm runs remain excluded from the selected outcome.
