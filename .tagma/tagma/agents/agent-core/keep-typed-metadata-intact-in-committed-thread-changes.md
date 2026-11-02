@@ -12,4 +12,4 @@ edges:
   - kind: relates
     to: 01a190e8-4cc1-7d06-8ccf-bdeb546133ca
 ---
-Fix transition publication losing schema-backed values when it copies committed thread metadata. Prove that a running thread's context measurement crosses thread.subscribe, with the regression failing before the producer fix; retain exact snapshot revisions and incremental publication.
+Committed metadata now remains a typed in-process projection instead of losing schema-backed values in a JSON copy. The real WebSocket thread.subscribe regression failed before the fix with the reported LLM.Usage error and exact field path, then passed seeds 1–3; the server typecheck (including agent) and 23 targeted snapshot/transition cases passed. Commit: c859b5f4be.
