@@ -23,6 +23,6 @@ Missing tags are named by one refusal, all at once, with a "switch the catalog o
 
 `#tag` and `#catalog` nodes never arrive: the declaration holds the whole source graph's nodes, and the target's vocabulary is set by its catalogs and its `#tag`.
 
-The target's address edges into arriving blocks become ordinary and are judged against the arriving block: in the target vocabulary it may hold other contracts, and waiting on a block that is not work in the target would hold the task forever.
+The target's address edges and unresolved local edges into arriving blocks become ordinary and are judged against the arriving block: in the target vocabulary it may hold other contracts, and waiting on a block that is not work in the target would hold the task forever.
 
 `session`-type fields translate through the target's session register, as in [[5fead709]]. Arriving bodies' `[[…]]` references sync after the whole subtree is inserted, so a reference to a later-inserted block is also found.
