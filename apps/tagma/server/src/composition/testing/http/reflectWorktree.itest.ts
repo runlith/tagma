@@ -65,7 +65,7 @@ const answered = (outcome: Outcome) =>
 layer(Layer.effect(Place, setup).pipe(Layer.provideMerge(BunFileSystem.layer)), {
   excludeTestServices: true,
 })('reflections from a worktree', (it) => {
-  it.effect('a native filing chooses stealth at birth without publishing a team version, while an omitted choice inherits team', () =>
+  it.effect('a native filing is born stealth under a team parent without publishing a team version, and team only when chosen', () =>
     Effect.gen(function* () {
       const { world, project, area } = yield* Place;
       const born = yield* op('create_thread', { approvalMode: 'bypass' });
@@ -79,15 +79,17 @@ layer(Layer.effect(Place, setup).pipe(Layer.provideMerge(BunFileSystem.layer)), 
         expected: 'the named block',
         actual: 'a different block',
       };
-      const filed = yield* answered(yield* doors.atNative('file_reflection', { ...filing, storage: 'stealth' }, placed));
+      const filed = yield* answered(yield* doors.atNative('file_reflection', filing, placed));
       const name = (filed.block as { name: string }).name;
       expect(yield* read(name)).toMatchObject({ parentName: area, stealth: true });
       const events = yield* op('read_events', { blockId: name, limit: 2 });
       expect(events).toMatchObject({ status: 200, body: { events: [{ op: 'create' }], complete: true } });
       expect((yield* op('sync_graph', {})).status).toBe(200);
       expect(yield* suiteGitText(world.sourceCheckout, 'log', '--all', '--format=%H', '-S', filing.title, '--', '.tagma')).toBe('');
-      const inherited = yield* answered(yield* doors.atNative('file_reflection', { ...filing, title: 'an ordinary team filing' }, placed));
-      const teamName = (inherited.block as { name: string }).name;
+      const chosen = yield* answered(
+        yield* doors.atNative('file_reflection', { ...filing, title: 'a chosen team filing', storage: 'team' }, placed),
+      );
+      const teamName = (chosen.block as { name: string }).name;
       expect((yield* read(teamName)).stealth).toBeUndefined();
     }),
   );

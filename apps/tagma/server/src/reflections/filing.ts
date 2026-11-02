@@ -113,7 +113,7 @@ const fileAt = Effect.fn('Reflection.fileAt')(function* (
     title,
     body: yield* provenance(place, body?.trim()),
     fields: { [binding.command]: facts.command, [binding.expected]: facts.expected, [binding.actual]: facts.actual },
-    storage,
+    storage: storage ?? 'stealth',
   });
 });
 

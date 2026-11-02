@@ -250,6 +250,18 @@ const walkBlockTree = (root: string, base: string, top: string | null, visit: (b
   return walk(root, base, top);
 };
 
+export const graphRootIn = Effect.fnUntraced(function* (tree: string) {
+  if (!existsSync(tree)) return undefined;
+  const roots: string[] = [];
+  for (const entry of yield* listing(tree)) {
+    if (entry.name.startsWith('.')) continue;
+    const path = join(tree, entry.name);
+    if (entry.isDirectory() && existsSync(join(path, INDEX))) roots.push((yield* decode(join(path, INDEX))).frontmatter.id);
+    else if (entry.isFile() && entry.name.endsWith('.md')) roots.push((yield* decode(path)).frontmatter.id);
+  }
+  return roots.length === 1 ? roots[0] : undefined;
+});
+
 export const readBlockTree = Effect.fnUntraced(function* (root: string, stealth: string | null = null) {
   const rows: ScannedBlock[] = [];
   yield* visitBlockTree(root, (block) => rows.push(block));

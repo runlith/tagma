@@ -1,6 +1,6 @@
 import { mkdirSync, realpathSync, rmSync } from 'node:fs';
 import { totalmem } from 'node:os';
-import { basename, dirname, join } from 'node:path';
+import { basename, dirname, join, relative } from 'node:path';
 import { liveAttempt } from '../installation/closure/attempt.js';
 import { fileURLToPath } from 'node:url';
 import { Cause, Context, Effect, Exit, FileSystem, Layer, Result, Scope, Stream } from 'effect';
@@ -198,6 +198,13 @@ export const serve = async (build: Build): Promise<void> => {
     told: (line) => console.log(`[tagma] ${line}`),
   });
   const standing: Installation | undefined = read.success.handsOut;
+  const origin = installation?.manifest.origin?.checkout;
+  const codePath =
+    installation === undefined
+      ? build.cut.roots.server
+      : origin === undefined
+        ? undefined
+        : join(origin, relative(build.cut.roots.checkout, build.cut.roots.server));
   const executionHostPath = installation === undefined ? join(build.cut.roots.packages, 'execution-host') : undefined;
   const source =
     installation === undefined
@@ -428,6 +435,7 @@ export const serve = async (build: Build): Promise<void> => {
             sandboxPort,
             sites: localSites,
             sourcePath: serverPath,
+            codePath,
             source,
             userEnvironment,
             placedHost,

@@ -48,7 +48,7 @@ export const REFLECTION_FILING_OPERATIONS = {
       }),
       storage: Schema.optional(Schema.Literals(STORAGE_MODES)).annotate({
         description:
-          "Where this occurrence is born: team rides the repository, stealth stays in Tagma's data directory. Omit to inherit its parent's storage.",
+          "Where this occurrence is born: stealth, the default, stays in Tagma's data directory, since an entry carries this machine's places; team rides the repository.",
       }),
     }),
     refusals: [

@@ -59,6 +59,7 @@ export const WORLD_SOURCE = {
 
 type DoorParams = {
   readonly installation?: InstallationManifest;
+  readonly codePath?: string;
   readonly hostSourcePath?: string;
   readonly everySpan?: boolean;
   readonly drivers?: readonly DriverId[];
@@ -212,6 +213,7 @@ const built = Effect.fnUntraced(
         sandboxPort: options.sandboxPort,
         localOrigin: DOOR_ORIGIN,
         sourcePath: serverPath,
+        codePath: options.codePath,
         hostSourcePath: options.hostSourcePath,
         hostBundlePath,
         ...seams,
@@ -333,6 +335,7 @@ export const doorWorld = kind(DoorFixture, (params: DoorParams, home: string) =>
 
 const paramsOf = (options: WorldOptions): DoorParams => ({
   installation: options.installation,
+  codePath: options.codePath,
   hostSourcePath: options.hostSourcePath,
   everySpan: options.everySpan,
   drivers: options.drivers,

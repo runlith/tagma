@@ -87,6 +87,7 @@ layer(graphToolsFixture, { excludeTestServices: true })('graph queue pages', (it
           command: `command ${at}`,
           expected: `expected ${at}`,
           actual: `actual ${at}`,
+          storage: 'team',
         });
         expect(filed.status).toBe('ok');
       }

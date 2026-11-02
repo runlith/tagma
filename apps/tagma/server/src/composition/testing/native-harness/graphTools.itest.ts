@@ -771,6 +771,7 @@ layer(graphToolsFixture, { excludeTestServices: true })('native graph tools', (i
         command: 'tool call',
         expected: 'a native door',
         actual: 'a CLI fallback',
+        storage: 'team',
       });
       expect(filed.status).toBe('ok');
       expect(Array.isArray(filed.already)).toBe(true);

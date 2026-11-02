@@ -330,6 +330,7 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
     sandboxPort?: number;
     sites?: LocalSites;
     sourcePath: string;
+    codePath?: string;
     source?: ProcessProvenance;
     quotaProviders?: readonly AccountQuotaProvider[];
     profileWindowMs?: () => number;
@@ -394,6 +395,7 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
         Layer.succeed(GraphSource, {
           sourcePath: options.sourcePath,
           originPath,
+          codePath: options.codePath,
           source: reader,
         }),
       ),
@@ -793,6 +795,7 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
     Context.make(GraphSource, {
       sourcePath: options.sourcePath,
       originPath,
+      codePath: options.codePath,
       source: reader,
     }),
     Context.make(GraphMigrations, graphMigrations),

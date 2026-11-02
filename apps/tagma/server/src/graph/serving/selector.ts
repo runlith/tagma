@@ -2,10 +2,10 @@ import { Effect } from 'effect';
 import { Projects } from '../../projects/contract/service/registry.js';
 import type { ProjectRefusal, ProjectRow } from '../../projects/contract/wire/project.js';
 import type { StoreFailure } from '../../platform/contract/service/store.js';
-import { GateRefusal, type GitRefusal } from '../../platform/contract/wire/refusal.js';
-import { SourceProject } from '../contract/service/source.js';
+import { GateRefusal } from '../../platform/contract/wire/refusal.js';
+import { SourceProject, type SourceRefusal } from '../contract/service/source.js';
 
-export type SelectorRefusal = ProjectRefusal | GitRefusal | 'global-missing' | 'no-home';
+export type SelectorRefusal = ProjectRefusal | SourceRefusal | 'global-missing' | 'no-home';
 
 export const resolveProject = Effect.fn('graph.resolveProject')(function* (
   selector: string | number,

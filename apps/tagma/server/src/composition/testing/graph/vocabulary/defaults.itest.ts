@@ -148,6 +148,7 @@ layer(demoGraphLayer({ projects: ['elsewhere'] }))('creation defaults', (it) => 
           actual: 'a refusal',
           project: 'elsewhere',
           cwd: origin.root,
+          storage: 'team' as const,
         };
         const first = yield* fileReflection(filing);
         expect(first.entry.projectId).toBe(projectId);

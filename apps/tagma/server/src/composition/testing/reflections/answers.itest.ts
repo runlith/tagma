@@ -8,18 +8,25 @@ import { fileReflection, filedReflections } from '../../../reflections/filing.js
 
 const testActing = writes('test', []);
 const facts = { command: 'tagma x', expected: 'one act', actual: 'four calls' };
-const file = Effect.map(fileReflection({ title: 'friction', ...facts }), (filed) => filed.entry.id);
+const team = { storage: 'team' as const };
+const file = Effect.map(fileReflection({ title: 'friction', ...facts, ...team }), (filed) => filed.entry.id);
 const standing = Effect.map(filedReflections(undefined, 100), (page) => page.rows.map((row) => row.id));
 
 layer(demoGraphLayer(), { excludeTestServices: true })('a reflection stops standing when something answers it', (it) => {
   it.effect('a filing carries its body with its facts, and a recurring sighting is its child', () =>
     withDemo(() =>
       Effect.gen(function* () {
-        const filed = yield* fileReflection({ title: 'with prose', ...facts, body: 'Eleven acts, five of them rewrites.' });
+        const filed = yield* fileReflection({ title: 'with prose', ...facts, ...team, body: 'Eleven acts, five of them rewrites.' });
         const prose = filed.entry;
         expect(prose.body).toContain('Eleven acts, five of them rewrites.');
         expect(prose.fields).toEqual({ ...facts });
-        const again = yield* fileReflection({ title: 'once more', ...facts, ontoId: prose.id, body: 'And a sixth, the next day.' });
+        const again = yield* fileReflection({
+          title: 'once more',
+          ...facts,
+          ...team,
+          ontoId: prose.id,
+          body: 'And a sixth, the next day.',
+        });
         expect(again.entry).toMatchObject({ id: prose.id, body: prose.body, sightings: 2 });
         expect(again.written).toMatchObject({ parentId: prose.id, body: expect.stringMatching(/And a sixth, the next day\.$/) });
         expect(again.written.fields).toEqual({ ...facts });

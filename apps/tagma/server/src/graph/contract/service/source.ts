@@ -9,13 +9,14 @@ export class GraphSource extends Context.Service<
   {
     readonly sourcePath: string;
     readonly originPath?: string;
+    readonly codePath?: string;
     readonly source?: ProcessProvenance;
   }
 >()('tagma/graph/GraphSource') {}
 
 export type SourcePlace = { readonly project: ProjectRow; readonly place: string };
 
-export type SourceRefusal = 'unknown-project' | 'ambiguous-project' | 'not-found' | GitRefusal;
+export type SourceRefusal = 'unknown-project' | 'ambiguous-project' | 'not-found' | 'graph-pool' | 'graph-unmerged' | GitRefusal;
 
 export class SourceProject extends Context.Service<
   SourceProject,

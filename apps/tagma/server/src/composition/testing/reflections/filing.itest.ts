@@ -35,6 +35,7 @@ const filing = {
   command: 'file_reflection from a server running out of an installation closure',
   expected: 'the entry lands under the block covering Tagma’s own source',
   actual: 'it refused no-home',
+  storage: 'team' as const,
 };
 const said = Effect.fn('reflection.git')(function* (cwd: string, args: string[]) {
   const run = yield* spawnedEffect(['git', ...args], { cwd });

@@ -108,6 +108,7 @@ layer(graphToolsFixture, { excludeTestServices: true })('native graph files', (i
         expected: 'one durable answer',
         actual: 'the first failure',
         body: 'The first filing owns this prose.',
+        storage: 'team',
       })) as { block: { name: string }; body: string[] };
       const keeperId = yield* graph.blockNames.idOfName(first.block.name);
       const keeperBody = (yield* graph.blocks.blockById(keeperId)).body;
@@ -118,6 +119,7 @@ layer(graphToolsFixture, { excludeTestServices: true })('native graph files', (i
         expected: 'another durable sighting',
         actual: 'the failure recurred',
         body: 'The second filing keeps its own prose.',
+        storage: 'team',
       })) as { block: { name: string }; body: string[]; sightings: number };
       expect(repeated.block.name).toBe(first.block.name);
       expect(repeated.sightings).toBe(2);
@@ -161,6 +163,7 @@ layer(graphToolsFixture, { excludeTestServices: true })('native graph files', (i
         command: 'third call',
         expected: 'one standing group',
         actual: 'another failure',
+        storage: 'team',
       })) as { block: { name: string }; sightings: number };
       expect(recurred.sightings).toBe(2);
       const afterFiling = (yield* call('read_reflections', {})) as Listed;
@@ -180,6 +183,7 @@ layer(graphToolsFixture, { excludeTestServices: true })('native graph files', (i
         command: 'fourth call',
         expected: 'one standing group',
         actual: 'still failing',
+        storage: 'team',
       })) as { block: { name: string }; sightings: number };
       expect(nested.block.name).toBe(latest);
       expect(nested.sightings).toBe(2);
