@@ -10,4 +10,4 @@ fields:
     "expected": "The --filter value is treated as a test-selection regex; instruction reading covers only real source files from the Swift diagnostics."
   }
 ---
-Filed from project `<project>`.
+Filed from another project.

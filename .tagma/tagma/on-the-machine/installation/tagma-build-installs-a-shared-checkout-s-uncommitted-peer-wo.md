@@ -6,7 +6,7 @@ tags: ["reflection"]
 fields:
   {
     "actual": "It built the working tree as `12b23011a-dirty` with 40 uncommitted paths of other running agents (half-done Holdings worker move, history store, invocation, app wire) and swapped install/current onto it; `--back` then refused operator-only, so a crash or restart would start unreviewed code.",
-    "command": "bun run tagma:build --no-restart (cwd /Users/teunlao/runlith/tagma, main checkout shared by ~20 agents)",
+    "command": "bun run tagma:build --no-restart (cwd ~/runlith/tagma, main checkout shared by ~20 agents)",
     "expected": "A build from a checkout other sessions hold uncommitted lines in builds committed HEAD, or refuses naming those lines, before swapping `current`."
   }
 ---

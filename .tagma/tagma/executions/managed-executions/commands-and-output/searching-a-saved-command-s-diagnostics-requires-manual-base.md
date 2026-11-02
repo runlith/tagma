@@ -10,6 +10,6 @@ fields:
     "expected": "Read or find the compiler diagnostics in the saved output without re-running the build."
   }
 ---
-Filed from project `<project>`.
+Filed from another project.
 
 The byte API honored its contract, but saved streams have no text window by offset or content search. After a 2m43s Swift build it took several tool calls to find the diagnostics.

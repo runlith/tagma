@@ -12,4 +12,4 @@ fields:
 ---
 Filed from project `tagma`. Received by a server up since 2026-11-01T04:35:00.962Z, from b555dcaa0.
 
-At /Users/teunlao/.tagma-dev/worktrees/tagma/cpu-event-projection, HEAD 3a13af8caaa1437071f9c73feee2e8f5c5d109b3 merges e7bac5e5187c3d4a9ace33f14e8f10d86cb5030e. The resolved checks/builtins.ts is byte-identical to MERGE_HEAD at the reviewed allowance and changes 814 to 817 against HEAD. The selected landing reported config-invalid at checks/builtins.ts:34, path [checks][F4][allowances][2][lines], Missing key. No unmerged index entries remain. The built-tree line slicing is a suspected cause, not yet proved.
+At ~/.tagma-dev/worktrees/tagma/cpu-event-projection, HEAD 3a13af8caaa1437071f9c73feee2e8f5c5d109b3 merges e7bac5e5187c3d4a9ace33f14e8f10d86cb5030e. The resolved checks/builtins.ts is byte-identical to MERGE_HEAD at the reviewed allowance and changes 814 to 817 against HEAD. The selected landing reported config-invalid at checks/builtins.ts:34, path [checks][F4][allowances][2][lines], Missing key. No unmerged index entries remain. The built-tree line slicing is a suspected cause, not yet proved.

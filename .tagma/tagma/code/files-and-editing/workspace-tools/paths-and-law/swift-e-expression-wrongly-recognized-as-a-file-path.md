@@ -10,4 +10,4 @@ fields:
     "expected": "The argument after Swift -e is recognized as source code; a successful probe answers without trying to treat inline code as a filesystem path."
   }
 ---
-Filed from project `<project>`.
+Filed from another project.

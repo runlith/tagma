@@ -10,4 +10,4 @@ fields:
     "expected": "Return the inline Swift process's output without treating the source-code argument as a file path."
   }
 ---
-Filed from project `<project>`.
+Filed from another project.

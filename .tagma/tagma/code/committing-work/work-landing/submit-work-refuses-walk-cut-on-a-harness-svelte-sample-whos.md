@@ -6,7 +6,7 @@ tags: ["reflection"]
 fields:
   {
     "actual": "refused[walk-cut] twice, with and without `whole`: \"UnsupportedSource: harness/samples/kit/apps/basics/tsconfig.json: its extends chain names the package config `$app/tsconfig`, which resolves to no file the tree holds\"; landing fell back to a plain git commit.",
-    "command": "submit_work {checkout: /Users/teunlao/runlith/dromon, paths: [harness/samples/kit/apps/basics/src/routes/routing/preloading/hash-route/+page.svelte, harness/manifest/kit/apps.json], whole: [harness/samples/kit/apps/basics/src/routes/routing/preloading/hash-route/+page.svelte]}",
+    "command": "submit_work {checkout: ~/runlith/dromon, paths: [harness/samples/kit/apps/basics/src/routes/routing/preloading/hash-route/+page.svelte, harness/manifest/kit/apps.json], whole: [harness/samples/kit/apps/basics/src/routes/routing/preloading/hash-route/+page.svelte]}",
     "expected": "The one-line edit (this session's only lines in the file) lands; at least `whole` carries the named file intact without a line walk."
   }
 ---

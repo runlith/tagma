@@ -6,7 +6,7 @@ tags: ["reflection"]
 fields:
   {
     "actual": "executionSpawner.spawn refused — Unauthorized: the terminals floor could not answer: ProjectRootsUnavailable; the same search via bash rg ran right after",
-    "command": "grep pattern \"degraded\" path /Users/teunlao/runlith/runlith/tagma/apps/tagma/server/src/platform/contract",
+    "command": "grep pattern \"degraded\" path ~/runlith/runlith/tagma/apps/tagma/server/src/platform/contract",
     "expected": "grep answers matches"
   }
 ---

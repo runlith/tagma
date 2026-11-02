@@ -10,4 +10,4 @@ fields:
     "expected": "The command performs a read-only JavaScript-vs-Swift comparison; the inline `-e` argument is not a file name."
   }
 ---
-Filed from project `<project>`.
+Filed from another project.

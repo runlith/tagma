@@ -10,4 +10,4 @@ fields:
     "expected": "Keep the command's exit and diagnostics; the --filter regex argument is not a checkout path."
   }
 ---
-Filed from project `<project>`.
+Filed from another project.

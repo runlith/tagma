@@ -12,4 +12,4 @@ fields:
 ---
 Filed from project `vigla`. Received by a server up since 2026-10-31T23:25:28.662Z, from 3a395b0b3.
 
-The failed batch performed two read-only import audits under the current Vigla acceptance samples, a read-only git diff/check in /Users/teunlao/runlith/dromon, and a progress message to the lead. None returned a result or message envelope. The transport failure was not a graph refusal; read_changes afterward confirmed the eight intended working-tree paths still stood. The source of the process termination is unproved.
+The failed batch performed two read-only import audits under the current Vigla acceptance samples, a read-only git diff/check in ~/runlith/dromon, and a progress message to the lead. None returned a result or message envelope. The transport failure was not a graph refusal; read_changes afterward confirmed the eight intended working-tree paths still stood. The source of the process termination is unproved.

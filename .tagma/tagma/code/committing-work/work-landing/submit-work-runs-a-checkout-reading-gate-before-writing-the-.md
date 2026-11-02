@@ -6,7 +6,7 @@ tags: ["reflection"]
 fields:
   {
     "actual": "The pin-compiles program refused inspection-failed \"the checkout differs from the commit being judged in apps/tagma/demo/app/src/runtime.ts\"; the formatted form reached the working file only after the refusal, and the unchanged second call landed 817c01cac0",
-    "command": "submit_work checkout=/Users/teunlao/runlith/runlith paths=[tagma, apps/tagma/demo/app/src/runtime.ts, …] (runlith project 42, rule 8e15721e pin-compiles at gate)",
+    "command": "submit_work checkout=~/runlith/runlith paths=[tagma, apps/tagma/demo/app/src/runtime.ts, …] (runlith project 42, rule 8e15721e pin-compiles at gate)",
     "expected": "The format commands rewrite runtime.ts and the gated program judges a checkout that already holds the formatted form, landing in one call"
   }
 ---

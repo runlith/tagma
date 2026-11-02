@@ -10,4 +10,4 @@ fields:
     "expected": "Get the first compiler error from the saved stdout without rebuilding: by text search or through a path to the full grep-able capture."
   }
 ---
-Filed from project `<project>`.
+Filed from another project.

@@ -10,4 +10,4 @@ fields:
     "expected": "Find compiler errors in the saved stderr without repeating the three-minute Swift check."
   }
 ---
-Filed from project `<project>`.
+Filed from another project.

@@ -10,4 +10,4 @@ fields:
     "expected": "Either the agents move to main and stay addressable, or send_task refuses saying the thread is archived."
   }
 ---
-Filed from project `<project>`.
+Filed from another project.

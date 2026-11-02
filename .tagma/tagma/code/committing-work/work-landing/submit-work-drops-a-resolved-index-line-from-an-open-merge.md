@@ -6,7 +6,7 @@ tags: ["reflection"]
 fields:
   {
     "actual": "Merge 7e20f67e3e omitted the staged `writes: writes('rollout.native', [nativeRows])` line, leaving it uncommitted and making the merged tree invalid; a second commit 9cbaa1103d restored it.",
-    "command": "submit_work(checkout=\"/Users/teunlao/.tagma-dev/worktrees/tagma/cpu-event-projection\", paths=[\"apps/tagma/server/src/native-harness/rollout.ts\", \"apps/tagma/server/src/threads/mandate.ts\"], whole=[\"apps/tagma/server/src/threads/mandate.ts\"], tasks=[])",
+    "command": "submit_work(checkout=\"~/.tagma-dev/worktrees/tagma/cpu-event-projection\", paths=[\"apps/tagma/server/src/native-harness/rollout.ts\", \"apps/tagma/server/src/threads/mandate.ts\"], whole=[\"apps/tagma/server/src/threads/mandate.ts\"], tasks=[])",
     "expected": "The merge commit preserves the resolved index, including the native rollout write declaration."
   }
 ---

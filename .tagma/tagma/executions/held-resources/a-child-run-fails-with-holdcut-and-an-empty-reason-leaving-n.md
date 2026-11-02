@@ -10,4 +10,4 @@ fields:
     "expected": "If the run is cut, the report names what was held and why it was cut, and whether the same call will fail again."
   }
 ---
-Filed from project `<project>`.
+Filed from another project.

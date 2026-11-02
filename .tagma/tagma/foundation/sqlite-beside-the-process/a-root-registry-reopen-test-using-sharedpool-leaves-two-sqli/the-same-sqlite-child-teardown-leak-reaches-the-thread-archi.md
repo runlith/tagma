@@ -12,4 +12,4 @@ fields:
 ---
 Filed from project `tagma`.
 
-Report /tmp/runlith-test/reports/run.33634.1793322281869.jsonl. Retained output /Users/teunlao/.tagma-dev/executions/01a083b0-37bd-7a58-9ba1-be2b7b69a2e8/records/38303565373263642d613131622d346635662d383166322d323837376433613135653931/output.log. The same file's preceding three-seed run was green before ongoing pool-hosting changes. The active half-born deletion itself passed in this failed file; that does not make the file green.
+Report /tmp/runlith-test/reports/run.33634.1793322281869.jsonl. Retained output ~/.tagma-dev/executions/01a083b0-37bd-7a58-9ba1-be2b7b69a2e8/records/38303565373263642d613131622d346635662d383166322d323837376433613135653931/output.log. The same file's preceding three-seed run was green before ongoing pool-hosting changes. The active half-born deletion itself passed in this failed file; that does not make the file green.

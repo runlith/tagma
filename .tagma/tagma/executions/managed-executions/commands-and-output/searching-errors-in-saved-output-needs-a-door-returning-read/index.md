@@ -10,6 +10,6 @@ fields:
     "expected": "After reading the bounded tail of tests, find the earlier error messages with one text-returning operation."
   }
 ---
-Filed from project `<project>`.
+Filed from another project.
 
 Truncation was explicitly requested and didn't break the read_output contract. The whole output stayed in read_command_bytes, but that door returns base64 windows with no readable-text search: seeing the earlier errors took shell decoding and filtering.

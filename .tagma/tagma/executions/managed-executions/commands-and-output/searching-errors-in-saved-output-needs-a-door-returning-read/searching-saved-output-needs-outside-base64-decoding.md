@@ -10,4 +10,4 @@ fields:
     "expected": "Find skipped- and failed-test markers over the whole saved text output with one search query."
   }
 ---
-Filed from project `<project>`.
+Filed from another project.

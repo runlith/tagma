@@ -6,7 +6,7 @@ tags: ["reflection"]
 fields:
   {
     "actual": "Refused lines-held: \"projectId in apps/tagma/server/src/threads/roads.ts:48, held by 01a188e1-…\" — our only line in a file importing roads.js (threads/assembly.ts) renames PluginPoints to TagmaAppPoints; the landing waits on an unrelated writer.",
-    "command": "submit_work checkout=/Users/teunlao/runlith/tagma taking=[server-apps, server-views, client-apps, fix-carryover, own-apps, graph-apps] tasks=[05a933b6]",
+    "command": "submit_work checkout=~/runlith/tagma taking=[server-apps, server-views, client-apps, fix-carryover, own-apps, graph-apps] tasks=[05a933b6]",
     "expected": "The landing slices our rename lines and lands them: none of them reference the peer's new RoadAsk.projectId in threads/roads.ts."
   }
 ---

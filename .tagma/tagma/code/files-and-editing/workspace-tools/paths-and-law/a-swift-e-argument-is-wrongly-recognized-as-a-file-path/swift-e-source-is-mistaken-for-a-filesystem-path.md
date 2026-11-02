@@ -10,4 +10,4 @@ fields:
     "expected": "Run the Swift expression and report its stdout without treating program source as a file path."
   }
 ---
-Filed from project `<project>`.
+Filed from another project.

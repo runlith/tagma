@@ -10,4 +10,4 @@ fields:
     "expected": "Run the Swift and Node inline programs without counting the -e argument as a source-file read."
   }
 ---
-Filed from project `<project>`.
+Filed from another project.

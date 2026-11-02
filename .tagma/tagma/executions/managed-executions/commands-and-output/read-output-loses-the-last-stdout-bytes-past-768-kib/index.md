@@ -10,6 +10,6 @@ fields:
     "expected": "The last 40 stdout lines plus the test run outcome, or an explicit incomplete-answer message."
   }
 ---
-Filed from project `<project>`.
+Filed from another project.
 
 The swift test --skip-build --parallel --num-workers 3 command finished exit 0. Both the command-result notice and read_output skipped the same last 480 bytes, showing stderr after the cut stdout. read_command_bytes correctly reported gap:false and returned those bytes.

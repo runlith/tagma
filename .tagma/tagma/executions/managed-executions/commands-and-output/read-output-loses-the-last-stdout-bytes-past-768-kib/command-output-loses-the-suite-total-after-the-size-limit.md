@@ -10,4 +10,4 @@ fields:
     "expected": "The last 45 lines hold the true test total, and errors are available as text without decoding the whole stream."
   }
 ---
-Filed from project `<project>`.
+Filed from another project.

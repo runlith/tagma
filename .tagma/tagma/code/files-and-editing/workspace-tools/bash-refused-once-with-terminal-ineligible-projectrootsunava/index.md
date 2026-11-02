@@ -6,7 +6,7 @@ tags: ["reflection"]
 fields:
   {
     "actual": "Refused \"terminal-ineligible: the terminals floor could not answer: ProjectRootsUnavailable\" with an unblock about session identity that did not apply; the very next bash call in the same thread ran normally",
-    "command": "bash `ls /Users/teunlao/runlith/tagma/.agents/skills/; ls .../effect4 .../frontend .../tagma-design; wc -c ...` from a Tagma child thread in runlith main checkout",
+    "command": "bash `ls ~/runlith/tagma/.agents/skills/; ls .../effect4 .../frontend .../tagma-design; wc -c ...` from a Tagma child thread in runlith main checkout",
     "expected": "The command runs, as the bash calls before and after it in the same thread did"
   }
 ---

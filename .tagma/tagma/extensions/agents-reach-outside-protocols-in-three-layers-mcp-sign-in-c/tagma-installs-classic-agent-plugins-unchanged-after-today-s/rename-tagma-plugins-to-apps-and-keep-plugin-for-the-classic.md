@@ -30,10 +30,10 @@ The code name is `TagmaApp` (`tagma-app`, `tagmaApp` in files, ids and variables
 
 Stored installs, enablings, secrets and data move to the new names on the first start of the build that carries the rename, so nobody reinstalls.
 
-Acceptance search, run from `/Users/teunlao/runlith/tagma`, answers nothing:
+Acceptance search, run from `~/runlith/tagma`, answers nothing:
 
 ```
-rg -il plugin apps/tagma/server/src/tagma-apps apps/tagma/server/src/views apps/tagma/app/src/lib/features/tagma-apps apps/tagma/server/src/native-harness/skills/apps /Users/teunlao/runlith/runlith/.tagma-apps /opt/workspaces/runlith/.tagma-apps -g '!node_modules/**' -g '!steps/**' -g '!secrets.itest.ts' -g '!features/tagma-apps/panes.ts' -g '!features/tagma-apps/surfaces.ts'
+rg -il plugin apps/tagma/server/src/tagma-apps apps/tagma/server/src/views apps/tagma/app/src/lib/features/tagma-apps apps/tagma/server/src/native-harness/skills/apps ~/runlith/runlith/.tagma-apps /opt/workspaces/runlith/.tagma-apps -g '!node_modules/**' -g '!steps/**' -g '!secrets.itest.ts' -g '!features/tagma-apps/panes.ts' -g '!features/tagma-apps/surfaces.ts'
 ```
 
 The exclusions name the code whose subject is the old names: the carry-over steps (`steps/`), the test of the former secret file (`secrets.itest.ts`), and the client's `formerly: 'plugin'` declarations that read stored pane kinds and surfaces (`panes.ts`, `surfaces.ts`). The renamed directories hold no third-party plugin words, and the step-2 module does not exist yet.

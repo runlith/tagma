@@ -10,6 +10,6 @@ fields:
     "expected": "With a foreground wait of 120000 ms, return the finished command's stdout and exit status in one call."
   }
 ---
-Filed from project `<project>`.
+Filed from another project.
 
 Execution 00899e9d-0069-433f-9369-3b5b3a22a676:167. read_command: admittedAt 1792181113792, native end 1792181113869, readAt 1792181121560; waitMs 120000, no command rules, retention retained, cleanup complete.

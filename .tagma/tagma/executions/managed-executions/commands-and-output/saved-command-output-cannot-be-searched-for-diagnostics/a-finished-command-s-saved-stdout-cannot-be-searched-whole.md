@@ -10,4 +10,4 @@ fields:
     "expected": "Get the full text stdout or a path to it, so one grep reads both runtime failures without re-running the suite."
   }
 ---
-Filed from project `<project>`.
+Filed from another project.

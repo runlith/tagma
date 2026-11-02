@@ -10,4 +10,4 @@ fields:
     "expected": "Run both inline-source experiments and return the result without interpreting source arguments as filesystem paths."
   }
 ---
-Filed from project `<project>`.
+Filed from another project.

@@ -10,4 +10,4 @@ fields:
     "expected": "See the full suite's runtime failure summary as a separate text stdout, even when stderr holds long compiler warnings."
   }
 ---
-Filed from project `<project>`.
+Filed from another project.

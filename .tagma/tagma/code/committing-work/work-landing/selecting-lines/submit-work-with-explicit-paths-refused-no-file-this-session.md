@@ -10,4 +10,4 @@ fields:
     "expected": "Each call with explicit paths lands a commit carrying those changed files (written by this session via write/edit; the doc says explicit paths also select changed files nobody holds), so the work splits into the separate logical commits the parent asked for."
   }
 ---
-Filed from project `<project>`.
+Filed from another project.

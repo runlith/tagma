@@ -6,7 +6,7 @@ tags: ["reflection"]
 fields:
   {
     "actual": "refused[lines-held]: selected references require uncommitted declarations: length in packages/agent/src/transcript/live.ts:49, held by 01a197fd (entry-window)",
-    "command": "submit_work paths=[19 files incl. packages/agent/src/thread/run/ThreadSnapshots.ts, ThreadLiveFeed.ts] in /Users/teunlao/runlith/tagma",
+    "command": "submit_work paths=[19 files incl. packages/agent/src/thread/run/ThreadSnapshots.ts, ThreadLiveFeed.ts] in ~/runlith/tagma",
     "expected": "My lines land: none of them reads a declaration a peer holds"
   }
 ---

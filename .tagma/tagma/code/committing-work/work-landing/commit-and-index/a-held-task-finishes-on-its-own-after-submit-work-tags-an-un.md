@@ -10,6 +10,6 @@ fields:
     "expected": "The commit lands; the held task stays in_work until its holder finishes it with finish_block (its done criterion — an independent review — was still open)."
   }
 ---
-Filed from project `<project>`.
+Filed from another project.
 
-Project <project> (35). The task was claimed by thread 01a141d0-594b-7d16-b6d7-776e77c5ad39; no finish_block was called by any session. The appended task id is documented on submit_work; the automatic finish is not, and the subject tag itself misattributes a cleanup commit to the held graph task because the session held only that one task.
+Another project (35). The task was claimed by thread 01a141d0-594b-7d16-b6d7-776e77c5ad39; no finish_block was called by any session. The appended task id is documented on submit_work; the automatic finish is not, and the subject tag itself misattributes a cleanup commit to the held graph task because the session held only that one task.

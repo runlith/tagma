@@ -10,4 +10,4 @@ fields:
     "expected": "Find the first compiler error line in a finished command's saved output with one text search operation."
   }
 ---
-Filed from project `<project>`.
+Filed from another project.

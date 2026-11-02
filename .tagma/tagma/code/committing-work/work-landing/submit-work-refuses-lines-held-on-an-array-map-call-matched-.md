@@ -6,7 +6,7 @@ tags: ["reflection"]
 fields:
   {
     "actual": "refused[lines-held]: \"map in packages/vigla/src/runtime/reactivity/batch.ts:69, held by scheduler\" — the only `map` in async.ts is `thunks.map(...)` on a readonly array parameter; the landing waits for the peer or carries its unrelated 195-line batch.ts whole",
-    "command": "submit_work paths=[…, packages/vigla/src/runtime/dom/async.ts, …] in /Users/teunlao/runlith/dromon",
+    "command": "submit_work paths=[…, packages/vigla/src/runtime/dom/async.ts, …] in ~/runlith/dromon",
     "expected": "async.ts imports only `resumed` and `suspend` from batch.ts, so a peer's uncommitted `Batch.map` field is no dependency and the landing proceeds"
   }
 ---

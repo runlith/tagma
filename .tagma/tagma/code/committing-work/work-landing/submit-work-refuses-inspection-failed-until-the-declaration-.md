@@ -6,7 +6,7 @@ tags: ["reflection"]
 fields:
   {
     "actual": "Refused twice with inspection-failed for 14 gated rules: first \"the declaration index holds no revision within 5000 changed files\", then \"coupling has no revision index\"; each cleared only after a manual check_rules over all (aabef712, then inspection coupling)",
-    "command": "submit_work paths=[apps/tagma/app/src/lib/features/plugins, …] in /Users/teunlao/runlith/tagma at HEAD ca7dbb50 → f2af0661",
+    "command": "submit_work paths=[apps/tagma/app/src/lib/features/plugins, …] in ~/runlith/tagma at HEAD ca7dbb50 → f2af0661",
     "expected": "The landing judges the change against indexes the server keeps near HEAD, as check_rules over the change did a minute earlier without refusing"
   }
 ---
