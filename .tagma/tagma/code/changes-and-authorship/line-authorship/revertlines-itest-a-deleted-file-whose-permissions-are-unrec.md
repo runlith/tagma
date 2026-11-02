@@ -8,9 +8,6 @@ fields:
     "holder": "tagma:01a178ee-aba4-7666-9af1-69b352bd81bc",
     "status": "done"
   }
-edges:
-  - kind: discovered-from
-    to: 01a179a7-5ae0-7899-b62e-35cda941dfc7/01a178d0-00df-76b7-a820-8ef6414c146a#runlith-private
 ---
 `revertLines.itest` "a deleted file whose permissions are unrecorded" is red on HEAD: the rollback preview never names the deleted file.
 

@@ -8,9 +8,6 @@ fields:
     "holder": "tagma:01a14c19-2ae6-7c7d-9cc2-edc404b6eb7f",
     "status": "done"
   }
-edges:
-  - kind: discovered-from
-    to: 01a179a7-5ae0-7899-b62e-35cda941dfc7/01a13796-6e99-731d-9f9b-83b8ba5f090c#runlith-private
 sources:
   - kind: file
     ref: apps/tagma/server/src/composition/testing/threads/conversations.stest.ts

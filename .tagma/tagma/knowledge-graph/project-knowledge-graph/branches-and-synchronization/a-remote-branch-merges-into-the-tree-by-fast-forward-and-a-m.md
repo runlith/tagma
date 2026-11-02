@@ -3,9 +3,6 @@ id: 01a178f3-aaad-707b-b257-8e3768f2942f
 title: A remote branch merges into the tree by fast-forward, and a merge commit is born only on real divergence
 ord: 11
 tags: ["explanation"]
-edges:
-  - kind: relates
-    to: 01a179a7-5ae0-7899-b62e-35cda941dfc7/01a178cf-eabb-7a2a-92d7-493ea4e99427#runlith-private
 sources:
   - kind: symbol
     ref: apps/tagma/server/src/graph/tree/topology.ts
