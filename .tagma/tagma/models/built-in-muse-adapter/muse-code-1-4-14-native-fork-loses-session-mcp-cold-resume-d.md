@@ -14,7 +14,7 @@ edges:
   - kind: relates
     to: 01a19543-e28b-72c2-95c9-7181e698aca6
 ---
-Read and measured on 2026-11-02: Muse Code `1.4.14-R7309.1` through the pinned `@muse-code/sdk` 1.4.10. The probe launched the installed binary directly with `--provider echo`, an empty isolated HOME/XDG tree and one loopback MCP server; it read no account, contacted no vendor model and incurred no model spend. Its script is `/Users/teunlao/.tagma-dev/scratch/01a19a02-5841-751e-a925-736b526fcb2e/muse-fork.mjs`. Temporary vendor records are under `/private/var/folders/87/cmcr9wbs5yqcbthnzgqp7lh80000gn/T/muse-fork-offline-aVliY6/data/muse/sessions/2026/11/02/`.
+Read and measured on 2026-11-02: Muse Code `1.4.14-R7309.1` through the pinned `@muse-code/sdk` 1.4.10. The probe launched the installed binary directly with `--provider echo`, an empty isolated HOME/XDG tree and one loopback MCP server; it read no account, contacted no vendor model and incurred no model spend. The probe script and the vendor session records it produced were kept only on the measuring machine, not in this repository, so this record alone cannot reproduce the run.
 
 Source session `01a19a0f-339d-7532-986f-a15a5332aad3` completed an echo turn with the whitelisted `mcp__probe__*` catalog. `session/fork` through that completed turn returned `00000000-0000-7156-9e42-416b6bffaa91`. Its next turn failed before a provider completion: `configError`, `invalid run configuration: unknown tool mcp__probe__*`. The fork therefore did not retain the source's session MCP configuration.
 
