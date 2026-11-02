@@ -247,6 +247,46 @@ it.effect('a turn runs under the Tagma turn id, seals each Tagma call before app
   }),
 );
 
+it.effect('each model request of a turn is measured and retried under keys of its own, with no content between them', () =>
+  Effect.gen(function* () {
+    const { agent, seen } = yield* world((one, emit) => {
+      const sessionId = one.params.sessionId;
+      if (one.method === 'session/start') return ok(one, { session: { sessionId } });
+      if (one.method === 'turn/start')
+        return Effect.as(
+          Effect.forkDetach(
+            Effect.gen(function* () {
+              yield* emit({ method: 'turn/started', params: { sessionId, turnId: TURN } });
+              for (const output of [10, 20]) {
+                yield* emit({
+                  method: 'turn/modelRetryScheduled',
+                  params: { sessionId, turnId: TURN, attempt: 1, maxAttempts: 3, retryDelayMs: output, errorKind: 'overloaded' },
+                });
+                const usage = { inputTokens: 100, outputTokens: output, cachedTokens: 0, reasoningTokens: 0 };
+                yield* emit({ method: 'session/tokenUsage', params: { sessionId, turnId: TURN, modelId: null, usage, promptTokens: 100 } });
+              }
+              yield* emit({ method: 'turn/completed', params: { sessionId, turnId: TURN, terminal: 'completed' } });
+            }),
+          ),
+          { commandId: one.id, status: 'accepted', turnId: TURN, disposition: 'started' },
+        );
+      return ok(one);
+    });
+    const session = yield* agent.newSession({ cwd: '/work', mcpServers: [] });
+    yield* agent.prompt({ sessionId: session.sessionId, prompt: [{ type: 'text', text: 'go' }], _meta: { 'tagma/turn': TURN } });
+    const measured = seen.flatMap((one) =>
+      kindOf(one) === 'usage_update'
+        ? [(one.body as { update: { _meta: { 'tagma/measured': { message: string } } } }).update._meta['tagma/measured'].message]
+        : [],
+    );
+    const retried = seen.flatMap((one) => (one.kind === '_tagma/retrying' ? [(one.body as { uuid: string }).uuid] : []));
+    expect(measured).toHaveLength(2);
+    expect(new Set(measured).size).toBe(2);
+    expect(retried).toHaveLength(2);
+    expect(new Set(retried).size).toBe(2);
+  }),
+);
+
 it.effect('a steer the turn ended before reading runs in the follow-up turn Muse opens for it, inside the same Tagma turn', () =>
   Effect.gen(function* () {
     const STEER = '01a19573-2e48-708d-9b8c-9be329a9e7e8';

@@ -140,6 +140,7 @@ export class Feed {
   readonly unread = new Set<string>();
   readonly doubted = new Set<string>();
   private step = 0;
+  private requests = 0;
   private settling = false;
   private failure: string | null = null;
   private closed = false;
@@ -367,7 +368,7 @@ export class Feed {
           type: 'notification',
           method: RETRYING,
           fields: {
-            uuid: `${turn}:retry:${retry.attempt}`,
+            uuid: `${turn}:request:${this.requests}:retry:${retry.attempt}`,
             attempt: retry.attempt,
             of: retry.maxAttempts,
             delayMs: retry.retryDelayMs,
@@ -534,7 +535,7 @@ export class Feed {
         size: this.ports.window() ?? 0,
         _meta: {
           [MEASURED]: {
-            message: this.message(),
+            message: `${this.ports.turn}:request:${this.requests}`,
             sentAt: new Date(now - took).toISOString(),
             input: spent.inputTokens,
             cacheRead: spent.cachedReadTokens,
@@ -548,6 +549,7 @@ export class Feed {
       },
     });
     this.attempt = 0;
+    this.requests += 1;
     this.closed = true;
     return yield* this.phase('calling');
   });
