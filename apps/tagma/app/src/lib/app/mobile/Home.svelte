@@ -156,7 +156,7 @@
           type="button"
           class="-mr-2 min-h-11 px-2 text-small font-medium text-primary disabled:text-muted-foreground"
           disabled={attention.marking || unreadOf(done).length === 0}
-          onclick={() => void attention.markRead(done)}
+          onclick={() => void attention.markRead(done, [])}
         >
           Mark read
         </button>

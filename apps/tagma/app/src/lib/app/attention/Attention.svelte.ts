@@ -153,13 +153,13 @@ export class Attention extends Service<Attention>()('Attention', { tier: 'app' }
     this.replies = new Map(this.replies).set(eventId, reply);
   }
 
-  unreadIn(rows: readonly AttentionRow[]): number {
-    return unreadOf(rows).length + toldOf(this.notified).length;
+  unreadIn(rows: readonly AttentionRow[], notices: readonly Notification[]): number {
+    return unreadOf(rows).length + toldOf(notices).length;
   }
 
-  async markRead(rows: readonly AttentionRow[]): Promise<void> {
+  async markRead(rows: readonly AttentionRow[], notices: readonly Notification[]): Promise<void> {
     const unread = unreadOf(rows);
-    const told = toldOf(this.notified);
+    const told = toldOf(notices);
     if (this.marking || unread.length + told.length === 0) return;
     this.marking = true;
     this.actionProblem = null;

@@ -46,7 +46,7 @@
     scope === 'project' && active !== null ? attention.rows.filter((row) => row.project.id === active.id) : attention.rows,
   );
   const groups = $derived(groupsOf(shown));
-  const unread = $derived(attention.unreadIn(shown));
+  const unread = $derived(attention.unreadIn(shown, attention.notified));
   const here = $derived(countsOf(attention.rows.filter((row) => row.project.id === active?.id)));
   const label = $derived(
     needed === 0 ? (counts.finished > 0 ? 'Attention, unread finished threads' : 'Attention') : `Attention, ${needed} need you`,
@@ -99,7 +99,12 @@
           </button>
         {/if}
       </div>
-      <Button size="xs" variant="ghost" disabled={unread === 0 || attention.marking} onclick={() => void attention.markRead(shown)}>
+      <Button
+        size="xs"
+        variant="ghost"
+        disabled={unread === 0 || attention.marking}
+        onclick={() => void attention.markRead(shown, attention.notified)}
+      >
         Mark all read
       </Button>
     </div>
