@@ -403,11 +403,6 @@
       "browser": "./src/graph/contract/wire/recovery.ts",
       "default": "./src/graph/contract/wire/recovery.ts"
     },
-    "./graph-remote/contract/wire/remote": {
-      "types": "./src/graph-remote/contract/wire/remote.ts",
-      "browser": "./src/graph-remote/contract/wire/remote.ts",
-      "default": "./src/graph-remote/contract/wire/remote.ts"
-    },
     "./threads/contract/wire/harness/names": {
       "types": "./src/threads/contract/wire/harness/names.ts",
       "browser": "./src/threads/contract/wire/harness/names.ts",
@@ -792,6 +787,26 @@
       "types": "./src/platform/contract/wire/refusal.ts",
       "browser": "./src/platform/contract/wire/refusal.ts",
       "default": "./src/platform/contract/wire/refusal.ts"
+    },
+    "./platform/contract/wire/pageFamily": {
+      "types": "./src/platform/contract/wire/pageFamily.ts",
+      "browser": "./src/platform/contract/wire/pageFamily.ts",
+      "default": "./src/platform/contract/wire/pageFamily.ts"
+    },
+    "./platform/contract/wire/place": {
+      "types": "./src/platform/contract/wire/place.ts",
+      "browser": "./src/platform/contract/wire/place.ts",
+      "default": "./src/platform/contract/wire/place.ts"
+    },
+    "./projects/contract/wire/reach": {
+      "types": "./src/projects/contract/wire/reach.ts",
+      "browser": "./src/projects/contract/wire/reach.ts",
+      "default": "./src/projects/contract/wire/reach.ts"
+    },
+    "./graph/contract/wire/operations/shared": {
+      "types": "./src/graph/contract/wire/operations/shared.ts",
+      "browser": "./src/graph/contract/wire/operations/shared.ts",
+      "default": "./src/graph/contract/wire/operations/shared.ts"
     },
     "./platform/contract/wire/session": {
       "types": "./src/platform/contract/wire/session.ts",
@@ -1191,21 +1206,6 @@
       "browser": "./src/speech/contract/wire/listening.ts",
       "default": "./src/speech/contract/wire/listening.ts"
     },
-    "./calls/contract/wire/listening": {
-      "types": "./src/calls/contract/wire/listening.ts",
-      "browser": "./src/calls/contract/wire/listening.ts",
-      "default": "./src/calls/contract/wire/listening.ts"
-    },
-    "./calls/contract/wire/search": {
-      "types": "./src/calls/contract/wire/search.ts",
-      "browser": "./src/calls/contract/wire/search.ts",
-      "default": "./src/calls/contract/wire/search.ts"
-    },
-    "./calls/contract/wire/view": {
-      "types": "./src/calls/contract/wire/view.ts",
-      "browser": "./src/calls/contract/wire/view.ts",
-      "default": "./src/calls/contract/wire/view.ts"
-    },
     "./speech/contract/wire/speaking": {
       "types": "./src/speech/contract/wire/speaking.ts",
       "browser": "./src/speech/contract/wire/speaking.ts",
@@ -1365,11 +1365,6 @@
     "./browser/contract/*": {
       "types": "./src/browser/contract/*.ts",
       "bun": "./src/browser/contract/*.ts",
-      "default": null
-    },
-    "./calls/*": {
-      "types": "./src/calls/*.ts",
-      "bun": "./src/calls/*.ts",
       "default": null
     },
     "./catalogs/*": {
@@ -1763,21 +1758,6 @@
       "default": null
     },
     "./graph/testing/*": null,
-    "./graph-remote/contract/wire/module": {
-      "types": "./src/graph-remote/contract/wire/module.ts",
-      "bun": "./src/graph-remote/contract/wire/module.ts",
-      "default": null
-    },
-    "./graph-remote/graph-remote": {
-      "types": "./src/graph-remote/graph-remote.ts",
-      "bun": "./src/graph-remote/graph-remote.ts",
-      "default": null
-    },
-    "./graph-remote/verbs": {
-      "types": "./src/graph-remote/verbs.ts",
-      "bun": "./src/graph-remote/verbs.ts",
-      "default": null
-    },
     "./http/*": {
       "types": "./src/http/*.ts",
       "bun": "./src/http/*.ts",
@@ -2673,7 +2653,6 @@
     "@runlith/agent-tools": "workspace:*",
     "@runlith/audio": "workspace:*",
     "@runlith/audio-darwin": "workspace:*",
-    "@runlith/audio-file": "workspace:*",
     "@runlith/browser-cookies": "workspace:*",
     "@runlith/builtin-catalog": "workspace:*",
     "@runlith/bundle": "workspace:*",
@@ -2682,7 +2661,6 @@
     "@runlith/code-facts": "workspace:*",
     "@runlith/codesign": "workspace:*",
     "@runlith/credential-file": "workspace:*",
-    "@runlith/echo": "workspace:*",
     "@runlith/execution-host": "workspace:*",
     "@runlith/executions": "workspace:*",
     "@runlith/file-lock": "workspace:*",

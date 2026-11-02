@@ -66,9 +66,9 @@ test('a daily place the operator unpinned stays off after a reload, and one a co
   const pins = rail(storage);
   expect(pins.ids).toEqual(['checkout', 'outline']);
 
-  const leave = POINT.register('features/calls', daily('calls', 5));
+  const leave = POINT.register('features/notes', daily('notes', 5));
   flushSync();
-  expect(pins.ids).toEqual(['checkout', 'outline', 'calls']);
+  expect(pins.ids).toEqual(['checkout', 'outline', 'notes']);
   leave();
 });
 

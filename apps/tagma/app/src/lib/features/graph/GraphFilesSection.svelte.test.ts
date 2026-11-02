@@ -9,7 +9,6 @@ import { TagCatalog } from '$lib/features/graph/TagCatalog.svelte.js';
 import { Notices } from '$lib/features/notices/Service.svelte.js';
 import { Live } from '$lib/wire/Live.js';
 import GraphFilesSection from './GraphFilesSection.svelte';
-import { RemoteRepo } from './RemoteRepo.js';
 
 let app: TestApp | undefined;
 
@@ -23,7 +22,6 @@ test('an unreadable tag declaration is named with its reason and opens its node'
   app = mountShell(
     Layer.mergeAll(
       Layer.of(TagCatalog, tags),
-      Layer.of(RemoteRepo, {} as never),
       Layer.of(Live, { hold: () => ({ unsubscribe: () => undefined }) } as never),
       Layer.of(Notices, {} as never),
     ),

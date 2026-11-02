@@ -16,7 +16,6 @@ import { GraphSelection } from './GraphSelection.svelte.js';
 import { TagCatalog } from './TagCatalog.svelte.js';
 import { TagsRepo } from './TagsRepo.js';
 import { Recovery } from './Recovery.svelte.js';
-import { RemoteRepo } from './RemoteRepo.js';
 import { ThreadWork } from './ThreadWork.svelte.js';
 import { ThreadWorkRepo } from './ThreadWorkRepo.js';
 import { TranslationLayer } from './translation/layer.js';
@@ -46,7 +45,6 @@ export const GraphLayer = Layer.mergeAll(
   Sidebar,
   GraphDoor,
   Recovery,
-  RemoteRepo,
   BlocksRepo,
   JournalRepo,
   SessionsRepo,

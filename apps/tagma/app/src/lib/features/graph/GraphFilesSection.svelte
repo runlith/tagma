@@ -3,7 +3,6 @@
   import Check from '@lucide/svelte/icons/check';
   import Copy from '@lucide/svelte/icons/copy';
   import { TagCatalog } from '$lib/features/graph/TagCatalog.svelte.js';
-  import RemoteCard from '$lib/features/graph/RemoteCard.svelte';
   import KeyCard from '$lib/features/settings/KeyCard.svelte';
   import { pick, rest, type SectionProps } from '$lib/features/settings/section.js';
   import { Addresses } from '$lib/features/workspace/Addresses.js';
@@ -19,8 +18,8 @@
   const unreadable = $derived(tags.table.unreadable);
 
   const STORAGE_FACT: Record<StorageMode, string> = {
-    team: "Team — the tree lives in the repository, on the branch it stands on. Stealth blocks live beside it in a tree versioned by Tagma's own git, which the repository never carries; its remote below keeps a copy off this machine.",
-    stealth: "Stealth — the tree is versioned by Tagma's own git, outside the repository; its remote below keeps a copy off this machine.",
+    team: "Team — the tree lives in the repository, on the branch it stands on. Stealth blocks live beside it in a tree versioned by Tagma's own git, which the repository never carries.",
+    stealth: "Stealth — the tree is versioned by Tagma's own git, outside the repository.",
   };
 
   const commits = $derived(storage === 'team');
@@ -66,10 +65,6 @@
     {/if}
   {/snippet}
 </KeyCard>
-
-{#if project !== null}
-  <RemoteCard {project} />
-{/if}
 
 {#if unreadable.length > 0}
   <section class="mt-6 overflow-hidden rounded-lg border border-destructive/40 bg-raised" aria-label="Unreadable tag declarations">

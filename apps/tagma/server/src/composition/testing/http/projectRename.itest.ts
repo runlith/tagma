@@ -13,7 +13,7 @@ const blockOf = (answer: Answer) => (answer.body as { block: { name: string } })
 
 layer(doorFixture().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeTestServices: true })('project rename', (it) => {
   it.effect(
-    'a renamed project answers to its new name with its graph, worktree copy, mirrors, graph remote and threads where they stood, also once its graphs open again',
+    'a renamed project answers to its new name with its graph, worktree copy, mirrors and threads where they stood, also once its graphs open again',
     () =>
       Effect.gen(function* () {
         const world = yield* DoorFixture;
@@ -30,9 +30,6 @@ layer(doorFixture().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeTest
         const branched = blockOf(
           yield* world.op('create_block', { tags: ['idea'], title: 'Kept on the branch', parentId }, `project=${added.id}&branch=feature`),
         );
-        const bare = yield* world.directory('remote');
-        yield* suiteGit(bare, 'init', '-q', '--bare');
-        expect((yield* world.op('set_graph_remote', { ref: String(added.id), remote: bare })).status).toBe(200);
         const born = yield* world.op('create_thread', { approvalMode: 'bypass' }, `project=${added.id}`);
         const threadId = (born.body as { snapshot: { thread: { id: string } } }).snapshot.thread.id;
         const main = yield* world.runtime.pool.resolve({ projectId: added.id });
@@ -52,9 +49,6 @@ layer(doorFixture().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeTest
             );
           expect(yield* title(kept, `project=${name}`)).toBe('Kept on main');
           expect(yield* title(branched, `project=${name}&branch=feature`)).toBe('Kept on the branch');
-          expect((yield* world.op('read_graph_remote', { ref: name })).body).toMatchObject({
-            remote: { remote: bare, holds: 'this-graph' },
-          });
           expect((yield* world.op('list_threads', { ids: [threadId], shape: 'rows' }, `project=${name}`)).body).toMatchObject({
             rows: [expect.anything()],
           });

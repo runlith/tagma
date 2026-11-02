@@ -473,10 +473,7 @@ layer(root, { excludeTestServices: true })('a root composing the core with a mod
           machine: {
             server: {
               calls: count,
-              work: expect.arrayContaining([
-                expect.objectContaining({ id: 'calls/listenings', count: 0 }),
-                expect.objectContaining({ id: 'greeting/tones', count }),
-              ]),
+              work: expect.arrayContaining([expect.objectContaining({ id: 'greeting/tones', count })]),
             },
           },
         });
@@ -605,27 +602,18 @@ it.live('the core alone opens a data directory written by modules it lacks, and 
     const files = yield* FileSystem.FileSystem;
     const home = yield* files.realPath(yield* files.makeTempDirectoryScoped({ prefix: 'extension-core-' }));
     yield* Effect.addFinalizer(() => Effect.orDie(endHosts(home)));
-    const bare = join(home, 'shared.git');
     const first = yield* Scope.make();
     const { runtime, request } = yield* Scope.provide(served(home, yield* Effect.promise(() => assemble(extended))), first);
     const git = Context.get(runtime.owners, Git);
-    yield* Effect.orDie(runGit(git, 'test', ['init', '-q', '--bare', bare]));
     const rootPath = join(home, 'kept');
     yield* Effect.orDie(runGit(git, 'test', ['init', '-q', '-b', 'main', rootPath]));
     expect((yield* request('/api/op/greet', { name: 'Ada' })).status).toBe(200);
-    const added = yield* request('/api/op/add_project', {
-      name: 'kept',
-      rootPath,
-      storage: 'stealth',
-      contributed: { 'graph-remote': bare },
-    });
+    const added = yield* request('/api/op/add_project', { name: 'kept', rootPath, storage: 'stealth' });
     expect(added.status).toBe(200);
     const project = (added.body as { project: { id: number } }).project.id;
     expect((yield* request('/api/op/write_setting', { project, key: greetingWord.id, value: 'Hi' })).status).toBe(200);
     yield* Scope.close(first, Exit.void);
     expect(existsSync(ownStorePath(join(home, 'tagma.sqlite'), 'greeting'))).toBe(true);
-    expect(existsSync(ownStorePath(join(home, 'tagma.sqlite'), 'graph-remote'))).toBe(true);
-    expect(existsSync(ownStorePath(join(home, 'tagma.sqlite'), 'calls'))).toBe(true);
 
     const second = yield* Scope.make();
     yield* Effect.addFinalizer(() => Scope.close(second, Exit.void));

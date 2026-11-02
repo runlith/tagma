@@ -221,46 +221,6 @@ layer(doorFixture().pipe(Layer.provideMerge(BunFileSystem.layer)), {
     }),
   );
 
-  it.effect('a clone registered with the graph remote reads the stealth blocks, and a clone without it reads only the team tree', () =>
-    Effect.gen(function* () {
-      const world = yield* DoorFixture;
-      const files = yield* FileSystem.FileSystem;
-      const bare = yield* world.directory('layer-remote');
-      yield* suiteGit(bare, 'init', '-q', '--bare');
-      const root = yield* files.realPath(yield* world.directory('origin'));
-      yield* suiteGit(root, 'init', '-q', '-b', 'main');
-      const born = yield* world.op('add_project', { name: world.uniqueName(), rootPath: root, storage: 'team' });
-      const project = (born.body as { project: { id: number } }).project.id;
-      const parentId = yield* rootOf(project);
-      const plan = ((yield* world.op('create_block', { project, title: 'Public plan', parentId })).body as Written).block.name;
-      const terms = ((yield* world.op('create_block', { project, title: 'Vendor terms', storage: 'stealth', parentId })).body as Written)
-        .block.name;
-      expect((yield* world.op('sync_graph', { project })).status).toBe(200);
-      const set = yield* world.op('set_graph_remote', { ref: String(project), remote: bare });
-      expect(set.body).toMatchObject({ remote: { remote: bare, holds: 'this-graph', failure: null } });
-
-      const cloned = Effect.fnUntraced(function* (label: string, remote?: string) {
-        const clone = join(yield* files.realPath(yield* world.directory(label)), 'checkout');
-        yield* suiteGit(root, 'clone', '-q', root, clone);
-        const contributed = remote === undefined ? {} : { 'graph-remote': remote };
-        const added = yield* world.op('add_project', { name: world.uniqueName(), rootPath: clone, storage: 'team', contributed });
-        expect(added.status).toBe(200);
-        return (added.body as { project: { id: number } }).project.id;
-      });
-      const shared = yield* cloned('shared', bare);
-      const alone = yield* cloned('alone');
-      yield* projectLeaving(world, project, shared, alone);
-      const seen = (at: number, name: string) =>
-        Effect.map(world.op('search_blocks', { project: at, query: name }), (answer) => (answer.body as { total: number }).total);
-      expect([yield* seen(shared, plan), yield* seen(shared, terms)]).toEqual([1, 1]);
-      expect([yield* seen(alone, plan), yield* seen(alone, terms)]).toEqual([1, 0]);
-      expect((yield* world.op('set_graph_remote', { ref: String(alone), remote: bare })).body).toMatchObject({
-        remote: { remote: bare, holds: 'this-graph', branches: [{ branch: 'main', state: 'synced' }] },
-      });
-      expect(yield* seen(alone, terms)).toBe(1);
-    }),
-  );
-
   it.effect('a stealth graph moves to team keeping the named subtrees stealth, and back to stealth losing no block', () =>
     Effect.gen(function* () {
       const world = yield* DoorFixture;

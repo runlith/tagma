@@ -5,7 +5,6 @@ import { Router } from '@runlith/layer/Router';
 import { Cache } from '@runlith/query/repo';
 import { AccountsLayer } from '$lib/features/providers/layer.js';
 import { SpeechLayer } from '$lib/features/speech/layer.js';
-import { CallsLayer } from '$lib/features/calls/layer.js';
 import { CheckoutLayer } from '$lib/features/checkout/layer.js';
 import { FilesLayer } from '$lib/features/checkout/files/layer.js';
 import { MarkdownPreview } from '$lib/features/checkout/files/MarkdownPreview.js';
@@ -15,8 +14,6 @@ import { PageTeams } from '$lib/features/pages/team.js';
 import { ThreadList } from '$lib/features/threads/List.svelte.js';
 import { pageTeam } from '$lib/features/threads/team.js';
 import { FrameLayer } from '$lib/app/chrome/layer.js';
-import { CreationFields } from '$lib/app/chrome/creation.js';
-import RemoteField from '$lib/features/graph/RemoteField.svelte';
 import { GraphLayer } from '$lib/features/graph/layer.js';
 import { HarnessLayer } from '$lib/features/threads/layer.js';
 import { ThreadRung } from '$lib/features/workspace/ThreadRung.js';
@@ -165,11 +162,9 @@ export function appLayers(desktop: DesktopApi | undefined) {
     NoticesLayer,
     ReadingLayer,
     GraphLayer,
-    CreationFields.contribute('graph-remote', { id: 'graph-remote', order: 10, payload: { component: RemoteField } }),
     TerminalsLayer,
     AccountsLayer,
     SpeechLayer,
-    CallsLayer,
     SettingsLayer,
     ActivityLayer,
     PowerLayer,
