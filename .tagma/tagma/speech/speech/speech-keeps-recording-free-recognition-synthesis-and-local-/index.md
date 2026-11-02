@@ -16,44 +16,11 @@ sources:
   - kind: dir
     ref: apps/tagma/server/src/speech
 ---
-Paths under `apps/tagma/server/src/` and `apps/tagma/app/src/` unless stated. Read against the code on 2026-11-01. This is the next capability woven through core flows to become points at its owners under [[f492b72c]], after the stealth repository's remote side ([[e41dca93]]).
+Paths under `apps/tagma/server/src/` and `apps/tagma/app/src/` unless stated. This is the next capability woven through core flows to become points at its owners under [[f492b72c]], after the stealth repository's remote side ([[e41dca93]]).
 
-## What stands
+## Why
 
-Server:
-- One `Listenings` service (`speech/contract/service/listenings.ts`) carries two roads. Recording-free recognition — dictation, the check, a view's recognition, device sending — uses `recognize`, `finishRecognition`, `send` and `captures`. Kept listenings use the other twenty members: start and end, shelf, search, read, mute, mark, name, pieces, give, text, detail, describe, follow, again, remove, recording files, watch, transcript and `live`. `speechLayer` builds the booth, re-recognition, the follower, the audio sweep, search indexing and the orphan sweep beside the hearings.
-- Recording-free recognition (`speech/listening/hearing.ts`) shares five files with listenings: the capture registry (`captures.ts`), recognizer choice (`choice.ts`), utterance conversion (`convert.ts`), device sending (`sending.ts`) and the track chain (`track.ts`: `named`, `capture`, `listened`, `recognized`). None of these imports the listening store. Two of them carry listening-only parts: `track.ts` holds the muting gate, and `choice.ts` reads `speech.calls.again` for the recorded-file choice.
-- The shared wire mixes the roads. `Heard`, the recognize feed's event, includes `listing` with a whole `Listening` and states typed `ListeningState`. `CaptureKind` is the literal pair `listening | recognition`. `ModelStatus.again` marks a model that can hear a recording.
-- Speech's manifest declares seven `speech.calls.*` keys beside its other keys. A key's section is its id's first segment (`platform/contract/wire/setting.ts`), so a key of any module named `speech.*` already lands in speech's section. `nativeOffers` (`invocation/nativeDoor.ts`) already groups every assembled operation by `tool.capability`, whatever module declares it.
-- Store: seven machine-store tables. Four are entities (`listening`, `listening_speaker`, `listening_follower`, `listening_given`), three are history (`transcript_line`, `transcript_entry`, `transcript_staged`), and `transcript_fts` indexes them. They come from migrations `baseline`, `calls` and `listening_echo`. Three machine-store facts tie them there:
-  - `listening.project_id` cascades from `project`, and search joins `project` for names (`speech/store/matches.ts`);
-  - speech's `HOME_FOLLOWERS` item rewrites `listening_follower` inside the machine write unit of a thread move (`thread-record/contract/service/homes.ts`);
-  - search indexes only listenings marked `indexed = false` (`speech/store/entries.ts`).
-
-  Audio lies under `<data>/recordings`, carried by speech's `RELOCATIONS` item.
-- The data directory's owners carry only what they know:
-  - The transition attempt copies the databases standing directly under `<data>/stores/` (`installation/process/trial.ts`). A store a failed start creates afterwards stays as it was left.
-  - A world transfer copies the machine database and the paths the target build's `RELOCATIONS` items name (`installation/move/transfer.ts`). It carries no module store.
-- An extension module's installation lifetime is built over `ServerRuntime.runtime` (`composition/build.ts`, `composition/runtime.ts`), which offers neither `Speech`, `AudioDevices`, `Settings`, `Projects`, `ProjectChanges` nor speech's capture registry. Composition binds speech's own implementations inside the core assembly.
-- Composition fills speech's ports by hand:
-  - `CallThreads` in `composition/callThreads.ts`, bound once the threads stack stands;
-  - `RecordingsPlace`;
-  - `Echo`, through an `import()` of `@runlith/echo/sonora` in `composition/speech.ts`;
-  - `Handoff`.
-
-  It also reads `Listenings.live` into the installation's `MachineCalls`. `read_machine_state` answers that count as the required `server.calls`, which the CLI decodes whole (`installation/cli/server.ts`) and the desktop's busy check and quit words read (`desktop/src/server.ts`, `desktop/src/quitting.ts`).
-- The HTTP door's fixed `Api.groups` include `SpeechGroup` (`http/contract/wire/speech.ts`): audio and peaks of a listening track, served by `composition/http/speech.ts`. `composition/http/handlers.ts` lists `Listenings` in its context.
-- Listenings are the only consumer of `@runlith/echo` and `@runlith/audio-file`. The kit's recorded-file road (`Speech.transcribe`, `resume`, `discard`, the `recorded` batch road) and the file models the adapters declare are reached only from re-recognition. The native helper's system-audio tap (`packages/audio-darwin`, `SystemTap`) also serves the check and any capture.
-- The app-view bridge `tagma/speech` carries `listening` and `transcript` actions beside recognition and speech output. They stand in `speech/contract/wire/view.ts`, the client's `features/speech/viewSpeech.ts` and the skill reference `native-harness/skills/apps/references/speech.md`.
-
-App:
-- `app/chrome/TopBar.svelte` draws `CaptureChip` and `CallChip` and opens the call pane. `app/chrome/Shell.svelte` draws `CallKeys`. `app/composition.ts` provides `CallScreen` over `ThreadOnScreen`.
-- `features/threads/Draft.svelte.ts` holds `pieces: Piece[]`, typed by speech's wire. `DraftStore.ts` stores them without a kind. At send, `threads/native/CallPieces.ts` resolves them through `ThreadsRepo.pieceText` and `givePiece`, which call `read_transcript_text` and `give_transcript_piece`. `draft.composer.svelte` draws `PieceCards`.
-- `features/speech/Section.svelte` draws the "Calls" `KeyCard`, `CallSound` and `CallAgain` inline. `SettingsPage.svelte` already draws every section's `SectionContributions` after the section's own view.
-- A core route file `routes/[project]/calls/[[id]]` stands beside the `calls` surface. Links to a moment are issued under it, with `at` and `word` in the query (`features/speech/library/place.ts`).
-- `CaptureChip` counts `listening` captures by that literal, and `Captures.svelte.ts` stops them with `end_listening`.
-
-Dictation (`features/speech/dictation/`), the check, speaking, local models, devices and status import nothing from `calls/` or `library/`.
+Kept captures — a recording whose transcript and sound outlive it — were woven through speech, the window, threads, installation, the HTTP door and composition with no declared seam: one speech service carried both recording-free recognition and kept captures, the shared wire mixed their types, and composition filled their ports by hand. A module from another root could neither join those flows nor leave them, and the core could not be built without that capability.
 
 ## What will stand
 
@@ -62,18 +29,16 @@ The speech module keeps:
 - synthesis and playback, local models, status and speech settings;
 - the `speech` agent capability.
 
-It holds no listening, transcript or recording state, and imports neither `@runlith/echo` nor `@runlith/audio-file`. The kit keeps its recorded-file road and the adapters their file models: they are part of the speech protocol, not of any product. A module from any root that records and keeps captures — a *keeping module* here — reaches speech, the window, threads and the machine only through the points below. With none, each point is empty.
-
-**Order.** Each point lands beside today's code, which keeps working as it is. The code it replaces — `Listenings`' kept-capture members, `CallThreads`, `RecordingsPlace`, `Echo`, `MachineCalls`, `SpeechGroup`, `CallScreen`, `Draft.pieces` and the inline settings cards — goes in the change that moves its last consumer onto the point.
+It holds no state of a kept capture. The kit keeps its recorded-file road and the adapters their file models: they are part of the speech protocol, not of any product. A module from any root that records and keeps captures — a *keeping module* here — reaches speech, the window, threads and the machine only through the points below. With none, each point is empty.
 
 Server:
-1. **A recognition service and a capture kit.** A recognition service with `recognize`, `finish` and `send` takes recording-free recognition out of `Listenings`.
+1. **A recognition service and a capture kit.** A recognition service with `recognize`, `finish` and `send` serves recording-free recognition.
    - The capture registry becomes a service of its own, `Captures`. Its entries carry an owner-named `kind`, a noun for the chip, and the stop their owner registers.
    - Speech's card declares an entry exporting the track chain (`named`, `capture`, `listened`, `recognized`), live and recorded-file recognizer choice and utterance conversion. The recorded-file choice takes its pick as an argument instead of reading a key.
-   - The muting gate leaves `track.ts`, and `listened` takes no muting.
+   - The track chain carries no muting gate, and `listened` takes no muting.
 2. **One stop for any capture.** An operator operation stops one capture by kind and id, or all of them, through the stop each owner registered; the capture chip calls it. `finish_recognition` stays for dictation's confirmed tail.
 3. **Wire without kept-capture types.**
-   - `Heard` loses `listing`, and its `state` takes a recognition state of its own.
+   - `Heard` carries no kept capture, and its `state` takes a recognition state of its own.
    - A capture's `kind` is an owner-named string.
    - `ModelStatus.recorded` is added, answering what `again` answers: the model hears a recorded file. `again` stays, with the same value, for clients of earlier releases.
    - What a keeping module needs from speech's wire — track and recognizer asks, turn mode, `Heard`, `Recognizer` — is reached through a declared entry.
@@ -106,7 +71,7 @@ App:
     - A restored draft drops an item whose kind the build lacks, and so do items stored by an earlier release with no kind. Both are window-local: what such an item referred to stays with its owner. The point takes members only while the app starts, so a restore reads the kinds as final.
     - The `staged` topic carries an item to a thread opened beside.
 11. **Former routes of a contributed surface.** A surface under `p/` may declare `formerRoutes`, claimed like its route. When no route file answers an address, the window sends one under a former route to the surface's `p/` address, keeping the rest of the path and the query. While a route file still answers a former route, it serves it.
-12. **View bridge methods are a point.** `TagmaMethods` (`features/tagma-apps/methods.ts`, beside the app view host) holds `tagma/<name>` methods `{ name, notifications, method(owners, mount) }`. A method's capability and each notification name are claimed by one contribution, and admission refuses a name, capability or notification the host serves itself, read from the same table the host builds its own methods from. Speech contributes `tagma/speech` whole, `listening` and `transcript` included, until the module that keeps captures contributes its own method; then `tagma/speech` keeps `status`, `recognize`, `finish`, `unsubscribe`, `speak` and `silence`, and the apps skill reference documents only those.
+12. **View bridge methods are a point.** `TagmaMethods` (`features/tagma-apps/methods.ts`, beside the app view host) holds `tagma/<name>` methods `{ name, notifications, method(owners, mount) }`. A method's capability and each notification name are claimed by one contribution, and admission refuses a name, capability or notification the host serves itself, read from the same table the host builds its own methods from. `tagma/speech` keeps `status`, `recognize`, `finish`, `unsubscribe`, `speak` and `silence`, and the apps skill reference documents only those; a keeping module contributes its own method.
 13. **The capture chip** counts captures under their nouns and stops them through item 2. A part that draws a capture itself claims it from `Captures` by its kind and id, and the chip leaves the claimed ones out.
 
 A root outside the core reaches these through `@tagma/app/points/parts`, `/points/staged`, `/points/methods` and `/speech/captures`.
