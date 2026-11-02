@@ -24,13 +24,13 @@ sources:
   - kind: file
     ref: apps/tagma/server/src/speech/listening/choice.ts
 ---
-**Value.** The operator once decides who recognizes and speaks for Tagma and how — and calls, checking, dictation, and the agent take it themselves without asking the model each time.
+**Value.** The operator once decides who recognizes and speaks for Tagma and how — and checking, dictation, and the agent take it themselves without asking the model each time.
 
 **How.** Settings → Speech, the Defaults card: recognizer (`speech.recognizer`) and who cuts turns — the provider, Tagma, or nobody; detailed tuning controls declared by the chosen model (`speech.tuning`); speech languages (`speech.languages`); synthesis voice with model and language (`speech.voice`). The Speech boundaries card — speech detector thresholds (`speech.segmenter`).
 
 **Behaviour.**
 - Unchosen is picked by capability: the first model that can do what's needed — live stream, languages, speaker separation — and is available now. A model that hears only a recorded file does not reach live choice.
-- A call naming a provider or model overrides the setting; dictation and re-recognition hold their own keys, and empty ones take the shared.
+- A request naming a provider or model overrides the setting; dictation holds its own keys, and empty ones take the shared.
 - Languages are a hint to the recognizer in probability order; an empty list leaves detection to it.
 - An unavailable chosen model is marked in the list and shows the reason beside it.
 - Speech keys are user-only; they have no project layer.

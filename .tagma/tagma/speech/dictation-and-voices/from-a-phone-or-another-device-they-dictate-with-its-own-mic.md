@@ -34,4 +34,4 @@ sources:
 - A browser that refused the microphone, a context without HTTPS, or a busy microphone gives a reason and a path to fix.
 - The Mac recording chip says recording goes on the bound device. Revoking the device also closes its sound stream.
 
-**Limits.** Dictation only: listenings and calls are not written from a device, and voicing on a device (`speak_text`) does not play. Collapsing a PWA on iOS or blanking the screen ends dictation with loss: background recording is impossible. Sound goes as uncompressed PCM.
+**Limits.** Dictation only: no other capture is written from a device, and voicing on a device (`speak_text`) does not play. Collapsing a PWA on iOS or blanking the screen ends dictation with loss: background recording is impossible. Sound goes as uncompressed PCM.

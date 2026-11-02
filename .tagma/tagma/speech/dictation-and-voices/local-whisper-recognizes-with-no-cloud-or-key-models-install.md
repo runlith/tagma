@@ -28,7 +28,7 @@ sources:
 - The catalog offers Whisper Large v3 Turbo models; the card shows size and disk footprint, counting partially downloaded data.
 - Models live in the data directory and survive a Tagma reinstall. An installed model is checked by size and SHA-256 once, at install time.
 - Deleting mid-install interrupts the install first.
-- Whisper recognizes in batches over speech segments, not as a stream; so it also fits re-recognizing a recorded call.
+- Whisper recognizes in batches over speech segments, not as a stream; so it also fits a recorded file.
 - The same engine is the product's only speech detector: without it, turn segmentation on the Tagma side does not happen.
 - The first run after installing or updating Tagma compiles Metal shaders, and readiness takes minutes.
 

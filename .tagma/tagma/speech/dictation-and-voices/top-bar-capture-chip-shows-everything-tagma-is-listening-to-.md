@@ -21,14 +21,13 @@ sources:
     ref: apps/tagma/server/src/speech/contract/wire/feeds.ts
     symbol: CAPTURES_FEED
 ---
-**Value.** The operator always sees what Tagma is listening to right now — dictation, an agent listening, or a check — and stops it all with one press.
+**Value.** The operator always sees what Tagma is listening to right now — dictation, a check, or a capture another module keeps — and stops it all with one press.
 
 **How.** A chip in the window's top bar with a timer, sources (microphone, system audio), capture count, and a Stop button; underneath it the `speech.captures.subscribe` feed, available only to the operator.
 
 **Behaviour.**
-- The feed carries every open capture on the machine: listenings from any project and recognitions without recording. It is fed by the same registry that opens and closes captures, with no polling.
-- Hovering tells how many listenings and recognitions are open, what is heard and where: on the server machine, on the paired device, or both.
-- Stop ends listenings by stopping and recognitions by reading out the tail.
-- It does not show a live call: calls have their own call chip.
+- The feed carries every open capture on the machine: recognitions without recording and the captures a module keeps. It is fed by the same registry that opens and closes captures, with no polling.
+- Hovering tells how many captures are open, what is heard and where: on the server machine, on the paired device, or both.
+- Stop ends a kept capture through its module's own stop and a recognition by reading out the tail.
 
 **Limits.** This is state display, not a permission request. The chip carries no paired-device name.

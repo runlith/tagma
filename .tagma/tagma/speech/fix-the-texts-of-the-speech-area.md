@@ -5,7 +5,7 @@ ord: 24
 tags: ["task"]
 fields:
   {
-    "status": "open"
+    "status": "closed"
   }
 ---
 - Module card 43059ef8 calls dictation "future", although it shipped.
