@@ -1,9 +1,8 @@
 import type { ThreadRunRow } from '@runlith/agent/thread/rows';
-import { RUN_ENDINGS } from '@runlith/agent/transcript/live';
 import { and, asc, desc, eq, inArray, isNotNull, isNull, like, not, or, sql, type SQL } from 'drizzle-orm';
 import { alias, type SQLiteColumn } from 'drizzle-orm/sqlite-core';
 import type { StoreDb } from '../../platform/contract/service/store.js';
-import { thread, threadRun, stalledKernelThread, unparkedRun } from '../store/kernel.js';
+import { ENDED_RUN, thread, threadRun, stalledKernelThread, unparkedRun } from '../store/kernel.js';
 import { threadSeen, keepWarmRun } from '../store/tables.js';
 import { entryField } from '../store/fields.js';
 import { threadLiveSpell } from '../store/mandate.js';
@@ -103,7 +102,7 @@ const ASKING = sql.raw('n.pending_interaction');
 export const outcomeRunOf = (threadId: SQLiteColumn | SQL): SQL<string | null> => sql<string | null>`(
   select ${threadRun.id}
   from ${threadRun}
-  where ${and(eq(threadRun.threadId, threadId), inArray(threadRun.status, RUN_ENDINGS), not(keepWarmRun(threadRun.id)))}
+  where ${and(eq(threadRun.threadId, threadId), ENDED_RUN, not(keepWarmRun(threadRun.id)))}
   order by ${threadRun.id} desc
   limit 1
 )`;

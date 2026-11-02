@@ -1,0 +1,3 @@
+{
+  "reason": "Building the activity-clock index reads native thread rows whose late timestamp follows potentially large prompt and state payloads."
+}

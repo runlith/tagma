@@ -6,7 +6,7 @@ import type { ThreadStorageFailed } from '@runlith/agent/thread/persisted';
 import { MachineStore, type StoreFailure } from '../../platform/contract/service/store.js';
 import { MachineUnits, type Unit } from '../../platform/contract/service/units.js';
 import { writes } from '../../platform/contract/service/writes.js';
-import { thread, threadRun, threadRunTally } from '../store/kernel.js';
+import { THREAD_CLOCK_INDEX, thread, threadRun, threadRunTally } from '../store/kernel.js';
 import { recordRows, threadRecord } from '../../thread-record/store/table.js';
 import { seenRows, threadSeen } from '../store/tables.js';
 import { threadMandate } from '../store/mandate.js';
@@ -564,7 +564,7 @@ export const makeThreadListReads = Effect.gen(function* () {
                 db
                   .select({
                     threadId: recordFacts.id,
-                    updatedAt: thread.updatedAt,
+                    updatedAt: sql<number>`${thread.updatedAt}`.mapWith(thread.updatedAt),
                     clock: recordFacts.movedAt,
                     createdAt: recordFacts.createdAt,
                     runId: threadRun.id,
@@ -575,7 +575,7 @@ export const makeThreadListReads = Effect.gen(function* () {
                     provenance: assignmentSelection.provenance,
                   })
                   .from(recordFacts)
-                  .leftJoin(thread, eq(thread.id, recordFacts.id))
+                  .leftJoin(sql`${thread} indexed by ${sql.identifier(THREAD_CLOCK_INDEX)}`, eq(thread.id, recordFacts.id))
                   .leftJoin(threadRun, and(eq(threadRun.threadId, recordFacts.id), eq(threadRun.status, 'running')))
                   .leftJoin(threadSeen, eq(threadSeen.threadId, recordFacts.id))
                   .leftJoin(assignmentSelection, eq(assignmentSelection.threadId, recordFacts.id))

@@ -32,6 +32,7 @@ import { projectRows } from '../../platform/contract/service/projections.js';
 export const ENDINGS_LIST: SQL = sql.raw(`(${RUN_ENDINGS.map((status) => `'${status}'`).join(', ')})`);
 
 export const THREAD_OPEN_QUESTION_INDEX = 'native_thread_open_question_idx';
+export const THREAD_CLOCK_INDEX = 'native_thread_clock_idx';
 
 export const thread = sqliteTable(
   'native_thread',
@@ -66,6 +67,7 @@ export const thread = sqliteTable(
   },
   (table) => [
     index('native_thread_updated_idx').on(table.updatedAt),
+    index(THREAD_CLOCK_INDEX).on(table.id, table.updatedAt),
     index('native_thread_asking_idx')
       .on(table.id)
       .where(sql`${entryField(table.pendingInteraction, 'action')} is not null`),
