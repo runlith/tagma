@@ -77,7 +77,11 @@ export function applyNotifications(held: readonly Notification[], event: Notific
   return [...held.filter((row) => row.id !== event.row.id), event.row].sort(newestNotification);
 }
 
+export function toldOf(rows: readonly Notification[]): readonly Notification[] {
+  return rows.filter((row) => row.question === null);
+}
+
 export function notificationCountsOf(rows: readonly Notification[]): { readonly asking: number; readonly telling: number } {
-  const asking = rows.filter((row) => row.question !== null).length;
-  return { asking, telling: rows.length - asking };
+  const telling = toldOf(rows).length;
+  return { asking: rows.length - telling, telling };
 }

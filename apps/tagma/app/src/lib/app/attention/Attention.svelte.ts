@@ -6,7 +6,7 @@ import { Scope } from '@runlith/layer/Scope';
 import { Service } from '@runlith/layer/key';
 import { Door } from '$lib/wire/Door.js';
 import { Live, type LiveConnection } from '$lib/wire/Live.js';
-import { applyAttention, applyNotifications, countsOf, NONE, notificationCountsOf, unreadOf, type AttentionRows } from './rows.js';
+import { applyAttention, applyNotifications, countsOf, NONE, notificationCountsOf, toldOf, unreadOf, type AttentionRows } from './rows.js';
 
 export type Reply = { readonly state: 'sending' | 'sent' } | { readonly state: 'refused'; readonly reason: string };
 
@@ -153,20 +153,28 @@ export class Attention extends Service<Attention>()('Attention', { tier: 'app' }
     this.replies = new Map(this.replies).set(eventId, reply);
   }
 
+  unreadIn(rows: readonly AttentionRow[]): number {
+    return unreadOf(rows).length + toldOf(this.notified).length;
+  }
+
   async markRead(rows: readonly AttentionRow[]): Promise<void> {
     const unread = unreadOf(rows);
-    if (this.marking || unread.length === 0) return;
+    const told = toldOf(this.notified);
+    if (this.marking || unread.length + told.length === 0) return;
     this.marking = true;
     this.actionProblem = null;
-    const answers = await Promise.allSettled(
-      unread.map((row) =>
-        this.door.perform(
-          'mark_thread_seen',
-          { threadId: ThreadId.make(row.threadId), runId: row.runId },
-          { project: String(row.project.id) },
+    const [answers] = await Promise.all([
+      Promise.allSettled(
+        unread.map((row) =>
+          this.door.perform(
+            'mark_thread_seen',
+            { threadId: ThreadId.make(row.threadId), runId: row.runId },
+            { project: String(row.project.id) },
+          ),
         ),
       ),
-    );
+      Promise.all(told.map((row) => this.dismissNotice(row))),
+    ]);
     this.marking = false;
     const refused = answers.find((answer): answer is PromiseRejectedResult => answer.status === 'rejected');
     if (refused !== undefined) this.actionProblem = refused.reason instanceof Error ? refused.reason.message : String(refused.reason);

@@ -19,7 +19,7 @@
   import { Attention } from './Attention.svelte.js';
   import AttentionIcon from './AttentionIcon.svelte';
   import NoticeCard from './NoticeCard.svelte';
-  import { countsOf, groupsOf, readingOf, titleOf, unreadOf } from './rows.js';
+  import { countsOf, groupsOf, readingOf, titleOf } from './rows.js';
 
   const attention = Attention.use();
   const workspace = Workspace.use();
@@ -46,7 +46,7 @@
     scope === 'project' && active !== null ? attention.rows.filter((row) => row.project.id === active.id) : attention.rows,
   );
   const groups = $derived(groupsOf(shown));
-  const unread = $derived(unreadOf(shown).length);
+  const unread = $derived(attention.unreadIn(shown));
   const here = $derived(countsOf(attention.rows.filter((row) => row.project.id === active?.id)));
   const label = $derived(
     needed === 0 ? (counts.finished > 0 ? 'Attention, unread finished threads' : 'Attention') : `Attention, ${needed} need you`,
@@ -104,32 +104,38 @@
       </Button>
     </div>
     <div class="min-h-0 flex-1 overflow-y-auto p-1" {@attach onLinkOpened(() => (open = false))}>
+      {#snippet heading(label: string, count: number)}
+        <div class="flex items-baseline gap-1.5 px-2 pt-2 pb-1 text-meta text-muted-foreground">
+          <span class="font-medium">{label}</span>
+          <span class="tabular">{count}</span>
+        </div>
+      {/snippet}
       {#if attention.notified.length > 0}
-        <div class="px-2 pt-2 pb-1 text-meta font-medium text-muted-foreground">Notifications · {attention.notified.length}</div>
+        {@render heading('Notifications', attention.notified.length)}
         {#each attention.notified as notice (notice.id)}
           <NoticeCard row={notice} />
         {/each}
       {/if}
       {#each groups as group (group.kind)}
-        <div class="px-2 pt-2 pb-1 text-meta font-medium text-muted-foreground">{group.label} · {group.rows.length}</div>
+        {@render heading(group.label, group.rows.length)}
         {#each group.rows as row (row.threadId)}
           <a
             href={addresses.thread(row.threadId, row.project.name)}
-            class="flex items-start gap-2 rounded-sm px-2 py-1.5 transition-colors hover:bg-hover"
+            class="flex items-start gap-2 rounded-md px-2 py-1.5 transition-colors select-none hover:bg-hover"
             data-attention-row={row.threadId}
             data-attention-kind={row.kind}
             {@attach linkTarget(opening, () => threadLink({ threadId: row.threadId, projectId: row.project.id }), surface)}
             onclick={() => (open = false)}
           >
-            <span class={cn('mt-1.5 size-1.5 shrink-0 rounded-full', TONE[row.kind])}></span>
+            <span class={cn('mt-1.5 size-1.5 shrink-0', TONE[row.kind])}></span>
             <span class="flex min-w-0 flex-1 flex-col gap-0.5">
               <span class="flex items-baseline gap-2">
-                <span class="min-w-0 flex-1 truncate text-ui">{titleOf(row)}</span>
+                <FadeText class="flex-1 text-ui" text={titleOf(row)} />
                 <span class="shrink-0 tabular text-meta text-muted-foreground">{timeCompact(row.at, clock.now)}</span>
               </span>
               <span class="flex items-baseline gap-1.5 text-small text-muted-foreground">
                 <span class="shrink-0 font-medium">{row.project.name}</span>
-                <span class="min-w-0 flex-1 truncate">{readingOf(row)}</span>
+                <FadeText class="flex-1" text={readingOf(row)} />
               </span>
             </span>
           </a>
