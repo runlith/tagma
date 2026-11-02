@@ -156,9 +156,6 @@ export const openHost = Effect.fn('opencode.openHost')(function* (input: HostInp
       OPENCODE_FILEWATCHER_DISABLE: 'true',
       OPENCODE_DISABLE_FFF: 'true',
       OPENCODE_DISABLE_AUTOUPDATE: 'true',
-      TMPDIR: input.config.directory,
-      TMP: input.config.directory,
-      TEMP: input.config.directory,
       OPENCODE_CLIENT: 'Tagma',
     },
     stdout: (chunk) => {

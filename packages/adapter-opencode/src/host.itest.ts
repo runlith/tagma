@@ -60,7 +60,7 @@ it.live('private hosts authenticate, share one account database and close on the
         });
         const info = yield* request((signal) => first.client.server.info({ signal }));
         expect(info.version).toBe('2.1.3');
-        const canonical = yield* files.realPath(firstConfig);
+        const canonical = yield* files.realPath(join(account, '.cache', 'tmp'));
         expect(info.paths.tmp.startsWith(`${canonical}/`)).toBe(true);
         const unauthorized = yield* Effect.tryPromise(() => fetch(`${first.endpoint}api/server/info`));
         expect(unauthorized.status).toBe(401);
@@ -77,6 +77,7 @@ it.live('private hosts authenticate, share one account database and close on the
           },
         });
         expect(first.endpoint).not.toBe(second.endpoint);
+        expect((yield* request((signal) => second.client.server.info({ signal }))).paths.tmp).toBe(info.paths.tmp);
         const restored = yield* request((signal) => second.client.session.get({ sessionID: session.id }, { signal }));
         expect(restored.id).toBe(session.id);
         expect((yield* request((signal) => first.client.session.get({ sessionID: session.id }, { signal }))).id).toBe(session.id);

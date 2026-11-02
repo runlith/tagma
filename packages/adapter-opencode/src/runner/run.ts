@@ -15,11 +15,9 @@ const runOpenCode = Effect.fnUntraced(
     const directory = at.env.OPENCODE_DATA_DIR;
     if (!directory) return yield* new AgentFault({ code: FAULT.internal, message: 'The OpenCode runner has no thread scratch directory.' });
     const files = yield* FileSystem.FileSystem;
-    const temporary = join(directory, 'tmp');
     const config = join(directory, 'config');
-    yield* files.makeDirectory(temporary, { recursive: true }).pipe(Effect.orDie);
     yield* files.makeDirectory(config, { recursive: true }).pipe(Effect.orDie);
-    const environment = { ...at.env, TMPDIR: temporary, TEMP: temporary, TMP: temporary };
+    const environment = { ...at.env };
     const program = yield* findProgram(environment).pipe(
       Effect.mapError((cause) => new AgentFault({ code: FAULT.internal, message: cause.message })),
     );

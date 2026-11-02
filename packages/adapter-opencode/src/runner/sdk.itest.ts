@@ -6,7 +6,7 @@ import { AgentFault, FAULT, type Outlet } from '@runlith/acp/agent';
 import type { SessionUpdate } from '@runlith/acp/updates';
 import { accountEnvironment } from '../environment.js';
 import { installedProgram } from '../host.js';
-import { COMPACT, COMPACTED, SAID, Said } from '@runlith/hosted-runner/wire/extensions';
+import { COMPACT, COMPACTED, FORK, SAID, Said } from '@runlith/hosted-runner/wire/extensions';
 import { hostedAgent } from '@runlith/hosted-runner/agent';
 import type { HostedDoor } from '@runlith/hosted-runner/door';
 import { OpenCodeSdk } from './channel.js';
@@ -32,6 +32,7 @@ it.live(
       const files = yield* FileSystem.FileSystem;
       const root = yield* files.makeTempDirectoryScoped({ prefix: 'opencode-boundary-' });
       const requests: (typeof RequestBody.Type)[] = [];
+      const wireRequests: { readonly body: string; readonly affinity: string | null }[] = [];
       const waiting = yield* Deferred.make<void>();
       const summarizing = yield* Deferred.make<void>();
       let summaryMode: 'finish' | 'fail' | 'hold' = 'finish';
@@ -52,7 +53,9 @@ it.live(
             port: 0,
             idleTimeout: 0,
             async fetch(request) {
-              const body = Schema.decodeUnknownSync(RequestBody)(await request.json());
+              const serialized = await request.text();
+              wireRequests.push({ body: serialized, affinity: request.headers.get('x-session-affinity') });
+              const body = Schema.decodeUnknownSync(RequestBody)(JSON.parse(serialized));
               requests.push(body);
               if ((body.tools?.length ?? 0) === 0) {
                 if (summaryMode === 'fail')
@@ -101,9 +104,15 @@ it.live(
                       { index: 1, id: 'call_original_b', type: 'function', function: { name: 'record', arguments: '{"marker":"b"}' } },
                     ],
                   };
-              return new Response(chunks(delta) + chunks({}, answered ? 'stop' : 'tool_calls') + 'data: [DONE]\n\n', {
-                headers: { 'content-type': 'text/event-stream' },
-              });
+              return new Response(
+                chunks({ reasoning_content: 'PRESERVED_REASONING' }) +
+                  chunks(delta) +
+                  chunks({}, answered ? 'stop' : 'tool_calls') +
+                  'data: [DONE]\n\n',
+                {
+                  headers: { 'content-type': 'text/event-stream' },
+                },
+              );
             },
           }),
         ),
@@ -117,7 +126,12 @@ it.live(
           probe: {
             package: '@opencode/ai/providers/openai-compatible',
             settings: { baseURL: `http://127.0.0.1:${upstream.port}/v1`, apiKey: 'probe' },
-            models: { probe: { capabilities: { tools: true, input: ['text', 'image'], output: ['text'] } } },
+            models: {
+              probe: {
+                capabilities: { tools: true, input: ['text', 'image'], output: ['text'] },
+                compatibility: { reasoningField: 'reasoning_content', supportsPromptCacheKey: true },
+              },
+            },
           },
         },
       });
@@ -216,6 +230,47 @@ it.live(
       ]);
       expect(updates.filter((update) => update.sessionUpdate === 'usage_update')).toHaveLength(2);
       expect(result.usage).toBeUndefined();
+      const forkScope = yield* Scope.fork(yield* Effect.scope);
+      const forkSdk = yield* makeOpenCodeSdk(host(`${root}/fork`), process).pipe(Effect.provideService(Scope.Scope, forkScope));
+      const forkCycle = yield* makeOpenCodeCycle(door, process, {
+        model: 'probe/probe',
+        effort: null,
+        parameters: {},
+        version: 'test',
+      }).pipe(Effect.provideService(OpenCodeSdk, forkSdk));
+      const forkAgent = hostedAgent(forkCycle, door)(outlet);
+      const fork = forkAgent.extensions[FORK];
+      expect(fork).toBeDefined();
+      const metadata = yield* Schema.decodeUnknownEffect(
+        Schema.Struct({ _meta: Schema.Struct({ 'tagma/turn': Schema.Struct({ prompt: Schema.String }) }) }),
+      )(result).pipe(Effect.orDie);
+      const address = metadata._meta['tagma/turn'];
+      const copied = yield* fork!({ sessionId: session.sessionId, cwd: root, through: address.prompt });
+      const forked = yield* Schema.decodeUnknownEffect(Schema.Struct({ sessionId: Schema.String }))(copied).pipe(Effect.orDie);
+      const next = [{ type: 'text' as const, text: 'The same next words' }];
+      const beforeFork = requests.length;
+      yield* forkAgent.prompt({ sessionId: forked.sessionId, prompt: next });
+      const copyRequest = wireRequests[beforeFork];
+      const beforeSource = requests.length;
+      yield* agent.prompt({ sessionId: session.sessionId, prompt: next });
+      expect(copyRequest).toEqual(wireRequests[beforeSource]);
+      expect(copyRequest!.body).toContain('PRESERVED_REASONING');
+      const cache = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Struct({ prompt_cache_key: Schema.String })))(
+        copyRequest!.body,
+      ).pipe(Effect.orDie);
+      expect(cache.prompt_cache_key).toBe(copyRequest!.affinity!);
+      const delayed = yield* fork!({ sessionId: session.sessionId, cwd: root, through: address.prompt });
+      const delayedSession = yield* Schema.decodeUnknownEffect(Schema.Struct({ sessionId: Schema.String }))(delayed).pipe(Effect.orDie);
+      const beforeDelayed = requests.length;
+      yield* forkAgent.prompt({ sessionId: delayedSession.sessionId, prompt: next });
+      expect(wireRequests[beforeDelayed]).toEqual(copyRequest);
+      const cut = yield* fork!({ sessionId: forked.sessionId, cwd: root, turn: address.prompt });
+      const cutSession = yield* Schema.decodeUnknownEffect(Schema.Struct({ sessionId: Schema.String }))(cut).pipe(Effect.orDie);
+      const beforeCut = requests.length;
+      yield* forkAgent.prompt({ sessionId: cutSession.sessionId, prompt: next });
+      expect(wireRequests[beforeCut]!.body).not.toContain('before-image');
+      yield* forkAgent.ended;
+      yield* Scope.close(forkScope, Exit.void);
       const compact =
         agent.extensions[COMPACT] ??
         (() => Effect.fail(new AgentFault({ code: FAULT.methodNotFound, message: 'OpenCode did not declare in-session compaction' })));

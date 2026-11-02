@@ -1,4 +1,4 @@
-import { COMPACT, COMPACTED, SAID, RETRYING } from '@runlith/hosted-runner/wire/extensions';
+import { COMPACT, COMPACTED, FORK, SAID, RETRYING } from '@runlith/hosted-runner/wire/extensions';
 import { clientProfile } from '@runlith/hosted-runner/profile';
 
 export const opencodeAcp = clientProfile({
@@ -7,5 +7,5 @@ export const opencodeAcp = clientProfile({
   login: 'sign in with the official OpenCode CLI on the Providers screen',
   compaction: 'session',
   usage: 'measured',
-  extensions: [COMPACT, COMPACTED, SAID, RETRYING],
+  extensions: [COMPACT, COMPACTED, FORK, SAID, RETRYING],
 });

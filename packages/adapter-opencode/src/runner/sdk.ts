@@ -8,13 +8,14 @@ import {
   isUnauthorizedError,
   type OpenCodeEvent,
   type SessionStructuredError,
+  type SessionMessageInfo,
   type TokenUsageInfo,
 } from '@opencode/client';
 import { modelSelection } from '../selection.js';
 import { familyRetries, type WireFailureFamily } from '@runlith/llm/schema/errors';
 import type { TransportFailure } from '@runlith/agent/transcript/entries';
 import { MEASURED, RETRYING } from '@runlith/hosted-runner/wire/extensions';
-import type { Process } from '@runlith/hosted-runner/cycle';
+import type { ForkPoint, Process } from '@runlith/hosted-runner/cycle';
 import type { Relayed } from '@runlith/hosted-runner/relay';
 import { OpenCodeSdk, type Compacted, type Sending } from './channel.js';
 import type { ClientOutcome, ClientRun } from '@runlith/hosted-runner/client';
@@ -203,10 +204,11 @@ export const makeOpenCodeSdk = Effect.fn('opencode.makeSdk')(function* (home: Ho
     }),
   );
   const client = host.client;
-  const readySession = Effect.fn('opencode.load')(function* (id: string, cwd: string) {
+  const readySession = Effect.fn('opencode.load')(function* (id: string, cwd: string, settled: boolean) {
     const session = yield* Effect.tryPromise({ try: () => client.session.get({ sessionID: id }), catch: failed });
     if (session.id !== id || resolve(session.location.directory, session.subpath ?? '.') !== resolve(cwd))
       return yield* new AgentFault({ code: FAULT.notFound, message: `OpenCode session ${id} belongs to another directory` });
+    if (!settled) return;
     const tail = yield* Effect.tryPromise({ try: () => client.message.list({ sessionID: id, limit: 1, order: 'desc' }), catch: failed });
     const terminal = tail.data.length === 0 || tail.data[0]?.type === 'idle';
     const inbox = yield* Effect.tryPromise({ try: () => client.session.inbox.list({ sessionID: id }), catch: failed });
@@ -216,13 +218,57 @@ export const makeOpenCodeSdk = Effect.fn('opencode.makeSdk')(function* (home: Ho
         message: `OpenCode session ${id} has an unfinished execution or undelivered input; restore it from the Tagma journal`,
       });
   });
+  const messages = Effect.fn('opencode.messages')(function* (sessionID: string) {
+    const messages: SessionMessageInfo[] = [];
+    let cursor: string | undefined;
+    do {
+      const page = yield* Effect.tryPromise({
+        try: () => client.message.list(cursor === undefined ? { sessionID, limit: 128, order: 'asc' } : { sessionID, limit: 128, cursor }),
+        catch: failed,
+      });
+      messages.push(...page.data);
+      cursor = page.cursor.next ?? undefined;
+    } while (cursor !== undefined);
+    return messages;
+  });
+  const ordinal = Effect.fn('opencode.ordinal')(function* (
+    sessionID: string,
+    address: string,
+    history: readonly SessionMessageInfo[],
+  ): Effect.fn.Return<number, AgentFault> {
+    const users = history.filter((message) => message.type === 'user');
+    const index = users.findIndex((message) => message.id === address);
+    if (index >= 0) return index;
+    const session = yield* Effect.tryPromise({ try: () => client.session.get({ sessionID }), catch: failed });
+    if (session.fork !== undefined) {
+      const inherited = yield* ordinal(session.fork.sessionID, address, yield* messages(session.fork.sessionID));
+      if (inherited < users.length) return inherited;
+    }
+    return yield* new AgentFault({ code: FAULT.notFound, message: `OpenCode session ${sessionID} has no turn ${address}` });
+  });
+  const boundary = Effect.fn('opencode.boundary')(function* (sessionID: string, point: ForkPoint) {
+    const address = point.turn ?? point.through;
+    if (address === null) return undefined;
+    const history = yield* messages(sessionID);
+    const index = yield* ordinal(sessionID, address, history);
+    const user = history.filter((message) => message.type === 'user')[index];
+    if (user === undefined) return yield* new AgentFault({ code: FAULT.notFound, message: `OpenCode lost the turn ${address}` });
+    if (point.turn !== null) return user.id;
+    const end = history.slice(history.indexOf(user) + 1).find((message) => message.type === 'idle');
+    if (end === undefined)
+      return yield* new AgentFault({ code: FAULT.notFound, message: `OpenCode has no completed boundary after turn ${address}` });
+    return end.id;
+  });
   return OpenCodeSdk.of({
     open: Effect.fn('OpenCodeSdk.open')(function* (opening, replacing) {
-      if (opening.id !== null) yield* readySession(opening.id, opening.cwd);
+      if (opening.id !== null) yield* readySession(opening.id, opening.cwd, opening.fork?.turn == null && opening.fork?.through == null);
+      const before = opening.id === null || opening.fork === undefined ? undefined : yield* boundary(opening.id, opening.fork);
       yield* replacing;
       const id =
-        opening.id ??
-        (yield* Effect.tryPromise({ try: () => client.session.create({ location: { directory: opening.cwd } }), catch: failed })).id;
+        opening.fork !== undefined && opening.id !== null
+          ? (yield* Effect.tryPromise({ try: () => client.session.fork({ sessionID: opening.id!, before }), catch: failed })).id
+          : (opening.id ??
+            (yield* Effect.tryPromise({ try: () => client.session.create({ location: { directory: opening.cwd } }), catch: failed })).id);
       let run: ClientRun | null = null;
       let compacting: {
         readonly request: string;
@@ -578,11 +624,11 @@ export const makeOpenCodeSdk = Effect.fn('opencode.makeSdk')(function* (home: Ho
               if (cancelled) return { status: 'cancelled' as const };
               yield* input.event({ type: 'phase', phase: 'calling' });
               sent = true;
-              yield* Effect.tryPromise({ try: () => client.session.prompt({ sessionID: id, ...prompt }), catch: failed });
+              const admitted = yield* Effect.tryPromise({ try: () => client.session.prompt({ sessionID: id, ...prompt }), catch: failed });
               yield* input.taken;
               if (cancelled) yield* Effect.tryPromise({ try: () => client.session.interrupt({ sessionID: id }), catch: failed });
               yield* Effect.tryPromise({ try: () => client.session.wait({ sessionID: id }), catch: failed });
-              return yield* Effect.raceFirst(Deferred.await(terminal), Fiber.join(events));
+              return { ...(yield* Effect.raceFirst(Deferred.await(terminal), Fiber.join(events))), turn: admitted.id };
             }),
           );
           yield* Effect.forkIn(
