@@ -39,4 +39,4 @@ sources:
 - The global project is born stealth and changes storage mode on common grounds; its working folder stays in place.
 - A group's graph is born stealth and stays stealth: no repository could carry it.
 
-**Limits.** The window doesn't move the graph itself — it copies the command. Moving to team removes private. An off-machine copy of a stealth graph is kept by [[34ea6c7a|its own git remote]]; a team graph has none, it travels with the code repository.
+**Limits.** The window doesn't move the graph itself — it copies the command. Moving to team removes private. A team graph travels with the code repository.

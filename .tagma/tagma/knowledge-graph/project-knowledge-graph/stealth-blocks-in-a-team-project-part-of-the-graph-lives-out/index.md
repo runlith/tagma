@@ -13,8 +13,6 @@ edges:
   - kind: relates
     to: 01a14c14-a11c-7ce8-9d84-6325d41fd6a2
   - kind: relates
-    to: 01a179a7-5ae0-7899-b62e-35cda941dfc7/01a178f3-a88b-7386-8e34-1bc734ea6c7a#runlith-private
-  - kind: relates
     to: 01a17f5f-3c8d-78c2-b6c7-2ab1c11265c5
 sources:
   - kind: file
