@@ -16,8 +16,8 @@ export class SoundChannel extends Service<SoundChannel>()('SoundChannel', { tier
     super();
   }
 
-  open(listening: string, track: string): WebSocket {
-    const query = new URLSearchParams({ id: listening, track });
+  open(recognition: string, track: string): WebSocket {
+    const query = new URLSearchParams({ id: recognition, track });
     const channel = this.socket(this.origin.socket(`${SENDING_PATH}?${query}`));
     channel.binaryType = 'arraybuffer';
     return channel;
