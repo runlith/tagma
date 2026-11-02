@@ -32,6 +32,8 @@ The earlier live CLI 3000.11.3 probe established `~/.local/share/devin/cli/sessi
 
 No separate fork/revert hook was found in the documents read. A new fork id can be checked by later hooks session_id/export session_id; for revert the id before/after and a full re-read of ATIF are needed, not just waiting for appended lines. Which events arrive exactly on these slash commands is unmeasured.
 
+A later static `strings` reading of the same installed 3000.11.92 binary found `session/load`, `session/resume` and `fork_session_from_node`, but no `session/fork` string. Some embedded ACP method lists include `session/resume` and others do not; the strings do not establish which endpoint the running ACP server supports or whether it announces resume. The measured `session/load` success and `session/resume` / `session/fork` method-not-found answers remain those of 3000.11.3 ([[904cee6b]]); no newer ACP process or model turn was started.
+
 ## Conclusion and open probes
 
 ATIF is an export, not a proven resume source. **Copying/trimming ATIF is undetermined as a fork/rewind means**: working state lives in SQLite, and no documented import exists. Hand-copying/editing sessions.db and replanting chain heads are unverified and undescribed as a CLI contract.
