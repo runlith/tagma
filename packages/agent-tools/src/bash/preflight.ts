@@ -1,4 +1,4 @@
-import * as path from 'node:path';
+import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
 import { Effect, FileSystem } from 'effect';
 import type { ToolCaller } from '@runlith/agent/contracts';
 import { everyClaim, ToolFailed } from '@runlith/agent/tool';
@@ -9,12 +9,12 @@ import { shellFacts, shellPlaces } from '../shellFacts';
 import { foreignCause } from '../ToolEdge';
 import type { CheckoutBaselines, Place } from '../CheckoutBaselines';
 import type { ShellTree } from '../ShellRun';
-import { globBase, type CommandFacts } from '../WorkspaceChanges';
+import { globSplit, literalGlob, type CommandFacts, type CommandPath, type Unplaced } from '../WorkspaceChanges';
 import type { Params } from './tool';
 
 const workdirOf = (resolved: ResolvedToolOptions, params: Params) =>
   params.workdir
-    ? resolveWorkspacePath(resolved, path.isAbsolute(params.workdir) ? params.workdir : path.resolve(resolved.cwd, params.workdir))
+    ? resolveWorkspacePath(resolved, isAbsolute(params.workdir) ? params.workdir : resolve(resolved.cwd, params.workdir))
     : Effect.succeed(resolved.cwd);
 
 export const sweepsShared = Effect.fn('BashTool.sweepsShared')(function* (
@@ -23,7 +23,7 @@ export const sweepsShared = Effect.fn('BashTool.sweepsShared')(function* (
   params: Params,
   sweep: ShellSweepShape,
 ) {
-  const swept = (sweep.within ?? []).reduce((dir, one) => path.resolve(dir, one), yield* workdirOf(resolved, params));
+  const swept = (sweep.within ?? []).reduce((dir, one) => resolve(dir, one), yield* workdirOf(resolved, params));
   const checkout = yield* resolved.checkout(swept).pipe(Effect.mapError(foreignCause));
   if (checkout !== 'shared') return false;
   const found = yield* baselines.place(swept, resolved);
@@ -40,7 +40,7 @@ export const commitElsewhere = Effect.fn('BashTool.commitElsewhere')(function* (
   const workdir = yield* workdirOf(resolved, params);
   for (const within of commits) {
     const found = yield* baselines.place(
-      within.reduce((dir, one) => path.resolve(dir, one), workdir),
+      within.reduce((dir, one) => resolve(dir, one), workdir),
       resolved,
     );
     if ('refused' in found || found.tree === null || found.ours) continue;
@@ -50,7 +50,7 @@ export const commitElsewhere = Effect.fn('BashTool.commitElsewhere')(function* (
 });
 
 export const commandClaims = Effect.fn('BashTool.commandClaims')(function* (resolved: ResolvedToolOptions, params: Params) {
-  const workdir = params.workdir === undefined ? resolved.cwd : path.resolve(resolved.cwd, params.workdir);
+  const workdir = params.workdir === undefined ? resolved.cwd : resolve(resolved.cwd, params.workdir);
   const facts = shellFacts(params.command, workdir);
   if (facts.readsOnly) return everyClaim('read');
   const unknown = (part: (typeof facts.parts)[number]) =>
@@ -80,14 +80,56 @@ const ownMeasured = (params: Params, resolved: ResolvedToolOptions, found: Place
   return found.tree === null || names(resolved.cwd) || names(own);
 };
 
-const reachedBy = (facts: CommandFacts, command: string, workdir: string): readonly string[] => [
-  ...new Set([
-    ...shellPlaces(command, workdir),
-    ...facts.parts.flatMap((part) =>
-      part.readsOnly ? [] : (part.named ?? []).map((path) => (typeof path === 'string' ? path : globBase(path.glob))),
-    ),
-  ]),
-];
+const spelledFacts = Effect.fn('BashTool.spelledFacts')(function* (facts: CommandFacts) {
+  const fs = yield* FileSystem.FileSystem;
+  const directories = new Map<string, string | Unplaced>();
+  const unplaced = new Map<string, Unplaced>();
+  const physical = Effect.fnUntraced(function* (directory: string): Effect.fn.Return<string | Unplaced> {
+    const held = directories.get(directory);
+    if (held !== undefined) return held;
+    const real = yield* fs.realPath(directory).pipe(
+      Effect.map((path): string | Unplaced | null => path),
+      Effect.catchReason('PlatformError', 'NotFound', () => Effect.succeed(null)),
+      Effect.catchTag('PlatformError', (error) =>
+        Effect.succeed({ path: directory, reason: `its directory could not be resolved: ${error.reason._tag}` }),
+      ),
+    );
+    const parent = dirname(directory);
+    const above = real !== null || parent === directory ? null : yield* physical(parent);
+    const spelled = real ?? (above === null ? directory : typeof above === 'string' ? join(above, basename(directory)) : above);
+    directories.set(directory, spelled);
+    return spelled;
+  });
+  const spell = Effect.fnUntraced(function* (path: CommandPath): Effect.fn.Return<CommandPath> {
+    const { base, rest } = typeof path === 'string' ? { base: dirname(path), rest: basename(path) } : globSplit(path.glob);
+    if (typeof path === 'string' && path === base) return path;
+    const spelled = yield* physical(base);
+    if (typeof spelled !== 'string') {
+      unplaced.set(spelled.path, spelled);
+      return path;
+    }
+    if (typeof path === 'string') return join(spelled, rest);
+    return { glob: `${literalGlob(spelled)}${spelled.endsWith('/') ? '' : '/'}${rest}` };
+  });
+  const parts = yield* Effect.forEach(facts.parts, (part) =>
+    part.readsOnly || part.named === null
+      ? Effect.succeed(part)
+      : Effect.map(Effect.forEach(part.named, spell), (named) => ({ ...part, named })),
+  );
+  return { facts: { ...facts, parts }, unplaced: [...unplaced.values()] };
+});
+
+const reachedBy = (facts: CommandFacts, command: string, workdir: string): readonly CommandPath[] => {
+  const seen = new Set<string>();
+  const reached: CommandPath[] = [];
+  for (const path of [...shellPlaces(command, workdir), ...facts.parts.flatMap((part) => (part.readsOnly ? [] : (part.named ?? [])))]) {
+    const key = typeof path === 'string' ? path : `\0${path.glob}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    reached.push(path);
+  }
+  return reached;
+};
 
 export const preflight = Effect.fn('BashTool.preflight')(function* (
   resolved: ResolvedToolOptions,
@@ -114,14 +156,17 @@ export const preflight = Effect.fn('BashTool.preflight')(function* (
   const ran = found.ours ? null : found.tree;
   if (facts.readsOnly && !found.ours) return { ...unmeasured, refused: null, ran };
   const own = yield* sessionTree(resolved, baselines, found);
+  const spelled = facts.readsOnly ? { facts, unplaced: [] } : yield* spelledFacts(facts);
   const checkouts = resolved.changes?.checkouts;
   const reached =
     !facts.readsOnly && checkouts !== undefined
-      ? yield* checkouts(reachedBy(facts, params.command, real.path))
+      ? yield* checkouts(reachedBy(spelled.facts, params.command, real.path))
       : { trees: [], unplaced: [] };
-  const trees: ShellTree[] = own !== null && ownMeasured(params, resolved, found, own) ? [{ tree: own, ours: true }] : [];
-  for (const tree of reached.trees) if (!trees.some((one) => one.tree === tree)) trees.push({ tree, ours: tree === own });
-  return { workdir, trees, refused: null, measuring, facts, ran, unplaced: reached.unplaced };
+  const trees = new Map<string, ShellTree>();
+  if (own !== null && ownMeasured(params, resolved, found, own)) trees.set(own, { tree: own, ours: true });
+  for (const tree of reached.trees) if (!trees.has(tree)) trees.set(tree, { tree, ours: tree === own });
+  const unplaced = [...spelled.unplaced, ...reached.unplaced];
+  return { workdir, trees: [...trees.values()], refused: null, measuring, facts: spelled.facts, ran, unplaced };
 });
 
 export const commandTime = (resolved: ResolvedToolOptions, params: Params, caller: ToolCaller, workdir: string) =>

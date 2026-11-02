@@ -69,49 +69,68 @@ export type CommandPath = string | { readonly glob: string };
 
 export const literalGlob = (text: string): string => text.replace(/[\\*?[\]{},!^-]/g, '\\$&');
 
-export const globBase = (glob: string): string => {
+export const globSplit = (glob: string): { readonly base: string; readonly rest: string } => {
   let literal = '';
+  let base = '';
+  let cut = -1;
   for (let at = 0; at < glob.length; at += 1) {
     const char = glob[at] as string;
     if (char === '\\') {
       literal += glob[at + 1] ?? '';
       at += 1;
-    } else if ('*?[{'.includes(char)) return literal.slice(0, literal.lastIndexOf('/')) || '/';
-    else literal += char;
+      continue;
+    }
+    if ('*?['.includes(char)) break;
+    if (char === '/') {
+      base = literal;
+      cut = at;
+    }
+    literal += char;
   }
-  return literal;
+  return { base: base === '' ? '/' : base, rest: glob.slice(cut + 1) };
 };
 
 const matchers = new WeakMap<object, Minimatch>();
+
+const matcherOf = (path: { readonly glob: string }): Minimatch => {
+  const held = matchers.get(path);
+  if (held !== undefined) return held;
+  const matcher = pathMatcher(path.glob, {
+    noext: true,
+    noglobstar: true,
+    nobrace: true,
+    nonegate: true,
+    nocomment: true,
+    dot: false,
+    optimizationLevel: 0,
+    platform: 'linux',
+  });
+  matchers.set(path, matcher);
+  return matcher;
+};
+
+const fits = (part: Minimatch['set'][number][number] | undefined, value: string): boolean =>
+  typeof part === 'string' ? part === value : part instanceof RegExp && part.test(value);
 
 export const namedBy = (paths: readonly CommandPath[], name: string): boolean => {
   const parts = name.split('/');
   return paths.some((path) => {
     if (typeof path === 'string') return path === '' || name === path || name.startsWith(`${path}/`);
     if (path.glob === '') return true;
-    let matcher = matchers.get(path);
-    if (matcher === undefined) {
-      matcher = pathMatcher(path.glob, {
-        noext: true,
-        noglobstar: true,
-        nobrace: true,
-        nonegate: true,
-        nocomment: true,
-        dot: false,
-        optimizationLevel: 0,
-        platform: 'linux',
-      });
-      matchers.set(path, matcher);
-    }
-    return matcher.set.some(
-      (row) =>
-        row.length <= parts.length &&
-        row.every((part, at) => {
-          const value = parts[at] as string;
-          return typeof part === 'string' ? part === value : part instanceof RegExp && part.test(value);
-        }),
-    );
+    return matcherOf(path).set.some((row) => row.length <= parts.length && row.every((part, at) => fits(part, parts[at] as string)));
   });
+};
+
+export const nameIn = (tree: string, path: CommandPath): CommandPath | null => {
+  if (typeof path === 'string') {
+    if (path === tree || tree.startsWith(path === '/' ? path : `${path}/`)) return '';
+    return path.startsWith(`${tree}/`) ? path.slice(tree.length + 1) : null;
+  }
+  const parts = tree.split('/');
+  const reaches = matcherOf(path).set.some((row) => parts.every((value, at) => at >= row.length || fits(row[at], value)));
+  if (!reaches) return null;
+  const segments = path.glob.split('/');
+  return { glob: segments.length <= parts.length ? '' : segments.slice(parts.length).join('/') };
 };
 
 export type CommandPart = {
@@ -156,7 +175,7 @@ export type WorkspaceChanges = {
     work: Effect.Effect<A, E, R>,
     target?: ChangeTarget,
   ) => Effect.Effect<A, E | IntakeRefused, R>;
-  readonly checkouts?: (paths: readonly string[]) => Effect.Effect<Reached>;
+  readonly checkouts?: (paths: readonly CommandPath[]) => Effect.Effect<Reached>;
   readonly command?: (tree: string, facts: CommandFacts) => Effect.Effect<CommandLife | null, IntakeRefused>;
   readonly rewrittenBy?: (path: string, text: string) => Effect.Effect<{ readonly commit: string | null } | null>;
 };

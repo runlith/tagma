@@ -1,12 +1,5 @@
 import { isAbsolute, relative } from 'node:path';
-import {
-  impliedBy,
-  literalGlob,
-  namedBy,
-  type CommandFacts,
-  type CommandPart,
-  type CommandPath,
-} from '@runlith/agent-tools/WorkspaceChanges';
+import { impliedBy, nameIn, namedBy, type CommandFacts, type CommandPart, type CommandPath } from '@runlith/agent-tools/WorkspaceChanges';
 
 export type Role =
   | { readonly kind: 'writer' }
@@ -50,8 +43,8 @@ export const roleOf = (facts: CommandFacts, tree: string, learned: (signature: s
     const part = signature === null ? given : taught(given, learned(signature));
     if (part.named === null) return WRITER;
     for (const path of part.named) {
-      const name = typeof path === 'string' ? within(tree, path) : within(literalGlob(tree), path.glob);
-      if (name !== null) paths.push(typeof path === 'string' ? name : { glob: name });
+      const name = nameIn(tree, path);
+      if (name !== null) paths.push(name);
     }
     if (part.listed) implicit.push(...part.implicit);
     else named = true;

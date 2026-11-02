@@ -7,7 +7,15 @@ import { MachineUnits } from '../platform/contract/service/units.js';
 import { CheckoutPaths, CheckoutUnknown, type PlaceUnread } from '../workspace/contract/service/checkoutPaths.js';
 import { GraphDirectory } from '../workspace/contract/service/checkouts.js';
 import type { WorkingRoot } from '../workspace/contract/wire/place.js';
-import { type CommandLife, IntakeRefused, type Reached, type Unplaced } from '@runlith/agent-tools/WorkspaceChanges';
+import {
+  type CommandLife,
+  type CommandPath,
+  globSplit,
+  IntakeRefused,
+  nameIn,
+  type Reached,
+  type Unplaced,
+} from '@runlith/agent-tools/WorkspaceChanges';
 import type { StoreFailure } from '../platform/contract/service/store.js';
 import type { CommandWrites } from './record/commands.js';
 import { Rewrites } from './record/rewrites.js';
@@ -74,15 +82,27 @@ export const makeChangeRecord = Effect.fnUntraced(function* ({
   const graphDirectory = yield* GraphDirectory;
   const git = yield* Git;
 
-  const reached = (at: readonly string[]): Effect.Effect<Reached> =>
+  const treesOf = (path: CommandPath): Effect.Effect<readonly string[], PlaceUnread> => {
+    const at = typeof path === 'string' ? path : globSplit(path.glob).base;
+    return Effect.map(
+      Effect.all([paths.placeAcross(at), paths.resourceAcross(at), paths.rootsWithin(at)], { concurrency: 'unbounded' }),
+      ([entry, resource, below]) => [
+        ...[entry, resource].flatMap((place) => (place === null ? [] : [place.root])),
+        ...below.flatMap((place) => (nameIn(place.root, path) === null ? [] : [place.root])),
+      ],
+    );
+  };
+
+  const reached = (at: readonly CommandPath[]): Effect.Effect<Reached> =>
     Effect.map(
-      Effect.forEach(at, (path) => Effect.result(paths.resourceAcross(path)), { concurrency: 8 }),
+      Effect.forEach(at, (path) => Effect.result(treesOf(path)), { concurrency: 8 }),
       (placed) => {
         const trees = new Set<string>();
         const unplaced: Unplaced[] = [];
         for (const [index, one] of placed.entries()) {
-          if (one._tag === 'Failure') unplaced.push({ path: at[index] as string, reason: one.failure.reason });
-          else if (one.success !== null) trees.add(one.success.root);
+          const path = at[index] as CommandPath;
+          if (one._tag === 'Failure') unplaced.push({ path: typeof path === 'string' ? path : path.glob, reason: one.failure.reason });
+          else for (const tree of one.success) trees.add(tree);
         }
         return { trees: [...trees], unplaced };
       },

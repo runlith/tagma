@@ -400,9 +400,11 @@ type Opening = {
   release: (() => void) | null;
 };
 
-type Side = Opening & { readonly before: Reading };
+type Side = { readonly opening: Opening; readonly before: Reading };
 
 type SideSettled = { readonly measure: CheckoutMeasure; readonly attributed: readonly ToolShown[] };
+
+const CHECKOUTS_AT_ONCE = 3;
 
 const measuringWords = (count: number, when: string): string =>
   count === 1 ? `Measuring the checkout ${when} the command` : `Measuring ${count} checkouts ${when} the command`;
@@ -410,6 +412,7 @@ const measuringWords = (count: number, when: string): string =>
 export class ShellRun {
   private readonly out = new OutputTail();
   private readonly errors = new OutputTail();
+  private held: Opening[] = [];
   private sides: Side[] = [];
   private refused: string | null = null;
   private unplaced: readonly Unplaced[] = [];
@@ -445,24 +448,35 @@ export class ShellRun {
       return;
     }
     if (!where.measuring) return;
+    yield* this.acquire(where).pipe(Effect.onError(() => Effect.sync(() => this.forget())));
+  });
+
+  private readonly acquire = Effect.fnUntraced(function* (
+    this: ShellRun,
+    where: ShellPlace,
+  ): Effect.fn.Return<void, never, FileSystem.FileSystem | Git> {
     const command = this.resolved.changes?.command;
-    const sides: (Opening | Side)[] = [];
+    const entries: (Opening | Side)[] = [];
     for (const { tree, ours } of where.trees) {
       const opened = command === undefined ? null : yield* Effect.result(command(tree, where.facts));
       if (opened !== null && opened._tag === 'Failure') {
         const before = { unreadable: `the change record could not open this command: ${opened.failure.reason}` };
-        sides.push({ tree, own: ours, life: null, release: null, before });
+        entries.push({ opening: { tree, own: ours, life: null, release: null }, before });
         continue;
       }
       const life = opened === null ? null : opened.success;
       if (life === null && !ours) continue;
-      sides.push({ tree, own: ours, life, release: yield* this.baselines.hold(tree) });
+      const opening: Opening = { tree, own: ours, life, release: null };
+      this.held.push(opening);
+      entries.push(opening);
+      opening.release = yield* this.baselines.hold(tree);
     }
-    this.elsewhere = where.ran !== null && !sides.some((side) => side.tree === where.ran) ? where.ran : null;
-    const reading = sides.filter((side) => !('before' in side)).length;
+    const trees = new Set(entries.map((entry) => ('opening' in entry ? entry.opening.tree : entry.tree)));
+    this.elsewhere = where.ran !== null && !trees.has(where.ran) ? where.ran : null;
+    const reading = entries.filter((entry) => !('opening' in entry)).length;
     if (reading > 0) this.progress?.stage(measuringWords(reading, 'before'));
-    this.sides = yield* Effect.forEach(sides, (side) => ('before' in side ? Effect.succeed(side) : this.based(side)), {
-      concurrency: 'unbounded',
+    this.sides = yield* Effect.forEach(entries, (entry) => ('opening' in entry ? Effect.succeed(entry) : this.based(entry)), {
+      concurrency: CHECKOUTS_AT_ONCE,
     });
   });
 
@@ -472,16 +486,16 @@ export class ShellRun {
   ): Effect.fn.Return<Side, never, FileSystem.FileSystem | Git> {
     const before = yield* this.baselines.measure(opening.tree, this.resolved);
     if (opening.life !== null && 'state' in before) yield* opening.life.based(baseOf(opening.tree, before));
-    return { ...opening, before: unkept(before) };
+    return { opening, before: unkept(before) };
   });
 
   readonly opened = (): void => {
     this.openedAt = performance.now();
-    for (const side of this.sides) side.life?.opened();
+    for (const opening of this.held) opening.life?.opened();
   };
 
   readonly ended = (): void => {
-    for (const side of this.sides) side.life?.ended();
+    for (const opening of this.held) opening.life?.ended();
   };
 
   readonly close = (): void => {
@@ -493,10 +507,10 @@ export class ShellRun {
   };
 
   private readonly leave = (end: (life: CommandLife) => void): void => {
-    for (const side of this.sides) {
-      if (side.life !== null) end(side.life);
-      const release = side.release;
-      side.release = null;
+    for (const opening of this.held) {
+      if (opening.life !== null) end(opening.life);
+      const release = opening.release;
+      opening.release = null;
       release?.();
     }
   };
@@ -576,7 +590,7 @@ export class ShellRun {
     }
     const reading = this.sides.filter((side) => 'state' in side.before).length;
     if (reading > 0) this.progress?.stage(measuringWords(reading, 'after'));
-    const sides = yield* Effect.forEach(this.sides, (side) => this.measured(side), { concurrency: 'unbounded' });
+    const sides = yield* Effect.forEach(this.sides, (side) => this.measured(side), { concurrency: CHECKOUTS_AT_ONCE });
     const stdout = this.out.text();
     const stderr = this.errors.text();
     const fs = yield* FileSystem.FileSystem;
@@ -613,31 +627,31 @@ export class ShellRun {
 
   private readonly measured = Effect.fnUntraced(function* (
     this: ShellRun,
-    side: Side,
+    { opening, before }: Side,
   ): Effect.fn.Return<SideSettled, never, FileSystem.FileSystem | Git> {
-    const before = side.before;
-    if ('unreadable' in before) return { measure: unmeasuredAt(side.tree, side.own, before.unreadable), attributed: [] };
-    const after = yield* this.baselines.measure(side.tree, this.resolved);
-    if ('unreadable' in after) return { measure: unmeasuredAt(side.tree, side.own, after.unreadable), attributed: [] };
+    const { tree, own, life } = opening;
+    if ('unreadable' in before) return { measure: unmeasuredAt(tree, own, before.unreadable), attributed: [] };
+    const after = yield* this.baselines.measure(tree, this.resolved);
+    if ('unreadable' in after) return { measure: unmeasuredAt(tree, own, after.unreadable), attributed: [] };
     const moved = movedPaths(before, after);
-    const found = yield* movesOf(side.tree, before, after, moved, this.resolved.world.working);
+    const found = yield* movesOf(tree, before, after, moved, this.resolved.world.working);
     const changed = new Set([...found.moves.map((move) => move.name), ...found.unread]);
     const verdicts =
-      side.life === null
+      life === null
         ? []
-        : yield* side.life.settle({
+        : yield* life.settle({
             base: 'commit' in before.head ? before.head.commit : null,
             window: { from: before.startedAt, to: after.endedAt },
             moves: found.moves,
           });
     const attributed = verdicts.flatMap((one) => {
-      const file = one.verdict === 'attributed' ? placeOf(side.tree, one.name) : null;
+      const file = one.verdict === 'attributed' ? placeOf(tree, one.name) : null;
       return file === null ? [] : [{ path: file.place, as: 'wrote' as const }];
     });
     return {
       measure: {
-        tree: side.tree,
-        own: side.own,
+        tree,
+        own,
         moved: moved.filter((name) => changed.has(name)),
         head: headMove(before, after),
         verdicts,

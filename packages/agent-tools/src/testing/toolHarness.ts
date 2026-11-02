@@ -1,7 +1,6 @@
 import { tempRepo } from '@runlith/git/testing';
 import { unthreadedCaller } from './caller';
 import type { WorkspaceChange } from '@runlith/files/change';
-import { landedOf } from '../WorkspaceChanges';
 import {
   chmod,
   lstat,
@@ -19,12 +18,20 @@ import {
   writeFile,
 } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { basename, dirname, join } from 'node:path';
+import { join } from 'node:path';
 import type { Tool, ToolPreparation, ToolRefusal, ToolShown } from '@runlith/agent/tool';
 import { ToolAnswer, ToolFailed, toolExecute, toolPrepare } from '@runlith/agent/tool';
 import { type ToolDisplay } from '@runlith/agent/tool/display';
 import { Effect } from 'effect';
-import type { CommandLife, CommandMove, CommandVerdict, WorkspaceChanges } from '../WorkspaceChanges';
+import {
+  landedOf,
+  nameIn,
+  type CommandLife,
+  type CommandMove,
+  type CommandPath,
+  type CommandVerdict,
+  type WorkspaceChanges,
+} from '../WorkspaceChanges';
 import { machineWorld } from '../world/machine';
 import type { World } from '../world';
 import { unruledTimes } from '../CommandWork';
@@ -138,18 +145,6 @@ export const createTempDir = () =>
     (dir) => Effect.promise(() => rm(dir, { force: true, recursive: true })),
   );
 
-const canonical = async (path: string): Promise<string> => {
-  const missing: string[] = [];
-  for (let at = path; ; at = dirname(at)) {
-    const real = await realpath(at).catch((cause: NodeJS.ErrnoException) => {
-      if (cause.code !== 'ENOENT' || dirname(at) === at) throw cause;
-      return null;
-    });
-    if (real !== null) return join(real, ...missing);
-    missing.unshift(basename(at));
-  }
-};
-
 export function recorder(registered: readonly string[] = []) {
   const changes: WorkspaceChange[] = [];
   const moves: CommandMove[] = [];
@@ -159,17 +154,10 @@ export function recorder(registered: readonly string[] = []) {
     moves,
     windows,
     port: {
-      checkouts: (paths: readonly string[]) =>
+      checkouts: (paths: readonly CommandPath[]) =>
         Effect.promise(async () => {
           const roots = await Promise.all(registered.map((root) => realpath(root)));
-          const trees = new Set<string>();
-          for (const path of paths) {
-            const real = await canonical(path);
-            const holding = roots.filter((root) => real === root || real.startsWith(`${root}/`));
-            const deepest = holding.sort((one, two) => two.length - one.length)[0];
-            if (deepest !== undefined) trees.add(deepest);
-          }
-          return { trees: [...trees], unplaced: [] };
+          return { trees: roots.filter((root) => paths.some((path) => nameIn(root, path) !== null)), unplaced: [] };
         }),
       land: <E, R>(batch: readonly WorkspaceChange[], write: Effect.Effect<boolean, E, R>) =>
         Effect.map(write, (written) => {

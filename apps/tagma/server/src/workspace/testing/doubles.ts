@@ -292,7 +292,7 @@ export const gitCheckoutPaths = (checkout: string, projectId = 1): CheckoutPaths
       Effect.map(isAbsolute(named) ? placeOf(projectId, named) : Effect.succeed(null), (place) =>
         place === null ? null : { projectId, rootId: RootId.make(place.checkout), path: place.root, origin: 'canonical' as const },
       ),
-    rootsWithin: () => Effect.die('a git checkout double does not list the checkouts inside a directory'),
+    rootsWithin: () => Effect.succeed([]),
   };
 };
 
