@@ -495,6 +495,7 @@ it.effect(
     const frame = yield* frames.at(1);
     expect(world.reads.latest).toBe(reads);
     expect(frame.deltas.map((delta) => delta.entry?.id)).toEqual(['a']);
+    expect(frame.state.thread.contextReading?.usage.visibleOutputTokens).toBe(1);
     expect(stripped(frame.state)).toEqual(stripped(yield* world.snapshots.state('t')));
   }),
 );
