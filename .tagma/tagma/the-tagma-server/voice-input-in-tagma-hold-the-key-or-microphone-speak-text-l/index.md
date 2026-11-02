@@ -26,7 +26,7 @@ Voice in Tagma is an input method. You hold the key or press the microphone and 
 - **Where the text goes.** Into focus: the agent field or the terminal. If neither holds focus, the text goes to the visible thread's agent field. If there is no such field, the key shows a short hint and writes nothing.
 - **Tail reading.** After release the server asks the recognizer to confirm the tail and inserts it. The wait is capped at 2 s: on expiry the confirmed text plus the last hypothesis is inserted. There are no "accuracy versus speed" modes.
 - **Why not.** The microphone in the field never hides when recording is unavailable. It shows the reason the speech status already gives: no permission, no key, no model, a server on a machine without the helper. Next to it, the road to fixing.
-- **Recording indicator.** While at least one capture is open on the server — dictation, agent listening, or a check — a chip burns in the Tagma top panel: timer, sources, and "Stop". It is state, not a question and not a permission.
+- **Recording indicator.** While at least one capture is open on the server — dictation or a check — a chip burns in the Tagma top panel: timer, sources, and "Stop". It is state, not a question and not a permission.
 - **Global dictation (desktop only).** The same key (changeable) works with any active app. A pill with level and live text appears at the screen bottom, and after release the text is inserted where the cursor stands. Off by default.
 - **Settings.** "Speech" gains a "Voice input" block: the dictation recognizer (default — the shared speech recognizer), the window key, global dictation with its key. Languages, microphone, and keys are shared with the rest of speech.
 
@@ -35,7 +35,7 @@ There are no voice commands: what was said is what prints. Turning a phrase into
 ## Architecture
 
 ```
-agent field ─┐                                ┌─ speech.recognize (feed, id) ─▶ Listenings.recognize
+agent field ─┐                                ┌─ speech.recognize (feed, id) ─▶ Recognitions.recognize
 terminal ────┼─▶ Dictation (window) ──ops/feeds─┤
 pill ────────┘        ▲                         └─ finish_recognition {id}     ─▶ read the tail, end the feed
                       │ keys, insertion
@@ -44,9 +44,9 @@ pill ────────┘        ▲                         └─ finis
 
 ### Server, the `speech` module
 
-- **Recognition ends with tail reading.** Now the `speech.recognize` feed ends only on unsubscribe, and unsubscribe cuts the tail. The feed ask gains an `id` selecting the window. The `finish_recognition { id }` operation stops that recognition's capture, as `end_listening` with `finish` stops listening tracks. The recognizer confirms the tail, the feed yields the last `utterance`, track phases `finished`, and ends. Unsubscribe stays `stop`. `Listenings` holds open recognitions by `id`, and `finish` on an unknown `id` refuses `unknown-recognition`. The tail-wait limit belongs to the window; the server waits on the recognizer as it does on listening `finish`.
-- **Open captures are visible.** The `speech.captures.subscribe` feed returns the machine's current capture set: every project's listenings and recognitions, each with kind, sources, start, project, and listening id. The same registry that opens and closes captures feeds it, with no polling. "Stop" in the chip calls `end_listening` with `stop` for listening and `finish_recognition` for recognition.
-- **The dictation recognizer** is the `speech.dictation.recognizer` setting key. Empty means the shared `recognizerChoice`. Selection follows the same `chosen` as listenings, with no vendor branching.
+- **Recognition ends with tail reading.** Now the `speech.recognize` feed ends only on unsubscribe, and unsubscribe cuts the tail. The feed ask gains an `id` selecting the window. The `finish_recognition { id }` operation stops that recognition's capture. The recognizer confirms the tail, the feed yields the last `utterance`, track phases `finished`, and ends. Unsubscribe stays `stop`. The recognition service holds open recognitions by `id`, and `finish` on an unknown `id` refuses `unknown-recognition`. The tail-wait limit belongs to the window.
+- **Open captures are visible.** The `speech.captures.subscribe` feed returns the machine's current capture set: every project's captures, each with kind, sources, start and project. The same registry that opens and closes captures feeds it, with no polling. "Stop" in the chip calls `finish_recognition` for a recognition.
+- **The dictation recognizer** is the `speech.dictation.recognizer` setting key. Empty means the shared `recognizerChoice`. Selection follows the shared `chosen`, with no vendor branching.
 
 ### Window, `apps/tagma/app`
 
@@ -73,9 +73,9 @@ Steps 2 and 3 are independent of each other. Each step ships on its own.
 ## What proves it
 
 - A server itest on fake devices and provider: `finish_recognition` returns the confirmed tail to the feed's end. Unsubscribing does not wait for the tail. `finish` on an unknown id refuses.
-- A capture-feed itest: listening and recognition open and end arrive as events.
+- A capture-feed itest: a recognition's open and end arrive as events.
 - A `Dictation` unit test on a fake feed: the stable increment inserts in order. Revisions do not duplicate text. On 2 s expiry the confirmed text plus the hypothesis is inserted. `Esc` returns the draft to its pre-dictation shape.
-- Smoke of the installed `Tagma.app` and Chrome: dictation into the agent field and the terminal on Soniox, OpenAI, and Whisper. The chip during agent listening. Global insertion into Notes after granting Accessibility, and the grant survives a rebuild.
+- Smoke of the installed `Tagma.app` and Chrome: dictation into the agent field and the terminal on Soniox, OpenAI, and Whisper. Global insertion into Notes after granting Accessibility, and the grant survives a rebuild.
 - Measurement as a sample on the named machine: from release to insertion on each of the three recognizers.
 
 ## Out of scope

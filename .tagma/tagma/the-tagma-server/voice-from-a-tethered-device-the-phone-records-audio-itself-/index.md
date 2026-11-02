@@ -84,7 +84,6 @@ The window depends on the server.
 ## Out of scope
 
 - Voicing on the phone (`speak_text` and the agent's voice). An answer is needed for which device the agent speaks on when the operator moves between the Mac and the phone. That is a separate spec.
-- Listenings (`start_listening`) from the phone. They still record on the server: a meeting at the Mac can be recorded from the phone.
 - An anti-aliasing filter before downsampling to 16 kHz: averaging over the step window already cuts the bulk, speech above 8 kHz is weak. Add if a measurement shows accuracy loss.
 - Opus compression through WebCodecs. Add if 256 kbit/s proves expensive on a mobile network.
 - Background recording and a native app.

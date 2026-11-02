@@ -24,7 +24,7 @@ Eleven `thread/conformance/*` suites run only in Tagma against SQLite. The packa
 - `storagePort.ts` is cut into one suite per port: runs, transcript, event log, spawn, owner settings.
 - `compactionRequests.ts` splits into compaction requests and `compactionParent`; the latter belongs to collaboration.
 - Every `InMemory`/SQLite divergence the runners expose is decided as a contract decision: either the violating adapter is fixed or the contract is fixed where it described one adapter's accident. A divergence is never skipped or marked skip ([[93739392]]).
-- Every existing test is judged by the contract it protects ([[4f387de2]]). Port-adapter binding checks (`ThreadPorts.test.ts`) and failure-cause preservation (`ThreadBorder.test.ts`) stay while their boundary stands, or are replaced by an equivalent test of the new owner. Prose string checks in `CollaborationTools.test.ts` are deleted. The shipped-workflow check (`workflow/shipped.test.ts`, reads disk in the unit layer) moves to its owner in the right layer unless its contract is covered more cheaply.
+- Every existing test is judged by the contract it protects (the minimal-test rule). Port-adapter binding checks (`ThreadPorts.test.ts`) and failure-cause preservation (`ThreadBorder.test.ts`) stay while their boundary stands, or are replaced by an equivalent test of the new owner. Prose string checks in `CollaborationTools.test.ts` are deleted. The shipped-workflow check (`workflow/shipped.test.ts`, reads disk in the unit layer) moves to its owner in the right layer unless its contract is covered more cheaply.
 
 ## Acceptance criteria
 

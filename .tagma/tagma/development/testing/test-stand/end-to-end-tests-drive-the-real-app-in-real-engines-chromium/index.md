@@ -61,7 +61,7 @@ A test names its lanes; the default is Chromium.
 - *Playwright Test as the runner:* a second runner with its own workers, budget and report beside testbed; it runs on Node, so it cannot build the Bun runtime in process and would need a separate server per worker.
 - *A `tagma:try` instance per run:* a full install, execution host and bundle build per worker, slower and with state outside the test's reach; the in-process door world already serves real HTTP.
 - *Cypress:* no WebKit or iOS Safari, runs inside the page.
-- *Screenshot regression suites:* layout is not a test assertion here ([[4f387de2]]).
+- *Screenshot regression suites:* layout is not a test assertion here (the minimal-test rule).
 
 **Law.** A headless `*.e2e.ts` run under testbed is a test, not a live check ([[c6569513]], amended on the operator's word, 2026-10-28): an agent runs the e2e files it wrote or its change affected. The iOS lane and a headed browser stay live checks; the operator allowed them for this work, including installing an iOS 27 Simulator runtime.
 

@@ -38,7 +38,7 @@ sources:
 
 **Behaviour.**
 - A project belongs to at most one group; the global project and a group join none. A group of two dissolves when one member leaves or is removed from Tagma; its graph stays on disk, and a group made again under that name takes it back.
-- The group's graph is stealth in Tagma's data directory, with no remote until `set_graph_remote`; its blocks name no code and link to member blocks by edges; its rules bind every member.
+- The group's graph is stealth in Tagma's data directory; its blocks name no code and link to member blocks by edges; its rules bind every member.
 - A member's thread starts with the global line, the group root, its own project marked as where it stands, then every other member with its top regions, within the project's one map budget; its law reads global, then the group, then each member's prompt rules under that member's name.
 - A member's native thread also gets every other member's project skills, each labelled with its member; a name this catalog or another member already offers is offered as `<member>-<name>`.
 - A path inside a member checkout nested in another member's answers the nested member's owners and code rules.

@@ -21,7 +21,7 @@ Re-adding is the regular New project or folder picking on desktop. When the fold
 
 ## Model: the registry row stays with a mark
 
-`project` gains `removed_at`. Removal sets the mark, return clears it. The row must not be deleted, nor data switched to a new id on return: everything the machine knows about the project is keyed by its id — threads and their journals `threads/<id>/`, settings, notes, policy, enforcement, change record, commands, listenings — and most tables hold a foreign key to `project.id` with `on delete cascade`. Deleting the row would cascade-wipe them, and switching journals and tables to a new id is per-owner work. The mark touches none of them: removal and return are one write in one row.
+`project` gains `removed_at`. Removal sets the mark, return clears it. The row must not be deleted, nor data switched to a new id on return: everything the machine knows about the project is keyed by its id — threads and their journals `threads/<id>/`, settings, notes, policy, enforcement, change record, commands — and most tables hold a foreign key to `project.id` with `on delete cascade`. Deleting the row would cascade-wipe them, and switching journals and tables to a new id is per-owner work. The mark touches none of them: removal and return are one write in one row.
 
 The repository key recognizes the project on return (`repo_key`, the root commit or the directory path without commits) — the same one holding the "one project per repository" rule. The root may change (another clone of the same repository): the return writes a new `root_path`, like `set_project_root`.
 
@@ -30,7 +30,7 @@ A removed project's name stays taken: stealth and plain graph stores (`<appHome>
 ## Registry (`projects`)
 
 - `Projects` reads — `list`, `byId`, `named`, `resolve`, `global` — never see removed projects: to every caller a removed project does not exist, as after row deletion before. So with no per-place fixes, doors do not find it by name, id or cwd, `ServingSwitch` does not open its graph, and other projects' edges into its graph read `absent` (`not on this machine`).
-- `Reach` "all" ("every project on this machine") carries removed projects' ids, and conversation and call search skips their threads and listenings; threads without a project stay in the results.
+- `Reach` "all" ("every project on this machine") carries removed projects' ids, and conversation search skips their threads; threads without a project stay in the results.
 - `register` looks at the repository key first: a marked row returns (mark cleared, root written) and answers `returned: true`; otherwise the previous name and root checks and a new row insert. Name checks do not apply to a return.
 - `remove` sets the mark; the global project refuses `global-permanent`. `forget` deletes the row — only rolling back a registration whose graph birth never happened (`takeBack`).
 - `RemovalHold`, its holders in graph (`pool`, `birth`), threads (`lifetime`), workspace (`coverage`), the `admit` check in composition and the `project-not-empty` refusal go away: there is nothing to hold.
@@ -47,7 +47,6 @@ A removed project's name stays taken: stealth and plain graph stores (`<appHome>
 `ProjectChanges.removed` subscribers release only the live, data stays:
 - the graph pool closes the project's copies, the project's MCP servers stop, the execution host learns the held command output's owners are gone — as now;
 - threads stop the runs and harness sessions of the project's threads, take down their commands and calls, and free transport resources — the same order as archive, with no archive mark; one stop's failure is logged and cancels none of the rest;
-- speech stops the project's live listenings and re-recognition, but erases no sound files and cleans no search index;
 - in-memory caches of notes and pinned views are no longer dropped: their rows stay, and a returned project sees them at once.
 
 Thread background commands with no running turn are not dropped by removal: they finish on their own.

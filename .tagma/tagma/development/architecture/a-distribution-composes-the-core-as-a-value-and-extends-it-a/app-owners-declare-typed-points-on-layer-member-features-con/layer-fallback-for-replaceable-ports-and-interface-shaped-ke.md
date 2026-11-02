@@ -12,4 +12,4 @@ edges:
   - kind: implements
     to: 01a19371-d439-78c0-9c60-473fd4b30c0c
 ---
-Items 5 and 6 of [[d4b30c0c]]. Settle the semantics under `Layer.when` and deferred chunks first; every key not declared a port stays sealed by `DuplicateProviderError`. The twin `@shop/layer` takes the same mechanism or gets an open task in its project.
+Items 5 and 6 of [[d4b30c0c]]. Settle the semantics under `Layer.when` and deferred chunks first; every key not declared a port stays sealed by `DuplicateProviderError`.

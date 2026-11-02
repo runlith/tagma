@@ -8,7 +8,7 @@ fields:
     "status": "open"
   }
 ---
-**What.** Domain logic is tested in the unit layer over fast adapters, while real git, SQLite, processes and disk are checked once — one conformance set per adapter and a few end-to-end paths through the real door. Current itest and stest files (859 and 294) each get one of three outcomes: logic → unit, real boundary → narrow itest, junk under [[4f387de2]] → deleted.
+**What.** Domain logic is tested in the unit layer over fast adapters, while real git, SQLite, processes and disk are checked once — one conformance set per adapter and a few end-to-end paths through the real door. Current itest and stest files (859 and 294) each get one of three outcomes: logic → unit, real boundary → narrow itest, junk under the minimal-test rule → deleted.
 
 **Where to substitute.** Substitution stands on the port the domain needs, not on the lower boundary.
 - **Git.** The `@runlith/git/Git` service is `run(args)`, i.e. whole git argv (`packages/git/src/Git.ts:70-79`); 217 non-test server files use it (most of all graph, enforcement, change-record, landing, workspace, worktrees). Emulating git by argv in memory is a second git; this is not done. A module whose logic must be tested without git declares its own port for what it needs from git (read HEAD, list changes, write a commit — by module meaning), with a real adapter over `Git` and an in-memory adapter; composition fills the port ([[e090f46d]], [[6f758080]]). A port is introduced only where measurement or dissection shows the module's logic is currently checked through a whole world with git.

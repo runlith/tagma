@@ -16,7 +16,7 @@ A counting run of 131 door-world and terminal-world files (all files where the `
 
 - 167 stealth-project births in 122 files; 14 more — global's birth at every world build.
 - By file: in 90 files one birth, in 25 — two, in 4 — three, one file each — 4, 5, and 6 (`socket/live`, `graphRemote`, `submitEqualLines`).
-- Past one birth per file — 45. Nearly all sit in tests whose subject is two projects: `birthPlace`, `threadWork`, `settingsPlace`, `graphRemote`, `projectRename`, `projectCatalogs`, `adoptDoor`.
+- Past one birth per file — 45. Nearly all sit in tests whose subject is two projects: `birthPlace`, `threadWork`, `settingsPlace`, `projectRename`, `projectCatalogs`, `adoptDoor`.
 - `add_project` through HTTP — 154 times, `remove_project` — 64.
 - Uncounted births via direct `ProjectLifecycle.create` in graph worlds: `copiedBlocks`, `farEdges`, `mirrorMove`, `routing`.
 

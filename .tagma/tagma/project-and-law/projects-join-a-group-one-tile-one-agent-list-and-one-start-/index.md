@@ -40,7 +40,7 @@ A group is a named, ordered set of registered projects Tagma treats as one syste
 - The group is registered like the shared graph: a graph of its own in Tagma's data directory, with no code repository. Its root says what the system is, each member's role and how they connect; its rules bind every member, as the shared graph's rules bind every project. Law reads global, then group, then project.
 - The group graph holds the knowledge spanning members: a contract one member serves and another calls, a spec or task changing more than one member, a decision binding the whole system. What is about one member's code stays in that member's graph, under that code's owner.
 - A group block carries no sources: a source is a path inside one project's root, and the code it names is owned in its member. A group block reaches members' blocks by edges, which already cross projects; the group's rules are therefore prompt rules, and a code rule stays with the member whose code it names.
-- Its storage is stealth, with Tagma's own git, as the shared graph's is. It has no remote until one is set with `set_graph_remote`; from then on it is pushed, merged and restored on another machine exactly as a stealth project graph is.
+- Its storage is stealth, with Tagma's own git, as the shared graph's is.
 - No member's committed graph names the group or the other members: a public repository's `.tagma` never mentions a private member.
 
 ## What an agent receives
@@ -75,6 +75,5 @@ A group is a named, ordered set of registered projects Tagma treats as one syste
 - The dock shows one tile for the group; the agent column lists the threads of every member; opening a thread of another member keeps the tile, the list and its folders.
 - Joining and then leaving returns each project its threads and folders as described.
 - A project in no group shows no change at any door.
-- The group graph has no remote by default; `set_graph_remote` on it pushes its graph, and `restore` on another machine takes the remote's graph.
 - A source on a group block is refused; an edge from a group block to a member's block is accepted.
 - Typecheck and the affected packages' tests pass; minimal contract tests through the orientation, owners and folder doors.

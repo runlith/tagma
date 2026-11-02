@@ -241,7 +241,6 @@ B: 75.7235 s. Every listed file uses a broad door world, though the asserted sub
 |---|---|---:|
 | projectCatalogs | 3.0066 | Catalog choice pinned in project settings, survives release/reopen and user-default change; SQL/state lifetime. |
 | projectsDoor | 4.8587 | Stealth-graph birth, tree files and shadow with no user `.git`. |
-| graphRemote | 10.5507 | Real bare remote, fetch/push, exchange between two graphs, refusal on foreign graph uuid. |
 | graphSync | 6.6947 | Unborn team-repo root commit, private index and kept staged code. |
 | checkoutHistoryDoor | 6.4945 | Real git history/path/grep/branch and pinned HEAD cursor. |
 | checkoutCommitDoor | 4.1603 | Git rename/first parent plus SQL overlay of thread lines. |
@@ -271,7 +270,6 @@ C: 149.7622 s.
 | operationsDoor | 3.1434 | HTTP decoding/admission, contract/outcome headers, JSON/media/text, approval repeat. |
 | changeRecord | 3.6931 | Record with a session grant, unsigned refusal and landing of the credited hunk. |
 | sites | 5.5651 | Host-origin routing, CSP/frame policy, IPv6 bind boundary. |
-| recordingsDoor | 3.5192 | HTTP range/project isolation and file-disappeared-after-lookup. |
 | authDoor | 2.4150 | OAuth loopback/device sign-in and key ingress through the door. |
 | graphFormat | 5.9714 | A detached caller gets its upgraded graph, but the write is refused in its place. |
 | threadTypeDoor | 3.3414 | Runtime modes → wire menu/settings → default agent at the next birth; mixed owner logic, end-to-end path kept. |

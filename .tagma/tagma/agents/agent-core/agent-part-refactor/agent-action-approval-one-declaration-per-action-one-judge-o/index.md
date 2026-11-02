@@ -129,7 +129,7 @@ One call's path:
 5. **A question waits the smallest duration among asking causes; `none` does not shorten the deadline.** So today's behavior holds in every row of the migration table.
 6. **`judge` is one pure function.** Roads differ only in how the caller waits for the answer: run parking, HTTP-call waiting to the door deadline, CLI hook. That is a transport property, not a second copy of the rule.
 7. **The approval grant is separate from the right to perform the action.** Its selectors are an action or a condition. The approver flow holds it, it inherits along the spawn line like `delegation`, and only the operator grants. The parent is the approver only when every asking cause is covered and its mode equals the child's mode.
-8. **The current approver answers, and the operator always does** ([[0f144655]]). There is no machinery against agent escalation ([[06e41b6f]]): the control is the grant, takeover and recording.
+8. **The current approver answers, and the operator always does** (the operator's-authority rule). There is no machinery against agent escalation ([[06e41b6f]]): the control is the grant, takeover and recording.
 9. **Law words in tool descriptions, settings and doctrine are derived from the declaration in one line, not handwritten** ([[51c66cb6]]). Today they already diverged from behavior.
 
 ## Parts

@@ -115,7 +115,7 @@ The performer proves:
 1. **An opening-phase test of native run assembly** (`thread/run/assembly/openingPhase.test.ts`, `@runlith/effect-test`, `it.effect` with test clocks, no sleeping, over a real `ThreadLiveFeed`). While context holds work in `waitingOn` past grace, the run's live-feed view carries `phase: 'opening'` with that `waiting` and `since` of the work's start. Work shorter than grace publishes no `waiting`. The first `preparing` replaces `opening`.
 2. **A `ThreadPhaseFeed` test** (`threads/list/phase.test.ts`): `opening` with `waiting` reaches `ThreadPhase`.
 3. The `context.ts` wiring is not covered by test: checking "whether the port was called" is mock bookkeeping. The operator sees it.
-4. No row-word tests ([[4f387de2]]).
+4. No row-word tests (the minimal-test rule).
 
 ## What the operator checks
 

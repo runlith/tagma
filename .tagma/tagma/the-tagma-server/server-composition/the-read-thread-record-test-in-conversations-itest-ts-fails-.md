@@ -12,4 +12,4 @@ sources:
   - kind: file
     ref: apps/tagma/server/src/composition/testing/threads/conversations.stest.ts
 ---
-"a match search_threads hands the agent opens with read_thread_record" in `composition/testing/threads/conversations.itest.ts` fails with `Service not found: tagma/graph/Tags`. It also fails on `main` (`e2bb6810c1`), so not because of the call branch: the call-search task that touched this file found it. Start from which fixture layer should give `Tags` to the `read_thread_record` read. Done when the test passes.
+"a match search_threads hands the agent opens with read_thread_record" in `composition/testing/threads/conversations.itest.ts` fails with `Service not found: tagma/graph/Tags`. It also fails on `main` (`e2bb6810c1`), so not because of the branch whose task found it. Start from which fixture layer should give `Tags` to the `read_thread_record` read. Done when the test passes.

@@ -14,8 +14,6 @@ edges:
     to: 01a14c05-9e8f-7c75-a633-b2abc2918809
   - kind: relates
     to: 01a1554e-6da7-7ec4-8ead-4daf77e3146e
-  - kind: relates
-    to: 01a179c9-bfb4-76ab-8a43-403b004630dd
 sources:
   - kind: file
     ref: apps/tagma/app/src/lib/features/notices/Service.svelte.ts
@@ -42,22 +40,20 @@ sources:
 - `Server error ×1001` — "… is not a registered checkout": `not-found` from `workspace/subjects.ts` reached `Notices.refusal`, became "Server error" over `gate: false`, and counted 1001 with no stack. Hypothesis: the count is around Svelte's per-flush limit, and it is the same cycle as the `page` line, with the source in Git-tab effects calling `notices.refusal` from a standing request error ([[e1d4c1f1]]). The record does not prove it: the window saved neither component nor the link between lines.
 - 1004 = 1001 and three lines of one each.
 
-## What we take from the studied error window and what we don't
-
-Read — [[004630dd]].
+## What the error window takes and what it leaves
 
 Taken:
 - client failures leave in batches where the operator reads them, on a timer and on page leave; the client folds repetitions before sending, the server counts and groups;
-- the failure kind is decided by values, not text: in the studied app outcome, breakage, and defect are different values; at Tagma the kind is decided by `Door`, the answer's producer;
+- the failure kind is decided by values, not text: `Door`, the answer's producer, decides it;
 - context is added by the runtime, not the call site: build, query-less route, session;
 - the window's last-steps trail — transitions, `Door` calls (operation id, kind or outcome code, ms), identical polls folded ×n, no page words — only at the group's sample;
 - every field has a ceiling and a cut order (trail first, then the stack's tail); what did not fit or was not accepted is counted, not silent.
 
 Not taken:
-- a separate in-process journal with its own lifetime (`ErrorWindow`): Tagma has activity with retention and loss accounting, a second journal would become a second owner;
-- address limits, dropping others' builds, Cloudflare stamps, visitor counting: that guards a public door, while Tagma's door is its own user's local server ([[06e41b6f]]);
-- the client's 60 s dedup window that sends the first report and mutes the rest: the count vanishes, while Tagma sends the count;
-- reception-side classification (`classify`: ours, network, foreign, cancel): the studied receiver guesses by trail, while Tagma's window knows what it was answered;
+- a separate in-process journal with its own lifetime: Tagma has activity with retention and loss accounting, a second journal would become a second owner;
+- address limits, dropping others' builds, visitor counting: that guards a public door, while Tagma's door is its own user's local server ([[06e41b6f]]);
+- a client dedup window that sends the first report and mutes the rest: the count vanishes, while Tagma sends the count;
+- reception-side classification by trail: Tagma's window knows what it was answered;
 - symbolication on read and chunk probes: release maps of Tagma lie outside the install and are read by `tagma:stack`, and window and server are one build. The record carries the build version for `tagma:stack` to find the map.
 
 ## Design

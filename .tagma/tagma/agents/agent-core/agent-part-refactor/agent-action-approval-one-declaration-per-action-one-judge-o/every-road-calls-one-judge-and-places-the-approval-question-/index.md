@@ -36,7 +36,7 @@ Goal: every road on which an agent performs an action calls one `judge` ([[2ebe1
 | The door after the question answer and at an accepted run (`ThreadAgent.toolDoor`) | `new ModeVerdicts(input.mode, floor, undefined, …)` — built-in modes by default (`ThreadAgent.ts:485`). | The same port as the native door. Building a door without a registry is a type error. |
 | A run that cannot wait (`interactive: false`: compaction, `RunScheduler.ts:255`) | `ask` becomes an "nobody to ask" refusal. | `ask` gives a typed `no-approver`. |
 
-An operator caller is not judged on any road ([[fe7e09a3]], [[0f144655]]). A foreign caller is admitted by `external` as today. An operation with `callers: 'thread'` called by the operator refuses with `thread-required`, as today. An operation with `callers: 'operator'` called by a flow refuses `operator-only` with unblock "ask the operator to perform" on every road and in every mode.
+An operator caller is not judged on any road ([[fe7e09a3]], the operator's-authority rule). A foreign caller is admitted by `external` as today. An operation with `callers: 'thread'` called by the operator refuses with `thread-required`, as today. An operation with `callers: 'operator'` called by a flow refuses `operator-only` with unblock "ask the operator to perform" on every road and in every mode.
 
 ## Standalone question and action key
 

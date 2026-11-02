@@ -15,4 +15,4 @@ sources:
   - kind: dir
     ref: apps/tagma/server/src/speech
 ---
-The "Server" section of spec step 1: `id` in the `speech.recognize` feed ask, the `finish_recognition` operation, the `unknown-recognition` refusal, the `speech.dictation.recognizer` key. Start with `apps/tagma/server/src/speech/listening/hearing.ts` and the listening `finish` in `booth.ts`. Done when an itest proves: `finish` returns the confirmed tail to the feed's end, unsubscribing does not wait for the tail, an unknown id refuses.
+The "Server" section of spec step 1: `id` in the `speech.recognize` feed ask, the `finish_recognition` operation, the `unknown-recognition` refusal, the `speech.dictation.recognizer` key. Start with `apps/tagma/server/src/speech/listening/hearing.ts`. Done when an itest proves: `finish` returns the confirmed tail to the feed's end, unsubscribing does not wait for the tail, an unknown id refuses.

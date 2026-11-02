@@ -21,7 +21,7 @@ It has no tools of its own. Publication is given by the `artifacts` skill: `moti
 
 ## What the instructions hold
 
-Dense, only what the agent gets wrong without ([[698f3353]]):
+Dense, only what the agent gets wrong without (the dense-prompt rule):
 - **Declaration and fragment** verbatim: `tagma-timeline` JSON and the `tagmaTimeline` fragment with readiness, bridge, `getAnimations()`, and switching its own clocks off on the first `seek`. The agent writes only the declaration and the frame function.
 - **Contract rules**: fixed-size scene, one theme with explicit colors, fonts and images only `data:`, no `localStorage`, a frame is a function of t; why (the server captures the clip with no network).
 - **Rewindable means**: CSS animations (via the fragment), GSAP timeline `paused` + `seek`, Lottie `goToAndStop` — from allowed CDNs.

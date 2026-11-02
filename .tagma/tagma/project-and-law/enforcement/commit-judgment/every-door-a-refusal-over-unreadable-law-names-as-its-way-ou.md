@@ -3,9 +3,6 @@ id: 01a18c5f-0908-7940-8a8c-6b887494484b
 title: Every door a refusal over unreadable law names as its way out stays open while that law does not read
 ord: 13
 tags: ["explanation"]
-edges:
-  - kind: discovered-from
-    to: 01a18c36-4a00-7ff9-a9a3-e670d6481c3f
 sources:
   - kind: file
     ref: apps/tagma/server/src/enforcement/judging/judge.ts

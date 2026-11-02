@@ -29,7 +29,7 @@ Goal: a thread works under one set of meanings, however it was started — the T
 ## What the user gets
 
 - One thread in the list, in `list_agents`, in presence, and in chat. `idle`, `working`, `awaiting`, `stalled`, and the `completed`, `failed`, `aborted`, `cut`, `withdrawn` ends mean the same on every transport, because one `RunStatus` derives them ([[9f3bb3f9]]).
-- Enter, Tab, word recall, Stop, question answer, mode change, rewind, fork, compact, and model change are the same acts with the same answers. Where the transport gives no capability, the core answers with one typed `transport-cannot` refusal naming it, and the app never draws that control ([[0f144655]]).
+- Enter, Tab, word recall, Stop, question answer, mode change, rewind, fork, compact, and model change are the same acts with the same answers. Where the transport gives no capability, the core answers with one typed `transport-cannot` refusal naming it, and the app never draws that control (the operator's-authority rule).
 - The parent gets exactly one report per run on every transport, from one settlement outbox.
 - A server restart mid-turn continues work on every transport with one mechanism: the core's reaper and the adapter's `adopt`.
 - Every thread has a feed in the core journal. So search, title, and the "said" row work even for a terminal CLI; automatic recap only over a warm copy with a known cache term, manual recap on any transport, with the cache-state mark ([[e6ca4efb]]).

@@ -52,7 +52,7 @@ A thread grows 32 px taller. Thread tools stand next to its name. You return to 
 The reference is the `one-row.html` mockup in the scratch of thread `01a125fe-9260-7644-9a64-589c9bc19e19` (the "Tagma One Row" artifact). The operator accepted it 2026-10-19 with the decisions: one bar, tabs instead of panels, memory at the thread, a thread is also a tab, no split. The spec-review (thread `01a15624-91c4-7afa-9459-56d1bddba817`) verified the spec against the code; its findings are accounted for below.
 
 **What stands now.**
-- **Shared bar.** `app/chrome/TopBar.svelte`, 36 px tall: set by the desktop `titleBarOverlay` strip ([[c4c7b819]]). It holds the traffic light, BackForward, project, branch, a wide "Find or ask… ⌘K" field (an icon in a narrow window), CaptureChip, CallChip, attention, menu. The projects bar `tabs` mode adds a `TabRow` line above it.
+- **Shared bar.** `app/chrome/TopBar.svelte`, 36 px tall: set by the desktop `titleBarOverlay` strip ([[c4c7b819]]). It holds the traffic light, BackForward, project, branch, a wide "Find or ask… ⌘K" field (an icon in a narrow window), CaptureChip, attention, menu. The projects bar `tabs` mode adds a `TabRow` line above it.
 - **Thread header.** `features/threads/Header.svelte`, a second `h-8` line. It holds:
   - the name with the thread menu (`Menu.svelte`);
   - the draft agent picker "as &lt;type&gt;" with rejected agent files and "New thread as…";
@@ -64,7 +64,7 @@ The reference is the `one-row.html` mockup in the scratch of thread `01a125fe-92
 - **Changes.** A `FilesColumn` on the right: the change list, ↑/↓ open the neighboring file's diff. Whether the column is open is local `filesOpen` in `ChatShell`. In a narrow window this is an overlay with a scrim, Esc, and focus return.
 - **File and diff.** `OpenFile` (thread tier) shown in `ThreadMain` as a seam beside the feed or over it.
 - **Terminals.** `TerminalPanel` at the bottom; places (worktree) have their own tab bar and splits (`executions/places`).
-- **Side panels.** `SidePanes`, `thread`, `browser`, `call`, `plugin` views. One layout per project, oldest panel evicted ([[a562a1a3]], [[0614903d]]). Drawn on every project section (`Shell.svelte`, `BesideSlot`).
+- **Side panels.** `SidePanes`, `thread`, `browser`, `plugin` views. One layout per project, oldest panel evicted ([[a562a1a3]], [[0614903d]]). Drawn on every project section (`Shell.svelte`, `BesideSlot`).
 - **Who is in focus.** `ThreadOnScreen` fills `SidePanes`. Composer focus, read marks, `OpenPages`, Picks, UsageMeters, worktree acts, and `FrameFollow`, which moves `?branch` to the focus thread's worktree, depend on it.
 
 One "show beside" action is built five ways, and none but `OpenFile` remembers the thread.
@@ -81,7 +81,7 @@ One "show beside" action is built five ways, and none but `OpenFile` remembers t
   - tools on the right: Pages (popover, as now), terminal with the place's live-terminal counter, Changes with counter, browser, ⋯.
   
   A tool is a plain action: opens its view's tab or moves to the already open one. It has no pressed state and closes no tab: only tabs show what is open and selected. Pages gets no tab-view: it is a popover of external artifact links.
-- **C — over the right area.** Tab bar, "+", "collapse area" (⌥⌘\; ⌘\ stays with the section column), then CaptureChip, CallChip, attention, menu. If the right area is closed, these buttons move to the end of zone B.
+- **C — over the right area.** Tab bar, "+", "collapse area" (⌥⌘\; ⌘\ stays with the section column), then CaptureChip, attention, menu. If the right area is closed, these buttons move to the end of zone B.
 
 The projects bar `tabs` mode keeps its `TabRow` line over the window: those are project tabs, not thread tabs.
 
@@ -98,15 +98,14 @@ The projects bar `tabs` mode keeps its `TabRow` line over the window: those are 
 | `file` | a file opened from the feed, a link, the palette, or "open file at this place" from diff | `projectId+rootId+path` and line; view and selection not stored. A file diff opens in the `changes` tab, there is no separate diff tab |
 | `terminal` | the place's tab with its split tree | place tab key |
 | `browser` | page | `project:page` |
-| `call` | call transcript | call id |
 | `plugin` | plugin view | `plugin/view` |
 
 Each browser page is a separate right-area tab, level with files and terminals. A browser tab has no inner tab strip of its own: the panel `TabStrip` leaves, the tab keeps address bar, navigation, search, scale, DevTools, and downloads. Address-bar hints still offer the project's open and recently closed pages.
 
 How a tab opens:
-- the zone-B tool, "+" (File… ⌘P, Terminal, Changes, Browser page ⌘T, the project's open pages and terminals, recently closed terminals), ⌥-click on a thread in the column, ⌘I "ask" (a thread tab with staged context, as `panes.ask` now), ask from a call and the calls library, the "New thread beside" palette action (formerly "Split right").
+- the zone-B tool, "+" (File… ⌘P, Terminal, Changes, Browser page ⌘T, the project's open pages and terminals, recently closed terminals), ⌥-click on a thread in the column, ⌘I "ask" (a thread tab with staged context, as `panes.ask` now), the "New thread beside" palette action (formerly "Split right").
 - Reopening the same thing (same `{kind, id}`) moves to its tab.
-- Toggles close the tab on repeated press when active: the call transcript in CallChip, zone-B tools.
+- Toggles close the tab on repeated press when active: zone-B tools.
 - A feed link leads to the page in the layout's active browser tab, as `showPage` does now. ⌘-click opens the link in the system browser.
 - A column click on a thread standing as a tab in the current layout activates that tab, as `reveal` does now.
 - A thread never becomes a tab of itself.
@@ -123,7 +122,7 @@ How a tab opens:
 - **A draft birthing a thread** carries the draft layout to the born thread in the same step as navigation.
 - **Stored on device** (`platform.storage.local`), one key per holder with a last-use mark. No shared index, so two desktop windows of projects never overwrite each other's layouts. One layout in two windows is won by the last write; the window re-reads it on `storage` events.
 - **Cleanup.** At startup the store deletes keys older than 30 days and beyond 500 per project, oldest first. A layout is hundreds of bytes, so 500 hold under 1 MB of the ~5 MB `localStorage` budget per origin on any machine. A deleted or archived thread loses its layout lazily: on open and by age.
-- **A vanished thing.** Each view's owner declares whether the thing still `stands(id)`: the thread not deleted, the page open, the place tab existing, the plugin contributing the view, the call existing, the file existing. The layout filters on restore and on owner events. Today's plugin `retain` becomes a special case.
+- **A vanished thing.** Each view's owner declares whether the thing still `stands(id)`: the thread not deleted, the page open, the place tab existing, the plugin contributing the view, the file existing. The layout filters on restore and on owner events. Today's plugin `retain` becomes a special case.
 
 *Terminals.* The bottom `TerminalPanel` leaves. Its mechanisms go:
 
@@ -149,11 +148,11 @@ A place tab key after reload, when all its runs are over, is filtered by the van
 
 `FrameFollow` follows focus, as now.
 
-*Sections.* The right area with tabs exists in every project section: chat, Checkout (outline and block page), Graph, Journal, Rules, Calls, Pages, plugin sections. The layout belongs to the thread in chat and to the section elsewhere. Zone B shows the name of what the section opens (block, commit, file) and the tools the section declares. Checkout keeps its tab area in the main area ([[47f441fe]]); on its right are thread tabs for ⌘I "ask about diff/commit" and review beside diff.
+*Sections.* The right area with tabs exists in every project section: chat, Checkout (outline and block page), Graph, Journal, Rules, Pages, plugin sections. The layout belongs to the thread in chat and to the section elsewhere. Zone B shows the name of what the section opens (block, commit, file) and the tools the section declares. Checkout keeps its tab area in the main area ([[47f441fe]]); on its right are thread tabs for ⌘I "ask about diff/commit" and review beside diff.
 
 *Narrow window.* The right area becomes an overlay over the main area if `window width − rail − column − active view min < CONVERSATION_MIN`. The overlay carries its own tab bar, scrim, Esc, and focus return to the tool — a shared container, not `FilesColumn`.
 
-*Width.* Area width lives in the layout and clamps to the active view's min/max when shown. `beside`, `browser`, `call`, `plugin`, `files`, `diff`, `terminals` size keys in `Panes` leave.
+*Width.* Area width lives in the layout and clamps to the active view's min/max when shown. `beside`, `browser`, `plugin`, `files`, `diff`, `terminals` size keys in `Panes` leave.
 
 *Menu over the browser page.* On desktop the page is a native `WebContentsView` ([[761cf71f]]) and covers HTML menus. While a menu, popover, or overlay intersecting the right area is open ("+", bar overflow, title menu), the page's place shows its snapshot (`capturePage`) and the live view steps aside. This belongs to this spec: without it "+" does not work.
 
@@ -177,7 +176,7 @@ A place tab key after reload, when all its runs are over, is filtered by the van
 **Acceptance.**
 1. One 36 px bar over the work; `Header` as a bar gone. Every element of "What stands now" reachable in zone B or the title menu.
 2. The ⌘K palette opens from the column field, the zone-A icon, and by key. Enter in the field opens it with the entered text. No wide field in the middle.
-3. File, diff, Changes, terminal, page, thread, call, and plugin view open only as tabs. `TerminalPanel`, `FilesColumn`, and `SidePanes` eviction deleted.
+3. File, diff, Changes, terminal, page, thread, and plugin view open only as tabs. `TerminalPanel`, `FilesColumn`, and `SidePanes` eviction deleted.
 4. `TabLayouts` and container tests:
    - two threads hold different layouts; return restores set, order, active tab, and width;
    - reopening moves to the existing tab;

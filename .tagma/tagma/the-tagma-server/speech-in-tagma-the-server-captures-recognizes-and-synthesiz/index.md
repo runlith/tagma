@@ -11,7 +11,7 @@ edges:
   - kind: relates
     to: 01a104f7-f8d1-7ff5-ad08-d25c58882889
 ---
-Tagma gets speech as infrastructure: microphone and system-audio capture, recognition, synthesis, playback, and a durable project transcript. Products built on it — dictation, talking to an agent, meetings, trainers — are designed in their own specs and are not decided here.
+Tagma gets speech as infrastructure: microphone and system-audio capture, recognition, synthesis and playback. Products built on it — dictation, talking to an agent, meetings, trainers — are designed in their own specs and are not decided here.
 
 ## Decisions
 
@@ -44,7 +44,7 @@ Old packages are not fixed in place. A new package replaces an old one, and the 
 | `@runlith/speech` | kit | speech protocol: request and event language, capability dictionary, catalog and choice, adapter contract, duplex runner, recognition and synthesis sessions, `Segmenter`, the `SpeechDetector` and `SpeechCredentials` ports, the `Speech` service ([[d3bd40f5|speech protocol]]) |
 | `@runlith/speech-soniox`, `@runlith/speech-openai` | kit | first-delivery adapters, STT and TTS of one vendor in one package ([[9c5ec1b5|adapters]]) |
 | `@runlith/speech-whisper` | kit | whisper.cpp engine as a child process: local Whisper and the speech detector, model store ([[ba0fa36e|Whisper engine]]) |
-| `speech` in `apps/tagma/server/src/speech` | product | project listenings and transcripts, recognition without recording, synthesis and playback, keys, settings, capability status ([[cc1f119c|server module]]) |
+| `speech` in `apps/tagma/server/src/speech` | product | recognition without recording, synthesis and playback, keys, settings, capability status ([[cc1f119c|server module]]) |
 
 Import direction: adapters and `speech-whisper` → `@runlith/speech` → `@runlith/audio`; `audio-darwin` → `audio`. The `speech` module imports `@runlith/speech` and `@runlith/audio`; composition of the server binds adapters, `audio-darwin`, `speech-whisper`, and the runtime. The window imports no audio packages ([[87eac0a0|window]]).
 
@@ -52,9 +52,8 @@ Import direction: adapters and `speech-whisper` → `@runlith/speech` → `@runl
 window ──ops/feeds──▶ speech ──▶ Speech (@runlith/speech) ◀─ composition: [speech-soniox, speech-openai, speech-whisper]
                      │            ├─ SpeechDetector ◀─ speech-whisper engine | none(reason)
                      │            └─ SpeechCredentials ◀─ speech (from providers)
-                     ├──▶ AudioDevices ◀─ composition: audio-darwin | none(reason)
-                     │            └─ socket ─▶ Tagma.app/Contents/Helpers/<helper>.app
-                     └─ machine DB: listenings, lines ─▶ list_listenings / read_transcript
+                     └──▶ AudioDevices ◀─ composition: audio-darwin | none(reason)
+                                  └─ socket ─▶ Tagma.app/Contents/Helpers/<helper>.app
 ```
 
 Every kit Tagma imports gets a `#module` card before its first import; the card is written from the code as read.
@@ -89,10 +88,9 @@ Steps 1–2 and 3 are independent and run in parallel.
 |---|---|
 | Dictation | microphone → `recognize` → text to the consumer, with no recording |
 | Talking to an agent | echo-cancelled microphone → recognition; text → synthesis → player with clearing |
-| Meeting, YouTube, machine background sound | microphone and system sound as two tracks → listening → project transcript → agent reads `read_transcript` |
 
 ## Proof
 
 - Contract tests owned by the owners — in each child spec.
-- Smoke of an installed `Tagma.app` on macOS: microphone and system-sound permissions survive rebuild; frames from both sources without Tagma's own sound; cloud and local recognition; synthesis with echo cancellation without headphones; a listening survives handoff to its successor; no helper processes remain after stop and server death.
+- Smoke of an installed `Tagma.app` on macOS: microphone and system-sound permissions survive rebuild; frames from both sources without Tagma's own sound; cloud and local recognition; synthesis with echo cancellation without headphones; no helper processes remain after stop and server death.
 - Measurements on the named machine, each as a sample: capture → first partial; end of speech → local Whisper final; synthesis request → first sound; engine memory.

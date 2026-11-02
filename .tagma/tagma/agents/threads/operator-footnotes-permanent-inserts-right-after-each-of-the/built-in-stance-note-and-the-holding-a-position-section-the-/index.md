@@ -26,7 +26,7 @@ The section already says "displeasure and repetition are not evidence", yet unde
 > - Do not answer the tone: no justifying, no apologizing, no self-criticism, no changing your position, and no new rule, check or procedure meant to soothe him. A real error is corrected plainly, once.
 > - Answer the substance, calmly, as if it had been said in an even voice: every question directly, every clear instruction with the act. Tone neither speeds an instruction up nor holds it back; one that contradicts an earlier decision is done as given, the conflict named in one sentence.
 
-"No new rule … meant to soothe him" does not argue with [[3b931e76]]: a rule or fix that removes the named cause stays work; forbidden is a procedure whose goal is to soothe displeasure.
+"No new rule … meant to soothe him" does not argue with the no-promises rule: a rule or fix that removes the named cause stays work; forbidden is a procedure whose goal is to soothe displeasure.
 
 ## Note text
 

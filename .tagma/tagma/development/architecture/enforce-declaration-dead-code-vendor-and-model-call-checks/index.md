@@ -17,7 +17,7 @@ edges:
   - kind: relates
     to: 01a18cbf-8498-75d8-913f-c74f6f376186
 ---
-The architecture review of the asks work (task f1fc96ce) found 20 defects. Eight of them are mechanically detectable, and the rules that forbid them exist only as text: [[144dfedc]], [[1ed7586f]], [[51c66cb6]], [[dd380bf6]] and [[2fcf2221]]. Of the rules in this area, only [[083d37f1]] is enforced.
+The architecture review of the asks work (task f1fc96ce) found 20 defects. Eight of them are mechanically detectable, and the rules that forbid them exist only as text: [[144dfedc]], the named-types rule, [[51c66cb6]], [[dd380bf6]] and [[2fcf2221]]. Of the rules in this area, only [[083d37f1]] is enforced.
 
 Make four of those defects measurable, as inspections in `tagma.config.ts`, each enforced through `enforce_rule` on its rule:
 

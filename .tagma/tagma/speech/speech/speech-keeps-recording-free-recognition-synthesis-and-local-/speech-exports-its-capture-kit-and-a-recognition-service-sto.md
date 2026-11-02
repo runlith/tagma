@@ -12,4 +12,4 @@ edges:
   - kind: implements
     to: 01a1956f-d780-7c1a-8b6f-809c556ba27b
 ---
-Items 1–3 of [[556ba27b]] with their acceptance: a test module captures and registers through the exported entries, the stop ends it, and the key and capability checks pass for an outside module. Lands beside today's listenings, which keep working.
+Items 1–3 of [[556ba27b]] with their acceptance: a test module captures and registers through the exported entries, the stop ends it, and the key and capability checks pass for an outside module.

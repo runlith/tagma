@@ -9,4 +9,3 @@ fields:
   }
 ---
 - Module card 43059ef8 calls dictation "future", although it shipped.
-- The `speech.calls.echo`, `speech.calls.keys`, and `speech.calls.followEvery` settings are not shown in Settings → Speech (`Section.svelte`): show them or explain why not.

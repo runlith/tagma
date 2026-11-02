@@ -16,7 +16,7 @@ fields:
 - **Chunk** — whole samples and the monotonic capture time of its first sample in the consuming process's clock (nanoseconds). An odd byte or an incomplete frame is a producer error, not something the consumer silently cuts.
 - **Gap** — a monotonic-time range with no sound: with a known or explicitly unknown boundary, with a cause (overflow, device change, helper failure, recognition failure). Gaps are not filled with zeros.
 - **Continuous segment** — sound between two gaps.
-- The kit knows no listenings and no scale over them: the consumer keeps origin and scale ([[d3bd40f5|speech protocol]]). Wall clock plays no part in sound time — it can jump.
+- The kit knows no capture timeline and no scale over it: the consumer keeps origin and scale ([[d3bd40f5|speech protocol]]). Wall clock plays no part in sound time — it can jump.
 
 ## Processing
 

@@ -235,7 +235,7 @@ The wait row's expansion takes the target's command line through the optional `C
 
 ### 12. Deferred tools at Claude Code
 
-- `servedPrompt` tells the truth ([[d82432e6]]): tools in the list are named `mcp__tagma__<name>`. How to reveal a deferred tool is told only by the run context's `deferred-tools` section — and only where deferred tools and `tool_search` exist; `servedPrompt` never names `tool_search`: an agent with no grant for it has no such tool.
+- `servedPrompt` tells the truth (prompts name only what exists): tools in the list are named `mcp__tagma__<name>`. How to reveal a deferred tool is told only by the run context's `deferred-tools` section — and only where deferred tools and `tool_search` exist; `servedPrompt` never names `tool_search`: an agent with no grant for it has no such tool.
 - Calling a deferred tool before reveal ends with Claude Code's words — after item 1 truthfully and at once. A Tagma refusal with a hint would require holding deferred tools' schemas in the list, and is rejected: deferral exists for exactly that.
 
 ### 13. Tagma-call parallelism at Claude Code

@@ -69,7 +69,7 @@ On the terminal there is no live tail (`feed: turns`), and an observed Esc gives
 
 ### The failure class goes into the existing diagnostics
 
-`TransportFailure` is a named core schema next to `ThreadFailureDiagnostics` (`transcript/entries.ts`, [[1ed7586f]]). It is the part of the diagnostics the transport knows:
+`TransportFailure` is a named core schema next to `ThreadFailureDiagnostics` (`transcript/entries.ts`, the named-types rule). It is the part of the diagnostics the transport knows:
 - `type` — the reason tag from the [[8dd27b1e]] table (a status with no table class is `statusReason` in `packages/llm/src/llm/schema/errors.ts`), the same value as on native;
 - `stage` — where the vendor failed: on the Claude runner `claude-code.turn`;
 - `httpStatus`, `retryable`, `modelStarted`, `detail`;
@@ -111,7 +111,7 @@ The [[eba592c4]] rule.
 - **The manual `/recap`** is always allowed except on a live run (`recap-running`, as today). It runs:
   - **on the copy when one stands** (a native capture or a Claude Code session), warm or not: a single request that rewrites the cache. `ThreadAsides` holds the copy until its cache lifetime ends, with no lifetime until the run ends. An `acp` session copy lives no longer than the vendor process that answers it: when the process ends (idle, crash, release, transport change), `ProtocolAsides` drops the copy. After that a manual recap retells the journal, and "Generate title" follows the cold excerpt road; aside never fails because the process is gone. The `recap-cold` and `released` refusals of the manual road are removed;
   - **with no copy** (native after a restart — `unavailable` today; `aside: none` on the terminal and Devin) — as a Tagma-journal retelling on the model picked by the same excerpt owner as the external title ([[db7ababc]]), with the same prompt and recap limits. Activity writes `model-chosen` with the `journal` road.
-- **The app.** The `/recap` command menu item (`native/commands/recap.commands.ts`) shows in its `value` "Cache cold" or "Cache state unknown" from the thread row's `cacheWarmth`, which the app already receives. No separate confirmation ([[0f144655]]): the mark shows before the press, the press launches the recap.
+- **The app.** The `/recap` command menu item (`native/commands/recap.commands.ts`) shows in its `value` "Cache cold" or "Cache state unknown" from the thread row's `cacheWarmth`, which the app already receives. No separate confirmation (the operator's-authority rule): the mark shows before the press, the press launches the recap.
 
 ### The `aside` capability
 

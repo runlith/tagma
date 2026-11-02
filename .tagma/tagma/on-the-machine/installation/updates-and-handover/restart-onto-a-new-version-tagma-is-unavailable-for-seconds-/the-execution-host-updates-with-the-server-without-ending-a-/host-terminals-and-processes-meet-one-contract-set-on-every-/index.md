@@ -194,7 +194,7 @@ The step implementer finally picks new names by the project's naming rules; the 
 
 ### One contract set
 
-The set lives as a `testing` entry of the port module and runs against any adapter. Each check asserts the contract through the port or through the host, by state, output, or typed refusal ([[4f387de2]]). The set reads adapter capabilities: where a capability is declared it checks the behavior; where not, it checks that the answer is `unsupported`. No silently skipped check.
+The set lives as a `testing` entry of the port module and runs against any adapter. Each check asserts the contract through the port or through the host, by state, output, or typed refusal (the minimal-test rule). The set reads adapter capabilities: where a capability is declared it checks the behavior; where not, it checks that the answer is `unsupported`. No silently skipped check.
 
 Terminal:
 - start: geometry as requested; the child is the terminal foreground (through POSIX adapter facts where they exist);

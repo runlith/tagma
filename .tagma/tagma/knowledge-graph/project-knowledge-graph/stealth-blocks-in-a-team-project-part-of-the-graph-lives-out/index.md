@@ -61,14 +61,13 @@ A team project's root changes storage only together with the project, through `s
 
 - A stealth block's row and page carry the same mark and word the stealth project carries now (`EyeOff`, "Stealth").
 - Block creation offers a storage choice, and a block can move to the other.
-- A team project's Settings → Graph files shows both trees and the Remote card.
+- A team project's Settings → Graph files shows both trees.
 - A layer-law refusal shows the depending blocks as links.
 
-## Branches, worktrees, remote
+## Branches and worktrees
 
 - A team project's stealth tree runs on the same machinery as a stealth project's graph ([[d41fd6a2]]): each checkout its own tree, each code branch its own twin, and a twin merges when code merges. A stealth spec written on a feature branch reaches main with that branch's code, no earlier.
 - Writing a stealth block on a detached HEAD refuses the same as in a stealth project today.
-- `set_graph_remote` accepts a team project: its remote carries the stealth layer. That is an off-machine copy and a shared layer for those with remote access; the rest see only the team layer. Registering a team project with `--graph-remote` raises the layer from the remote.
 
 ## Project storage
 
@@ -96,9 +95,9 @@ A team project's root changes storage only together with the project, through `s
   - mirror scan, watch, repair, and rebuild over two trees — the block path together with the tree;
   - projection by block storage, anchor directories, and naming by own-tree neighbours;
   - the ledger of its own writes per tree.
-- `graph/serving`: a graph copy holds both trees — write-through, team-tree commits, commits, twins, and remote of the stealth tree.
+- `graph/serving`: a graph copy holds both trees — write-through, team-tree commits, commits and twins of the stealth tree.
 - The layer-law gate is one, in the graph write layer. It judges every write: act, batch, amendment admission, subtree arrival from another project. No operation carries its own check.
-- `graph/storage/move.ts` and `set_project_storage` take the subtree list; `graph/storage/remote.ts` and `set_graph_remote` accept a team project.
+- `graph/storage/move.ts` and `set_project_storage` take the subtree list.
 - `landing/land/message.ts` names only team tasks.
 - App: the storage mark, choice at creation, the move, Settings → Graph files.
 
@@ -121,7 +120,6 @@ A team project's root changes storage only together with the project, through `s
 5. Every layer-law dependency refuses with its own code and with way-outs; stealth-to-team `supersedes` and a stealth `#module` refuse.
 6. Moving to stealth a subtree team blocks link to refuses and names them. A batch with edits and the move lands, and no `.tagma` commit holds an intermediate state.
 7. A stealth block written in a branch worktree appears in main after that branch's `merge_worktree`, no earlier.
-8. A second machine with the same remote receives the team project's stealth layer, while a machine without it sees only the team layer.
 9. A team parent deleted by someone else's commit leaves the stealth child standing, and Tagma writes not one file for it.
 10. A code commit with a stealth task's work never names it; `.tagma` commits never name stealth blocks.
 11. A stealth → team move with a list leaves the named subtrees out of `.tagma`; a team → stealth move loses not one block.

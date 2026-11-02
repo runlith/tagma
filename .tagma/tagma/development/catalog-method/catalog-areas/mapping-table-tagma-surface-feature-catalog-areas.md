@@ -46,7 +46,7 @@ Every Tagma surface unit stands in exactly one catalog area; the areas and their
 - providers (24): begin_sign_in, complete_sign_in, disable_adapter, discover_adapter_models, enable_adapter, install_adapter, list_accounts, list_console_keys, read_adapter_settings, read_adapters, read_cache_lifetimes, read_provider_token, read_sign_in, refresh_accounts, remove_account, remove_adapter, remove_adapter_instance, remove_console_key, rename_account, save_adapter_instance, save_console_key, select_account_mode, set_default_account, update_adapter
 
 **A8 (22)**
-- speech (22): delete_listening, describe_listening, end_listening, finish_recognition, follow_listening, give_transcript_piece, install_speech_model, list_listenings, mark_listening, mute_track, name_speaker, read_listening, read_transcript, read_transcript_piece, read_transcript_text, recognize_listening, remove_speech_model, search_transcripts, speak_text, speech_status, start_listening, stop_speaking
+- speech (6): finish_recognition, install_speech_model, remove_speech_model, speak_text, speech_status, stop_speaking
 
 **A9 (21)**
 - browser (21): act_on_page, answer_page_dialog, capture_page, clear_profile, close_page, create_profile, delete_profile, emulate_page, evaluate_in_page, import_cookies, list_cookie_sources, list_pages, list_profiles, navigate_page, open_page, read_page_console, read_page_downloads, read_page_network, snapshot_page, update_profile, wait_for_page
@@ -79,7 +79,7 @@ Every Tagma surface unit stands in exactly one catalog area; the areas and their
 - **A5 (10):** agent.autoCommit, agent.checkout, checkout.fsmonitor, checkout.untrackedCache, editor.autoSave, editor.autoSaveDelay, worktrees.branchPrefix, worktrees.folder, worktrees.setupCopy, worktrees.setupRun
 - **A6 (44):** agent.checkoutWorld, agent.commandDescription, host.memoryShare, power.agentWork, power.keepAwake and 39 `terminal.*` keys: activePaneOpacity, allowOsc52Clipboard, backgroundOpacity, clipboardOnSelect, colorOverrides, cursorBlink, cursorOpacity, cursorStyle, dividerColorDark, dividerColorLight, dividerThicknessPx, fastScrollSensitivity, focusFollowsMouse, fontFamily, fontSize, fontWeight, fontWeightBold, gpuAcceleration, importedFromOrca, inactivePaneOpacity, lastGrid, ligatures, lineHeight, macOptionAsAlt, mouseHideWhileTyping, opacityTransitionMs, paddingX, paddingY, placeLayouts, rightClickToPaste, scrollSensitivity, scrollbackRows, shortcutPolicy, skipCloseConfirm, themeDark, themeLight, tuiScrollSensitivity, useSeparateLightTheme, wordSeparator
 - **A7 (0)**
-- **A8 (17):** speech.calls.again, speech.calls.audio, speech.calls.echo, speech.calls.followEvery, speech.calls.keys, speech.calls.speakers, speech.calls.tracks, speech.dictation.global, speech.dictation.globalKey, speech.dictation.key, speech.dictation.recognizer, speech.languages, speech.microphone, speech.recognizer, speech.segmenter, speech.tuning, speech.voice
+- **A8 (10):** speech.dictation.global, speech.dictation.globalKey, speech.dictation.key, speech.dictation.recognizer, speech.languages, speech.microphone, speech.recognizer, speech.segmenter, speech.tuning, speech.voice
 - **A9 (4):** agent.web, browser.agentProfile, browser.openLinks, browser.userProfile
 - **A10 (12):** agent.contextFiles.enabled, agent.contextFiles.names, apps.enabled, apps.installed, mcp.servers, skills.directories.global, skills.directories.project, skills.disabled, skills.global.enabled, skills.own.enabled, skills.project.enabled, skills.rescan
 - **A11 (2):** access.cloud, release.feed (release build only)
@@ -137,7 +137,7 @@ The agent's remaining tools are operations and stand above in their areas.
 - A3: `[project]/graph/[[id]]`, `[project]/journal/[[id]]`, `[project]/b/[id]`
 - A4: `[project]/rules`
 - A5: `[project]/checkout`
-- A8: `[project]/calls/[[id]]`, `_desktop/dictation`
+- A8: `_desktop/dictation`
 - A9: `[project]/w/[[page]]`
 - A10: `[project]/p/[app]/[view]`, `_desktop/view/[project]/[app]/[view]`
 - A12: `/`, `[project]`, `settings`

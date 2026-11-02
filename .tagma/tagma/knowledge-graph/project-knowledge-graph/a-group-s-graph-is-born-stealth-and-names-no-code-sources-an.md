@@ -9,7 +9,7 @@ sources:
   - kind: file
     ref: apps/tagma/server/src/graph/sources/placement.ts
 ---
-A group's graph is born with the group: stealth with Tagma's own git, its root folder in the data directory, the machine's catalogs, and no remote until `set_graph_remote` gives it one. It stays stealth — a team move refuses `group-graph`, since no repository could carry it, and a member's repository never names the group or another member.
+A group's graph is born with the group: stealth with Tagma's own git, its root folder in the data directory, and the machine's catalogs. It stays stealth — a team move refuses `group-graph`, since no repository could carry it, and a member's repository never names the group or another member.
 
 Its blocks carry no sources: a source is a path inside one checkout, and the code it names is owned in the member holding it, so `Sources.place` — the door every new source passes — refuses `group-source`. A group block reaches member blocks by edges, which already cross projects, and its rules are prompt rules.
 

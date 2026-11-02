@@ -165,5 +165,5 @@ The `agent.questionWait` setting is removed: only the declaration names the time
 - Composition test: a rung named by no mode, and one condition id at two owners, fail loading with names.
 - Door test: prepare raising an undeclared condition is a defect, not `allow`.
 - Test: an operation with `callers: 'operator'` refuses the flow with `operator-only` in every built-in mode. The same declaration with the field switched to `'any'` is judged by its `approval`.
-- Outcome tests check code and typed fields, not text ([[4f387de2]]).
+- Outcome tests check code and typed fields, not text (the minimal-test rule).
 - `rg`: no `floor`, `PermissionPolicy`, `matchesGlob`, `consent` in `permissions/` and `modes/`; no `questionWait` anywhere in the code.

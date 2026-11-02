@@ -178,7 +178,7 @@ Eight `runtime: true` operations are handed to the native agent by the runtime (
 
 ### 11. Texts seen by agents and authors
 
-The same change fixes (rule [[d82432e6]]):
+The same change fixes (prompts name only what exists):
 
 - the doctrine: `threads/doctrine/operationsSection.ts`, `graph/doctrine/graphReading.ts:9`, the `threads/doctrine/sectionText.ts` check and its test;
 - `installation/operations/downgrade.ts:70`;

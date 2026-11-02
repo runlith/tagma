@@ -39,7 +39,7 @@ sources:
 
 **Order.** Package scripts keep declared order; the drivers choose it. `check:change` runs every set with its variant's `--seed`, `test:all --randomize [--seed N]` shuffles, testbed prints the seed whenever a run is shuffled, and a test file written or changed passes alone on three seeds (tests skill). `--timings` with `--update-timings` puts the slowest files first and splits them by time (`parallel.mdx`, "Balancing with --timings"). A layout is replayed from the report's worker sequence.
 
-**What the core does not solve.** Whether a test belongs at all — junk, patch pinning, mock bookkeeping — stays with review under [[4f387de2]].
+**What the core does not solve.** Whether a test belongs at all — junk, patch pinning, mock bookkeeping — stays with review under the minimal-test rule.
 
 **Acceptance.**
 - Today's guard checks (`test/guard.stest.ts`, `test/layers.itest.ts`) rewritten against the core as itest files, passing for both runners; a process left by a test still fails its file, a world's process does not, and one that outlived the worker's exit is picked up by the next run.

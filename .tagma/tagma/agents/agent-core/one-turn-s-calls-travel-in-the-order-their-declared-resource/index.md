@@ -156,7 +156,7 @@ A batch of its own tools is ordered by the vendor (Claude Code by `isConcurrency
 
 ## Removed
 
-- The `artifacts` skill line "in a later turn than the write, never beside it: the publish copies whatever the file holds when it runs" (`artifacts.ts:105-106`, commit 40512f6bcc at 21:49 UTC, three minutes after the incident). This is a prompt bypass, and after the change it would have described a restriction that no longer stands ([[d82432e6]]). "Write the page to a file, then call `publish_artifact` with its path" remains.
+- The `artifacts` skill line "in a later turn than the write, never beside it: the publish copies whatever the file holds when it runs" (`artifacts.ts:105-106`, commit 40512f6bcc at 21:49 UTC, three minutes after the incident). This is a prompt bypass, and after the change it would have described a restriction that no longer stands (prompts name only what exists). "Write the page to a file, then call `publish_artifact` with its path" remains.
 - `pathOverlaps` exported from `turn/tools.ts`, `writes`/`rememberWrite`/`pendingWrites`, and advance preparation in `hostedOrder.ts`.
 
 ## Rejected

@@ -87,7 +87,7 @@ The runner:
 ## Streaming recognition
 
 1. A `Track` with the format from readiness; a resampler brings it to the connection format.
-2. **Session scale** — milliseconds from the monotonic origin set by the host (the listening start at the server). The session keeps a “sent-sample-index → capture-time” mapping built from chunk times, and translates provider time through it. Device clock drift therefore needs no thresholds and no rebinding.
+2. **Session scale** — milliseconds from the monotonic origin set by the host (the capture start at the server). The session keeps a “sent-sample-index → capture-time” mapping built from chunk times, and translates provider time through it. Device clock drift therefore needs no thresholds and no rebinding.
 3. **Segment** — one connection over continuous sound. It opens on the first chunk after start or a gap; a gap or break closes it as interrupted. Provider speakers hold within a segment: no speaker matching across segments.
 4. Before `ready` sound waits in the runner's shared budget; overrun is a gap. Sound is never dropped silently, and there is no pause.
 5. In `client` mode the `Segmenter` over `SpeechDetector` probabilities sends `commit` on end of speech and on the length limit; each commit carries a sound range, and a late result gets its commit's time, not the current turn's.

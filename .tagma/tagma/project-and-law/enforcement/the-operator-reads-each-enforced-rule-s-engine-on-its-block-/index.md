@@ -15,7 +15,7 @@ Approved by the operator on 2026-10-01 from the mock at http://localhost:5634/a/
 - A #rule's block page shows, under its body, the rule's **engine**: how strict it is and which acts run it, what checks it and what that means, its parameters drawn in their own shape (floors bottom-up, thresholds, modules and their relations, lists), its debt grouped by the work that owns it with the trend of its count, the acts it refused, what slipped past it, and its law standing — accepted, pending with the reason, or not adopted — with when it was last measured and who changed it last.
 - A **Law** surface shows every enforced rule of the project on one screen: what it guards, where, how strict, what checks it, its debt and trend, its last refusal; and how many rules carry no check.
 - Every refused landing, merge and checkout commit is recorded per crossing — rule, file, line, what it reached, the base commit, the caller, the time — kept by enforcement in a bounded, pruned table and read page by page.
-- Nothing on either screen asks for permission or offers a control that only enables another ([[0f144655]]); a rule is changed by asking an agent, which acts through `enforce_rule`.
+- Nothing on either screen asks for permission or offers a control that only enables another (the operator's-authority rule); a rule is changed by asking an agent, which acts through `enforce_rule`.
 
 ## 2. Problem, with evidence
 

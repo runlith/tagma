@@ -150,7 +150,7 @@ All three verbs go through one `ThreadMessagingAccess.send`, so fan-out is built
 
 ## What the performer proves
 
-Contract tests through public operations ([[4f387de2]]):
+Contract tests through public operations (the minimal-test rule):
 1. `send` to three recipients yields three envelopes with different ids and one text, one keyed act, and receipts in list order.
 2. One unknown address of three: `not-found` names it, the inbox holds nothing, and after fixing the address the same key admits the broadcast.
 3. A name and a thread id of one agent in the list yield one envelope and one receipt.

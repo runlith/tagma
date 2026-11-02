@@ -12,7 +12,7 @@ edges:
   - kind: relates
     to: 01a14c08-1c3f-7bde-a2e3-04644096201b
 ---
-The operator accepted (2026-10-29). Every large competitor limits where an agent's browser may go (Codex, Claude, Antigravity, Gemini CLI, VS Code, Cursor, Kiro); Tagma has nothing, so a page an agent reads can steer it anywhere — prompt injection is the threat it answers. Product shape fixed by the operator's decision:
+The operator accepted (2026-10-29). Codex, Claude, Antigravity, Gemini CLI, VS Code, Cursor and Kiro each limit where an agent's browser may go; Tagma had no such limit, so a page an agent reads can steer it anywhere — prompt injection is the threat it answers. Product shape fixed by the operator's decision:
 - Settings per user and per project, project over user: a list of blocked domains and a list of allowed domains, patterns covering subdomains. Both empty — the default — means no limit, so nothing changes for anyone who does not set them. A non-empty allowed list means only those.
 - They bind HTTP(S) Document navigation of a page while an agent acts on it — `open_page`, `navigate_page`, and a navigation or popup an agent action causes — in the main frame and in frames. Policy persists until operator input/navigation or a new agent policy; a late blocked navigation is surfaced once at the next agent action. The operator's own navigation is never limited. Non-network documents (`blob:`, `data:`, `about:`) and page fetches/subresources are outside the lists.
 - A blocked navigation is a typed refusal naming the domain and the setting that blocked it; nothing is loaded. No per-site prompt.

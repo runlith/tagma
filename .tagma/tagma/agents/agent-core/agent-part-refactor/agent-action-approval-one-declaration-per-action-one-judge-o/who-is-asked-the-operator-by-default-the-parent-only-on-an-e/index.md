@@ -60,7 +60,7 @@ Flow C's question approver is computed at placement and recomputed on every take
    - P's effective grant covers the question.
 3. Otherwise — the operator.
 
-The operator can answer — always, any question ([[0f144655]]) — and the current approver flow. Everyone else gets `not-the-approver`, checked at answer time. The route goes only to the parent, so there is no cycle or self-approval by construction: a flow is never its own question's approver. That is structure, not guardrails.
+The operator can answer — always, any question (the operator's-authority rule) — and the current approver flow. Everyone else gets `not-the-approver`, checked at answer time. The route goes only to the parent, so there is no cycle or self-approval by construction: a flow is never its own question's approver. That is structure, not guardrails.
 
 ## How the parent is asked
 
@@ -77,7 +77,7 @@ The operator can answer — always, any question ([[0f144655]]) — and the curr
 
 - The operator writes to a flow with a parent — `start_turn`, `queue_turn`, `steer_turn`, i.e. where `ReaderMarks.spoke` (`threads/turns/reader.ts`) sends the parent an `operatorNotice`. When `agent.takeover` is on, the flow becomes `takenOver`.
 - The flow's standing questions move to the operator: they appear in the attention list and in push. The parent's late answer refuses with `not-the-approver`.
-- There is no "take control" button ([[0f144655]]): takeover is the consequence of the operator having written.
+- There is no "take control" button (the operator's-authority rule): takeover is the consequence of the operator having written.
 - To return: `/approver default` removes the takeover. Switched-off `agent.takeover` no longer sets it on the operator's words.
 - **Proposal (the operator has not decided):**
   - takeover covers only the flow the operator wrote to; its children route on their own;

@@ -12,7 +12,7 @@ fields:
 
 The main criterion: the next capability arrives as a new contribution point at its owner. The manifest envelope, the process protocol, the view bridge, and the caller shape do not break.
 
-The spec was consolidated by thread 01a113e4's lead after analysis by two assistants. The reports lie in the `plugins-astra` (01a12269-41d2-7541-bf62-a79988c6f9fd) and `plugins-critic` (01a12269-41d2-7541-bf62-a79a99ed2926) threads' scratch. The basis is idea [[21acc718]], poker [[9caf5753]], the competitor survey [[b27c8519]].
+The spec was consolidated by thread 01a113e4's lead after analysis by two assistants. The reports lie in the `plugins-astra` (01a12269-41d2-7541-bf62-a79988c6f9fd) and `plugins-critic` (01a12269-41d2-7541-bf62-a79a99ed2926) threads' scratch. The basis is idea [[21acc718]] and poker [[9caf5753]].
 
 ## What a plugin is
 

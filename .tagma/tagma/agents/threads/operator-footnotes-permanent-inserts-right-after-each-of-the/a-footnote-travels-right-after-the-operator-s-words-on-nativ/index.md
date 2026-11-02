@@ -64,7 +64,7 @@ The operator's words leave for the vendor on ACP only through the driver — as 
 
 ## What shows it works
 
-The performer proves it with tests on recorded `runtime-guidance` frames (ruleId, `retell`, word ids, history position), not prompt strings ([[4f387de2]]):
+The performer proves it with tests on recorded `runtime-guidance` frames (ruleId, `retell`, word ids, history position), not prompt strings (the minimal-test rule):
 - native: two operator messages — two frames, each after its own words; a set changed between them changes only the second; an empty set — none; mid-turn words — a frame in the same step; a step retry does not double the frame; a child report and a parent task get no frame;
 - ACP: the turn lead and steer carry the footnote tail as the last block, the frame recorded once per send; the rule's hosted evaluation writes no frame;
 - the next run's history from records matches the previous request's prefix;

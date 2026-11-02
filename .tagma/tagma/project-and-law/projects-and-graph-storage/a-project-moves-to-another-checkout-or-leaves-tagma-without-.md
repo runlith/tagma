@@ -34,7 +34,7 @@ sources:
 
 **Behaviour.**
 - The new root must not belong to another project; the commit gate is installed into the new checkout.
-- Removal requires nothing to be cleaned: the graph in any storage, threads and their journals, settings, notes, and call sounds stay. The project's running agents stop, live listenings are interrupted, the project's graph and MCP servers close.
+- Removal requires nothing to be cleaned: the graph in any storage, threads and their journals, settings and notes stay. The project's running agents stop, the project's graph and MCP servers close.
 - Removal takes the commit gate and merge driver out of the checkout if no other registered checkout shares them, and puts back the hooks the gate had pushed aside.
 - A removed project is visible neither in the list nor by name, id, or directory, nor in cross-project search, and its threads leave "Attention"; other projects' edges into its graph read as off this machine.
 - The same folder, or this repository moved elsewhere (`mv`), brings the project back with its former id, name, policy, and storage; entered name, storage, and directories don't apply to it, and the window says the project has returned. Likewise, adding a moved repository of a standing project moves the project to the new place. Another clone or folder copy is a new project; a folder without git is moved with `set_project_root` after the move.
