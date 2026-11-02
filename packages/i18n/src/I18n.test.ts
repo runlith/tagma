@@ -111,13 +111,13 @@ describe('I18n', () => {
       bundles: [
         {
           en: {
-            'model.reward.bonus.fs': 'Bonus Points',
+            'model.reward.bonus.pts': 'Bonus Points',
           },
         },
       ],
     });
 
-    expect(i18n.interpolate('10 {model.reward.bonus.fs}')).toBe('10 Bonus Points');
+    expect(i18n.interpolate('10 {model.reward.bonus.pts}')).toBe('10 Bonus Points');
   });
 
   test('interpolate keeps placeholder when translation is missing', () => {

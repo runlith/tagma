@@ -32,8 +32,8 @@ describe('parseMessage', () => {
   });
 
   test('argument names may carry dots and colons', () => {
-    expect(parseMessage('{model.reward.bonus.fs} и {alias:appName}')).toEqual([
-      { kind: 'arg', name: 'model.reward.bonus.fs' },
+    expect(parseMessage('{model.reward.bonus.pts} и {alias:appName}')).toEqual([
+      { kind: 'arg', name: 'model.reward.bonus.pts' },
       { kind: 'text', value: ' и ' },
       { kind: 'arg', name: 'alias:appName' },
     ]);
