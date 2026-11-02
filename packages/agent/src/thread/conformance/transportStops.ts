@@ -5,6 +5,7 @@ import { entryOf } from '../../transcript/kinds';
 import type { ThreadTranscriptEntry } from '../../transcript/rows';
 import type { ThreadStop } from '../ending';
 import type { ThreadRunStatus } from '../rows';
+import { occurrences } from './transportWords';
 
 export const STOP_STATES = [
   'opening',
@@ -61,11 +62,14 @@ const agentSaid = (journal: RunJournal): RunJournal => {
   };
 };
 
+export const STEER_WORDS = 'Use the other table.';
+
 export type StopCase = {
   readonly runId: string;
   stop(): Effect.Effect<ThreadStop, unknown>;
   ended(): Effect.Effect<StoppedRun | null, unknown>;
   journal(): Effect.Effect<RunJournal, unknown>;
+  heard(): Effect.Effect<string, unknown>;
   agentTurns(): Effect.Effect<number, unknown>;
   interrupts(): Effect.Effect<number, unknown>;
   runsAfter(): Effect.Effect<number, unknown>;
@@ -139,7 +143,10 @@ export function describeTransportStops<R>(
           expect(agentSaid(yield* reached.journal())).toEqual(sealed);
           const after = yield* reached.runsAfter();
           expect(after).toBeLessThanOrEqual(WAKES[state] ?? 0);
-          if (state === 'steer-unechoed') expect(after).toBe(1);
+          if (state === 'steer-unechoed') {
+            expect(after).toBe(1);
+            expect(occurrences(yield* reached.heard(), STEER_WORDS)).toBe(1);
+          }
           expect((yield* reached.agentTurns()) - turns).toBe(after);
           measured.push({ transport, state, ms: Math.max(0, ms), note: status });
         }),

@@ -3,7 +3,7 @@ import { ThreadCallBroke } from '../ThreadBorder';
 import { compactionWorld, hold, opened, OWNER, quiet, SCOPE, started, until, type CompactionWorld, type Hold } from './compactionWorld';
 import { seeded } from './compactionRequests/support';
 import type { ThreadStorageFactory, ThreadStorageHarness } from './storagePort';
-import type { StopCase, StopRig, StopState, Unreachable } from './transportStops';
+import { STEER_WORDS, type StopCase, type StopRig, type StopState, type Unreachable } from './transportStops';
 
 const unreached = (unreachable: string): Unreachable => ({ unreachable });
 
@@ -37,6 +37,7 @@ const stopCase = <TTx, TWrite extends TTx>(
         entries,
         tail: run?.streamTail ?? null,
       })),
+    heard: () => Effect.sync(() => JSON.stringify(world.requests.at(-1) ?? [])),
     agentTurns: () => Effect.map(runs.runsOf(threadId), (all) => all.length),
     interrupts: () => Effect.succeed(0),
     runsAfter: () =>
@@ -118,7 +119,7 @@ export const nativeStopRig = <TTx, TWrite extends TTx = TTx, R = never>(open: Th
         world.answers.push({ parks: parked, opens: 'text' }, { text: 'Took the other table.' });
         const runId = yield* started(handle, 'Begin.');
         yield* parked.reached;
-        const steered = yield* handle.send('Use the other table.');
+        const steered = yield* handle.send(STEER_WORDS);
         if (steered.status !== 'steered')
           return yield* new ThreadCallBroke({ cause: new Error(`the words answered ${steered.status} instead of going into the run`) });
         return stopCase(storage, world, threadId, runId, [parked]);
@@ -129,7 +130,7 @@ export const nativeStopRig = <TTx, TWrite extends TTx = TTx, R = never>(open: Th
         world.answers.push({ tool: 'work' }, { parks: next });
         const runId = yield* started(handle, 'Do the work.');
         yield* parked.reached;
-        yield* handle.send('Use the other table.');
+        yield* handle.send(STEER_WORDS);
         parked.release();
         yield* next.reached;
         return stopCase(storage, world, threadId, runId, [next]);

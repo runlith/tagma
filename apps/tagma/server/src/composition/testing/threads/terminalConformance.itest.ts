@@ -362,6 +362,7 @@ const stopCase = Effect.fnUntraced(function* (fake: Fake, runId: string, options
     stop: () => run(options.stop ?? flow.harness().threads.handle(threadId, OPERATOR_PRINCIPAL).stop()),
     ended: () => flow.ended(runId),
     journal: () => flow.journalOf(threadId, runId),
+    heard: () => run(textOf(fake.report)),
     agentTurns: () => Effect.sync(() => fake.state.turns),
     interrupts: () => run(pressed(fake.keys)),
     runsAfter: () =>

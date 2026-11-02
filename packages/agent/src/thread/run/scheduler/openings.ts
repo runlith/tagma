@@ -3,7 +3,8 @@ import { entryOf } from '../../../transcript/kinds';
 import type { AgentApproval } from '../../../agent/contracts';
 import { type ThreadEventBody, type ThreadEventInput, type ThreadTurnEvent } from '../../events';
 import { mintThreadRunId } from '../../identity';
-import { carriesWords, isCompactionRequest, isInboxRequest } from '../../inboxItems';
+import { signalEntryId } from '../../../transcript/entryNames';
+import { carriesWords, isCompactionRequest, isInboxRequest, isReaderWordsItem } from '../../inboxItems';
 import { actDigest, type Keyed } from '../../keyed';
 import { ThreadStorageFailed } from '../../persisted';
 import type { ThreadMetadataRow, ThreadRow, ThreadRunKind, ThreadRunRow } from '../../rows';
@@ -90,6 +91,16 @@ export const makeOpenings = Effect.fnUntraced(function* ({
   const budgets = yield* ThreadBudget;
   const store = kernel.store;
 
+  const told = Effect.fnUntraced(function* (thread: ThreadMetadataRow, items: readonly ThreadInboxItem[], tx?: ThreadTx) {
+    const said = new Set<string>();
+    if (!thread.capabilities.continue) return said;
+    for (const item of items) {
+      if (item.state !== 'queued' || item.kind !== 'signal' || !isReaderWordsItem(item)) continue;
+      if ((yield* store.entryById(thread.id, signalEntryId(item.id), tx)) !== undefined) said.add(item.id);
+    }
+    return said;
+  });
+
   const open = Effect.fnUntraced(function* (
     thread: ThreadMetadataRow,
     request: OpenRequest,
@@ -147,6 +158,8 @@ export const makeOpenings = Effect.fnUntraced(function* ({
         const inherited = standing.filter(isInboxRequest).map((item) => item.id);
         const read = words === 'receipt' ? [] : standing.filter((item) => !isInboxRequest(item)).map((item) => item.id);
         const unanswered = earlier.filter(isCompactionRequest).map((item) => item.id);
+        const heard =
+          request.inherits === false || (request.kind ?? 'turn') !== 'turn' ? new Set<string>() : yield* told(thread, inboxNow, tx);
         const promoted = prompts === null || prompts === undefined ? undefined : pendingInstructions(prompts);
         const opened: ThreadRow = {
           ...view.row,
@@ -163,7 +176,9 @@ export const makeOpenings = Effect.fnUntraced(function* ({
         if (request.works === undefined) {
           const seed =
             words === 'receipt'
-              ? (request.seed ?? []).map((item) => ({ ...item, state: 'delivered' as const, deliveredToRunId: run.id }))
+              ? (request.seed ?? [])
+                  .filter((item) => !heard.has(item.id))
+                  .map((item) => ({ ...item, state: 'delivered' as const, deliveredToRunId: run.id }))
               : [];
           yield* tx.afterCommit(
             handover.begin(
@@ -190,6 +205,7 @@ export const makeOpenings = Effect.fnUntraced(function* ({
             if (inherited.length > 0) yield* inbox.deliver(inherited, run.id, unit);
             if (read.length > 0) yield* inbox.acknowledge(read, run.id, unit);
             if (unanswered.length > 0) yield* inbox.acknowledge(unanswered, null, unit);
+            if (heard.size > 0) yield* inbox.acknowledge([...heard], run.id, unit);
           }),
         } as Decision<unknown, ThreadWriteTx>;
       }),
@@ -229,5 +245,5 @@ export const makeOpenings = Effect.fnUntraced(function* ({
     }).pipe(Effect.ensuring(Deferred.succeed(published, undefined)));
   });
 
-  return { words: handover.words, open };
+  return { words: handover.words, open, told };
 });

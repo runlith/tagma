@@ -32,7 +32,7 @@ export const ENDING_BEHAVIOR = { ifActive: 'deliver', ifIdle: 'wake-completed' }
 
 export const endingSignal = (id: string, text: string) => ({ id, type: 'command-result', addressee: 'transport', text }) as const;
 
-const occurrences = (heard: string, word: string): number => heard.split(word).length - 1;
+export const occurrences = (heard: string, word: string): number => heard.split(word).length - 1;
 
 export function describeTransportEndings<R>(
   transport: string,

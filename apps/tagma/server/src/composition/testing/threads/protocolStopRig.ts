@@ -2,7 +2,7 @@ import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { and, asc, eq, sql } from 'drizzle-orm';
 import { Clock, Context, Effect, Exit, Scope } from 'effect';
-import type { StopRig, StopState } from '@runlith/agent/thread/conformance/transportStops';
+import { STEER_WORDS, type StopRig, type StopState } from '@runlith/agent/thread/conformance/transportStops';
 import type { RestartCase, RestartRig } from '@runlith/agent/thread/conformance/transportRestarts';
 import { MachineStore } from '../../../platform/contract/service/store.js';
 import { MachineUnits } from '../../../platform/contract/service/units.js';
@@ -120,6 +120,7 @@ const make = (rig: ProtocolRig['Service'], agent: RigAgent, label: string) => {
         entries: entries.filter((entry) => entry.runId === runId),
         tail: run?.streamTail ?? null,
       })),
+    heard: () => agent.heard(report),
     agentTurns: () => agent.turns(report),
     interrupts: () => agent.interrupts(report),
     runsAfter: () =>
@@ -234,13 +235,13 @@ const make = (rig: ProtocolRig['Service'], agent: RigAgent, label: string) => {
       case 'steer-unechoed':
       case 'steer-echoed': {
         const runId = yield* opened('HOLD the turn');
-        yield* handle.send('Use the other table. SURVIVE the stop.');
+        yield* handle.send(`${STEER_WORDS} SURVIVE the stop.`);
         yield* asked(report, 'steer');
         if (state === 'steer-echoed') {
           writeFileSync(`${report}.step`, 'step');
           yield* until(
             Effect.map(raised.entries(threadId), (entries) =>
-              entries.some((entry) => entry.runId === runId && JSON.stringify(entry).includes('Use the other table.')) ? true : null,
+              entries.some((entry) => entry.runId === runId && JSON.stringify(entry).includes(STEER_WORDS)) ? true : null,
             ),
             'read the steer in the run',
             report,

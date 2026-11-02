@@ -6,16 +6,16 @@ import { Message } from '@runlith/llm/schema/messages';
 import { ActivityLog } from '@runlith/activity/log';
 import { activityRecording } from '@runlith/activity/testing';
 import type { ThreadEntry, ThreadQuestionEntry } from '@runlith/agent/transcript/entries';
-import { describeTransportStops } from '@runlith/agent/thread/conformance/transportStops';
+import { describeTransportStops, STEER_WORDS } from '@runlith/agent/thread/conformance/transportStops';
 import { describeTransportRestarts } from '@runlith/agent/thread/conformance/transportRestarts';
-import { describeTransportEndings, describeTransportWords } from '@runlith/agent/thread/conformance/transportWords';
+import { describeTransportEndings, describeTransportWords, occurrences } from '@runlith/agent/thread/conformance/transportWords';
 import { runEnd } from './protocolEnds.js';
 import { ASIDE, COMPACT, FORK, REWIND } from '@runlith/hosted-runner/wire/extensions';
 import { HarnessAdapters } from '../../../external-harnesses/contract/service/adapters.js';
 import { shippedAdapters } from '../external-harnesses/shipped.js';
 import { heard, ProtocolRig, protocolFixture, scenario, until as readUntil, words, type Said } from './protocolRig.js';
 import { scriptedAgent } from './protocolAgents.js';
-import { protocolStopRig } from './protocolStopRig.js';
+import { protocolStopRig, rigReads, staged, staging } from './protocolStopRig.js';
 import { protocolWordRig } from './protocolWordRig.js';
 
 const waiting =
@@ -292,6 +292,44 @@ describe('ACP adapter boundaries over one execution host', () => {
           }),
         );
       }),
+    );
+
+    it.effect('a steer the agent took across Esc reaches it once when another agent opens the next turn first', () =>
+      staged(
+        Effect.gen(function* () {
+          const rig = yield* ProtocolRig;
+          const scripted = scriptedAgent(rig);
+          const { rested, prompted, asked: saw } = rigReads(rig, scripted);
+          const report = staging(rig, 'kept-steer');
+          yield* scripted.install(report);
+          const threadId = 'thread-kept-steer';
+          yield* rig.openThread(threadId, CLAUDE);
+          const resting = new Set<string>();
+          const raised = yield* rig.floor([], { fails: 0, refuses: false, resting });
+          const driver = yield* raised.driver('owner-kept-steer');
+          const handle = raised.harness.threads.handle(threadId, 'operator');
+          yield* driver.send(threadId, 'HOLD the turn');
+          yield* prompted(report, 1);
+          yield* handle.send(`${STEER_WORDS} SURVIVE the stop.`);
+          yield* saw(report, 'steer');
+          resting.add(threadId);
+          yield* handle.stop();
+          yield* waiting(threadId)(
+            Effect.map(raised.entries(threadId), (entries) =>
+              entries.some((entry) => entry.type === 'signal' && entry.text.includes(STEER_WORDS)) ? true : null,
+            ),
+            'recorded the steer the agent took after the stop',
+            report,
+          );
+          resting.delete(threadId);
+          const woken = yield* handle.sendSignal({ addressee: 'transport', type: 'note', text: 'HOLD for the report that arrived.' });
+          expect(woken).toMatchObject({ status: 'woken' });
+          yield* prompted(report, 2);
+          yield* handle.stop();
+          yield* rested(raised, threadId, report);
+          expect(occurrences(yield* scripted.heard(report), STEER_WORDS)).toBe(1);
+        }),
+      ),
     );
 
     it.effect('words queued while a stopped opening drains reach a later turn', () =>

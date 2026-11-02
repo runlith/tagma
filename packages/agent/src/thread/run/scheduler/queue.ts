@@ -1,5 +1,4 @@
 import { type Context, Effect } from 'effect';
-import { signalEntryId } from '../../../transcript/entryNames';
 import { threadSignalEvent, threadUserMessageEvent, type ThreadEventBody } from '../../events';
 import {
   beforeBarrier,
@@ -81,16 +80,6 @@ export const makeQueues = Effect.fnUntraced(function* ({
       },
     );
 
-  const toldOf = (threadId: string, items: readonly ThreadInboxItem[]): Effect.Effect<ReadonlySet<string>, ThreadBorderFailed> =>
-    Effect.map(
-      Effect.filter(items, (item) =>
-        item.kind === 'signal'
-          ? Effect.map(store.entryById(threadId, signalEntryId(item.id)), (entry) => entry !== undefined)
-          : Effect.succeed(false),
-      ),
-      (standing) => new Set(standing.map((item) => item.id)),
-    );
-
   const queuedTurns = Effect.fnUntraced(function* (
     thread: ThreadMetadataRow,
     source: QueueSource,
@@ -100,7 +89,7 @@ export const makeQueues = Effect.fnUntraced(function* ({
   ): Effect.fn.Return<Opening, ThreadBorderFailed> {
     const queued = source.items.filter((item) => item.state === 'queued');
     const turns = queued.filter(opensTurn);
-    const told = thread.capabilities.continue ? yield* toldOf(thread.id, queued) : new Set<string>();
+    const told = yield* openings.told(thread, queued);
     const said = openingWords(queued).filter((item) => !told.has(item.id));
     const tasked = turns.filter(carriesWords).filter(spokenByAgent);
     const refs = said.flatMap((item) => (item.kind === 'turn' || item.kind === 'signal' ? [...(item.body.attachments ?? [])] : []));
@@ -117,7 +106,7 @@ export const makeQueues = Effect.fnUntraced(function* ({
         ...under(signals, stopped ? runId : source.runId, runId),
         ...tasked.map((item) => threadSignalEvent(threadSignalOfInboxItem(item), runId)),
       ],
-      seed: source.items.filter(carriesWords).filter((item) => !told.has(item.id)),
+      seed: source.items.filter(carriesWords),
       consume: consumed(inbox, source, told),
       admits: unmoved(source),
       startKey: startKey,
@@ -319,10 +308,8 @@ function consumed(inbox: Context.Service.Shape<typeof ThreadInbox>, source: Queu
   return Effect.fnUntraced(function* (runId: string, tx: ThreadWriteTx, how: WordsConsumed) {
     const words = source.items.filter(carriesWords);
     const requests = words.filter(isInboxRequest).map((item) => item.id);
-    const heard = words.filter((item) => told.has(item.id)).map((item) => item.id);
     const taken = words.filter((item) => !isInboxRequest(item) && !told.has(item.id)).map((item) => item.id);
     if (requests.length > 0) yield* inbox.deliver(requests, runId, tx);
-    if (heard.length > 0) yield* inbox.acknowledge(heard, runId, tx);
     if (taken.length > 0) yield* how === 'read' ? inbox.acknowledge(taken, runId, tx) : inbox.deliver(taken, runId, tx);
   });
 }

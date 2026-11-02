@@ -433,6 +433,38 @@ export function describeTransportContract<TTx, TWrite extends TTx = TTx, R = nev
       }),
     );
     test(
+      'an operator steer the agent confirms after its turn ended stays owed when no turn runs, and is the running turn’s when one does',
+      Effect.fnUntraced(function* () {
+        const world = yield* lifecycleWorld(open);
+        const reports = world.reports.of(ADAPTER);
+        const steered = Effect.fnUntraced(function* (id: string) {
+          const run = yield* opened(world);
+          const steer = {
+            ...(yield* wordsFor(run.threadId, id)),
+            kind: 'signal',
+            body: { type: 'user-message', addressee: 'reader', text: 'use the other table' },
+          } as const;
+          yield* world.storage.inbox.put(steer);
+          yield* report(world, reports.ended(run, { kind: 'aborted', stoppedBy: 'reader' }));
+          return { run, steer };
+        });
+        const stateOf = (run: ThreadRunRef, id: string) =>
+          Effect.map(world.storage.inbox.pending(run.threadId), (items) => items.find((item) => item.id === id)?.state ?? null);
+        const idle = yield* steered('steer-idle');
+        yield* report(world, reports.fate(idle.run, 'read', [idle.steer.id]));
+        expect(yield* stateOf(idle.run, idle.steer.id)).toBe('queued');
+        yield* world.storage.inbox.acknowledge([idle.steer.id], null);
+        const going = yield* steered('steer-going');
+        const next = yield* opened(world);
+        yield* report(world, reports.fate(going.run, 'read', [going.steer.id]));
+        expect(yield* stateOf(going.run, going.steer.id)).not.toBe('queued');
+        expect((yield* signalsOf(world, next.threadId)).filter((signal) => signal.said)).toEqual([
+          { runId: idle.run.id, unconfirmed: undefined, said: true },
+          { runId: going.run.id, unconfirmed: undefined, said: true },
+        ]);
+      }),
+    );
+    test(
       'words whose read deadline lapsed close once and stay marked unconfirmed through a later read',
       Effect.fnUntraced(function* () {
         const world = yield* lifecycleWorld(open);

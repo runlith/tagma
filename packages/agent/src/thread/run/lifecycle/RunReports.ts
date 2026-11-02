@@ -245,8 +245,8 @@ export const runReportsLayer = Layer.effect(
       if (thread.transport.adapter !== adapter) return yield* new ForeignBinding({ threadId, adapter });
       return thread;
     });
-    const steersAfterEnd = Effect.fnUntraced(function* (run: ThreadRunRef, items: readonly string[], tx: ThreadWriteTx) {
-      if ((yield* runs.runById(run.id, tx))?.status === 'running') return [];
+    const owedSteers = Effect.fnUntraced(function* (run: ThreadRunRef, items: readonly string[], tx: ThreadWriteTx) {
+      if ((yield* runs.latestRun(run.threadId, ['running'], tx)) !== null) return [];
       const owed: string[] = [];
       for (const id of items) {
         const item = yield* inbox.receipt(id, tx);
@@ -494,7 +494,7 @@ export const runReportsLayer = Layer.effect(
           yield* bound(adapter, run.threadId, tx);
           const heard = recorded !== true && (fate === 'read' || fate === 'unconfirmed');
           if (heard) yield* signalled(run, items, fate, tx);
-          const owed = heard ? yield* steersAfterEnd(run, items, tx) : [];
+          const owed = heard ? yield* owedSteers(run, items, tx) : [];
           yield* inbox.fated(run.threadId, run.id, owed, 'returned', tx);
           yield* inbox.fated(
             run.threadId,

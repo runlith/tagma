@@ -69,7 +69,7 @@ export const names: Builtin<'names', NamesParams> = {
             why: 'One subject: a DOM recording lifecycle — trusted input, wheel and scroll timing and command evidence, own scroller writes and the movement they leave running, row measurements, anchor history and final ResizeObserver samples share the same pending capture and frame boundary.',
           },
           {
-            lines: 752,
+            lines: 784,
             path: 'packages/agent/src/thread/conformance/transport.ts',
             why: 'One subject: adapter report and lifecycle conformance over the shared storage contract; its durable reports, live tail and launch handover use the same harness unchanged over memory and SQLite.',
           },
