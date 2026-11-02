@@ -1,4 +1,5 @@
 import { type Context, Effect } from 'effect';
+import { signalEntryId } from '../../../transcript/entryNames';
 import { threadSignalEvent, threadUserMessageEvent, type ThreadEventBody } from '../../events';
 import {
   beforeBarrier,
@@ -80,6 +81,16 @@ export const makeQueues = Effect.fnUntraced(function* ({
       },
     );
 
+  const toldOf = (threadId: string, items: readonly ThreadInboxItem[]): Effect.Effect<ReadonlySet<string>, ThreadBorderFailed> =>
+    Effect.map(
+      Effect.filter(items, (item) =>
+        item.kind === 'signal'
+          ? Effect.map(store.entryById(threadId, signalEntryId(item.id)), (entry) => entry !== undefined)
+          : Effect.succeed(false),
+      ),
+      (standing) => new Set(standing.map((item) => item.id)),
+    );
+
   const queuedTurns = Effect.fnUntraced(function* (
     thread: ThreadMetadataRow,
     source: QueueSource,
@@ -87,14 +98,16 @@ export const makeQueues = Effect.fnUntraced(function* ({
     door?: Door,
     stopped = false,
   ): Effect.fn.Return<Opening, ThreadBorderFailed> {
-    const turns = source.items.filter((item) => item.state === 'queued' && opensTurn(item));
-    const said = openingWords(source.items.filter((item) => item.state === 'queued'));
+    const queued = source.items.filter((item) => item.state === 'queued');
+    const turns = queued.filter(opensTurn);
+    const told = thread.capabilities.continue ? yield* toldOf(thread.id, queued) : new Set<string>();
+    const said = openingWords(queued).filter((item) => !told.has(item.id));
     const tasked = turns.filter(carriesWords).filter(spokenByAgent);
     const refs = said.flatMap((item) => (item.kind === 'turn' || item.kind === 'signal' ? [...(item.body.attachments ?? [])] : []));
     const stored = refs.length > 0 ? yield* attachments.resolve(thread.id, thread.ownerId, refs) : undefined;
     const reader = said.some((item) => isReaderWordsItem(item) || saidAsOperator(item));
     const turnKey = said.flatMap((item) => inputAddressOf(item.id)?.key ?? []).at(-1);
-    const signals = yield* signalsOf(thread, source.items, new Set(said.map((item) => item.id)));
+    const signals = yield* signalsOf(thread, source.items, new Set([...said.map((item) => item.id), ...told]));
     const opened = yield* openings.open(thread, {
       turn:
         said.length > 0
@@ -104,8 +117,8 @@ export const makeQueues = Effect.fnUntraced(function* ({
         ...under(signals, stopped ? runId : source.runId, runId),
         ...tasked.map((item) => threadSignalEvent(threadSignalOfInboxItem(item), runId)),
       ],
-      seed: source.items.filter(carriesWords),
-      consume: consumed(inbox, source),
+      seed: source.items.filter(carriesWords).filter((item) => !told.has(item.id)),
+      consume: consumed(inbox, source, told),
       admits: unmoved(source),
       startKey: startKey,
       key: door?.key,
@@ -302,12 +315,14 @@ function unmoved(source: QueueSource) {
   return (_tx: ThreadWriteTx, pending: readonly ThreadInboxItem[]) => Effect.succeed(sameCohort(source.items, source.cohort(pending)));
 }
 
-function consumed(inbox: Context.Service.Shape<typeof ThreadInbox>, source: QueueSource) {
+function consumed(inbox: Context.Service.Shape<typeof ThreadInbox>, source: QueueSource, told: ReadonlySet<string> = new Set()) {
   return Effect.fnUntraced(function* (runId: string, tx: ThreadWriteTx, how: WordsConsumed) {
     const words = source.items.filter(carriesWords);
     const requests = words.filter(isInboxRequest).map((item) => item.id);
-    const taken = words.filter((item) => !isInboxRequest(item)).map((item) => item.id);
+    const heard = words.filter((item) => told.has(item.id)).map((item) => item.id);
+    const taken = words.filter((item) => !isInboxRequest(item) && !told.has(item.id)).map((item) => item.id);
     if (requests.length > 0) yield* inbox.deliver(requests, runId, tx);
+    if (heard.length > 0) yield* inbox.acknowledge(heard, runId, tx);
     if (taken.length > 0) yield* how === 'read' ? inbox.acknowledge(taken, runId, tx) : inbox.deliver(taken, runId, tx);
   });
 }

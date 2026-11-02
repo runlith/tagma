@@ -21,7 +21,7 @@ import {
   threadStepFinishedEvent,
 } from '../../events';
 import { mintThreadRunId } from '../../identity';
-import { isInboxRequest } from '../../inboxItems';
+import { isInboxRequest, isReaderWordsItem } from '../../inboxItems';
 import { actDigest, chargeKey, reportKey, type CallKey } from '../../keyed';
 import type { ThreadContextReading, ThreadMetadataRow, ThreadRunCost } from '../../rows';
 import { ThreadNotFoundError } from '../../storage/aggregate';
@@ -244,6 +244,15 @@ export const runReportsLayer = Layer.effect(
       if (thread === undefined) return yield* Effect.fail(new ThreadNotFoundError(threadId));
       if (thread.transport.adapter !== adapter) return yield* new ForeignBinding({ threadId, adapter });
       return thread;
+    });
+    const steersAfterEnd = Effect.fnUntraced(function* (run: ThreadRunRef, items: readonly string[], tx: ThreadWriteTx) {
+      if ((yield* runs.runById(run.id, tx))?.status === 'running') return [];
+      const owed: string[] = [];
+      for (const id of items) {
+        const item = yield* inbox.receipt(id, tx);
+        if (item?.kind === 'signal' && item.threadId === run.threadId && isReaderWordsItem(item)) owed.push(id);
+      }
+      return owed;
     });
     const questionsOf = (run: ThreadRunRef, tx: ThreadWriteTx): Effect.Effect<readonly ThreadQuestionEntry[], ThreadPortFailure> =>
       Effect.map(store.entriesOfRun(run.threadId, run.id, tx), (entries) =>
@@ -480,11 +489,20 @@ export const runReportsLayer = Layer.effect(
           ),
       }),
       fate: (run, fate, items, recorded) => ({
-        tables: fate === 'read' || fate === 'unconfirmed' ? ['inbox', 'events', 'thread', 'records'] : ['inbox'],
+        tables: fate === 'read' || fate === 'unconfirmed' ? ['inbox', 'events', 'thread', 'records', 'runs'] : ['inbox'],
         run: Effect.fnUntraced(function* (tx) {
           yield* bound(adapter, run.threadId, tx);
-          if (recorded !== true && (fate === 'read' || fate === 'unconfirmed')) yield* signalled(run, items, fate, tx);
-          yield* inbox.fated(run.threadId, run.id, items, fate, tx);
+          const heard = recorded !== true && (fate === 'read' || fate === 'unconfirmed');
+          if (heard) yield* signalled(run, items, fate, tx);
+          const owed = heard ? yield* steersAfterEnd(run, items, tx) : [];
+          yield* inbox.fated(run.threadId, run.id, owed, 'returned', tx);
+          yield* inbox.fated(
+            run.threadId,
+            run.id,
+            items.filter((id) => !owed.includes(id)),
+            fate,
+            tx,
+          );
           yield* tx.afterCommit(Effect.sync(() => inflight.settled(run, items)));
           return result('applied', run.id);
         }),

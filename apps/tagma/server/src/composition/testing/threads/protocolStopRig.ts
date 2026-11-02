@@ -234,7 +234,7 @@ const make = (rig: ProtocolRig['Service'], agent: RigAgent, label: string) => {
       case 'steer-unechoed':
       case 'steer-echoed': {
         const runId = yield* opened('HOLD the turn');
-        yield* handle.send('Use the other table.');
+        yield* handle.send('Use the other table. SURVIVE the stop.');
         yield* asked(report, 'steer');
         if (state === 'steer-echoed') {
           writeFileSync(`${report}.step`, 'step');

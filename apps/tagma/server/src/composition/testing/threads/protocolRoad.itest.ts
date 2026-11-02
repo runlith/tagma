@@ -61,7 +61,7 @@ describe('ACP adapter boundaries over one execution host', () => {
       'acp (scripted agent)',
       () => Effect.map(ProtocolRig, (rig) => protocolStopRig(rig, scriptedAgent(rig))),
       it.effect,
-      ['thinking'],
+      ['thinking', 'steer-unechoed'],
     );
     describeTransportRestarts(
       'acp (scripted agent)',

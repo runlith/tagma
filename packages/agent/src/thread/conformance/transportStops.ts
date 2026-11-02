@@ -139,8 +139,7 @@ export function describeTransportStops<R>(
           expect(agentSaid(yield* reached.journal())).toEqual(sealed);
           const after = yield* reached.runsAfter();
           expect(after).toBeLessThanOrEqual(WAKES[state] ?? 0);
-          if (state === 'steer-unechoed' && after === 0)
-            expect((yield* reached.journal()).entries.some((entry) => operatorWord(entry) && entry.addressee === 'reader')).toBe(true);
+          if (state === 'steer-unechoed') expect(after).toBe(1);
           expect((yield* reached.agentTurns()) - turns).toBe(after);
           measured.push({ transport, state, ms: Math.max(0, ms), note: status });
         }),
