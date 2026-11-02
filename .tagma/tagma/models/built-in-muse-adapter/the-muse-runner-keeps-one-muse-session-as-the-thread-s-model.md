@@ -15,6 +15,8 @@ sources:
     ref: packages/adapter-muse/src/runner/home.ts
   - kind: file
     ref: packages/adapter-muse/src/runner/sdk.ts
+  - kind: file
+    ref: packages/adapter-muse/src/runner/configuration.ts
 ---
 The runner keeps Muse's session as the one model loop of a Tagma thread, so its cache and history survive between turns; every choice below protects that or keeps the user's own Muse setup out of the thread.
 
