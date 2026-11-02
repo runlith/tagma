@@ -74,14 +74,14 @@ describe('I18n', () => {
           en: {
             'greet.user': 'Hello {name}, you have {count} messages',
             'greet.with-alias': 'Hello {alias:appName}!',
-            appName: 'Shop',
+            appName: 'Acme',
           },
         },
       ],
     });
 
     expect(i18n.t('greet.user', { name: 'Teun', count: 3 })).toBe('Hello Teun, you have 3 messages');
-    expect(i18n.t('greet.with-alias')).toBe('Hello Shop!');
+    expect(i18n.t('greet.with-alias')).toBe('Hello Acme!');
   });
 
   test('interpolate translates a plain key when no {..} templates are present', () => {

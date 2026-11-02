@@ -8,7 +8,7 @@
     "02-schedule": {
       "markers": ["#roots.includes(e)", "The root queue is deduplicated"],
       "tests": [],
-      "e2e": [{ "app": "shop/shop/apps/acme", "spec": "e2e/domains/game-page/game-page.mock.spec.ts", "names": "switches to real mode via signup" }]
+      "e2e": [{ "app": "a downstream application", "spec": "its sign-in end-to-end spec", "names": "a signed-out visitor signs in" }]
     },
     "05-flushed": {
       "markers": ["#flushed"],

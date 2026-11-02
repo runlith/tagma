@@ -232,8 +232,8 @@ build is what would fail. Both are named here rather than given a trap that cann
 ## `svelte@5.57.0.patch`
 
 Nine hunks: 1, 2, 7, 10 and 11 stand in the applied patch; 5, 6, 8 and 9 are off while Tagma compiles
-without `experimental.async` (below), kept in `svelte@5.57.0.off.patch`. 1, 2, 5 and 6 are carried from shop `core-refactor` at `8c71394ba0`, 7 and 8 from shop
-`release` at `9de9eb1deb`, 9, 10 and 11 are runlith's own. Three of the first four are about one thing: the
+without `experimental.async` (below), kept in `svelte@5.57.0.off.patch`. 1, 2, 5, 6, 7 and 8 come from a downstream application,
+9, 10 and 11 are runlith's own. Three of the first four are about one thing: the
 graph's services live in detached roots (`detachedRoot` in `packages/layer/src/svelte/App.svelte.ts`),
 their effects stand outside the component tree, and Svelte's batch scheduler in async mode does not
 count them as its own at time travel and at commit. On 5.57.0 `batch.js` is byte-identical to 5.56.10;
@@ -271,8 +271,8 @@ branch a batch marked and never reached is flushed by nobody: the bit stays clea
 `schedule` under it returns early. The patch always walks to the top and deduplicates the root queue —
 exactly what the bail was buying.
 
-Symptom in shop: a guest on a game page signs up, the screen stays on "Loading…" forever, the launch
-request never leaves. Here the equivalent is a branch switch on a busy graph.
+Symptom in a downstream application: a signed-out visitor signs in, the screen stays on "Loading…"
+forever, and the request it waits on never leaves. Here the equivalent is a branch switch on a busy graph.
 
 Where the cleared bit comes from, by the scheduler log of that spec without the hunk: `#process` moves
 the roots scheduled during its traversal into the next batch without clearing its own `#roots`; the
@@ -280,8 +280,8 @@ session-swap batch, already unlinked, is processed once more with the same root,
 `root.f ^= CLEAN` on a clean root — bit cleared. A unit trap needs that second entry into a committed
 batch; who makes it is not found yet, so the hunk is proven by e2e alone.
 
-Trap: shop `apps/acme/e2e/domains/game-page/game-page.mock.spec.ts › switches to real mode via signup`
-(4 of 4 red without the hunk). No unit here distinguishes it.
+Trap: an end-to-end spec of that application, 4 of 4 red without the hunk. It does not run in this
+repository, and no unit here distinguishes it.
 
 ### 5 · `batch.js`, `Batch.apply`: a flushed batch counts as applied
 
@@ -290,8 +290,8 @@ its values sit in `source.v` and in the DOM, and reverting them for a neighbour 
 screen has left. Svelte already treats intersecting batches this way. Writes made in a continuation
 after an `await` are not reverted either: no macrotask separates them from the flush.
 
-Symptom, measured in shop with the search box temporarily under a boundary with `pending`: on the game
-route the Rewards presenter sees the results with the profile `undefined` and never runs again.
+Symptom, measured in a downstream application with a search box temporarily under a boundary with
+`pending`: a presenter sees the results with the profile `undefined` and never runs again.
 
 Trap: `time-travel.svelte.test.ts -t pending`.
 
@@ -304,13 +304,12 @@ stale effects go to `#dirty_effects`, stale deriveds take DIRTY and a fresh `wv`
 set, `discard` clears it: the world without the discarded batch is the outcome. A read under `untrack`
 is not noted.
 
-Exactly what read the revert reruns. An effect whose dependencies did not change does not run: in shop's
-cbc a `GameScreen` teardown cancels the game launch, and both wider forms of the earlier hunk (DIRTY on
+Exactly what read the revert reruns. An effect whose dependencies did not change does not run: in a downstream
+application a screen's teardown cancels the work it launched, and both wider forms of the earlier hunk (DIRTY on
 every deferred effect; `wv` over the whole of `current`) dropped it. The earlier hunks 3 (a write during
 a deferred batch's traversal stays in it) and 4 (`wv` over every `previous`) were special cases of this.
 
-Traps: `time-travel.svelte.test.ts -t blocking`; in shop, cbc `game-session.mock.spec.ts › opens a game
-from a catalog card` and `after-deposit-prompt.mock.spec.ts › waits out a running game session`.
+Traps: `time-travel.svelte.test.ts -t blocking`, and two end-to-end specs of a downstream application.
 
 ### 7 · `batch.js`, `schedule_effect`: no current batch — a new one is made
 
@@ -320,7 +319,7 @@ Upstream [sveltejs/svelte#18850](https://github.com/sveltejs/svelte/issues/18850
 that on its first run writes what it just read and flushes in the same run reaches its self-invalidation
 with no batch and throws `Cannot read properties of null (reading 'schedule')`.
 
-Symptom in shop: acme prod on 5.57.0, the route's error boundary replaced `/balance-multiplication`.
+Symptom in a downstream application in production on 5.57.0: a route's error boundary replaced the page.
 
 Trap: `packages/layer/src/svelte/effect-self-invalidation.svelte.test.ts`.
 
@@ -336,9 +335,9 @@ and after the traversal defers into the rebased batch only those, as PR #18896 d
 is wrong: a shared root's traversal also collects other batches' effects, which then turn CLEAN and wait
 for the held batch.
 
-Symptom in shop: mobile game search after a reload stays empty for good.
+Symptom in a downstream application: a mobile search after a reload stays empty for good.
 
-Trap: `packages/layer/src/svelte/rebase.svelte.test.ts`, the reproduction of #18895. shop's own trap
+Trap: `packages/layer/src/svelte/rebase.svelte.test.ts`, the reproduction of #18895. The earlier trap
 (`time-travel.svelte.test.ts -t "woken by a write after the await"`) is green here without the hunk.
 
 ### 9 · `batch.js`, `#traverse`: a later batch skips the branches a batch it carries removes
@@ -495,10 +494,10 @@ element sees that element's document in `setup`; without the hunk it is the iner
 | `clear_marked(effect.deps)` in `destroy_effect` | 5 of 6 red |
 | revert `CLEAN` and `WAS_MARKED` in `Batch.discard()` | 5 of 6 red |
 | keep collected effects in the rebase branch of `#commit` | 5 of 6 red |
-| `DIRTY` on every deferred effect at commit | cbc: the `GameScreen` teardown cancels the launch |
-| `wv` over the whole of `current` at commit | cbc: the same; touches values first computed inside the batch |
+| `DIRTY` on every deferred effect at commit | downstream: a screen's teardown cancels the work it launched |
+| `wv` over the whole of `current` at commit | downstream: the same; touches values first computed inside the batch |
 | roll svelte back to 5.53.5 | green, but drags vite and vite-plugin-svelte along: the versions do not detach one by one |
-| a boundary with `pending` without hunk 5 | shop: the presenter runs over the reverted profile 3 of 3 |
+| a boundary with `pending` without hunk 5 | downstream: the presenter runs over the reverted profile 3 of 3 |
 
 ### How to check
 
@@ -526,4 +525,4 @@ bun run --cwd packages/primitives test
 9. `from_html` and `from_namespace` clone templates into the page's document in every browser — hunk 11
    goes, its trap stays.
 10. While none of this is done, the patch is regenerated for the new version by the method above,
-   `patches:prove` is green whole, and the e2e trap of hunk 2 is green in shop.
+   `patches:prove` is green whole, and the end-to-end trap of hunk 2 is green in the downstream application.

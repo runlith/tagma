@@ -41,8 +41,8 @@ test('a project registered by another door appears in the open workspace when th
   await waitUntil(() => workspace.loaded);
   expect(workspace.projects.map((one) => one.name)).toEqual(['first']);
 
-  registry.push(project(2, 'shop-backend'));
+  registry.push(project(2, 'billing-backend'));
   feed.routes.get('projects.subscribe')?.({ revision: 2 });
 
-  await waitFor(() => expect(workspace.projects.map((one) => one.name)).toEqual(['first', 'shop-backend']));
+  await waitFor(() => expect(workspace.projects.map((one) => one.name)).toEqual(['first', 'billing-backend']));
 });
