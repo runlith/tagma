@@ -7,13 +7,15 @@ import './tokens.css';
 const target = document.getElementById('stand')!;
 const parameters = new URL(location.href).searchParams;
 const loaded = Number(parameters.get('loaded') ?? 120);
+const count = parameters.has('count') ? Number(parameters.get('count')) : undefined;
+const active = parameters.get('idle') !== '1';
 const touch = parameters.get('touch') === '1';
 const controller = new AbortController();
 window.addEventListener('pagehide', () => controller.abort(), { once: true });
 void Effect.runPromise(
   Effect.scoped(
     Effect.gen(function* () {
-      const rig = yield* makeRig(loaded);
+      const rig = yield* makeRig(loaded, { active, count });
       if (touch) {
         const viewport = window.visualViewport;
         let height = -1;

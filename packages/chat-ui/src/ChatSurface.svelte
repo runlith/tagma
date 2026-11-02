@@ -271,8 +271,9 @@
     viewport.dispose();
   });
 
+  $effect.pre(() => turns.onSubmit(() => viewport.resume()));
+
   function send(): Promise<boolean> {
-    viewport.resume();
     return turns.run(turns.send(), false);
   }
 

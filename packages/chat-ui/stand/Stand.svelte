@@ -3,19 +3,19 @@
   import Surface from './Surface.svelte';
   import { Recorder, scroller } from './recorder';
   import type { Rig } from './rig.svelte';
-  import type { StandPort } from './port';
+  import type { ComposerStandPort } from './port';
   import { premeasure } from './premeasure';
-  import { observations } from './corpus';
   import { PageActions } from './PageActions';
   import { pagingMargin } from '@reach';
 
   let { rig, touch }: { rig: Rig; touch: boolean } = $props();
   let epoch = $state(0);
   onMount(() => {
+    const observations = rig.observations;
     let timing = false;
     let recorder = new Recorder(observations, { timing });
     const actions = new PageActions(() => recorder, observations, pagingMargin);
-    const port: StandPort = {
+    const port: ComposerStandPort = {
       ready: false,
       timing: () => {
         recorder.timing();
@@ -62,6 +62,8 @@
       frames: (count) => recorder.frames(count),
       frameTime: () => recorder.frameTime(),
       stream: (chunks) => rig.stream(chunks),
+      send: () => rig.turns.run(rig.turns.send(), false),
+      sending: () => rig.turns.pending,
       loadOlder: () => actions.loadOlder(async () => rig.paging.requested),
       reachOlder: () => actions.reachOlder(),
       pageLatency: (ms) => rig.pageLatency(ms),

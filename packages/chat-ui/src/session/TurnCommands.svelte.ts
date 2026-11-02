@@ -1,4 +1,5 @@
 import { Data, Deferred, Duration, Effect, Fiber, FiberSet, Result } from 'effect';
+import { createEventEmitter } from '@runlith/utils/event';
 import type { ThreadCompactionPoint } from '@runlith/agent/thread/storage/inbox';
 import type { ChatDraft, ChatTurnOpening } from '../ChatDraft';
 import type { ChatQuestionAnswer } from '../entries';
@@ -84,6 +85,11 @@ export class TurnCommands<TDraft, TThread extends ChatThreadView> {
   private readonly lanes = new Map<string | ThreadOpening, Lane>();
   private readonly bornFrom = new WeakMap<ThreadOpening, Bearing>();
   private readonly bornOpenings = new Map<string, ThreadOpening>();
+  private readonly submissions = createEventEmitter((error) => {
+    queueMicrotask(() => {
+      throw error;
+    });
+  });
 
   session = $derived(this.target instanceof ThreadSession ? this.target : null);
   opening = $derived(this.target instanceof ThreadOpening ? this.target : null);
@@ -139,7 +145,7 @@ export class TurnCommands<TDraft, TThread extends ChatThreadView> {
     const connection = yield* ChatConnection<TThread>();
     const fork = yield* FiberSet.makeRuntime<never, void, never>();
     const deadline = options.birthDeadlineMs ?? BIRTH_DEADLINE_MS;
-    return new TurnCommands<TDraft, TThread>(
+    const commands = new TurnCommands<TDraft, TThread>(
       connection,
       turns,
       stops,
@@ -152,6 +158,8 @@ export class TurnCommands<TDraft, TThread extends ChatThreadView> {
       (work) => fork(work),
       deadline,
     );
+    yield* Effect.addFinalizer(() => Effect.sync(() => commands.submissions.clear()));
+    return commands;
   });
 
   get notice(): ChatNotice | null {
@@ -169,6 +177,10 @@ export class TurnCommands<TDraft, TThread extends ChatThreadView> {
 
   run<A>(work: Effect.Effect<A>, otherwise: A): Promise<A> {
     return this.drive(work, otherwise);
+  }
+
+  onSubmit(listener: () => void): () => void {
+    return this.submissions.subscribe(listener);
   }
 
   relay(settled: Effect.Effect<ChatNotice | null>): Effect.Effect<void> {
@@ -201,6 +213,7 @@ export class TurnCommands<TDraft, TThread extends ChatThreadView> {
       const current = this.draft.current;
       const text = this.draft.textOf(current).trim();
       if (!freeform || !text || this.draft.attached(current)) return this.sendDraft(this.draft.clone(current), { clearCurrent: true });
+      this.submissions.emit();
       this.draft.clear();
       return Effect.as(this.answerQuestion(freeform.questionId, [{ questionId: freeform.promptId, values: [text] }]), true);
     });
@@ -213,6 +226,7 @@ export class TurnCommands<TDraft, TThread extends ChatThreadView> {
   sendDraft(next: TDraft, options: ChatSendOptions = {}): Effect.Effect<boolean> {
     return Effect.suspend(() => {
       if (!this.draft.filled(next)) return Effect.succeed(false);
+      this.submissions.emit();
       this.sending += 1;
       this.shown = null;
       const opening = this.draft.opening(next);

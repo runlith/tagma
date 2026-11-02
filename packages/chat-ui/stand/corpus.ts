@@ -27,8 +27,8 @@ export function markdown(index: number): string {
   return `## Answer ${index}\n\n${paragraphs}${extras}`;
 }
 
-export function corpus(): readonly ThreadTranscriptEntry[] {
-  return Array.from({ length: ENTRY_COUNT }, (_, index): ThreadTranscriptEntry => {
+export function corpus(count = ENTRY_COUNT): readonly ThreadTranscriptEntry[] {
+  return Array.from({ length: count }, (_, index): ThreadTranscriptEntry => {
     const id = entryId(index);
     const runId = `run-${Math.floor(index / 5)}`;
     const occurredAt = '2026-01-01T00:00:00.000Z';
@@ -72,14 +72,14 @@ export function corpus(): readonly ThreadTranscriptEntry[] {
 
 export const streamChunk = (index: number): string => `\n\nStreaming paragraph ${index + 1}. ${paragraph}`;
 
-export const observations: ObservedEntries = {
+export const observations = (count = ENTRY_COUNT): ObservedEntries => ({
   jump: 'jumpToLatest',
   message(key) {
     const entry = key.match(/entry-(\d+)/)?.[1];
     const run = key.match(/run-(\d+)/)?.[1];
     if (entry !== undefined) return userLabel(Math.floor(Number(entry) / 5) * 5);
     if (run !== undefined) return userLabel(Number(run) * 5);
-    return key === STREAM_ID || key === 'live:status' ? userLabel(9995) : null;
+    return key === STREAM_ID || key === 'live:status' ? userLabel(Math.floor((count - 1) / 5) * 5) : null;
   },
   kind(key) {
     const index = key.match(/entry-(\d+)/)?.[1];
@@ -87,4 +87,4 @@ export const observations: ObservedEntries = {
     return Number(index) % 5 === 0 ? 'user' : Number(index) % 5 === 2 ? 'tool' : 'assistant';
   },
   tail: (key) => key === 'live:status',
-};
+});

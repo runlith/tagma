@@ -4,11 +4,13 @@ import type { TestSession } from '@feed/testing/chatHarness.svelte';
 import type { TurnCommands } from '@feed/session/TurnCommands.svelte';
 import type { TestDraft } from '@feed/testing/chatHarness.svelte';
 import type { TestThread } from '@feed/testing/chatConnection';
-import { corpus, PAGE_SIZE, STREAM_ID, STREAM_RUN, streamChunk } from './corpus';
+import { corpus, ENTRY_COUNT, observations, PAGE_SIZE, STREAM_ID, STREAM_RUN, streamChunk } from './corpus';
+import type { ObservedEntries } from './recording';
 
 export type Rig = {
   readonly turns: TurnCommands<TestDraft, TestThread>;
   readonly session: TestSession['session'];
+  readonly observations: ObservedEntries;
   readonly paging: { requested: number; landed: number; latency: number; requestedAt: number | null; landedAt: number | null };
   stream(chunks?: number): Promise<void>;
   loadOlder(): Promise<boolean>;
@@ -17,8 +19,13 @@ export type Rig = {
   releasePages(): void;
 };
 
-export const makeRig = Effect.fnUntraced(function* (loaded = PAGE_SIZE): Effect.fn.Return<Rig, never, import('effect').Scope.Scope> {
-  const entries = corpus();
+type RigOptions = { readonly active?: boolean; readonly count?: number };
+
+export const makeRig = Effect.fnUntraced(function* (
+  loaded = PAGE_SIZE,
+  { active = true, count = ENTRY_COUNT }: RigOptions = {},
+): Effect.fn.Return<Rig, never, import('effect').Scope.Scope> {
+  const entries = corpus(count);
   const chat = yield* makeChat();
   const paging = $state<Rig['paging']>({ requested: 0, landed: 0, latency: 350, requestedAt: null, landedAt: null });
   let gate: Deferred.Deferred<void> | null = null;
@@ -38,12 +45,20 @@ export const makeRig = Effect.fnUntraced(function* (loaded = PAGE_SIZE): Effect.
   const before = Math.max(0, entries.length - loaded);
   chat.connection.emit(
     snapshotEvent({
-      activeRunId: STREAM_RUN,
+      activeRunId: active ? STREAM_RUN : null,
       transcript: entries.slice(before),
       before: before === 0 ? null : before,
-      open: [
-        { type: 'message', role: 'assistant', id: STREAM_ID, runId: STREAM_RUN, text: 'A scripted answer is arriving below the reader.' },
-      ],
+      open: active
+        ? [
+            {
+              type: 'message',
+              role: 'assistant',
+              id: STREAM_ID,
+              runId: STREAM_RUN,
+              text: 'A scripted answer is arriving below the reader.',
+            },
+          ]
+        : [],
     }),
   );
   yield* session.opened();
@@ -58,6 +73,7 @@ export const makeRig = Effect.fnUntraced(function* (loaded = PAGE_SIZE): Effect.
   return {
     turns,
     session,
+    observations: observations(count),
     paging,
     stream: (chunks = 30) => turns.run(streaming(chunks), undefined),
     loadOlder: () => turns.run(turns.loadOlder(), false),

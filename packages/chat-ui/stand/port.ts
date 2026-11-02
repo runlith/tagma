@@ -39,3 +39,10 @@ export type StandPort = {
 };
 
 export type StandGlobal = { feedStand?: StandPort };
+
+export interface ComposerStandPort extends StandPort {
+  send(): Promise<boolean>;
+  sending(): boolean;
+}
+
+export type ComposerStandGlobal = { feedStand?: ComposerStandPort };
