@@ -199,7 +199,7 @@ export class ProtocolDriver implements ProtocolSessions {
       new ProtocolPreparing<LaunchWords>(links, preparing, 'launch'),
       new ProtocolPreparing<SteerWords>(links, preparing, 'steer'),
     );
-    const opening = new ProtocolOpening(steps, halts, prompts, rows, alignment);
+    const opening = new ProtocolOpening(steps, halts, prompts, rows, alignment, place);
     const copies = yield* makeSessionCopies.pipe(Effect.provideService(HarnessAsides, held));
     const asides = new ProtocolAsides(links, steps, answers, inbox, threads, copies);
     const reactor = new ProtocolReactor(links, steps, halts, asks, prompts, opening, asides, quota, titled, begun, journal.stepped);

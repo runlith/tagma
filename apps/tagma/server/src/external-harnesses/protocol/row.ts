@@ -35,6 +35,8 @@ export const ForkOrigin = Schema.Struct({
   session: Schema.String,
   prompt: Schema.NullOr(Schema.String),
   account: Schema.optional(Schema.NullOr(Schema.String)),
+  thread: Schema.optional(Schema.String),
+  through: Schema.optional(Schema.NullOr(Schema.String)),
 });
 export const Cut = Schema.Struct({ at: Schema.String, request: Schema.NullOr(Schema.String) });
 export type Cut = typeof Cut.Type;

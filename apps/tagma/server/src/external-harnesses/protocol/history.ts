@@ -84,9 +84,13 @@ export class ProtocolHistory {
         : point._tag === 'Cut'
           ? { address: point.address, ordinal: point.ordinal }
           : { address: before?.address ?? null, ordinal: before?.ordinal ?? null };
+    const through = at !== null && at.address === null ? ((yield* turns.turns(unit, source)).at(-1)?.last ?? null) : null;
     yield* rows.write(unit, child, {
       ...freshRow(child, null, null),
-      fork: at === null || facet.sessionKey === null ? null : { session: facet.sessionKey, prompt: at.address, account },
+      fork:
+        at === null || facet.sessionKey === null
+          ? null
+          : { session: facet.sessionKey, prompt: at.address, account, thread: source, through },
     });
     if (at === null) return;
     yield* turns.copy(unit, source, child, at.ordinal);

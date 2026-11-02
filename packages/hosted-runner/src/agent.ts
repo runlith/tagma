@@ -3,7 +3,7 @@ import { AgentFault, FAULT, type AgentHandlers, type Outlet } from '@runlith/acp
 import { ContentBlock } from '@runlith/acp/content';
 import type { NewSessionResult } from '@runlith/acp/methods';
 import { ASIDE, Aside, COMPACT, FORK, REWIND, STEER, WITHDRAW } from './wire/extensions.js';
-import type { Cycle, Opening, Session } from './cycle.js';
+import type { Cycle, ForkPoint, Opening, Session } from './cycle.js';
 import type { HostedDoor } from './door.js';
 import { Turn } from './turn.js';
 
@@ -18,6 +18,8 @@ const Fork = Schema.Struct({
   sessionId: Schema.String,
   cwd: Schema.optional(Schema.String),
   turn: Schema.optional(Schema.NullOr(Schema.String)),
+  through: Schema.optional(Schema.NullOr(Schema.String)),
+  storage: Schema.optional(Schema.NullOr(Schema.String)),
 });
 const Rewind = Schema.Struct({ sessionId: Schema.String, turn: Schema.String });
 
@@ -71,8 +73,7 @@ export const hostedAgent =
       );
     const absent = (method: string) =>
       Effect.fail(new AgentFault({ code: FAULT.methodNotFound, message: `this agent does not implement ${method}` }));
-    const fork = (id: string, cwd: string, at: string | null) =>
-      cycle.fork === undefined ? absent(FORK) : replace(cycle.fork(id, cwd, at, outlet, replacing));
+    const fork = (point: ForkPoint) => (cycle.fork === undefined ? absent(FORK) : replace(cycle.fork(point, outlet, replacing)));
     const declared = cycle.extensions;
     const extensions: Record<string, (params: unknown) => Effect.Effect<unknown, AgentFault>> = {};
     {
@@ -107,12 +108,27 @@ export const hostedAgent =
               ? Effect.fail(
                   new AgentFault({ code: FAULT.invalidParams, message: `${FORK} names the cwd of a session this process has not opened` }),
                 )
-              : fork(asked.sessionId, cwd, asked.turn ?? null);
+              : asked.turn != null && asked.through != null
+                ? Effect.fail(
+                    new AgentFault({
+                      code: FAULT.invalidParams,
+                      message: `${FORK} names both a turn to cut before and one to keep through`,
+                    }),
+                  )
+                : fork({
+                    from: asked.sessionId,
+                    cwd,
+                    turn: asked.turn ?? null,
+                    through: asked.through ?? null,
+                    storage: asked.storage ?? null,
+                  });
           });
       if (declared.includes(REWIND))
         extensions[REWIND] = (params) =>
           Effect.flatMap(decoded(Rewind, REWIND)(params), (asked) =>
-            Effect.flatMap(live(asked.sessionId), (standing) => fork(standing.id, standing.cwd, asked.turn)),
+            Effect.flatMap(live(asked.sessionId), (standing) =>
+              fork({ from: standing.id, cwd: standing.cwd, turn: asked.turn, through: null, storage: null }),
+            ),
           );
     }
     return {

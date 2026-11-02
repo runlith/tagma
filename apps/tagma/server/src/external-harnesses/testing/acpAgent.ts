@@ -299,7 +299,13 @@ const extended = (message: Message): void => {
       return;
     }
     case '_tagma/fork':
-      later(() => send({ id, result: { sessionId: 'sess-fork', configOptions: served() } }));
+      later(() =>
+        send(
+          existsSync(`${report}.unforked`)
+            ? { id, error: { code: -32002, message: 'the source session is gone' } }
+            : { id, result: { sessionId: 'sess-fork', configOptions: served() } },
+        ),
+      );
       return;
     case '_tagma/rewind':
       later(() =>

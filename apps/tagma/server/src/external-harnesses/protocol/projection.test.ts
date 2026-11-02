@@ -66,7 +66,7 @@ test('a turn projects as its messages and its tool call by turn and id, and ends
   ]);
   expect(projected.turns).toEqual([]);
   expect(projected.closed).toEqual([{ ...opened[0]!, parts: { text: 1, reasoning: 1 }, said: 'Done.' }]);
-  expect(projected.vendor).toEqual([{ run: 'turn-1', address: 'p-1' }]);
+  expect(projected.vendor).toEqual([{ run: 'turn-1', address: 'p-1', last: 'l-1' }]);
 });
 
 test('a hosted assistant message keeps reasoning, text and all tool calls together across durable boundaries, then flushes its last message', () => {

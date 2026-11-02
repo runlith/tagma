@@ -175,6 +175,7 @@ export class ProtocolReactor {
       case 'RequestFailed': {
         if (event.cause._tag === 'Exited') return null;
         if (event.request.meaning !== 'extension') return yield* opening.refused(link, event);
+        if (opening.unavailable(link, event)) return yield* opening.unforked(link);
         const refused = refusal(event);
         if (refused === null) return yield* prompts.prompt(link);
         yield* halts.failed(link, refused);

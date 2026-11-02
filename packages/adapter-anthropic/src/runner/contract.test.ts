@@ -1663,7 +1663,7 @@ describe('a prompt of the run that changed when the turn opened', () => {
     ]);
   const answering: Script = { onUser: (_, channel) => channel.emit(resultOf(1, 1, 0.1)) };
 
-  it.live('reopens the query on the same session before the words go, with snapshots off', () =>
+  it.live('reopens the query on the same session before the words go, the new prompt superseding the recorded one', () =>
     Effect.gen(function* () {
       const session = yield* open(answering, { door: changing(null) });
       yield* session.prompt('one');
@@ -1674,7 +1674,8 @@ describe('a prompt of the run that changed when the turn opened', () => {
       expect(after!.channel.received).toHaveLength(1);
       expect(after!.options).toMatchObject({
         resume: session.sessionId,
-        systemPrompt: { type: 'custom', prompt: servedPrompt('v2', false), snapshot: false },
+        systemPrompt: { type: 'custom', prompt: servedPrompt('v2', false), snapshot: true },
+        env: { CLAUDE_CODE_HOST_PROMPT_SUPERSEDES_RECORD: '1' },
       });
     }),
   );
@@ -1690,7 +1691,7 @@ describe('a prompt of the run that changed when the turn opened', () => {
       expect(before!.channel.received).toHaveLength(0);
       expect(after!.options.sessionId).toBe(session.sessionId);
       expect(after!.options.resume).toBeUndefined();
-      expect(after!.options.systemPrompt).toMatchObject({ prompt: servedPrompt('v2', false), snapshot: false });
+      expect(after!.options.systemPrompt).toMatchObject({ prompt: servedPrompt('v2', false), snapshot: true });
     }),
   );
 
@@ -1772,6 +1773,18 @@ describe('fork at a turn', () => {
     Effect.gen(function* () {
       const session = yield* open({}, { transcript });
       expect((yield* session.refused(FORK, { turn: 'missing' })).code).toBe(FAULT.invalidParams);
+    }),
+  );
+
+  it.live('copies a source that stands where the fork was born whole, and cuts one that went on at the record it stood on', () =>
+    Effect.gen(function* () {
+      const session = yield* open({}, { transcript });
+      yield* session.extension(FORK, { through: 'a2' });
+      expect(session.sdk.opened[1]!.options).toMatchObject({ resume: session.sessionId, forkSession: true });
+      expect(session.sdk.opened[1]!.options.resumeSessionAt).toBeUndefined();
+      yield* session.extension(FORK, { through: 'a1' });
+      expect(session.sdk.opened[2]!.options).toMatchObject({ resume: session.sessionId, forkSession: true, resumeSessionAt: 'a1' });
+      expect((yield* session.refused(FORK, { through: 'gone' })).code).toBe(FAULT.notFound);
     }),
   );
 });

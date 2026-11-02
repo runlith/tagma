@@ -17,6 +17,7 @@ export const vendorTurn = sqliteTable(
     runId: text('run_id').notNull(),
     ordinal: integer('ordinal').notNull(),
     address: text('address'),
+    last: text('last'),
   },
   (table) => [primaryKey({ columns: [table.threadId, table.runId] }), index('vendor_turn_order').on(table.threadId, table.ordinal)],
 );
@@ -31,13 +32,18 @@ export const vendorSession = sqliteTable('vendor_session', {
   owed: text('owed'),
 });
 
-export type VendorAddress = { readonly run: string; readonly address: string | null };
+export type VendorAddress = { readonly run: string; readonly address: string | null; readonly last: string | null };
 
 export type LaunchedCut = NonNullable<HarnessSession['cut']>;
 
 export const accountKey = (account: HarnessSession['account']): string | null => account?.key ?? null;
 
-export const VendorTurnRow = Schema.Struct({ run: Schema.String, ordinal: Schema.Int, address: Schema.NullOr(Schema.String) });
+export const VendorTurnRow = Schema.Struct({
+  run: Schema.String,
+  ordinal: Schema.Int,
+  address: Schema.NullOr(Schema.String),
+  last: Schema.optional(Schema.NullOr(Schema.String)),
+});
 export type VendorTurnRow = typeof VendorTurnRow.Type;
 
 export const ReplacedRoot = Schema.Struct({ root: Schema.String, cut: Schema.Array(Schema.String), turns: Schema.Array(VendorTurnRow) });
@@ -76,7 +82,7 @@ export class VendorTurns {
       Effect.map(
         held.run(
           this.db
-            .select({ run: vendorTurn.runId, ordinal: vendorTurn.ordinal, address: vendorTurn.address })
+            .select({ run: vendorTurn.runId, ordinal: vendorTurn.ordinal, address: vendorTurn.address, last: vendorTurn.last })
             .from(vendorTurn)
             .where(and(eq(vendorTurn.threadId, threadId), eq(vendorTurn.runId, run)))
             .get(),
@@ -89,7 +95,7 @@ export class VendorTurns {
   turns(unit: Unit<'machine'>, threadId: string): Effect.Effect<readonly VendorTurnRow[], StoreFailure> {
     return unit.run(
       this.db
-        .select({ run: vendorTurn.runId, ordinal: vendorTurn.ordinal, address: vendorTurn.address })
+        .select({ run: vendorTurn.runId, ordinal: vendorTurn.ordinal, address: vendorTurn.address, last: vendorTurn.last })
         .from(vendorTurn)
         .where(eq(vendorTurn.threadId, threadId))
         .orderBy(asc(vendorTurn.ordinal))
@@ -107,11 +113,15 @@ export class VendorTurns {
               threadId,
               runId: mark.run,
               address: mark.address,
+              last: mark.last,
               ordinal: sql`(select coalesce(max(ordinal), -1) + 1 from vendor_turn where thread_id = ${threadId})`,
             })
             .onConflictDoUpdate({
               target: [vendorTurn.threadId, vendorTurn.runId],
-              set: { address: sql`coalesce(excluded.address, ${vendorTurn.address})` },
+              set: {
+                address: sql`coalesce(excluded.address, ${vendorTurn.address})`,
+                last: sql`coalesce(excluded.last, ${vendorTurn.last})`,
+              },
             }),
         ),
       ),
@@ -121,8 +131,8 @@ export class VendorTurns {
   copy(unit: Unit<'machine'>, source: string, child: string, before: number | null): Effect.Effect<void, StoreFailure> {
     return Effect.asVoid(
       unit.run(
-        this.db.run(sql`insert into vendor_turn (thread_id, run_id, ordinal, address)
-      select ${child}, run_id, ordinal, address from vendor_turn where thread_id = ${source}
+        this.db.run(sql`insert into vendor_turn (thread_id, run_id, ordinal, address, last)
+      select ${child}, run_id, ordinal, address, last from vendor_turn where thread_id = ${source}
       ${before === null ? sql`` : sql`and ordinal < ${before}`}`),
       ),
     );
@@ -196,7 +206,7 @@ export class VendorTurns {
         this.inserted(
           unit,
           threadId,
-          standing.map((run) => ({ run, address: null })),
+          standing.map((run) => ({ run, address: null, last: null })),
         ),
         this.heard(unit, threadId),
       ],
@@ -275,7 +285,7 @@ export class VendorTurns {
         unit.run(
           this.db
             .update(vendorTurn)
-            .set({ address: paired ? (addresses[at] ?? null) : null })
+            .set({ address: paired ? (addresses[at] ?? null) : null, last: null })
             .where(and(eq(vendorTurn.threadId, threadId), eq(vendorTurn.runId, turn.run))),
         ),
       { discard: true },
@@ -319,9 +329,15 @@ export class VendorTurns {
     yield* this.rowsGone(unit, threadId);
     if (replaced.turns.length > 0)
       yield* unit.run(
-        this.db
-          .insert(vendorTurn)
-          .values(replaced.turns.map((turn) => ({ threadId, runId: turn.run, ordinal: turn.ordinal, address: turn.address }))),
+        this.db.insert(vendorTurn).values(
+          replaced.turns.map((turn) => ({
+            threadId,
+            runId: turn.run,
+            ordinal: turn.ordinal,
+            address: turn.address,
+            last: turn.last ?? null,
+          })),
+        ),
       );
     yield* this.generation(unit, threadId, null);
     return replaced;
@@ -383,7 +399,7 @@ export class VendorTurns {
           unit.run(
             this.db
               .insert(vendorTurn)
-              .values(marks.map((mark, ordinal) => ({ threadId, runId: mark.run, ordinal, address: mark.address }))),
+              .values(marks.map((mark, ordinal) => ({ threadId, runId: mark.run, ordinal, address: mark.address, last: mark.last }))),
           ),
         );
   }

@@ -9,7 +9,7 @@ import type { ProtocolAlignment } from './alignment.js';
 import { ASIDE, COMPACT, FORK, REWIND, STEER, WITHDRAW } from '@runlith/hosted-runner/wire/extensions';
 import type { ProtocolHalts } from './halts.js';
 import type { Link } from './links.js';
-import type { ProtocolPrompts } from './prompts.js';
+import type { ProtocolPrompts, SessionPlace } from './prompts.js';
 import { negotiates, negotiating } from './row.js';
 import { IDLE, type Persisted, type ProtocolSteps } from './steps.js';
 
@@ -20,6 +20,7 @@ export class ProtocolOpening {
     private readonly prompts: ProtocolPrompts,
     private readonly rows: ProtocolRows,
     private readonly alignment: ProtocolAlignment,
+    private readonly place: SessionPlace,
   ) {}
 
   readonly initialized = Effect.fnUntraced(function* (this: ProtocolOpening, link: Link, result: InitializeResult) {
@@ -89,6 +90,24 @@ export class ProtocolOpening {
     return yield* this.steps.intend(link, { _tag: 'SetMode', params: { sessionId, modeId: link.profile.mode } });
   });
 
+  unavailable(link: Link, event: Extract<ClientEvent, { readonly _tag: 'RequestFailed' }>): boolean {
+    const { request, cause } = event;
+    return (
+      link.row.fork !== null &&
+      request.meaning === 'extension' &&
+      request.method === FORK &&
+      cause._tag === 'Agent' &&
+      cause.error.code === FAULT.notFound
+    );
+  }
+
+  readonly unforked = Effect.fnUntraced(function* (this: ProtocolOpening, link: Link) {
+    const cwd = yield* this.alignment.cwd(link);
+    if (cwd === null) return IDLE;
+    yield* this.steps.persist(link, { row: (row) => ({ ...row, fork: null }) });
+    return yield* this.alignment.fresh(link, cwd);
+  });
+
   readonly refused = Effect.fnUntraced(function* (
     this: ProtocolOpening,
     link: Link,
@@ -153,13 +172,22 @@ export class ProtocolOpening {
         );
         return IDLE;
       }
+      const { session, prompt, thread, through } = link.row.fork;
+      const kept = link.profile.storage;
+      const scratch = kept === undefined || thread === undefined ? undefined : (yield* this.place(thread)).scratch;
       return yield* steps.intend(
         link,
         {
           _tag: 'Extend',
           method: FORK,
           envelopes: [],
-          params: { sessionId: link.row.fork.session, cwd, turn: link.row.fork.prompt },
+          params: {
+            sessionId: session,
+            cwd,
+            turn: prompt,
+            through: through ?? null,
+            storage: kept === undefined || scratch === undefined ? null : `${scratch}/${kept.folder}`,
+          },
         },
         { row: (row) => ({ ...row, phase: 'opening' }) },
       );

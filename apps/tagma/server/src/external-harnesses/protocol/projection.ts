@@ -122,6 +122,7 @@ const text = (value: unknown): string | null => (typeof value === 'string' ? val
 const vendorOf = (run: string, meta: Readonly<Record<string, unknown>>): VendorAddress => ({
   run,
   address: text(field(meta['tagma/turn'], 'prompt')),
+  last: text(field(meta['tagma/turn'], 'last')),
 });
 
 export const project = (

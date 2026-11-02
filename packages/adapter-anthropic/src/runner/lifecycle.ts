@@ -35,6 +35,8 @@ export type Listener = {
 
 const STEPPED = { CLAUDE_CODE_AUTO_COMPACT_WINDOW: '1000000', CLAUDE_AUTOCOMPACT_PCT_OVERRIDE: '1' };
 
+const RECORDED = { CLAUDE_CODE_HOST_PROMPT_SUPERSEDES_RECORD: '1' };
+
 export class Lifecycle {
   private driving: Driving | null = null;
   private reopening: Deferred.Deferred<void> | null = null;
@@ -238,7 +240,7 @@ export class Lifecycle {
       cwd,
       additionalDirectories: [...directories],
       pathToClaudeCodeExecutable: this.runner.claude,
-      systemPrompt: { type: 'custom', prompt: servedPrompt(this.prompted, false), snapshot: false },
+      systemPrompt: { type: 'custom', prompt: servedPrompt(this.prompted, false), snapshot: true },
       tools: this.webbed === 'vendor' ? VENDOR_TOOLS.map((tool) => tool.wire) : [],
       toolAliases: this.names.aliases,
       strictMcpConfig: true,
@@ -249,7 +251,7 @@ export class Lifecycle {
         idleCompaction: false,
         precomputeCompactionEnabled: false,
       },
-      env: { ...process.env, ...STEPPED },
+      env: { ...process.env, ...STEPPED, ...RECORDED },
       hooks: {
         PreToolUse: this.webbed === 'vendor' ? [this.fetching.hook()] : [],
         PreCompact: [

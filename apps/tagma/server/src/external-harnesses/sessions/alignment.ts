@@ -405,7 +405,7 @@ export const makeSessionAlignment = (
     writes: aligning,
     align,
     due,
-    taken: (unit, threadId, run, address) => turns.record(unit, threadId, [{ run, address }]),
+    taken: (unit, threadId, run, address) => turns.record(unit, threadId, [{ run, address, last: null }]),
     bound,
   };
 };

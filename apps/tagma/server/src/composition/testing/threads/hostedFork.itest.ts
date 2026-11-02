@@ -54,7 +54,8 @@ describe('a fork of a Claude Code thread on ACP', () => {
           const source = yield* birth();
           const parent = (yield* birthsOf(world.runtime.owners).create({ projectId, createdBySessionId: null, approvalMode: 'bypass' }))
             .thread.id;
-          yield* completed(report, (yield* turnsOf(world.runtime.owners).send(source, projectId, 'Read the module.')).runId);
+          const read = (yield* turnsOf(world.runtime.owners).send(source, projectId, 'Read the module.')).runId;
+          yield* completed(report, read);
           const spawn = (input: object) =>
             world.op('spawn_agent', input, `project=${projectId}`, { [GRANT_HEADER]: grantFor(parent), [APPROVAL_WAIT_HEADER]: '0' });
           const ask = { agentId: 'tagma', task: 'HOLD UNSENT the turn and say what it does.', fork: 'all', forkFrom: source };
@@ -69,7 +70,7 @@ describe('a fork of a Claude Code thread on ACP', () => {
           });
           const prompts = yield* framed(report, 'session/prompt', 2, 'the fork reached the agent');
           expect(prompts.filter((line) => line.method === '_tagma/fork').map((line) => line.params)).toMatchObject([
-            { sessionId: 'sess-1' },
+            { sessionId: 'sess-1', turn: null, through: `last-${read}`, storage: null },
           ]);
           expect(prompts.filter((line) => line.method === 'session/prompt').at(-1)?.params).toMatchObject({ sessionId: 'sess-fork' });
           const files = yield* FileSystem.FileSystem;
@@ -133,6 +134,32 @@ describe('a fork of a Claude Code thread on ACP', () => {
           expect(opening?.method).toBe('session/new');
           expect((yield* kernel.reads.snapshot(source)).latestRun).toMatchObject({ id: going, status: 'running' });
         }),
+    );
+
+    it.effect('a branch whose source state the agent no longer holds opens its session from the journal instead of failing', () =>
+      Effect.gen(function* () {
+        const { world, projectId, agent, birth } = yield* ProtocolWorld;
+        const report = yield* agent('branch-unforked');
+        const source = yield* birth();
+        const turns = turnsOf(world.runtime.owners);
+        const kernel = Context.get(world.runtime.owners, ThreadHarness);
+        yield* completed(report, (yield* turns.send(source, projectId, 'Read the module.')).runId);
+        yield* (yield* FileSystem.FileSystem).writeFileString(`${report}.unforked`, 'gone');
+        const answer = yield* world.op('branch_thread', { threadId: source }, `project=${projectId}`);
+        expect(answer.status).toBe(200);
+        const child = String((answer.body as { readonly threadId: string }).threadId);
+        yield* Effect.addFinalizer(() => {
+          const born = kernel.threads.handle(child, 'operator');
+          return Effect.andThen(born.stop(), born.release()).pipe(Effect.orDie);
+        });
+        yield* completed(report, (yield* turns.send(child, projectId, 'Say what it does.')).runId);
+        const frames = yield* heard(report);
+        const asked = frames.findIndex(
+          (line) => line.method === 'session/prompt' && JSON.stringify(line.params).includes('Say what it does.'),
+        );
+        const openings = frames.slice(0, asked).filter((line) => OPENINGS.has(line.method ?? ''));
+        expect(openings.slice(-2).map((line) => line.method)).toEqual(['_tagma/fork', 'session/new']);
+      }),
     );
 
     it.effect('a branch inherits the source account choice and uses the vendor fork only while its source session remains reachable', () =>

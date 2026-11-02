@@ -45,18 +45,20 @@ export interface Session {
   readonly aside?: (question: string) => Effect.Effect<unknown, AgentFault>;
 }
 
+export type ForkPoint = {
+  readonly from: string;
+  readonly cwd: string;
+  readonly turn: string | null;
+  readonly through: string | null;
+  readonly storage: string | null;
+};
+
 export interface Cycle {
   readonly initialize: InitializeResult;
   readonly extensions: readonly (Extension | Notification)[];
   readonly modes: SessionModeState;
   open(opening: Opening, outlet: Outlet, replacing: Effect.Effect<void, AgentFault>): Effect.Effect<Session, AgentFault>;
-  readonly fork?: (
-    from: string,
-    cwd: string,
-    turn: string | null,
-    outlet: Outlet,
-    replacing: Effect.Effect<void, AgentFault>,
-  ) => Effect.Effect<Session, AgentFault>;
+  readonly fork?: (point: ForkPoint, outlet: Outlet, replacing: Effect.Effect<void, AgentFault>) => Effect.Effect<Session, AgentFault>;
 }
 
 export type Process = {

@@ -60,7 +60,7 @@ layer(doorFixture(), { excludeTestServices: true })('hosted account world', (it)
           }),
         );
         const turns = new VendorTurns(db, units);
-        yield* units.write(turns.writes, (unit) => turns.record(unit, threadId, [{ run: 'kept-turn', address: 'prompt-a' }]));
+        yield* units.write(turns.writes, (unit) => turns.record(unit, threadId, [{ run: 'kept-turn', address: 'prompt-a', last: null }]));
         let process: string | null = 'process-a';
         let running = true;
         const currentRuns = Context.get(world.runtime.owners, ThreadRunning);

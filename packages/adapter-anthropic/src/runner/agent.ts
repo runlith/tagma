@@ -100,14 +100,20 @@ export const claudeAgent =
           ),
         );
       }),
-      fork: Effect.fnUntraced(function* (from, cwd, turn, _outlet, replacing) {
+      fork: Effect.fnUntraced(function* ({ from, cwd, turn, through }, _outlet, replacing) {
         const id = crypto.randomUUID();
         const input: HostedOpening = { id, cwd, mcpServers: [], additionalDirectories: [], origin: 'new', history: [] };
-        if (turn === null) {
+        if (turn === null && through === null) {
           yield* replacing;
           return yield* opened(opening(input, { _tag: 'Fork', sessionId: from, at: null }));
         }
         const messages = yield* transcribed(from, cwd);
+        if (through !== null) {
+          const end = messages.findIndex((message) => message.uuid === through);
+          if (end < 0) return yield* new AgentFault({ code: FAULT.notFound, message: `session ${from} holds no record ${through}` });
+          yield* replacing;
+          return yield* opened(opening(input, { _tag: 'Fork', sessionId: from, at: end === messages.length - 1 ? null : through }));
+        }
         const at = messages.findIndex((message) => message.type === 'user' && message.uuid === turn);
         if (at < 0) return yield* new AgentFault({ code: FAULT.invalidParams, message: `session ${from} holds no turn ${turn}` });
         const kept = messages[at - 1]?.uuid ?? null;
