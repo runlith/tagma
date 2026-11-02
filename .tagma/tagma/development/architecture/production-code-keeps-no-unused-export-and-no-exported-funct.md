@@ -5226,10 +5226,6 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead apps/tagma/server/src/graph/contract/service/source.ts#SourcePlace",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "dead-code dead apps/tagma/server/src/graph/contract/service/steps.ts#StepServices",
           "owner": "5a3bed29"
         },
