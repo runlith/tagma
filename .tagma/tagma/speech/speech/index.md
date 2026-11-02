@@ -46,10 +46,6 @@ edges:
     to: 01a106db-b8b2-7b23-bc99-c3d1eaabfb41
   - kind: imports
     to: 01a1237e-b7b0-70ab-98b0-c0c63d78b068
-  - kind: imports
-    to: 01a137a5-2cdd-7e99-892d-41b3e3acacf3
-  - kind: imports
-    to: 01a13b34-f692-7514-aced-482bdbf8f243
 sources:
   - kind: dir
     ref: apps/tagma/server/src/speech
