@@ -360,7 +360,7 @@
     },
   );
   const spoken = $derived(
-    ['Tagma', chip.word, chip.behind > 0 ? chip.note : null].filter((part) => part !== null && part !== '').join(', '),
+    ['Tagma beta', chip.word, chip.behind > 0 ? chip.note : null].filter((part) => part !== null && part !== '').join(', '),
   );
 
   const hostTone = $derived.by((): Tone => {
@@ -443,6 +443,7 @@
         {@render dot(chip.tone)}
       {/if}
       <span class="whitespace-nowrap">Tagma</span>
+      <span class="whitespace-nowrap text-muted-foreground">beta</span>
       {#if chip.word !== ''}
         <span class={cn('whitespace-nowrap tabular-nums', INK[chip.tone])} data-standing-word>{chip.word}</span>
       {/if}
@@ -458,6 +459,7 @@
       <div class="flex min-w-0 items-center gap-2">
         <AgentIcon brand class="size-3.5 shrink-0" />
         <span class="text-ui font-bold">Tagma</span>
+        <span class="text-ui text-muted-foreground">beta</span>
         {#if runs !== null}
           <span class="stamp text-small text-foreground">{runs.head.slice(0, 7)}</span>
           {#if runs.dirty}
