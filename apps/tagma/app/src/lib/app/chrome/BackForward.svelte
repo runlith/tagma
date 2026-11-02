@@ -12,20 +12,8 @@
   const router = Router.use();
   const mac = Host.use().apple;
 
-  let canBack = $state(navigation.canGoBack);
-  let canForward = $state(navigation.canGoForward);
-
-  $effect(() => {
-    const sync = (): void => {
-      canBack = navigation.canGoBack;
-      canForward = navigation.canGoForward;
-    };
-    navigation.addEventListener('currententrychange', sync);
-    return () => navigation.removeEventListener('currententrychange', sync);
-  });
-
   function go(direction: Direction): void {
-    if (direction < 0 ? navigation.canGoBack : navigation.canGoForward) router.traverse(direction);
+    if (direction < 0 ? router.reach.back : router.reach.forward) router.traverse(direction);
   }
 
   function chordOf(event: KeyboardEvent): Direction | null {
@@ -62,12 +50,19 @@
 
 <div class="mr-1 flex shrink-0 items-center gap-0.5">
   <Tooltip text="Back" keys={backKeys} side="bottom">
-    <Button size="icon-sm" variant="quiet" class="no-drag-region" aria-label="Back" disabled={!canBack} onclick={() => go(-1)}>
+    <Button size="icon-sm" variant="quiet" class="no-drag-region" aria-label="Back" disabled={!router.reach.back} onclick={() => go(-1)}>
       <ArrowLeft class="size-3.5" />
     </Button>
   </Tooltip>
   <Tooltip text="Forward" keys={forwardKeys} side="bottom">
-    <Button size="icon-sm" variant="quiet" class="no-drag-region" aria-label="Forward" disabled={!canForward} onclick={() => go(1)}>
+    <Button
+      size="icon-sm"
+      variant="quiet"
+      class="no-drag-region"
+      aria-label="Forward"
+      disabled={!router.reach.forward}
+      onclick={() => go(1)}
+    >
       <ArrowRight class="size-3.5" />
     </Button>
   </Tooltip>

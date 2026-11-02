@@ -47,6 +47,13 @@ export interface NavigationListener {
   after?(navigation: Navigation): void;
 }
 
+export interface HistoryReach {
+  readonly back: boolean;
+  readonly forward: boolean;
+}
+
+const UNREACHED: HistoryReach = { back: false, forward: false };
+
 export interface RouterSource {
   url(): URL;
   routeId(): RouteId | undefined;
@@ -56,6 +63,7 @@ export interface RouterSource {
   goto(href: RoutePathname, options?: RouterGoOptions): Promise<void>;
   invalidate(dependency: string): Promise<void>;
   historyIndex(): number | undefined;
+  reach?(): HistoryReach;
   traverse(delta: number): void;
   reload(): void;
   load(href: string, options: RouterLoadOptions): void;
@@ -107,6 +115,10 @@ export class Router extends Service<Router>()('Router', { tier: 'app' }) {
 
   get historyIndex(): number | undefined {
     return this.source.historyIndex();
+  }
+
+  get reach(): HistoryReach {
+    return this.source.reach?.() ?? UNREACHED;
   }
 
   traverse(delta: number): void {

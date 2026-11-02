@@ -16,7 +16,7 @@
 
   const router = Router.use();
   const desktop = DesktopSwipe.find();
-  const open = (direction: SwipeDirection): boolean => (direction === 'back' ? navigation.canGoBack : navigation.canGoForward);
+  const open = (direction: SwipeDirection): boolean => (direction === 'back' ? router.reach.back : router.reach.forward);
   const swipe = new Swipe(open);
   const step = (direction: SwipeDirection): void => router.traverse(direction === 'back' ? -1 : 1);
 

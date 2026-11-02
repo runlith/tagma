@@ -3,6 +3,7 @@ import { navigating, page } from '$app/state';
 import type { LoadEvent, NavigationTarget } from '@sveltejs/kit';
 import { BROWSER } from 'esm-env';
 import { untrack } from 'svelte';
+import { createSubscriber } from 'svelte/reactivity';
 
 import type { Ask } from '../key.js';
 import { Entry, Layer, type LayerLike } from '../Layer.js';
@@ -11,6 +12,7 @@ import { currentApp, holdApp, landApp } from '../request/holder.js';
 import { MountedApp, type ClosedBy, type Definition } from '../App.js';
 import {
   Router,
+  type HistoryReach,
   type Navigation,
   type NavigationListener,
   type NavigationPlace,
@@ -33,6 +35,18 @@ const HISTORY_INDEX = 'sveltekit:history';
 function historyIndex(): number | undefined {
   const index: unknown = history.state?.[HISTORY_INDEX];
   return typeof index === 'number' ? index : undefined;
+}
+
+const entries = BROWSER && 'navigation' in globalThis ? globalThis.navigation : null;
+
+const moved = createSubscriber((update) => {
+  entries?.addEventListener('currententrychange', update);
+  return () => entries?.removeEventListener('currententrychange', update);
+});
+
+function reach(): HistoryReach {
+  moved();
+  return { back: entries?.canGoBack ?? false, forward: entries?.canGoForward ?? false };
 }
 
 async function afterNavigations(dependency: string): Promise<void> {
@@ -92,6 +106,7 @@ export const RouterLive = Layer.of(
     },
     invalidate: afterNavigations,
     historyIndex,
+    reach,
     traverse: (delta) => history.go(delta),
     reload: () => location.reload(),
     load: (href, options) => (options.replace ? location.replace(href) : location.assign(href)),
