@@ -9,7 +9,7 @@ fields:
   }
 edges:
   - kind: discovered-from
-    to: 01a13796-6e99-731d-9f9b-83b90483c742
+    to: 01a179a7-5ae0-7899-b62e-35cda941dfc7/01a13796-6e99-731d-9f9b-83b90483c742#runlith-private
 sources:
   - kind: file
     ref: packages/speech-soniox/src/transcription.ts
