@@ -11002,10 +11002,6 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead packages/adapter-anthropic/src/runner/spend.ts#Settled",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "dead-code dead packages/adapter-anthropic/src/runner/transcript.ts#Seat",
           "owner": "5a3bed29"
         },
