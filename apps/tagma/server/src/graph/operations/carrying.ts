@@ -5,7 +5,7 @@ import { GraphStore } from '../../platform/contract/service/store.js';
 import { WriterRegister } from '../../platform/contract/service/writers.js';
 import { GateRefusal } from '../../platform/contract/wire/refusal.js';
 import { pagesOf } from '../../platform/store/binds.js';
-import { block, edge, farEdge } from '../store/tables.js';
+import { block, edge, farEdge, unboundEdge } from '../store/tables.js';
 import { BlockNames, type BlockRow } from '../contract/service/acts.js';
 import { type CarriedBlock, type CarriedFar, Edges, type FarBlock } from '../contract/service/blocks.js';
 import type { GraphAddress } from '../contract/wire/far.js';
@@ -25,6 +25,11 @@ import { readFieldOption } from '../vocabulary/declarationRules.js';
 const PROVENANCE: readonly string[] = ['supersedes'];
 
 const RUNS: ReadonlySet<string> = new Set(['watch', 'gate']);
+
+const edgeBoundary = (from: string, kind: string, to: string) =>
+  new GateRefusal('relocation-shape', `${from} ${kind} ${to} crosses the edge of the moving subtree, and that edge stays in one graph`, [
+    `move ${from} and ${to} in one subtree: ${kind} is written by its own operation, inside one graph`,
+  ]);
 
 export type Carried = {
   readonly root: BlockRow;
@@ -52,6 +57,7 @@ export const carriedOf = Effect.fn('update_block.carried')(function* (rootId: nu
   const placed = yield* (yield* Sources).byBlock(ids);
   const near: (typeof edge.$inferSelect)[] = [];
   const far: (typeof farEdge.$inferSelect)[] = [];
+  const unbound: (typeof unboundEdge.$inferSelect)[] = [];
   for (const page of pagesOf(ids, 1)) {
     near.push(
       ...(yield* db.select().from(edge).where(inArray(edge.fromId, page)).orderBy(asc(edge.fromId), asc(edge.kind), asc(edge.toId))),
@@ -63,9 +69,17 @@ export const carriedOf = Effect.fn('update_block.carried')(function* (rootId: nu
         .where(inArray(farEdge.fromId, page))
         .orderBy(asc(farEdge.fromId), asc(farEdge.kind), asc(farEdge.graph), asc(farEdge.uuid))),
     );
+    unbound.push(
+      ...(yield* db
+        .select()
+        .from(unboundEdge)
+        .where(inArray(unboundEdge.fromId, page))
+        .orderBy(asc(unboundEdge.fromId), asc(unboundEdge.kind), asc(unboundEdge.to))),
+    );
   }
   const nearFrom = Map.groupBy(near, (link) => link.fromId);
   const farFrom = Map.groupBy(far, (link) => link.fromId);
+  const unboundFrom = Map.groupBy(unbound, (link) => link.fromId);
   const ends = new Map<number, FarBlock>();
   const endOf = Effect.fnUntraced(function* (id: number) {
     const known = ends.get(id);
@@ -98,6 +112,9 @@ export const carriedOf = Effect.fn('update_block.carried')(function* (rootId: nu
     }
     for (const link of farFrom.get(row.id) ?? []) {
       leaving.push({ kind: link.kind, target: { graph: link.graph, uuid: link.uuid, label: link.label }, end: null });
+    }
+    for (const link of unboundFrom.get(row.id) ?? []) {
+      if (!RELATION_EDGES.includes(link.kind)) leaving.push({ kind: link.kind, target: { ...graph, uuid: link.to }, end: null });
     }
     const parent = row.id === root.id || row.parentId === null ? undefined : byId.get(row.parentId);
     blocks.push({
@@ -245,11 +262,13 @@ export const crossingEdges = Effect.fnUntraced(function* (ids: ReadonlySet<numbe
   const { db } = yield* GraphStore;
   const outgoing: (typeof edge.$inferSelect)[] = [];
   const incoming: (typeof edge.$inferSelect)[] = [];
+  const unbound: (typeof unboundEdge.$inferSelect)[] = [];
   for (const page of pagesOf([...ids], 1)) {
     for (const link of yield* db.select().from(edge).where(inArray(edge.fromId, page))) if (!ids.has(link.toId)) outgoing.push(link);
     for (const link of yield* db.select().from(edge).where(inArray(edge.toId, page))) if (!ids.has(link.fromId)) incoming.push(link);
+    unbound.push(...(yield* db.select().from(unboundEdge).where(inArray(unboundEdge.fromId, page))));
   }
-  return { outgoing, incoming };
+  return { outgoing, incoming, unbound };
 });
 
 export const assertIncoming = Effect.fn('update_block.incoming')(function* (ids: ReadonlySet<number>, ends: ReadonlyMap<string, FarBlock>) {
@@ -276,18 +295,20 @@ export const leavingOf = Effect.fn('update_block.leaving')(function* (carried: C
   const nameOf = Effect.fnUntraced(function* (id: number) {
     return blockName((yield* rows.rawBlockById(id)).uuid);
   });
-  const { outgoing, incoming } = yield* crossingEdges(ids);
+  const { outgoing, incoming, unbound } = yield* crossingEdges(ids);
   for (const link of [...outgoing, ...incoming]) {
     if (PROVENANCE.includes(link.kind)) {
       const from = yield* nameOf(link.fromId);
       const to = yield* nameOf(link.toId);
-      return yield* new GateRefusal(
-        'relocation-shape',
-        `${from} ${link.kind} ${to} crosses the edge of the moving subtree, and that edge stays in one graph`,
-        [`move ${from} and ${to} in one subtree: ${link.kind} is written by its own operation, inside one graph`],
-      );
+      return yield* edgeBoundary(from, link.kind, to);
     }
     if (RELATION_EDGES.includes(link.kind)) dropped.push(`${yield* nameOf(link.fromId)} ${link.kind} ${yield* nameOf(link.toId)}`);
+  }
+  for (const link of unbound) {
+    const from = yield* nameOf(link.fromId);
+    const to = blockName(link.to);
+    if (PROVENANCE.includes(link.kind)) return yield* edgeBoundary(from, link.kind, to);
+    if (RELATION_EDGES.includes(link.kind)) dropped.push(`${from} ${link.kind} ${to}`);
   }
   yield* partedDebt(root.projectId, ids);
   const cards = carried.rows.filter((row) => table.supports(row, MODULE)).map((row) => row.id);

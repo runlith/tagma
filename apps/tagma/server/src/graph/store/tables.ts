@@ -102,6 +102,18 @@ export const edge = sqliteTable(
   ],
 );
 
+export const unboundEdge = sqliteTable(
+  'unbound_edge',
+  {
+    fromId: integer('from_id')
+      .notNull()
+      .references(() => block.id, { onDelete: 'cascade' }),
+    kind: text('kind').notNull(),
+    to: text('to').notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.fromId, table.kind, table.to] }), index('unbound_edge_target_idx').on(table.to)],
+);
+
 export const farEdge = sqliteTable(
   'far_edge',
   {

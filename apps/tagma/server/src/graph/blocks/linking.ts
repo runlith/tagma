@@ -2,7 +2,7 @@ import { Effect, Layer } from 'effect';
 import { type FloorRefusal, GateRefusal } from '../../platform/contract/wire/refusal.js';
 import { and, eq, inArray, or } from 'drizzle-orm';
 import { GraphStore, type StoreFailure } from '../../platform/contract/service/store.js';
-import { block, edge, farEdge } from '../store/tables.js';
+import { block, edge, farEdge, unboundEdge } from '../store/tables.js';
 import { CORE_EDGES, DISCOVERED_FROM, type EdgeKind, RELATES } from '../contract/wire/edges.js';
 import { BlockRows } from '../acts/rows.js';
 import { Act, BlockNames, type BlockRow } from '../contract/service/acts.js';
@@ -24,7 +24,7 @@ import { storedTypeId } from '../vocabulary/projection.js';
 import { pagesOf } from '../../platform/store/binds.js';
 
 const linkingEdge = writes('Edges.link', [], linking);
-const unlinking = writes('Edges.unlink', [edge, farEdge]);
+const unlinking = writes('Edges.unlink', [edge, farEdge, unboundEdge]);
 const readdressing = writes('Edges.readdress', [farEdge], linking);
 
 type WaitEnd = { readonly id: number } | { readonly far: FarTarget };
@@ -365,9 +365,13 @@ export const edgesLayer: Layer.Layer<Edges, never, GraphStore | Act | BlockNames
         .innerJoin(block, eq(block.id, edge.toId))
         .where(eq(edge.fromId, node.id));
       const far = yield* db.select({ kind: farEdge.kind, uuid: farEdge.uuid }).from(farEdge).where(eq(farEdge.fromId, node.id));
+      const unbound = yield* db
+        .select({ kind: unboundEdge.kind, uuid: unboundEdge.to })
+        .from(unboundEdge)
+        .where(eq(unboundEdge.fromId, node.id));
       const outgoing: { readonly kind: string; readonly uuid: string; readonly to: EdgeNode | null }[] = [
         ...near.map((row) => ({ kind: row.kind, uuid: row.uuid, to: row.toId === node.id ? future : row })),
-        ...far.map((row) => ({ kind: row.kind, uuid: row.uuid, to: null })),
+        ...[...far, ...unbound].map((row) => ({ kind: row.kind, uuid: row.uuid, to: null })),
       ];
       for (const link of outgoing) {
         const toName = blockName(link.uuid);
@@ -387,7 +391,7 @@ export const edgesLayer: Layer.Layer<Edges, never, GraphStore | Act | BlockNames
         ) {
           return yield* retagRefusal(
             'edge-shape',
-            `"${link.kind}" from ${label} points only at some tags, and ${toName} stands in another graph, where this change cannot judge its tags`,
+            `"${link.kind}" from ${label} points only at some tags, and this graph cannot judge the tags of ${toName}`,
             unlink,
             link.kind,
           );
@@ -514,6 +518,35 @@ export const edgesLayer: Layer.Layer<Edges, never, GraphStore | Act | BlockNames
       }),
 
       unlinkFar,
+
+      unlinkUnbound: Effect.fn('Edges.unlinkUnbound')(function* (input) {
+        yield* operationOnly(input.kind);
+        if (RELATION_EDGES.includes(input.kind)) return yield* boundaryRefusal(yield* names.nameOf(input.fromId), 'unlinked');
+        const from = yield* rows.rawBlockById(input.fromId);
+        const root = yield* rows.rootBlockOf(from.projectId);
+        yield* act.unit(
+          unlinking,
+          Effect.gen(function* () {
+            for (const uuid of input.to) {
+              const removed = yield* db
+                .delete(unboundEdge)
+                .where(and(eq(unboundEdge.fromId, input.fromId), eq(unboundEdge.kind, input.kind), eq(unboundEdge.to, uuid)))
+                .returning();
+              if (removed.length === 0)
+                return yield* new GateRefusal('no-edge', `no "${input.kind}" edge from ${blockName(from.uuid)} to ${blockName(uuid)}`, [
+                  `read_block ${blockName(from.uuid)}`,
+                ]);
+              yield* act.record('unlink', input.fromId, { kind: input.kind, far: farText({ graph: root.uuid, uuid, label: root.title }) });
+            }
+          }),
+        );
+      }),
+
+      unboundFrom: (fromId, kind) =>
+        db
+          .select()
+          .from(unboundEdge)
+          .where(and(eq(unboundEdge.fromId, fromId), eq(unboundEdge.kind, kind))),
 
       of: (projectId: number, within?: ReadonlySet<number>) =>
         db

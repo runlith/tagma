@@ -14,7 +14,7 @@ import type { CreationDefaultRefusal } from '../wire/tags/profile.js';
 import type { ModuleCard, ModuleWrite } from '../wire/modules.js';
 import type { FarAddress, FarTarget, GraphAddress } from '../wire/far.js';
 import type { ContractId } from '../wire/tags/behaviour.js';
-import type { farEdge } from '../../store/tables.js';
+import type { farEdge, unboundEdge } from '../../store/tables.js';
 import type { SessionRef } from '../../../platform/contract/wire/session.js';
 import type { SourceInput } from '../wire/sources.js';
 import type { StorageMode } from '../../../projects/contract/wire/project.js';
@@ -240,6 +240,7 @@ export type LinkTarget = { readonly near: number } | { readonly far: FarBlock };
 export type BlockLink = { readonly fromId: string | number; readonly kind: EdgeKind; readonly toId: string | number };
 
 export type FarEdgeRow = typeof farEdge.$inferSelect;
+export type UnboundEdgeRow = typeof unboundEdge.$inferSelect;
 
 export class Edges extends Context.Service<
   Edges,
@@ -286,6 +287,12 @@ export class Edges extends Context.Service<
     of(projectId: number, within?: ReadonlySet<number>): Effect.Effect<EdgeRow[], StoreFailure>;
     farOf(projectId: number): Effect.Effect<FarEdgeRow[], StoreFailure>;
     farFrom(fromId: number, kind: EdgeKind): Effect.Effect<FarEdgeRow[], StoreFailure>;
+    unboundFrom(fromId: number, kind: EdgeKind): Effect.Effect<UnboundEdgeRow[], StoreFailure>;
+    unlinkUnbound(input: {
+      fromId: number;
+      kind: EdgeKind;
+      to: readonly string[];
+    }): Effect.Effect<void, StoreFailure | GateRefusal<FloorRefusal | 'not-found' | 'operation-only' | 'no-edge' | 'no-root'>>;
     insertEdgeRow(fromId: number, kind: EdgeKind, toId: number): Effect.Effect<boolean, StoreFailure, ActState>;
     insertEdge(fromId: number, kind: EdgeKind, toId: number): Effect.Effect<void, StoreFailure, ActState>;
     insertFarEdge(fromId: number, kind: EdgeKind, target: FarTarget): Effect.Effect<void, StoreFailure, ActState>;

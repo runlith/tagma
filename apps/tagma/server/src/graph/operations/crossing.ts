@@ -501,17 +501,25 @@ export const unlink = Effect.fnUntraced(function* (input: BlockLink) {
   const from = yield* linkSource(input.fromId);
   if (typeof input.toId === 'number') return yield* edges.unlink({ fromId: from.id, kind: input.kind, toId: input.toId });
   const ends = yield* edges.farFrom(from.id, input.kind);
-  if (blockAddress(input.toId).projectId === null) {
-    const named = input.toId.toLowerCase();
-    const held = ends.filter((row) => row.uuid.replaceAll('-', '').endsWith(named));
-    const blocks = new Set(held.map((row) => row.uuid));
+  const unbound = yield* edges.unboundFrom(from.id, input.kind);
+  const address = blockAddress(input.toId);
+  if (address.projectId === null || address.projectId === from.projectId) {
+    const named = address.name.toLowerCase();
+    const held = address.projectId === null ? ends.filter((row) => row.uuid.replaceAll('-', '').endsWith(named)) : [];
+    const loose = unbound.filter((row) => row.to.replaceAll('-', '').endsWith(named));
+    const blocks = new Set([...held.map((row) => row.uuid), ...loose.map((row) => row.to)]);
     if (blocks.size > 1) {
-      return yield* new GateRefusal('ambiguous-name', `${input.toId} names ${blocks.size} far ends of ${input.kind} edges`, [
+      return yield* new GateRefusal('ambiguous-name', `${input.toId} names ${blocks.size} ends of ${input.kind} edges`, [
         'write more of the name — the tail is what tells them apart',
         ...held.map((row) => `${row.uuid.replaceAll('-', '')} in ${row.label}`),
+        ...loose.map((row) => row.to.replaceAll('-', '')),
       ]);
     }
-    if (held.length > 0) return yield* edges.unlinkFar({ fromId: from.id, kind: input.kind, to: held });
+    if (held.length > 0 || loose.length > 0) {
+      if (held.length > 0) yield* edges.unlinkFar({ fromId: from.id, kind: input.kind, to: held });
+      if (loose.length > 0) yield* edges.unlinkUnbound({ fromId: from.id, kind: input.kind, to: loose.map((row) => row.to) });
+      return;
+    }
   }
   const target = yield* locate(input.toId);
   if (target.projectId === from.projectId)

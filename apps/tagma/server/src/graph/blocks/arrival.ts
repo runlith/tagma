@@ -1,12 +1,12 @@
 import { Clock, Effect } from 'effect';
-import { and, eq, inArray, isNotNull, isNull } from 'drizzle-orm';
+import { and, eq, inArray, isNotNull } from 'drizzle-orm';
 import { GraphStore, type StoreFailure } from '../../platform/contract/service/store.js';
 import { WriterRegister } from '../../platform/contract/service/writers.js';
 import { GateRefusal } from '../../platform/contract/wire/refusal.js';
 import { writes } from '../../platform/contract/service/writes.js';
 import { session } from '../../platform/store/writers.js';
 import { pagesOf } from '../../platform/store/binds.js';
-import { block, farEdge } from '../store/tables.js';
+import { block, farEdge, unboundEdge } from '../store/tables.js';
 import { linking, placing, projecting, referencing } from '../store/actWrites.js';
 import { Act, BlockProjection, BlockReferences, type BlockRow, type BlockWrite } from '../contract/service/acts.js';
 import { type Arrival, type ArrivalRefusal, type CarriedBlock, Edges } from '../contract/service/blocks.js';
@@ -26,8 +26,9 @@ import { assertComposable, assertRequiredFields, validateFields } from '../vocab
 import { fieldTargetGuard } from '../vocabulary/carriers.js';
 import { assertRequiredSources } from '../sources/readers/place.js';
 import { assertBodyCap, leafRefusal } from './guards.js';
+import { bindUnboundEdges } from '../tree/edgeRows.js';
 
-const arriving = writes('Blocks.arrive', [block, session], projecting, referencing, linking, placing);
+const arriving = writes('Blocks.arrive', [block, session, unboundEdge], projecting, referencing, linking, placing);
 
 const renamed = <Code extends string>(name: string, refused: GateRefusal<Code>): GateRefusal<Code> =>
   new GateRefusal(refused.code, `${name}: ${refused.reason}`, refused.unblock);
@@ -180,14 +181,13 @@ export const blockArrival = Effect.gen(function* () {
             const here = yield* db
               .select()
               .from(block)
-              .where(and(eq(block.uuid, link.target.uuid), eq(block.projectId, input.projectId), isNull(block.deletedAt)))
+              .where(and(eq(block.uuid, link.target.uuid), eq(block.projectId, input.projectId)))
               .get();
             if (here === undefined) {
-              return yield* new GateRefusal(
-                'relocation-shape',
-                `${name} ${link.kind} ${blockName(link.target.uuid)} names a block of this graph, and this graph does not hold it`,
-                [`unlink_blocks ${name} ${link.kind} ${blockName(link.target.uuid)} before the move`],
-              );
+              yield* edges.assertCarried(row, link.kind, null);
+              yield* db.insert(unboundEdge).values({ fromId: row.id, kind: link.kind, to: link.target.uuid }).onConflictDoNothing();
+              yield* act.record('link', row.id, { kind: link.kind, far: farText(link.target) }, now);
+              continue;
             }
             yield* edges.assertCarried(row, link.kind, here);
             yield* rows.insertEdge(row.id, link.kind, here.id);
@@ -210,6 +210,10 @@ export const blockArrival = Effect.gen(function* () {
             yield* act.record('unlink', far.fromId, { kind: far.kind, far: farText(far) }, now);
             yield* rows.insertEdge(far.fromId, far.kind, to.id);
           }
+        }
+        for (const link of yield* bindUnboundEdges(db, input.projectId, [...born.keys()])) {
+          yield* edges.assertCarried(yield* rows.rawBlockById(link.fromId), link.kind, yield* rows.rawBlockById(link.toId));
+          yield* act.record('link', link.fromId, { kind: link.kind, toId: link.toId }, now);
         }
         const root = born.get(input.blocks[0]?.uuid ?? '');
         if (root === undefined) return yield* Effect.die('an arrival carries no blocks');

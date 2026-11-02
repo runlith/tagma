@@ -2,9 +2,10 @@ import { dirname } from 'node:path';
 import { Clock, Data, Effect } from 'effect';
 import { and, eq, getTableColumns, inArray, isNull, or, sql } from 'drizzle-orm';
 import { type StoreDb, GraphStore, type StoreFailure } from '../../platform/contract/service/store.js';
-import { block, blockTag, edge, farEdge, meta, source, touch } from '../store/tables.js';
+import { block, blockTag, edge, farEdge, meta, source, touch, unboundEdge } from '../store/tables.js';
 import { ownRoot } from '../acts/far.js';
-import { type FarRow, fileEdges, insertFarRows } from './edgeRows.js';
+import { type FarRow, bindUnboundEdges, fileEdges, insertFarRows, insertUnboundRows } from './edgeRows.js';
+import type { UnboundEdgeRow } from '../contract/service/blocks.js';
 import { pagesOf } from '../../platform/store/binds.js';
 import { duplicateIdentity, twiceHeld } from './duplicates.js';
 import { type BlockRead, readBlocks } from './blockReads.js';
@@ -33,8 +34,8 @@ import type { Tagged } from '../contract/wire/tags/roles.js';
 import type { WriterRegister } from '../../platform/contract/service/writers.js';
 import { readSessions } from './sessions.js';
 
-const rebuilding = writes('Mirror.rebuild', [block, source, edge, farEdge, touch], projecting, referencing);
-const repairing = writes('Mirror.repair', [block, source, edge, farEdge, touch], projecting, referencing);
+const rebuilding = writes('Mirror.rebuild', [block, source, edge, farEdge, unboundEdge, touch], projecting, referencing);
+const repairing = writes('Mirror.repair', [block, source, edge, farEdge, unboundEdge, touch], projecting, referencing);
 
 const BLOCK_COLUMNS = Object.keys(getTableColumns(block)).length;
 const SOURCE_COLUMNS = Object.keys(getTableColumns(source)).length;
@@ -163,6 +164,12 @@ export const absorbMirror = Effect.fn('Mirror.absorb')(function* (scan: TreeScan
   const newlyFallen = new Set(kept.filter((row) => row.deletedAt === null).map((row) => row.id));
   const keptEdges = keptIds.size === 0 ? [] : (yield* db.select().from(edge)).filter((row) => keptIds.has(row.fromId));
   const keptFar = keptIds.size === 0 ? [] : (yield* db.select().from(farEdge)).filter((row) => keptIds.has(row.fromId));
+  const keptUnbound =
+    keptIds.size === 0
+      ? []
+      : (yield* db.select().from(unboundEdge)).filter(
+          (row) => keptIds.has(row.fromId) && !(row.kind === 'supersedes' && newlyFallen.has(row.fromId)),
+        );
   const rootUuid = roots[0]!.frontmatter.id;
   const keptSources = keptIds.size === 0 ? [] : (yield* db.select().from(source)).filter((row) => keptIds.has(row.blockId));
   const revivedUuids = new Set(
@@ -200,6 +207,7 @@ export const absorbMirror = Effect.fn('Mirror.absorb')(function* (scan: TreeScan
       yield* db.delete(source);
       yield* db.delete(edge);
       yield* db.delete(farEdge);
+      yield* db.delete(unboundEdge);
       yield* db.delete(block);
       const now = new Date(yield* Clock.currentTimeMillis);
       const standing = new Set(ids.values());
@@ -237,6 +245,7 @@ export const absorbMirror = Effect.fn('Mirror.absorb')(function* (scan: TreeScan
       const sources: SourceRow[] = [];
       const edges: EdgeRow[] = [];
       const farRows: FarRow[] = [...keptFar];
+      const unboundRows: UnboundEdgeRow[] = [...keptUnbound];
       for (const row of ordered) {
         const front = row.frontmatter;
         const blockId = ids.get(front.id) as number;
@@ -255,6 +264,7 @@ export const absorbMirror = Effect.fn('Mirror.absorb')(function* (scan: TreeScan
         }
         const split = fileEdges(blockId, front.edges ?? [], rootUuid, (uuid) => ids.get(uuid));
         farRows.push(...split.far);
+        unboundRows.push(...split.unbound);
         for (const to of split.dead) deadEdges.push({ fromId: front.id, to });
         for (const { kind, toId } of split.near) {
           edges.push({ fromId: blockId, toId, kind, createdBySessionId: null, createdAt: EPOCH });
@@ -272,6 +282,8 @@ export const absorbMirror = Effect.fn('Mirror.absorb')(function* (scan: TreeScan
       }
       for (const page of pagesOf(edges, EDGE_COLUMNS, (row) => row.kind.length)) yield* db.insert(edge).values(page);
       yield* insertFarRows(db, farRows);
+      yield* insertUnboundRows(db, unboundRows);
+      yield* bindUnboundEdges(db, projectId, uuids);
       yield* recordTrash(act, fallen, now);
       yield* rebatch(
         db,
@@ -489,6 +501,7 @@ export const repairMirror = Effect.fnUntraced(function* (
         if (row === undefined) return;
         trashed.push(row);
         yield* db.delete(edge).where(and(eq(edge.fromId, blockId), eq(edge.kind, 'supersedes')));
+        yield* db.delete(unboundEdge).where(and(eq(unboundEdge.fromId, blockId), eq(unboundEdge.kind, 'supersedes')));
       });
       for (const path of gone) {
         const row = yield* db
@@ -623,6 +636,7 @@ export const repairMirror = Effect.fnUntraced(function* (
         const front = file.frontmatter;
         yield* db.delete(edge).where(eq(edge.fromId, blockId));
         yield* db.delete(farEdge).where(eq(farEdge.fromId, blockId));
+        yield* db.delete(unboundEdge).where(eq(unboundEdge.fromId, blockId));
         const split = fileEdges(blockId, front.edges ?? [], root, (uuid) => idByUuid.get(uuid));
         for (const to of split.dead) deadEdges.push({ fromId: front.id, to });
         for (const { kind, toId } of split.near) {
@@ -640,7 +654,9 @@ export const repairMirror = Effect.fnUntraced(function* (
           yield* db.insert(edge).values({ fromId: blockId, toId, kind, createdBySessionId: null, createdAt: EPOCH });
         }
         yield* insertFarRows(db, split.far);
+        yield* insertUnboundRows(db, split.unbound);
       }
+      yield* bindUnboundEdges(db, projectId, [...arrivalUuids]);
       yield* blockProjection.derive(landed.map((entry) => entry.blockId));
       const absorbed = yield* (yield* Tags).of(projectId);
       const respelled: number[] = [];

@@ -107,10 +107,10 @@ export const graph = manifest({
     { id: 'what-tagma-is', place: { prompt: 30, law: 40 }, owner: 'graph', render: whatItIs, path: 'src/graph/doctrine/whatItIs.ts' },
   ],
   tables: async () => {
-    const [{ block, blockField, blockTag, edge, event, farEdge, meta, ref, searchIndex, source, touch }, { projectPolicy }] =
+    const [{ block, blockField, blockTag, edge, event, farEdge, meta, ref, searchIndex, source, touch, unboundEdge }, { projectPolicy }] =
       await Promise.all([import('./store/tables.js'), import('./store/policy.js')]);
     return {
-      entities: [meta, block, blockTag, blockField, edge, farEdge, searchIndex, ref, source, projectPolicy],
+      entities: [meta, block, blockTag, blockField, edge, farEdge, unboundEdge, searchIndex, ref, source, projectPolicy],
       history: [touch, event],
     };
   },

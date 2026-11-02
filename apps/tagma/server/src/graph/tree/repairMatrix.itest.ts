@@ -12,6 +12,7 @@ import { type TreeBlock, writeBlockTree } from './layout.js';
 import { type TreeChange } from './freshness.js';
 import { MirrorRefused, rebuildMirror, repairMirror } from './mirror.js';
 import { scanTree } from './scan.js';
+import { projectToTree } from './projection.js';
 
 const A = '0198ffff-0000-7000-8000-00000000a001';
 const B = '0198ffff-0000-7000-8000-00000000b002';
@@ -133,6 +134,44 @@ layer(mirrors, { excludeTestServices: true })('mirror repair contracts', (it) =>
           expect(yield* byUuid(E)).toMatchObject({ id: shelf.id, parentId: replacement.id, deletedAt: null });
         }),
       ),
+  );
+
+  it.effect('a departing unbound successor does not compete with the live successor when their target arrives', () =>
+    withMirror(({ tree, fs, db, file, byUuid, repair }) =>
+      Effect.gen(function* () {
+        yield* file('root-hall/old.md', D, 'Old successor', 'old', { edges: [{ kind: 'supersedes', to: F }] });
+        yield* repair([{ status: 'A', path: 'root-hall/old.md' }]);
+        yield* fs.remove(join(tree, 'root-hall/old.md'));
+        yield* repair([{ status: 'D', path: 'root-hall/old.md' }]);
+        yield* file('root-hall/new.md', E, 'New successor', 'new', { edges: [{ kind: 'supersedes', to: F }] });
+        yield* repair([{ status: 'A', path: 'root-hall/new.md' }]);
+        yield* file('root-hall/target.md', F, 'Target', 'the target');
+        yield* repair([{ status: 'A', path: 'root-hall/target.md' }]);
+        const successor = yield* byUuid(E);
+        const target = yield* byUuid(F);
+        expect(yield* db.select({ fromId: edge.fromId }).from(edge).where(eq(edge.toId, target.id))).toEqual([{ fromId: successor.id }]);
+      }),
+    ),
+  );
+
+  it.effect('an unresolved local edge survives projection and binds when its target file arrives alone', () =>
+    withMirror(({ projectId, tree, db, file, byUuid, repair }) =>
+      Effect.gen(function* () {
+        const charter = yield* byUuid(C);
+        yield* file('root-hall/charter.md', C, 'Charter', 'the charter', { edges: [{ kind: 'relates', to: D }] });
+        expect((yield* repair([{ status: 'M', path: 'root-hall/charter.md' }])).deadEdges).toEqual([{ fromId: C, to: D }]);
+        yield* projectToTree({ projectId, treeRoot: tree });
+        expect((yield* scanTree(tree)).blocks.find((row) => row.frontmatter.id === C)?.frontmatter.edges).toEqual([
+          { kind: 'relates', to: D },
+        ]);
+        yield* file('root-hall/arrival.md', D, 'Arrival', 'the arriving knowledge');
+        yield* repair([{ status: 'A', path: 'root-hall/arrival.md' }]);
+        const arrived = yield* byUuid(D);
+        expect(yield* db.select({ toId: edge.toId, kind: edge.kind }).from(edge).where(eq(edge.fromId, charter.id))).toEqual([
+          { toId: arrived.id, kind: 'relates' },
+        ]);
+      }),
+    ),
   );
 
   it.effect('deleting a file journals a trash batch that the public restore brings back intact', () =>

@@ -1,7 +1,7 @@
 import { aliasedTable, and, asc, eq, inArray, isNotNull, isNull } from 'drizzle-orm';
 import { Effect } from 'effect';
 import { GraphStore, type StoreFailure } from '../../platform/contract/service/store.js';
-import { block, edge, farEdge, source } from '../store/tables.js';
+import { block, edge, farEdge, source, unboundEdge } from '../store/tables.js';
 import { farText } from '../contract/wire/far.js';
 import type { Tagged } from '../contract/wire/tags/roles.js';
 import { Tags } from '../contract/service/vocabulary.js';
@@ -27,7 +27,14 @@ export const connectionRows = Effect.fnUntraced(function* (
     .from(edge)
     .innerJoin(holder, eq(holder.id, edge.fromId))
     .innerJoin(target, eq(target.id, edge.toId))
-    .where(and(held, eq(target.projectId, projectId), isNotNull(target.uuid)));
+    .where(and(held, eq(target.projectId, projectId), isNotNull(target.uuid)))
+    .unionAll(
+      db
+        .select({ fromId: unboundEdge.fromId, kind: unboundEdge.kind, to: unboundEdge.to })
+        .from(unboundEdge)
+        .innerJoin(holder, eq(holder.id, unboundEdge.fromId))
+        .where(and(held, eq(holder.projectId, projectId))),
+    );
   const far = yield* db
     .select({ fromId: farEdge.fromId, kind: farEdge.kind, graph: farEdge.graph, uuid: farEdge.uuid, label: farEdge.label })
     .from(farEdge)

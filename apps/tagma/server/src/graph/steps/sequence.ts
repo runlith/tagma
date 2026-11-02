@@ -43,6 +43,7 @@ export const GRAPH_STEPS: readonly GraphStep[] = [
   { id: '20261020210000_briefs_leave', run: briefsLeave },
   { id: '20261023130000_holders_proven', run: holdersProven },
   { id: '20261028120000_session_namespace', mirror: true, run: sessionNamespace },
+  { id: '20261102110000_unbound_edges', mirror: true, run: () => Effect.void },
 ];
 
 export const GRAPH_BASE: GraphBase | null = null;
