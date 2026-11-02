@@ -159,22 +159,28 @@ export const recovered = Effect.fn('BashTool.recovered')(function* (
 ): Effect.fn.Return<ToolEffectSettlement, ToolFailed> {
   const run = yield* work
     .startedBy(correlation)
-    .pipe(Effect.mapError((failure) => new ToolFailed({ reason: `The command this call started could not be read back: ${failure.reason}` })));
+    .pipe(
+      Effect.mapError((failure) => new ToolFailed({ reason: `The command this call started could not be read back: ${failure.reason}` })),
+    );
   if (run === null) return { status: 'unknown' };
   const read = yield* Effect.result(run.phase);
-  const phase: HandoffPhase = read._tag === 'Success' ? { phase: read.success, unreadable: null } : { phase: null, unreadable: read.failure.reason };
+  const phase: HandoffPhase =
+    read._tag === 'Success' ? { phase: read.success, unreadable: null } : { phase: null, unreadable: read.failure.reason };
   if (phase.phase !== 'ended') {
     const moved = yield* Effect.result(run.background);
     if (moved._tag === 'Failure') return { status: 'completed', output: strandedAnswer(params, run, phase, moved.failure.reason) };
     if (moved.success === 'moved') return { status: 'completed', output: awayAnswer(params, run, phase) };
     if (moved.success === 'already') {
-      return { status: 'completed', output: phase.phase === null ? awayAnswer(params, run, phase) : runningAnswer(params, run, phase.phase) };
+      return {
+        status: 'completed',
+        output: phase.phase === null ? awayAnswer(params, run, phase) : runningAnswer(params, run, phase.phase),
+      };
     }
   }
   const workdir = params.workdir === undefined ? resolved.cwd : path.resolve(resolved.cwd, params.workdir);
   const shell = new ShellRun(resolved, baselines, services, workdir, params.command);
   yield* shell
-    .open({ place: null, refused: RESTARTED, measuring: false, facts: shellFacts(params.command, workdir), elsewhere: null })
+    .open({ trees: [], refused: RESTARTED, measuring: false, facts: shellFacts(params.command, workdir), ran: null, unplaced: [] })
     .pipe(Effect.provide(services));
   const result = yield* shell.observe(run);
   return { status: 'completed', output: finishedAnswer(params, yield* ownerEnded(run, result), null, result, run) };

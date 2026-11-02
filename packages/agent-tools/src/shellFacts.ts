@@ -605,14 +605,15 @@ function partOf(one: ShellCommand, cwd: string | null): CommandPart {
   return { readsOnly, named: reading ? outputs : null, signature: learnable ? signature : null, listed, implicit };
 }
 
-export function shellFacts(command: string, cwd: string): CommandFacts {
-  const commands = shellCommands(command);
-  if (commands === null || commands.length === 0) return { readsOnly: false, parts: [UNKNOWN], line: command };
-  const parts: CommandPart[] = [];
+type Step = { readonly one: ShellCommand; readonly at: string | null; readonly moves: boolean };
+
+function stepsOf(commands: readonly ShellCommand[], cwd: string): readonly Step[] {
+  const steps: Step[] = [];
   let at: string | null = cwd;
   for (const [index, one] of commands.entries()) {
     const name = nameOf(one.words[0]);
-    if (name === 'cd' || name === 'pushd' || name === 'popd') {
+    const moves = name === 'cd' || name === 'pushd' || name === 'popd';
+    if (moves) {
       const target = one.words[1];
       const piped = one.piped || commands[index + 1]?.piped === true;
       if (!piped)
@@ -620,10 +621,20 @@ export function shellFacts(command: string, cwd: string): CommandFacts {
           name === 'popd' || target === undefined || one.words.length > 2 || unresolvable(at)(target) || target.text.startsWith('-')
             ? null
             : resolve(at ?? '/', target.text);
-      parts.push(QUIET);
-      continue;
     }
-    parts.push(partOf(one, at));
+    steps.push({ one, at, moves });
   }
+  return steps;
+}
+
+export function shellFacts(command: string, cwd: string): CommandFacts {
+  const commands = shellCommands(command);
+  if (commands === null || commands.length === 0) return { readsOnly: false, parts: [UNKNOWN], line: command };
+  const parts = stepsOf(commands, cwd).map((step) => (step.moves ? QUIET : partOf(step.one, step.at)));
   return { readsOnly: !RUNS.test(command) && commands.every(shellPartReads), parts, line: command };
+}
+
+export function shellPlaces(command: string, cwd: string): readonly string[] {
+  const steps = stepsOf(shellCommands(command) ?? [], cwd);
+  return [...new Set([cwd, ...steps.flatMap((step) => (step.moves || step.at === null ? [] : [step.at]))])];
 }

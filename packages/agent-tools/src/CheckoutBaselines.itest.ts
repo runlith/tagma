@@ -9,7 +9,7 @@ import { contentDigest } from '@runlith/files/content';
 import { CheckoutBaselines } from './CheckoutBaselines';
 import { readable } from './checkoutState';
 import { CheckoutFlights } from './CheckoutFlights';
-import { ShellRun, localRunning } from './ShellRun';
+import { ShellRun, localRunning, type ShellPlace } from './ShellRun';
 import { machineWorld } from './world/machine';
 import { resolveToolOptions } from './workspace/runtime';
 import { checkout, host, options, recorder } from './testing/toolHarness';
@@ -20,6 +20,15 @@ afterAll(release);
 const services = Layer.mergeAll(machineWorld.files, machineWorld.exec, machineWorld.git);
 
 const WRITER: CommandFacts = { readsOnly: false, parts: [{ readsOnly: false, named: null, signature: null, listed: false, implicit: [] }] };
+
+const own = (root: string): ShellPlace => ({
+  trees: [{ tree: root, ours: true }],
+  refused: null,
+  measuring: true,
+  facts: WRITER,
+  ran: null,
+  unplaced: [],
+});
 
 const git = (root: string, command: string) => Effect.promise(() => Bun.$`sh -c ${command}`.cwd(root).quiet());
 
@@ -41,9 +50,7 @@ it.live('a command sees same-size rewrites with restored mtime, renames, deletio
     const resolved = resolveToolOptions(options({ cwd: root, changes: sink.port }));
     const baselines = new CheckoutBaselines(new CheckoutFlights());
     const shell = new ShellRun(resolved, baselines, services, root, 'true');
-    yield* shell
-      .open({ place: { tree: root, ours: true }, refused: null, measuring: true, facts: WRITER, elsewhere: null })
-      .pipe(Effect.provide(services));
+    yield* shell.open(own(root)).pipe(Effect.provide(services));
     const before = yield* host.stat(edit);
     yield* host.writeFile(edit, 'peer\n');
     yield* host.utimes(edit, before.atime, before.mtime);
@@ -54,7 +61,7 @@ it.live('a command sees same-size rewrites with restored mtime, renames, deletio
     yield* host.writeFile(join(root, 'ignored'), 'ignored\n');
     yield* git(root, 'git checkout -- back.txt');
     const result = yield* shell.finish({ ...localRunning, code: 0 }).pipe(Effect.provide(services));
-    expect(result.moved).toEqual(['back.txt', 'created.txt', 'edit.txt', 'empty.txt', 'gone.txt', 'new.txt', 'old.txt']);
+    expect(result.checkouts[0]?.moved).toEqual(['back.txt', 'created.txt', 'edit.txt', 'empty.txt', 'gone.txt', 'new.txt', 'old.txt']);
     expect(sink.moves.map((move) => [move.name, move.present])).toEqual([
       ['back.txt', true],
       ['created.txt', true],
@@ -69,7 +76,7 @@ it.live('a command sees same-size rewrites with restored mtime, renames, deletio
       before: contentDigest('dirty\n'),
       after: contentDigest('base\n'),
     });
-    expect(result.unmeasured).toBeNull();
+    expect(result.checkouts[0]?.unmeasured).toBeNull();
   }),
 );
 
@@ -109,12 +116,10 @@ it.live('a file unreadable in both snapshots remains unread in the final command
     const sink = recorder();
     const resolved = resolveToolOptions(options({ cwd: root, changes: sink.port, world: { ...machineWorld, files } }));
     const shell = new ShellRun(resolved, new CheckoutBaselines(new CheckoutFlights()), measured, root, 'true');
-    yield* shell
-      .open({ place: { tree: root, ours: true }, refused: null, measuring: true, facts: WRITER, elsewhere: null })
-      .pipe(Effect.provide(measured));
+    yield* shell.open(own(root)).pipe(Effect.provide(measured));
     const result = yield* shell.finish({ ...localRunning, code: 0 }).pipe(Effect.provide(measured));
-    expect(result.unread).toEqual(['kept.txt']);
-    expect(result.verdicts).toEqual([]);
+    expect(result.checkouts[0]?.unread).toEqual(['kept.txt']);
+    expect(result.checkouts[0]?.verdicts).toEqual([]);
     expect(sink.moves).toEqual([]);
   }),
 );
@@ -185,15 +190,13 @@ it.live('a command measures checkout files while untracked Git merge temporaries
     const sink = recorder();
     const resolved = resolveToolOptions(options({ cwd: root, changes: sink.port }));
     const shell = new ShellRun(resolved, new CheckoutBaselines(new CheckoutFlights()), services, root, 'git show HEAD:kept.txt');
-    yield* shell
-      .open({ place: { tree: root, ours: true }, refused: null, measuring: true, facts: WRITER, elsewhere: null })
-      .pipe(Effect.provide(services));
+    yield* shell.open(own(root)).pipe(Effect.provide(services));
     yield* host.writeFile(join(root, '.merge_file_123abc'), 'external merge base\n');
     yield* host.writeFile(join(root, '.merge_file_a1B2c3'), 'external merge ours\n');
     yield* host.writeFile(join(root, '.merge_file_ABCDEF'), 'tracked edit\n');
     yield* host.writeFile(join(root, 'kept.txt'), 'changed\n');
     const result = yield* shell.finish({ ...localRunning, code: 0 }).pipe(Effect.provide(services));
-    expect(result.moved).toEqual(['.merge_file_ABCDEF', 'kept.txt']);
+    expect(result.checkouts[0]?.moved).toEqual(['.merge_file_ABCDEF', 'kept.txt']);
     expect(sink.moves.map((move) => [move.name, move.after])).toEqual([
       ['.merge_file_ABCDEF', contentDigest('tracked edit\n')],
       ['kept.txt', contentDigest('changed\n')],
@@ -208,13 +211,11 @@ it.live('a peer commit changes HEAD without making unchanged checkout bytes a wr
     const sink = recorder();
     const resolved = resolveToolOptions(options({ cwd: root, changes: sink.port }));
     const shell = new ShellRun(resolved, new CheckoutBaselines(new CheckoutFlights()), services, root, 'git log -1');
-    yield* shell
-      .open({ place: { tree: root, ours: true }, refused: null, measuring: true, facts: WRITER, elsewhere: null })
-      .pipe(Effect.provide(services));
+    yield* shell.open(own(root)).pipe(Effect.provide(services));
     yield* git(root, 'git add file.txt && git commit -qm peer');
     const result = yield* shell.finish({ ...localRunning, code: 0 }).pipe(Effect.provide(services));
-    expect(result.head).toMatchObject({ from: expect.any(String), to: expect.any(String) });
-    expect(result.moved).toEqual([]);
+    expect(result.checkouts[0]?.head).toMatchObject({ from: expect.any(String), to: expect.any(String) });
+    expect(result.checkouts[0]?.moved).toEqual([]);
     expect(sink.moves).toEqual([]);
   }),
 );

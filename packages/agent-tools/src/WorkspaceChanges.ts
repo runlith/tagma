@@ -61,9 +61,26 @@ export type CommandLife = {
   readonly forget: () => void;
 };
 
+export type Unplaced = { readonly path: string; readonly reason: string };
+
+export type Reached = { readonly trees: readonly string[]; readonly unplaced: readonly Unplaced[] };
+
 export type CommandPath = string | { readonly glob: string };
 
 export const literalGlob = (text: string): string => text.replace(/[\\*?[\]{},!^-]/g, '\\$&');
+
+export const globBase = (glob: string): string => {
+  let literal = '';
+  for (let at = 0; at < glob.length; at += 1) {
+    const char = glob[at] as string;
+    if (char === '\\') {
+      literal += glob[at + 1] ?? '';
+      at += 1;
+    } else if ('*?[{'.includes(char)) return literal.slice(0, literal.lastIndexOf('/')) || '/';
+    else literal += char;
+  }
+  return literal;
+};
 
 const matchers = new WeakMap<object, Minimatch>();
 
@@ -139,6 +156,7 @@ export type WorkspaceChanges = {
     work: Effect.Effect<A, E, R>,
     target?: ChangeTarget,
   ) => Effect.Effect<A, E | IntakeRefused, R>;
+  readonly checkouts?: (paths: readonly string[]) => Effect.Effect<Reached>;
   readonly command?: (tree: string, facts: CommandFacts) => Effect.Effect<CommandLife | null, IntakeRefused>;
   readonly rewrittenBy?: (path: string, text: string) => Effect.Effect<{ readonly commit: string | null } | null>;
 };

@@ -281,9 +281,9 @@ export const checkoutState = Effect.fn('CheckoutBaselines.checkoutState')(functi
       for (const name of named.untracked) untracked.add(name);
     }
   const fs = yield* FileSystem.FileSystem;
-  const unowned = within(resolved.unowned, resolved.cwd);
+  const unowned = within(resolved.unowned, workdir);
   const owned = [...untracked].filter((name) => {
-    const directory = placeOf(resolved.cwd, name);
+    const directory = placeOf(workdir, name);
     return directory !== null && !unowned(directory.name);
   });
   const expanded = yield* untrackedWithin(workdir, owned);
@@ -297,7 +297,7 @@ export const checkoutState = Effect.fn('CheckoutBaselines.checkoutState')(functi
     names,
     (name): Effect.Effect<void> =>
       Effect.gen(function* () {
-        const file = placeOf(resolved.cwd, name);
+        const file = placeOf(workdir, name);
         if (file === null || unowned(file.name)) return;
         const read = yield* frontier.read(fs, file.place, resolved.world.working, budget);
         state.set(name, read.digest);

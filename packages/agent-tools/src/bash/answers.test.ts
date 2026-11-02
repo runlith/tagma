@@ -10,19 +10,20 @@ const stderr = '1 check failed';
 const name = `packages/peer/${'directory/'.repeat(10)}file.ts`;
 const names = Array.from({ length: Math.ceil(TOOL_OUTPUT_MAX_BYTES / name.length) + 1 }, (_, at) => `${at}/${name}`);
 
-const settlement = (verdicts: readonly CommandVerdict[]): ShellSettlement => ({
+const settlement = (
+  verdicts: readonly CommandVerdict[],
+  unread: readonly string[] = [],
+  moved: readonly string[] = names,
+  inspect: string | null = null,
+): ShellSettlement => ({
   settled: { ...localRunning, code: 7 },
   stdout,
   stderr,
   cut: false,
   kept: null,
   outputUnavailable: null,
-  moved: names,
-  head: null,
-  verdicts,
-  unread: [],
-  inspect: null,
-  unmeasured: null,
+  checkouts: [{ tree: '/repo', own: true, moved, head: null, verdicts, unread, unmeasured: null }],
+  inspect,
   shown: [],
   unseen: null,
 });
@@ -32,7 +33,7 @@ for (const kind of ['overlap', 'taken', 'unread'] as const) {
     const verdicts = names.map((name): CommandVerdict =>
       kind === 'taken' ? { name, verdict: 'taken', by: 'peer' } : { name, verdict: 'overlap' },
     );
-    const result = { ...settlement(kind === 'unread' ? [] : verdicts), unread: kind === 'unread' ? names : [] };
+    const result = settlement(kind === 'unread' ? [] : verdicts, kind === 'unread' ? names : []);
     const answer = finishedAnswer(
       { command: 'check', description: 'Check own files', waitMs: undefined, lifeMs: undefined, workdir: undefined },
       { ending: 'life ran out', words: '' },
@@ -50,7 +51,7 @@ for (const kind of ['overlap', 'taken', 'unread'] as const) {
 
 test('unread diagnostics survive in the retained observation and name a path in the command answer', () => {
   const unread = ['src/read-error.ts', 'src/another.ts'] as const;
-  const result = { ...settlement([]), moved: unread, unread, inspect: 'read the managed command' };
+  const result = settlement([], unread, unread, 'read the managed command');
   const observation = measurement(result, null);
   expect(observation).toContain(JSON.stringify(unread));
   const answer = finishedAnswer(

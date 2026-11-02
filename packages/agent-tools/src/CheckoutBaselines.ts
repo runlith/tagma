@@ -54,10 +54,8 @@ export class CheckoutBaselines {
   ): Effect.fn.Return<Reading, never, FileSystem.FileSystem | Git> {
     const services = yield* Effect.context<FileSystem.FileSystem | Git>();
     const source = this.flights.source;
-    return yield* this.flights.join(
-      resolved.world.files ?? resolved.world,
-      `${tree}\0${resolved.cwd}\0${resolved.unowned.join('\0')}`,
-      (frontier) => flightReading(tree, resolved, frontier, source).pipe(Effect.provideContext(services)),
+    return yield* this.flights.join(resolved.world.files ?? resolved.world, `${tree}\0${resolved.unowned.join('\0')}`, (frontier) =>
+      flightReading(tree, resolved, frontier, source).pipe(Effect.provideContext(services)),
     );
   });
 }

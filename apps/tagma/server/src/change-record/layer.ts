@@ -7,7 +7,7 @@ import { MachineUnits } from '../platform/contract/service/units.js';
 import { CheckoutPaths, CheckoutUnknown, type PlaceUnread } from '../workspace/contract/service/checkoutPaths.js';
 import { GraphDirectory } from '../workspace/contract/service/checkouts.js';
 import type { WorkingRoot } from '../workspace/contract/wire/place.js';
-import { type CommandLife, IntakeRefused } from '@runlith/agent-tools/WorkspaceChanges';
+import { type CommandLife, IntakeRefused, type Reached, type Unplaced } from '@runlith/agent-tools/WorkspaceChanges';
 import type { StoreFailure } from '../platform/contract/service/store.js';
 import type { CommandWrites } from './record/commands.js';
 import { Rewrites } from './record/rewrites.js';
@@ -74,6 +74,20 @@ export const makeChangeRecord = Effect.fnUntraced(function* ({
   const graphDirectory = yield* GraphDirectory;
   const git = yield* Git;
 
+  const reached = (at: readonly string[]): Effect.Effect<Reached> =>
+    Effect.map(
+      Effect.forEach(at, (path) => Effect.result(paths.resourceAcross(path)), { concurrency: 8 }),
+      (placed) => {
+        const trees = new Set<string>();
+        const unplaced: Unplaced[] = [];
+        for (const [index, one] of placed.entries()) {
+          if (one._tag === 'Failure') unplaced.push({ path: at[index] as string, reason: one.failure.reason });
+          else if (one.success !== null) trees.add(one.success.root);
+        }
+        return { trees: [...trees], unplaced };
+      },
+    ).pipe(Effect.withSpan('ChangeRecord.checkouts'));
+
   const changes = (work: ChangeWork): ReturnType<ChangeRecord['Service']['changes']> => ({
     land: (facts, write) => intake.land(workOf(work), facts, write),
     landEach: (facts, write) => intake.landEach(workOf(work), facts, write),
@@ -81,6 +95,7 @@ export const makeChangeRecord = Effect.fnUntraced(function* ({
     basis: (paths, run) => intake.basis(work.work.projectId, paths, run),
     normalized: (path) => intake.normalized(work.work.projectId, path),
     records: (paths, target) => intake.records(work.work.projectId, paths, target),
+    checkouts: reached,
     command: (tree, facts) =>
       Effect.flatMap(
         Effect.mapError(paths.resourceAcross(tree), (failure) => new IntakeRefused({ path: tree, reason: failure.reason })),

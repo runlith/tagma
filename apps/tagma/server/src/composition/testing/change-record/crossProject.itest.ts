@@ -167,6 +167,11 @@ layer(demoGraphLayer({ repos: ['target'] }), { excludeTestServices: true })('for
           return { served, retirement, read, history, caller, close: Scope.close(lifetime, Exit.void) };
         });
         const first = yield* open;
+        const reach = first.served.changes.changes({ work: { projectId: home, threadId: ACTOR } }).checkouts;
+        expect(yield* reach?.([join(root, 'fresh', 'made.txt'), shared]) ?? Effect.die('the record places no command paths')).toEqual({
+          trees: [root],
+          unplaced: [],
+        });
         const save = Effect.fnUntraced(function* (
           holder: Holder,
           projectId: number,

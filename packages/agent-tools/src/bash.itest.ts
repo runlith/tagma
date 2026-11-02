@@ -2,7 +2,7 @@ import { unthreadedCaller } from './testing/caller';
 import { afterAll, expect } from 'bun:test';
 import { release } from '@runlith/git/testing';
 import { it } from '@runlith/effect-test';
-import { lstat } from 'node:fs/promises';
+import { lstat, realpath } from 'node:fs/promises';
 import { createServer, type Socket } from 'node:net';
 import { basename, join } from 'node:path';
 import { TOOL_OUTPUT_MAX_BYTES, TOOL_OUTPUT_MAX_LINES } from '@runlith/agent/ToolOutputSpool';
@@ -659,21 +659,27 @@ it.live('a command run outside any repository measures the session’s checkout 
   }),
 );
 
-it.live('a command run in another repository measures the session’s checkout only when it names it', () =>
+it.live('a command’s writes are measured in every registered checkout its line reaches', () =>
   Effect.gen(function* () {
-    const dir = yield* checkout();
-    const foreign = yield* checkout();
-    const sink = recorder();
+    const dir = yield* checkout({ 'template.ts': 'const a = 1;\n' });
+    const other = yield* checkout();
+    const sink = recorder([dir, other]);
     const tools = createTools(options({ cwd: dir, changes: sink.port, allowOutsideCwd: true }));
+    const [mine, theirs] = yield* Effect.promise(() => Promise.all([realpath(dir), realpath(other)]));
 
+    yield* call(tools.bash, { command: `cp '${join(dir, 'template.ts')}' '${join(other, 'copied.ts')}'`, description: 'Copy across' });
     yield* call(tools.bash, {
-      command: `printf 'x\\n' > '../${basename(dir)}/unnamed.ts'`,
-      workdir: foreign,
-      description: 'Write unnamed',
+      command: `printf 'x\\n' > '../${basename(dir)}/named.ts' && cp copied.ts again.ts`,
+      workdir: other,
+      description: 'Write from the other checkout',
     });
-    yield* call(tools.bash, { command: `printf 'y\\n' > '${join(dir, 'named.ts')}'`, workdir: foreign, description: 'Write named' });
 
-    expect(sink.moves.map((move) => move.name)).toEqual(['named.ts']);
+    const written = sink.windows.filter((window) => window.names.length > 0);
+    expect(written.sort((one, two) => (one.names[0] ?? '').localeCompare(two.names[0] ?? ''))).toEqual([
+      { tree: theirs, names: ['again.ts'] },
+      { tree: theirs, names: ['copied.ts'] },
+      { tree: mine, names: ['named.ts'] },
+    ]);
   }),
 );
 

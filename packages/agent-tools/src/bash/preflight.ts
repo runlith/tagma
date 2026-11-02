@@ -5,9 +5,11 @@ import { everyClaim, ToolFailed } from '@runlith/agent/tool';
 import type { ResolvedToolOptions } from '../workspace';
 import { pathClaims, resolveWorkspacePath } from '../workspace/runtime';
 import { shellCommitDirs, type ShellSweepShape } from '../shellShapes';
-import { shellFacts } from '../shellFacts';
+import { shellFacts, shellPlaces } from '../shellFacts';
 import { foreignCause } from '../ToolEdge';
 import type { CheckoutBaselines, Place } from '../CheckoutBaselines';
+import type { ShellTree } from '../ShellRun';
+import { globBase, type CommandFacts } from '../WorkspaceChanges';
 import type { Params } from './tool';
 
 const workdirOf = (resolved: ResolvedToolOptions, params: Params) =>
@@ -63,6 +65,30 @@ export const commandClaims = Effect.fn('BashTool.commandClaims')(function* (reso
   return [...everyClaim('read'), ...(yield* pathClaims(resolved, named, 'write', true))];
 });
 
+const sessionTree = Effect.fn('BashTool.sessionTree')(function* (
+  resolved: ResolvedToolOptions,
+  baselines: CheckoutBaselines,
+  found: Place,
+) {
+  const own = found.ours ? found : yield* baselines.place(resolved.cwd, resolved);
+  return 'refused' in own || !own.ours ? null : own.tree;
+});
+
+const ownMeasured = (params: Params, resolved: ResolvedToolOptions, found: Place, own: string): boolean => {
+  if (found.ours) return true;
+  const names = (root: string): boolean => params.command.includes(`${root}/`) || params.command.endsWith(root);
+  return found.tree === null || names(resolved.cwd) || names(own);
+};
+
+const reachedBy = (facts: CommandFacts, command: string, workdir: string): readonly string[] => [
+  ...new Set([
+    ...shellPlaces(command, workdir),
+    ...facts.parts.flatMap((part) =>
+      part.readsOnly ? [] : (part.named ?? []).map((path) => (typeof path === 'string' ? path : globBase(path.glob))),
+    ),
+  ]),
+];
+
 export const preflight = Effect.fn('BashTool.preflight')(function* (
   resolved: ResolvedToolOptions,
   params: Params,
@@ -80,26 +106,22 @@ export const preflight = Effect.fn('BashTool.preflight')(function* (
       )
     : { path: workdir };
   const facts = shellFacts(params.command, 'path' in real ? real.path : workdir);
-  const writes = !facts.readsOnly;
-  let place: Place | null = null;
-  let refused: string | null = 'refused' in real ? real.refused : null;
-  let elsewhere: string | null = null;
-  if (measuring && refused === null) {
-    const found = yield* baselines.place(workdir, resolved);
-    if ('refused' in found) refused = found.refused;
-    else if (found.ours) place = found;
-    else {
-      elsewhere = found.tree;
-      const own = writes ? yield* baselines.place(resolved.cwd, resolved) : null;
-      const reached = own === null || 'refused' in own || !own.ours ? null : own;
-      const names = (root: string): boolean => params.command.includes(`${root}/`) || params.command.endsWith(root);
-      place =
-        reached !== null && (found.tree === null || names(resolved.cwd) || (reached.tree !== null && names(reached.tree)))
-          ? reached
-          : found;
-    }
-  }
-  return { workdir, place, refused, measuring, facts, elsewhere };
+  const unmeasured = { workdir, trees: [], measuring, facts, ran: null, unplaced: [] };
+  if (!measuring) return { ...unmeasured, refused: null };
+  if ('refused' in real) return { ...unmeasured, refused: real.refused };
+  const found = yield* baselines.place(workdir, resolved);
+  if ('refused' in found) return { ...unmeasured, refused: found.refused };
+  const ran = found.ours ? null : found.tree;
+  if (facts.readsOnly && !found.ours) return { ...unmeasured, refused: null, ran };
+  const own = yield* sessionTree(resolved, baselines, found);
+  const checkouts = resolved.changes?.checkouts;
+  const reached =
+    !facts.readsOnly && checkouts !== undefined
+      ? yield* checkouts(reachedBy(facts, params.command, real.path))
+      : { trees: [], unplaced: [] };
+  const trees: ShellTree[] = own !== null && ownMeasured(params, resolved, found, own) ? [{ tree: own, ours: true }] : [];
+  for (const tree of reached.trees) if (!trees.some((one) => one.tree === tree)) trees.push({ tree, ours: tree === own });
+  return { workdir, trees, refused: null, measuring, facts, ran, unplaced: reached.unplaced };
 });
 
 export const commandTime = (resolved: ResolvedToolOptions, params: Params, caller: ToolCaller, workdir: string) =>

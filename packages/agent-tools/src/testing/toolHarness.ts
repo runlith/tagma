@@ -19,7 +19,7 @@ import {
   writeFile,
 } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import type { Tool, ToolPreparation, ToolRefusal, ToolShown } from '@runlith/agent/tool';
 import { ToolAnswer, ToolFailed, toolExecute, toolPrepare } from '@runlith/agent/tool';
 import { type ToolDisplay } from '@runlith/agent/tool/display';
@@ -138,13 +138,39 @@ export const createTempDir = () =>
     (dir) => Effect.promise(() => rm(dir, { force: true, recursive: true })),
   );
 
-export function recorder() {
+const canonical = async (path: string): Promise<string> => {
+  const missing: string[] = [];
+  for (let at = path; ; at = dirname(at)) {
+    const real = await realpath(at).catch((cause: NodeJS.ErrnoException) => {
+      if (cause.code !== 'ENOENT' || dirname(at) === at) throw cause;
+      return null;
+    });
+    if (real !== null) return join(real, ...missing);
+    missing.unshift(basename(at));
+  }
+};
+
+export function recorder(registered: readonly string[] = []) {
   const changes: WorkspaceChange[] = [];
   const moves: CommandMove[] = [];
+  const windows: { readonly tree: string; readonly names: readonly string[] }[] = [];
   return {
     changes,
     moves,
+    windows,
     port: {
+      checkouts: (paths: readonly string[]) =>
+        Effect.promise(async () => {
+          const roots = await Promise.all(registered.map((root) => realpath(root)));
+          const trees = new Set<string>();
+          for (const path of paths) {
+            const real = await canonical(path);
+            const holding = roots.filter((root) => real === root || real.startsWith(`${root}/`));
+            const deepest = holding.sort((one, two) => two.length - one.length)[0];
+            if (deepest !== undefined) trees.add(deepest);
+          }
+          return { trees: [...trees], unplaced: [] };
+        }),
       land: <E, R>(batch: readonly WorkspaceChange[], write: Effect.Effect<boolean, E, R>) =>
         Effect.map(write, (written) => {
           if (written) changes.push(...batch);
@@ -158,7 +184,7 @@ export function recorder() {
             return landedOf(landed, landed);
           }),
         ),
-      command: () =>
+      command: (tree: string) =>
         Effect.succeed<CommandLife>({
           based: () => Effect.void,
           opened: () => {},
@@ -168,6 +194,7 @@ export function recorder() {
           settle: (moved) =>
             Effect.sync(() => {
               moves.push(...moved.moves);
+              windows.push({ tree, names: moved.moves.map((move) => move.name) });
               return moved.moves.map((move): CommandVerdict => ({ name: move.name, verdict: 'attributed' }));
             }),
         }),

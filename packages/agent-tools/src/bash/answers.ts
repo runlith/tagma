@@ -1,9 +1,10 @@
+import { join } from 'node:path';
 import { Effect, type FileSystem, type Layer } from 'effect';
 import type { ChildProcessSpawner } from 'effect/process';
 import type { Git } from '@runlith/git/Git';
 import { Tool } from '@runlith/agent/tool';
 import type { ToolDisplayFact, ToolDisplayReference } from '@runlith/agent/tool/display';
-import { OutputTail, type ShellSettlement } from '../ShellRun';
+import { OutputTail, type CheckoutMeasure, type ShellSettlement } from '../ShellRun';
 import {
   humanMs,
   IN_BACKGROUND,
@@ -241,23 +242,45 @@ export const localEnded = (time: CommandTime): Expiry =>
       }
     : { ending: 'life ran out', words: lifeEnded(time.life) };
 
+type Verdicts = Record<CommandVerdict['verdict'], number>;
+
+const nothingJudged = (): Verdicts => ({ attributed: 0, taken: 0, unproven: 0, overlap: 0, team: 0, unclaimed: 0 });
+
+const inTree = (one: CheckoutMeasure): string => (one.own || one.tree === null ? '' : ` in ${one.tree}`);
+
+const unreadOf = (result: ShellSettlement): readonly string[] =>
+  result.checkouts.flatMap((one) => {
+    const tree = one.own ? null : one.tree;
+    return tree === null ? one.unread : one.unread.map((name) => join(tree, name));
+  });
+
 const movedLines = (result: ShellSettlement): readonly string[] => {
-  const counts: Record<CommandVerdict['verdict'], number> = { attributed: 0, taken: 0, unproven: 0, overlap: 0, team: 0, unclaimed: 0 };
-  for (const one of result.verdicts) counts[one.verdict] += 1;
-  const unread = result.unread.length;
-  const unjudged = result.moved.length - result.verdicts.length - unread;
+  const totals = nothingJudged();
+  const lines: string[] = [];
+  for (const one of result.checkouts) {
+    if (one.moved.length === 0) continue;
+    const counts = nothingJudged();
+    for (const judged of one.verdicts) counts[judged.verdict] += 1;
+    for (const verdict of Object.keys(counts) as CommandVerdict['verdict'][]) totals[verdict] += counts[verdict];
+    const unread = one.unread.length;
+    const unjudged = one.moved.length - one.verdicts.length - unread;
+    lines.push(
+      `${one.moved.length} file${one.moved.length === 1 ? '' : 's'} moved${inTree(one)} while this ran: ${counts.attributed} attributed to this session, ${counts.taken} to other sessions; ${counts.unproven} unproven, ${counts.overlap} overlap and ${counts.unclaimed} unclaimed observations belong to nobody; ${counts.team} met only by commands of this session's agent team; ${unread} unread; ${unjudged} without a command-record verdict.`,
+    );
+  }
+  if (lines.length === 0) return [];
   return [
-    `${result.moved.length} file${result.moved.length === 1 ? '' : 's'} moved while this ran: ${counts.attributed} attributed to this session, ${counts.taken} to other sessions; ${counts.unproven} unproven, ${counts.overlap} overlap and ${counts.unclaimed} unclaimed observations belong to nobody; ${counts.team} met only by commands of this session's agent team; ${unread} unread; ${unjudged} without a command-record verdict.`,
+    ...lines,
     'read_changes reads this session’s retained paths and attribution reasons; these observations alone do not prove who wrote a file.',
-    ...(counts.unproven === 0
+    ...(totals.unproven === 0
       ? []
       : [
           'Unproven paths changed while only commands of this session could have written them, but no command line names them, so they are not this session’s lines.',
         ]),
-    ...(counts.overlap + counts.unproven === 0
+    ...(totals.overlap + totals.unproven === 0
       ? []
       : ['To land retained overlap or unproven paths, name their files or a containing directory in submit_work `paths` and `whole`.']),
-    ...(counts.team === 0
+    ...(totals.team === 0
       ? []
       : [
           "Team paths are the team root's to land: its submit_work with `taking` of this session, or the paths named in `paths` and `whole`.",
@@ -265,27 +288,33 @@ const movedLines = (result: ShellSettlement): readonly string[] => {
   ];
 };
 
-export const measurement = (result: ShellSettlement, elsewhere: string | null, detailed = true): string =>
-  [
-    ...(result.moved.length > 0 ? [movedLines(result).join('\n')] : []),
-    ...(detailed && result.unread.length > 0 ? [`Unread paths: ${JSON.stringify(result.unread)}`] : []),
-    ...(result.head === null
-      ? []
-      : [
-          'unread' in result.head
-            ? `whether HEAD moved while this ran is not known: ${result.head.unread}`
-            : `HEAD moved while this ran: ${result.head.from ?? 'no commit'} → ${result.head.to ?? 'no commit'}`,
-        ]),
+const headLine = (one: CheckoutMeasure): string | null => {
+  const head = one.own || one.tree === null ? 'HEAD' : `HEAD of ${one.tree}`;
+  if (one.head === null) return null;
+  return 'unread' in one.head
+    ? `whether ${head} moved while this ran is not known: ${one.head.unread}`
+    : `${head} moved while this ran: ${one.head.from ?? 'no commit'} → ${one.head.to ?? 'no commit'}`;
+};
+
+const unmeasuredLine = (one: CheckoutMeasure): string | null =>
+  one.unmeasured === null
+    ? null
+    : `${one.own || one.tree === null ? 'the checkout' : one.tree} was NOT measured: ${one.unmeasured}. Whatever this command changed there is recorded against nobody and cannot be landed or attributed, and running it again will not recover that. Write through the file tools for a change that has to be attributable, and repair the repository before relying on this measurement again.`;
+
+export const measurement = (result: ShellSettlement, elsewhere: string | null, detailed = true): string => {
+  const moved = movedLines(result);
+  const unread = unreadOf(result);
+  return [
+    ...(moved.length > 0 ? [moved.join('\n')] : []),
+    ...(detailed && unread.length > 0 ? [`Unread paths: ${JSON.stringify(unread)}`] : []),
+    ...result.checkouts.flatMap((one) => [headLine(one)].filter((line) => line !== null)),
     ...(elsewhere === null ? [] : [`this command ran in ${elsewhere}, another repository, and that repository was not measured`]),
     ...(result.unseen === null
       ? []
       : [`the files this command printed could not be told apart, so no law of their places rides with it: ${result.unseen}`]),
-    ...(result.unmeasured === null
-      ? []
-      : [
-          `the checkout was NOT measured: ${result.unmeasured}. Whatever this command changed is recorded against nobody and cannot be landed or attributed, and running it again will not recover that. Write through the file tools for a change that has to be attributable, and repair the repository before relying on this measurement again.`,
-        ]),
+    ...result.checkouts.flatMap((one) => [unmeasuredLine(one)].filter((line) => line !== null)),
   ].join('\n\n');
+};
 
 export const finishedAnswer = (
   params: Params,
@@ -319,15 +348,16 @@ export const finishedAnswer = (
   if (settled.code !== null && settled.code !== 0) meta.push(`Command exited with status ${settled.code}.`);
   if (note !== null) meta.push(note);
 
+  const unread = unreadOf(result);
   const compose = (kept: string | null): OutputTail => {
     const tail = new OutputTail();
-    if (result.unread.length > 0) {
-      const unread = isManaged ? result.unread.slice(0, 1) : result.unread;
-      tail.appendText(`Unread paths (${unread.length} of ${result.unread.length}): ${JSON.stringify(unread)}\n\n`);
+    if (unread.length > 0) {
+      const shown = isManaged ? unread.slice(0, 1) : unread;
+      tail.appendText(`Unread paths (${shown.length} of ${unread.length}): ${JSON.stringify(shown)}\n\n`);
     }
     tail.appendText(printed !== '' ? printed : (result.outputUnavailable ?? '(no output)'));
     if (measured !== '') tail.appendText(`\n\n${measured}`);
-    if (isManaged && result.unread.length > 0) {
+    if (isManaged && unread.length > 0) {
       tail.appendText(
         `\nRead retained unread-path details with read_output(execution="${named.execution.execution}", incarnation=${named.execution.incarnation}).`,
       );
