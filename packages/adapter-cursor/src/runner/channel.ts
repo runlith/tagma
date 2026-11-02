@@ -1,4 +1,4 @@
-import { Context, type Effect } from 'effect';
+import { Context, type Effect, type FileSystem } from 'effect';
 import type { AgentFault } from '@runlith/acp/agent';
 import type { ClientRun } from '@runlith/hosted-runner/client';
 import type { CursorSelection } from '../selection.js';
@@ -29,9 +29,18 @@ export type Opening = {
   readonly apiKey: string;
   readonly model: CursorSelection | undefined;
 };
+type Forking = {
+  readonly id: string;
+  readonly source: string;
+  readonly directory: string;
+  readonly cwd: string;
+  readonly turn: string | null;
+  readonly through: string | null;
+};
 export class CursorSdk extends Context.Service<
   CursorSdk,
   {
     readonly open: (input: Opening) => Effect.Effect<Channel, AgentFault>;
+    readonly fork: (input: Forking) => Effect.Effect<void, AgentFault, FileSystem.FileSystem>;
   }
 >()('adapter-cursor/CursorSdk') {}

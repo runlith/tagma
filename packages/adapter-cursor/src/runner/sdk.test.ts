@@ -103,6 +103,7 @@ it.effect('Cursor seals a message after its calls, returns hosted results and re
     });
     expect(yield* run.wait).toMatchObject({
       status: 'finished',
+      turn: 'run',
       usage: { inputTokens: 13, outputTokens: 4, cachedReadTokens: 3, cachedWriteTokens: 2, thoughtTokens: 1, totalTokens: 17 },
     });
     expect(calls).toEqual(['call-1:read:{"path":"/input"}']);

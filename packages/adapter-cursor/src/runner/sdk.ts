@@ -1,4 +1,6 @@
-import { Deferred, Effect, Schema } from 'effect';
+import { createHash } from 'node:crypto';
+import { join } from 'node:path';
+import { Deferred, Effect, FileSystem, Schema } from 'effect';
 import { AgentFault, FAULT } from '@runlith/acp/agent';
 import type { TransportFailure } from '@runlith/agent/transcript/entries';
 import { familyRetries, type WireFailureFamily } from '@runlith/llm/schema/errors';
@@ -90,6 +92,92 @@ export const cursorSdk = (module: typeof import('@cursor/sdk')): CursorSdk['Serv
           thoughtTokens: usage.reasoningTokens,
         };
   return CursorSdk.of({
+    fork: Effect.fn('CursorSdk.fork')(function* (input) {
+      const files = yield* FileSystem.FileSystem;
+      const names = [
+        module.JSONL_LOCAL_AGENT_STORE_FILES.agents,
+        module.JSONL_LOCAL_AGENT_STORE_FILES.runs,
+        module.JSONL_LOCAL_AGENT_STORE_FILES.runEvents,
+        module.JSONL_LOCAL_AGENT_STORE_FILES.checkpoints,
+      ];
+      const failed = (cause: unknown) =>
+        cause instanceof AgentFault
+          ? cause
+          : new AgentFault({ code: FAULT.internal, message: `Cursor session copy failed: ${String(cause)}` });
+      const read = Effect.fn('CursorSdk.readForkStore')(function* () {
+        return yield* Effect.forEach(names, (name) =>
+          files.readFile(join(input.source, name)).pipe(
+            Effect.catchReason('PlatformError', 'NotFound', () => Effect.succeed(null)),
+            Effect.mapError(failed),
+          ),
+        );
+      });
+      let previous = yield* read();
+      let snapshot = yield* read();
+      while (
+        previous.some((bytes, index) => {
+          const next = snapshot[index];
+          return bytes === null
+            ? next !== null
+            : next === null ||
+                next === undefined ||
+                !Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength).equals(
+                  Buffer.from(next.buffer, next.byteOffset, next.byteLength),
+                );
+        })
+      ) {
+        previous = snapshot;
+        snapshot = yield* read();
+      }
+      if (snapshot[0] === null || snapshot[1] === null)
+        return yield* new AgentFault({ code: FAULT.notFound, message: 'The Cursor session store is missing.' });
+      yield* files.makeDirectory(input.directory, { recursive: true }).pipe(Effect.mapError(failed));
+      yield* Effect.forEach(names, (name, index) => {
+        const bytes = snapshot[index];
+        return bytes === null || bytes === undefined
+          ? Effect.void
+          : files.writeFile(join(input.directory, name), bytes).pipe(Effect.mapError(failed));
+      });
+      yield* Effect.tryPromise({
+        try: async () => {
+          const store = new module.JsonlLocalAgentStore(input.directory);
+          const agent = await store.agents.get({ agentId: input.id });
+          if (agent === null) throw new AgentFault({ code: FAULT.notFound, message: `Cursor session ${input.id} is missing.` });
+          const runs: import('@cursor/sdk').LocalAgentRunDocument[] = [];
+          let cursor: string | undefined;
+          do {
+            const page = await store.runs.list({ filter: { agentIds: [input.id], cursor, limit: Number.MAX_SAFE_INTEGER } });
+            runs.push(...page.items);
+            cursor = page.nextCursor;
+          } while (cursor !== undefined);
+          const address = input.turn ?? input.through;
+          const index = address === null ? -1 : runs.findIndex((run) => run.runId === address);
+          if ((address !== null && index < 0) || (address === null && runs.length > 0))
+            throw new AgentFault({ code: FAULT.notFound, message: 'The Cursor fork point is missing from its session store.' });
+          const selected = index < 0 ? null : runs[index]!;
+          if (input.through !== null && selected !== null && (selected.status === 'running' || selected.status === 'queued'))
+            throw new AgentFault({ code: FAULT.notFound, message: 'The Cursor fork point has not finished.' });
+          const checkpoint = selected === null ? null : input.turn !== null ? selected.startCheckpointRef : selected.latestCheckpointRef;
+          const kept = input.turn !== null ? index : index + 1;
+          if (runs.slice(0, kept).some((run, at) => run.turnNumber !== at + 1))
+            throw new AgentFault({ code: FAULT.internal, message: 'The Cursor session store has an incomplete run history.' });
+          if (checkpoint == null && kept > 0)
+            throw new AgentFault({ code: FAULT.notFound, message: 'The Cursor fork checkpoint is missing.' });
+          if (checkpoint != null) {
+            const bytes = await store.checkpoints.get({ agentId: input.id, blobId: checkpoint.rootBlobId });
+            if (bytes === null) throw new AgentFault({ code: FAULT.notFound, message: 'The Cursor fork checkpoint is missing.' });
+            if (createHash('sha256').update(bytes).digest('hex') !== checkpoint.rootBlobId)
+              throw new AgentFault({ code: FAULT.internal, message: 'The Cursor fork checkpoint has an invalid content hash.' });
+          }
+          const removed = runs.slice(kept).map((run) => run.runId);
+          if (removed.length > 0) await store.runs.delete({ filter: { agentIds: [input.id], runIds: removed } });
+          await store.agents.update({
+            agent: { ...agent, cwd: input.cwd, status: 'idle', activeRunId: null, latestCheckpoint: checkpoint ?? null },
+          });
+        },
+        catch: failed,
+      });
+    }),
     open: Effect.fn('CursorSdk.open')(function* (input) {
       const options = {
         apiKey: input.apiKey,
@@ -258,6 +346,7 @@ export const cursorSdk = (module: typeof import('@cursor/sdk')): CursorSdk['Serv
             wait: Effect.tryPromise({ try: () => run.wait(), catch: (cause) => fault(cause, modelStarted) }).pipe(
               Effect.map((result): ClientOutcome => ({
                 status: result.status,
+                turn: run.id,
                 usage: usageOf(result.usage ?? latestUsage),
                 detail: result.error?.message,
                 failure:
