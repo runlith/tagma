@@ -12,6 +12,8 @@ sources:
     ref: apps/tagma/server/src/change-record/record/lives.ts
   - kind: file
     ref: apps/tagma/server/src/change-record/record/recovery.ts
+  - kind: file
+    ref: packages/agent-tools/src/bash/preflight.ts
   - kind: symbol
     ref: apps/tagma/server/src/change-record/record/commandRows.ts
     symbol: pairingOf
@@ -24,8 +26,6 @@ sources:
   - kind: symbol
     ref: packages/agent-tools/src/WorkspaceChanges.ts
     symbol: namedBy
-  - kind: file
-    ref: packages/agent-tools/src/bash/preflight.ts
 ---
 Whose command shift it is, is decided on facts, and `Lives` is only their in-memory cache. Without durable facts, a restart between a command's end and its lines being recorded lost attribution.
 

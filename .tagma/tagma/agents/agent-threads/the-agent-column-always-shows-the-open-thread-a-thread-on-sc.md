@@ -5,11 +5,11 @@ ord: 34
 tags: ["explanation"]
 sources:
   - kind: file
+    ref: apps/tagma/app/src/lib/features/threads/ColumnState.svelte.ts
+  - kind: file
     ref: apps/tagma/app/src/lib/features/threads/List.svelte.ts
   - kind: file
     ref: apps/tagma/app/src/lib/features/threads/shownFamilies.svelte.ts
-  - kind: file
-    ref: apps/tagma/app/src/lib/features/threads/ColumnState.svelte.ts
 ---
 The column loads a window — the newest roots by the reader's last word, plus working, pinned and filed ones — and pages older roots behind "more". The palette, links and notifications open any thread of any age, so being on screen is a reason to hold a thread, like working or pinned; without it a thread opened from search had no row and the operator could not see where he stood.
 

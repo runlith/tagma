@@ -14,9 +14,9 @@ edges:
     to: 01a18d86-3376-7adb-aa00-abfaf88b843f
 sources:
   - kind: file
-    ref: apps/tagma/server/src/native-harness/inputs/walk.ts
-  - kind: file
     ref: apps/tagma/server/src/native-harness/inputs/cache.ts
+  - kind: file
+    ref: apps/tagma/server/src/native-harness/inputs/walk.ts
 ---
 ## Why
 

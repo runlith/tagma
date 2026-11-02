@@ -8,20 +8,20 @@ edges:
     to: 01a12cce-dcee-72ca-9826-a33562d9a6f4
 sources:
   - kind: file
+    ref: apps/tagma/server/drizzle/20261102110000_unbound_edges/migration.sql
+  - kind: file
     ref: apps/tagma/server/src/graph/tree/connections.ts
-  - kind: symbol
-    ref: apps/tagma/server/src/graph/tree/export.ts
-    symbol: rowText
   - kind: file
     ref: apps/tagma/server/src/graph/tree/edgeRows.ts
-  - kind: file
-    ref: apps/tagma/server/drizzle/20261102110000_unbound_edges/migration.sql
+  - kind: symbol
+    ref: apps/tagma/server/src/graph/steps/sequence.ts
+    symbol: GRAPH_STEPS
   - kind: symbol
     ref: apps/tagma/server/src/graph/store/tables.ts
     symbol: unboundEdge
   - kind: symbol
-    ref: apps/tagma/server/src/graph/steps/sequence.ts
-    symbol: GRAPH_STEPS
+    ref: apps/tagma/server/src/graph/tree/export.ts
+    symbol: rowText
 ---
 Tree reads into the mirror resolve an edge uuid to a trashed block too: repair looks for the target among all project rows, and rebuild among the scan and the saved trash. `Trash.delete` keeps the rows' edges so `restore_block` returns the block with them. So the holder's file carries the edge to a trashed block. If the file did not carry it, the mirror would stop being derivable from files: a holder repair or rebuild would wipe the edge, and the restored block would return without incoming edges. Graph reading (`read_block`) hides such edges: it is a filter over the truth, not part of it.
 

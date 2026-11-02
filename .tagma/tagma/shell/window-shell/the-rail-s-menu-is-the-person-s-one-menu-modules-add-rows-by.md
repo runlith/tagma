@@ -5,9 +5,9 @@ ord: 19
 tags: ["explanation"]
 sources:
   - kind: file
-    ref: apps/tagma/app/src/lib/shared/window/parts.ts
-  - kind: file
     ref: apps/tagma/app/src/lib/app/chrome/AppMenu.svelte
+  - kind: file
+    ref: apps/tagma/app/src/lib/shared/window/parts.ts
 ---
 The menu at the bottom of the rail holds what belongs to the person rather than to a project: settings, theme, keeping the machine awake, the project strip, and whatever a distribution adds about the person. A second button beside it was rejected: two menus of the same kind crowd the rail, and a build without the contributing module would carry an empty slot.
 

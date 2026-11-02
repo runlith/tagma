@@ -12,9 +12,9 @@ edges:
     to: 01a19888-3749-73c6-8c8d-4675e44d6479
 sources:
   - kind: file
-    ref: packages/sqlite-process/src/host.ts
-  - kind: file
     ref: apps/tagma/server/src/graph/tree/projection.ts
+  - kind: file
+    ref: packages/sqlite-process/src/host.ts
 ---
 The SQLite child should refuse a `Run` answer past a declared byte budget with a typed failure naming the statement fingerprint and size, so that no runaway read can again put gigabytes into the server: one held thread-list read returned 5 GB. The code and its test are written: `reply-guard.patch` in the scratch of thread 01a19878-4d78-70d5-a678-880d7defc965 holds a 256 MiB budget in `host.ts`, `ReplyOversized` in `connection.ts`, and the measured size riding the `Rows` reply so the ledger does not walk the rows again. Its `channel.ts` hunk also carries `SELECTION_KEY`, which has landed since.
 

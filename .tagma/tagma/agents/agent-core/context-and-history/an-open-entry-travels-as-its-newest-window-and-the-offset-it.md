@@ -10,14 +10,14 @@ edges:
     to: 01a190c6-9088-7be5-8efe-8b03a3cb3d23
 sources:
   - kind: file
+    ref: packages/agent/src/transcript/feedFold.ts
+  - kind: file
     ref: packages/agent/src/transcript/openText.ts
   - kind: file
-    ref: packages/agent/src/transcript/feedFold.ts
+    ref: packages/chat-ui/src/session/ThreadSession.svelte.ts
   - kind: symbol
     ref: packages/agent/src/thread/run/ThreadSnapshots.ts
     symbol: makeThreadSnapshots
-  - kind: file
-    ref: packages/chat-ui/src/session/ThreadSession.svelte.ts
 ---
 An open entry's growing field — an answer's or reasoning's text, a tool's streamed input — crosses every frame as at most its newest 64 Ki UTF-16 units, with `from`, the offset that window starts at. Without the bound, every snapshot, `attachFrom` and reopened `put` repeated the whole text, so one long answer made each frame as large as itself.
 

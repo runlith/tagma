@@ -10,6 +10,8 @@ edges:
     to: 01a190c6-9088-7be5-8efe-8b03a3cb3d23
 sources:
   - kind: file
+    ref: apps/tagma/server/src/threads/journal/sourceRewrites.ts
+  - kind: file
     ref: packages/agent/src/thread/run/lifecycle/RunReports.ts
   - kind: file
     ref: packages/agent/src/thread/run/RunProgress.ts
@@ -20,8 +22,6 @@ sources:
   - kind: symbol
     ref: packages/agent/src/thread/transition/kernel.ts
     symbol: applyPrepared
-  - kind: file
-    ref: apps/tagma/server/src/threads/journal/sourceRewrites.ts
 ---
 `ThreadSnapshots` keeps each thread's last published state at the change revision it was read or applied at, with the inputs its status was derived from (input receipts, open questions, the newest ending), at most 256 threads, the least recently changed leaving first. Typed committed changes run on one drain per thread. Explicit `publish` calls and publications asked by status deadlines enter the same per-thread snapshot lane; they do not enter that drain. The lane and the framed and opening revision marks prevent a frame older than one already sent. Background forks use the owner's construction context so later callers' transaction and lane marks cannot survive into detached work; the causing cost and committed work's requested span parent are carried explicitly.
 

@@ -8,9 +8,9 @@ edges:
     to: 01a190c6-9088-7be5-8efe-8b03a3cb3d23
 sources:
   - kind: file
-    ref: apps/tagma/server/src/threads/list/rows.ts
-  - kind: file
     ref: apps/tagma/server/src/threads/list/inputs.ts
+  - kind: file
+    ref: apps/tagma/server/src/threads/list/rows.ts
 ---
 `ThreadRows` keeps the raw summary inputs only of rows someone follows — list windows and audiences, operator attention, and the waiting threads keep-warm judges — and applies each committed row envelope to them in memory, so a held row changes with no storage read. It also keeps two narrow sets for every thread: the running threads with their placement root, and the threads owed their own work, each with its ancestry path; keep-warm's waiting answer and the graph-copy holds come from these.
 

@@ -17,9 +17,9 @@ sources:
   - kind: file
     ref: packages/agent/src/thread/run/callConfirmation.ts
   - kind: file
-    ref: packages/agent/src/thread/run/ParkedMoves.ts
-  - kind: file
     ref: packages/agent/src/thread/run/lateSettlement.ts
+  - kind: file
+    ref: packages/agent/src/thread/run/ParkedMoves.ts
 ---
 A call goes to the background from any stage after admission: the preparing, resolving, queueing, and executing is finished by the thread, and the outcome arrives as a notification. A native call keeps one causal cost from claims through late completion, because preparation and background delivery can outlive the invoking fiber; a hosted call reuses its ingress cause instead of counting a second root. A call taken before execution keeps its original span ancestry; a parked call adopted into the background starts a root trace because the transfer is another act, not its parent. A call that asked for `background` is taken by the door right after admission — before preparation — and the model gets a receipt naming only what is known at that point: the call has not executed yet. The operator moves a running call to the background at any stage: preparation, queueing for claims, waiting for permission, execution. After that the call's life belongs to the thread, and the outcome arrives as a notification the same way as for a call moved during execution.
 

@@ -5,17 +5,17 @@ ord: 35
 tags: ["rule"]
 sources:
   - kind: dir
-    ref: packages/execution-host
-  - kind: dir
-    ref: packages/watch
-  - kind: dir
-    ref: packages/sqlite-process
+    ref: apps/tagma/desktop
   - kind: dir
     ref: apps/tagma/server/src/executions
   - kind: dir
     ref: apps/tagma/server/src/platform/watch
   - kind: dir
-    ref: apps/tagma/desktop
+    ref: packages/execution-host
+  - kind: dir
+    ref: packages/sqlite-process
+  - kind: dir
+    ref: packages/watch
 ---
 Killing any Tagma process — the window, the server, its sqlite-process children, the execution host logic, the execution-holder, the file watcher, any worker — by any means (quit, Activity Monitor, kill -9), in any order and at any moment, and then starting Tagma again yields a fully working system: agent commands run, the thread list loads, memory stays bounded.
 
