@@ -1,7 +1,7 @@
 ---
 id: 01a14c08-619e-7ae1-af8b-16d6968ea9d7
-title: An app view recognizes speech, reads calls, and speaks through Tagma speech
-ord: 6
+title: An app view recognizes speech and speaks through Tagma speech
+ord: 11
 tags: ["feature"]
 fields:
   {
@@ -22,13 +22,12 @@ sources:
   - kind: file
     ref: apps/tagma/server/src/speech/contract/wire/view.ts
 ---
-**Value.** An app view builds its own voice interface — dictation, a live call transcript, speech output — on Tagma speech, with no keys, models, or microphone access of its own.
+**Value.** An app view builds its own voice interface — dictation and speech output — on Tagma speech, with no keys, models, or microphone access of its own.
 
-**How.** The `tagma/speech` method of the app-view bridge with actions: status, recognition, tail read-out, unsubscribe, speak, and silence; its events arrive as `tagma/notifications/speech` notifications. A call subscription and its transcript come through the `tagma/calls` method, with `tagma/notifications/calls`.
+**How.** The `tagma/speech` method of the app-view bridge with actions: status, recognition, tail read-out, unsubscribe, speak, and silence; its events arrive as `tagma/notifications/speech` notifications.
 
 **Behaviour.**
 - Recognition records audio where ordinary dictation does: on the server machine — the server, on a paired device — the device itself.
-- A call subscription outlives the end of recording and delivers every call change; the transcript carries both labels and muting. The call's project comes from the view's mount.
 - Speech output plays on the device showing the view, through Web Audio, not through the server speakers; the answer arrives after playback ends. Silence, a new phrase, and closing the view cancel only that view's speech output.
 - Losing or regaining the connection drops subscriptions and capture; they do not reopen on their own.
 
