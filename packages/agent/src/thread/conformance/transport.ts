@@ -353,7 +353,7 @@ export function describeTransportContract<TTx, TWrite extends TTx = TTx, R = nev
         const run = yield* opened(world);
         const reports = world.reports.of(ADAPTER);
         yield* reports.live(run, { op: 'tool-input', callId: 'call-1', name: 'read', text: '{"path":"a' });
-        expect(world.feed.view(run.threadId).open).toMatchObject([{ toolCallId: 'call-1', toolState: 'input-streaming' }]);
+        expect(world.feed.view(run.threadId).open).toMatchObject([{ entry: { toolCallId: 'call-1', toolState: 'input-streaming' } }]);
         const retry = { attempt: 1, of: 10, family: 'overloaded', delayMs: 500, status: 529, message: 'overloaded' } as const;
         yield* reports.live(run, { op: 'retry' });
         expect((yield* report(world, reports.retried(run, retry, 'retried:u1'))).status).toBe('applied');
