@@ -1,6 +1,11 @@
 import { expect, test } from 'bun:test';
+import * as BunServices from '@effect/platform-bun/BunServices';
+import { Effect } from 'effect';
+import { invoke } from '../../cli/invoke.js';
 import { loadVerbs } from '../../cli/verbs.js';
+import { InstalledChannel } from '../../installation/contract/service/channel.js';
 import type { Manifest } from '../../platform/contract/service/manifest.js';
+import { PROGRAM_RELEASE } from '../../platform/contract/wire/program.js';
 import type { Build } from '../build.js';
 import { DEVELOPER } from '../developer/build.js';
 import { MODULES as DEVELOPER_DECLARED } from '../developer/modules.js';
@@ -17,7 +22,8 @@ const declaring = (modules: readonly Manifest[]) =>
 const server = async () => ({});
 
 test('the CLI verb table holds the verbs each manifest declares, in module order, for the developer and the release build', () => {
-  const table = (build: Build) => build.verbs.map((module) => [module.id, module.verbs] as const);
+  const table = (build: Build): readonly (readonly [string, Manifest['verbs']])[] =>
+    build.verbs.map((module) => [module.id, module.verbs] as const);
   expect(table(DEVELOPER)).toEqual(declaring(DEVELOPER_MODULES));
   expect(table(RELEASE)).toEqual(declaring(RELEASE_MODULES));
   const bindings = bindingsOf(DEVELOPER);
@@ -28,6 +34,16 @@ test('the CLI verb table holds the verbs each manifest declares, in module order
       Object.assign({}, ...DEVELOPER_MODULES.map((module) => module.verbs?.(...((bindings[module.id] ?? []) as never[])) ?? {})),
     ),
   ]);
+});
+
+test('a CLI entry that leaves out a service its verbs require does not typecheck', () => {
+  const entry = invoke(['web'], verbsOf(DEVELOPER, server), PROGRAM_RELEASE).pipe(
+    Effect.provideService(InstalledChannel, DEVELOPER.channel),
+    Effect.provide(BunServices.layer),
+  );
+  // @ts-expect-error the entry leaves out Processes and LockHolders, which the verbs' environment holds
+  const runnable: Effect.Effect<number> = entry;
+  expect(Effect.isEffect(runnable)).toBe(true);
 });
 
 const verbs = await loadVerbs(verbsOf(DEVELOPER, server));

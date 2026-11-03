@@ -6,6 +6,16 @@ import type { RefusalBody, Words } from '../contract/wire/refusal.js';
 
 export class Notes extends Context.Service<Notes, string>()('tagma/platform/Notes') {}
 
+export type VerbCommand<R> = Command.Command<any, any, any, unknown, R>;
+
+export type Preface = (argv: readonly string[]) => string | undefined;
+
+export type Verbs<R> = Readonly<Record<string, VerbCommand<R> | Preface>>;
+
+export type VerbSource<R> = () => Promise<Verbs<R>>;
+
+export type VerbSources<R> = Readonly<Record<string, VerbSource<R>>>;
+
 export const noting =
   (text: string) =>
   <C>(command: C): C =>

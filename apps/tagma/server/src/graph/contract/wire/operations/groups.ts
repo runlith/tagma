@@ -1,7 +1,7 @@
 import { Schema } from 'effect';
 import { operation } from '../../../../platform/contract/wire/operation.js';
 import { graphArms as arms } from '../answers.js';
-import { groupSchema, projectSchema } from '../rows.js';
+import { groupSchema, groupShareSchema, projectSchema } from '../rows.js';
 import { SURFACE_ACT, SURFACE_READ, graphInput } from './shared.js';
 
 const project = Schema.String.check(Schema.isMinLength(1)).annotate({ description: 'A project, by name or id.' });
@@ -89,6 +89,22 @@ export const GROUP_OPERATIONS = {
     input: Schema.Struct({ group, project }),
     answer: arms({ ok: { group: groupSchema } }),
     refusals: [...PROJECT_REFUSALS, 'not-a-group', 'grouped', 'ungroupable'],
+  }),
+
+  set_group_sharing: operation('set_group_sharing', {
+    ...SURFACE_ACT,
+    place: 'machine',
+    ...act('Change what this project shares with its group?', 'Share', 'Changed what a project shares with its group'),
+    meaning: 'Set what a member gives its group and what it takes from it: its map, its law and its skills.',
+    grammar:
+      'One member’s map, law or skills reach another member’s threads exactly when the first gives it and the second takes it; a member joins giving and taking everything. The group graph’s own rules reach every member whatever it takes. A list left out stays as it is.',
+    input: Schema.Struct({
+      project,
+      gives: Schema.optional(Schema.Array(groupShareSchema)).annotate({ description: 'What it gives the other members.' }),
+      takes: Schema.optional(Schema.Array(groupShareSchema)).annotate({ description: 'What it takes from the other members.' }),
+    }),
+    answer: arms({ ok: { group: groupSchema } }),
+    refusals: [...PROJECT_REFUSALS, 'ungrouped'],
   }),
 
   leave_group: operation('leave_group', {

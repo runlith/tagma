@@ -15,6 +15,8 @@ import type {
   ProjectRefusal,
   ProjectRow,
   Registered,
+  SharedGroup,
+  SharingChange,
 } from '../wire/project.js';
 
 export class ProjectIdentification extends Context.Service<
@@ -80,5 +82,10 @@ export class ProjectGroups extends Context.Service<
       project: ProjectRow,
     ): Effect.Effect<ProjectGroup, StoreFailure | GateRefusal<JoinRefusal>>;
     leave(unit: WriteUnit<'machine'>, project: ProjectRow): Effect.Effect<DepartedGroup, StoreFailure | GateRefusal<'ungrouped'>>;
+    share(
+      unit: WriteUnit<'machine'>,
+      project: ProjectRow,
+      sharing: SharingChange,
+    ): Effect.Effect<SharedGroup, StoreFailure | GateRefusal<'ungrouped'>>;
   }
 >()('tagma/projects/ProjectGroups') {}

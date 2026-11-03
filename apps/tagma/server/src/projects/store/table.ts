@@ -1,5 +1,5 @@
 import { index, integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
-import { PROJECT_KINDS } from '../contract/wire/project.js';
+import { type GroupShare, PROJECT_KINDS } from '../contract/wire/project.js';
 
 export const project = sqliteTable(
   'project',
@@ -25,6 +25,8 @@ export const groupMember = sqliteTable(
       .notNull()
       .references(() => project.id, { onDelete: 'cascade' }),
     ord: integer('ord').notNull(),
+    withholds: text('withholds', { mode: 'json' }).$type<readonly GroupShare[]>().notNull().default([]),
+    declines: text('declines', { mode: 'json' }).$type<readonly GroupShare[]>().notNull().default([]),
   },
   (table) => [index('group_member_group_idx').on(table.groupId, table.ord)],
 );

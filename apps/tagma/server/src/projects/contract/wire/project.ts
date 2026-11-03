@@ -41,14 +41,33 @@ export type ProjectRow = {
 
 export type Registered = { readonly project: ProjectRow; readonly returned: boolean };
 
+export const GROUP_SHARES = ['map', 'law', 'skills'] as const;
+export type GroupShare = (typeof GROUP_SHARES)[number];
+
+export type MemberSharing = { readonly gives: readonly GroupShare[]; readonly takes: readonly GroupShare[] };
+
+export const FULL_SHARING: MemberSharing = { gives: GROUP_SHARES, takes: GROUP_SHARES };
+
 export type ProjectGroup = {
   readonly graph: ProjectRow;
   readonly members: readonly ProjectRow[];
+  readonly sharing: ReadonlyMap<number, MemberSharing>;
 };
+
+export const sharingOf = (group: ProjectGroup, projectId: number): MemberSharing => group.sharing.get(projectId) ?? FULL_SHARING;
+
+export const reaching = (group: ProjectGroup, projectId: number, share: GroupShare): readonly ProjectRow[] =>
+  sharingOf(group, projectId).takes.includes(share)
+    ? group.members.filter((member) => member.id !== projectId && sharingOf(group, member.id).gives.includes(share))
+    : [];
 
 export type FormedGroup = { readonly group: ProjectGroup; readonly returned: boolean };
 
 export type DepartedGroup = { readonly from: ProjectGroup; readonly rest: ProjectGroup | null };
+
+export type SharingChange = { readonly gives?: readonly GroupShare[] | undefined; readonly takes?: readonly GroupShare[] | undefined };
+
+export type SharedGroup = { readonly from: MemberSharing; readonly group: ProjectGroup };
 
 export type FormRefusal = 'grouped' | 'ungroupable' | 'group-size' | 'not-found' | 'unwritable-root';
 

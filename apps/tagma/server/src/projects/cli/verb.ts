@@ -1,11 +1,13 @@
 import { Console, Effect, Option } from 'effect';
 import { Argument, Command, Flag } from 'effect/cli';
 import { resolve } from 'node:path';
-import { CurrentInvocation, print, type Invocation } from '../../platform/cli/verb.js';
+import { CurrentInvocation, print, type Invocation, type VerbCommand } from '../../platform/cli/verb.js';
 import type { GroupRegistry, ProjectLens as Lens, ProjectRegistry } from '../contract/service/registration.js';
 import { STORAGE_MODES } from '../contract/wire/project.js';
 
-export type ProjectsCli<Row, Removed, Policy extends ReadonlyArray<Command.Command.Any>, Group, Left> = {
+export type PolicyCommands = ReadonlyArray<VerbCommand<Command.Environment>>;
+
+export type ProjectsCli<Row, Removed, Policy extends PolicyCommands, Group, Left> = {
   readonly registry: ProjectRegistry<Row, Removed>;
   readonly groups: GroupRegistry<Group, Left>;
   readonly here: (at: Invocation) => Lens;
@@ -17,7 +19,7 @@ export type ProjectsCli<Row, Removed, Policy extends ReadonlyArray<Command.Comma
 const json = Flag.Boolean('json').pipe(Flag.withDescription('machine-readable output'), Flag.withDefault(false));
 const optional = <A>(value: Option.Option<A>): A | undefined => Option.getOrUndefined(value);
 
-export const projects = <Row, Removed, const Policy extends ReadonlyArray<Command.Command.Any>, Group, Left>({
+export const projects = <Row, Removed, const Policy extends PolicyCommands, Group, Left>({
   registry,
   here,
   render,
@@ -117,7 +119,7 @@ export const projects = <Row, Removed, const Policy extends ReadonlyArray<Comman
   );
 };
 
-export const grouping = <Row, Removed, const Policy extends ReadonlyArray<Command.Command.Any>, Group, Left>({
+export const grouping = <Row, Removed, const Policy extends PolicyCommands, Group, Left>({
   groups,
   here,
   renderGroups,

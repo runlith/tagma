@@ -1,6 +1,7 @@
 import { Effect } from 'effect';
-import type { VerbSources } from '../../cli/verbs.js';
+import type { VerbSources } from '../../platform/cli/verb.js';
 import type { Build } from '../build.js';
+import type { CliEnvironment } from './environment.js';
 import type { Assembly } from '../manifest.js';
 import type { VerbBinding, VerbBindings } from './binding.js';
 import { doorFor, externalHarnessBindings } from './doorBinding.js';
@@ -118,7 +119,7 @@ export const bindingsOf = (build: Build): VerbBindings => {
   };
 };
 
-export const verbsOf = (build: Build, server: () => Promise<unknown>): VerbSources => {
+export const verbsOf = (build: Build, server: () => Promise<unknown>): VerbSources<CliEnvironment> => {
   const bindings = bindingsOf(build);
   const bound = (id: string): readonly VerbBinding[] => bindings[id] ?? [];
   return {

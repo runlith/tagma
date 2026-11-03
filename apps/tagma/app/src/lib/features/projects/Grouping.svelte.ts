@@ -1,4 +1,5 @@
 import type { Group, Project } from '@tagma/server/graph/contract/wire/rows';
+import type { SharingChange } from '@tagma/server/projects/contract/wire/project';
 import { Service } from '@runlith/layer/key';
 import { ProjectsRepo } from '../workspace/ProjectsRepo.js';
 import { Workspace } from '../workspace/Selection.svelte.js';
@@ -53,6 +54,10 @@ export class ProjectGrouping extends Service<ProjectGrouping>()('ProjectGrouping
 
   async leave(project: Project): Promise<void> {
     await this.acting(() => this.projects.leaveGroup.run(project.id, { throwOnError: true }));
+  }
+
+  async share(project: Project, change: SharingChange): Promise<void> {
+    await this.acting(() => this.projects.shareGroup.run({ projectId: project.id, ...change }, { throwOnError: true }));
   }
 
   private async acting(work: () => Promise<unknown>): Promise<void> {

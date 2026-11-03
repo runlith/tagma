@@ -4,7 +4,7 @@ import { writes } from '../../platform/contract/service/writes.js';
 import type { GateRefusal, OpenRefusal } from '../../platform/contract/wire/refusal.js';
 import { ActState } from '../contract/service/transaction.js';
 import { ProjectGroups, Projects } from '../../projects/contract/service/registry.js';
-import type { ProjectRow } from '../../projects/contract/wire/project.js';
+import { type MemberSharing, type ProjectRow, sharingOf } from '../../projects/contract/wire/project.js';
 import { groupMember, project } from '../../projects/store/table.js';
 import { Act } from '../contract/service/acts.js';
 import { GroupLifecycle } from '../contract/service/serving.js';
@@ -15,6 +15,8 @@ import { projecting, referencing } from '../store/actWrites.js';
 
 const forming = writes('GroupLifecycle.make', [block, projectPolicy, meta], projecting, referencing);
 const regrouping = writes('GroupLifecycle.regroup', []);
+
+const said = (sharing: MemberSharing) => `gives ${sharing.gives.join(', ') || 'nothing'}; takes ${sharing.takes.join(', ') || 'nothing'}`;
 
 export const makeGroupLifecycle = Effect.fnUntraced(function* (input: {
   readonly bear: (row: ProjectRow) => Effect.Effect<ProjectPolicyRow, StoreFailure | GateRefusal<OpenRefusal>, ActState>;
@@ -62,7 +64,7 @@ export const makeGroupLifecycle = Effect.fnUntraced(function* (input: {
           }),
         ),
       );
-      return { graph, members: group.members };
+      return { graph, members: group.members, sharing: group.sharing };
     }),
 
     join: Effect.fn('GroupLifecycle.join')(function* (group, row) {
@@ -73,6 +75,20 @@ export const makeGroupLifecycle = Effect.fnUntraced(function* (input: {
             const joined = yield* groups.join(unit, group, row);
             yield* moved(row, null, joined.graph.id);
             return joined;
+          }),
+        ),
+      );
+    }),
+
+    share: Effect.fn('GroupLifecycle.share')(function* (row, sharing) {
+      return yield* machine.transaction(writes('group.share', [groupMember]), (unit) =>
+        act.unit(
+          regrouping,
+          Effect.gen(function* () {
+            const shared = yield* groups.share(unit, row, sharing);
+            const to = sharingOf(shared.group, row.id);
+            yield* act.record('project_set', null, { projectId: row.id, field: 'group-sharing', from: said(shared.from), to: said(to) });
+            return shared.group;
           }),
         ),
       );

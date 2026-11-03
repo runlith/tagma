@@ -178,49 +178,53 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
       ),
   );
 
-  it.effect('a group member reads the other members’ project skills, a member’s re-read reaches it, and leaving withdraws them', () =>
-    withDemo((demo) =>
-      Effect.gen(function* () {
-        const files = yield* FileSystem.FileSystem;
-        const cache = yield* setup(demo);
-        const siblingRoot = yield* tempRootEffect(demo.fixture, 'skill-group-sibling-');
-        const sibling = yield* demo.graph.projectLifecycle.create({ name: 'sibling', rootPath: siblingRoot });
-        const skill = Effect.fnUntraced(function* (root: string, name: string, description: string) {
-          const directory = join(root, '.agents/skills', name);
-          yield* files.makeDirectory(directory, { recursive: true });
-          yield* files.writeFileString(join(directory, 'SKILL.md'), `---\ndescription: ${description}\n---\nBody.\n`);
-        });
-        yield* skill(demo.demoRoot, 'tests', 'Our tests.');
-        yield* skill(siblingRoot, 'tests', 'Their tests.');
-        yield* skill(siblingRoot, 'release', 'Their release.');
-        const groups = Context.get(demo.context, ProjectGroups);
-        const members = [yield* demo.graph.projects.byId(demo.projectId), sibling];
-        yield* demo.graph.units.write('testing.formGroup', (unit) => groups.form(unit, { name: `group-${randomUUID()}`, members }));
-        const here = { threadId: 'member', projectId: demo.projectId, root: demo.demoRoot };
-        const read = Effect.map(cache.preview(here), (sources) => ({
-          home: sources.skills.map((one) => one.description),
-          members: sources.members.map((one) => [one.project, one.skills.map((found) => [found.id, found.description, found.place])]),
-        }));
-        expect(yield* read).toEqual({
-          home: ['Our tests.'],
-          members: [
-            [
-              'sibling',
+  it.effect(
+    'a group member reads the other members’ project skills, a member’s re-read reaches it, and withholding them or leaving withdraws them',
+    () =>
+      withDemo((demo) =>
+        Effect.gen(function* () {
+          const files = yield* FileSystem.FileSystem;
+          const cache = yield* setup(demo);
+          const siblingRoot = yield* tempRootEffect(demo.fixture, 'skill-group-sibling-');
+          const sibling = yield* demo.graph.projectLifecycle.create({ name: 'sibling', rootPath: siblingRoot });
+          const skill = Effect.fnUntraced(function* (root: string, name: string, description: string) {
+            const directory = join(root, '.agents/skills', name);
+            yield* files.makeDirectory(directory, { recursive: true });
+            yield* files.writeFileString(join(directory, 'SKILL.md'), `---\ndescription: ${description}\n---\nBody.\n`);
+          });
+          yield* skill(demo.demoRoot, 'tests', 'Our tests.');
+          yield* skill(siblingRoot, 'tests', 'Their tests.');
+          yield* skill(siblingRoot, 'release', 'Their release.');
+          const groups = Context.get(demo.context, ProjectGroups);
+          const members = [yield* demo.graph.projects.byId(demo.projectId), sibling];
+          yield* demo.graph.units.write('testing.formGroup', (unit) => groups.form(unit, { name: `group-${randomUUID()}`, members }));
+          const here = { threadId: 'member', projectId: demo.projectId, root: demo.demoRoot };
+          const read = Effect.map(cache.preview(here), (sources) => ({
+            home: sources.skills.map((one) => one.description),
+            members: sources.members.map((one) => [one.project, one.skills.map((found) => [found.id, found.description, found.place])]),
+          }));
+          expect(yield* read).toEqual({
+            home: ['Our tests.'],
+            members: [
               [
-                ['release', 'Their release.', 'sibling'],
-                ['tests', 'Their tests.', 'sibling'],
+                'sibling',
+                [
+                  ['release', 'Their release.', 'sibling'],
+                  ['tests', 'Their tests.', 'sibling'],
+                ],
               ],
             ],
-          ],
-        });
-        yield* skill(siblingRoot, 'deploy', 'Their deploy.');
-        expect((yield* read).members[0]?.[1]).toHaveLength(2);
-        yield* cache.invalidate({ projectId: sibling.id });
-        expect((yield* read).members[0]?.[1]).toHaveLength(3);
-        yield* demo.graph.units.write('testing.leaveGroup', (unit) => groups.leave(unit, sibling));
-        expect(yield* read).toEqual({ home: ['Our tests.'], members: [] });
-      }),
-    ),
+          });
+          yield* skill(siblingRoot, 'deploy', 'Their deploy.');
+          expect((yield* read).members[0]?.[1]).toHaveLength(2);
+          yield* cache.invalidate({ projectId: sibling.id });
+          expect((yield* read).members[0]?.[1]).toHaveLength(3);
+          yield* demo.graph.units.write('testing.shareGroup', (unit) => groups.share(unit, sibling, { gives: ['map', 'law'] }));
+          expect((yield* read).members).toEqual([]);
+          yield* demo.graph.units.write('testing.leaveGroup', (unit) => groups.leave(unit, sibling));
+          expect(yield* read).toEqual({ home: ['Our tests.'], members: [] });
+        }),
+      ),
   );
 
   it.effect('threads standing in one tree share one walk, and an invalidation of any shape drops it', () =>

@@ -250,7 +250,7 @@ export class ProjectWindows {
 
   private enter(held: Held): void {
     held.onSurface = true;
-    held.window.loadURL(held.address.toString()).catch(() => undefined);
+    held.window.loadURL(held.address.toString(), { extraHeaders: 'Cache-Control: no-cache\n' }).catch(() => undefined);
   }
 
   private wait(held: Held, page: string): void {

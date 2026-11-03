@@ -5,14 +5,12 @@ import type { HarnessCatalog } from './hooks/rows.js';
 import type { ServerCli } from './cli/server.js';
 import type { HostedPlaces } from './cli/harnessRun.js';
 
-type VerbSource = () => Promise<Record<string, unknown>>;
-
 export const externalHarnessVerbs = (
   hookBinding: () => Promise<(at: Invocation) => Effect.Effect<HookClient>>,
   serverBinding: () => Promise<ServerCli>,
   catalogBinding: () => Promise<HarnessCatalog>,
   runnersBinding: () => Promise<HostedPlaces>,
-): Readonly<{ hook: VerbSource; 'harness-run': VerbSource }> => ({
+) => ({
   hook: async () => {
     const [{ hook }, connect] = await Promise.all([import('./cli/hook.js'), hookBinding()]);
     const { hookConnectOver } = await import('./hooks/door.js');

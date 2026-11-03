@@ -301,6 +301,7 @@ layer(Layer.effect(Remote, setup).pipe(Layer.provideMerge(BunFileSystem.layer)),
         expect(yield* socket(undefined, { path: '/API/ws' })).toMatchObject({ opened: false });
         const shell = yield* remote('/pair', { headers: { ...forged, accept: 'text/html' } });
         expect([shell.status, ...framing(shell)]).toEqual([200, 'DENY', ["frame-ancestors 'none'"]]);
+        expect(shell.headers.get('cache-control')).toBe('no-cache');
         expect(yield* Effect.promise(() => shell.text())).toContain('<title>Tagma</title>');
       }),
   );

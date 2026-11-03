@@ -5,6 +5,7 @@
   import FolderMinus from '@lucide/svelte/icons/folder-minus';
   import GroupIcon from '@lucide/svelte/icons/group';
   import UngroupIcon from '@lucide/svelte/icons/ungroup';
+  import GroupSharing from '$lib/features/projects/GroupSharing.svelte';
   import GroupWith from '$lib/features/projects/GroupWith.svelte';
   import { ProjectGrouping } from '$lib/features/projects/Grouping.svelte.js';
   import PencilLine from '@lucide/svelte/icons/pencil-line';
@@ -262,6 +263,7 @@
   <DropdownMenu.Separator />
   <DropdownMenu.Item icon={PencilLine} onSelect={() => renaming.ask(current)}>Rename “{labelOf(current)}”…</DropdownMenu.Item>
   {#if group !== null}
+    <GroupSharing project={current} {group} />
     <DropdownMenu.Item icon={UngroupIcon} onSelect={() => void grouping.leave(current).catch((error: unknown) => notices.refusal(error))}>
       Leave group “{labelOf(group.graph)}”
     </DropdownMenu.Item>

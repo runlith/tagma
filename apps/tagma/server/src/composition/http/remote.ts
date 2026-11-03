@@ -196,7 +196,8 @@ export const remoteServing = (remote: RemoteDoor) =>
           return access.sandboxOrigin;
         },
       };
-      const shell = remote.appDist === undefined ? null : yield* HttpStaticServer.make({ root: remote.appDist, spa: true });
+      const shell =
+        remote.appDist === undefined ? null : yield* HttpStaticServer.make({ root: remote.appDist, spa: true, cacheControl: 'no-cache' });
       const door = Context.add(remote.door, ViewSites, remoteSites(Context.get(remote.door, PlacedSites))).pipe(
         Context.add(LaneEndpoint, remoteEndpoint(Context.get(remote.door, TerminalSite))),
         Context.add(DoorAddress, remoteAddress(access)),

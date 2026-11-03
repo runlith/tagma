@@ -6,7 +6,7 @@ import type { TargetAt } from '../../workspace/contract/wire/place.js';
 import { ownSkillEnabled, projectSkillsEnabled, rescanPolicy } from '../contract/wire/sourceSettings.js';
 import { Settings } from '../../settings/contract/service/values.js';
 import { ProjectGroups } from '../../projects/contract/service/registry.js';
-import type { ProjectRow } from '../../projects/contract/wire/project.js';
+import { type ProjectRow, reaching } from '../../projects/contract/wire/project.js';
 import { WorkspaceInputs, type MemberSkills, type WorkspaceInputAim, type WorkspaceInputSet } from '../contract/service/inputs.js';
 import type { BridgeMethod } from '../../views/contract/wire/bridge.js';
 import { readMemberSkills, readWorkspaceInputs, withMembers } from './walk.js';
@@ -80,11 +80,9 @@ export const workspaceInputsLayer = (
           if (!(yield* settings.value(projectSkillsEnabled, projectId))) return home;
           const group = yield* groups.of(projectId);
           if (group === undefined || group.graph.id === projectId) return home;
-          const members = yield* Effect.forEach(
-            group.members.filter((member) => member.id !== projectId),
-            (member) => memberOf(member, remembered),
-            { concurrency: 'unbounded' },
-          );
+          const members = yield* Effect.forEach(reaching(group, projectId, 'skills'), (member) => memberOf(member, remembered), {
+            concurrency: 'unbounded',
+          });
           return withMembers(home, members, yield* settings.value(ownSkillEnabled, projectId));
         });
         const walk = (projectId: number, root: string) =>

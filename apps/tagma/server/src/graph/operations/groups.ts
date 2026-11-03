@@ -3,7 +3,7 @@ import { body, pair } from '../../platform/contract/service/body.js';
 import { GateRefusal } from '../../platform/contract/wire/refusal.js';
 import { CurrentProject } from '../../projects/contract/service/caller.js';
 import { ProjectGroups, Projects } from '../../projects/contract/service/registry.js';
-import type { ProjectGroup } from '../../projects/contract/wire/project.js';
+import { type ProjectGroup, sharingOf } from '../../projects/contract/wire/project.js';
 import { GroupLifecycle, RoutedGraphs } from '../contract/service/serving.js';
 import { GROUP_OPERATIONS as OPS } from '../contract/wire/operations/groups.js';
 import type { Group } from '../contract/wire/rows.js';
@@ -18,7 +18,8 @@ const wiredGroups = Effect.fn('groups.wired')(function* (groups: readonly Projec
     const graph = rows[at]!;
     const members = rows.slice(at + 1, at + 1 + group.members.length);
     at += 1 + group.members.length;
-    return { graph, members };
+    const sharing = group.members.map((member) => ({ project: member.id, ...sharingOf(group, member.id) }));
+    return { graph, members, sharing };
   });
 });
 
@@ -95,6 +96,16 @@ export const GROUP_PAIRS = {
       execute: Effect.fnUntraced(function* (input: In<'join_group'>) {
         const joined = yield* (yield* GroupLifecycle).join(yield* groupNamed(input.group), yield* projectNamed(input.project));
         return { status: 'ok' as const, group: yield* wiredGroup(joined) };
+      }),
+    }),
+  ),
+
+  set_group_sharing: pair(
+    OPS.set_group_sharing,
+    body(OPS.set_group_sharing, {
+      execute: Effect.fnUntraced(function* (input: In<'set_group_sharing'>) {
+        const shared = yield* (yield* GroupLifecycle).share(yield* projectNamed(input.project), { gives: input.gives, takes: input.takes });
+        return { status: 'ok' as const, group: yield* wiredGroup(shared) };
       }),
     }),
   ),

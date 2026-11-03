@@ -6,7 +6,7 @@ import type { EvidenceAnswer } from '../contract/wire/evidence.js';
 import type { ThreadWireSnapshotPayload } from '../contract/wire/snapshot.js';
 import { blockRefFlag } from '../../graph/cli/args.js';
 import { refuse, noting, CurrentInvocation, print } from '../../platform/cli/verb.js';
-import { createThread, locateThread, threadTurns, type ThreadsCli } from './turnVerbs.js';
+import { createThread, followThread, locateThread, type ThreadsCli } from './turnVerbs.js';
 
 const json = Flag.Boolean('json').pipe(Flag.withDescription('machine-readable output'), Flag.withDefault(false));
 const project = Flag.String('project').pipe(
@@ -18,7 +18,7 @@ const optional = <A>(value: Option.Option<A>): A | undefined => Option.getOrUnde
 
 export const threadCommands = (cli: ThreadsCli) => {
   const { ask, lens } = cli;
-  const { followThread } = threadTurns(cli);
+  const follow = followThread(cli);
   const newThread = Command.make(
     'new',
     {
@@ -193,7 +193,7 @@ export const threadCommands = (cli: ThreadsCli) => {
           ]);
         }
         const projectId = yield* locateThread(ask, input.id);
-        yield* followThread({
+        yield* follow({
           projectId,
           threadId: input.id,
           since: optional(input.after),

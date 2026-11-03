@@ -1,4 +1,4 @@
-import type { StorageMode } from '@tagma/server/projects/contract/wire/project';
+import type { SharingChange, StorageMode } from '@tagma/server/projects/contract/wire/project';
 import type { InstanceOf } from '@runlith/layer/key';
 import type { KeyedLoaderContext } from '@runlith/query/types';
 import { Repo } from '@runlith/query/repo';
@@ -62,6 +62,18 @@ export const ProjectsRepo = Repo.define(
     leaveGroup: mutation({
       mutator: async (projectId: number, { signal }, door) =>
         (await door.perform('leave_group', { project: String(projectId) }, {}, { signal })).group,
+    }),
+
+    shareGroup: mutation({
+      mutator: async (input: SharingChange & { projectId: number }, { signal }, door) =>
+        (
+          await door.perform(
+            'set_group_sharing',
+            { project: String(input.projectId), gives: input.gives, takes: input.takes },
+            {},
+            { signal },
+          )
+        ).group,
     }),
 
     renameGroup: mutation({

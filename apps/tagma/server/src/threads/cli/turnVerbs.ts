@@ -246,29 +246,28 @@ class TextGone extends Data.TaggedError('TextGone')<{ readonly message: string }
 
 type Prefix = (entryId: string, from: number) => Effect.Effect<string, unknown>;
 
-const prefixReader =
-  (ask: ThreadsCli['ask'], projectId: number, threadId: string): Prefix =>
-    Effect.fnUntraced(function* (entryId: string, from: number) {
-      let text = '';
-      let at = from;
-      while (at > 0) {
-        const start = Math.max(0, at - OPEN_TEXT_MAX);
-        const read = (yield* ask((door) =>
-          door.operations.perform({
-            params: { id: 'read_thread_text' },
-            query: { project: String(projectId) },
-            headers: {},
-            payload: { threadId, entryId, from: start, limit: at - start },
-          }),
-        )) as { readonly status: 'found'; readonly text: string; readonly from: number } | { readonly status: 'absent' };
-        if (read.status === 'absent' || read.from >= at) {
-          return yield* new TextGone({ message: `entry ${entryId} has no text before offset ${at}` });
-        }
-        text = read.text + text;
-        at = read.from;
+const prefixReader = (ask: ThreadsCli['ask'], projectId: number, threadId: string): Prefix =>
+  Effect.fnUntraced(function* (entryId: string, from: number) {
+    let text = '';
+    let at = from;
+    while (at > 0) {
+      const start = Math.max(0, at - OPEN_TEXT_MAX);
+      const read = (yield* ask((door) =>
+        door.operations.perform({
+          params: { id: 'read_thread_text' },
+          query: { project: String(projectId) },
+          headers: {},
+          payload: { threadId, entryId, from: start, limit: at - start },
+        }),
+      )) as { readonly status: 'found'; readonly text: string; readonly from: number } | { readonly status: 'absent' };
+      if (read.status === 'absent' || read.from >= at) {
+        return yield* new TextGone({ message: `entry ${entryId} has no text before offset ${at}` });
       }
-      return text;
-    });
+      text = read.text + text;
+      at = read.from;
+    }
+    return text;
+  });
 
 class LiveWords {
   private readonly words = new Set<string>();
@@ -285,7 +284,8 @@ class LiveWords {
     if (!coreEntry(entry)) return Effect.succeed({ text: '', shown: '' });
     if (entry.type === 'message' && entry.role === 'assistant' && !this.words.has(entry.id)) {
       this.words.add(entry.id);
-      const whole = change.from === 0 ? Effect.succeed(entry.text) : Effect.map(this.prefix(entry.id, change.from), (head) => head + entry.text);
+      const whole =
+        change.from === 0 ? Effect.succeed(entry.text) : Effect.map(this.prefix(entry.id, change.from), (head) => head + entry.text);
       return Effect.map(whole, (text) => ({ text, shown: text }));
     }
     if (entry.type === 'tool' && !this.calls.has(entry.id)) {
@@ -627,12 +627,12 @@ export const threadTurns = ({ ask, askLive, lens }: ThreadsCli) => {
     }),
   ).pipe(Command.withDescription('take back a queued turn, an unread steer or a compaction request before a run takes it'));
 
-  const followThread = (input: {
-    projectId: number;
-    threadId: string;
-    since: number | undefined;
-    asJson: boolean;
-  }): Effect.Effect<void, never, Stdio.Stdio> =>
+  return { askThread, reply, stop, continueThread, steer, compact, unqueue };
+};
+
+export const followThread =
+  ({ ask, askLive }: ThreadsCli) =>
+  (input: { projectId: number; threadId: string; since: number | undefined; asJson: boolean }): Effect.Effect<void, never, Stdio.Stdio> =>
     askLive((live) => {
       const words = new LiveWords(prefixReader(ask, input.projectId, input.threadId));
       return Stream.runForEach(
@@ -644,5 +644,3 @@ export const threadTurns = ({ ask, askLive, lens }: ThreadsCli) => {
         (frame) => Effect.flatMap(followFrameText(frame, input.asJson, words), write),
       );
     });
-  return { askThread, reply, stop, continueThread, steer, compact, unqueue, followThread };
-};

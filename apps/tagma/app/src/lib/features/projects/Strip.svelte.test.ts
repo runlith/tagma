@@ -146,7 +146,7 @@ test('a group stands as one tile where its first member stood, opens into the me
   go(3);
   const shop = { ...project(9, 'shop'), kind: 'group' as const };
   at.projects = [...REGISTRY, shop];
-  at.groups = [{ graph: shop, members: [REGISTRY[0]!, REGISTRY[2]!] }];
+  at.groups = [{ graph: shop, members: [REGISTRY[0]!, REGISTRY[2]!], sharing: [] }];
   flushSync();
   expect(names(strip.projects)).toEqual(['shop', 'beta']);
   expect(strip.entry(shop).name).toBe('gamma');
@@ -161,7 +161,7 @@ test('a group stands as one tile where its first member stood, opens into the me
   flushSync();
   expect(names(strip.projects)).toEqual(['beta', 'alpha', 'gamma']);
 
-  at.groups = [{ graph: shop, members: [REGISTRY[0]!, REGISTRY[2]!] }];
+  at.groups = [{ graph: shop, members: [REGISTRY[0]!, REGISTRY[2]!], sharing: [] }];
   flushSync();
   strip.remove(9);
   expect(names(strip.projects)).toEqual(['beta']);

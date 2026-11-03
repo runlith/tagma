@@ -16,9 +16,7 @@ export type ArtifactsCli = {
   readonly ask: <A>(call: (door: ArtifactsDoor, at: Invocation) => Effect.Effect<A, unknown>) => Effect.Effect<A, unknown>;
 };
 
-type VerbSource = () => Promise<Record<string, unknown>>;
-
-export const artifactsVerbs = (binding: () => Promise<ArtifactsCli>): Readonly<{ artifacts: VerbSource }> => ({
+export const artifactsVerbs = (binding: () => Promise<ArtifactsCli>) => ({
   artifacts: async () => {
     const [{ artifactsList }, port] = await Promise.all([import('./cli/list.js'), binding()]);
     return { artifacts: artifactsList(port) };

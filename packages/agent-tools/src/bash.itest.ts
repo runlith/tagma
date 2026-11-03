@@ -181,20 +181,6 @@ it.live('an awk program and a shell body behind a launcher are code, never probe
   }),
 );
 
-it.live('an argument too long to name a file answers as data, with no failed sighting beside it', () =>
-  Effect.gen(function* () {
-    const root = yield* createTempDir();
-    const tools = createTools(options({ cwd: root }));
-    const body = `Dear team,\n${'the report follows. '.repeat(20)}\nRegards`;
-    const said = yield* call(
-      tools.bash,
-      { command: `echo sent --body '${body}'`, description: 'Send a message' },
-      { toolCallId: 'call-body', caller: unthreadedCaller },
-    );
-    expect(String(said)).toBe(`sent --body ${body}\n`);
-  }),
-);
-
 it.live('bash declares descriptions by policy and executes a call without one', () =>
   Effect.gen(function* () {
     const root = yield* createTempDir();
@@ -722,6 +708,17 @@ it.live('a command answers the files it named and the files its output found', (
     expect(read.shown).toEqual([{ path: join(dir, 'src', 'alpha.ts'), as: 'read' }]);
     const found = yield* answer(tools.bash, { command: 'cd src && grep -n const beta.ts alpha.ts /dev/null', description: 'Search' });
     expect(found.shown.map((one) => one.path).sort()).toEqual([join(dir, 'src', 'alpha.ts'), join(dir, 'src', 'beta.ts')]);
+  }),
+);
+
+it.live('an operand longer than any file name is no file, and the files beside it are still answered', () =>
+  Effect.gen(function* () {
+    const dir = yield* checkout();
+    yield* host.writeFile(join(dir, 'alpha.ts'), 'const a = 1;\n');
+    const tools = createTools(options({ cwd: dir }));
+
+    const ran = yield* answer(tools.bash, { command: `cat alpha.ts '${'x'.repeat(300)}' 2>/dev/null || true`, description: 'Read files' });
+    expect(ran.shown).toEqual([{ path: join(dir, 'alpha.ts'), as: 'read' }]);
   }),
 );
 
