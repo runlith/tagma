@@ -14,6 +14,6 @@ sources:
 ---
 A regular exit closes the writers. A writer held by stuck work would hold the exit just as long — up to the 15-minute wait ceiling. So the signal arms a process deadline: a server that has not closed within it exits without finishing closing. SQLite keeps only committed data, and on restart the successor takes the data directory as soon as the predecessor has exited.
 
-`quit` (used by the window's Stop and Quit) takes the server down with SIGKILL after its own deadline and says so in the response. Its deadline is longer than the server's, so the server's own exit fires first.
+`quit` (used by the window's Stop and Quit) first cancels the process generation and signals its witnessed members. It escalates remaining members to SIGKILL after its longer grace and reports that escalation; completion still requires their actual departure, not expiry of either deadline. An issued predecessor without cancellable generation membership can leave an unrecorded automatic return, so its stop remains explicitly unproven.
 
 Restart preparation reads the migration chain through readers, not through the writer. Otherwise `restart_server` would wait for that same stuck writer before even starting.

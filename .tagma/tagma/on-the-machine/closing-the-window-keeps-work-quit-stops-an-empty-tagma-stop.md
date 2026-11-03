@@ -24,6 +24,6 @@ sources:
 
 **How.** Closing the window, Quit in the menu or Dock, a separate Stop Tagma; from the terminal — `tagma quit`.
 
-**Behaviour.** On macOS, closing the last window leaves the app and server alive. Quit stops its own server only when there are no agents, terminals, commands, call recording, installation or transfer running; while working or with unknown state it only closes the app. Stop first enumerates the consequences and then ends the server and the execution host with everything it runs. A window aimed explicitly at another surface does not stop the server.
+**Behaviour.** On macOS, closing the last window leaves the app and server alive. Quit stops its own server only when there are no agents, terminals, commands, call recording, installation or transfer running; while working or with unknown state it only closes the app. Stop first enumerates the consequences, cancels an admitted handover, and then ends the server generation and the execution host with everything it runs. If an issued predecessor cannot prove the fate of its automatic return, Stop reports that Tagma may have started again and asks for another Stop rather than claim completion. A window aimed explicitly at another surface does not stop the server.
 
 **Limits.** The `quit` CLI is not a soft close of the window alone: it ends work entirely and reports a forced takedown if the server did not leave. A system logout does not hold the window with a question. The `serve` help still claims no CLI verb ends the server, although `quit` does.

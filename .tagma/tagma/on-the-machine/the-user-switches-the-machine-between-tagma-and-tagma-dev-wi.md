@@ -26,6 +26,6 @@ sources:
 
 **How.** The Tagma and Tagma Dev apps, their CLIs; `tagma switch` and a switch action on the window's waiting page.
 
-**Behaviour.** Channels have separate app identity, directories and addresses. The machine's shared entry points at the active channel. Finding another active channel, the window shows it and offers to switch; switching ends its server, agents and execution host, then raises the selected one. It can only free the place, leaving the launch to the window.
+**Behaviour.** Channels have separate app identity, directories and addresses. The machine's shared entry points at the active channel. Finding another active channel, the window shows it and offers to switch; switching ends its server, agents and execution host, then raises the selected one. It can only free the place, leaving the launch to the window. A handover is cancelled before freeing it; an unproven issued process chain refuses the switch, so the selected channel does not start on a guessed departure.
 
 **Limits.** This is switching installations on one machine, not syncing their worlds and not choosing an agent model. Plain work allows one active channel through the shared entry; an isolated trial server of its own is a separate mechanism. Switching interrupts runs, unlike a clean restart of its own server.

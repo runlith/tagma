@@ -11,4 +11,4 @@ sources:
 ---
 Selection means sign-in through Tagma, an addressed catalog request, or use of the provider, model or CLI thread. It needs no separate enable. The binary's presence, its discovery and old automatically found sign-in records are no selection; passive startup, catalogs, quotas, lists and integration installs do not start an untouched CLI.
 
-Claude Code and Codex are the exception: their default login's status is read at server start and when their login files change, and a signed-in answer is their selection.
+Claude Code and Codex are the exception: their default login's status is read at server start, when their login files change, and on window focus while they are not signed in; only a signed-in answer is their selection.
