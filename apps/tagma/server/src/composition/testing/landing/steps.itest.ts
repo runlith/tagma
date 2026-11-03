@@ -204,6 +204,20 @@ layer(Layer.merge(checkoutFixture, BunFileSystem.layer), { excludeTestServices: 
         ),
     );
   }
+  it.effect('an interrupt inside the reshape read refuses landing-cut naming its step, and nothing is committed', () =>
+    withCheckout((world) =>
+      Effect.fnUntraced(function* () {
+        yield* declared(world);
+        yield* world.wrote(MINE, [...FILE.slice(0, 4), 'const five = 5; // mine   ']);
+        const head = yield* world.run(['rev-parse', 'HEAD']);
+        const record = { ...world.changes, reshapeRead: () => Effect.interrupt };
+        const refused = yield* refusal(world, world.submitAs(MINE, { shape: (yield* steppedOver(world.store)).shape, record }));
+        expect(refused.code).toBe('landing-cut');
+        expect(refused.reason).toContain('judging the rules');
+        expect(yield* world.run(['rev-parse', 'HEAD'])).toBe(head);
+      })(),
+    ),
+  );
   it.effect('a nearby step finds its program and ancestor config before a whole-tree step reads tracked files elsewhere', () =>
     withCheckout((world) =>
       Effect.fnUntraced(function* () {

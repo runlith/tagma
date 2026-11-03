@@ -381,6 +381,7 @@ export const makeCheckout = Effect.fnUntraced(
       namedAgent,
       run,
       context,
+      changes: Context.get(landing, ChangeRecord),
       store,
       units,
       git,
