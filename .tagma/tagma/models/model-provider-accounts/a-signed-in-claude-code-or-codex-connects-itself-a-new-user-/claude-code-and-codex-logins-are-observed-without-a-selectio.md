@@ -6,7 +6,7 @@ tags: ["task"]
 fields:
   {
     "holder": "tagma:01a1a298-9069-764d-82a9-ff141f1e5bc5",
-    "status": "in_work"
+    "status": "done"
   }
 edges:
   - kind: implements
@@ -21,3 +21,4 @@ Wire contract the app half builds against. Change it only by agreement with the 
 - Birth on a signed-out account refuses `account-signed-out`, naming provider and account.
 - `observe_logins` is a new operator-only operation with no input, called by the app on window focus. It re-locates declaring CLIs not known signed in, runs one status read each, and publishes through `accounts.subscribe`.
 - The first send without a saved model saves the model it was born on as the default.
+- `AccountQuotaRow` (the CLI's own row) carries `lent: [{ provider, problem }]`, one entry per provider borrowing that login, `problem` null when the borrower can use it. The CLI's own `problem` decides signed and "Add account"; the card's native usability and reason read `lent` for the plan's provider. A change in `lent` publishes a frame.
