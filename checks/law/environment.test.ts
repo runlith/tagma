@@ -1,6 +1,9 @@
 import { expect, test } from 'bun:test';
-import programs from './programs';
-import type { EnvironmentParams } from './environment/declaration';
+import { ADAPTERS } from '@runlith/code-facts/adapters';
+import type { Tree } from '@runlith/code-facts/tree';
+import { checked } from './checks';
+import { environment as declared, type EnvironmentParams } from './environment/declaration';
+import { environment } from './environment/implementation';
 
 const params: EnvironmentParams = {
   base: '',
@@ -18,24 +21,19 @@ const params: EnvironmentParams = {
   imports: [{ specifier: '$app/navigation', instead: 'Router', allow: [] }],
 };
 
-const judge = async (files: Readonly<Record<string, string>>) => {
-  const tree = { commit: 'tree', paths: Object.keys(files), whole: false, read: async (path: string) => files[path] ?? null, facts: null };
-  return (await programs.environment({ params, tree, base: null })).tree.findings.map((one) => [
-    one.fingerprint,
-    one.line,
-    one.sites?.map((site) => site.line) ?? [],
-  ]);
+const violations = (files: Readonly<Record<string, string>>) => {
+  const tree: Tree = { has: (path) => Object.hasOwn(files, path), read: (path) => files[path]! };
+  const check = checked(declared.params, environment, params);
+  const paths = Object.keys(files).filter((path) => check.selects(path));
+  return check.read(tree, paths, ADAPTERS, { get: () => undefined, set: () => undefined }, 'change').violations;
 };
 
-test('a finding names what the file reads and the service it takes instead', async () => {
-  const tree = {
-    commit: 'tree',
-    paths: ['src/store.ts'],
-    whole: false,
-    read: async () => "import { goto } from '$app/navigation';\nexport const bridge = window.tagmaDesktop;\n",
-    facts: null,
-  };
-  expect((await programs.environment({ params, tree, base: null })).tree.findings.map(({ message, fix }) => ({ message, fix }))).toEqual([
+const judge = (files: Readonly<Record<string, string>>) =>
+  violations(files).map((one) => [one.fingerprint, one.line, one.sites?.map((site) => site.line) ?? []]);
+
+test('a finding names what the file reads and the service it takes instead', () => {
+  const files = { 'src/store.ts': "import { goto } from '$app/navigation';\nexport const bridge = window.tagmaDesktop;\n" };
+  expect(violations(files).map(({ message, fix }) => ({ message, fix }))).toEqual([
     { message: 'imports `$app/navigation` directly', fix: 'Take Router instead of importing `$app/navigation`.' },
     {
       message: 'reads `tagmaDesktop` directly',
@@ -44,9 +42,9 @@ test('a finding names what the file reads and the service it takes instead', asy
   ]);
 });
 
-test('a free read of a watched global or import refuses once per file and name, wherever the file reads it', async () => {
+test('a free read of a watched global or import refuses once per file and name, wherever the file reads it', () => {
   expect(
-    await judge({
+    judge({
       'src/Panel.svelte': [
         '<script module lang="ts">',
         "  import { goto } from '$app/navigation';",
