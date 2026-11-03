@@ -5,7 +5,7 @@ import type { Signing } from '@runlith/codesign/codesign';
 import { output } from './command.js';
 import { diskImage } from './dmg.js';
 import { packRelease } from './pipeline.js';
-import { type ReleaseRecord, replaced, type Weight, weigh } from './stage.js';
+import { BRAND, type ReleaseRecord, replaced, type Weight, weigh } from './stage.js';
 import type { FeedArchive } from '../contract/wire/feed.js';
 
 export class NotarizationRefused extends Data.TaggedError('NotarizationRefused')<{
@@ -25,7 +25,7 @@ export type Apple = {
   readonly staple: (path: string) => Effect.Effect<void, NotarizationRefused>;
   readonly assess: (app: string) => Effect.Effect<void, NotarizationRefused>;
   readonly opens: (image: string) => Effect.Effect<void, NotarizationRefused>;
-  readonly image: (app: string, image: string) => Effect.Effect<void, NotarizationRefused>;
+  readonly image: (app: string, image: string, assets?: string) => Effect.Effect<void, NotarizationRefused>;
 };
 
 const Submitted = Schema.Struct({ id: Schema.String });
@@ -111,9 +111,9 @@ const appleOf = (developer: Developer, context: Context.Context<Spawner>): Apple
       ),
     assess: (app) => provided(gatekeeper(app, ['--type', 'execute'])),
     opens: (image) => provided(gatekeeper(image, ['--type', 'open', '--context', 'context:primary-signature'])),
-    image: (app, image) =>
+    image: (app, image, assets) =>
       provided(
-        diskImage(app, image, developer.assets, basename(app).replace(/\.app$/u, ''), developer.signing).pipe(
+        diskImage(app, image, assets ?? developer.assets, basename(app).replace(/\.app$/u, ''), developer.signing).pipe(
           Effect.mapError((failure) => refused(failure)),
         ),
       ),
@@ -169,7 +169,8 @@ const sealed = Effect.fn('Notarize.seal')(function* (
       yield* apple.staple(app);
       yield* apple.assess(app);
       yield* packRelease(staging, join(staging, archiveName), application).pipe(Effect.mapError((failure) => refused(failure)));
-      yield* apple.image(app, join(staging, imageName));
+      const branded = join(cut, BRAND);
+      yield* apple.image(app, join(staging, imageName), (yield* at(branded, files.exists(branded))) ? branded : undefined);
       yield* at(archive, files.rename(join(staging, archiveName), archive));
       yield* at(image, files.rename(join(staging, imageName), image));
       yield* at(app, files.remove(app, { recursive: true, force: true }));

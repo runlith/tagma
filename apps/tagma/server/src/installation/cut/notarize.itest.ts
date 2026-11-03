@@ -121,6 +121,30 @@ it.live(
     }),
 );
 
+it.live(
+  'the disk images are made from the brand assets the cut carries, which pass to the notarized cut, and from the live assets when it carries none',
+  () =>
+    Effect.gen(function* () {
+      const branded = yield* cutAt('branded');
+      mkdirSync(join(branded, 'brand'));
+      writeFileSync(join(branded, 'brand', 'logo'), 'the logo');
+      const plain = yield* cutAt('plain');
+      const assets: (string | undefined)[] = [];
+      const notary = yield* sealingNotary({
+        ...accepting(() => Effect.void),
+        image: (app, image, given) => Effect.sync(() => (assets.push(given), writeFileSync(image, `the dmg around ${appOf(app)}`))),
+      }).pipe(Effect.provide(machine));
+
+      yield* notarizeRelease(notary, branded).pipe(Effect.provide(machine));
+      const brandedAssets = assets.splice(0);
+      yield* notarizeRelease(notary, plain).pipe(Effect.provide(machine));
+
+      expect(brandedAssets).toEqual([join(branded, 'brand'), join(branded, 'brand')]);
+      expect(readFileSync(join(branded, 'brand', 'logo'), 'utf8')).toBe('the logo');
+      expect(assets).toEqual([undefined, undefined]);
+    }),
+);
+
 it.live('a disk image Gatekeeper would not open refuses the notarization, and the cut stands unnotarized and whole', () =>
   Effect.gen(function* () {
     const out = yield* cutAt('refused');

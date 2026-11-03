@@ -22,6 +22,7 @@ import { RELEASE_LOG, ReleaseRefused } from './release.js';
 export const RELEASE_RECORD = 'release.json';
 export const MAPS = 'maps';
 export const INPUTS = 'inputs';
+export const BRAND = 'brand';
 const TRIED = 'tried';
 const NOTARIZED = 'notarized';
 const RETIRED = 'retired';
@@ -221,7 +222,7 @@ export const releasedAt = (home: string, record: ReleaseRecord): Released => ({
 export const landNotarized = Effect.fn('installation.landNotarized')(function* (out: string, from: string, record: ReleaseRecord) {
   const files = yield* FileSystem.FileSystem;
   const home = homeOf(out, record);
-  for (const part of [MAPS, INPUTS, RELEASE_LOG]) {
+  for (const part of [MAPS, INPUTS, BRAND, RELEASE_LOG]) {
     const source = join(from, part);
     if (!(yield* files.exists(source).pipe(Effect.mapError(unreadable(source))))) continue;
     yield* files.remove(join(home, part), { recursive: true, force: true }).pipe(Effect.mapError(unreadable(join(home, part))));
