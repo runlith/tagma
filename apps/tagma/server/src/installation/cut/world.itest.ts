@@ -3,6 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { LOCK_FILE } from '../../platform/contract/wire/lock.js';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { testProcesses } from '../testing/processes.js';
 import { pathToFileURL } from 'node:url';
 import { it } from '@runlith/effect-test';
 import { Effect } from 'effect';
@@ -43,6 +44,7 @@ const world: World = {
   installRoot: join(dir, 'install'),
   data: join(dir, 'data'),
   repo: dir,
+  processes: testProcesses,
 };
 const offer: FeedRelease = {
   release: '0.2.0',

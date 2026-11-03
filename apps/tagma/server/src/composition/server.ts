@@ -1,9 +1,9 @@
 import { mkdirSync, realpathSync, rmSync } from 'node:fs';
 import { totalmem } from 'node:os';
 import { basename, dirname, join, relative } from 'node:path';
-import { liveAttempt } from '../installation/closure/attempt.js';
+import { standingAttempt } from '../installation/closure/attempt.js';
 import { fileURLToPath } from 'node:url';
-import { Cause, Context, Effect, Exit, FileSystem, Layer, Result, Scope, Stream } from 'effect';
+import { Cause, Context, Deferred, Effect, Exit, FileSystem, Layer, Result, Scope, Stream } from 'effect';
 import { InstalledHarnesses } from '../threads/contract/service/harness.js';
 import type * as ProcessVitals from '@runlith/performance/ProcessVitals';
 import { ProcessPool } from '@runlith/sqlite-process/ProcessPool';
@@ -52,7 +52,7 @@ import {
   type DataDirectoryLockFailed,
   lockDataDirectory,
 } from '../platform/lock/dataDirectory.js';
-import { stopServer } from './stop.js';
+import { closingDeadline, stopServer } from './stop.js';
 import { frozenBuildsLayer, surfaceRoot } from '../installation/builds/frozen.js';
 import { FrozenBuilds } from '../installation/contract/service/builds.js';
 import { NextInstallation } from '../installation/contract/service/next.js';
@@ -91,6 +91,8 @@ import { attemptOf, startFailure } from './attempt.js';
 import { connectLaunch } from '../installation/process/launch.js';
 import { migrationsFolder, refusalDetail } from '../installation/closure/read.js';
 import { EXECUTIONS, MIGRATIONS, type Installation } from '../installation/contract/wire/manifest.js';
+import { Processes } from '@runlith/execution-host/ProcessReader';
+import { ownGeneration, ownProcessesLayer } from './children.js';
 import { runningWorld } from '../installation/setup/launcher.js';
 import { readCurrent } from '../installation/closure/current.js';
 import { serverPartsStand } from '../installation/closure/present.js';
@@ -102,8 +104,6 @@ const LOOPBACK_HOST = '127.0.0.1';
 const LOOPBACK_SIX = '::1';
 
 const SHUTDOWN_GRACE = '1 second';
-
-const SHUTDOWN_DEADLINE_MS = 60_000;
 
 const MEMORY_CEILING_SHARE = 0.5;
 
@@ -142,6 +142,9 @@ export const serve = async (build: Build): Promise<void> => {
   const dataPath = storeDirectory(storePath);
   mkdirSync(dataPath, { recursive: true });
   process.chdir(dataPath);
+  const successionScope = await Effect.runPromise(Scope.make());
+  const nativeContext = await Effect.runPromise(Scope.provide(Layer.build(ownProcessesLayer(build.cut.roots.packages)), successionScope));
+  const processReader = Context.get(nativeContext, Processes);
   const launch = connectLaunch(process.env);
   const hostLifetime: HostLifetime | undefined = launch === undefined ? undefined : 'with-parent';
   const predecessor = replaced(process.env);
@@ -152,7 +155,9 @@ export const serve = async (build: Build): Promise<void> => {
   delete process.env[HOST_REPLACE];
   const incoming = process.env[RESTART_ID];
   delete process.env[RESTART_ID];
-  const restartRecord = await Effect.runPromise(makeProcessRestart({ path: join(dataPath, RESTART_RECORD), pid: process.pid, incoming }));
+  const restarts = makeProcessRestart({ path: join(dataPath, RESTART_RECORD), pid: process.pid, incoming });
+  const restartRecord = await Effect.runPromise(restarts.pipe(Effect.provide(nativeContext)));
+  const closingSignal = closingDeadline(() => restartRecord.close());
   if (predecessor !== undefined) restartRecord.receive(predecessor);
   const observations = Layer.mergeAll(
     Layer.succeed(PhaseEvents, restartRecord.phase),
@@ -233,7 +238,7 @@ export const serve = async (build: Build): Promise<void> => {
               : `${source.revision.head}${source.revision.dirty ? '-dirty' : ''}`,
         }
       : { _tag: 'Closure', path: join(installation.root, EXECUTIONS) };
-  const attempting = installation !== undefined && liveAttempt(installations)?.to === basename(installation.root);
+  const attempting = installation !== undefined && standingAttempt(installations)?.to === basename(installation.root);
   const placedHost =
     predecessor === undefined || hostState === undefined || attempting
       ? undefined
@@ -294,11 +299,12 @@ export const serve = async (build: Build): Promise<void> => {
           `pid ${predecessor} left ${dataPath}`,
           Effect.andThen(
             Effect.sync(() => process.off('exit', withdrawn)),
-            standBy(dataPath, predecessor, notified),
+            standBy(dataPath, predecessor, notified, launch?.chained ?? true),
           ),
         );
   const stood: StoodBy = await Effect.runPromise(
     locking.pipe(
+      Effect.provide(nativeContext),
       Effect.mapError((refused): never => {
         console.error(
           `[tagma] ${refused._tag === 'SuccessorFailed' ? refused.detail : refused._tag === 'DataDirectoryConflict' ? refused.message : `the data directory ${refused.path} could not be locked: ${refused.reason}`}`,
@@ -317,11 +323,15 @@ export const serve = async (build: Build): Promise<void> => {
   }
   const attempt = await Effect.runPromise(attemptOf({ installRoot: installations, release: installation?.root, storePath }));
   const dataLock: DataDirectoryLock = stood.lock;
+  const worldCommand = join(runningWorld(installation?.root, installations), WORLD_COMMAND);
+  const processChain = stood.chain ?? (await ownGeneration(dataPath, worldCommand, launch?.chained ?? true, nativeContext));
   const releaseActive = holdJunction(
     channel,
     process.env,
-    join(runningWorld(installation?.root, installations), WORLD_COMMAND),
+    worldCommand,
     `http://${LOOPBACK_HOST}:${port}`,
+    processReader,
+    processChain?.reference,
   );
   const localScope = await Effect.runPromise(Scope.make());
   const startingScope = await Effect.runPromise(Scope.fork(localScope));
@@ -355,7 +365,7 @@ export const serve = async (build: Build): Promise<void> => {
     phase('session grants opened', grantSignerAt(join(dataPath, 'session.key')).pipe(Effect.provide(BunFileSystem.layer))),
   );
   const born: ProcessBirth = { startedAt, replacedPid: predecessor ?? null };
-  const successionScope = await Effect.runPromise(Scope.make());
+  const restartExit = await Effect.runPromise(Deferred.make<void>());
   const succession: Succession['Service'] = Context.get(
     await Effect.runPromise(
       Scope.provide(
@@ -364,7 +374,10 @@ export const serve = async (build: Build): Promise<void> => {
             installation,
             installations,
             serveLog,
-            undefined,
+            () => {
+              closingSignal('restart');
+              Deferred.doneUnsafe(restartExit, Exit.void);
+            },
             launch,
             restartRecord,
             (next) =>
@@ -390,6 +403,7 @@ export const serve = async (build: Build): Promise<void> => {
             Effect.sync(() => Context.get(tagma.executions, SuccessionSteps)),
             undefined,
             userEnvironment.handoff,
+            processChain,
           ),
         ),
         successionScope,
@@ -635,16 +649,7 @@ export const serve = async (build: Build): Promise<void> => {
 
   process.on('SIGHUP', () => process.kill(process.pid, 'SIGTERM'));
 
-  for (const signal of ['SIGINT', 'SIGTERM'] as const)
-    process.once(signal, () => {
-      restartRecord.close();
-      setTimeout(() => {
-        console.error(
-          `[tagma] pid ${process.pid} did not close within ${SHUTDOWN_DEADLINE_MS / 1000}s of ${signal}; it leaves without finishing, and SQLite keeps only what committed`,
-        );
-        process.exit(1);
-      }, SHUTDOWN_DEADLINE_MS).unref();
-    });
+  for (const signal of ['SIGINT', 'SIGTERM'] as const) process.once(signal, () => closingSignal(signal));
 
   const frozen = Layer.succeed(FrozenBuilds, Context.get(localContext, FrozenBuilds));
   const door = closing(
@@ -755,7 +760,7 @@ export const serve = async (build: Build): Promise<void> => {
   ).pipe(Layer.provide(served), Layer.provide(frozen), Layer.provide(door));
 
   BunRuntime.runMain(
-    Layer.launch(Layer.mergeAll(served, announced, logBound, remote)).pipe(
+    Effect.raceFirst(Layer.launch(Layer.mergeAll(served, announced, logBound, remote)), Deferred.await(restartExit)).pipe(
       Effect.onExit((exit) =>
         Effect.gen(function* () {
           const { runOwnersDisposed, failures } = yield* closed;
@@ -771,7 +776,7 @@ export const serve = async (build: Build): Promise<void> => {
             releaseActive();
             yield* dataLock.release;
             yield* succession.release(unclosed).pipe(Effect.orDie);
-            yield* succession.settle;
+            yield* succession.settle.pipe(Effect.orDie);
           }
           if (failures.length > 0) {
             return yield* Effect.sync(() => {

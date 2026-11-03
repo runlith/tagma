@@ -1,4 +1,4 @@
-import { existsSync, lstatSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { Effect, FileSystem, type PlatformError, Schema } from 'effect';
 import { digestOf } from '@runlith/executions/hostArtifacts';
@@ -20,6 +20,7 @@ import {
   STORE_MIGRATIONS,
 } from '../contract/wire/manifest.js';
 import type { OwnStore } from '../../platform/contract/service/ownStore.js';
+import { decodeProof, streamedProof } from './proof.js';
 
 const bundledMigrations = fileURLToPath(new URL(`../../${MIGRATIONS}`, import.meta.url));
 
@@ -81,10 +82,10 @@ const within = (root: string, resolved: string): boolean =>
 
 const malformed = (root: string, detail: string) => new InstallationInvalid({ root, reason: 'malformed', detail });
 
-export const readInstallation = Effect.fn('installation.read')(function* (root: string) {
+export const readInstallation = Effect.fn('installation.read')(function* (root: string, placed = root) {
   const files = yield* FileSystem.FileSystem;
   const text = yield* files
-    .readFileString(partPath(root, INSTALL_FILE))
+    .readFileString(partPath(placed, INSTALL_FILE))
     .pipe(
       Effect.catchTag('PlatformError', (error: PlatformError.PlatformError) =>
         Effect.fail(
@@ -94,29 +95,35 @@ export const readInstallation = Effect.fn('installation.read')(function* (root: 
         ),
       ),
     );
-  const manifest = yield* decodeManifest(text).pipe(Effect.catchTag('SchemaError', (error) => Effect.fail(malformed(root, error.message))));
+  const answer = yield* decodeProof(root, text).pipe(Effect.mapError((failure) => malformed(root, failure.message)));
+  if (answer._tag === 'Rejected') return yield* malformed(root, answer.detail);
+  if (answer._tag !== 'Decoded') return yield* Effect.die('the installation proof worker did not decode the manifest');
+  return answer.manifest;
+});
 
+export const manifestIssue = (manifest: InstallationManifest): string | undefined => {
   const seen = new Set<string>();
   const roles = new Set<InstallationRole>();
   for (const part of manifest.parts) {
-    if (!insideClosure(part.path)) {
-      return yield* Effect.fail(malformed(root, `the part ${part.path} is named outside the closure`));
-    }
-    if (seen.has(part.path)) {
-      return yield* Effect.fail(malformed(root, `the part ${part.path} is named twice`));
-    }
+    if (!insideClosure(part.path)) return `the part ${part.path} is named outside the closure`;
+    if (seen.has(part.path)) return `the part ${part.path} is named twice`;
     seen.add(part.path);
     roles.add(part.role);
   }
   for (const role of REQUIRED_ROLES) {
-    if (!roles.has(role)) {
-      return yield* Effect.fail(malformed(root, `the closure names no ${role}`));
-    }
+    if (!roles.has(role)) return `the closure names no ${role}`;
   }
   const produced = identityOf(manifest);
   if (produced !== manifest.identity.digest) {
-    return yield* Effect.fail(malformed(root, `the manifest declares ${manifest.identity.digest} and its contents produce ${produced}`));
+    return `the manifest declares ${manifest.identity.digest} and its contents produce ${produced}`;
   }
+  return undefined;
+};
+
+export const decodeInstallation = Effect.fnUntraced(function* (root: string, text: string) {
+  const manifest = yield* decodeManifest(text).pipe(Effect.catchTag('SchemaError', (error) => Effect.fail(malformed(root, error.message))));
+  const issue = manifestIssue(manifest);
+  if (issue !== undefined) return yield* malformed(root, issue);
   return manifest;
 });
 
@@ -135,7 +142,18 @@ export const verifyInstallation = Effect.fn('installation.verify')(function* (ro
       yield* proved(files, root, resolvedRoot, part);
       continue;
     }
-    if (lstatSync(partPath(root, part.path), { throwIfNoEntry: false }) !== undefined) {
+    const placed = yield* files.readLink(partPath(root, part.path)).pipe(
+      Effect.as(true),
+      Effect.catchIf(
+        (error) =>
+          error.reason._tag === 'NotFound' ||
+          error.reason._tag === 'BadArgument' ||
+          (error.reason._tag === 'Unknown' && (error.reason.cause as { readonly code?: string } | undefined)?.code === 'EINVAL'),
+        () => files.exists(partPath(root, part.path)),
+      ),
+      Effect.mapError((error) => malformed(root, `${part.path} could not be inspected: ${error.reason._tag}`)),
+    );
+    if (placed) {
       return yield* Effect.fail(malformed(root, `${part.path} stands, and this closure is placed without it`));
     }
   }
@@ -179,14 +197,16 @@ const proved = Effect.fnUntraced(function* (
   if (info.type !== 'File') return yield* Effect.fail(unreadable(`it is a ${info.type}, not a file`));
   const size = Number(info.size);
   if (size !== part.bytes) return yield* Effect.fail(mismatch(`${part.bytes} bytes`, `${size} bytes`));
-  const bytes = yield* files
-    .readFile(resolved)
-    .pipe(Effect.catchTag('PlatformError', (error) => Effect.fail(unreadable(error.reason._tag))));
-  if (bytes.length !== part.bytes) {
-    return yield* Effect.fail(mismatch(`${part.bytes} bytes`, `${bytes.length} bytes`));
+  const hashed = yield* streamedProof(files.stream(resolved, { chunkSize: 64 * 1024 })).pipe(
+    Effect.catchTags({
+      PlatformError: (error) => Effect.fail(unreadable(error.reason._tag)),
+      WorkerUnavailable: (error) => Effect.fail(unreadable(error.message)),
+    }),
+  );
+  if (hashed.bytes !== part.bytes) {
+    return yield* Effect.fail(mismatch(`${part.bytes} bytes`, `${hashed.bytes} bytes`));
   }
-  const digest = digestOf(bytes);
-  if (digest !== part.digest) return yield* Effect.fail(mismatch(part.digest, digest));
+  if (hashed.digest !== part.digest) return yield* Effect.fail(mismatch(part.digest, hashed.digest));
 });
 
 type PartEntry = { readonly relative: string; readonly kind: 'file' | 'link' };
@@ -200,7 +220,9 @@ const classify = Effect.fnUntraced(function* (
   const link = yield* files.readLink(absolute).pipe(
     Effect.as(true),
     Effect.catchIf(
-      (error) => error.reason._tag === 'Unknown' && (error.reason.cause as { readonly code?: string } | undefined)?.code === 'EINVAL',
+      (error) =>
+        error.reason._tag === 'BadArgument' ||
+        (error.reason._tag === 'Unknown' && (error.reason.cause as { readonly code?: string } | undefined)?.code === 'EINVAL'),
       () => Effect.succeed(false),
     ),
   );

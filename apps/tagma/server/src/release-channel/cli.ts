@@ -1,6 +1,6 @@
 import { existsSync, rmSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
-import { Clock, Console, Effect, Schema } from 'effect';
+import { Clock, Console, Effect, Logger, Schema } from 'effect';
 import { Argument, Command, Flag } from 'effect/cli';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { CurrentInvocation, noting, print, refuse, write } from '../platform/cli/verb.js';
@@ -9,6 +9,7 @@ import type { DirectoryHolder } from '../platform/contract/wire/lock.js';
 import { databasePath, installationRoot, launcherPath } from '../installation/paths.js';
 import { BUILD_ASKED_EVERY_MS, CURRENT } from '../installation/contract/wire/layout.js';
 import type { Installed, Installing, NextFrame, NextOffer, Then } from '../installation/contract/wire/next.js';
+import { placementSchema } from '../installation/contract/wire/placement.js';
 import { INSTALLATION_OPERATIONS } from '../installation/contract/wire/operations.js';
 import { json, machineState, serveLog, type Operating } from '../installation/cli/server.js';
 import { readStartup } from '../installation/process/record.js';
@@ -30,6 +31,7 @@ import { releasePlaces } from './places.js';
 const readStarted = Schema.decodeUnknownResult(INSTALLATION_OPERATIONS.install_next.answer);
 const readStopped = Schema.decodeUnknownResult(INSTALLATION_OPERATIONS.stop_installing.answer);
 const readChecked = Schema.decodeUnknownResult(INSTALLATION_OPERATIONS.check_for_updates.answer);
+const encodePlacement = Schema.encodeSync(Schema.fromJsonString(placementSchema));
 
 const megabytes = (bytes: number): string => `${(bytes / 1024 ** 2).toFixed(0)} MB`;
 
@@ -119,6 +121,9 @@ const followed = Effect.fnUntraced(function* (
       return refuse('update-unread', 'the server no longer answers for the update it started', [
         `${started.log} — the whole output of the update`,
       ]);
+    }
+    if (ended.placement?.status === 'held' || ended.placement?.status === 'ask') {
+      return yield* json ? print(ended, true) : Console.log(ended.detail);
     }
     if (ended.outcome !== 'landed') {
       return refuse(ended.outcome === 'stopped' ? 'update-stopped' : 'update-failed', ended.detail, [
@@ -332,7 +337,7 @@ export const installFrom = (cli: ServerCli, applications: Applications) =>
             ),
           ),
         );
-        if (o.json) return yield* write(`${JSON.stringify(answer)}\n`);
+        if (o.json) return yield* write(`${encodePlacement(answer)}\n`);
         if (answer.status === 'ask') return yield* Console.log(`${answer.said} — install-from --agreed installs it`);
         if (answer.status === 'held') {
           yield* Console.log(
@@ -344,7 +349,7 @@ export const installFrom = (cli: ServerCli, applications: Applications) =>
           `release ${answer.build} stands in ${answer.root}${answer.previous === null ? '' : `, beside ${answer.previous}`}`,
         );
         yield* Console.log(`the launcher is ${answer.launcher}; tagma release path puts it on PATH`);
-      }),
+      }).pipe(Effect.provideService(Logger.LogToStderr, true)),
   ).pipe(
     Command.withDescription('install the release an application carries: prove it, copy it, and make it the one that stands'),
     noting(`The one entry that installs a release: \`<directory>/bun <directory>/bin/cli/main.js

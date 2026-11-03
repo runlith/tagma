@@ -1,11 +1,16 @@
 import { Cause, Context, Deferred, Effect, Exit, Layer, Queue } from 'effect';
 import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { makeProcessChain } from '../process/chain.js';
+import { testProcesses } from './processes.js';
 import { connectLaunch } from '../process/launch.js';
 import { expectsRelease, replaced, serving, standBy, successionLayer } from '../process/succession.js';
 import { lockDataDirectory } from '../../platform/lock/dataDirectory.js';
 import { Succession } from '../contract/service/succession.js';
 import { STANDING_BY } from '../contract/wire/launch.js';
+import { takeActive } from '../setup/active.js';
+import { junctionDirectory } from '../contract/wire/junction.js';
+import { Processes } from '@runlith/execution-host/ProcessReader';
 
 const home = process.env.LAUNCH_TEST_HOME;
 if (home === undefined) throw new Error('LAUNCH_TEST_HOME is required');
@@ -22,19 +27,56 @@ await Effect.runPromise(
             }),
         );
       }
+      const native = yield* Layer.build(testProcesses);
       const launch = connectLaunch(process.env);
       if (launch === undefined && process.env.LAUNCH_TEST_UNSUPERVISED !== '1') return yield* Effect.die('a server launch is required');
       const predecessor = replaced(process.env);
       const notified = expectsRelease(process.env);
-      const stood = predecessor === undefined ? undefined : yield* standBy(home, predecessor, notified);
+      const stood =
+        predecessor === undefined
+          ? undefined
+          : yield* standBy(home, predecessor, notified, launch?.chained ?? true).pipe(Effect.provide(native));
       const lock = yield* Effect.acquireRelease(
         stood === undefined ? lockDataDirectory(home) : Effect.succeed(stood.lock),
         (lock) => lock.release,
       );
       if (stood?.unreleased != null) writeFileSync(join(home, `unreleased-${process.pid}`), stood.unreleased);
       if (predecessor !== undefined && process.env.LAUNCH_TEST_FAIL_AFTER_TAKE === '1') process.exit(1);
+      const chain =
+        stood?.chain ??
+        (yield* makeProcessChain(home, process.env.LAUNCH_TEST_CLI ?? null, launch?.chained ?? true).pipe(Effect.provide(native)));
+      const own = Context.get(native, Processes).identity(process.pid);
+      const active =
+        process.env.LAUNCH_TEST_CLI === undefined
+          ? undefined
+          : takeActive(junctionDirectory(process.env)!, {
+              channel: 'dev',
+              cli: process.env.LAUNCH_TEST_CLI,
+              url: 'http://127.0.0.1:0',
+              pid: process.pid,
+              birth: own._tag === 'Read' ? own.birth : undefined,
+              chain: chain?.reference,
+            });
+      if (active !== undefined && active._tag !== 'Taken') return yield* Effect.die('the fixture did not take its active lock');
+      const stopped = yield* Deferred.make<void>();
       const succession = Context.get(
-        yield* Layer.build(successionLayer(undefined, home, join(home, 'serve.log'), undefined, launch)),
+        yield* Layer.build(
+          successionLayer(
+            undefined,
+            home,
+            join(home, 'serve.log'),
+            () => {
+              Deferred.doneUnsafe(stopped, Exit.void);
+            },
+            launch,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            chain,
+          ),
+        ).pipe(Effect.provide(native)),
         Succession,
       );
       const requests = yield* Effect.acquireRelease(Queue.unbounded<PromiseWithResolvers<Response>>(), Queue.shutdown);
@@ -48,7 +90,6 @@ await Effect.runPromise(
           }),
         ),
       );
-      const stopped = yield* Deferred.make<void>();
       const door = yield* Effect.acquireRelease(
         Effect.sync(() =>
           Bun.serve({
@@ -108,7 +149,7 @@ await Effect.runPromise(
       const hangup = () => process.kill(process.pid, 'SIGTERM');
       yield* Effect.acquireRelease(
         Effect.sync(() => {
-          process.once('SIGTERM', stop);
+          process.on('SIGTERM', stop);
           process.on('SIGHUP', hangup);
         }),
         () =>
@@ -123,7 +164,12 @@ await Effect.runPromise(
       yield* serving(notified);
       yield* Deferred.await(stopped);
       door.stop(true);
+      if (predecessor === undefined && process.env.LAUNCH_TEST_HOLD_CLOSE === '1') {
+        writeFileSync(join(home, 'closing'), String(process.pid));
+        while (!existsSync(join(home, 'close'))) yield* Effect.sleep('10 millis');
+      }
       if (process.env.LAUNCH_TEST_LEAVE_UNRELEASED === '1') process.exit(1);
+      if (active?._tag === 'Taken') active.release();
       yield* lock.release;
       writeFileSync(join(home, `closed-${process.pid}`), 'closed');
       yield* succession.release(process.env.LAUNCH_TEST_RELEASE_FAILURE ?? null);

@@ -28,13 +28,13 @@ const ended = (spawned: Spawned): Extract<Start<never>, { _tag: 'Left' | 'Signal
       ? { _tag: 'Left', code: spawned.exitCode }
       : null;
 
-export const awaitStart = Effect.fn('ServerStart.awaitStart')(function* <A>(
+export const awaitStart = Effect.fn('ServerStart.awaitStart')(function* <A, R>(
   spawned: Spawned,
   probe: Effect.Effect<A | null>,
   holder: () => DirectoryHolder,
-  progress: Effect.Effect<StartupState>,
+  progress: Effect.Effect<StartupState, never, R>,
   waiting: Waiting,
-): Effect.fn.Return<Start<A>> {
+): Effect.fn.Return<Start<A>, never, R> {
   let announced: DirectoryHolder = null;
   for (;;) {
     const left = ended(spawned);
@@ -64,13 +64,13 @@ type RestartTarget<A> = {
   readonly expected: string | null;
 };
 
-export const awaitRestart = Effect.fn('ServerStart.awaitRestart')(function* <A>(
+export const awaitRestart = Effect.fn('ServerStart.awaitRestart')(function* <A, R>(
   probe: Effect.Effect<A | null>,
   holder: (() => DirectoryHolder) | null,
-  progress: Effect.Effect<StartupState>,
+  progress: Effect.Effect<StartupState, never, R>,
   target: RestartTarget<A>,
   waiting: Waiting,
-): Effect.fn.Return<Restarted<A>> {
+): Effect.fn.Return<Restarted<A>, never, R> {
   let announced: DirectoryHolder = null;
   for (;;) {
     const saved = yield* progress;
@@ -101,10 +101,10 @@ export const awaitRestart = Effect.fn('ServerStart.awaitRestart')(function* <A>(
 export const restartMismatch = (actual: string | null, expected: string | null): string | null =>
   actual === expected ? null : `came back on ${actual ?? 'a checkout'} instead of ${expected ?? 'the checkout'}`;
 
-export const requestRestart = Effect.fn('ServerStart.requestRestart')(function* (
+export const requestRestart = Effect.fn('ServerStart.requestRestart')(function* <R>(
   request: Effect.Effect<Restart, unknown>,
   before: StartupState,
-  progress: Effect.Effect<StartupState>,
+  progress: Effect.Effect<StartupState, never, R>,
   holder: (() => DirectoryHolder) | null = null,
 ) {
   return yield* request.pipe(

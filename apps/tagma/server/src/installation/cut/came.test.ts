@@ -6,6 +6,7 @@ import { cameUp } from './came.js';
 import type { BuildServer, HealthAnswer } from './port.js';
 import { CurrentInvocation } from '../../platform/cli/verb.js';
 import type { StartupState } from '../contract/wire/restart.js';
+import { testProcesses as processes } from '../testing/processes.js';
 
 const channel: Channel = {
   id: 'dev',
@@ -68,12 +69,12 @@ it.effect('a build restart that returns on its previous installation is refused 
       expect(outcome.lines.join(' ')).toContain('b0');
       expect(outcome.lines.join(' ')).toContain('b1');
     }
-  }),
+  }).pipe(Effect.provide(processes)),
 );
 
 it.effect('a server that cannot take the landed installation is to be ended by hand', () =>
   Effect.gen(function* () {
     expect((yield* cameUp(refusing('no-successor'), channel))._tag).toBe('ByHand');
     expect((yield* cameUp(refusing('successor-left'), channel))._tag).toBe('Refused');
-  }),
+  }).pipe(Effect.provide(processes)),
 );

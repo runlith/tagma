@@ -1,5 +1,6 @@
 import { join } from 'node:path';
 import { Effect } from 'effect';
+import { testProcesses } from './processes.js';
 import { build } from '../cut/build.js';
 import { runCut } from '../cut/command.js';
 import { CHANNELS } from '../contract/wire/channel.js';
@@ -26,6 +27,6 @@ export const runSourceBuild = async (root: string, args: readonly string[]): Pro
       channel: CHANNELS.dev,
       checkout: root,
       composition: Effect.die('a HEAD build evaluates its committed entry instead of the working composition'),
-    }),
+    }).pipe(Effect.provide(testProcesses)),
   );
 };

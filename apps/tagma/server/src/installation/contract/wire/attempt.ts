@@ -27,3 +27,5 @@ export const returnSchema = Schema.Struct({
 export type Return = typeof returnSchema.Type;
 
 export const ATTEMPT_STARTS = 2;
+
+export const servingSchema = Schema.Struct({ release: Schema.String });

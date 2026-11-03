@@ -275,6 +275,7 @@ export const cutRelease = Effect.fn('installation.cutRelease')(function* ({
       labels,
       scratch: tmpdir(),
       log: (line) => appendFileSync(trying.log, `\n=== trial ${name} ===\n${line}\n`),
+      processes: composition.processes,
     }).pipe(
       Effect.flatMap((trouble) =>
         trouble === null

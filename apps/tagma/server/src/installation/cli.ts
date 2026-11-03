@@ -16,7 +16,13 @@ export const installationVerbs = <User, Repo, Entry extends Refreshed>(
   };
   const server: VerbSource = async () => {
     const [verbs, port] = await Promise.all([import('./cli/server.js'), cli()]);
-    return { restart: verbs.restart(port), status: verbs.status(port), switch: verbs.switching(port), quit: verbs.quitting };
+    return {
+      restart: verbs.restart(port),
+      status: verbs.status(port),
+      switch: verbs.switching(port),
+      quit: verbs.quitting,
+      'process-state': verbs.processState,
+    };
   };
   const clients: VerbSource = async () => {
     const [verbs, port] = await Promise.all([import('./cli/clients.js'), cli()]);
@@ -38,6 +44,7 @@ export const installationVerbs = <User, Repo, Entry extends Refreshed>(
     status: server,
     switch: server,
     quit: server,
+    'process-state': server,
     transfer: carrying,
   } as const;
 };

@@ -2,7 +2,8 @@ import { afterAll, beforeEach, expect, test } from 'bun:test';
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { activeElsewhere } from './installation.js';
-import { startServer } from './server.js';
+import { closureIn, startServer } from './server.js';
+import { takeActive } from '@tagma/server/installation/setup/active';
 import { ACTIVE_FILE, holderName, junctionDirectory } from '@tagma/server/installation/contract/wire/junction';
 import { CHANNEL } from './channel.js';
 
@@ -18,7 +19,11 @@ function stood(at: string, relative: string, text: string, mode = 0o644): void {
   writeFileSync(path, text, { mode });
 }
 
-const RECORDING_RUNTIME = '#!/bin/sh\necho "argv: $*"\necho "pgid: $(ps -o pgid= -p $$ | tr -d \' \')"\n';
+const RECORDING_RUNTIME = `#!/bin/sh
+if [ "$3" = process-state ]; then exec '${process.execPath.replaceAll("'", "'\\''")}' '${new URL('../../server/src/installation/testing/processProbe.ts', import.meta.url).pathname.replaceAll("'", "'\\''")}' "$5"; fi
+echo "argv: $*"
+echo "pgid: $(ps -o pgid= -p $$ | tr -d ' ')"
+`;
 
 beforeEach(() => {
   rmSync(base, { recursive: true, force: true });
@@ -39,14 +44,17 @@ test('the switch screen names the channel running elsewhere with its agents and 
         ? Response.json({ status: 'read', machine: { server: { agents: 2 }, host: { holds: { terminals: 3 } } } })
         : new Response('', { status: 404 }),
   });
+  let release: (() => void) | undefined;
   try {
     const other = CHANNEL.id === 'dev' ? 'stable' : 'dev';
     const url = `http://127.0.0.1:${holder.port}`;
     const junction = junctionDirectory(env)!;
     const record = (pid: number) => stood(junction, ACTIVE_FILE, `${JSON.stringify({ channel: other, cli: '/nowhere', url, pid })}\n`);
 
-    record(process.pid);
-    expect(await activeElsewhere(env)).toEqual({
+    const taken = takeActive(junction, { channel: other, cli: '/nowhere', url, pid: process.pid });
+    if (taken._tag === 'Taken') release = taken.release;
+    expect(taken._tag).toBe('Taken');
+    expect(await activeElsewhere(env, closureIn(root))).toEqual({
       name: holderName({ channel: other, cli: '/nowhere', url, pid: process.pid }),
       pid: process.pid,
       url,
@@ -54,9 +62,11 @@ test('the switch screen names the channel running elsewhere with its agents and 
       terminals: 3,
     });
 
-    record(2 ** 22 + 1);
-    expect(await activeElsewhere(env)).toBeNull();
+    if (taken._tag === 'Taken') taken.release();
+    record(process.pid);
+    expect(await activeElsewhere(env, closureIn(root))).toBeNull();
   } finally {
+    release?.();
     await holder.stop(true);
   }
 });

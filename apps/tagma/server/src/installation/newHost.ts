@@ -1,7 +1,8 @@
 import { Effect, Stream } from 'effect';
 import type { MachineHost } from './contract/service/machineHost.js';
 import type { NextInstallation } from './contract/service/next.js';
-import type { HostRefusal, Succession } from './contract/service/succession.js';
+import type { Succession } from './contract/service/succession.js';
+import type { PendingRefusal } from './contract/wire/pending.js';
 import type { Installation } from './contract/wire/manifest.js';
 import type { NewHost } from './contract/wire/newHost.js';
 import type { NextFrame, NextIssue } from './contract/wire/next.js';
@@ -16,7 +17,7 @@ type Measured = { readonly key: string; readonly newHost: NewHost | undefined };
 export const waitingOf = (
   current: Installation | null,
   runs: InstallationCut | null,
-  refused: HostRefusal | null,
+  refused: PendingRefusal | null,
 ): InstallationCut | null => {
   const waits = refused?.waits ?? null;
   const held = waits === null ? null : (refused?.successor ?? null);

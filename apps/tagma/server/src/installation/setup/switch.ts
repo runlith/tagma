@@ -1,28 +1,24 @@
 import { accessSync, constants } from 'node:fs';
-import { Clock, Data, Effect, Option } from 'effect';
-import { pidAlive } from '@runlith/utils/process';
-import { ASKED_EVERY_MS } from '../contract/wire/layout.js';
+import { Clock, Data, Effect } from 'effect';
+import { Processes } from '@runlith/execution-host/ProcessReader';
+import { LockHolders } from '../contract/service/lockHolders.js';
+import { chainAt, stopChain, stopProcess } from '../process/chain.js';
+import { ACTIVE_LOCK } from '../contract/wire/junction.js';
 import { type ActiveHolder, holderName, junctionDirectory } from '../contract/wire/junction.js';
 
 export class SwitchRefused extends Data.TaggedError('SwitchRefused')<{
-  readonly code: 'channel-unnamed' | 'host-stayed';
+  readonly code: 'channel-unnamed' | 'host-stayed' | 'chain-unproven';
   readonly reason: string;
   readonly unblock: string[];
 }> {}
 
 export type Switched = { readonly from: string; readonly host: string; readonly killed: boolean };
 
-const SIGNALLED_GONE = 'ESRCH';
-
-const LEAVE_DEADLINE_MS = 90_000;
-
-const signalled = (pid: number, signal: NodeJS.Signals): Effect.Effect<void> =>
-  Effect.sync(() => {
-    try {
-      process.kill(pid, signal);
-    } catch (cause) {
-      if ((cause as NodeJS.ErrnoException).code !== SIGNALLED_GONE) throw cause;
-    }
+const chainUnproven = (name: string) => (detail: string) =>
+  new SwitchRefused({
+    code: 'chain-unproven',
+    reason: `${name} may have started again; its process chain could not be proven stopped: ${detail}`,
+    unblock: ['press Stop again to stop any Tagma that came back'],
   });
 
 const executable = (path: string): boolean => {
@@ -33,10 +29,6 @@ const executable = (path: string): boolean => {
     return false;
   }
 };
-
-const left = Effect.fnUntraced(function* (pid: number) {
-  while (pidAlive(pid)) yield* Effect.sleep(ASKED_EVERY_MS);
-});
 
 const ENDED = new Set(['ShutdownComplete']);
 
@@ -69,10 +61,20 @@ const hostEnded = Effect.fnUntraced(function* (cli: string, name: string): Effec
   return 'its execution host ended with every terminal and command it ran';
 });
 
+export const stopUnheld = Effect.fn('installation.stopUnheld')(function* (data: string, name: string) {
+  const unproven = chainUnproven(name);
+  const chain = yield* chainAt(data).pipe(Effect.mapError((failure) => unproven(failure.detail)));
+  if (chain === null) return null;
+  const stopped = yield* stopChain(chain.reference).pipe(Effect.mapError((failure) => unproven(failure.detail)));
+  if (!stopped.running) return null;
+  if (chain.cli === null) return yield* unproven('the process generation records no command for ending its execution host');
+  return { from: name, host: yield* hostEnded(chain.cli, name), killed: stopped.killed } satisfies Switched;
+});
+
 export const switchFrom = Effect.fnUntraced(function* (
   holder: ActiveHolder,
   env: NodeJS.ProcessEnv,
-): Effect.fn.Return<Switched, SwitchRefused> {
+): Effect.fn.Return<Switched, SwitchRefused, Processes | LockHolders> {
   const name = holderName(holder);
   const junction = junctionDirectory(env);
   if (holder === 'unnamed' || junction === null) {
@@ -82,11 +84,24 @@ export const switchFrom = Effect.fnUntraced(function* (
       unblock: [`quit ${name} from its window, then switch again`],
     });
   }
-  yield* signalled(holder.pid, 'SIGTERM');
-  const killed = Option.isNone(yield* Effect.timeoutOption(left(holder.pid), LEAVE_DEADLINE_MS));
-  if (killed) {
-    yield* signalled(holder.pid, 'SIGKILL');
-    yield* left(holder.pid);
+  const unproven = chainUnproven(name);
+  if (holder.chain !== undefined) {
+    const stopped = yield* stopChain(holder.chain).pipe(Effect.mapError((failure) => unproven(failure.detail)));
+    return { from: name, host: yield* hostEnded(holder.cli, name), killed: stopped.killed };
   }
-  return { from: name, host: yield* hostEnded(holder.cli, name), killed };
+  const reader = yield* Processes;
+  const current = reader.identity(holder.pid);
+  if (current._tag !== 'Read' || current.zombie || (holder.birth !== undefined && holder.birth !== current.birth)) {
+    return yield* unproven(
+      current._tag === 'Unreadable' ? current.detail : 'the recorded process has left or its PID belongs to another process',
+    );
+  }
+  if (holder.birth === undefined) {
+    const held = yield* Effect.flatMap(LockHolders, (holders) => holders.of(`${junction}/${ACTIVE_LOCK}`));
+    if (held._tag === 'Unread' || !held.pids.includes(holder.pid))
+      return yield* unproven(held._tag === 'Unread' ? held.detail : 'the recorded PID does not hold the active lock file');
+  }
+  yield* stopProcess({ pid: holder.pid, birth: current.birth }).pipe(Effect.mapError((failure) => unproven(failure.detail)));
+  yield* hostEnded(holder.cli, name);
+  return yield* unproven('this issued server does not record or cancel its automatic returns');
 });

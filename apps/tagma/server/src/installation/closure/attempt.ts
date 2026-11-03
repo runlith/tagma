@@ -1,8 +1,8 @@
-import { closeSync, fsyncSync, openSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { closeSync, existsSync, fsyncSync, openSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { Result, Schema } from 'effect';
-import { type Attempt, attemptSchema, type Return, returnSchema } from '../contract/wire/attempt.js';
-import { ATTEMPT_FILE, RETURN_FILE } from '../contract/wire/layout.js';
+import { type Attempt, attemptSchema, type Return, returnSchema, servingSchema } from '../contract/wire/attempt.js';
+import { ATTEMPT_FILE, INSTALL_FILE, RETURN_FILE, SERVED_FILE } from '../contract/wire/layout.js';
 import { absentPath } from './manifests.js';
 import { currentVersion } from './versions.js';
 
@@ -10,6 +10,8 @@ const decodeAttempt = Schema.decodeUnknownResult(Schema.fromJsonString(attemptSc
 const encodeAttempt = Schema.encodeSync(Schema.fromJsonString(attemptSchema));
 const decodeReturn = Schema.decodeUnknownResult(Schema.fromJsonString(returnSchema));
 const encodeReturn = Schema.encodeSync(Schema.fromJsonString(returnSchema));
+const decodeServed = Schema.decodeUnknownResult(Schema.fromJsonString(servingSchema));
+const encodeServed = Schema.encodeSync(Schema.fromJsonString(servingSchema));
 
 const textAt = (path: string): string | null => {
   try {
@@ -56,7 +58,7 @@ export const readAttempt = (installRoot: string): Attempt | null => recorded(joi
 export const writeAttempt = (installRoot: string, attempt: Attempt): void =>
   replaced(join(installRoot, ATTEMPT_FILE), encodeAttempt(attempt));
 
-export const openAttempt = (installRoot: string, from: string | null, to: string): void =>
+export const beginAttempt = (installRoot: string, from: string | null, to: string): void =>
   writeAttempt(installRoot, { from, to, starts: 0, copied: false, ended: null });
 
 export const passAttempt = (installRoot: string, to: string): void => {
@@ -65,13 +67,16 @@ export const passAttempt = (installRoot: string, to: string): void => {
   flushed(installRoot);
 };
 
-export const liveAttempt = (installRoot: string): Attempt | null => {
+export const stands = (attempt: Attempt, current: string | null): boolean =>
+  attempt.to === current && (attempt.ended === null || attempt.ended.data === 'unrestored');
+
+export const standingAttempt = (installRoot: string): Attempt | null => {
   const open = readAttempt(installRoot);
-  return open !== null && open.ended === null && open.to === currentVersion(installRoot) ? open : null;
+  return open !== null && stands(open, currentVersion(installRoot)) ? open : null;
 };
 
 export const attemptHolds = (installRoot: string): readonly string[] => {
-  const open = liveAttempt(installRoot);
+  const open = standingAttempt(installRoot);
   return open === null ? [] : [open.to, ...(open.from === null ? [] : [open.from])];
 };
 
@@ -84,3 +89,11 @@ export const writeReturn = (installRoot: string, left: string, to: string): void
   replaced(join(installRoot, RETURN_FILE), encodeReturn({ left, to }));
 
 export const clearReturn = (installRoot: string): void => rmSync(join(installRoot, RETURN_FILE), { force: true });
+
+export const writeServed = (installRoot: string, release: string): void =>
+  replaced(join(installRoot, SERVED_FILE), encodeServed({ release }));
+
+export const servedRelease = (installRoot: string): string | null => {
+  const served = recorded(join(installRoot, SERVED_FILE), decodeServed)?.release ?? null;
+  return served !== null && existsSync(join(installRoot, served, INSTALL_FILE)) ? served : null;
+};

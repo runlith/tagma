@@ -15,9 +15,9 @@ import {
 } from '@tagma/server/installation/contract/wire/layout';
 import { CHANNEL } from './channel.js';
 import { CHANNELS, type Channel } from '@tagma/server/installation/contract/wire/channel';
-import { holderName, junctionDirectory, readActive } from '@tagma/server/installation/contract/wire/junction';
+import { holderName } from '@tagma/server/installation/contract/wire/junction';
 import type { MachineState } from '@tagma/server/installation/contract/wire/machine';
-import { type Closure, closureIn, type Refusal, runCli, verbRefusal } from './server.js';
+import { type Closure, closureIn, localProcessState, type Refusal, runCli, verbRefusal } from './server.js';
 
 export type Holder = {
   readonly name: string;
@@ -112,15 +112,6 @@ export const transferFrom = (closure: Closure, from: Channel, log: string, env: 
 export const switchOver = (closure: Closure, log: string, env: NodeJS.ProcessEnv): Promise<string | null> =>
   settledBy(closure, ['switch', '--no-start'], log, env, 'switch');
 
-const alive = (pid: number): boolean => {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (error) {
-    return (error as NodeJS.ErrnoException).code === 'EPERM';
-  }
-};
-
 const occupancy = async (url: string): Promise<{ readonly agents: number | null; readonly terminals: number | null }> => {
   const answer = await fetch(new URL('/api/op/read_machine_state', url), {
     method: 'POST',
@@ -132,9 +123,11 @@ const occupancy = async (url: string): Promise<{ readonly agents: number | null;
   return { agents: machine?.server.agents ?? null, terminals: machine?.host.holds?.terminals ?? null };
 };
 
-export async function activeElsewhere(env: NodeJS.ProcessEnv): Promise<Holder | null> {
-  const junction = junctionDirectory(env);
-  const holder = junction === null ? null : readActive(junction);
-  if (holder === null || holder.channel === CHANNEL.id || !alive(holder.pid)) return null;
+export async function activeElsewhere(env: NodeJS.ProcessEnv, closure: Closure): Promise<Holder | null> {
+  const data = dataDirectory(CHANNEL, env);
+  if (data === null) throw new Error('the data directory of this Tagma is not named');
+  const holder = (await localProcessState(closure, data, env)).active;
+  if (holder === 'unnamed') throw new Error('another Tagma holds the active lock, but its process identity could not be proven');
+  if (holder === null || holder.channel === CHANNEL.id) return null;
   return { name: holderName(holder), pid: holder.pid, url: holder.url, ...(await occupancy(holder.url)) };
 }

@@ -13,6 +13,7 @@ import { CHANNELS } from '../contract/wire/channel.js';
 import type { Feed } from '../contract/wire/feed.js';
 import type { Composition, Publisher } from './descriptor.js';
 import { cutRelease } from './pipeline.js';
+import { testProcesses } from '../testing/processes.js';
 
 const scratch = realpathSync(mkdtempSync(join(tmpdir(), 'tagma-cut-judged-')));
 afterAll(() => rmSync(scratch, { recursive: true, force: true }));
@@ -93,6 +94,7 @@ it.live(
         publisher,
         steps: { graph: [], journal: [] },
         stores: [],
+        processes: testProcesses,
       };
       const cut = (asked: string | null) =>
         Effect.flip(

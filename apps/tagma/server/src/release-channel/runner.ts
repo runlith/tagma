@@ -30,15 +30,19 @@ import {
   type NextIssue,
   type Then,
 } from '../installation/contract/wire/next.js';
-import { CLI_ENTRY, CURRENT, RUNTIME_PART, SERVE_FLAGS } from '../installation/contract/wire/layout.js';
+import { CURRENT } from '../installation/contract/wire/layout.js';
 import { type Installation, releaseApplication } from '../installation/contract/wire/manifest.js';
-import { writeReturn } from '../installation/closure/attempt.js';
-import { currentVersion, releasesNewestFirst, swapCurrent } from '../installation/closure/versions.js';
+import { placementSchema, type Placement } from '../installation/contract/wire/placement.js';
+import { readAttempt, readReturn } from '../installation/closure/attempt.js';
+import { steppedBack } from '../installation/closure/moves.js';
+import { currentVersion, previousRelease } from '../installation/closure/versions.js';
 import { manifestAt, releaseAt } from '../installation/closure/manifests.js';
 import { downgradePreflight } from '../installation/operations/downgrade.js';
 import { holdDirectory } from '../platform/lock/directoryLease.js';
 import { Settings } from '../settings/contract/service/values.js';
-import { archiveRefusal, unpackCommand } from './archive.js';
+import { inspectArchive, unpackCommand } from './archive.js';
+import type { ArchiveFootprint } from './inspection.js';
+import { installFrom } from './installer.js';
 import { logged } from './child.js';
 import { downloaded, Undelivered, undelivered } from './delivery.js';
 import { type Feed, type ReleaseArchive, feedSchema } from '../installation/contract/wire/feed.js';
@@ -61,7 +65,6 @@ import { releaseFeed } from './settings.js';
 
 const FEED_EVERY = Duration.hours(1);
 const SPACE_MARGIN = 1.25;
-const PACKED_RATIO = 3;
 const TAIL_LINES = 20;
 const TAIL_BYTES = 8192;
 
@@ -70,6 +73,7 @@ const keptSchema = Schema.Struct({
   installing: Schema.NullOr(installingSchema),
   installed: Schema.NullOr(installedSchema),
   took: Schema.NullOr(Schema.Number),
+  placement: Schema.optional(placementSchema),
 });
 
 const decodeKept = Schema.decodeUnknownResult(Schema.fromJsonString(keptSchema));
@@ -93,6 +97,7 @@ type Delivering = {
   readonly installing: Installing;
   readonly fiber: Fiber.Fiber<string | null, Undelivered> | null;
   readonly landed: string | null;
+  readonly placement: Placement | null;
 };
 
 type Target = { readonly release: ReleaseArchive } | { readonly previous: Previous };
@@ -185,6 +190,7 @@ export const makeReleaseChannel = Effect.fnUntraced(function* (place: ChannelPla
   let readAt = stamp();
   let readFrom: string | null = null;
   let previous: Previous | null = null;
+  let history: string | null = null;
   let delivering: Delivering | null = null;
   let installed: Installed | null = null;
   let took: number | null = null;
@@ -212,6 +218,7 @@ export const makeReleaseChannel = Effect.fnUntraced(function* (place: ChannelPla
       previous,
       installing: delivering?.installing ?? null,
       installed,
+      history,
     });
 
   const shift = Effect.fnUntraced(function* () {
@@ -252,7 +259,11 @@ export const makeReleaseChannel = Effect.fnUntraced(function* (place: ChannelPla
     const at = place.places.record;
     mkdirSync(dirname(at), { recursive: true });
     const passing = `${at}.${process.pid}`;
-    writeFileSync(passing, encodeKept({ feed, installing: building, installed: last, took }), { mode: 0o600 });
+    writeFileSync(
+      passing,
+      encodeKept({ feed, installing: building, installed: last, took, placement: delivering?.placement ?? undefined }),
+      { mode: 0o600 },
+    );
     renameSync(passing, at);
   };
 
@@ -263,6 +274,7 @@ export const makeReleaseChannel = Effect.fnUntraced(function* (place: ChannelPla
     detail: string,
     tail: readonly string[],
     restartRefused: string | null = null,
+    placement: Placement | undefined = delivering?.placement ?? undefined,
   ): Installed => ({
     offer: building.offer,
     title: building.title,
@@ -276,23 +288,46 @@ export const makeReleaseChannel = Effect.fnUntraced(function* (place: ChannelPla
     tail: [...tail],
     then: building.then,
     restartRefused,
+    placement,
   });
 
-  const reconciled = (building: Installing): Installed => {
+  const reconciled = (building: Installing, placement: Placement | undefined): Installed => {
+    if (placement?.status === 'held') return endedOf(building, 'stopped', placement.build, placement.detail, [], null, placement);
+    if (placement?.status === 'ask') return endedOf(building, 'stopped', null, placement.said, [], null, placement);
     const standing = currentVersion(place.installations);
     const build = standing === null ? null : (releaseAt(place.installations, standing)?.identity.build ?? null);
-    if (build !== null && build === building.target) {
-      return endedOf(building, 'landed', build, `release ${build} became current before the server that installed it ended`, []);
+    const tried = readAttempt(place.installations);
+    if (placement?.status === 'landed' && tried !== null && tried.to === placement.version && tried.ended !== null) {
+      return endedOf(building, 'failed', null, tried.ended.detail, [], null, placement);
     }
-    return endedOf(building, 'failed', null, 'the server that ran this installation ended before it did', []);
+    if (placement?.status === 'landed' || (build !== null && build === building.target)) {
+      const landed = placement?.status === 'landed' ? placement.build : build;
+      return endedOf(
+        building,
+        'landed',
+        landed,
+        `release ${landed} became current before the server that installed it ended`,
+        [],
+        null,
+        placement,
+      );
+    }
+    return endedOf(building, 'stopped', null, 'the server ended before it confirmed the installation result', [], null, placement);
   };
 
   const measureBack: Effect.Effect<void> = Effect.promise(async () => {
-    const versions = releasesNewestFirst(place.installations);
+    const offered = choice().release?.release;
+    const tried = readAttempt(place.installations);
+    const returned = readReturn(place.installations);
+    const failed = tried !== null && tried.ended !== null && releaseAt(place.installations, tried.to)?.identity.build === offered;
+    history = failed
+      ? `This release was rolled back here: ${tried.ended?.words?.text ?? tried.ended?.detail}`
+      : returned !== null && returned.left === offered
+        ? `You previously went back from release ${returned.left}`
+        : null;
     const standing = currentVersion(place.installations);
-    const at = standing === null ? -1 : versions.indexOf(standing);
-    const version = at < 0 ? undefined : versions[at + 1];
-    if (version === undefined || standing === null) {
+    const version = previousRelease(place.installations);
+    if (version === null || standing === null) {
       previous = null;
       return;
     }
@@ -380,19 +415,20 @@ export const makeReleaseChannel = Effect.fnUntraced(function* (place: ChannelPla
     }
   });
 
-  const spaced = Effect.fnUntraced(function* (release: ReleaseArchive) {
+  const spaced = Effect.fnUntraced(function* (release: ReleaseArchive, footprint: ArchiveFootprint | null = null) {
     const staging = place.places.staging;
     mkdirSync(staging, { recursive: true });
-    const unpacked = (place.runsFrom?.manifest.parts ?? []).reduce((sum, part) => sum + part.bytes, 0);
-    const tree = (unpacked > 0 ? unpacked : release.size * PACKED_RATIO) * SPACE_MARGIN;
     const installs = standingAt(place.installations);
     const apart = statSync(installs).dev !== statSync(staging).dev;
-    const asks: ReadonlyArray<readonly [string, number]> = apart
-      ? [
-          [staging, release.size + tree],
-          [installs, tree],
-        ]
-      : [[staging, release.size + tree]];
+    const payload = (at: string) =>
+      footprint === null ? release.size : (footprint.bytes + footprint.entries * Number(statfsSync(at).bsize)) * SPACE_MARGIN;
+    const asks: ReadonlyArray<readonly [string, number]> =
+      footprint !== null && apart
+        ? [
+            [staging, payload(staging)],
+            [installs, payload(installs)],
+          ]
+        : [[staging, payload(staging)]];
     for (const [at, needed] of asks) {
       const free = freeBytes(at);
       if (free >= needed) continue;
@@ -429,9 +465,9 @@ export const makeReleaseChannel = Effect.fnUntraced(function* (place: ChannelPla
   const unpacked = Effect.fn('ReleaseChannel.unpack')(function* (release: ReleaseArchive, file: string) {
     const into = join(place.places.staging, release.release);
     yield* clean(into);
+    const footprint = yield* inspectArchive(file);
+    yield* spaced(release, footprint).pipe(Effect.mapError((failure) => undelivered(failure.reason)));
     mkdirSync(into, { recursive: true });
-    const refusal = yield* archiveRefusal(file, place.env);
-    if (refusal !== null) return yield* undelivered(`the archive of release ${release.release} is refused before it unpacks: ${refusal}`);
     yield* ran('unpack', unpackCommand(file, into));
     rmSync(file, { force: true });
     const carried = place.applications.carried(into);
@@ -442,11 +478,12 @@ export const makeReleaseChannel = Effect.fnUntraced(function* (place: ChannelPla
       Effect.provide(BunFileSystem.layer),
       Effect.mapError((failure) => undelivered(`release ${release.release} does not prove itself at ${failure.step}: ${failure.reason}`)),
     );
-    const installing = [join(carried, RUNTIME_PART), ...SERVE_FLAGS, join(carried, CLI_ENTRY), 'install-from', carried];
     yield* Effect.uninterruptible(
       Effect.gen(function* () {
-        yield* ran('install-from', installing);
-        if (delivering !== null) delivering = { ...delivering, landed: proven.identity.build };
+        const placement = yield* installFrom(carried, release, proven, place.env, place.places.log);
+        if (delivering !== null) delivering = { ...delivering, placement, landed: placement.status === 'landed' ? placement.build : null };
+        keep();
+        yield* shift();
       }),
     );
     yield* clean(into);
@@ -470,17 +507,27 @@ export const makeReleaseChannel = Effect.fnUntraced(function* (place: ChannelPla
     if (read._tag !== 'Read') return yield* undelivered(`${target.root} holds no installation manifest that reads`);
     const kept = releaseApplication(target.root, place.name);
     if (!existsSync(kept)) return yield* undelivered(`no application of release ${target.build ?? target.version} is kept at ${kept}`);
-    yield* downgradePreflight().pipe(
+    const named = target.build ?? target.version;
+    const preflight = downgradePreflight().pipe(
       Effect.provideService(DowngradeSteps, place.downgrade),
       Effect.mapError((failure) => undelivered(failure.reason)),
     );
-    yield* Effect.try({
-      try: () => {
-        writeReturn(place.installations, place.running, target.version);
-        swapCurrent(place.installations, target.version);
-      },
-      catch: (cause) => undelivered(`the step back could not make release ${target.build ?? target.version} current: ${String(cause)}`),
-    }).pipe(Effect.onError(() => place.downgrade.reopen()));
+    yield* steppedBack(place.installations, target.version, preflight, place.downgrade.reopen()).pipe(
+      Effect.mapError((failure) => {
+        switch (failure._tag) {
+          case 'Undelivered':
+            return failure;
+          case 'MoveFailed':
+            return undelivered(`the step back could not make release ${named} current: ${failure.detail}`);
+          case 'AttemptStanding':
+            return undelivered(`the update onto ${failure.attempt.to} stands open, so nothing steps back before it ends`);
+          case 'PreviousMissing':
+            return undelivered(`release ${named} is no longer the one kept before the release that stands`);
+          case 'InstallHeld':
+            return undelivered(`${failure.path}: ${failure.reason}`);
+        }
+      }),
+    );
     say(`${CURRENT} → ${target.version} (${target.build ?? 'unnamed'})`);
     if (delivering !== null) delivering = { ...delivering, landed: target.build ?? target.version };
   });
@@ -488,8 +535,8 @@ export const makeReleaseChannel = Effect.fnUntraced(function* (place: ChannelPla
   const landedOf = (building: Installing): string | null => (delivering?.installing.since === building.since ? delivering.landed : null);
 
   const restarted = Effect.fn('ReleaseChannel.restarted')(function* (building: Installing) {
-    if (building.then !== 'restart') return null;
     const landed = landedOf(building);
+    if (building.then !== 'restart' || landed === null) return null;
     yield* stepped('restart');
     keep(null, endedOf(building, 'landed', landed, landedDetail(landed, building.then), []));
     say(`=== then restart, asked by pid ${process.pid} ===`);
@@ -509,8 +556,19 @@ export const makeReleaseChannel = Effect.fnUntraced(function* (place: ChannelPla
 
   const settle = Effect.fn('ReleaseChannel.settle')(function* (building: Installing, exit: Exit.Exit<string | null, Undelivered>) {
     const landed = landedOf(building);
+    const placement = delivering?.placement;
     const ended = Exit.isSuccess(exit)
-      ? endedOf(building, 'landed', landed, landedDetail(landed, building.then), [], exit.value)
+      ? placement?.status === 'held'
+        ? endedOf(
+            building,
+            'stopped',
+            placement.build,
+            `release ${placement.build} is kept beside ${placement.standing ?? 'the current installation'}: ${placement.detail}`,
+            [],
+          )
+        : placement?.status === 'ask'
+          ? endedOf(building, 'stopped', null, placement.said, [])
+          : endedOf(building, 'landed', landed, landedDetail(landed, building.then), [], exit.value)
       : Cause.hasInterruptsOnly(exit.cause)
         ? landed === null
           ? endedOf(building, 'stopped', null, `stopped at the ${building.step} step; nothing landed`, [])
@@ -528,7 +586,10 @@ export const makeReleaseChannel = Effect.fnUntraced(function* (place: ChannelPla
   const record = readKept();
   feed = record?.feed ?? null;
   took = record?.took ?? null;
-  installed = record?.installing === null || record?.installing === undefined ? (record?.installed ?? null) : reconciled(record.installing);
+  installed =
+    record?.installing === null || record?.installing === undefined
+      ? (record?.installed ?? null)
+      : reconciled(record.installing, record.placement);
   yield* clean(place.places.staging);
   keep();
   yield* shift();
@@ -582,7 +643,7 @@ export const makeReleaseChannel = Effect.fnUntraced(function* (place: ChannelPla
           usually: back ? null : took,
         };
         shown = -1;
-        delivering = { installing, fiber: null, landed: null };
+        delivering = { installing, fiber: null, landed: null, placement: null };
         logFrom = sizeOf(place.places.log);
         say(`\n=== ${installing.title} ${installing.target} started ${installing.since} by pid ${process.pid} ===`);
         const work = 'previous' in target ? stepBack(target.previous) : deliver(target.release);

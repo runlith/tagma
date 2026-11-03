@@ -16,7 +16,7 @@ export const restartPointSchema = Schema.Struct({
 });
 export type RestartPoint = typeof restartPointSchema.Type;
 
-const processSchema = Schema.Struct({ pid: Schema.Int, source: sourceSchema });
+const processSchema = Schema.Struct({ pid: Schema.Int, birth: Schema.optional(Schema.String), source: sourceSchema });
 
 export const restartFrameSchema = Schema.Struct({
   door: restartDoorSchema,
@@ -61,6 +61,7 @@ export const handoverSchema = Schema.Struct({
   id: Schema.String,
   stage: restartStageSchema,
   underway: Schema.Boolean,
+  unmeasured: Schema.optional(Schema.String),
   failure: Schema.NullOr(Schema.String),
   stays: Schema.Boolean,
 });
@@ -94,6 +95,8 @@ export const restartStateSchema = Schema.Struct({
   issue: Schema.NullOr(restartIssueSchema),
   stage: Schema.NullOr(restartStageSchema),
   startup: Schema.NullOr(startupSchema),
+  underway: Schema.optional(Schema.Boolean),
+  unmeasured: Schema.optional(Schema.String),
 });
 export const startupStateSchema = Schema.Struct({
   startup: Schema.NullOr(startupSchema),

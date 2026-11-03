@@ -3,7 +3,8 @@ import { mkdir, mkdtemp, readdir, readFile, realpath, rm, writeFile } from 'node
 import { createServer } from 'node:net';
 import { join, relative } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { Data, Effect, Result, Schema } from 'effect';
+import { Data, Effect, type Layer, Result, Schema } from 'effect';
+import type { Processes } from '@runlith/execution-host/ProcessReader';
 import type { Channel } from '../contract/wire/channel.js';
 import { type FeedRelease, feedSchema } from '../contract/wire/feed.js';
 import { portBlock, portsEnv } from '../contract/wire/ports.js';
@@ -39,7 +40,10 @@ export type World = {
   readonly installRoot: string;
   readonly data: string;
   readonly repo: string;
+  readonly processes: Layer.Layer<Processes>;
 };
+
+const startupOf = (world: World) => Effect.runPromise(readStartup(join(world.data, RESTART_RECORD)).pipe(Effect.provide(world.processes)));
 
 export type Ran = { readonly code: number; readonly out: string; readonly err: string };
 
@@ -148,7 +152,11 @@ export const cli = (world: World, ...args: string[]): Promise<Ran> => {
   return ran(world, [join(current, RUNTIME_PART), ...SERVE_FLAGS, join(current, CLI_ENTRY), ...args]);
 };
 
-export const openWorld = async (channel: Channel, scratch: string): Promise<Result.Result<World, string>> => {
+export const openWorld = async (
+  channel: Channel,
+  scratch: string,
+  processes: Layer.Layer<Processes>,
+): Promise<Result.Result<World, string>> => {
   const port = await freePorts();
   if (port === null) return Result.fail('no four free loopback ports stand between 41000 and 49000 for a server of its own');
   const dir = await realpath(await mkdtemp(join(scratch, 'tagma-trial-')));
@@ -176,6 +184,7 @@ export const openWorld = async (channel: Channel, scratch: string): Promise<Resu
     installRoot: Result.getOrThrow(installationRootIn(channel, env)),
     data: dataDirectory(channel, env)!,
     repo,
+    processes,
   });
 };
 
@@ -212,7 +221,7 @@ export const serving = async (world: World): Promise<string | null> => {
     closeSync(sink);
   }
   for (;;) {
-    const saved = await Effect.runPromise(readStartup(join(world.data, RESTART_RECORD)));
+    const saved = await startupOf(world);
     if (saved.startup?.status === 'failed' && saved.startup.pid === server.pid)
       return `its server start failed: ${saved.startup.failure?.detail ?? saved.startup.phase}`;
     if (Result.isSuccess(await serves(world))) return null;
@@ -334,7 +343,7 @@ export const updated = async (world: World, offer: FeedRelease): Promise<string 
       const refusal = readRefused(answer);
       if (Result.isFailure(refusal) || refusal.success.code !== 'unreached')
         return `its machine state did not read while waiting for ${offer.release}: ${refusalOf(answer)}`;
-      const saved = await Effect.runPromise(readStartup(join(world.data, RESTART_RECORD)));
+      const saved = await startupOf(world);
       if (dataDirectoryLocked(world.data) === null && saved.restart?.underway !== true)
         return `no server answers at ${world.url}, no process holds ${world.data}, and no restart is under way`;
     } else {
@@ -348,11 +357,11 @@ export const updated = async (world: World, offer: FeedRelease): Promise<string 
     }
     if (id === undefined) await pause(ASKED_EVERY_MS);
   }
-  const before = await Effect.runPromise(readStartup(join(world.data, RESTART_RECORD)));
+  const before = await startupOf(world);
   const started = await op(world, 'install_next', { offer: id, then: 'restart' });
   if (Result.isFailure(readStarted(started))) return `its update to ${offer.release} did not start: ${refusalOf(started)}`;
   for (;;) {
-    const saved = await Effect.runPromise(readStartup(join(world.data, RESTART_RECORD)));
+    const saved = await startupOf(world);
     const failure =
       (saved.restart?.id !== before.restart?.id ? saved.restart?.failure : null) ??
       (saved.startup?.pid !== before.startup?.pid ? saved.startup?.failure?.detail : null);
@@ -420,14 +429,14 @@ const readable = async (world: World, terminals: Terminals): Promise<Waited> => 
     if (Result.isSuccess(phase) && phase.success.state !== null) return { ms: Date.now() - started, meanwhile };
     meanwhile = Result.isSuccess(phase) ? 'its host did not answer' : refusalOf(answer);
     if (Result.isSuccess(phase)) {
-      const saved = await Effect.runPromise(readStartup(join(world.data, RESTART_RECORD)));
+      const saved = await startupOf(world);
       if (dataDirectoryLocked(world.data) === null && saved.restart?.underway !== true) return { ms: Date.now() - started, meanwhile };
     } else {
       const refused = readRefused(answer);
       if (Result.isFailure(refused)) return { ms: Date.now() - started, meanwhile };
       const { code } = refused.success;
       if (code === 'unreached') {
-        const saved = await Effect.runPromise(readStartup(join(world.data, RESTART_RECORD)));
+        const saved = await startupOf(world);
         if (dataDirectoryLocked(world.data) === null && saved.restart?.underway !== true) return { ms: Date.now() - started, meanwhile };
       } else if (
         code !== 'terminal-host-closed' &&

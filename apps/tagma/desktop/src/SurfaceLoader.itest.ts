@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
+import { Schema } from 'effect';
 import { EventEmitter, once } from 'node:events';
 import {
   appendFileSync,
@@ -21,6 +22,8 @@ import {
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { CHANNEL } from './channel.js';
+import { identityOf } from '@tagma/server/installation/closure/read';
+import { InstallationPart, REQUIRED_ROLES } from '@tagma/server/installation/contract/wire/manifest';
 import { ATTEMPT_FILE, RELEASE_INSIDE, dataDirectory, hostBundle } from '@tagma/server/installation/contract/wire/layout';
 import { RESTART_RECORD, type RestartRecord } from '@tagma/server/installation/contract/wire/restart';
 import { LOCK_FILE } from '@tagma/server/platform/contract/wire/lock';
@@ -34,11 +37,12 @@ import type { LoaderState } from './waitingPage.js';
 const NAME = hostBundle(CHANNEL.name);
 
 const FAKE = `#!/bin/sh
-if [ "$1" = -e ]; then echo "probe $$ $0" >> "$ACTS"; exec "$REAL_BUN" "$@"; fi
+if [ "$1" = -e ]; then [ -z "$ACTS" ] || echo "probe $$ $0" >> "$ACTS"; exec '${process.execPath.replaceAll("'", "'\\''")}' "$@"; fi
 shift; shift
 verb="$1"; shift
 echo "$verb $$ $0 $*" >> "$ACTS"
 case "$verb" in
+  process-state) exec '${process.execPath.replaceAll("'", "'\\''")}' '${new URL('../../server/src/installation/testing/processProbe.ts', import.meta.url).pathname.replaceAll("'", "'\\''")}' "$2" ;;
   install-from)
     agreed=0
     for arg in "$@"; do [ "$arg" = --agreed ] && agreed=1; dir="$arg"; done
@@ -74,7 +78,17 @@ setInterval(() => {}, 1000);`;
 
 type Bearing = { readonly build: string; readonly digest: string };
 
-const bearing = (build: string): Bearing => ({ build, digest: `sha256:${createHash('sha256').update(build).digest('hex')}` });
+const platform = { os: 'darwin', arch: 'arm64' };
+const digest = Schema.decodeUnknownSync(InstallationPart.fields.digest);
+const partsOf = (build: string) =>
+  REQUIRED_ROLES.map((role) => ({
+    role,
+    path: role === 'runtime' ? 'bun' : `parts/${role}`,
+    kind: 'file' as const,
+    bytes: 1,
+    digest: digest(`sha256:${createHash('sha256').update(`${build}:${role}`).digest('hex')}`),
+  }));
+const bearing = (build: string): Bearing => ({ build, digest: identityOf({ platform, parts: partsOf(build) }) });
 
 let base = '';
 let installRoot = '';
@@ -107,8 +121,8 @@ const releaseAt = (at: string, build: string): void => {
     JSON.stringify({
       version: 1,
       identity: { digest, build },
-      platform: { os: 'darwin', arch: 'arm64' },
-      parts: [{ role: 'runtime', path: 'bun', kind: 'file', bytes: 1, digest }],
+      platform,
+      parts: partsOf(build),
     }),
   );
   written(join(at, 'bun'), FAKE, 0o755);
@@ -143,8 +157,8 @@ const lines = (): readonly string[] => (existsSync(env.ACTS!) ? readFileSync(env
 const acts = (): readonly string[] =>
   lines()
     .map((line) => line.split(' ')[0]!)
-    .filter((verb) => verb !== 'probe');
-const probes = (): number => lines().filter((line) => line.startsWith('probe ')).length;
+    .filter((verb) => verb !== 'probe' && verb !== 'process-state');
+const probes = (): number => lines().filter((line) => line.startsWith('probe ') || line.startsWith('process-state ')).length;
 
 const answering = (): void => {
   stub = Bun.serve({
@@ -698,7 +712,7 @@ const restartRecord = (pid: number, failure: string | null = null) =>
     predecessor: { pid, source: { cut: null, installation: null } },
     successor: null,
     phases: [],
-    points: [],
+    points: [{ name: 'accepted', pid, at: Date.now(), door: null, migrations: null }],
     frames: [],
     windows: [],
     failure: failure === null ? null : { at: 0, pid, detail: failure },

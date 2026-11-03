@@ -1,5 +1,6 @@
 import { join } from 'node:path';
-import { Effect, Result, Schema } from 'effect';
+import { Effect, type Layer, Result, Schema } from 'effect';
+import type { Processes } from '@runlith/execution-host/ProcessReader';
 import { knownAnswer } from '../../platform/contract/wire/operation.js';
 import { PROVIDER_OPERATIONS } from '../../providers/contract/wire/operations.js';
 import type { Channel } from '../contract/wire/channel.js';
@@ -30,6 +31,7 @@ export type Trial = {
   readonly labels: readonly Label[];
   readonly scratch: string;
   readonly log: (line: string) => void;
+  readonly processes: Layer.Layer<Processes>;
 };
 
 export const transitionTrouble = (seen: Seen, release: string, terminals: boolean): string | null => {
@@ -56,9 +58,18 @@ export const transitionTrouble = (seen: Seen, release: string, terminals: boolea
   return troubles.length === 0 ? null : troubles.join('; ');
 };
 
-export const trialStart = ({ channel, archive, offer, predecessor, labels, scratch, log }: Trial): Effect.Effect<string | null> =>
+export const trialStart = ({
+  channel,
+  archive,
+  offer,
+  predecessor,
+  labels,
+  scratch,
+  log,
+  processes,
+}: Trial): Effect.Effect<string | null> =>
   Effect.promise(async (): Promise<string | null> => {
-    const opened = await openWorld(channel, scratch);
+    const opened = await openWorld(channel, scratch, processes);
     if (Result.isFailure(opened)) return opened.failure;
     const world = opened.success;
     try {

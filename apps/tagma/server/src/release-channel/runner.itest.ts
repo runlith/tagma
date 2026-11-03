@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, readlinkSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, readlinkSync, rmSync, writeFileSync } from 'node:fs';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -11,8 +11,9 @@ import { FetchHttpClient } from 'effect/http';
 import { NextInstallation } from '../installation/contract/service/next.js';
 import type { DowngradeSteps } from '../installation/contract/service/steps.js';
 import type { NextFrame } from '../installation/contract/wire/next.js';
+import type { InstallationPlatform } from '../installation/contract/wire/manifest.js';
 import { releaseAt } from '../installation/closure/manifests.js';
-import { readReturn } from '../installation/closure/attempt.js';
+import { readReturn, writeAttempt } from '../installation/closure/attempt.js';
 import type { SettingKey } from '../platform/contract/wire/setting.js';
 import { Settings } from '../settings/contract/service/values.js';
 import type { Feed } from '../installation/contract/wire/feed.js';
@@ -159,15 +160,19 @@ const setup = Effect.fnUntraced(function* (_params: {}, directory: string) {
     platforms: { [platformKey]: { archive, sha256, size: packed.size } },
     irreversible,
     stores: { 'machine-store': [], 'host-store': [], graph: [], journal: [] },
-    changes: [],
+    changes: irreversible ? [{ store: 'graph' as const, release }] : [],
   });
 
-  const packed = Effect.fnUntraced(function* (build: string, irreversible?: Parameters<typeof syntheticReleaseEffect>[2]) {
+  const packed = Effect.fnUntraced(function* (
+    build: string,
+    irreversible?: Parameters<typeof syntheticReleaseEffect>[2],
+    platform: InstallationPlatform = native.platform,
+  ) {
     const bundle = join(home, `unpacked-${build}`, 'Tagma.app');
-    yield* syntheticReleaseEffect(bundle, build, irreversible, native);
+    yield* syntheticReleaseEffect(bundle, build, irreversible, { ...native, platform });
     const pack = packRelease(bundle, join(home, `${build}.tar.gz`));
     archives.set(`/archive/${build}.tar.gz`, pack.file);
-    return pack;
+    return { ...pack, bundle };
   });
 
   yield* syntheticReleaseEffect(join(home, 'unpacked-0.1.0', 'Tagma.app'), '0.1.0', undefined, {
@@ -442,7 +447,7 @@ layer(world(releaseWorld, {}).pipe(Layer.provideMerge(BunFileSystem.layer)), { e
           }
           expect(buildOf(standing())).toBe('0.4.0');
           expect(existsSync(join(root, serving))).toBe(true);
-          expect(versionOf('0.1.0')).toBeNull();
+          expect([versionOf('0.1.0'), versionOf('0.3.0')]).toEqual([null, null]);
         });
 
         yield* Effect.gen(function* () {
@@ -471,8 +476,8 @@ layer(world(releaseWorld, {}).pipe(Layer.provideMerge(BunFileSystem.layer)), { e
               return yield* ended(next, installing.since);
             }),
           );
-          expect(back.installed).toMatchObject({ outcome: 'landed', build: '0.3.0', then: 'restart' });
-          expect(buildOf(standing())).toBe('0.3.0');
+          expect(back.installed).toMatchObject({ outcome: 'landed', build: '0.2.0', then: 'restart' });
+          expect(buildOf(standing())).toBe('0.2.0');
           expect(readReturn(root)).toEqual({ left: '0.4.0', to: standing() });
           expect(queue).toMatchObject({ closed: 2, reopened: 1 });
           expect(restarts.at(-1)).toBe('0.4.0');
@@ -557,6 +562,142 @@ layer(world(releaseWorld, {}).pipe(Layer.provideMerge(BunFileSystem.layer)), { e
           );
           expect(seen.before.update).toBeNull();
           expect(seen.checked.update).toBe('0.6.0');
+        });
+
+        yield* Effect.gen(function* () {
+          const world = yield* World;
+          const { packed, releaseOf, standing, channel, placed, until, ended, restarts, places } = world;
+          const files = yield* FileSystem.FileSystem;
+          let interrupted: string | null = null;
+          const storage: FileSystem.FileSystem = {
+            ...files,
+            remove: Effect.fnUntraced(function* (path, options) {
+              if (path === join(places.staging, '0.8.0') && existsSync(path)) interrupted = readFileSync(places.record, 'utf8');
+              yield* files.remove(path, options);
+            }),
+          };
+          const before = standing();
+          const asked = restarts.length;
+          const archive = yield* packed('0.8.0');
+          world.feed = { releases: [releaseOf('0.8.0', archive, false)] };
+          const place = placed('0.5.0', before);
+          const held = yield* channel(
+            { ...place, env: { ...place.env, TAGMA_TEST_HOST_REFUSAL: 'the standing host cannot accept this bundle' } },
+            (next) =>
+              Effect.gen(function* () {
+                yield* until(next, (frame) => frame.offers[0]?.id === '0.8.0');
+                const { installing } = yield* next.install('0.8.0', 'restart', null);
+                return yield* ended(next, installing.since);
+              }),
+            storage,
+          );
+          expect(held.installed).toMatchObject({ outcome: 'stopped', placement: { status: 'held', build: '0.8.0' } });
+          expect(standing()).toBe(before);
+          expect(restarts.length).toBe(asked);
+          const pending = held.installed?.placement;
+          if (pending?.status !== 'held') return yield* Effect.die('the fixture needs its held placement');
+          const reason = 'the release could not open this data format';
+          writeAttempt(world.root, {
+            from: before,
+            to: pending.version,
+            starts: 1,
+            copied: true,
+            ended: { detail: reason, data: 'restored' },
+          });
+          const retried = yield* channel(
+            { ...place, env: { ...place.env, TAGMA_TEST_HOST_REFUSAL: 'the standing host cannot accept this bundle' } },
+            (next) =>
+              Effect.gen(function* () {
+                const informed = yield* until(next, (frame) => frame.readFrom !== null);
+                expect(informed.offers[0]?.detail).toContain(reason);
+                const { installing } = yield* next.install('0.8.0', 'restart', null);
+                return yield* ended(next, installing.since);
+              }),
+            storage,
+          );
+          expect(retried.installed).toMatchObject({ outcome: 'stopped', placement: { status: 'held', build: '0.8.0' } });
+          expect(interrupted).not.toBeNull();
+          writeFileSync(places.record, interrupted!);
+          const reopened = yield* channel(place, (next) => next.reading);
+          expect(reopened.installed).toMatchObject({
+            since: retried.installed?.since,
+            outcome: 'stopped',
+            placement: { status: 'held', build: '0.8.0' },
+          });
+          expect(standing()).toBe(before);
+          expect(restarts.length).toBe(asked);
+        });
+
+        yield* Effect.gen(function* () {
+          const world = yield* World;
+          const { packed, releaseOf, standing, channel, placed, until, ended, places, home } = world;
+          const before = standing();
+          const witness = join(home, 'installer-entered');
+          const variants = [
+            { offered: '0.9.0', build: '0.8.1', platform: world.platform, changes: undefined },
+            {
+              offered: '0.10.0',
+              build: '0.10.0',
+              platform: { ...world.platform, arch: world.platform.arch === 'arm64' ? 'x64' : 'arm64' },
+              changes: undefined,
+            },
+            { offered: '0.11.0', build: '0.11.0', platform: world.platform, changes: [{ store: 'graph' as const, release: '0.11.0' }] },
+          ];
+          for (const variant of variants) {
+            const archive = yield* packed(variant.build, variant.changes, variant.platform);
+            world.feed = { releases: [releaseOf(variant.offered, archive, false, `${world.url}/archive/${variant.build}.tar.gz`)] };
+            const place = placed('0.5.0', before);
+            const refused = yield* channel({ ...place, env: { ...place.env, TAGMA_TEST_INSTALL_ENTRY: witness } }, (next) =>
+              Effect.gen(function* () {
+                yield* until(next, (frame) => frame.offers[0]?.id === variant.offered);
+                const { installing } = yield* next.install(variant.offered, null, null);
+                return yield* ended(next, installing.since);
+              }),
+            );
+            expect(refused.installed?.outcome).toBe('failed');
+            expect(standing()).toBe(before);
+            expect(existsSync(witness)).toBe(false);
+            expect(existsSync(places.staging)).toBe(false);
+          }
+          const changes = [{ store: 'graph' as const, release: '0.11.0' }];
+          const archive = yield* packed('0.12.0', changes);
+          world.feed = { releases: [{ ...releaseOf('0.12.0', archive, false), changes }] };
+          const accepted = yield* channel(placed('0.5.0', before), (next) =>
+            Effect.gen(function* () {
+              const offered = yield* until(next, (frame) => frame.offers[0]?.id === '0.12.0');
+              expect(offered.offers[0]?.irreversible).toBe(true);
+              const { installing } = yield* next.install('0.12.0', null, null);
+              return yield* ended(next, installing.since);
+            }),
+          );
+          expect(accepted.installed).toMatchObject({ outcome: 'landed', build: '0.12.0' });
+          expect(world.buildOf(standing())).toBe('0.12.0');
+          const extra = yield* packed('0.12.1');
+          const unused = yield* installRelease(
+            carriedIn(extra.bundle),
+            { installRoot: world.root, launcher: join(home, '.tagma/bin/tagma'), name: CHANNELS.stable.name },
+            trustedApplications,
+            new Date(yield* Clock.currentTimeMillis),
+            false,
+            () => Effect.succeed({ _tag: 'Refuses', detail: 'this version was kept without becoming current' }),
+          );
+          expect(unused.status).toBe('held');
+          const nextArchive = yield* packed('0.13.0');
+          world.feed = { releases: [releaseOf('0.13.0', nextArchive, false)] };
+          const warning = join(home, 'prune-refused');
+          const cliPlace = placed('0.12.0', standing());
+          const warned = yield* channel(
+            { ...cliPlace, env: { ...cliPlace.env, TAGMA_TEST_CLI_JSON: '1', TAGMA_TEST_PRUNE_ENTRY: warning } },
+            (next) =>
+              Effect.gen(function* () {
+                yield* until(next, (frame) => frame.offers[0]?.id === '0.13.0');
+                const { installing } = yield* next.install('0.13.0', 'restart', null);
+                return yield* ended(next, installing.since);
+              }),
+          );
+          expect(warned.installed).toMatchObject({ outcome: 'landed', build: '0.13.0', placement: { status: 'landed' } });
+          expect(existsSync(warning)).toBe(true);
+          expect(world.buildOf(standing())).toBe('0.13.0');
         });
       }),
   );

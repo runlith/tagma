@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { it } from '@runlith/effect-test';
+import { testProcesses } from '../testing/processes.js';
 import { Clock, Effect } from 'effect';
 import { RESTART_RECORD } from '../contract/wire/restart.js';
 import { makeProcessRestart, readStartup } from './record.js';
@@ -77,5 +78,5 @@ it.live('a persisted startup failure ends the CLI start wait with its recorded c
       () => Effect.void,
     );
     expect(outcome).toEqual({ _tag: 'Failed', detail: 'migration refused' });
-  }),
+  }).pipe(Effect.provide(testProcesses)),
 );

@@ -1,8 +1,9 @@
 import { expect } from 'bun:test';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { it } from '@runlith/effect-test';
-import { Effect, FileSystem, Schema } from 'effect';
+import { Effect, FileSystem, Layer, Schema } from 'effect';
+import { serverProcessesLayer } from '../children.js';
 import { readStartup } from '../../installation/process/record.js';
 import { startupStateSchema } from '../../installation/contract/wire/restart.js';
 
@@ -72,5 +73,12 @@ it.live('an occupied local port leaves a failed startup that status reads after 
       Schema.fromJsonString(Schema.Struct({ ready: Schema.Literal(false), ...startupStateSchema.fields })),
     )(answer.out);
     expect(decoded).toEqual({ ready: false, ...state });
-  }).pipe(Effect.provide(BunFileSystem.layer)),
+  }).pipe(
+    Effect.provide(
+      Layer.merge(
+        BunFileSystem.layer,
+        serverProcessesLayer(resolve(import.meta.dir, '../../../../../..', 'packages/execution-host'), undefined),
+      ),
+    ),
+  ),
 );

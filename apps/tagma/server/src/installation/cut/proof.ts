@@ -5,7 +5,7 @@ import { keptComments } from '@runlith/bundle/bundle';
 import { developerMarks } from '@runlith/tagma/adapter/host-modules';
 import { entryPath, entryRefusal, EXECUTIONS_RUNTIME } from '../contract/wire/archive.js';
 import { INSTALL_FILE } from '../contract/wire/layout.js';
-import { type EntrySink, type TarEntry, walkTarball } from './tarball.js';
+import { type EntrySink, type TarEntry, walkTarball } from '../archive/tarball.js';
 
 export type Label = { readonly text: string; readonly by: string };
 

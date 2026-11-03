@@ -18,8 +18,10 @@ import { readInstallation, refusalDetail, verifyInstallation } from '../closure/
 import type { LauncherWritten } from '../setup/launcher.js';
 import type { BuildServer } from './port.js';
 import type { Composition } from './descriptor.js';
-import { releaseInstallation, stepBack } from './release.js';
+import { releaseInstallation } from './release.js';
+import { steppedBack } from '../closure/moves.js';
 import { buildHead, type BuildAttribution } from './source.js';
+import type { Processes } from '@runlith/execution-host/ProcessReader';
 
 const spawning = BunChildProcessSpawner.layer.pipe(Layer.provide(Layer.mergeAll(BunFileSystem.layer, BunPath.layer)));
 
@@ -109,16 +111,29 @@ const back = Effect.fnUntraced(function* (api: BuildServer, channel: Channel, js
       else downgrade.push(...answer.lines);
     }),
   );
-  const stepped = yield* Effect.result(stepBack(installationRoot(channel), prepared));
+  const root = installationRoot(channel);
+  const stepped = yield* Effect.result(steppedBack(root, null, prepared, Effect.void));
   if (stepped._tag === 'Failure') {
-    return refuse(
-      json,
-      'no-previous',
-      stepped.failure.standing === null
-        ? `nothing is installed at ${stepped.failure.root}`
-        : `${stepped.failure.standing} is the oldest closure kept at ${stepped.failure.root}, and there is none below it`,
-      [`${BUILD_COMMAND} — build this checkout into an installation and make it the one that stands`],
-    );
+    const failure = stepped.failure;
+    switch (failure._tag) {
+      case 'PreviousMissing':
+        return refuse(
+          json,
+          'no-previous',
+          failure.standing === null
+            ? `nothing is installed at ${failure.root}`
+            : `${failure.standing} is the oldest closure kept at ${failure.root}, and there is none below it`,
+          [`${BUILD_COMMAND} — build this checkout into an installation and make it the one that stands`],
+        );
+      case 'AttemptStanding':
+        return refuse(json, 'attempt-open', `the update onto ${failure.attempt.to} stands open, so nothing steps back before it ends`, [
+          'start the server of current: it finishes the update or rolls it back',
+        ]);
+      case 'MoveFailed':
+        return refuse(json, 'back-failed', `${failure.step}: ${failure.detail}`, [`${BUILD_COMMAND} --back — try again`]);
+      case 'InstallHeld':
+        return refuse(json, 'back-failed', `${failure.path} could not be held: ${failure.reason}`, [`${BUILD_COMMAND} --back — try again`]);
+    }
   }
   const named = yield* Effect.result(readInstallation(stepped.success.root)).pipe(Effect.provide(BunFileSystem.layer));
   const build = named._tag === 'Success' ? named.success.identity.build : null;
@@ -228,7 +243,7 @@ export const build = (
   given: readonly string[],
   recipe: BuildRecipe,
   attribution: BuildAttribution | undefined = undefined,
-): Effect.Effect<void> => {
+): Effect.Effect<void, never, Processes> => {
   const originAt = given.indexOf('--origin');
   const originCheckout = originAt < 0 ? undefined : given[originAt + 1];
   if (originAt >= 0 && (originCheckout === undefined || originCheckout.startsWith('--'))) {

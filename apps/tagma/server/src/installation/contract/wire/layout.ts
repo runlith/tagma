@@ -30,6 +30,7 @@ export const AUDIO_HELPER = 'Tagma Audio';
 export const CURRENT = 'current';
 export const ATTEMPT_FILE = 'attempt.json';
 export const RETURN_FILE = 'returned.json';
+export const SERVED_FILE = 'served.json';
 export const INSTALL_LOCK = 'install.lock';
 
 export const WORLD = 'world';

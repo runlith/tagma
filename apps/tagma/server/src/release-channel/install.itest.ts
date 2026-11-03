@@ -1,15 +1,16 @@
-import { copyFileSync, existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect } from 'bun:test';
 import { it } from '@runlith/effect-test';
 import { Clock, Context, Effect, FileSystem, Layer } from 'effect';
+import { arrive, enterTrial } from '../installation/process/trial.js';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { passAttempt, readAttempt, writeAttempt, writeReturn } from '../installation/closure/attempt.js';
 import { ATTEMPT_OPEN } from '../installation/contract/wire/attempt.js';
 import { releaseAt } from '../installation/closure/manifests.js';
 import { swapCurrent } from '../installation/closure/versions.js';
 import { EXECUTIONS_RUNTIME } from '../installation/contract/wire/archive.js';
-import { type InstallPlace, installRelease } from './install.js';
+import { type InstallPlace, installRelease, type Weigh } from './install.js';
 import { carriedIn, serverless, syntheticReleaseEffect, trustedApplications } from './testing/release.js';
 
 class World extends Context.Service<World, { readonly home: string; readonly root: string; readonly place: InstallPlace }>()(
@@ -145,7 +146,7 @@ describe('install-from', () => {
   );
 
   it.live(
-    'an update its release has started and not finished refuses another install; one not started yet is replaced, still going back to the release before it',
+    'an update its release has started and not finished refuses another install; one not started yet is replaced, still going back to the release before it, which alone stays beside',
     () =>
       Effect.gen(function* () {
         const { root } = yield* World;
@@ -161,11 +162,11 @@ describe('install-from', () => {
         writeAttempt(root, { ...readAttempt(root)!, starts: 0 });
         const replaced = yield* landed(six);
         expect(readAttempt(root)).toMatchObject({ from, to: replaced.version, starts: 0, ended: null });
-        expect(yield* versions()).toEqual(expect.arrayContaining([from, five.version, replaced.version]));
+        expect((yield* versions()).toSorted()).toEqual([from, replaced.version].toSorted());
       }).pipe(Effect.provide(world)),
   );
 
-  it.live('two installs at once land one after the other, and neither removes the release the other made current', () =>
+  it.live('two installs at once land one after the other, both moving from the release that served, and leave no copy half made', () =>
     Effect.gen(function* () {
       const { root } = yield* World;
       const { version } = yield* landed(yield* built('six', '0.6.0'));
@@ -175,9 +176,76 @@ describe('install-from', () => {
       const current = yield* standing();
       const last = both.find((one) => one.version === current)!;
       const first = both.find((one) => one !== last)!;
-      expect(last.previous).toBe(first.version);
-      expect(yield* versions()).toEqual(expect.arrayContaining([first.version, last.version]));
+      expect([first.previous, last.previous, readAttempt(root)?.from]).toEqual([version, version, version]);
+      expect((yield* versions()).toSorted()).toEqual([version, last.version].toSorted());
       expect(readdirSync(root).filter((name) => name.endsWith('.incoming'))).toEqual([]);
+    }).pipe(Effect.provide(world)),
+  );
+
+  it.live(
+    'an update whose data did not come back still stands: a newer release refuses to install over it, and the release before it stays',
+    () =>
+      Effect.gen(function* () {
+        const { root } = yield* World;
+        const { version: from } = yield* landed(yield* built('one', '0.1.0'));
+        passAttempt(root, from);
+        const two = yield* landed(yield* built('two', '0.2.0'));
+        const unrestored = {
+          from,
+          to: two.version,
+          starts: 2,
+          copied: true,
+          ended: { detail: 'the migration failed', data: 'unrestored' as const },
+        };
+        writeAttempt(root, unrestored);
+        const three = yield* offered(yield* built('three', '0.3.0'));
+        expect(three._tag === 'Failure' ? three.failure.code : 'installed').toBe(ATTEMPT_OPEN);
+        expect([yield* standing(), readAttempt(root)]).toEqual([two.version, unrestored]);
+        expect(yield* versions()).toEqual(expect.arrayContaining([from, two.version]));
+      }).pipe(Effect.provide(world)),
+  );
+
+  it.live(
+    'a start of the release an install would replace, arriving while the install asks the running server, enters, and the install then refuses rather than replace the update that began',
+    () =>
+      Effect.gen(function* () {
+        const { home, root, place } = yield* World;
+        const { version: from } = yield* landed(yield* built('four', '0.4.0'));
+        passAttempt(root, from);
+        const five = yield* landed(yield* built('five', '0.5.0'));
+        const data = join(home, '.tagma');
+        mkdirSync(data, { recursive: true });
+        const starting = { installRoot: root, release: join(root, five.version), files: [join(data, 'tagma.sqlite')], stores: null };
+        let arrived: string | null = null;
+        const asked: Weigh = () =>
+          Effect.map(arrive(starting).pipe(Effect.orDie), (verdict) => {
+            arrived = verdict;
+            return { _tag: 'Unasked', detail: 'the start arrived while the server was asked' } as const;
+          });
+        const six = yield* built('six', '0.6.0');
+        const refused = yield* Effect.flip(
+          installRelease(carriedIn(six), place, trustedApplications, new Date(yield* Clock.currentTimeMillis), false, asked),
+        );
+        expect([refused.code, arrived, yield* standing()]).toEqual([ATTEMPT_OPEN, 'serve', five.version]);
+        expect(readAttempt(root)).toMatchObject({ from, to: five.version, starts: 1 });
+      }).pipe(Effect.provide(world)),
+  );
+
+  it.live('an update moves from the release whose data a start opened last, even one that no longer stands', () =>
+    Effect.gen(function* () {
+      const { home, root } = yield* World;
+      const one = yield* landed(yield* built('one', '0.1.0'));
+      passAttempt(root, one.version);
+      const two = yield* landed(yield* built('two', '0.2.0'));
+      passAttempt(root, two.version);
+      swapCurrent(root, one.version);
+      const data = join(home, '.tagma');
+      mkdirSync(data, { recursive: true });
+      const serving = { installRoot: root, release: join(root, two.version), files: [join(data, 'tagma.sqlite')], stores: null };
+      expect(yield* enterTrial(serving).pipe(Effect.orDie)).toBeNull();
+
+      const three = yield* landed(yield* built('three', '0.3.0'));
+      expect([readAttempt(root)?.from, three.previous]).toEqual([two.version, two.version]);
     }).pipe(Effect.provide(world)),
   );
 });

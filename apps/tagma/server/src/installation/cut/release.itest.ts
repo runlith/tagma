@@ -18,11 +18,12 @@ import * as BunPath from '@effect/platform-bun/BunPath';
 import { it } from '@runlith/effect-test';
 import { Effect, Layer } from 'effect';
 import { gitLayer } from '@runlith/git/Git';
-import { SURFACE_INDEX, CLI_ENTRY, RUNTIME_PART } from '../contract/wire/layout.js';
+import { SURFACE_INDEX, CLI_ENTRY, INSTALL_LOCK, RUNTIME_PART } from '../contract/wire/layout.js';
 import type { Applications } from '../contract/service/applications.js';
 import { CHANNELS } from '../contract/wire/channel.js';
 import { SERVER_ENTRY, SURFACE } from '../contract/wire/manifest.js';
-import { RELEASE_LOG, releaseInstallation, stepBack } from './release.js';
+import { RELEASE_LOG, releaseInstallation } from './release.js';
+import { testProcesses } from '../testing/processes.js';
 
 const treed = Effect.acquireRelease(
   Effect.sync(() => realpathSync(mkdtempSync('/tmp/tagma-release-'))),
@@ -112,6 +113,7 @@ const refusalOf = (where: ReturnType<typeof checkout>) =>
       publisher: null,
       steps: { graph: [], journal: [] },
       stores: [],
+      processes: testProcesses,
     }),
   ).pipe(Effect.provide(machine));
 
@@ -131,7 +133,7 @@ it.live(
       expect(refusal.log).toBe(join(where.install, RELEASE_LOG));
       const log = readFileSync(refusal.log, 'utf8');
       expect(log).toContain('=== surface ===');
-      expect(readdirSync(where.install).sort()).toEqual(['20260101T000000000Z', 'current', RELEASE_LOG]);
+      expect(readdirSync(where.install).sort()).toEqual(['20260101T000000000Z', 'current', INSTALL_LOCK, RELEASE_LOG].sort());
       expect(readdirSync(join(where.source, '../app/.svelte-kit'))).toEqual([]);
     }),
 );
@@ -190,33 +192,5 @@ it.live('a CLI bundle that would have swallowed the server refuses instead of la
     expect(refusal.step).toBe('program');
     expect(refusal.detail).toContain('../server/http.js');
     expect(readlinkSync(join(where.install, 'current'))).toBe('20260101T000000000Z');
-  }),
-);
-
-const versions = (tree: string, name: string, standing: string, ...held: readonly string[]): string => {
-  const root = join(tree, name, 'install');
-  for (const version of held) wrote(join(root, version, 'install.json'), '{}\n');
-  symlinkSync(standing, join(root, 'current'));
-  return root;
-};
-
-it.live('stepping back lands on the version below the standing one, and refuses from the oldest kept', () =>
-  Effect.gen(function* () {
-    const root = versions(yield* treed, 'stepping', '20260102T000000000Z', '20260101T000000000Z', '20260102T000000000Z');
-    const stepped = yield* stepBack(root);
-    expect(stepped.version).toBe('20260101T000000000Z');
-    expect(stepped.from).toBe('20260102T000000000Z');
-    expect(readlinkSync(join(root, 'current'))).toBe('20260101T000000000Z');
-    yield* Effect.flip(stepBack(root));
-    expect(readlinkSync(join(root, 'current'))).toBe('20260101T000000000Z');
-  }),
-);
-
-it.live('stepping back over an installation root with no link at all names no standing version', () =>
-  Effect.gen(function* () {
-    const root = join(yield* treed, 'nothing-installed', 'install');
-    mkdirSync(root, { recursive: true });
-    const refused = yield* Effect.flip(stepBack(root));
-    expect(refused.standing).toBeNull();
   }),
 );

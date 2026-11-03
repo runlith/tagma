@@ -27,7 +27,7 @@ const STAGED = /^\..+\.incoming$/u;
 export const stagedVersions = (root: string): readonly string[] =>
   existsSync(root) ? readdirSync(root).filter((entry) => STAGED.test(entry)) : [];
 
-const stamped = (at: Date): string => at.toISOString().replace(/[-:.]/g, '');
+export const stamped = (at: Date): string => at.toISOString().replace(/[-:.]/g, '');
 
 export function claimStaged(root: string, at: Date): string {
   mkdirSync(root, { recursive: true });
@@ -57,6 +57,14 @@ export function currentVersion(root: string): string | null {
   } catch {
     return null;
   }
+}
+
+export function previousRelease(root: string): string | null {
+  const standing = currentVersion(root);
+  if (standing === null) return null;
+  const versions = releasesNewestFirst(root);
+  const at = versions.indexOf(standing);
+  return at < 0 ? null : (versions[at + 1] ?? null);
 }
 
 export function readCurrentFile(root: string, file: string): string | null {

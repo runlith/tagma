@@ -17,7 +17,7 @@ import {
   BUILD_WORKTREE_ENV,
   revisionLabel,
 } from '../installation/contract/wire/layout.js';
-import { currentVersion, releasesNewestFirst } from '../installation/closure/versions.js';
+import { previousRelease } from '../installation/closure/versions.js';
 import { declaredSubmodules, SUBMODULE_PATHS } from '../installation/cut/source.js';
 import { type InstallRefused, NextInstallation, type StopRefused } from '../installation/contract/service/next.js';
 import { type InstallRefusal, installRefusalSchema, type NextFrame } from '../installation/contract/wire/next.js';
@@ -130,13 +130,8 @@ const tailOf = (path: string, from: number, lines: number): string[] => {
   }
 };
 
-const previousOf = (installations: string | undefined): string | null => {
-  if (installations === undefined) return null;
-  const standing = currentVersion(installations);
-  const versions = releasesNewestFirst(installations);
-  const at = standing === null ? -1 : versions.indexOf(standing);
-  return at < 0 ? null : (versions[at + 1] ?? null);
-};
+const previousOf = (installations: string | undefined): string | null =>
+  installations === undefined ? null : previousRelease(installations);
 
 const occupied = (busy: BuildRunning): InstallRefused => ({
   code: 'install-running',

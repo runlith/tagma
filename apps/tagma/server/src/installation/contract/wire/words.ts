@@ -14,6 +14,7 @@ export const INSTALL_WORDS = {
 export const QUIT_WORDS = {
   'channel-unnamed': { text: 'Another Tagma holds this Mac and cannot be asked to stop. Quit it from its own window.' },
   'host-stayed': { text: 'Tagma stopped, but some of its terminals or commands may still run. Stop Tagma again to end them.' },
+  'chain-unproven': { text: 'Tagma may have started again. Press Stop again.' },
 } as const satisfies Readonly<Record<string, Words>>;
 
 export const RESTART_WORDS = {

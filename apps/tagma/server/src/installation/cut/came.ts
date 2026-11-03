@@ -10,6 +10,7 @@ import { RESTART_RECORD } from '../contract/wire/restart.js';
 import { dataDirectoryLocked } from '../../platform/lock/holder.js';
 import type { BuildServer } from './port.js';
 import type { Restart } from '../contract/wire/source.js';
+import type { Processes } from '@runlith/execution-host/ProcessReader';
 
 export type CameUp =
   | { readonly _tag: 'Restarted'; readonly url: string; readonly build: string | null }
@@ -24,7 +25,7 @@ export const cameUp = Effect.fnUntraced(function* (
   api: BuildServer,
   channel: Channel,
   target: string | null = null,
-): Effect.fn.Return<CameUp> {
+): Effect.fn.Return<CameUp, never, Processes> {
   const at = yield* CurrentInvocation;
   const url = api.baseUrl(at);
   const holderOf = (): number | null => {

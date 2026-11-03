@@ -1,6 +1,7 @@
 import { mkdirSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
-import { Effect, Layer, Schema } from 'effect';
+import { Context, Effect, Layer, Schema } from 'effect';
+import { Processes } from '@runlith/execution-host/ProcessReader';
 import * as BunChildProcessSpawner from '@effect/platform-bun/BunChildProcessSpawner';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import * as BunPath from '@effect/platform-bun/BunPath';
@@ -278,11 +279,18 @@ export const tryout = (
 
     const runtime = join(installRoot, CURRENT, RUNTIME_PART);
     const entry = join(installRoot, CURRENT, CLI_ENTRY);
+    const processes = Context.get(yield* Layer.build(composition.processes), Processes);
     const launch = yield* Effect.acquireRelease(
-      Effect.sync(() => new ServerLaunch([runtime, ...SERVE_FLAGS, entry, 'serve'], world, log)),
+      Effect.sync(() => new ServerLaunch([runtime, ...SERVE_FLAGS, entry, 'serve'], world, log, processes)),
       (started) => Effect.promise(() => started.stop()),
     );
-    const outcome = yield* awaitStart(launch.initial, probe, holder, readStartup(join(dataDirectory, RESTART_RECORD)), comingUp(url, log));
+    const outcome = yield* awaitStart(
+      launch.initial,
+      probe,
+      holder,
+      readStartup(join(dataDirectory, RESTART_RECORD)),
+      comingUp(url, log),
+    ).pipe(Effect.provideService(Processes, processes));
     if (outcome._tag !== 'Answered') {
       const why =
         outcome._tag === 'Failed'

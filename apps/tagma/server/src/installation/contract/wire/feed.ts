@@ -1,5 +1,5 @@
 import { Schema } from 'effect';
-import { IrreversibleChange } from './manifest.js';
+import { IrreversibleChange, type InstallationPlatform } from './manifest.js';
 
 export const RELEASE_NUMBER = /^\d+(\.\d+){0,2}$/u;
 
@@ -44,7 +44,12 @@ export const feedArchiveSchema = Schema.Struct({
   size: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
 });
 export type FeedArchive = typeof feedArchiveSchema.Type;
-export type ReleaseArchive = FeedArchive & { readonly release: string };
+export type ReleaseArchive = FeedArchive & {
+  readonly release: string;
+  readonly platform: InstallationPlatform;
+  readonly irreversible: boolean;
+  readonly changes: readonly IrreversibleChange[];
+};
 
 export const platformArchivesSchema = Schema.Record(Schema.String, feedArchiveSchema);
 

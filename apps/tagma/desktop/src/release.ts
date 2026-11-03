@@ -2,7 +2,7 @@ import { type ChildProcess, spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
-import { manifestAt, releaseAt, releaseIdentified } from '@tagma/server/installation/closure/manifests';
+import { makeManifestProjection } from '@tagma/server/installation/closure/manifests';
 import { readAttempt } from '@tagma/server/installation/closure/attempt';
 import { currentVersion } from '@tagma/server/installation/closure/versions';
 import { RELEASE_INSIDE, RUNTIME_PART, hostBundle } from '@tagma/server/installation/contract/wire/layout';
@@ -15,6 +15,8 @@ export type Bearing = { readonly build: string; readonly digest: string };
 export type Standing = Bearing & { readonly version: string };
 
 export type Branch = 'follow' | 'install' | 'equal';
+
+const manifests = makeManifestProjection();
 
 const BUNDLE = /^(.*?\.app)\/Contents\/MacOS\/[^/]+$/u;
 
@@ -41,14 +43,14 @@ export const bundleOf = (executable: string): string | null => BUNDLE.exec(execu
 export const carriedIn = (bundle: string): string => join(bundle, RELEASE_INSIDE);
 
 export function carriedBy(bundle: string): Bearing | null {
-  const read = manifestAt(carriedIn(bundle));
+  const read = manifests.read(carriedIn(bundle));
   return read._tag === 'Read' ? { build: read.manifest.identity.build, digest: read.manifest.identity.digest } : null;
 }
 
 export function standingIn(installRoot: string): Standing | null {
   const version = currentVersion(installRoot);
   if (version === null) return null;
-  const read = manifestAt(join(installRoot, version));
+  const read = manifests.read(join(installRoot, version));
   return read._tag === 'Read' ? { version, build: read.manifest.identity.build, digest: read.manifest.identity.digest } : null;
 }
 
@@ -59,14 +61,14 @@ export function fallen(installRoot: string): Fallen | null {
   const current = currentVersion(installRoot);
   const fell = ended.data === 'unrestored' ? 'unrestored' : 'rolled-back';
   if (current !== (fell === 'unrestored' ? attempt.to : attempt.from)) return null;
-  const manifest = releaseAt(installRoot, attempt.to);
+  const manifest = manifests.at(installRoot, attempt.to);
   const build = manifest?.identity.build ?? attempt.to;
   return {
     fell,
     key: `${attempt.from ?? ''}>${attempt.to}: ${ended.detail}`,
     to: manifest === undefined ? null : { version: attempt.to, build, digest: manifest.identity.digest },
     build,
-    back: attempt.from === null ? null : (releaseAt(installRoot, attempt.from)?.identity.build ?? attempt.from),
+    back: attempt.from === null ? null : (manifests.at(installRoot, attempt.from)?.identity.build ?? attempt.from),
     said: ended.words?.text ?? null,
     detail: ended.detail,
   };
@@ -82,7 +84,7 @@ export function keptApplication(installRoot: string, standing: Standing): string
 export const numbered = (bearing: Bearing): boolean => isRelease(bearing.build);
 
 export function installedAs(installRoot: string, bearing: Bearing): Standing | null {
-  const version = releaseIdentified(bearing.digest, installRoot);
+  const version = manifests.identified(bearing.digest, installRoot);
   return version === null ? null : { version, ...bearing };
 }
 
@@ -91,7 +93,7 @@ export function branchOf(own: Bearing, standing: Standing | null, installRoot: s
   if (own.digest === standing.digest) return 'equal';
   if (settled) return 'follow';
   if (isRelease(own.build) && isRelease(standing.build)) return compareReleases(own.build, standing.build) < 0 ? 'follow' : 'install';
-  return releaseIdentified(own.digest, installRoot) === null ? 'install' : 'follow';
+  return manifests.identified(own.digest, installRoot) === null ? 'install' : 'follow';
 }
 
 export const leaseRelease = async (root: string, env: NodeJS.ProcessEnv): Promise<ChildProcess> => {

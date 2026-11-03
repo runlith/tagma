@@ -1,6 +1,7 @@
 import { expect } from 'bun:test';
 import { it } from '@runlith/effect-test';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
+import { serverProcessesLayer } from '../../children.js';
 import { Clock, Context, Deferred, Effect, Exit, Fiber, FileSystem, Layer, Scope } from 'effect';
 import { sharedPool } from '@runlith/sqlite-process/testing/pool';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
@@ -100,5 +101,13 @@ it.live('a pending migration is visible while health and operations refuse, then
     expect((yield* readStartup(records.path)).startup?.status).toBe('ready');
     yield* Scope.close(active, Exit.void);
     expect(yield* Effect.flip(get('/health'))).toMatchObject({ reason: { _tag: 'TransportError', cause: { code: 'ECONNREFUSED' } } });
-  }).pipe(Effect.provide(Layer.mergeAll(BunFileSystem.layer, FetchHttpClient.layer))),
+  }).pipe(
+    Effect.provide(
+      Layer.mergeAll(
+        BunFileSystem.layer,
+        FetchHttpClient.layer,
+        serverProcessesLayer(resolve(import.meta.dir, '../../../../../../..', 'packages/execution-host'), undefined),
+      ),
+    ),
+  ),
 );

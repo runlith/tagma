@@ -49,8 +49,18 @@ import { HOST_REFUSAL_ENV, HostRefusal } from '../contract/wire/hostRefusal.js';
 import { type CommandUnavailable, output } from './command.js';
 import { carriedEngine, engineLayout } from './engine.js';
 import { carryNative, nativeCarried, writeInstallationPackage } from './packages.js';
-import { currentVersion, nextVersion, openVersion, releasesNewestFirst, swapCurrent } from '../closure/versions.js';
-import { pruneReleases } from '../closure/leases.js';
+import { nextVersion, openVersion, stamped } from '../closure/versions.js';
+import type { Claimed } from '../closure/leases.js';
+import {
+  type AttemptStanding,
+  type InstallHeld,
+  madeCurrent,
+  type MoveFailed,
+  moveFrom,
+  moving,
+  published,
+  staging,
+} from '../closure/moves.js';
 import { carrySkills, skillInputs } from './skills.js';
 import { carryRipgrep, carryTypescript } from './tools.js';
 import { installedPackages, lockedPackages } from './locked.js';
@@ -98,17 +108,6 @@ export type ReleaseLanded<Launcher = LauncherWritten> = {
   readonly launcher: Launcher;
   readonly log: string;
   readonly previous: string | null;
-};
-
-export class PreviousVersionMissing extends Data.TaggedError('PreviousVersionMissing')<{
-  readonly root: string;
-  readonly standing: string | null;
-}> {}
-
-export type SteppedBack = {
-  readonly version: string;
-  readonly root: string;
-  readonly from: string;
 };
 
 type Spawner = ChildProcessSpawner.ChildProcessSpawner;
@@ -212,7 +211,7 @@ const labelled = Effect.fnUntraced(function* (
   };
 });
 
-type Unswapped = { root: string | null; readonly swapped: (version: string) => void };
+type Unswapped = { root: string | null; release: () => void; readonly swapped: (version: string) => void };
 
 const releaseWith = <Launcher>(
   installRoot: string,
@@ -223,7 +222,7 @@ const releaseWith = <Launcher>(
   release: ReleaseCut | null = null,
 ): Effect.Effect<ReleaseLanded<Launcher>, ReleaseRefused, FileSystem.FileSystem | Spawner | Git> =>
   Effect.suspend(() => {
-    const unswapped: Unswapped = { root: null, swapped };
+    const unswapped: Unswapped = { root: null, release: () => undefined, swapped };
     return releasing(unswapped, installRoot, composition, writing, origin, release).pipe(
       Effect.onInterrupt(() => {
         const root = unswapped.root;
@@ -234,6 +233,7 @@ const releaseWith = <Launcher>(
               Effect.ignore,
             );
       }),
+      Effect.ensuring(Effect.sync(() => unswapped.release())),
     );
   });
 
@@ -327,17 +327,25 @@ const releasing = Effect.fnUntraced(function* <Launcher>(
     }
   }
 
-  const standing = yield* Effect.sync(() => currentVersion(installRoot));
   const now = new Date(yield* Clock.currentTimeMillis);
-  const version = yield* Effect.sync(() => nextVersion(installRoot, now));
-  const root = yield* Effect.sync(() => {
-    const opening = openVersion(installRoot, version);
-    unswapped.root = opening;
-    return opening;
-  });
+  const stamp = stamped(now);
+  const staged: Claimed =
+    release === null
+      ? yield* staging(installRoot).pipe(
+          Effect.catch((failure) =>
+            refuseEarly('install root', failure._tag === 'InstallHeld' ? `${failure.path}: ${failure.reason}` : failure.detail),
+          ),
+        )
+      : yield* Effect.sync(() => {
+          const version = nextVersion(installRoot, now);
+          return { version, root: openVersion(installRoot, version), release: () => undefined };
+        });
+  unswapped.root = staged.root;
+  unswapped.release = staged.release;
+  const root = staged.root;
   const at = (part: string) => `${root}/${part}`;
-  yield* note(`version ${version}${standing === null ? '' : `, over ${standing}`}\n`);
-  yield* said(`release ${version} from ${sourcePath}; every step's output goes to ${log}`);
+  yield* note(`${release === null ? 'staged in' : 'version'} ${staged.version}\n`);
+  yield* said(`release ${stamp} from ${sourcePath}; every step's output goes to ${log}`);
 
   const refuse = Effect.fnUntraced(function* (step: string, detail: string, unblock: ReadonlyArray<string> = []) {
     const removed = yield* Effect.result(files.remove(root, { recursive: true, force: true }));
@@ -539,7 +547,7 @@ const releasing = Effect.fnUntraced(function* <Launcher>(
     ]);
   }
 
-  const labels = yield* step('revision', labelled(git, checkout, version), troubleOf);
+  const labels = yield* step('revision', labelled(git, checkout, release === null ? stamp : staged.version), troubleOf);
   const build = release === null ? labels.build : release.number;
   const { tree } = labels;
   yield* step(
@@ -611,24 +619,50 @@ const releasing = Effect.fnUntraced(function* <Launcher>(
     at(HOST_REFUSAL_FILE),
   );
 
-  const launched = yield* step(
+  const landing = yield* step(
     release === null ? 'swap' : 'staged',
-    Effect.gen(function* () {
-      const written = yield* writing(platform);
-      if (release !== null) return written;
-      yield* Effect.sync(() => {
-        swapCurrent(installRoot, version);
-        unswapped.root = null;
-        unswapped.swapped(version);
-        pruneReleases(installRoot, [version, ...(standing === null ? [] : [standing])], composition.applications.forget);
-      });
-      return written;
-    }),
-    (error) => `${error.path}: ${error.detail}`,
+    release !== null
+      ? Effect.map(writing(platform), (launcher) => ({ launcher, version: staged.version, previous: null, left: null }))
+      : moving(installRoot, (lock) =>
+          Effect.gen(function* () {
+            const move = yield* moveFrom(lock);
+            const launcher = yield* writing(platform);
+            const version = yield* published(lock, staged);
+            unswapped.root = null;
+            const left = yield* madeCurrent(lock, version, move, false, composition.applications.forget);
+            unswapped.swapped(version);
+            return { launcher, version, previous: move.from === version ? null : move.from, left };
+          }),
+        ),
+    landingRefusal,
   );
+  if (landing.left !== null) yield* note(`${landing.left}\n`);
   yield* said(`${release === null ? 'installed' : 'cut release'} ${build}${logTrouble === null ? '' : ` — ${logTrouble}`}`);
-  return { version, root, manifest, launcher: launched, log, previous: standing };
+  return {
+    version: landing.version,
+    root: `${installRoot}/${landing.version}`,
+    manifest,
+    launcher: landing.launcher,
+    log,
+    previous: landing.previous,
+  };
 });
+
+const landingRefusal = (error: LauncherWriteFailed | InstallHeld | AttemptStanding | MoveFailed): string | HostRefusal => {
+  switch (error._tag) {
+    case 'LauncherWriteFailed':
+      return `${error.path}: ${error.detail}`;
+    case 'InstallHeld':
+      return `${error.path} could not be held: ${error.reason}`;
+    case 'MoveFailed':
+      return `${error.step}: ${error.detail}`;
+    case 'AttemptStanding':
+      return {
+        detail: `the update onto ${error.attempt.to} stands open, so no other installation becomes current before it ends`,
+        unblock: ['start the server of current: it finishes the update or rolls it back', 'then build again'],
+      };
+  }
+};
 
 export const releaseInstallation = (
   installRoot: string,
@@ -661,24 +695,3 @@ export const releaseStaged = (
     () => undefined,
     release,
   );
-
-export const stepBack = <E = never, R = never>(
-  installRoot: string,
-  before: Effect.Effect<void, E, R> = Effect.void,
-): Effect.Effect<SteppedBack, PreviousVersionMissing | E, R> =>
-  Effect.suspend((): Effect.Effect<SteppedBack, PreviousVersionMissing | E, R> => {
-    const standing = currentVersion(installRoot);
-    const versions = releasesNewestFirst(installRoot);
-    const at = standing === null ? -1 : versions.indexOf(standing);
-    const previous = at < 0 ? undefined : versions[at + 1];
-    if (standing === null || previous === undefined) {
-      return Effect.fail(new PreviousVersionMissing({ root: installRoot, standing }));
-    }
-    return Effect.andThen(
-      before,
-      Effect.sync(() => {
-        swapCurrent(installRoot, previous);
-        return { version: previous, root: `${installRoot}/${previous}`, from: standing };
-      }),
-    );
-  });

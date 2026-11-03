@@ -6,7 +6,7 @@ import { provenanceLine } from '../../platform/contract/wire/provenance.js';
 import { migrationLoadText } from '../../platform/contract/wire/migrationLoad.js';
 import { HomeUnavailable } from '../contract/wire/home.js';
 import { InstalledChannel } from '../contract/service/channel.js';
-import { SERVE_FLAGS, serveLogPath } from '../contract/wire/layout.js';
+import { SERVE_FLAGS, serveLogPath, dataDirectory } from '../contract/wire/layout.js';
 import { dataDirectoryLocked } from '../../platform/lock/holder.js';
 import { refuse, noting, CurrentInvocation, type Invocation, print } from '../../platform/cli/verb.js';
 import { type Answered, renderMachine, renderStartup, renderStatus } from '../voice/status.js';
@@ -18,9 +18,12 @@ import type { Restart } from '../contract/wire/source.js';
 import type { ServerCli } from './port.js';
 import { awaitRestart, awaitStart, comingUp, requestRestart } from '../process/serverStart.js';
 import { activeElsewhere, activeHolder } from '../setup/active.js';
-import { switchFrom } from '../setup/switch.js';
-import { channelActive, junctionDirectory } from '../contract/wire/junction.js';
+import { stopUnheld, switchFrom } from '../setup/switch.js';
+import { channelActive, junctionDirectory, readActive } from '../contract/wire/junction.js';
 import { QUIT_WORDS } from '../contract/wire/words.js';
+import { processStateSchema } from '../contract/wire/probe.js';
+import { readProcessState } from '../process/probe.js';
+import type { Processes } from '@runlith/execution-host/ProcessReader';
 
 export const serveLog = (at: Invocation): Effect.Effect<string, HomeUnavailable, InstalledChannel> =>
   Effect.flatMap(InstalledChannel, (channel) => {
@@ -57,7 +60,7 @@ const restartServer = ({ ask, here }: Operating): Effect.Effect<Restart, unknown
     }),
   );
 
-const startupWords = (log: string, url: string): Effect.Effect<readonly string[]> =>
+const startupWords = (log: string, url: string): Effect.Effect<readonly string[], never, Processes> =>
   Effect.map(readStartup(join(dirname(log), RESTART_RECORD)), (saved) =>
     saved.startup === null && saved.issue === null ? [] : [renderStartup(saved, url)],
   );
@@ -82,7 +85,7 @@ export const ensureServer = Effect.fnUntraced(function* ({
   boundAddress,
   boundHere,
   healthOrNone,
-}: ServerCli): Effect.fn.Return<Standing, HomeUnavailable, InstalledChannel> {
+}: ServerCli): Effect.fn.Return<Standing, HomeUnavailable, InstalledChannel | Processes> {
   const at = yield* CurrentInvocation;
   const channel = yield* InstalledChannel;
   const { command } = channel;
@@ -275,7 +278,9 @@ export const switching = (cli: ServerCli) =>
     Effect.gen(function* () {
       const at = yield* CurrentInvocation;
       const channel = yield* InstalledChannel;
-      const holder = activeElsewhere(channel, at.env);
+      const junction = junctionDirectory(at.env);
+      const saved = junction === null ? null : readActive(junction);
+      const holder = activeElsewhere(channel, at.env) ?? (saved?.chain !== undefined && saved.channel !== channel.id ? saved : null);
       if (holder !== null) {
         const switched = yield* switchFrom(holder, at.env).pipe(
           Effect.catchTag('SwitchRefused', (refused) => Effect.sync(() => refuse(refused.code, refused.reason, refused.unblock))),
@@ -293,20 +298,36 @@ command it runs — and this one starts and takes the entry point that hooks
 and MCP servers reach.`),
   );
 
+export const processState = Command.make('process-state', { data: Flag.String('data') }, ({ data }) =>
+  Effect.gen(function* () {
+    const at = yield* CurrentInvocation;
+    const state = yield* readProcessState(data, at.env).pipe(
+      Effect.catchTag('ProcessStateUnproven', (failure) =>
+        Effect.sync(() => refuse('process-unproven', failure.detail, ['repair this copy of Tagma, then try again'])),
+      ),
+    );
+    yield* Schema.encodeUnknownEffect(processStateSchema)(state).pipe(Effect.flatMap((answer) => print(answer, true)));
+  }),
+);
+
 export const quitting = Command.make('quit', { json }, (o) =>
   Effect.gen(function* () {
     const at = yield* CurrentInvocation;
     const channel = yield* InstalledChannel;
     const junction = junctionDirectory(at.env);
-    const holder = junction === null ? null : activeHolder(junction);
-    if (holder === null || (holder !== 'unnamed' && holder.channel !== channel.id)) {
+    const saved = junction === null ? null : readActive(junction);
+    const holder = junction === null ? null : (activeHolder(junction) ?? (saved?.chain !== undefined ? saved : null));
+    if (holder !== null && holder !== 'unnamed' && holder.channel !== channel.id) {
       return yield* o.json ? print({ stopped: false }, true) : Console.log(`${channel.name} is not running`);
     }
-    const stopped = yield* switchFrom(holder, at.env).pipe(
+    const data = dataDirectory(channel, at.env);
+    const stopping = holder === null ? (data === null ? Effect.succeed(null) : stopUnheld(data, channel.name)) : switchFrom(holder, at.env);
+    const stopped = yield* stopping.pipe(
       Effect.catchTag('SwitchRefused', (refused) =>
         Effect.sync(() => refuse(refused.code, refused.reason, refused.unblock, QUIT_WORDS[refused.code])),
       ),
     );
+    if (stopped === null) return yield* o.json ? print({ stopped: false }, true) : Console.log(`${channel.name} is not running`);
     if (o.json) return yield* print({ stopped: true, host: stopped.host, killed: stopped.killed }, true);
     yield* Console.log(`${stopped.from} ${stopped.killed ? 'did not leave in time and was killed' : 'stopped'}; ${stopped.host}`);
   }),

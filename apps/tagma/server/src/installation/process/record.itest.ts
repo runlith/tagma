@@ -4,8 +4,11 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { it } from '@runlith/effect-test';
 import { Clock, Effect, Result, Schema } from 'effect';
-import { restartStateSchema } from '../contract/wire/restart.js';
-import { makeProcessRestart, type ProcessRestart } from './record.js';
+import { RESTART_RECORD, restartStateSchema } from '../contract/wire/restart.js';
+import { makeProcessRestart, readStartup, type ProcessRestart } from './record.js';
+import { testProcesses } from '../testing/processes.js';
+import { Processes } from '@runlith/execution-host/ProcessReader';
+import { readProcessState } from './probe.js';
 
 const rooted = Effect.acquireRelease(
   Effect.sync(() => mkdtempSync(join(tmpdir(), 'restart-record-'))),
@@ -15,6 +18,41 @@ const rooted = Effect.acquireRelease(
 const latest = (record: ProcessRestart) => Effect.map(record.state, (state) => state.record);
 
 const observed = { id: 'opening', name: 'stores opening', pid: 102, startedAt: 10, endedAt: null, durationMs: null, outcome: null };
+
+it.live('a reused PID and an issued predecessor record older than its process do not keep a restart underway', () =>
+  Effect.gen(function* () {
+    const path = join(yield* rooted, 'reused.json');
+    const writer = yield* makeProcessRestart({ path, pid: process.pid });
+    yield* writer.begin();
+    const record = (yield* writer.state).record!;
+    writeFileSync(path, JSON.stringify({ ...record, predecessor: { ...record.predecessor, birth: 'another-process' } }));
+    expect((yield* readStartup(path)).restart?.underway).toBe(false);
+    writeFileSync(
+      path,
+      JSON.stringify({
+        ...record,
+        predecessor: { pid: process.pid, source: record.predecessor!.source },
+        points: record.points.map((point) => ({ ...point, at: point.at - 60_000 })),
+      }),
+    );
+    expect((yield* readStartup(path)).restart?.underway).toBe(false);
+  }).pipe(Effect.provide(testProcesses)),
+);
+
+it.live('an unmeasured restart participant leaves the process state unproven instead of ended', () =>
+  Effect.gen(function* () {
+    const data = yield* rooted;
+    const writer = yield* makeProcessRestart({ path: join(data, RESTART_RECORD), pid: 4_194_305 });
+    yield* writer.begin();
+    const real = yield* Processes;
+    const blind = Processes.of({
+      ...real,
+      identity: (pid) => (pid === process.pid ? real.identity(pid) : { _tag: 'Unreadable', detail: 'denied' }),
+    });
+    const refused = yield* Effect.flip(readProcessState(data, {}).pipe(Effect.provideService(Processes, blind)));
+    expect(refused._tag).toBe('ProcessStateUnproven');
+  }).pipe(Effect.provide(testProcesses)),
+);
 
 it.live('a heavy plan is readable before handover and survives successor startup', () =>
   Effect.gen(function* () {

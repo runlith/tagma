@@ -59,6 +59,7 @@ export type ChannelState = {
   readonly previous: Previous | null;
   readonly installing: Installing | null;
   readonly installed: Installed | null;
+  readonly history: string | null;
 };
 
 const plain = (text: string): Said => ({ text, strong: false });
@@ -118,7 +119,12 @@ const offerOf = (state: ChannelState, newer: readonly FeedRelease[], denied: str
   return {
     id: newest.release,
     title: RELEASE_TITLE,
-    detail: newer.length > 1 ? `the newest of ${newer.length} releases after ${state.running}` : `the release after ${state.running}`,
+    detail: [
+      newer.length > 1 ? `the newest of ${newer.length} releases after ${state.running}` : `the release after ${state.running}`,
+      state.history,
+    ]
+      .filter((one) => one !== null)
+      .join('. '),
     label: newest.release,
     size: state.choice.release.size,
     irreversible: crossesNoWayBack(state.feed, state.running, newest.release),

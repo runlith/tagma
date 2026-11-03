@@ -38,6 +38,9 @@ export const downloaded = Effect.fn('release.download')(function* (
     (fd) =>
       Stream.runForEach(response.stream.pipe(Stream.timeoutOrElse({ duration: IDLE, orElse: stalled })), (chunk) =>
         Effect.suspend(() => {
+          if (chunk.length > release.size - done) {
+            return undelivered(`the download of release ${release.release} exceeds its declared ${release.size} bytes`);
+          }
           writeSync(fd, chunk);
           hash.update(chunk);
           done += chunk.length;
@@ -52,6 +55,9 @@ export const downloaded = Effect.fn('release.download')(function* (
       ),
     (fd) => Effect.sync(() => closeSync(fd)),
   );
+  if (done !== release.size) {
+    return yield* undelivered(`the download of release ${release.release} ended at ${done} bytes, and the feed declares ${release.size}`);
+  }
   renameSync(part, file);
   return hash.digest('hex');
 });

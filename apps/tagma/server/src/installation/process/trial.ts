@@ -5,7 +5,8 @@ import { Data, Effect, Option, Predicate, Result, Schema } from 'effect';
 import { type Words, wordsSchema } from '../../platform/contract/wire/refusal.js';
 import { cloneFile, moveFile, removeFile, replaceFile } from '../../platform/durable/files.js';
 import { dataSpaceWords } from '../../platform/durable/space.js';
-import { passAttempt, readAttempt, writeAttempt } from '../closure/attempt.js';
+import { passAttempt, readAttempt, stands, writeAttempt, writeServed } from '../closure/attempt.js';
+import { moving } from '../closure/moves.js';
 import { currentVersion, swapCurrent } from '../closure/versions.js';
 import { ATTEMPT_STARTS, type Attempt, type AttemptEnd } from '../contract/wire/attempt.js';
 
@@ -41,7 +42,32 @@ const covered = (place: TrialPlace): readonly string[] => [...place.files, ...da
 
 const standing = (place: TrialPlace): readonly string[] => [...place.files, ...databasesIn(place.stores, '')];
 
+const COPIES = ['', ...SIDES].flatMap((side) => [`${side}${KEPT}`, `${side}${RETURNING}`]);
+
+const strays = (place: TrialPlace): readonly string[] => {
+  const found = new Set(place.files);
+  if (place.stores !== null && existsSync(place.stores))
+    for (const name of readdirSync(place.stores)) {
+      const suffix = COPIES.find((one) => name.endsWith(`${DATABASE}${one}`));
+      if (suffix !== undefined) found.add(join(place.stores, name.slice(0, name.length - suffix.length)));
+    }
+  return [...found];
+};
+
 export class TrialRefused extends Data.TaggedError('TrialRefused')<{ readonly detail: string; readonly words?: Words }> {}
+
+class StartStale extends Data.TaggedError('StartStale')<{ readonly detail: string }> {
+  override get message(): string {
+    return this.detail;
+  }
+}
+
+const staleOf = (record: Attempt | null, current: string | null, version: string | null): StartStale | null =>
+  record !== null && stands(record, current) && version !== null && version !== record.to && version !== record.from
+    ? new StartStale({
+        detail: `release ${version} is not the release that stands: ${record.to} stands as the update from ${record.from ?? 'nothing'}, and only those two open the data until that update ends`,
+      })
+    : null;
 
 const decodeWords = Schema.decodeUnknownOption(wordsSchema);
 
@@ -80,7 +106,7 @@ const returned = Effect.fnUntraced(function* (path: string) {
 });
 
 const dropped = Effect.fnUntraced(function* (path: string) {
-  for (const side of ['', ...SIDES]) {
+  for (const side of [...SIDES, '']) {
     yield* removeFile(`${path}${side}${KEPT}`);
     yield* removeFile(`${path}${side}${RETURNING}`);
   }
@@ -98,21 +124,28 @@ const droppedAll = (files: readonly string[]): Effect.Effect<void> =>
         ),
   );
 
-export const arrive = Effect.fn('Trial.arrive')(function* (place: TrialPlace) {
+const copiesLeft = (place: TrialPlace): boolean => strays(place).some((path) => COPIES.some((suffix) => existsSync(`${path}${suffix}`)));
+
+const admitted = Effect.fnUntraced(function* (place: TrialPlace) {
   const { installRoot } = place;
   const version = ownVersion(place);
   const record = readAttempt(installRoot);
-  if (record === null) return 'serve' as const;
   const current = currentVersion(installRoot);
-  if (record.to !== version) {
-    if (record.ended !== null && current !== record.to) yield* droppedAll(covered(place));
-    return 'serve' as const;
-  }
+  const standing = record !== null && stands(record, current);
+  if (!standing || !record.copied) yield* droppedAll(strays(place));
+  if (record === null) return 'serve' as const;
+  if (staleOf(record, current, version) !== null) return 'stale' as const;
+  if (record.to !== version) return 'serve' as const;
   if (current !== version) return 'serve' as const;
   if (record.ended !== null) return record.ended.data === 'unrestored' ? ('roll' as const) : ('serve' as const);
   if (record.starts >= ATTEMPT_STARTS) return 'roll' as const;
   writeAttempt(installRoot, { ...record, starts: record.starts + 1 });
   return 'serve' as const;
+});
+
+export const arrive = Effect.fn('Trial.arrive')(function* (place: TrialPlace) {
+  if (readAttempt(place.installRoot) === null && !copiesLeft(place)) return 'serve' as const;
+  return yield* moving(place.installRoot, () => admitted(place));
 });
 
 const returnedAll = (place: TrialPlace): Effect.Effect<AttemptEnd['data']> =>
@@ -169,11 +202,11 @@ const settledOn = Effect.fnUntraced(function* (place: TrialPlace, record: Attemp
   const { installRoot } = place;
   if (end.data !== 'unrestored' && record.from !== null && currentVersion(installRoot) === record.to) swapCurrent(installRoot, record.from);
   writeAttempt(installRoot, { ...record, ended: end });
-  if (end.data !== 'unrestored') yield* droppedAll(covered(place));
+  if (end.data !== 'unrestored') yield* droppedAll(strays(place));
   console.error(`[tagma] the attempt on ${record.to} ended before its door opened (${end.data}): ${end.detail}`);
 });
 
-export const rollBack = Effect.fn('Trial.rollBack')(function* (place: TrialPlace, detail: string, words?: Words) {
+const rolled = Effect.fnUntraced(function* (place: TrialPlace, detail: string, words?: Words) {
   const version = ownVersion(place);
   const record = readAttempt(place.installRoot);
   if (version === null || record === null || record.to !== version || currentVersion(place.installRoot) !== version) return;
@@ -190,6 +223,10 @@ export const rollBack = Effect.fn('Trial.rollBack')(function* (place: TrialPlace
   else writeAttempt(place.installRoot, { ...record, ended: { ...ended, data, left: leftAs(covered(place)) } });
 });
 
+export const rollBack = Effect.fn('Trial.rollBack')(function* (place: TrialPlace, detail: string, words?: Words) {
+  return yield* moving(place.installRoot, () => rolled(place, detail, words));
+});
+
 const copiedAll = (place: TrialPlace): Effect.Effect<void, TrialRefused> =>
   forEachFile(standing(place), kept).pipe(
     Effect.mapError(
@@ -201,12 +238,14 @@ const copiedAll = (place: TrialPlace): Effect.Effect<void, TrialRefused> =>
     ),
   );
 
-export const enterTrial = Effect.fn('Trial.enter')(function* (place: TrialPlace) {
+const entered = Effect.fnUntraced(function* (place: TrialPlace, version: string) {
   const { installRoot } = place;
-  const version = ownVersion(place);
-  const record = version === null ? null : readAttempt(installRoot);
-  if (version === null || record === null || record.to !== version || record.ended !== null || currentVersion(installRoot) !== version)
-    return null;
+  const record = readAttempt(installRoot);
+  const current = currentVersion(installRoot);
+  const stale = staleOf(record, current, version);
+  if (stale !== null) return yield* stale;
+  writeServed(installRoot, version);
+  if (record === null || record.to !== version || record.ended !== null || current !== version) return null;
   if (record.copied)
     yield* forEachFile(covered(place), returned).pipe(
       Effect.mapError(
@@ -221,9 +260,13 @@ export const enterTrial = Effect.fn('Trial.enter')(function* (place: TrialPlace)
     settled: () => settled,
     passed: Effect.suspend(() => {
       settled = true;
-      passAttempt(installRoot, version);
-      return droppedAll(covered(place));
-    }),
+      return moving(installRoot, () =>
+        Effect.andThen(
+          Effect.sync(() => passAttempt(installRoot, version)),
+          droppedAll(strays(place)),
+        ),
+      );
+    }).pipe(Effect.orDie),
     closing: (close) => {
       closings.push(close);
     },
@@ -231,8 +274,21 @@ export const enterTrial = Effect.fn('Trial.enter')(function* (place: TrialPlace)
       Effect.suspend(() => {
         if (settled) return Effect.void;
         settled = true;
-        return Effect.andThen(Effect.forEach(closings, Effect.exit, { discard: true }), rollBack(place, detail, words));
+        return Effect.andThen(
+          Effect.forEach(closings, Effect.exit, { discard: true }),
+          rollBack(place, detail, words).pipe(
+            Effect.catchTag('InstallHeld', (held) =>
+              Effect.sync(() => console.error(`[tagma] the attempt waits for its next start to roll back: ${held.path}: ${held.reason}`)),
+            ),
+          ),
+        );
       }),
   };
   return trial;
+});
+
+export const enterTrial = Effect.fn('Trial.enter')(function* (place: TrialPlace) {
+  const version = ownVersion(place);
+  if (version === null) return null;
+  return yield* moving(place.installRoot, () => entered(place, version));
 });

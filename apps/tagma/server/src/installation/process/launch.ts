@@ -1,7 +1,10 @@
 import { closeSync, existsSync, mkdirSync, openSync, realpathSync, writeSync } from 'node:fs';
 import { dirname } from 'node:path';
-import { Schema } from 'effect';
+import { Effect, Schema } from 'effect';
+import type { ProcessReader } from '@runlith/execution-host/ProcessReader';
 import type { SuccessorLaunch } from '../contract/service/succession.js';
+import { PROCESS_CHAIN, type ProcessChain } from '../contract/wire/process.js';
+import { forkChain, inheritedChain, ProcessChainRefused } from './chain.js';
 import {
   type LaunchAnswer,
   type LaunchRequest,
@@ -11,6 +14,7 @@ import {
   handoffSchema,
   launchAnswerSchema,
   launchRequestSchema,
+  CHAINED,
   HANDOFF,
   HOST_REPLACE,
   HOST_STATE,
@@ -34,6 +38,7 @@ type Attempt = {
   readonly predecessor: Child;
   readonly child: Child;
   readonly command: string;
+  readonly chain: ProcessChain | undefined;
   state: 'starting' | 'ready' | 'cancelled';
   released: boolean;
   serving: boolean;
@@ -51,6 +56,8 @@ export class ServerLaunch {
   private current: Child | null = null;
   private readonly launched = new Map<Child, Launched>();
   private stopping = false;
+  private returning = 0;
+  private starting: { readonly id: string; cancelled: boolean } | null = null;
   private hasFailed = false;
   private code = 0;
   private readonly settled: (code: number) => void;
@@ -61,6 +68,7 @@ export class ServerLaunch {
     command: readonly string[],
     env: NodeJS.ProcessEnv,
     private readonly log: string,
+    private readonly processes: ProcessReader,
   ) {
     const ending = Promise.withResolvers<number>();
     this.exited = ending.promise;
@@ -92,7 +100,13 @@ export class ServerLaunch {
         stdin: this.lifetime.reader,
         stdout: sink,
         stderr: sink,
-        env: { ...env, [SUPERVISED]: '1', [RELEASES]: '1', ...(predecessor === undefined ? {} : { [REPLACES]: String(predecessor) }) },
+        env: {
+          ...env,
+          [SUPERVISED]: '1',
+          [RELEASES]: '1',
+          [CHAINED]: '1',
+          ...(predecessor === undefined ? {} : { [REPLACES]: String(predecessor) }),
+        },
         ipc: (message, sender) => this.received(message, sender),
         onDisconnect: () => {
           if (this.children.has(child)) child.kill('SIGTERM');
@@ -147,6 +161,10 @@ export class ServerLaunch {
       return;
     }
     if (request._tag === 'Cancel') {
+      if (this.starting?.id === request.id) {
+        this.starting.cancelled = true;
+        return;
+      }
       const attempt = this.attempt;
       if (attempt === null || attempt.predecessor !== sender || attempt.id !== request.id) return;
       attempt.state = 'cancelled';
@@ -158,30 +176,69 @@ export class ServerLaunch {
       ? 'the launch is stopping'
       : sender !== this.current
         ? 'this server is handing its place to its successor'
-        : this.attempt === null
-          ? null
-          : this.attempt.state === 'ready'
-            ? `the predecessor pid ${this.attempt.predecessor.pid} is still leaving`
-            : 'a successor is still starting or being cancelled';
+        : this.starting !== null
+          ? 'a successor is still starting or being cancelled'
+          : this.attempt === null
+            ? null
+            : this.attempt.state === 'ready'
+              ? `the predecessor pid ${this.attempt.predecessor.pid} is still leaving`
+              : 'a successor is still starting or being cancelled';
     if (refused !== null) {
       this.answer(sender, { _tag: 'Failed', id: request.id, detail: refused });
       return;
     }
-    try {
-      const child = this.spawn(request.command, request.env, sender.pid);
+    const begin = (child: Child, chain: ProcessChain | undefined): Attempt => {
       this.attempt = {
         id: request.id,
         predecessor: sender,
         child,
         command: request.command.join(' '),
+        chain,
         state: 'starting',
         released: false,
         serving: false,
         failed: false,
       };
+      return this.attempt;
+    };
+    let chain: ProcessChain | undefined;
+    try {
+      chain = inheritedChain(request.env);
+      if (chain === undefined) {
+        begin(this.spawn(request.command, request.env, sender.pid), undefined);
+        return;
+      }
     } catch (cause) {
       this.answer(sender, { _tag: 'Failed', id: request.id, detail: `the successor would not start: ${String(cause)}` });
+      return;
     }
+    const starting = { id: request.id, cancelled: false };
+    this.starting = starting;
+    const generation = chain;
+    let spawned: Attempt | null = null;
+    const spawn = () => {
+      if (this.stopping) throw new ProcessChainRefused({ detail: 'the launch is stopping', reason: 'stopping' });
+      const child = this.spawn(request.command, request.env, sender.pid);
+      spawned = begin(child, generation);
+      return child;
+    };
+    void Effect.runPromise(Effect.result(forkChain(this.processes, generation, spawn))).then((forked) => {
+      this.starting = null;
+      const attempt: Attempt | null = spawned;
+      if (attempt === null) {
+        if (this.children.has(sender))
+          this.answer(sender, {
+            _tag: 'Failed',
+            id: request.id,
+            detail: `the successor would not start: ${forked._tag === 'Failure' ? forked.failure.detail : 'it was never spawned'}`,
+          });
+      } else if (forked._tag === 'Success' && starting.cancelled && this.attempt === attempt) {
+        attempt.state = 'cancelled';
+        if (this.current === attempt.child) this.current = sender;
+        attempt.child.kill('SIGTERM');
+      }
+      this.settle();
+    });
   }
 
   private answer(child: Child, answer: LaunchAnswer | Handoff): void {
@@ -207,12 +264,12 @@ export class ServerLaunch {
         if (this.current === child) this.current = null;
         if (attempt.released) {
           this.attempt = null;
-          this.returned(attempt.predecessor);
+          this.returned(attempt.predecessor, attempt.chain);
         } else {
           attempt.failed = true;
           if (!this.children.has(attempt.predecessor)) {
             this.attempt = null;
-            this.returned(attempt.predecessor);
+            this.returned(attempt.predecessor, attempt.chain);
           }
         }
         return this.settle();
@@ -231,7 +288,7 @@ export class ServerLaunch {
         return;
       }
       this.attempt = null;
-      if (attempt.failed && !this.stopping) this.returned(child);
+      if (attempt.failed && !this.stopping) this.returned(child, attempt.chain);
       else if (attempt.state !== 'ready') attempt.child.kill('SIGTERM');
       else if (!attempt.released && !this.stopping)
         this.answer(attempt.child, {
@@ -249,13 +306,13 @@ export class ServerLaunch {
   }
 
   private settle(): void {
-    if (this.children.size !== 0) return;
+    if (this.children.size !== 0 || this.returning !== 0 || this.starting !== null) return;
     for (const [signal, forward] of this.forwards) process.off(signal, forward);
     this.lifetime.end();
     this.settled(this.hasFailed ? 1 : this.code);
   }
 
-  private returned(predecessor: Child): void {
+  private returned(predecessor: Child, chain: ProcessChain | undefined): void {
     const was = this.launched.get(predecessor);
     if (was === undefined) {
       this.fail(`pid ${predecessor.pid} left no record of how it was started`);
@@ -264,11 +321,28 @@ export class ServerLaunch {
     this.launched.delete(predecessor);
     const env = { ...was.env };
     for (const name of RETURN_DROPS) delete env[name];
-    try {
-      this.current = this.spawn(was.command, env, undefined, true);
-    } catch (cause) {
-      this.fail(`the server launch could not start pid ${predecessor.pid}'s build again: ${String(cause)}`);
+    if (chain === undefined) {
+      try {
+        this.current = this.spawn(was.command, env, undefined, true);
+      } catch (cause) {
+        this.fail(`the server launch could not start pid ${predecessor.pid}'s build again: ${String(cause)}`);
+      }
+      return;
     }
+    if (this.current === predecessor) this.current = null;
+    this.returning += 1;
+    const spawn = () => {
+      if (this.stopping) throw new ProcessChainRefused({ detail: 'the launch is stopping', reason: 'stopping' });
+      return this.spawn(was.command, { ...env, [PROCESS_CHAIN]: JSON.stringify(chain) }, undefined, true);
+    };
+    void Effect.runPromise(Effect.result(forkChain(this.processes, chain, spawn))).then((forked) => {
+      this.returning -= 1;
+      if (forked._tag === 'Success') this.current = forked.success;
+      else if (forked.failure.reason === undefined)
+        this.fail(`pid ${predecessor.pid}'s build could not return into its process generation: ${forked.failure.detail}`);
+      else console.error(`[tagma] pid ${predecessor.pid}'s build does not return: ${forked.failure.detail}`);
+      this.settle();
+    });
   }
 }
 
@@ -277,6 +351,8 @@ export const connectLaunch = (env: NodeJS.ProcessEnv): SuccessorLaunch | undefin
   delete env[SUPERVISED];
   const releases = env[RELEASES] === '1';
   delete env[RELEASES];
+  const chained = env[CHAINED] === '1';
+  delete env[CHAINED];
   if (!supervised) return undefined;
   const lost = () => process.kill(process.pid, 'SIGTERM');
   process.once('disconnect', lost);
@@ -287,6 +363,7 @@ export const connectLaunch = (env: NodeJS.ProcessEnv): SuccessorLaunch | undefin
   let started: string | null = null;
   return {
     releases,
+    chained,
     release: (failure) => {
       if (!process.connected || process.send === undefined) throw new Error('the server launch is not connected');
       process.send(handoffOf(process.pid, failure));

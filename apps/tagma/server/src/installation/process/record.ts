@@ -1,8 +1,8 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { uptime } from 'node:os';
 import { dirname } from 'node:path';
-import { Clock, Effect, Result, Schema } from 'effect';
-import { pidAlive } from '@runlith/utils/process';
+import { Clock, Effect, Option, Result, Schema } from 'effect';
+import { Processes, ProcessesUnreadable, type ProcessReader } from '@runlith/execution-host/ProcessReader';
 import type { PhaseStamp } from '../../platform/contract/wire/phases.js';
 import type { PhaseCapture } from '../../platform/contract/service/phases.js';
 import type { Source } from '../contract/wire/source.js';
@@ -35,29 +35,58 @@ const thisBoot = (record: RestartRecord, now: number): boolean => {
   return began === undefined || began >= now - uptime() * 1000;
 };
 
-export const handoverOf = ({ record, stage }: RestartState, now: number): Handover | null =>
+export const handoverOf = ({ record, stage, underway, unmeasured }: RestartState, now: number): Handover | null =>
   record === null || stage === null
     ? null
     : {
         id: record.id,
         stage,
-        underway:
-          UNDER_WAY.has(stage) &&
-          thisBoot(record, now) &&
-          [record.predecessor?.pid, record.successor?.pid].some((pid) => pid !== undefined && pidAlive(pid)),
+        underway: UNDER_WAY.has(stage) && thisBoot(record, now) && (underway === true || unmeasured !== undefined),
+        ...(unmeasured === undefined || !UNDER_WAY.has(stage) || !thisBoot(record, now) ? {} : { unmeasured }),
         failure: stage === 'failed' ? (record.failure?.detail ?? null) : null,
         stays: stage === 'failed' && record.failure?.pid === record.predecessor?.pid,
       };
 
-export const readStartup = Effect.fn('installation.readStartup')(function* (path: string): Effect.fn.Return<StartupState> {
+const liveParticipant = (record: RestartRecord, reader: ProcessReader | undefined): boolean | ProcessesUnreadable => {
+  if (reader === undefined) return new ProcessesUnreadable({ detail: 'no native process reader measures the restart participants' });
+  const began = record.points.find((point) => point.name === 'accepted')?.at;
+  let unread: ProcessesUnreadable | null = null;
+  for (const participant of [record.predecessor, record.successor]) {
+    if (participant === null) continue;
+    const current = reader.identity(participant.pid);
+    if (current._tag === 'Unreadable') {
+      unread ??= new ProcessesUnreadable({ detail: current.detail });
+      continue;
+    }
+    if (current._tag !== 'Read' || current.zombie) continue;
+    if (participant.birth !== undefined) {
+      if (current.birth === participant.birth) return true;
+      continue;
+    }
+    if (began === undefined) continue;
+    const until =
+      participant === record.predecessor
+        ? began
+        : record.startup?.pid === participant.pid
+          ? record.startup.startedAt
+          : record.phases.find((phase) => phase.pid === participant.pid)?.startedAt;
+    if (until === undefined) continue;
+    const born = reader.bornBetween(current.birth, participant === record.predecessor ? 0 : began, until);
+    if (born === true) return true;
+    if (born !== false) unread ??= born;
+  }
+  return unread ?? false;
+};
+
+export const readStartup = Effect.fn('installation.readStartup')(function* (
+  path: string,
+): Effect.fn.Return<StartupState, never, Processes> {
+  yield* Processes;
   const reader = yield* makeProcessRestart({ path, pid: process.pid });
   reader.load();
   const state = yield* reader.state;
   return { startup: state.startup, issue: state.issue, restart: handoverOf(state, yield* Clock.currentTimeMillis) };
 });
-
-export const readHandover = (path: string): Effect.Effect<Handover | null> =>
-  Effect.map(readStartup(path), ({ restart }) => restart ?? null);
 
 export type ProcessRestart = Effect.Success<ReturnType<typeof makeProcessRestart>>;
 
@@ -68,6 +97,11 @@ export const makeProcessRestart = Effect.fnUntraced(function* (input: {
 }) {
   const { path, pid: ownPid, incoming } = input;
   const clock = yield* Clock.Clock;
+  const reader = Option.getOrUndefined(yield* Effect.serviceOption(Processes));
+  const birthOf = (pid: number): string | undefined => {
+    const current = reader?.identity(pid);
+    return current?._tag === 'Read' && !current.zombie ? current.birth : undefined;
+  };
   let recorded: RestartRecord | null = null;
   let issue: RestartIssue | null = null;
   let role: 'reading' | 'waiting' | 'predecessor' | 'successor' = incoming === undefined ? 'reading' : 'waiting';
@@ -144,7 +178,18 @@ export const makeProcessRestart = Effect.fnUntraced(function* (input: {
   };
 
   const observations = RestartRecords.of({
-    state: Effect.sync(() => ({ record: recorded, issue, stage: stage(), startup: startup() })),
+    state: Effect.sync(() => {
+      const now = stage();
+      const live = recorded === null || now === null || !UNDER_WAY.has(now) ? false : liveParticipant(recorded, reader);
+      return {
+        record: recorded,
+        issue,
+        stage: now,
+        startup: startup(),
+        underway: live === true,
+        ...(typeof live === 'boolean' ? {} : { unmeasured: live.detail }),
+      };
+    }),
     report: Effect.fn('RestartRecords.report')(function* (window) {
       const record = recorded;
       if (record === null || record.id !== window.restartId || record.successor?.pid !== ownPid) {
@@ -188,7 +233,7 @@ export const makeProcessRestart = Effect.fnUntraced(function* (input: {
         recorded = {
           id: crypto.randomUUID(),
           predecessor: null,
-          successor: { pid: ownPid, source },
+          successor: { pid: ownPid, birth: birthOf(ownPid), source },
           startup: null,
           phases: [],
           points: [],
@@ -246,7 +291,7 @@ export const makeProcessRestart = Effect.fnUntraced(function* (input: {
       recorded = read.success;
       if ((incoming === undefined && !receiving) || recorded === null) return read;
       unrecorded = undefined;
-      recorded = { ...recorded, successor: { pid: ownPid, source } };
+      recorded = { ...recorded, successor: { pid: ownPid, birth: birthOf(ownPid), source } };
       role = 'successor';
       capturing = true;
       for (const stamp of pending.splice(0)) note(stamp);
@@ -256,12 +301,12 @@ export const makeProcessRestart = Effect.fnUntraced(function* (input: {
     identify: (next: Source): void => {
       source = next;
       if (role !== 'successor' || recorded === null) return;
-      recorded = { ...recorded, successor: { pid: ownPid, source } };
+      recorded = { ...recorded, successor: { pid: ownPid, birth: birthOf(ownPid), source } };
       persist(recorded);
     },
     spawned: (pid: number, next: Source): void => {
       if (role !== 'predecessor' || recorded === null) return;
-      recorded = { ...recorded, successor: { pid, source: next } };
+      recorded = { ...recorded, successor: { pid, birth: birthOf(pid), source: next } };
       persist(recorded);
     },
     begin: Effect.fn('RestartRecords.begin')(function* (heavy?: MigrationLoad): Effect.fn.Return<string, RestartRecordUnwritable> {
@@ -270,7 +315,7 @@ export const makeProcessRestart = Effect.fnUntraced(function* (input: {
         id,
         heavy,
         startup: null,
-        predecessor: { pid: ownPid, source },
+        predecessor: { pid: ownPid, birth: birthOf(ownPid), source },
         successor: null,
         phases: [],
         frames: [],

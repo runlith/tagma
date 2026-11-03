@@ -3,11 +3,14 @@ import { mkdir, open } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { pidAlive } from '@runlith/utils/process';
 import { CEILINGS } from '../../platform/contract/service/deadlines.js';
-import { Cause, Clock, Context, Deferred, Effect, Exit, Layer, PubSub, Result, Schema, Semaphore, Stream } from 'effect';
+import { Cause, Clock, Context, Deferred, Effect, Exit, Layer, PubSub, Result, Schedule, Schema, Semaphore, Stream } from 'effect';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { readAttempt } from '../closure/attempt.js';
+import { PendingUnreadable, readPending, writePending } from '../closure/pending.js';
+import type { PendingRefusal, Waiting } from '../contract/wire/pending.js';
 import { serverPartsStand } from '../closure/present.js';
 import { readInstallation, refusalDetail } from '../closure/read.js';
+import { makeCurrentProjection } from '../closure/current.js';
 import { EXECUTIONS, type Installation } from '../contract/wire/manifest.js';
 import { ASKED_EVERY_MS, CLI_ENTRY, CURRENT, RUNTIME_PART, SERVE_FLAGS } from '../contract/wire/layout.js';
 import type { Restart, RestartHost } from '../contract/wire/source.js';
@@ -20,7 +23,6 @@ import {
 } from '../../platform/lock/dataDirectory.js';
 import { dataDirectoryLocked } from '../../platform/lock/holder.js';
 import {
-  type HostRefusal,
   HostUnprepared,
   type SuccessorLaunch,
   type SuccessorPlan,
@@ -28,7 +30,6 @@ import {
   Succession,
   SuccessionRefused,
   SuccessorFailed,
-  type Waiting,
 } from '../contract/service/succession.js';
 import {
   HANDOFF,
@@ -43,6 +44,8 @@ import {
 import { RESTART_ID, RESTART_RECORD } from '../contract/wire/restart.js';
 import { RestartRecords } from '../contract/service/restarts.js';
 import { makeProcessRestart, type ProcessRestart } from './record.js';
+import { checkChain, inheritedChain, makeProcessChain, waitingForStop, type Chain, type ProcessChainRefused } from './chain.js';
+import { Processes } from '@runlith/execution-host/ProcessReader';
 
 type Acknowledgements = {
   readonly taken: PromiseWithResolvers<void>;
@@ -71,14 +74,15 @@ export const successionLayer = (
   runsFrom: Installation | undefined,
   installRoot: string,
   log: string,
-  signal: () => void = () => process.kill(process.pid, 'SIGTERM'),
+  signal?: () => void,
   launch?: SuccessorLaunch,
   record?: ProcessRestart,
   preparation?: SuccessionPreparation,
   steps?: Effect.Effect<SuccessionSteps['Service']>,
   own: readonly string[] = ownCommand(),
   handoff: () => Readonly<Record<string, string>> = () => ({}),
-): Layer.Layer<Succession | RestartRecords> =>
+  chain: Chain = null,
+): Layer.Layer<Succession | RestartRecords, PendingUnreadable> =>
   Layer.effectContext(
     Effect.gen(function* () {
       const records = record ?? (yield* makeProcessRestart({ path: join(dirname(log), RESTART_RECORD), pid: process.pid }));
@@ -97,6 +101,7 @@ export const successionLayer = (
         steps,
         own,
         handoff,
+        chain,
       });
       return Context.make(Succession, succession).pipe(Context.add(RestartRecords, records));
     }),
@@ -107,24 +112,33 @@ const processSuccession = Effect.fnUntraced(function* (input: {
   readonly runsFrom: Installation | undefined;
   readonly installRoot: string;
   readonly log: string;
-  readonly signal: () => void;
+  readonly signal: (() => void) | undefined;
   readonly launch: SuccessorLaunch | undefined;
   readonly preparation: SuccessionPreparation | undefined;
   readonly steps: Effect.Effect<SuccessionSteps['Service']> | undefined;
   readonly own: readonly string[];
   readonly handoff: () => Readonly<Record<string, string>>;
+  readonly chain: Chain;
 }) {
-  const { runsFrom, installRoot, log, record, signal, launch, preparation, steps, own, handoff } = input;
+  const { runsFrom, installRoot, log, record, signal, launch, preparation, steps, own, handoff, chain } = input;
   let left: Restart | null = null;
   let candidate: Candidate | null = null;
-  let refusal: HostRefusal | null = null;
+  let stopping = false;
+  let restarting = false;
+  const stopped = yield* Deferred.make<void>();
+  let refusal: PendingRefusal | null = yield* Effect.try({
+    try: () => readPending(installRoot),
+    catch: (cause) => (cause instanceof PendingUnreadable ? cause : new PendingUnreadable({ path: installRoot, detail: String(cause) })),
+  });
   const refusals = yield* Effect.acquireRelease(PubSub.sliding<void>({ capacity: 1, replay: 1 }), PubSub.shutdown);
   yield* PubSub.publish(refusals, undefined);
   const asking = yield* Semaphore.make(1);
   const scope = yield* Effect.scope;
   const clock = yield* Clock.Clock;
 
-  const returned = (): void => {
+  const returned = Effect.fn('Succession.return')(function* () {
+    if (stopping) return;
+    if (chain !== null) yield* chain.check.pipe(Effect.mapError((failure) => new SuccessorFailed({ detail: failure.detail, log })));
     const tried = readAttempt(installRoot);
     const retried = runsFrom !== undefined && tried !== null && tried.ended === null && tried.starts > 0;
     const command = retried
@@ -133,20 +147,22 @@ const processSuccession = Effect.fnUntraced(function* (input: {
     console.error(
       `[tagma] the successor ended before it served; pid ${process.pid} starts ${retried ? 'the attempt that stands again' : 'its own build again'}`,
     );
-    const env: NodeJS.ProcessEnv = { ...process.env, ...handoff() };
+    const env: NodeJS.ProcessEnv = { ...process.env, ...handoff(), ...chain?.environment };
     for (const name of [REPLACES, HANDOFF, HOST_STATE, HOST_REPLACE, RESTART_ID]) delete env[name];
     mkdirSync(dirname(log), { recursive: true });
     const sink = openSync(log, 'a');
+    const stamp = new Date(yield* Clock.currentTimeMillis).toISOString();
     try {
-      writeSync(
-        sink,
-        `\n=== tagma serve started ${new Date().toISOString()}, returned by pid ${process.pid} after its successor ended ===\n`,
-      );
-      Bun.spawn([...command], { stdin: 'ignore', stdout: sink, stderr: sink, detached: true, env }).unref();
+      writeSync(sink, `\n=== tagma serve started ${stamp}, returned by pid ${process.pid} after its successor ended ===\n`);
+      const spawn = () => Bun.spawn([...command], { stdin: 'ignore', stdout: sink, stderr: sink, detached: true, env });
+      const child = yield* chain === null
+        ? Effect.try({ try: spawn, catch: (cause) => new SuccessorFailed({ detail: String(cause), log }) })
+        : chain.fork(spawn).pipe(Effect.mapError((failure) => new SuccessorFailed({ detail: failure.detail, log })));
+      child.unref();
     } finally {
       closeSync(sink);
     }
-  };
+  });
 
   const holding = async (pid: number, ended: Promise<'gone'>): Promise<'holding' | 'gone'> => {
     for (;;) {
@@ -156,39 +172,108 @@ const processSuccession = Effect.fnUntraced(function* (input: {
     }
   };
 
-  const settled = async ({ child, taken, serving, gone, lost }: Candidate): Promise<void> => {
+  const settled = Effect.fn('Succession.settle')(function* ({ child, taken, serving, gone, lost }: Candidate) {
     const ended = gone.promise.then(() => 'gone' as const);
     const cut = lost.promise.then(() => 'lost' as const);
-    const acknowledged = await Promise.race([taken.promise.then(() => 'taken' as const), ended, cut]);
+    const acknowledged = yield* Effect.promise(() => Promise.race([taken.promise.then(() => 'taken' as const), ended, cut]));
     const outcome =
-      acknowledged === 'taken' ? await Promise.race([serving.promise.then(() => 'serving' as const), ended, cut]) : acknowledged;
-    const verdict = outcome === 'lost' ? await holding(child.pid, ended) : outcome;
+      acknowledged === 'taken'
+        ? yield* Effect.promise(() => Promise.race([serving.promise.then(() => 'serving' as const), ended, cut]))
+        : acknowledged;
+    const verdict = outcome === 'lost' ? yield* Effect.promise(() => holding(child.pid, ended)) : outcome;
     candidate = null;
-    if (verdict === 'gone') return returned();
+    if (verdict === 'gone') return yield* returned();
     if (verdict === 'holding')
       console.error(`[tagma] pid ${child.pid} holds the data directory with its channel to pid ${process.pid} closed`);
     child.unref();
-  };
+  });
 
+  const projection = yield* makeCurrentProjection.pipe(Effect.provide(BunFileSystem.layer));
   const current = Effect.gen(function* () {
     const root = join(installRoot, CURRENT);
-    const read = yield* Effect.result(readInstallation(root));
+    const read = yield* Effect.result(projection.read(root));
     if (read._tag === 'Success') return { root, manifest: read.success };
     return read.failure._tag === 'InstallationMissing' ? null : yield* read.failure;
-  }).pipe(Effect.provide(BunFileSystem.layer));
+  });
+
+  if (refusal !== null && runsFrom !== undefined && refusal.successor?.digest === runsFrom.manifest.identity.digest) {
+    const chosen = yield* current.pipe(
+      Effect.mapError((failure) => new PendingUnreadable({ path: failure.root, detail: refusalDetail(failure) })),
+    );
+    if (chosen?.manifest.identity.digest === runsFrom.manifest.identity.digest) {
+      yield* writePending(installRoot, null).pipe(
+        Effect.mapError((failure) => new PendingUnreadable({ path: failure.path, detail: failure.reason })),
+      );
+      refusal = null;
+    }
+  }
 
   const withdrawn: Effect.Effect<void> = steps === undefined ? Effect.void : Effect.flatMap(steps, (port) => port.withdraw);
 
+  let cancellation: Promise<void> | null = null;
   const cancelled = Effect.suspend(() => {
     if (launch !== undefined) return Effect.sync(() => launch.cancel());
     const standing = candidate;
-    if (standing === null) return Effect.void;
-    candidate = null;
-    return Effect.promise(async () => {
+    if (standing !== null) {
+      candidate = null;
       standing.child.kill('SIGKILL');
-      await standing.child.exited;
-    });
+      cancellation = standing.child.exited.then(() => undefined);
+    }
+    return cancellation === null ? Effect.void : Effect.promise(() => cancellation!);
   });
+
+  {
+    const stoppingSignal = () => {
+      if (restarting) return;
+      stopping = true;
+      Deferred.doneUnsafe(stopped, Exit.void);
+      const recording: Effect.Effect<void, ProcessChainRefused> = chain === null ? Effect.void : Effect.asVoid(chain.stop);
+      Effect.runFork(
+        recording.pipe(
+          Effect.tapError((failure) => Effect.logError('the process generation could not record its stop', { detail: failure.detail })),
+          Effect.ensuring(Effect.andThen(cancelled, withdrawn)),
+        ),
+      );
+    };
+    const listeners = (['SIGINT', 'SIGTERM', 'SIGHUP'] as const).map((received) => [received, stoppingSignal] as const);
+    yield* Effect.acquireRelease(
+      Effect.sync(() => {
+        for (const [received, listener] of listeners) process.on(received, listener);
+      }),
+      () =>
+        Effect.sync(() => {
+          for (const [received, listener] of listeners) process.off(received, listener);
+        }),
+    );
+  }
+
+  if (chain !== null)
+    yield* Effect.forkScoped(
+      waitingForStop(chain.reference).pipe(
+        Effect.tapError((failure) =>
+          failure.reason === undefined
+            ? Effect.logWarning('process stop intent could not be read', { detail: failure.detail })
+            : Effect.void,
+        ),
+        Effect.retry({ while: (failure) => failure.reason === undefined, schedule: Schedule.spaced(ASKED_EVERY_MS) }),
+        Effect.catchTag('ProcessChainRefused', () =>
+          Effect.sync(() => {
+            stopping = true;
+            Deferred.doneUnsafe(stopped, Exit.void);
+            if (signal === undefined) process.kill(process.pid, 'SIGTERM');
+            else signal();
+          }),
+        ),
+      ),
+    );
+
+  const notStopped = Effect.suspend(() =>
+    stopping
+      ? Effect.fail(new SuccessionRefused({ detail: 'this server is stopping' }))
+      : chain === null
+        ? Effect.void
+        : chain.check.pipe(Effect.mapError((failure) => new SuccessionRefused({ detail: failure.detail }))),
+  );
 
   const readied = (restartId: string, host: RestartHost, successor: Successor): Effect.Effect<void, HostUnprepared> => {
     if (steps === undefined) return Effect.void;
@@ -226,9 +311,22 @@ const processSuccession = Effect.fnUntraced(function* (input: {
     if (standing._tag === 'Unread') return unasked(standing.detail);
     const verdict = yield* Effect.flatMap(steps, (port) => port.weigh(join(root, EXECUTIONS)));
     const held = refusal;
-    if (verdict._tag === 'Refuses') refusal = { successor, detail: verdict.detail, waits: { root, release, over: standing.over } };
-    else if (held?.successor?.digest === successor.digest) refusal = null;
-    if (refusal !== held) yield* PubSub.publish(refusals, undefined);
+    const next: PendingRefusal | null =
+      verdict._tag === 'Refuses'
+        ? { successor, detail: verdict.detail, waits: { root, release, over: standing.over } }
+        : verdict._tag === 'Takes' && held?.successor?.digest === successor.digest
+          ? null
+          : held;
+    if (next === held) return verdict;
+    const saved = yield* Effect.result(writePending(installRoot, next));
+    if (saved._tag === 'Failure') {
+      const detail = `the pending installation could not be recorded at ${saved.failure.path}: ${saved.failure.reason}`;
+      refusal = { successor, detail, waits: { root, release, over: standing.over } };
+      yield* PubSub.publish(refusals, undefined);
+      return { _tag: 'Refuses', detail } satisfies HostVerdict;
+    }
+    refusal = next;
+    yield* PubSub.publish(refusals, undefined);
     return verdict;
   });
 
@@ -298,6 +396,7 @@ const processSuccession = Effect.fnUntraced(function* (input: {
     const env = {
       ...process.env,
       ...handoff(),
+      ...chain?.environment,
       [REPLACES]: String(process.pid),
       ...(launch === undefined || launch.releases ? { [HANDOFF]: '1' } : {}),
       ...(plan === null ? {} : { [HOST_STATE]: plan.hostState }),
@@ -333,45 +432,43 @@ const processSuccession = Effect.fnUntraced(function* (input: {
           gone: Promise.withResolvers<void>(),
           lost: Promise.withResolvers<void>(),
         };
-        return yield* Effect.acquireRelease(
-          Effect.try({
-            try: () =>
-              Bun.spawn(command, {
-                stdin: 'ignore',
-                stdout: sink.fd,
-                stderr: sink.fd,
-                detached: true,
-                env,
-                ipc: (message) => {
-                  if (message === STANDING_BY) {
-                    standing = true;
-                    Deferred.doneUnsafe(stood, Exit.void);
-                    return;
-                  }
-                  const said = decodeTakeover(message);
-                  if (Result.isSuccess(said)) (said.success._tag === 'Taken' ? acknowledgements.taken : acknowledgements.serving).resolve();
-                },
-                onDisconnect: () => acknowledgements.lost.resolve(),
-                onExit: (ended, code) => {
-                  acknowledgements.gone.resolve();
-                  if (standing) Effect.runFork(withdrawn);
-                  Deferred.doneUnsafe(
-                    stood,
-                    Exit.fail(
-                      failed(`the successor ${command.join(' ')} ended with ${ended.signalCode ?? `code ${code}`} before it stood by`),
-                    ),
-                  );
-                },
-              }),
-            catch: (cause) => failed(`the successor ${command.join(' ')} would not start: ${String(cause)}`),
-          }),
-          (child, exit) =>
-            Exit.isSuccess(exit)
-              ? Effect.void
-              : Effect.try(() => child.kill('SIGKILL')).pipe(
-                  Effect.tapError((failure) => Effect.logWarning('Failed successor could not be killed', { pid: child.pid, failure })),
-                  Effect.ignore,
-                ),
+        const spawn = () =>
+          Bun.spawn(command, {
+            stdin: 'ignore',
+            stdout: sink.fd,
+            stderr: sink.fd,
+            detached: true,
+            env,
+            ipc: (message) => {
+              if (message === STANDING_BY) {
+                standing = true;
+                Deferred.doneUnsafe(stood, Exit.void);
+                return;
+              }
+              const said = decodeTakeover(message);
+              if (Result.isSuccess(said)) (said.success._tag === 'Taken' ? acknowledgements.taken : acknowledgements.serving).resolve();
+            },
+            onDisconnect: () => acknowledgements.lost.resolve(),
+            onExit: (ended, code) => {
+              acknowledgements.gone.resolve();
+              if (standing) Effect.runFork(withdrawn);
+              Deferred.doneUnsafe(
+                stood,
+                Exit.fail(failed(`the successor ${command.join(' ')} ended with ${ended.signalCode ?? `code ${code}`} before it stood by`)),
+              );
+            },
+          });
+        const spawned =
+          chain === null
+            ? Effect.try({ try: spawn, catch: (cause) => failed(`the successor ${command.join(' ')} would not start: ${String(cause)}`) })
+            : chain.fork(spawn).pipe(Effect.mapError((failure) => failed(failure.detail)));
+        return yield* Effect.acquireRelease(spawned, (child, exit) =>
+          Exit.isSuccess(exit)
+            ? Effect.void
+            : Effect.try(() => child.kill('SIGKILL')).pipe(
+                Effect.tapError((failure) => Effect.logWarning('Failed successor could not be killed', { pid: child.pid, failure })),
+                Effect.ignore,
+              ),
         ).pipe(
           Effect.tap((child) =>
             Effect.sync(() =>
@@ -396,28 +493,30 @@ const processSuccession = Effect.fnUntraced(function* (input: {
     leaving: Effect.sync(() => left !== null),
     release: (failure) =>
       Effect.suspend(() =>
-        left === null
-          ? Effect.void
-          : Effect.try({
-              try: () => {
-                if (launch !== undefined) {
-                  if (launch.releases) launch.release(failure);
-                } else if (candidate !== null) {
-                  const standing = candidate;
-                  try {
-                    standing.child.send(handoffOf(process.pid, failure));
-                  } catch (cause) {
-                    console.error(`[tagma] pid ${standing.child.pid} could not be told the data directory is released: ${String(cause)}`);
-                    standing.gone.resolve();
+        stopping
+          ? Effect.andThen(cancelled, withdrawn)
+          : left === null
+            ? Effect.void
+            : Effect.try({
+                try: () => {
+                  if (launch !== undefined) {
+                    if (launch.releases) launch.release(failure);
+                  } else if (candidate !== null) {
+                    const standing = candidate;
+                    try {
+                      standing.child.send(handoffOf(process.pid, failure));
+                    } catch (cause) {
+                      console.error(`[tagma] pid ${standing.child.pid} could not be told the data directory is released: ${String(cause)}`);
+                      standing.gone.resolve();
+                    }
                   }
-                }
-              },
-              catch: (cause) => new SuccessorFailed({ detail: `the data directory release could not be sent: ${String(cause)}`, log }),
-            }),
+                },
+                catch: (cause) => new SuccessorFailed({ detail: `the data directory release could not be sent: ${String(cause)}`, log }),
+              }),
       ),
     settle: Effect.suspend(() => {
       const standing = candidate;
-      return standing === null ? Effect.void : Effect.promise(() => settled(standing));
+      return stopping ? cancelled : standing === null ? Effect.void : settled(standing);
     }),
     refusals: Stream.fromPubSub(refusals),
     refused: Effect.sync(() => refusal),
@@ -428,6 +527,7 @@ const processSuccession = Effect.fnUntraced(function* (input: {
         asking.withPermit(
           Effect.uninterruptibleMask((restore) =>
             Effect.gen(function* () {
+              yield* notStopped;
               if (left !== null) return left;
               const successor = yield* restore(successorOf);
               const plan =
@@ -441,10 +541,11 @@ const processSuccession = Effect.fnUntraced(function* (input: {
                 step.pipe(
                   Effect.onExit((exit) => (Exit.isSuccess(exit) ? Effect.void : Effect.sync(() => record.fail(Cause.pretty(exit.cause))))),
                 );
-              yield* recorded(restore(started(successor, id, plan, host))).pipe(
-                Effect.onExit((exit) => (Exit.isSuccess(exit) ? Effect.void : withdrawn)),
-              );
+              yield* recorded(
+                restore(Effect.raceFirst(started(successor, id, plan, host), Effect.andThen(Deferred.await(stopped), notStopped))),
+              ).pipe(Effect.onExit((exit) => (Exit.isSuccess(exit) ? Effect.void : withdrawn)));
               yield* recorded(restore(readied(id, host, successor)));
+              yield* notStopped;
               record.point('standing-by', plan === null ? {} : { migrations: plan.migrations });
               const leaving: Restart = {
                 leaving: runsFrom === undefined ? null : identityOf(runsFrom),
@@ -457,7 +558,19 @@ const processSuccession = Effect.fnUntraced(function* (input: {
               };
               left = leaving;
               yield* Effect.forkIn(
-                Effect.andThen(Effect.sleep(ANSWER_GRACE_MS), Effect.sync(signal)).pipe(Effect.provideService(Clock.Clock, clock)),
+                Effect.andThen(
+                  Effect.sleep(ANSWER_GRACE_MS),
+                  Effect.sync(() => {
+                    if (stopping) return;
+                    restarting = true;
+                    try {
+                      if (signal !== undefined) signal();
+                      else process.emit('SIGTERM', 'SIGTERM');
+                    } finally {
+                      restarting = false;
+                    }
+                  }),
+                ).pipe(Effect.provideService(Clock.Clock, clock)),
                 scope,
               );
               return leaving;
@@ -565,7 +678,7 @@ const announced = (said: 'Taken' | 'Serving'): Effect.Effect<void> =>
 
 export const serving = (notified: boolean): Effect.Effect<void> => (notified ? announced('Serving') : Effect.void);
 
-export const standBy = (
+const takePlace = (
   dataPath: string,
   predecessor: number,
   notified = false,
@@ -590,7 +703,36 @@ export const standBy = (
       );
 };
 
-export type StoodBy = { readonly lock: DataDirectoryLock; readonly unreleased: string | null };
+export const standBy = Effect.fnUntraced(function* (dataPath: string, predecessor: number, notified = false, admitted = true) {
+  const failed = (cause: unknown) => new SuccessorFailed({ detail: String(cause), log: '' });
+  const reference = yield* Effect.try({ try: () => inheritedChain(process.env), catch: failed });
+  if (reference === undefined) return yield* takePlace(dataPath, predecessor, notified);
+  const check = checkChain(reference).pipe(Effect.mapError(failed));
+  yield* check;
+  const reader = yield* Effect.serviceOption(Processes);
+  if (reader._tag === 'None') return yield* failed('the successor has no native process reader to join its generation');
+  const chain = yield* makeProcessChain(dataPath, null, admitted).pipe(
+    Effect.provideService(Processes, reader.value),
+    Effect.mapError(failed),
+  );
+  let taken: StoodBy | undefined;
+  return yield* Effect.raceFirst(
+    takePlace(dataPath, predecessor, notified).pipe(
+      Effect.tap((stood) =>
+        Effect.sync(() => {
+          taken = stood;
+        }),
+      ),
+      Effect.tap(() => check),
+    ),
+    waitingForStop(reference).pipe(Effect.mapError(failed)),
+  ).pipe(
+    Effect.onExit((exit) => (Exit.isFailure(exit) && taken !== undefined ? taken.lock.release : Effect.void)),
+    Effect.map((stood) => ({ ...stood, chain })),
+  );
+});
+
+export type StoodBy = { readonly lock: DataDirectoryLock; readonly unreleased: string | null; readonly chain?: Chain };
 
 const identityOf = (installation: Installation) => ({
   build: installation.manifest.identity.build,

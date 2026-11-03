@@ -8,6 +8,7 @@ import * as BunChildProcessSpawner from '@effect/platform-bun/BunChildProcessSpa
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import * as BunPath from '@effect/platform-bun/BunPath';
 import { gitLayer } from '@runlith/git/Git';
+import type { Processes } from '@runlith/execution-host/ProcessReader';
 import { OWN_GIT_VARIABLE } from '../../platform/contract/service/credentials.js';
 import { refusalLines } from '@runlith/agent/tool/refusal';
 import type { Channel } from '../contract/wire/channel.js';
@@ -48,6 +49,7 @@ type Plan = {
   readonly offer: FeedRelease;
   readonly desktop: string;
   readonly out: string;
+  readonly processes: Layer.Layer<Processes>;
 };
 
 type Proved = { readonly title: string; readonly lines: readonly string[]; readonly trouble: string | null };
@@ -94,7 +96,7 @@ const standing = async (plan: Plan, world: World, lines: string[]): Promise<Resu
 };
 
 const inWorld = (plan: Plan, lines: string[], work: (world: World, stood: Stood) => Promise<string | null>): Promise<string | null> =>
-  openWorld(plan.channel, plan.out).then(async (opening) => {
+  openWorld(plan.channel, plan.out, plan.processes).then(async (opening) => {
     if (Result.isFailure(opening)) return opening.failure;
     const world = opening.success;
     try {
@@ -265,6 +267,7 @@ export const transitionCommand = Effect.fnUntraced(function* (given: readonly st
     offer: staged.success.offer,
     desktop,
     out,
+    processes: composition.processes,
   };
   console.log(`${composition.channel.name} ${number} of this tree, over ${plan.before} from ${from}`);
   const trialLines: string[] = [];
@@ -276,6 +279,7 @@ export const transitionCommand = Effect.fnUntraced(function* (given: readonly st
     labels: [],
     scratch: out,
     log: (line) => trialLines.push(line.split('\n')[0]!),
+    processes: plan.processes,
   });
   const runs: Proved[] = [
     { title: `the release trial: ${plan.before} updates to ${number} by its own button`, lines: trialLines, trouble: trial },

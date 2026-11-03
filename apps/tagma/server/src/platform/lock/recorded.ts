@@ -22,7 +22,13 @@ const heldBy = <R>(read: () => R | null): R | null => {
 
 const said = (cause: unknown): string => (cause instanceof Error ? cause.message : String(cause));
 
-export const takeRecorded = <R extends Recorded>(lock: string, record: string, own: R, read: () => R | null): RecordedTaken<R> => {
+export const takeRecorded = <R extends Recorded>(
+  lock: string,
+  record: string,
+  own: R,
+  read: () => R | null,
+  retain = false,
+): RecordedTaken<R> => {
   let fd: number;
   try {
     mkdirSync(dirname(lock), { recursive: true });
@@ -50,7 +56,7 @@ export const takeRecorded = <R extends Recorded>(lock: string, record: string, o
       if (released) return;
       released = true;
       try {
-        if (read()?.pid === own.pid) rmSync(record, { force: true });
+        if (!retain && read()?.pid === own.pid) rmSync(record, { force: true });
       } finally {
         unlock(fd);
         closeSync(fd);

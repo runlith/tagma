@@ -1,7 +1,9 @@
 import { join } from 'node:path';
 import { Cause, Deferred, Effect, Exit, Result } from 'effect';
 import { ACTIVITY_DATABASE } from '../activity/contract/service/place.js';
+import { readAttempt } from '../installation/closure/attempt.js';
 import { holdingProcess } from '../installation/closure/leases.js';
+import type { InstallHeld } from '../installation/closure/moves.js';
 import { databasePathIn, installationRootIn } from '../installation/paths.js';
 import { arrive, enterTrial, rollBack, type Trial, type TrialPlace, wordsOf } from '../installation/process/trial.js';
 import { ATTEMPT_STARTS } from '../installation/contract/wire/attempt.js';
@@ -60,6 +62,12 @@ export const beforeDoor = <A, E, R>(serving: Effect.Effect<A, E, R>): Effect.Eff
 
 const left = (): Effect.Effect<never> => Effect.sync((): never => process.exit(1));
 
+const unlocked = (held: InstallHeld): Effect.Effect<never> =>
+  Effect.andThen(
+    Effect.sync(() => console.error(`[tagma] the update this start belongs to cannot be judged without ${held.path}: ${held.reason}`)),
+    left(),
+  );
+
 export const arrival = Effect.fn('composition.arrival')(function* (channel: Channel) {
   const store = databasePathIn(channel, process.env);
   const installRoot = installationRootIn(channel, process.env);
@@ -69,13 +77,24 @@ export const arrival = Effect.fn('composition.arrival')(function* (channel: Chan
     release: holdingProcess(process.execPath) ?? undefined,
     storePath: store.success,
   });
-  if ((yield* arrive(place)) === 'serve') return;
+  const arrived = yield* arrive(place).pipe(Effect.catchTag('InstallHeld', unlocked));
+  if (arrived === 'serve') return;
+  if (arrived === 'stale') {
+    const open = readAttempt(installRoot.success);
+    console.error(
+      `[tagma] ${place.release ?? 'this build'} is not the release that stands: ${open?.to ?? 'another release'} stands as the update from ${open?.from ?? 'nothing'}, and only those two open its data until that update ends`,
+    );
+    return yield* left();
+  }
   const lock = yield* Effect.result(lockDataDirectory(storeDirectory(store.success)));
   if (Result.isFailure(lock)) {
     console.error(`[tagma] the failed attempt waits for its data directory to be free: ${detailOf(lock.failure)}`);
     return yield* left();
   }
-  yield* rollBack(place, `it started ${ATTEMPT_STARTS} times and never opened its door`).pipe(Effect.ensuring(lock.success.release));
+  yield* rollBack(place, `it started ${ATTEMPT_STARTS} times and never opened its door`).pipe(
+    Effect.catchTag('InstallHeld', unlocked),
+    Effect.ensuring(lock.success.release),
+  );
   return yield* left();
 });
 
@@ -86,6 +105,13 @@ export const attemptOf = Effect.fn('composition.attempt')(function* (at: Attempt
   const arrived = Effect.asVoid(Deferred.done(door, Exit.void));
   const trial = yield* enterTrial(place).pipe(
     Effect.catchTag('TrialRefused', (refused) => Effect.andThen(rollBack(place, refused.detail, refused.words), left())),
+    Effect.catchTag('StartStale', (stale) =>
+      Effect.andThen(
+        Effect.sync(() => console.error(`[tagma] ${stale.detail}`)),
+        left(),
+      ),
+    ),
+    Effect.catchTag('InstallHeld', unlocked),
   );
   if (trial === null) return { trial: null, opened, open: arrived } satisfies Arrival;
   entered = trial;

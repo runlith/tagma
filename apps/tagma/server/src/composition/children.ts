@@ -1,6 +1,9 @@
-import { Effect, type FileSystem, Layer, type Scope } from 'effect';
+import { type Context, Effect, type FileSystem, Layer, type Scope } from 'effect';
+import { holdingProcess } from '../installation/closure/leases.js';
+import { EXECUTIONS } from '../installation/contract/wire/manifest.js';
+import { makeProcessChain } from '../installation/process/chain.js';
 import { join } from 'node:path';
-import { Processes } from '@runlith/execution-host/ProcessReader';
+import { Processes, ProcessesUnreadable } from '@runlith/execution-host/ProcessReader';
 import { processLayer, yieldAsker } from '@runlith/execution-host/composition/platform';
 import { pathOf, readArtifact } from '@runlith/executions/hostArtifacts';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
@@ -29,29 +32,48 @@ const platformLibrary = Effect.fnUntraced(function* (
   return { _tag: 'Unavailable', detail: 'this world has no process-reader artifact' };
 });
 
-export const childLedgerLayer = (checkout: string | undefined, bundle: string | undefined): Layer.Layer<never> => {
-  const unavailable = (detail: string) =>
-    Layer.effect(
-      ChildLedger,
+export const serverProcessesLayer = (checkout: string | undefined, bundle: string | undefined): Layer.Layer<Processes> => {
+  const unavailable = (detail: string) => {
+    const failure = new ProcessesUnreadable({ detail });
+    return Layer.effect(
+      Processes,
       Effect.as(
         Effect.logWarning('server child attribution is unavailable: no native process reader', { detail }),
-        childLedger(undefined, detail),
+        Processes.of({
+          scan: () => Effect.fail(failure),
+          table: Effect.fail(failure),
+          members: () => Effect.fail(failure),
+          facts: () => Effect.fail(failure),
+          identity: () => ({ _tag: 'Unreadable', detail }),
+          resolve: () => 'unknown',
+          compareBirth: () => failure,
+          bornBetween: () => failure,
+        }),
       ),
     );
+  };
   return Layer.unwrap(
     Effect.map(platformLibrary(checkout, bundle), (library) =>
       library._tag === 'Unavailable'
         ? unavailable(library.detail)
-        : Layer.effect(
-            ChildLedger,
-            Effect.map(Processes, (reader) => childLedger(reader)),
-          ).pipe(
-            Layer.provide(processLayer(library.path)),
-            Layer.catchTag('BootRefused', (refused) => unavailable(refused.detail)),
-          ),
+        : processLayer(library.path).pipe(Layer.catchTag('BootRefused', (refused) => unavailable(refused.detail))),
     ),
   ).pipe(Layer.provide(BunFileSystem.layer));
 };
+
+export const ownProcessesLayer = (packages: string): Layer.Layer<Processes> => {
+  const installed = holdingProcess(process.execPath);
+  return serverProcessesLayer(join(packages, 'execution-host'), installed === null ? undefined : join(installed, EXECUTIONS));
+};
+
+export const ownGeneration = (data: string, cli: string, admitted: boolean, native: Context.Context<Processes>) =>
+  Effect.runPromise(makeProcessChain(data, cli, admitted).pipe(Effect.provide(native)));
+
+export const childLedgerLayer = (checkout: string | undefined, bundle: string | undefined): Layer.Layer<Processes> =>
+  Layer.effect(
+    ChildLedger,
+    Effect.map(Processes, (reader) => childLedger(reader)),
+  ).pipe(Layer.provideMerge(serverProcessesLayer(checkout, bundle)));
 
 export const logicYieldLayer = (checkout: string | undefined, bundle: string | undefined): Layer.Layer<LogicYield> =>
   Layer.effect(

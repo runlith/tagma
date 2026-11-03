@@ -1,32 +1,10 @@
 import { existsSync, realpathSync, rmSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { directoryLeased, holdDirectory, leaseDirectory, removeUnleased } from '../../platform/lock/directoryLease.js';
-import { LockBusy, LockUnavailable, withFileLock } from '@runlith/file-lock/FileLock';
-import { Data, Effect } from 'effect';
-import { CURRENT, INSTALL_FILE, INSTALL_LOCK } from '../contract/wire/layout.js';
+import { CURRENT, INSTALL_FILE } from '../contract/wire/layout.js';
 import { attemptHolds } from './attempt.js';
-import { claimStaged, releasesNewestFirst, stagedVersions, versionsNewestFirst } from './versions.js';
-
-export class InstallHeld extends Data.TaggedError('InstallHeld')<{
-  readonly path: string;
-  readonly reason: string;
-  readonly busy: boolean;
-}> {}
-
-export const withInstallLock = <A, E, R>(
-  installRoot: string,
-  patienceMs: number,
-  work: Effect.Effect<A, E, R>,
-): Effect.Effect<A, E | InstallHeld, R> =>
-  withFileLock(join(installRoot, INSTALL_LOCK), patienceMs, () => work).pipe(
-    Effect.mapError((failure) =>
-      failure instanceof LockBusy
-        ? new InstallHeld({ path: failure.path, reason: `another installation held it for ${failure.waitedMs} ms`, busy: true })
-        : failure instanceof LockUnavailable
-          ? new InstallHeld({ path: failure.path, reason: failure.reason, busy: false })
-          : failure,
-    ),
-  );
+import { pendingHolds } from './pending.js';
+import { claimStaged, currentVersion, releasesNewestFirst, stagedVersions, versionsNewestFirst } from './versions.js';
 
 export function holdVersion(version: string): void {
   if (leaseDirectory(version) === 'being-removed') throw new Error(`${version} is being removed by a build; start Tagma from ${CURRENT}`);
@@ -57,7 +35,8 @@ export function pruneVersions(root: string, keep: readonly string[]): void {
 }
 
 export function pruneReleases(root: string, keep: readonly string[], forget: (dir: string) => void): void {
-  const kept = new Set([...keep, ...attemptHolds(root)]);
+  const standing = currentVersion(root);
+  const kept = new Set([...keep, ...(standing === null ? [] : [standing]), ...attemptHolds(root), ...pendingHolds(root)]);
   for (const version of [...releasesNewestFirst(root), ...stagedVersions(root)])
     if (!kept.has(version)) removeUnleased(join(root, version), forget);
 }

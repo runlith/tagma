@@ -1,6 +1,7 @@
 import { Schema } from 'effect';
 import { feed } from '../../../platform/contract/wire/operation.js';
 import { newHostSchema } from './newHost.js';
+import { placementSchema } from './placement.js';
 
 export const nextIssueCodeSchema = Schema.Literals(['source-unreadable', 'offline', 'platform-unavailable']);
 export type NextIssueCode = typeof nextIssueCodeSchema.Type;
@@ -88,6 +89,7 @@ export const installedSchema = Schema.Struct({
   then: Schema.NullOr(thenSchema),
   restartRefused: Schema.NullOr(Schema.String),
   refused: Schema.optional(installRefusalSchema),
+  placement: Schema.optional(placementSchema),
 });
 export type Installed = typeof installedSchema.Type;
 

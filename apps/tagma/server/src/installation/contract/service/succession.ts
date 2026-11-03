@@ -1,8 +1,9 @@
 import { Context, Data, type Effect, type Stream } from 'effect';
 import type { Installation, InstallationFailure } from '../wire/manifest.js';
-import type { InstallationCut, Restart, RestartHost, Source } from '../wire/source.js';
+import type { Restart, RestartHost, Source } from '../wire/source.js';
 import type { MigrationLoad } from '../../../platform/contract/wire/migrationLoad.js';
 import type { HostVerdict } from './steps.js';
+import type { PendingRefusal } from '../wire/pending.js';
 
 export class SuccessionRefused extends Data.TaggedError('SuccessionRefused')<{ readonly detail: string }> {}
 
@@ -22,6 +23,7 @@ export type SuccessorLaunch = {
   start(command: readonly string[], env: NodeJS.ProcessEnv, signal: AbortSignal): Promise<void>;
   cancel(): void;
   readonly releases: boolean;
+  readonly chained: boolean;
   release(failure: string | null): void;
 };
 
@@ -38,18 +40,6 @@ export class ServerProcess extends Context.Service<
   }
 >()('tagma/installation/ServerProcess') {}
 
-export type Waiting = {
-  readonly root: string;
-  readonly release: string;
-  readonly over: string | null;
-};
-
-export type HostRefusal = {
-  readonly successor: InstallationCut | null;
-  readonly detail: string;
-  readonly waits: Waiting | null;
-};
-
 export class Succession extends Context.Service<
   Succession,
   {
@@ -57,9 +47,9 @@ export class Succession extends Context.Service<
     readonly leaving: Effect.Effect<boolean>;
     restart(host?: RestartHost): Effect.Effect<Restart, SuccessionRefused | SuccessorFailed | HostUnprepared>;
     weigh(root: string, release: string): Effect.Effect<HostVerdict>;
-    readonly refused: Effect.Effect<HostRefusal | null>;
+    readonly refused: Effect.Effect<PendingRefusal | null>;
     readonly refusals: Stream.Stream<void>;
     readonly release: (failure: string | null) => Effect.Effect<void, SuccessorFailed>;
-    readonly settle: Effect.Effect<void>;
+    readonly settle: Effect.Effect<void, SuccessorFailed>;
   }
 >()('tagma/installation/Succession') {}

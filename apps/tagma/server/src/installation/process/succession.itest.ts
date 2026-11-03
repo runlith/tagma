@@ -8,6 +8,7 @@ import { digestOf } from '@runlith/executions/hostArtifacts';
 import { Context, Deferred, Effect, Exit, Fiber, Layer } from 'effect';
 import { makeProcessRestart } from './record.js';
 import { openVersion, swapCurrent } from '../closure/versions.js';
+import { pruneReleases } from '../closure/leases.js';
 import { spawnedEffect } from '../../platform/testing/spawn.js';
 import { readInstallation } from '../closure/read.js';
 import { writeInstallation } from '../closure/write.js';
@@ -34,11 +35,11 @@ const stand = Effect.fnUntraced(function* (root: string, build: string) {
     role,
     path: `parts/${role}`,
     kind: 'file' as const,
-    bytes: role.length,
-    digest: digestOf(new TextEncoder().encode(role)),
+    bytes: `${build}:${role}`.length,
+    digest: digestOf(new TextEncoder().encode(`${build}:${role}`)),
   }));
   mkdirSync(join(version, 'parts'), { recursive: true });
-  for (const role of REQUIRED_ROLES) writeFileSync(join(version, 'parts', role), role);
+  for (const role of REQUIRED_ROLES) writeFileSync(join(version, 'parts', role), `${build}:${role}`);
   yield* writeInstallation(version, { os: process.platform, arch: process.arch }, build, parts).pipe(
     Effect.provide(BunFileSystem.layer),
     Effect.orDie,
@@ -63,6 +64,7 @@ it.live('a cancelled successor leaves a failed record and later disposal cannot 
       () => {},
       {
         releases: true,
+        chained: true,
         release: () => {},
         cancel: () => {},
         start: (_command, _env, signal) =>
@@ -101,6 +103,7 @@ for (const releases of [true, false]) {
         () => Deferred.doneUnsafe(signalled, Exit.void),
         {
           releases,
+          chained: true,
           release: () => {},
           cancel: () => {},
           start: async (_command, env) => {
@@ -258,7 +261,7 @@ it.live(
         () => {
           signalled += 1;
         },
-        { releases: true, release: () => {}, cancel: () => (cancelled += 1), start: async () => {} },
+        { releases: true, chained: true, release: () => {}, cancel: () => (cancelled += 1), start: async () => {} },
         yield* makeProcessRestart({ path: join(home, 'restart.json'), pid: process.pid }),
         undefined,
         Effect.succeed(steps),
@@ -286,6 +289,47 @@ it.live('a successor refuses a directory that a live process other than the one 
 
     expect(refused).toBeInstanceOf(DataDirectoryConflict);
     expect(refused._tag === 'DataDirectoryConflict' ? refused.holder : null).toBe(1);
+  }),
+);
+
+it.live('a refused installation remains actionable after its server restarts, until another installation is chosen', () =>
+  Effect.gen(function* () {
+    const home = yield* homed;
+    const installRoot = join(home, 'install');
+    const older = yield* stand(installRoot, 'earlier');
+    const offered = yield* stand(installRoot, 'offered');
+    swapCurrent(installRoot, 'earlier');
+    const steps: SuccessionSteps['Service'] = {
+      prepare: () => Effect.die('a held installation is not launched'),
+      withdraw: Effect.void,
+      weigh: () => Effect.succeed({ _tag: 'Refuses', detail: 'the host cannot take this bundle' }),
+    };
+    const refused = yield* Effect.scoped(
+      Effect.gen(function* () {
+        const first = yield* succeeding(
+          older,
+          installRoot,
+          join(home, 'serve.log'),
+          () => undefined,
+          undefined,
+          undefined,
+          undefined,
+          Effect.succeed(steps),
+        );
+        expect((yield* first.weigh(offered.root, join(offered.root, 'desktop', 'carried')))._tag).toBe('Refuses');
+        return yield* first.refused;
+      }),
+    );
+    pruneReleases(installRoot, ['earlier'], () => undefined);
+    expect(existsSync(offered.root)).toBe(true);
+    const restarted = yield* succeeding(older, installRoot, join(home, 'serve.log'), () => undefined);
+    expect(yield* restarted.refused).toEqual(refused);
+    expect((yield* Effect.flip(restarted.restart()))._tag).toBe('HostUnprepared');
+    const notChosen = yield* succeeding(offered, installRoot, join(home, 'serve.log'), () => undefined);
+    expect(yield* notChosen.refused).toEqual(refused);
+    yield* stand(installRoot, 'another');
+    const changed = yield* succeeding(older, installRoot, join(home, 'serve.log'), () => undefined);
+    expect(yield* changed.refused).toBeNull();
   }),
 );
 

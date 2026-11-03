@@ -16,7 +16,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { it } from '@runlith/effect-test';
 import { Clock, Effect } from 'effect';
-import { readAttempt, writeAttempt } from '../closure/attempt.js';
+import { passAttempt, readAttempt, writeAttempt } from '../closure/attempt.js';
 import { swapCurrent } from '../closure/versions.js';
 import { arrive, enterTrial, rollBack, type TrialPlace } from './trial.js';
 
@@ -184,6 +184,58 @@ it.live(
       expect([standing(), readAttempt(install)?.ended?.data]).toEqual(['v1', 'restored']);
       expect(notes()).toEqual(['before']);
     }),
+);
+
+it.effect('while an update stands open, a start of a third release refuses to open the data and the release before it may', () =>
+  Effect.gen(function* () {
+    attempted(0);
+    mkdirSync(join(install, 'v3'), { recursive: true });
+    writeFileSync(join(install, 'v3', 'install.json'), '{}');
+    expect(yield* arrive({ ...place, release: join(install, 'v3') })).toBe('stale');
+    expect(yield* arrive({ ...place, release: join(install, 'v1') })).toBe('serve');
+    expect(readAttempt(install)).toMatchObject({ to: 'v2', starts: 0 });
+  }),
+);
+
+it.effect('a start of a third release that arrived before an update began is still refused when it comes to open the data', () =>
+  Effect.gen(function* () {
+    rmSync(join(install, 'attempt.json'), { force: true });
+    mkdirSync(join(install, 'v3'), { recursive: true });
+    writeFileSync(join(install, 'v3', 'install.json'), '{}');
+    const third = { ...place, release: join(install, 'v3') };
+    expect(yield* arrive(third)).toBe('serve');
+    attempted(0);
+    const refused = yield* Effect.flip(enterTrial(third));
+    expect(refused._tag).toBe('StartStale');
+    expect(readAttempt(install)).toMatchObject({ to: 'v2', starts: 0, copied: false });
+  }),
+);
+
+it.effect('copies of a module store left without their main copy go at the next start', () =>
+  Effect.gen(function* () {
+    rmSync(join(install, 'attempt.json'), { force: true });
+    mkdirSync(stores, { recursive: true });
+    const orphan = join(stores, 'module.sqlite-wal.attempt');
+    writeFileSync(orphan, 'a log copy whose main copy is gone');
+    expect(yield* arrive(place)).toBe('serve');
+    expect(existsSync(orphan)).toBe(false);
+    rmSync(stores, { recursive: true, force: true });
+  }),
+);
+
+it.effect('copies a start left when it died between ending the attempt and dropping them go at the next start', () =>
+  Effect.gen(function* () {
+    attempted(1);
+    yield* on(yield* enterTrial(place));
+    passAttempt(install, 'v2');
+    expect(existsSync(`${store}.attempt`)).toBe(true);
+    expect(yield* arrive(place)).toBe('serve');
+    expect([existsSync(`${store}.attempt`), existsSync(`${store}-wal.attempt`), existsSync(`${fresh}.attempt`)]).toEqual([
+      false,
+      false,
+      false,
+    ]);
+  }),
 );
 
 it.effect('the door opening ends the attempt and drops the copies, and a start no open attempt names is no trial', () =>

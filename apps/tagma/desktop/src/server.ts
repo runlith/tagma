@@ -3,12 +3,12 @@ import { realpathSync } from 'node:fs';
 import { appendFile, mkdir, open } from 'node:fs/promises';
 import { request } from 'node:http';
 import { dirname, join, resolve } from 'node:path';
-import { Effect, Schema } from 'effect';
-import { type Handover, RESTART_RECORD, type Startup } from '@tagma/server/installation/contract/wire/restart';
-import { readHandover, readStartup } from '@tagma/server/installation/process/record';
+import { Schema } from 'effect';
+import { type Handover, type Startup } from '@tagma/server/installation/contract/wire/restart';
+import { processStateSchema, type ProcessState } from '@tagma/server/installation/contract/wire/probe';
 import { CLI_ENTRY, RUNTIME_PART, SERVE_FLAGS } from '@tagma/server/installation/contract/wire/layout';
 import { stalledSchema, unreadyHealthSchema } from '@tagma/server/http/contract/wire/health';
-import { LOCK_FILE } from '@tagma/server/platform/contract/wire/lock';
+const decodeProcessState = Schema.decodeUnknownSync(Schema.fromJsonString(processStateSchema));
 import type { Bearing } from './release.js';
 
 export type Closure = {
@@ -112,33 +112,42 @@ export async function endStalled(stalled: Stalled, log: string): Promise<void> {
   }
 }
 
-export async function startupLeft(data: string): Promise<Startup | null> {
-  return (await Effect.runPromise(readStartup(join(data, RESTART_RECORD)))).startup;
-}
-
-export const handover = (data: string): Promise<Handover | null> => Effect.runPromise(readHandover(join(data, RESTART_RECORD)));
-
-const LOCK_PROBE = `const { dlopen } = require('bun:ffi');
-const libc = dlopen('libc.dylib', { flock: { args: ['i32', 'i32'], returns: 'i32' } });
-let held;
-try { held = require('node:fs').openSync(process.env.TAGMA_PROBED, 'r'); } catch (error) { process.exit(error.code === 'ENOENT' ? 0 : 2); }
-process.exit(libc.symbols.flock(held, 6) === 0 ? 0 : 1);`;
-
-const locked = (runtime: string, data: string, env: NodeJS.ProcessEnv): Promise<boolean> =>
+export const localProcessState = (closure: Closure, data: string, env: NodeJS.ProcessEnv): Promise<ProcessState> =>
   new Promise((answered, refused) => {
-    const probe = spawn(runtime, ['-e', LOCK_PROBE], { env: { ...env, TAGMA_PROBED: join(data, LOCK_FILE) }, stdio: 'ignore' });
+    const probe = spawn(closure.runtime, [...SERVE_FLAGS, closure.entry, 'process-state', '--data', data], {
+      env,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    let out = '';
+    let err = '';
+    probe.stdout.on('data', (chunk) => {
+      out += String(chunk);
+    });
+    probe.stderr.on('data', (chunk) => {
+      err += String(chunk);
+    });
     probe.on('error', refused);
-    probe.on('exit', (code, signal) =>
-      code === 0 || code === 1
-        ? answered(code === 1)
-        : refused(
-            new Error(`the lock of ${data} could not be read: the probe ${signal === null ? `exited ${code}` : `ended on ${signal}`}`),
-          ),
-    );
+    probe.on('close', (code, signal) => {
+      if (code !== 0 || signal !== null)
+        return refused(new Error(`the process state of ${data} could not be read: ${signal ?? code}: ${err || out}`));
+      try {
+        answered(decodeProcessState(out));
+      } catch (cause) {
+        refused(cause);
+      }
+    });
   });
 
-export const dataHeld = async (runtime: string, data: string, env: NodeJS.ProcessEnv): Promise<boolean> =>
-  (await locked(runtime, data, env)) || (await handover(data))?.underway === true;
+export const startupLeft = async (closure: Closure, data: string, env: NodeJS.ProcessEnv): Promise<Startup | null> =>
+  (await localProcessState(closure, data, env)).startup;
+
+export const handover = async (closure: Closure, data: string, env: NodeJS.ProcessEnv): Promise<Handover | null> =>
+  (await localProcessState(closure, data, env)).restart ?? null;
+
+export const dataHeld = async (closure: Closure, data: string, env: NodeJS.ProcessEnv): Promise<boolean> => {
+  const state = await localProcessState(closure, data, env);
+  return state.held || state.restart?.underway === true;
+};
 
 export type ServerHandle = {
   readonly ended: () => string | null;

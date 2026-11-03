@@ -35,15 +35,17 @@ export const releaseFor = (feed: Feed, running: string, platform: InstallationPl
           unblock: [`tagma status — check again when a release with an archive for ${key} is published`],
         },
       }
-    : { release: { release: newest.release, ...archive }, issue: null };
+    : {
+        release: { release: newest.release, platform, irreversible: newest.irreversible, changes: newest.changes, ...archive },
+        issue: null,
+      };
 };
 
 export const crossesNoWayBack = (feed: Feed, below: string, upTo: string): boolean =>
-  feed.releases.some(
+  newestOf(feed).changes.some(
     (one) =>
-      one.irreversible &&
-      (!isRelease(below) || compareReleases(one.release, below) > 0) &&
-      (!isRelease(upTo) || compareReleases(one.release, upTo) <= 0),
+      !isRelease(one.release) ||
+      ((!isRelease(below) || compareReleases(one.release, below) > 0) && (!isRelease(upTo) || compareReleases(one.release, upTo) <= 0)),
   );
 
 const unreachable = (url: string, detail: string): NextIssue => ({

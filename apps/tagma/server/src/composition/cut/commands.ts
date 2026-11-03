@@ -19,6 +19,8 @@ import { SIGNERS } from '../cli/signers.js';
 import { entryKinds } from '../entryKinds.js';
 import { readBuildAttribution } from './attribution.js';
 import { claimHoldersLayer } from '../hostClaims.js';
+import { serverProcessesLayer } from '../children.js';
+import { join } from 'node:path';
 
 const cutOf = async (of: Build): Promise<Composition> => {
   const { modules, rested } = await of.parts();
@@ -30,6 +32,7 @@ const cutOf = async (of: Build): Promise<Composition> => {
       journal: entryKinds(modules, rested).steps.map((step) => step.name),
     },
     stores: modules.flatMap((module) => module.stores ?? []),
+    processes: serverProcessesLayer(join(of.cut.roots.packages, 'execution-host'), undefined),
   };
 };
 
@@ -63,7 +66,7 @@ export const buildCut = async (of: Build, given: readonly string[]): Promise<voi
       given,
       { channel: of.channel, checkout: of.cut.roots.checkout, composition: Effect.promise(() => cutOf(of)) },
       readBuildAttribution(door),
-    ),
+    ).pipe(Effect.provide(serverProcessesLayer(join(of.cut.roots.packages, 'execution-host'), undefined))),
   );
 };
 

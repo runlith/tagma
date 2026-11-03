@@ -1,7 +1,9 @@
 import { watch } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
-import { Cause, Clock, Deferred, Effect, Exit, FileSystem, Layer, PlatformError, Queue, Schema, Stream } from 'effect';
+import { Processes } from '@runlith/execution-host/ProcessReader';
+import { serverProcessesLayer } from '../children.js';
+import { Cause, Clock, Context, Deferred, Effect, Exit, FileSystem, Layer, PlatformError, Queue, Schema, Stream } from 'effect';
 import { RpcClient } from 'effect/rpc';
 import { Socket } from 'effect/socket';
 import { digestOf } from '@runlith/executions/hostArtifacts';
@@ -83,6 +85,10 @@ export const makeRestartRig = Effect.fn('restart.rig')(function* () {
   const sourceClock = yield* Clock.Clock;
   const now = () => wall + Number(sourceClock.monotonicTimeNanosUnsafe() - monotonic) / 1_000_000;
   const clock = Effect.sync(now);
+  const processes = Context.get(
+    yield* Layer.build(serverProcessesLayer(resolve(import.meta.dir, '../../../../../..', 'packages/execution-host'), undefined)),
+    Processes,
+  );
   let launch: ServerLaunch | null = null;
   let build = 0;
   let dataset: RestartDataset | null = null;
@@ -214,6 +220,7 @@ export const makeRestartRig = Effect.fn('restart.rig')(function* () {
         TAGMA_OBSERVE_ROLLOUT: '1',
       },
       join(root, 'data/serve.log'),
+      processes,
     );
     yield* ready();
   });

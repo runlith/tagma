@@ -2,6 +2,8 @@ import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { Cause, Context, Effect } from 'effect';
 import type { Channel } from '../installation/contract/wire/channel.js';
 import { takeActive } from '../installation/setup/active.js';
+import type { ProcessChain } from '../installation/contract/wire/process.js';
+import type { ProcessReader } from '@runlith/execution-host/ProcessReader';
 import { channelActive, entryCommand, integratesProjects, junctionDirectory } from '../installation/contract/wire/junction.js';
 import { placeEntry } from '../installation/setup/entry.js';
 import { installHomes } from '../external-harnesses/installs/skillInstall.js';
@@ -14,13 +16,22 @@ import { Projects } from '../projects/contract/service/registry.js';
 import { ProjectPolicy, type ServedGraphs } from '../graph/contract/service/serving.js';
 import { Orientation } from '../graph/contract/service/orientation.js';
 
-export const holdJunction = (channel: Channel, env: NodeJS.ProcessEnv, cli: string, url: string): (() => void) => {
+export const holdJunction = (
+  channel: Channel,
+  env: NodeJS.ProcessEnv,
+  cli: string,
+  url: string,
+  reader?: ProcessReader,
+  chain?: ProcessChain,
+): (() => void) => {
   const junction = junctionDirectory(env);
   if (junction === null) {
     console.error('[tagma] HOME names no place for the lock that keeps one Tagma running on this Mac; start it with HOME set');
     return process.exit(1);
   }
-  const taken = takeActive(junction, { channel: channel.id, cli, url, pid: process.pid });
+  const own = reader?.identity(process.pid);
+  const birth = own?._tag === 'Read' ? own.birth : undefined;
+  const taken = takeActive(junction, { channel: channel.id, cli, url, pid: process.pid, birth, chain });
   if (taken._tag === 'Held') {
     const said = channelActive(taken.holder ?? 'unnamed', channel);
     console.error(`[tagma] channel-active: ${said.reason}`);

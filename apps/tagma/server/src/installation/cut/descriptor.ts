@@ -1,5 +1,6 @@
 import type { BunPlugin } from 'bun';
-import type { Effect, FileSystem } from 'effect';
+import type { Effect, FileSystem, Layer } from 'effect';
+import type { Processes } from '@runlith/execution-host/ProcessReader';
 import type { ChildProcessSpawner } from 'effect/process';
 import type { Git } from '@runlith/git/Git';
 import type { OwnStore } from '../../platform/contract/service/ownStore.js';
@@ -60,4 +61,5 @@ export type Composition = Distribution & {
   readonly channel: Channel;
   readonly steps: Steps;
   readonly stores: readonly OwnStore[];
+  readonly processes: Layer.Layer<Processes>;
 };

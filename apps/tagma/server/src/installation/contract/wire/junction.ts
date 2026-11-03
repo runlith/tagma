@@ -2,11 +2,19 @@ import { readFileSync } from 'node:fs';
 import { Option, Result, Schema } from 'effect';
 import { CHANNELS, type Channel } from './channel.js';
 import { WORLD_COMMAND } from './layout.js';
+import { processChainSchema } from './process.js';
 
 export const ACTIVE_LOCK = 'active.lock';
 export const ACTIVE_FILE = 'active.json';
 
-export const ActiveServer = Schema.Struct({ channel: Schema.String, cli: Schema.String, url: Schema.String, pid: Schema.Number });
+export const ActiveServer = Schema.Struct({
+  channel: Schema.String,
+  cli: Schema.String,
+  url: Schema.String,
+  pid: Schema.Number,
+  birth: Schema.optional(Schema.String),
+  chain: Schema.optional(processChainSchema),
+});
 export type ActiveServer = typeof ActiveServer.Type;
 
 const decodeActive = Schema.decodeUnknownResult(Schema.fromJsonString(ActiveServer));
@@ -59,12 +67,15 @@ export const entryCommand = (env: NodeJS.ProcessEnv): readonly string[] => {
 
 export const entryLine = (args: string): string => `t="$HOME/${[...JUNCTION, ENTRY].join('/')}"; [ -x "$t" ] || exit 0; exec "$t" ${args}`;
 
+export const ENTERED = 'TAGMA_ENTERED';
+export const NOT_RUNNING = 'Tagma is not running: open Tagma or Tagma Dev';
+
 export const ENTRY_SCRIPT = `#!/bin/sh
-active="$(dirname "$0")/../active.json"
+active="$(dirname "$0")/../${ACTIVE_FILE}"
 cli=$(sed -n 's/.*"cli":"\\([^"]*\\)".*/\\1/p' "$active" 2>/dev/null)
 pid=$(sed -n 's/.*"pid":\\([0-9]*\\).*/\\1/p' "$active" 2>/dev/null)
-if [ -n "$cli" ] && [ -x "$cli" ] && [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then exec "$cli" "$@"; fi
+if [ -n "$cli" ] && [ -x "$cli" ] && [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then ${ENTERED}=1; export ${ENTERED}; exec "$cli" "$@"; fi
 if [ "$1" = hook ]; then exit 0; fi
-echo "Tagma is not running: open Tagma or Tagma Dev" >&2
+echo "${NOT_RUNNING}" >&2
 exit 1
 `;

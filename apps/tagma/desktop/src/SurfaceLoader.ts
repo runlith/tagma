@@ -24,6 +24,7 @@ import {
 import {
   askRestart,
   type Closure,
+  closureIn,
   dataHeld,
   endStalled,
   handover,
@@ -169,6 +170,13 @@ export class SurfaceLoader {
 
   private own(): Bearing | null {
     return this.bundle === null ? null : carriedBy(this.bundle);
+  }
+
+  private async probe(places: Places): Promise<Closure> {
+    if (this.bundle !== null) return closureIn(carriedIn(this.bundle));
+    const planned = await closureOf(places.installRoot);
+    if ('missing' in planned) throw new Error(planned.missing);
+    return planned.closure;
   }
 
   private get left(): boolean {
@@ -381,10 +389,10 @@ export class SurfaceLoader {
     this.asked = divergence;
     if (work?.needsHost === standing.build) return null;
     this.stand({ why: 'starting' });
-    const before = (await handover(places.data))?.id;
+    const before = (await handover(await this.probe(places), places.data, this.opening.env))?.id;
     const refused = await askRestart(this.surfaceUrl);
     if (refused === null) return standing.digest;
-    const after = await handover(places.data);
+    const after = await handover(await this.probe(places), places.data, this.opening.env);
     if (refused.code === 'unanswered' && after !== null && after.id !== before) return standing.digest;
     if ((await machineWork(this.surfaceUrl))?.needsHost === standing.build) return null;
     this.window.told(`${CHANNEL.name} couldn't switch to ${standing.build}`, refused);
@@ -479,7 +487,7 @@ export class SurfaceLoader {
   private async caught(installation: Bearing | null, awaited: string | null, places: Places): Promise<boolean> {
     const standing = standingIn(places.installRoot);
     if (awaited === null || installation === null || installation.digest === standing?.digest) return true;
-    const passing = await handover(places.data);
+    const passing = await handover(await this.probe(places), places.data, this.opening.env);
     if (passing?.underway === true) return false;
     if (standing !== null)
       this.window.told(`${CHANNEL.name} couldn't switch to ${standing.build}`, {
@@ -500,7 +508,7 @@ export class SurfaceLoader {
       return 'stood';
     }
     if (Date.now() < this.heldUntil) return null;
-    if (await dataHeld(planned.closure.runtime, places.data, this.opening.env)) {
+    if (await dataHeld(await this.probe(places), places.data, this.opening.env)) {
       this.heldUntil = Date.now() + HELD_ASKED_EVERY_MS;
       if (started !== null && currentVersion(places.installRoot) === started.version) this.started = null;
       return null;
@@ -513,12 +521,16 @@ export class SurfaceLoader {
       this.stand({ why: 'unrestored', build: fell.build, said: fell.said, detail: fell.detail });
       return 'stood';
     }
-    this.stand({ why: 'not-started', detail: `${CHANNEL.name} ${ended}`, startup: await startupLeft(places.data) });
+    this.stand({
+      why: 'not-started',
+      detail: `${CHANNEL.name} ${ended}`,
+      startup: await startupLeft(await this.probe(places), places.data, this.opening.env),
+    });
     return 'stood';
   }
 
   private async begun(places: Places, closure: Closure): Promise<boolean> {
-    const holder = await activeElsewhere(this.opening.env);
+    const holder = await activeElsewhere(this.opening.env, await this.probe(places));
     if (holder !== null) {
       this.held = closure;
       this.stand({ why: 'channel-active', holder });
