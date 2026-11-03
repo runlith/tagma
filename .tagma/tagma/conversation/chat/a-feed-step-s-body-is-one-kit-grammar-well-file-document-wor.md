@@ -13,6 +13,8 @@ sources:
     ref: packages/chat-ui/src/entries/ToolRow.svelte
   - kind: file
     ref: packages/chat-ui/src/entries/Well.svelte
+  - kind: file
+    ref: packages/chat-ui/src/entries/ToolXRay.svelte
 ---
 A step's body — what opens under a call, signal and notice — the kit assembles from one set of parts, and the producer says only what the content is (`form` display). The view is chosen by the text's addressee, not its format: model-bound text in markdown used to render in the human-answer font, and 40 lines of a command's tail filled the screen as the agent's answer.
 
@@ -23,4 +25,4 @@ A step's body — what opens under a call, signal and notice — the kit assembl
 - **Rows** — lists: one row 24 px, with graph blocks a menu-row `BlockCard`, not a framed card.
 - **Object** — what the call created or opened (a browser page, an artifact page, a video): a `raised` card with frame and header.
 
-On the rail nothing is larger than the step row: `body`-size markdown stays only for words spoken to a person (answer, message, bubble). Long text is cut by one `Clamp` on measured height (`clampFade` watches both the block and its content, so markdown drawn later also gets `Show all`; `ClampedText` is the same `Clamp` with a Copy button); there is no nested vertical scroll in the body. The row-height estimate (`rowEstimate`) reads the same expansion keys as the parts: an 8-row body, and whole after `Show all`. Two exceptions, both viewers with their own scroll. Diff is virtualized and holds its own height, or a long patch would build all rows at once. A command's output terminal that has output (`CommandToolRow`, shared `TerminalPane`, 0c39e069) draws the program's stream — ANSI, row redraw — which the text well cannot, and stays the place where output reads whole.
+On the rail nothing is larger than the step row: `body`-size markdown stays only for words spoken to a person (answer, message, bubble). Long text is cut by one `Clamp` on measured height (`clampFade` watches both the block and its content, so markdown drawn later also gets `Show all`; `ClampedText` is the same `Clamp` with a Copy button); there is no nested vertical scroll in the body. A call's raw input and output (`ToolXRay`) stand behind a `Details` toggle only under a readable body — a well, error, refusal, command sheet or verbose facts; a call with nothing readable opens straight onto them, since a disclosure holding only another disclosure costs a click and shows nothing. The row-height estimate (`rowEstimate`) reads the same expansion keys as the parts: an 8-row body, and whole after `Show all`. Two exceptions, both viewers with their own scroll. Diff is virtualized and holds its own height, or a long patch would build all rows at once. A command's output terminal that has output (`CommandToolRow`, shared `TerminalPane`, 0c39e069) draws the program's stream — ANSI, row redraw — which the text well cannot, and stays the place where output reads whole.
