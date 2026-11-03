@@ -5,7 +5,7 @@ ord: 6
 tags: ["explanation"]
 sources:
   - kind: file
-    ref: apps/tagma/server/src/installation/cut/publish.ts
+    ref: apps/tagma/server/src/cut/publish.ts
 ---
 `tagma:release publish` releases the checkout's HEAD whole, and a commit is released once. A HEAD a release tag names is answered as that release, with nothing cut, notarized or published and without asking the publisher or the feed. Its source maps are complete when `kept/<release>/kept.json` names that release and commit; otherwise a standing cut of that release at HEAD copies them again, and with no such cut the command refuses `maps-refused` when nothing is kept, or answers with the maps unverified when a directory without the record stands. Otherwise a standing cut of HEAD is taken as it is, whatever number it carries — so a publication stopped after its feed landed and before its tag is completed under its own number rather than cut again under the next — and only a HEAD with no standing cut is cut first; then it is notarized and published. It reads `release.json` and the files it names from the standing cut, and refuses `no-publisher` for a distribution whose descriptor names none; notarizing needs no publisher.
 

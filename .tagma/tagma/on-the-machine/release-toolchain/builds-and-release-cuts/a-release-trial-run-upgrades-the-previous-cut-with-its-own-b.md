@@ -10,11 +10,11 @@ edges:
     to: 01a13c7f-b7b8-77fb-b506-75271c89545b
 sources:
   - kind: file
-    ref: apps/tagma/server/src/installation/cut/trial.ts
+    ref: apps/tagma/server/src/cut/trial.ts
   - kind: file
-    ref: apps/tagma/server/src/installation/cut/world.ts
+    ref: apps/tagma/server/src/cut/world.ts
   - kind: symbol
-    ref: apps/tagma/server/src/installation/cut/pipeline.ts
+    ref: apps/tagma/server/src/cut/pipeline.ts
     symbol: previousCut
 ---
 A cut's trial run proves the road the release will take to people, not just a start in an empty world. The predecessor's code is issued for good: whether it accepts the new release's manifest, signature and restart shows only through its own button.

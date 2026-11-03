@@ -1,7 +1,7 @@
 ---
 id: 01a1a2ee-4df0-7950-86ed-67d0a7c1a24b
 title: A build and a release cut run from a captured source snapshot, and the revision they record is measured on that snapshot
-ord: 95
+ord: 2
 tags: ["explanation"]
 edges:
   - kind: relates
@@ -10,11 +10,11 @@ edges:
     to: 01a1a2bb-6070-765d-ad16-10beda41e0db
 sources:
   - kind: file
-    ref: apps/tagma/server/src/installation/cut/snapshot.ts
+    ref: apps/tagma/server/src/cut/snapshot.ts
   - kind: file
-    ref: apps/tagma/server/src/installation/cut/source.ts
+    ref: apps/tagma/server/src/cut/source.ts
   - kind: file
-    ref: apps/tagma/server/src/installation/cut/entry.ts
+    ref: apps/tagma/server/src/cut/entry.ts
   - kind: symbol
     ref: apps/tagma/server/src/platform/git/readings.ts
     symbol: sourceTree

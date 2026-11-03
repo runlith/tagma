@@ -17,7 +17,7 @@ sources:
   - kind: file
     ref: apps/tagma/server/src/composition/server.ts
   - kind: file
-    ref: apps/tagma/server/src/installation/cut/try.ts
+    ref: apps/tagma/server/src/cut/try.ts
   - kind: file
     ref: packages/sqlite-process/src/child.ts
   - kind: file

@@ -13,7 +13,7 @@ edges:
     to: 01a13209-1c70-7d0c-87f4-40b2e7b7be7f
 sources:
   - kind: file
-    ref: apps/tagma/server/src/installation/cut/publish.ts
+    ref: apps/tagma/server/src/cut/publish.ts
 ---
 Spec section "Distribution". Through `gh`: Release with the release tag, archive and DMG upload, then the `feed.json` commit to `main` — feed last. Repo is a parameter; checked against a test repo created with the operator's consent. Only the operator's word creates `runlith/tagma` and uploads the first release.
 

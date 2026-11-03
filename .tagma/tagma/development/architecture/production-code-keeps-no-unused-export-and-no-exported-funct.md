@@ -6599,238 +6599,6 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead apps/tagma/server/src/installation/cut/beside.ts#besideDataDirectory",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/installation/cut/came.ts#CameUp",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/installation/cut/engine.ts#EngineOutcome",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/installation/cut/locked.ts#REGISTRY",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/installation/cut/notarize.ts#NotarizationRefused",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/installation/cut/notarize.ts#Developer",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/installation/cut/notarize.ts#Apple",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/installation/cut/notarize.ts#sealingNotary",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/installation/cut/notes.ts#NotesUnreadable",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/installation/cut/notes.ts#notesOf",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/installation/cut/packages.ts#CarriedPackage",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/installation/cut/packages.ts#CarriedBinary",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/installation/cut/packages.ts#Native",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/installation/cut/packages.ts#carryPackages",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/installation/cut/pipeline.ts#diskImageFile",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/installation/cut/pipeline.ts#CutCache",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/installation/cut/pipeline.ts#Previous",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/installation/cut/pipeline.ts#machinePaths",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/installation/cut/pipeline.ts#Cut",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/installation/cut/pipeline.ts#cutRelease",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/installation/cut/pipeline.ts#Flags",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/installation/cut/port.ts#CutDoor",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/installation/cut/port.ts#StayingHost",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/installation/cut/proof.ts#Unwanted",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/installation/cut/proof.ts#pathSpellings",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/installation/cut/proof.ts#DeveloperInput",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/installation/cut/publish.ts#PublishRefused",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/installation/cut/publish.ts#Published",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/installation/cut/publish.ts#notarizeRelease",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/installation/cut/publish.ts#Publishing",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/installation/cut/publish.ts#publishRelease",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/installation/cut/release.ts#ReleaseCut",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/installation/cut/release.ts#PROGRAM_INPUTS",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/installation/cut/release.ts#EXECUTIONS_INPUTS",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/installation/cut/release.ts#ReleaseLanded",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/installation/cut/runtime.ts#OFFICIAL_RUNTIMES",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/installation/cut/runtime.ts#RuntimeTrouble",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/installation/cut/stack.ts#Decoded",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/installation/cut/stack.ts#StackRefused",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/installation/cut/stack.ts#decodeStack",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/installation/cut/stage.ts#Identity",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/installation/cut/stage.ts#recorded",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/installation/cut/stage.ts#cutFiles",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/installation/cut/stage.ts#settle",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/installation/cut/stage.ts#stand",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/installation/cut/stage.ts#releasedAt",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/installation/cut/target.ts#TargetTrouble",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/installation/cut/target.ts#rustTriple",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/installation/cut/tools.ts#ToolCarried",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/installation/cut/tools.ts#Tools",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/installation/cut/trial.ts#Trial",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/installation/cut/world.ts#Ran",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/installation/cut/world.ts#Terminal",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/installation/cut/world.ts#Beats",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/installation/cut/world.ts#Waited",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/installation/cut/world.ts#serves",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/installation/cut/world.ts#op",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/installation/cut/world.ts#keptOf",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "dead-code dead apps/tagma/server/src/installation/move/transfer.ts#CarryMiss",
           "owner": "5a3bed29"
         },
@@ -6880,14 +6648,6 @@ fields:
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/installation/setup/launcher.ts#launcherText",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/installation/setup/signing.ts#SIGNING_NAME",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/installation/setup/signing.ts#SigningRefused",
           "owner": "5a3bed29"
         },
         {
@@ -19519,474 +19279,238 @@ fields:
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/cut/came.ts#CameUp",
-          "held": {
-            "base": "906f7ce1aa13087d1e3a04ea720ca7b123a16c45",
-            "path": "apps/tagma/server/src/cut/came.ts"
-          },
           "owner": "5a3bed29"
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/cut/engine.ts#EngineOutcome",
-          "held": {
-            "base": "906f7ce1aa13087d1e3a04ea720ca7b123a16c45",
-            "path": "apps/tagma/server/src/cut/engine.ts"
-          },
           "owner": "5a3bed29"
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/cut/locked.ts#REGISTRY",
-          "held": {
-            "base": "906f7ce1aa13087d1e3a04ea720ca7b123a16c45",
-            "path": "apps/tagma/server/src/cut/locked.ts"
-          },
           "owner": "5a3bed29"
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/cut/notarize.ts#NotarizationRefused",
-          "held": {
-            "base": "906f7ce1aa13087d1e3a04ea720ca7b123a16c45",
-            "path": "apps/tagma/server/src/cut/notarize.ts"
-          },
           "owner": "5a3bed29"
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/cut/notarize.ts#Developer",
-          "held": {
-            "base": "906f7ce1aa13087d1e3a04ea720ca7b123a16c45",
-            "path": "apps/tagma/server/src/cut/notarize.ts"
-          },
           "owner": "5a3bed29"
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/cut/notarize.ts#Apple",
-          "held": {
-            "base": "906f7ce1aa13087d1e3a04ea720ca7b123a16c45",
-            "path": "apps/tagma/server/src/cut/notarize.ts"
-          },
           "owner": "5a3bed29"
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/cut/notarize.ts#sealingNotary",
-          "held": {
-            "base": "906f7ce1aa13087d1e3a04ea720ca7b123a16c45",
-            "path": "apps/tagma/server/src/cut/notarize.ts"
-          },
           "owner": "5a3bed29"
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/cut/notes.ts#NotesUnreadable",
-          "held": {
-            "base": "906f7ce1aa13087d1e3a04ea720ca7b123a16c45",
-            "path": "apps/tagma/server/src/cut/notes.ts"
-          },
           "owner": "5a3bed29"
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/cut/notes.ts#notesOf",
-          "held": {
-            "base": "906f7ce1aa13087d1e3a04ea720ca7b123a16c45",
-            "path": "apps/tagma/server/src/cut/notes.ts"
-          },
           "owner": "5a3bed29"
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/cut/packages.ts#CarriedPackage",
-          "held": {
-            "base": "906f7ce1aa13087d1e3a04ea720ca7b123a16c45",
-            "path": "apps/tagma/server/src/cut/packages.ts"
-          },
           "owner": "5a3bed29"
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/cut/packages.ts#CarriedBinary",
-          "held": {
-            "base": "906f7ce1aa13087d1e3a04ea720ca7b123a16c45",
-            "path": "apps/tagma/server/src/cut/packages.ts"
-          },
           "owner": "5a3bed29"
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/cut/packages.ts#Native",
-          "held": {
-            "base": "906f7ce1aa13087d1e3a04ea720ca7b123a16c45",
-            "path": "apps/tagma/server/src/cut/packages.ts"
-          },
           "owner": "5a3bed29"
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/cut/packages.ts#carryPackages",
-          "held": {
-            "base": "906f7ce1aa13087d1e3a04ea720ca7b123a16c45",
-            "path": "apps/tagma/server/src/cut/packages.ts"
-          },
           "owner": "5a3bed29"
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/cut/pipeline.ts#diskImageFile",
-          "held": {
-            "base": "906f7ce1aa13087d1e3a04ea720ca7b123a16c45",
-            "path": "apps/tagma/server/src/cut/pipeline.ts"
-          },
           "owner": "5a3bed29"
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/cut/pipeline.ts#CutCache",
-          "held": {
-            "base": "906f7ce1aa13087d1e3a04ea720ca7b123a16c45",
-            "path": "apps/tagma/server/src/cut/pipeline.ts"
-          },
           "owner": "5a3bed29"
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/cut/pipeline.ts#Previous",
-          "held": {
-            "base": "906f7ce1aa13087d1e3a04ea720ca7b123a16c45",
-            "path": "apps/tagma/server/src/cut/pipeline.ts"
-          },
           "owner": "5a3bed29"
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/cut/pipeline.ts#machinePaths",
-          "held": {
-            "base": "906f7ce1aa13087d1e3a04ea720ca7b123a16c45",
-            "path": "apps/tagma/server/src/cut/pipeline.ts"
-          },
           "owner": "5a3bed29"
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/cut/pipeline.ts#Cut",
-          "held": {
-            "base": "906f7ce1aa13087d1e3a04ea720ca7b123a16c45",
-            "path": "apps/tagma/server/src/cut/pipeline.ts"
-          },
           "owner": "5a3bed29"
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/cut/pipeline.ts#cutRelease",
-          "held": {
-            "base": "906f7ce1aa13087d1e3a04ea720ca7b123a16c45",
-            "path": "apps/tagma/server/src/cut/pipeline.ts"
-          },
           "owner": "5a3bed29"
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/cut/pipeline.ts#Flags",
-          "held": {
-            "base": "906f7ce1aa13087d1e3a04ea720ca7b123a16c45",
-            "path": "apps/tagma/server/src/cut/pipeline.ts"
-          },
           "owner": "5a3bed29"
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/cut/port.ts#CutDoor",
-          "held": {
-            "base": "906f7ce1aa13087d1e3a04ea720ca7b123a16c45",
-            "path": "apps/tagma/server/src/cut/port.ts"
-          },
           "owner": "5a3bed29"
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/cut/port.ts#StayingHost",
-          "held": {
-            "base": "906f7ce1aa13087d1e3a04ea720ca7b123a16c45",
-            "path": "apps/tagma/server/src/cut/port.ts"
-          },
           "owner": "5a3bed29"
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/cut/proof.ts#Unwanted",
-          "held": {
-            "base": "906f7ce1aa13087d1e3a04ea720ca7b123a16c45",
-            "path": "apps/tagma/server/src/cut/proof.ts"
-          },
           "owner": "5a3bed29"
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/cut/proof.ts#pathSpellings",
-          "held": {
-            "base": "906f7ce1aa13087d1e3a04ea720ca7b123a16c45",
-            "path": "apps/tagma/server/src/cut/proof.ts"
-          },
           "owner": "5a3bed29"
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/cut/proof.ts#DeveloperInput",
-          "held": {
-            "base": "906f7ce1aa13087d1e3a04ea720ca7b123a16c45",
-            "path": "apps/tagma/server/src/cut/proof.ts"
-          },
           "owner": "5a3bed29"
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/cut/publish.ts#PublishRefused",
-          "held": {
-            "base": "906f7ce1aa13087d1e3a04ea720ca7b123a16c45",
-            "path": "apps/tagma/server/src/cut/publish.ts"
-          },
           "owner": "5a3bed29"
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/cut/publish.ts#Published",
-          "held": {
-            "base": "906f7ce1aa13087d1e3a04ea720ca7b123a16c45",
-            "path": "apps/tagma/server/src/cut/publish.ts"
-          },
           "owner": "5a3bed29"
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/cut/publish.ts#notarizeRelease",
-          "held": {
-            "base": "906f7ce1aa13087d1e3a04ea720ca7b123a16c45",
-            "path": "apps/tagma/server/src/cut/publish.ts"
-          },
           "owner": "5a3bed29"
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/cut/publish.ts#Publishing",
-          "held": {
-            "base": "906f7ce1aa13087d1e3a04ea720ca7b123a16c45",
-            "path": "apps/tagma/server/src/cut/publish.ts"
-          },
           "owner": "5a3bed29"
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/cut/publish.ts#publishRelease",
-          "held": {
-            "base": "906f7ce1aa13087d1e3a04ea720ca7b123a16c45",
-            "path": "apps/tagma/server/src/cut/publish.ts"
-          },
           "owner": "5a3bed29"
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/cut/release.ts#ReleaseCut",
-          "held": {
-            "base": "906f7ce1aa13087d1e3a04ea720ca7b123a16c45",
-            "path": "apps/tagma/server/src/cut/release.ts"
-          },
           "owner": "5a3bed29"
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/cut/release.ts#PROGRAM_INPUTS",
-          "held": {
-            "base": "906f7ce1aa13087d1e3a04ea720ca7b123a16c45",
-            "path": "apps/tagma/server/src/cut/release.ts"
-          },
           "owner": "5a3bed29"
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/cut/release.ts#EXECUTIONS_INPUTS",
-          "held": {
-            "base": "906f7ce1aa13087d1e3a04ea720ca7b123a16c45",
-            "path": "apps/tagma/server/src/cut/release.ts"
-          },
           "owner": "5a3bed29"
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/cut/release.ts#ReleaseLanded",
-          "held": {
-            "base": "906f7ce1aa13087d1e3a04ea720ca7b123a16c45",
-            "path": "apps/tagma/server/src/cut/release.ts"
-          },
           "owner": "5a3bed29"
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/cut/runtime.ts#OFFICIAL_RUNTIMES",
-          "held": {
-            "base": "906f7ce1aa13087d1e3a04ea720ca7b123a16c45",
-            "path": "apps/tagma/server/src/cut/runtime.ts"
-          },
           "owner": "5a3bed29"
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/cut/runtime.ts#RuntimeTrouble",
-          "held": {
-            "base": "906f7ce1aa13087d1e3a04ea720ca7b123a16c45",
-            "path": "apps/tagma/server/src/cut/runtime.ts"
-          },
           "owner": "5a3bed29"
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/cut/signing.ts#SIGNING_NAME",
-          "held": {
-            "base": "906f7ce1aa13087d1e3a04ea720ca7b123a16c45",
-            "path": "apps/tagma/server/src/cut/signing.ts"
-          },
           "owner": "5a3bed29"
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/cut/signing.ts#SigningRefused",
-          "held": {
-            "base": "906f7ce1aa13087d1e3a04ea720ca7b123a16c45",
-            "path": "apps/tagma/server/src/cut/signing.ts"
-          },
           "owner": "5a3bed29"
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/cut/stack.ts#Decoded",
-          "held": {
-            "base": "906f7ce1aa13087d1e3a04ea720ca7b123a16c45",
-            "path": "apps/tagma/server/src/cut/stack.ts"
-          },
           "owner": "5a3bed29"
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/cut/stack.ts#StackRefused",
-          "held": {
-            "base": "906f7ce1aa13087d1e3a04ea720ca7b123a16c45",
-            "path": "apps/tagma/server/src/cut/stack.ts"
-          },
           "owner": "5a3bed29"
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/cut/stack.ts#decodeStack",
-          "held": {
-            "base": "906f7ce1aa13087d1e3a04ea720ca7b123a16c45",
-            "path": "apps/tagma/server/src/cut/stack.ts"
-          },
           "owner": "5a3bed29"
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/cut/stage.ts#Identity",
-          "held": {
-            "base": "906f7ce1aa13087d1e3a04ea720ca7b123a16c45",
-            "path": "apps/tagma/server/src/cut/stage.ts"
-          },
           "owner": "5a3bed29"
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/cut/stage.ts#recorded",
-          "held": {
-            "base": "906f7ce1aa13087d1e3a04ea720ca7b123a16c45",
-            "path": "apps/tagma/server/src/cut/stage.ts"
-          },
           "owner": "5a3bed29"
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/cut/stage.ts#cutFiles",
-          "held": {
-            "base": "906f7ce1aa13087d1e3a04ea720ca7b123a16c45",
-            "path": "apps/tagma/server/src/cut/stage.ts"
-          },
           "owner": "5a3bed29"
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/cut/stage.ts#settle",
-          "held": {
-            "base": "906f7ce1aa13087d1e3a04ea720ca7b123a16c45",
-            "path": "apps/tagma/server/src/cut/stage.ts"
-          },
           "owner": "5a3bed29"
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/cut/stage.ts#stand",
-          "held": {
-            "base": "906f7ce1aa13087d1e3a04ea720ca7b123a16c45",
-            "path": "apps/tagma/server/src/cut/stage.ts"
-          },
           "owner": "5a3bed29"
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/cut/stage.ts#releasedAt",
-          "held": {
-            "base": "906f7ce1aa13087d1e3a04ea720ca7b123a16c45",
-            "path": "apps/tagma/server/src/cut/stage.ts"
-          },
           "owner": "5a3bed29"
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/cut/target.ts#TargetTrouble",
-          "held": {
-            "base": "906f7ce1aa13087d1e3a04ea720ca7b123a16c45",
-            "path": "apps/tagma/server/src/cut/target.ts"
-          },
           "owner": "5a3bed29"
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/cut/target.ts#rustTriple",
-          "held": {
-            "base": "906f7ce1aa13087d1e3a04ea720ca7b123a16c45",
-            "path": "apps/tagma/server/src/cut/target.ts"
-          },
           "owner": "5a3bed29"
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/cut/tools.ts#ToolCarried",
-          "held": {
-            "base": "906f7ce1aa13087d1e3a04ea720ca7b123a16c45",
-            "path": "apps/tagma/server/src/cut/tools.ts"
-          },
           "owner": "5a3bed29"
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/cut/tools.ts#Tools",
-          "held": {
-            "base": "906f7ce1aa13087d1e3a04ea720ca7b123a16c45",
-            "path": "apps/tagma/server/src/cut/tools.ts"
-          },
           "owner": "5a3bed29"
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/cut/trial.ts#Trial",
-          "held": {
-            "base": "906f7ce1aa13087d1e3a04ea720ca7b123a16c45",
-            "path": "apps/tagma/server/src/cut/trial.ts"
-          },
           "owner": "5a3bed29"
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/cut/world.ts#Ran",
-          "held": {
-            "base": "906f7ce1aa13087d1e3a04ea720ca7b123a16c45",
-            "path": "apps/tagma/server/src/cut/world.ts"
-          },
           "owner": "5a3bed29"
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/cut/world.ts#Terminal",
-          "held": {
-            "base": "906f7ce1aa13087d1e3a04ea720ca7b123a16c45",
-            "path": "apps/tagma/server/src/cut/world.ts"
-          },
           "owner": "5a3bed29"
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/cut/world.ts#Beats",
-          "held": {
-            "base": "906f7ce1aa13087d1e3a04ea720ca7b123a16c45",
-            "path": "apps/tagma/server/src/cut/world.ts"
-          },
           "owner": "5a3bed29"
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/cut/world.ts#Waited",
-          "held": {
-            "base": "906f7ce1aa13087d1e3a04ea720ca7b123a16c45",
-            "path": "apps/tagma/server/src/cut/world.ts"
-          },
           "owner": "5a3bed29"
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/cut/world.ts#serves",
-          "held": {
-            "base": "906f7ce1aa13087d1e3a04ea720ca7b123a16c45",
-            "path": "apps/tagma/server/src/cut/world.ts"
-          },
           "owner": "5a3bed29"
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/cut/world.ts#op",
-          "held": {
-            "base": "906f7ce1aa13087d1e3a04ea720ca7b123a16c45",
-            "path": "apps/tagma/server/src/cut/world.ts"
-          },
           "owner": "5a3bed29"
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/cut/world.ts#keptOf",
-          "held": {
-            "base": "906f7ce1aa13087d1e3a04ea720ca7b123a16c45",
-            "path": "apps/tagma/server/src/cut/world.ts"
-          },
           "owner": "5a3bed29"
         }
       ],

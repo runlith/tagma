@@ -5,7 +5,7 @@ ord: 10
 tags: ["explanation"]
 sources:
   - kind: file
-    ref: apps/tagma/server/src/installation/cut/release.ts
+    ref: apps/tagma/server/src/cut/release.ts
 ---
 The developer cut builds the CLI, the server and their workers with the map separate (`external`) and lays it next to the bundle as `<bundle file>.map`, naming it part of closure. The release keeps maps outside the installation (they are read by `tagma:stack`), and the release's proof refuses a map inside it.
 

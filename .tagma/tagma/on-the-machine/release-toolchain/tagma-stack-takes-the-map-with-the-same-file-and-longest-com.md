@@ -1,14 +1,14 @@
 ---
 id: 01a13622-ae44-7f6d-920d-bc1b267509ec
 title: tagma:stack takes the map with the same file and longest common tail for a stack frame
-ord: 3
+ord: 5
 tags: ["explanation"]
 edges:
   - kind: relates
     to: 01a13209-1c70-7d0c-87f4-40b2e7b7be7f
 sources:
   - kind: file
-    ref: apps/tagma/server/src/installation/cut/stack.ts
+    ref: apps/tagma/server/src/cut/stack.ts
   - kind: file
     ref: packages/bundle/src/maps.ts
 ---

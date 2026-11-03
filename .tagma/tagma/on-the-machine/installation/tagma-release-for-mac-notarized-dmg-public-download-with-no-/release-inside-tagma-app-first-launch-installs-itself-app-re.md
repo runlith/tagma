@@ -15,7 +15,7 @@ edges:
     to: 01a135f8-f7eb-72c1-88c2-519be2abbfcc
 sources:
   - kind: file
-    ref: apps/tagma/server/src/installation/cut/release.ts
+    ref: apps/tagma/server/src/cut/release.ts
   - kind: file
     ref: apps/tagma/server/src/release-channel/install.ts
 ---

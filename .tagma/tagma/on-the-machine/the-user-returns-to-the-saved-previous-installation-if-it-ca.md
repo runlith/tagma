@@ -16,7 +16,7 @@ sources:
   - kind: file
     ref: apps/tagma/desktop/src/SurfaceLoader.ts
   - kind: file
-    ref: apps/tagma/server/src/installation/cut/build.ts
+    ref: apps/tagma/server/src/cut/build.ts
   - kind: file
     ref: apps/tagma/server/src/installation/operations/downgrade.ts
   - kind: file

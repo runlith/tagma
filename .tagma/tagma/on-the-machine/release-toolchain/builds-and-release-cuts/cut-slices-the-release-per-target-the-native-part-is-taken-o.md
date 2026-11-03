@@ -8,13 +8,13 @@ edges:
     to: 01a175e1-b116-7055-8be6-30f9fb401399
 sources:
   - kind: file
-    ref: apps/tagma/server/src/installation/cut/locked.ts
+    ref: apps/tagma/server/src/cut/locked.ts
   - kind: file
-    ref: apps/tagma/server/src/installation/cut/runtime.ts
+    ref: apps/tagma/server/src/cut/runtime.ts
   - kind: file
-    ref: apps/tagma/server/src/installation/cut/target.ts
+    ref: apps/tagma/server/src/cut/target.ts
   - kind: symbol
-    ref: apps/tagma/server/src/installation/cut/packages.ts
+    ref: apps/tagma/server/src/cut/packages.ts
     symbol: nativeCarried
 ---
 One release is cut from one commit for `darwin-arm64` and `darwin-x64` on an Apple silicon Mac. The target is part of `ReleaseCut`, and release hands it to every native-part producer. A checkout build (Tagma Dev, beside, try) gets no target: it builds for the machine out of `node_modules`, as before.

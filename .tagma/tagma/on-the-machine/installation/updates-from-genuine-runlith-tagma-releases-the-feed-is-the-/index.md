@@ -14,9 +14,9 @@ sources:
   - kind: file
     ref: apps/tagma/server/src/installation/contract/wire/feed.ts
   - kind: file
-    ref: apps/tagma/server/src/installation/cut/publish.ts
+    ref: apps/tagma/server/src/cut/publish.ts
   - kind: file
-    ref: apps/tagma/server/src/installation/cut/published.ts
+    ref: apps/tagma/server/src/cut/published.ts
   - kind: file
     ref: apps/tagma/server/src/release-channel/places.ts
 ---

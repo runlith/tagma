@@ -1,7 +1,7 @@
 ---
 id: 01a14c05-71a7-71c8-88a1-ee49a186ad90
 title: A developer builds the installed Tagma from HEAD or the working tree and checks it separately
-ord: 61
+ord: 3
 tags: ["feature"]
 fields:
   {
@@ -20,9 +20,9 @@ sources:
   - kind: file
     ref: apps/tagma/server/src/composition/developer/bindings.ts
   - kind: file
-    ref: apps/tagma/server/src/installation/cut/build.ts
+    ref: apps/tagma/server/src/cut/build.ts
   - kind: file
-    ref: apps/tagma/server/src/installation/cut/try.ts
+    ref: apps/tagma/server/src/cut/try.ts
 ---
 **Value.** A developer checks fresh Tagma code as an installed program, apart from the working source tree.
 

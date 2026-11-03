@@ -5,7 +5,7 @@ ord: 1
 tags: ["explanation"]
 sources:
   - kind: file
-    ref: apps/tagma/server/src/installation/cut/skills.ts
+    ref: apps/tagma/server/src/cut/skills.ts
   - kind: file
     ref: apps/tagma/server/src/native-harness/skills/shipped.ts
 ---

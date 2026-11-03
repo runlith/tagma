@@ -27,8 +27,6 @@ fields:
   }
 edges:
   - kind: imports
-    to: 01a0c0d5-c713-75bd-b78b-0583adeeb4ba
-  - kind: imports
     to: 01a0c6ed-5b45-77b0-a47b-9e0ab77b7a93
   - kind: imports
     to: 01a0c6ef-834d-72bb-a092-d74196b75e80
@@ -55,8 +53,6 @@ edges:
   - kind: imports
     to: 01a0fd8b-bedd-7f22-b461-adddedf810fe
   - kind: imports
-    to: 01a0fd8b-beed-7934-884b-a443f92da92b
-  - kind: imports
     to: 01a0fd8b-bef1-758e-b119-40b1d962023e
   - kind: imports
     to: 01a0fd8b-bef3-77af-90bc-2ea871f4b029
@@ -74,8 +70,6 @@ edges:
     to: 01a1165d-b047-7099-969a-602c520698f4
   - kind: imports
     to: 01a12c51-8120-7250-9703-61feea5c74f4
-  - kind: imports
-    to: 01a13b1a-1851-79b3-ba84-3b0e9f581885
   - kind: imports-tests
     to: 01a0fd8b-bee9-7760-9b13-b9847a70e34e
   - kind: imports-tests
@@ -86,4 +80,4 @@ sources:
   - kind: dir
     ref: apps/tagma/server/src/installation
 ---
-Tagma is a program on the operator's machine, and the module answers for it as an installation: the data directory and machine registry, checkout builds and releases, the server process and handing it to its successor on restart, initial setup and database compaction. What the running server does is decided by the other modules; here — where it came from, where it lies, and how it is replaced.
+Tagma is a program on the operator's machine, and the module answers for it as an installation: the data directory and machine registry, the installed releases and the moves between them, the server process and handing it to its successor on restart, initial setup and database compaction. What the running server does is decided by the other modules, and how a release is built, tried and published by the release toolchain; here — where the installation lies, what it is made of, and how it is replaced. Its contract is what both sides of a release boundary read: the manifest, the attempt and restart records, the feed shape and the environment a beside installation runs with.

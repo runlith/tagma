@@ -9,11 +9,11 @@ fields:
   }
 sources:
   - kind: file
-    ref: apps/tagma/server/src/installation/cut/notarize.ts
+    ref: apps/tagma/server/src/cut/notarize.ts
   - kind: file
-    ref: apps/tagma/server/src/installation/cut/pipeline.ts
+    ref: apps/tagma/server/src/cut/pipeline.ts
   - kind: file
-    ref: apps/tagma/server/src/installation/cut/publish.ts
+    ref: apps/tagma/server/src/cut/publish.ts
   - kind: file
     ref: apps/tagma/server/src/composition/cut/commands.ts
 ---

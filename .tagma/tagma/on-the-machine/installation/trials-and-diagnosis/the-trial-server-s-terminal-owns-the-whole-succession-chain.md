@@ -7,7 +7,7 @@ sources:
   - kind: file
     ref: apps/tagma/server/src/installation/contract/wire/launch.ts
   - kind: file
-    ref: apps/tagma/server/src/installation/cut/try.ts
+    ref: apps/tagma/server/src/cut/try.ts
   - kind: file
     ref: apps/tagma/server/src/installation/process/launch.ts
   - kind: file

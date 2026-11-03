@@ -15,8 +15,8 @@ edges:
     to: 01a1361b-0306-7539-b5f1-3cd46c675b20
 sources:
   - kind: file
-    ref: apps/tagma/server/src/installation/cut/maps.ts
+    ref: apps/tagma/server/src/cut/maps.ts
   - kind: file
-    ref: apps/tagma/server/src/installation/cut/publish.ts
+    ref: apps/tagma/server/src/cut/publish.ts
 ---
 `ship` trusted `kept/<release>` by existence, so a directory left partial by an older cut passed, and a tagged HEAD whose maps were lost went back through notarization and the publisher, where a newer feed refused it. Kept maps carry `kept.json` (release, commit) written in staging before the rename; `ship` on a tagged HEAD with a standing cut of that release copies the maps again unless the record matches, and refuses `maps-refused` naming the missing data when the directory is absent and no such cut stands.

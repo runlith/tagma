@@ -137,14 +137,6 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "repeated-declarations repeated alias:Spawner apps/tagma/server/src/installation/cut/notarize.ts",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "repeated-declarations repeated alias:Spawner apps/tagma/server/src/installation/cut/release.ts",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "repeated-declarations repeated alias:Failed apps/tagma/server/src/landing/contract/service/mergeGit.ts",
           "owner": "5a3bed29"
         },
@@ -342,18 +334,10 @@ fields:
         },
         {
           "fingerprint": "repeated-declarations repeated alias:Spawner apps/tagma/server/src/cut/notarize.ts",
-          "held": {
-            "base": "906f7ce1aa13087d1e3a04ea720ca7b123a16c45",
-            "path": "apps/tagma/server/src/cut/notarize.ts"
-          },
           "owner": "5a3bed29"
         },
         {
           "fingerprint": "repeated-declarations repeated alias:Spawner apps/tagma/server/src/cut/release.ts",
-          "held": {
-            "base": "906f7ce1aa13087d1e3a04ea720ca7b123a16c45",
-            "path": "apps/tagma/server/src/cut/release.ts"
-          },
           "owner": "5a3bed29"
         }
       ],

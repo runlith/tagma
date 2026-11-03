@@ -15,10 +15,10 @@ edges:
     to: 01a16915-34b6-7bf8-9a01-c8c56bc98bc4
 sources:
   - kind: file
-    ref: apps/tagma/server/src/installation/cut/stage.ts
+    ref: apps/tagma/server/src/cut/stage.ts
   - kind: file
-    ref: apps/tagma/server/src/installation/cut/notarize.ts
+    ref: apps/tagma/server/src/cut/notarize.ts
   - kind: file
-    ref: apps/tagma/server/src/installation/cut/publish.ts
+    ref: apps/tagma/server/src/cut/publish.ts
 ---
 `ReleaseRecord.images` named files only and `cutStanding` checked existence, so a modified DMG in a notarized cut was published. The sealed record carries `imageDigests` (sha256, size per platform); `notarize` and `publish` verify them before reusing a notarized cut. A notarized cut recorded before the field existed is sealed in place — staple and Gatekeeper on the image — then recorded, never trusted unproven.

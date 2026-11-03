@@ -5,7 +5,7 @@ ord: 4
 tags: ["explanation"]
 sources:
   - kind: file
-    ref: apps/tagma/server/src/installation/cut/engine.ts
+    ref: apps/tagma/server/src/cut/engine.ts
   - kind: file
     ref: packages/speech-whisper/scripts/build.ts
 ---

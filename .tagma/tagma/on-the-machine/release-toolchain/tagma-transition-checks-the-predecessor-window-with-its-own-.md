@@ -1,7 +1,7 @@
 ---
 id: 01a155fa-972a-742a-a39f-559855712a25
 title: tagma:transition checks the predecessor window with its own SurfaceLoader from its commit sources
-ord: 6
+ord: 7
 tags: ["task"]
 fields:
   {

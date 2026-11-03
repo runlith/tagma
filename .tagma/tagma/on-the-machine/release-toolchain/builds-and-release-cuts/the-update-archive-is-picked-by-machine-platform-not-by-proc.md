@@ -9,7 +9,7 @@ sources:
   - kind: file
     ref: apps/tagma/server/src/installation/contract/wire/feed.ts
   - kind: file
-    ref: apps/tagma/server/src/installation/cut/stage.ts
+    ref: apps/tagma/server/src/cut/stage.ts
   - kind: file
     ref: apps/tagma/server/src/installation/setup/macos.ts
   - kind: file

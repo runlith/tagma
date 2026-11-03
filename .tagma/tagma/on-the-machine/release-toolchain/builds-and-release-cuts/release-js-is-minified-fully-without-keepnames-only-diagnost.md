@@ -12,7 +12,7 @@ sources:
   - kind: file
     ref: apps/tagma/desktop/scripts/build-host.ts
   - kind: file
-    ref: apps/tagma/server/src/installation/cut/release.ts
+    ref: apps/tagma/server/src/cut/release.ts
   - kind: file
     ref: packages/bundle/src/bundle.ts
   - kind: file

@@ -11,11 +11,11 @@ sources:
   - kind: file
     ref: apps/tagma/server/src/composition/cut/release.ts
   - kind: file
-    ref: apps/tagma/server/src/installation/cut/pipeline.ts
+    ref: apps/tagma/server/src/cut/pipeline.ts
   - kind: file
-    ref: apps/tagma/server/src/installation/cut/publish.ts
+    ref: apps/tagma/server/src/cut/publish.ts
   - kind: file
-    ref: apps/tagma/server/src/installation/cut/trial.ts
+    ref: apps/tagma/server/src/cut/trial.ts
 ---
 **Value.** A developer ships a self-contained app that people can pass around and update through the same public source.
 

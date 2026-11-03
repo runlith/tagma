@@ -9,7 +9,7 @@ fields:
   }
 sources:
   - kind: dir
-    ref: apps/tagma/server/src/installation/cut
+    ref: apps/tagma/server/src/cut
   - kind: dir
     ref: apps/tagma/server/src/release-channel
   - kind: file

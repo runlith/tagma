@@ -10,7 +10,7 @@ fields:
   }
 sources:
   - kind: file
-    ref: apps/tagma/server/src/installation/cut/beside.ts
+    ref: apps/tagma/server/src/cut/beside.ts
   - kind: symbol
     ref: apps/tagma/server/src/external-harnesses/installs/upgrade.ts
     symbol: refreshInstallations
