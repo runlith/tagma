@@ -4,7 +4,7 @@ import { kind, own } from '@runlith/testbed/worlds';
 import { existsSync, readlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import * as BunServices from '@effect/platform-bun/BunServices';
-import { Clock, Context, Effect, Exit, FileSystem, Layer, Schedule, Schema, Scope } from 'effect';
+import { Clock, Context, Effect, Exit, FileSystem, Layer, Result, Schedule, Schema, Scope } from 'effect';
 import { HostRegistration } from '@runlith/executions/HostRegistration';
 import { endpointConnection } from '@runlith/executions/posix/endpoint';
 import { HostRequestKey } from '@runlith/executions/protocol/execution';
@@ -190,7 +190,7 @@ describe('a published release the standing execution host does not take', () => 
           expect(refused).toMatchObject({ status: 'held', build: '0.2.0', standing: '0.1.0' });
           if (refused.status !== 'held') return;
           expect(readlinkSync(join(installRoot, 'current'))).toBe(first.version);
-          expect(readAttempt(installRoot)?.to).toBe(first.version);
+          expect(Result.getOrThrow(readAttempt(installRoot))?.to).toBe(first.version);
           expect(existsSync(hostBundleNext(Context.get(executions, HostManagement).connection.address.state))).toBe(false);
           const current = yield* succession.current;
           const runs = { build: '0.1.0', digest: runsFrom.manifest.identity.digest };
@@ -211,7 +211,7 @@ describe('a published release the standing execution host does not take', () => 
           const consented = yield* Effect.flip(succession.restart('replace'));
           expect(consented._tag).toBe('SuccessorFailed');
           expect(readlinkSync(join(installRoot, 'current'))).toBe(refused.version);
-          expect(readAttempt(installRoot)?.to).toBe(refused.version);
+          expect(Result.getOrThrow(readAttempt(installRoot))?.to).toBe(refused.version);
 
           const taken = yield* installRelease(
             yield* release('0.3.0', join(standing, EXECUTIONS)),

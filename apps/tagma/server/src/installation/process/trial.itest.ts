@@ -15,10 +15,12 @@ import {
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { it } from '@runlith/effect-test';
-import { Clock, Effect } from 'effect';
+import { Clock, Effect, Result } from 'effect';
 import { passAttempt, readAttempt, writeAttempt } from '../closure/attempt.js';
 import { swapCurrent } from '../../platform/lock/versionedDirectories.js';
 import { arrive, enterTrial, rollBack, type TrialPlace } from './trial.js';
+
+const attemptAt = (root: string) => Result.getOrThrow(readAttempt(root));
 
 const home = realpathSync(mkdtempSync(join(tmpdir(), 'tagma-trial-')));
 afterAll(() => rmSync(home, { recursive: true, force: true }));
@@ -64,14 +66,14 @@ it.effect(
       writeFileSync(module, 'module before');
       expect(yield* arrive(place)).toBe('serve');
       const trial = yield* on(yield* enterTrial(place));
-      expect(readAttempt(install)).toMatchObject({ starts: 1, copied: true });
+      expect(attemptAt(install)).toMatchObject({ starts: 1, copied: true });
       written();
       writeFileSync(module, 'module migrated');
       yield* trial.failed('the migration failed');
 
       expect([...data(), readFileSync(module, 'utf8')]).toEqual(['before', 'wal before', false, false, 'module before']);
       expect(standing()).toBe('v1');
-      expect(readAttempt(install)?.ended).toEqual({ detail: 'the migration failed', data: 'restored' });
+      expect(attemptAt(install)?.ended).toEqual({ detail: 'the migration failed', data: 'restored' });
       expect([existsSync(`${store}.attempt`), existsSync(`${module}.attempt`)]).toEqual([false, false]);
       rmSync(stores, { recursive: true, force: true });
     }),
@@ -92,7 +94,7 @@ it.effect(
 
       expect(yield* arrive(place)).toBe('roll');
       yield* rollBack(place, 'it started 2 times and never opened its door');
-      expect([standing(), readAttempt(install)?.ended?.data]).toEqual(['v1', 'restored']);
+      expect([standing(), attemptAt(install)?.ended?.data]).toEqual(['v1', 'restored']);
       expect(data()).toEqual(['before', 'wal before', false, false]);
     }),
 );
@@ -107,12 +109,12 @@ it.effect(
       written();
       chmodSync(`${store}.attempt`, 0o000);
       yield* trial.failed('the migration failed');
-      expect([standing(), readAttempt(install)?.ended?.data]).toEqual(['v2', 'unrestored']);
+      expect([standing(), attemptAt(install)?.ended?.data]).toEqual(['v2', 'unrestored']);
 
       expect(yield* arrive(place)).toBe('roll');
       chmodSync(`${store}.attempt`, 0o600);
       yield* rollBack(place, 'unused');
-      expect([standing(), readAttempt(install)?.ended]).toEqual(['v1', { detail: 'the migration failed', data: 'restored' }]);
+      expect([standing(), attemptAt(install)?.ended]).toEqual(['v1', { detail: 'the migration failed', data: 'restored' }]);
       expect(data()).toEqual(['before', 'wal before', false, false]);
       expect(yield* arrive(place)).toBe('serve');
     }),
@@ -147,7 +149,7 @@ const unreturned = Effect.fnUntraced(function* (migrations: readonly string[]) {
   chmodSync(`${store}.attempt`, 0o000);
   yield* trial.failed('the migration failed');
   chmodSync(`${store}.attempt`, 0o600);
-  expect(readAttempt(install)?.ended?.data).toBe('unrestored');
+  expect(attemptAt(install)?.ended?.data).toBe('unrestored');
 });
 
 it.effect(
@@ -164,7 +166,7 @@ it.effect(
 
       expect(yield* arrive(place)).toBe('roll');
       yield* rollBack(place, 'unused');
-      expect([standing(), readAttempt(install)?.ended]).toEqual(['v1', { detail: 'the migration failed', data: 'kept' }]);
+      expect([standing(), attemptAt(install)?.ended]).toEqual(['v1', { detail: 'the migration failed', data: 'kept' }]);
       expect(notes()).toEqual(['before', 'by the attempt', 'by the release before']);
       expect([existsSync(`${store}.attempt`), readFileSync(made, 'utf8')]).toEqual([false, 'made by the attempt']);
       rmSync(stores, { recursive: true, force: true });
@@ -181,7 +183,7 @@ it.live(
 
       expect(yield* arrive(place)).toBe('roll');
       yield* rollBack(place, 'unused');
-      expect([standing(), readAttempt(install)?.ended?.data]).toEqual(['v1', 'restored']);
+      expect([standing(), attemptAt(install)?.ended?.data]).toEqual(['v1', 'restored']);
       expect(notes()).toEqual(['before']);
     }),
 );
@@ -193,7 +195,7 @@ it.effect('while an update stands open, a start of a third release refuses to op
     writeFileSync(join(install, 'v3', 'install.json'), '{}');
     expect(yield* arrive({ ...place, release: join(install, 'v3') })).toBe('stale');
     expect(yield* arrive({ ...place, release: join(install, 'v1') })).toBe('serve');
-    expect(readAttempt(install)).toMatchObject({ to: 'v2', starts: 0 });
+    expect(attemptAt(install)).toMatchObject({ to: 'v2', starts: 0 });
   }),
 );
 
@@ -207,7 +209,7 @@ it.effect('a start of a third release that arrived before an update began is sti
     attempted(0);
     const refused = yield* Effect.flip(enterTrial(third));
     expect(refused._tag).toBe('StartStale');
-    expect(readAttempt(install)).toMatchObject({ to: 'v2', starts: 0, copied: false });
+    expect(attemptAt(install)).toMatchObject({ to: 'v2', starts: 0, copied: false });
   }),
 );
 
@@ -243,8 +245,28 @@ it.effect('the door opening ends the attempt and drops the copies, and a start n
     attempted(1);
     const trial = yield* on(yield* enterTrial(place));
     yield* trial.passed;
-    expect([readAttempt(install), existsSync(`${store}.attempt`), existsSync(`${fresh}.attempt`)]).toEqual([null, false, false]);
+    expect([attemptAt(install), existsSync(`${store}.attempt`), existsSync(`${fresh}.attempt`)]).toEqual([null, false, false]);
     expect(yield* enterTrial(place)).toBeNull();
     expect(standing()).toBe('v2');
+  }),
+);
+
+it.effect('a start over an attempt record that does not read drops no copy: it sets the record and every copy aside and serves', () =>
+  Effect.gen(function* () {
+    attempted(1);
+    yield* on(yield* enterTrial(place));
+    const damaged = '{"from":"v1","to":"v2","starts":';
+    writeFileSync(join(install, 'attempt.json'), damaged);
+
+    expect(yield* arrive(place)).toBe('serve');
+    expect(yield* enterTrial(place)).toBeNull();
+    expect([
+      existsSync(join(install, 'attempt.json')),
+      readFileSync(join(install, 'attempt.json.unread-0'), 'utf8'),
+      readFileSync(`${store}.attempt.unread-0`, 'utf8'),
+      readFileSync(`${store}-wal.attempt.unread-0`, 'utf8'),
+      existsSync(`${store}.attempt`),
+      standing(),
+    ]).toEqual([false, damaged, 'before', 'wal before', false, 'v2']);
   }),
 );

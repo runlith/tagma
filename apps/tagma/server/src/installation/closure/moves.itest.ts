@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, expect } from 'bun:test';
 import { it } from '@runlith/effect-test';
-import { Effect, Fiber } from 'effect';
+import { Effect, Fiber, Result } from 'effect';
 import { readReturn } from './attempt.js';
 import { claimLeased } from './leases.js';
 import { madeCurrent, moveFrom, moving, published, staging, steppedBack } from './moves.js';
@@ -62,7 +62,10 @@ it.live('stepping back lands on the release below the standing one and records t
     const root = rooted('stepping', '20260102T000000000Z', '20260101T000000000Z', '20260102T000000000Z');
     const stepped = yield* steppedBack(root, null, Effect.void, Effect.void);
     expect(stepped).toMatchObject({ version: '20260101T000000000Z', from: '20260102T000000000Z' });
-    expect([standing(root), readReturn(root)]).toEqual(['20260101T000000000Z', { left: '20260102T000000000Z', to: '20260101T000000000Z' }]);
+    expect([standing(root), Result.getOrThrow(readReturn(root))]).toEqual([
+      '20260101T000000000Z',
+      { left: '20260102T000000000Z', to: '20260101T000000000Z' },
+    ]);
 
     const oldest = yield* Effect.flip(steppedBack(root, null, Effect.void, Effect.void));
     expect(oldest).toMatchObject({ _tag: 'PreviousMissing', standing: '20260101T000000000Z' });

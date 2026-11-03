@@ -141,7 +141,9 @@ const processSuccession = Effect.fnUntraced(function* (input: {
     if (stopping) return;
     if (chain !== null) yield* chain.check.pipe(Effect.mapError((failure) => new SuccessorFailed({ detail: failure.detail, log })));
     const tried = readAttempt(installRoot);
-    const retried = runsFrom !== undefined && tried !== null && tried.ended === null && tried.starts > 0;
+    const retried =
+      runsFrom !== undefined &&
+      (Result.isFailure(tried) || (tried.success !== null && tried.success.ended === null && tried.success.starts > 0));
     const command = retried
       ? [join(installRoot, CURRENT, RUNTIME_PART), ...SERVE_FLAGS, join(installRoot, CURRENT, CLI_ENTRY), 'serve']
       : own;

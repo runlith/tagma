@@ -1,9 +1,9 @@
-import { Layer } from 'effect';
+import { type Effect, Layer } from 'effect';
 import { unofferedLayer } from '../installation/unoffered.js';
 import type { HttpClient } from 'effect/http';
 import type { ProcessProvenance } from '../platform/contract/wire/provenance.js';
-import type { Installation } from '../installation/contract/wire/manifest.js';
-import type { NextInstallation } from '../installation/contract/service/next.js';
+import type { Installation, InstallationFailure } from '../installation/contract/wire/manifest.js';
+import type { NextInstallation, RestartRefused } from '../installation/contract/service/next.js';
 import type { DowngradeSteps } from '../installation/contract/service/steps.js';
 import type { Settings } from '../settings/contract/service/values.js';
 import type { FileRoots } from '../workspace/contract/service/roots.js';
@@ -33,9 +33,9 @@ export type NextPlace = SourcePlace & {
   readonly dataPath: string;
   readonly installations: string;
   readonly source: ProcessProvenance | undefined;
-  readonly restart: () => Promise<string | null>;
-  readonly landed: () => Promise<string | null>;
-  readonly refuses: (root: string) => Promise<string | null>;
+  readonly restart: Effect.Effect<void, RestartRefused>;
+  readonly landed: Effect.Effect<string | null, InstallationFailure>;
+  readonly refuses: (root: string) => Effect.Effect<string | null>;
   readonly downgrade: DowngradeSteps['Service'];
   readonly roots: FileRoots['Service'];
   readonly watch: CheckoutWatch['Service'];

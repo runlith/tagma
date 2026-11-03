@@ -1,5 +1,6 @@
 import { existsSync, realpathSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import { Result } from 'effect';
 import { holdDirectory, leaseDirectory } from '../../platform/lock/directoryLease.js';
 import { CURRENT } from '../../platform/contract/wire/versions.js';
 import { pruneDirectories } from '../../platform/lock/versionLeases.js';
@@ -29,6 +30,8 @@ export function claimLeased(root: string, at: Date): Claimed {
 
 export function pruneReleases(root: string, keep: readonly string[], forget: (dir: string) => void): void {
   const standing = currentVersion(root);
-  const kept = new Set([...keep, ...(standing === null ? [] : [standing]), ...attemptHolds(root), ...pendingHolds(root)]);
+  const held = attemptHolds(root);
+  if (Result.isFailure(held)) throw held.failure;
+  const kept = new Set([...keep, ...(standing === null ? [] : [standing]), ...held.success, ...pendingHolds(root)]);
   pruneDirectories(root, [...releasesNewestFirst(root), ...stagedVersions(root)], kept, forget);
 }

@@ -66,6 +66,7 @@ import {
   published,
   staging,
 } from '../closure/moves.js';
+import type { RecordUnreadable } from '../closure/attempt.js';
 import { carrySkills, skillInputs } from './skills.js';
 import { carryRipgrep, carryTypescript } from './tools.js';
 import { installedPackages, lockedPackages } from './locked.js';
@@ -669,7 +670,9 @@ const releasing = Effect.fnUntraced(function* <Launcher>(
   };
 });
 
-const landingRefusal = (error: LauncherWriteFailed | InstallHeld | AttemptStanding | MoveFailed): string | HostRefusal => {
+const landingRefusal = (
+  error: LauncherWriteFailed | InstallHeld | AttemptStanding | RecordUnreadable | MoveFailed,
+): string | HostRefusal => {
   switch (error._tag) {
     case 'LauncherWriteFailed':
       return `${error.path}: ${error.detail}`;
@@ -681,6 +684,11 @@ const landingRefusal = (error: LauncherWriteFailed | InstallHeld | AttemptStandi
       return {
         detail: `the update onto ${error.attempt.to} stands open, so no other installation becomes current before it ends`,
         unblock: ['start the server of current: it finishes the update or rolls it back', 'then build again'],
+      };
+    case 'RecordUnreadable':
+      return {
+        detail: `${error.message}, so no other installation becomes current before it is set aside`,
+        unblock: ['start the server of current: its start sets the record aside with the data copies it may name', 'then build again'],
       };
   }
 };

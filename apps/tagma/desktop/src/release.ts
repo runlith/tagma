@@ -2,6 +2,7 @@ import { type ChildProcess, spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
+import { Result } from 'effect';
 import { makeManifestProjection } from '@tagma/server/installation/closure/manifests';
 import { readAttempt } from '@tagma/server/installation/closure/attempt';
 import { currentVersion } from '@tagma/server/platform/lock/versionedDirectories';
@@ -51,7 +52,8 @@ export function standingIn(installRoot: string): Standing | null {
 }
 
 export function fallen(installRoot: string): Fallen | null {
-  const attempt = readAttempt(installRoot);
+  const read = readAttempt(installRoot);
+  const attempt = Result.isSuccess(read) ? read.success : null;
   const ended = attempt?.ended ?? null;
   if (attempt === null || ended === null) return null;
   const current = currentVersion(installRoot);

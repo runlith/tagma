@@ -5,7 +5,7 @@ import { pathToFileURL } from 'node:url';
 import { expect } from 'bun:test';
 import { layer } from '@runlith/effect-test';
 import { kind, world } from '@runlith/testbed/worlds';
-import { Clock, Context, Deferred, Effect, Fiber, FileSystem, Layer, Option, type Scope, Stream } from 'effect';
+import { Clock, Context, Deferred, Effect, Fiber, FileSystem, Layer, Option, Result, type Scope, Stream } from 'effect';
 import { installRelease } from './install.js';
 import { FetchHttpClient } from 'effect/http';
 import { NextInstallation } from '../installation/contract/service/next.js';
@@ -117,11 +117,10 @@ const setup = Effect.fnUntraced(function* (_params: {}, directory: string) {
     applications,
     machine: macPlatform,
     downgrade,
-    restart: async () => {
+    restart: Effect.sync(() => {
       restarts.push(running);
-      return null;
-    },
-    refuses: async () => refused,
+    }),
+    refuses: () => Effect.succeed(refused),
     env,
   });
 
@@ -478,7 +477,7 @@ layer(world(releaseWorld, {}).pipe(Layer.provideMerge(BunFileSystem.layer)), { e
           );
           expect(back.installed).toMatchObject({ outcome: 'landed', build: '0.2.0', then: 'restart' });
           expect(buildOf(standing())).toBe('0.2.0');
-          expect(readReturn(root)).toEqual({ left: '0.4.0', to: standing() });
+          expect(Result.getOrThrow(readReturn(root))).toEqual({ left: '0.4.0', to: standing() });
           expect(queue).toMatchObject({ closed: 2, reopened: 1 });
           expect(restarts.at(-1)).toBe('0.4.0');
         });

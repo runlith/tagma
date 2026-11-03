@@ -1,6 +1,6 @@
 import { closeSync, existsSync, fsyncSync, openSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { Result, Schema } from 'effect';
+import { Data, Result, Schema } from 'effect';
 import { type Attempt, attemptSchema, type Return, returnSchema, servingSchema } from '../contract/wire/attempt.js';
 import { ATTEMPT_FILE, INSTALL_FILE, RETURN_FILE, SERVED_FILE } from '../contract/wire/layout.js';
 import { absentPath } from './manifests.js';
@@ -44,16 +44,28 @@ const replaced = (path: string, text: string): void => {
   flushed(dirname(path));
 };
 
-const recorded = <A, E>(path: string, decoded: (text: string) => Result.Result<A, E>): A | null => {
+export class RecordUnreadable extends Data.TaggedError('RecordUnreadable')<{ readonly path: string; readonly detail: string }> {
+  override get message(): string {
+    return `${this.path} does not read as its record: ${this.detail}`;
+  }
+}
+
+type Recorded<A> = Result.Result<A | null, RecordUnreadable>;
+
+const recorded = <A, E>(path: string, decoded: (text: string) => Result.Result<A, E>): Recorded<A> => {
   const text = textAt(path);
-  if (text === null) return null;
-  const read = decoded(text);
-  if (Result.isSuccess(read)) return read.success;
-  console.warn(`[tagma] ${path} does not read, so it stands for no record: ${String(read.failure)}`);
-  return null;
+  if (text === null) return Result.succeed(null);
+  return Result.mapError(decoded(text), (failure) => new RecordUnreadable({ path, detail: String(failure) }));
 };
 
-export const readAttempt = (installRoot: string): Attempt | null => recorded(join(installRoot, ATTEMPT_FILE), decodeAttempt);
+export const readAttempt = (installRoot: string): Recorded<Attempt> => recorded(join(installRoot, ATTEMPT_FILE), decodeAttempt);
+
+export const setAsideAttempt = (installRoot: string, stamp: number): string => {
+  const aside = join(installRoot, `${ATTEMPT_FILE}.unread-${stamp}`);
+  renameSync(join(installRoot, ATTEMPT_FILE), aside);
+  flushed(installRoot);
+  return aside;
+};
 
 export const writeAttempt = (installRoot: string, attempt: Attempt): void =>
   replaced(join(installRoot, ATTEMPT_FILE), encodeAttempt(attempt));
@@ -62,7 +74,8 @@ export const beginAttempt = (installRoot: string, from: string | null, to: strin
   writeAttempt(installRoot, { from, to, starts: 0, copied: false, ended: null });
 
 export const passAttempt = (installRoot: string, to: string): void => {
-  if (readAttempt(installRoot)?.to !== to) return;
+  const read = readAttempt(installRoot);
+  if (Result.isFailure(read) || read.success?.to !== to) return;
   rmSync(join(installRoot, ATTEMPT_FILE), { force: true });
   flushed(installRoot);
 };
@@ -70,20 +83,16 @@ export const passAttempt = (installRoot: string, to: string): void => {
 export const stands = (attempt: Attempt, current: string | null): boolean =>
   attempt.to === current && (attempt.ended === null || attempt.ended.data === 'unrestored');
 
-export const standingAttempt = (installRoot: string): Attempt | null => {
-  const open = readAttempt(installRoot);
-  return open !== null && stands(open, currentVersion(installRoot)) ? open : null;
-};
+export const standingAttempt = (installRoot: string): Recorded<Attempt> =>
+  Result.map(readAttempt(installRoot), (open) => (open !== null && stands(open, currentVersion(installRoot)) ? open : null));
 
-export const attemptHolds = (installRoot: string): readonly string[] => {
-  const open = standingAttempt(installRoot);
-  return open === null ? [] : [open.to, ...(open.from === null ? [] : [open.from])];
-};
+export const attemptHolds = (installRoot: string): Result.Result<readonly string[], RecordUnreadable> =>
+  Result.map(standingAttempt(installRoot), (open) => (open === null ? [] : [open.to, ...(open.from === null ? [] : [open.from])]));
 
-export const readReturn = (installRoot: string): Return | null => {
-  const record = recorded(join(installRoot, RETURN_FILE), decodeReturn);
-  return record !== null && record.to === currentVersion(installRoot) ? record : null;
-};
+export const readReturn = (installRoot: string): Recorded<Return> =>
+  Result.map(recorded(join(installRoot, RETURN_FILE), decodeReturn), (record) =>
+    record !== null && record.to === currentVersion(installRoot) ? record : null,
+  );
 
 export const writeReturn = (installRoot: string, left: string, to: string): void =>
   replaced(join(installRoot, RETURN_FILE), encodeReturn({ left, to }));
@@ -93,7 +102,7 @@ export const clearReturn = (installRoot: string): void => rmSync(join(installRoo
 export const writeServed = (installRoot: string, release: string): void =>
   replaced(join(installRoot, SERVED_FILE), encodeServed({ release }));
 
-export const servedRelease = (installRoot: string): string | null => {
-  const served = recorded(join(installRoot, SERVED_FILE), decodeServed)?.release ?? null;
-  return served !== null && existsSync(join(installRoot, served, INSTALL_FILE)) ? served : null;
-};
+export const servedRelease = (installRoot: string): Recorded<string> =>
+  Result.map(recorded(join(installRoot, SERVED_FILE), decodeServed), (served) =>
+    served !== null && existsSync(join(installRoot, served.release, INSTALL_FILE)) ? served.release : null,
+  );

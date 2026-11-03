@@ -5,7 +5,7 @@ import { CLI_ENTRY, RUNTIME_PART, SERVE_FLAGS } from '../installation/contract/w
 import type { ReleaseArchive } from '../installation/contract/wire/feed.js';
 import type { InstallationManifest } from '../installation/contract/wire/manifest.js';
 import { placementSchema } from '../installation/contract/wire/placement.js';
-import { captured } from './child.js';
+import { answered } from '../platform/command.js';
 import { undelivered } from './delivery.js';
 
 const decodePlacement = Schema.decodeUnknownEffect(Schema.fromJsonString(placementSchema));
@@ -37,9 +37,10 @@ export const installFrom = Effect.fn('ReleaseChannel.installFrom')(function* (
   }
   const command = [join(carried, RUNTIME_PART), ...SERVE_FLAGS, join(carried, CLI_ENTRY), 'install-from', '--json', '--agreed', carried];
   appendFileSync(log, `\n--- install-from: ${command.join(' ')} ---\n`);
-  const ran = yield* captured(command, env);
+  const ran = yield* answered(command[0]!, command.slice(1), { env });
   appendFileSync(log, `${ran.out}${ran.err}`);
-  if (ran.code !== 0) return yield* undelivered(`install-from ended with code ${ran.code}`);
+  if (ran.status === null) return yield* undelivered(`install-from could not start: ${ran.text.trim()}`);
+  if (ran.status !== 0) return yield* undelivered(`install-from ended with code ${ran.status}`);
   return yield* decodePlacement(ran.out.trim()).pipe(
     Effect.mapError((failure) => undelivered(`install-from answered outside its placement result: ${failure.message}`)),
   );

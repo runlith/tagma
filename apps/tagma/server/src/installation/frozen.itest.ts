@@ -9,6 +9,9 @@ import { attemptSchema, returnSchema } from './contract/wire/attempt.js';
 import { ATTEMPT_FILE, INSTALL_FILE, RETURN_FILE } from './contract/wire/layout.js';
 import { InstallationRole, IRREVERSIBLE_STORES } from './contract/wire/manifest.js';
 import { restartDoorSchema } from './contract/wire/restart.js';
+import { installedSchema, installingSchema } from './contract/wire/next.js';
+import { updateRecordSchema } from './contract/wire/update.js';
+import { makeKeptRecord } from '../platform/durable/keptRecord.js';
 import type { Source } from './contract/wire/source.js';
 import { readAttempt, readReturn, writeAttempt, writeReturn } from './closure/attempt.js';
 import { makeManifestProjection } from './closure/manifests.js';
@@ -91,11 +94,11 @@ layer(BunFileSystem.layer, { excludeTestServices: true })('frozen wire formats',
         yield* files.symlink('0.2.0', join(root, 'current'));
         for (const attempt of yield* sampled(shape.attempt)) {
           yield* files.writeFileString(join(root, ATTEMPT_FILE), JSON.stringify(attempt));
-          expect(readAttempt(root)).not.toBeNull();
+          expect(Result.getOrThrow(readAttempt(root))).not.toBeNull();
         }
         for (const back of yield* sampled(shape.returned)) {
           yield* files.writeFileString(join(root, RETURN_FILE), JSON.stringify({ ...back, to: '0.2.0' }));
-          expect(readReturn(root)).not.toBeNull();
+          expect(Result.getOrThrow(readReturn(root))).not.toBeNull();
         }
         yield* files.remove(join(root, 'current'));
       }
@@ -157,6 +160,41 @@ layer(BunFileSystem.layer, { excludeTestServices: true })('frozen wire formats',
         const written = yield* recorded(home, { ...record, irreversible });
         const text = yield* files.readFileString(written);
         for (const shape of FROZEN) expect(issuedReads(shape.feed, text)).toBeUndefined();
+      }
+    }),
+  );
+
+  it.effect('every issued release reads the update record today writes, and today reads the ones it wrote', () =>
+    Effect.gen(function* () {
+      const files = yield* FileSystem.FileSystem;
+      const root = yield* files.makeTempDirectoryScoped({ prefix: 'tagma-frozen-' });
+      const path = join(root, 'update.json');
+      const record = yield* makeKeptRecord(updateRecordSchema, path, 'update record');
+      const finite = <A>(value: A): A =>
+        JSON.parse(JSON.stringify(value, (_key, field: unknown) => (typeof field === 'number' && !Number.isFinite(field) ? 0 : field)));
+      const installings = (yield* sampled(installingSchema)).map(finite);
+      const installeds = (yield* sampled(installedSchema)).map(finite);
+      const feed = {
+        releases: [
+          {
+            release: '0.2.3',
+            platforms: { 'darwin-arm64': { archive: 'https://releases.example/a.tar.gz', sha256: 'a'.repeat(64), size: 1 } },
+            irreversible: false,
+            stores: { 'machine-store': [], 'host-store': [], graph: [], journal: [] },
+            changes: [],
+          },
+        ] as const,
+      };
+      for (const [at, installing] of installings.entries()) {
+        yield* record.write({ feed, installing, installed: installeds[at] ?? null, took: at });
+        const written = yield* files.readFileString(path);
+        for (const shape of FROZEN) expect(issuedReads(shape.update, written)).toBeUndefined();
+      }
+      for (const shape of FROZEN) {
+        for (const kept of yield* sampled(shape.update)) {
+          yield* files.writeFileString(path, JSON.stringify(kept));
+          expect(yield* record.read).not.toBeNull();
+        }
       }
     }),
   );

@@ -130,6 +130,10 @@ const back = Effect.fnUntraced(function* (api: BuildServer, channel: Channel, js
         return refuse(json, 'attempt-open', `the update onto ${failure.attempt.to} stands open, so nothing steps back before it ends`, [
           'start the server of current: it finishes the update or rolls it back',
         ]);
+      case 'RecordUnreadable':
+        return refuse(json, 'attempt-open', `${failure.message}, so nothing steps back before it is set aside`, [
+          'start the server of current: its start sets the record aside with the data copies it may name',
+        ]);
       case 'MoveFailed':
         return refuse(json, 'back-failed', `${failure.step}: ${failure.detail}`, [`${BUILD_COMMAND} --back — try again`]);
       case 'InstallHeld':

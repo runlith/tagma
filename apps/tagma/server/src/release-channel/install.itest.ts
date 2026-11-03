@@ -2,7 +2,7 @@ import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFi
 import { join } from 'node:path';
 import { describe, expect } from 'bun:test';
 import { it } from '@runlith/effect-test';
-import { Clock, Context, Effect, FileSystem, Layer } from 'effect';
+import { Clock, Context, Effect, FileSystem, Layer, Result } from 'effect';
 import { arrive, enterTrial } from '../installation/process/trial.js';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { passAttempt, readAttempt, writeAttempt, writeReturn } from '../installation/closure/attempt.js';
@@ -12,6 +12,8 @@ import { swapCurrent } from '../platform/lock/versionedDirectories.js';
 import { EXECUTIONS_RUNTIME } from '../installation/contract/wire/archive.js';
 import { type InstallPlace, installRelease, type Weigh } from './install.js';
 import { carriedIn, serverless, syntheticReleaseEffect, trustedApplications } from './testing/release.js';
+
+const attemptAt = (root: string) => Result.getOrThrow(readAttempt(root));
 
 class World extends Context.Service<World, { readonly home: string; readonly root: string; readonly place: InstallPlace }>()(
   'testing/ReleaseInstallation',
@@ -76,7 +78,7 @@ describe('install-from', () => {
         expect(existsSync(join(one.application, 'Contents/Resources/release/install.json'))).toBe(true);
         expect(readFileSync(join(one.root, EXECUTIONS_RUNTIME))).toEqual(readFileSync(join(one.root, 'bun')));
         expect(existsSync(join(carriedIn(first), 'install.json'))).toBe(true);
-        expect(readAttempt(root)).toEqual({ from: null, to: one.version, starts: 0, copied: false, ended: null });
+        expect(attemptAt(root)).toEqual({ from: null, to: one.version, starts: 0, copied: false, ended: null });
 
         const again = yield* landed(first);
         expect([again.version, again.previous, (yield* versions()).length]).toEqual([one.version, null, 1]);
@@ -84,7 +86,7 @@ describe('install-from', () => {
         passAttempt(root, one.version);
         const two = yield* landed(yield* built('two', '0.2.0'));
         expect([yield* standing(), two.previous]).toEqual([two.version, one.version]);
-        expect(readAttempt(root)).toMatchObject({ from: one.version, to: two.version, ended: null });
+        expect(attemptAt(root)).toMatchObject({ from: one.version, to: two.version, ended: null });
       }).pipe(Effect.provide(world)),
   );
 
@@ -95,12 +97,12 @@ describe('install-from', () => {
         const { root } = yield* World;
         const { version: from } = yield* landed(yield* built('two', '0.2.0'));
         passAttempt(root, from);
-        const before = readAttempt(root)!;
+        const before = attemptAt(root)!;
         writeReturn(root, '0.3.0', from);
         const three = yield* built('three', '0.3.0');
         const back = yield* offered(three, true);
         expect(back._tag === 'Success' ? back.success : null).toMatchObject({ status: 'ask', reason: 'stepped-back' });
-        expect([yield* standing(), readAttempt(root)]).toEqual([from, before]);
+        expect([yield* standing(), attemptAt(root)]).toEqual([from, before]);
 
         const agreed = yield* landed(three);
         expect(yield* standing()).toBe(agreed.version);
@@ -153,15 +155,15 @@ describe('install-from', () => {
         const { version: from } = yield* landed(yield* built('four', '0.4.0'));
         passAttempt(root, from);
         const five = yield* landed(yield* built('five', '0.5.0'));
-        writeAttempt(root, { ...readAttempt(root)!, starts: 1 });
+        writeAttempt(root, { ...attemptAt(root)!, starts: 1 });
         const six = yield* built('six', '0.6.0');
         const open = yield* offered(six);
         expect(open._tag === 'Failure' ? open.failure.code : 'installed').toBe(ATTEMPT_OPEN);
         expect(yield* standing()).toBe(five.version);
 
-        writeAttempt(root, { ...readAttempt(root)!, starts: 0 });
+        writeAttempt(root, { ...attemptAt(root)!, starts: 0 });
         const replaced = yield* landed(six);
-        expect(readAttempt(root)).toMatchObject({ from, to: replaced.version, starts: 0, ended: null });
+        expect(attemptAt(root)).toMatchObject({ from, to: replaced.version, starts: 0, ended: null });
         expect((yield* versions()).toSorted()).toEqual([from, replaced.version].toSorted());
       }).pipe(Effect.provide(world)),
   );
@@ -176,7 +178,7 @@ describe('install-from', () => {
       const current = yield* standing();
       const last = both.find((one) => one.version === current)!;
       const first = both.find((one) => one !== last)!;
-      expect([first.previous, last.previous, readAttempt(root)?.from]).toEqual([version, version, version]);
+      expect([first.previous, last.previous, attemptAt(root)?.from]).toEqual([version, version, version]);
       expect((yield* versions()).toSorted()).toEqual([version, last.version].toSorted());
       expect(readdirSync(root).filter((name) => name.endsWith('.incoming'))).toEqual([]);
     }).pipe(Effect.provide(world)),
@@ -200,8 +202,44 @@ describe('install-from', () => {
         writeAttempt(root, unrestored);
         const three = yield* offered(yield* built('three', '0.3.0'));
         expect(three._tag === 'Failure' ? three.failure.code : 'installed').toBe(ATTEMPT_OPEN);
-        expect([yield* standing(), readAttempt(root)]).toEqual([two.version, unrestored]);
+        expect([yield* standing(), attemptAt(root)]).toEqual([two.version, unrestored]);
         expect(yield* versions()).toEqual(expect.arrayContaining([from, two.version]));
+      }).pipe(Effect.provide(world)),
+  );
+
+  it.live(
+    'an update record or served record that does not read refuses an install over it and keeps every release, until a start sets it aside',
+    () =>
+      Effect.gen(function* () {
+        const { home, root } = yield* World;
+        const { version: from } = yield* landed(yield* built('one', '0.1.0'));
+        passAttempt(root, from);
+        const two = yield* landed(yield* built('two', '0.2.0'));
+        writeAttempt(root, {
+          from,
+          to: two.version,
+          starts: 2,
+          copied: true,
+          ended: { detail: 'the migration failed', data: 'unrestored' },
+        });
+        const damaged = '{"from":"one","to":';
+        writeFileSync(join(root, 'attempt.json'), damaged);
+        const three = yield* built('three', '0.3.0');
+        const refused = yield* offered(three);
+        expect(refused._tag === 'Failure' ? refused.failure.code : 'installed').toBe(ATTEMPT_OPEN);
+        expect([yield* standing(), readFileSync(join(root, 'attempt.json'), 'utf8')]).toEqual([two.version, damaged]);
+        expect(yield* versions()).toEqual(expect.arrayContaining([from, two.version]));
+
+        const data = join(home, '.tagma');
+        mkdirSync(data, { recursive: true });
+        const starting = { installRoot: root, release: join(root, two.version), files: [join(data, 'tagma.sqlite')], stores: null };
+        expect(yield* arrive(starting).pipe(Effect.orDie)).toBe('serve');
+        writeFileSync(join(root, 'served.json'), '{"release":');
+        const served = yield* offered(three);
+        expect(served._tag === 'Failure' ? served.failure.code : 'installed').toBe(ATTEMPT_OPEN);
+
+        expect(yield* enterTrial(starting).pipe(Effect.orDie)).toBeNull();
+        expect((yield* landed(three)).previous).toBe(two.version);
       }).pipe(Effect.provide(world)),
   );
 
@@ -227,7 +265,7 @@ describe('install-from', () => {
           installRelease(carriedIn(six), place, trustedApplications, new Date(yield* Clock.currentTimeMillis), false, asked),
         );
         expect([refused.code, arrived, yield* standing()]).toEqual([ATTEMPT_OPEN, 'serve', five.version]);
-        expect(readAttempt(root)).toMatchObject({ from, to: five.version, starts: 1 });
+        expect(attemptAt(root)).toMatchObject({ from, to: five.version, starts: 1 });
       }).pipe(Effect.provide(world)),
   );
 
@@ -245,7 +283,7 @@ describe('install-from', () => {
       expect(yield* enterTrial(serving).pipe(Effect.orDie)).toBeNull();
 
       const three = yield* landed(yield* built('three', '0.3.0'));
-      expect([readAttempt(root)?.from, three.previous]).toEqual([two.version, two.version]);
+      expect([attemptAt(root)?.from, three.previous]).toEqual([two.version, two.version]);
     }).pipe(Effect.provide(world)),
   );
 });
