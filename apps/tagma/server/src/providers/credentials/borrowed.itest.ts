@@ -11,12 +11,12 @@ import { AccountKey } from '@runlith/llm/models/authStatus';
 import type { StoredCredential } from '@runlith/llm/oauth/credential';
 import { ExecutionRef } from '@runlith/executions/protocol/execution';
 import type { Provider, WireProvider } from '@runlith/tagma/adapter/provider';
-import { Deferred, Effect, Fiber, Schema, Stream } from 'effect';
+import { Context, Deferred, Effect, Fiber, Schema, Stream } from 'effect';
 import { TestClock } from 'effect/testing';
 import { CliLoginUnreadable } from '@runlith/llm/oauth/cliStore';
-import { makeHarnessDirectoryStore } from '../accounts/harnessRows.js';
+import { HarnessDirectories, makeHarnessDirectoryStore } from '../accounts/harnessRows.js';
 import { makeDefaultLoginBook } from '../accounts/defaultLogins.js';
-import type { AccountCli, AccountCommand } from '../contract/service/cli.js';
+import { AccountCli, type AccountCommand } from '../contract/service/cli.js';
 import { providerCatalogOf } from '../testing/registry.js';
 import { testTokens } from '../testing/tokens.js';
 import { makeBorrowingTokens } from './borrowed.js';
@@ -81,13 +81,17 @@ const world = Effect.fnUntraced(function* (
   const catalog = providerCatalogOf(providers);
   const own = testTokens(join(home, name, 'tokens.json'));
   const tokens = makeBorrowingTokens({ own, catalog: () => catalog, directories, cli, now: () => NOW });
+  const logins = yield* Effect.provide(
+    makeDefaultLoginBook,
+    Context.make(HarnessDirectories, directories).pipe(Context.add(AccountCli, cli)),
+  );
   const modelTokens = makeBorrowingTokens({
     own,
     catalog: () => catalog,
     directories,
     cli,
     now: () => NOW,
-    options: { renew: true, logins: makeDefaultLoginBook({ rows: directories, cli }) },
+    options: { renew: true, logins },
   });
   return { tokens, modelTokens, runs, directory, directories, catalog };
 });
@@ -263,13 +267,17 @@ it.live('Codex directory accounts read their auth.json and an unchanged rejected
       stop: () => Effect.die('borrowing credentials cancels no login terminal'),
     };
     const catalog = () => providerCatalogOf(providers);
+    const logins = yield* Effect.provide(
+      makeDefaultLoginBook,
+      Context.make(HarnessDirectories, directories).pipe(Context.add(AccountCli, cli)),
+    );
     const tokens = makeBorrowingTokens({
       own,
       catalog,
       directories,
       cli,
       now: () => NOW,
-      options: { renew: true, logins: makeDefaultLoginBook({ rows: directories, cli }) },
+      options: { renew: true, logins },
     });
     const old = document('old').tokens.access_token;
     const fresh = document('fresh').tokens.access_token;

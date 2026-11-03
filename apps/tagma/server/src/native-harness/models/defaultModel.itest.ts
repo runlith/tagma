@@ -14,7 +14,7 @@ import { CredentialFiles } from '../../providers/contract/service/credentials.js
 import { type AdapterSource, BuiltinAdapters, ProviderRegistry } from '../../providers/contract/service/registry.js';
 import { ProviderAccounts } from '../../providers/contract/service/accounts.js';
 import { registryLayer } from '../../providers/registry.js';
-import { makeHarnessDirectoryStore } from '../../providers/accounts/harnessRows.js';
+import { HarnessDirectories, makeHarnessDirectoryStore } from '../../providers/accounts/harnessRows.js';
 import { makeDefaultLoginBook } from '../../providers/accounts/defaultLogins.js';
 import { harnessStored } from '../../providers/accounts/harnessStored.js';
 import { subscriptionAccounts } from '../../providers/accounts/stored.js';
@@ -137,13 +137,11 @@ const birthOn = Effect.fnUntraced(function* (
     directories,
     cli: account,
   });
-  const accounts = harnessStored(
-    subscriptionAccounts(tokens),
-    directories,
-    registry,
-    makeDefaultLoginBook({ rows: directories, cli: account }),
-    () => [],
+  const logins = yield* Effect.provide(
+    makeDefaultLoginBook,
+    Context.make(HarnessDirectories, directories).pipe(Context.add(AccountCli, account)),
   );
+  const accounts = harnessStored(subscriptionAccounts(tokens), directories, registry, logins, () => []);
   const stores = yield* Layer.build(
     unitsLayer(MachineUnits, MachineStore).pipe(
       Layer.provideMerge(Layer.orDie(seededStoreLayer(MachineStore, fixtureMigrations, {}, sharedPool))),

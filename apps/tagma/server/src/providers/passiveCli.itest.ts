@@ -126,7 +126,10 @@ it.effect('passive catalog and account reads start no CLI until the provider is 
       Layer.succeed(ProviderCredentials, testCredentials(tokens)),
     );
     const registry = Context.get(yield* Layer.build(registryLayer.pipe(Layer.provide(common))), ProviderRegistry);
-    const logins = makeDefaultLoginBook({ rows: directories, cli });
+    const logins = yield* Effect.provide(
+      makeDefaultLoginBook,
+      Context.make(HarnessDirectories, directories).pipe(Context.add(AccountCli, cli)),
+    );
     const book = yield* makeHarnessAccountBook.pipe(
       Effect.provide(
         (yield* Layer.build(common)).pipe(

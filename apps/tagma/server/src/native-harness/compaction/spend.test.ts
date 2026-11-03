@@ -28,6 +28,7 @@ const anthropic: AccountQuotaRow = {
   label: 'Key key-1',
   origin: { kind: 'own' },
   problem: null,
+  lent: [],
   default: true,
   quota: null,
   restored: false,

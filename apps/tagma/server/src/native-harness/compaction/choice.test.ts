@@ -33,6 +33,7 @@ const ACCOUNTS: QuotaTable = [
     label: 'Summary',
     origin: { kind: 'own' },
     problem: null,
+    lent: [],
     default: true,
     quota: null,
     restored: false,

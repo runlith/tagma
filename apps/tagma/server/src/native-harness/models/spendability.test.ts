@@ -27,6 +27,7 @@ const row = (patch: Partial<AccountQuotaRow> & Pick<AccountQuotaRow, 'provider'>
   label: 'Key key-1',
   origin: { kind: 'own' },
   problem: null,
+  lent: [],
   default: true,
   quota: null,
   restored: false,
@@ -74,6 +75,33 @@ describe('whether a model may be spent now', () => {
       until: AHEAD * 1_000,
     });
     expect(spendability(CATALOG, 'subscription', 'claude-opus-5-5', lent, NOW)).toEqual({ spendable: false, reason: 'not-connected' });
+  });
+
+  test('an unreadable borrowed login does not switch accounts or block the lender CLI', () => {
+    const borrowing = catalogOf((provider) => (provider === 'subscription' ? 'claude-code' : provider));
+    const unreadable = row({
+      provider: 'claude-code',
+      lent: [{ provider: 'subscription', problem: { kind: 'unreadable', reason: 'login unavailable' } }],
+    });
+    const other = row({
+      provider: 'claude-code',
+      account: AccountKey.make('key-2'),
+      default: false,
+      lent: [{ provider: 'subscription', problem: null }],
+    });
+    expect(spendability(borrowing, 'subscription', 'claude-opus-5-5', [unreadable, other], NOW)).toEqual({
+      spendable: false,
+      reason: 'not-connected',
+    });
+    const recovered = { ...unreadable, lent: [{ provider: 'subscription', problem: null }] };
+    expect(spendability(borrowing, 'subscription', 'claude-opus-5-5', [recovered, other], NOW)).toEqual({
+      spendable: true,
+      account: 'key-1',
+    });
+    expect(turnSpendability(borrowing, 'claude-code', 'claude-opus-5-5', [unreadable, other], NOW)).toEqual({
+      spendable: true,
+      account: 'key-1',
+    });
   });
 
   test('a full window with its reset ahead holds the account until the last such reset; a reset already passed does not', () => {

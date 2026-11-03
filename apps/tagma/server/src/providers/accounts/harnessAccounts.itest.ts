@@ -21,7 +21,7 @@ import { vendorWire } from '@runlith/llm/oauth/vendorCall';
 import { adapter as cursorAdapter } from '@runlith/adapter-cursor/adapter';
 import { makeHarnessAccountBook, type HarnessAccountBook } from './harnessAccounts.js';
 import { HarnessAccounts } from '../contract/service/harness.js';
-import { DEFAULT_LOGIN, DefaultLogins, makeDefaultLoginBook, LISTED_MS } from './defaultLogins.js';
+import { DEFAULT_LOGIN, DefaultLogins, makeDefaultLoginBook, LISTED_MS, type DefaultLoginBook } from './defaultLogins.js';
 import { harnessStored } from './harnessStored.js';
 import { harnessSignIns } from './harnessSignIns.js';
 import { SignIns } from '../contract/service/signIns.js';
@@ -85,8 +85,11 @@ const bookOf = Effect.fnUntraced(function* (
   chosen: DefaultAccounts['Service'],
   port: AccountCli['Service'],
   quota = quiet,
-  logins = makeDefaultLoginBook({ rows, cli: port }),
+  providedLogins?: DefaultLoginBook,
 ) {
+  const logins =
+    providedLogins ??
+    (yield* Effect.provide(makeDefaultLoginBook, Context.make(HarnessDirectories, rows).pipe(Context.add(AccountCli, port))));
   return yield* makeHarnessAccountBook.pipe(
     Effect.provide(
       Context.make(HarnessDirectories, rows).pipe(
@@ -151,6 +154,7 @@ it.effect('a key harness launches with the pinned key instead of the default and
     const a = yield* tokens.add('cursor', { accessToken: 'key-a', refreshToken: null, expiresAt: now + 1_000, email: 'a@example.com' });
     const b = yield* tokens.add('cursor', { accessToken: 'key-b', refreshToken: null, expiresAt: null, email: 'b@example.com' });
     const rows = makeHarnessDirectoryStore({ home: join(home, 'key-harness'), machine: 'machine' });
+    const logins = yield* Effect.provide(makeDefaultLoginBook, Context.make(HarnessDirectories, rows).pipe(Context.add(AccountCli, cli)));
     const book = yield* makeHarnessAccountBook.pipe(
       Effect.provide(
         Context.make(HarnessDirectories, rows).pipe(
@@ -158,7 +162,7 @@ it.effect('a key harness launches with the pinned key instead of the default and
           Context.add(ProviderRegistry, staticRegistry(providerCatalogOf([cursor]))),
           Context.add(DefaultAccounts, { ...defaults(), defaultAccount: () => Effect.succeed({ account: b, revision: 1 }) }),
           Context.add(AccountCli, cli),
-          Context.add(DefaultLogins, makeDefaultLoginBook({ rows, cli })),
+          Context.add(DefaultLogins, logins),
           Context.add(AccountQuota, quiet),
         ),
       ),
@@ -554,7 +558,10 @@ it.effect(
         ...cli,
         run: () => Effect.sync(() => ({ stdout: login ?? '', stderr: '', code: login === null ? 1 : 0 })),
       };
-      const logins = makeDefaultLoginBook({ rows, cli: port });
+      const logins = yield* Effect.provide(
+        makeDefaultLoginBook,
+        Context.make(HarnessDirectories, rows).pipe(Context.add(AccountCli, port)),
+      );
       const book = yield* bookOf(rows, defaults(), port, undefined, logins);
       const listing = harnessStored({ of: () => Effect.succeed([]) }, rows, registry, logins, () => []);
       const base = { key: DEFAULT_LOGIN, label: 'old@cli', machine: 'machine', directory: null, addedAt: 1, pending: false };
@@ -580,7 +587,8 @@ it.effect(
       const started = yield* book.begin(provider.id, 1);
       yield* book.complete(provider.id, started.account);
       const removed: ProviderRegistry['Service'] = staticRegistry(providerCatalogOf([]));
-      const accounts = harnessStored({ of: () => Effect.succeed([]) }, rows, removed, makeDefaultLoginBook({ rows, cli }), () => []);
+      const logins = yield* Effect.provide(makeDefaultLoginBook, Context.make(HarnessDirectories, rows).pipe(Context.add(AccountCli, cli)));
+      const accounts = harnessStored({ of: () => Effect.succeed([]) }, rows, removed, logins, () => []);
 
       expect(yield* accounts.of(provider.id)).toMatchObject([{ key: started.account, problem: { kind: 'not-installed' } }]);
       expect(yield* Effect.flip(accounts.of('never-installed'))).toMatchObject({ code: 'provider-not-installed' });

@@ -124,18 +124,16 @@ it.effect('the selected mode controls credentials and defaults, preserves both g
     const own = ownStore(path);
     yield* own.add(wire.id, OWN);
     const tokens = makeBorrowingTokens({ own, catalog: catalog.current, directories, cli: cli(always) });
+    const logins = yield* Effect.provide(
+      makeDefaultLoginBook,
+      Context.make(HarnessDirectories, directories).pipe(Context.add(AccountCli, cli(always))),
+    );
     const stores = unitsLayer(MachineUnits, MachineStore).pipe(
       Layer.provideMerge(Layer.orDie(seededStoreLayer(MachineStore, fixtureMigrations, {}, sharedPool))),
     );
     const defaultsContext = yield* Layer.build(
       defaultAccountsLayer(
-        harnessStored(
-          subscriptionAccounts(tokens),
-          directories,
-          catalog,
-          makeDefaultLoginBook({ rows: directories, cli: cli(always) }),
-          () => [],
-        ),
+        harnessStored(subscriptionAccounts(tokens), directories, catalog, logins, () => []),
         () => [],
         catalog,
       ).pipe(Layer.provide(stores)),
@@ -267,6 +265,8 @@ it.effect('a harness thread launches on its directory account whatever mode is s
       refresh: () => Effect.void,
       changes: Stream.empty,
     };
+    const port = cli(always);
+    const logins = yield* Effect.provide(makeDefaultLoginBook, Context.make(HarnessDirectories, rows).pipe(Context.add(AccountCli, port)));
     const book = yield* makeHarnessAccountBook.pipe(
       Effect.provide(
         Context.make(HarnessDirectories, rows).pipe(
@@ -276,8 +276,8 @@ it.effect('a harness thread launches on its directory account whatever mode is s
           ),
           Context.add(ProviderRegistry, catalog),
           Context.add(DefaultAccounts, defaults),
-          Context.add(AccountCli, cli(always)),
-          Context.add(DefaultLogins, makeDefaultLoginBook({ rows, cli: cli(always) })),
+          Context.add(AccountCli, port),
+          Context.add(DefaultLogins, logins),
           Context.add(AccountQuota, quota),
         ),
       ),
