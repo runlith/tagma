@@ -22,6 +22,10 @@ export const sourceInputSchema = Schema.Struct({
 });
 export type SourceInput = typeof sourceInputSchema.Type;
 
+export function sourceName(ref: string, symbol: string | null): string {
+  return symbol === null ? ref : `${ref}#${symbol}`;
+}
+
 export function sourceSpelling(spelling: string): { ref: string; symbol?: string; dir?: true } {
   const separator = spelling.indexOf('#');
   if (separator !== -1) {

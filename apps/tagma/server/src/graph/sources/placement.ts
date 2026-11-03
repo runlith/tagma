@@ -1,10 +1,10 @@
 import { Clock, Effect, Layer } from 'effect';
-import { isTerritoryKind, type SourceInput, type SourceKind, sourceSpelling, SOURCE_KINDS } from '../contract/wire/sources.js';
+import { isTerritoryKind, type SourceInput, type SourceKind, sourceName, sourceSpelling, SOURCE_KINDS } from '../contract/wire/sources.js';
 import { assertNoBoundary } from '../blocks/guards.js';
 import { and, eq, inArray } from 'drizzle-orm';
 import { GraphStore, type StoreFailure } from '../../platform/contract/service/store.js';
 import { source } from '../store/tables.js';
-import { type SourceTarget, assertRequiredSources, sourceKinds, sourceName, sourcePath } from './readers/place.js';
+import { type SourceTarget, assertRequiredSources, sourceKinds, sourcePath } from './readers/place.js';
 import { BlockRows } from '../acts/rows.js';
 import { Act, BlockNames, BlockProjection } from '../contract/service/acts.js';
 import type { SourceRow, BlockRow } from '../contract/service/acts.js';

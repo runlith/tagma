@@ -10,7 +10,7 @@ import { deriveLaw } from './derived.js';
 import { measuredRoot } from '../contract/service/serving.js';
 import { ProjectGroups, Projects } from '../../projects/contract/service/registry.js';
 import { type LawEntry, type LawReads, ruleLine } from './law.js';
-import { reachLabel } from './reach.js';
+import { reachLabel } from '../contract/wire/tags/law.js';
 import { tagRevision } from './tagPrompts.js';
 
 export function instructionOf(kind: Instruction['kind'], source: string, scope: string, text: string, value: unknown = text): Instruction {
@@ -108,7 +108,7 @@ export const instructionsReads = Effect.fnUntraced(function* (law: LawReads) {
     locals.set(entry, variants);
     let instruction = variants.get(project);
     if (instruction === undefined) {
-      const scope = reachLabel(entry.reach, project);
+      const scope = reachLabel(entry.reach.delivery, entry.reach.sources, project);
       instruction = instructionOf('law', blockName(entry.rule.uuid), scope, ruleLine(entry, ` [${scope}]`));
       variants.set(project, instruction);
     }

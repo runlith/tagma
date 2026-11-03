@@ -16,6 +16,23 @@ export type RuleReach = {
 
 export type LawReach = ReadonlyMap<number, RuleReach>;
 
+const SHOWN = 3;
+
+const sourcesSaid = (sources: readonly string[]): string => {
+  const shown = sources.slice(0, SHOWN).join(', ');
+  return sources.length > SHOWN ? `${shown}, …` : shown;
+};
+
+export const codeLabel = (sources: readonly string[]): string =>
+  sources.length === 0 ? 'code · no sources' : `code · ${sourcesSaid(sources)}`;
+
+export const reachLabel = (delivery: Delivery, sources: readonly string[], project: string): string =>
+  delivery === 'prompt'
+    ? `prompt · ${project}`
+    : delivery === 'finding'
+      ? `finding · ${sources.length > 0 ? sourcesSaid(sources) : project}`
+      : codeLabel(sources);
+
 export const lawFieldSchema = Schema.Struct({ field: Schema.NonEmptyString, schema: Schema.NonEmptyString });
 export type LawField = typeof lawFieldSchema.Type;
 

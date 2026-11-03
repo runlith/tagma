@@ -1,9 +1,9 @@
 import { Effect } from 'effect';
-import { sourceSpelling } from '../contract/wire/sources.js';
+import { sourceName, sourceSpelling } from '../contract/wire/sources.js';
 import { and, eq, isNull, ne, or, sql } from 'drizzle-orm';
 import type { StoreFailure } from '../../platform/contract/service/store.js';
 import { block, source } from '../store/tables.js';
-import { sourceName, sourcePath } from './readers/place.js';
+import { sourcePath } from './readers/place.js';
 import { likeLiteral } from '../acts/rows.js';
 import { blockName } from '../contract/wire/references.js';
 import { GateRefusal, type FloorRefusal } from '../../platform/contract/wire/refusal.js';

@@ -12,7 +12,7 @@ import { GAUGES } from '../contract/wire/operations/shared.js';
 import { ceilingOf } from '../../platform/contract/wire/pageFamily.js';
 import { Tags } from '../contract/service/vocabulary.js';
 import { Sources, type PlaceSource } from '../contract/service/sources.js';
-import { sourceName } from '../sources/readers/place.js';
+import { sourceName } from '../contract/wire/sources.js';
 import { Touches } from '../contract/service/orientation.js';
 import { blockName } from '../contract/wire/references.js';
 import { tagLabel } from '../contract/wire/tags/roles.js';

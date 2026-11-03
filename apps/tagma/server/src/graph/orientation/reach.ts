@@ -8,34 +8,17 @@ import { deliveryOf, type LawReach, type RuleReach } from '../contract/wire/tags
 import { deriveLaw } from './derived.js';
 import { GraphUnits } from '../../platform/contract/service/units.js';
 import { readsThrough } from '../acts/reads.js';
-import { insideRelative, sourceName } from '../sources/readers/place.js';
-import { anchorsOf } from '../contract/wire/sources.js';
+import { insideRelative } from '../sources/readers/place.js';
+import { anchorsOf, sourceName } from '../contract/wire/sources.js';
 
 type Anchor = { readonly kind: string; readonly ref: string; readonly symbol: string | null };
 
 export const WHOLE_PROJECT = '';
 
-const SHOWN = 3;
-
 export const reaches = (places: readonly string[], place: string): boolean =>
   places.some((at) => at === WHOLE_PROJECT || insideRelative(place, at));
 
 export const sourced = (reach: RuleReach): boolean => reach.sources.length > 0;
-
-const sourcesSaid = (sources: readonly string[]): string => {
-  const shown = sources.slice(0, SHOWN).join(', ');
-  return sources.length > SHOWN ? `${shown}, …` : shown;
-};
-
-export const codeLabel = (sources: readonly string[]): string =>
-  sources.length === 0 ? 'code · no sources' : `code · ${sourcesSaid(sources)}`;
-
-export const reachLabel = (reach: RuleReach, project: string): string =>
-  reach.delivery === 'prompt'
-    ? `prompt · ${project}`
-    : reach.delivery === 'finding'
-      ? `finding · ${sourced(reach) ? sourcesSaid(reach.sources) : project}`
-      : codeLabel(reach.sources);
 
 const placeOf = (ref: string): string => {
   const trimmed = ref.replace(/\/+$/, '');

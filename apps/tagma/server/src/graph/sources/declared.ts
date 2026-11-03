@@ -5,7 +5,7 @@ import type { Projects } from '../../projects/contract/service/registry.js';
 import { CurrentGraph } from '../contract/service/serving.js';
 import { askOnce } from '../tree/oneShot.js';
 import type { Declared, DeclaredAnswer, DeclaredJob } from './declaredNames.js';
-import { sourceName } from './readers/place.js';
+import { sourceName } from '../contract/wire/sources.js';
 
 const declaredOf = (job: DeclaredJob): Effect.Effect<Declared> =>
   askOnce<DeclaredAnswer, Error>(new URL('./declaredNames.worker.ts', import.meta.url), job, (message) => new Error(message)).pipe(

@@ -37,10 +37,6 @@ export function insideAny(path: string, roots: ReadonlySet<string>): boolean {
   return false;
 }
 
-export function sourceName(ref: string, symbol: string | null): string {
-  return symbol === null ? ref : `${ref}#${symbol}`;
-}
-
 export function placeKey(source: SourceTarget): string {
   return JSON.stringify([source.kind === 'dir', source.ref, source.kind === 'dir' ? null : source.symbol]);
 }

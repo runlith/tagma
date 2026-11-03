@@ -27,7 +27,8 @@ import { Tasks } from '../contract/service/work.js';
 import { GraphJournal } from '../contract/service/journal.js';
 import { Sources } from '../contract/service/sources.js';
 import { appendTagPrompts, tagPrompts, tagPromptText } from '../orientation/tagPrompts.js';
-import { lawReach, reachLabel } from '../orientation/reach.js';
+import { lawReach } from '../orientation/reach.js';
+import { reachLabel } from '../contract/wire/tags/law.js';
 
 export const ZONE_PAGE_BUDGET = 20_000;
 
@@ -118,7 +119,7 @@ export const blockReadsLayer: Layer.Layer<
       const projectName = lawful ? (yield* projects.byId(root.projectId)).name : '';
       const reachOf = (id: number): string | null => {
         const reach = reaches?.get(id);
-        return reach === undefined ? null : reachLabel(reach, projectName);
+        return reach === undefined ? null : reachLabel(reach.delivery, reach.sources, projectName);
       };
 
       const edgesOut = new Map<number, BlockDetail['edgesOut']>();
