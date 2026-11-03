@@ -2,7 +2,7 @@ import { createReadStream } from 'node:fs';
 import { createGunzip } from 'node:zlib';
 import type { ArchiveEntry } from '../contract/wire/archive.js';
 
-export type TarEntry = ArchiveEntry & { readonly size: number; readonly attributes: readonly string[] };
+export type TarEntry = ArchiveEntry & { readonly size: number; readonly mode: number; readonly attributes: readonly string[] };
 
 export type EntrySink = { readonly chunk: (bytes: Buffer) => void; readonly end: () => void };
 
@@ -142,6 +142,7 @@ export const walkTarball = async (file: string, visit: (entry: TarEntry) => Entr
       kind,
       target: kind === 'link' || kind === 'hard link' ? (attributes.get('linkpath') ?? pending.target ?? text(block, 157, 100)) : null,
       size: sized(declared === undefined ? size : Number(declared)),
+      mode: number(block, 100, 8),
       attributes: [...attributes.keys()].flatMap((key) => ATTRIBUTE.exec(key)?.[1] ?? []),
     };
     pending = { records: new Map(), name: null, target: null };

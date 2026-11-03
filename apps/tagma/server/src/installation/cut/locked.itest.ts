@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { appendFileSync, chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { afterAll, expect } from 'bun:test';
 import * as BunChildProcessSpawner from '@effect/platform-bun/BunChildProcessSpawner';
@@ -28,8 +28,12 @@ const registry = async () => {
   const source = join(tree, 'source');
   wrote(join(source, 'package/package.json'), JSON.stringify({ name: NAME, version: VERSION }));
   wrote(join(source, 'package/bin/tool'), 'the vendor binary');
+  chmodSync(join(source, 'package/bin/tool'), 0o755);
+  symlinkSync('tool', join(source, 'package/bin/alias'));
   const archive = join(tree, 'package.tgz');
-  const packed = Bun.spawnSync(['/usr/bin/tar', '-czf', archive, '-C', source, 'package']);
+  const packed = Bun.spawnSync(['/usr/bin/tar', '-czf', archive, '-C', source, 'package'], {
+    env: { ...process.env, COPYFILE_DISABLE: '1' },
+  });
   expect(packed.exitCode).toBe(0);
   const bytes = readFileSync(archive);
   const integrity = `sha512-${createHash('sha512').update(bytes).digest('base64')}`;
@@ -62,6 +66,20 @@ it.live('a cached package is taken once fetched, and two writers racing on an em
     const before = requests.length;
     expect(yield* resolve).toBe(both[0]);
     expect(requests.length).toBe(before);
+  }).pipe(Effect.provide(spawning)),
+);
+
+it.live('an entry left by the unproven cache layout is ignored, never used or removed', () =>
+  Effect.gen(function* () {
+    const { checkout, parent, url } = yield* Effect.promise(() => world);
+    const cache = join(tree, 'cache-legacy');
+    const legacy = join(cache, `${NAME}@${VERSION}`);
+    wrote(join(legacy, 'package/bin/tool'), 'attacker bytes');
+    wrote(join(legacy, 'integrity'), 'sha512-marker');
+    const packages = yield* lockedPackages(checkout, cache, url);
+    const taken = yield* packages(parent, NAME);
+    expect(readFileSync(join(taken, 'bin/tool'), 'utf8')).toBe('the vendor binary');
+    expect(readFileSync(join(legacy, 'package/bin/tool'), 'utf8')).toBe('attacker bytes');
   }).pipe(Effect.provide(spawning)),
 );
 

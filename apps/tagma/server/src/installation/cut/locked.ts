@@ -1,10 +1,9 @@
 import { createHash } from 'node:crypto';
-import { createReadStream } from 'node:fs';
-import { lstat, readdir, readlink } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { Effect, FileSystem, type PlatformError, Schema } from 'effect';
 import type { ChildProcessSpawner } from 'effect/process';
 import { output } from './command.js';
+import { standingTree, tarballTree, treeDifference } from './tree.js';
 
 export const REGISTRY = 'https://registry.npmjs.org';
 
@@ -27,26 +26,22 @@ const decodeDeclared = Schema.decodeUnknownEffect(Schema.fromJsonString(Declared
 const EXACT = /^\d+\.\d+\.\d+(?:-[\w.]+)?$/u;
 const TARBALL = 'package.tgz';
 
-const treeDigest = (root: string): Effect.Effect<string, string> =>
+const LAYOUT = 'proven-1';
+
+const refused = (error: unknown): string => (error instanceof Error ? error.message : String(error));
+
+const diverges = (
+  tarball: string,
+  directory: string,
+  what: string,
+): Effect.Effect<{ readonly root: string; readonly difference: string | null }, string> =>
   Effect.tryPromise({
     try: async () => {
-      const lines: string[] = [];
-      const walk = async (path: string, relative: string): Promise<void> => {
-        const stat = await lstat(path);
-        if (stat.isSymbolicLink()) lines.push(`l ${relative} ${await readlink(path)}`);
-        else if (stat.isDirectory()) {
-          lines.push(`d ${relative}`);
-          for (const child of (await readdir(path)).sort()) await walk(join(path, child), `${relative}/${child}`);
-        } else if (stat.isFile()) {
-          const hash = createHash('sha512');
-          for await (const chunk of createReadStream(path)) hash.update(chunk);
-          lines.push(`f ${relative} ${stat.mode & 0o111 ? 'x' : '-'} ${stat.size} ${hash.digest('base64')}`);
-        } else lines.push(`? ${relative}`);
-      };
-      await walk(root, '');
-      return createHash('sha512').update(lines.join('\n')).digest('base64');
+      const proof = await tarballTree(tarball);
+      const standing = await standingTree(join(directory, proof.root), proof.root);
+      return { root: proof.root, difference: treeDifference(proof.entries, standing) };
     },
-    catch: (error) => `${root} could not be digested: ${error instanceof Error ? error.message : String(error)}`,
+    catch: (error) => `${what} could not be proven: ${refused(error)}`,
   });
 
 export const installedPackages: PlatformPackages = (parent, name) =>
@@ -91,6 +86,8 @@ export const lockedPackages = Effect.fn('release.lockedPackages')(function* (che
       .pipe(Effect.mapError(unread(dirname(into))));
     yield* files.writeFile(join(work, TARBALL), bytes).pipe(Effect.mapError(unread(work)));
     const root = yield* unpacked(join(work, TARBALL), join(work, 'unpacked'), url);
+    const laid = yield* diverges(join(work, TARBALL), join(work, 'unpacked'), url);
+    if (laid.difference !== null) return yield* Effect.fail(`${url} unpacks to something other than it holds: ${laid.difference}`);
     const declared = yield* files.readFileString(join(work, 'unpacked', root, 'package.json')).pipe(
       Effect.mapError(unread(`the package.json of ${url}`)),
       Effect.flatMap((json) => decodeDeclared(json).pipe(Effect.mapError((error) => `${url} declares no package: ${error.message}`))),
@@ -133,17 +130,11 @@ export const lockedPackages = Effect.fn('release.lockedPackages')(function* (che
     const tarball = join(into, TARBALL);
     const bytes = yield* files.readFile(tarball).pipe(Effect.mapError(unread(tarball)));
     if (integrityOf(bytes) !== integrity) return yield* Effect.fail(corrupt('its tarball differs from the integrity bun.lock names'));
-    const check = yield* files
-      .makeTempDirectoryScoped({ directory: dirname(into), prefix: '.verify-' })
-      .pipe(Effect.mapError(unread(dirname(into))));
-    const root = yield* unpacked(tarball, join(check, 'unpacked'), tarball);
-    if (root !== roots[0]) return yield* Effect.fail(corrupt(`its tarball unpacks to ${root}, not ${roots[0]}`));
-    const [expected, standing] = yield* Effect.all([treeDigest(join(check, 'unpacked', root)), treeDigest(join(into, root))], {
-      concurrency: 2,
-    });
-    if (expected !== standing) return yield* Effect.fail(corrupt('its files, links or entries differ'));
+    const { root, difference } = yield* diverges(tarball, into, tarball).pipe(Effect.mapError(corrupt));
+    if (root !== roots[0]) return yield* Effect.fail(corrupt(`its tarball holds ${root}, not ${roots[0]}`));
+    if (difference !== null) return yield* Effect.fail(corrupt(difference));
     return join(into, root);
-  }, Effect.scoped);
+  });
 
   const resolved: PlatformPackages = Effect.fn('release.platformPackage')(function* (parent: string, name: string) {
     const manifest = join(parent, 'package.json');
@@ -157,7 +148,7 @@ export const lockedPackages = Effect.fn('release.lockedPackages')(function* (che
     }
     const integrity = integrities.get(`${name}@${version}`);
     if (integrity === undefined) return yield* Effect.fail(`bun.lock names no integrity of ${name}@${version}`);
-    const into = join(cache, `${name}@${version}`);
+    const into = join(cache, LAYOUT, `${name}@${version}`);
     const published = yield* files.exists(into).pipe(Effect.mapError(unread(into)));
     return published ? yield* proven(into, integrity) : yield* fetched(name, version, integrity, into);
   });
