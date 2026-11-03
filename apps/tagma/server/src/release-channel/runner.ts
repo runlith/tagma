@@ -30,12 +30,13 @@ import {
   type NextIssue,
   type Then,
 } from '../installation/contract/wire/next.js';
-import { CURRENT } from '../installation/contract/wire/layout.js';
+import { CURRENT } from '../platform/contract/wire/versions.js';
 import { type Installation, releaseApplication } from '../installation/contract/wire/manifest.js';
 import { placementSchema, type Placement } from '../installation/contract/wire/placement.js';
 import { readAttempt, readReturn } from '../installation/closure/attempt.js';
 import { steppedBack } from '../installation/closure/moves.js';
-import { currentVersion, previousRelease } from '../installation/closure/versions.js';
+import { previousRelease } from '../installation/closure/versions.js';
+import { currentVersion } from '../platform/lock/versionedDirectories.js';
 import { manifestAt, releaseAt } from '../installation/closure/manifests.js';
 import { downgradePreflight } from '../installation/operations/downgrade.js';
 import { holdDirectory } from '../platform/lock/directoryLease.js';
@@ -472,7 +473,7 @@ export const makeReleaseChannel = Effect.fnUntraced(function* (place: ChannelPla
     rmSync(file, { force: true });
     const carried = place.applications.carried(into);
     if (carried === null) return yield* undelivered(`the archive of release ${release.release} holds no one application at its root`);
-    const unsigned = yield* Effect.promise((signal) => place.applications.signature(carried, place.installations, signal));
+    const unsigned = yield* place.applications.signature(carried, place.installations);
     if (unsigned !== null) return yield* undelivered(`release ${release.release} is refused before it runs: ${unsigned}`);
     const proven = yield* provenRelease(carried).pipe(
       Effect.provide(BunFileSystem.layer),

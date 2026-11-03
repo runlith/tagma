@@ -5,7 +5,7 @@ import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { body, pair } from '../../platform/contract/service/body.js';
 import { GateRefusal } from '../../platform/contract/wire/refusal.js';
 import { readInstallation, refusalDetail } from '../closure/read.js';
-import { CURRENT } from '../contract/wire/layout.js';
+import { CURRENT } from '../../platform/contract/wire/versions.js';
 import { INSTALLATION_OPERATIONS as OPS } from '../contract/wire/operations.js';
 import type { Channel } from '../contract/wire/channel.js';
 import { InstalledChannel } from '../contract/service/channel.js';

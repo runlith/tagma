@@ -27,7 +27,6 @@ export const WHISPER_ABSENCE_PART = 'tools/whisper-engine.absent';
 export const SPEECH_MODELS = 'speech-models';
 export const AUDIO_HELPER = 'Tagma Audio';
 
-export const CURRENT = 'current';
 export const ATTEMPT_FILE = 'attempt.json';
 export const RETURN_FILE = 'returned.json';
 export const SERVED_FILE = 'served.json';
@@ -50,11 +49,6 @@ export const RELEASE_NUMBER_ENV = 'TAGMA_RELEASE_NUMBER';
 export const BUILD_TARGET_ENV = 'TAGMA_BUILD_TARGET';
 export const HOST_CHANNEL_ENV = 'TAGMA_HOST_CHANNEL';
 export const HOST_ASSETS_ENV = 'TAGMA_HOST_ASSETS';
-
-export const hostChannelIn = (env: NodeJS.ProcessEnv, otherwise: Channel): Channel => {
-  const given = env[HOST_CHANNEL_ENV]?.trim();
-  return given ? (JSON.parse(given) as Channel) : otherwise;
-};
 
 export const buildConditionsIn = (env: NodeJS.ProcessEnv): readonly string[] =>
   (env[BUILD_CONDITIONS_ENV] ?? '')

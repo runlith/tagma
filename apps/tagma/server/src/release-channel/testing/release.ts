@@ -82,15 +82,16 @@ export const trustedApplications: Applications = {
     const bundles = readdirSync(dir).filter((name) => name.endsWith('.app'));
     return bundles.length === 1 ? carriedIn(join(dir, bundles[0]!)) : null;
   },
-  verify: async () => null,
-  copy: async (bundle, to) => {
-    rmSync(to, { recursive: true, force: true });
-    mkdirSync(dirname(to), { recursive: true });
-    cpSync(bundle, to, { recursive: true, verbatimSymlinks: true });
-  },
-  unquarantine: async () => null,
+  verify: () => Effect.succeed(null),
+  copy: (bundle, to) =>
+    Effect.sync(() => {
+      rmSync(to, { recursive: true, force: true });
+      mkdirSync(dirname(to), { recursive: true });
+      cpSync(bundle, to, { recursive: true, verbatimSymlinks: true });
+    }),
+  unquarantine: () => Effect.succeed(null),
   forget: () => undefined,
-  signature: async () => null,
+  signature: () => Effect.succeed(null),
 };
 
 export const serverless: Weigh = () => Effect.succeed({ _tag: 'Unasked', detail: 'no server runs beside this installation' });

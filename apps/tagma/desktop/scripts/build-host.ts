@@ -18,8 +18,8 @@ import {
   BUILD_TARGET_ENV,
   buildConditionsIn,
   hostBundle,
-  hostChannelIn,
   HOST_ASSETS_ENV,
+  HOST_CHANNEL_ENV,
   HOST_MAIN,
   RELEASE_INSIDE,
   RELEASE_NUMBER_ENV,
@@ -28,7 +28,8 @@ import {
 import { DESKTOP, EXECUTIONS } from '@tagma/server/installation/contract/wire/manifest';
 import { EXECUTIONS_RUNTIME } from '@tagma/server/installation/contract/wire/archive';
 import { signingIdentity, signingNotice } from '@tagma/server/installation/setup/signing';
-import { Effect, Layer } from 'effect';
+import { channelSchema } from '@tagma/server/installation/contract/wire/channel';
+import { Effect, Layer, Schema } from 'effect';
 import { type BuildOptions, build, context } from 'esbuild';
 import { KEYCHAIN_ADDON } from '../src/browser/keychain.js';
 import { CHANNEL_DEFINE } from '../src/channel.js';
@@ -36,7 +37,8 @@ import { INPUT_EXECUTABLE, INPUT_HELPER } from '../src/helper.js';
 import { SWIPE_ADDON } from '../src/swipe.js';
 
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-const CHANNEL = hostChannelIn(process.env, DEVELOPER_CHANNEL);
+const givenChannel = process.env[HOST_CHANNEL_ENV]?.trim();
+const CHANNEL = givenChannel ? Schema.decodeUnknownSync(Schema.fromJsonString(channelSchema))(givenChannel) : DEVELOPER_CHANNEL;
 const assets = process.env[HOST_ASSETS_ENV]?.trim() || join(packageRoot, 'assets');
 const DESKTOP_INPUT = resolve(packageRoot, '..', '..', '..', 'packages', 'desktop-input');
 const watching = process.argv.includes('--watch');

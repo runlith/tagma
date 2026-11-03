@@ -1,13 +1,13 @@
-import { spawnSync } from 'node:child_process';
-import { chmodSync, copyFileSync, cpSync, existsSync, rmSync, statSync } from 'node:fs';
+import { existsSync, rmSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { Data, Effect } from 'effect';
 import type { Words } from '../platform/contract/wire/refusal.js';
-import { freeBytes, gigabytes, requireFree, SpaceShort, standingAt, treeBytes } from '../platform/durable/space.js';
+import { type CloneFailed, cloneTree } from '../platform/durable/clone.js';
+import { freeBytes, gigabytes, SpaceShort, standingAt, treeBytes } from '../platform/durable/space.js';
 import { holdDirectory } from '../platform/lock/directoryLease.js';
 import { readAttempt, readReturn } from '../installation/closure/attempt.js';
 import { refusalDetail, verifyInstallation } from '../installation/closure/read.js';
-import { currentVersion } from '../installation/closure/versions.js';
+import { currentVersion } from '../platform/lock/versionedDirectories.js';
 import { manifestAt, releaseAt, releaseIdentified } from '../installation/closure/manifests.js';
 import { compareReleases, isRelease } from '../installation/contract/wire/feed.js';
 import { claimLeased } from '../installation/closure/leases.js';
@@ -22,7 +22,7 @@ import {
   moving,
   published,
 } from '../installation/closure/moves.js';
-import type { Applications } from '../installation/contract/service/applications.js';
+import type { ApplicationNotCopied, Applications } from '../installation/contract/service/applications.js';
 import type { HostVerdict } from '../installation/contract/service/steps.js';
 import { type InstallationManifest, releaseApplication } from '../installation/contract/wire/manifest.js';
 import { writeLauncherBeside } from '../installation/setup/launcher.js';
@@ -82,21 +82,21 @@ export const provenRelease = Effect.fn('release.prove')(function* (dir: string) 
   return manifest;
 });
 
-const cloneRuntime = (dir: string, manifest: InstallationManifest): void => {
-  if (!manifest.parts.some((part) => part.path === EXECUTIONS_RUNTIME)) return;
-  const runtime = join(dir, RUNTIME_PART);
-  const carried = join(dir, EXECUTIONS_RUNTIME);
-  if (spawnSync('/bin/cp', ['-c', runtime, carried], { stdio: 'ignore' }).status === 0) return;
-  requireFree(dir, statSync(runtime).size);
-  copyFileSync(runtime, carried);
-  chmodSync(carried, 0o700);
-};
+const placingRefusal =
+  (step: string) =>
+  (failure: CloneFailed | ApplicationNotCopied): ReleaseNotInstalled =>
+    failure.needed === undefined
+      ? refused(step, failure.message)
+      : refused('space', `${step}: ${failure.message}`, spaceWords(failure.needed));
 
-const cloneInto = (from: string, to: string): void => {
-  if (spawnSync('/bin/cp', ['-Rc', `${from}/.`, to], { stdio: 'ignore' }).status === 0) return;
-  requireFree(to, treeBytes(from));
-  cpSync(from, to, { recursive: true, verbatimSymlinks: true, force: true });
-};
+const cloneRefusal = placingRefusal('place');
+
+const copyRefusal = placingRefusal('application');
+
+const cloneRuntime = (dir: string, manifest: InstallationManifest): Effect.Effect<void, CloneFailed> =>
+  manifest.parts.some((part) => part.path === EXECUTIONS_RUNTIME)
+    ? cloneTree(join(dir, RUNTIME_PART), join(dir, EXECUTIONS_RUNTIME))
+    : Effect.void;
 
 const copyBytes = (bundle: string, installRoot: string): number =>
   statSync(bundle).dev === statSync(standingAt(installRoot)).dev ? 0 : treeBytes(bundle);
@@ -213,7 +213,7 @@ const placed = Effect.fn('release.place')(function* (
   const changing = standingRelease?.identity.digest !== offered.identity.digest;
   const asked = asking && changing ? askOf(installRoot, offered, standingBuild) : null;
   if (asked !== null) return asked;
-  const unsigned = yield* Effect.promise((signal) => applications.verify(carrier, signal));
+  const unsigned = yield* applications.verify(carrier);
   if (unsigned !== null) return yield* refused('signature', unsigned, DAMAGED);
   const manifest = yield* provenRelease(dir);
   if (manifest.platform.os !== process.platform || manifest.platform.arch !== process.arch) {
@@ -229,16 +229,12 @@ const placed = Effect.fn('release.place')(function* (
   const claimed = reused ?? (yield* attempt('place', () => claimLeased(installRoot, at)));
   const written = Effect.gen(function* () {
     const kept = releaseApplication(claimed.root, place.name);
-    if (!existsSync(kept)) {
-      yield* Effect.tryPromise({ try: () => applications.copy(carrier, kept), catch: failedAt('application') });
-    }
+    if (!existsSync(kept)) yield* applications.copy(carrier, kept).pipe(Effect.mapError(copyRefusal));
     if (reused === null) {
-      yield* attempt('place', () => {
-        cloneInto(join(kept, RELEASE_INSIDE), claimed.root);
-        cloneRuntime(claimed.root, manifest);
-      });
+      yield* cloneTree(join(kept, RELEASE_INSIDE), claimed.root).pipe(Effect.mapError(cloneRefusal));
+      yield* cloneRuntime(claimed.root, manifest).pipe(Effect.mapError(cloneRefusal));
     }
-    const quarantined = yield* Effect.promise(() => applications.unquarantine(claimed.root));
+    const quarantined = yield* applications.unquarantine(claimed.root);
     if (quarantined !== null) return yield* refused('quarantine', `${claimed.root} stays quarantined: ${quarantined}`, UNFINISHED);
     yield* writeLauncherBeside(installRoot, place.launcher, manifest.platform).pipe(
       Effect.mapError((failure) => refused('launcher', `${failure.path}: ${failure.detail}`, UNFINISHED)),

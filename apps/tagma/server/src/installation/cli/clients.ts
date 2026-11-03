@@ -4,7 +4,7 @@ import { Console, Effect } from 'effect';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { Command, Flag } from 'effect/cli';
 import { installationRootIn } from '../paths.js';
-import { CURRENT } from '../contract/wire/layout.js';
+import { CURRENT } from '../../platform/contract/wire/versions.js';
 import { releaseApplication } from '../contract/wire/manifest.js';
 import { InstalledChannel } from '../contract/service/channel.js';
 import { refuse, noting, CurrentInvocation } from '../../platform/cli/verb.js';

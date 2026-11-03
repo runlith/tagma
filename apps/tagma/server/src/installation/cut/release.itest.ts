@@ -81,11 +81,11 @@ const checkout = (
 const inert: Applications = {
   carrier: () => null,
   carried: () => null,
-  verify: async () => null,
-  copy: async () => undefined,
-  unquarantine: async () => null,
+  verify: () => Effect.succeed(null),
+  copy: () => Effect.void,
+  unquarantine: () => Effect.succeed(null),
   forget: () => undefined,
-  signature: async () => null,
+  signature: () => Effect.succeed(null),
 };
 
 const refusalOf = (where: ReturnType<typeof checkout>) =>

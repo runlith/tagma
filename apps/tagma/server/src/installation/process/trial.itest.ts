@@ -17,7 +17,7 @@ import { join } from 'node:path';
 import { it } from '@runlith/effect-test';
 import { Clock, Effect } from 'effect';
 import { passAttempt, readAttempt, writeAttempt } from '../closure/attempt.js';
-import { swapCurrent } from '../closure/versions.js';
+import { swapCurrent } from '../../platform/lock/versionedDirectories.js';
 import { arrive, enterTrial, rollBack, type TrialPlace } from './trial.js';
 
 const home = realpathSync(mkdtempSync(join(tmpdir(), 'tagma-trial-')));

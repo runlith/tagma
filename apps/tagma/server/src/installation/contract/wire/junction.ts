@@ -1,5 +1,4 @@
-import { readFileSync } from 'node:fs';
-import { Option, Result, Schema } from 'effect';
+import { Schema } from 'effect';
 import { CHANNELS, type Channel } from './channel.js';
 import { WORLD_COMMAND } from './layout.js';
 import { processChainSchema } from './process.js';
@@ -16,18 +15,6 @@ export const ActiveServer = Schema.Struct({
   chain: Schema.optional(processChainSchema),
 });
 export type ActiveServer = typeof ActiveServer.Type;
-
-const decodeActive = Schema.decodeUnknownResult(Schema.fromJsonString(ActiveServer));
-
-export const readActive = (junction: string): ActiveServer | null => {
-  let text: string;
-  try {
-    text = readFileSync(`${junction}/${ACTIVE_FILE}`, 'utf8');
-  } catch {
-    return null;
-  }
-  return Option.getOrNull(Result.getSuccess(decodeActive(text)));
-};
 
 export type ActiveHolder = ActiveServer | 'unnamed';
 

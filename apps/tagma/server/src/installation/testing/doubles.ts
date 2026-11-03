@@ -1,6 +1,6 @@
 import { frozenBuildsLayer as frozenBuildsLayerFn } from '../builds/frozen.js';
 import { migrationsFolder as migrationsFolderValue } from '../closure/read.js';
-import { openVersion as openVersionFn, swapCurrent as swapCurrentFn } from '../closure/versions.js';
+import { openVersion as openVersionFn, swapCurrent as swapCurrentFn } from '../../platform/lock/versionedDirectories.js';
 import { writeInstallation as writeInstallationFn } from '../closure/write.js';
 import { seedDirectory as seedDirectoryFn } from '../paths.js';
 import { successionLayer as successionLayerFn } from '../process/succession.js';

@@ -1,7 +1,7 @@
-import { constants } from 'node:fs';
-import { type FileHandle, chmod, copyFile, mkdir, open, rename, stat, statfs, unlink } from 'node:fs/promises';
+import { type FileHandle, chmod, mkdir, open, rename, stat, statfs, unlink } from 'node:fs/promises';
 import { basename, dirname, join, resolve } from 'node:path';
 import { Data, Effect } from 'effect';
+import { cloneBytes } from './clone.js';
 import { type Flushed, flushDescriptor } from './flush.js';
 import { UnitOpen } from '../store/transaction.js';
 import { SpaceShort } from './space.js';
@@ -107,13 +107,7 @@ export const cloneFile = Effect.fnUntraced(function* (from: string, to: string, 
   yield* makeDirectory(dirname(to));
   yield* Effect.tryPromise({
     try: async () => {
-      try {
-        await copyFile(from, to, constants.COPYFILE_FICLONE_FORCE | constants.COPYFILE_EXCL);
-      } catch (cause) {
-        if (!['ENOTSUP', 'EOPNOTSUPP', 'ENOSYS', 'EXDEV', 'EINVAL'].includes((cause as NodeJS.ErrnoException).code ?? '')) throw cause;
-        await checkSpace(to, (await stat(from)).size);
-        await copyFile(from, to, constants.COPYFILE_EXCL);
-      }
+      await cloneBytes(from, to, true);
       await chmod(to, 0o600);
     },
     catch: failed(to, 'write'),

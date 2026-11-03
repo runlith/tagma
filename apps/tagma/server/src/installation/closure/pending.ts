@@ -4,7 +4,7 @@ import { Data, Effect, Schema } from 'effect';
 import { removeFile, replaceFile } from '../../platform/durable/files.js';
 import { pendingRefusalSchema, type PendingRefusal } from '../contract/wire/pending.js';
 import { absentPath, releaseAt } from './manifests.js';
-import { currentVersion } from './versions.js';
+import { currentVersion } from '../../platform/lock/versionedDirectories.js';
 
 const PENDING = 'pending.json';
 const decode = Schema.decodeUnknownResult(Schema.fromJsonString(pendingRefusalSchema));

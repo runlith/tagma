@@ -1,7 +1,9 @@
 import { copyFileSync, cpSync, mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterAll, expect, test } from 'bun:test';
+import { afterAll, expect } from 'bun:test';
+import { it } from '@runlith/effect-test';
+import { Effect } from 'effect';
 import { RELEASE_INSIDE } from '../installation/contract/wire/layout.js';
 import { signatureRefusal } from './placement.js';
 
@@ -32,15 +34,19 @@ const bundle = (at: string, build: string, signed: boolean): string => {
   return at;
 };
 
-const refusal = (at: string) => signatureRefusal(carriedRelease(at), root, new AbortController().signal);
+const refusal = (at: string) => signatureRefusal(carriedRelease(at), root);
 
-test('a downloaded application is refused unless its signature verifies and names the identity of the application the current release keeps', async () => {
-  const standing = bundle(join(root, 'v1/desktop/Tagma.app'), '1', true);
-  symlinkSync('v1', join(root, 'current'));
-  const same = join(home, 'copy/Tagma.app');
-  cpSync(standing, same, { recursive: true, verbatimSymlinks: true });
+it.live(
+  'a downloaded application is refused unless its signature verifies and names the identity of the application the current release keeps',
+  () =>
+    Effect.gen(function* () {
+      const standing = bundle(join(root, 'v1/desktop/Tagma.app'), '1', true);
+      symlinkSync('v1', join(root, 'current'));
+      const same = join(home, 'copy/Tagma.app');
+      cpSync(standing, same, { recursive: true, verbatimSymlinks: true });
 
-  expect(await refusal(same)).toBeNull();
-  expect(await refusal(bundle(join(home, 'unsigned/Tagma.app'), '2', false))).toContain('carries no valid signature');
-  expect(await refusal(bundle(join(home, 'other/Tagma.app'), '3', true))).toContain('is signed as');
-});
+      expect(yield* refusal(same)).toBeNull();
+      expect(yield* refusal(bundle(join(home, 'unsigned/Tagma.app'), '2', false))).toContain('carries no valid signature');
+      expect(yield* refusal(bundle(join(home, 'other/Tagma.app'), '3', true))).toContain('is signed as');
+    }),
+);

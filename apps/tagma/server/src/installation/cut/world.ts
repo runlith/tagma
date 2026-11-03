@@ -10,7 +10,6 @@ import { type FeedRelease, feedSchema } from '../contract/wire/feed.js';
 import { portBlock, portsEnv } from '../contract/wire/ports.js';
 import {
   CLI_ENTRY,
-  CURRENT,
   INSTALL_FILE,
   RELEASE_INSIDE,
   RUNTIME_PART,
@@ -23,6 +22,7 @@ import { installationRootIn } from '../paths.js';
 import { readStartup } from '../process/record.js';
 import { RESTART_RECORD } from '../contract/wire/restart.js';
 import { dataDirectoryLocked } from '../../platform/lock/holder.js';
+import { CURRENT } from '../../platform/contract/wire/versions.js';
 import { pidAlive } from '@runlith/utils/process';
 
 const UNPACK = ['--no-xattrs', '--no-mac-metadata', '--no-acls', '--no-fflags', '--no-same-owner'];

@@ -3,6 +3,7 @@ import { basename, dirname, join } from 'node:path';
 import { Effect } from 'effect';
 import type { ChildProcessSpawner } from 'effect/process';
 import { type Signing, signCode } from '@runlith/codesign/codesign';
+import { cloneTree } from '../../platform/durable/clone.js';
 import { output } from './command.js';
 
 const HAS_CUSTOM_ICON = `${'0'.repeat(16)}0400${'0'.repeat(44)}`;
@@ -32,7 +33,7 @@ export const diskImage = Effect.fn('installation.diskImage')(
       catch: (cause) => `the disk image could not be staged in ${stage}: ${String(cause)}`,
     });
     const at = dirname(image);
-    yield* ran('/bin/cp', ['-Rc', bundle, join(stage, basename(bundle))], at);
+    yield* cloneTree(bundle, join(stage, basename(bundle))).pipe(Effect.mapError((failure) => failure.message));
     yield* ran(
       '/usr/bin/hdiutil',
       ['create', '-volname', volume, '-srcfolder', stage, '-fs', 'HFS+', '-format', 'UDRW', '-ov', writable],

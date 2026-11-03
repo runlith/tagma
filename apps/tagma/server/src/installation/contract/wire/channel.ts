@@ -1,13 +1,17 @@
-export type ChannelId = 'stable' | 'dev';
+import { Schema } from 'effect';
 
-export type Channel = {
-  readonly id: ChannelId;
-  readonly name: string;
-  readonly bundleId: string;
-  readonly data: string;
-  readonly port: number;
-  readonly command: string;
-};
+export const channelSchema = Schema.Struct({
+  id: Schema.Literals(['stable', 'dev']),
+  name: Schema.String,
+  bundleId: Schema.String,
+  data: Schema.String,
+  port: Schema.Number,
+  command: Schema.String,
+});
+
+export type Channel = typeof channelSchema.Type;
+
+export type ChannelId = Channel['id'];
 
 export const CHANNELS: { readonly [Id in ChannelId]: Channel & { readonly id: Id } } = {
   stable: {

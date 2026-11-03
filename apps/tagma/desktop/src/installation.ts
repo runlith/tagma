@@ -3,7 +3,7 @@ import { existsSync } from 'node:fs';
 import { mkdir, open, stat } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { Schema } from 'effect';
-import { currentVersion } from '@tagma/server/installation/closure/versions';
+import { currentVersion } from '@tagma/server/platform/lock/versionedDirectories';
 import {
   CLI_ENTRY,
   DATABASE_FILE,

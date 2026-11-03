@@ -29,7 +29,7 @@ const migration = (folder: string, name: string): void => {
   writeFileSync(join(folder, name, 'migration.sql'), 'select 1;\n');
 };
 
-const unplaced = () => Promise.reject(new Error('a refused cut places no application'));
+const unplaced = () => Effect.die('a refused cut places no application');
 const applications: Applications = {
   carrier: () => null,
   carried: () => null,

@@ -7,7 +7,8 @@ import { Effect, Fiber } from 'effect';
 import { readReturn } from './attempt.js';
 import { claimLeased } from './leases.js';
 import { madeCurrent, moveFrom, moving, published, staging, steppedBack } from './moves.js';
-import { previousRelease, swapCurrent } from './versions.js';
+import { swapCurrent } from '../../platform/lock/versionedDirectories.js';
+import { previousRelease } from './versions.js';
 
 const tree = realpathSync(mkdtempSync(join(tmpdir(), 'tagma-moves-')));
 afterAll(() => rmSync(tree, { recursive: true, force: true }));

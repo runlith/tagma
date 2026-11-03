@@ -1,7 +1,8 @@
 import { constants, realpathSync } from 'node:fs';
 import { access, mkdir } from 'node:fs/promises';
 import { basename, dirname, join, resolve } from 'node:path';
-import { BundleRefused, recoverBundle, replaceBundle, verifiedBundle } from '@tagma/server/mac-applications/placement';
+import { Effect } from 'effect';
+import { recoverBundle, replaceBundle, verifiedBundle } from '@tagma/server/mac-applications/placement';
 import { compareReleases, isRelease } from '@tagma/server/installation/contract/wire/feed';
 import { carriedBy } from './release.js';
 
@@ -38,15 +39,13 @@ export const inApplications = (bundle: string, home: string | null): boolean =>
 
 export type Placed = { readonly placed: string } | { readonly refused: string };
 
-const replaced = async (target: string, kept: string): Promise<Placed> => {
-  try {
-    await replaceBundle(target, kept, verifiedBundle);
-    return { placed: target };
-  } catch (error) {
-    if (error instanceof BundleRefused) return { refused: error.message };
-    throw error;
-  }
-};
+const replaced = (target: string, kept: string): Promise<Placed> =>
+  Effect.runPromise(
+    replaceBundle(target, kept, verifiedBundle).pipe(
+      Effect.as<Placed>({ placed: target }),
+      Effect.catchTag('BundleRefused', (refused): Effect.Effect<Placed> => Effect.succeed({ refused: refused.message })),
+    ),
+  );
 
 export async function become(own: string | null, kept: string, installRoot: string): Promise<Placed> {
   if (own === null || within(own, installRoot) || !(await writable(dirname(own)))) return { placed: kept };
@@ -58,7 +57,7 @@ export async function replaceAt(copy: string, kept: string, installRoot: string)
   return replaced(copy, kept);
 }
 
-export const settleOwn = (own: string): Promise<void> => recoverBundle(own);
+export const settleOwn = (own: string): Promise<void> => Effect.runPromise(recoverBundle(own));
 
 export const applicationFolders = (home: string | null): readonly string[] =>
   home === null ? [SYSTEM_APPLICATIONS] : [SYSTEM_APPLICATIONS, userApplications(home)];

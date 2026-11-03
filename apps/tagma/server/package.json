@@ -474,10 +474,10 @@
       "node": "./src/installation/contract/wire/manifest.ts",
       "default": "./src/installation/contract/wire/manifest.ts"
     },
-    "./installation/closure/versions": {
-      "types": "./src/installation/closure/versions.ts",
-      "node": "./src/installation/closure/versions.ts",
-      "default": "./src/installation/closure/versions.ts"
+    "./platform/lock/versionedDirectories": {
+      "types": "./src/platform/lock/versionedDirectories.ts",
+      "node": "./src/platform/lock/versionedDirectories.ts",
+      "default": "./src/platform/lock/versionedDirectories.ts"
     },
     "./installation/closure/attempt": {
       "types": "./src/installation/closure/attempt.ts",

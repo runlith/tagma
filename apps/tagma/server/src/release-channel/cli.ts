@@ -7,7 +7,8 @@ import { CurrentInvocation, noting, print, refuse, write } from '../platform/cli
 import { dataDirectoryHolder, dataDirectoryLocked } from '../platform/lock/holder.js';
 import type { DirectoryHolder } from '../platform/contract/wire/lock.js';
 import { databasePath, installationRoot, launcherPath } from '../installation/paths.js';
-import { BUILD_ASKED_EVERY_MS, CURRENT } from '../installation/contract/wire/layout.js';
+import { BUILD_ASKED_EVERY_MS } from '../installation/contract/wire/layout.js';
+import { CURRENT } from '../platform/contract/wire/versions.js';
 import type { Installed, Installing, NextFrame, NextOffer, Then } from '../installation/contract/wire/next.js';
 import { placementSchema } from '../installation/contract/wire/placement.js';
 import { INSTALLATION_OPERATIONS } from '../installation/contract/wire/operations.js';
@@ -17,7 +18,7 @@ import { comingUp, restartMismatch } from '../installation/process/serverStart.j
 import { RESTART_RECORD } from '../installation/contract/wire/restart.js';
 import type { ServerCli } from '../installation/cli/port.js';
 import { readInstallation, refusalDetail } from '../installation/closure/read.js';
-import { versionsNewestFirst } from '../installation/closure/versions.js';
+import { versionsNewestFirst } from '../platform/lock/versionedDirectories.js';
 import type { Applications } from '../installation/contract/service/applications.js';
 import { InstalledChannel } from '../installation/contract/service/channel.js';
 import type { Channel } from '../installation/contract/wire/channel.js';

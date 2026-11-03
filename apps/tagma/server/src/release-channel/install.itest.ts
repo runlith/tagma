@@ -8,7 +8,7 @@ import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
 import { passAttempt, readAttempt, writeAttempt, writeReturn } from '../installation/closure/attempt.js';
 import { ATTEMPT_OPEN } from '../installation/contract/wire/attempt.js';
 import { releaseAt } from '../installation/closure/manifests.js';
-import { swapCurrent } from '../installation/closure/versions.js';
+import { swapCurrent } from '../platform/lock/versionedDirectories.js';
 import { EXECUTIONS_RUNTIME } from '../installation/contract/wire/archive.js';
 import { type InstallPlace, installRelease, type Weigh } from './install.js';
 import { carriedIn, serverless, syntheticReleaseEffect, trustedApplications } from './testing/release.js';

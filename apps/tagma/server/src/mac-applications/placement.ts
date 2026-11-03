@@ -1,12 +1,14 @@
-import { spawn, spawnSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import { existsSync, readdirSync } from 'node:fs';
 import { mkdir, rename, rm } from 'node:fs/promises';
 import { basename, dirname, join } from 'node:path';
-import type { Applications } from '../installation/contract/service/applications.js';
+import { Data, Effect } from 'effect';
+import { ApplicationNotCopied, type Applications } from '../installation/contract/service/applications.js';
 import { RELEASE_INSIDE, RUNTIME_PART } from '../installation/contract/wire/layout.js';
 import { DESKTOP } from '../installation/contract/wire/manifest.js';
-import { currentVersion } from '../installation/closure/versions.js';
-import { requireFree, treeBytes } from '../platform/durable/space.js';
+import { currentVersion } from '../platform/lock/versionedDirectories.js';
+import { answered, refusalOf } from '../platform/command.js';
+import { cloneTree } from '../platform/durable/clone.js';
 
 const CODESIGN = '/usr/bin/codesign';
 const XATTR = '/usr/bin/xattr';
@@ -32,33 +34,29 @@ const keptApplication = (root: string): string | undefined => {
   return found.length === 1 ? join(kept, found[0]!) : undefined;
 };
 
-const ran = (args: readonly string[]): Promise<number | null> =>
-  new Promise((ended) => {
-    const child = spawn('/bin/cp', [...args], { stdio: 'ignore' });
-    child.on('error', () => ended(null));
-    child.on('exit', (code) => ended(code));
-  });
+export class BundleRefused extends Data.TaggedError('BundleRefused')<{ readonly reason: string }> {
+  override get message(): string {
+    return this.reason;
+  }
+}
 
-const cloned = async (from: string, to: string): Promise<void> => {
-  if ((await ran(['-Rc', from, to])) === 0) return;
-  await rm(to, { recursive: true, force: true });
-  requireFree(dirname(to), treeBytes(from));
-  const code = await ran(['-R', from, to]);
-  if (code === 0) return;
-  await rm(to, { recursive: true, force: true });
-  throw new Error(`${from} could not be copied to ${to}: cp exited ${code ?? 'without starting'}`);
-};
+const notCopied = (path: string) => (cause: unknown) =>
+  new ApplicationNotCopied({ path, reason: cause instanceof Error ? cause.message : String(cause) });
+
+const attempt = (path: string, work: () => Promise<unknown>): Effect.Effect<void, ApplicationNotCopied> =>
+  Effect.asVoid(Effect.tryPromise({ try: work, catch: notCopied(path) }));
 
 const beside = (target: string, part: 'incoming' | 'outgoing'): string => join(dirname(target), `.${basename(target)}.${part}`);
 
-export const recoverBundle = async (target: string): Promise<void> => {
-  const outgoing = beside(target, 'outgoing');
-  if (!existsSync(target) && existsSync(outgoing)) await rename(outgoing, target);
-  await rm(beside(target, 'incoming'), { recursive: true, force: true });
-  await rm(outgoing, { recursive: true, force: true });
-};
+const removed = (path: string): Effect.Effect<void, ApplicationNotCopied> =>
+  attempt(path, () => rm(path, { recursive: true, force: true }));
 
-export class BundleRefused extends Error {}
+export const recoverBundle = Effect.fn('macApplications.recoverBundle')(function* (target: string) {
+  const outgoing = beside(target, 'outgoing');
+  if (!existsSync(target) && existsSync(outgoing)) yield* attempt(target, () => rename(outgoing, target));
+  yield* removed(beside(target, 'incoming'));
+  yield* removed(outgoing);
+});
 
 const EXCHANGE = `const { dlopen, ptr, read } = require('bun:ffi');
 const libc = dlopen('libc.dylib', {
@@ -71,38 +69,49 @@ if (libc.symbols.renamex_np(ptr(from), ptr(to), 2) !== 0) {
   throw new Error('atomic application exchange failed: errno ' + read.i32(libc.symbols.__error(), 0));
 }`;
 
-const exchanged = (runtime: string, from: string, to: string): Promise<void> =>
-  new Promise((answer, refuse) => {
-    const child = spawn(runtime, ['-e', EXCHANGE, from, to], { stdio: ['ignore', 'ignore', 'pipe'] });
-    let detail = '';
-    child.stderr.on('data', (chunk: Buffer) => (detail += chunk.toString('utf8')));
-    child.on('error', refuse);
-    child.on('close', (code, signal) => {
-      if (code === 0) answer();
-      else refuse(new Error(`the application exchange ended on ${signal ?? code}: ${detail.trim()}`));
-    });
-  });
+const staged = Effect.fnUntraced(function* (target: string, from: string) {
+  yield* attempt(target, () => mkdir(dirname(target), { recursive: true }));
+  yield* recoverBundle(target);
+  const incoming = beside(target, 'incoming');
+  yield* cloneTree(from, incoming).pipe(
+    Effect.mapError((failure) => new ApplicationNotCopied({ path: incoming, reason: failure.reason, needed: failure.needed })),
+    Effect.onError(() =>
+      removed(incoming).pipe(
+        Effect.catchTag('ApplicationNotCopied', (left) =>
+          Effect.logWarning(`${left.path} stays after a failed copy, and the next placement removes it: ${left.reason}`),
+        ),
+      ),
+    ),
+  );
+  return incoming;
+});
 
-export const replaceBundle = async (
+const swapped = Effect.fnUntraced(function* (target: string, from: string, incoming: string) {
+  if (existsSync(target)) {
+    const runtime = join(from, RELEASE_INSIDE, RUNTIME_PART);
+    const refusal = refusalOf(runtime, yield* answered(runtime, ['-e', EXCHANGE, incoming, target]));
+    if (refusal !== null) return yield* new ApplicationNotCopied({ path: target, reason: `the application exchange failed: ${refusal}` });
+  } else yield* attempt(target, () => rename(incoming, target));
+  yield* removed(incoming);
+});
+
+export const replaceBundle = Effect.fn('macApplications.replace')(function* (
   target: string,
   from: string,
-  verify: (bundle: string) => Promise<string | null> = async () => null,
-): Promise<void> => {
-  await mkdir(dirname(target), { recursive: true });
-  await recoverBundle(target);
-  const incoming = beside(target, 'incoming');
-  await cloned(from, incoming);
-  const refused = await verify(incoming);
+  verify: (bundle: string) => Effect.Effect<string | null>,
+) {
+  const incoming = yield* staged(target, from);
+  const refused = yield* verify(incoming);
   if (refused !== null) {
-    await rm(incoming, { recursive: true, force: true });
-    throw new BundleRefused(refused);
+    yield* removed(incoming);
+    return yield* new BundleRefused({ reason: refused });
   }
-  if (existsSync(target)) await exchanged(join(from, RELEASE_INSIDE, RUNTIME_PART), incoming, target);
-  else await rename(incoming, target);
-  await rm(incoming, { recursive: true, force: true });
-};
+  yield* swapped(target, from, incoming);
+});
 
-export const copyBundle = (from: string, to: string): Promise<void> => replaceBundle(to, from);
+const copyBundle = Effect.fn('macApplications.copy')(function* (from: string, to: string) {
+  yield* swapped(to, from, yield* staged(to, from));
+});
 
 export const carriedIn = (dir: string): string | null => {
   const bundles = readdirSync(dir).filter((name) => name.endsWith('.app'));
@@ -136,58 +145,36 @@ export const forgetBundles = (dir: string): void => {
   }
 };
 
-type Signed = { readonly status: number | null; readonly text: string };
-
-const codesign = (args: readonly string[], signal: AbortSignal | undefined): Promise<Signed> =>
-  new Promise((answer) => {
-    const child = spawn(CODESIGN, [...args], { stdio: ['ignore', 'pipe', 'pipe'], signal });
-    let text = '';
-    child.stdout.on('data', (chunk: Buffer) => (text += chunk.toString('utf8')));
-    child.stderr.on('data', (chunk: Buffer) => (text += chunk.toString('utf8')));
-    child.on('error', (error) => answer({ status: null, text: error.message }));
-    child.on('close', (code, ended) => answer({ status: code, text: ended === null ? text : `${text}codesign ended on ${ended}` }));
+const requirementOf = (bundle: string): Effect.Effect<{ readonly said: string } | { readonly requirement: string }> =>
+  Effect.map(answered(CODESIGN, ['-d', '-r-', bundle]), (read) => {
+    const requirement = /designated => (.+)/u.exec(read.text)?.[1]?.trim();
+    return read.status === 0 && requirement !== undefined ? { requirement } : { said: refusalOf(CODESIGN, read) ?? read.text.trim() };
   });
 
-const requirementOf = async (
-  bundle: string,
-  signal: AbortSignal,
-): Promise<{ readonly said: string } | { readonly requirement: string }> => {
-  const read = await codesign(['-d', '-r-', bundle], signal);
-  const requirement = /designated => (.+)/u.exec(read.text)?.[1]?.trim();
-  return read.status === 0 && requirement !== undefined ? { requirement } : { said: read.text.trim() || `codesign exited ${read.status}` };
-};
-
-export const verifiedBundle = async (bundle: string, signal?: AbortSignal): Promise<string | null> => {
-  const verified = await codesign(['--verify', '--deep', '--strict', bundle], signal);
-  return verified.status === 0
-    ? null
-    : `${bundle} carries no valid signature: ${verified.text.trim() || `codesign exited ${verified.status}`}`;
-};
-
-const unquarantined = (path: string): Promise<string | null> =>
-  new Promise((answer) => {
-    const child = spawn(XATTR, ['-dr', QUARANTINE, path], { stdio: ['ignore', 'ignore', 'pipe'] });
-    let text = '';
-    child.stderr.on('data', (chunk: Buffer) => (text += chunk.toString('utf8')));
-    child.on('error', (error) => answer(error.message));
-    child.on('close', (code) => answer(code === 0 ? null : text.trim() || `xattr exited ${code}`));
+export const verifiedBundle = (bundle: string): Effect.Effect<string | null> =>
+  Effect.map(answered(CODESIGN, ['--verify', '--deep', '--strict', bundle]), (verified) => {
+    const refusal = refusalOf(CODESIGN, verified);
+    return refusal === null ? null : `${bundle} carries no valid signature: ${refusal}`;
   });
 
-export const signatureRefusal = async (carried: string, installRoot: string, signal: AbortSignal): Promise<string | null> => {
+const unquarantined = (path: string): Effect.Effect<string | null> =>
+  Effect.map(answered(XATTR, ['-dr', QUARANTINE, path]), (answer) => refusalOf(XATTR, answer));
+
+export const signatureRefusal = Effect.fn('macApplications.signature')(function* (carried: string, installRoot: string) {
   const bundle = carrierOf(carried);
   if (bundle === null) return `${carried} is carried by no application`;
-  const unsigned = await verifiedBundle(bundle, signal);
+  const unsigned = yield* verifiedBundle(bundle);
   if (unsigned !== null) return unsigned;
   const standing = currentVersion(installRoot);
   const running = standing === null ? undefined : keptApplication(join(installRoot, standing));
   if (running === undefined || !existsSync(running)) return null;
-  const [offered, ours] = await Promise.all([requirementOf(bundle, signal), requirementOf(running, signal)]);
+  const [offered, ours] = yield* Effect.all([requirementOf(bundle), requirementOf(running)], { concurrency: 2 });
   if ('said' in offered) return `the signature of ${bundle} could not be read: ${offered.said}`;
   if ('said' in ours) return `the signature of ${running} could not be read: ${ours.said}`;
   return offered.requirement === ours.requirement
     ? null
     : `${bundle} is signed as ${offered.requirement}, and the application that stands here as ${ours.requirement}`;
-};
+});
 
 export const applications: Applications = {
   carrier: carrierOf,

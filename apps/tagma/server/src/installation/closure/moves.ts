@@ -7,7 +7,8 @@ import { INSTALL_LOCK } from '../contract/wire/layout.js';
 import { beginAttempt, clearReturn, servedRelease, standingAttempt, writeReturn } from './attempt.js';
 import { type Claimed, claimLeased, pruneReleases } from './leases.js';
 import { releaseAt } from './manifests.js';
-import { currentVersion, previousRelease, publishStaged, swapCurrent } from './versions.js';
+import { currentVersion, swapCurrent } from '../../platform/lock/versionedDirectories.js';
+import { previousRelease, publishStaged } from './versions.js';
 
 export class InstallHeld extends Data.TaggedError('InstallHeld')<{ readonly path: string; readonly reason: string }> {}
 

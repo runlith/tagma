@@ -4,7 +4,8 @@ import type { Git } from '@runlith/git/Git';
 import { Context, Effect, Result } from 'effect';
 import type { Maintenance } from '../../platform/contract/service/maintenance.js';
 import { GRANT_VARIABLE } from '../../platform/contract/service/credentials.js';
-import { CLI_ENTRY, CURRENT, RUNTIME_PART } from '../../installation/contract/wire/layout.js';
+import { CLI_ENTRY, RUNTIME_PART } from '../../installation/contract/wire/layout.js';
+import { CURRENT } from '../../platform/contract/wire/versions.js';
 import { CHAINED, chaining, gateStanding, type GateStanding, MARK, OWN_EXIT, OWNER_LINE } from '../contract/wire/gateHook.js';
 import { driverStanding, registerMergeDriver, unregisterMergeDriver } from './mergeDriver.js';
 

@@ -12,7 +12,8 @@ import { serverPartsStand } from '../closure/present.js';
 import { readInstallation, refusalDetail } from '../closure/read.js';
 import { makeCurrentProjection } from '../closure/current.js';
 import { EXECUTIONS, type Installation } from '../contract/wire/manifest.js';
-import { ASKED_EVERY_MS, CLI_ENTRY, CURRENT, RUNTIME_PART, SERVE_FLAGS } from '../contract/wire/layout.js';
+import { ASKED_EVERY_MS, CLI_ENTRY, RUNTIME_PART, SERVE_FLAGS } from '../contract/wire/layout.js';
+import { CURRENT } from '../../platform/contract/wire/versions.js';
 import type { Restart, RestartHost } from '../contract/wire/source.js';
 import type { HostVerdict, SuccessionSteps } from '../contract/service/steps.js';
 import {

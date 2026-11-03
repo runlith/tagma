@@ -1,13 +1,14 @@
 import { Database } from 'bun:sqlite';
-import { constants, copyFileSync, existsSync, mkdtempSync, readdirSync, realpathSync, rmSync, statSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, realpathSync, rmSync, statSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 import { Data, Effect, Option, Predicate, Result, Schema } from 'effect';
 import { type Words, wordsSchema } from '../../platform/contract/wire/refusal.js';
+import { type CloneFailed, cloneTree } from '../../platform/durable/clone.js';
 import { cloneFile, moveFile, removeFile, replaceFile } from '../../platform/durable/files.js';
 import { dataSpaceWords } from '../../platform/durable/space.js';
 import { passAttempt, readAttempt, stands, writeAttempt, writeServed } from '../closure/attempt.js';
 import { moving } from '../closure/moves.js';
-import { currentVersion, swapCurrent } from '../closure/versions.js';
+import { currentVersion, swapCurrent } from '../../platform/lock/versionedDirectories.js';
 import { ATTEMPT_STARTS, type Attempt, type AttemptEnd } from '../contract/wire/attempt.js';
 
 const KEPT = '.attempt';
@@ -164,39 +165,50 @@ const leftAs = (files: readonly string[]): string =>
     })
     .join('\n');
 
-const ledgerOf = (main: string, wal: string): string | null => {
-  if (!existsSync(main) || statSync(main).size === 0) return null;
-  const scratch = mkdtempSync(join(dirname(main), '.ledger-'));
+class LedgerUnread extends Data.TaggedError('LedgerUnread')<{ readonly reason: string }> {
+  override get message(): string {
+    return this.reason;
+  }
+}
+
+const migrationsIn = (at: string): string => {
+  const db = new Database(at);
   try {
-    const at = join(scratch, 'read.sqlite');
-    copyFileSync(main, at, constants.COPYFILE_FICLONE);
-    if (existsSync(wal)) copyFileSync(wal, `${at}-wal`, constants.COPYFILE_FICLONE);
-    const db = new Database(at);
-    try {
-      const held = db.query("select 1 from sqlite_master where type = 'table' and name = '__drizzle_migrations'").get() !== null;
-      return held ? JSON.stringify(db.query('select name, hash from __drizzle_migrations order by id').all()) : '';
-    } finally {
-      db.close();
-    }
+    const held = db.query("select 1 from sqlite_master where type = 'table' and name = '__drizzle_migrations'").get() !== null;
+    return held ? JSON.stringify(db.query('select name, hash from __drizzle_migrations order by id').all()) : '';
   } finally {
-    rmSync(scratch, { recursive: true, force: true });
+    db.close();
   }
 };
 
-const servedByFrom = (files: readonly string[]): Effect.Effect<boolean> =>
-  Effect.map(
-    Effect.result(
-      Effect.try({
-        try: () => files.every((path) => ledgerOf(path, `${path}-wal`) === ledgerOf(`${path}${KEPT}`, `${path}-wal${KEPT}`)),
-        catch: (cause) => (cause instanceof Error ? cause.message : String(cause)),
-      }),
-    ),
-    (read) => {
-      if (Result.isSuccess(read)) return read.success;
-      console.error(`[tagma] the migrations standing in the data could not be read, so the copies go back: ${read.failure}`);
-      return false;
-    },
-  );
+const ledgerOf = Effect.fnUntraced(function* (main: string, wal: string) {
+  if (!existsSync(main) || statSync(main).size === 0) return null;
+  const unread = (cause: unknown) => new LedgerUnread({ reason: cause instanceof Error ? cause.message : String(cause) });
+  const scratch = yield* Effect.try({ try: () => mkdtempSync(join(dirname(main), '.ledger-')), catch: unread });
+  return yield* Effect.gen(function* () {
+    const at = join(scratch, 'read.sqlite');
+    yield* cloneTree(main, at);
+    if (existsSync(wal)) yield* cloneTree(wal, `${at}-wal`);
+    return yield* Effect.try({ try: () => migrationsIn(at), catch: unread });
+  }).pipe(Effect.ensuring(Effect.sync(() => rmSync(scratch, { recursive: true, force: true }))));
+});
+
+const servedByFrom = Effect.fnUntraced(
+  function* (files: readonly string[]) {
+    for (const path of files) {
+      if ((yield* ledgerOf(path, `${path}-wal`)) !== (yield* ledgerOf(`${path}${KEPT}`, `${path}-wal${KEPT}`))) return false;
+    }
+    return true;
+  },
+  (effect) => {
+    const unread = (failure: CloneFailed | LedgerUnread) =>
+      Effect.sync(() => {
+        console.error(`[tagma] the migrations standing in the data could not be read, so the copies go back: ${failure.message}`);
+        return false;
+      });
+    return Effect.catchTags(effect, { CloneFailed: unread, LedgerUnread: unread });
+  },
+);
 
 const settledOn = Effect.fnUntraced(function* (place: TrialPlace, record: Attempt, end: AttemptEnd) {
   const { installRoot } = place;

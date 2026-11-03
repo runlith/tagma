@@ -12,7 +12,7 @@ import { REQUIRED_ROLES } from '../contract/wire/manifest.js';
 import { Succession } from '../contract/service/succession.js';
 import { successionLayer } from '../process/succession.js';
 import { writeInstallation } from './write.js';
-import { openVersion, swapCurrent } from './versions.js';
+import { openVersion, swapCurrent } from '../../platform/lock/versionedDirectories.js';
 
 it.live('current reuses identity proof for an unchanged version and detects link switches and same-size manifest replacements', () =>
   Effect.gen(function* () {

@@ -49,7 +49,8 @@ import { HOST_REFUSAL_ENV, HostRefusal } from '../contract/wire/hostRefusal.js';
 import { type CommandUnavailable, output } from './command.js';
 import { carriedEngine, engineLayout } from './engine.js';
 import { carryNative, nativeCarried, writeInstallationPackage } from './packages.js';
-import { nextVersion, openVersion, stamped } from '../closure/versions.js';
+import { stamped } from '../closure/versions.js';
+import { nextVersion, openVersion } from '../../platform/lock/versionedDirectories.js';
 import type { Claimed } from '../closure/leases.js';
 import {
   type AttemptStanding,

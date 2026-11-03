@@ -19,16 +19,16 @@ import { createHash } from 'node:crypto';
 import { isAbsolute, join, resolve } from 'node:path';
 import { Result, Schema } from 'effect';
 import { GateRefusal } from '../platform/contract/wire/refusal.js';
+import { CURRENT } from '../platform/contract/wire/versions.js';
 import {
   currentVersion,
+  nextVersion,
   openVersion,
   readCurrentFile,
   swapCurrent,
-  nextVersion,
   versionsNewestFirst,
-} from '../installation/closure/versions.js';
-import { pruneVersions } from '../installation/closure/leases.js';
-import { CURRENT } from '../installation/contract/wire/layout.js';
+} from '../platform/lock/versionedDirectories.js';
+import { pruneVersions } from '../platform/lock/versionLeases.js';
 import type { Draft, KeptVideo, PageVideos, PublishPage, ShelfKey, ShelfPage, ShelfSelection } from './contract/service/shelf.js';
 import type { CompactionFailure, Published, SelectionUpdate } from './protocol.js';
 import { Selection } from './selection.js';

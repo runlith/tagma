@@ -4,7 +4,7 @@ import { Result, Schema } from 'effect';
 import { type Attempt, attemptSchema, type Return, returnSchema, servingSchema } from '../contract/wire/attempt.js';
 import { ATTEMPT_FILE, INSTALL_FILE, RETURN_FILE, SERVED_FILE } from '../contract/wire/layout.js';
 import { absentPath } from './manifests.js';
-import { currentVersion } from './versions.js';
+import { currentVersion } from '../../platform/lock/versionedDirectories.js';
 
 const decodeAttempt = Schema.decodeUnknownResult(Schema.fromJsonString(attemptSchema));
 const encodeAttempt = Schema.encodeSync(Schema.fromJsonString(attemptSchema));

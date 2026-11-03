@@ -4,7 +4,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { writeAttempt } from './attempt.js';
 import { claimLeased, pruneReleases } from './leases.js';
-import { publishStaged, releasesNewestFirst, swapCurrent } from './versions.js';
+import { swapCurrent } from '../../platform/lock/versionedDirectories.js';
+import { publishStaged, releasesNewestFirst } from './versions.js';
 
 const tree = realpathSync(mkdtempSync(join(tmpdir(), 'tagma-prune-')));
 afterAll(() => rmSync(tree, { recursive: true, force: true }));

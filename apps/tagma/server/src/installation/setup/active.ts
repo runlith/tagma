@@ -1,16 +1,22 @@
+import { readFileSync } from 'node:fs';
 import { recordedHolder, type RecordedTaken, takeRecorded } from '../../platform/lock/recorded.js';
 import type { Channel } from '../contract/wire/channel.js';
-import { Effect } from 'effect';
+import { Effect, Option, Result, Schema } from 'effect';
 import { Processes, type ProcessReader } from '@runlith/execution-host/ProcessReader';
 import { LockHolders } from '../contract/service/lockHolders.js';
-import {
-  ACTIVE_FILE,
-  ACTIVE_LOCK,
-  type ActiveHolder,
-  type ActiveServer,
-  junctionDirectory,
-  readActive,
-} from '../contract/wire/junction.js';
+import { ACTIVE_FILE, ACTIVE_LOCK, type ActiveHolder, ActiveServer, junctionDirectory } from '../contract/wire/junction.js';
+
+const decodeActive = Schema.decodeUnknownResult(Schema.fromJsonString(ActiveServer));
+
+export const readActive = (junction: string): ActiveServer | null => {
+  let text: string;
+  try {
+    text = readFileSync(`${junction}/${ACTIVE_FILE}`, 'utf8');
+  } catch {
+    return null;
+  }
+  return Option.getOrNull(Result.getSuccess(decodeActive(text)));
+};
 
 export const takeActive = (junction: string, own: ActiveServer): RecordedTaken<ActiveServer> =>
   takeRecorded(`${junction}/${ACTIVE_LOCK}`, `${junction}/${ACTIVE_FILE}`, own, () => readActive(junction), own.chain !== undefined);

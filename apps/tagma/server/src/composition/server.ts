@@ -70,7 +70,8 @@ import { HOST_REPLACE, HOST_STATE } from '../installation/contract/wire/launch.j
 import { MachineStore, storeDirectory } from '../platform/contract/service/store.js';
 import { StoreSnapshots } from '../platform/contract/service/snapshots.js';
 import { chain, pendingMigrations } from '../platform/store/chain.js';
-import { CURRENT, SERVE_LOG, WORLD_COMMAND, serveLogPath } from '../installation/contract/wire/layout.js';
+import { SERVE_LOG, WORLD_COMMAND, serveLogPath } from '../installation/contract/wire/layout.js';
+import { CURRENT } from '../platform/contract/wire/versions.js';
 import { portsOf } from '../installation/contract/wire/ports.js';
 import { unfinishedTransfer } from '../installation/move/transfer.js';
 import { holdJunction, homesIntegrated, installationsRefreshed } from './junction.js';

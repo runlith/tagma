@@ -22,12 +22,12 @@ import { Effect, Layer, Stream } from 'effect';
 import { FetchHttpClient } from 'effect/http';
 import {
   AUDIO_HELPER,
-  CURRENT,
   SILERO_PART,
   SPEECH_MODELS,
   WHISPER_ABSENCE_PART,
   WHISPER_ENGINE_PART,
 } from '../installation/contract/wire/layout.js';
+import { CURRENT } from '../platform/contract/wire/versions.js';
 import { type Installation, releaseApplication } from '../installation/contract/wire/manifest.js';
 import { installationRoot } from '../installation/paths.js';
 import type { Channel } from '../installation/contract/wire/channel.js';

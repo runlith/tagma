@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { createInterface } from 'node:readline';
 import { makeManifestProjection } from '@tagma/server/installation/closure/manifests';
 import { readAttempt } from '@tagma/server/installation/closure/attempt';
-import { currentVersion } from '@tagma/server/installation/closure/versions';
+import { currentVersion } from '@tagma/server/platform/lock/versionedDirectories';
 import { RELEASE_INSIDE, RUNTIME_PART, hostBundle } from '@tagma/server/installation/contract/wire/layout';
 import { DESKTOP } from '@tagma/server/installation/contract/wire/manifest';
 import { compareReleases, isRelease } from '@tagma/server/installation/contract/wire/feed';
