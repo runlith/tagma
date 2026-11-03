@@ -100,6 +100,42 @@ export default defineProgram({ audit: async ({ tree, base }) => ({ tree: await r
     }),
   );
 
+  it.effect('one key needing preparation does not end the others: the refusal names every unprepared key at once', () =>
+    Effect.gen(function* () {
+      const files = yield* FileSystem.FileSystem;
+      const root = yield* files.makeTempDirectoryScoped({ prefix: 'checker-unprepared-' });
+      yield* files.writeFileString(
+        join(root, 'check.ts'),
+        `import { defineProgram } from '@runlith/tagma/rules';
+class NeedsPreparation extends Error { name = 'NeedsPreparation'; }
+const needs = (what) => () => { throw new NeedsPreparation(what + ' holds no index'); };
+export default defineProgram({
+  first: needs('first'),
+  second: ({ tree }) => ({ tree: { findings: [{ fingerprint: 'm', path: tree.paths[0], message: 'ok' }] } }),
+  third: needs('third'),
+  fourth: () => { throw new Error('boom'); },
+});`,
+      );
+      const head = committed(root, ['check.ts']);
+      const checks = ['first', 'second', 'third', 'fourth'].map((name) => ({
+        key: name,
+        program: { program: 'check.ts', name, concern: 'code' as const, needs: [], params: {} },
+      }));
+      const checker = checkerFor(root, checks[0]!);
+      const bindings: ProgramBinding[] = checks.map((check) => ({ rule: check.key, check, places: ['src'], debt: [], checker }));
+      const judged: GroupSubject = { ...subject(root), tree: head, base: null, sides: [subject(root).sides[0]] };
+      const refused = (yield* judgePrograms(judged, bindings).pipe(Effect.provideService(ProgramRoad, localRoad([])))).get(
+        checker.id,
+      )!.answer;
+      if (Result.isSuccess(refused)) return yield* Effect.die('a group with unprepared keys was judged');
+      expect(refused.failure.reason).toContain('first is unprepared: first holds no index');
+      expect(refused.failure.reason).toContain('third is unprepared: third holds no index');
+      expect(refused.failure.reason).toContain('fourth threw: Error: boom');
+      expect(refused.failure.reason).not.toContain('second');
+      expect(refused.failure.ways?.join(' ')).toContain('first, third');
+    }),
+  );
+
   it.effect('a missing checkout dependency names its environment, and preparing that checkout makes the same inspection judge', () =>
     Effect.gen(function* () {
       const files = yield* FileSystem.FileSystem;

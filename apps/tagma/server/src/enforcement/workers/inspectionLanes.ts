@@ -39,6 +39,7 @@ export class InspectionFailed extends Data.TaggedError('InspectionFailed')<{
   readonly reason: string;
   readonly ways?: readonly string[];
   readonly split?: true;
+  readonly unprepared?: boolean;
   readonly worker?: WorkerUnavailable;
 }> {}
 

@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { TreeDifference } from '@runlith/git/trees';
 import type { Finding, Side } from '@runlith/tagma/rules';
+import { NeedsPreparation } from '../../preparation';
 import { isManifest } from '../../declarations/corpus';
 import { blobTexts } from '../../git';
 import {
@@ -163,7 +164,7 @@ export const judgements = (root: string, params: CallParams, versionRevision: st
       if (changes.length < GOOD_ENOUGH) break;
     }
     if (best === undefined || best.changes.length > FAR)
-      throw new Error(
+      throw new NeedsPreparation(
         `no ask-calls state within ${FAR} changed files of ${commit}; run check_rules with inspection ask-calls over "change", using the same paths, whole and taking selection, to prepare the candidate before judging it again`,
       );
     return advance(commit, best, best.changes).id;
