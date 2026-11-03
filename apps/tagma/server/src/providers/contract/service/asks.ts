@@ -81,15 +81,17 @@ export type ProgramRun = {
   readonly ask: ProgramAsk;
   readonly entries: readonly EnvironmentEntry[];
   readonly input: string;
-  readonly deadlineMs: number;
+  readonly stallMs: number | null;
 };
 
 export class ProgramFailed extends Data.TaggedError('ProgramFailed')<{ readonly message: string }> {}
 
+export class ProgramStalled extends Data.TaggedError('ProgramStalled')<{ readonly message: string; readonly idleMs: number }> {}
+
 export class AskPrograms extends Context.Service<
   AskPrograms,
   {
-    run(run: ProgramRun): Effect.Effect<ProgramOutput, ProgramFailed>;
+    run(run: ProgramRun): Effect.Effect<ProgramOutput, ProgramFailed | ProgramStalled>;
   }
 >()('tagma/providers/AskPrograms') {}
 

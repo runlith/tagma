@@ -38,6 +38,12 @@ if (log !== undefined && log !== '')
     })}\n`,
   );
 
+if (input.includes('ASK-MOVING'))
+  for (let beat = 0; beat < 12; beat += 1) {
+    process.stdout.write('\n');
+    await Bun.sleep(100);
+  }
+
 if (input.includes('ASK-HANG')) setInterval(() => {}, 1_000);
 else if (input.includes('ASK-QUOTA')) {
   process.stderr.write('usage limit reached for this account');

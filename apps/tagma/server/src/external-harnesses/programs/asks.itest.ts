@@ -6,6 +6,7 @@ import { ActivityLog } from '@runlith/activity/log';
 import { activityRecording } from '@runlith/activity/testing';
 import { layer } from '@runlith/effect-test';
 import { AccountKey } from '@runlith/llm/models/authStatus';
+import type { AskProgram } from '@runlith/tagma/adapter/provider';
 import { Context, Effect, Fiber, FileSystem, Layer, Queue } from 'effect';
 import { ASK_PROGRAM_MODEL, ASK_PROGRAM_PROVIDER, adapter, askProgramFixture } from '../../composition/testing/askProgram.js';
 import { makeModelAsks } from '../../providers/asks.js';
@@ -27,14 +28,21 @@ const filler = Layer.effect(AskPrograms, makeAskPrograms).pipe(
   Layer.provideMerge(BunFileSystem.layer),
 );
 
-const run = (input: string, entries: readonly { readonly _tag: 'Set'; readonly name: string; readonly value: string }[] = []) =>
+const reporting = { ...askProgramFixture, progress: true };
+
+const run = (
+  input: string,
+  entries: readonly { readonly _tag: 'Set'; readonly name: string; readonly value: string }[] = [],
+  program: AskProgram = askProgramFixture,
+  stallMs: number | null = null,
+) =>
   Effect.flatMap(AskPrograms, (programs) =>
     programs.run({
-      program: askProgramFixture,
+      program,
       ask: { model: ASK_PROGRAM_MODEL, rung: 'low', system: 'Answer.' },
       entries,
       input,
-      deadlineMs: 60_000,
+      stallMs,
     }),
   );
 
@@ -71,6 +79,14 @@ layer(filler, { excludeTestServices: true })('ask programs', (it) => {
       const limited = yield* run('ASK-QUOTA');
       expect(limited.exit).toBe(2);
       expect(askProgramFixture.answer(limited)).toMatchObject({ _tag: 'Refused', refusal: 'ask-quota' });
+    }),
+  );
+
+  it.effect('a program reporting progress is waited for while it moves and stalls once it falls silent', () =>
+    Effect.gen(function* () {
+      const moving = yield* run('ASK-MOVING ASK-BYTES', [], reporting, 400);
+      expect(reporting.answer(moving)).toMatchObject({ _tag: 'Text', text: String(Buffer.byteLength('ASK-MOVING ASK-BYTES')) });
+      expect(yield* Effect.flip(run('ASK-HANG', [], reporting, 400))).toMatchObject({ _tag: 'ProgramStalled', idleMs: 400 });
     }),
   );
 

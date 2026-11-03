@@ -1,13 +1,21 @@
 import { join } from 'node:path';
-import { Effect, FileSystem, Stdio, Stream } from 'effect';
+import { Effect, FileSystem, Stream } from 'effect';
 import { AgentFault, FAULT } from '@runlith/acp/agent';
 import { ExchangeFailed } from '@runlith/ndjson-rpc/exchange';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
-import * as BunStdio from '@effect/platform-bun/BunStdio';
 import { cursorSelection } from '../selection.js';
 import { hostedAgent } from '@runlith/hosted-runner/agent';
 import type { HostedDoor } from '@runlith/hosted-runner/door';
-import { hostedStdio, serveHosted, type HostedAsk, type HostedLaunch, type HostedRunner, type Invoked } from '@runlith/hosted-runner/run';
+import {
+  askAnswered,
+  askMoved,
+  hostedStdio,
+  serveHosted,
+  type HostedAsk,
+  type HostedLaunch,
+  type HostedRunner,
+  type Invoked,
+} from '@runlith/hosted-runner/run';
 import { CursorSdk } from './channel.js';
 import { makeCursorCycle } from './cycle.js';
 import { cursorSdk } from './sdk.js';
@@ -92,19 +100,18 @@ const runAsk = Effect.fn('cursor.runAsk')(function* (at: Invoked, { model, effor
     }),
     (agent) => Effect.sync(() => agent.close()),
   );
-  const run = yield* Effect.tryPromise({ try: () => agent.send(`${system}\n\n${input}`), catch: failed });
+  const run = yield* Effect.tryPromise({ try: () => agent.send(`${system}\n\n${input}`, { onDelta: askMoved }), catch: failed });
   const result = yield* Effect.tryPromise({ try: () => run.wait(), catch: failed });
   if (result.status !== 'finished')
     return yield* new AgentFault({
       code: FAULT.internal,
       message: `${result.error?.code ?? result.status}: ${result.error?.message ?? 'Cursor did not finish the ask.'}`,
     });
-  const stdio = yield* Stdio.Stdio;
-  yield* Stream.run(Stream.make(`${JSON.stringify({ text: result.result, usage: result.usage })}\n`), stdio.stdout());
+  yield* askAnswered(JSON.stringify({ text: result.result, usage: result.usage }));
 }, Effect.scoped);
 
 export const cursorRunner: HostedRunner = {
   run: (at, door, launch) => runCursor(at, door, launch).pipe(Effect.provide(BunFileSystem.layer)),
-  ask: (at, ask) => runAsk(at, ask).pipe(Effect.provide(BunFileSystem.layer), Effect.provide(BunStdio.layer)),
+  ask: (at, ask) => runAsk(at, ask).pipe(Effect.provide(BunFileSystem.layer)),
   cut: null,
 };

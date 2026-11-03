@@ -2,6 +2,7 @@ import { homedir } from 'node:os';
 import { Effect, Layer } from 'effect';
 import { HostRequestKey } from '@runlith/executions/protocol/execution';
 import { AccountCli, type AccountCommand, type ProgramState } from '../../providers/contract/service/cli.js';
+import { ProgramFailed } from '../../providers/contract/service/asks.js';
 import { HarnessAdapters } from '../contract/service/adapters.js';
 import { GateRefusal } from '../../platform/contract/wire/refusal.js';
 import { Projects } from '../../projects/contract/service/registry.js';
@@ -21,17 +22,24 @@ const cliFailed = (reason: string): GateRefusal =>
   new GateRefusal('account-cli-failed', reason, ['check the installed CLI and retry on this account']);
 
 const run = Effect.fn('AccountCli.run')(function* (command: AccountCommand, program: HarnessProgram | null) {
+  const limitMs = command.timeoutMs ?? COMMAND_MS;
   const ran = yield* runProgram(
     {
       program: command.program,
       args: command.args,
       entries: command.entries,
       cwd: command.cwd ?? homedir(),
-      timeoutMs: command.timeoutMs ?? COMMAND_MS,
+      stallMs: null,
       exchange: command.exchange,
     },
     program,
-  ).pipe(Effect.mapError((failure) => cliFailed(`The account CLI failed: ${failure.message}`)));
+  ).pipe(
+    Effect.timeoutOrElse({
+      duration: limitMs,
+      orElse: () => Effect.fail(new ProgramFailed({ message: `The program did not answer within ${limitMs} ms.` })),
+    }),
+    Effect.mapError((failure) => cliFailed(`The account CLI failed: ${failure.message}`)),
+  );
   return { stdout: ran.stdout, stderr: ran.stderr, code: ran.exit ?? -1 };
 });
 

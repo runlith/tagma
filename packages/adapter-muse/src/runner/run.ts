@@ -1,11 +1,19 @@
 import { join } from 'node:path';
-import { Deferred, Effect, FileSystem, Result, Schema, Stdio, Stream } from 'effect';
+import { Deferred, Effect, FileSystem, Result, Schema, Stream } from 'effect';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
-import * as BunStdio from '@effect/platform-bun/BunStdio';
 import { AgentFault, FAULT } from '@runlith/acp/agent';
 import { hostedAgent } from '@runlith/hosted-runner/agent';
 import type { HostedDoor } from '@runlith/hosted-runner/door';
-import { hostedStdio, serveHosted, type HostedAsk, type HostedLaunch, type HostedRunner, type Invoked } from '@runlith/hosted-runner/run';
+import {
+  askAnswered,
+  askMoved,
+  hostedStdio,
+  serveHosted,
+  type HostedAsk,
+  type HostedLaunch,
+  type HostedRunner,
+  type Invoked,
+} from '@runlith/hosted-runner/run';
 import { HARNESS_PROGRAM } from '@runlith/hosted-runner/wire/program';
 import { ExchangeFailed } from '@runlith/ndjson-rpc/exchange';
 import { MUSE_CODE_STORAGE } from '../harness/acp.js';
@@ -89,6 +97,7 @@ const runAsk = Effect.fnUntraced(
     const spent: Tokens[] = [];
     const ended = yield* Deferred.make<typeof TurnCompleted.Type>();
     const frame = Effect.fnUntraced(function* (seen: Frame) {
+      askMoved();
       if (seen.method === 'item/completed') {
         const read = decodeItem(seen.params);
         if (Result.isSuccess(read) && read.success.item.kind === 'agentMessage' && read.success.item.turnId === turn)
@@ -154,15 +163,10 @@ const runAsk = Effect.fnUntraced(
       }),
       { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, totalTokens: 0, reasoningTokens: 0 },
     );
-    const stdio = yield* Stdio.Stdio;
-    yield* Stream.run(
-      Stream.make(`${JSON.stringify({ text: said.join('\n\n'), usage: spent.length === 0 ? undefined : total })}\n`),
-      stdio.stdout(),
-    );
+    yield* askAnswered(JSON.stringify({ text: said.join('\n\n'), usage: spent.length === 0 ? undefined : total }));
   },
   Effect.scoped,
   Effect.provide(BunFileSystem.layer),
-  Effect.provide(BunStdio.layer),
 );
 
 export const museCodeRunner: HostedRunner = { run: runMuse, ask: runAsk, cut: null };

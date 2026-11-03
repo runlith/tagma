@@ -1,5 +1,5 @@
-import { Effect } from 'effect';
-import { ProgramFailed } from '../../providers/contract/service/asks.js';
+import { Clock, Duration, Effect } from 'effect';
+import { ProgramFailed, ProgramStalled } from '../../providers/contract/service/asks.js';
 import { resolveEnvironment } from '@runlith/executions/CommandEnvironment';
 import type { EnvironmentEntry } from '@runlith/executions/protocol/execution';
 import type { CommandExchange, ProgramOutput } from '@runlith/tagma/adapter/provider';
@@ -11,12 +11,12 @@ export type ProgramCommand = {
   readonly args: readonly string[];
   readonly entries: readonly EnvironmentEntry[];
   readonly cwd: string;
-  readonly timeoutMs: number;
+  readonly stallMs: number | null;
   readonly exchange?: CommandExchange;
   readonly input?: string;
 };
 
-const outputText = async (stream: ReadableStream<Uint8Array>, onLine?: (line: string) => void): Promise<string> => {
+const outputText = async (stream: ReadableStream<Uint8Array>, moved: () => void, onLine?: (line: string) => void): Promise<string> => {
   const reader = stream.getReader();
   const decoder = new TextDecoder();
   let text = '';
@@ -26,6 +26,7 @@ const outputText = async (stream: ReadableStream<Uint8Array>, onLine?: (line: st
     for (;;) {
       const read = await reader.read();
       if (read.done) return text + decoder.decode();
+      moved();
       text += decoder.decode(read.value, { stream: true });
       if (onLine !== undefined) {
         for (let end = text.indexOf('\n', searchFrom); end !== -1; end = text.indexOf('\n', scanned)) {
@@ -64,7 +65,13 @@ export const runProgram = Effect.fnUntraced(function* (command: ProgramCommand, 
         await child.exited;
       }),
   );
-  return yield* Effect.tryPromise({
+  const clock = yield* Clock.clockWith((held) => Effect.succeed(held));
+  const awakeMs = () => Number(clock.monotonicTimeNanosUnsafe()) / 1_000_000;
+  let movedAt = awakeMs();
+  const moved = () => {
+    movedAt = awakeMs();
+  };
+  const reading = Effect.tryPromise({
     try: async (): Promise<ProgramOutput> => {
       let completed = command.exchange === undefined;
       const onLine = (line: string) => {
@@ -86,8 +93,8 @@ export const runProgram = Effect.fnUntraced(function* (command: ProgramCommand, 
         unwritten = cause;
       });
       const [stdout, stderr] = await Promise.all([
-        outputText(child.stdout, command.exchange === undefined ? undefined : onLine),
-        outputText(child.stderr),
+        outputText(child.stdout, moved, command.exchange === undefined ? undefined : onLine),
+        outputText(child.stderr, moved),
         child.exited,
         written,
       ]);
@@ -98,10 +105,19 @@ export const runProgram = Effect.fnUntraced(function* (command: ProgramCommand, 
     },
     catch: (cause) =>
       cause instanceof ProgramFailed ? cause : new ProgramFailed({ message: `The program output could not be read: ${String(cause)}` }),
-  }).pipe(
-    Effect.timeoutOrElse({
-      duration: command.timeoutMs,
-      orElse: () => Effect.fail(new ProgramFailed({ message: `The program did not answer within ${command.timeoutMs} ms.` })),
-    }),
-  );
+  });
+  const stallMs = command.stallMs;
+  if (stallMs === null) return yield* reading;
+  const silence = Effect.gen(function* () {
+    for (;;) {
+      const remaining = movedAt + stallMs - awakeMs();
+      if (remaining <= 0)
+        return yield* new ProgramStalled({
+          message: `The program printed nothing for ${Math.round(stallMs / 1000)} seconds while it was still running.`,
+          idleMs: stallMs,
+        });
+      yield* clock.sleep(Duration.millis(remaining));
+    }
+  });
+  return yield* Effect.raceFirst(reading, silence);
 }, Effect.scoped);

@@ -35,8 +35,6 @@ import type { AskRefusal } from './contract/wire/asks.js';
 import { ProviderRegistry, type AskRoute, type ProviderCatalog } from './contract/service/registry.js';
 
 const PROGRAM_OUTPUT_TOKENS = 8_192;
-const PROGRAM_SETTLE_MS = 30_000;
-const PROGRAM_MS_PER_OUTPUT_TOKEN = 25;
 
 type ProgramRoute = Extract<AskRoute, { readonly path: 'program' }>;
 
@@ -198,7 +196,7 @@ export const makeModelAsks = Effect.gen(function* () {
           ask: { model: selection.model, rung: selection.reasoning, system, schema: native ? schema : undefined },
           entries: environment.entries,
           input: ask.input,
-          deadlineMs: PROGRAM_SETTLE_MS + budget.output * PROGRAM_MS_PER_OUTPUT_TOKEN,
+          stallMs: ask.stallMs ?? null,
         }),
       )
       .pipe(Effect.mapError((failure) => refused('ask-provider-failed', failure.message, failure)));

@@ -228,34 +228,26 @@ layer(fixture, { excludeTestServices: true })('account CLI', (it) => {
     }),
   );
 
-  it.effect('a deadline or an oversized response refuses and reaps its headless child even when SIGTERM is ignored', () =>
+  it.effect('a deadline refuses and reaps its headless child even when SIGTERM is ignored', () =>
     Effect.gen(function* () {
       const disk = yield* FileSystem.FileSystem;
       const home = yield* disk.makeTempDirectoryScoped({ prefix: 'account-cli-' });
       const cli = yield* AccountCli;
-      for (const mode of ['deadline', 'overflow']) {
-        const pidFile = join(home, `${mode}.pid`);
-        const script =
-          'require("node:fs").writeFileSync(process.argv[1],String(process.pid));process.on("SIGTERM",()=>{});if(process.argv[2]==="overflow")process.stdout.write("x".repeat(1024*1024+1),()=>process.exit(0));else setInterval(()=>{},1000)';
-        const refusal = yield* Effect.flip(
-          cli.run({
-            program: process.execPath,
-            args: ['-e', script, pidFile, mode],
-            cwd: home,
-            entries: [],
-            timeoutMs: 250,
-          }),
-        );
-        expect(refusal.code).toBe('account-cli-failed');
-        const pid = Number(yield* disk.readFileString(pidFile));
-        let state: unknown;
-        try {
-          process.kill(pid, 0);
-        } catch (cause) {
-          state = cause;
-        }
-        expect(state).toMatchObject({ code: 'ESRCH' });
+      const pidFile = join(home, 'deadline.pid');
+      const script =
+        'require("node:fs").writeFileSync(process.argv[1],String(process.pid));process.on("SIGTERM",()=>{});setInterval(()=>{},1000)';
+      const refusal = yield* Effect.flip(
+        cli.run({ program: process.execPath, args: ['-e', script, pidFile], cwd: home, entries: [], timeoutMs: 250 }),
+      );
+      expect(refusal.code).toBe('account-cli-failed');
+      const pid = Number(yield* disk.readFileString(pidFile));
+      let state: unknown;
+      try {
+        process.kill(pid, 0);
+      } catch (cause) {
+        state = cause;
       }
+      expect(state).toMatchObject({ code: 'ESRCH' });
     }),
   );
 });

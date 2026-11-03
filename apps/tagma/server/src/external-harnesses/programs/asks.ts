@@ -34,7 +34,7 @@ export const makeAskPrograms = Effect.gen(function* () {
           args: launched.args,
           entries: launched.entries,
           cwd: scratch,
-          timeoutMs: run.deadlineMs,
+          stallMs: 'runner' in run.program || run.program.progress === true ? run.stallMs : null,
           input: run.input,
         },
         launched.installed,

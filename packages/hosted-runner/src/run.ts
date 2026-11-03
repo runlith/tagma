@@ -33,6 +33,17 @@ export type HostedRunner = {
   readonly ask?: (at: Invoked, ask: HostedAsk) => Effect.Effect<void, unknown>;
 };
 
+export const askMoved = (): void => {
+  process.stdout.write('\n');
+};
+
+export const askAnswered = (line: string): Effect.Effect<void, ExchangeFailed> =>
+  Effect.callback<void, ExchangeFailed>((resume) => {
+    process.stdout.write(`${line}\n`, (failure) =>
+      resume(failure == null ? Effect.void : Effect.fail(new ExchangeFailed({ detail: `stdout failed: ${String(failure)}` }))),
+    );
+  });
+
 type AgentFactory<R> = (process: Process) => Effect.Effect<(outlet: Outlet) => AgentHandlers<never>, AgentFault, R>;
 
 type HostedStdio = {

@@ -37,6 +37,7 @@ export type ProgramAnswer = (
 export type CommandProgram = {
   readonly command: string;
   readonly schemas: boolean;
+  readonly progress?: boolean;
   argv(ask: ProgramAsk): readonly string[];
   answer(output: ProgramOutput): ProgramAnswer;
 };
