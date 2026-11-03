@@ -1,8 +1,6 @@
 import type { EnforcementCli } from './cli/port.js';
 
-type VerbSource = () => Promise<Record<string, unknown>>;
-
-export const enforcementVerbs = (binding: () => Promise<EnforcementCli>): Readonly<{ check: VerbSource; 'merge-driver': VerbSource }> => ({
+export const enforcementVerbs = (binding: () => Promise<EnforcementCli>) => ({
   check: async () => {
     const [{ check }, road] = await Promise.all([import('./cli/check.js'), binding()]);
     return { check: check(road) };

@@ -19,6 +19,7 @@ import { type DoorPath, overlaps, type Route, routedPath } from './route.js';
 
 import { journaledOf, type OperationSet, type RefusalWords } from '../wire/manifest.js';
 import type { ModulePresentation } from './presentation.js';
+import type { VerbSources } from '../../cli/verb.js';
 
 export type SettingControlSource<R> = {
   readonly id: string;
@@ -33,7 +34,7 @@ export type Manifest = {
   readonly bodies?: () => Promise<readonly OperationPair[]>;
   readonly presentation?: () => Promise<ModulePresentation<any>>;
   readonly subjects?: () => Promise<readonly SubjectPlace[]>;
-  readonly verbs?: (...bindings: never[]) => Readonly<Record<string, () => Promise<Record<string, unknown>>>>;
+  readonly verbs?: (...bindings: never[]) => VerbSources<unknown>;
   readonly feeds?: readonly FeedDeclaration[];
   readonly live?: {
     readonly feeds: readonly FeedDeclaration[];

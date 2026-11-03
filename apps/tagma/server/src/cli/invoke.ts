@@ -1,7 +1,7 @@
 import { Cause, Console, Effect, Layer } from 'effect';
 import { CliConfig, Command, GlobalFlag } from 'effect/cli';
-import { exitCodeOf, cliHelp } from '../platform/cli/verb.js';
-import { loadVerbs, verbNamed, type VerbSources } from './verbs.js';
+import { exitCodeOf, cliHelp, type VerbSources } from '../platform/cli/verb.js';
+import { loadVerbs, verbNamed } from './verbs.js';
 
 function namedVerb(argv: readonly string[]): string | undefined {
   for (const token of argv) {
@@ -15,7 +15,7 @@ function versionOnly(argv: readonly string[]): boolean {
   return argv.some((token) => token === '--version' || token === '-v') && !argv.some((token) => token === '--help' || token === '-h');
 }
 
-const performed = Effect.fnUntraced(function* (argv: readonly string[], contributions: VerbSources, version: string) {
+const performed = Effect.fnUntraced(function* <R>(argv: readonly string[], contributions: VerbSources<R>, version: string) {
   const verb = namedVerb(argv);
   const named = verb === undefined ? undefined : yield* Effect.promise(() => verbNamed(verb, contributions));
   const help = named?.preface?.(argv);
@@ -32,12 +32,12 @@ const performed = Effect.fnUntraced(function* (argv: readonly string[], contribu
   );
 });
 
-export const invoke = (
+export const invoke = <R>(
   argv: readonly string[],
-  contributions: VerbSources,
+  contributions: VerbSources<R>,
   version: string,
-): Effect.Effect<number, never, Command.Environment> =>
-  (performed(argv, contributions, version) as Effect.Effect<void, unknown, Command.Environment>).pipe(
+): Effect.Effect<number, never, R | Command.Environment> =>
+  performed(argv, contributions, version).pipe(
     Effect.as(0),
     Effect.catchCause((cause) => exitCodeOf(Cause.squash(cause), argv.includes('--json'))),
   );
