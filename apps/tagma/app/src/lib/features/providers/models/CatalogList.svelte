@@ -39,6 +39,7 @@
     autofocus = true,
     heading,
     detail,
+    cost,
     onpick,
     onstar,
     onreorder,
@@ -57,6 +58,7 @@
     autofocus?: boolean;
     heading?: Snippet<[string, string]>;
     detail?: Snippet<[ModelChoice, string | null]>;
+    cost?: Snippet<[ModelChoice, string | null]>;
     onpick: (choice: ModelChoice, rung: string | null, gesture: ModelGesture, switches: ModelSwitches) => void;
     onstar?: (provider: string, model: string) => void;
     onreorder?: (choice: ModelChoice, before: ModelChoice | null) => void;
@@ -381,6 +383,9 @@
       {#each line.choice.flags ?? [] as flag (flag.text)}
         <FadeText class={['min-w-0 shrink text-small', TONE[flag.tone]]} text={flag.text} />
       {/each}
+      {#if on && cost}
+        {@render cost(line.choice, rung)}
+      {/if}
     </span>
     {#if on && ladder.length > 0}
       <Rungs

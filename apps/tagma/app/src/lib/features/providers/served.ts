@@ -9,7 +9,7 @@ export function providerName(models: ServedModels, provider: string): string {
   return models.registered(provider) ? (models.named(provider).accountsLabel ?? models.providerLabel(provider)) : provider;
 }
 
-export function billing(models: ServedModels, provider: string): string | null {
+export function billing(models: ServedModels, provider: string): 'API key' | 'plan' | null {
   if (!models.registered(provider)) return null;
   return models.named(provider).auth === 'api-key' ? 'API key' : 'plan';
 }

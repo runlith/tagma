@@ -8,7 +8,9 @@
   import { ProviderCatalog } from '$lib/features/providers/Catalog.svelte.js';
   import { billedLabel } from '$lib/features/providers/served.js';
   import ModelCatalogList from '$lib/features/providers/models/CatalogList.svelte';
+  import FadeText from '$lib/shared/FadeText.svelte';
   import { choiceKey, type ModelChoice, type ModelFlag, type ModelGesture } from '$lib/shared/models/choice.js';
+  import { coldWords, type ColdBasis } from './coldWords.js';
   import { compactionDetail, compactionList } from './compactionWords.js';
   import PickerHeading from './PickerHeading.svelte';
   import type { ChatHold } from '../ChatHold.svelte.js';
@@ -17,6 +19,7 @@
   import { ThreadCompaction } from '../thread/ThreadCompaction.svelte.js';
   import type { ThreadViews } from '../thread/ThreadViews.js';
   import type { ThreadWrites } from '../ThreadWrites.js';
+  import { warmthFilled } from '../warmthWords.js';
 
   let {
     shown,
@@ -58,6 +61,18 @@
     const flag: ModelFlag =
       unread === null ? { text: 'reading the choices…', tone: 'muted' } : { text: 'the choices were not read', tone: 'bad' };
     return own === undefined ? [] : [{ ...own, meta: undefined, flags: [flag] }];
+  });
+  const cold = $derived.by<ColdBasis | null>(() => {
+    const session = chat.session;
+    const thread = session?.thread ?? null;
+    if (session === null || thread === null) return null;
+    const queued = [...session.queued, ...session.pendingSteers].some((item) => item.kind === 'compaction');
+    return {
+      reading: thread.contextReading ?? null,
+      warm: session.activeRunId !== null || warmthFilled(thread.cacheWarmth ?? null, () => clock.now),
+      account: thread.account ?? null,
+      compacting: queued || session.runPhase?.phase === 'compacting',
+    };
   });
 
   function close(): void {
@@ -128,6 +143,15 @@
   />
 {/snippet}
 
+{#snippet coldRead(choice: ModelChoice, rung: string | null)}
+  {@const standing = choiceKey(choice.provider, choice.model) === models?.current && rung === choice.rung}
+  {@const words =
+    cold === null || standing ? null : coldWords(catalog.models, cold, { provider: choice.provider, model: choice.model, rung }, clock.now)}
+  {#if words !== null}
+    <FadeText class="min-w-0 shrink text-small text-muted-foreground" text={words} />
+  {/if}
+{/snippet}
+
 {#snippet compactDetail(choice: ModelChoice)}
   {@const row = compaction?.rows.get(choiceKey(choice.provider, choice.model))}
   {#if read !== null && row !== undefined}
@@ -152,6 +176,7 @@
             query={current.query}
             busy={settings.busy}
             heading={signer}
+            cost={coldRead}
             onpick={choose}
             onstar={(provider, model) => void favorites.toggle(provider, model)}
             onreorder={reorder}
