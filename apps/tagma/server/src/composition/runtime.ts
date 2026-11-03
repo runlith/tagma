@@ -735,7 +735,7 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
                 ),
               ),
             ),
-            Layer.provideMerge(closing('machine store', machineStoreLayer(storePath, migrations, processes))),
+            Layer.provideMerge(closing('machine store', machineStoreLayer(storePath, migrations, processes, assembly.machineRegistry))),
             Layer.provideMerge(Layer.succeedContext(bindings)),
             Layer.provideMerge(Layer.succeed(Doctrine, doctrineText(assembly))),
             Layer.provideMerge(Layer.succeed(InstalledChannel, channel)),

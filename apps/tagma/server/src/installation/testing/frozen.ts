@@ -225,6 +225,38 @@ const update0_2 = Schema.Struct({
   took: Schema.NullOr(Schema.Number),
 });
 
+const member0_2 = Schema.Struct({ projectId: Schema.Number, groupId: Schema.Number, ord: Schema.Number });
+
+const setting0_2 = Schema.Struct({
+  id: Schema.Number,
+  scope: Schema.Literals(['user', 'project']),
+  key: Schema.String,
+  projectId: Schema.NullOr(Schema.Number),
+  value: Schema.NullOr(Schema.String),
+  declined: Schema.optional(Schema.Boolean),
+  updatedAt: Schema.String,
+});
+
+const registry0_2 = Schema.Struct({
+  projects: Schema.Array(
+    Schema.Struct({
+      id: Schema.Number,
+      name: Schema.String,
+      repoKey: Schema.String,
+      rootPath: Schema.String,
+      storage: Schema.Literals(['stealth', 'team', 'plain']),
+      createdAt: Schema.String,
+      strictProvenance: Schema.optional(Schema.Boolean),
+      private: Schema.optional(Schema.Boolean),
+      kind: Schema.optional(Schema.Literals(['folder', 'global', 'group'])),
+      global: Schema.optional(Schema.Boolean),
+      removedAt: Schema.optional(Schema.NullOr(Schema.String)),
+    }),
+  ),
+  members: Schema.optional(Schema.Array(member0_2)),
+  settings: Schema.Array(setting0_2),
+});
+
 const changeNext = Schema.Struct({ store: Schema.String, release: Schema.NonEmptyString });
 
 const manifestNext = Schema.Struct({
@@ -298,6 +330,26 @@ const updateNext = Schema.Struct({
   placement: Schema.optional(placementNext),
 });
 
+const registryNext = Schema.Struct({
+  projects: Schema.Array(
+    Schema.Struct({
+      id: Schema.Number,
+      name: Schema.String,
+      repoKey: Schema.String,
+      rootPath: Schema.String,
+      createdAt: Schema.String,
+      kind: Schema.optional(Schema.Literals(['folder', 'global', 'group'])),
+      global: Schema.optional(Schema.Boolean),
+      removedAt: Schema.optional(Schema.NullOr(Schema.String)),
+      strictProvenance: Schema.optional(Schema.Boolean),
+      private: Schema.optional(Schema.Boolean),
+      storage: Schema.Literals(['stealth', 'team', 'plain']),
+    }),
+  ),
+  members: Schema.optional(Schema.Array(member0_2)),
+  settings: Schema.Array(setting0_2),
+});
+
 export const NEXT = {
   issued: [],
   manifest: manifestNext,
@@ -309,6 +361,7 @@ export const NEXT = {
   restart: restartNext,
   feed: feedNext,
   update: updateNext,
+  registry: registryNext,
 } as const;
 
 export const FROZEN = [
@@ -323,6 +376,7 @@ export const FROZEN = [
     restart: restart0_2,
     feed: feed0_2,
     update: update0_2,
+    registry: registry0_2,
   },
   NEXT,
 ] as const;

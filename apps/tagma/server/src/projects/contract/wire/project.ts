@@ -4,7 +4,7 @@ export const STORAGE_MODES = ['stealth', 'team'] as const;
 export type StorageMode = (typeof STORAGE_MODES)[number];
 
 export const PROJECT_KINDS = ['folder', 'global', 'group'] as const;
-export type ProjectKind = (typeof PROJECT_KINDS)[number];
+type ProjectKind = (typeof PROJECT_KINDS)[number];
 
 export type ProjectIdentity = {
   readonly repoKey: string | null;

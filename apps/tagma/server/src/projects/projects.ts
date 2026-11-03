@@ -1,5 +1,6 @@
 import { Context, Effect, Queue, Stream } from 'effect';
 import { lazyLayer, liveOf, manifest } from '../platform/contract/service/manifest.js';
+import { MACHINE_REGISTRY } from '../platform/contract/service/machineRegistry.js';
 import { projectsVerbs } from './cli.js';
 import { ProjectChanges } from './contract/service/changes.js';
 import type { ProjectsLive } from './contract/service/live.js';
@@ -33,6 +34,10 @@ export const projects = manifest({
     const [{ project, groupMember }] = await Promise.all([import('./store/table.js')]);
     return { entities: [project, groupMember], history: [] };
   },
+  contributions: MACHINE_REGISTRY.of(
+    { id: 'projects/projects', load: async () => (await import('./machineRegistry.js')).projectRows },
+    { id: 'projects/members', load: async () => (await import('./machineRegistry.js')).memberRows },
+  ),
   lifetimes: {
     installation: lazyLayer(
       () => import('./registration.js'),

@@ -2092,11 +2092,6 @@
       "bun": "./src/projects/resolution.ts",
       "default": null
     },
-    "./projects/store/restore": {
-      "types": "./src/projects/store/restore.ts",
-      "bun": "./src/projects/store/restore.ts",
-      "default": null
-    },
     "./projects/store/table": {
       "types": "./src/projects/store/table.ts",
       "bun": "./src/projects/store/table.ts",

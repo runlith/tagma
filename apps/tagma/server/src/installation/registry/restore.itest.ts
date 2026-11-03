@@ -17,7 +17,9 @@ import { projectsWithPolicy } from '../../graph/store/policy.js';
 import { projectsLayer } from '../../projects/registration.js';
 import { fixtureGraph } from '../../composition/testing/fixtureGraph.js';
 import { ProjectGroups, Projects } from '../../projects/contract/service/registry.js';
-import { dumpMachineRegistry, readRegistry } from './file.js';
+import { fixtureRegistry } from '../../composition/testing/migrations.js';
+import { MachineRegistry } from '../contract/service/registry.js';
+import { readRegistry } from './file.js';
 import { machineStoreLayer } from './restore.js';
 import { sharedPool } from '@runlith/sqlite-process/testing/pool';
 import { registryExportLayer } from './export.js';
@@ -36,7 +38,7 @@ const opened = (dbPath: string, base: string) =>
     ),
     unitsLayer(MachineUnits, MachineStore),
   )
-    .pipe(Layer.provideMerge(machineStoreLayer(dbPath, fixtureMigrations, sharedPool)))
+    .pipe(Layer.provideMerge(machineStoreLayer(dbPath, fixtureMigrations, sharedPool, fixtureRegistry)))
     .pipe(Layer.provideMerge(testSessionIdentityLayer));
 
 const early = (rootPath: string, createdAt: string) => ({
@@ -117,7 +119,7 @@ it.live('a setting row the standing database deleted stays deleted across a rest
         { scope: 'user', key: 'terminal.tabLayouts', value: '{}', updatedAt: now },
         { scope: 'user', key: 'terminal.placeLayouts', value: '{}', updatedAt: now },
       ]);
-      yield* dumpMachineRegistry();
+      yield* (yield* MachineRegistry).dump;
     }).pipe(Effect.provide(opened(dbPath, base)));
 
     yield* Effect.flatMap(MachineStore, ({ db }) => db.delete(setting).where(eq(setting.key, 'terminal.tabLayouts'))).pipe(
@@ -168,12 +170,15 @@ it.live('a registry file that is not one is a typed refusal naming the file, nev
   Effect.gen(function* () {
     const base = yield* based('registry-');
     const path = join(base, 'registry.json');
+    const parts = yield* Effect.promise(() => Promise.all(fixtureRegistry.map((owner) => owner.load())));
     writeFileSync(path, '{not json');
-    const notJson = yield* Effect.flip(readRegistry(path));
+    const notJson = yield* Effect.flip(readRegistry(parts, path));
     expect(notJson._tag).toBe('RegistryUnreadable');
     expect(notJson.path).toBe(path);
     writeFileSync(path, JSON.stringify({ projects: 'none' }));
-    expect((yield* Effect.flip(readRegistry(path)))._tag).toBe('RegistryUnreadable');
-    expect((yield* Effect.flip(readRegistry(join(base, 'absent.json'))))._tag).toBe('RegistryUnreadable');
+    expect((yield* Effect.flip(readRegistry(parts, path)))._tag).toBe('RegistryUnreadable');
+    writeFileSync(path, JSON.stringify({ settings: [] }));
+    expect((yield* Effect.flip(readRegistry(parts, path)))._tag).toBe('RegistryUnreadable');
+    expect((yield* Effect.flip(readRegistry(parts, join(base, 'absent.json'))))._tag).toBe('RegistryUnreadable');
   }),
 );
