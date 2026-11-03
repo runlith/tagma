@@ -10,7 +10,7 @@
   import { SessionNaming } from '$lib/wire/SessionNaming.svelte.js';
   import ChatMarkdown from './ChatMarkdown.svelte';
   import type { EntryKinds } from '@runlith/chat-ui/EntryKinds.svelte';
-  import ToolResultRow from './ToolResultRow.svelte';
+  import ToolResultRow, { drawsOwn } from './ToolResultRow.svelte';
 
   let { kinds, contributor }: { kinds: EntryKinds; contributor: string } = $props();
 
@@ -20,7 +20,7 @@
   const operationsOwnedBy = (module: string) => operations.ownedBy(module);
 
   const voiced = (names: readonly string[], modelText: (output: unknown) => string | null, render?: typeof nativeToolRow) =>
-    names.map((name) => kinds.registerTool(contributor, { name, modelText, render }));
+    names.map((name) => kinds.registerTool(contributor, { name, modelText, render, renders: render && drawsOwn }));
 
   $effect.pre(() => {
     const disposers = [

@@ -23,6 +23,7 @@ import { Door } from '$lib/wire/Door.js';
 import { SessionNaming } from '$lib/wire/SessionNaming.svelte.js';
 import { loadCatalog, testDoor } from '$lib/wire/testing.js';
 import ToolResultRow from './ToolResultRow.fixture.svelte';
+import { drawsOwn } from './ToolResultRow.svelte';
 
 const pointer = {
   truncated: true,
@@ -93,6 +94,21 @@ test('a graph answer that fits still renders its own arm', () => {
   const card = target.querySelector('a');
   expect(card?.textContent).toContain(block.title);
   expect(card?.getAttribute('href')).toContain(block.name);
+});
+
+test('the row claims a graph call only once its answer has an arm the row draws', () => {
+  const call = (toolState: ChatEntryOf<'tool'>['toolState'], toolOutput?: unknown): ChatEntryOf<'tool'> => ({
+    id: 'entry-1',
+    kind: 'tool',
+    toolName: 'read_block',
+    toolCallId: 'call-1',
+    toolState,
+    toolOutput,
+  });
+
+  expect(drawsOwn(call('input-available'))).toBe(false);
+  expect(drawsOwn(call('output-available', { status: 'ok', blocks: [], total: 0 }))).toBe(false);
+  expect(drawsOwn(call('output-available', { status: 'ok', blocks: [block], total: 1 }))).toBe(true);
 });
 
 test('a moved block opens at its destination while its journal preview and range open at the source', async () => {

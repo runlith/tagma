@@ -1,9 +1,27 @@
-<script lang="ts">
+<script module lang="ts">
   import { retainedToolValue } from '@tagma/server/native-harness/contract/wire/toolResult';
   import type { GraphToolAnswer } from '@tagma/server/graph/contract/wire/toolAnswers';
   import type { PerformanceAnswer } from '@tagma/server/performance/contract/wire/performance';
+  import type { ChatEntryOf } from '@runlith/chat-ui/renderers';
+
+  type Answer = GraphToolAnswer | PerformanceAnswer;
+
+  function rowsOf(result: Answer | undefined) {
+    return result?.status !== 'ok' ? [] : 'blocks' in result ? result.blocks : 'tasks' in result ? result.tasks : [];
+  }
+
+  export function drawsOwn(entry: ChatEntryOf<'tool'>): boolean {
+    if (retainedToolValue(entry.toolOutput) !== null) return true;
+    const result = entry.toolOutput as Answer | undefined;
+    if (result?.status === 'refused') return true;
+    if (result?.status !== 'ok') return false;
+    return ['overview', 'reads', 'performance', 'page', 'block'].some((key) => key in result) || rowsOf(result).length > 0;
+  }
+</script>
+
+<script lang="ts">
   import { performanceText } from '@tagma/server/performance/voice';
-  import type { ChatEntryOf, ChatMarkdownBody } from '@runlith/chat-ui/renderers';
+  import type { ChatMarkdownBody } from '@runlith/chat-ui/renderers';
   import ToolRow from '@runlith/chat-ui/entries/ToolRow.svelte';
   import Well from '@runlith/chat-ui/entries/Well.svelte';
   import type { Snippet } from 'svelte';
@@ -26,8 +44,8 @@
       ? null
       : `${byteText(retained.byteLength)} in ${retained.lineCount} ${retained.lineCount === 1 ? 'line' : 'lines'}, kept whole`,
   );
-  const result = $derived(entry.toolOutput as GraphToolAnswer | PerformanceAnswer | undefined);
-  const rows = $derived(result?.status !== 'ok' ? [] : 'blocks' in result ? result.blocks : 'tasks' in result ? result.tasks : []);
+  const result = $derived(entry.toolOutput as Answer | undefined);
+  const rows = $derived(rowsOf(result));
 
   const wroteRange = $derived(
     result?.status === 'ok' && 'block' in result && 'journal' in result && result.journal !== undefined ? result.journal : null,
