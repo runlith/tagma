@@ -202,7 +202,12 @@ export const restart = (cli: ServerCli) =>
       const log = yield* serveLog(at);
       const local = boundHere(at, url);
       const progress = local ? readStartup(join(dirname(log), RESTART_RECORD)) : cli.startup();
-      const asked = yield* requestRestart(restartServer(cli), yield* progress, progress);
+      const asked = yield* requestRestart(
+        restartServer(cli),
+        yield* progress,
+        progress,
+        local ? () => dataDirectoryLocked(dirname(log)) : null,
+      );
       if (asked?.heavy !== undefined) yield* Console.log(migrationLoadText(asked.heavy));
       const expected =
         asked === null

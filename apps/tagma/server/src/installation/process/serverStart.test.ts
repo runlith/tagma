@@ -252,6 +252,20 @@ it.effect('a lost restart answer is accepted by the new restart record rather th
   }),
 );
 
+it.effect('a lost request with no recorded acceptance and no local owner returns its transport failure', () =>
+  Effect.gen(function* () {
+    const lost = new HttpClientError.HttpClientError({
+      reason: new HttpClientError.TransportError({ request: HttpClientRequest.post('http://127.0.0.1/restart') }),
+    });
+    const waiting = yield* Effect.forkChild(Effect.result(requestRestart(Effect.fail(lost), unread, Effect.succeed(unread), nobody)));
+    yield* TestClock.adjust('0 millis');
+    expect(waiting.pollUnsafe()).toBeDefined();
+    const outcome = yield* Fiber.join(waiting);
+    expect(outcome._tag).toBe('Failure');
+    if (outcome._tag === 'Failure') expect(outcome.failure).toBe(lost);
+  }),
+);
+
 it.effect('a declared restart refusal is preserved when the request was answered', () =>
   Effect.gen(function* () {
     const refused = { code: 'host-unprepared', reason: 'the host refused preparation', unblock: ['read the host state'] };

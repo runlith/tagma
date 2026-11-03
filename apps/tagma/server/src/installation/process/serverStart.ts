@@ -105,6 +105,7 @@ export const requestRestart = Effect.fn('ServerStart.requestRestart')(function* 
   request: Effect.Effect<Restart, unknown>,
   before: StartupState,
   progress: Effect.Effect<StartupState>,
+  holder: (() => DirectoryHolder) | null = null,
 ) {
   return yield* request.pipe(
     Effect.catchIf(
@@ -125,6 +126,7 @@ export const requestRestart = Effect.fn('ServerStart.requestRestart')(function* 
             )
               return null;
             if (saved.startup !== null && saved.startup.pid !== before.startup?.pid) return null;
+            if (holder !== null && holder() === null && restart?.underway !== true) return yield* Effect.fail(failure);
             yield* Effect.sleep(ASKED_EVERY_MS);
           }
         }),
