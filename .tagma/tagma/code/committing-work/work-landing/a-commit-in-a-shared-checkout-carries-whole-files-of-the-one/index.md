@@ -85,7 +85,7 @@ Every round closed one case and opened the next. The Work landing and Line autho
 - The whole change of every writer whose lines ride. When a commit carries another writer's lines, it also carries every file that writer has changed and not committed, and in turn the changes of the writers in those files. A writer's uncommitted lines are one change that only ever existed whole. A changed declaration rides together with the callers its writer updated, and a new route rides with the new file it points to. This needs no language knowledge, and it keeps the safety `taking` gave by carrying a writer's whole held work.
 - The other path of a move, as today.
 - Files the commit cannot do without, as far as a language adapter can see. The code-facts port gains this question: which changed files does this text need? When the adapter for a carried file's language finds a reference to a declaration that exists only in another changed file, that file rides too, whole, and the walk continues from it. Today's JS/TS/Svelte binder and placement become this adapter. A false match now costs a larger commit, never a refusal. A language without an adapter adds nothing, and the project's checks judge.
-- Derived outputs, through `derive` and the config's declarations, as today.
+- Derived outputs: `derive` and the config's declarations regenerate them, and derived content nobody declared lands as it stands. The `derive-required` refusal goes, because the writer's whole change already carries the inputs it was generated from.
 
 **What stays out.**
 - Git-ignored files and the graph store, as today.
