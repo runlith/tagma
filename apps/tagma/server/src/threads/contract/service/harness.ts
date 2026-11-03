@@ -5,6 +5,7 @@ import type { ThreadRow } from '@runlith/agent/thread/rows';
 import type { BirthConflict, BirthInput, BirthRefused } from '@runlith/agent/collaboration/threads';
 import { Context, Data, type Effect, type Stream } from 'effect';
 import type { ModelSwitches } from '@runlith/llm/models/description';
+import type { ProgramState } from '../../../providers/contract/service/cli.js';
 import type { MachineStore, StoreFailure } from '../../../platform/contract/service/store.js';
 import type { WriteSet } from '../../../platform/contract/service/writes.js';
 import type { Unit, WriteUnit } from '../../../platform/contract/service/units.js';
@@ -117,6 +118,7 @@ export class InstalledHarnesses extends Context.Service<
     readonly refresh: Effect.Effect<readonly HarnessInstall[]>;
     program(name: string, by?: 'binary' | 'harness'): Effect.Effect<HarnessProgram | null>;
     locate(name: string): Effect.Effect<HarnessProgram | null>;
+    availability(binary: string): Effect.Effect<ProgramState>;
     readonly changes: Stream.Stream<void>;
   }
 >()('tagma/threads/InstalledHarnesses') {}

@@ -597,7 +597,7 @@ export const makeRuntime = Effect.fn('composition.runtime')(function* (
             threadRecords,
             closing('providers', readyProviders),
             installedHarnesses,
-            askProgramsLayer.pipe(Layer.provide(Layer.merge(installedHarnesses, BunFileSystem.layer))),
+            askProgramsLayer.pipe(Layer.provide(Layer.mergeAll(installedHarnesses, userEnvironment, BunFileSystem.layer))),
             closing('sandbox', sandboxInstallation),
             closing('working owners', workingLayerWithUnits),
             closing('terminals floor', agentPaceLayer.pipe(Layer.provideMerge(executionsLayerWithDeps))),

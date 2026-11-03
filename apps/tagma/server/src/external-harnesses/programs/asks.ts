@@ -1,6 +1,7 @@
 import type { ProgramAsk } from '@runlith/tagma/adapter/provider';
 import { Effect, FileSystem, Layer } from 'effect';
 import { AskPrograms, type ProgramRun } from '../../providers/contract/service/asks.js';
+import { UserEnvironment } from '../../installation/contract/service/userEnvironment.js';
 import { InstalledHarnesses } from '../../threads/contract/service/harness.js';
 import { runProgram } from './run.js';
 import { WORLD_COMMAND } from '../../installation/contract/wire/layout.js';
@@ -16,6 +17,7 @@ export const runnerAsk = (ask: ProgramAsk): readonly string[] => [
 
 export const makeAskPrograms = Effect.gen(function* () {
   const installs = yield* InstalledHarnesses;
+  const users = yield* UserEnvironment;
   const files = yield* FileSystem.FileSystem;
   const launch = Effect.fnUntraced(function* ({ program, ask, entries }: ProgramRun) {
     if (!('runner' in program))
@@ -29,6 +31,7 @@ export const makeAskPrograms = Effect.gen(function* () {
       const launched = yield* launch(run);
       const scratch = yield* files.makeTempDirectoryScoped({ prefix: 'tagma-ask-' }).pipe(Effect.orDie);
       return yield* runProgram(
+        users,
         {
           program: launched.command,
           args: launched.args,

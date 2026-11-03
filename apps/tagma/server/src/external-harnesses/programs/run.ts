@@ -3,6 +3,7 @@ import { ProgramFailed, ProgramStalled } from '../../providers/contract/service/
 import { resolveEnvironment } from '@runlith/executions/CommandEnvironment';
 import type { EnvironmentEntry } from '@runlith/executions/protocol/execution';
 import type { CommandExchange, ProgramOutput } from '@runlith/tagma/adapter/provider';
+import type { UserEnvironment } from '../../installation/contract/service/userEnvironment.js';
 import type { HarnessProgram } from '../../threads/contract/service/harness.js';
 import { programEnvironment } from '../sessions/programs.js';
 
@@ -41,8 +42,15 @@ const outputText = async (stream: ReadableStream<Uint8Array>, moved: () => void,
   }
 };
 
-export const runProgram = Effect.fnUntraced(function* (command: ProgramCommand, program: HarnessProgram | null) {
-  const bound = new Map(Object.entries(process.env).flatMap(([name, value]) => (value === undefined ? [] : [[name, value] as const])));
+export const runProgram = Effect.fnUntraced(function* (
+  users: UserEnvironment['Service'],
+  command: ProgramCommand,
+  program: HarnessProgram | null,
+) {
+  const { variables } = yield* users.now;
+  const bound = new Map(
+    Object.entries({ ...process.env, ...variables }).flatMap(([name, value]) => (value === undefined ? [] : [[name, value] as const])),
+  );
   const request = { inherit: true, entries: command.entries };
   const environment = Object.fromEntries(
     resolveEnvironment(bound, program === null ? request : programEnvironment(program, request)).map(({ name, value }) => [name, value]),
