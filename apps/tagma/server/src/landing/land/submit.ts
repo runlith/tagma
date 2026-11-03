@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { Effect, type Context, type FileSystem } from 'effect';
+import { Cause, Effect, type Context, type FileSystem } from 'effect';
 import type { LineWrites } from '../../change-record/contract/service/lineWrites.js';
 import type { Git } from '@runlith/git/Git';
 import type { MachineStore } from '../../platform/contract/service/store.js';
@@ -42,6 +42,7 @@ import { landingIntents } from './intents.js';
 import { intentLifecycle } from '../store/intentLifecycle.js';
 import { SignedCall } from '../../platform/contract/service/writers.js';
 import { landedBy, witnessSubmission } from '../store/submissions.js';
+import { receipt as publicationReceipt } from '../../platform/git/publish.js';
 
 type StoreShape = Context.Service.Shape<typeof MachineStore>;
 
@@ -57,6 +58,34 @@ const unreadCommits = (receipt: Extract<SubmitReceipt, { status: 'nothing' }>, f
   ],
 });
 
+type LandingPhase = {
+  step: string;
+  witnessed: { readonly commit: string; readonly ref: string; readonly job: string; readonly receipt: SubmitReceipt } | null;
+  published: { readonly commit: string; readonly subject: string } | null;
+};
+
+const interrupted = Effect.fn('submitWork.interrupted')(function* (phase: LandingPhase, git: Git['Service'], root: string) {
+  const at = phase.witnessed;
+  if (at === null)
+    return yield* new GateRefusal(
+      'landing-cut',
+      `the landing in ${root} was interrupted at "${phase.step}", before anything was published, so nothing was committed`,
+      ['read the branch before asking again: read_checkout, read_checkout_history'],
+    );
+  const unproven = (why: string) =>
+    new GateRefusal(
+      'root-unproven',
+      `the landing in ${root} was interrupted at "${phase.step}" with ${at.commit.slice(0, 10)} ready for ${at.ref}, and ${why}`,
+      ['read_checkout_history before submitting again'],
+    );
+  const reached = yield* Effect.mapError(publicationReceipt(git, root, at.ref, at.commit, at.job), (failure) =>
+    unproven(`whether it was published could not be read: ${failure.message}`),
+  );
+  if (reached === 'uncertain') return yield* unproven('whether it was published could not be told');
+  phase.published ??= { commit: at.commit, subject: at.receipt.status === 'landed' ? (at.receipt.subject ?? '') : '' };
+  return at.receipt;
+});
+
 export const submitWork = Effect.fn('submitWork')(function* (
   git: Git['Service'],
   hosted: Git['Service'],
@@ -69,63 +98,70 @@ export const submitWork = Effect.fn('submitWork')(function* (
   checks: ActChecks,
   produce: Context.Service.Shape<typeof PreparedChanges>,
 ): Effect.fn.Return<SubmitReceipt, SubmitFailure, Landing> {
-  const { projectId } = input;
-  const placed = yield* Effect.mapError(
-    (yield* ChangeRecord).checkout(projectId, root),
-    (failure) =>
-      new GateRefusal('root-unproven', `the checkout this commit lands in cannot be placed: ${failure.reason}`, [
-        'submit again once the checkout reads',
-      ]),
-  );
-  const retirement = yield* Retirement;
+  const phase: LandingPhase = { step: 'placing the checkout', witnessed: null, published: null };
+  const said = yield* CallStage;
   const landings = yield* CommitLandings;
-  let published: { readonly commit: string; readonly subject: string } | null = null;
-  const landed = (commit: string, subject: string) => {
-    published = { commit, subject };
-  };
-  const submitted = yield* retirement
-    .lease(RootId.make(placed), submitHeld(git, hosted, root, store, units, origin, caller, input, checks, produce, placed, landed))
-    .pipe(
-      Effect.onExit(() =>
-        published === null || origin.work === null
-          ? Effect.void
-          : landings.publish({ threadId: origin.work.threadId, projectId: origin.work.projectId, ...published }),
-      ),
+  const landed = Effect.gen(function* (): Effect.fn.Return<SubmitReceipt, SubmitFailure, Landing> {
+    const { projectId } = input;
+    const placed = yield* Effect.mapError(
+      (yield* ChangeRecord).checkout(projectId, root),
+      (failure) =>
+        new GateRefusal('root-unproven', `the checkout this commit lands in cannot be placed: ${failure.reason}`, [
+          'submit again once the checkout reads',
+        ]),
     );
-  const { receipt, team, carried } = submitted;
-  const place = { git, root, store, units, checkout: placed };
-  if (receipt.status === 'nothing') {
-    if (input.paths !== undefined || team.length === 0) return receipt;
-    const found = yield* Effect.result(produce.carriedBy(place, team));
-    const own = yield* Effect.result(
-      landedBy(
-        store.db,
-        units,
-        team.map((one) => one.threadId),
-        root,
-      ),
+    const retirement = yield* Retirement;
+    const submitted = yield* retirement.lease(
+      RootId.make(placed),
+      submitHeld(git, hosted, root, store, units, origin, caller, input, checks, produce, placed, phase),
     );
-    if (found._tag === 'Failure') return unreadCommits(receipt, found.failure);
-    if (own._tag === 'Failure') return unreadCommits(receipt, own.failure);
-    const commits = found.success.filter((commit) => !own.success.has(commit));
-    return commits.length === 0 ? receipt : { ...receipt, commits };
-  }
-  if (receipt.status !== 'landed') return receipt;
-  const standing = yield* Effect.result(produce.remaining(place, team));
-  if (standing._tag === 'Failure')
-    return {
-      ...receipt,
-      unrecorded: [
-        ...(receipt.unrecorded ?? []),
-        { step: 'receipt', reason: `which files of this session still differ from HEAD could not be read: ${standing.failure.message}` },
-      ],
-    };
-  const kept = new Set((receipt.kept ?? []).map((one) => one.path));
-  const left = standing.success
-    .filter((path) => !kept.has(path))
-    .sort()
-    .map((path) => ({ path, reason: carried.has(path) || input.paths === undefined ? ('written' as const) : ('paths' as const) }));
-  return { ...receipt, left: left.length === 0 ? undefined : left };
+    const { receipt, team, carried } = submitted;
+    const place = { git, root, store, units, checkout: placed };
+    if (receipt.status === 'nothing') {
+      if (input.paths !== undefined || team.length === 0) return receipt;
+      const found = yield* Effect.result(produce.carriedBy(place, team));
+      const own = yield* Effect.result(
+        landedBy(
+          store.db,
+          units,
+          team.map((one) => one.threadId),
+          root,
+        ),
+      );
+      if (found._tag === 'Failure') return unreadCommits(receipt, found.failure);
+      if (own._tag === 'Failure') return unreadCommits(receipt, own.failure);
+      const commits = found.success.filter((commit) => !own.success.has(commit));
+      return commits.length === 0 ? receipt : { ...receipt, commits };
+    }
+    if (receipt.status !== 'landed') return receipt;
+    const standing = yield* Effect.result(produce.remaining(place, team));
+    if (standing._tag === 'Failure')
+      return {
+        ...receipt,
+        unrecorded: [
+          ...(receipt.unrecorded ?? []),
+          { step: 'receipt', reason: `which files of this session still differ from HEAD could not be read: ${standing.failure.message}` },
+        ],
+      };
+    const kept = new Set((receipt.kept ?? []).map((one) => one.path));
+    const left = standing.success
+      .filter((path) => !kept.has(path))
+      .sort()
+      .map((path) => ({ path, reason: carried.has(path) || input.paths === undefined ? ('written' as const) : ('paths' as const) }));
+    return { ...receipt, left: left.length === 0 ? undefined : left };
+  });
+  return yield* landed.pipe(
+    Effect.provideService(CallStage, (detail: string) => {
+      phase.step = detail;
+      said(detail);
+    }),
+    Effect.catchCause((cause) => (Cause.hasInterruptsOnly(cause) ? interrupted(phase, git, root) : Effect.failCause(cause))),
+    Effect.onExit(() =>
+      phase.published === null || origin.work === null
+        ? Effect.void
+        : landings.publish({ threadId: origin.work.threadId, projectId: origin.work.projectId, ...phase.published }),
+    ),
+  );
 });
 
 const submitHeld = Effect.fn('submitWork.held')(function* (
@@ -140,7 +176,7 @@ const submitHeld = Effect.fn('submitWork.held')(function* (
   checks: ActChecks,
   produce: Context.Service.Shape<typeof PreparedChanges>,
   placed: string,
-  landed: (commit: string, subject: string) => void,
+  phase: LandingPhase,
 ): Effect.fn.Return<Submission, SubmitFailure, Landing> {
   const { projectId } = input;
   const message = messageOf(subjectFor(input.subject, input.tasks), input.body, input.tasks, input.coAuthored);
@@ -189,19 +225,25 @@ const submitHeld = Effect.fn('submitWork.held')(function* (
         checkout: placed,
         job,
         witness: (commit, ref, submitted) =>
-          callId === null || work === null
-            ? Effect.void
-            : witnessSubmission(store.db, units, {
-                threadId: work.threadId,
-                projectId: work.projectId,
-                callId,
-                checkout: root,
-                ref,
-                job,
-                commit,
-                submitted,
-                complete: false,
+          Effect.tap(
+            callId === null || work === null
+              ? Effect.void
+              : witnessSubmission(store.db, units, {
+                  threadId: work.threadId,
+                  projectId: work.projectId,
+                  callId,
+                  checkout: root,
+                  ref,
+                  job,
+                  commit,
+                  submitted,
+                  complete: false,
+                }),
+            () =>
+              Effect.sync(() => {
+                phase.witnessed = { commit, ref, job, receipt: submitted };
               }),
+          ),
         intents,
         lanes,
         trees,
@@ -293,7 +335,7 @@ const submitHeld = Effect.fn('submitWork.held')(function* (
     };
   }
   const subject = done.hooked.message.split(/\r?\n/, 1)[0] ?? done.hooked.message;
-  landed(done.commit, subject);
+  phase.published = { commit: done.commit, subject };
   (yield* CallStage)(`${done.commit.slice(0, 10)} landed; carrying the hooks' edits and releasing the landed lines`);
   const owing = { commit: done.commit, source: 'steps' } as const;
   const stepped = yield* Effect.result(applyCarried(changes, checkout, done.carriage.stepped, UNHELD, owing));

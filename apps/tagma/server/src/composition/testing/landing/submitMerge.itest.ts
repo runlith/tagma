@@ -2,7 +2,7 @@ import { layer } from '@runlith/effect-test';
 import { join } from 'node:path';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { expect } from 'bun:test';
-import { Deferred, Effect, Exit, Fiber } from 'effect';
+import { Deferred, Effect, Fiber } from 'effect';
 import { indexWrites } from '../../../platform/git/index.js';
 import type { Git } from '@runlith/git/Git';
 import { FILE, MINE, THEIRS, makeCheckout, CheckoutFixture, checkoutFixture, withCheckout } from '../checkoutFixture.js';
@@ -159,8 +159,8 @@ layer(checkoutFixture, { excludeTestServices: true })('checkout', (it) => {
             },
           };
           const ended = yield* Effect.provide(Effect.exit(world.submitAs(MINE, { git: interrupted, paths: ['src'] })), world.context);
-          expect(Exit.isFailure(ended)).toBe(true);
           const commit = yield* world.run(['rev-parse', 'HEAD']);
+          expect(ended).toMatchObject({ _tag: 'Success', value: { status: 'landed', commit } });
           expect(yield* world.run(['rev-list', '--parents', '-1', 'HEAD'])).toBe(`${commit} ${head} ${tip}`);
           expect(yield* world.run(['rev-parse', 'MERGE_HEAD'])).toBe(tip);
           yield* world.run(['branch', 'alternate', commit]);
