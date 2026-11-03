@@ -7,6 +7,7 @@ import type { ThreadRow } from '@runlith/agent/thread/rows';
 import type { ThreadCreateInput } from '@runlith/agent/thread/ThreadAggregate';
 import type { AgentApprovalMode, ThreadBindings } from '@runlith/agent/contracts';
 import { DELEGATION_OFF, delegationRefused } from '@runlith/agent/collaboration/CollaborationVoice';
+import { PLANE_REFUSALS } from '@runlith/agent/collaboration/refusals';
 import type { TeamLayer } from '@runlith/agent/collaboration/team';
 import type { ModelSwitches } from '@runlith/llm/models/description';
 import { OPERATOR_PRINCIPAL } from '../../platform/contract/wire/actor.js';
@@ -98,10 +99,7 @@ export const makeThreadBirths = Effect.gen(function* () {
       if (input.askedBy !== undefined) {
         const asking = yield* stored('delegation')(resolveDelegation(mandate, settings, input.askedBy));
         if (!asking.allowed) {
-          return yield* new GateRefusal(DELEGATION_OFF, delegationRefused(input.askedBy, asking), [
-            'do the work in your own thread',
-            'the operator switches it back on: /delegation on the thread, or agent.delegation for the machine',
-          ]);
+          return yield* new GateRefusal(DELEGATION_OFF, delegationRefused(input.askedBy, asking), PLANE_REFUSALS[DELEGATION_OFF]);
         }
       }
       const typeId = input.type ?? (yield* stored('defaultType')(settings.value(defaultType, input.projectId)));

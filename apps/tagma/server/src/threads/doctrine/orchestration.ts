@@ -2,11 +2,11 @@ import type { Section } from '../../platform/contract/wire/section.js';
 
 export const orchestration: Section = () => `## Spreading Work Across Agents
 
-Taking and finishing one task is the session protocol. Spreading work over MORE
+Taking and finishing one task is the session protocol. Spreading work over more
 than one agent is judgment, and these are the defaults that judgment starts from.
 
 - **A fresh agent pays a fixed entry before its first useful act** — its prompt,
-  its tools, this contract, its orientation, then the task's zone. NEVER spawn
+  its tools, this contract, its orientation, then the task's zone. Never spawn
   one for a triviality: a trivial task in a held zone goes to the holder in
   passing, and in nobody's zone the orchestrator does it itself. The cheapest
   agent is no agent.

@@ -209,7 +209,7 @@ export function reviewWords(team: Team): string {
             ? 'each reads the same brief in isolation'
             : `the first reads the whole work, each next one a lens: ${lenses.join(', ')}`,
         ];
-  return `Review of a delivered change: ${[`${who} on spawn_agent.model rows marked for review, chosen by their ratings for the work`, 'skip one whose account is exhausted', ...how].join('; ')}.`;
+  return `Review of a delivered change: ${[who, 'skip a reviewer whose account is exhausted', ...how].join('; ')}.`;
 }
 
 export function teamModelsWords(team: Team): string {
