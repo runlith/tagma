@@ -6,7 +6,7 @@ tags: ["task"]
 fields:
   {
     "holder": "tagma:01a19eb2-4a56-79d0-9dbd-af67ec98a662",
-    "status": "in_work"
+    "status": "done"
   }
 sources:
   - kind: file
@@ -16,12 +16,13 @@ The operator's decision, 2026-11-03: the earlier `test.yml` workflow and its set
 
 The first check is the full typecheck: `runlith-typecheck .` over every workspace package, 74 through tsrs and 10 through svelte-check, on `ubuntu-latest`. tsrs ships darwin-arm64 and linux binaries but no darwin-x64, so Intel macOS runners cannot run it.
 
-## Measurements, one sample each
+## Measurements
 
-| Where | install, cold cache | typecheck | whole job |
-|---|---|---|---|
-| Apple M2 Max, local, load average 7–9 | — | 50.3 s wall, about 53 s CPU, 794 MB peak resident | — |
-| `macos-latest`, 3-core M1, 7 GB | 31 s | 59 s | 2 min 13 s |
-| `ubuntu-latest`, 4 x64 cores, 16 GB | 41 s | 90 s | 2 min 33 s |
+| Where | Cache restore | install | typecheck | Whole job |
+|---|---|---|---|---|
+| Apple M2 Max, local, load average 7–9 | — | — | 50.3 s wall, about 53 s CPU, 794 MB peak resident | — |
+| `macos-latest`, 3-core M1, 7 GB, run [41551670346](https://github.com/runlith/tagma/actions/runs/41551670346) | none | 31 s | 59 s | 2 min 13 s |
+| `ubuntu-latest`, 4 x64 cores, 16 GB, same run | none | 41 s | 90 s | 2 min 33 s |
+| `ubuntu-latest`, run [41552117054](https://github.com/runlith/tagma/actions/runs/41552117054) | 17 s | 30 s | 59 s | 1 min 55 s |
 
-Run [41551670346](https://github.com/runlith/tagma/actions/runs/41551670346), both green. The typecheck checks packages one after another, so wall time follows the speed of one core and not the count. That is why the 4-core Linux runner was slower than the 3-core M1. A faster typecheck in CI would come from checking independent packages in parallel. After the comparison the workflow keeps only Linux: macOS stays for checks that need it.
+All green. The typecheck checks packages one after another, so wall time follows the speed of one core and not the count. The two Linux runs differ by half on the same work, so one run of a hosted runner does not rank the runners. A faster typecheck in CI would come from checking independent packages in parallel. After the comparison the workflow keeps only Linux: macOS stays for checks that need it.
