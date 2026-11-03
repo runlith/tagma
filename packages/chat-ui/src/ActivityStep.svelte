@@ -371,6 +371,8 @@
 
 {#snippet inline(text: string)}{#if rendering.lineText}{@render rendering.lineText(text)}{:else}{text}{/if}{/snippet}
 
+{#snippet linked(text: string)}{#if rendering.userText}{@render rendering.userText(text)}{:else}{text}{/if}{/snippet}
+
 {#snippet stepText(
   entry: ActivityEntry,
   line: ChatStepLine,
@@ -504,7 +506,7 @@
         <ClampedText text={entry.toolError} id={`${entry.id}:error`} />
       {/if}
       {#if entry.toolRefusal && !rendering.kinds.toolRenders(entry)}
-        <p class="text-ui leading-snug break-words text-muted-foreground">{entry.toolRefusal.reason}</p>
+        <p class="text-ui leading-snug break-words whitespace-pre-wrap text-muted-foreground">{@render linked(entry.toolRefusal.reason)}</p>
       {/if}
       {@const toolRenderer = rendering.kinds.renderer(entry)}
       {#if toolRenderer}
