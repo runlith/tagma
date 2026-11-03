@@ -26,6 +26,8 @@ import type { AssignmentStore } from '../store/assignments.js';
 
 type Canonical = { readonly git: RootGit; readonly commonDir: string };
 
+type Side = 'worktree' | 'root' | 'repointed';
+
 type Placement = { readonly checkout: string; readonly origin: ProjectRoot['origin']; readonly adoption: RootAdoption };
 
 const GITDIR = 'gitdir: ';
@@ -66,7 +68,11 @@ export const makeCoverageLedger = Effect.fnUntraced(function* ({
           message: `This project's coverage was established in ${standing.namespaceId}; a second namespace does not share this record.`,
         });
       }
-      const canonical = yield* facet(row.rootPath, projectId, true);
+      const canonical = yield* facet(
+        row.rootPath,
+        projectId,
+        standing !== null && standing.rootPath !== row.rootPath ? 'repointed' : 'root',
+      );
       const checkouts = canonical === null ? [] : yield* worktrees(row.rootPath, projectId);
       const registered = yield* registry(
         projectId,
@@ -380,15 +386,18 @@ export const makeCoverageLedger = Effect.fnUntraced(function* ({
   const facet = Effect.fn('ProjectRoots.facet')(function* (
     checkout: string,
     projectId: number,
-    mayBePlain: boolean,
+    side: Side,
   ): Effect.fn.Return<Canonical | null, ProjectRootFailure> {
-    const repository = yield* repositories
-      .register({ path: checkout, projectId })
-      .pipe(
-        Effect.catchTag('RepositoryMissing', (refusal) =>
-          mayBePlain && refusal.reason === 'no-repository' ? Effect.succeed(null) : Effect.fail(refusal),
-        ),
-      );
+    const repository = yield* repositories.register({ path: checkout, projectId }).pipe(
+      Effect.catchTag('RepositoryMissing', (refusal) =>
+        side !== 'worktree' && refusal.reason === 'no-repository' ? Effect.succeed(null) : Effect.fail(refusal),
+      ),
+      Effect.catchTag('RepositoryConflict', (refusal) =>
+        side === 'repointed' && refusal.reason === 'moved' && refusal.repositoryId !== undefined && refusal.locationRevision !== undefined
+          ? repositories.relocate({ repositoryId: refusal.repositoryId, locationRevision: refusal.locationRevision }, checkout)
+          : Effect.fail(refusal),
+      ),
+    );
     if (repository === null) return null;
     const locations = yield* locate(checkout, projectId);
     if (locations.prefix !== '') return null;
@@ -420,7 +429,7 @@ export const makeCoverageLedger = Effect.fnUntraced(function* ({
     projectId: number,
     canonical: Canonical,
   ): Effect.fn.Return<RootGit | null, ProjectRootFailure> {
-    const asked = Effect.map(facet(checkout, projectId, false), (placed) => placed?.git ?? null);
+    const asked = Effect.map(facet(checkout, projectId, 'worktree'), (placed) => placed?.git ?? null);
     return yield* administration(checkout, canonical.commonDir).pipe(
       Effect.flatMap((gitDir) =>
         gitDir === null
