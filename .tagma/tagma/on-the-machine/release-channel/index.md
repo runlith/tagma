@@ -23,11 +23,15 @@ fields:
   }
 edges:
   - kind: imports
+    to: 01a0c702-bcab-7b1f-9440-825f382fa6aa
+  - kind: imports
     to: 01a0fd8b-bedd-7f22-b461-adddedf810fe
   - kind: imports
     to: 01a0fd8b-beeb-7ef2-bff4-d6d3b824564e
   - kind: imports
     to: 01a0fd8b-bef5-738e-8ee9-97f36cc306ce
+  - kind: imports-tests
+    to: 01a0fd8b-bf0c-778a-8cab-a7689e81e75e
 sources:
   - kind: dir
     ref: apps/tagma/server/src/release-channel
