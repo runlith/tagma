@@ -17,7 +17,7 @@ Adding a folder asks only what the folder cannot answer. Today the New project d
 
 ## What stands after
 
-**One rule at the owner.** A project whose birth opening — the one `add_project` runs, never a later rebuild of a mirror — serves a tree holding blocks it did not project from its own birth rows — a graph carried in the folder, or one the exchange side brought — takes the catalogs installed in that tree as its own `graph.catalogs` choice (project layer, pinned), replacing whatever the creation wrote. The graph it found is the truth; nothing is installed into it on that opening, and a later change of the machine default adds nothing to it. Catalogs chosen at creation install only into a graph born empty.
+**One rule at the owner.** A project whose opening finds its tree already holding blocks while its own birth rows were never projected — once per project, never on a later rebuild of a mirror — — a graph carried in the folder, or one the exchange side brought — takes the catalogs installed in that tree as its own `graph.catalogs` choice (project layer, pinned), replacing whatever the creation wrote. The graph it found is the truth; nothing is installed into it on that opening, and a later change of the machine default adds nothing to it. Catalogs chosen at creation install only into a graph born empty.
 
 **Reading a folder before adding it.** A read operation, `read_folder`, answers for a path whether its project root carries a graph (`.tagma` holding a block — the cheap holds-any answer of the tree scanner, never a whole scan) and whether it is a git repository. The dialog asks it; in the web dialog it reads the typed root path.
 
