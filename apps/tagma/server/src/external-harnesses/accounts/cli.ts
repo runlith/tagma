@@ -22,8 +22,8 @@ const cliFailed = (reason: string): GateRefusal =>
   new GateRefusal('account-cli-failed', reason, ['check the installed CLI and retry on this account']);
 
 const run = Effect.fn('AccountCli.run')(function* (command: AccountCommand, program: HarnessProgram | null, scratch: string) {
-  const limitMs = command.timeoutMs ?? COMMAND_MS;
-  const ran = yield* runProgram(
+  const limitMs = command.timeoutMs === undefined ? COMMAND_MS : command.timeoutMs;
+  const running = runProgram(
     {
       program: command.program,
       args: command.args,
@@ -33,13 +33,17 @@ const run = Effect.fn('AccountCli.run')(function* (command: AccountCommand, prog
       exchange: command.exchange,
     },
     program,
-  ).pipe(
-    Effect.timeoutOrElse({
-      duration: limitMs,
-      orElse: () => Effect.fail(new ProgramFailed({ message: `The program did not answer within ${limitMs} ms.` })),
-    }),
-    Effect.mapError((failure) => cliFailed(`The account CLI failed: ${failure.message}`)),
   );
+  const completed =
+    limitMs === null
+      ? running
+      : running.pipe(
+          Effect.timeoutOrElse({
+            duration: limitMs,
+            orElse: () => Effect.fail(new ProgramFailed({ message: `The program did not answer within ${limitMs} ms.` })),
+          }),
+        );
+  const ran = yield* completed.pipe(Effect.mapError((failure) => cliFailed(`The account CLI failed: ${failure.message}`)));
   return { stdout: ran.stdout, stderr: ran.stderr, code: ran.exit ?? -1 };
 });
 

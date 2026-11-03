@@ -50,11 +50,11 @@ export const makeDefaultLoginBook = (input: { readonly rows: HarnessDirectorySto
         pending: false,
       };
       const read = yield* cli
-        .run({ ...auth.status, entries: registration.environment(directory), timeoutMs: 10_000, located: auth.discovery !== undefined })
+        .run({ ...auth.status, entries: registration.environment(directory), timeoutMs: null, located: auth.discovery !== undefined })
         .pipe(
           Effect.flatMap(auth.loggedIn),
           Effect.match({
-            onFailure: (cause): HarnessLoginStatus => ({ kind: 'unreadable', reason: cause.message }),
+            onFailure: (cause): HarnessLoginStatus => ({ kind: 'unreadable', reason: cause.reason }),
             onSuccess: (answer) => answer,
           }),
         );
@@ -271,7 +271,9 @@ export const defaultLoginsLayer = Layer.effect(
       book.place(provider, directory);
       const persisted = (yield* rows.of(provider.id)).find((row) => row.directory === directory);
       if (persisted?.signed && persisted.problem == null) signed.add(provider.id);
+      else signed.delete(provider.id);
       yield* watch(provider, directory).pipe(Effect.provideService(Scope.Scope, scope));
+      return persisted ?? null;
     });
     const settle = Effect.fnUntraced(function* () {
       const providers = declaring();
@@ -335,6 +337,7 @@ export const defaultLoginsLayer = Layer.effect(
         (provider) =>
           Effect.gen(function* () {
             yield* prepare(provider, environment);
+            yield* settle();
             if (!observed.has(provider.id) && (yield* cli.installed(provider.accounts!.status.program))._tag === 'Found')
               yield* read(provider);
             yield* settle();
@@ -359,8 +362,8 @@ export const defaultLoginsLayer = Layer.effect(
           declaring(),
           (provider) =>
             Effect.gen(function* () {
-              if (signed.has(provider.id)) return;
-              yield* prepare(provider, environment);
+              const row = yield* prepare(provider, environment);
+              if (row?.signed && row.problem == null) return;
               if ((yield* cli.installed(provider.accounts!.status.program))._tag === 'Found') yield* read(provider);
             }),
           { concurrency: 3 },

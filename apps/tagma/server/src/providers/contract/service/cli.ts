@@ -8,7 +8,7 @@ export type AccountCommand = {
   readonly args: readonly string[];
   readonly entries: readonly EnvironmentEntry[];
   readonly cwd?: string;
-  readonly timeoutMs?: number;
+  readonly timeoutMs?: number | null;
   readonly exchange?: CommandExchange;
   readonly located?: boolean;
 };

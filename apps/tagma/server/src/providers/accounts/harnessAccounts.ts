@@ -46,7 +46,12 @@ export const makeHarnessAccountBook = Effect.gen(function* () {
   const identity = Effect.fnUntraced(function* (registration: CliHarnessProvider, directory: string | null) {
     const auth = registration.accounts;
     if (auth === undefined) return yield* unavailable(registration.id);
-    const output = yield* cli.run({ ...auth.status, entries: registration.environment(directory), timeoutMs: 10_000 });
+    const output = yield* cli.run({
+      ...auth.status,
+      entries: registration.environment(directory),
+      timeoutMs: null,
+      located: auth.discovery !== undefined,
+    });
     const status = yield* auth.loggedIn(output);
     if (status.kind === 'signed-in') return { label: status.label };
     if (status.kind === 'signed-out') return null;
