@@ -155,7 +155,7 @@ export const restartContracts = (adapter: HostAdapter, forgetStart: Forgetting) 
         yield* host.control.yieldLogic;
         expect(yield* host.client.retire(yield* operation(host), ref)).toMatchObject({ _tag: 'Retired' });
         expect(yield* Effect.flip(host.client.read({ ref, stream: 'stdout', offset: byteOffset(0n) }, 4_096))).toMatchObject({
-          refusal: { _tag: 'HostConflict', reason: 'RecordReadFailed' },
+          refusal: { _tag: 'HostUnavailable' },
         });
       }),
     );

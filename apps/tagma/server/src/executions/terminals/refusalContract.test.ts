@@ -50,7 +50,7 @@ test('a host refusal that crosses the neutral port and comes back keeps its reas
   expect(hostRefusalOf.ineligible).toBe('Unauthorized');
 });
 
-test('a host decision that moved custody sends the caller to read what stands; the rest say nothing was started', () => {
+test('a host decision that moved custody sends the caller to read what stands; an unavailable host says to ask again', () => {
   const moved = terminalRefusal(
     new HostRefused({
       refusal: { _tag: 'CustodyConflict', reason: 'page-7 no longer types into exec-1. Nothing was applied.' },
@@ -58,8 +58,14 @@ test('a host decision that moved custody sends the caller to read what stands; t
   );
   const shut = terminalRefusal(new HostRefused({ refusal: { _tag: 'AdmissionClosed', reason: 'this host admits no more work' } }));
 
+  const unread = terminalRefusal(
+    new HostRefused({ refusal: { _tag: 'HostUnavailable', reason: 'the stdout record could not be read: 0 of 8 bytes from 0' } }),
+  );
+
   expect(moved.code).toBe('terminal-host-refused-CustodyConflict');
   expect(moved.unblock).not.toEqual(shut.unblock);
+  expect(unread.unblock.join(' ')).not.toContain('nothing was started');
+  expect(unread.unblock).not.toEqual(shut.unblock);
   expect(moved.reason).toBe('page-7 no longer types into exec-1. Nothing was applied.');
 });
 

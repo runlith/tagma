@@ -138,7 +138,9 @@ export const terminalRefusal = <Code extends string = string>(
               ? 'read the terminal list again: this execution is over, nothing types into it, and a new one is started instead'
               : failure.refusal._tag === 'StreamMissing'
                 ? 'read a stream this record carries: a pipes record sealed before output was kept carries stdout and stderr only'
-                : 'the host decided this before any effect; nothing was started',
+                : failure.refusal._tag === 'HostUnavailable'
+                  ? 'ask again once the host answers for what it holds: this act changed nothing, and no answer here says the work did not run'
+                  : 'the host decided this before any effect of this act',
       ]);
     default:
       return new GateRefusal(
