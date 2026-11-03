@@ -21,6 +21,24 @@ const reply = (id: string, text: string) =>
     ],
     steps: [scriptedStep({ text, messages: [Message.assistant(text)] })],
   });
+const dyingAfterCommit = <TTx, TWrite extends TTx, R>(open: ThreadStorageFactory<TTx, TWrite, R>) => {
+  const crashed = { armed: false };
+  const factory = Effect.fnUntraced(function* () {
+    const storage = yield* open();
+    const aggregate = Object.create(storage.aggregate, {
+      readCut: {
+        value: (...args: Parameters<typeof storage.aggregate.readCut>) => {
+          if (!crashed.armed) return storage.aggregate.readCut(...args);
+          crashed.armed = false;
+          return Effect.fail(new ThreadStorageFailed({ call: 'readCut', cause: new Error('The process died after the commit.') }));
+        },
+      },
+    }) as typeof storage.aggregate;
+    return { ...storage, aggregate };
+  });
+  return { crashed, factory };
+};
+
 export function describeThreadAdmission<TTx, TWrite extends TTx = TTx, R = never>(
   name: string,
   open: ThreadStorageFactory<TTx, TWrite, R>,
@@ -124,24 +142,8 @@ export function describeThreadAdmission<TTx, TWrite extends TTx = TTx, R = never
     test(
       'a send that committed and then died before answering, sent again under its key, answers the run it opened and opens no second',
       Effect.fnUntraced(function* () {
-        const crashed = { armed: false };
-        const { storage, world, thread } = yield* openedRun(
-          Effect.fnUntraced(function* () {
-            const storage = yield* open();
-            const eventLog = Object.create(storage.eventLog, {
-              headPosition: {
-                value: (...args: Parameters<typeof storage.eventLog.headPosition>) => {
-                  if (!crashed.armed) return storage.eventLog.headPosition(...args);
-                  crashed.armed = false;
-                  return Effect.fail(
-                    new ThreadStorageFailed({ call: 'headPosition', cause: new Error('The process died after the commit.') }),
-                  );
-                },
-              },
-            }) as typeof storage.eventLog;
-            return { ...storage, eventLog };
-          }),
-        );
+        const { crashed, factory } = dyingAfterCommit(open);
+        const { storage, world, thread } = yield* openedRun(factory);
         const handle = world.harness.threads.handle(thread.id, OWNER);
         const item = { kind: 'say', mode: 'send', text: 'Deal once.' } as const;
         crashed.armed = true;
@@ -184,24 +186,8 @@ export function describeThreadAdmission<TTx, TWrite extends TTx = TTx, R = never
     test(
       'a compaction that committed its opening and then died leaves its run with its entry, and the same start key answers that run',
       Effect.fnUntraced(function* () {
-        const crashed = { armed: false };
-        const { storage, world, thread } = yield* openedRun(
-          Effect.fnUntraced(function* () {
-            const storage = yield* open();
-            const eventLog = Object.create(storage.eventLog, {
-              headPosition: {
-                value: (...args: Parameters<typeof storage.eventLog.headPosition>) => {
-                  if (!crashed.armed) return storage.eventLog.headPosition(...args);
-                  crashed.armed = false;
-                  return Effect.fail(
-                    new ThreadStorageFailed({ call: 'headPosition', cause: new Error('The process died after the commit.') }),
-                  );
-                },
-              },
-            }) as typeof storage.eventLog;
-            return { ...storage, eventLog };
-          }),
-        );
+        const { crashed, factory } = dyingAfterCommit(open);
+        const { storage, world, thread } = yield* openedRun(factory);
         const handle = world.harness.threads.handle(thread.id, OWNER);
         const ask = { startKey: { key: 'compact-1', digest: 'compact-1' } };
         crashed.armed = true;
