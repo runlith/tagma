@@ -15,8 +15,6 @@ sources:
   - kind: dir
     ref: packages/testbed
   - kind: file
-    ref: .github/workflows/test.yml
-  - kind: file
     ref: apps/tagma/server/src/composition/testing/pageWorld.ts
 ---
 Parts 1, 2, 3 and 7 of [[7111dc21]]: the `*.e2e.ts` kind and `test:e2e` in testbed, browser fixtures per lane with their own profiles and the mock keychain, failure artifacts in the run report; the e2e world serving the door world and the built app over real HTTP and WebSocket, seeded through product operations with a scripted model; the first flow (open a thread, send, the scripted reply streams, scroll); the CI jobs. The fixture API is the contract the feed stand builds on.
