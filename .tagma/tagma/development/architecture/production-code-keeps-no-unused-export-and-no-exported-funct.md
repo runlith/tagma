@@ -19746,6 +19746,15 @@ fields:
           "line": 23,
           "path": "packages/utils/src/worker.ts",
           "said": "exported type `WorkerLink` is imported by no production file"
+        },
+        {
+          "changed": "check",
+          "commit": "e91e0cfa5d8c88c5cfd7ad0af20bdc18a0db4dfd",
+          "fingerprint": "dead-code dead apps/tagma/server/src/cli/verbs.ts#Preface",
+          "fix": "Delete it; drop `export` when its own file uses it. A test-only consumer is not a reason to export it.",
+          "line": 7,
+          "path": "apps/tagma/server/src/cli/verbs.ts",
+          "said": "exported type `Preface` is imported by no production file"
         }
       ],
       "inspection": "dead-code",

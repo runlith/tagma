@@ -20,7 +20,7 @@ fields:
           "code": true
         }
       },
-      "revision": "e829b0456cfc5a4404efbf8073e66e6621c426e18c376e7462c145aa7915836d",
+      "revision": "e20dc83405a0f6f38f0c671a9e41ebeec1b7788b3a3e9da0f1f65ca75dac4687",
       "tags": [
         {
           "body": {
@@ -283,7 +283,7 @@ fields:
             }
           ],
           "id": "task",
-          "prompt": "A #task is a piece of work: it states what to do and why. Link the spec it implements or the block it was discovered from. The holder claims it before working, releases it if stopping unfinished, and finishes it with the commit that carries the work. What a child thread still holds when it stops working passes to the thread that gave it the work, which ends, releases or hands on each; taking a task from another holder is a claim. A waiting task points to its blocker with waits-on; larger work may have child tasks.",
+          "prompt": "A #task is a piece of work: it states what to do and why. Link the spec it implements or the block it was discovered from. The holder claims it before working, releases it if stopping unfinished, and finishes it with the commit that carries the work. What a child thread still holds when it stops working passes to the thread that gave it the work, which ends, releases or hands on each; inside one thread tree a holder only notes who is on a task, and any member finishes or attributes it. A waiting task points to its blocker with waits-on; larger work may have child tasks.",
           "roles": {
             "holder": "holder",
             "status": {
@@ -298,7 +298,7 @@ fields:
           "sections": [
             {
               "key": "task",
-              "text": "A #task is a piece of work: it states what to do and why. Link the spec it implements or the block it was discovered from. The holder claims it before working, releases it if stopping unfinished, and finishes it with the commit that carries the work. What a child thread still holds when it stops working passes to the thread that gave it the work, which ends, releases or hands on each; taking a task from another holder is a claim. A waiting task points to its blocker with waits-on; larger work may have child tasks."
+              "text": "A #task is a piece of work: it states what to do and why. Link the spec it implements or the block it was discovered from. The holder claims it before working, releases it if stopping unfinished, and finishes it with the commit that carries the work. What a child thread still holds when it stops working passes to the thread that gave it the work, which ends, releases or hands on each; inside one thread tree a holder only notes who is on a task, and any member finishes or attributes it. A waiting task points to its blocker with waits-on; larger work may have child tasks."
             },
             {
               "edits": [
