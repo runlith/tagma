@@ -6,7 +6,7 @@ tags: ["task"]
 fields:
   {
     "holder": "tagma:01a1a245-7a43-7a67-8046-6e8a2efb5b64",
-    "status": "in_work"
+    "status": "done"
   }
 ---
 Review finding M4, first half. Three clone implementations stand: `cloneFile` in `platform/durable/files.ts`, `/bin/cp -c`/`-Rc` with a `cpSync` fallback in `release-channel/install.ts`, and `/bin/cp -Rc`/`-R` in `mac-applications/placement.ts`. The macOS `cp -c` variance sits in the release channel. One tree clone in `platform/durable` holds the platform variance and the space-checked fallback, and the release channel and the application adapter call it.
