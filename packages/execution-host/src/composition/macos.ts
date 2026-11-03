@@ -45,7 +45,7 @@ export const platformLayer = (path: string) =>
       const library = yield* loaded(path);
       const facts = yield* platformFacts(library);
       const reader = yield* processReader(library);
-      const probe = yield* evidenceProbe(MACHINE_PROBE_LIMITS).pipe(Effect.provideService(Processes, reader));
+      const probe = yield* evidenceProbe({ ...MACHINE_PROBE_LIMITS, probeMs: 2_000 }).pipe(Effect.provideService(Processes, reader));
       const asked = yield* yieldRequests;
       return Context.make(PlatformFacts, facts).pipe(
         Context.add(Processes, reader),

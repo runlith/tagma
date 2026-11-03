@@ -34,7 +34,7 @@ export const platformFacts = Effect.fnUntraced(function* (loaded: LoadedLibrary)
         Effect.provideService(FileSystem.FileSystem, files),
         Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
       ),
-    recountMs: MACHINE_PROBE_LIMITS.probeMs,
+    recountMs: 2_000,
     uptimeNanos: () => loaded.abi.uptimeNanos(),
   });
 });

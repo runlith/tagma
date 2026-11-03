@@ -4,7 +4,7 @@ import { broken, command, LSOF, PS, type ProbeLimits } from './evidence';
 import { StandingUnreadable } from '../../PlatformFacts';
 import type { LoadedLibrary } from '../Library';
 
-export const MACHINE_PROBE_LIMITS: ProbeLimits = { probeMs: 2_000, outputBytes: 262_144, errorBytes: 8_192 };
+export const MACHINE_PROBE_LIMITS: ProbeLimits = { outputBytes: 262_144, errorBytes: 8_192 };
 
 const PTMX = '/dev/ptmx';
 const DEVICES = '/dev';
@@ -96,18 +96,16 @@ const allocated: Effect.Effect<number, StandingUnreadable, FileSystem.FileSystem
 const masters = Effect.fnUntraced(function* (limits: ProbeLimits, holder: number) {
   const region = `the terminal masters open on ${PTMX}`;
   const output = yield* command(LSOF, ['-nP', '-w', '-Fpf', PTMX], limits).pipe(
-    Effect.mapError(
-      (failure) =>
-        new StandingUnreadable({
-          region,
-          detail: failure._tag === 'TimeoutError' ? `${LSOF} did not answer inside ${limits.probeMs} ms` : failure.detail,
-        }),
-    ),
+    Effect.mapError((failure) => new StandingUnreadable({ region, detail: failure.detail })),
   );
-  if (output.truncated || output.signalled || output.failed !== undefined)
+  if (output.truncated || broken(output) || (output.exitCode !== undefined && output.exitCode > 1))
     return yield* new StandingUnreadable({
       region,
-      detail: output.failed ?? `${LSOF} was read to ${limits.outputBytes} bytes and stopped`,
+      detail:
+        output.failed ??
+        (output.truncated
+          ? `${LSOF} was read to ${limits.outputBytes} bytes and stopped`
+          : `${LSOF} exited ${output.exitCode ?? 'by signal'}`),
     });
   let pid = 0;
   let masters = 0;
@@ -126,20 +124,16 @@ const rows = Effect.fnUntraced(function* (
   counts: (line: string) => boolean,
 ) {
   const output = yield* command(program, args, limits).pipe(
-    Effect.mapError(
-      (failure) =>
-        new StandingUnreadable({
-          region,
-          detail: failure._tag === 'TimeoutError' ? `${program} did not answer inside ${limits.probeMs} ms` : failure.detail,
-        }),
-    ),
+    Effect.mapError((failure) => new StandingUnreadable({ region, detail: failure.detail })),
   );
-  if (broken(output) || output.truncated)
+  if (broken(output) || output.truncated || output.exitCode !== 0)
     return yield* new StandingUnreadable({
       region,
       detail:
         output.failed ??
-        (output.truncated ? `${program} was read to ${limits.outputBytes} bytes and stopped` : 'the reading was cut short'),
+        (output.truncated
+          ? `${program} was read to ${limits.outputBytes} bytes and stopped`
+          : `${program} exited ${output.exitCode ?? 'by signal'}`),
     });
   const found = output.text.split('\n').filter(counts);
   return found.length === 0

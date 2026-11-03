@@ -1,5 +1,5 @@
 import { hostname } from 'node:os';
-import { Clock, Data, Effect, Stream } from 'effect';
+import { Clock, Data, Deferred, Effect, Stream } from 'effect';
 import type { Cause } from 'effect';
 import { ChildProcess, ChildProcessSpawner } from 'effect/process';
 import type {
@@ -20,10 +20,11 @@ export const PS = '/bin/ps';
 export const LSOF = '/usr/sbin/lsof';
 
 export type ProbeLimits = {
-  readonly probeMs: number;
   readonly outputBytes: number;
   readonly errorBytes: number;
 };
+
+type EvidenceLimits = ProbeLimits & { readonly probeMs: number };
 
 const PID_CEILING = 99_999;
 
@@ -34,7 +35,7 @@ class ProbeFailed extends Data.TaggedError('ProbeFailed')<{ readonly detail: str
   }
 }
 
-export const evidenceProbe = Effect.fnUntraced(function* (limits: ProbeLimits) {
+export const evidenceProbe = Effect.fnUntraced(function* (limits: EvidenceLimits) {
   const reader = yield* Processes;
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const machine: EvidenceNamespace = { _tag: 'Local', machine: hostname() };
@@ -49,7 +50,10 @@ export const evidenceProbe = Effect.fnUntraced(function* (limits: ProbeLimits) {
   });
 
   const read = (program: string, args: ReadonlyArray<string>) =>
-    Effect.provideService(command(program, args, limits), ChildProcessSpawner.ChildProcessSpawner, spawner);
+    command(program, args, limits).pipe(
+      Effect.timeout(limits.probeMs),
+      Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
+    );
 
   const identities = (request: ProcessProbe): Effect.Effect<ReadonlyMap<number, ProcessIdentity>, ProcessesUnreadable> =>
     Effect.map(reader.scan(request), (rows) => new Map(rows.map((row) => [row.pid, { ...row, _tag: 'Read' as const }])));
@@ -285,7 +289,7 @@ const listing = (request: ProcessProbe, fields: string, usable: ReadonlyArray<nu
 const complete = (unmeasured: ReadonlyArray<UnmeasuredRegion>): 'complete' | 'partial' =>
   unmeasured.length === 0 ? 'complete' : 'partial';
 
-const broke = (region: string, failure: ProbeFailed | Cause.TimeoutError, limits: ProbeLimits): UnmeasuredRegion =>
+const broke = (region: string, failure: ProbeFailed | Cause.TimeoutError, limits: EvidenceLimits): UnmeasuredRegion =>
   failure._tag === 'TimeoutError'
     ? { region, reason: 'timeout', detail: `the reading did not answer inside ${limits.probeMs} ms` }
     : { region, reason: 'failed', detail: failure.detail };
@@ -445,6 +449,7 @@ type Output = {
   readonly failed: string | undefined;
   readonly truncated: boolean;
   readonly signalled: boolean;
+  readonly exitCode: number | undefined;
 };
 
 export const command = Effect.fn('posix.evidence.command')(
@@ -456,34 +461,39 @@ export const command = Effect.fn('posix.evidence.command')(
       stdin: 'ignore',
       stdout: 'pipe',
       stderr: 'pipe',
+      killSignal: 'SIGKILL',
     });
-    const [out, failed] = yield* Effect.all([collect(handle.stdout, limits.outputBytes), collect(handle.stderr, limits.errorBytes)], {
-      concurrency: 2,
-    });
-    const ended = out.truncated ? undefined : yield* Effect.result(handle.exitCode);
+    const cut = yield* Deferred.make<void>();
+    const stdout = capture(handle.stdout, limits.outputBytes, cut);
+    const stderr = capture(handle.stderr, limits.errorBytes, cut);
+    yield* Effect.raceFirst(Effect.all([stdout.read, stderr.read], { concurrency: 2 }), Deferred.await(cut));
+    const out = stdout.output();
+    const failed = stderr.output();
+    const ended = out.truncated || failed.truncated ? undefined : yield* Effect.result(handle.exitCode);
     const detail = failed.text.trim();
     return {
       text: out.text,
-      failed: detail === '' ? undefined : failed.truncated ? `${detail} (read to ${limits.errorBytes} bytes and stopped)` : detail,
+      failed: failed.truncated ? `${detail} (read to ${limits.errorBytes} bytes and stopped)` : detail === '' ? undefined : detail,
       truncated: out.truncated,
       signalled: ended !== undefined && ended._tag === 'Failure',
+      exitCode: ended?._tag === 'Success' ? ended.success : undefined,
     };
   },
   (effect, program) => Effect.mapError(effect, (error) => new ProbeFailed({ detail: `${program}: ${error.message}` })),
   Effect.scoped,
-  (effect, _program, _args, limits) => Effect.timeout(effect, limits.probeMs),
 );
 
-const collect = Effect.fnUntraced(function* <E, R>(stream: Stream.Stream<Uint8Array, E, R>, cap: number) {
+const capture = <E, R>(stream: Stream.Stream<Uint8Array, E, R>, cap: number, cut: Deferred.Deferred<void>) => {
   const held: Uint8Array[] = [];
   let taken = 0;
-  yield* Stream.runForEachWhile(stream, (chunk) =>
-    Effect.sync(() => {
-      held.push(chunk);
-      taken += chunk.length;
-      return taken <= cap;
-    }),
-  );
-  const whole = Buffer.concat(held);
-  return { text: whole.subarray(0, cap).toString('utf8'), truncated: taken > cap };
-});
+  return {
+    read: Stream.runForEachWhile(stream, (chunk) =>
+      Effect.sync(() => {
+        if (taken < cap) held.push(chunk.subarray(0, cap - taken));
+        taken += chunk.length;
+        return taken <= cap;
+      }),
+    ).pipe(Effect.tap(() => (taken > cap ? Deferred.succeed(cut, undefined) : Effect.void))),
+    output: () => ({ text: Buffer.concat(held).toString('utf8'), truncated: taken > cap }),
+  };
+};

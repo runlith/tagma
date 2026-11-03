@@ -11,7 +11,7 @@ import { ChildProcess, ChildProcessSpawner } from 'effect/process';
 import { identityMatch, type ProcessWitness } from '@runlith/executions/protocol/evidence';
 import { ExecutionId, ExecutionRef } from '@runlith/executions/protocol/execution';
 import { EvidenceReader, type EvidenceScans, type ScanLimits, makeEvidenceScans } from './EvidenceScans';
-import { evidenceProbe, type ProbeLimits } from './posix/macos/evidence';
+import { evidenceProbe } from './posix/macos/evidence';
 import { readStanding } from './posix/macos/standing';
 import { hostSpawner } from './hostSpawner';
 import { makeProcessEvidence, type ExecutionTopology, type ObservedExecution } from './ProcessEvidence';
@@ -20,7 +20,7 @@ const FIXTURE = `
 const server = Bun.listen({ hostname: '127.0.0.1', port: 0, socket: { data() {} } });
 console.log(server.port);
 `;
-const LIMITS: ProbeLimits = { probeMs: 2_000, outputBytes: 1024 * 1024, errorBytes: 64 * 1024 };
+const LIMITS = { probeMs: 2_000, outputBytes: 1024 * 1024, errorBytes: 64 * 1024 };
 const TABLE_ROWS = 802;
 const SCANS: ScanLimits = { concurrency: 2, flight: 4, freshMs: 0, retained: 4, results: 2 * TABLE_ROWS };
 const ref = Schema.decodeUnknownSync(ExecutionRef)({ installation: 'installation-1', execution: 'execution-1', incarnation: 1 });
@@ -206,6 +206,21 @@ layer(readings, { excludeTestServices: true })('macOS readings', (it) => {
       }),
     );
 
+    it.effect('answers an unfinished evidence probe as unmeasured instead of an empty measurement', () =>
+      Effect.gen(function* () {
+        const { witness } = yield* ListeningProcess;
+        const probe = yield* evidenceProbe({ ...LIMITS, probeMs: 1 }).pipe(
+          Effect.provideService(
+            ChildProcessSpawner.ChildProcessSpawner,
+            ChildProcessSpawner.make(() => Effect.never),
+          ),
+        );
+        const measured = yield* probe.processes({ _tag: 'Pids', pids: [witness.pid] });
+        expect(measured.completeness).toBe('unavailable');
+        expect(measured.unmeasured.map((region) => region.reason)).toEqual(['timeout']);
+      }),
+    );
+
     it.effect('asks nobody when the question names no process it can address, and says so', () =>
       Effect.gen(function* () {
         const reader = yield* EvidenceReader;
@@ -233,7 +248,7 @@ layer(readings, { excludeTestServices: true })('macOS readings', (it) => {
   });
 
   describe('what already stands on this machine', () => {
-    it.effect('falls back to the terminals allocated when the terminal masters cannot be read in time, and never refuses the reading', () =>
+    it.effect('falls back to allocated terminals when a live masters probe exceeds the stderr cap', () =>
       Effect.gen(function* () {
         const files = yield* FileSystem.FileSystem;
         const devices = FileSystem.FileSystem.of({
@@ -242,11 +257,15 @@ layer(readings, { excludeTestServices: true })('macOS readings', (it) => {
             path === '/dev' ? Effect.succeed(['ttys000', 'ttys001', 'tty', 'ptmx', 'ttys-not-a-terminal']) : files.readDirectory(path),
         });
         const real = yield* ChildProcessSpawner.ChildProcessSpawner;
-        const silent = ChildProcessSpawner.make((command) =>
-          command._tag === 'StandardCommand' && command.args.includes('/dev/ptmx') ? Effect.never : real.spawn(command),
+        const refused = ChildProcessSpawner.make((command) =>
+          real.spawn(
+            command._tag === 'StandardCommand' && command.args.includes('/dev/ptmx')
+              ? ChildProcess.make('/bin/sh', ['-c', 'while :; do printf "the terminal table is unavailable\\n" >&2; done'], command.options)
+              : command,
+          ),
         );
-        const bounded = yield* readStanding({ ...LIMITS, probeMs: 1_000 }, process.pid, yield* loadLibrary(HOLDER_LIBRARY)).pipe(
-          Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, silent),
+        const bounded = yield* readStanding(LIMITS, process.pid, yield* loadLibrary(HOLDER_LIBRARY)).pipe(
+          Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, refused),
           Effect.provideService(FileSystem.FileSystem, devices),
         );
         expect(bounded.terminals).toBe(2);
