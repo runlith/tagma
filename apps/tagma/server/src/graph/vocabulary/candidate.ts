@@ -9,6 +9,7 @@ import {
   type Catalog,
   CATALOG_DECLARATION,
   type CatalogRelease,
+  composedCatalogs,
   type Declaration,
   type Tag,
   TAG_DECLARATION,
@@ -144,11 +145,36 @@ const retarget = (declaration: Declaration, catalogId: string, exports: Readonly
   };
 };
 
-const wanted = (shipped: Catalogs['Service'], catalogIds: readonly string[], retained: readonly string[]): Set<string> => {
-  const ids = new Set([...catalogIds, ...retained]);
-  if (shipped.byId(CORE_LIBRARY) !== null) ids.add(CORE_LIBRARY);
+const wanted = (shipped: Catalogs['Service'], catalogIds: readonly string[], retained: readonly string[]): readonly string[] => {
+  const seen = new Set<string>();
+  const ids: string[] = [];
+  const add = (id: string): void => {
+    if (seen.has(id)) return;
+    seen.add(id);
+    for (const required of shipped.byId(id)?.requires ?? []) add(required);
+    ids.push(id);
+  };
+  if (shipped.byId(CORE_LIBRARY) !== null) add(CORE_LIBRARY);
+  for (const id of [...catalogIds, ...retained]) add(id);
   return ids;
 };
+
+type Libraries = ReadonlyMap<string, Catalog>;
+
+const librariesOf = (shipped: Catalogs['Service'], ids: readonly string[]): Libraries => {
+  const order = new Map(shipped.all.map((catalog, at) => [catalog.id, at] as const));
+  const rank = (id: string): number => order.get(id) ?? order.size;
+  const found = ids.flatMap((id) => shipped.byId(id) ?? []);
+  const composed = composedCatalogs([...found].sort((one, other) => rank(one.id) - rank(other.id)));
+  const byId = new Map(composed.map((catalog) => [catalog.id, catalog] as const));
+  return new Map(found.map((catalog) => [catalog.id, byId.get(catalog.id)!] as const));
+};
+
+const releasedIds = (installed: Installed): readonly string[] =>
+  installed.catalogs.flatMap((row) => (row.release !== null ? [row.id] : []));
+
+export const librariesFor = (shipped: Catalogs['Service'], installed: Installed, catalogIds: readonly string[]): Libraries =>
+  librariesOf(shipped, wanted(shipped, catalogIds, releasedIds(installed)));
 
 type Copy = {
   readonly own: StandingType | undefined;
@@ -323,9 +349,10 @@ export function catalogFindings(
   behaviours: BehaviourRegistry,
 ): readonly CatalogFinding[] {
   const plan: Plan = { types: [], layered: new Map(), claimed: new Set(installed.types.map((row) => row.declaration.id)) };
+  const libraries = librariesFor(shipped, installed, []);
   return installed.catalogs.flatMap((standing) => {
-    const catalog = shipped.byId(standing.id);
-    if (catalog === null || standing.release === null) return [];
+    const catalog = libraries.get(standing.id);
+    if (catalog === undefined || standing.release === null) return [];
     const blocked = standing.release.blocked === undefined ? [] : [blockedFinding(standing.id, standing.name, standing.release.blocked)];
     const settled = settleCatalog(catalog, standing, installed, table, behaviours, plan, true);
     return Result.isSuccess(settled) ? [...blocked, ...settled.success.findings] : blocked;
@@ -451,9 +478,11 @@ export function prepareCandidate(
   const retained = installed.catalogs.flatMap((row) => (row.release !== null && shipped.byId(row.id) !== null ? [row.id] : []));
   const plan: Plan = { types: [], layered: new Map(), claimed: new Set(installed.types.map((row) => row.declaration.id)) };
   const catalogs: CatalogWrite[] = [];
-  for (const id of wanted(shipped, catalogIds, retained)) {
-    const catalog = shipped.byId(id);
-    if (catalog === null) {
+  const ids = wanted(shipped, catalogIds, retained);
+  const libraries = librariesOf(shipped, ids);
+  for (const id of ids) {
+    const catalog = libraries.get(id);
+    if (catalog === undefined) {
       return Result.fail(
         new GateRefusal('unknown-catalog', `no catalog named "${id}" is shipped`, [
           'name a shipped catalog, or create local #catalog and #tag declarations',
@@ -542,12 +571,13 @@ export function releasesCurrent(
   shipped: Catalogs['Service'],
   catalogIds: readonly string[],
 ): boolean {
-  const retained = installed.catalogs.flatMap((row) => (row.release !== null ? [row.id] : []));
-  for (const id of wanted(shipped, catalogIds, retained)) {
+  const ids = wanted(shipped, catalogIds, releasedIds(installed));
+  const libraries = librariesOf(shipped, ids);
+  for (const id of ids) {
     const standing = installed.catalogs.find((row) => row.id === id);
-    if (!releaseCurrent(id, standing?.release ?? null, shipped)) return false;
-    const catalog = shipped.byId(id);
-    if (catalog === null || standing === undefined) continue;
+    const catalog = libraries.get(id);
+    if (!releaseCurrent(catalog, standing?.release ?? null)) return false;
+    if (catalog === undefined || standing === undefined) continue;
     const retired = retiredMembers(table, installed, id, new Set(catalog.tags.map((tag) => tag.id)));
     if (standing.members.some((name) => retired.has(name))) return false;
   }
@@ -555,10 +585,7 @@ export function releasesCurrent(
 }
 
 export function carryMissing(table: TagTable, installed: Installed, shipped: Catalogs['Service'], catalogIds: readonly string[]): boolean {
-  const retained = installed.catalogs.flatMap((row) => (row.release !== null ? [row.id] : []));
-  for (const id of wanted(shipped, catalogIds, retained)) {
-    const catalog = shipped.byId(id);
-    if (catalog === null) continue;
+  for (const [id, catalog] of librariesFor(shipped, installed, catalogIds)) {
     for (const tag of catalog.tags) {
       const { row } = copyOf(id, tag, installed, table);
       if (row !== undefined && row.unread === null && carrying(tag, row.declaration) !== row.declaration) return true;
@@ -574,11 +601,9 @@ export function baseMissing(
   catalogIds: readonly string[],
   behaviours: BehaviourRegistry,
 ): boolean {
-  const retained = installed.catalogs.flatMap((row) => (row.release !== null ? [row.id] : []));
-  for (const id of wanted(shipped, catalogIds, retained)) {
-    const catalog = shipped.byId(id);
+  for (const [id, catalog] of librariesFor(shipped, installed, catalogIds)) {
     const release = installed.catalogs.find((row) => row.id === id)?.release ?? null;
-    if (catalog === null || release === null) continue;
+    if (release === null) continue;
     for (const tag of catalog.tags) {
       if (release.tags.some((entry) => entry.id === tag.id)) continue;
       const { row } = copyOf(id, tag, installed, table);
@@ -590,7 +615,5 @@ export function baseMissing(
   return false;
 }
 
-export function releaseCurrent(id: string, stored: CatalogRelease | null, shipped: Catalogs['Service']): boolean {
-  const catalog = shipped.byId(id);
-  return catalog !== null && stored?.revision === releaseRevision(catalog);
-}
+export const releaseCurrent = (catalog: Catalog | undefined, stored: CatalogRelease | null): boolean =>
+  catalog !== undefined && stored?.revision === releaseRevision(catalog);

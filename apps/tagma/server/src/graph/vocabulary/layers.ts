@@ -4,9 +4,18 @@ import { canonicalJson } from '@runlith/utils/object';
 import { sha256 } from '@runlith/utils/sha256';
 import { type CatalogRelease, type Declaration, type Tag, TAG_DEFAULTS } from '../contract/wire/tags/declaration.js';
 import { shippedTypeId } from '../contract/wire/tags/identity.js';
-import type { Fork, KeyedLayer, LayerEdit, Section, SectionEdit, SectionOrigin } from '../contract/wire/tags/sections.js';
+import {
+  composedText,
+  type Fork,
+  type KeyedLayer,
+  type LayerEdit,
+  SECTION_JOIN,
+  type Section,
+  type SectionEdit,
+  type SectionOrigin,
+} from '../contract/wire/tags/sections.js';
 import type { BehaviourRegistry } from '../contract/service/behaviours.js';
-import { compose, SECTION_JOIN } from './compiler.js';
+import { compose } from './compiler.js';
 
 export type Stale = { readonly section: string; readonly edit: SectionEdit; readonly reason: 'changed' | 'removed' };
 
@@ -162,9 +171,6 @@ function layeredShipped(shipped: Tag, layer: KeyedLayer | null): Result.Result<S
   return Result.succeed({ kind: 'shipped', declaration: { ...shipped, sections }, layer, layered, stale });
 }
 
-export const composedText = (sections: readonly Section[]): string =>
-  sections.flatMap((section) => (section.text === '' ? [] : [section.text])).join(SECTION_JOIN);
-
 export const sectionsRevision = (sections: readonly Section[]): string => digest(sections);
 
 export function appended(type: string, local: string, base: string, sections: readonly Section[] | undefined): KeyedLayer | null {
@@ -188,8 +194,10 @@ export function onShipped(
   return appended(type, local, shipped, sections);
 }
 
+const UNKNOWN_BASE = 'its installed base is unknown';
+
 function fromBase(type: string, sections: readonly Section[] | undefined, local: string | null, base: string | null): Decision {
-  if (base === null) return { kind: 'conflict', reason: 'its installed base is unknown' };
+  if (base === null) return { kind: 'conflict', reason: UNKNOWN_BASE };
   if (local === base) return { kind: 'shipped', layer: null };
   const derived = local !== null ? appended(type, local, base, sections) : null;
   return derived !== null
@@ -251,15 +259,15 @@ export function settle(
     return layeredShipped(shipped, layer);
   }
   const local = textOf(declaration, behaviours);
-  const shippedText = textOf(shipped, behaviours);
-  if (differs(shipped).length === 0 && shippedText !== null) {
-    const taken = onShipped(type, shipped.sections, local, shippedText);
-    if (taken !== null) return layeredShipped(shipped, accepted(taken));
-  }
+  const shippedText = differs(shipped).length === 0 ? textOf(shipped, behaviours) : null;
+  if (shippedText !== null && local === shippedText) return layeredShipped(shipped, null);
   const parts = known === null ? [] : differs(known);
+  const based = known === null || parts.length > 0 ? null : fromBase(type, shipped.sections, local, textOf(known, behaviours));
+  if (based?.kind === 'shipped') return layeredShipped(shipped, based.layer);
+  const taken = shippedText === null ? null : onShipped(type, shipped.sections, local, shippedText);
+  if (taken !== null) return layeredShipped(shipped, accepted(taken));
   if (parts.length > 0) return conflict(`its ${parts.join(', ')} differ from the installed base`);
-  const decision = fromBase(type, shipped.sections, local, known === null ? null : textOf(known, behaviours));
-  return decision.kind === 'conflict' ? conflict(decision.reason) : layeredShipped(shipped, decision.layer);
+  return conflict(based?.kind === 'conflict' ? based.reason : UNKNOWN_BASE);
 }
 
 export type TextCopy = {
@@ -291,8 +299,11 @@ export function settleText(
   if (copy.layer !== null) {
     return copy.layer.type === type ? layered(copy.layer) : conflict(`its layer was accepted over ${copy.layer.type}, not ${type}`);
   }
-  const taken = onShipped(type, shipped, copy.text, composedText(shipped));
+  const shippedText = composedText(shipped);
+  if (copy.text === shippedText) return layered(null);
+  const based = base === null ? null : fromBase(type, shipped, copy.text, composedText(base));
+  if (based?.kind === 'shipped') return layered(based.layer);
+  const taken = onShipped(type, shipped, copy.text, shippedText);
   if (taken !== null) return layered(accepted(taken));
-  const decision = fromBase(type, shipped, copy.text, base === null ? null : composedText(base));
-  return decision.kind === 'conflict' ? conflict(decision.reason) : layered(decision.layer);
+  return conflict(based?.kind === 'conflict' ? based.reason : UNKNOWN_BASE);
 }

@@ -7,7 +7,7 @@ export const graphCatalogs = settingKey({
   order: 50,
   title: 'Tag catalogs',
   description:
-    'The catalogs of tag declarations this project is switched on with. Switching one on installs its tags as `#tag` nodes here, where they are read exactly as a tag you declare yourself; switching one off leaves the nodes standing, to be deleted or edited like any other.',
+    'The catalogs of tag declarations this project is switched on with; `core`, with `#rule`, is always installed, and a catalog brings the catalogs it builds on. Switching one on installs its tags as `#tag` nodes here, where they are read exactly as a tag you declare yourself; switching one off leaves the nodes standing, to be deleted or edited like any other.',
   schema: Schema.Array(Schema.Literals(CATALOG_IDS)),
   control: {
     kind: 'choice',
@@ -15,7 +15,7 @@ export const graphCatalogs = settingKey({
     choices: CATALOGS.map((catalog) => ({
       value: catalog.id,
       label: catalog.id,
-      hint: `${catalog.tags.map((tag) => `#${tag.id}`).join(' ')}`,
+      hint: [catalog.tags.map((tag) => `#${tag.id}`).join(' '), ...(catalog.requires ?? []).map((id) => `with ${id}`)].join(' · '),
     })),
   },
   fallback: DEFAULT_CATALOGS,

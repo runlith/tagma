@@ -2,7 +2,8 @@ import { Schema } from 'effect';
 import { edgeNameSchema } from '../edges.js';
 import { nameRef } from '../fields.js';
 import { SOURCE_KINDS } from '../sources.js';
-import { type Section, shippedSections, tagSectionsSchema } from './sections.js';
+import { composedText, type Section, shippedSections, tagSectionsSchema, withAdded } from './sections.js';
+import { shippedTypeId } from './identity.js';
 import { type ContractBindings, contractBindingsSchema } from './behaviour.js';
 import { type CatalogProfile, catalogProfileSchema } from './profile.js';
 
@@ -150,14 +151,37 @@ export type Declaration = {
   readonly prompt: string;
 };
 
+type CatalogSection = { readonly type: string; readonly text: string };
+
 export type Catalog = {
   readonly id: string;
   readonly guidance: string;
   readonly tags: readonly Tag[];
   readonly profile?: CatalogProfile;
+  readonly requires?: readonly string[];
+  readonly sections?: readonly CatalogSection[];
 };
 
 export const sectioned = (tag: Tag): Tag => ({ ...tag, sections: shippedSections(tag.id, tag.prompt) });
+
+export function composedCatalogs(catalogs: readonly Catalog[]): readonly Catalog[] {
+  const adding = catalogs.filter((catalog) => (catalog.sections ?? []).length > 0);
+  if (adding.length === 0) return catalogs;
+  return catalogs.map((catalog) => {
+    let changed = false;
+    const tags = catalog.tags.map((tag) => {
+      const type = shippedTypeId(catalog.id, tag.id);
+      const added = adding.flatMap((other) =>
+        (other.sections ?? []).flatMap((section) => (section.type === type ? [{ key: other.id, text: section.text }] : [])),
+      );
+      if (added.length === 0) return tag;
+      changed = true;
+      const sections = withAdded(tag.sections ?? shippedSections(tag.id, tag.prompt), added);
+      return { ...tag, sections, prompt: composedText(sections) };
+    });
+    return changed ? { ...catalog, tags } : catalog;
+  });
+}
 
 export const upgradeBlockedSchema = Schema.Struct({ code: Schema.NonEmptyString, reason: Schema.String });
 export type UpgradeBlocked = typeof upgradeBlockedSchema.Type;

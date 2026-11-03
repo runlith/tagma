@@ -101,7 +101,7 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
           graph.blocks.create({ projectId: notebook.id, parentId: notebookRoot, tags: ['task'], title: 'do it' }),
         );
         expect(refused.code).toBe('tag-undeclared');
-        expect(refused.unblock.join(' ')).toContain('software-development');
+        expect(refused.unblock.join(' ')).toContain('work');
         expect(refused.unblock.join(' ')).toContain(SHIPPED_CATALOGS.key.id);
         expect((yield* graph.blocks.create({ projectId: notebook.id, parentId: notebookRoot, title: 'a thought' })).tags).toEqual([]);
         yield* graph.settings.write({

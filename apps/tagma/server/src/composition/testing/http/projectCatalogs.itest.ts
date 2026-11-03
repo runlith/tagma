@@ -80,7 +80,7 @@ layer(doorFixture().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeTest
       );
       expect(changed.status).toBe(200);
       yield* world.runtime.pool.releaseProject(chosen);
-      expect(yield* installedOf(chosen)).toEqual({ ids: new Set([CORE_LIBRARY, 'software-development']), bindsCode: true });
+      expect(yield* installedOf(chosen)).toEqual({ ids: new Set([CORE_LIBRARY, 'work', 'software-development']), bindsCode: true });
       expect(yield* projectLayerOf(chosen)).toEqual([CORE_LIBRARY, 'software-development']);
     }),
   );

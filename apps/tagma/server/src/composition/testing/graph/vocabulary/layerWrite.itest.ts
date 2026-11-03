@@ -9,8 +9,8 @@ import { ensureVocabulary } from '../../../../graph/serving/birth.js';
 
 const installedTask = Effect.fnUntraced(function* (projectId: number) {
   const catalogs = yield* (yield* InstalledCatalogs).read(projectId);
-  const catalog = catalogs.find((entry) => entry.id === 'software-development');
-  if (catalog === undefined) return yield* Effect.die('software-development is not installed');
+  const catalog = catalogs.find((entry) => entry.id === 'work');
+  if (catalog === undefined) return yield* Effect.die('work is not installed');
   const { idOfName } = yield* BlockNames;
   const { blockById } = yield* Blocks;
   for (const name of catalog.tags) {
@@ -32,7 +32,7 @@ layer(demoGraphLayer(), { excludeTestServices: true })('layer writes', (it) => {
         const written = yield* graph.blocks.blockById(task.id);
         expect(written.fields.layer).toEqual(layer);
         expect(written.body).toBe(task.body);
-        const fork = { library: 'software-development', export: 'task', at: 'revision' };
+        const fork = { library: 'work', export: 'task', at: 'revision' };
         yield* graph.blocks.update({ id: task.id, body: 'Our task, forked.', fields: { fork } });
         yield* ensureVocabulary('machine');
         expect((yield* graph.blocks.blockById(task.id)).fields.fork).toEqual(fork);

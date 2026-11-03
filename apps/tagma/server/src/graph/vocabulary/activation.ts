@@ -20,6 +20,7 @@ import {
   type CandidateRefusal,
   carryMissing,
   installedRevision,
+  librariesFor,
   prepareCandidate,
   releaseCurrent,
   releasesCurrent,
@@ -260,11 +261,13 @@ export const automaticInstall = Effect.fnUntraced(function* (
     Effect.gen(function* () {
       const rows = yield* vocabularyRows(road.db, projectId);
       if (yield* current(road, projectId, rows, catalogIds)) return;
-      const released = installedOf(rows).catalogs.flatMap((catalog) =>
+      const installed = installedOf(rows);
+      const released = installed.catalogs.flatMap((catalog) =>
         catalog.release === null ? [] : [{ ...catalog, release: catalog.release }],
       );
       if (released.length === 0) return yield* Effect.fail(refusal);
-      const behind = released.filter((catalog) => !releaseCurrent(catalog.id, catalog.release, road.shipped));
+      const libraries = librariesFor(road.shipped, installed, catalogIds);
+      const behind = released.filter((catalog) => !releaseCurrent(libraries.get(catalog.id), catalog.release));
       const save = saver(road, projectId);
       for (const catalog of behind.length > 0 ? behind : released) {
         const row = rows.find((one) => one.id === catalog.row);

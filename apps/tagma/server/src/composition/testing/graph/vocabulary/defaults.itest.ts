@@ -35,7 +35,7 @@ const localType = (demo: EffectDemo, projectId: number, key: string, fields: Rea
     Effect.map((row) => localTypeId(row.uuid.replaceAll('-', '').toLowerCase())),
   );
 
-const query = { tags: [shippedTypeId('software-development', 'task')], sort: { by: 'created' as const, order: 'asc' as const } };
+const query = { tags: [shippedTypeId('work', 'task')], sort: { by: 'created' as const, order: 'asc' as const } };
 
 layer(demoGraphLayer({ projects: ['elsewhere'] }))('creation defaults', (it) => {
   it.effect('selection defaults, explicit types and batch handles keep their chosen contracts', () =>
@@ -105,7 +105,7 @@ layer(demoGraphLayer({ projects: ['elsewhere'] }))('creation defaults', (it) => 
         expect((yield* demo.refusal(create())).code).toBe('creation-default-invalid');
         yield* graph.blocks.update({
           id: configured.id,
-          fields: { profile: { defaults: [{ contract: SELECTION, type: shippedTypeId('software-development', 'task'), override: true }] } },
+          fields: { profile: { defaults: [{ contract: SELECTION, type: shippedTypeId('work', 'task'), override: true }] } },
         });
         expect((yield* demo.refusal(create())).code).toBe('creation-default-invalid');
         const choices = [{ contract: SELECTION, type: shippedTypeId(CORE_LIBRARY, 'view'), override: true as const }];

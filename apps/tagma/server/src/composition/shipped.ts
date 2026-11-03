@@ -1,4 +1,4 @@
-import { DEFAULT_CATALOGS } from '../catalogs/contract/wire/registry.js';
+import { DEFAULT_CATALOGS, tagsOfCatalogs } from '../catalogs/contract/wire/registry.js';
 import type { Vocabulary } from '../graph/contract/wire/tags/table.js';
 import { vocabularyOf } from '../graph/vocabulary/served.js';
 import { TagIndex } from '../graph/vocabulary/tagIndex.js';
@@ -9,19 +9,7 @@ import { SHIPPED_CATALOGS, settingDeclarations } from './settings.js';
 import type { ServerParts } from './build.js';
 
 const shippedVocabulary = (assembly: Assembly, catalogs: readonly string[]): Vocabulary =>
-  vocabularyOf(
-    new TagIndex(
-      catalogs.flatMap((id) => SHIPPED_CATALOGS.byId(id)?.tags ?? []),
-      assembly.behaviours,
-      [],
-      undefined,
-      null,
-      SHIPPED_CATALOGS,
-    ),
-    catalogs,
-    [],
-    [],
-  );
+  vocabularyOf(new TagIndex(tagsOfCatalogs(catalogs), assembly.behaviours, [], undefined, null, SHIPPED_CATALOGS), catalogs, [], []);
 
 const shippedSettings = (assembly: Assembly): SettingDeclarationsAnswer => {
   const declared = settingDeclarations(assembly.settings);

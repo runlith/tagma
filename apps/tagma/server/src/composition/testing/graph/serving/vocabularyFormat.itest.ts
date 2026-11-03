@@ -131,7 +131,7 @@ layer(servingLayer, { excludeTestServices: true })('vocabulary format', (it) => 
             fields: { id: 'subidea', extends: 'idea' },
           }),
         ).pipe(Effect.provide(current().context));
-        expect(tag.fields).toMatchObject({ id: 'subidea', extends: 'shipped:software-development/idea' });
+        expect(tag.fields).toMatchObject({ id: 'subidea', extends: 'shipped:work/idea' });
 
         yield* stamp(String(NEWER));
         yield* reopen();

@@ -20,10 +20,20 @@ export const tagSectionsSchema = Schema.Array(sectionSchema);
 
 export const PROJECT_SECTION = 'project';
 
+export const SECTION_JOIN = '\n\n';
+
+export const composedText = (sections: readonly Section[]): string =>
+  sections.flatMap((section) => (section.text === '' ? [] : [section.text])).join(SECTION_JOIN);
+
 export const shippedSections = (key: string, text: string): readonly Section[] => [
   { key, text },
   { key: PROJECT_SECTION, text: '', edits: ['append'] },
 ];
+
+export const withAdded = (sections: readonly Section[], added: readonly Section[]): readonly Section[] => {
+  const at = sections.findIndex((section) => section.key === PROJECT_SECTION);
+  return at === -1 ? [...sections, ...added] : [...sections.slice(0, at), ...added, ...sections.slice(at)];
+};
 
 export const layerEditSchema = Schema.Struct({
   section: Schema.NonEmptyString,

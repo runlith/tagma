@@ -20,6 +20,7 @@ type Raw = Record<string, unknown>;
 
 const WAS = 'code-project';
 const NOW = softwareDevelopment.id;
+const WORK = 'work';
 const MOVED = ['reflection', 'view'];
 const EARLIER = 'A #note explains what the code cannot.';
 const EARLIER_VIEW = 'A #view saves a selection.';
@@ -64,14 +65,14 @@ layer(demoGraphLayer(), { excludeTestServices: true })('software-development nam
           title: 'a refusal',
           fields: { command: 'read', expected: 'an answer', actual: 'a refusal' },
         });
-        const status = fieldIdOf(shippedTypeId(NOW, 'task'), 'status');
+        const status = fieldIdOf(shippedTypeId(WORK, 'task'), 'status');
         const sort = { by: 'created', order: 'asc' } as const;
         const work = yield* graph.blocks.create({
           projectId,
           parentId: root,
           contract: 'core/selection',
           title: 'open work',
-          fields: { query: { tags: [shippedTypeId(NOW, 'task')], fields: { [status]: 'open' }, sort } },
+          fields: { query: { tags: [shippedTypeId(WORK, 'task')], fields: { [status]: 'open' }, sort } },
         });
         const sightings = yield* graph.blocks.create({
           projectId,
@@ -85,7 +86,7 @@ layer(demoGraphLayer(), { excludeTestServices: true })('software-development nam
           parentId: root,
           contract: 'core/selection',
           title: 'chosen work',
-          fields: { query: { selector: { kind: 'exact', types: [shippedTypeId(NOW, 'task')] }, sort } },
+          fields: { query: { selector: { kind: 'exact', types: [shippedTypeId(WORK, 'task')] }, sort } },
         });
         const memo = yield* graph.blocks.create({
           projectId,
@@ -202,7 +203,9 @@ layer(demoGraphLayer(), { excludeTestServices: true })('software-development nam
         expect(yield* selected(work.id)).toEqual([yield* demo.nameOf(task.id)]);
         expect(yield* selected(sightings.id)).toEqual([yield* demo.nameOf(reflection.id)]);
         const listings = once.filter((row) => row.tags.includes('catalog'));
-        expect(listings.map((row) => [row.fields.id, row.title]).sort()).toEqual([CORE_LIBRARY, NOW, 'notes'].map((id) => [id, id]).sort());
+        expect(listings.map((row) => [row.fields.id, row.title]).sort()).toEqual(
+          [CORE_LIBRARY, NOW, 'notes', WORK].map((id) => [id, id]).sort(),
+        );
         expect(listings.find((row) => row.fields.id === CORE_LIBRARY)?.fields.release).not.toHaveProperty('transfers');
 
         yield* ensureVocabulary('machine');

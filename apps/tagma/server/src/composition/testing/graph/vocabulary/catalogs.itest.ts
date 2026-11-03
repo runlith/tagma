@@ -15,6 +15,9 @@ import { shippedTypeId } from '../../../../graph/contract/wire/tags/identity.js'
 import { isEnabled } from '../../../../graph/contract/wire/tags/law.js';
 import { blockName } from '../../../../graph/contract/wire/references.js';
 import { softwareDevelopment } from '../../../../catalogs/contract/wire/softwareDevelopment.js';
+import { work } from '../../../../catalogs/contract/wire/work.js';
+import { coreLibrary } from '../../../../catalogs/contract/wire/coreLibrary.js';
+import { DEFAULT_CATALOGS, tagsOfCatalogs } from '../../../../catalogs/contract/wire/registry.js';
 import { Catalogs } from '../../../../graph/contract/wire/catalogs.js';
 import { catalogWriter } from '../../../../graph/vocabulary/install.js';
 import { demoGraphLayer, withDemo } from '../../graphFixture.js';
@@ -25,11 +28,15 @@ import { BEHAVIOUR_REGISTRY } from '../../composed.js';
 import { reachLeaves } from '../../../../graph/steps/reachLeaves.js';
 import { provenanceLeaves } from '../../../../graph/steps/provenanceLeaves.js';
 
-const softwareDevelopmentIn = Effect.fnUntraced(function* (projectId: number) {
-  const catalog = (yield* (yield* InstalledCatalogs).read(projectId)).find((entry) => entry.id === softwareDevelopment.id);
-  if (catalog === undefined) return yield* Effect.die('software-development is not installed');
+const catalogIn = Effect.fnUntraced(function* (projectId: number, id: string) {
+  const catalog = (yield* (yield* InstalledCatalogs).read(projectId)).find((entry) => entry.id === id);
+  if (catalog === undefined) return yield* Effect.die(`${id} is not installed`);
   return catalog;
 });
+
+const softwareDevelopmentIn = (projectId: number) => catalogIn(projectId, softwareDevelopment.id);
+
+const shippedRule = tagsOfCatalogs(DEFAULT_CATALOGS).find((tag) => tag.id === 'rule')!;
 
 const declarationOf = Effect.fn('catalogFixture.declaration')(function* (projectId: number, id: string) {
   const name = (yield* (yield* Tags).of(projectId)).identities.typeOf(id)?.declaration;
@@ -83,10 +90,10 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
   it.effect('a graph step upgrades the installed declaration and release base together before installation', () =>
     withDemo(({ graph, projectId }) =>
       Effect.gen(function* () {
-        const catalog = yield* softwareDevelopmentIn(projectId);
+        const catalog = yield* catalogIn(projectId, work.id);
         if (catalog.release === undefined) return yield* Effect.die('catalog has no release');
         const idea = yield* declarationOf(projectId, 'idea');
-        const shipped = softwareDevelopment.tags.find((tag) => tag.id === 'idea');
+        const shipped = work.tags.find((tag) => tag.id === 'idea');
         if (shipped === undefined) return yield* Effect.die('idea is not shipped');
         const catalogNode = yield* graph.blocks.blockById(yield* graph.blockNames.idOfName(catalog.name));
         const prior = { ...shipped, edges: ['discovered-from', ...shipped.edges], prompt: 'Earlier catalog guidance.' };
@@ -178,8 +185,8 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
         const decoded = yield* Schema.decodeUnknownEffect(Schema.Array(tagSchema))(
           base.find((catalog) => catalog.id === 'code-project')?.tags,
         );
-        const tags = decoded.filter((tag) => (tag.id === 'rule' || tag.id === 'task') && system.tagById(tag.id) === null);
-        expect(tags.map((tag) => tag.id).sort()).toEqual(['rule', 'task']);
+        const tags = decoded.filter((tag) => (tag.id === 'idea' || tag.id === 'task') && system.tagById(tag.id) === null);
+        expect(tags.map((tag) => tag.id).sort()).toEqual(['idea', 'task']);
         const projectRoot = yield* graph.blocks.rootBlockOf(project.id);
         const copies = [];
         for (const tag of tags) {
@@ -199,19 +206,19 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
           key: SHIPPED_CATALOGS.key.id,
           value: [softwareDevelopment.id],
         });
-        const catalog = yield* softwareDevelopmentIn(project.id);
+        const catalog = yield* catalogIn(project.id, work.id);
         const findings = yield* (yield* InstalledCatalogs).findings(project.id);
         expect(new Set(findings.map((finding) => [finding.kind, finding.name].join(' ')))).toEqual(
           new Set(copies.map((copy) => `migration-conflict ${blockName(copy.uuid)}`)),
         );
-        expect(catalog.release?.tags.filter((tag) => tag.id === 'rule' || tag.id === 'task')).toEqual([]);
+        expect(catalog.release?.tags.filter((tag) => tag.id === 'idea' || tag.id === 'task')).toEqual([]);
         const members = yield* graph.blockNames.idsOfNames(catalog.tags);
         for (const copy of copies) {
           expect([...members.values()]).not.toContain(copy.id);
           expect(yield* graph.blocks.blockById(copy.id)).toEqual(copy);
         }
         yield* ensureVocabulary('machine');
-        expect(yield* softwareDevelopmentIn(project.id)).toEqual(catalog);
+        expect(yield* catalogIn(project.id, work.id)).toEqual(catalog);
       }),
     ),
   );
@@ -243,16 +250,72 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
     ),
   );
 
+  it.effect("a catalog's section stands on another library's type only while that catalog is installed, before the project's part", () =>
+    withDemo(({ graph, fixture, table }) =>
+      Effect.gen(function* () {
+        const rootPath = yield* fixture.directory('codeless');
+        const project = yield* graph.projectLifecycle.create({ name: 'codeless', rootPath, catalogs: [work.id] });
+        const sections = (id: string) =>
+          Effect.map(table(project.id), (read) =>
+            read.tagById(id)?.sections?.map((section) => [section.key, section.text === '' ? '' : 'text']),
+          );
+        const codeless = yield* table(project.id);
+        expect(codeless.tagById('module')).toBeNull();
+        expect(codeless.bindsCode()).toBe(false);
+        expect(yield* sections('rule')).toEqual([
+          ['rule', 'text'],
+          ['project', ''],
+        ]);
+        expect(yield* sections('task')).toEqual([
+          ['task', 'text'],
+          ['project', ''],
+        ]);
+        const catalogs = (value: readonly string[]) =>
+          graph.settings.write({ scope: 'project', projectId: project.id, key: SHIPPED_CATALOGS.key.id, value });
+        yield* catalogs([softwareDevelopment.id]);
+        expect(yield* sections('rule')).toEqual([
+          ['rule', 'text'],
+          [softwareDevelopment.id, 'text'],
+          ['project', ''],
+        ]);
+        expect(yield* sections('task')).toEqual([
+          ['task', 'text'],
+          [softwareDevelopment.id, 'text'],
+          ['project', ''],
+        ]);
+        expect(yield* sections('spec')).toEqual([
+          ['spec', 'text'],
+          ['project', ''],
+        ]);
+        const ruleNode = yield* declarationOf(project.id, 'rule');
+        yield* graph.blocks.update({ id: ruleNode.id, body: `${ruleNode.body}\n\nOurs.` });
+        yield* catalogs([work.id]);
+        yield* graph.trash.delete({ id: yield* graph.blockNames.idOfName((yield* catalogIn(project.id, softwareDevelopment.id)).name) });
+        yield* ensureVocabulary('machine');
+        expect(yield* sections('rule')).toEqual([
+          ['rule', 'text'],
+          ['project', 'text'],
+        ]);
+        expect((yield* table(project.id)).tagById('rule')?.prompt.endsWith('\n\nOurs.')).toBe(true);
+        expect(yield* sections('task')).toEqual([
+          ['task', 'text'],
+          ['project', ''],
+        ]);
+        expect(yield* (yield* InstalledCatalogs).findings(project.id)).toEqual([]);
+      }),
+    ),
+  );
+
   it.effect('a catalog member refuses to fall alone and can be deleted after its catalog falls', () =>
     withDemo(({ graph, projectId, refusal }) =>
       Effect.gen(function* () {
-        const catalog = yield* softwareDevelopmentIn(projectId);
+        const catalog = yield* catalogIn(projectId, work.id);
         const idea = yield* declarationOf(projectId, 'idea');
         const refused = yield* refusal(graph.trash.delete({ id: idea.id }));
         expect(refused.code).toBe('catalog-member');
         expect(refused.reason).toContain(catalog.name);
         expect(yield* graph.blocks.blockById(idea.id)).toEqual(idea);
-        expect(yield* softwareDevelopmentIn(projectId)).toEqual(catalog);
+        expect(yield* catalogIn(projectId, work.id)).toEqual(catalog);
         const showsIdea = () =>
           Effect.map(graph.orientation.instructions({ projectId, audience: 'graph' }), (set) =>
             set.entries.some((entry) => entry.source === '#idea'),
@@ -260,7 +323,7 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
         expect(yield* showsIdea()).toBe(true);
         yield* graph.trash.delete({ id: yield* graph.blockNames.idOfName(catalog.name) });
         yield* graph.trash.delete({ id: idea.id });
-        expect((yield* (yield* InstalledCatalogs).read(projectId)).filter((entry) => entry.id === softwareDevelopment.id)).toEqual([]);
+        expect((yield* (yield* InstalledCatalogs).read(projectId)).filter((entry) => entry.id === work.id)).toEqual([]);
         expect(yield* showsIdea()).toBe(false);
       }),
     ),
@@ -298,10 +361,9 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
   it.effect('an installed rule gains enforcement in place while its standing rule keeps its complete stored state', () =>
     withDemo(({ graph, projectId, root, table }) =>
       Effect.gen(function* () {
-        const catalog = yield* softwareDevelopmentIn(projectId);
+        const catalog = yield* catalogIn(projectId, coreLibrary.id);
         if (catalog.release === undefined) return yield* Effect.die('catalog has no release');
-        const shipped = softwareDevelopment.tags.find((tag) => tag.id === 'rule');
-        if (shipped === undefined) return yield* Effect.die('rule is not shipped');
+        const shipped = shippedRule;
         const ruleNode = yield* declarationOf(projectId, 'rule');
         const catalogNode = yield* graph.blocks.blockById(yield* graph.blockNames.idOfName(catalog.name));
         const previous = {
@@ -339,8 +401,8 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
         const before = yield* graph.blocks.blockById(standing.id);
         yield* ensureVocabulary('machine');
         const upgraded = yield* table();
-        expect(upgraded.tagById('rule')).toEqual(new TagIndex(softwareDevelopment.tags, BEHAVIOUR_REGISTRY).tagById('rule'));
-        const reinstalled = yield* softwareDevelopmentIn(projectId);
+        expect(upgraded.tagById('rule')).toEqual(new TagIndex([shippedRule], BEHAVIOUR_REGISTRY).tagById('rule'));
+        const reinstalled = yield* catalogIn(projectId, coreLibrary.id);
         expect(yield* (yield* InstalledCatalogs).findings(projectId)).toEqual([]);
         expect(reinstalled.tags).toEqual(catalog.tags);
         const row = yield* graph.blocks.blockById(standing.id);
@@ -386,7 +448,7 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
       () =>
         withDemo(({ graph, projectId, root, table }) =>
           Effect.gen(function* () {
-            const catalog = yield* softwareDevelopmentIn(projectId);
+            const catalog = yield* catalogIn(projectId, coreLibrary.id);
             if (catalog.release === undefined) return yield* Effect.die('catalog has no release');
             const ruleNode = yield* declarationOf(projectId, 'rule');
             const listing = yield* graph.blocks.blockById(yield* graph.blockNames.idOfName(catalog.name));
@@ -403,7 +465,7 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
             yield* db
               .update(block)
               .set({
-                fields: { ...reached(ruleNode.fields), identity: { shipped: { library: softwareDevelopment.id, export: 'rule' } } },
+                fields: { ...reached(ruleNode.fields), identity: { shipped: { library: coreLibrary.id, export: 'rule' } } },
                 body: ruleNode.body.replace(PRIOR_TEXT, REACH_TEXT),
               })
               .where(eq(block.id, ruleNode.id));
@@ -421,7 +483,7 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
             yield* graph.tags.forget(projectId);
             yield* ensureVocabulary('machine');
             const upgraded = yield* table();
-            expect(upgraded.tagById('rule')).toEqual(new TagIndex(softwareDevelopment.tags, BEHAVIOUR_REGISTRY).tagById('rule'));
+            expect(upgraded.tagById('rule')).toEqual(new TagIndex([shippedRule], BEHAVIOUR_REGISTRY).tagById('rule'));
             expect(yield* (yield* InstalledCatalogs).findings(projectId)).toEqual([]);
             const row = yield* graph.blocks.blockById(written.id);
             expect(row.fields).toEqual({});

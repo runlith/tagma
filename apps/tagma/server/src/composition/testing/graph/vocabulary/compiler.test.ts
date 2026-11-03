@@ -9,7 +9,8 @@ import {
   type Tag,
   TAG_DECLARATION,
 } from '../../../../graph/contract/wire/tags/declaration.js';
-import { type Candidate, SECTION_JOIN, sameSchema } from '../../../../graph/vocabulary/compiler.js';
+import { type Candidate, sameSchema } from '../../../../graph/vocabulary/compiler.js';
+import { SECTION_JOIN } from '../../../../graph/contract/wire/tags/sections.js';
 import { TagIndex } from '../../../../graph/vocabulary/tagIndex.js';
 import { BEHAVIOUR_REGISTRY } from '../../composed.js';
 import { WORK } from '../../../../graph/contract/wire/tags/work.js';
@@ -17,11 +18,11 @@ import { WORK } from '../../../../graph/contract/wire/tags/work.js';
 const indexed = (declared: readonly (Declaration | Candidate)[]) => new TagIndex(declared, BEHAVIOUR_REGISTRY);
 const withoutContracts = ({ contracts: _, ...tag }: Tag) => tag;
 
-const shipped = tagsOfCatalogs(['tagma', 'software-development']);
+const shipped = tagsOfCatalogs(['core', 'software-development']);
 
 function shippedTag(id: string): Tag {
   const tag = shipped.find((candidate) => candidate.id === id);
-  if (tag === undefined) throw new Error(`software-development ships no #${id}`);
+  if (tag === undefined) throw new Error(`no shipped catalog declares #${id}`);
   return tag;
 }
 

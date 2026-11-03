@@ -72,7 +72,7 @@ const FIELD_SCHEMAS = {
   line: { codec: line, form: 'one non-blank line' },
   blockQuery: { codec: blockQuerySchema, form: 'a query_blocks input with its sort' },
   viewLayout: { codec: viewLayoutSchema, form: `{mode: "list"} | {mode: "sections"|"board", by: ${words(GROUP_FIELDS)}}` },
-  researchSource: { codec: researchSourceSchema, form: '{name: the system read, ref: its checkout, URL or version}' },
+  researchSource: { codec: researchSourceSchema, form: '{name: what was read, ref: its URL, version or checkout}' },
   tagFields: {
     codec: tagFieldsSchema,
     form: `{<field>: ${words(SCALAR_FIELD_TYPES)} | {type: "enum", values: [...]} | {type: "ref", tag?, many?: true} | {type: "schema", name}}`,

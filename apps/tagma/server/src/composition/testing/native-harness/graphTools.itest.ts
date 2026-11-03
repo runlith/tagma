@@ -51,7 +51,7 @@ layer(graphToolsFixture, { excludeTestServices: true })('native graph tools', (i
       const entries = [
         {
           row: yield* graph.blocks.create({ projectId, parentId: rootId, tags: ['view'], title: 'view', fields: { query } }),
-          fields: { query: { ...query, tags: ['shipped:software-development/task'] } },
+          fields: { query: { ...query, tags: ['shipped:work/task'] } },
         },
         {
           row: yield* graph.blocks.create({ projectId, parentId: rootId, tags: ['research'], title: 'research', fields: { source } }),

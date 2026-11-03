@@ -4,11 +4,12 @@ import { GateRefusal } from '../../platform/contract/wire/refusal.js';
 import type { Catalogs } from '../contract/wire/catalogs.js';
 import type { TagTable } from '../contract/wire/tags/table.js';
 import { CATALOG_DECLARATION } from '../contract/wire/tags/declaration.js';
-import { type KeyedLayer, keyedLayerSchema, type Section, shippedSections } from '../contract/wire/tags/sections.js';
+import { composedText, type KeyedLayer, keyedLayerSchema, type Section, shippedSections } from '../contract/wire/tags/sections.js';
 import { closedParsing } from '../contract/wire/fields.js';
 import { declarationOf } from './declarationRules.js';
-import { applyLayer, baseSectionsOf, composedText, differing, type Forbidden, onShipped, writtenLayer } from './layers.js';
+import { applyLayer, baseSectionsOf, differing, type Forbidden, onShipped, writtenLayer } from './layers.js';
 import { installedOf, vocabularyRows } from './installed.js';
+import { librariesFor } from './candidate.js';
 
 type LayerRefusal = GateRefusal<'field-invalid' | 'layer-forbidden'>;
 
@@ -123,7 +124,8 @@ export const checkedText = Effect.fnUntraced(function* (
   const text = rewrite ?? '';
   const type = table.identities.typeOf(id);
   const from = type?.shipped ?? null;
-  const tag = from === null ? undefined : shipped.byId(from.library)?.tags.find((one) => one.id === from.export);
+  const libraries = from === null ? null : librariesFor(shipped, installedOf(yield* vocabularyRows(db, projectId)), []);
+  const tag = from === null ? undefined : libraries?.get(from.library)?.tags.find((one) => one.id === from.export);
   let taken: Rewritten = null;
   if (tag !== undefined && type !== null) {
     const declaration = yield* Effect.fromResult(declarationOf({ fields: merged, body: text })).pipe(

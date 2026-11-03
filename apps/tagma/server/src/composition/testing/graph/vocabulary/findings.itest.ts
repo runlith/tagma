@@ -16,38 +16,41 @@ import { installedOf, vocabularyRows } from '../../../../graph/vocabulary/instal
 import { InstalledCatalogs, Tags } from '../../../../graph/contract/service/vocabulary.js';
 import { Catalogs } from '../../../../graph/contract/wire/catalogs.js';
 import { type Catalog, sectioned } from '../../../../graph/contract/wire/tags/declaration.js';
-import { SECTION_JOIN } from '../../../../graph/vocabulary/compiler.js';
+import { SECTION_JOIN } from '../../../../graph/contract/wire/tags/sections.js';
 import { catalogWriter } from '../../../../graph/vocabulary/install.js';
 
-const TASK = softwareDevelopment.tags.find((tag) => tag.id === 'task')!;
+const SHIPPED = softwareDevelopment.tags.find((tag) => tag.id === 'explanation')!;
 
 const shipping = (catalog: Catalog) =>
   Catalogs.of({ ...SHIPPED_CATALOGS, byId: (id) => (id === catalog.id ? catalog : SHIPPED_CATALOGS.byId(id)) });
 
 const nodes = Effect.fnUntraced(function* (projectId: number) {
   const listing = (yield* (yield* InstalledCatalogs).read(projectId)).find((catalog) => catalog.id === softwareDevelopment.id);
-  const task = (yield* (yield* Tags).of(projectId)).identities.typeOf('task')?.declaration;
-  if (listing === undefined || task === undefined || task === null) return yield* Effect.die('software-development is not installed');
-  return { catalog: listing.name, task };
+  const declared = (yield* (yield* Tags).of(projectId)).identities.typeOf('explanation')?.declaration;
+  if (listing === undefined || declared === undefined || declared === null)
+    return yield* Effect.die('software-development is not installed');
+  return { catalog: listing.name, declared };
 });
 
 layer(demoGraphLayer(), { excludeTestServices: true })('catalog findings', (it) => {
   it.effect('a part written after the shipped text of a type becomes its project layer, and the next shipped text reaches it', () =>
     withDemo(({ graph, projectId, table, context }) =>
       Effect.gen(function* () {
-        const { task } = yield* nodes(projectId);
-        const id = yield* graph.blockNames.idOfName(task);
-        yield* graph.blocks.update({ id, body: `${TASK.prompt}${SECTION_JOIN}Cite the file.` });
+        const { declared } = yield* nodes(projectId);
+        const id = yield* graph.blockNames.idOfName(declared);
+        yield* graph.blocks.update({ id, body: `${SHIPPED.prompt}${SECTION_JOIN}Cite the file.` });
         expect((yield* graph.blocks.blockById(id)).fields.layer).toMatchObject({
           edits: [{ section: 'project', edit: 'append', text: 'Cite the file.' }],
         });
         expect(yield* (yield* InstalledCatalogs).findings(projectId)).toEqual([]);
         const reworded: Catalog = {
           ...softwareDevelopment,
-          tags: softwareDevelopment.tags.map((tag) => (tag.id === 'task' ? sectioned({ ...tag, prompt: 'A task, reworded.' }) : tag)),
+          tags: softwareDevelopment.tags.map((tag) =>
+            tag.id === 'explanation' ? sectioned({ ...tag, prompt: 'A task, reworded.' }) : tag,
+          ),
         };
         yield* (yield* catalogWriter(Context.add(context, Catalogs, shipping(reworded)), projectId))([softwareDevelopment.id]);
-        expect((yield* table()).tagById('task')?.prompt).toBe(`A task, reworded.${SECTION_JOIN}Cite the file.`);
+        expect((yield* table()).tagById('explanation')?.prompt).toBe(`A task, reworded.${SECTION_JOIN}Cite the file.`);
       }),
     ),
   );
@@ -55,22 +58,22 @@ layer(demoGraphLayer(), { excludeTestServices: true })('catalog findings', (it) 
   it.effect('a type rewritten outside its project section is kept with a finding until its body is the shipped text and a tail', () =>
     withDemo(({ graph, projectId, table }) =>
       Effect.gen(function* () {
-        const { task } = yield* nodes(projectId);
-        const id = yield* graph.blockNames.idOfName(task);
+        const { declared } = yield* nodes(projectId);
+        const id = yield* graph.blockNames.idOfName(declared);
         yield* graph.blocks.update({ id, body: 'Our own task text.' });
-        expect((yield* table()).tagById('task')?.prompt).toBe('Our own task text.');
+        expect((yield* table()).tagById('explanation')?.prompt).toBe('Our own task text.');
         yield* ensureVocabulary('machine');
-        expect((yield* table()).tagById('task')?.prompt).toBe('Our own task text.');
+        expect((yield* table()).tagById('explanation')?.prompt).toBe('Our own task text.');
         const findings = yield* (yield* InstalledCatalogs).findings(projectId);
-        expect(findings.map((finding) => [finding.kind, finding.name])).toEqual([['migration-conflict', task]]);
+        expect(findings.map((finding) => [finding.kind, finding.name])).toEqual([['migration-conflict', declared]]);
         const instructions = yield* graph.orientation.instructions({ projectId, audience: 'graph' });
-        expect(instructions.entries.map((entry) => entry.source)).toContain(`migration-conflict ${task}`);
-        yield* graph.blocks.update({ id, body: `${TASK.prompt}${SECTION_JOIN}Our own part.` });
+        expect(instructions.entries.map((entry) => entry.source)).toContain(`migration-conflict ${declared}`);
+        yield* graph.blocks.update({ id, body: `${SHIPPED.prompt}${SECTION_JOIN}Our own part.` });
         expect((yield* graph.blocks.blockById(id)).fields.layer).toMatchObject({ edits: [{ section: 'project', text: 'Our own part.' }] });
         expect(yield* (yield* InstalledCatalogs).findings(projectId)).toEqual([]);
         expect(
           (yield* graph.orientation.instructions({ projectId, audience: 'graph' })).entries.map((entry) => entry.source),
-        ).not.toContain(`migration-conflict ${task}`);
+        ).not.toContain(`migration-conflict ${declared}`);
       }),
     ),
   );
@@ -101,21 +104,21 @@ layer(demoGraphLayer(), { excludeTestServices: true })('catalog findings', (it) 
   it.effect('a refused automatic upgrade stands in the graph instructions, and other findings of its catalog stay visible beside it', () =>
     withDemo(({ graph, projectId, table }) =>
       Effect.gen(function* () {
-        const { catalog, task } = yield* nodes(projectId);
-        const taskId = yield* graph.blockNames.idOfName(task);
+        const { catalog, declared } = yield* nodes(projectId);
+        const taskId = yield* graph.blockNames.idOfName(declared);
         const catalogId = yield* graph.blockNames.idOfName(catalog);
         yield* graph.orientation.instructions({ projectId, audience: 'graph' });
-        yield* graph.blocks.update({ id: taskId, body: `${TASK.prompt}${SECTION_JOIN}Cite the file.` });
+        yield* graph.blocks.update({ id: taskId, body: `${SHIPPED.prompt}${SECTION_JOIN}Cite the file.` });
         yield* graph.blocks.update({ id: catalogId, body: 'Our own process.' });
         const closed: Catalog = {
           ...softwareDevelopment,
           guidance: 'The catalog, reworded.',
           tags: softwareDevelopment.tags.map((tag) =>
-            tag.id === 'task'
+            tag.id === 'explanation'
               ? {
                   ...tag,
                   sections: [
-                    { key: 'task', text: tag.prompt },
+                    { key: 'explanation', text: tag.prompt },
                     { key: 'project', text: '' },
                   ],
                 }
@@ -123,7 +126,7 @@ layer(demoGraphLayer(), { excludeTestServices: true })('catalog findings', (it) 
           ),
         };
         yield* ensureVocabulary('machine').pipe(Effect.provideService(Catalogs, shipping(closed)));
-        expect((yield* table()).tagById('task')?.prompt).toBe(`${TASK.prompt}${SECTION_JOIN}Cite the file.`);
+        expect((yield* table()).tagById('explanation')?.prompt).toBe(`${SHIPPED.prompt}${SECTION_JOIN}Cite the file.`);
         const instructions = yield* graph.orientation.instructions({ projectId, audience: 'graph' });
         expect(instructions.entries.find((one) => one.source === `upgrade-blocked ${catalog}`)?.text).toContain('layer-forbidden');
         expect(instructions.entries.map((one) => one.source)).toContain(`migration-conflict ${catalog}`);
@@ -135,7 +138,7 @@ layer(demoGraphLayer(), { excludeTestServices: true })('catalog findings', (it) 
         );
         expect(judged.map((finding) => [finding.kind, finding.name])).toEqual([
           ['upgrade-blocked', catalog],
-          ['upgrade-blocked', task],
+          ['upgrade-blocked', declared],
           ['migration-conflict', catalog],
         ]);
       }),
@@ -147,11 +150,11 @@ layer(demoGraphLayer(), { excludeTestServices: true })('catalog findings', (it) 
     () =>
       withDemo(({ graph, projectId, table, context }) =>
         Effect.gen(function* () {
-          const { task } = yield* nodes(projectId);
-          const id = yield* graph.blockNames.idOfName(task);
+          const { declared } = yield* nodes(projectId);
+          const id = yield* graph.blockNames.idOfName(declared);
           const withTask = (prompt: string): Catalog => ({
             ...softwareDevelopment,
-            tags: softwareDevelopment.tags.map((tag) => (tag.id === 'task' ? sectioned({ ...tag, prompt }) : tag)),
+            tags: softwareDevelopment.tags.map((tag) => (tag.id === 'explanation' ? sectioned({ ...tag, prompt }) : tag)),
           });
           const install = (catalog: Catalog) =>
             Effect.flatMap(catalogWriter(Context.add(context, Catalogs, shipping(catalog)), projectId), (write) =>
@@ -161,12 +164,12 @@ layer(demoGraphLayer(), { excludeTestServices: true })('catalog findings', (it) 
           yield* graph.blocks.update({ id, body: 'Our own task text.' });
           yield* ensureVocabulary('machine');
           expect((yield* (yield* InstalledCatalogs).findings(projectId)).map((finding) => [finding.kind, finding.name])).toEqual([
-            ['migration-conflict', task],
+            ['migration-conflict', declared],
           ]);
-          yield* graph.blocks.update({ id, body: `${TASK.prompt}${SECTION_JOIN}Our part.` });
+          yield* graph.blocks.update({ id, body: `${SHIPPED.prompt}${SECTION_JOIN}Our part.` });
           expect(yield* (yield* InstalledCatalogs).findings(projectId)).toEqual([]);
           yield* install(withTask('A task, reworded.'));
-          expect((yield* table()).tagById('task')?.prompt).toBe(`A task, reworded.${SECTION_JOIN}Our part.`);
+          expect((yield* table()).tagById('explanation')?.prompt).toBe(`A task, reworded.${SECTION_JOIN}Our part.`);
         }),
       ),
   );
@@ -182,7 +185,10 @@ layer(demoGraphLayer(), { excludeTestServices: true })('catalog findings', (it) 
         yield* db
           .update(block)
           .set({
-            fields: { ...row.fields, release: { ...release, conflicts: ['#task: kept'], forks: [{ type: 'task', at: 'a', now: 'b' }] } },
+            fields: {
+              ...row.fields,
+              release: { ...release, conflicts: ['#task: kept'], forks: [{ type: 'explanation', at: 'a', now: 'b' }] },
+            },
           })
           .where(eq(block.id, id));
         const project = yield* graph.projects.byId(projectId);
@@ -251,19 +257,21 @@ layer(demoGraphLayer(), { excludeTestServices: true })('catalog findings', (it) 
   it.effect('a layered type whose structure was edited is kept with a finding, and an upgrade does not erase the edit', () =>
     withDemo(({ graph, projectId, table, context }) =>
       Effect.gen(function* () {
-        const { task } = yield* nodes(projectId);
-        const id = yield* graph.blockNames.idOfName(task);
-        yield* graph.blocks.update({ id, body: `${TASK.prompt}${SECTION_JOIN}Cite the file.` });
-        yield* graph.blocks.update({ id, fields: { fields: { ...TASK.fields, estimate: 'number' } } });
+        const { declared } = yield* nodes(projectId);
+        const id = yield* graph.blockNames.idOfName(declared);
+        yield* graph.blocks.update({ id, body: `${SHIPPED.prompt}${SECTION_JOIN}Cite the file.` });
+        yield* graph.blocks.update({ id, fields: { fields: { ...SHIPPED.fields, estimate: 'number' } } });
         expect((yield* (yield* InstalledCatalogs).findings(projectId)).map((finding) => [finding.kind, finding.name])).toEqual([
-          ['migration-conflict', task],
+          ['migration-conflict', declared],
         ]);
         const reworded: Catalog = {
           ...softwareDevelopment,
-          tags: softwareDevelopment.tags.map((tag) => (tag.id === 'task' ? sectioned({ ...tag, prompt: 'A task, reworded.' }) : tag)),
+          tags: softwareDevelopment.tags.map((tag) =>
+            tag.id === 'explanation' ? sectioned({ ...tag, prompt: 'A task, reworded.' }) : tag,
+          ),
         };
         yield* (yield* catalogWriter(Context.add(context, Catalogs, shipping(reworded)), projectId))([softwareDevelopment.id]);
-        expect((yield* table()).tagById('task')?.fields.estimate).toBe('number');
+        expect((yield* table()).tagById('explanation')?.fields.estimate).toBe('number');
       }),
     ),
   );

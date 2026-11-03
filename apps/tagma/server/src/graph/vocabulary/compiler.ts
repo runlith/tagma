@@ -20,7 +20,7 @@ import {
 } from '../contract/wire/tags/declaration.js';
 import type { DeclaringNode, Redeclared, UnreadableTag } from '../contract/wire/tags/table.js';
 import type { Provenance, SectionSource } from '../contract/wire/tags/provenance.js';
-import type { Section, SectionOrigin } from '../contract/wire/tags/sections.js';
+import { composedText, type Section, type SectionOrigin } from '../contract/wire/tags/sections.js';
 import { LIFECYCLE, lifecycleOf } from '../contract/wire/tags/lifecycle.js';
 import type { Bound, ContractBinding, ContractBindings } from '../contract/wire/tags/behaviour.js';
 import { VOCABULARY_FORMAT } from '../contract/wire/tags/revision.js';
@@ -29,8 +29,6 @@ import { incoherence } from './declarationRules.js';
 import { type BindingPart, bindContracts, translateRoles } from './behaviours.js';
 
 export type TypeResolver = (reference: string) => string | null;
-
-export const SECTION_JOIN = '\n\n';
 
 export type Stated = {
   readonly name: string;
@@ -186,9 +184,6 @@ function checked(
   ]);
 }
 
-const joined = (sections: readonly Section[]): string =>
-  sections.flatMap((section) => (section.text === '' ? [] : [section.text])).join(SECTION_JOIN);
-
 type Texts = { readonly sections: readonly Section[]; readonly sources: readonly SectionSource[] };
 
 function ownTexts({ declaration, layered }: Stated): Result.Result<Texts | null, GateRefusal<'tag-incoherent'>> {
@@ -223,7 +218,7 @@ function rooted(stated: Stated, behaviours: BehaviourRegistry): Composed {
     ...TAG_DEFAULTS,
     ...parts,
     sections: own?.sections,
-    prompt: own === null ? prompt : joined(own.sections),
+    prompt: own === null ? prompt : composedText(own.sections),
   };
   const provenance = { ...core(tag).provenance, sections: own?.sources ?? [] };
   return checked(stated, tag, [tag.id], provenance, null, behaviours);
@@ -412,7 +407,7 @@ function extended(stated: Stated, over: Compiled, behaviours: BehaviourRegistry,
     body,
     open,
     sections,
-    prompt: joined(sections),
+    prompt: composedText(sections),
   };
   const provenance: Provenance = {
     fields: fieldFrom,

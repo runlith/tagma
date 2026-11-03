@@ -73,7 +73,7 @@ import type { SANDBOX_OPERATIONS } from '../../../sandbox/contract/wire/operatio
 
 const MINE = 'thread-importer';
 const THEIRS = 'thread-neighbour';
-const VOCABULARY = tagIndex(tagsOfCatalogs(['tagma', 'software-development']), BEHAVIOUR_REGISTRY);
+const VOCABULARY = tagIndex(tagsOfCatalogs(['core', 'software-development']), BEHAVIOUR_REGISTRY);
 
 const makeImportWorld = Effect.gen(function* () {
   const { context: platform, files: hostFiles, processes, checkout: sourceTree } = yield* SandboxResources;

@@ -1,7 +1,7 @@
 import { expect } from 'bun:test';
 import { it } from '@runlith/effect-test';
 import { Effect } from 'effect';
-import { softwareDevelopment } from '../../../../catalogs/contract/wire/softwareDevelopment.js';
+import { work } from '../../../../catalogs/contract/wire/work.js';
 import { coreLibrary } from '../../../../catalogs/contract/wire/coreLibrary.js';
 import { knowledge } from '../../../../catalogs/contract/wire/knowledge.js';
 import type { Catalog, Tag } from '../../../../graph/contract/wire/tags/declaration.js';
@@ -17,7 +17,7 @@ const SLICE = { tags: ['task'], sort: { by: 'updated', order: 'desc' } } as cons
 
 it.effect('catalog field grammars accept their values and identify the refused field', () =>
   Effect.gen(function* () {
-    const task = tagNamed(softwareDevelopment, 'task');
+    const task = tagNamed(work, 'task');
     const view = tagNamed(coreLibrary, 'view');
     const meeting = tagNamed(knowledge, 'meeting');
     yield* validateFields([task], { status: 'open', holder: 12 });

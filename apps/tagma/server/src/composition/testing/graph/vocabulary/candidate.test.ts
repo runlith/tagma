@@ -5,7 +5,7 @@ import type { Catalog, Declaration, Tag } from '../../../../graph/contract/wire/
 import { CORE_LIBRARY, shippedTypeId } from '../../../../graph/contract/wire/tags/identity.js';
 import type { KeyedLayer, Section } from '../../../../graph/contract/wire/tags/sections.js';
 import { type CatalogCandidate, type Installed, prepareCandidate, type StandingType } from '../../../../graph/vocabulary/candidate.js';
-import { SECTION_JOIN } from '../../../../graph/vocabulary/compiler.js';
+import { SECTION_JOIN } from '../../../../graph/contract/wire/tags/sections.js';
 import { sectionRevision, typeRevision } from '../../../../graph/vocabulary/layers.js';
 import { TagIndex } from '../../../../graph/vocabulary/tagIndex.js';
 import { BEHAVIOUR_REGISTRY } from '../../composed.js';

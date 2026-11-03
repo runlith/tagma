@@ -99,7 +99,7 @@ layer(servingLayer, { excludeTestServices: true })('machine vocabulary order', (
           Effect.gen(function* () {
             const catalogs = yield* (yield* InstalledCatalogs).read(legacy.id);
             const installed = catalogs.find((row) => row.id === 'knowledge');
-            expect(catalogs.map((row) => row.id).sort()).toEqual(['core', 'knowledge', 'software-development']);
+            expect(catalogs.map((row) => row.id).sort()).toEqual(['core', 'knowledge', 'software-development', 'work']);
             expect(installed?.name).toBe(yield* demo.nameOf(catalog.id));
             const blocks = yield* Blocks;
             const table = yield* (yield* Tags).of(legacy.id);

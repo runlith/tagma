@@ -82,7 +82,7 @@ const registryOf = (named?: Projects['Service']['named']): Projects['Service'] =
     named,
   }) as unknown as Projects['Service'];
 
-const shippedTable = tagIndex(tagsOfCatalogs(['tagma', 'software-development']), BEHAVIOUR_REGISTRY);
+const shippedTable = tagIndex(tagsOfCatalogs(['core', 'software-development']), BEHAVIOUR_REGISTRY);
 
 const vocabulary: Tags['Service'] = {
   of: () => Effect.succeed(shippedTable),
