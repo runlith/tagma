@@ -58,7 +58,11 @@ function farEndText(end: FarEnd | undefined): string {
 
 function restingLine(resting: BlockRead['restingIn'], name: string): string | null {
   const groups = new Map<string, string[]>();
-  if (resting.refs.length > 0) groups.set('refs', [...resting.refs]);
+  if (resting.refsDetails.length > 0)
+    groups.set(
+      'refs',
+      resting.refsDetails.map((ref) => ref.name),
+    );
   for (const edge of resting.edges) {
     const names = groups.get(edge.kind) ?? [];
     names.push(edge.toName === name ? edge.fromName : `${edge.fromName} → ${edge.toName}`);
@@ -93,14 +97,15 @@ export function blockPageText(
   const elsewhere = new Map(
     (view.refsElsewhere ?? []).map((ref) => [ref.name, ref.branch === null ? ref.project : `${ref.project}@${ref.branch}`] as const),
   );
-  const named = new Set(view.refsOut);
+  const outNames = view.refsOutDetails.map((ref) => ref.name);
+  const named = new Set(outNames);
   const refsOut = [
-    ...view.refsOut.map((name) => (elsewhere.has(name) ? `${name} · ${elsewhere.get(name)}` : name)),
+    ...outNames.map((name) => (elsewhere.has(name) ? `${name} · ${elsewhere.get(name)}` : name)),
     ...[...elsewhere].filter(([name]) => !named.has(name)).map(([name, place]) => `${name} · ${place}`),
     ...(view.refsAbsent ?? []).map((name) => `${name} — not on this machine`),
   ];
   if (refsOut.length > 0) lines.push(`refs → ${refsOut.join(', ')}`);
-  if (view.refsIn.length > 0) lines.push(`refs ← ${view.refsIn.join(', ')}`);
+  if (view.refsInDetails.length > 0) lines.push(`refs ← ${view.refsInDetails.map((ref) => ref.name).join(', ')}`);
   const resting = restingLine(view.restingIn, view.name);
   if (resting !== null) lines.push(resting);
   if (view.ending) {

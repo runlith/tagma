@@ -12,7 +12,7 @@
       read.edgesOut.length > 0 ||
       read.edgesIn.length > 0 ||
       (read.edgesInUnread?.length ?? 0) > 0 ||
-      read.refsOut.length > 0 ||
+      read.refsOutDetails.length > 0 ||
       (read.refsAbsent?.length ?? 0) > 0 ||
       referrersOf(read, store).length > 0 ||
       read.restingIn.edges.length > 0 ||

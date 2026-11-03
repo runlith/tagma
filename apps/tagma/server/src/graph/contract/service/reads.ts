@@ -145,15 +145,12 @@ export type BlockDetail = BlockRecord & {
   edgesOut: DetailEdge[];
   edgesIn: DetailEdge[];
   edgesInUnread: readonly string[];
-  refsOut: string[];
   refsOutDetails: BlockReference[];
   refsElsewhere: readonly RefElsewhere[];
   refsAbsent: string[];
-  refsIn: string[];
   refsInDetails: BlockReference[];
   restingIn: {
     edges: DetailEdge[];
-    refs: string[];
     refsDetails: BlockReference[];
   };
   sources: SourceRow[];

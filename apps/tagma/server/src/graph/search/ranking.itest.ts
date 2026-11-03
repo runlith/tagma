@@ -36,7 +36,9 @@ layer(demoGraphLayer(), { excludeTestServices: true })('search', (it) => {
         const first = result.ids.first as string;
         const second = result.ids.second as string;
         expect((yield* graph.blocks.blockById(yield* graph.blockNames.idOfName(first))).body).toBe(`смотри [[${second}]]`);
-        expect((yield* graph.reading.show(yield* graph.blockNames.idOfName(second), 0)).refsIn).toEqual([first]);
+        expect((yield* graph.reading.show(yield* graph.blockNames.idOfName(second), 0)).refsInDetails.map((ref) => ref.name)).toEqual([
+          first,
+        ]);
       }),
     ),
   );
@@ -47,8 +49,8 @@ layer(demoGraphLayer(), { excludeTestServices: true })('search', (it) => {
         const target = yield* make('spec', 'цель');
         const targetName = yield* nameOf(target);
         const source = yield* make('idea', 'источник', `подключается к [[${targetName}|цели]] и к [[${targetName}]]`);
-        expect((yield* graph.reading.show(source, 0)).refsOut).toEqual([targetName]);
-        expect((yield* graph.reading.show(target, 0)).refsIn).toEqual([yield* nameOf(source)]);
+        expect((yield* graph.reading.show(source, 0)).refsOutDetails.map((ref) => ref.name)).toEqual([targetName]);
+        expect((yield* graph.reading.show(target, 0)).refsInDetails.map((ref) => ref.name)).toEqual([yield* nameOf(source)]);
       }),
     ),
   );

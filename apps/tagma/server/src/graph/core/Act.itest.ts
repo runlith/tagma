@@ -10,7 +10,7 @@ type Extra = { edges?: readonly { kind: string; to: number }[]; parentId?: numbe
 const lens = ({ graph, projectId, root }: EffectDemo) => {
   const make = (tag: string, title: string, extra: Extra = {}) =>
     Effect.map(graph.blocks.create({ projectId, tags: [tag], title, parentId: root, ...extra }), (row) => row.id);
-  const refsIn = (id: number) => Effect.map(graph.reading.show(id, 0), (page) => page.refsIn);
+  const refsIn = (id: number) => Effect.map(graph.reading.show(id, 0), (page) => page.refsInDetails.map((ref) => ref.name));
   return { make, refsIn };
 };
 
@@ -25,10 +25,10 @@ layer(demoGraphLayer(), { excludeTestServices: true })('body reference index', (
         const source = yield* make('task', 'mentions');
         const [targetName, sourceName] = [yield* nameOf(target), yield* nameOf(source)];
         yield* graph.blocks.update({ id: source, body: `см. [[${targetName}]]` });
-        expect((yield* graph.reading.show(source, 0)).refsOut).toEqual([targetName]);
+        expect((yield* graph.reading.show(source, 0)).refsOutDetails.map((ref) => ref.name)).toEqual([targetName]);
         expect(yield* refsIn(target)).toEqual([sourceName]);
         yield* graph.blocks.update({ id: source, body: 'ссылок больше нет' });
-        expect((yield* graph.reading.show(source, 0)).refsOut).toEqual([]);
+        expect((yield* graph.reading.show(source, 0)).refsOutDetails).toEqual([]);
         expect(yield* refsIn(target)).toEqual([]);
         yield* graph.blocks.update({ id: source, body: `[[${targetName}]]` });
         yield* graph.trash.delete({ id: source });
@@ -61,14 +61,14 @@ layer(demoGraphLayer(), { excludeTestServices: true })('body reference index', (
         yield* graph.tasks.finish({ id: finished });
         const [standingName, finishedName] = [yield* nameOf(standing), yield* nameOf(finished)];
         const page = yield* graph.reading.show(target, 0);
-        expect(page.refsIn).toEqual([standingName]);
+        expect(page.refsInDetails.map((ref) => ref.name)).toEqual([standingName]);
         expect(page.edgesIn.map((edge) => edge.fromUuid?.replaceAll('-', '').endsWith(standingName))).toEqual([true]);
-        expect(page.restingIn.refs).toEqual([finishedName]);
+        expect(page.restingIn.refsDetails.map((ref) => ref.name)).toEqual([finishedName]);
         expect(page.restingIn.edges.map((edge) => edge.kind)).toEqual(['discovered-from']);
         const whole = yield* graph.reading.show(target, 0, true);
-        expect([...whole.refsIn].sort()).toEqual([standingName, finishedName].sort());
+        expect(whole.refsInDetails.map((ref) => ref.name).sort()).toEqual([standingName, finishedName].sort());
         expect(whole.edgesIn).toHaveLength(2);
-        expect(whole.restingIn).toEqual({ edges: [], refs: [], refsDetails: [] });
+        expect(whole.restingIn).toEqual({ edges: [], refsDetails: [] });
       }),
     ),
   );

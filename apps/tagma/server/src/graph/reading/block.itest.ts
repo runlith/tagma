@@ -25,7 +25,7 @@ layer(demoGraphLayer(), { excludeTestServices: true })('block pages', (it) => {
           title: 'what we stand on',
           body: `We stand on [[${name}]].`,
         });
-        expect((yield* graph.reading.show(doc.id, 0)).refsOut).toEqual([name]);
+        expect((yield* graph.reading.show(doc.id, 0)).refsOutDetails.map((ref) => ref.name)).toEqual([name]);
       }),
     ),
   );
@@ -53,7 +53,7 @@ layer(demoGraphLayer(), { excludeTestServices: true })('block pages', (it) => {
           title: 'points at a collision',
           body: 'see [[beeff00d]]',
         });
-        expect((yield* graph.reading.show(doc.id, 0)).refsOut).toEqual([]);
+        expect((yield* graph.reading.show(doc.id, 0)).refsOutDetails).toEqual([]);
       }),
     ),
   );

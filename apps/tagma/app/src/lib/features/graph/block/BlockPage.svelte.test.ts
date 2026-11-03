@@ -148,11 +148,9 @@ const read = (block: TreeBlock) => ({
   body: '',
   edgesOut: [],
   edgesIn: [],
-  refsOut: [],
   refsOutDetails: [],
-  refsIn: [],
   refsInDetails: [],
-  restingIn: { edges: [], refs: [], refsDetails: [] },
+  restingIn: { edges: [], refsDetails: [] },
   sources: [],
   reach: null,
   ending: null,
@@ -237,10 +235,8 @@ test('a part page in the main pane and another block in the right-hand tab both 
           const selected = name === DEPARTED.slice(-12) ? (movedAgain ? replacement : DEPARTED) : name;
           const block = rows.get(selected) ?? [...rows.values()].find((row) => row.identity === selected)!;
           const detail = read(block);
-          if (restored && block.identity === DEPARTED)
-            return { ...detail, refsOut: [TWIN.slice(-8)], refsOutDetails: [{ name: TWIN.slice(-8), identity: TWIN }] };
-          if (restored && block.identity === TWIN)
-            return { ...detail, refsIn: [DEPARTED.slice(-8)], refsInDetails: [{ name: DEPARTED.slice(-8), identity: DEPARTED }] };
+          if (restored && block.identity === DEPARTED) return { ...detail, refsOutDetails: [{ name: TWIN.slice(-8), identity: TWIN }] };
+          if (restored && block.identity === TWIN) return { ...detail, refsInDetails: [{ name: DEPARTED.slice(-8), identity: DEPARTED }] };
           return detail;
         }),
       });

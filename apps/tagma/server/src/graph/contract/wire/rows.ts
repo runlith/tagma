@@ -127,15 +127,12 @@ export interface BlockRead extends Block, GraphReport {
   readonly edgesOut: readonly Edge[];
   readonly edgesIn: readonly Edge[];
   readonly edgesInUnread?: readonly string[] | undefined;
-  readonly refsOut: readonly string[];
   readonly refsOutDetails: readonly BlockReference[];
   readonly refsElsewhere?: readonly RefElsewhere[] | undefined;
   readonly refsAbsent?: readonly string[] | undefined;
-  readonly refsIn: readonly string[];
   readonly refsInDetails: readonly BlockReference[];
   readonly restingIn: {
     readonly edges: readonly Edge[];
-    readonly refs: readonly string[];
     readonly refsDetails: readonly BlockReference[];
   };
   readonly sources: readonly Source[];
@@ -172,19 +169,16 @@ export const blockReadSchema: Schema.Codec<BlockRead> = Schema.Struct({
   edgesInUnread: Schema.optional(Schema.Array(Schema.String)).annotate({
     description: 'Projects of this machine whose edges into this block could not be read yet: edgesIn may lack theirs.',
   }),
-  refsOut: Schema.Array(BlockName),
   refsOutDetails: Schema.Array(blockReferenceSchema),
   refsElsewhere: Schema.optional(Schema.Array(refElsewhereSchema)).annotate({
-    description: 'The references of refsOut that stand in another project of this machine, with that project.',
+    description: 'The references of refsOutDetails that stand in another project of this machine, with that project.',
   }),
   refsAbsent: Schema.optional(Schema.Array(Schema.String)).annotate({
     description: 'Names written in the body that no copy of this machine holds.',
   }),
-  refsIn: Schema.Array(BlockName),
   refsInDetails: Schema.Array(blockReferenceSchema),
   restingIn: Schema.Struct({
     edges: Schema.Array(edgeSchema),
-    refs: Schema.Array(BlockName),
     refsDetails: Schema.Array(blockReferenceSchema),
   }),
   sources: Schema.Array(sourceSchema),

@@ -64,11 +64,14 @@ export const blockAnswerSchema = Schema.Struct({
 });
 export type BlockAnswer = typeof blockAnswerSchema.Type;
 
+const journalSubjectSchema = Schema.Struct({ name: BlockName, copy: graphCopySchema });
+export type JournalSubject = typeof journalSubjectSchema.Type;
+
 export const callJournalRangeSchema = Schema.Struct({
   from: Schema.Number,
   to: Schema.Number,
   chars: Schema.optional(Schema.Struct({ from: Schema.Number, to: Schema.Number })),
-  subject: Schema.optional(Schema.Struct({ name: BlockName, copy: graphCopySchema })).annotate({
+  subject: Schema.optional(journalSubjectSchema).annotate({
     description: 'The journal’s block and copy when they differ from the returned block.',
   }),
 });

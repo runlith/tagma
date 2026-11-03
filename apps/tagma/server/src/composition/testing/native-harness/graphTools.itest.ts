@@ -260,7 +260,7 @@ layer(graphToolsFixture, { excludeTestServices: true })('native graph tools', (i
       expect(yield* nativeCall('apply_batch', { ops })).toMatchObject({ status: 'refused', code: 'body-address' });
       expect(yield* nativeCall('edit_block', { ...edit, newString: bare })).toMatchObject({ status: 'ok' });
       expect(yield* nativeCall('read_block', { blockIds: [citing.block.name, target] })).toMatchObject({
-        reads: [{ refsOut: [target] }, { refsIn: [citing.block.name] }],
+        reads: [{ refsOutDetails: [{ name: target }] }, { refsInDetails: [{ name: citing.block.name }] }],
       });
     }),
   );

@@ -370,7 +370,7 @@ layer(
             const reads = (served: ServedGraph, id: number) =>
               Effect.provide(onGraph(served)(Effect.flatMap(BlockReads, (reading) => reading.show(id, 0))), routed);
             expect(yield* reads(servedFront, noted.id)).toMatchObject({
-              refsOut: [blockName(blocker.uuid)],
+              refsOutDetails: [{ name: blockName(blocker.uuid) }],
               refsElsewhere: [{ name: blockName(blocker.uuid), projectId: back.id }],
               refsAbsent: ['0badc0de'],
             });

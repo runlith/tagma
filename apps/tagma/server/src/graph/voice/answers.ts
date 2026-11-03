@@ -7,7 +7,7 @@ import { startLines } from '../../platform/contract/wire/start.js';
 import { blockLine, crowdedLine, pageFooter, refsInLine, syncLine, underParent } from './lines.js';
 import { blockPageText } from './blockPage.js';
 import type { TagReading } from '../contract/wire/tags/reading.js';
-import type { GraphReport, IdleSpecAnswer, Moved } from '../contract/wire/answers.js';
+import type { GraphReport, IdleSpecAnswer, JournalSubject, Moved } from '../contract/wire/answers.js';
 import type { FarHold } from '../contract/wire/far.js';
 import type { WriterSession } from '../contract/wire/operations/history.js';
 import { blockName } from '../contract/wire/references.js';
@@ -49,6 +49,9 @@ export function graphText(
 
 const idleSpecLine = (spec: IdleSpecAnswer): string =>
   `spec ${spec.name} ${spec.title} has no open work left — close_block ${spec.name} if it is built, or name in it what remains`;
+
+const journalSubjectLine = (subject: JournalSubject): string =>
+  `journal: ${subject.name} in project ${subject.copy.projectId}, graph copy ${subject.copy.tree}`;
 
 const movedLines = (moved: Moved): string[] => [
   `moved ${moved.blocks === 1 ? 'the block' : `${moved.blocks} blocks`} from ${moved.from}${moved.relinked === 0 ? '' : `; ${moved.relinked} edges of other projects now address this graph`}`,
@@ -101,7 +104,7 @@ function graphContent(table: TagReading, result: GraphToolAnswer, identity: Sess
           ? 'block unrecorded'
           : batch.moved === undefined
             ? `${batch.blockName}${block === undefined ? '' : ` ${block.title}${underParent(block.parentName)}`}`
-            : `${batch.moved.name} ${batch.moved.title} to ${batch.moved.destination.label} (${blockName(batch.moved.destination.graph)})`;
+            : `${batch.moved.name}${batch.moved.name === batch.blockName ? '' : ` (journal of ${batch.blockName})`} ${batch.moved.title} to ${batch.moved.destination.label} (${blockName(batch.moved.destination.graph)})`;
       return `${events} · ${time} · ${subject} · ${writer}\n  ${batch.ops.join(', ')} · ${batch.entries} ${batch.entries === 1 ? 'act' : 'acts'}`;
     });
     const batched = new Set(result.batches.map((batch) => batch.blockName));
@@ -138,6 +141,7 @@ function graphContent(table: TagReading, result: GraphToolAnswer, identity: Sess
       `${blockLine(table, result.block)}${underParent(result.block.parentName)}`,
       ...(refsIn.length === 0 ? [] : [refsInLine(refsIn)]),
       ...('moved' in result && result.moved !== undefined ? movedLines(result.moved) : []),
+      ...('journal' in result && result.journal?.subject !== undefined ? [journalSubjectLine(result.journal.subject)] : []),
       ...('published' in result
         ? (result.published ?? []).map((name) => `already committed: ${name} — those versions stay in the repository's history`)
         : []),

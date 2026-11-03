@@ -49,7 +49,7 @@ layer(demoGraphLayer(), { excludeTestServices: true })('graph steps', (it) => {
         expect(imported.parentId).toBe(root.id);
         expect(imported.body).toBe('orchid');
         expect((yield* graph.blocks.blockById(task.id)).fields).toEqual(held.fields);
-        expect((yield* graph.reading.show(pointer.id, 0)).refsOut).toEqual([yield* nameOf(kept.id)]);
+        expect((yield* graph.reading.show(pointer.id, 0)).refsOutDetails.map((ref) => ref.name)).toEqual([yield* nameOf(kept.id)]);
         expect((yield* graph.ranking.search({ projectId, query: 'orchid' })).items.map((row) => row.name)).toEqual([
           yield* nameOf(kept.id),
         ]);

@@ -233,7 +233,7 @@ layer(demoGraphLayer({ repos: ['served-catalogs'] }).pipe(Layer.provideMerge(Bun
               );
               expect(writer).toMatchObject({ harness: 'test', key: 'router' });
               const read = yield* Effect.provide(onGraph(local)(Effect.flatMap(BlockReads, (reading) => reading.show(note.id, 0))), routed);
-              expect(read.refsOut).toContain(name);
+              expect(read.refsOutDetails.map((ref) => ref.name)).toContain(name);
             }),
           ),
         ),

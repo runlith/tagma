@@ -168,7 +168,7 @@ layer(demoGraphLayer(), { excludeTestServices: true })('knowledge migration', (i
           expect((yield* graph.blocks.blockById(note.id)).parentId).toBe(meeting.id);
           const page = yield* graph.reading.show(note.id, 0);
           expect(page.edgesOut.map((edge) => edge.toId)).toEqual([person.id]);
-          expect(page.refsOut).toEqual([personName]);
+          expect(page.refsOutDetails.map((ref) => ref.name)).toEqual([personName]);
           const selected = (id: number) =>
             Effect.map(graph.reading.show(id, 0), (page) => (page.results?.items ?? []).map((row) => row.name));
           expect(yield* selected(selection.id)).toEqual([yield* demo.nameOf(meeting.id)]);
