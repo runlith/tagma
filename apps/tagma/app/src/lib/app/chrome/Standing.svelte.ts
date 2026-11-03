@@ -129,9 +129,7 @@ export class Standing extends Service<Standing>()('Standing', { tier: 'app' }) {
         live.hold(
           (client) => client['installation.next']({}),
           (frame) => {
-            const prior = this.nextFrame;
-            if (prior !== null && prior.instance === frame.instance && prior.revision > frame.revision) return;
-            this.nextFrame = frame;
+            if (!this.advance(frame)) return;
             this.liveProblem = null;
             this.readAt = Date.parse(frame.readAt);
             const said = frame.newHost ?? null;
@@ -237,13 +235,22 @@ export class Standing extends Service<Standing>()('Standing', { tier: 'app' }) {
     this.checking = true;
     this.actionProblem = null;
     try {
-      await this.door.perform('check_for_updates', {}, {});
+      const { next } = await this.door.perform('check_for_updates', {}, {});
+      if (this.advance(next)) this.readAt = Date.parse(next.readAt);
     } catch (error) {
       this.actionProblem = toldOf(error);
     } finally {
       this.checking = false;
     }
+    this.readAfter = true;
     await this.read();
+  }
+
+  private advance(frame: NextFrame): boolean {
+    const prior = this.nextFrame;
+    if (prior !== null && prior.instance === frame.instance && prior.revision > frame.revision) return false;
+    this.nextFrame = frame;
+    return true;
   }
 
   putOff(): void {

@@ -167,6 +167,7 @@ export const makeReleaseChannel = Effect.fnUntraced(function* (place: ChannelPla
     ),
   );
   const admission = yield* Semaphore.make(1);
+  const reads = yield* Semaphore.make(1);
   const feeds = yield* settings.changes(releaseFeed).pipe(Effect.orDie);
   const serving = place.runsFrom?.root;
   if (serving !== undefined) {
@@ -316,9 +317,9 @@ export const makeReleaseChannel = Effect.fnUntraced(function* (place: ChannelPla
 
   const refresh = Effect.fn('ReleaseChannel.refresh')(function* () {
     const url = feedUrl;
-    if (url === null) return;
+    if (url === null) return frame();
     const read = yield* Effect.result(readFeed(client, url));
-    if (feedUrl !== url) return;
+    if (feedUrl !== url) return frame();
     readAt = stamp();
     readFrom = url;
     if (read._tag === 'Success') {
@@ -328,7 +329,8 @@ export const makeReleaseChannel = Effect.fnUntraced(function* (place: ChannelPla
     yield* measureBack;
     keep();
     yield* shift();
-  });
+    return frame();
+  }, reads.withPermit);
 
   const targetOf = Effect.fnUntraced(function* (offer: string): Effect.fn.Return<Target, InstallRefused> {
     if (offer === BACK) {
@@ -549,7 +551,7 @@ export const makeReleaseChannel = Effect.fnUntraced(function* (place: ChannelPla
 
   return NextInstallation.of({
     reading: Effect.sync(frame),
-    check: Effect.andThen(refresh(), Effect.sync(frame)),
+    check: refresh(),
     changes: Stream.fromPubSub(frames),
     installing: Effect.sync(() => delivering?.installing ?? null),
     install: Effect.fn('NextInstallation.install')(

@@ -5,7 +5,7 @@ import { WINDOW_PLACEMENT_FILE } from '@runlith/desktop-host/WindowPlacement';
 import { DEFAULT_WINDOW_BEHAVIOR_STATE } from '@runlith/window-behavior/contract/state';
 import { ElectronWindowBehaviorHost } from '@runlith/window-behavior/host-electron/ElectronWindowBehaviorHost';
 import { behaviorWindowOptions } from '@runlith/window-behavior/host-electron/bootstrap';
-import { BrowserWindow, type MessageBoxOptions, type WebContents, app, dialog, screen, session } from 'electron';
+import { BrowserWindow, type MessageBoxOptions, type WebContents, app, dialog, ipcMain, screen, session } from 'electron';
 import { PILL_PATH, type Stroke } from './bridge.js';
 import { DICTATION, UPDATES } from './channels.js';
 import { Declaring } from './declaring.js';
@@ -40,6 +40,7 @@ import { holdInstance } from './instance.js';
 
 let dictation: Dictation | undefined;
 let windows: ProjectWindows | undefined;
+let checkAsked = false;
 let browserServing: Fiber.Fiber<never> | undefined;
 const PRELOAD = fileURLToPath(new URL('./preload.cjs', import.meta.url));
 
@@ -380,6 +381,7 @@ app.whenReady().then(() => {
     shownWindow,
     () => void reportProblem(),
     () => {
+      checkAsked = true;
       windows?.reveal();
       windows?.focused()?.webContents.send(UPDATES.check);
     },
@@ -387,6 +389,11 @@ app.whenReady().then(() => {
     dev?.menu() ?? [],
   );
   quitting.install();
+  ipcMain.handle(UPDATES.take, () => {
+    const asked = checkAsked;
+    checkAsked = false;
+    return asked;
+  });
   dictation = new Dictation((down) => new PillWindow(surfaceUrl, down), inputHelperIn(app.getPath('exe')), fronts);
   dictation.install();
   serveTabKeys(fronts);

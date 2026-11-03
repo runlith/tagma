@@ -710,7 +710,11 @@
         onclick={() => void standing.check()}
       >
         {standing.checking ? 'checking for updates' : standing.readAt === null ? 'not read yet' : `read ${ago(standing.readAt, now)} ago`}
-        <RefreshCw class={cn('size-3', standing.checking && 'animate-spin')} />
+        {#if standing.checking}
+          <Waiting class="size-3" />
+        {:else}
+          <RefreshCw class="size-3" />
+        {/if}
       </button>
     </div>
   </Popover.Content>

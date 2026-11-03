@@ -73,7 +73,14 @@ const tabs: DesktopTabs = {
 };
 
 const updates: DesktopUpdates = {
-  onCheck: (listener) => listen<void>(UPDATES.check, listener),
+  onCheck: (listener) => {
+    const take = () =>
+      void (ipcRenderer.invoke(UPDATES.take) as Promise<boolean>).then((asked) => {
+        if (asked) listener();
+      });
+    take();
+    return listen<void>(UPDATES.check, take);
+  },
 };
 
 const swipe: DesktopSwipe = {

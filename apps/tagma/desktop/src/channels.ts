@@ -18,6 +18,7 @@ export const TABS = {
 
 export const UPDATES = {
   check: 'updates:check',
+  take: 'updates:take',
 } as const;
 
 export const SWIPE = {
