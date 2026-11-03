@@ -145,9 +145,10 @@ export const makeCheckoutBuilds = Effect.fnUntraced(function* (options: Checkout
   const shift = PubSub.publish(shifts, undefined);
 
   const runningRecord = Effect.fnUntraced(function* () {
-    if (running === null) return null;
-    const tail = yield* onDisk(shownTail(options.log, running.offset, { lines: 1, bytes: TAIL_BYTES }));
-    return { ...running.record, tail: tail[0] ?? null };
+    const building = running;
+    if (building === null) return null;
+    const tail = yield* onDisk(shownTail(options.log, building.offset, { lines: 1, bytes: TAIL_BYTES }));
+    return { ...building.record, tail: tail[0] ?? null };
   });
 
   const nextOf = (frame: CheckoutFrame): NextFrame => {
