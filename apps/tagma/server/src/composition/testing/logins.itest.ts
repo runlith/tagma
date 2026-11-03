@@ -3,7 +3,8 @@ import { execFile } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { it } from '@runlith/effect-test';
-import { Context, Effect } from 'effect';
+import { Context, Effect, Fiber, Option, Stream } from 'effect';
+import { AccountQuota } from '../../providers/contract/service/quota.js';
 import { InstalledHarnesses } from '../../threads/contract/service/harness.js';
 import { makeE2eWorld } from './e2eWorld.js';
 
@@ -23,7 +24,12 @@ it.live('a fresh login world stands only its controlled CLIs, holds a status unt
     expect(binary(first, 'codex')).toBeNull();
 
     yield* served.logins.started('claude');
+    const quota = Context.get(served.world.runtime.owners, AccountQuota);
+    const connected = yield* Effect.forkChild(
+      Stream.runHead(Stream.filter(quota.changes, (table) => table.some((row) => row.provider === 'claude-code' && row.problem === null))),
+    );
     yield* served.logins.answer('claude', 'signed-in');
+    expect(Option.isSome(yield* Fiber.join(connected))).toBe(true);
     expect(yield* served.logins.starts('claude')).toContainEqual({
       argv: ['auth', 'status', '--json'],
       cwd: expect.stringContaining('tagma-account-status'),
