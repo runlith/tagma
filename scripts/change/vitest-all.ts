@@ -17,18 +17,21 @@ async function projects(source: VitestConfig, env: ConfigEnv): Promise<UserWorks
   const config: ViteUserConfig = await (typeof loaded.default === 'function' ? loaded.default(env) : loaded.default);
   const directory = resolve(root, source.directory);
   const suite = basename(directory);
-  const local = config.test?.projects ?? [{ test: { name: source.file.endsWith('.bench.config.ts') ? 'bench' : 'unit' } }];
-  return local.map((project) => {
+  const local = config.test?.projects ?? [{ test: { name: 'unit' } }];
+  return local.flatMap((project) => {
     if (typeof project !== 'object' || project === null || project instanceof Promise) {
       throw new Error(`The shared Vitest run requires inline projects in ${source.file}.`);
     }
     const name = project.test?.name;
     if (typeof name !== 'string') throw new Error(`The Vitest project in ${source.file} needs a string name.`);
-    return {
-      extends: path,
-      root: directory,
-      test: { ...project.test, name: `${suite}:${name}` },
-    };
+    if (!/^unit(?:-|$)/.test(name)) return [];
+    return [
+      {
+        extends: path,
+        root: directory,
+        test: { ...project.test, name: `${suite}:${name}` },
+      },
+    ];
   });
 }
 

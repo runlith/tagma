@@ -417,11 +417,12 @@
     }
   },
   "scripts": {
-    "test": "testbed vitest run src",
+    "test": "testbed vitest run src --project 'unit*'",
     "test:e2e": "testbed e2e --no-isolate ./stand/feed.e2e.ts ./stand/submission.e2e.ts",
     "typecheck": "runlith-typecheck",
     "stand": "vite --config stand/vite.config.ts",
     "bench": "testbed e2e --program stand/frames.bench.ts",
+    "bench:transcript": "testbed vitest run src --project bench",
     "baseline": "testbed e2e --program stand/baseline.bench.ts"
   },
   "dependencies": {
