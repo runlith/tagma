@@ -25,7 +25,7 @@ layer(landingFixture(), { excludeTestServices: true })('landing gates', (it) => 
           const refusal = yield* gate.refused(MINE);
           expect(refusal.code).toBe('rule-violated');
           expect(refusal.reason).toMatch(
-            /“Import only downward” · gate\n {4}fix: .+\n {4}src\/core\/boot\.ts:1 imports `\.\.\/app\/main`/u,
+            /\|Import only downward\]\] · gate\n {4}fix: .+\n {4}src\/core\/boot\.ts:1 imports `\.\.\/app\/main`/u,
           );
           expect(refusal.unblock.join('\n')).toContain('"app order core/boot.ts -> app/"');
           expect(yield* gate.sh(['rev-parse', 'HEAD'])).toBe(head);

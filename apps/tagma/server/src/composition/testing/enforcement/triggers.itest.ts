@@ -98,7 +98,7 @@ layer(landingFixture(), { excludeTestServices: true })('landing enforcement', (i
             const notices = yield* Deferred.await(told);
             expect(notices.map((one) => one.threadId)).toEqual([MINE]);
             expect(notices[0]?.text).toMatch(
-              /“Import only downward” · gate\n {4}fix: .+\n {4}src\/core\/boot\.ts:1 imports `\.\.\/app\/main`/u,
+              /\|Import only downward\]\] · gate\n {4}fix: .+\n {4}src\/core\/boot\.ts:1 imports `\.\.\/app\/main`/u,
             );
           }),
         );

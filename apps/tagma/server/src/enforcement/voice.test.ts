@@ -58,7 +58,7 @@ test('the check report carries an index refusal even when no tree or violation c
   }
   expect(judged).toContain(
     [
-      `watch-rule · “${watch.title}” · watch`,
+      `[[watch-rule|${watch.title}]] · watch`,
       '  A test of the domain may load the UI.',
       `  fix where a place names none: ${watch.generalFix}`,
       '  src/watch.ts:2 loads @law-lab/ui',

@@ -18,8 +18,11 @@ export const bodyLines = (body: string | undefined, at: string): string[] =>
     .filter((line) => line.trim() !== '')
     .map((line) => `${at}${line}`);
 
+const ruleSaid = (rule: string, title: string): string =>
+  title === '' ? `[[${rule}]]` : /[\]\n]/u.test(title) ? `[[${rule}]] “${title}”` : `[[${rule}|${title}]]`;
+
 export const normSaid = ({ rule, title, strictness }: Norm): string =>
-  [rule, title === '' ? '' : `“${title}”`, strictness ?? ''].filter((part) => part !== '').join(' · ');
+  [ruleSaid(rule, title), strictness ?? ''].filter((part) => part !== '').join(' · ');
 
 export const placeSaid = ({ file, line }: Placed): string => (line === undefined ? file : `${file}:${line}`);
 
