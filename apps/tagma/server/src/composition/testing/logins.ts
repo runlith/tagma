@@ -1,4 +1,4 @@
-import { existsSync, watch } from 'node:fs';
+import { existsSync, readFileSync, watch } from 'node:fs';
 import { dirname, isAbsolute, join } from 'node:path';
 import { Clock, Effect, FileSystem } from 'effect';
 import { type Adapter, defineAdapter, type Provider } from '@runlith/tagma/adapter/provider';
@@ -26,6 +26,7 @@ export type LoginStart = {
 export type Logins = {
   readonly answer: (name: LoginName, state: LoginState) => Effect.Effect<void>;
   readonly started: (name: LoginName) => Effect.Effect<void>;
+  readonly launched: (name: LoginName) => Effect.Effect<void>;
   readonly starts: (name: LoginName) => Effect.Effect<readonly LoginStart[]>;
   readonly place: (name: LoginName) => string;
   readonly agent: { readonly report: string };
@@ -73,7 +74,7 @@ const claudeScript = (control: string, place: string): string =>
     '    /bin/cp "$CONTROL/login.json" "$PLACE/.claude.json"',
     "    printf 'Login successful\\n'; exit 0;;",
     'esac',
-    "case \"$1\" in --version) printf '2.0.0 (Claude Code)\\n'; exit 0;; esac",
+    'case "$1" in --version) printf \'2.0.0 (Claude Code)\\n\'; exit 0;; esac',
     'exit 0',
     '',
   ].join('\n');
@@ -97,7 +98,7 @@ const codexScript = (control: string, place: string): string =>
     '    /bin/cp "$CONTROL/login.json" "$PLACE/auth.json"',
     "    printf 'Logged in using ChatGPT\\n' >&2; exit 0;;",
     'esac',
-    "case \"$1\" in --version) printf 'codex-cli 0.50.0\\n'; exit 0;; esac",
+    'case "$1" in --version) printf \'codex-cli 0.50.0\\n\'; exit 0;; esac',
     'exit 0',
     '',
   ].join('\n');
@@ -127,6 +128,27 @@ const appears = (path: string): Effect.Effect<void> =>
       resume(Effect.void);
     });
     if (existsSync(path)) {
+      watcher.close();
+      resume(Effect.void);
+    }
+    return Effect.sync(() => watcher.close());
+  });
+
+const launching = (log: string): boolean =>
+  log.split('\n').some((line) => {
+    const argv = line.split('\t')[0] ?? '';
+    return line.length > 0 && !/^(auth|login|--version)(\s|$)/u.test(argv);
+  });
+
+const logged = (path: string, accept: (log: string) => boolean): Effect.Effect<void> =>
+  Effect.callback<void>((resume) => {
+    const settled = (): boolean => existsSync(path) && accept(readFileSync(path, 'utf8'));
+    const watcher = watch(dirname(path), () => {
+      if (!settled()) return;
+      watcher.close();
+      resume(Effect.void);
+    });
+    if (settled()) {
       watcher.close();
       resume(Effect.void);
     }
@@ -175,7 +197,8 @@ export const installLogins = Effect.fn('testing.installLogins')(function* (fixtu
     }
     const status = state === 'keyring' ? 'signed-in' : state;
     yield* files.writeFileString(join(place, STATUS_FILE), status).pipe(Effect.orDie);
-    const document = status === 'signed-in' && state !== 'keyring' ? yield* files.readFileString(join(control, 'login.json')).pipe(Effect.orDie) : null;
+    const document =
+      status === 'signed-in' && state !== 'keyring' ? yield* files.readFileString(join(control, 'login.json')).pipe(Effect.orDie) : null;
     if (document !== null) yield* files.writeFileString(loginFile(name), document).pipe(Effect.orDie);
     else if (name === 'claude') yield* files.writeFileString(loginFile(name), '{}').pipe(Effect.orDie);
     else yield* remove(loginFile(name));
@@ -239,6 +262,7 @@ export const installLogins = Effect.fn('testing.installLogins')(function* (fixtu
   const logins: Logins = {
     answer,
     started: (name) => appears(join(dirs[name].control, 'started')),
+    launched: (name) => logged(join(dirs[name].control, 'starts.log'), launching),
     starts,
     place: (name) => dirs[name].place,
     agent: { report },
@@ -280,6 +304,7 @@ export const relocatedAdapters = (sources: readonly AdapterSource[], logins: Log
 export const noLogins: Logins = {
   answer: () => Effect.die(new Error('this world has no logins fixture; build it with { logins }')),
   started: () => Effect.die(new Error('this world has no logins fixture; build it with { logins }')),
+  launched: () => Effect.die(new Error('this world has no logins fixture; build it with { logins }')),
   starts: () => Effect.die(new Error('this world has no logins fixture; build it with { logins }')),
   place: () => {
     throw new Error('this world has no logins fixture; build it with { logins }');

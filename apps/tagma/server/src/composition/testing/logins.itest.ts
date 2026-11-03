@@ -45,5 +45,7 @@ it.live('a fresh login world stands only its controlled CLIs, holds a status unt
     const codex = binary(yield* installs.refresh, 'codex');
     expect(codex).not.toBeNull();
     expect((yield* Effect.promise(() => ran(codex!, ['login', 'status']))).code).toBe(1);
+    yield* Effect.promise(() => ran(codex!, ['--model', 'fixture']));
+    yield* served.logins.launched('codex');
   }),
 );
