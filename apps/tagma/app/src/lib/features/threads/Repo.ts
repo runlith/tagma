@@ -143,6 +143,10 @@ export const ThreadsRepo = Repo.define(
       },
     }),
 
+    connection: single({
+      loader: async ({ signal }, door) => (await door.perform('read_model_connection', {}, {}, { signal })).plans,
+    }),
+
     setDefaults: mutation({
       mutator: async (selection: ModelDefaultsWrite, { signal }, door) => {
         const { status: _, ...defaults } = await door.perform(
