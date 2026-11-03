@@ -6,7 +6,7 @@ tags: ["task"]
 fields:
   {
     "holder": "tagma:01a19eb2-4a56-79d0-9dbd-af67ec98a662",
-    "status": "in_work"
+    "status": "done"
   }
 sources:
   - kind: file
@@ -27,3 +27,5 @@ The earlier run [41623545687](https://github.com/runlith/tagma/actions/runs/4162
 Red in the second run:
 - red on HEAD locally too: `apps/tagma/server/src/composition/handles.test.ts` (`read_block.reads[].refsOutDetails[].name` is not printed), `composition/places.test.ts` (`submit_work.derive[].paths` declares no place role), `packages/agent/src/thread/conformance/runLog/admission.test.ts` (two keyed-admission cases), `packages/builtin-catalog/src/core/catalog.test.ts` (Muse rows label the contributor models without the Muse prefix that `opencode-go` keeps);
 - red only on a fresh Linux checkout: `checks/law/environment.test.ts` (the unit test reaches the SQLite engine build, which writes), `packages/execution-host/src/Interpretation.test.ts` (a heap census still finds one released row), `packages/chat-ui/src/transcriptDelta.bench.ts` (a wall-time ratio of 2.82 against a budget of 2).
+
+Fixed in `95b84719fd`, `1f70033198`, `fe2538e264`, `0395b19ba0`, `5176cb4b09`, `86bcbb1cf9`, `bf00452fa2`. Green run [41630521665](https://github.com/runlith/tagma/actions/runs/41630521665): 64 suites, 1257 files, 8410 tests, `test:all` 126.8 s wall and 318.2 s CPU; the unit step 2 min 7 s, setup 47 s.
