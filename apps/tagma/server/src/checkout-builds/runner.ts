@@ -440,6 +440,7 @@ export const makeCheckoutBuilds = Effect.fnUntraced(function* (options: Checkout
 
   return NextInstallation.of({
     reading,
+    check: reading,
     changes,
     installing: Effect.sync(() => {
       const record = runningRecord();

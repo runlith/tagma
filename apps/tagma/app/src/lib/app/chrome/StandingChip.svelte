@@ -13,6 +13,7 @@
   import * as Popover from '$lib/shared/ui/popover/index.js';
   import { cn } from '$lib/shared/utils.js';
   import { Host } from '@runlith/layer/Host';
+  import { DesktopUpdates } from '$lib/shared/desktop/DesktopUpdates.js';
   import Kbd from '$lib/shared/ui/kbd/Kbd.svelte';
   import { spellModifier } from '$lib/shared/chordSpelling.js';
   import { Restart } from '$lib/wire/Restart.svelte.js';
@@ -39,6 +40,14 @@
   $effect(() => {
     if (open) void standing.read();
   });
+
+  const updates = DesktopUpdates.find();
+  $effect(() =>
+    updates?.onCheck(() => {
+      open = true;
+      void standing.check();
+    }),
+  );
 
   let holdOpen = $state(false);
   let altHeld = $state(false);
@@ -696,11 +705,12 @@
       <button
         type="button"
         class="inline-flex shrink-0 items-center gap-1.5 rounded-sm px-1.5 py-0.5 transition-colors hover:bg-hover hover:text-foreground"
-        aria-label="Read the standing again"
-        onclick={() => void standing.read()}
+        aria-label="Check for updates"
+        disabled={standing.checking}
+        onclick={() => void standing.check()}
       >
-        {standing.readAt === null ? 'not read yet' : `read ${ago(standing.readAt, now)} ago`}
-        <RefreshCw class="size-3" />
+        {standing.checking ? 'checking for updates' : standing.readAt === null ? 'not read yet' : `read ${ago(standing.readAt, now)} ago`}
+        <RefreshCw class={cn('size-3', standing.checking && 'animate-spin')} />
       </button>
     </div>
   </Popover.Content>

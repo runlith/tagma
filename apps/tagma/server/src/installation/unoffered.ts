@@ -23,6 +23,7 @@ export const unofferedLayer = Layer.effect(
     };
     return NextInstallation.of({
       reading: Effect.succeed(frame),
+      check: Effect.succeed(frame),
       changes: Stream.concat(Stream.make(frame), Stream.never),
       installing: Effect.succeed(null),
       install: (offer) =>

@@ -37,6 +37,7 @@ export class Quitting {
     private readonly windows: () => readonly BrowserWindow[],
     private readonly parent: () => BrowserWindow | undefined,
     private readonly report: () => void,
+    private readonly checkForUpdates: () => void,
     private readonly ending: () => void,
     private readonly view: readonly MenuItemConstructorOptions[],
   ) {}
@@ -60,6 +61,7 @@ export class Quitting {
           role: 'appMenu',
           submenu: [
             { role: 'about' },
+            { label: 'Check for Updates…', click: () => this.checkForUpdates() },
             { type: 'separator' },
             { role: 'services' },
             { type: 'separator' },

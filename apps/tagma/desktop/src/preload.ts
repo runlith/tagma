@@ -8,6 +8,7 @@ import type {
   DesktopSurface,
   DesktopSwipe,
   DesktopTabs,
+  DesktopUpdates,
   DesktopWindows,
   GlobalState,
   Identities,
@@ -22,7 +23,7 @@ import type {
   SwipePhase,
   TabCommand,
 } from './bridge.js';
-import { BROWSER, DEV_SURFACE_ARGUMENT, DICTATION, FOLDERS, SURFACE, SWIPE, TABS, WINDOWS } from './channels.js';
+import { BROWSER, DEV_SURFACE_ARGUMENT, DICTATION, FOLDERS, SURFACE, SWIPE, TABS, UPDATES, WINDOWS } from './channels.js';
 
 function isMainFrame(): boolean {
   try {
@@ -69,6 +70,10 @@ const dictation: DesktopDictation = {
 const tabs: DesktopTabs = {
   onCommand: (listener) => listen<TabCommand>(TABS.command, listener),
   closeWindow: () => ipcRenderer.send(TABS.closeWindow),
+};
+
+const updates: DesktopUpdates = {
+  onCheck: (listener) => listen<void>(UPDATES.check, listener),
 };
 
 const swipe: DesktopSwipe = {
@@ -128,6 +133,7 @@ const api: DesktopApi = {
   folders,
   browser,
   files,
+  updates,
   ...(process.argv.includes(DEV_SURFACE_ARGUMENT) ? { surface } : {}),
 };
 

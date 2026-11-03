@@ -7,7 +7,7 @@ export const releaseFeed = settingKey({
   order: 1500,
   title: 'Release feed',
   description:
-    'The address of the public file that names every release of Tagma: its number, its archive, its SHA-256 and whether it can be stepped back from. Tagma reads it when the server starts and once a day, without signing in, and offers the newest release in the status bar and in tagma status. Empty, no release is offered.',
+    'The address of the public file that names every release of Tagma: its number, its archive, its SHA-256 and whether it can be stepped back from. Tagma reads it when the server starts, every hour and on Check for Updates, without signing in, and offers the newest release in the status bar and in tagma status. Empty, no release is offered.',
   schema: Schema.String,
   fallback: PROGRAM_FEED ?? '',
   scopes: ['user'],

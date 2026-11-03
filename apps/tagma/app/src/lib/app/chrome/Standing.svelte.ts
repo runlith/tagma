@@ -104,6 +104,7 @@ export class Standing extends Service<Standing>()('Standing', { tier: 'app' }) {
   });
   quietSince = $state<number | null>(null);
   stopping = $state<string | null>(null);
+  checking = $state(false);
   private reading: Promise<void> | null = null;
   private readAfter = false;
   private disposed = false;
@@ -229,6 +230,20 @@ export class Standing extends Service<Standing>()('Standing', { tier: 'app' }) {
     } catch (caught) {
       this.readProblem = toldOf(caught);
     }
+  }
+
+  async check(): Promise<void> {
+    if (this.checking) return;
+    this.checking = true;
+    this.actionProblem = null;
+    try {
+      await this.door.perform('check_for_updates', {}, {});
+    } catch (error) {
+      this.actionProblem = toldOf(error);
+    } finally {
+      this.checking = false;
+    }
+    await this.read();
   }
 
   putOff(): void {

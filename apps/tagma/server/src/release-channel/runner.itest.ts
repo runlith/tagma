@@ -543,6 +543,21 @@ layer(world(releaseWorld, {}).pipe(Layer.provideMerge(BunFileSystem.layer)), { e
           world.feedAt = `${world.url}/feed.json`;
           expect([unfed.readFrom, unfed.offers, unfed.issue]).toEqual([null, [], null]);
         });
+
+        yield* Effect.gen(function* () {
+          const world = yield* World;
+          const { fourth, releaseOf, standing, channel, placed, until } = world;
+          world.feed = { releases: [releaseOf('0.5.0', fourth, false)] };
+          const seen = yield* channel(placed('0.5.0', standing()), (next) =>
+            Effect.gen(function* () {
+              const before = yield* until(next, (frame) => frame.standing.tone === 'latest');
+              world.feed = { releases: [releaseOf('0.6.0', fourth, false), releaseOf('0.5.0', fourth, false)] };
+              return { before, checked: yield* next.check };
+            }),
+          );
+          expect(seen.before.update).toBeNull();
+          expect(seen.checked.update).toBe('0.6.0');
+        });
       }),
   );
 });

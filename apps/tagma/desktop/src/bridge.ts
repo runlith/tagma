@@ -40,6 +40,10 @@ export interface DesktopTabs {
   closeWindow(): void;
 }
 
+export interface DesktopUpdates {
+  onCheck(listener: () => void): () => void;
+}
+
 export type SwipePhase = 'began' | 'ended' | 'cancelled';
 
 export type SwipeDirection = 'back' | 'forward';
@@ -135,6 +139,8 @@ export interface DesktopApi {
   readonly browser: DesktopBrowser;
   //! A desktop shell built before this member serves the newer app the server sends, and lacks it.
   readonly files?: DesktopFiles;
+  //! A desktop shell built before this member serves the newer app the server sends, and lacks it.
+  readonly updates?: DesktopUpdates;
   //! Only a project window of a build from a checkout, opened on no named address, carries it.
   readonly surface?: DesktopSurface;
 }

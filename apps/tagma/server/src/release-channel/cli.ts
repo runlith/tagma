@@ -29,6 +29,7 @@ import { releasePlaces } from './places.js';
 
 const readStarted = Schema.decodeUnknownResult(INSTALLATION_OPERATIONS.install_next.answer);
 const readStopped = Schema.decodeUnknownResult(INSTALLATION_OPERATIONS.stop_installing.answer);
+const readChecked = Schema.decodeUnknownResult(INSTALLATION_OPERATIONS.check_for_updates.answer);
 
 const megabytes = (bytes: number): string => `${(bytes / 1024 ** 2).toFixed(0)} MB`;
 
@@ -202,6 +203,26 @@ applied a change the one before it cannot read says "no step back once it runs".
 Nothing updates on its own.`),
   );
 
+const check = (cli: ServerCli) =>
+  Command.make('check', { json }, (o) =>
+    Effect.gen(function* () {
+      if ((yield* cli.healthOrNone()) === null)
+        return refuse('server-not-up', 'no server answers here; the server reads the release feed', ['tagma web — start it']);
+      const answered = yield* cli.ask((door, at) =>
+        door.operations.perform({ params: { id: 'check_for_updates' }, query: cli.here(at), headers: {}, payload: {} }),
+      );
+      const read = readChecked(answered);
+      if (read._tag !== 'Success' || read.success.status !== 'checked')
+        return yield* Effect.fail(new Error('check_for_updates answered outside its checked shape'));
+      const next = (read.success as { readonly next: NextFrame }).next;
+      if (o.json) return yield* print(next, true);
+      yield* Console.log(next.standing.said.map((part) => part.text).join(''));
+      const offered = next.offers.find((offer) => offer.id === next.update);
+      if (offered !== undefined) yield* Console.log(`${offerLine(offered)} — tagma release update installs it`);
+      if (next.issue !== null) yield* Console.log(`${next.issue.code}: ${next.issue.reason}`);
+    }),
+  ).pipe(Command.withDescription('read the release feed now and print whether a newer release is out'));
+
 const back = (cli: ServerCli) =>
   Command.make('back', { json }, (o) =>
     moved(
@@ -271,8 +292,8 @@ does, when asked. Hooks call tagma by name and stay silent where it is not on PA
 
 export const release = (cli: ServerCli) =>
   Command.make('release').pipe(
-    Command.withDescription('the releases of Tagma on this machine: update, step back, remove, put on PATH'),
-    Command.withSubcommands([update(cli), back(cli), removeVerb, pathVerb]),
+    Command.withDescription('the releases of Tagma on this machine: check, update, step back, remove, put on PATH'),
+    Command.withSubcommands([check(cli), update(cli), back(cli), removeVerb, pathVerb]),
   );
 
 const unweighed: Weigh = () => Effect.succeed({ _tag: 'Unasked', detail: 'the person agreed to a new execution host' });

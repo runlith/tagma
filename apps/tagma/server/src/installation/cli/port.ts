@@ -8,7 +8,13 @@ import type { StartupState } from '../contract/wire/restart.js';
 
 export type Lens = { readonly cwd?: string; readonly project?: string };
 
-export type InstallationOperation = 'read_machine_state' | 'install_next' | 'stop_installing' | 'restart_server' | 'check_successor';
+export type InstallationOperation =
+  | 'read_machine_state'
+  | 'check_for_updates'
+  | 'install_next'
+  | 'stop_installing'
+  | 'restart_server'
+  | 'check_successor';
 
 export type InstallationDoor = {
   readonly operations: {

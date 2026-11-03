@@ -22,6 +22,7 @@ export class NextInstallation extends Context.Service<
   NextInstallation,
   {
     readonly reading: Effect.Effect<NextFrame>;
+    readonly check: Effect.Effect<NextFrame>;
     readonly changes: Stream.Stream<NextFrame, NextIssue>;
     readonly installing: Effect.Effect<Installing | null>;
     install(offer: string, then: Then | null, replacing: string | null): Effect.Effect<InstallStart, InstallRefused>;

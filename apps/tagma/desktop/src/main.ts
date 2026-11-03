@@ -7,7 +7,7 @@ import { ElectronWindowBehaviorHost } from '@runlith/window-behavior/host-electr
 import { behaviorWindowOptions } from '@runlith/window-behavior/host-electron/bootstrap';
 import { BrowserWindow, type MessageBoxOptions, type WebContents, app, dialog, screen, session } from 'electron';
 import { PILL_PATH, type Stroke } from './bridge.js';
-import { DICTATION } from './channels.js';
+import { DICTATION, UPDATES } from './channels.js';
 import { Declaring } from './declaring.js';
 import { Dictation, type Pill } from './Dictation.js';
 import { type LoaderWindow, SurfaceLoader } from './SurfaceLoader.js';
@@ -379,6 +379,10 @@ app.whenReady().then(() => {
     () => BrowserWindow.getAllWindows(),
     shownWindow,
     () => void reportProblem(),
+    () => {
+      windows?.reveal();
+      windows?.focused()?.webContents.send(UPDATES.check);
+    },
     () => loader?.leave(),
     dev?.menu() ?? [],
   );

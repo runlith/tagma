@@ -48,6 +48,15 @@ export const installNext = pair(
   }),
 );
 
+export const checkForUpdates = pair(
+  OPS.check_for_updates,
+  body(OPS.check_for_updates, {
+    execute: Effect.fnUntraced(function* () {
+      return { status: 'checked' as const, next: yield* (yield* NextInstallation).check };
+    }),
+  }),
+);
+
 export const stopInstalling = pair(
   OPS.stop_installing,
   body(OPS.stop_installing, {

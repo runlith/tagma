@@ -3,7 +3,7 @@ import { Schema } from 'effect';
 import { arms, type DeclaredAnswer, operation } from '../../../platform/contract/wire/operation.js';
 import { vacuumSchema } from './status.js';
 import { machineStateSchema } from './machine.js';
-import { installAskSchema, installedSchema, installingSchema, type NextOffer } from './next.js';
+import { installAskSchema, installedSchema, installingSchema, nextFrameSchema, type NextOffer } from './next.js';
 import { restartAskSchema, restartSchema } from './source.js';
 import { downgradeAskSchema, downgradeReadySchema } from './downgrade.js';
 import { restartRecordSchema, restartWindowSchema } from './restart.js';
@@ -100,6 +100,22 @@ export const INSTALLATION_OPERATIONS = {
     confirmation: () => ({ summary: 'Read where this machine stands?' }),
     confirmLabel: 'Read machine state',
     presentation: { running: 'Reading the machine state', done: 'Read the machine state' },
+  }),
+  check_for_updates: operation('check_for_updates', {
+    approval: ASKS_NEVER,
+    ...operatorOnly,
+    meaning: 'Read the source of the next installations again now and answer what it offers.',
+    grammar:
+      'The same read the server makes at start and every hour: a release build reads its release feed, a checkout build measures its checkout. The answer is the `server.next` read_machine_state carries, with the newest offer under `update`; a feed that could not be read answers its `issue` beside the last offers read.',
+    input: Schema.Struct({}),
+    answer: arms({ checked: { next: nextFrameSchema } }),
+    refusals: [],
+    effect: 'write',
+    identity: { key: 'call' },
+    subjects: () => [],
+    confirmation: () => ({ summary: 'Check for updates?' }),
+    confirmLabel: 'Check for updates',
+    presentation: { running: 'Checking for updates', done: 'Checked for updates' },
   }),
   report_restart_window: operation('report_restart_window', {
     approval: ASKS_NEVER,

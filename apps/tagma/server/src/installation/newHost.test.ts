@@ -35,6 +35,7 @@ it.effect('a host verdict that comes after the window subscribed reaches it as a
     const feed = framesWithNewHost({
       next: NextInstallation.of({
         reading: Effect.die('the feed is read through its changes'),
+        check: Effect.die('the feed is read through its changes'),
         changes: Stream.fromQueue(frames),
         installing: Effect.die('nothing installs here'),
         install: () => Effect.die('nothing installs here'),

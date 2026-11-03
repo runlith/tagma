@@ -75,6 +75,7 @@ import { DesktopFolders } from '$lib/shared/desktop/DesktopFolders.js';
 import { DesktopSurface } from '$lib/shared/desktop/DesktopSurface.js';
 import { DesktopSwipe } from '$lib/shared/desktop/DesktopSwipe.js';
 import { DesktopTabs } from '$lib/shared/desktop/DesktopTabs.js';
+import { DesktopUpdates } from '$lib/shared/desktop/DesktopUpdates.js';
 import { MainWindow } from '$lib/shared/desktop/MainWindow.js';
 import { ProjectWindows } from '$lib/shared/desktop/ProjectWindows.js';
 import { ThreadSeats } from '$lib/features/threads/seats/ThreadSeats.svelte.js';
@@ -140,6 +141,16 @@ export function appLayers(desktop: DesktopApi | undefined) {
     Layer.provide(
       MainWindow,
       bridged((bridge) => bridge.windows),
+    ),
+    Layer.when(
+      () => desktop?.updates !== undefined,
+      Layer.provide(
+        DesktopUpdates,
+        bridged((bridge) => {
+          if (bridge.updates === undefined) throw new Error('This desktop shell has no Check for Updates');
+          return bridge.updates;
+        }),
+      ),
     ),
     Layer.when(
       () => desktop?.surface !== undefined,

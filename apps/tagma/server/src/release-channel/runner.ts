@@ -59,7 +59,7 @@ import {
 import type { ReleasePlaces } from './places.js';
 import { releaseFeed } from './settings.js';
 
-const FEED_EVERY = Duration.hours(24);
+const FEED_EVERY = Duration.hours(1);
 const SPACE_MARGIN = 1.25;
 const PACKED_RATIO = 3;
 const TAIL_LINES = 20;
@@ -549,6 +549,7 @@ export const makeReleaseChannel = Effect.fnUntraced(function* (place: ChannelPla
 
   return NextInstallation.of({
     reading: Effect.sync(frame),
+    check: Effect.andThen(refresh(), Effect.sync(frame)),
     changes: Stream.fromPubSub(frames),
     installing: Effect.sync(() => delivering?.installing ?? null),
     install: Effect.fn('NextInstallation.install')(

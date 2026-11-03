@@ -16,6 +16,10 @@ export const TABS = {
   closeWindow: 'tabs:close-window',
 } as const;
 
+export const UPDATES = {
+  check: 'updates:check',
+} as const;
+
 export const SWIPE = {
   phase: 'swipe:phase',
   swiped: 'swipe:swiped',
