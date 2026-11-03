@@ -45,7 +45,7 @@ export class Holdings extends Context.Service<
   {
     read(checkout: RootId, wait?: 'settled'): Effect.Effect<HoldingsView, HoldingsFailure>;
     settled(checkout: RootId): Effect.Effect<void, HoldingsFailure>;
-    judged(checkout: RootId, paths: readonly string[]): Effect.Effect<ReadonlyMap<string, Judged>, HoldingsFailure>;
+    judged(checkout: RootId, paths: readonly string[], scope?: 'required'): Effect.Effect<ReadonlyMap<string, Judged>, HoldingsFailure>;
     introduced<E>(
       checkout: RootId,
       steps: readonly IntroducedStep[],

@@ -7,7 +7,7 @@ import type { MachineUnits } from '../../platform/contract/service/units.js';
 import type { TerminalActor } from '../../executions/contract/wire/terminals.js';
 import type { ActChecks } from '../../enforcement/contract/service/ruleChecks.js';
 import { Retirement } from '../../change-record/contract/service/retirement.js';
-import { Holdings, type Judged } from '../../change-record/contract/service/holdings.js';
+import { Holdings } from '../../change-record/contract/service/holdings.js';
 import { pathsOfThread } from '../../change-record/record/reads.js';
 import { carriersOf } from '../../change-record/prepared/carriers.js';
 import { owes } from '../../change-record/holdings/totals.js';
@@ -50,6 +50,8 @@ type StoreShape = Context.Service.Shape<typeof MachineStore>;
 
 type Landing = CommitTrees | ChangeRecord | FileSystem.FileSystem | LineWrites | Retirement | Holdings | CommitLandings;
 
+type Submission = { readonly receipt: SubmitReceipt; readonly paths: readonly string[] };
+
 export const submitWork = Effect.fn('submitWork')(function* (
   git: Git['Service'],
   hosted: Git['Service'],
@@ -88,7 +90,7 @@ export const submitWork = Effect.fn('submitWork')(function* (
   const landed = (commit: string, subject: string) => {
     published = { commit, subject };
   };
-  return yield* Effect.acquireUseRelease(
+  const submitted = yield* Effect.acquireUseRelease(
     produce.lease(input),
     () =>
       retirement.lease(
@@ -117,6 +119,54 @@ export const submitWork = Effect.fn('submitWork')(function* (
         : landings.publish({ threadId: origin.work.threadId, projectId: origin.work.projectId, ...published }),
     ),
   );
+  const { receipt } = submitted;
+  if (receipt.status !== 'landed') return receipt;
+  const [standing, unreadable] = yield* Effect.partition(carriers, ({ projectId, threadId }) =>
+    pathsOfThread(units, store, projectId, threadId, placed),
+  );
+  const candidates = [...new Set([...paths, ...submitted.paths, ...standing.flatMap((rows) => rows.map((one) => one.path))])];
+  const lanes = yield* LandingLanes;
+  const result = yield* Effect.result(
+    lanes.commits
+      .enter(root, holdings.judged(RootId.make(placed), candidates, 'required'))
+      .pipe(Effect.catchTag('ReentrantCall', Effect.die)),
+  );
+  const judged = result._tag === 'Success' ? result.success : null;
+  const unanswered = judged === null ? [] : candidates.filter((path) => !judged.has(path)).sort();
+  const unread = [
+    ...unreadable.map((failure) => ({
+      step: 'receipt' as const,
+      reason: `what this session still holds could not be read: ${failure.message}`,
+    })),
+    ...(result._tag === 'Failure'
+      ? [{ step: 'receipt' as const, reason: `what this session still holds could not be judged: ${result.failure.message}` }]
+      : []),
+    ...(unanswered.length === 0
+      ? []
+      : [{ step: 'receipt' as const, reason: `whether this session still holds lines in ${unanswered.join(', ')} could not be judged` }]),
+  ];
+  const left =
+    judged === null || unreadable.length > 0
+      ? []
+      : [...judged.values()]
+          .filter((one) => carriers.some((carrier) => owes(one.holding, carrier.threadId)))
+          .map((one) => one.holding.path)
+          .sort();
+  const unowned = [
+    ...new Set([
+      ...(receipt.unattributed ?? []),
+      ...submitted.paths.flatMap((path) => {
+        const one = judged?.get(path);
+        return one?.verdict.verdict === 'proven' && one.verdict.unheld ? [path] : [];
+      }),
+    ]),
+  ].sort();
+  return {
+    ...receipt,
+    left: left.length === 0 ? undefined : left,
+    unattributed: unowned.length === 0 ? undefined : unowned,
+    unrecorded: unread.length === 0 ? receipt.unrecorded : [...(receipt.unrecorded ?? []), ...unread],
+  };
 });
 
 const submitHeld = Effect.fn('submitWork.held')(function* (
@@ -133,7 +183,7 @@ const submitHeld = Effect.fn('submitWork.held')(function* (
   placed: string,
   paths: readonly string[],
   landed: (commit: string, subject: string) => void,
-): Effect.fn.Return<SubmitReceipt, SubmitFailure, Landing> {
+): Effect.fn.Return<Submission, SubmitFailure, Landing> {
   const { projectId } = input;
   const message = messageOf(
     subjectFor(input.subject, input.tasks),
@@ -217,7 +267,7 @@ const submitHeld = Effect.fn('submitWork.held')(function* (
       const { edits, said: carried, lost } = yield* carriedOnRefusal(changes, checkout, stopped, held);
       if (failure instanceof OwnGitFailed) {
         if (failure.admission !== undefined) return yield* notAdmitted(failure.admission);
-        return { status: 'refused', reason: `${saidByGit(failure)}${lost}`, ...hookFields(edits) };
+        return { receipt: { status: 'refused', reason: `${saidByGit(failure)}${lost}`, ...hookFields(edits) }, paths: [] };
       }
       const refusal = failure._tag === 'HoldCut' ? cutRefusal(root, failure) : failure;
       if (refusal instanceof GateRefusal)
@@ -232,7 +282,7 @@ const submitHeld = Effect.fn('submitWork.held')(function* (
     }
     if (answer.failure instanceof OwnGitFailed) {
       if (answer.failure.admission !== undefined) return yield* notAdmitted(answer.failure.admission);
-      return { status: 'refused', reason: saidByGit(answer.failure) };
+      return { receipt: { status: 'refused', reason: saidByGit(answer.failure) }, paths: [] };
     }
     return yield* answer.failure;
   }
@@ -247,20 +297,10 @@ const submitHeld = Effect.fn('submitWork.held')(function* (
           message: `the holdings could not be judged, so no row was discharged and what this session still holds is unknown: ${judged.failure.message}`,
         }),
       );
-      return { judged: null, ended: false, unrecorded };
+      return unrecorded;
     }
-    let ended = false;
-    const unrecorded = yield* recorded(
-      'discharge',
-      Effect.tap(retirement.pass(checkoutId), (gone) =>
-        Effect.sync(() => {
-          ended = gone.committed.length + gone.withdrawn.length > 0;
-        }),
-      ),
-    );
-    return { judged: judged.success, ended, unrecorded };
+    return yield* recorded('discharge', retirement.pass(checkoutId));
   });
-  const retired = () => Effect.map(discharged(paths), (done) => done.unrecorded);
   if (done === null) {
     const settled =
       emptied === null
@@ -284,20 +324,22 @@ const submitHeld = Effect.fn('submitWork.held')(function* (
             reason: `${path} carries the commit steps' change, and the session's row of that write was not recorded`,
           }))
         : []),
-      ...(yield* retired()),
+      ...(yield* discharged(paths)),
     ];
     return {
-      status: 'nothing',
-      unattributed: unattributed.length === 0 ? undefined : [...unattributed],
-      unmatched: unmatched.length === 0 ? undefined : [...unmatched],
-      unrecorded: unrecorded.length === 0 ? undefined : unrecorded,
-      ...hookFields(settled?._tag === 'Success' ? settled.success : NO_EDITS),
+      receipt: {
+        status: 'nothing',
+        unattributed: unattributed.length === 0 ? undefined : [...unattributed],
+        unmatched: unmatched.length === 0 ? undefined : [...unmatched],
+        unrecorded: unrecorded.length === 0 ? undefined : unrecorded,
+        ...hookFields(settled?._tag === 'Success' ? settled.success : NO_EDITS),
+      },
+      paths: [],
     };
   }
   const subject = done.hooked.message.split(/\r?\n/, 1)[0] ?? done.hooked.message;
   landed(done.commit, subject);
   (yield* CallStage)(`${done.commit.slice(0, 10)} landed; carrying the hooks' edits and releasing the landed lines`);
-  const carriers = carriersOf(origin, input);
   const owing = { commit: done.commit, source: 'steps' } as const;
   const stepped = yield* Effect.result(applyCarried(changes, checkout, done.carriage.stepped, UNHELD, owing));
   const staged = yield* Effect.result(applyCarried(changes, checkout, done.carriage.staged, UNHELD, owing));
@@ -311,51 +353,9 @@ const submitHeld = Effect.fn('submitWork.held')(function* (
     done.intent === null || done.conclusion !== null || done.unsynced.length > 0
       ? []
       : yield* recorded('receipt', intents.land(done.intent, done.commit));
-  const [standing, unreadable] = yield* Effect.partition(carriers, ({ projectId, threadId }) =>
-    pathsOfThread(units, store, projectId, threadId, placed),
-  );
-  const candidates = [
-    ...new Set([...paths, ...done.built.plan.map((one) => one.path), ...standing.flatMap((rows) => rows.map((one) => one.path))]),
-  ];
-  const discharge = yield* discharged(candidates);
+  const selected = done.built.plan.map((one) => one.path);
+  const discharge = yield* discharged([...new Set([...paths, ...selected])]);
   const swept = yield* recorded('discharge', changes.sweep(git, root, placed));
-  const owedIn = (judged: ReadonlyMap<string, Judged>) =>
-    [...judged.values()]
-      .filter((one) => carriers.some((carrier) => owes(one.holding, carrier.threadId)))
-      .map((one) => one.holding.path)
-      .sort();
-  const before = discharge.judged === null ? null : owedIn(discharge.judged);
-  const after =
-    before !== null && before.length > 0 && discharge.ended ? yield* Effect.result(holdings.judged(checkoutId, candidates)) : null;
-  const judged = after?._tag === 'Success' ? after.success : discharge.judged;
-  const unanswered = judged === null ? [] : candidates.filter((path) => !judged.has(path)).sort();
-  const unread = [
-    ...unreadable.map((failure) => ({
-      step: 'receipt' as const,
-      reason: `what this session still holds could not be read: ${failure.message}`,
-    })),
-    ...(after?._tag === 'Failure'
-      ? [
-          {
-            step: 'receipt' as const,
-            reason: `left and unattributed use the judgement taken before the record was discharged, because judging again failed: ${after.failure.message}`,
-          },
-        ]
-      : []),
-    ...(unanswered.length === 0
-      ? []
-      : [{ step: 'receipt' as const, reason: `whether this session still holds lines in ${unanswered.join(', ')} could not be judged` }]),
-  ];
-  const left = judged === null || unreadable.length > 0 ? null : owedIn(judged);
-  const unowned = [
-    ...new Set([
-      ...unattributed,
-      ...done.built.plan.flatMap(({ path }) => {
-        const one = judged?.get(path);
-        return one?.verdict.verdict === 'proven' && one.verdict.unheld ? [path] : [];
-      }),
-    ]),
-  ].sort();
   const unrecorded = [
     ...(done.conclusion === null ? [] : [{ step: 'receipt' as const, reason: done.conclusion }]),
     ...receipt,
@@ -370,7 +370,7 @@ const submitHeld = Effect.fn('submitWork.held')(function* (
       step: 'reshape' as const,
       reason: `${path} carries the hooks' edits, and the session's row of that write was not recorded`,
     })),
-    ...discharge.unrecorded,
+    ...discharge,
     ...swept,
   ];
   const empty = done.built.base === undefined ? yield* Effect.result(emptyTree(git, root)) : undefined;
@@ -391,12 +391,13 @@ const submitHeld = Effect.fn('submitWork.held')(function* (
     base: base ?? undefined,
   });
   return {
-    ...done.receipt,
-    left: left === null || left.length === 0 ? undefined : left,
-    unattributed: unowned.length === 0 ? undefined : unowned,
-    unsynced: done.unsynced.length === 0 ? undefined : done.unsynced,
-    unrecorded: unrecorded.length + unread.length === 0 ? undefined : [...unrecorded, ...unread],
-    ...hookFields(edits),
+    receipt: {
+      ...done.receipt,
+      unsynced: done.unsynced.length === 0 ? undefined : done.unsynced,
+      unrecorded: unrecorded.length === 0 ? undefined : unrecorded,
+      ...hookFields(edits),
+    },
+    paths: selected,
   };
 });
 

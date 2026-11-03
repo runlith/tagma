@@ -249,7 +249,7 @@ export const probeAt = Effect.fn('Holdings.probe')(function* (
     scope,
     expected,
     heads: known = headsRead(),
-  }: { readonly scope: 'candidates' | 'required'; readonly expected?: string; readonly heads?: HeadsRead },
+  }: { readonly scope: 'required' | ReadonlySet<string>; readonly expected?: string; readonly heads?: HeadsRead },
 ): Effect.fn.Return<Probed, StoreFailure> {
   const scoped = requested.length <= WHOLE_TREE && pathspecFits(requested);
   const [rows, status] = yield* Effect.all(
@@ -290,6 +290,7 @@ export const probeAt = Effect.fn('Holdings.probe')(function* (
       ? requested
       : requested.filter(
           (path) =>
+            scope.has(path) ||
             rows.has(path) ||
             tracked._tag === 'Failure' ||
             tracked.success.has(path) ||

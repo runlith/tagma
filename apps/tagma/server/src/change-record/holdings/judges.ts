@@ -242,8 +242,8 @@ export const makeJudges = Effect.fnUntraced(function* ({
       changed,
       follow,
       subscribe: frames,
-      judged: (checkout, paths) =>
-        paths.length === 0 ? Effect.succeed(new Map<string, Judged>()) : using(checkout, (judge) => judge.judged(unique(paths))),
+      judged: (checkout, paths, scope) =>
+        paths.length === 0 ? Effect.succeed(new Map<string, Judged>()) : using(checkout, (judge) => judge.judged(unique(paths), scope)),
       settled: (checkout) => using(checkout, (judge) => judge.quiet),
       introduced: (checkout, steps, decide) =>
         Effect.flatMap(roots.read(checkout), (root) => introduced(readers, folder, { rootId: checkout, dir: root.path }, steps, decide)),

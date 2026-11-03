@@ -71,7 +71,7 @@ export const nativeLanding = Effect.fnUntraced(function* (committed: Readonly<Re
     return yield* doors.doorsFor(thread.id, thread.ownerId);
   });
   const record = Context.get(world.runtime.owners, ChangeRecord);
-  const write = Effect.fnUntraced(function* (threadId: string, path: string, after: string) {
+  const write = Effect.fnUntraced(function* (threadId: string, path: string, after: string | null) {
     const at = join(root, path);
     const before = (yield* files.exists(at)) ? yield* files.readFileString(at) : null;
     expect(
@@ -80,12 +80,12 @@ export const nativeLanding = Effect.fnUntraced(function* (committed: Readonly<Re
         [
           {
             path: at,
-            origin: before === null ? 'write' : 'edit',
+            origin: after === null ? 'delete' : before === null ? 'write' : 'edit',
             before: before === null ? undefined : contentDigest(before),
-            after: contentDigest(after),
+            after: after === null ? undefined : contentDigest(after),
             beforeText: before ?? undefined,
-            afterText: after,
-            hunk: workspaceChangeHunk(before ?? '', after),
+            afterText: after ?? undefined,
+            hunk: workspaceChangeHunk(before ?? '', after ?? ''),
             at: new Date(yield* Clock.currentTimeMillis),
           },
         ],

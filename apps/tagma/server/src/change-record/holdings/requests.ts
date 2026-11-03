@@ -3,25 +3,31 @@ import type { Judged } from '../contract/service/holdings.js';
 
 export type Request = readonly [path: string, answer: Deferred.Deferred<Judged | null>];
 
-export class Requests {
-  private pending = new Map<string, Deferred.Deferred<Judged | null>[]>();
+type Waiting = { readonly answer: Deferred.Deferred<Judged | null>; readonly required: boolean };
 
-  private answering = new Map<string, Deferred.Deferred<Judged | null>[]>();
+export class Requests {
+  private pending = new Map<string, Waiting[]>();
+
+  private answering = new Map<string, Waiting[]>();
 
   get empty(): boolean {
     return this.pending.size === 0 && this.answering.size === 0;
   }
 
-  admit(paths: readonly string[]): readonly Request[] {
+  admit(paths: readonly string[], scope?: 'required'): readonly Request[] {
     return paths.map((path) => {
       const answer = Deferred.makeUnsafe<Judged | null>();
-      this.pending.set(path, [...(this.pending.get(path) ?? []), answer]);
+      this.pending.set(path, [...(this.pending.get(path) ?? []), { answer, required: scope === 'required' }]);
       return [path, answer] as const;
     });
   }
 
   owes(path: string): boolean {
     return (this.answering.get(path)?.length ?? 0) > 0;
+  }
+
+  requires(path: string): boolean {
+    return this.answering.get(path)?.some((one) => one.required) ?? false;
   }
 
   begin(paths: readonly string[]): void {
@@ -58,7 +64,7 @@ export class Requests {
   answer(path: string, judged: Judged | null): Effect.Effect<void> {
     const owed = this.answering.get(path) ?? [];
     this.answering.delete(path);
-    return Effect.forEach(owed, (answer) => Deferred.succeed(answer, judged), { discard: true });
+    return Effect.forEach(owed, ({ answer }) => Deferred.succeed(answer, judged), { discard: true });
   }
 
   fail(): Effect.Effect<void> {
@@ -66,7 +72,7 @@ export class Requests {
     this.answering = new Map();
     this.pending = new Map();
     return Effect.gen(function* () {
-      for (const queue of waiting) for (const owed of queue.values()) for (const answer of owed) yield* Deferred.succeed(answer, null);
+      for (const queue of waiting) for (const owed of queue.values()) for (const { answer } of owed) yield* Deferred.succeed(answer, null);
     });
   }
 }

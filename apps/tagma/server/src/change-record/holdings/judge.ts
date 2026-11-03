@@ -404,7 +404,13 @@ export const makeJudge = ({
     const { units } = readers;
     const [probed, witnessed] = yield* Effect.all(
       [
-        Effect.result(probeAt(readers, checkout, paths, { scope: 'candidates', expected: head ?? undefined, heads })),
+        Effect.result(
+          probeAt(readers, checkout, paths, {
+            scope: new Set(paths.filter((path) => requests.requires(path))),
+            expected: head ?? undefined,
+            heads,
+          }),
+        ),
         Effect.result(witnessesAt(units, readers.store, checkout.rootId, paths)),
       ],
       { concurrency: 2 },
@@ -598,8 +604,8 @@ export const makeJudge = ({
     return kick();
   };
 
-  const judged = Effect.fnUntraced(function* (paths: readonly string[]) {
-    const owed = requests.admit(paths);
+  const judged = Effect.fnUntraced(function* (paths: readonly string[], scope?: 'required') {
+    const owed = requests.admit(paths, scope);
     for (const path of paths) {
       later.delete(path);
       now.add(path);
