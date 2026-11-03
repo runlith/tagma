@@ -35,10 +35,13 @@ sources:
 ---
 **Value.** A ready dictionary for a kind of work turns on with one setting, and the project need not invent what records to keep from scratch.
 
-**How.** The `graph.catalogs` setting or catalog choice in the new-project dialog. Three catalogs ship:
-- `core` — system types: reflection, saved view; on by default;
-- `software-development` — modules, explanations, specs, tasks, rules, ideas, research; on by default, declares the graph a graph over code;
+**How.** The `graph.catalogs` setting or catalog choice in the new-project dialog. Four catalogs ship:
+- `core` — rules, reflections and saved views; installed in every project, whatever the setting says;
+- `work` — ideas, specs, tasks and research; on by default;
+- `software-development` — modules and explanations, plus the words code needs on rules, tasks and research; on by default, brings `work` with it and declares the graph a graph over code;
 - `knowledge` — decisions, people, meetings, and sources; an ordinary note is a block with no tag. The catalog does not depend on how the graph is stored.
+
+A catalog may add a section of its own to another catalog's type: it reads after that type's text and before the project's own part, and stands only while the adding catalog is installed.
 
 **Behaviour.** An enabled catalog sets its tags as ordinary `#tag` nodes alongside the project's existing declarations; later they read and edit as their own. Moving or renaming their container preserves its use for catalog additions and updates. A project with no declarations gets a new container under its root. At graph start the server delivers new releases of the enabled catalogs. An export removed by a release leaves that catalog's membership; its declaration and existing blocks remain, and the declaration can be deleted normally. A knowledge decision stands until replacement through `supersede_block`: the core link keeps the predecessor and leads to the new decision, with no separate status field.
 

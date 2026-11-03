@@ -62,4 +62,4 @@ sources:
   - kind: dir
     ref: apps/tagma/server/src/catalogs
 ---
-A project receives its tag vocabulary not from scratch but from the catalogs Tagma supplies: software-development for code work, knowledge for decisions, people, meetings and sources, Tagma system types. The module owns their declarations and the setting of which catalogs a project installs. Which contracts types support is decided by the graph compiling declarations with its behaviours — both at install and when a refusal suggests a fitting catalog.
+A project receives its tag vocabulary not from scratch but from the catalogs Tagma supplies: core for the law and system types every project carries, work for ideas, specs, tasks and research, software-development for code over work, knowledge for decisions, people, meetings and sources. The module owns their declarations and the setting of which catalogs a project installs. Which contracts types support is decided by the graph compiling declarations with its behaviours — both at install and when a refusal suggests a fitting catalog.

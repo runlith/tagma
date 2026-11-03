@@ -24,7 +24,7 @@ A decision about the Tagma product itself, not about runlith: what replaces the 
 - Types and fields have **permanent ids**; a name is an alias, so a tag with carriers can be renamed and two catalogs using one name do not collide ([[42fb81f7]]).
 - A project changes a shipped type only by a **declared addition, a subtype or an explicit fork**; upgrades of what it did not fork keep arriving, and a conflict is a finding, not a silent local copy ([[516d96bd]]).
 - An upgrade is a **checked candidate switched on atomically**; a blocked automatic upgrade leaves the previous version active, and an old server refuses to write a vocabulary newer than it understands ([[516d96bd]], [[fcaf4455]]).
-- System types (`#view`, `#proposal`, `#reflection`) leave the domain catalog for the `core` library; a catalog profile carries brief sections and defaults ([[3087c3ed]]).
+- System types (`#view`, `#proposal`, `#reflection`) leave the domain catalog for the `core` library; a catalog profile carries brief sections and defaults ([[3087c3ed]]). `#rule` ships in `core` too and the work types in a `work` catalog, and a catalog adds to another library's type only a section of its own text, composed before the project's part ([[16f1296b]], level described in [[516d96bd]]).
 - `#module` carries a territory of directories and files through a contract, so a domain module can be expressed ([[14e01b12]]).
 
 ## 2. Problem, with evidence

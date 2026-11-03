@@ -2597,10 +2597,6 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead apps/tagma/server/src/catalogs/contract/wire/registry.ts#tagsOfCatalogs",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "dead-code dead apps/tagma/server/src/catalogs/contract/wire/softwareDevelopment.ts#softwareDevelopmentProfile",
           "owner": "5a3bed29"
         },

@@ -5,7 +5,7 @@ ord: 5
 tags: ["idea"]
 fields:
   {
-    "status": "open"
+    "status": "closed"
   }
 ---
 **Question.** `#task` currently exists only in software-development. A knowledge-project (`knowledge`) user who needs tasks can only get them by installing software-development in full — with `#module`, `#rule` and code checks.

@@ -12,7 +12,7 @@ Part of [[6bf40362]]. It fixes which vocabulary Tagma ships itself, what domain 
 
 ## Outcome
 - The metalanguage `#tag`, `#catalog` is the core.
-- **The `core` library** ships the `core/*` contracts and the system types: `#view`, `#proposal` (installation profile defaults; a project may choose its own type with the same contract) and `#reflection`. `file_reflection` writes into the graph of Tagma's sources (`Reflection.home`, [[6b35c2af]]); the reflection type is provided there, not necessarily in every project. `code-project` no longer has `#reflection`.
+- **The `core` library** ships the `core/*` contracts and the system types: `#view`, `#proposal` (installation profile defaults; a project may choose its own type with the same contract) and `#reflection`. `file_reflection` writes into the graph of Tagma's sources (`Reflection.home`, [[6b35c2af]]); the reflection type is provided there, not necessarily in every project. `code-project` no longer has `#reflection`. `#rule` ships in `core` as well, and `#task`, `#spec`, `#idea` and `#research` in the `work` catalog ([[16f1296b]]).
 - **Domain catalogs** (`code-project` and future ones) are versioned libraries: types, a brief profile, defaults. The standard types are defaults, not a ban on another vocabulary.
 - **A catalog profile** says how a catalog presents its types: brief sections, creation defaults, commands. Tag literals leave the core.
 - Code checks switch on by an explicit measurable territory or a check profile, not because one abstract type can accept a file: `bindsCode()` (`graph/vocabulary/tagIndex.ts:72`) would turn true in a book once this library loads.

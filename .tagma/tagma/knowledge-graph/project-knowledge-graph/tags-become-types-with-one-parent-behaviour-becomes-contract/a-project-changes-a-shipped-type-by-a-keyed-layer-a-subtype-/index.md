@@ -19,6 +19,8 @@ The scheme of package systems (ESLint, VS Code, Kustomize, dpkg):
 
 A project never rewrites a contract's behaviour: different behaviour is a different type with a different contract (a note instead of a claim).
 
+**A catalog's section on another library's type.** Apart from a project's levels, a shipped catalog may add one section of its own text, keyed by its id, to a type another library ships — `software-development` adds its code words to `core`'s `#rule` and `work`'s `#task` ([[16f1296b]]). It adds no field, role or edge, so a block moved to a project without that catalog stays valid; it never rewrites the base text; a project cannot edit it. The installer composes the type's own sections, then each installed catalog's section, then the project section, and settles a project's layer or fork over that composed text; the section stands while its catalog is installed and changes with that catalog's release.
+
 The types Tagma ships (`#claim`, `#task`, `#rule`, `#decision` …) declare **one section, "project context", append only** as changeable; the shared contract cannot be hidden or replaced. A project's opinions on how to write are its `#rule`s, not the type's text. runlith's current `#claim` divergence (two sentences) is folded into the shipped catalog rather than becoming a layer.
 
 ## Findings
