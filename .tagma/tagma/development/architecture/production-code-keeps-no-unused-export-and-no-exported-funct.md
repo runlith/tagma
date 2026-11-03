@@ -3360,10 +3360,6 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead apps/tagma/server/src/cli/verbs.ts#Preface",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "dead-code dead apps/tagma/server/src/commit-steps/contract/service/setup.ts#TreeSetupStanding",
           "owner": "5a3bed29"
         },
