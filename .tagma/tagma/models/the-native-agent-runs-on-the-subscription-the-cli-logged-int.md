@@ -16,10 +16,10 @@ sources:
   - kind: file
     ref: packages/adapter-openai/src/oauth/cli/codex.ts
 ---
-**Value.** Tagma's native agent runs on the ChatGPT subscription the CLI already logged into, without a second login and without logging the CLI out.
+**Value.** Tagma's native agent uses an existing file-held ChatGPT subscription without a second login or a Tagma-owned refresh.
 
-**How.** CLI-login mode in the vendor section ([[948797f4]]): Tagma's own path takes the accounts of its vendor's CLI provider.
+**How.** The CLI-login mode in the vendor section takes accounts from the vendor's CLI provider. Declared discovery finds that login before a model is chosen; mode choices and Tagma-owned accounts remain authoritative.
 
-**Behaviour.** The model-call request itself confirms the choice of the CLI provider lending its credentials: the existing default login is found with no prior directory, CLI thread, or re-login. Passive lists and quota do not open an untouched CLI. Each request rereads the token from the CLI account directory. An expiring token is refreshed by the CLI itself: Tagma starts it in the account environment with no model call, parallel requests wait on one such start, and if someone else already refreshed the token, the CLI does not start. Codex refreshes the login only on refusal, so a 401 on its login starts a refresh and one retry. The default account and quota of such an account are shared with the CLI provider; the line stands in the CLI section.
+**Behaviour.** Each request rereads the credential from the account's exact directory. An expiring readable credential is renewed by its CLI; parallel requests share that launch, and a reread skips it when another client already refreshed the file. A rejection first rereads the file; an unchanged Codex token asks for sign-in again instead of forcing file storage. The account and quota remain shared with the creditor's section. Discovery readiness holds the first model-default read and birth, and the first accepted send keeps its model as the operator default. Sign-out changes no saved choice.
 
-**Limits.** Tagma never refreshes a borrowed token itself: its refresh would log the CLI out. Such an account can only be deleted or renamed in the CLI section.
+**Limits.** A keyring-only Codex login is usable for CLI threads but not for native ChatGPT: Tagma does not read the keyring or export a grant. Codex status exposes no effective account identity without side effects, so a readable stale auth.json surviving failed keyring cleanup can name another account from the CLI's effective login. A borrowed record is renamed or removed in the creditor's section.

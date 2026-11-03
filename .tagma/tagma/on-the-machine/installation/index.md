@@ -80,6 +80,8 @@ edges:
     to: 01a12c51-8120-7250-9703-61feea5c74f4
   - kind: imports
     to: 01a13b1a-1851-79b3-ba84-3b0e9f581885
+  - kind: imports-tests
+    to: 01a127e3-cc5c-73fa-99ff-b228d2a60527
 sources:
   - kind: dir
     ref: apps/tagma/server/src/installation
