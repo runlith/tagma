@@ -221,6 +221,7 @@ const built = Effect.fnUntraced(
         hostSourcePath: options.hostSourcePath,
         hostBundlePath,
         ...seams,
+        quotaProviders: options.logins === undefined ? seams.quotaProviders : undefined,
         source: options.installation === undefined ? WORLD_SOURCE : undefined,
         installation: installed,
         drivers: options.drivers ?? [],
