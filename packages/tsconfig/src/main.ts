@@ -6,16 +6,21 @@ import * as BunPath from '@effect/platform-bun/BunPath';
 import * as BunRuntime from '@effect/platform-bun/BunRuntime';
 import { Effect, Layer } from 'effect';
 import { resolve } from 'node:path';
-import { run } from './typecheck.js';
+import { type Reach, run } from './typecheck.js';
 
 const args = process.argv.slice(2);
-const project = args[0] === '--project';
-const target = resolve(process.cwd(), (project ? args[1] : args[0]) ?? '.');
-const invalid = project && (args.length !== 2 || args[1] === '');
+const reach: Reach = args[0] === '--project' ? 'project' : args[0] === '--no-dependencies' ? 'scope' : 'closure';
+const target = resolve(process.cwd(), (reach === 'closure' ? args[0] : args[1]) ?? '.');
+const invalid = reach === 'project' && (args.length !== 2 || args[1] === '');
 
 const host = Layer.mergeAll(
   BunFileSystem.layer,
   BunChildProcessSpawner.layer.pipe(Layer.provide(Layer.mergeAll(BunFileSystem.layer, BunPath.layer))),
 );
 
-BunRuntime.runMain((invalid ? Effect.fail(new Error('Usage: runlith-typecheck [directory | --project <tsconfig>]')) : run(target, project)).pipe(Effect.provide(host)));
+BunRuntime.runMain(
+  (invalid
+    ? Effect.fail(new Error('Usage: runlith-typecheck [--no-dependencies] [directory] | --project <tsconfig>'))
+    : run(target, reach)
+  ).pipe(Effect.provide(host)),
+);

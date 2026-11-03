@@ -70,16 +70,20 @@ type Scope =
   | { readonly kind: 'package'; readonly pkg: WorkspacePackage }
   | { readonly kind: 'group'; readonly roots: readonly WorkspacePackage[] };
 
-export const run = Effect.fn('typecheck.run')(function* (target: string, project = false): Effect.fn.Return<void, CheckFailure, Host> {
-  const root = yield* findRoot(project ? process.cwd() : target);
-  if (project) return yield* checkProject(root, target);
+export type Reach = 'closure' | 'scope' | 'project';
+
+export const run = Effect.fn('typecheck.run')(function* (target: string, reach: Reach): Effect.fn.Return<void, CheckFailure, Host> {
+  const root = yield* findRoot(reach === 'project' ? process.cwd() : target);
+  if (reach === 'project') return yield* checkProject(root, target);
   const scanned = yield* read(root);
   const scope = yield* select(scanned, resolve(target));
   const roots = scope.kind === 'package' ? [scope.pkg] : scope.roots;
   const names = roots.map((entry) => entry.name);
+  const reached = (packages: readonly WorkspacePackage[]): readonly WorkspacePackage[] =>
+    reach === 'closure' ? closureOf(packages, names) : packages.filter((entry) => names.includes(entry.name));
 
-  const packages = (yield* preparations(closureOf(scanned, names))) ? yield* read(root) : scanned;
-  const graph = yield* plan(packages, names);
+  const packages = (yield* preparations(reached(scanned))) ? yield* read(root) : scanned;
+  const graph = yield* plan(packages, reached(packages));
 
   const selected = scope.kind === 'package' ? (packages.find((p) => p.dir === scope.pkg.dir) ?? scope.pkg) : null;
   const failed: string[] = [];
@@ -111,7 +115,8 @@ const checkProject = Effect.fn('typecheck.project')(function* (root: string, tar
   const fileSystem = yield* FileSystem.FileSystem;
   const workspace = yield* fileSystem.realPath(root);
   const config = yield* fileSystem.realPath(target);
-  if (!config.startsWith(`${workspace}${sep}`) || (yield* fileSystem.stat(config)).type !== 'File') return yield* new ScopeUnknown({ target });
+  if (!config.startsWith(`${workspace}${sep}`) || (yield* fileSystem.stat(config)).type !== 'File')
+    return yield* new ScopeUnknown({ target });
   const packages = yield* read(workspace);
   const pkg = packages.filter((entry) => config.startsWith(`${entry.dir}${sep}`)).sort((a, b) => b.dir.length - a.dir.length)[0];
   if (pkg === undefined || pkg.kind === null) return yield* new ScopeUnknown({ target });

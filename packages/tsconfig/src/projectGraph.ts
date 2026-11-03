@@ -61,10 +61,9 @@ export function closureOf(packages: readonly WorkspacePackage[], roots: readonly
 
 export const plan = Effect.fn('projectGraph.plan')(function* (
   packages: readonly WorkspacePackage[],
-  roots: readonly string[],
+  reached: readonly WorkspacePackage[],
 ): Effect.fn.Return<Plan, PlanFailure> {
   const names = new Set(packages.map((entry) => entry.name));
-  const reached = closureOf(packages, roots);
 
   for (const owner of reached) {
     for (const dep of owner.deps)
