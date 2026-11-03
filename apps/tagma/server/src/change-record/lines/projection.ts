@@ -124,7 +124,9 @@ const snapshotOf = (state: FoldState, digest: string | null): Snapshot | undefin
     : snapshot;
 };
 
-type Origin = { readonly root: Rope; readonly side: TextContent };
+export type TextIdentity = { readonly blob: string | null; readonly digest: string | null };
+
+type Origin = { readonly root: Rope; readonly version: TextIdentity; readonly side: () => BaseSide };
 
 function originOf(state: FoldState, ended: ReadonlySet<string>): Origin {
   for (let link = state.rows; link !== null; link = link.previous) {
@@ -133,9 +135,13 @@ function originOf(state: FoldState, ended: ReadonlySet<string>): Origin {
     if (digest === undefined || digest === state.base.digest) break;
     const snapshot = lookup(state.snapshots, digestKey(digest));
     if (snapshot === undefined) break;
-    return { root: snapshot.root, side: digest === null ? contentOf(null) : contentOf(textOf(snapshot.root), undefined, digest) };
+    return {
+      root: snapshot.root,
+      version: { blob: digest, digest },
+      side: () => baseSide(digest === null ? contentOf(null) : contentOf(textOf(snapshot.root), undefined, digest)),
+    };
   }
-  return { root: snapshotOf(state, state.base.digest)?.root ?? null, side: state.base };
+  return { root: snapshotOf(state, state.base.digest)?.root ?? null, version: state.base, side: () => baseSide(state.base) };
 }
 
 function headRoot(origin: Origin, head: TextContent, alignment: BaseAlignment): Rope {
@@ -473,7 +479,7 @@ function sliceRegions(
 
 export type Projected = { readonly result: Verdict; readonly alignment: BaseAlignment | null };
 
-export type Alignments = (before: TextContent, after: TextContent) => BaseAlignment | undefined;
+export type Alignments = (before: TextIdentity, after: TextIdentity) => BaseAlignment | undefined;
 
 export function projectFold(state: FoldState, head: Content, working: Content, budget: Deadline, alignments?: Alignments): Verdict {
   return completeFold(projectWork(state, head, working, budget, alignments), budget).result;
@@ -514,19 +520,19 @@ export function* projectWork(
   else if (composed !== undefined && composed !== 'unfilled') root = composed.root;
   else {
     const origin = originOf(state, ended);
-    const kept = alignments?.(origin.side, head);
+    const kept = alignments?.(origin.version, head);
     if (
       kept !== undefined &&
-      (kept.from !== origin.side.blob ||
+      (kept.from !== origin.version.blob ||
         kept.to !== head.blob ||
-        kept.beforeDigest !== origin.side.digest ||
+        kept.beforeDigest !== origin.version.digest ||
         kept.afterDigest !== head.digest ||
         kept.normalized !== state.normalized)
     )
       return unknown({ reason: 'alignment' });
-    const baseRequest: BaseWork = { before: baseSide(origin.side), after: baseSide(head), normalized: state.normalized };
+    const request = (): BaseWork => ({ before: origin.side(), after: baseSide(head), normalized: state.normalized });
     const base =
-      kept ?? (origin.side.digest === head.digest ? alignBase(baseRequest, budget) : yield* askFold({ kind: 'base', work: baseRequest }));
+      kept ?? (origin.version.digest === head.digest ? alignBase(request(), budget) : yield* askFold({ kind: 'base', work: request() }));
     if ('reason' in base.aligned) return unknown(base.aligned);
     used = base;
     const aligned = headRoot(origin, head, base);
