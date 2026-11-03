@@ -20,6 +20,7 @@ layer(demoGraphLayer())('graph refresh retry clock', (it) => {
         const root = yield* fixture.directory('refresh-retry');
         const row = (yield* graph.projectPolicy.read([projectId])).get(projectId);
         if (row === undefined) return yield* Effect.die('the fixture project is missing');
+        const told = (outage: string) => `SqlError: ${outage}; caused by ConnectionError: ${outage}; caused by Error: ${outage}`;
         const first = new SqlError({ reason: new ConnectionError({ message: 'first outage', cause: new Error('first outage') }) });
         const second = new SqlError({ reason: new ConnectionError({ message: 'second outage', cause: new Error('second outage') }) });
         let failure = first;
@@ -60,14 +61,14 @@ layer(demoGraphLayer())('graph refresh retry clock', (it) => {
           (held) => Effect.sync(held.unregister),
         );
         yield* Queue.take(attempted);
-        expect(yield* Effect.flip(gate.beforeAct(root))).toMatchObject({ code: 'graph-pool', reason: `SqlError: ${first.message}` });
+        expect(yield* Effect.flip(gate.beforeAct(root))).toMatchObject({ code: 'graph-pool', reason: told('first outage') });
         failure = second;
         yield* TestClock.adjust(999);
         yield* gate.fresh(root);
-        expect(yield* Effect.flip(gate.beforeAct(root))).toMatchObject({ code: 'graph-pool', reason: `SqlError: ${first.message}` });
+        expect(yield* Effect.flip(gate.beforeAct(root))).toMatchObject({ code: 'graph-pool', reason: told('first outage') });
         yield* TestClock.adjust(1);
         yield* Queue.take(attempted);
-        expect(yield* Effect.flip(gate.beforeAct(root))).toMatchObject({ code: 'graph-pool', reason: `SqlError: ${second.message}` });
+        expect(yield* Effect.flip(gate.beforeAct(root))).toMatchObject({ code: 'graph-pool', reason: told('second outage') });
       }),
     ),
   );
