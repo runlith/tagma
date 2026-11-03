@@ -12520,10 +12520,6 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead packages/agent/src/thread/cache/ThreadCacheWarmth.ts#ThreadCacheWarmthInput",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "dead-code dead packages/agent/src/thread/cache/ThreadCacheWarmth.ts#ThreadNextRequest",
           "owner": "5a3bed29"
         },
