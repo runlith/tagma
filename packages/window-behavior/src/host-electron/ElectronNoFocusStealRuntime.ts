@@ -6,6 +6,7 @@ export interface NoFocusStealOptions {
   nativeAdapter?: NoFocusStealAdapter;
   appBridge?: ElectronAppBridge;
   clock?: ElectronClock;
+  platform?: NodeJS.Platform;
 }
 
 export class ElectronNoFocusStealRuntime {
@@ -13,6 +14,7 @@ export class ElectronNoFocusStealRuntime {
   readonly #nativeAdapter: NoFocusStealAdapter | undefined;
   readonly #appBridge: ElectronAppBridge;
   readonly #clock: ElectronClock;
+  private readonly platform: NodeJS.Platform;
   #temporaryInteractiveFocus = false;
   #movingOrResizing = false;
   #focusListener: (() => void) | undefined;
@@ -28,6 +30,7 @@ export class ElectronNoFocusStealRuntime {
     this.#nativeAdapter = options?.nativeAdapter;
     this.#appBridge = options?.appBridge ?? defaultAppBridge;
     this.#clock = options?.clock ?? defaultClock;
+    this.platform = options?.platform ?? process.platform;
   }
 
   setEnabled(enabled: boolean): void {
@@ -185,7 +188,7 @@ export class ElectronNoFocusStealRuntime {
       if (this.#movingOrResizing) return;
       if (this.#temporaryInteractiveFocus) return;
 
-      if (process.platform === 'darwin') {
+      if (this.platform === 'darwin') {
         this.#restorePreviousAppFocus();
         return;
       }
@@ -197,7 +200,7 @@ export class ElectronNoFocusStealRuntime {
   #restoreExternalFocusIfWindowIsFocused(): void {
     if (!this.#window.isFocused()) return;
 
-    if (process.platform === 'darwin') {
+    if (this.platform === 'darwin') {
       this.#restorePreviousAppFocus();
       return;
     }

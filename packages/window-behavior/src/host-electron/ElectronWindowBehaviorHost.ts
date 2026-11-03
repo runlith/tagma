@@ -43,6 +43,7 @@ export class ElectronWindowBehaviorHost {
       noFocusStealOptions.nativeAdapter = options.noFocusStealNativeAdapter;
     }
     noFocusStealOptions.appBridge = this.#appBridge;
+    noFocusStealOptions.platform = this.#platform;
     if (options?.clock !== undefined) {
       noFocusStealOptions.clock = options.clock;
     }
