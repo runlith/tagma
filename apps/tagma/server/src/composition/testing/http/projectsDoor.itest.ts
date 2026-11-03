@@ -4,8 +4,9 @@ import { layer } from '@runlith/effect-test';
 import { LocationRevision } from '@runlith/files/resource';
 import { existsSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
-import { Effect, FileSystem, Layer } from 'effect';
+import { Context, Effect, FileSystem, Layer } from 'effect';
 import { scanTree } from '../../../graph/testing/doubles.js';
+import { CheckoutPaths } from '../../../workspace/contract/service/checkoutPaths.js';
 import type { CoveredRepositoriesAnswer } from '../../../workspace/contract/wire/repositories.js';
 import { doorFixture, DoorFixture } from '../doorFixture.js';
 import { suiteGit } from '../suiteGit.js';
@@ -56,6 +57,31 @@ layer(doorFixture().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeTest
             [after],
           ],
         ],
+      );
+    }),
+  );
+
+  it.effect('a project whose repository no longer opens refuses its own paths and leaves every other project its places', () =>
+    Effect.gen(function* () {
+      const world = yield* DoorFixture;
+      const files = yield* FileSystem.FileSystem;
+      const born = Effect.fnUntraced(function* (label: string) {
+        const root = yield* files.realPath(yield* world.directory(label));
+        yield* suiteGit(root, 'init', '-q', '-b', 'main');
+        yield* suiteGit(root, 'commit', '-q', '--allow-empty', '-m', 'born');
+        const added = yield* world.op('add_project', { name: world.uniqueName(), rootPath: root, storage: 'stealth' });
+        return { root, projectId: (added.body as { project: { id: number } }).project.id };
+      });
+      const healthy = yield* born('healthy');
+      const broken = yield* born('broken');
+      yield* files.remove(join(broken.root, '.git'), { recursive: true });
+      yield* files.writeFileString(join(broken.root, '.git'), `gitdir: ${join(broken.root, 'nowhere')}\n`);
+      const owners = (projectId: number, root: string) => world.op('read_owners', { path: join(root, 'main.ts') }, `project=${projectId}`);
+      expect((yield* owners(healthy.projectId, healthy.root)).status).toBe(200);
+      expect((yield* owners(broken.projectId, broken.root)).body).toMatchObject({ code: 'files' });
+      expect((yield* owners(healthy.projectId, healthy.root)).status).toBe(200);
+      expect((yield* Effect.flip(Context.get(world.runtime.workspace, CheckoutPaths).rootsWithin(dirname(broken.root))))._tag).toBe(
+        'PlaceUnread',
       );
     }),
   );

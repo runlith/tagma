@@ -127,6 +127,8 @@ const dropProject = (index: Map<string, readonly ProjectRoot[]>, key: string, pr
 
 const directlyIn = (outside: ReadonlySet<string> | undefined, path: string): boolean => outside?.has(dirname(path)) === true;
 
+const under = (path: string, root: string): boolean => path === root || path.startsWith(`${root}/`);
+
 export type CheckoutPathService = CheckoutPaths['Service'];
 
 export const makeCheckoutPathService = Effect.gen(function* () {
@@ -155,16 +157,20 @@ export const makeCheckoutPathService = Effect.gen(function* () {
 
   const missedAcross = new Set<string>();
 
-  const missing = new Map<number, string>();
+  const fenced = new Map<number, readonly string[]>();
+
+  const former = new Map<number, readonly string[]>();
 
   function invalidate(projectId: number): void {
-    for (const root of known.get(projectId) ?? []) {
+    const roots = known.get(projectId) ?? [];
+    if (roots.length > 0) former.set(projectId, [...new Set([...(former.get(projectId) ?? []), ...roots.map((root) => root.path)])]);
+    for (const root of roots) {
       dropProject(byPath, root.path, projectId);
       dropProject(byId, root.rootId, projectId);
     }
     known.delete(projectId);
     outsideOf.delete(projectId);
-    missing.delete(projectId);
+    fenced.delete(projectId);
     pending.add(projectId);
     missedAcross.clear();
     invalidations += 1;
@@ -183,6 +189,7 @@ export const makeCheckoutPathService = Effect.gen(function* () {
         if (known.has(projectId)) invalidate(projectId);
         else pending.add(projectId);
       }
+      for (const projectId of former.keys()) if (!current.has(projectId)) former.delete(projectId);
       projectsAt = current;
       seenRegistry = registry;
       missedAcross.clear();
@@ -215,11 +222,12 @@ export const makeCheckoutPathService = Effect.gen(function* () {
   ): Effect.fn.Return<ProjectRoot | null, PlaceUnread> {
     const roots = yield* machineRoots(path);
     const placed = yield* indexedRoot(roots, spelling, preferred);
-    for (const [projectId, root] of missing) {
-      if ((spelling !== root && !spelling.startsWith(`${root}/`)) || (placed !== null && placed.path.length > root.length)) continue;
+    for (const [projectId, fences] of fenced) {
+      const root = fences.find((one) => under(spelling, one));
+      if (root === undefined || (placed !== null && placed.path.length > root.length)) continue;
       yield* rootsOf(projectId, path);
       pending.add(projectId);
-      missing.delete(projectId);
+      fenced.delete(projectId);
       return yield* atSpelling(path, spelling, preferred, followed);
     }
     if (placed !== null || followed || directlyIn(missedAcross, spelling)) return placed;
@@ -241,42 +249,36 @@ export const makeCheckoutPathService = Effect.gen(function* () {
     return Effect.suspend(() => {
       const attempted = revisions.get(projectId) ?? 0;
       let omitted = false;
+      const fence = (refusal: PlaceUnread, place: string | undefined): Effect.Effect<readonly ProjectRoot[], PlaceUnread> => {
+        const registered = projectsAt.get(projectId);
+        const fences = [
+          ...new Set([
+            ...(place === undefined ? [] : [place]),
+            ...(registered === undefined ? [] : [registered]),
+            ...(former.get(projectId) ?? []),
+          ]),
+        ];
+        if (!across || fences.length === 0 || fences.some((root) => under(path, root))) return Effect.fail(refusal);
+        return Effect.map(
+          Effect.mapError(Effect.forEach(fences, canonicalize), () => refusal),
+          (real) => {
+            omitted = true;
+            if ((revisions.get(projectId) ?? 0) === attempted) fenced.set(projectId, real);
+            return [];
+          },
+        );
+      };
       return coverage.covered(projectId).pipe(
         Effect.catchTag('ProjectRootsUnavailable', (failure) =>
           failure.reason === 'unestablished' || failure.reason === 'moved' ? coverage.cover(projectId) : Effect.fail(failure),
         ),
         Effect.map((covered) => covered.roots),
-        Effect.catchTag('RootMissing', (failure) => {
-          if (!across || failure.path === undefined || path === failure.path || path.startsWith(`${failure.path}/`))
-            return Effect.fail(failure);
-          return Effect.map(
-            Effect.mapError(canonicalize(failure.path), () => failure),
-            (root) => {
-              omitted = true;
-              if ((revisions.get(projectId) ?? 0) === attempted) missing.set(projectId, root);
-              return [];
-            },
-          );
-        }),
-        Effect.catchTag('RepositoryMissing', (failure) => {
-          if (
-            !across ||
-            failure.reason !== undefined ||
-            failure.path === undefined ||
-            path === failure.path ||
-            path.startsWith(`${failure.path}/`)
-          )
-            return Effect.fail(failure);
-          return Effect.map(
-            Effect.mapError(canonicalize(failure.path), () => failure),
-            (root) => {
-              omitted = true;
-              if ((revisions.get(projectId) ?? 0) === attempted) missing.set(projectId, root);
-              return [];
-            },
-          );
-        }),
-        Effect.mapError((failure) => new PlaceUnread({ path, reason: failure.message })),
+        Effect.catch((failure) =>
+          fence(
+            new PlaceUnread({ path, reason: failure.message }),
+            'path' in failure && typeof failure.path === 'string' ? failure.path : undefined,
+          ),
+        ),
         Effect.flatMap((roots) => {
           return Effect.forEach(roots, (root) =>
             Effect.map(
@@ -287,6 +289,8 @@ export const makeCheckoutPathService = Effect.gen(function* () {
             Effect.tap((roots) =>
               Effect.sync(() => {
                 if (omitted || (revisions.get(projectId) ?? 0) !== attempted) return;
+                fenced.delete(projectId);
+                former.delete(projectId);
                 for (const root of known.get(projectId) ?? []) {
                   dropProject(byPath, root.path, projectId);
                   dropProject(byId, root.rootId, projectId);
@@ -348,6 +352,9 @@ export const makeCheckoutPathService = Effect.gen(function* () {
     rootsWithin: Effect.fn('CheckoutPaths.rootsWithin')(function* (directory) {
       const spelling = yield* Effect.mapError(spelled(directory), (failure) => unreadPlace(directory, failure.cause));
       const roots = yield* machineRoots(directory);
+      for (const [projectId, fences] of [...fenced]) {
+        if (fences.some((root) => under(root, spelling) || under(spelling, root))) yield* rootsOf(projectId, directory);
+      }
       const prefix = spelling.endsWith('/') ? spelling : `${spelling}/`;
       const within: CheckoutPlace[] = [];
       for (const [path, group] of roots) {
