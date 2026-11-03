@@ -3,6 +3,8 @@ import { and, inArray } from 'drizzle-orm';
 import { blockLine } from '../voice/lines.js';
 import { GraphStore, type StoreFailure } from '../../platform/contract/service/store.js';
 import { WriterRegister } from '../../platform/contract/service/writers.js';
+import { NATIVE_HARNESS, SessionIdentity, sessionName } from '../../platform/contract/wire/session.js';
+import { journalSessions } from '../journal/writers.js';
 import { blockName } from '../contract/wire/references.js';
 import { rowsPerStatement } from '../../platform/store/binds.js';
 import { GateRefusal } from '../../platform/contract/wire/refusal.js';
@@ -16,14 +18,22 @@ import { Tags } from '../contract/service/vocabulary.js';
 import { Orientation } from '../contract/service/orientation.js';
 import { GraphJournal } from '../contract/service/journal.js';
 
-import { Digest, type DigestReader, type GraphDigest } from '../contract/service/orientation.js';
+import { Digest, SessionNames, type DigestReader, type GraphDigest } from '../contract/service/orientation.js';
 
 type Reach = { readonly mine: ReadonlySet<number>; readonly near: ReadonlySet<number> };
+
+type Writer = number | null;
+
+type Seen = { readonly by: Map<Writer, string[]> };
+
+type Label = (writer: Writer) => string;
+
+const NAMED_WRITERS = 4;
 
 export const digestLayer: Layer.Layer<
   Digest,
   never,
-  Projects | Selection | GraphJournal | Orientation | Tags | WriterRegister | GraphStore
+  Projects | Selection | GraphJournal | Orientation | Tags | WriterRegister | SessionNames | SessionIdentity | GraphStore
 > = Layer.effect(
   Digest,
   Effect.gen(function* () {
@@ -33,7 +43,24 @@ export const digestLayer: Layer.Layer<
     const journal = yield* GraphJournal;
     const orientation = yield* Orientation;
     const sessions = yield* WriterRegister;
+    const names = yield* SessionNames;
+    const identity = yield* SessionIdentity;
     const { db } = yield* GraphStore;
+
+    const labelsOf = Effect.fn('Digest.labelsOf')(function* (
+      projectId: number,
+      writers: readonly Writer[],
+    ): Effect.fn.Return<Label, StoreFailure> {
+      const rows = yield* sessions.named(writers.filter((id): id is number => id !== null));
+      const known = new Map((yield* journalSessions(names, projectId, rows)).map((row) => [row.id, row]));
+      return (writer) => {
+        if (writer === null) return 'operator';
+        const row = known.get(writer);
+        if (row === undefined) return 'unknown';
+        if (row.harness !== NATIVE_HARNESS) return `session ${sessionName(row, identity)}`;
+        return `agent ${row.name === null ? row.key : `${row.name} (${row.key})`}`;
+      };
+    });
 
     const reachOf = Effect.fn('Digest.reachOf')(function* (input: {
       projectId: number;
@@ -91,16 +118,17 @@ export const digestLayer: Layer.Layer<
         const throughEventId = Math.max(input.sinceEventId, highestId(events));
 
         const own = input.reader === undefined ? null : yield* sessions.idOf(input.reader.session);
-        const touched = new Map<number, { ops: string[]; sessions: (number | null)[] }>();
+        const touched = new Map<number, Seen>();
         const unreadable: number[] = [];
         for (const entry of [...events].reverse()) {
           if (own !== null && entry.sessionId === own) continue;
           const concerned = blocksOf(entry);
           if (concerned.unreadable !== null) unreadable.push(entry.id);
           for (const id of concerned.ids) {
-            const seen = touched.get(id) ?? { ops: [], sessions: [] };
-            if (!seen.ops.includes(entry.op)) seen.ops.push(entry.op);
-            if (!seen.sessions.includes(entry.sessionId)) seen.sessions.push(entry.sessionId);
+            const seen = touched.get(id) ?? { by: new Map() };
+            const ops = seen.by.get(entry.sessionId) ?? [];
+            if (!ops.includes(entry.op)) ops.push(entry.op);
+            seen.by.set(entry.sessionId, ops);
             touched.set(id, seen);
           }
         }
@@ -115,11 +143,12 @@ export const digestLayer: Layer.Layer<
                 written: input.reader.written,
                 candidates: [...touched.keys()],
               });
-        const tells = (blockId: number, seen: { ops: readonly string[]; sessions: readonly (number | null)[] }): boolean =>
-          reach === null || seen.sessions.includes(null) || reach.mine.has(blockId) || reach.near.has(blockId);
+        const tells = (blockId: number, seen: Seen): boolean =>
+          reach === null || seen.by.has(null) || reach.mine.has(blockId) || reach.near.has(blockId);
         const shown = [...touched].filter(([blockId, seen]) => tells(blockId, seen));
         const aside = [...touched].filter(([blockId, seen]) => !tells(blockId, seen));
 
+        const label = yield* labelsOf(proj.id, [...new Set([...touched.values()].flatMap((seen) => [...seen.by.keys()]))]);
         const lines = [`Graph changes since the previous turn — project "${proj.name}":`];
         if (shown.length > 0) {
           const table = yield* vocabulary.of(input.projectId);
@@ -130,10 +159,11 @@ export const digestLayer: Layer.Layer<
           for (const [blockId, seen] of shown) {
             const row = byId.get(blockId);
             if (!row) continue;
-            lines.push(`- ${blockLine(table, row)} — ${seen.ops.join(', ')}`);
+            const acts = [...seen.by].map(([writer, ops]) => `${ops.join(', ')} by ${label(writer)}`);
+            lines.push(`- ${blockLine(table, row)} — ${acts.join('; ')}`);
           }
         }
-        const elsewhere = elsewhereLine(aside);
+        const elsewhere = elsewhereLine(aside, label);
         if (elsewhere !== null) lines.push('', elsewhere);
         if (unreadable.length > 0) {
           lines.push(
@@ -147,10 +177,12 @@ export const digestLayer: Layer.Layer<
   }),
 );
 
-function elsewhereLine(blocks: readonly (readonly [number, { readonly sessions: readonly (number | null)[] }])[]): string | null {
+function elsewhereLine(blocks: readonly (readonly [number, Seen])[], label: Label): string | null {
   if (blocks.length === 0) return null;
-  const writers = new Set(blocks.flatMap(([, seen]) => seen.sessions)).size;
-  return `Not listed: ${counted(blocks.length, 'block')} changed by ${counted(writers, 'session')} (read_events).`;
+  const writers = [...new Set(blocks.flatMap(([, seen]) => [...seen.by.keys()]))].map(label);
+  const rest = writers.length - NAMED_WRITERS;
+  const named = `${writers.slice(0, NAMED_WRITERS).join(', ')}${rest > 0 ? ` and ${rest} more` : ''}`;
+  return `Not listed: ${counted(blocks.length, 'block')} changed by ${named} (read_events).`;
 }
 
 const counted = (count: number, noun: string): string => `${count} ${noun}${count === 1 ? '' : 's'}`;

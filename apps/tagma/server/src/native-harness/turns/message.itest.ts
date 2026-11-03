@@ -10,6 +10,7 @@ import { nativeTurnContext } from './message.js';
 import { type WorldState, worldStateSections } from './worldState.js';
 import type { Message } from '@runlith/llm/schema/messages';
 import { CORE_KINDS } from '../testing/doubles.js';
+import { signedBy } from '../../invocation/testing/call.js';
 
 const noWorld: WorldState = {
   skills: [{ id: 'artifacts', description: 'Writes a page this server hosts.' }],
@@ -207,6 +208,29 @@ layer(demoGraphLayer().pipe(Layer.provideMerge(BunFileSystem.layer)), { excludeT
         expect(told).toContain(yield* demo.nameOf(mine.id));
         expect(told).toContain(yield* demo.nameOf(task.id));
         expect(told).not.toContain('far away');
+      }),
+    ),
+  );
+
+  it.effect('every told change names its writer: the operator, an agent thread or a CLI session', () =>
+    withDemo((demo) =>
+      Effect.gen(function* () {
+        const { graph, projectId, root } = demo;
+        const { nextTurn, threadId } = yield* setup(demo);
+        yield* nextTurn();
+        const mine = yield* demo.as(
+          'reader',
+          graph.blocks.create({ projectId, parentId: root, tags: ['idea'], title: 'what the reader wrote' }),
+        );
+        const doomed = yield* graph.blocks.create({ projectId, parentId: root, tags: ['idea'], title: 'the operator removes this' });
+        yield* nextTurn();
+        yield* graph.trash.delete({ id: doomed.id });
+        yield* graph.blocks.update({ id: mine.id, title: 'retitled by the operator' });
+        yield* graph.blocks.update({ id: mine.id, body: 'and by an agent' }).pipe(signedBy({ harness: 'tagma', key: threadId }));
+        yield* graph.blocks.update({ id: mine.id, body: 'and by a CLI' }).pipe(signedBy({ harness: 'test', key: 'peer' }));
+        const told = contextText(yield* nextTurn());
+        expect(told).toContain(`(in the trash) the operator removes this — delete by operator`);
+        expect(told).toContain(`update by operator; update by agent ${threadId}; update by session test:peer`);
       }),
     ),
   );
