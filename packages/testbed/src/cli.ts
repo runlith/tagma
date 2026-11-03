@@ -2,7 +2,7 @@
 import { appendFileSync, existsSync, readFileSync } from 'node:fs';
 import { constants, getPriority, setPriority } from 'node:os';
 import { basename, join, resolve } from 'node:path';
-import { kindOf } from './core/files.ts';
+import { kindOf, runsAs, type Kind } from './core/files.ts';
 import type { FileRow, NotRunRow, Row, TestRow, WorldRow } from './core/ledger.ts';
 import { openProcesses } from './core/processes.ts';
 import { openRun, REPORT_ENV, ROOT_ENV, sweepRuns } from './core/run.ts';
@@ -14,7 +14,36 @@ const REPO = resolve(import.meta.dir, '../../..');
 const TIMINGS = '.bun-test-timings.json';
 const TAIL_MS = 250;
 
+const KINDS: Readonly<Record<string, { readonly kind: Kind; readonly suffix: string; readonly pathspec: string }>> = {
+  e2e: { kind: 'e2e', suffix: '.e2e.ts', pathspec: '*.e2e.ts' },
+  itest: { kind: 'resource', suffix: '.itest.ts', pathspec: '*.itest.*' },
+};
+const discover = async (kind: Kind, pathspec: string): Promise<string[]> => {
+  const cwd = process.cwd();
+  const tracked = Bun.spawnSync(['git', 'ls-files', '--cached', '--others', '--exclude-standard', '-z', '--', pathspec], {
+    cwd,
+    stdout: 'pipe',
+    stderr: 'pipe',
+  });
+  let found: string[];
+  if (tracked.exitCode === 0) found = tracked.stdout.toString().split('\0').filter(Boolean);
+  else if (tracked.stderr.toString().includes('not a git repository'))
+    found = await Array.fromAsync(new Bun.Glob(`**/${pathspec}`).scan({ cwd, onlyFiles: true, followSymlinks: false }));
+  else throw new Error(`test discovery failed: ${tracked.stderr.toString()}`);
+  const packages = new Map<string, boolean>();
+  const nested = (directory: string): boolean => {
+    let known = packages.get(directory);
+    if (known === undefined) packages.set(directory, (known = existsSync(join(cwd, directory, 'package.json'))));
+    return known;
+  };
+  return found
+    .filter((file) => runsAs(kind, file, nested))
+    .map((file) => resolve(file))
+    .filter((file) => existsSync(file));
+};
+
 const command = process.argv.slice(2);
+const selected = KINDS[command[0] ?? ''];
 const program = command[0] === 'e2e' && command[1] === '--program';
 let headed = false;
 if (program) {
@@ -22,7 +51,8 @@ if (program) {
   if (file === undefined) throw new Error('e2e --program needs a program file');
   if (!existsSync(resolve(file))) throw new Error(`e2e program does not exist: ${file}`);
   command.splice(0, 3, 'bun', resolve(file));
-} else if (command[0] === 'e2e') {
+} else if (selected !== undefined) {
+  const word = command[0]!;
   const flags: string[] = [];
   const files: string[] = [];
   const values = new Set([
@@ -52,7 +82,7 @@ if (program) {
   let positional = false;
   for (let at = 1; at < command.length; at++) {
     const part = command[at]!;
-    if (!positional && part === '--headed') {
+    if (!positional && selected.kind === 'e2e' && part === '--headed') {
       headed = true;
       continue;
     }
@@ -71,40 +101,19 @@ if (program) {
         part === '--changed' &&
         command[at + 1] !== undefined &&
         !command[at + 1]!.startsWith('-') &&
-        kindOf(command[at + 1]!) !== 'e2e'
+        kindOf(command[at + 1]!) !== selected.kind
       )
         flags.push(command[++at]!);
       continue;
     }
-    if (kindOf(part) !== 'e2e') throw new Error(`e2e expects .e2e.ts files, received ${part}`);
+    if (kindOf(part) !== selected.kind) throw new Error(`${word} expects ${selected.suffix} files, received ${part}`);
     const file = resolve(part);
-    if (!existsSync(file)) throw new Error(`e2e file does not exist: ${part}`);
+    if (!existsSync(file)) throw new Error(`${word} file does not exist: ${part}`);
     files.push(file);
   }
+  if (files.length === 0) files.push(...(await discover(selected.kind, selected.pathspec)));
   if (files.length === 0) {
-    const tracked = Bun.spawnSync(['git', 'ls-files', '--cached', '--others', '--exclude-standard', '-z', '--', '*.e2e.ts'], {
-      cwd: process.cwd(),
-      stdout: 'pipe',
-      stderr: 'pipe',
-    });
-    let discovered: string[];
-    if (tracked.exitCode === 0) discovered = tracked.stdout.toString().split('\0').filter(Boolean);
-    else if (tracked.stderr.toString().includes('not a git repository'))
-      discovered = await Array.fromAsync(new Bun.Glob('**/*.e2e.ts').scan({ cwd: process.cwd(), onlyFiles: true, followSymlinks: false }));
-    else throw new Error(`e2e discovery failed: ${tracked.stderr.toString()}`);
-    for (const file of discovered) {
-      if (
-        file
-          .split('/')
-          .some((part) => part.startsWith('.') || ['node_modules', 'build', 'dist', 'coverage', 'out', 'target'].includes(part))
-      )
-        continue;
-      const absolute = resolve(file);
-      if (existsSync(absolute)) files.push(absolute);
-    }
-  }
-  if (files.length === 0) {
-    console.error('testbed: no .e2e.ts files found');
+    console.error(`testbed: no ${selected.suffix} files found`);
     process.exit(1);
   }
   command.splice(0, command.length, 'bun', 'test', ...flags, ...new Set(files.sort()));

@@ -1,4 +1,5 @@
 import { dirname, join } from 'node:path';
+import { kindOf, runsAs } from '@runlith/testbed/kinds';
 import type { Package } from './packages.ts';
 import { vitestConfigsOf } from './vitestConfigs.ts';
 
@@ -23,7 +24,7 @@ export type SuiteOptions = {
 
 export const SCRIPTS = ['test', 'test:integration', 'test:native'] as const;
 
-const BUN_TEST = /\bbun(?:\s+--\S+)*\s+test\b/;
+const BUN_TEST = /\bbun(?:\s+--\S+)*\s+test\b|^(?:itest|e2e)\b/;
 const TEST_FILE = /\.[cm]?[jt]sx?'?$/;
 
 const quote = (value: string): string => `'${value.replaceAll("'", "'\\''")}'`;
@@ -32,6 +33,16 @@ export const suitesOf = (packages: readonly Package[], paths: readonly string[],
   if (options.jobs !== undefined && (!Number.isSafeInteger(options.jobs) || options.jobs < 1))
     throw new Error('--jobs must be a positive integer');
   const cli = `${quote(process.execPath)} ${quote(join(options.root, 'packages/testbed/src/cli.ts'))}`;
+  const listed = new Set(paths);
+  const owners = [...packages].sort((a, b) => b.dir.length - a.dir.length);
+  for (const path of paths) {
+    if (kindOf(path) !== 'resource') continue;
+    const owner = owners.find((pkg) => pkg.dir === '' || path.startsWith(`${pkg.dir}/`));
+    if (owner === undefined || owner.scripts['test:integration'] !== undefined) continue;
+    const own = owner.dir === '' ? path : path.slice(owner.dir.length + 1);
+    if (runsAs('resource', own, (directory) => listed.has(join(owner.dir, directory, 'package.json'))))
+      throw new Error(`${owner.dir || '.'} has no test:integration script to run ${path}`);
+  }
   const result: Suite[] = [];
   const vitest = options.combineVitest ? new Set(vitestConfigsOf(packages, paths).map((config) => config.directory)) : new Set<string>();
   if (vitest.size > 0) {

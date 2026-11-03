@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "typecheck": "runlith-typecheck",
-    "test:integration": "testbed bun test ./change/check.itest.ts ./change/all.itest.ts"
+    "test:integration": "testbed itest"
   },
   "dependencies": {
     "@runlith/code-facts": "workspace:*",

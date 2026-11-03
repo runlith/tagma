@@ -2625,7 +2625,7 @@
     "db:generate": "bun --bun drizzle-kit generate",
     "start": "bun src/composition/developer/server.ts",
     "test": "testbed bun test src --no-isolate",
-    "test:integration": "testbed bun test --no-isolate $(find src scripts -name '*.itest.ts' | sed 's|^|./|')",
+    "test:integration": "testbed itest --no-isolate",
     "test:e2e": "testbed e2e --no-isolate",
     "typecheck": "runlith-typecheck"
   },

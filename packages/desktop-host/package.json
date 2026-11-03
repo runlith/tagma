@@ -20,6 +20,7 @@
   },
   "scripts": {
     "test": "testbed vitest run src --project 'unit*'",
+    "test:integration": "testbed vitest run --project integration",
     "typecheck": "runlith-typecheck"
   },
   "dependencies": {

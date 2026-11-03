@@ -102,7 +102,7 @@
   },
   "scripts": {
     "test": "testbed bun test --no-isolate",
-    "test:integration": "testbed bun test --no-isolate $(find src -name '*.itest.ts' | sed 's|^|./|')",
+    "test:integration": "testbed itest --no-isolate",
     "bench:modules": "bun src/packs/architecture/modules/implementation.bench.ts",
     "bench:names": "bun src/packs/architecture/names/implementation.bench.ts",
     "inspect": "bun src/cli/inspect.ts",

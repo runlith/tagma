@@ -34,7 +34,7 @@
   "scripts": {
     "build": "bun ./scripts/build.ts",
     "smoke": "bun ./scripts/smoke.ts",
-    "test:integration": "testbed bun test --no-isolate $(find src -name '*.itest.ts' | sed 's|^|./|')",
+    "test:integration": "testbed itest --no-isolate",
     "typecheck": "runlith-typecheck"
   },
   "dependencies": {

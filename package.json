@@ -80,10 +80,9 @@
   "scripts": {
     "check:change": "bun scripts/change/check.ts",
     "test:all": "testbed bun scripts/change/all.ts",
-    "test:e2e": "testbed e2e --no-isolate",
     "typecheck": "runlith-typecheck scripts",
     "patches:prove": "bun scripts/patches-prove.mjs",
-    "test:integration": "testbed bun test $(find checks -path checks/law -prune -o -name '*.itest.ts' -print | sed 's|^|./|')",
+    "test:integration": "testbed itest",
     "effect:lint": "bun checks/effect/lint.ts",
     "tagma:build": "bun run --cwd apps/tagma/server build",
     "tagma:release": "bun run --cwd apps/tagma/server release",

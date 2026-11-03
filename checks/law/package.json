@@ -5,7 +5,7 @@
   "scripts": {
     "typecheck": "runlith-typecheck",
     "test": "testbed bun test",
-    "test:integration": "testbed bun test $(find . -name '*.itest.ts' -not -path './node_modules/*')"
+    "test:integration": "testbed itest"
   },
   "dependencies": {
     "@runlith/code-facts": "workspace:*",

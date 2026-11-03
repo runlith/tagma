@@ -16,7 +16,7 @@
   },
   "scripts": {
     "build": "node scripts/build-native.mjs",
-    "test:integration": "testbed bun test --no-isolate ./src/conformance.itest.ts",
+    "test:integration": "testbed itest --no-isolate",
     "test:native": "swift test --package-path native -j 3",
     "typecheck": "runlith-typecheck"
   },

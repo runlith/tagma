@@ -55,7 +55,7 @@
     "build:native": "bun run src/artifact.ts",
     "postinstall": "bun run src/artifact.ts",
     "test": "testbed bun test --no-isolate",
-    "test:integration": "testbed bun test --no-isolate $(find src -name '*.itest.ts' | sed 's|^|./|')",
+    "test:integration": "testbed itest --no-isolate",
     "typecheck": "runlith-typecheck"
   },
   "dependencies": {

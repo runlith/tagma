@@ -123,12 +123,37 @@ test('leaves a child', () => { Bun.spawn(['sleep', '307'], { stdout: 'ignore', s
   expect(orphan.files[0]!.residue).toBe(1);
 });
 
-test('an empty e2e selection fails without falling back to ordinary tests', async () => {
+test('a kind command runs its own package files of that kind and leaves nested packages to their own runs', async () => {
+  const root = directory();
+  const git = Bun.spawnSync(['git', 'init', '-q', root]);
+  expect(git.exitCode, git.stderr.toString()).toBe(0);
+  writeFileSync(join(root, 'package.json'), '{}');
+  writeFileSync(join(root, 'unit.test.ts'), sum);
+  writeFileSync(join(root, 'own.e2e.ts'), sum);
+  mkdirSync(join(root, 'scripts'));
+  writeFileSync(join(root, 'scripts', 'own.itest.ts'), sum);
+  for (const dir of ['build', 'nested']) {
+    mkdirSync(join(root, dir));
+    writeFileSync(join(root, dir, 'foreign.itest.ts'), "throw new Error('a foreign itest ran');");
+    writeFileSync(join(root, dir, 'foreign.e2e.ts'), "throw new Error('a foreign e2e ran');");
+  }
+  writeFileSync(join(root, 'nested', 'package.json'), '{}');
+  const itest = await run(root, ['itest']);
+  expect(itest.code, itest.output).toBe(0);
+  expect(names(itest.files)).toEqual(['own.itest.ts']);
+  const e2e = await run(root, ['e2e']);
+  expect(e2e.code, e2e.output).toBe(0);
+  expect(names(e2e.files)).toEqual(['own.e2e.ts']);
+});
+
+test('an empty e2e or itest selection fails without falling back to ordinary tests', async () => {
   const root = directory();
   writeFileSync(join(root, 'unit.test.ts'), sum);
-  const empty = await run(root, ['e2e', '--pass-with-no-tests']);
-  expect(empty.code, empty.output).toBe(1);
-  expect(empty.files).toEqual([]);
+  for (const kind of ['e2e', 'itest']) {
+    const empty = await run(root, [kind, '--pass-with-no-tests']);
+    expect(empty.code, empty.output).toBe(1);
+    expect(empty.files).toEqual([]);
+  }
 });
 
 test('e2e workers retain two budget units each and one on a tiny machine', async () => {

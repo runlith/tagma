@@ -40,7 +40,7 @@ test('combined Vitest follows new workspace packages and extra configs while pre
 });
 
 test('a package script is one suite whose runner gets every file it selects, however many there are', () => {
-  const script = "testbed bun test --no-isolate $(find src -name '*.itest.ts' | sed 's|^|./|')";
+  const script = 'testbed itest --no-isolate';
   const files = new Map([
     ['package.json', JSON.stringify({ workspaces: ['packages/*'] })],
     ['packages/w/package.json', JSON.stringify({ scripts: { 'test:integration': script } })],
@@ -49,10 +49,32 @@ test('a package script is one suite whose runner gets every file it selects, how
   const plan = suitesOf(
     packagesOf([...files.keys()], (path) => files.get(path)!),
     [...files.keys()],
-    { root: '/', jobs: undefined, seed: undefined, randomize: false, reports: '/reports', combineVitest: false },
+    { root: '/', jobs: undefined, seed: 7, randomize: true, reports: '/reports', combineVitest: false },
   );
   expect(plan.map((suite) => suite.id)).toEqual(['packages/w:test:integration']);
-  expect(plan[0]!.stages).toEqual([expect.stringContaining("$(find src -name '*.itest.ts'")]);
+  expect(plan[0]!.stages).toEqual([expect.stringMatching(/ itest --no-isolate --randomize --seed=7$/)]);
+});
+
+test('an integration file its package runs no test:integration for refuses the plan', () => {
+  const files = new Map([
+    ['package.json', JSON.stringify({ workspaces: ['packages/*'] })],
+    ['packages/w/package.json', JSON.stringify({ scripts: { test: 'testbed bun test' } })],
+    ['packages/w/scripts/tool.itest.ts', ''],
+  ]);
+  expect(() =>
+    suitesOf(
+      packagesOf([...files.keys()], (path) => files.get(path)!),
+      [...files.keys()],
+      {
+        root: '/',
+        jobs: undefined,
+        seed: undefined,
+        randomize: false,
+        reports: '/reports',
+        combineVitest: false,
+      },
+    ),
+  ).toThrow('packages/w/scripts/tool.itest.ts');
 });
 
 test('a cut native suite stays pending and its CPU survives a successful resume', async () => {
@@ -179,7 +201,7 @@ test('stopping test:all preserves completed file output and ends the current sta
       join(root, 'package.json'),
       JSON.stringify({
         scripts: {
-          test: `bun test --parallel=1 --no-isolate ./finished.itest.ts && bun -e "const fs = require('fs'); fs.watch(process.env.STAGE_ROOT, () => {}); fs.writeFileSync(process.env.STAGE_MARK, String(process.pid))"`,
+          'test:integration': `bun test --parallel=1 --no-isolate ./finished.itest.ts && bun -e "const fs = require('fs'); fs.watch(process.env.STAGE_ROOT, () => {}); fs.writeFileSync(process.env.STAGE_MARK, String(process.pid))"`,
         },
       }),
     );
@@ -210,7 +232,7 @@ test('stopping test:all preserves completed file output and ends the current sta
       await reached.promise;
       expect(existsSync(mark), existsSync(mark) ? '' : (await output).join('\n')).toBe(true);
       const stage = Number(readFileSync(mark, 'utf8'));
-      const log = join(`${report}.d`, '.%3Atest.log');
+      const log = join(`${report}.d`, '.%3Atest%3Aintegration.log');
       const written = Promise.withResolvers<string>();
       const readSaved = () => (existsSync(log) ? readFileSync(log, 'utf8') : '');
       const checkSaved = () => {
@@ -252,7 +274,7 @@ test('suites run side by side while the machine budget has room, and one at a ti
       ['two', 'one'],
     ] as const) {
       mkdirSync(join(root, name));
-      writeFileSync(join(root, name, 'package.json'), JSON.stringify({ scripts: { test: 'bun test ./meet.itest.ts' } }));
+      writeFileSync(join(root, name, 'package.json'), JSON.stringify({ scripts: { 'test:integration': 'bun test ./meet.itest.ts' } }));
       writeFileSync(join(root, name, 'meet.itest.ts'), rendezvousSource(root, name, other));
     }
     const env: Record<string, string | undefined> = {
@@ -283,7 +305,7 @@ test('suites run side by side while the machine budget has room, and one at a ti
     expect(side.code, side.output).toBe(0);
     const alone = await invoke('alone.json', false, '--jobs', '1');
     expect(alone.code, alone.output).toBe(0);
-    const stages = [...alone.output.matchAll(/^test:all: (one|two):test(?: (pass|FAIL|CUT):[^\n]*)?$/gm)];
+    const stages = [...alone.output.matchAll(/^test:all: (one|two):test:integration(?: (pass|FAIL|CUT):[^\n]*)?$/gm)];
     expect(stages.map((stage) => stage[2] ?? 'started')).toEqual(['started', 'pass', 'started', 'pass']);
     expect(stages[0]?.[1]).toBe(stages[1]?.[1]);
     expect(stages[2]?.[1]).toBe(stages[3]?.[1]);

@@ -63,8 +63,7 @@
   },
   "scripts": {
     "test": "testbed bun test",
-    "test:e2e": "testbed e2e",
-    "test:integration": "testbed bun test $(find src -name '*.itest.ts' | sed 's|^|./|')",
+    "test:integration": "testbed itest",
     "typecheck": "runlith-typecheck"
   },
   "dependencies": {
