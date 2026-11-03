@@ -2,7 +2,7 @@ import { describe, expect } from 'bun:test';
 import { layer } from '@runlith/effect-test';
 import { closeSync, openSync } from 'node:fs';
 import * as BunFileSystem from '@effect/platform-bun/BunFileSystem';
-import { Context, Effect, FileSystem, Layer, Schema } from 'effect';
+import { Context, Deferred, Effect, FileSystem, Layer, Schema, Stream } from 'effect';
 import { processReader } from './posix/macos/processes';
 import { loadLibrary } from './posix/Library';
 import { HOLDER_LIBRARY } from './posix/testing/holder';
@@ -11,7 +11,7 @@ import { ChildProcess, ChildProcessSpawner } from 'effect/process';
 import { identityMatch, type ProcessWitness } from '@runlith/executions/protocol/evidence';
 import { ExecutionId, ExecutionRef } from '@runlith/executions/protocol/execution';
 import { EvidenceReader, type EvidenceScans, type ScanLimits, makeEvidenceScans } from './EvidenceScans';
-import { evidenceProbe } from './posix/macos/evidence';
+import { evidenceProbe, PS } from './posix/macos/evidence';
 import { readStanding } from './posix/macos/standing';
 import { hostSpawner } from './hostSpawner';
 import { makeProcessEvidence, type ExecutionTopology, type ObservedExecution } from './ProcessEvidence';
@@ -203,6 +203,38 @@ layer(readings, { excludeTestServices: true })('macOS readings', (it) => {
         expect(cut.unmeasured.some((region) => region.reason === 'truncated')).toBe(true);
         const measured = new Set(full.found.map((held) => `${held.address}:${held.port}/${held.holder.pid}`));
         for (const held of cut.found) expect(measured.has(`${held.address}:${held.port}/${held.holder.pid}`)).toBe(true);
+      }),
+    );
+
+    it.effect('does not publish an unfinished process row when the stderr cap stops the probe', () =>
+      Effect.gen(function* () {
+        const { witness } = yield* ListeningProcess;
+        const real = yield* ChildProcessSpawner.ChildProcessSpawner;
+        const interrupted = ChildProcessSpawner.make((command) =>
+          Effect.gen(function* () {
+            if (command._tag !== 'StandardCommand' || command.command !== PS) return yield* real.spawn(command);
+            const listed = yield* Deferred.make<void>();
+            const child = yield* real.spawn(
+              ChildProcess.make(
+                '/bin/sh',
+                ['-c', `printf '${witness.pid} 1 1 ?? S unfinished'; exec 1>&-; while :; do printf diagnostic >&2; done`],
+                command.options,
+              ),
+            );
+            return {
+              ...child,
+              stdout: child.stdout.pipe(Stream.ensuring(Deferred.succeed(listed, undefined))),
+              stderr: Stream.unwrap(Effect.as(Deferred.await(listed), child.stderr)),
+            };
+          }),
+        );
+        const probe = yield* evidenceProbe({ ...LIMITS, errorBytes: 32 }).pipe(
+          Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, interrupted),
+        );
+        const measured = yield* probe.processes({ _tag: 'Pids', pids: [witness.pid] });
+        expect(measured.found).toEqual([]);
+        expect(measured.completeness).toBe('unavailable');
+        expect(measured.unmeasured.some((region) => region.reason === 'refused')).toBe(true);
       }),
     );
 

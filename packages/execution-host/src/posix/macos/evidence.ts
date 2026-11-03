@@ -305,7 +305,7 @@ const around = (region: string, output: Output, limits: ProbeLimits): ReadonlyAr
 export const broken = (output: Output): boolean => output.failed !== undefined || output.signalled;
 
 const whole = (output: Output): string => {
-  if (!output.truncated) return output.text;
+  if (!output.truncated && output.exitCode !== undefined) return output.text;
   const last = output.text.lastIndexOf('\n');
   return last < 0 ? '' : output.text.slice(0, last + 1);
 };

@@ -6,7 +6,7 @@ import { HostRegistration } from '@runlith/executions/HostRegistration';
 import { type WireLimits } from '@runlith/executions/protocol/wire';
 import { join, resolve } from 'node:path';
 import { host, serve } from './host';
-import { ChildProcessSpawner } from 'effect/process';
+import { ChildProcess, ChildProcessSpawner } from 'effect/process';
 import { ExecutionClient } from '@runlith/executions/ExecutionClient';
 import { endpointConnection } from '@runlith/executions/posix/endpoint';
 import { platformLayer } from './composition/macos';
@@ -47,9 +47,11 @@ layer(platform, { excludeTestServices: true })('host boot', (it) => {
       yield* Effect.gen(function* () {
         const real = yield* ChildProcessSpawner.ChildProcessSpawner;
         const delayed = ChildProcessSpawner.make((command) =>
-          command._tag === 'StandardCommand' && command.command === PS
-            ? Effect.andThen(Effect.sleep('2100 millis'), real.spawn(command))
-            : real.spawn(command),
+          real.spawn(
+            command._tag === 'StandardCommand' && command.command === PS
+              ? ChildProcess.make('/bin/sh', ['-c', 'sleep 2.1; exec "$@"', 'sh', command.command, ...command.args], command.options)
+              : command,
+          ),
         );
         const facts = yield* platformFacts(yield* loadLibrary(LIBRARY)).pipe(
           Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, delayed),
