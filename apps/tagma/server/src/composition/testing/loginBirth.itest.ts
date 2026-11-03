@@ -66,9 +66,8 @@ it.live('the first prompt waits for Claude discovery, keeps its model, and survi
     const thread = yield* Fiber.join(birth);
     expect(thread).toMatchObject({ provider: 'claude-code' });
     const primary = yield* nextRow((row) => row.provider === 'claude-code' && row.problem === null && row.default);
-    const adopted = yield* world.op('begin_sign_in', { provider: 'claude-code' });
-    expect(adopted.status).toBe(200);
-    expect(adopted.body).toMatchObject({ status: 'begun', flow: { flow: 'adopted', account: primary.account } });
+    expect(initial).toMatchObject({ account: primary.account });
+    expect(thread).toMatchObject({ account: primary.account });
     const beforeFirstOut = yield* Effect.forkScoped(
       nextRow((row) => row.provider === 'claude-code' && row.account === primary.account && row.problem?.kind === 'signed-out'),
     );
@@ -85,6 +84,9 @@ it.live('the first prompt waits for Claude discovery, keeps its model, and survi
     yield* Fiber.join(beforeFirstIn);
     expect(yield* tenant.perform('read_model_defaults', {})).toEqual(initial);
     yield* tenant.turn(thread.id, { text: 'First prompt', key: 'first-login-send' });
+    const adopted = yield* world.op('begin_sign_in', { provider: 'claude-code' });
+    expect(adopted.status).toBe(200);
+    expect(adopted.body).toMatchObject({ status: 'begun', flow: { flow: 'adopted', account: primary.account } });
     const saved = yield* tenant.perform('read_model_defaults', {});
     expect(saved).toMatchObject({ status: 'read', provider: 'claude-code', account: primary.account });
     const before = yield* accounts.defaultAccount('claude-code');

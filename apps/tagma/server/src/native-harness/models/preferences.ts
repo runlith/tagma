@@ -16,12 +16,14 @@ export type ModelMemory = {
   readonly switches: RememberedSwitches;
 };
 
+export type ModelOffer = DefaultModel & { readonly account: string | null };
+
 export type ModelPreferenceRows = Effect.Success<typeof makeModelPreferenceRows>;
 
 export const makeModelPreferenceRows = Effect.gen(function* () {
   const { db } = yield* MachineStore;
   const units = yield* MachineUnits;
-  let offered: DefaultModel | null = null;
+  let offered: ModelOffer | null = null;
 
   const memory = (ownerId: string, within?: Unit<'machine'>): Effect.Effect<ModelMemory, ThreadStorageFailed> => {
     const read = (unit: Unit<'machine'>) =>
@@ -56,7 +58,7 @@ export const makeModelPreferenceRows = Effect.gen(function* () {
   return {
     memory,
     offered: () => offered,
-    offer: (selection: DefaultModel) => (offered = selection),
+    offer: (selection: ModelOffer) => (offered = selection),
     modelSelection: (ownerId: string, within?: Unit<'machine'>) => Effect.map(memory(ownerId, within), (held) => held.selection),
     defaultSwitches: (ownerId: string, provider: string, model: string): Effect.Effect<ModelSwitches, ThreadStorageFailed> =>
       stored('defaultSwitches')(
