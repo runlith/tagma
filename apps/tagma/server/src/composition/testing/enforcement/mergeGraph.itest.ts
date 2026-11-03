@@ -153,6 +153,16 @@ twinned(
 );
 
 twinned(
+  'a base twin the topology sync leaves ahead is not taken as absorbed: the base graph judges',
+  { behind: true, graph: { status: 'synced', merges: [] } },
+  ({ finishing, projectId, side }) =>
+    Effect.gen(function* () {
+      const refused = yield* Effect.flip(finishing.merge(projectId, side.rootId, {}));
+      expect(refused._tag === 'WorktreeFinishRefused' && refused.reason).toBe('rule-violated');
+    }),
+);
+
+twinned(
   'a stealth merge whose base twin cannot be brought into the branch twin refuses naming the conflict, with the base taken into the branch',
   { behind: true, graph: { status: 'synced', merges: [{ branch: 'main', merged: null, conflicts: ['modules/core.md'] }] } },
   ({ finishing, projectId, project, side, base }) =>

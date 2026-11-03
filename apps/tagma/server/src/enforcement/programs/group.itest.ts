@@ -143,6 +143,10 @@ export default defineProgram({
       expect(invocations.map((one) => one.mode)).toEqual([undefined, 'measure', undefined]);
       expect(invocations[1]!.keys.map((key) => key.id)).toEqual(['first', 'third']);
       expect(invocations[1]!.sides).toEqual([{ side: 'tree', paths: null, files: null }]);
+
+      const again = yield* judgePrograms(judged, bindings).pipe(Effect.provideService(ProgramRoad, localRoad(launches)));
+      yield* Effect.fromResult(again.get(checker.id)!.answer);
+      expect(launches.slice(3).map((one) => (JSON.parse(one.stdin) as ProgramInvocation).mode)).toEqual([undefined]);
     }),
   );
 

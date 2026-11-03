@@ -315,6 +315,7 @@ export const integrate = (
               took = source;
               tookYielded = checked.yielded;
             }
+            let absorbed = twin !== null;
             if (twin === true && options.graph !== undefined) {
               const brought = yield* options.graph(projectId, record.path);
               if (brought.status === 'unread')
@@ -330,6 +331,22 @@ export const integrate = (
                   `the graph of ${baseBranch} conflicts with the graph of ${branch} on ${conflicted.flatMap((one) => one.conflicts).join(', ')}, so the merge cannot be judged by the merged graph`,
                   [`resolve the graph conflict in ${record.path} with resolve_graph_conflict, then merge again`],
                 );
+              const failures = brought.status === 'synced' ? (brought.copyFailures ?? []) : [];
+              if (failures.length > 0)
+                return yield* refused(
+                  'inspection-failed',
+                  `a graph copy failed while the graph of ${baseBranch} was brought into the graph of ${branch}: ${failures.map((one) => one.error.reason).join('; ')}`,
+                  [`read the graph of ${record.path} with sync_graph, then merge again`],
+                );
+              const still = yield* Effect.mapError(
+                options.twinBehind!(projectId, record.path, branch, baseBranch),
+                (failure) =>
+                  new WorktreeUnavailable({
+                    reason: 'storage',
+                    message: `whether the graph of ${baseBranch} is ahead of the worktree's could not be read: ${failure.reason}`,
+                  }),
+              );
+              absorbed = still !== true;
             }
             if ((source !== tip || twin !== null) && options.settled !== undefined) {
               yield* Effect.mapError(
@@ -367,7 +384,7 @@ export const integrate = (
                 caller: request.caller,
                 workdir: record.path,
               };
-              if (twin !== null) return judged(rules, { ...subject, rulesAt: record.path, parted: false });
+              if (absorbed) return judged(rules, { ...subject, rulesAt: record.path, parted: false });
               if (!carries || !paths.some(inGraphTree)) return judged(rules, { ...subject, rulesAt: base.root.path, parted: false });
               return Effect.flatMap(git.changed(base.root.path, source, built), (behind) =>
                 behind.some(inGraphTree)
