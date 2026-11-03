@@ -19,7 +19,6 @@
   },
   "scripts": {
     "test": "testbed bun test --no-isolate src",
-    "test:integration": "testbed bun test --no-isolate $(find src -name '*.itest.ts' | sed 's|^|./|')",
     "typecheck": "runlith-typecheck"
   },
   "dependencies": {

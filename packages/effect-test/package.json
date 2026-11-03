@@ -14,7 +14,7 @@
   },
   "scripts": {
     "test": "testbed bun test --no-isolate",
-    "test:vitest": "testbed vitest run --exclude '**/vitestFailures.fixture.ts' --no-file-parallelism",
+    "test:integration": "testbed bun test --no-isolate $(find src -name '*.itest.ts' | sed 's|^|./|')",
     "typecheck": "runlith-typecheck"
   },
   "dependencies": {

@@ -91,7 +91,7 @@
   "scripts": {
     "build": "bun kit/build.ts",
     "test": "testbed bun test --no-isolate --pass-with-no-tests src",
-    "test:integration": "bun --no-install test --parallel=1 --no-isolate ./kit/distribution.itest.ts ./kit/declarations.itest.ts",
+    "test:integration": "bun --no-install test --parallel=1 --no-isolate ./kit/distribution.itest.ts ./kit/declarations.itest.ts && testbed bun test --no-isolate $(find src -name '*.itest.ts' | sed 's|^|./|')",
     "typecheck": "runlith-typecheck"
   },
   "dependencies": {

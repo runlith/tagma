@@ -40,7 +40,8 @@
   },
   "scripts": {
     "typecheck": "runlith-typecheck",
-    "test": "testbed bun test --no-isolate --pass-with-no-tests"
+    "test": "testbed bun test --no-isolate --pass-with-no-tests",
+    "test:integration": "testbed bun test --no-isolate $(find src -name '*.itest.ts' | sed 's|^|./|')"
   },
   "dependencies": {
     "@runlith/code-facts": "workspace:*",
