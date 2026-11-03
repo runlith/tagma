@@ -29,6 +29,8 @@
   --chat-interrupted: var(--muted-foreground);
   --chat-interrupted-label: var(--foreground);
 
+  --chat-waiting: var(--primary);
+
   --chat-context-track: var(--border);
   --chat-here: var(--primary);
   --chat-aim: var(--primary);
@@ -114,6 +116,7 @@
   --color-chat-queued-label: var(--chat-queued-label);
   --color-chat-interrupted: var(--chat-interrupted);
   --color-chat-interrupted-label: var(--chat-interrupted-label);
+  --color-chat-waiting: var(--chat-waiting);
   --color-chat-scrim: var(--chat-scrim);
   --color-chat-here: var(--chat-here);
   --color-chat-aim: var(--chat-aim);

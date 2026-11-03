@@ -1,5 +1,6 @@
 <script lang="ts">
   import ChevronDown from '@lucide/svelte/icons/chevron-down';
+  import Waiting from '@runlith/chat-ui/Waiting.svelte';
   import InlineSvg from '$lib/shared/ui/InlineSvg.svelte';
   import type { ModelPanelState } from '../ModelPanelState.svelte.js';
   import type { ThreadViews } from '../thread/ThreadViews.js';
@@ -38,4 +39,13 @@
     {/each}
     <ChevronDown class="size-3 shrink-0 text-muted-foreground" />
   </button>
+{:else if views.model.pending}
+  <span
+    class="inline-flex h-6 min-w-0 shrink items-center gap-1.5 px-1.5 text-meta text-muted-foreground pointer-coarse:h-8 @min-[30rem]:h-7 @min-[30rem]:px-2 @min-[30rem]:text-small"
+    role="status"
+    data-model-pending
+  >
+    <Waiting class="size-3" />
+    Looking for your sign-in…
+  </span>
 {/if}

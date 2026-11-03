@@ -20,10 +20,11 @@ export function readingAt(row: AccountQuotaRow): number | null {
   return row.quota?.observedAt.getTime() ?? null;
 }
 
-export type UsageNeed = 'sign-in' | 'new-key';
+export type UsageNeed = 'sign-in' | 'subscription' | 'new-key';
 
 export const NEED_WORDS: Record<UsageNeed, string> = {
   'sign-in': 'Sign in again',
+  subscription: 'Sign in with a subscription',
   'new-key': 'Replace key',
 };
 
@@ -39,6 +40,7 @@ function keyExpiry(row: AccountQuotaRow, served: ServedProvider | undefined, now
 export function usageNeed(row: AccountQuotaRow, served: ServedProvider | undefined, now = Date.now()): UsageNeed | null {
   if (keyExpiry(row, served, now) !== null) return 'sign-in';
   if (row.problem?.kind === 'signed-out') return 'sign-in';
+  if (row.problem?.kind === 'unsupported-method') return 'subscription';
   const tag = row.failure?._tag;
   return tag === 'stale-token' || tag === 'missing-scope' ? needOf(row, served) : null;
 }
@@ -80,6 +82,8 @@ export function usageStatus(row: AccountQuotaRow, served: ServedProvider | undef
         stale: true,
         note: row.origin.kind === 'cli' ? 'Sign in with its CLI' : 'Sign in again',
       };
+    if (row.problem.kind === 'unsupported-method')
+      return { word: row.problem.method, tone: 'warning', stale: true, note: 'Tagma runs on a subscription sign-in' };
     return row.problem.kind === 'not-installed'
       ? { word: NOT_INSTALLED, tone: 'warning', stale: false, note: 'no installed adapter provides this account' }
       : { word: 'Credential unreadable', tone: 'alarm', stale: false, note: row.problem.reason };

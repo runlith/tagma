@@ -127,6 +127,8 @@ export class ThreadSettings extends Service<ThreadSettings>()('ThreadSettings', 
     return basis === null ? false : accountMissingOf(this.catalog.models, basis.provider, basis.account, this.accounts);
   });
 
+  readonly pending = false;
+
   private standing = $derived(this.thread?.processAccount ?? null);
 
   accountLabel = $derived.by<string | null>(() =>

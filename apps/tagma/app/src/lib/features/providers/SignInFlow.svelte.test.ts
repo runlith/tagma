@@ -126,6 +126,21 @@ test('a CLI sign-in that lands ends as a signed outcome naming the account, and 
   expect(door.refresh).toHaveBeenCalledTimes(2);
 });
 
+test('a default login the server adopted ends signed at once, with no wait, terminal or polling', async () => {
+  door.begin.mockResolvedValue({ flow: 'adopted', provider: 'claude-code', account: 'default', label: 'maya@example.com' });
+  const signIn = await flow();
+
+  await signIn.begin(null);
+
+  expect(signIn.pending).toBeNull();
+  expect(signIn.place).toBeNull();
+  expect(signIn.outcome).toEqual({ kind: 'signed', label: 'maya@example.com', account: 'default', execution: null });
+  expect(door.signedIn).toHaveBeenCalledTimes(1);
+  await vi.advanceTimersByTimeAsync(12_000);
+  expect(door.refresh).not.toHaveBeenCalled();
+  expect(door.complete).not.toHaveBeenCalled();
+});
+
 test('a CLI sign-in whose pending row vanishes ends as failed, never as signed in', async () => {
   door.refresh.mockResolvedValueOnce({ 'claude-code': [pendingRow] }).mockResolvedValueOnce({});
   const signIn = await flow();

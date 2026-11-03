@@ -14,8 +14,6 @@
   import { Addresses } from '$lib/features/workspace/Addresses.js';
   import { ExternalLinks } from '$lib/shared/ExternalLinks.js';
   import { terminalKey, type ExecutionAddress } from '$lib/features/executions/Repo.js';
-  import { SHELL } from '$lib/features/executions/terminal/Pane.svelte.js';
-  import TerminalView from '$lib/features/executions/terminal/View.svelte';
   import { Button, buttonVariants } from '$lib/shared/ui/button/index.js';
   import { Input } from '$lib/shared/ui/input/index.js';
   import * as DropdownMenu from '$lib/shared/ui/dropdown-menu/index.js';
@@ -33,6 +31,7 @@
   import { cacheLifetimeBuckets, cacheLifetimeLine } from './auth/cacheLifetimeWords.js';
   import { usageStatus } from '$lib/features/providers/accounts/status.js';
   import { SignInFlow } from './SignInFlow.svelte.js';
+  import SignInTerminal from './SignInTerminal.svelte';
   import CatalogState from './models/CatalogState.svelte';
   import RefreshModels from './models/RefreshModels.svelte';
 
@@ -56,6 +55,7 @@
   const selected = $derived(section?.options.find((option) => option.id === section.selected));
   const unavailable = $derived(selected?.unavailable ?? null);
   const rows = $derived(unavailable === null ? usageAccounts.of(provider) : []);
+  const signed = $derived(rows.filter((row) => row.problem === null));
   const attention = $derived(rows.some((row) => usageStatus(row, catalog.provider(provider), countdownClock.now).tone !== 'plain'));
 
   const served = $derived(catalog.provider(provider));
@@ -122,16 +122,7 @@
 
 {#snippet signInTerminal(execution: ExecutionAddress)}
   {#if flow.place !== null}
-    {#key terminalKey(execution)}
-      <TerminalView
-        class="h-64 rounded-md border border-vein"
-        key={terminalKey(execution)}
-        projectId={flow.place.id}
-        address={execution}
-        program={name}
-        source={SHELL}
-      />
-    {/key}
+    <SignInTerminal {execution} projectId={flow.place.id} program={name} />
   {/if}
 {/snippet}
 
@@ -142,8 +133,8 @@
       <h3 class="text-ui font-semibold">{name}</h3>
     </Tooltip>
     {#if usageAccounts.known}
-      {#if rows.length === 0}
-        <Tooltip text="No account">
+      {#if signed.length === 0}
+        <Tooltip text={rows.length === 0 ? 'No account' : 'No account is signed in'}>
           <span class="size-2 shrink-0 rounded-full border-[1.5px] border-vein-strong"></span>
         </Tooltip>
         <span class="text-ui text-muted-foreground">not connected</span>
@@ -151,7 +142,7 @@
         <Tooltip text={attention ? 'An account needs attention' : 'Connected'}>
           <span class="size-2 shrink-0 rounded-full {attention ? 'bg-severity-gap' : 'bg-status-done'}"></span>
         </Tooltip>
-        <span class="text-ui text-muted-foreground tabular">{rows.length} account{rows.length === 1 ? '' : 's'}</span>
+        <span class="text-ui text-muted-foreground tabular">{signed.length} account{signed.length === 1 ? '' : 's'}</span>
       {/if}
     {/if}
     <span class="flex-1"></span>
@@ -198,8 +189,11 @@
           {/each}
         {:else if methods.length > 1}
           <DropdownMenu.Root>
-            <DropdownMenu.Trigger class={buttonVariants({ variant: rows.length > 0 ? 'outline' : 'default', size: 'sm' })} disabled={busy}>
-              {rows.length > 0 ? 'Add account' : (selected?.signInLabel ?? 'Add account')}
+            <DropdownMenu.Trigger
+              class={buttonVariants({ variant: signed.length > 0 ? 'outline' : 'default', size: 'sm' })}
+              disabled={busy}
+            >
+              {signed.length > 0 ? 'Add account' : (selected?.signInLabel ?? 'Add account')}
             </DropdownMenu.Trigger>
             <DropdownMenu.Content>
               {#each methods as method (method)}
@@ -209,12 +203,12 @@
           </DropdownMenu.Root>
         {:else}
           <Button
-            variant={rows.length > 0 ? 'outline' : 'default'}
+            variant={signed.length > 0 ? 'outline' : 'default'}
             size="sm"
             disabled={busy || methods.length === 0}
             onclick={() => void begin(methods[0])}
           >
-            {rows.length > 0 ? 'Add account' : (selected?.signInLabel ?? 'Sign in')}
+            {signed.length > 0 ? 'Add account' : (selected?.signInLabel ?? 'Sign in')}
           </Button>
         {/if}
       {/if}
@@ -337,17 +331,20 @@
           <span class="flex-1"></span>
           <Button variant="outline" size="sm" onclick={() => flow.dismiss()}>Done</Button>
         </div>
-        <button
-          type="button"
-          class="inline-flex w-fit items-center gap-1 text-small text-muted-foreground transition-colors hover:text-foreground"
-          aria-expanded={showOutput}
-          onclick={() => (showOutput = !showOutput)}
-        >
-          <ChevronRight class="size-3 {showOutput ? 'rotate-90' : ''}" />
-          Show sign-in output
-        </button>
-        {#if showOutput}
-          {@render signInTerminal(outcome.execution)}
+        {#if outcome.execution !== null}
+          {@const execution = outcome.execution}
+          <button
+            type="button"
+            class="inline-flex w-fit items-center gap-1 text-small text-muted-foreground transition-colors hover:text-foreground"
+            aria-expanded={showOutput}
+            onclick={() => (showOutput = !showOutput)}
+          >
+            <ChevronRight class="size-3 {showOutput ? 'rotate-90' : ''}" />
+            Show sign-in output
+          </button>
+          {#if showOutput}
+            {@render signInTerminal(execution)}
+          {/if}
         {/if}
       {:else}
         <div class="flex items-center gap-2">
@@ -366,7 +363,10 @@
     <!-- svelte-ignore a11y_no_noninteractive_element_to_interactive_role -->
     <div role="radiogroup" aria-label="{name} default account" tabindex={-1} onkeydown={stepDefault}>
       {#each rows as row (row.account)}
-        <AccountRow {row} onSignIn={() => void begin(undefined, String(row.account))} />
+        <AccountRow
+          {row}
+          onSignIn={() => void begin(undefined, row.problem?.kind === 'unsupported-method' ? undefined : String(row.account))}
+        />
       {/each}
     </div>
   {/if}

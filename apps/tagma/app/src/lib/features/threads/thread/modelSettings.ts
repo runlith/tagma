@@ -261,6 +261,7 @@ export interface ModelView {
   readonly chosenLabel: string | null;
   readonly accountMove: AccountMove | null;
   readonly accountMissing: boolean;
+  readonly pending: boolean;
   readonly busy: boolean;
   chooseModel(provider: string, modelId: string, reasoning?: string | null, options?: PickOptions): Effect.Effect<void, ThreadRefused>;
   chooseAccount(value: string | null): Effect.Effect<void, ThreadRefused>;

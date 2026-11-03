@@ -2,7 +2,7 @@
   import type { Snippet } from 'svelte';
 
   type Props = {
-    tone: 'failure' | 'interrupted';
+    tone: 'failure' | 'interrupted' | 'waiting';
     text: string;
     detail?: string | null;
     action?: Snippet;
@@ -13,6 +13,7 @@
   const MARK: Record<Props['tone'], string> = {
     failure: 'bg-chat-failure',
     interrupted: 'bg-chat-interrupted',
+    waiting: 'bg-chat-waiting',
   };
 </script>
 

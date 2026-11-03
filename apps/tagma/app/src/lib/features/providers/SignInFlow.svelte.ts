@@ -3,7 +3,9 @@ import type { LinkPort } from '$lib/shared/ExternalLinks.js';
 import type { Notices } from '$lib/features/notices/Service.svelte.js';
 import type { AccountsRepo } from './AccountsRepo.js';
 
-export type SignInPending = NonNullable<Awaited<ReturnType<AccountsRepo['begin']['run']>>>;
+type SignInBegun = NonNullable<Awaited<ReturnType<AccountsRepo['begin']['run']>>>;
+
+export type SignInPending = Exclude<SignInBegun, { flow: 'adopted' }>;
 
 export type SignInPlace = { readonly id: number; readonly name: string };
 
@@ -14,9 +16,16 @@ export type SignInOutcome =
       readonly kind: 'signed';
       readonly label: string;
       readonly account: CliPending['account'];
-      readonly execution: CliPending['execution'];
+      readonly execution: CliPending['execution'] | null;
     }
   | { readonly kind: 'failed'; readonly execution: CliPending['execution']; readonly retryAccount: string | undefined };
+
+export const pendingWords = (pending: SignInPending): string =>
+  pending.flow === 'loopback'
+    ? 'Continue in your browser…'
+    : pending.flow === 'external-cli'
+      ? 'Finish signing in below…'
+      : 'Waiting for sign-in…';
 
 const LOOPBACK_POLL_MS = 2_000;
 const DEVICE_POLL_MS = 4_000;
@@ -53,6 +62,13 @@ export class SignInFlow {
       if (!started || mine !== this.attempt) return;
       this.account = reconnect;
       this.code = '';
+      if (started.flow === 'adopted') {
+        this.pending = null;
+        this.place = null;
+        this.outcome = { kind: 'signed', label: started.label, account: started.account, execution: null };
+        this.options.signedIn?.();
+        return;
+      }
       this.pending = started;
       this.place = place;
       if (started.flow === 'loopback' || started.flow === 'paste') this.links.open(started.authorizeUrl);

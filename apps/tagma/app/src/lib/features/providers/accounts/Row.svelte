@@ -15,6 +15,7 @@
   import { spellKey } from '$lib/shared/chordSpelling.js';
   import { Host } from '@runlith/layer/Host';
   import FadeText from '$lib/shared/FadeText.svelte';
+  import PathText from '$lib/shared/PathText.svelte';
   import { CountdownClock } from './CountdownClock.svelte.js';
   import RemoveAccountDialog from '../auth/RemoveAccountDialog.svelte';
   import { usageNeed, usageStatus, readingAt, updatedAgo, NEED_WORDS } from './status.js';
@@ -46,11 +47,11 @@
   const keyed = $derived(row.label === String(row.account));
   const section = $derived(catalog.section(row.provider));
   const mode = $derived(section?.options.find((option) => option.provider === row.provider));
-  const origin = $derived(
-    row.origin.kind === 'cli'
-      ? `${mode?.label ?? catalog.name(row.provider)} login · ${row.origin.place === 'default' ? (mode?.defaultPlace ?? 'default directory') : row.origin.place}`
-      : 'Tagma sign-in',
+  const directory = $derived(row.origin.kind === 'cli' && row.origin.place !== 'default' ? row.origin.place : null);
+  const place = $derived(
+    row.origin.kind === 'own' ? 'Tagma sign-in' : (mode?.defaultPlace ?? `${mode?.label ?? catalog.name(row.provider)} default`),
   );
+  const staleNote = $derived(status.stale && status.note !== null && bars.length > 0 ? status.note : null);
   const read = $derived(readingAt(row));
 
   let busy = $state(false);
@@ -152,6 +153,11 @@
           <Tooltip text={row.label} class="block min-w-0">
             <FadeText class={cn('block min-w-0', keyed ? 'stamp text-ui' : 'font-medium')}>{row.label}</FadeText>
           </Tooltip>
+          {#if directory !== null}
+            <PathText path={directory} class="min-w-0 text-small text-muted-foreground" />
+          {:else}
+            <FadeText class="min-w-0 shrink text-small text-muted-foreground">{place}</FadeText>
+          {/if}
           {#if row.problem !== null}
             <Tooltip text={status.note ?? undefined}>
               <span
@@ -164,14 +170,16 @@
             </Tooltip>
           {/if}
         </div>
-        <FadeText class="text-small text-muted-foreground">
-          {origin}
-          {#if row.expiresAt !== undefined}
-            · Expires {new Date(row.expiresAt).toLocaleDateString()}{/if}
-          {#if status.stale && status.note !== null && bars.length > 0}
-            · {status.note}
-          {/if}
-        </FadeText>
+        {#if row.expiresAt !== undefined || staleNote !== null}
+          <div class="flex min-w-0 items-center gap-3 text-small text-muted-foreground">
+            {#if row.expiresAt !== undefined}
+              <span class="shrink-0">Expires {new Date(row.expiresAt).toLocaleDateString()}</span>
+            {/if}
+            {#if staleNote !== null}
+              <FadeText class="min-w-0">{staleNote}</FadeText>
+            {/if}
+          </div>
+        {/if}
       {:else}
         {@render renameField('text-ui')}
         <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-small text-muted-foreground">
@@ -194,7 +202,7 @@
           <Bar used={figure.usedPercent} color={toneFill(tone)} class="h-1" />
           <span class="text-right stamp {toneText(tone)}">{usagePercentText(figure.usedPercent)}</span>
           <span class="whitespace-nowrap stamp text-muted-foreground">
-            {figure.resetsAt === null ? '' : `· ${resetText(figure.resetsAt, countdownClock.now)}`}
+            {figure.resetsAt === null ? '' : resetText(figure.resetsAt, countdownClock.now)}
           </span>
         {/each}
       {:else if status.word !== null}

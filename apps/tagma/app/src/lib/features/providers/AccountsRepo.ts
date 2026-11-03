@@ -17,6 +17,10 @@ export const AccountsRepo = Repo.define(
         (await door.perform('begin_sign_in', input, {}, { signal })).flow,
     }),
 
+    observe: mutation({
+      mutator: async (_: void, { signal }, door) => (await door.perform('observe_logins', {}, {}, { signal })).status,
+    }),
+
     cancel: mutation({
       mutator: async (input: { provider: string; account: AccountKey; execution: ExecutionRef }, { signal }, door) =>
         await door.perform('cancel_cli_sign_in', input, {}, { signal }),

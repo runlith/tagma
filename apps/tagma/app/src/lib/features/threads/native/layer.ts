@@ -2,6 +2,7 @@ import { Layer } from '@runlith/layer/Layer';
 import type { Component } from 'svelte';
 import { WireEntryKinds } from '$lib/wire/WireEntryKinds.js';
 import connectFeed from '../birth/connect.feed.svelte';
+import signedOutComposer from '../birth/signedOut.composer.svelte';
 import * as transportKinds from '../external/transport.kinds.svelte';
 import * as externalRecords from '../external/productRecords.js';
 import stripComposer from '../place/strip.composer.svelte';
@@ -102,6 +103,7 @@ export const ThreadContributions = Layer.mergeAll(
     composer('team', teamComposer),
   ),
   ComposerParts.contribute('place', composer('strip', stripComposer)),
+  ComposerParts.contribute('birth', composer('signedOut', signedOutComposer)),
   FeedParts.contribute(
     'native',
     feed('bash', bashFeed),

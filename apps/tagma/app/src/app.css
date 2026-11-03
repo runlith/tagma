@@ -99,6 +99,7 @@
   --chat-queued-label: var(--status-open);
   --chat-interrupted: var(--status-in-work);
   --chat-interrupted-label: var(--status-in-work);
+  --chat-waiting: var(--status-open);
   --chat-context-track: var(--vein-strong);
   --chat-scrim: oklch(0 0 0 / 0.8);
 

@@ -172,7 +172,7 @@ export class ThreadBirth implements ChatBirth {
   }
 
   private async bear(): Promise<string | null> {
-    if (this.selection.activeId !== null) return null;
+    if (this.selection.activeId !== null || this.settings.signedOut !== null) return null;
     const generation = this.selection.generation;
     const unbornKey = this.selection.draftKey(null);
     const scopeName = this.context.scopeName();

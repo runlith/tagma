@@ -25,6 +25,8 @@ import {
 } from '../thread/modelSettings.js';
 import type { ThreadRefused } from '../thread/ThreadRefused.js';
 
+type SignedOut = { readonly provider: string; readonly account: string; readonly label: string };
+
 export class BirthSettings implements ModelView {
   private writing = $state(false);
 
@@ -39,6 +41,10 @@ export class BirthSettings implements ModelView {
 
   get busy(): boolean {
     return this.writing;
+  }
+
+  get pending(): boolean {
+    return !this.defaults.known;
   }
 
   private pickable = $derived.by(() => pickableProviders(this.catalog.models, undefined, this.types.served, null));
@@ -65,6 +71,13 @@ export class BirthSettings implements ModelView {
   accountMissing = $derived.by<boolean>(() => {
     const selection = this.defaults.value;
     return selection === null ? false : accountMissingOf(this.catalog.models, selection.provider, this.draft.account, this.accounts);
+  });
+
+  signedOut = $derived.by<SignedOut | null>(() => {
+    const settings = this.settings;
+    if (settings === null || settings.account === '') return null;
+    const row = this.accounts.signing(settings.provider).find((one) => String(one.account) === settings.account);
+    return row?.problem?.kind === 'signed-out' ? { provider: row.provider, account: String(row.account), label: row.label } : null;
   });
 
   readonly accountLabel: string | null = null;

@@ -11,10 +11,10 @@
   import ProviderMark from '$lib/features/providers/Mark.svelte';
   import { AccountsRepo } from '$lib/features/providers/AccountsRepo.js';
   import { ProviderCatalog } from '$lib/features/providers/Catalog.svelte.js';
-  import { SignInFlow } from '$lib/features/providers/SignInFlow.svelte.js';
-  import { ExecutionsRepo, terminalKey } from '$lib/features/executions/Repo.js';
-  import { SHELL } from '$lib/features/executions/terminal/Pane.svelte.js';
-  import TerminalView from '$lib/features/executions/terminal/View.svelte';
+  import { SignInFlow, pendingWords } from '$lib/features/providers/SignInFlow.svelte.js';
+  import SignInTerminal from '$lib/features/providers/SignInTerminal.svelte';
+  import { UsageAccounts } from '$lib/features/providers/usage/Accounts.svelte.js';
+  import { ExecutionsRepo } from '$lib/features/executions/Repo.js';
   import { Workspace } from '$lib/features/workspace/Selection.svelte.js';
   import { settingsHref } from '$lib/features/workspace/address.js';
   import { type CliInstall, installInTerminal } from '../external/install.js';
@@ -35,6 +35,17 @@
   const router = Router.use();
   const addresses = Addresses.use();
   const links = ExternalLinks.use();
+  const usage = UsageAccounts.use();
+
+  function troubleOf(provider: string): string | null {
+    const row = usage.signing(provider).find((one) => one.problem !== null && one.problem.kind !== 'not-installed');
+    const problem = row?.problem ?? null;
+    if (row === undefined || problem === null) return null;
+    if (problem.kind === 'signed-out') return `${row.label} is signed out`;
+    if (problem.kind === 'unsupported-method') return `${problem.method} is not a subscription`;
+    if (problem.kind === 'unreadable') return problem.reason;
+    return null;
+  }
 
   const cliOf = (provider: string) => agents.launches.find((row) => row.presentation.modelProvider === provider);
 
@@ -113,18 +124,14 @@
             {#if waiting}
               <span class="flex items-center gap-1.5 text-small text-muted-foreground">
                 <Waiting class="size-3" />
-                {flow?.pending?.flow === 'loopback'
-                  ? 'Continue in your browser…'
-                  : flow?.pending?.flow === 'external-cli'
-                    ? 'Finish signing in below…'
-                    : 'Waiting for sign-in…'}
+                {flow?.pending ? pendingWords(flow.pending) : ''}
               </span>
             {:else if flow?.outcome?.kind === 'signed'}
               <span class="text-small text-status-done" role="status">Signed in as {flow.outcome.label}</span>
             {:else if flow?.outcome?.kind === 'failed'}
               <span class="text-small text-destructive" role="status">Sign-in didn't finish — nothing was added.</span>
             {:else}
-              <span class="text-small text-muted-foreground">{option?.unavailable ?? option?.hint ?? ''}</span>
+              <span class="text-small text-muted-foreground">{option?.unavailable ?? troubleOf(provider.id) ?? option?.hint ?? ''}</span>
             {/if}
           </div>
           {#if waiting}
@@ -143,32 +150,14 @@
             {/if}
           {:else}
             <Button variant="secondary" size="sm" disabled={flow !== undefined && flow.busy !== null} onclick={() => void signIn(provider)}>
-              Sign in
+              {option?.signInLabel ?? 'Sign in'}
             </Button>
           {/if}
         </div>
         {#if waiting && flow?.pending?.flow === 'external-cli'}
-          {#key terminalKey(flow.pending.execution)}
-            <TerminalView
-              class="h-64 rounded-md border border-vein"
-              key={terminalKey(flow.pending.execution)}
-              {projectId}
-              address={flow.pending.execution}
-              program={provider.label}
-              source={SHELL}
-            />
-          {/key}
+          <SignInTerminal execution={flow.pending.execution} {projectId} program={provider.label} />
         {:else if flow?.outcome?.kind === 'failed'}
-          {#key terminalKey(flow.outcome.execution)}
-            <TerminalView
-              class="h-64 rounded-md border border-vein"
-              key={terminalKey(flow.outcome.execution)}
-              {projectId}
-              address={flow.outcome.execution}
-              program={provider.label}
-              source={SHELL}
-            />
-          {/key}
+          <SignInTerminal execution={flow.outcome.execution} {projectId} program={provider.label} />
         {/if}
       </li>
     {/each}
