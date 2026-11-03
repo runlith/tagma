@@ -254,6 +254,15 @@ const unreadOf = (result: ShellSettlement): readonly string[] =>
     return tree === null ? one.unread : one.unread.map((name) => join(tree, name));
   });
 
+const NAMED_THREADS = 4;
+
+const takenBy = (verdicts: readonly CommandVerdict[]): string => {
+  const threads = [...new Set(verdicts.flatMap((judged) => (judged.verdict === 'taken' ? [judged.by] : [])))];
+  if (threads.length === 0) return '';
+  const rest = threads.length - NAMED_THREADS;
+  return ` (threads ${threads.slice(0, NAMED_THREADS).join(', ')}${rest > 0 ? ` and ${rest} more` : ''})`;
+};
+
 const movedLines = (result: ShellSettlement): readonly string[] => {
   const totals = nothingJudged();
   const lines: string[] = [];
@@ -265,7 +274,7 @@ const movedLines = (result: ShellSettlement): readonly string[] => {
     const unread = one.unread.length;
     const unjudged = one.moved.length - one.verdicts.length - unread;
     lines.push(
-      `${one.moved.length} file${one.moved.length === 1 ? '' : 's'} moved${inTree(one)} while this ran: ${counts.attributed} attributed to this session, ${counts.taken} to other sessions; ${counts.unproven} unproven, ${counts.overlap} overlap and ${counts.unclaimed} unclaimed observations belong to nobody; ${counts.team} met only by commands of this session's agent team; ${unread} unread; ${unjudged} without a command-record verdict.`,
+      `${one.moved.length} file${one.moved.length === 1 ? '' : 's'} moved${inTree(one)} while this ran: ${counts.attributed} attributed to this session, ${counts.taken} to other sessions${takenBy(one.verdicts)}; ${counts.unproven} unproven, ${counts.overlap} overlap and ${counts.unclaimed} unclaimed observations belong to nobody; ${counts.team} met only by commands of this session's agent team; ${unread} unread; ${unjudged} without a command-record verdict.`,
     );
   }
   if (lines.length === 0) return [];
