@@ -2633,10 +2633,6 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead apps/tagma/server/src/change-record/contract/service/prepared.ts#PreparedThread",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "dead-code dead apps/tagma/server/src/change-record/contract/service/record.ts#RecordPosition",
           "owner": "5a3bed29"
         },
@@ -2841,10 +2837,6 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead apps/tagma/server/src/change-record/lines/overlay.ts#Overlay",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "dead-code dead apps/tagma/server/src/change-record/lines/owed.ts#windowText",
           "owner": "5a3bed29"
         },
@@ -2869,27 +2861,11 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead apps/tagma/server/src/change-record/lines/selection.ts#Carried",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/change-record/lines/selection.ts#Selection",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/change-record/lines/selection.ts#Bearers",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "dead-code dead apps/tagma/server/src/change-record/lines/walks.ts#WalkQuestion",
           "owner": "5a3bed29"
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/change-record/operations/changes.ts#readChangeRows",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/change-record/prepared/carriers.ts#Selection",
           "owner": "5a3bed29"
         },
         {
@@ -2906,10 +2882,6 @@ fields:
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/change-record/prepared/eligible.ts#Standing",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/change-record/prepared/overlay.ts#Overlaid",
           "owner": "5a3bed29"
         },
         {
@@ -2942,10 +2914,6 @@ fields:
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/change-record/prepared/subject.ts#holdersOf",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/change-record/prepared/tree.ts#WEIGHED_BYTES",
           "owner": "5a3bed29"
         },
         {
@@ -3090,10 +3058,6 @@ fields:
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/change-record/record/moves.ts#Move",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/change-record/record/moves.ts#Moves",
           "owner": "5a3bed29"
         },
         {
@@ -3525,14 +3489,6 @@ fields:
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/composition/ports.ts#AssembledPorts",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/composition/preparedChanges.ts#landingAdmission",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/composition/preparedChanges.ts#sharedPrepared",
           "owner": "5a3bed29"
         },
         {
@@ -7015,10 +6971,6 @@ fields:
           "owner": "5a3bed29"
         },
         {
-          "fingerprint": "dead-code dead apps/tagma/server/src/landing/contract/service/landings.ts#SubmitTaking",
-          "owner": "5a3bed29"
-        },
-        {
           "fingerprint": "dead-code dead apps/tagma/server/src/landing/contract/service/mergeGit.ts#MergeHead",
           "owner": "5a3bed29"
         },
@@ -7053,10 +7005,6 @@ fields:
         },
         {
           "fingerprint": "dead-code dead apps/tagma/server/src/landing/contract/wire/receipt.ts#SubmitCarry",
-          "owner": "5a3bed29"
-        },
-        {
-          "fingerprint": "dead-code dead apps/tagma/server/src/landing/contract/wire/receipt.ts#LANDED_BY",
           "owner": "5a3bed29"
         },
         {

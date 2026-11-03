@@ -100,15 +100,7 @@ fields:
           "owner": "02c71a0d"
         },
         {
-          "fingerprint": "S4 change-record:Selection @ change-record/lines/selection.ts",
-          "owner": "02c71a0d"
-        },
-        {
           "fingerprint": "S4 change-record:Version @ change-record/lines/walks.ts",
-          "owner": "02c71a0d"
-        },
-        {
-          "fingerprint": "S4 change-record:Selection @ change-record/prepared/carriers.ts",
           "owner": "02c71a0d"
         },
         {
