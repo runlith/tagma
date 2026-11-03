@@ -35,6 +35,15 @@ export class OutputUnreadable extends Data.TaggedError('OutputUnreadable')<{
   }
 }
 
+class CheckUnfinished extends Data.TaggedError('CheckUnfinished')<{
+  readonly unit: string;
+  readonly status: number;
+}> {
+  override get message(): string {
+    return `${this.unit} ended with ${this.status} before it finished checking.`;
+  }
+}
+
 export class ScopeUnknown extends Data.TaggedError('ScopeUnknown')<{
   readonly target: string;
 }> {
@@ -55,6 +64,7 @@ export class PreparationFailed extends Data.TaggedError('PreparationFailed')<{
 
 export type CheckFailure =
   | ChecksFailed
+  | CheckUnfinished
   | ToolMissing
   | OutputUnreadable
   | ScopeUnknown
@@ -155,11 +165,16 @@ const check = Effect.fn('typecheck.check')(function* (
   pkg: WorkspacePackage,
   failed: string[],
   config = pkg.dir,
-): Effect.fn.Return<void, PlatformError, ChildProcessSpawner.ChildProcessSpawner> {
+): Effect.fn.Return<void, CheckUnfinished | PlatformError, ChildProcessSpawner.ChildProcessSpawner> {
   const unit = `tsrs ${relative(root, config)}`;
   yield* Console.log(unit);
-  if ((yield* spawn('node', [TSRS, '-p', config, '--noEmit', '--checkers', CHECKERS], root)) !== 0) failed.push(unit);
+  const status = yield* spawn('node', [TSRS, '-p', config, '--noEmit', '--checkers', CHECKERS], root);
+  if (status === 0) return;
+  if (!DIAGNOSED.has(status)) return yield* new CheckUnfinished({ unit, status });
+  failed.push(unit);
 });
+
+const DIAGNOSED = new Set([1, 2]);
 
 const TSRS = join(dirname(fileURLToPath(import.meta.resolve('tsrs/package.json'))), 'bin', 'tsrs');
 
@@ -246,8 +261,8 @@ const svelteCheck = Effect.fn('typecheck.svelteCheck')(function* (
     }),
   );
   if (errors > 0 || warnings > 0) yield* Console.log(`svelte-check ${pkg.name}: ${errors} errors, ${warnings} warnings`);
+  if (!complete) return yield* new OutputUnreadable({ owner: pkg.name, reason: `process ended with ${status} without a COMPLETED record` });
   if (status !== 0 || errors > 0 || (config !== undefined && warnings > 0)) failed.push(`svelte-check ${pkg.name}`);
-  else if (!complete) return yield* new OutputUnreadable({ owner: pkg.name, reason: 'process ended without a COMPLETED record' });
 });
 
 const binary = Effect.fn('typecheck.binary')(function* (
